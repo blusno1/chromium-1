@@ -15,6 +15,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalFrame.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "modules/bluetooth/BluetoothDevice.h"
 #include "modules/bluetooth/BluetoothError.h"
 #include "modules/bluetooth/BluetoothRemoteGATTCharacteristic.h"
@@ -151,16 +152,16 @@ void Bluetooth::RequestDeviceCallback(
 ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
                                        const RequestDeviceOptions& options,
                                        ExceptionState& exception_state) {
+  ExecutionContext* context = ExecutionContext::From(script_state);
+
 // Remind developers when they are using Web Bluetooth on unsupported platforms.
 #if !OS(CHROMEOS) && !OS(ANDROID) && !OS(MACOSX)
-  context->addConsoleMessage(ConsoleMessage::create(
-      JSMessageSource, InfoMessageLevel,
-      "Web Bluetooth is currently experimental on this platform. See "
+  context->AddConsoleMessage(ConsoleMessage::Create(
+      kJSMessageSource, kInfoMessageLevel,
+      "Web Bluetooth is experimental on this platform. See "
       "https://github.com/WebBluetoothCG/web-bluetooth/blob/gh-pages/"
       "implementation-status.md"));
 #endif
-
-  ExecutionContext* context = ExecutionContext::From(script_state);
 
   // If the Relevant settings object is not a secure context, reject promise
   // with a SecurityError and abort these steps.
