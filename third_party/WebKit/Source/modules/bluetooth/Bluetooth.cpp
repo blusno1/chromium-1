@@ -151,6 +151,15 @@ void Bluetooth::RequestDeviceCallback(
 ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
                                        const RequestDeviceOptions& options,
                                        ExceptionState& exception_state) {
+// Remind developers when they are using Web Bluetooth on unsupported platforms.
+#if !OS(CHROMEOS) && !OS(ANDROID) && !OS(MACOSX)
+  context->addConsoleMessage(ConsoleMessage::create(
+      JSMessageSource, InfoMessageLevel,
+      "Web Bluetooth is currently experimental on this platform. See "
+      "https://github.com/WebBluetoothCG/web-bluetooth/blob/gh-pages/"
+      "implementation-status.md"));
+#endif
+
   ExecutionContext* context = ExecutionContext::From(script_state);
 
   // If the Relevant settings object is not a secure context, reject promise
