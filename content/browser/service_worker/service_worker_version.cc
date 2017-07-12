@@ -27,6 +27,7 @@
 #include "content/browser/service_worker/service_worker_client_utils.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/service_worker/service_worker_installed_scripts_sender.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/origin_trials/trial_token_validator.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
@@ -38,7 +39,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/result_codes.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
@@ -342,10 +343,15 @@ void ServiceWorkerVersion::SetStatus(Status status) {
          !(status == INSTALLED || status == ACTIVATING || status == ACTIVATED));
 
   status_ = status;
-  if (skip_waiting_ && status_ == ACTIVATED) {
-    for (int request_id : pending_skip_waiting_requests_)
-      DidSkipWaiting(request_id);
-    pending_skip_waiting_requests_.clear();
+  if (skip_waiting_) {
+    if (status == INSTALLED) {
+      RestartTick(&skip_waiting_time_);
+    } else if (status == ACTIVATED) {
+      ClearTick(&skip_waiting_time_);
+      for (int request_id : pending_skip_waiting_requests_)
+        DidSkipWaiting(request_id);
+      pending_skip_waiting_requests_.clear();
+    }
   }
 
   // OnVersionStateChanged() invokes updates of the status using state
@@ -654,6 +660,7 @@ void ServiceWorkerVersion::AddControllee(
   controllee_map_[uuid] = provider_host;
   // Keep the worker alive a bit longer right after a new controllee is added.
   RestartTick(&idle_time_);
+  ClearTick(&no_controllees_time_);
   for (auto& observer : listeners_)
     observer.OnControlleeAdded(this, provider_host);
 }
@@ -666,6 +673,7 @@ void ServiceWorkerVersion::RemoveControllee(
   for (auto& observer : listeners_)
     observer.OnControlleeRemoved(this, provider_host);
   if (!HasControllee()) {
+    RestartTick(&no_controllees_time_);
     for (auto& observer : listeners_)
       observer.OnNoControllees(this);
   }
@@ -896,14 +904,7 @@ void ServiceWorkerVersion::OnDetached(EmbeddedWorkerStatus old_status) {
 }
 
 void ServiceWorkerVersion::OnScriptLoaded() {
-  DCHECK(GetMainScriptHttpResponseInfo() ||
-         // TODO(scottmg|falken): This DCHECK is currently triggered in
-         // --network-service because ServiceWorkerReadFromCacheJob isn't being
-         // used to retrieve the service worker js. This should be removed once
-         // that's done.
-         (IsBrowserSideNavigationEnabled() &&
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kEnableNetworkService)));
+  DCHECK(GetMainScriptHttpResponseInfo());
   if (IsInstalled(status()))
     UMA_HISTOGRAM_BOOLEAN("ServiceWorker.ScriptLoadSuccess", true);
 }
@@ -1308,6 +1309,8 @@ void ServiceWorkerVersion::OnSkipWaiting(int request_id) {
       context_->GetLiveRegistration(registration_id_);
   if (!registration)
     return;
+  if (skip_waiting_time_.is_null())
+    RestartTick(&skip_waiting_time_);
   pending_skip_waiting_requests_.push_back(request_id);
   if (pending_skip_waiting_requests_.size() == 1)
     registration->ActivateWaitingVersionWhenReady();
@@ -1430,6 +1433,8 @@ void ServiceWorkerVersion::DidEnsureLiveRegistrationForStartWorker(
             "ServiceWorker", "ServiceWorkerVersion::StartWorker", trace_id,
             "Script", script_url_.spec(), "Purpose",
             ServiceWorkerMetrics::EventTypeToString(purpose));
+        DCHECK(!start_worker_first_purpose_);
+        start_worker_first_purpose_ = purpose;
         start_callbacks_.push_back(
             base::Bind(&ServiceWorkerVersion::RecordStartWorkerResult,
                        weak_factory_.GetWeakPtr(), purpose, prestart_status,
@@ -1449,12 +1454,17 @@ void ServiceWorkerVersion::DidEnsureLiveRegistrationForStartWorker(
 
 void ServiceWorkerVersion::StartWorkerInternal() {
   DCHECK_EQ(EmbeddedWorkerStatus::STOPPED, running_status());
+  DCHECK(start_worker_first_purpose_);
 
   if (!ServiceWorkerMetrics::ShouldExcludeSiteFromHistogram(site_for_uma_)) {
     DCHECK(!event_recorder_);
     event_recorder_ =
-        base::MakeUnique<ServiceWorkerMetrics::ScopedEventRecorder>();
+        base::MakeUnique<ServiceWorkerMetrics::ScopedEventRecorder>(
+            start_worker_first_purpose_.value());
   }
+  // We don't clear |start_worker_first_purpose_| here but clear in
+  // FinishStartWorker. This is because StartWorkerInternal may be called
+  // again from OnStoppedInternal if StopWorker is called before OnStarted.
 
   StartTimeoutTimer();
 
@@ -1465,8 +1475,17 @@ void ServiceWorkerVersion::StartWorkerInternal() {
   params->is_installed = IsInstalled(status_);
   params->pause_after_download = pause_after_download_;
 
+  mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info;
+  if (ServiceWorkerUtils::IsScriptStreamingEnabled()) {
+    DCHECK(!installed_scripts_sender_);
+    installed_scripts_sender_ =
+        base::MakeUnique<ServiceWorkerInstalledScriptsSender>();
+    installed_scripts_info = installed_scripts_sender_->CreateInfoAndBind();
+  }
+
   embedded_worker_->Start(
       std::move(params), mojo::MakeRequest(&event_dispatcher_),
+      std::move(installed_scripts_info),
       base::Bind(&ServiceWorkerVersion::OnStartSentAndScriptEvaluated,
                  weak_factory_.GetWeakPtr()));
   event_dispatcher_.set_connection_error_handler(base::Bind(
@@ -1661,9 +1680,7 @@ void ServiceWorkerVersion::RecordStartWorkerResult(
       !skip_recording_startup_time_) {
     ServiceWorkerMetrics::RecordStartWorkerTime(
         GetTickDuration(start_time), IsInstalled(prestart_status),
-        ServiceWorkerMetrics::GetStartSituation(
-            is_browser_startup_complete, embedded_worker_->is_new_process()),
-        purpose);
+        embedded_worker_->start_situation(), purpose);
   }
 
   if (status != SERVICE_WORKER_ERROR_TIMEOUT)
@@ -1826,6 +1843,7 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
   pending_requests_.Clear();
   external_request_uuid_to_request_id_.clear();
   event_dispatcher_.reset();
+  installed_scripts_sender_.reset();
 
   // TODO(falken): Call SWURLRequestJob::ClearStream here?
   streaming_url_request_jobs_.clear();
@@ -1841,6 +1859,7 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
 }
 
 void ServiceWorkerVersion::FinishStartWorker(ServiceWorkerStatusCode status) {
+  start_worker_first_purpose_ = base::nullopt;
   RunCallbacks(this, &start_callbacks_, status);
 }
 

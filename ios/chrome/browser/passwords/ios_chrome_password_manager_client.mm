@@ -14,13 +14,13 @@
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/core/browser/signin_manager_base.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -28,6 +28,7 @@
 #endif
 
 using password_manager::PasswordFormManager;
+using password_manager::PasswordManagerMetricsRecorder;
 using password_manager::PasswordStore;
 using password_manager::PasswordSyncState;
 
@@ -149,6 +150,7 @@ ukm::SourceId IOSChromePasswordManagerClient::GetUkmSourceId() {
   // TODO(crbug.com/732846): The UKM Source should be recycled (e.g. from the
   // web contents), once the UKM framework provides a mechanism for that.
   if (ukm_source_url_ != delegate_.lastCommittedURL) {
+    metrics_recorder_.reset();
     ukm_source_url_ = delegate_.lastCommittedURL;
     ukm_source_id_ = ukm::UkmRecorder::GetNewSourceID();
     ukm::UkmRecorder* ukm_recorder = GetUkmRecorder();
@@ -156,4 +158,14 @@ ukm::SourceId IOSChromePasswordManagerClient::GetUkmSourceId() {
       ukm_recorder->UpdateSourceURL(ukm_source_id_, ukm_source_url_);
   }
   return ukm_source_id_;
+}
+
+PasswordManagerMetricsRecorder&
+IOSChromePasswordManagerClient::GetMetricsRecorder() {
+  if (!metrics_recorder_) {
+    metrics_recorder_.emplace(PasswordManagerMetricsRecorder(
+        PasswordManagerMetricsRecorder::CreateUkmEntryBuilder(
+            GetUkmRecorder(), GetUkmSourceId())));
+  }
+  return metrics_recorder_.value();
 }

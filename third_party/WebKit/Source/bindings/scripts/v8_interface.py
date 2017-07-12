@@ -243,6 +243,12 @@ def interface_context(interface, interfaces):
     # as in the WebIDL spec?
     is_immutable_prototype = is_global or 'ImmutablePrototype' in extended_attributes
 
+    # DOMException is defined in WebIDL and is the only object that resembles
+    # the concept of an "exception interface" (which was removed from the spec
+    # in 2014). |is_exception == true| is mostly used to make the prototype
+    # object inherit from %ErrorPrototype% in V8PerContextData.
+    is_exception = interface.name == 'DOMException'
+
     wrapper_class_id = ('kNodeClassId' if inherits_interface(interface.name, 'Node') else 'kObjectClassId')
 
     # [ActiveScriptWrappable] must be accompanied with [DependentLifetime].
@@ -274,7 +280,7 @@ def interface_context(interface, interfaces):
         'is_array_buffer_or_view': is_array_buffer_or_view,
         'is_check_security': is_check_security,
         'is_event_target': is_event_target,
-        'is_exception': interface.is_exception,
+        'is_exception': is_exception,
         'is_global': is_global,
         'is_immutable_prototype': is_immutable_prototype,
         'is_node': inherits_interface(interface.name, 'Node'),
@@ -360,7 +366,7 @@ def interface_context(interface, interfaces):
     has_ce_reactions = any(setter_or_deleter and 'CEReactions' in setter_or_deleter.extended_attributes
                            for setter_or_deleter in setter_or_deleters)
     if has_ce_reactions:
-        includes.add('core/dom/custom/CEReactionsScope.h')
+        includes.add('core/html/custom/CEReactionsScope.h')
 
     context.update({
         'constructors': constructors,

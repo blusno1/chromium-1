@@ -18,8 +18,8 @@
 #include "modules/nfc/NFCPushOptions.h"
 #include "modules/nfc/NFCWatchOptions.h"
 #include "platform/mojo/MojoHelper.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace {
 const char kJsonMimePostfix[] = "+json";
@@ -403,7 +403,8 @@ ScriptPromise RejectIfInvalidURLRecord(ScriptState* script_state,
   }
 
   blink::V8StringResource<> string_resource = record.data().V8Value();
-  if (!string_resource.Prepare() || !KURL(KURL(), string_resource).IsValid()) {
+  if (!string_resource.Prepare() ||
+      !KURL(NullURL(), string_resource).IsValid()) {
     return RejectWithDOMException(script_state, kSyntaxError,
                                   "Cannot parse data for 'url' record.");
   }
@@ -641,7 +642,7 @@ NFC::NFC(LocalFrame* frame)
   if (!IsSupportedInContext(GetExecutionContext(), error_message))
     return;
 
-  frame->GetInterfaceProvider()->GetInterface(mojo::MakeRequest(&nfc_));
+  frame->GetInterfaceProvider().GetInterface(mojo::MakeRequest(&nfc_));
   nfc_.set_connection_error_handler(ConvertToBaseCallback(
       WTF::Bind(&NFC::OnConnectionError, WrapWeakPersistent(this))));
   device::mojom::blink::NFCClientPtr client;

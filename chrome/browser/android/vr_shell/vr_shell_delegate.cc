@@ -57,8 +57,9 @@ void VrShellDelegate::SetDelegate(device::GvrDelegate* delegate,
   if (device_provider_) {
     device_provider_->Device()->OnDelegateChanged();
   }
-
-  gvr_delegate_->UpdateVSyncInterval(timebase_nanos_, interval_seconds_);
+  if (vsync_timebase_ != base::TimeTicks()) {
+    gvr_delegate_->UpdateVSyncInterval(vsync_timebase_, vsync_interval_);
+  }
 
   if (pending_successful_present_request_) {
     gvr_delegate_->ConnectPresentingService(
@@ -83,10 +84,12 @@ void VrShellDelegate::SetPresentResult(JNIEnv* env,
                                        const JavaParamRef<jobject>& obj,
                                        jboolean success) {
   CHECK(!present_callback_.is_null());
-  if (success && !gvr_delegate_) {
-    // We have to wait until the GL thread is ready since we have to pass it
-    // the VRSubmitFrameClient.
-    pending_successful_present_request_ = true;
+  if (!gvr_delegate_) {
+    if (success) {
+      // We have to wait until the GL thread is ready since we have to pass it
+      // the VRSubmitFrameClient.
+      pending_successful_present_request_ = true;
+    }
     return;
   }
 
@@ -112,11 +115,12 @@ void VrShellDelegate::DisplayActivate(JNIEnv* env,
 void VrShellDelegate::UpdateVSyncInterval(JNIEnv* env,
                                           const JavaParamRef<jobject>& obj,
                                           jlong timebase_nanos,
-                                          jdouble interval_seconds) {
-  timebase_nanos_ = timebase_nanos;
-  interval_seconds_ = interval_seconds;
+                                          jlong interval_micros) {
+  vsync_timebase_ = base::TimeTicks() +
+                    base::TimeDelta::FromMilliseconds(timebase_nanos / 1000);
+  vsync_interval_ = base::TimeDelta::FromMicroseconds(interval_micros);
   if (gvr_delegate_) {
-    gvr_delegate_->UpdateVSyncInterval(timebase_nanos_, interval_seconds_);
+    gvr_delegate_->UpdateVSyncInterval(vsync_timebase_, vsync_interval_);
   }
 }
 
@@ -217,7 +221,7 @@ void VrShellDelegate::SetListeningForActivate(bool listening) {
 
 void VrShellDelegate::GetNextMagicWindowPose(
     device::mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) {
-  if (!gvr_api_) {
+  if (!gvr_api_ || gvr_delegate_) {
     std::move(callback).Run(nullptr);
     return;
   }

@@ -180,11 +180,13 @@ class RecordableEmbeddedWorkerInstanceClient
  protected:
   void StartWorker(const EmbeddedWorkerStartParams& params,
                    mojom::ServiceWorkerEventDispatcherRequest request,
+                   mojom::ServiceWorkerInstalledScriptsInfoPtr scripts_info,
                    mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo
                        instance_host) override {
     events_.push_back(Message::StartWorker);
     EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::StartWorker(
-        params, std::move(request), std::move(instance_host));
+        params, std::move(request), std::move(scripts_info),
+        std::move(instance_host));
   }
 
   void StopWorker() override {
@@ -210,9 +212,7 @@ TEST_F(ServiceWorkerContextTest, Register) {
   int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
-      pattern,
-      script_url,
-      NULL,
+      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
@@ -265,9 +265,7 @@ TEST_F(ServiceWorkerContextTest, Register_RejectInstall) {
   int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
-      pattern,
-      script_url,
-      NULL,
+      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
@@ -317,7 +315,7 @@ TEST_F(ServiceWorkerContextTest, Register_RejectActivate) {
   int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
-      pattern, script_url, NULL,
+      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
@@ -356,9 +354,8 @@ TEST_F(ServiceWorkerContextTest, Unregister) {
   bool called = false;
   int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      pattern,
       GURL("http://www.example.com/service_worker.js"),
-      NULL,
+      ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
@@ -405,24 +402,20 @@ TEST_F(ServiceWorkerContextTest, UnregisterMultiple) {
   int64_t registration_id3 = kInvalidServiceWorkerRegistrationId;
   int64_t registration_id4 = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      origin1_p1,
       GURL("http://www.example.com/service_worker.js"),
-      NULL,
+      ServiceWorkerRegistrationOptions(origin1_p1), nullptr,
       MakeRegisteredCallback(&called, &registration_id1));
   context()->RegisterServiceWorker(
-      origin1_p2,
       GURL("http://www.example.com/service_worker2.js"),
-      NULL,
+      ServiceWorkerRegistrationOptions(origin1_p2), nullptr,
       MakeRegisteredCallback(&called, &registration_id2));
   context()->RegisterServiceWorker(
-      origin2_p1,
       GURL("http://www.example.com:8080/service_worker3.js"),
-      NULL,
+      ServiceWorkerRegistrationOptions(origin2_p1), nullptr,
       MakeRegisteredCallback(&called, &registration_id3));
   context()->RegisterServiceWorker(
-      origin3_p1,
       GURL("http://www.other.com/service_worker4.js"),
-      NULL,
+      ServiceWorkerRegistrationOptions(origin3_p1), nullptr,
       MakeRegisteredCallback(&called, &registration_id4));
 
   ASSERT_FALSE(called);
@@ -502,9 +495,8 @@ TEST_F(ServiceWorkerContextTest, RegisterNewScript) {
   bool called = false;
   int64_t old_registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      pattern,
       GURL("http://www.example.com/service_worker.js"),
-      NULL,
+      ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &old_registration_id));
 
   ASSERT_FALSE(called);
@@ -515,9 +507,8 @@ TEST_F(ServiceWorkerContextTest, RegisterNewScript) {
   called = false;
   int64_t new_registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      pattern,
       GURL("http://www.example.com/service_worker_new.js"),
-      NULL,
+      ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &new_registration_id));
 
   ASSERT_FALSE(called);
@@ -545,9 +536,7 @@ TEST_F(ServiceWorkerContextTest, RegisterDuplicateScript) {
   bool called = false;
   int64_t old_registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      pattern,
-      script_url,
-      NULL,
+      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &old_registration_id));
 
   ASSERT_FALSE(called);
@@ -558,9 +547,7 @@ TEST_F(ServiceWorkerContextTest, RegisterDuplicateScript) {
   called = false;
   int64_t new_registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      pattern,
-      script_url,
-      NULL,
+      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &new_registration_id));
 
   ASSERT_FALSE(called);
@@ -690,9 +677,7 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
   int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
-      pattern,
-      script_url,
-      NULL,
+      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
@@ -735,9 +720,7 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
 
   called = false;
   context()->RegisterServiceWorker(
-      pattern,
-      script_url,
-      NULL,
+      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
       MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);

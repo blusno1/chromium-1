@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/debug/crash_logging.h"
 #include "base/hash.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
@@ -35,6 +36,7 @@
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
+#include "gpu/config/gpu_crash_keys.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
@@ -268,7 +270,9 @@ bool GpuCommandBufferStub::OnMessageReceived(const IPC::Message& message) {
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "GPUTask",
                "data", DevToolsChannelData::CreateForChannel(channel()));
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
-
+  // TODO(sunnyps): Should this use ScopedCrashKey instead?
+  base::debug::SetCrashKeyValue(crash_keys::kGPUGLContextIsVirtual,
+                                use_virtualized_gl_context_ ? "1" : "0");
   bool have_context = false;
   // Ensure the appropriate GL context is current before handling any IPC
   // messages directed at the command buffer. This ensures that the message
@@ -406,8 +410,10 @@ void GpuCommandBufferStub::PollWork() {
 
 void GpuCommandBufferStub::PerformWork() {
   TRACE_EVENT0("gpu", "GpuCommandBufferStub::PerformWork");
-
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
+  // TODO(sunnyps): Should this use ScopedCrashKey instead?
+  base::debug::SetCrashKeyValue(crash_keys::kGPUGLContextIsVirtual,
+                                use_virtualized_gl_context_ ? "1" : "0");
   if (decoder_.get() && !MakeCurrent())
     return;
 
@@ -499,6 +505,10 @@ bool GpuCommandBufferStub::MakeCurrent() {
 }
 
 void GpuCommandBufferStub::Destroy() {
+  FastSetActiveURL(active_url_, active_url_hash_, channel_);
+  // TODO(sunnyps): Should this use ScopedCrashKey instead?
+  base::debug::SetCrashKeyValue(crash_keys::kGPUGLContextIsVirtual,
+                                use_virtualized_gl_context_ ? "1" : "0");
   if (wait_for_token_) {
     Send(wait_for_token_->reply.release());
     wait_for_token_.reset();
@@ -679,6 +689,19 @@ bool GpuCommandBufferStub::Initialize(
       surface_ = default_surface;
     }
   } else {
+    switch (init_params.attribs.color_space) {
+      case gles2::COLOR_SPACE_UNSPECIFIED:
+        surface_format.SetColorSpace(
+            gl::GLSurfaceFormat::COLOR_SPACE_UNSPECIFIED);
+        break;
+      case gles2::COLOR_SPACE_SRGB:
+        surface_format.SetColorSpace(gl::GLSurfaceFormat::COLOR_SPACE_SRGB);
+        break;
+      case gles2::COLOR_SPACE_DISPLAY_P3:
+        surface_format.SetColorSpace(
+            gl::GLSurfaceFormat::COLOR_SPACE_DISPLAY_P3);
+        break;
+    }
     surface_ = ImageTransportSurface::CreateNativeSurface(
         AsWeakPtr(), surface_handle_, surface_format);
     if (!surface_ || !surface_->Initialize(surface_format)) {
@@ -701,6 +724,10 @@ bool GpuCommandBufferStub::Initialize(
     // group
     share_group_ = channel_->share_group();
   }
+
+  // TODO(sunnyps): Should this use ScopedCrashKey instead?
+  base::debug::SetCrashKeyValue(crash_keys::kGPUGLContextIsVirtual,
+                                use_virtualized_gl_context_ ? "1" : "0");
 
   scoped_refptr<gl::GLContext> context;
   if (use_virtualized_gl_context_ && share_group_) {

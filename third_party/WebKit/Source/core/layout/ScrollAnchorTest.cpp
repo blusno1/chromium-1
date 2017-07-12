@@ -4,8 +4,8 @@
 
 #include "core/layout/ScrollAnchor.h"
 
-#include "core/dom/ClientRect.h"
 #include "core/frame/VisualViewport.h"
+#include "core/geometry/DOMRect.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "core/page/PrintContext.h"
@@ -19,7 +19,7 @@ using Corner = ScrollAnchor::Corner;
 
 typedef bool TestParamRootLayerScrolling;
 class ScrollAnchorTest
-    : public testing::WithParamInterface<TestParamRootLayerScrolling>,
+    : public ::testing::WithParamInterface<TestParamRootLayerScrolling>,
       private ScopedRootLayerScrollingForTest,
       public RenderingTest {
  public:

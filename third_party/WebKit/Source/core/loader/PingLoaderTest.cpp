@@ -47,9 +47,8 @@ class PingLoaderTest : public ::testing::Test {
   }
 
   void SetDocumentURL(const KURL& url) {
-    FrameLoadRequest request(
-        nullptr, ResourceRequest(url),
-        SubstituteData(SharedBuffer::Create(), "text/html", "UTF-8", KURL()));
+    FrameLoadRequest request(nullptr, ResourceRequest(url),
+                             SubstituteData(SharedBuffer::Create()));
     page_holder_->GetFrame().Loader().Load(request);
     blink::testing::RunPendingTasks();
     ASSERT_EQ(url.GetString(), page_holder_->GetDocument().Url().GetString());
@@ -58,7 +57,7 @@ class PingLoaderTest : public ::testing::Test {
   const ResourceRequest& PingAndGetRequest(const KURL& ping_url) {
     KURL destination_url(kParsedURLString, "http://navigation.destination");
     URLTestHelpers::RegisterMockedURLLoad(
-        ping_url, testing::WebTestDataPath("bar.html"), "text/html");
+        ping_url, testing::CoreTestDataPath("bar.html"), "text/html");
     PingLoader::SendLinkAuditPing(&page_holder_->GetFrame(), ping_url,
                                   destination_url);
     const ResourceRequest& ping_request = client_->PingRequest();

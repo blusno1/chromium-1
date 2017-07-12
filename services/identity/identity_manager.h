@@ -5,25 +5,30 @@
 #ifndef SERVICES_IDENTITY_IDENTITY_MANAGER_H_
 #define SERVICES_IDENTITY_IDENTITY_MANAGER_H_
 
+#include "base/callback_list.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "components/signin/core/browser/signin_manager_base.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "services/identity/public/cpp/account_state.h"
 #include "services/identity/public/cpp/scope_set.h"
 #include "services/identity/public/interfaces/identity_manager.mojom.h"
 
 class AccountTrackerService;
-class SigninManagerBase;
 
 namespace identity {
 
-class IdentityManager : public mojom::IdentityManager {
+class IdentityManager : public mojom::IdentityManager,
+                        public OAuth2TokenService::Observer,
+                        public SigninManagerBase::Observer {
  public:
   static void Create(mojom::IdentityManagerRequest request,
                      AccountTrackerService* account_tracker,
                      SigninManagerBase* signin_manager,
                      ProfileOAuth2TokenService* token_service);
 
-  IdentityManager(AccountTrackerService* account_tracker,
+  IdentityManager(mojom::IdentityManagerRequest request,
+                  AccountTrackerService* account_tracker,
                   SigninManagerBase* signin_manager,
                   ProfileOAuth2TokenService* token_service);
   ~IdentityManager() override;
@@ -65,6 +70,8 @@ class IdentityManager : public mojom::IdentityManager {
 
   // mojom::IdentityManager:
   void GetPrimaryAccountInfo(GetPrimaryAccountInfoCallback callback) override;
+  void GetPrimaryAccountWhenAvailable(
+      GetPrimaryAccountWhenAvailableCallback callback) override;
   void GetAccountInfoFromGaiaId(
       const std::string& gaia_id,
       GetAccountInfoFromGaiaIdCallback callback) override;
@@ -73,18 +80,48 @@ class IdentityManager : public mojom::IdentityManager {
                       const std::string& consumer_id,
                       GetAccessTokenCallback callback) override;
 
+  // OAuth2TokenService::Observer:
+  void OnRefreshTokenAvailable(const std::string& account_id) override;
+
+  // SigninManagerBase::Observer:
+  void GoogleSigninSucceeded(const std::string& account_id,
+                             const std::string& username) override;
+
+  // Notified when there is a change in the state of the account
+  // corresponding to |account_id|.
+  void OnAccountStateChange(const std::string& account_id);
+
   // Deletes |request|.
   void AccessTokenRequestCompleted(AccessTokenRequest* request);
 
   // Gets the current state of the account represented by |account_info|.
   AccountState GetStateOfAccount(const AccountInfo& account_info);
 
+  // Called when |signin_manager_| is shutting down. Destroys this instance,
+  // since this instance can't outlive the signin classes that it is depending
+  // on. Note that once IdentityManager manages the lifetime of its dependencies
+  // internally, this will no longer be necessary.
+  void OnSigninManagerShutdown();
+
+  // Called when |binding_| hits a connection error. Destroys this instance,
+  // since it's no longer needed.
+  void OnConnectionError();
+
+  mojo::Binding<mojom::IdentityManager> binding_;
   AccountTrackerService* account_tracker_;
   SigninManagerBase* signin_manager_;
   ProfileOAuth2TokenService* token_service_;
 
+  std::unique_ptr<base::CallbackList<void()>::Subscription>
+      signin_manager_shutdown_subscription_;
+
   // The set of pending requests for access tokens.
   AccessTokenRequests access_token_requests_;
+
+  // List of callbacks that will be notified when the primary account is
+  // available.
+  std::vector<GetPrimaryAccountWhenAvailableCallback>
+      primary_account_available_callbacks_;
 };
 
 }  // namespace identity

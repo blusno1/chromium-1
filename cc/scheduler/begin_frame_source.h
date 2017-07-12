@@ -11,8 +11,6 @@
 #include <set>
 #include <string>
 
-#include "base/containers/flat_set.h"
-#include "base/containers/small_map.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
@@ -257,10 +255,6 @@ class CC_EXPORT ExternalBeginFrameSource : public BeginFrameSource {
   void OnBeginFrame(const BeginFrameArgs& args);
 
  protected:
-  // Called on AddObserver and gets missed BeginFrameArgs for the given
-  // observer.
-  virtual BeginFrameArgs GetMissedBeginFrameArgs(BeginFrameObserver* obs);
-
   BeginFrameArgs last_begin_frame_args_;
   std::unordered_set<BeginFrameObserver*> observers_;
   ExternalBeginFrameSourceClient* client_;

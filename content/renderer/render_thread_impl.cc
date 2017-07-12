@@ -45,7 +45,6 @@
 #include "cc/base/histograms.h"
 #include "cc/base/switches.h"
 #include "cc/blink/web_layer_impl.h"
-#include "cc/output/buffer_to_texture_target_map.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/layer_tree_frame_sink.h"
 #include "cc/output/vulkan_in_process_context_provider.h"
@@ -58,6 +57,7 @@
 #include "components/viz/client/client_layer_tree_frame_sink.h"
 #include "components/viz/client/client_shared_bitmap_manager.h"
 #include "components/viz/client/local_surface_id_provider.h"
+#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "content/child/appcache/appcache_dispatcher.h"
 #include "content/child/appcache/appcache_frontend_impl.h"
 #include "content/child/blob_storage/blob_message_filter.h"
@@ -115,10 +115,10 @@
 #include "content/renderer/media/audio_input_message_filter.h"
 #include "content/renderer/media/audio_message_filter.h"
 #include "content/renderer/media/audio_renderer_mixer_manager.h"
+#include "content/renderer/media/gpu/gpu_video_accelerator_factories_impl.h"
 #include "content/renderer/media/media_stream_center.h"
 #include "content/renderer/media/midi_message_filter.h"
 #include "content/renderer/media/render_media_client.h"
-#include "content/renderer/media/renderer_gpu_video_accelerator_factories.h"
 #include "content/renderer/media/video_capture_impl_manager.h"
 #include "content/renderer/net_info_helper.h"
 #include "content/renderer/p2p/socket_dispatcher.h"
@@ -425,7 +425,7 @@ void CreateSingleSampleMetricsProvider(
 
 class RendererLocalSurfaceIdProvider : public viz::LocalSurfaceIdProvider {
  public:
-  const cc::LocalSurfaceId& GetLocalSurfaceIdForFrame(
+  const viz::LocalSurfaceId& GetLocalSurfaceIdForFrame(
       const cc::CompositorFrame& frame) override {
     auto new_surface_properties =
         RenderWidgetSurfaceProperties::FromCompositorFrame(frame);
@@ -438,8 +438,8 @@ class RendererLocalSurfaceIdProvider : public viz::LocalSurfaceIdProvider {
   }
 
  private:
-  cc::LocalSurfaceIdAllocator local_surface_id_allocator_;
-  cc::LocalSurfaceId local_surface_id_;
+  viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
+  viz::LocalSurfaceId local_surface_id_;
   RenderWidgetSurfaceProperties surface_properties_;
 };
 
@@ -763,7 +763,7 @@ void RenderThreadImpl::Init(
   registry->AddInterface(base::Bind(&CreateFrameFactory),
                          base::ThreadTaskRunnerHandle::Get());
   registry->AddInterface(base::Bind(&EmbeddedWorkerInstanceClientImpl::Create,
-                                    base::TimeTicks::Now()),
+                                    base::TimeTicks::Now(), GetIOTaskRunner()),
                          base::ThreadTaskRunnerHandle::Get());
   GetServiceManagerConnection()->AddConnectionFilter(
       base::MakeUnique<SimpleConnectionFilter>(std::move(registry)));
@@ -825,7 +825,7 @@ void RenderThreadImpl::Init(
   std::string image_texture_target_string =
       command_line.GetSwitchValueASCII(switches::kContentImageTextureTarget);
   buffer_to_texture_target_map_ =
-      cc::StringToBufferToTextureTargetMap(image_texture_target_string);
+      viz::StringToBufferToTextureTargetMap(image_texture_target_string);
 
   if (command_line.HasSwitch(switches::kDisableLCDText)) {
     is_lcd_text_enabled_ = false;
@@ -1319,7 +1319,7 @@ RenderThreadImpl::HostAllocateSharedMemoryBuffer(size_t size) {
   return ChildThreadImpl::AllocateSharedMemory(size);
 }
 
-cc::SharedBitmapManager* RenderThreadImpl::GetSharedBitmapManager() {
+viz::SharedBitmapManager* RenderThreadImpl::GetSharedBitmapManager() {
   return shared_bitmap_manager();
 }
 
@@ -1421,10 +1421,9 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
             GetMediaThreadTaskRunner();
         media_task_runner->PostTask(
             FROM_HERE,
-            base::Bind(
-                base::IgnoreResult(
-                    &RendererGpuVideoAcceleratorFactories::CheckContextLost),
-                base::Unretained(gpu_factories_.back().get())));
+            base::Bind(base::IgnoreResult(
+                           &GpuVideoAcceleratorFactoriesImpl::CheckContextLost),
+                       base::Unretained(gpu_factories_.back().get())));
       }
     }
   }
@@ -1465,11 +1464,15 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
       cmd_line->HasSwitch(switches::kEnableGpuMemoryBufferVideoFrames);
 #endif
 
-  gpu_factories_.push_back(RendererGpuVideoAcceleratorFactories::Create(
+  media::mojom::VideoEncodeAcceleratorPtr vea;
+  gpu_->CreateVideoEncodeAccelerator(mojo::MakeRequest(&vea));
+  media::mojom::VideoEncodeAcceleratorPtrInfo unbound_vea = vea.PassInterface();
+
+  gpu_factories_.push_back(GpuVideoAcceleratorFactoriesImpl::Create(
       std::move(gpu_channel_host), base::ThreadTaskRunnerHandle::Get(),
       media_task_runner, std::move(media_context_provider),
       enable_gpu_memory_buffer_video_frames, buffer_to_texture_target_map_,
-      enable_video_accelerator));
+      enable_video_accelerator, std::move(unbound_vea)));
   return gpu_factories_.back().get();
 }
 
@@ -1606,7 +1609,7 @@ bool RenderThreadImpl::IsElasticOverscrollEnabled() {
   return is_elastic_overscroll_enabled_;
 }
 
-const cc::BufferToTextureTargetMap&
+const viz::BufferToTextureTargetMap&
 RenderThreadImpl::GetBufferToTextureTargetMap() {
   return buffer_to_texture_target_map_;
 }
@@ -2517,11 +2520,13 @@ void RenderThreadImpl::OnSyncMemoryPressure(
   v8::MemoryPressureLevel v8_memory_pressure_level =
       static_cast<v8::MemoryPressureLevel>(memory_pressure_level);
 
+#if !BUILDFLAG(ALLOW_CRITICAL_MEMORY_PRESSURE_HANDLING_IN_FOREGROUND)
   // In order to reduce performance impact, translate critical level to
-  // moderate level for foregroud renderer.
+  // moderate level for foreground renderer.
   if (!RendererIsHidden() &&
       v8_memory_pressure_level == v8::MemoryPressureLevel::kCritical)
     v8_memory_pressure_level = v8::MemoryPressureLevel::kModerate;
+#endif  // !BUILDFLAG(ALLOW_CRITICAL_MEMORY_PRESSURE_HANDLING_IN_FOREGROUND)
 
   blink::MainThreadIsolate()->MemoryPressureNotification(
       v8_memory_pressure_level);

@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/time.h"
@@ -34,14 +35,19 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/web_contents_tester.h"
+#include "content/test/test_web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+using content::NavigationHandle;
+using content::NavigationThrottle;
 using content::WebContents;
 using content::WebContentsTester;
 
 namespace resource_coordinator {
 namespace {
+
+const char kTestUrl[] = "http://www.example.com";
 
 class TabStripDummyDelegate : public TestTabStripModelDelegate {
  public:
@@ -89,7 +95,6 @@ class MockTabStripModelObserver : public TabStripModelObserver {
 };
 
 enum TestIndicies {
-  kSelected,
   kAutoDiscardable,
   kPinned,
   kApp,
@@ -107,8 +112,51 @@ enum TestIndicies {
 class TabManagerTest : public ChromeRenderViewHostTestHarness {
  public:
   WebContents* CreateWebContents() {
-    return WebContents::Create(WebContents::CreateParams(profile()));
+    content::TestWebContents* web_contents =
+        content::TestWebContents::Create(profile(), nullptr);
+    // Commit an URL to allow discarding.
+    web_contents->NavigateAndCommit(GURL("https://www.example.com"));
+    return web_contents;
   }
+
+  std::unique_ptr<NavigationHandle> CreateTabAndNavigation() {
+    content::TestWebContents* web_contents =
+        content::TestWebContents::Create(profile(), nullptr);
+    return content::NavigationHandle::CreateNavigationHandleForTesting(
+        GURL(kTestUrl), web_contents->GetMainFrame());
+  }
+
+  // Simulate creating 3 tabs and their navigations.
+  void MaybeThrottleNavigations(TabManager* tab_manager) {
+    nav_handle1_ = CreateTabAndNavigation();
+    nav_handle2_ = CreateTabAndNavigation();
+    nav_handle3_ = CreateTabAndNavigation();
+    contents1_ = nav_handle1_->GetWebContents();
+    contents2_ = nav_handle2_->GetWebContents();
+    contents3_ = nav_handle3_->GetWebContents();
+
+    NavigationThrottle::ThrottleCheckResult result1 =
+        tab_manager->MaybeThrottleNavigation(nav_handle1_.get());
+    NavigationThrottle::ThrottleCheckResult result2 =
+        tab_manager->MaybeThrottleNavigation(nav_handle2_.get());
+    NavigationThrottle::ThrottleCheckResult result3 =
+        tab_manager->MaybeThrottleNavigation(nav_handle3_.get());
+
+    // First tab starts navigation right away because there is no tab loading.
+    EXPECT_EQ(content::NavigationThrottle::PROCEED, result1);
+
+    // The other 2 tabs's navigations are delayed.
+    EXPECT_EQ(content::NavigationThrottle::DEFER, result2);
+    EXPECT_EQ(content::NavigationThrottle::DEFER, result3);
+  }
+
+ protected:
+  std::unique_ptr<NavigationHandle> nav_handle1_;
+  std::unique_ptr<NavigationHandle> nav_handle2_;
+  std::unique_ptr<NavigationHandle> nav_handle3_;
+  WebContents* contents1_;
+  WebContents* contents2_;
+  WebContents* contents3_;
 };
 
 // TODO(georgesak): Add tests for protection to tabs with form input and
@@ -119,7 +167,7 @@ TEST_F(TabManagerTest, Comparator) {
   TabStatsList test_list;
   const base::TimeTicks now = base::TimeTicks::Now();
 
-  // Add kSelected last to verify that the array is being sorted.
+  // Add kAutoDiscardable last to verify that the array is being sorted.
 
   {
     TabStats stats;
@@ -190,6 +238,8 @@ TEST_F(TabManagerTest, Comparator) {
     test_list.push_back(stats);
   }
 
+  // This entry sorts to the front, so by adding it last, it verifies that the
+  // array is being sorted.
   {
     TabStats stats;
     stats.last_active = now;
@@ -198,20 +248,9 @@ TEST_F(TabManagerTest, Comparator) {
     test_list.push_back(stats);
   }
 
-  // This entry sorts to the front, so by adding it last, it verifies that the
-  // array is being sorted.
-  {
-    TabStats stats;
-    stats.last_active = now;
-    stats.is_selected = true;
-    stats.child_process_host_id = kSelected;
-    test_list.push_back(stats);
-  }
-
   std::sort(test_list.begin(), test_list.end(), TabManager::CompareTabStats);
 
   int index = 0;
-  EXPECT_EQ(kSelected, test_list[index++].child_process_host_id);
   EXPECT_EQ(kAutoDiscardable, test_list[index++].child_process_host_id);
   EXPECT_EQ(kFormEntry, test_list[index++].child_process_host_id);
   EXPECT_EQ(kPlayingAudio, test_list[index++].child_process_host_id);
@@ -246,9 +285,16 @@ TEST_F(TabManagerTest, IsInternalPage) {
 TEST_F(TabManagerTest, DiscardWebContentsAt) {
   TabManager tab_manager;
 
+  // Create a tab strip in a visible and active window.
   TabStripDummyDelegate delegate;
   TabStripModel tabstrip(&delegate, profile());
   tabstrip.AddObserver(&tab_manager);
+
+  TabManager::BrowserInfo browser_info;
+  browser_info.tab_strip_model = &tabstrip;
+  browser_info.window_is_minimized = false;
+  browser_info.browser_is_app = false;
+  tab_manager.test_browser_info_list_.push_back(browser_info);
 
   // Fill it with some tabs.
   WebContents* contents1 = CreateWebContents();
@@ -288,12 +334,6 @@ TEST_F(TabManagerTest, DiscardWebContentsAt) {
 
   // Activating the tab should clear its discard state.
   tabstrip.ActivateTabAt(0, true /* user_gesture */);
-  ASSERT_EQ(2, tabstrip.count());
-  EXPECT_FALSE(tab_manager.IsTabDiscarded(tabstrip.GetWebContentsAt(0)));
-  EXPECT_FALSE(tab_manager.IsTabDiscarded(tabstrip.GetWebContentsAt(1)));
-
-  // Don't discard active tab.
-  tab_manager.DiscardWebContentsAt(0, &tabstrip);
   ASSERT_EQ(2, tabstrip.count());
   EXPECT_FALSE(tab_manager.IsTabDiscarded(tabstrip.GetWebContentsAt(0)));
   EXPECT_FALSE(tab_manager.IsTabDiscarded(tabstrip.GetWebContentsAt(1)));
@@ -418,7 +458,8 @@ TEST_F(TabManagerTest, CanOnlyDiscardOnce) {
 TEST_F(TabManagerTest, DefaultTimeToPurgeInCorrectRange) {
   TabManager tab_manager;
   base::TimeDelta time_to_purge =
-      tab_manager.GetTimeToPurge(TabManager::kDefaultMinTimeToPurge);
+      tab_manager.GetTimeToPurge(TabManager::kDefaultMinTimeToPurge,
+                                 TabManager::kDefaultMinTimeToPurge * 2);
   EXPECT_GE(time_to_purge, base::TimeDelta::FromMinutes(30));
   EXPECT_LT(time_to_purge, base::TimeDelta::FromMinutes(60));
 }
@@ -456,6 +497,9 @@ TEST_F(TabManagerTest, ShouldPurgeAtDefaultTime) {
   // Wait 1 day and verify that the tab is still be purged.
   test_clock.Advance(base::TimeDelta::FromHours(24));
   EXPECT_FALSE(tab_manager.ShouldPurgeNow(test_contents));
+
+  // Tabs with a committed URL must be closed explicitly to avoid DCHECK errors.
+  tabstrip.CloseAllTabs();
 }
 
 TEST_F(TabManagerTest, ActivateTabResetPurgeState) {
@@ -466,7 +510,6 @@ TEST_F(TabManagerTest, ActivateTabResetPurgeState) {
 
   TabManager::BrowserInfo browser_info;
   browser_info.tab_strip_model = &tabstrip;
-  browser_info.window_is_active = true;
   browser_info.window_is_minimized = false;
   browser_info.browser_is_app = false;
   tab_manager.test_browser_info_list_.push_back(browser_info);
@@ -498,6 +541,9 @@ TEST_F(TabManagerTest, ActivateTabResetPurgeState) {
   // Activate tab2. Tab2's PurgeAndSuspend state should be NOT_PURGED.
   tabstrip.ActivateTabAt(1, true /* user_gesture */);
   EXPECT_FALSE(tab_manager.GetWebContentsData(tab2)->is_purged());
+
+  // Tabs with a committed URL must be closed explicitly to avoid DCHECK errors.
+  tabstrip.CloseAllTabs();
 }
 
 // Verify that the |is_in_visible_window| field of TabStats returned by
@@ -525,14 +571,12 @@ TEST_F(TabManagerTest, GetUnsortedTabStatsIsInVisibleWindow) {
   // minimized.
   TabManager::BrowserInfo browser_info1;
   browser_info1.tab_strip_model = &tab_strip1;
-  browser_info1.window_is_active = true;
   browser_info1.window_is_minimized = false;
   browser_info1.browser_is_app = false;
   tab_manager.test_browser_info_list_.push_back(browser_info1);
 
   TabManager::BrowserInfo browser_info2;
   browser_info2.tab_strip_model = &tab_strip2;
-  browser_info2.window_is_active = false;
   browser_info2.window_is_minimized = true;
   browser_info2.browser_is_app = false;
   tab_manager.test_browser_info_list_.push_back(browser_info2);
@@ -556,6 +600,66 @@ TEST_F(TabManagerTest, GetUnsortedTabStatsIsInVisibleWindow) {
   EXPECT_TRUE(tab_stats[1].is_in_visible_window);
   EXPECT_FALSE(tab_stats[2].is_in_visible_window);
   EXPECT_FALSE(tab_stats[3].is_in_visible_window);
+
+  // Tabs with a committed URL must be closed explicitly to avoid DCHECK errors.
+  tab_strip1.CloseAllTabs();
+  tab_strip2.CloseAllTabs();
+}
+
+// Verify that:
+// - On ChromeOS, DiscardTab can discard every tab in a non-visible window, but
+//   cannot discard the active tab in a visible window.
+// - On other platforms, DiscardTab can discard every non-active tab.
+TEST_F(TabManagerTest, DiscardTabWithNonVisibleTabs) {
+  TabManager tab_manager;
+  TabStripDummyDelegate delegate;
+
+  // Create 2 TabStripModels.
+  TabStripModel tab_strip1(&delegate, profile());
+  tab_strip1.AppendWebContents(CreateWebContents(), true);
+  tab_strip1.AppendWebContents(CreateWebContents(), false);
+
+  TabStripModel tab_strip2(&delegate, profile());
+  tab_strip2.AppendWebContents(CreateWebContents(), true);
+  tab_strip2.AppendWebContents(CreateWebContents(), false);
+
+  // Add the 2 TabStripModels to the TabManager.
+  // The window for |tab_strip1| is visible while the window for |tab_strip2|
+  // is minimized.
+  TabManager::BrowserInfo browser_info1;
+  browser_info1.tab_strip_model = &tab_strip1;
+  browser_info1.window_is_minimized = false;
+  browser_info1.browser_is_app = false;
+  tab_manager.test_browser_info_list_.push_back(browser_info1);
+
+  TabManager::BrowserInfo browser_info2;
+  browser_info2.tab_strip_model = &tab_strip2;
+  browser_info2.window_is_minimized = true;
+  browser_info2.browser_is_app = false;
+  tab_manager.test_browser_info_list_.push_back(browser_info2);
+
+  for (int i = 0; i < 4; ++i)
+    tab_manager.DiscardTab();
+
+  // Active tab in a visible window should not be discarded.
+  EXPECT_FALSE(tab_manager.IsTabDiscarded(tab_strip1.GetWebContentsAt(0)));
+
+  // Non-active tabs should be discarded.
+  EXPECT_TRUE(tab_manager.IsTabDiscarded(tab_strip1.GetWebContentsAt(1)));
+  EXPECT_TRUE(tab_manager.IsTabDiscarded(tab_strip2.GetWebContentsAt(1)));
+
+#if defined(OS_CHROMEOS)
+  // On ChromeOS, active tab in a minimized window should be discarded.
+  EXPECT_TRUE(tab_manager.IsTabDiscarded(tab_strip2.GetWebContentsAt(0)));
+#else
+  // On other platforms, an active tab is never discarded, even if its window is
+  // minimized.
+  EXPECT_FALSE(tab_manager.IsTabDiscarded(tab_strip2.GetWebContentsAt(0)));
+#endif  // defined(OS_CHROMEOS)
+
+  // Tabs with a committed URL must be closed explicitly to avoid DCHECK errors.
+  tab_strip1.CloseAllTabs();
+  tab_strip2.CloseAllTabs();
 }
 
 TEST_F(TabManagerTest, OnSessionRestoreStartedAndFinishedLoadingTabs) {
@@ -576,6 +680,167 @@ TEST_F(TabManagerTest, OnSessionRestoreStartedAndFinishedLoadingTabs) {
       ->NavigateAndCommit(GURL("about:blank"));
   WebContentsTester::For(test_contents.get())->TestSetIsLoading(false);
   EXPECT_FALSE(tab_manager->IsSessionRestoreLoadingTabs());
+}
+
+TEST_F(TabManagerTest, HistogramsSessionRestoreSwitchToTab) {
+  const char kHistogramName[] = "TabManager.SessionRestore.SwitchToTab";
+
+  TabManager tab_manager;
+  TabStripDummyDelegate delegate;
+  TabStripModel tab_strip(&delegate, profile());
+  WebContents* tab = CreateWebContents();
+  tab_strip.AppendWebContents(tab, true);
+
+  auto* data = tab_manager.GetWebContentsData(tab);
+
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount(kHistogramName, 0);
+
+  data->SetTabLoadingState(TAB_IS_LOADING);
+  tab_manager.RecordSwitchToTab(tab);
+  tab_manager.RecordSwitchToTab(tab);
+
+  // Nothing should happen until we're in a session restore
+  histograms.ExpectTotalCount(kHistogramName, 0);
+
+  tab_manager.OnSessionRestoreStartedLoadingTabs();
+
+  data->SetTabLoadingState(TAB_IS_NOT_LOADING);
+  tab_manager.RecordSwitchToTab(tab);
+  tab_manager.RecordSwitchToTab(tab);
+  histograms.ExpectTotalCount(kHistogramName, 2);
+  histograms.ExpectBucketCount(kHistogramName, TAB_IS_NOT_LOADING, 2);
+
+  data->SetTabLoadingState(TAB_IS_LOADING);
+  tab_manager.RecordSwitchToTab(tab);
+  tab_manager.RecordSwitchToTab(tab);
+  tab_manager.RecordSwitchToTab(tab);
+
+  histograms.ExpectTotalCount(kHistogramName, 5);
+  histograms.ExpectBucketCount(kHistogramName, TAB_IS_NOT_LOADING, 2);
+  histograms.ExpectBucketCount(kHistogramName, TAB_IS_LOADING, 3);
+
+  data->SetTabLoadingState(TAB_IS_LOADED);
+  tab_manager.RecordSwitchToTab(tab);
+  tab_manager.RecordSwitchToTab(tab);
+  tab_manager.RecordSwitchToTab(tab);
+  tab_manager.RecordSwitchToTab(tab);
+
+  histograms.ExpectTotalCount(kHistogramName, 9);
+  histograms.ExpectBucketCount(kHistogramName, TAB_IS_NOT_LOADING, 2);
+  histograms.ExpectBucketCount(kHistogramName, TAB_IS_LOADING, 3);
+  histograms.ExpectBucketCount(kHistogramName, TAB_IS_LOADED, 4);
+
+  // Tabs with a committed URL must be closed explicitly to avoid DCHECK errors.
+  tab_strip.CloseAllTabs();
+}
+
+TEST_F(TabManagerTest, MaybeThrottleNavigation) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  // Tab 1 is loading. The other 2 tabs's navigations are delayed.
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+}
+
+TEST_F(TabManagerTest, OnDidFinishNavigation) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  tab_manager->GetWebContentsData(contents2_)
+      ->DidFinishNavigation(nav_handle2_.get());
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+}
+
+TEST_F(TabManagerTest, OnDidStopLoading) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+
+  // Simulate tab 1 has finished loading.
+  tab_manager->GetWebContentsData(contents1_)->DidStopLoading();
+
+  // After tab 1 has finished loading, TabManager starts loading the next tab.
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+}
+
+TEST_F(TabManagerTest, OnWebContentsDestroyed) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  // Tab 2 is destroyed when its navigation is still delayed. Its states are
+  // cleaned up.
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  tab_manager->OnWebContentsDestroyed(contents2_);
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+
+  // Tab 1 is destroyed when it is still loading. Its states are cleaned up and
+  // Tabmanager starts to load the next tab (tab 3).
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+  tab_manager->GetWebContentsData(contents1_)->WebContentsDestroyed();
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+}
+
+TEST_F(TabManagerTest, OnDelayedTabSelected) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  // Simulate selecting tab 3, which should start loading immediately.
+  tab_manager->ActiveTabChanged(
+      contents1_, contents3_, 2,
+      TabStripModelObserver::CHANGE_REASON_USER_GESTURE);
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  // Simulate tab 1 has finished loading. TabManager will NOT load the next tab
+  // (tab 2) because tab 3 is still loading.
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  tab_manager->GetWebContentsData(contents1_)->DidStopLoading();
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+
+  // Simulate tab 3 has finished loading. TabManager starts loading the next tab
+  // (tab 2).
+  tab_manager->GetWebContentsData(contents3_)->DidStopLoading();
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
 }
 
 }  // namespace resource_coordinator

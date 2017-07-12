@@ -4,13 +4,13 @@
 
 #include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_service.h"
 
@@ -50,7 +50,7 @@ AffiliatedMatchHelper::~AffiliatedMatchHelper() {
 void AffiliatedMatchHelper::Initialize() {
   DCHECK(password_store_);
   DCHECK(affiliation_service_);
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&AffiliatedMatchHelper::DoDeferredInitialization,
                  weak_ptr_factory_.GetWeakPtr()),
@@ -86,7 +86,7 @@ void AffiliatedMatchHelper::GetAffiliatedWebRealms(
   }
 }
 
-void AffiliatedMatchHelper::InjectAffiliatedWebRealms(
+void AffiliatedMatchHelper::InjectAffiliationAndBrandingInformation(
     std::vector<std::unique_ptr<autofill::PasswordForm>> forms,
     const PasswordFormsCallback& result_callback) {
   std::vector<autofill::PasswordForm*> android_credentials;
@@ -99,34 +99,53 @@ void AffiliatedMatchHelper::InjectAffiliatedWebRealms(
   base::Closure barrier_closure =
       base::BarrierClosure(android_credentials.size(), on_get_all_realms);
   for (auto* form : android_credentials) {
+    // TODO(crbug.com/628988): Rename |GetAffiliations| to
+    // |GetAffiliationsAndBranding|.
     affiliation_service_->GetAffiliations(
         FacetURI::FromPotentiallyInvalidSpec(form->signon_realm),
         AffiliationService::StrategyOnCacheMiss::FAIL,
-        base::Bind(&AffiliatedMatchHelper::CompleteInjectAffiliatedWebRealm,
+        base::Bind(&AffiliatedMatchHelper::
+                       CompleteInjectAffiliationAndBrandingInformation,
                    weak_ptr_factory_.GetWeakPtr(), base::Unretained(form),
                    barrier_closure));
   }
 }
 
-void AffiliatedMatchHelper::CompleteInjectAffiliatedWebRealm(
+void AffiliatedMatchHelper::CompleteInjectAffiliationAndBrandingInformation(
     autofill::PasswordForm* form,
     base::Closure barrier_closure,
     const AffiliatedFacets& results,
     bool success) {
-  // If there is a number of realms, choose the first in the list.
-  if (success) {
-    for (const FacetURI& affiliated_facet : results) {
-      if (affiliated_facet.IsValidWebFacetURI()) {
-        form->affiliated_web_realm = affiliated_facet.canonical_spec() + "/";
-        break;
-      }
-    }
+  if (!success) {
+    barrier_closure.Run();
+    return;
   }
-  barrier_closure.Run();
-}
 
-void AffiliatedMatchHelper::TrimAffiliationCache() {
-  affiliation_service_->TrimCache();
+  const FacetURI facet_uri(
+      FacetURI::FromPotentiallyInvalidSpec(form->signon_realm));
+  DCHECK(facet_uri.IsValidAndroidFacetURI());
+
+  // Inject branding information into the form (e.g. the Play Store name and
+  // icon URL). We expect to always find a matching facet URI in the results.
+  auto facet = std::find_if(results.begin(), results.end(),
+                            [&facet_uri](const Facet& affiliated_facet) {
+                              return affiliated_facet.uri == facet_uri;
+                            });
+  DCHECK(facet != results.end());
+  form->app_display_name = facet->branding_info.name;
+  form->app_icon_url = facet->branding_info.icon_url;
+
+  // Inject the affiliated web realm into the form, if available. In case
+  // multiple web realms are available, this will always choose the first
+  // available web realm for injection.
+  auto affiliated_facet = std::find_if(
+      results.begin(), results.end(), [](const Facet& affiliated_facet) {
+        return affiliated_facet.uri.IsValidWebFacetURI();
+      });
+  if (affiliated_facet != results.end())
+    form->affiliated_web_realm = affiliated_facet->uri.canonical_spec() + "/";
+
+  barrier_closure.Run();
 }
 
 // static
@@ -159,11 +178,12 @@ void AffiliatedMatchHelper::CompleteGetAffiliatedAndroidRealms(
     bool success) {
   std::vector<std::string> affiliated_realms;
   if (success) {
-    for (const FacetURI& affiliated_facet : results) {
-      if (affiliated_facet != original_facet_uri &&
-          affiliated_facet.IsValidAndroidFacetURI())
+    for (const Facet& affiliated_facet : results) {
+      if (affiliated_facet.uri != original_facet_uri &&
+          affiliated_facet.uri.IsValidAndroidFacetURI())
         // Facet URIs have no trailing slash, whereas realms do.
-        affiliated_realms.push_back(affiliated_facet.canonical_spec() + "/");
+        affiliated_realms.push_back(affiliated_facet.uri.canonical_spec() +
+                                    "/");
     }
   }
   result_callback.Run(affiliated_realms);
@@ -175,10 +195,11 @@ void AffiliatedMatchHelper::CompleteGetAffiliatedWebRealms(
     bool success) {
   std::vector<std::string> affiliated_realms;
   if (success) {
-    for (const FacetURI& affiliated_facet : results) {
-      if (affiliated_facet.IsValidWebFacetURI())
+    for (const Facet& affiliated_facet : results) {
+      if (affiliated_facet.uri.IsValidWebFacetURI())
         // Facet URIs have no trailing slash, whereas realms do.
-        affiliated_realms.push_back(affiliated_facet.canonical_spec() + "/");
+        affiliated_realms.push_back(affiliated_facet.uri.canonical_spec() +
+                                    "/");
     }
   }
   result_callback.Run(affiliated_realms);
@@ -204,11 +225,11 @@ void AffiliatedMatchHelper::OnLoginsChanged(
 
   // When the primary key for a login is updated, |changes| will contain both a
   // REMOVE and ADD change for that login. Cached affiliation data should not be
-  // deleted in this case. A simple solution is to call TrimCacheForFacet()
+  // deleted in this case. A simple solution is to call TrimCacheForFacetURI()
   // always after Prefetch() calls -- the trimming logic will detect that there
   // is an active prefetch and not delete the corresponding data.
   for (const FacetURI& facet_uri : facet_uris_to_trim)
-    affiliation_service_->TrimCacheForFacet(facet_uri);
+    affiliation_service_->TrimCacheForFacetURI(facet_uri);
 }
 
 void AffiliatedMatchHelper::OnGetPasswordStoreResults(

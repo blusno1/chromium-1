@@ -25,7 +25,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_synthetic_delay.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/debug_marker_manager.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
@@ -3179,6 +3178,10 @@ bool GLES2DecoderImpl::Initialize(
   // SetSurface.
   context_ = context;
   surface_ = surface;
+
+  // Set workarounds for the surface.
+  if (workarounds().rely_on_implicit_sync_for_swap_buffers)
+    surface_->SetRelyOnImplicitSync();
 
   // Create GPU Tracer for timing values.
   gpu_tracer_.reset(new GPUTracer(this));
@@ -11917,7 +11920,6 @@ void GLES2DecoderImpl::DoSwapBuffersWithBoundsCHROMIUM(
     GLsizei count,
     const volatile GLint* rects) {
   TRACE_EVENT0("gpu", "GLES2DecoderImpl::SwapBuffersWithBoundsCHROMIUM");
-  { TRACE_EVENT_SYNTHETIC_DELAY("gpu.PresentingFrame"); }
   if (!supports_swap_buffers_with_bounds_) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glSwapBuffersWithBoundsCHROMIUM",
                        "command not supported by surface");
@@ -11951,9 +11953,6 @@ error::Error GLES2DecoderImpl::HandlePostSubBufferCHROMIUM(
       *static_cast<const volatile gles2::cmds::PostSubBufferCHROMIUM*>(
           cmd_data);
   TRACE_EVENT0("gpu", "GLES2DecoderImpl::HandlePostSubBufferCHROMIUM");
-  {
-    TRACE_EVENT_SYNTHETIC_DELAY("gpu.PresentingFrame");
-  }
   if (!supports_post_sub_buffer_) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_OPERATION,
@@ -14110,7 +14109,7 @@ error::Error GLES2DecoderImpl::HandleCompressedTexSubImage2D(
     }
     data = reinterpret_cast<const void*>(data_shm_offset);
   } else {
-    if (!data_shm_id && data_shm_offset) {
+    if (!data_shm_id) {
       return error::kInvalidArguments;
     }
     data = GetSharedMemoryAs<const void*>(
@@ -14185,6 +14184,8 @@ error::Error GLES2DecoderImpl::DoCompressedTexSubImage(
           width, height, depth, format, texture)) {
     return error::kNoError;
   }
+  if (image_size > 0 && !state_.bound_pixel_unpack_buffer && !data)
+    return error::kInvalidArguments;
 
   if (!texture->IsLevelCleared(target, level)) {
     // This can only happen if the compressed texture was allocated
@@ -14841,6 +14842,8 @@ error::Error GLES2DecoderImpl::HandleTexSubImage2D(
     }
     params = state_.GetUnpackParams(ContextState::k2D);
   } else {
+    if (!pixels_shm_id && pixels_shm_offset)
+      return error::kInvalidArguments;
     // When reading from client buffer, the command buffer client side took
     // the responsibility to take the pixels from the client buffer and
     // unpack them according to the full ES3 pack parameters as source, all
@@ -14870,6 +14873,7 @@ error::Error GLES2DecoderImpl::HandleTexSubImage2D(
     if (!pixels)
       return error::kOutOfBounds;
   } else {
+    DCHECK(buffer || !pixels_shm_offset);
     pixels = reinterpret_cast<const void*>(pixels_shm_offset);
   }
 
@@ -14932,6 +14936,8 @@ error::Error GLES2DecoderImpl::HandleTexSubImage3D(
     }
     params = state_.GetUnpackParams(ContextState::k3D);
   } else {
+    if (!pixels_shm_id && pixels_shm_offset)
+      return error::kInvalidArguments;
     // When reading from client buffer, the command buffer client side took
     // the responsibility to take the pixels from the client buffer and
     // unpack them according to the full ES3 pack parameters as source, all
@@ -14961,6 +14967,7 @@ error::Error GLES2DecoderImpl::HandleTexSubImage3D(
     if (!pixels)
       return error::kOutOfBounds;
   } else {
+    DCHECK(buffer || !pixels_shm_offset);
     pixels = reinterpret_cast<const void*>(pixels_shm_offset);
   }
 
@@ -15548,9 +15555,6 @@ void GLES2DecoderImpl::DoSwapBuffers() {
   TRACE_EVENT2("gpu", "GLES2DecoderImpl::DoSwapBuffers",
                "offscreen", is_offscreen,
                "frame", this_frame_number);
-  {
-    TRACE_EVENT_SYNTHETIC_DELAY("gpu.PresentingFrame");
-  }
 
   ScopedGPUTrace scoped_gpu_trace(gpu_tracer_.get(), kTraceDecoder,
                                   "GLES2Decoder", "SwapBuffer");

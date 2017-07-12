@@ -54,9 +54,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
                                  public IAccessibleHyperlink,
                                  public IAccessibleHypertext,
                                  public IAccessibleImage,
-                                 public IAccessibleTable,
-                                 public IAccessibleTable2,
-                                 public IAccessibleTableCell,
                                  public IAccessibleValue,
                                  public ISimpleDOMDocument,
                                  public ISimpleDOMNode,
@@ -727,9 +724,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
 
  private:
   // Private accessors.
-  int32_t ia_role() const { return win_attributes_->ia_role; }
-  int32_t ia2_role() const { return win_attributes_->ia2_role; }
-  int32_t ia2_state() const { return win_attributes_->ia2_state; }
   const std::vector<base::string16>& ia2_attributes() const {
     return win_attributes_->ia2_attributes;
   }
@@ -776,10 +770,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   // returns a pointer to the target object if it exists, otherwise NULL.
   // Does not return a new reference.
   BrowserAccessibilityComWin* GetTargetFromChildID(const VARIANT& var_id);
-
-  // Initialize the role and state metadata from the role enum and state
-  // bitmasks defined in ui::AXNodeData.
-  void InitRoleAndState();
 
   // Retrieve the value of an attribute from the string attribute map and
   // if found and nonempty, allocate a new BSTR (with SysAllocString)
@@ -926,9 +916,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
 
   // Fire a Windows-specific accessibility event notification on this node.
   void FireNativeEvent(LONG win_event_type) const;
-
-  static bool IsInTreeGrid(const BrowserAccessibility* item);
-
   struct WinAttributes {
     WinAttributes();
     ~WinAttributes();

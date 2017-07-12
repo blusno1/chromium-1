@@ -41,9 +41,10 @@ class Document;
 class ElementShadow;
 class ExceptionState;
 class HTMLShadowElement;
-class InsertionPoint;
+class V0InsertionPoint;
 class ShadowRootRareDataV0;
 class SlotAssignment;
+class WhitespaceAttacher;
 
 enum class ShadowRootType { kUserAgent, V0, kOpen, kClosed };
 
@@ -114,15 +115,15 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   unsigned DescendantShadowElementCount() const;
   HTMLShadowElement* ShadowInsertionPointOfYoungerShadowRoot() const;
   void SetShadowInsertionPointOfYoungerShadowRoot(HTMLShadowElement*);
-  void DidAddInsertionPoint(InsertionPoint*);
-  void DidRemoveInsertionPoint(InsertionPoint*);
-  const HeapVector<Member<InsertionPoint>>& DescendantInsertionPoints();
+  void DidAddInsertionPoint(V0InsertionPoint*);
+  void DidRemoveInsertionPoint(V0InsertionPoint*);
+  const HeapVector<Member<V0InsertionPoint>>& DescendantInsertionPoints();
 
   // For Internals, don't use this.
   unsigned ChildShadowRootCount() const { return child_shadow_root_count_; }
 
   void RecalcStyle(StyleRecalcChange);
-  void RebuildLayoutTree(Text*& next_text_sibling);
+  void RebuildLayoutTree(WhitespaceAttacher&);
 
   void RegisterScopedHTMLStyleChild();
   void UnregisterScopedHTMLStyleChild();
@@ -175,7 +176,7 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
     --child_shadow_root_count_;
   }
   void InvalidateDescendantInsertionPoints();
-  void SkipRebuildLayoutTree(Text*& next_text_sibling) const;
+  void SkipRebuildLayoutTree(WhitespaceAttacher&) const;
 
   Member<ShadowRootRareDataV0> shadow_root_rare_data_v0_;
   Member<StyleSheetList> style_sheet_list_;

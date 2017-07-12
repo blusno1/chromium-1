@@ -56,7 +56,18 @@ class VRDisplayFrameRequestCallback : public FrameRequestCallback {
       : vr_display_(vr_display) {}
   ~VRDisplayFrameRequestCallback() override {}
   void handleEvent(double high_res_time_ms) override {
-    vr_display_->OnMagicWindowVSync(high_res_time_ms / 1000.0);
+    double monotonic_time;
+    if (!vr_display_->GetDocument() || !vr_display_->GetDocument()->Loader()) {
+      monotonic_time = WTF::MonotonicallyIncreasingTime();
+    } else {
+      // Convert document-zero time back to monotonic time.
+      double reference_monotonic_time = vr_display_->GetDocument()
+                                            ->Loader()
+                                            ->GetTiming()
+                                            .ReferenceMonotonicTime();
+      monotonic_time = (high_res_time_ms / 1000.0) + reference_monotonic_time;
+    }
+    vr_display_->OnMagicWindowVSync(monotonic_time);
   }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
@@ -183,9 +194,7 @@ void VRDisplay::RequestVSync() {
         doc->RequestAnimationFrame(new VRDisplayFrameRequestCallback(this));
     return;
   }
-
-  if (!pending_vrdisplay_raf_)
-    return;
+  DCHECK(vr_presentation_provider_.is_bound());
 
   // The logic here is a bit subtle. We get called from one of the following
   // four contexts:
@@ -495,7 +504,11 @@ void VRDisplay::BeginPresent() {
     Platform::Current()->RecordRapporURL("VR.WebVR.PresentSuccess",
                                          WebURL(doc->Url()));
   }
-
+  if (!FocusedOrPresenting() && display_blurred_) {
+    // Presentation doesn't care about focus, so if we're blurred because of
+    // focus, then unblur.
+    OnFocus();
+  }
   is_presenting_ = true;
   // Call RequestVSync to switch from the (internal) document rAF to the
   // VrPresentationProvider VSync.
@@ -883,11 +896,6 @@ void VRDisplay::OnPresentingVSync(
   }
   pending_vsync_ = false;
 
-  // Ensure a consistent timebase with document rAF.
-  if (timebase_ < 0) {
-    timebase_ = WTF::MonotonicallyIncreasingTime() - time_delta.InSecondsF();
-  }
-
   frame_pose_ = std::move(pose);
   vr_frame_id_ = frame_id;
 
@@ -902,7 +910,7 @@ void VRDisplay::OnPresentingVSync(
   Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       WTF::Bind(&VRDisplay::ProcessScheduledAnimations,
-                WrapWeakPersistent(this), timebase_ + time_delta.InSecondsF()));
+                WrapWeakPersistent(this), time_delta.InSecondsF()));
 }
 
 void VRDisplay::OnMagicWindowVSync(double timestamp) {
@@ -965,11 +973,9 @@ bool VRDisplay::HasPendingActivity() const {
 
 void VRDisplay::FocusChanged() {
   DVLOG(1) << __FUNCTION__;
-  if (is_presenting_)
-    return;
   if (navigator_vr_->IsFocused()) {
     OnFocus();
-  } else {
+  } else if (!is_presenting_) {
     OnBlur();
   }
 }

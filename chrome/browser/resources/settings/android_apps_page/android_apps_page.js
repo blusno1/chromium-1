@@ -28,16 +28,18 @@ Polymer({
       type: Object,
       value: function() {
         var map = new Map();
-        map.set(
-            settings.Route.ANDROID_APPS_DETAILS.path,
-            '#android-apps .subpage-arrow');
+        if (settings.routes.ANDROID_APPS_DETAILS) {
+          map.set(
+              settings.routes.ANDROID_APPS_DETAILS.path,
+              '#android-apps .subpage-arrow');
+        }
         return map;
       },
     },
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   onEnableTap_: function(event) {
@@ -53,6 +55,6 @@ Polymer({
   /** @private */
   onSubpageTap_: function() {
     if (this.androidAppsInfo.playStoreEnabled)
-      settings.navigateTo(settings.Route.ANDROID_APPS_DETAILS);
+      settings.navigateTo(settings.routes.ANDROID_APPS_DETAILS);
   },
 });

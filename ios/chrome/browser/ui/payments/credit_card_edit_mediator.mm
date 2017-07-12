@@ -11,8 +11,8 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #import "components/autofill/ios/browser/credit_card_util.h"
 #include "components/payments/core/payment_request_data_util.h"
+#include "components/payments/core/strings_util.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_util.h"
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type.h"
@@ -38,7 +38,7 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 // The PaymentRequest object owning an instance of web::PaymentRequest as
 // provided by the page invoking the Payment Request API. This is a weak
 // pointer and should outlive this class.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // The credit card to be edited, if any. This pointer is not owned by this class
 // and should outlive it.
@@ -67,7 +67,7 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 @synthesize fieldsMap = _fieldsMap;
 @synthesize creditCardExpDateField = _creditCardExpDateField;
 
-- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+- (instancetype)initWithPaymentRequest:(payments::PaymentRequest*)paymentRequest
                             creditCard:(autofill::CreditCard*)creditCard {
   self = [super init];
   if (self) {
@@ -136,7 +136,8 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
   AcceptedPaymentMethodsItem* acceptedMethodsItem =
       [[AcceptedPaymentMethodsItem alloc] init];
   acceptedMethodsItem.message =
-      l10n_util::GetNSString(IDS_PAYMENTS_ACCEPTED_CARDS_LABEL);
+      base::SysUTF16ToNSString(payments::GetAcceptedCardTypesText(
+          _paymentRequest->supported_card_types_set()));
   acceptedMethodsItem.methodTypeIcons = issuerNetworkIcons;
   return acceptedMethodsItem;
 }
@@ -264,10 +265,9 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 
   // Card holder name field.
   NSString* creditCardName =
-      _creditCard
-          ? autofill::GetCreditCardName(
-                *_creditCard, GetApplicationContext()->GetApplicationLocale())
-          : nil;
+      _creditCard ? autofill::GetCreditCardName(
+                        *_creditCard, _paymentRequest->GetApplicationLocale())
+                  : nil;
   fieldKey = [NSNumber numberWithInt:AutofillUITypeCreditCardHolderFullName];
   EditorField* creditCardNameField = self.fieldsMap[fieldKey];
   if (!creditCardNameField) {

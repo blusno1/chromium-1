@@ -201,7 +201,9 @@ MojoResult DataPipeConsumerDispatcher::BeginReadData(const void** buffer,
 
   // These flags may not be used in two-phase mode.
   if ((flags & MOJO_READ_DATA_FLAG_DISCARD) ||
-      (flags & MOJO_READ_DATA_FLAG_QUERY) || (flags & MOJO_READ_DATA_FLAG_PEEK))
+      (flags & MOJO_READ_DATA_FLAG_QUERY) ||
+      (flags & MOJO_READ_DATA_FLAG_PEEK) ||
+      (flags & MOJO_READ_DATA_FLAG_ALL_OR_NONE))
     return MOJO_RESULT_INVALID_ARGUMENT;
 
   const bool had_new_data = new_data_available_;
@@ -530,7 +532,7 @@ void DataPipeConsumerDispatcher::UpdateSignalsStateNoLock() {
 
   ports::PortStatus port_status;
   int rv = node_controller_->node()->GetStatus(control_port_, &port_status);
-  peer_remote_ = port_status.peer_remote;
+  peer_remote_ = rv == ports::OK && port_status.peer_remote;
   if (rv != ports::OK || !port_status.receiving_messages) {
     DVLOG(1) << "Data pipe consumer " << pipe_id_ << " is aware of peer closure"
              << " [control_port=" << control_port_.name() << "]";

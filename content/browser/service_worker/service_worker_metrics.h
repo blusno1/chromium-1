@@ -15,6 +15,7 @@
 #include "content/browser/service_worker/service_worker_database.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/public/common/service_worker_modes.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseError.h"
 #include "ui/base/page_transition_types.h"
 
@@ -143,33 +144,47 @@ class ServiceWorkerMetrics {
 
   // Not used for UMA.
   enum class StartSituation {
+    // Failed to allocate a process.
     UNKNOWN,
+    // The service worker started up during browser startup.
     DURING_STARTUP,
-    EXISTING_PROCESS,
-    NEW_PROCESS
+    // The service worker started up in a new process.
+    NEW_PROCESS,
+    // The service worker started up in an existing unready process. (Ex: The
+    // process was created for the navigation by PlzNavigate but the IPC
+    // connection is not established yet.)
+    EXISTING_UNREADY_PROCESS,
+    // The service worker started up in an existing ready process.
+    EXISTING_READY_PROCESS
   };
 
   // Used for UMA. Append only.
   // This enum describes how an activated worker was found and prepared (i.e.,
   // reached the RUNNING status) in order to dispatch a fetch event to.
   enum class WorkerPreparationType {
-    UNKNOWN,
+    UNKNOWN = 0,
     // The worker was already starting up. We waited for it to finish.
-    STARTING,
+    STARTING = 1,
     // The worker was already running.
-    RUNNING,
+    RUNNING = 2,
     // The worker was stopping. We waited for it to stop, and then started it
     // up.
-    STOPPING,
+    STOPPING = 3,
     // The worker was in the stopped state. We started it up, and startup
     // required a new process to be created.
-    START_IN_NEW_PROCESS,
-    // The worker was in the stopped state. We started it up, and it used an
-    // existing process.
-    START_IN_EXISTING_PROCESS,
+    START_IN_NEW_PROCESS = 4,
+    // Deprecated 07/2017; replaced by START_IN_EXISTING_UNREADY_PROCESS and
+    // START_IN_EXISTING_READY_PROCESS.
+    //   START_IN_EXISTING_PROCESS = 5,
     // The worker was in the stopped state. We started it up, and this occurred
     // during browser startup.
-    START_DURING_STARTUP,
+    START_DURING_STARTUP = 6,
+    // The worker was in the stopped state. We started it up, and it used an
+    // existing unready process.
+    START_IN_EXISTING_UNREADY_PROCESS = 7,
+    // The worker was in the stopped state. We started it up, and it used an
+    // existing ready process.
+    START_IN_EXISTING_READY_PROCESS = 8,
     // Add new types here.
     NUM_TYPES
   };
@@ -189,7 +204,7 @@ class ServiceWorkerMetrics {
 
   class ScopedEventRecorder {
    public:
-    explicit ScopedEventRecorder();
+    explicit ScopedEventRecorder(EventType start_worker_purpose);
     ~ScopedEventRecorder();
 
     void RecordEventHandledStatus(EventType event, bool handled);
@@ -206,12 +221,16 @@ class ServiceWorkerMetrics {
                                         size_t fired_events);
 
     std::map<EventType, EventStat> event_stats_;
+    const EventType start_worker_purpose_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedEventRecorder);
   };
 
   // Converts an event type to a string. Used for tracing.
   static const char* EventTypeToString(EventType event_type);
+
+  // Converts a start situation to a string. Used for tracing.
+  static const char* StartSituationToString(StartSituation start_situation);
 
   // If the |url| is not a special site, returns Site::OTHER.
   static Site SiteFromURL(const GURL& url);
@@ -336,8 +355,6 @@ class ServiceWorkerMetrics {
       StartSituation start_situation);
 
   static const char* LoadSourceToString(LoadSource source);
-  static StartSituation GetStartSituation(bool is_browser_startup_complete,
-                                          bool is_new_process);
 
   // Records the result of a start attempt that occurred after the worker had
   // failed |failure_count| consecutive times.

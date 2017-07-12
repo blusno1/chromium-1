@@ -12,6 +12,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -182,15 +183,12 @@ bool ChromeConfigurator::EnabledCupSigning() const {
   return configurator_impl_.EnabledCupSigning();
 }
 
-// Returns a task runner to run blocking tasks. The task runner continues to run
-// after the browser shuts down, until the OS terminates the process. This
-// imposes certain requirements for the code using the task runner, such as
-// not accessing any global browser state while the code is running.
+// Returns a task runner to run blocking tasks.
 scoped_refptr<base::SequencedTaskRunner>
 ChromeConfigurator::GetSequencedTaskRunner() const {
   return base::CreateSequencedTaskRunnerWithTraits(
       {base::MayBlock(), base::TaskPriority::BACKGROUND,
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
 PrefService* ChromeConfigurator::GetPrefService() const {

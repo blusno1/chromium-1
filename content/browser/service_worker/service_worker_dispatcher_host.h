@@ -20,6 +20,7 @@
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_associated_interface.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "mojo/public/cpp/bindings/strong_associated_binding_set.h"
 
 class GURL;
 
@@ -42,6 +43,24 @@ struct ServiceWorkerObjectInfo;
 struct ServiceWorkerRegistrationObjectInfo;
 struct ServiceWorkerVersionAttributes;
 
+// ServiceWorkerDispatcherHost is the browser-side endpoint for several IPC
+// messages for service workers. There is a 1:1 correspondence between
+// renderer processes and ServiceWorkerDispatcherHosts. Currently
+// ServiceWorkerDispatcherHost handles both legacy IPC messages (to and from
+// its corresponding ServiceWorkerDispatcher on the renderer) and Mojo IPC
+// messages (from any ServiceWorkerNetworkProvider on the renderer).
+//
+// Most messages are "from" a "service worker provider" on the renderer (a
+// ServiceWorkerNetworkProvider or a blink::WebServiceWorkerProvider), hence
+// they include a provider_id which must match to a ServiceWorkerProviderHost.
+//
+// ServiceWorkerDispatcherHost is created on the UI thread in
+// RenderProcessHostImpl::Init() via CreateMessageFilters(). But initialization
+// and destruction occur on the IO thread, as does most (or all?) message
+// handling.  It lives as long as the renderer process lives. Therefore much
+// tracking of renderer processes in browser-side service worker code is built
+// on ServiceWorkerDispatcherHost lifetime.
+//
 // This class is bound with mojom::ServiceWorkerDispatcherHost. All
 // InterfacePtrs on the same render process are bound to the same
 // content::ServiceWorkerDispatcherHost.
@@ -101,16 +120,18 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
 
   // mojom::ServiceWorkerDispatcherHost implementation
   void OnProviderCreated(ServiceWorkerProviderHostInfo info) override;
-  void OnSetHostedVersionId(int provider_id,
-                            int64_t version_id,
-                            int embedded_worker_id) override;
+  void OnSetHostedVersionId(
+      int provider_id,
+      int64_t version_id,
+      int embedded_worker_id,
+      mojom::URLLoaderFactoryAssociatedRequest request) override;
 
   // IPC Message handlers
   void OnRegisterServiceWorker(int thread_id,
                                int request_id,
                                int provider_id,
-                               const GURL& pattern,
-                               const GURL& script_url);
+                               const GURL& script_url,
+                               const ServiceWorkerRegistrationOptions& options);
   void OnUpdateServiceWorker(int thread_id,
                              int request_id,
                              int provider_id,
@@ -254,6 +275,7 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
 
   const int render_process_id_;
   ResourceContext* resource_context_;
+  // Only accessed on the IO thread.
   scoped_refptr<ServiceWorkerContextWrapper> context_wrapper_;
 
   IDMap<std::unique_ptr<ServiceWorkerHandle>> handles_;
@@ -264,8 +286,6 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
 
   bool channel_ready_;  // True after BrowserMessageFilter::sender_ != NULL.
   std::vector<std::unique_ptr<IPC::Message>> pending_messages_;
-
-  base::WeakPtrFactory<ServiceWorkerDispatcherHost> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerDispatcherHost);
 };

@@ -27,6 +27,8 @@
 #include "core/css/resolver/StyleBuilderConverter.h"
 
 #include <algorithm>
+
+#include "build/build_config.h"
 #include "core/css/BasicShapeFunctions.h"
 #include "core/css/CSSBasicShapeValues.h"
 #include "core/css/CSSColorValue.h"
@@ -194,7 +196,7 @@ static bool ConvertFontFamilyName(
   if (value.IsFontFamilyValue()) {
     generic_family = FontDescription::kNoFamily;
     family_name = AtomicString(ToCSSFontFamilyValue(value).Value());
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
     if (family_name == FontCache::LegacySystemFontFamily()) {
       UseCounter::Count(*document_for_count, WebFeature::kBlinkMacSystemFont);
       family_name = FontFamilyNames::system_ui;
@@ -812,7 +814,7 @@ void StyleBuilderConverter::ConvertOrderedNamedGridLinesMapToNamedGridLinesMap(
   }
 
   for (auto& named_grid_line : named_grid_lines) {
-    Vector<size_t> grid_line_indexes = named_grid_line.value;
+    Vector<size_t>& grid_line_indexes = named_grid_line.value;
     std::sort(grid_line_indexes.begin(), grid_line_indexes.end());
   }
 }

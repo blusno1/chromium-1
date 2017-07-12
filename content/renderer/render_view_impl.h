@@ -24,7 +24,7 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/input/browser_controls_state.h"
-#include "cc/resources/shared_bitmap.h"
+#include "components/viz/common/quads/shared_bitmap.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/navigation_gesture.h"
@@ -86,7 +86,7 @@ struct WebWindowFeatures;
 }  // namespace blink
 
 namespace gfx {
-class ICCProfile;
+class ColorSpace;
 }
 
 namespace content {
@@ -233,7 +233,7 @@ class CONTENT_EXPORT RenderViewImpl
   void SetDeviceScaleFactorForTesting(float factor);
 
   // Change the device ICC color profile while running a layout test.
-  void SetDeviceColorProfileForTesting(const gfx::ICCProfile& icc_profile);
+  void SetDeviceColorSpaceForTesting(const gfx::ColorSpace& color_space);
 
   // Used to force the size of a window when running layout tests.
   void ForceResizeForTesting(const gfx::Size& new_size);
@@ -381,6 +381,7 @@ class CONTENT_EXPORT RenderViewImpl
   void HandleInputEvent(const blink::WebCoalescedInputEvent& input_event,
                         const ui::LatencyInfo& latency_info,
                         HandledEventCallback callback) override;
+  void ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
 
  protected:
   // RenderWidget overrides:
@@ -505,8 +506,6 @@ class CONTENT_EXPORT RenderViewImpl
   // The documentation for these functions should be in
   // content/common/*_messages.h for the message that the function is handling.
   void OnExecuteEditCommand(const std::string& name, const std::string& value);
-  void OnMoveCaret(const gfx::Point& point);
-  void OnScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
   void OnAllowScriptToClose(bool script_can_close);
   void OnCancelDownload(int32_t download_id);
   void OnClosePage();
@@ -525,7 +524,7 @@ class CONTENT_EXPORT RenderViewImpl
   void OnPluginActionAt(const gfx::Point& location,
                         const blink::WebPluginAction& action);
   void OnMoveOrResizeStarted();
-  void OnReleaseDisambiguationPopupBitmap(const cc::SharedBitmapId& id);
+  void OnReleaseDisambiguationPopupBitmap(const viz::SharedBitmapId& id);
   void OnResolveTapDisambiguation(double timestamp_seconds,
                                   gfx::Point tap_viewport_offset,
                                   bool is_long_press);
@@ -798,7 +797,7 @@ class CONTENT_EXPORT RenderViewImpl
   // constructors call the AddObservers method of RenderViewImpl.
   std::unique_ptr<StatsCollectionObserver> stats_collection_observer_;
 
-  typedef std::map<cc::SharedBitmapId, cc::SharedBitmap*> BitmapMap;
+  typedef std::map<viz::SharedBitmapId, viz::SharedBitmap*> BitmapMap;
   BitmapMap disambiguation_bitmaps_;
 
   std::unique_ptr<IdleUserDetector> idle_user_detector_;

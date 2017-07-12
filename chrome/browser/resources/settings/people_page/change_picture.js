@@ -3,30 +3,6 @@
 // found in the LICENSE file.
 
 /**
- * Contains the possible types of Change Picture selections.
- * @enum {string}
- */
-var ChangePictureSelectionTypes = {
-  CAMERA: 'camera',
-  FILE: 'file',
-  PROFILE: 'profile',
-  OLD: 'old',
-  DEFAULT: 'default',
-};
-
-/**
- * An image element.
- * @typedef {{
- *   dataset: {
- *     type: !ChangePictureSelectionTypes,
- *     defaultImageIndex: ?number,
- *   },
- *   src: string,
- * }}
- */
-var ChangePictureImageElement;
-
-/**
  * @fileoverview
  * 'settings-change-picture' is the settings subpage containing controls to
  * edit a ChromeOS user's picture.
@@ -54,29 +30,11 @@ Polymer({
      * The currently selected item. This property is bound to the iron-selector
      * and never directly assigned. This may be undefined momentarily as
      * the selection changes due to iron-selector implementation details.
-     * @private {?ChangePictureImageElement}
+     * @private {?CrPicture.ImageElement}
      */
-    selectedItem_: Object,
-
-    /**
-     * The url of the Old image, which is the existing image sourced from
-     * the camera, a file, or a deprecated default image. It defaults to an
-     * empty string instead of undefined, because Polymer bindings don't behave
-     * as expected with undefined properties.
-     * @private {string}
-     */
-    oldImageUrl_: {
-      type: String,
-      value: '',
-    },
-
-    /**
-     * The url of the profile image.
-     * @private {string}
-     */
-    profileImageUrl_: {
-      type: String,
-      value: 'chrome://theme/IDR_PROFILE_PICTURE_LOADING',
+    selectedItem_: {
+      type: Object,
+      value: null,
     },
 
     /**
@@ -89,35 +47,26 @@ Polymer({
         return [];
       },
     },
+  },
 
-    /** @private */
-    selectionTypesEnum_: {
-      type: Object,
-      value: ChangePictureSelectionTypes,
-      readOnly: true,
-    },
+  listeners: {
+    'discard-image': 'onDiscardImage_',
+    'image-activate': 'onImageActivate_',
+    'photo-flipped': 'onPhotoFlipped_',
+    'photo-taken': 'onPhotoTaken_',
   },
 
   /** @private {?settings.ChangePictureBrowserProxy} */
   browserProxy_: null,
 
-  /**
-   * The fallback image to be selected when the user discards the Old image.
-   * This may be null if the user started with the Old image.
-   * @private {?ChangePictureImageElement}
-   */
-  fallbackImage_: null,
-
-  /**
-   * Type of the last selected icon. This is used to jump back to the camera
-   * after the user discards a newly taken photo.
-   * @private {string}
-   */
-  lastSelectedImageType_: '',
+  /** @private {?CrPictureListElement} */
+  pictureList_: null,
 
   /** @override */
   ready: function() {
     this.browserProxy_ = settings.ChangePictureBrowserProxyImpl.getInstance();
+    this.pictureList_ =
+        /** @type {CrPictureListElement} */ (this.$.pictureList);
   },
 
   /** @override */
@@ -137,16 +86,9 @@ Polymer({
 
   /** @protected */
   currentRouteChanged: function(newRoute) {
-    if (newRoute == settings.Route.CHANGE_PICTURE) {
+    if (newRoute == settings.routes.CHANGE_PICTURE) {
       this.browserProxy_.initialize();
-
-      // This in needed because we manually clear the selectedItem_ property
-      // when navigating away. The selector element doesn't fire its upward
-      // data binding unless its selected item has changed.
-      this.selectedItem_ = this.$.selector.selectedItem;
-      // Focus the container by default so that the arrow keys work (and since
-      // we use the focus highlight to show which picture is selected).
-      this.$.container.focus();
+      this.pictureList_.setFocus();
     } else {
       // Ensure we deactivate the camera when we navigate away.
       this.selectedItem_ = null;
@@ -169,19 +111,7 @@ Polymer({
    * @private
    */
   receiveSelectedImage_: function(imageUrl) {
-    var index = this.$.selector.items.findIndex(function(image) {
-      return image.dataset.type == ChangePictureSelectionTypes.DEFAULT &&
-          image.src == imageUrl;
-    });
-    assert(index != -1, 'Default image not found: ' + imageUrl);
-
-    this.fallbackImage_ = this.$.selector.items[index];
-
-    // If user is currently taking a photo, do not steal the focus.
-    if (!this.selectedItem_ ||
-        this.selectedItem_.dataset.type != ChangePictureSelectionTypes.CAMERA) {
-      this.$.selector.select(index);
-    }
+    this.pictureList_.setSelectedImageUrl(imageUrl);
   },
 
   /**
@@ -193,8 +123,7 @@ Polymer({
    * @private
    */
   receiveOldImage_: function(imageUrl) {
-    this.oldImageUrl_ = imageUrl;
-    this.$.selector.select(this.$.selector.indexOf(this.$.oldImage));
+    this.pictureList_.setOldImageUrl(imageUrl);
   },
 
   /**
@@ -204,19 +133,7 @@ Polymer({
    * @private
    */
   receiveProfileImage_: function(imageUrl, selected) {
-    this.profileImageUrl_ = imageUrl;
-    this.$.profileImage.title = this.i18n('profilePhoto');
-
-    if (!selected)
-      return;
-
-    this.fallbackImage_ = this.$.profileImage;
-
-    // If user is currently taking a photo, do not steal the focus.
-    if (!this.selectedItem_ ||
-        this.selectedItem_.dataset.type != ChangePictureSelectionTypes.CAMERA) {
-      this.$.selector.select(this.$.selector.indexOf(this.$.profileImage));
-    }
+    this.pictureList_.setProfileImageUrl(imageUrl, selected);
   },
 
   /**
@@ -230,24 +147,24 @@ Polymer({
 
   /**
    * Selects an image element.
-   * @param {!ChangePictureImageElement} image
+   * @param {!CrPicture.ImageElement} image
    * @private
    */
   selectImage_: function(image) {
     switch (image.dataset.type) {
-      case ChangePictureSelectionTypes.CAMERA:
-        // Nothing needs to be done.
+      case CrPicture.SelectionTypes.CAMERA:
+        /** CrPicturePaneElement */ (this.$.picturePane).takePhoto();
         break;
-      case ChangePictureSelectionTypes.FILE:
+      case CrPicture.SelectionTypes.FILE:
         this.browserProxy_.chooseFile();
         break;
-      case ChangePictureSelectionTypes.PROFILE:
+      case CrPicture.SelectionTypes.PROFILE:
         this.browserProxy_.selectProfileImage();
         break;
-      case ChangePictureSelectionTypes.OLD:
+      case CrPicture.SelectionTypes.OLD:
         this.browserProxy_.selectOldImage();
         break;
-      case ChangePictureSelectionTypes.DEFAULT:
+      case CrPicture.SelectionTypes.DEFAULT:
         this.browserProxy_.selectDefaultImage(image.src);
         break;
       default:
@@ -256,111 +173,43 @@ Polymer({
   },
 
   /**
-   * Handler for when accessibility-specific keys are pressed.
-   * @param {!{detail: !{key: string, keyboardEvent: Object}}} e
-   */
-  onKeysPress_: function(e) {
-    if (!this.selectedItem_)
-      return;
-
-    // In the old Options user images grid, the 'up' and 'down' keys had
-    // different behavior depending on whether ChromeVox was on or off.
-    // If ChromeVox was on, 'up' or 'down' would select the next or previous
-    // image on the left or right. If ChromeVox was off, it would select the
-    // image spatially above or below using calculated columns.
-    //
-    // The code below implements the simple behavior of selecting the image
-    // to the left or right (as if ChromeVox was always on).
-    //
-    // TODO(tommycli): Investigate if it's necessary to calculate columns
-    // and select the image on the top or bottom for non-ChromeVox users.
-    var /** IronSelectorElement */ selector = this.$.selector;
-    switch (e.detail.key) {
-      case 'up':
-      case 'left':
-        // This loop always terminates because the file and profile icons are
-        // never hidden.
-        do {
-          selector.selectPrevious();
-        } while (this.selectedItem_.hidden);
-
-        if (this.selectedItem_.dataset.type != ChangePictureSelectionTypes.FILE)
-          this.selectImage_(this.selectedItem_);
-
-        this.lastSelectedImageType_ = this.selectedItem_.dataset.type;
-        e.detail.keyboardEvent.preventDefault();
-        break;
-
-      case 'down':
-      case 'right':
-        // This loop always terminates because the file and profile icons are
-        // never hidden.
-        do {
-          selector.selectNext();
-        } while (this.selectedItem_.hidden);
-
-        if (this.selectedItem_.dataset.type != ChangePictureSelectionTypes.FILE)
-          this.selectImage_(this.selectedItem_);
-
-        this.lastSelectedImageType_ = this.selectedItem_.dataset.type;
-        e.detail.keyboardEvent.preventDefault();
-        break;
-
-      case 'enter':
-      case 'space':
-        if (this.selectedItem_.dataset.type ==
-            ChangePictureSelectionTypes.CAMERA) {
-          var /** SettingsCameraElement */ camera = this.$.camera;
-          camera.takePhoto();
-        } else if (
-            this.selectedItem_.dataset.type ==
-            ChangePictureSelectionTypes.FILE) {
-          this.browserProxy_.chooseFile();
-        } else if (
-            this.selectedItem_.dataset.type ==
-            ChangePictureSelectionTypes.OLD) {
-          this.onTapDiscardOldImage_();
-        }
-        break;
-    }
-  },
-
-  /**
-   * Handler for when the an image is activated.
-   * @param {!Event} event
+   * Handler for when an image is activated.
+   * @param {!{detail: !CrPicture.ImageElement}} event
    * @private
    */
   onImageActivate_: function(event) {
-    var image = event.detail.item;
-    this.lastSelectedImageType_ = image.dataset.type;
-    this.selectImage_(image);
+    this.selectImage_(event.detail);
   },
 
   /**
-   * Handle photo captured event, which contains the data URL of the image.
    * @param {!{detail: !{photoDataUrl: string}}} event
-   * containing a data URL.
+   * @private
    */
   onPhotoTaken_: function(event) {
     this.browserProxy_.photoTaken(event.detail.photoDataUrl);
-    this.$.container.focus();
+    this.pictureList_.setFocus();
+    announceAccessibleMessage(
+        loadTimeData.getString('photoCaptureAccessibleText'));
   },
 
   /**
-   * Discard currently selected Old image. Selects the first default icon.
+   * @param {!{detail: boolean}} event
+   * @private
+   */
+  onPhotoFlipped_: function(event) {
+    var flipped = event.detail;
+    var flipMessageId = flipped ? 'photoFlippedAccessibleText' :
+                                  'photoFlippedBackAccessibleText';
+    announceAccessibleMessage(loadTimeData.getString(flipMessageId));
+  },
+
+  /**
+   * Discard currently selected image. Selects the first default icon.
    * Returns to the camera stream if the user had just taken a picture.
    * @private
    */
-  onTapDiscardOldImage_: function() {
-    this.oldImageUrl_ = '';
-
-    if (this.lastSelectedImageType_ == ChangePictureSelectionTypes.CAMERA)
-      this.$.selector.select(this.$.selector.indexOf(this.$.cameraImage));
-
-    if (this.fallbackImage_ != null) {
-      this.selectImage_(this.fallbackImage_);
-      return;
-    }
+  onDiscardImage_: function() {
+    this.pictureList_.setOldImageUrl('');
 
     // If the user has not chosen an image since opening the subpage and
     // discards the current photo, select the first default image.
@@ -371,92 +220,61 @@ Polymer({
   },
 
   /**
-   * @param {string} oldImageUrl
-   * @return {boolean} True if there is no Old image and the Old image icon
-   *     should be hidden.
+   * @param {CrPicture.ImageElement} selectedItem
+   * @return {string}
    * @private
    */
-  isOldImageHidden_: function(oldImageUrl) {
-    return oldImageUrl.length == 0;
+  getImageSrc_: function(selectedItem) {
+    return (selectedItem && selectedItem.src) || '';
   },
 
   /**
-   * @param {ChangePictureImageElement} selectedItem
-   * @return {boolean} True if the preview image should be hidden.
+   * @param {CrPicture.ImageElement} selectedItem
+   * @return {string}
    * @private
    */
-  isPreviewImageHidden_: function(selectedItem) {
-    if (!selectedItem)
-      return true;
-
-    var type = selectedItem.dataset.type;
-    return type != ChangePictureSelectionTypes.DEFAULT &&
-        type != ChangePictureSelectionTypes.PROFILE &&
-        type != ChangePictureSelectionTypes.OLD;
+  getImageType_: function(selectedItem) {
+    return (selectedItem && selectedItem.dataset.type) ||
+        CrPicture.SelectionTypes.NONE;
   },
 
   /**
-   * @param {boolean} cameraPresent
-   * @param {ChangePictureImageElement} selectedItem
-   * @return {boolean} True if the camera is selected in the image grid.
-   * @private
-   */
-  isCameraActive_: function(cameraPresent, selectedItem) {
-    return cameraPresent && !!selectedItem &&
-        selectedItem.dataset.type == ChangePictureSelectionTypes.CAMERA;
-  },
-
-  /**
-   * @param {ChangePictureImageElement} selectedItem
-   * @return {boolean} True if the discard controls should be hidden.
-   * @private
-   */
-  isDiscardHidden_: function(selectedItem) {
-    return !selectedItem ||
-        selectedItem.dataset.type != ChangePictureSelectionTypes.OLD;
-  },
-
-  /**
-   * @param {ChangePictureImageElement} selectedItem
+   * @param {CrPicture.ImageElement} selectedItem
    * @return {boolean} True if the author credit text is shown.
    * @private
    */
   isAuthorCreditShown_: function(selectedItem) {
     return !!selectedItem &&
-        selectedItem.dataset.type == ChangePictureSelectionTypes.DEFAULT;
+        selectedItem.dataset.type == CrPicture.SelectionTypes.DEFAULT;
   },
 
   /**
-   * @param {!ChangePictureImageElement} selectedItem
+   * @param {!CrPicture.ImageElement} selectedItem
    * @param {!Array<!settings.DefaultImage>} defaultImages
    * @return {string} The author name for the selected default image. An empty
    *     string is returned if there is no valid author name.
    * @private
    */
-  getAuthorName_: function(selectedItem, defaultImages) {
-    if (!this.isAuthorCreditShown_(selectedItem))
+  getAuthorCredit_: function(selectedItem, defaultImages) {
+    var index = selectedItem ? selectedItem.dataset.index : undefined;
+    if (index === undefined)
       return '';
-
-    assert(
-        selectedItem.dataset.defaultImageIndex !== null &&
-        selectedItem.dataset.defaultImageIndex < defaultImages.length);
-    return defaultImages[selectedItem.dataset.defaultImageIndex].author;
+    assert(index < defaultImages.length);
+    return this.i18n('authorCreditText', defaultImages[index].author);
   },
 
   /**
-   * @param {!ChangePictureImageElement} selectedItem
+   * @param {!CrPicture.ImageElement} selectedItem
    * @param {!Array<!settings.DefaultImage>} defaultImages
-   * @return {string} The author website for the selected default image. An
-   *     empty string is returned if there is no valid author name.
+   * @return {string} The author name for the selected default image. An empty
+   *     string is returned if there is no valid author name.
    * @private
    */
   getAuthorWebsite_: function(selectedItem, defaultImages) {
-    if (!this.isAuthorCreditShown_(selectedItem))
+    var index = selectedItem ? selectedItem.dataset.index : undefined;
+    if (index === undefined)
       return '';
-
-    assert(
-        selectedItem.dataset.defaultImageIndex !== null &&
-        selectedItem.dataset.defaultImageIndex < defaultImages.length);
-    return defaultImages[selectedItem.dataset.defaultImageIndex].website;
+    assert(index < defaultImages.length);
+    return defaultImages[index].website;
   },
 });

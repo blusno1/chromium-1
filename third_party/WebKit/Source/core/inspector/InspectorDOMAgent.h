@@ -55,7 +55,7 @@ class Element;
 class ExceptionState;
 class FloatQuad;
 class HTMLSlotElement;
-class InsertionPoint;
+class V0InsertionPoint;
 class InspectedFrames;
 class InspectorHistory;
 class Node;
@@ -153,7 +153,8 @@ class CORE_EXPORT InspectorDOMAgent final
       std::unique_ptr<protocol::Array<int>>* node_ids) override;
   protocol::Response setInspectedNode(int node_id) override;
   protocol::Response resolveNode(
-      int node_id,
+      protocol::Maybe<int> node_id,
+      protocol::Maybe<int> backend_node_id,
       protocol::Maybe<String> object_group,
       std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject>*)
       override;
@@ -288,7 +289,7 @@ class CORE_EXPORT InspectorDOMAgent final
   std::unique_ptr<protocol::Array<protocol::DOM::Node>>
   BuildArrayForPseudoElements(Element*, NodeToIdMap* nodes_map);
   std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
-  BuildArrayForDistributedNodes(InsertionPoint*);
+  BuildArrayForDistributedNodes(V0InsertionPoint*);
   std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
   BuildDistributedNodesForSlot(HTMLSlotElement*);
 

@@ -43,7 +43,6 @@ class SystemTrayDelegateChromeOS
 
   // Overridden from ash::SystemTrayDelegate:
   void Initialize() override;
-  void ShowUserLogin() override;
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() const override;
   void ActiveUserWasChanged() override;
   bool IsSearchKeyMappedToCapsLock() override;
@@ -78,8 +77,6 @@ class SystemTrayDelegateChromeOS
 
   void OnAccessibilityModeChanged(
       ash::AccessibilityNotificationVisibility notify);
-
-  void UpdatePerformanceTracing();
 
   // Overridden from chrome::BrowserListObserver:
   void OnBrowserRemoved(Browser* browser) override;

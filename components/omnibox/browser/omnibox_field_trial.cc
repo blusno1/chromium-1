@@ -103,9 +103,10 @@ const base::Feature kUIExperimentMaxAutocompleteMatches{
     "OmniboxUIExperimentMaxAutocompleteMatches",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Feature used for hiding the suggestion URL path as a UI experiment.
-const base::Feature kUIExperimentHideSuggestionUrlPath{
-    "OmniboxUIExperimentHideSuggestionUrlPath",
+// Feature used for eliding the suggestion URL after the host as a UI
+// experiment.
+const base::Feature kUIExperimentElideSuggestionUrlAfterHost{
+    "OmniboxUIExperimentElideSuggestionUrlAfterHost",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Feature used for hiding the suggestion URL scheme as a UI experiment.
@@ -130,6 +131,13 @@ const base::Feature kUIExperimentVerticalLayout{
 // Feature used for the vertical margin UI experiment.
 const base::Feature kUIExperimentVerticalMargin{
     "OmniboxUIExperimentVerticalMargin", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used to enable speculatively starting a service worker associated
+// with the destination of the default match when the user's input looks like a
+// query.
+const base::Feature kSpeculativeServiceWorkerStartOnQueryInput{
+    "OmniboxSpeculativeServiceWorkerStartOnQueryInput",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace omnibox
 

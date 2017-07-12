@@ -209,10 +209,6 @@ bool IsProfileSignedOut(Profile* profile) {
 // Opens a tab for each GURL in |urls|.
 - (void)openUrls:(const std::vector<GURL>&)urls;
 
-// Creates StartupBrowserCreator and opens |urls| with it.
-- (void)openUrlsViaStartupBrowserCreator:(const std::vector<GURL>&)urls
-                               inBrowser:(Browser*)browser;
-
 // This class cannot open urls until startup has finished. The urls that cannot
 // be opened are cached in |startupUrls_|. This method must be called exactly
 // once after startup has completed. It opens the urls in |startupUrls_|, and
@@ -1279,16 +1275,6 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
          prefs->GetBoolean(prefs::kBrowserGuestModeEnabled);
 }
 
-- (void)openUrlsViaStartupBrowserCreator:(const std::vector<GURL>&)urls
-                               inBrowser:(Browser*)browser {
-  base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
-  chrome::startup::IsFirstRun first_run =
-      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
-                                    : chrome::startup::IS_NOT_FIRST_RUN;
-  StartupBrowserCreatorImpl launch(base::FilePath(), dummy, first_run);
-  launch.OpenURLsInBrowser(browser, false, urls);
-}
-
 // Various methods to open URLs that we get in a native fashion. We use
 // StartupBrowserCreator here because on the other platforms, URLs to open come
 // through the ProcessSingleton, and it calls StartupBrowserCreator. It's best
@@ -1299,36 +1285,20 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
     return;
   }
 
-  Profile* profile = [self safeLastProfileForNewWindows];
-  SessionStartupPref pref = StartupBrowserCreator::GetSessionStartupPref(
-      *base::CommandLine::ForCurrentProcess(), profile);
-
-  if (pref.type == SessionStartupPref::LAST) {
-    if (SessionRestore::IsRestoring(profile)) {
-      // In case of session restore, remember |urls|, so they will be opened
-      // after session is resored, in the tabs next to it.
-      SessionRestore::AddURLsToOpen(profile, urls);
-    } else {
-      Browser* browser = chrome::GetLastActiveBrowser();
-      if (!browser) {
-        // This behavior is needed for the case when chromium app is launched,
-        // but there are no open indows.
-        browser = new Browser(Browser::CreateParams(profile, true));
-        browser->window()->Show();
-        SessionRestore::AddURLsToOpen(profile, urls);
-      } else {
-        [self openUrlsViaStartupBrowserCreator:urls inBrowser:browser];
-      }
-    }
-  } else {
-    Browser* browser = chrome::GetLastActiveBrowser();
-    // If no browser window exists then create one with no tabs to be filled in.
-    if (!browser) {
-      browser = new Browser(Browser::CreateParams(profile, true));
-      browser->window()->Show();
-    }
-    [self openUrlsViaStartupBrowserCreator:urls inBrowser:browser];
+  Browser* browser = chrome::GetLastActiveBrowser();
+  // if no browser window exists then create one with no tabs to be filled in
+  if (!browser) {
+    browser = new Browser(
+        Browser::CreateParams([self safeLastProfileForNewWindows], true));
+    browser->window()->Show();
   }
+
+  base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
+  chrome::startup::IsFirstRun first_run =
+      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
+                                    : chrome::startup::IS_NOT_FIRST_RUN;
+  StartupBrowserCreatorImpl launch(base::FilePath(), dummy, first_run);
+  launch.OpenURLsInBrowser(browser, false, urls);
 }
 
 - (void)getUrl:(NSAppleEventDescriptor*)event
@@ -1557,13 +1527,15 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 }
 
 - (BOOL)application:(NSApplication*)application
-    willContinueUserActivityWithType:(NSString*)userActivityType {
+    willContinueUserActivityWithType:(NSString*)userActivityType
+    __attribute__((availability(macos, introduced = 10.10))) {
   return [userActivityType isEqualToString:NSUserActivityTypeBrowsingWeb];
 }
 
 - (BOOL)application:(NSApplication*)application
     continueUserActivity:(NSUserActivity*)userActivity
-      restorationHandler:(void (^)(NSArray*))restorationHandler {
+      restorationHandler:(void (^)(NSArray*))restorationHandler
+    __attribute__((availability(macos, introduced = 10.10))) {
   if (![userActivity.activityType
           isEqualToString:NSUserActivityTypeBrowsingWeb]) {
     return NO;
@@ -1599,7 +1571,14 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 }
 
 - (void)passURLToHandoffManager:(const GURL&)handoffURL {
-  [handoffManager_ updateActiveURL:handoffURL];
+  if (@available(macOS 10.10, *)) {
+    [handoffManager_ updateActiveURL:handoffURL];
+  } else {
+    // Only ends up being called in 10.10+, i.e. if shouldUseHandoff returns
+    // true. Some tests override shouldUseHandoff to always return true, but
+    // then they also override this function to do something else.
+    NOTREACHED();
+  }
 }
 
 - (void)updateHandoffManager:(content::WebContents*)webContents {

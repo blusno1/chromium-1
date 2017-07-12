@@ -14,7 +14,11 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/payments/core/payment_instrument.h"
+#include "components/payments/core/payment_prefs.h"
+#include "components/payments/core/payments_test_util.h"
 #include "components/payments/core/strings_util.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
@@ -30,6 +34,7 @@
 #import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/ui/payments/cells/price_item.h"
 #include "ios/web/public/payments/payment_request.h"
+#import "ios/web/public/test/fakes/test_web_state.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -50,23 +55,25 @@ class PaymentRequestMediatorTest : public PlatformTest {
  protected:
   PaymentRequestMediatorTest()
       : autofill_profile_(autofill::test::GetFullProfile()),
-        credit_card_(autofill::test::GetCreditCard()) {
+        credit_card_(autofill::test::GetCreditCard()),
+        pref_service_(payments::test::PrefServiceForTesting()) {
     // Add testing profile and credit card to autofill::TestPersonalDataManager.
     personal_data_manager_.AddTestingProfile(&autofill_profile_);
     credit_card_.set_billing_address_id(autofill_profile_.guid());
     personal_data_manager_.AddTestingCreditCard(&credit_card_);
 
-    payment_request_ = base::MakeUnique<TestPaymentRequest>(
-        payment_request_test_util::CreateTestWebPaymentRequest(),
-        &personal_data_manager_);
-
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(ios::SigninManagerFactory::GetInstance(),
                                        &ios::BuildFakeSigninManager);
     chrome_browser_state_ = test_cbs_builder.Build();
+
+    payment_request_ = base::MakeUnique<payments::TestPaymentRequest>(
+        payment_request_test_util::CreateTestWebPaymentRequest(),
+        chrome_browser_state_.get(), &web_state_, &personal_data_manager_);
+    payment_request_->SetPrefService(pref_service_.get());
+
     mediator_ = [[PaymentRequestMediator alloc]
-        initWithBrowserState:chrome_browser_state_.get()
-              paymentRequest:payment_request_.get()];
+        initWithPaymentRequest:payment_request_.get()];
   }
 
   PaymentRequestMediator* GetPaymentRequestMediator() { return mediator_; }
@@ -75,28 +82,30 @@ class PaymentRequestMediatorTest : public PlatformTest {
 
   autofill::AutofillProfile autofill_profile_;
   autofill::CreditCard credit_card_;
+  web::TestWebState web_state_;
+  std::unique_ptr<PrefService> pref_service_;
   autofill::TestPersonalDataManager personal_data_manager_;
-  std::unique_ptr<TestPaymentRequest> payment_request_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
+  std::unique_ptr<payments::TestPaymentRequest> payment_request_;
   PaymentRequestMediator* mediator_;
 };
 
 // Tests whether payment can be completed when expected.
 TEST_F(PaymentRequestMediatorTest, TestCanPay) {
-  EXPECT_TRUE(payment_request_->selected_credit_card());
+  EXPECT_TRUE(payment_request_->selected_payment_method());
   EXPECT_TRUE(payment_request_->selected_shipping_profile());
   EXPECT_TRUE(payment_request_->selected_shipping_option());
   EXPECT_TRUE(payment_request_->selected_contact_profile());
   EXPECT_TRUE([GetPaymentRequestMediator() canPay]);
 
-  // Payment cannot be completed if there is no selected credit card.
-  autofill::CreditCard* selected_credit_card =
-      payment_request_->selected_credit_card();
-  payment_request_->set_selected_credit_card(nullptr);
+  // Payment cannot be completed if there is no selected payment method.
+  payments::PaymentInstrument* selected_payment_method =
+      payment_request_->selected_payment_method();
+  payment_request_->set_selected_payment_method(nullptr);
   EXPECT_FALSE([GetPaymentRequestMediator() canPay]);
 
-  // Restore the selected credit card.
-  payment_request_->set_selected_credit_card(selected_credit_card);
+  // Restore the selected payment method.
+  payment_request_->set_selected_payment_method(selected_payment_method);
   EXPECT_TRUE([GetPaymentRequestMediator() canPay]);
 
   // Payment cannot be completed if there is no selected shipping profile,
@@ -302,11 +311,11 @@ TEST_F(PaymentRequestMediatorTest, TestPaymentMethodItem) {
   EXPECT_EQ(MDCCollectionViewCellAccessoryDisclosureIndicator,
             payment_method_item.accessoryType);
 
-  // Reset the selected credit card.
-  payment_request_->set_selected_credit_card(nullptr);
+  // Reset the selected payment method.
+  payment_request_->set_selected_payment_method(nullptr);
 
-  // When there is no selected credit card, the Payment Method item should be of
-  // type CollectionViewDetailItem.
+  // When there is no selected payment method, the Payment Method item should be
+  // of type CollectionViewDetailItem.
   item = [GetPaymentRequestMediator() paymentMethodItem];
   ASSERT_TRUE([item isMemberOfClass:[CollectionViewDetailItem class]]);
   CollectionViewDetailItem* add_payment_method_item =
@@ -318,8 +327,8 @@ TEST_F(PaymentRequestMediatorTest, TestPaymentMethodItem) {
   EXPECT_EQ(MDCCollectionViewCellAccessoryDisclosureIndicator,
             add_payment_method_item.accessoryType);
 
-  // Remove the credit cards.
-  payment_request_->ClearCreditCards();
+  // Remove the payment methods.
+  payment_request_->ClearPaymentMethods();
 
   // No accessory view indicates there are no payment methods to choose from.
   item = [GetPaymentRequestMediator() paymentMethodItem];
@@ -423,6 +432,10 @@ TEST_F(PaymentRequestMediatorTest, TestContactInfoItem) {
 
 // Tests that the Footer item is created as expected.
 TEST_F(PaymentRequestMediatorTest, TestFooterItem) {
+  // Make sure the first transaction has not completed yet.
+  pref_service_->SetBoolean(payments::kPaymentsFirstTransactionCompleted,
+                            false);
+
   // Make sure the user is signed out.
   SigninManager* signin_manager = ios::SigninManagerFactory::GetForBrowserState(
       chrome_browser_state_.get());
@@ -449,4 +462,24 @@ TEST_F(PaymentRequestMediatorTest, TestFooterItem) {
       isEqualToString:l10n_util::GetNSStringF(
                           IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_IN,
                           base::ASCIIToUTF16("username@example.com"))]);
+
+  // Record that the first transaction completed.
+  pref_service_->SetBoolean(payments::kPaymentsFirstTransactionCompleted, true);
+
+  item = [GetPaymentRequestMediator() footerItem];
+  footer_item = base::mac::ObjCCastStrict<CollectionViewFooterItem>(item);
+  EXPECT_TRUE([footer_item.text
+      isEqualToString:l10n_util::GetNSString(
+                          IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS)]);
+
+  // Sign the user out.
+  signin_manager->SignOut(signin_metrics::SIGNOUT_TEST,
+                          signin_metrics::SignoutDelete::IGNORE_METRIC);
+
+  // The signed in state has no effect on the footer text if the first
+  // transaction has completed.
+  footer_item = base::mac::ObjCCastStrict<CollectionViewFooterItem>(item);
+  EXPECT_TRUE([footer_item.text
+      isEqualToString:l10n_util::GetNSString(
+                          IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS)]);
 }

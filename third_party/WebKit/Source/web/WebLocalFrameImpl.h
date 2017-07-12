@@ -163,7 +163,6 @@ class WEB_EXPORT WebLocalFrameImpl final
   void SetReferrerForRequest(WebURLRequest&, const WebURL& referrer) override;
   WebAssociatedURLLoader* CreateAssociatedURLLoader(
       const WebAssociatedURLLoaderOptions&) override;
-  unsigned UnloadListenerCount() const override;
   void SetMarkedText(const WebString&,
                      unsigned location,
                      unsigned length) override;
@@ -242,7 +241,6 @@ class WEB_EXPORT WebLocalFrameImpl final
   // WebLocalFrame methods:
   WebLocalFrameImpl* CreateLocalChild(WebTreeScopeType,
                                       WebFrameClient*,
-                                      blink::InterfaceProvider*,
                                       blink::InterfaceRegistry*) override;
   void SetAutofillClient(WebAutofillClient*) override;
   WebAutofillClient* AutofillClient() override;
@@ -324,6 +322,8 @@ class WEB_EXPORT WebLocalFrameImpl final
                             WebString& clip_text,
                             WebString& clip_html) override;
 
+  void AdvanceFocusInForm(WebFocusType) override;
+
   void InitializeCoreFrame(Page&,
                            FrameOwner*,
                            const AtomicString& name) override;
@@ -334,18 +334,15 @@ class WEB_EXPORT WebLocalFrameImpl final
 
   static WebLocalFrameImpl* Create(WebTreeScopeType,
                                    WebFrameClient*,
-                                   InterfaceProvider*,
                                    InterfaceRegistry*,
                                    WebFrame* opener);
   static WebLocalFrameImpl* CreateMainFrame(WebView*,
                                             WebFrameClient*,
-                                            InterfaceProvider*,
                                             InterfaceRegistry*,
                                             WebFrame* opener,
                                             const WebString& name,
                                             WebSandboxFlags);
   static WebLocalFrameImpl* CreateProvisional(WebFrameClient*,
-                                              InterfaceProvider*,
                                               InterfaceRegistry*,
                                               WebRemoteFrame*,
                                               WebSandboxFlags,
@@ -448,6 +445,8 @@ class WEB_EXPORT WebLocalFrameImpl final
       const WebURLRequest&,
       base::SingleThreadTaskRunner*) override;
 
+  WebFrameWidgetBase* LocalRootFrameWidget() override;
+
   DECLARE_VIRTUAL_TRACE();
 
  private:
@@ -455,11 +454,9 @@ class WEB_EXPORT WebLocalFrameImpl final
 
   WebLocalFrameImpl(WebTreeScopeType,
                     WebFrameClient*,
-                    blink::InterfaceProvider*,
                     blink::InterfaceRegistry*);
   WebLocalFrameImpl(WebRemoteFrame*,
                     WebFrameClient*,
-                    blink::InterfaceProvider*,
                     blink::InterfaceRegistry*);
 
   // Inherited from WebFrame, but intentionally hidden: it never makes sense
@@ -515,7 +512,6 @@ class WEB_EXPORT WebLocalFrameImpl final
   float input_events_scale_factor_for_emulation_;
 
   // Borrowed pointers to Mojo objects.
-  blink::InterfaceProvider* interface_provider_;
   blink::InterfaceRegistry* interface_registry_;
 
   WebDevToolsFrontendImpl* web_dev_tools_frontend_;

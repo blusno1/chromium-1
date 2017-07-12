@@ -67,14 +67,18 @@ Polymer({
       value: function() {
         var map = new Map();
         // <if expr="not is_macosx">
-        map.set(
-            settings.Route.EDIT_DICTIONARY.path,
-            '#spellCheckCollapse .subpage-arrow');
+        if (settings.routes.EDIT_DICTIONARY) {
+          map.set(
+              settings.routes.EDIT_DICTIONARY.path,
+              '#spellCheckCollapse .subpage-arrow');
+        }
         // </if>
         // <if expr="chromeos">
-        map.set(
-            settings.Route.INPUT_METHODS.path,
-            '#inputMethodsCollapse .subpage-arrow');
+        if (settings.routes.INPUT_METHODS) {
+          map.set(
+              settings.routes.INPUT_METHODS.path,
+              '#inputMethodsCollapse .subpage-arrow');
+        }
         // </if>
         return map;
       },
@@ -169,7 +173,7 @@ Polymer({
    * @private
    */
   onManageInputMethodsTap_: function() {
-    settings.navigateTo(settings.Route.INPUT_METHODS);
+    settings.navigateTo(settings.routes.INPUT_METHODS);
   },
 
   /**
@@ -181,8 +185,10 @@ Polymer({
    *           key: (string|undefined)}} e
    */
   onInputMethodTap_: function(e) {
-    // Taps on the paper-icon-button are handled in onInputMethodOptionsTap_.
-    if (e.target.tagName == 'PAPER-ICON-BUTTON')
+    // Taps on the button are handled in onInputMethodOptionsTap_.
+    // TODO(dschuyler): The row has two operations that are not clearly
+    // delineated. crbug.com/740691
+    if (e.target.tagName == 'BUTTON')
       return;
 
     // Ignore key presses other than <Enter>.
@@ -421,7 +427,7 @@ Polymer({
    * @private
    */
   onEditDictionaryTap_: function() {
-    settings.navigateTo(settings.Route.EDIT_DICTIONARY);
+    settings.navigateTo(settings.routes.EDIT_DICTIONARY);
   },
 
   /**

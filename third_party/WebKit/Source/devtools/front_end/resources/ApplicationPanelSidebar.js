@@ -57,7 +57,6 @@ Resources.ApplicationPanelSidebar = class extends UI.VBox {
     this._applicationTreeElement.appendChild(clearStorageTreeElement);
 
     var storageTreeElement = this._addSidebarSection(Common.UIString('Storage'));
-    this._addRefreshSectionButton(storageTreeElement, this._refreshStorageSection.bind(this));
     this.localStorageListTreeElement =
         new Resources.StorageCategoryTreeElement(panel, Common.UIString('Local Storage'), 'LocalStorage');
     var localStorageIcon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
@@ -84,7 +83,6 @@ Resources.ApplicationPanelSidebar = class extends UI.VBox {
     storageTreeElement.appendChild(this.cookieListTreeElement);
 
     var cacheTreeElement = this._addSidebarSection(Common.UIString('Cache'));
-    this._addRefreshSectionButton(cacheTreeElement, this._refreshCacheSection.bind(this));
     this.cacheStorageListTreeElement = new Resources.ServiceWorkerCacheTreeElement(panel);
     cacheTreeElement.appendChild(this.cacheStorageListTreeElement);
     this.applicationCacheListTreeElement =
@@ -130,32 +128,6 @@ Resources.ApplicationPanelSidebar = class extends UI.VBox {
     treeElement.selectable = false;
     this._sidebarTree.appendChild(treeElement);
     return treeElement;
-  }
-
-  /**
-   * @param {!UI.TreeElement} treeElement
-   * @param {function()} refresh
-   */
-  _addRefreshSectionButton(treeElement, refresh) {
-    var refreshIcon = UI.Icon.create('largeicon-refresh', 'sidebar-section-button');
-    refreshIcon.addEventListener('click', refresh, false);
-    treeElement.setTrailingIcons([refreshIcon]);
-  }
-
-  _refreshStorageSection() {
-    var visibleView = this._panel.visibleView;
-    if (visibleView instanceof Resources.DOMStorageItemsView || visibleView instanceof Resources.CookieItemsView) {
-      // Local Storage, Session Storage || Cookies
-      visibleView.refreshItems();
-    } else if (visibleView instanceof Resources.DatabaseTableView) {
-      // Web SQL
-      visibleView.update();
-    }
-    this.indexedDBListTreeElement.refreshIndexedDB();
-  }
-
-  _refreshCacheSection() {
-    this.cacheStorageListTreeElement._refreshCaches();
   }
 
   /**
@@ -378,30 +350,12 @@ Resources.ApplicationPanelSidebar = class extends UI.VBox {
    * @param {!SDK.Resource} resource
    * @param {number=} line
    * @param {number=} column
-   * @return {boolean}
+   * @return {!Promise}
    */
-  showResource(resource, line, column) {
+  async showResource(resource, line, column) {
     var resourceTreeElement = Resources.FrameResourceTreeElement.forResource(resource);
     if (resourceTreeElement)
-      resourceTreeElement.revealAndSelect(true);
-
-    if (typeof line === 'number') {
-      var resourceSourceFrame = this._resourceSourceFrameViewForResource(resource);
-      if (resourceSourceFrame)
-        resourceSourceFrame.revealPosition(line, column, true);
-    }
-    return true;
-  }
-
-  /**
-   * @param {!SDK.Resource} resource
-   * @return {?SourceFrame.ResourceSourceFrame}
-   */
-  _resourceSourceFrameViewForResource(resource) {
-    var resourceView = Resources.FrameResourceTreeElement.resourceViewForResource(resource);
-    if (resourceView && resourceView instanceof SourceFrame.ResourceSourceFrame)
-      return /** @type {!SourceFrame.ResourceSourceFrame} */ (resourceView);
-    return null;
+      await resourceTreeElement.revealResource(line, column);
   }
 
   /**

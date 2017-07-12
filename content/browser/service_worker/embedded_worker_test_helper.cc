@@ -73,6 +73,7 @@ EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::
 void EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::StartWorker(
     const EmbeddedWorkerStartParams& params,
     mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+    mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host) {
   if (!helper_)
     return;
@@ -298,7 +299,8 @@ EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
       new MockServiceWorkerDatabaseTaskManager(
           base::ThreadTaskRunnerHandle::Get()));
   wrapper_->InitInternal(user_data_directory, std::move(database_task_manager),
-                         base::ThreadTaskRunnerHandle::Get(), nullptr, nullptr);
+                         base::ThreadTaskRunnerHandle::Get(), nullptr, nullptr,
+                         nullptr, nullptr);
   wrapper_->process_manager()->SetProcessIdForTest(mock_render_process_id());
   wrapper_->process_manager()->SetNewProcessIdForTest(new_render_process_id());
 

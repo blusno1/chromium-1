@@ -45,6 +45,7 @@
 #include "core/css/properties/CSSPropertyMarginUtils.h"
 #include "core/css/properties/CSSPropertyOffsetRotateUtils.h"
 #include "core/css/properties/CSSPropertyPositionUtils.h"
+#include "core/css/properties/CSSPropertyTextDecorationLineUtils.h"
 #include "core/css/properties/CSSPropertyTransitionPropertyUtils.h"
 #include "core/css/properties/CSSPropertyWebkitBorderWidthUtils.h"
 #include "core/frame/UseCounter.h"
@@ -396,8 +397,10 @@ static CSSValue* ConsumeAnimationTimingFunction(CSSParserTokenRange& range) {
   CSSValueID function = range.Peek().FunctionId();
   if (function == CSSValueSteps)
     return ConsumeSteps(range);
-  if (function == CSSValueFrames)
+  if (RuntimeEnabledFeatures::FramesTimingFunctionEnabled() &&
+      function == CSSValueFrames) {
     return ConsumeFrames(range);
+  }
   if (function == CSSValueCubicBezier)
     return ConsumeCubicBezier(range);
   return nullptr;
@@ -564,35 +567,6 @@ static CSSValue* ConsumeFilter(CSSParserTokenRange& range,
     list->Append(*filter_value);
   } while (!range.AtEnd());
   return list;
-}
-
-static CSSValue* ConsumeTextDecorationLine(CSSParserTokenRange& range) {
-  CSSValueID id = range.Peek().Id();
-  if (id == CSSValueNone)
-    return ConsumeIdent(range);
-
-  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-  while (true) {
-    CSSIdentifierValue* ident =
-        ConsumeIdent<CSSValueBlink, CSSValueUnderline, CSSValueOverline,
-                     CSSValueLineThrough>(range);
-    if (!ident)
-      break;
-    if (list->HasValue(*ident))
-      return nullptr;
-    list->Append(*ident);
-  }
-
-  if (!list->length())
-    return nullptr;
-  return list;
-}
-
-static CSSValue* ConsumeNoneOrURI(CSSParserTokenRange& range,
-                                  const CSSParserContext* context) {
-  if (range.Peek().Id() == CSSValueNone)
-    return ConsumeIdent(range);
-  return ConsumeUrl(range, context);
 }
 
 static CSSValue* ConsumePerspective(CSSParserTokenRange& range,
@@ -1191,91 +1165,26 @@ static CSSValue* ConsumeGridTemplateAreas(CSSParserTokenRange& range) {
                                            column_count);
 }
 
-static void CountKeywordOnlyPropertyUsage(CSSPropertyID property,
-                                          const CSSParserContext* context,
-                                          CSSValueID value_id) {
-  if (!context->IsUseCounterRecordingEnabled())
-    return;
-  switch (property) {
-    case CSSPropertyWebkitAppearance: {
-      WebFeature feature;
-      if (value_id == CSSValueNone) {
-        feature = WebFeature::kCSSValueAppearanceNone;
-      } else {
-        feature = WebFeature::kCSSValueAppearanceNotNone;
-        if (value_id == CSSValueButton)
-          feature = WebFeature::kCSSValueAppearanceButton;
-        else if (value_id == CSSValueCaret)
-          feature = WebFeature::kCSSValueAppearanceCaret;
-        else if (value_id == CSSValueCheckbox)
-          feature = WebFeature::kCSSValueAppearanceCheckbox;
-        else if (value_id == CSSValueMenulist)
-          feature = WebFeature::kCSSValueAppearanceMenulist;
-        else if (value_id == CSSValueMenulistButton)
-          feature = WebFeature::kCSSValueAppearanceMenulistButton;
-        else if (value_id == CSSValueListbox)
-          feature = WebFeature::kCSSValueAppearanceListbox;
-        else if (value_id == CSSValueRadio)
-          feature = WebFeature::kCSSValueAppearanceRadio;
-        else if (value_id == CSSValueSearchfield)
-          feature = WebFeature::kCSSValueAppearanceSearchField;
-        else if (value_id == CSSValueTextfield)
-          feature = WebFeature::kCSSValueAppearanceTextField;
-        else
-          feature = WebFeature::kCSSValueAppearanceOthers;
-      }
-      context->Count(feature);
-      break;
-    }
-
-    case CSSPropertyWebkitUserModify: {
-      switch (value_id) {
-        case CSSValueReadOnly:
-          context->Count(WebFeature::kCSSValueUserModifyReadOnly);
-          break;
-        case CSSValueReadWrite:
-          context->Count(WebFeature::kCSSValueUserModifyReadWrite);
-          break;
-        case CSSValueReadWritePlaintextOnly:
-          context->Count(WebFeature::kCSSValueUserModifyReadWritePlaintextOnly);
-          break;
-        default:
-          NOTREACHED();
-      }
-      break;
-    }
-
-    default:
-      break;
-  }
-}
 
 const CSSValue* CSSPropertyParser::ParseSingleValue(
     CSSPropertyID unresolved_property,
     CSSPropertyID current_shorthand) {
   DCHECK(context_);
-  CSSPropertyID property = resolveCSSPropertyID(unresolved_property);
-  if (CSSParserFastPaths::IsKeywordPropertyID(property)) {
-    if (!CSSParserFastPaths::IsValidKeywordPropertyAndValue(
-            property, range_.Peek().Id(), context_->Mode()))
-      return nullptr;
-    CountKeywordOnlyPropertyUsage(property, context_, range_.Peek().Id());
-    return ConsumeIdent(range_);
-  }
 
   // Gets the parsing method for our current property from the property API.
   // If it has been implemented, we call this method, otherwise we manually
   // parse this value in the switch statement below. As we implement APIs for
   // other properties, those properties will be taken out of the switch
   // statement.
-  const CSSPropertyDescriptor& css_property_desc =
-      CSSPropertyDescriptor::Get(property);
-  if (css_property_desc.parseSingleValue) {
-    return css_property_desc.parseSingleValue(
-        range_, *context_,
-        CSSParserLocalContext(isPropertyAlias(unresolved_property)));
-  }
+  bool needs_legacy_parsing = false;
+  const CSSValue* const parsed_value =
+      CSSPropertyParserHelpers::ParseLonghandViaAPI(
+          unresolved_property, current_shorthand, *context_, range_,
+          needs_legacy_parsing);
+  if (!needs_legacy_parsing)
+    return parsed_value;
 
+  CSSPropertyID property = resolveCSSPropertyID(unresolved_property);
   switch (property) {
     case CSSPropertyMaxWidth:
     case CSSPropertyMaxHeight:
@@ -1313,7 +1222,6 @@ const CSSValue* CSSPropertyParser::ParseSingleValue(
     case CSSPropertyGridRowGap:
       return ConsumeLengthOrPercent(range_, context_->Mode(),
                                     kValueRangeNonNegative);
-    case CSSPropertyColor:
     case CSSPropertyBorderBottomColor:
     case CSSPropertyBorderLeftColor:
     case CSSPropertyBorderRightColor:
@@ -1340,10 +1248,8 @@ const CSSValue* CSSPropertyParser::ParseSingleValue(
       return ConsumeFilter(range_, context_);
     case CSSPropertyTextDecoration:
       DCHECK(!RuntimeEnabledFeatures::CSS3TextDecorationsEnabled());
-    // fallthrough
-    case CSSPropertyWebkitTextDecorationsInEffect:
-    case CSSPropertyTextDecorationLine:
-      return ConsumeTextDecorationLine(range_);
+      return CSSPropertyTextDecorationLineUtils::ConsumeTextDecorationLine(
+          range_);
     case CSSPropertyOffsetDistance:
       return ConsumeLengthOrPercent(range_, context_->Mode(), kValueRangeAll);
     case CSSPropertyOffsetRotate:
@@ -1359,11 +1265,6 @@ const CSSValue* CSSPropertyParser::ParseSingleValue(
       return CSSPropertyPositionUtils::ConsumePositionLonghand<CSSValueTop,
                                                                CSSValueBottom>(
           range_, context_->Mode());
-    case CSSPropertyMarkerStart:
-    case CSSPropertyMarkerMid:
-    case CSSPropertyMarkerEnd:
-    case CSSPropertyMask:
-      return ConsumeNoneOrURI(range_, context_);
     case CSSPropertyWebkitBoxFlex:
       return ConsumeNumber(range_, kValueRangeAll);
     case CSSPropertyStrokeWidth:
@@ -1797,62 +1698,6 @@ bool CSSPropertyParser::Consume4Values(const StylePropertyShorthand& shorthand,
   AddParsedProperty(longhands[3], shorthand.id(), *left, important);
 
   return range_.AtEnd();
-}
-
-// TODO(crbug.com/668012): refactor out property specific logic from this method
-// and remove CSSPropetyID argument
-bool CSSPropertyParser::ConsumeBorderImage(CSSPropertyID property,
-                                           bool default_fill,
-                                           bool important) {
-  CSSValue* source = nullptr;
-  CSSValue* slice = nullptr;
-  CSSValue* width = nullptr;
-  CSSValue* outset = nullptr;
-  CSSValue* repeat = nullptr;
-  if (CSSPropertyBorderImageUtils::ConsumeBorderImageComponents(
-          range_, context_, source, slice, width, outset, repeat,
-          default_fill)) {
-    switch (property) {
-      case CSSPropertyWebkitMaskBoxImage:
-        AddParsedProperty(
-            CSSPropertyWebkitMaskBoxImageSource, CSSPropertyWebkitMaskBoxImage,
-            source ? *source : *CSSInitialValue::Create(), important);
-        AddParsedProperty(
-            CSSPropertyWebkitMaskBoxImageSlice, CSSPropertyWebkitMaskBoxImage,
-            slice ? *slice : *CSSInitialValue::Create(), important);
-        AddParsedProperty(
-            CSSPropertyWebkitMaskBoxImageWidth, CSSPropertyWebkitMaskBoxImage,
-            width ? *width : *CSSInitialValue::Create(), important);
-        AddParsedProperty(
-            CSSPropertyWebkitMaskBoxImageOutset, CSSPropertyWebkitMaskBoxImage,
-            outset ? *outset : *CSSInitialValue::Create(), important);
-        AddParsedProperty(
-            CSSPropertyWebkitMaskBoxImageRepeat, CSSPropertyWebkitMaskBoxImage,
-            repeat ? *repeat : *CSSInitialValue::Create(), important);
-        return true;
-      case CSSPropertyBorderImage:
-        AddParsedProperty(CSSPropertyBorderImageSource, CSSPropertyBorderImage,
-                          source ? *source : *CSSInitialValue::Create(),
-                          important);
-        AddParsedProperty(CSSPropertyBorderImageSlice, CSSPropertyBorderImage,
-                          slice ? *slice : *CSSInitialValue::Create(),
-                          important);
-        AddParsedProperty(CSSPropertyBorderImageWidth, CSSPropertyBorderImage,
-                          width ? *width : *CSSInitialValue::Create(),
-                          important);
-        AddParsedProperty(CSSPropertyBorderImageOutset, CSSPropertyBorderImage,
-                          outset ? *outset : *CSSInitialValue::Create(),
-                          important);
-        AddParsedProperty(CSSPropertyBorderImageRepeat, CSSPropertyBorderImage,
-                          repeat ? *repeat : *CSSInitialValue::Create(),
-                          important);
-        return true;
-      default:
-        NOTREACHED();
-        return false;
-    }
-  }
-  return false;
 }
 
 static inline CSSValueID MapFromPageBreakBetween(CSSValueID value) {
@@ -2509,24 +2354,8 @@ bool CSSPropertyParser::ParseShorthand(CSSPropertyID unresolved_property,
     case CSSPropertyTextDecoration:
       DCHECK(RuntimeEnabledFeatures::CSS3TextDecorationsEnabled());
       return ConsumeShorthandGreedily(textDecorationShorthand(), important);
-    case CSSPropertyMargin:
-      return Consume4Values(marginShorthand(), important);
     case CSSPropertyPadding:
       return Consume4Values(paddingShorthand(), important);
-    case CSSPropertyWebkitTextEmphasis:
-      return ConsumeShorthandGreedily(webkitTextEmphasisShorthand(), important);
-    case CSSPropertyOutline:
-      return ConsumeShorthandGreedily(outlineShorthand(), important);
-    case CSSPropertyWebkitBorderStart:
-      return ConsumeShorthandGreedily(webkitBorderStartShorthand(), important);
-    case CSSPropertyWebkitBorderEnd:
-      return ConsumeShorthandGreedily(webkitBorderEndShorthand(), important);
-    case CSSPropertyWebkitBorderBefore:
-      return ConsumeShorthandGreedily(webkitBorderBeforeShorthand(), important);
-    case CSSPropertyWebkitBorderAfter:
-      return ConsumeShorthandGreedily(webkitBorderAfterShorthand(), important);
-    case CSSPropertyWebkitTextStroke:
-      return ConsumeShorthandGreedily(webkitTextStrokeShorthand(), important);
     case CSSPropertyMarker: {
       const CSSValue* marker = ParseSingleValue(CSSPropertyMarkerStart);
       if (!marker || !range_.AtEnd())
@@ -2561,10 +2390,6 @@ bool CSSPropertyParser::ParseShorthand(CSSPropertyID unresolved_property,
       return ConsumeShorthandGreedily(borderLeftShorthand(), important);
     case CSSPropertyBorder:
       return ConsumeBorder(important);
-    case CSSPropertyBorderImage:
-      return ConsumeBorderImage(property, false /* default_fill */, important);
-    case CSSPropertyWebkitMaskBoxImage:
-      return ConsumeBorderImage(property, true /* default_fill */, important);
     case CSSPropertyPageBreakAfter:
     case CSSPropertyPageBreakBefore:
     case CSSPropertyPageBreakInside:
@@ -2646,8 +2471,6 @@ bool CSSPropertyParser::ParseShorthand(CSSPropertyID unresolved_property,
       return ConsumePlaceSelfShorthand(important);
     case CSSPropertyScrollPadding:
       return Consume4Values(scrollPaddingShorthand(), important);
-    case CSSPropertyScrollPaddingBlock:
-      return Consume2Values(scrollPaddingBlockShorthand(), important);
     case CSSPropertyScrollPaddingInline:
       return Consume2Values(scrollPaddingInlineShorthand(), important);
     case CSSPropertyScrollSnapMargin:

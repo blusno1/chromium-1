@@ -29,6 +29,7 @@
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/background_generator.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
@@ -51,6 +52,7 @@
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #include "ios/web/public/referrer.h"
 #import "net/base/mac/url_conversions.h"
@@ -490,6 +492,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   // |YES| if there is card set animation being processed. For testing only.
   // Save last touch point used by new tab animation.
   CGPoint _lastTapPoint;
+  // The dispacther instance used when this view controller is active.
+  CommandDispatcher* _dispatcher;
 }
 
 @synthesize activeCardSet = _activeCardSet;
@@ -506,7 +510,9 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
 
 - (instancetype)initWithMainCardSet:(CardSet*)mainCardSet
                          otrCardSet:(CardSet*)otrCardSet
-                      activeCardSet:(CardSet*)activeCardSet {
+                      activeCardSet:(CardSet*)activeCardSet
+         applicationCommandEndpoint:
+             (id<ApplicationCommands>)applicationCommandEndpoint {
   DCHECK(mainCardSet);
   DCHECK(otrCardSet);
   DCHECK(activeCardSet == otrCardSet || activeCardSet == mainCardSet);
@@ -530,13 +536,20 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
         initWithTarget:self
                 action:@selector(handleTapFrom:)];
     [_modeSwitchRecognizer setDelegate:self];
+    _dispatcher = [[CommandDispatcher alloc] init];
+    [_dispatcher startDispatchingToTarget:self
+                              forProtocol:@protocol(BrowserCommands)];
+    [_dispatcher startDispatchingToTarget:applicationCommandEndpoint
+                              forProtocol:@protocol(ApplicationCommands)];
   }
   return self;
 }
 
 - (instancetype)initWithMainTabModel:(TabModel*)mainModel
                          otrTabModel:(TabModel*)otrModel
-                      activeTabModel:(TabModel*)activeModel {
+                      activeTabModel:(TabModel*)activeModel
+          applicationCommandEndpoint:
+              (id<ApplicationCommands>)applicationCommandEndpoint {
   DCHECK(mainModel);
   DCHECK(otrModel);
   DCHECK(activeModel == otrModel || activeModel == mainModel);
@@ -546,7 +559,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
       (activeModel == mainModel) ? mainCardSet : otrCardSet;
   return [self initWithMainCardSet:mainCardSet
                         otrCardSet:otrCardSet
-                     activeCardSet:activeCardSet];
+                     activeCardSet:activeCardSet
+        applicationCommandEndpoint:applicationCommandEndpoint];
 }
 
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
@@ -558,6 +572,10 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
 - (instancetype)initWithCoder:(NSCoder*)aDecoder {
   NOTREACHED();
   return nil;
+}
+
+- (id<ApplicationCommands, BrowserCommands>)dispatcher {
+  return static_cast<id<ApplicationCommands, BrowserCommands>>(_dispatcher);
 }
 
 - (void)setUpWithMainCardSet:(CardSet*)mainCardSet
@@ -723,7 +741,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   [self.view addSubview:_backgroundView];
 
   _toolbarController =
-      [[StackViewToolbarController alloc] initWithStackViewToolbar];
+      [[StackViewToolbarController alloc] initWithDispatcher:self.dispatcher];
   CGRect toolbarFrame = [self.view bounds];
   toolbarFrame.origin.y = CGRectGetMinY([[_toolbarController view] frame]);
   toolbarFrame.size.height = CGRectGetHeight([[_toolbarController view] frame]);
@@ -2683,13 +2701,26 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   return nil;
 }
 
+#pragma mark - BrowserCommands
+
+- (void)showToolsMenu {
+  ToolsMenuConfiguration* configuration =
+      [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]];
+  [configuration setInTabSwitcher:YES];
+  // When checking for the existence of tabs, catch the case where the main set
+  // is both active and empty, but the incognito set has some cards.
+  if (([[_activeCardSet cards] count] == 0) &&
+      (_activeCardSet == _otrCardSet || [[_otrCardSet cards] count] == 0))
+    [configuration setNoOpenedTabs:YES];
+  if (_activeCardSet == _otrCardSet)
+    [configuration setInIncognito:YES];
+  [_toolbarController showToolsMenuPopupWithConfiguration:configuration];
+}
+
 - (IBAction)chromeExecuteCommand:(id)sender {
   int command = [sender tag];
 
   switch (command) {
-    case IDC_SHOW_TOOLS_MENU:
-      [self showToolsMenuPopup];
-      break;
     // Closing all while the main set is active closes everything, but closing
     // all while incognito is active only closes incognito tabs.
     case IDC_CLOSE_ALL_TABS:
@@ -2718,20 +2749,6 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
       [super chromeExecuteCommand:sender];
       break;
   }
-}
-
-- (void)showToolsMenuPopup {
-  ToolsMenuConfiguration* configuration =
-      [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]];
-  [configuration setInTabSwitcher:YES];
-  // When checking for the existence of tabs, catch the case where the main set
-  // is both active and empty, but the incognito set has some cards.
-  if (([[_activeCardSet cards] count] == 0) &&
-      (_activeCardSet == _otrCardSet || [[_otrCardSet cards] count] == 0))
-    [configuration setNoOpenedTabs:YES];
-  if (_activeCardSet == _otrCardSet)
-    [configuration setInIncognito:YES];
-  [_toolbarController showToolsMenuPopupWithConfiguration:configuration];
 }
 
 #pragma mark Notification Handlers

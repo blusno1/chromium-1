@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <cassert>
 #include <climits>
 #include <cmath>
 #include <cstdlib>
@@ -15,6 +16,74 @@
 #include <type_traits>
 
 #include "base/numerics/safe_conversions.h"
+
+// Where available use builtin math overflow support on Clang and GCC.
+#if !defined(__native_client__) &&                         \
+    ((defined(__clang__) &&                                \
+      ((__clang_major__ > 3) ||                            \
+       (__clang_major__ == 3 && __clang_minor__ >= 4))) || \
+     (defined(__GNUC__) && __GNUC__ >= 5))
+#include "base/numerics/safe_math_clang_gcc_impl.h"
+
+// These are the placeholder implementations for platforms that don't provide
+// optimized builtin/intrinsic operations.
+#else
+namespace base {
+namespace internal {
+
+template <typename T, typename U>
+struct CheckedAddFastOp {
+  static const bool is_supported = false;
+  template <typename V>
+  static bool Do(T, U, V*) {
+    assert(false);  // Should not be reached.
+    return false;
+  }
+};
+
+template <typename T, typename U>
+struct CheckedSubFastOp {
+  static const bool is_supported = false;
+  template <typename V>
+  static bool Do(T, U, V*) {
+    assert(false);  // Should not be reached.
+    return false;
+  }
+};
+
+template <typename T, typename U>
+struct CheckedMulFastOp {
+  static const bool is_supported = false;
+  template <typename V>
+  static bool Do(T, U, V*) {
+    assert(false);  // Should not be reached.
+    return false;
+  }
+};
+
+template <typename T, typename U>
+struct ClampedAddFastOp {
+  static const bool is_supported = false;
+  template <typename V>
+  static V Do(T, U) {
+    assert(false);  // Should not be reached.
+    return false;
+  }
+};
+
+template <typename T, typename U>
+struct ClampedSubFastOp {
+  static const bool is_supported = false;
+  template <typename V>
+  static V Do(T, U) {
+    assert(false);  // Should not be reached.
+    return false;
+  }
+};
+
+}  // namespace internal
+}  // namespace base
+#endif
 
 namespace base {
 namespace internal {
@@ -118,26 +187,27 @@ struct ResultType {
   template <typename L, typename R, typename... Args>                          \
   CLASS##Numeric<typename ResultType<CLASS##OP_NAME##Op, L, R, Args...>::type> \
       CL_ABBR##OP_NAME(const L lhs, const R rhs, const Args... args) {         \
-    return ChkMathOp<CLASS##OP_NAME##Op, L, R, Args...>(lhs, rhs, args...);    \
+    return CL_ABBR##MathOp<CLASS##OP_NAME##Op, L, R, Args...>(lhs, rhs,        \
+                                                              args...);        \
   }
 
 #define BASE_NUMERIC_ARITHMETIC_OPERATORS(CLASS, CL_ABBR, OP_NAME, OP, CMP_OP) \
-  /* Binary arithmetic operator for all CheckedNumeric operations. */          \
+  /* Binary arithmetic operator for all CLASS##Numeric operations. */          \
   template <typename L, typename R,                                            \
-            typename std::enable_if<IsCheckedOp<L, R>::value>::type* =         \
+            typename std::enable_if<Is##CLASS##Op<L, R>::value>::type* =       \
                 nullptr>                                                       \
-  CheckedNumeric<typename MathWrapper<CLASS##OP_NAME##Op, L, R>::type>         \
+  CLASS##Numeric<typename MathWrapper<CLASS##OP_NAME##Op, L, R>::type>         \
   operator OP(const L lhs, const R rhs) {                                      \
     return decltype(lhs OP rhs)::template MathOp<CLASS##OP_NAME##Op>(lhs,      \
                                                                      rhs);     \
   }                                                                            \
-  /* Assignment arithmetic operator implementation from CheckedNumeric. */     \
+  /* Assignment arithmetic operator implementation from CLASS##Numeric. */     \
   template <typename L>                                                        \
   template <typename R>                                                        \
-  CheckedNumeric<L>& CheckedNumeric<L>::operator CMP_OP(const R rhs) {         \
+  CLASS##Numeric<L>& CLASS##Numeric<L>::operator CMP_OP(const R rhs) {         \
     return MathOp<CLASS##OP_NAME##Op>(rhs);                                    \
   }                                                                            \
-  /* Variadic arithmetic functions that return CheckedNumeric. */              \
+  /* Variadic arithmetic functions that return CLASS##Numeric. */              \
   BASE_NUMERIC_ARITHMETIC_VARIADIC(CLASS, CL_ABBR, OP_NAME)
 
 }  // namespace internal

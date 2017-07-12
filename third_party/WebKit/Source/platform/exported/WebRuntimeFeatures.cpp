@@ -172,6 +172,10 @@ void WebRuntimeFeatures::EnableMediaSession(bool enable) {
   RuntimeEnabledFeatures::SetMediaSessionEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableModuleScripts(bool enable) {
+  RuntimeEnabledFeatures::SetModuleScriptsEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableMojoBlobs(bool enable) {
   RuntimeEnabledFeatures::SetMojoBlobsEnabled(enable);
 }
@@ -246,10 +250,6 @@ void WebRuntimeFeatures::EnableSkipCompositingSmallScrollers(bool enable) {
 
 void WebRuntimeFeatures::EnableSlimmingPaintV2(bool enable) {
   RuntimeEnabledFeatures::SetSlimmingPaintV2Enabled(enable);
-}
-
-void WebRuntimeFeatures::EnableSlimmingPaintInvalidation(bool enable) {
-  RuntimeEnabledFeatures::SetSlimmingPaintInvalidationEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableTouchEventFeatureDetection(bool enable) {
@@ -344,6 +344,10 @@ void WebRuntimeFeatures::EnableRenderingPipelineThrottling(bool enable) {
   RuntimeEnabledFeatures::SetRenderingPipelineThrottlingEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableResourceLoadScheduler(bool enable) {
+  RuntimeEnabledFeatures::SetResourceLoadSchedulerEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableExpensiveBackgroundTimerThrottling(bool enable) {
   RuntimeEnabledFeatures::SetExpensiveBackgroundTimerThrottlingEnabled(enable);
 }
@@ -358,6 +362,10 @@ void WebRuntimeFeatures::EnableScrollAnchoring(bool enable) {
 
 void WebRuntimeFeatures::EnableServiceWorkerNavigationPreload(bool enable) {
   RuntimeEnabledFeatures::SetServiceWorkerNavigationPreloadEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableServiceWorkerScriptStreaming(bool enable) {
+  RuntimeEnabledFeatures::SetServiceWorkerScriptStreamingEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableAutoplayMutedVideos(bool enable) {
@@ -406,16 +414,20 @@ void WebRuntimeFeatures::EnableMediaControlsOverlayPlayButton(bool enable) {
   RuntimeEnabledFeatures::SetMediaControlsOverlayPlayButtonEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableLocationHardReload(bool enable) {
-  RuntimeEnabledFeatures::SetLocationHardReloadEnabled(enable);
-}
-
 void WebRuntimeFeatures::EnableRemotePlaybackBackend(bool enable) {
   RuntimeEnabledFeatures::SetRemotePlaybackBackendEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableMediaCastOverlayButton(bool enable) {
   RuntimeEnabledFeatures::SetMediaCastOverlayButtonEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableWebAuth(bool enable) {
+  RuntimeEnabledFeatures::SetWebAuthEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableClientPlaceholdersForServerLoFi(bool enable) {
+  RuntimeEnabledFeatures::SetClientPlaceholdersForServerLoFiEnabled(enable);
 }
 
 }  // namespace blink

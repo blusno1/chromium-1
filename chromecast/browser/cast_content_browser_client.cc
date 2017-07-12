@@ -67,12 +67,15 @@
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
 #include "chromecast/media/service/cast_mojo_media_client.h"
-#include "media/mojo/services/media_service.h"  // nogncheck
+#include "media/mojo/interfaces/constants.mojom.h"  // nogncheck
+#include "media/mojo/services/media_service.h"      // nogncheck
 #endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
 
 #if defined(OS_ANDROID)
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/crash_dump_manager_android.h"
+#else
+#include "chromecast/browser/memory_pressure_controller_impl.h"
 #endif  // defined(OS_ANDROID)
 
 #if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
@@ -504,6 +507,17 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
       base::Bind(&media::MediaCapsImpl::AddBinding,
                  base::Unretained(cast_browser_main_parts_->media_caps())),
       base::ThreadTaskRunnerHandle::Get());
+
+#if !defined(OS_ANDROID)
+  if (!memory_pressure_controller_) {
+    memory_pressure_controller_.reset(new MemoryPressureControllerImpl());
+  }
+
+  registry->AddInterface(
+      base::Bind(&MemoryPressureControllerImpl::AddBinding,
+                 base::Unretained(memory_pressure_controller_.get())),
+      base::ThreadTaskRunnerHandle::Get());
+#endif  // !defined(OS_ANDROID)
 }
 
 void CastContentBrowserClient::RegisterInProcessServices(
@@ -512,7 +526,7 @@ void CastContentBrowserClient::RegisterInProcessServices(
   service_manager::EmbeddedServiceInfo info;
   info.factory = base::Bind(&CreateMediaService, base::Unretained(this));
   info.task_runner = GetMediaTaskRunner();
-  services->insert(std::make_pair("media", info));
+  services->insert(std::make_pair(::media::mojom::kMediaServiceName, info));
 #endif
 }
 

@@ -145,10 +145,13 @@ class ContentLoFiDeciderTest : public testing::Test {
     net::ProxyRetryInfoMap proxy_retry_info;
 
     if (use_data_reduction_proxy) {
-      std::string data_reduction_proxy;
-      base::TrimString(test_context_->config()->test_params()->DefaultOrigin(),
-                       "/", &data_reduction_proxy);
-      data_reduction_proxy_info.UseNamedProxy(data_reduction_proxy);
+      test_context_->config()->test_params()->UseNonSecureProxiesForHttp();
+      data_reduction_proxy_info.UseProxyServer(test_context_->config()
+                                                   ->test_params()
+                                                   ->proxies_for_http()
+                                                   .front()
+                                                   .proxy_server());
+
     } else {
       data_reduction_proxy_info.UseNamedProxy("proxy.com");
     }
@@ -771,11 +774,11 @@ TEST_F(ContentLoFiDeciderTest, VideoDirectiveDoesNotOverride) {
   std::unique_ptr<net::URLRequest> request =
       CreateRequestByType(content::RESOURCE_TYPE_MEDIA, false, true);
   net::HttpRequestHeaders headers;
-  headers.SetHeader(chrome_proxy_accept_transform_header(), "foo");
+  headers.SetHeader(chrome_proxy_accept_transform_header(), "empty-image");
   NotifyBeforeSendHeaders(&headers, request.get(), true);
   std::string header_value;
   headers.GetHeader(chrome_proxy_accept_transform_header(), &header_value);
-  EXPECT_EQ("foo", header_value);
+  EXPECT_EQ("empty-image", header_value);
 }
 
 TEST_F(ContentLoFiDeciderTest, IsSlowPagePreviewRequested) {

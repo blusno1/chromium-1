@@ -6,12 +6,14 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "base/timer/mock_timer.h"
+#include "chrome/browser/media/media_engagement_score.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/media/media_engagement_service_factory.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 class MediaEngagementContentsObserverTest
@@ -21,6 +23,8 @@ class MediaEngagementContentsObserverTest
     scoped_feature_list_.InitFromCommandLine("media-engagement", std::string());
 
     ChromeRenderViewHostTestHarness::SetUp();
+    SetContents(content::WebContentsTester::CreateTestWebContents(
+        browser_context(), nullptr));
 
     MediaEngagementService* service = MediaEngagementService::Get(profile());
     ASSERT_TRUE(service);
@@ -30,7 +34,7 @@ class MediaEngagementContentsObserverTest
     playback_timer_ = new base::MockTimer(true, false);
     contents_observer_->SetTimerForTest(base::WrapUnique(playback_timer_));
 
-    ASSERT_FALSE(GetStoredPlayerStatesCount());
+    SimulateInaudible();
   }
 
   bool IsTimerRunning() const { return playback_timer_->IsRunning(); }
@@ -45,13 +49,6 @@ class MediaEngagementContentsObserverTest
 
   size_t GetStoredPlayerStatesCount() const {
     return contents_observer_->player_states_.size();
-  }
-
-  void Navigate(GURL url) {
-    std::unique_ptr<content::NavigationHandle> test_handle =
-        content::NavigationHandle::CreateNavigationHandleForTesting(
-            url, main_rfh(), true /** committed */);
-    contents_observer_->DidFinishNavigation(test_handle.get());
   }
 
   void SimulatePlaybackStarted(int id) {
@@ -81,10 +78,10 @@ class MediaEngagementContentsObserverTest
     contents_observer_->MediaStoppedPlaying(player_info, player_id);
   }
 
-  void SimulateMutedStateChange(int id, bool muted_state) {
+  void SimulateMutedStateChange(int id, bool muted) {
     content::WebContentsObserver::MediaPlayerId player_id =
         std::make_pair(nullptr /* RenderFrameHost */, id);
-    contents_observer_->MediaMutedStateChanged(player_id, muted_state);
+    contents_observer_->MediaMutedStatusChanged(player_id, muted);
   }
 
   void SimulateIsVisible() { contents_observer_->WasShown(); }
@@ -99,7 +96,55 @@ class MediaEngagementContentsObserverTest
     contents_observer_->significant_playback_recorded_ = true;
   }
 
+  void SimulateSignificantPlaybackTime() {
+    contents_observer_->OnSignificantMediaPlaybackTime();
+  }
+
   void SimulatePlaybackTimerFired() { playback_timer_->Fire(); }
+
+  void ExpectScores(GURL url,
+                    double expected_score,
+                    int expected_visits,
+                    int expected_media_playbacks) {
+    EXPECT_EQ(contents_observer_->service_->GetEngagementScore(url),
+              expected_score);
+    EXPECT_EQ(contents_observer_->service_->GetScoreMapForTesting()[url],
+              expected_score);
+
+    MediaEngagementScore* score =
+        contents_observer_->service_->CreateEngagementScore(url);
+    EXPECT_EQ(score->visits(), expected_visits);
+    EXPECT_EQ(score->media_playbacks(), expected_media_playbacks);
+    delete score;
+  }
+
+  void Navigate(GURL url) {
+    std::unique_ptr<content::NavigationHandle> test_handle =
+        content::NavigationHandle::CreateNavigationHandleForTesting(
+            GURL(url), main_rfh(), true /** committed */);
+    contents_observer_->DidFinishNavigation(test_handle.get());
+    contents_observer_->committed_origin_ = url::Origin(url);
+  }
+
+  void SimulateAudible() {
+    content::WebContentsTester::For(web_contents())
+        ->SetWasRecentlyAudible(true);
+  }
+
+  void SimulateInaudible() {
+    content::WebContentsTester::For(web_contents())
+        ->SetWasRecentlyAudible(false);
+  }
+
+  void SimulateSignificantPlayer(int id) {
+    SimulatePlaybackStarted(id);
+    SimulateIsVisible();
+    SimulateAudible();
+    web_contents()->SetAudioMuted(false);
+    SimulateResizeEvent(id, MediaEngagementContentsObserver::kSignificantSize);
+  }
+
+  void ForceUpdateTimer() { contents_observer_->UpdateTimer(); }
 
  private:
   // contents_observer_ auto-destroys when WebContents is destroyed.
@@ -153,8 +198,8 @@ TEST_F(MediaEngagementContentsObserverTest, AreConditionsMet) {
 
   web_contents()->SetAudioMuted(true);
   EXPECT_FALSE(AreConditionsMet());
-
   web_contents()->SetAudioMuted(false);
+
   SimulateIsHidden();
   EXPECT_FALSE(AreConditionsMet());
 
@@ -231,15 +276,34 @@ TEST_F(MediaEngagementContentsObserverTest, TimerDoesNotRunIfEntryRecorded) {
 
 TEST_F(MediaEngagementContentsObserverTest,
        SignificantPlaybackRecordedWhenTimerFires) {
-  SimulatePlaybackStarted(0);
-  SimulateIsVisible();
-  web_contents()->SetAudioMuted(false);
-  SimulateResizeEvent(0, MediaEngagementContentsObserver::kSignificantSize);
+  SimulateSignificantPlayer(0);
   EXPECT_TRUE(IsTimerRunning());
   EXPECT_FALSE(WasSignificantPlaybackRecorded());
 
   SimulatePlaybackTimerFired();
   EXPECT_TRUE(WasSignificantPlaybackRecorded());
+}
+
+TEST_F(MediaEngagementContentsObserverTest, InteractionsRecorded) {
+  GURL url("https://www.example.com");
+  ExpectScores(url, 0.0, 0, 0);
+
+  Navigate(url);
+  ExpectScores(url, 0.0, 1, 0);
+
+  SimulateAudible();
+  SimulateSignificantPlaybackTime();
+  ExpectScores(url, 0.0, 1, 1);
+}
+
+TEST_F(MediaEngagementContentsObserverTest,
+       SignificantPlaybackNotRecordedIfAudioSilent) {
+  SimulatePlaybackStarted(0);
+  SimulateIsVisible();
+  SimulateInaudible();
+  web_contents()->SetAudioMuted(false);
+  EXPECT_FALSE(IsTimerRunning());
+  EXPECT_FALSE(WasSignificantPlaybackRecorded());
 }
 
 TEST_F(MediaEngagementContentsObserverTest, DoNotRecordAudiolessTrack) {
@@ -248,4 +312,17 @@ TEST_F(MediaEngagementContentsObserverTest, DoNotRecordAudiolessTrack) {
   content::WebContentsObserver::MediaPlayerInfo player_info(true, false);
   SimulatePlaybackStarted(player_info, 0);
   EXPECT_EQ(0u, GetSignificantActivePlayersCount());
+}
+
+TEST_F(MediaEngagementContentsObserverTest,
+       ResetStateOnNavigationWithPlayingPlayers) {
+  Navigate(GURL("https://www.google.com"));
+  SimulateSignificantPlayer(0);
+  ForceUpdateTimer();
+  EXPECT_TRUE(IsTimerRunning());
+
+  Navigate(GURL("https://www.example.com"));
+  EXPECT_FALSE(GetSignificantActivePlayersCount());
+  EXPECT_FALSE(GetStoredPlayerStatesCount());
+  EXPECT_FALSE(IsTimerRunning());
 }

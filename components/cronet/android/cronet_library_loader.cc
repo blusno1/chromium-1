@@ -18,7 +18,9 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "components/cronet/android/cronet_bidirectional_stream_adapter.h"
+#include "components/cronet/android/cronet_jni_registration.h"
 #include "components/cronet/android/cronet_upload_data_stream_adapter.h"
 #include "components/cronet/android/cronet_url_request_adapter.h"
 #include "components/cronet/android/cronet_url_request_context_adapter.h"
@@ -66,6 +68,9 @@ bool RegisterJNI(JNIEnv* env) {
 bool NativeInit() {
   if (!base::android::OnJNIOnLoadInit())
     return false;
+  if (!base::TaskScheduler::GetInstance())
+    base::TaskScheduler::CreateAndStartWithDefaultParams("Cronet");
+
   url::Initialize();
   // Initializes the statistics recorder system. This needs to be done before
   // emitting histograms to prevent memory leaks (crbug.com/707836).
@@ -84,6 +89,11 @@ bool OnInitThread() {
 jint CronetOnLoad(JavaVM* vm, void* reserved) {
   base::android::InitVM(vm);
   JNIEnv* env = base::android::AttachCurrentThread();
+  if (!RegisterMainDexNatives(env) || !RegisterNonMainDexNatives(env)) {
+    return -1;
+  }
+  // TODO(agrieve): Delete this block, this is a no-op now.
+  // https://crbug.com/683256.
   if (!RegisterJNI(env) || !NativeInit()) {
     return -1;
   }
@@ -91,6 +101,9 @@ jint CronetOnLoad(JavaVM* vm, void* reserved) {
 }
 
 void CronetOnUnLoad(JavaVM* jvm, void* reserved) {
+  if (base::TaskScheduler::GetInstance())
+    base::TaskScheduler::GetInstance()->Shutdown();
+
   base::android::LibraryLoaderExitHook();
 }
 

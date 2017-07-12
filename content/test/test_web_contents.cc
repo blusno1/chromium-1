@@ -100,6 +100,13 @@ int TestWebContents::DownloadImage(const GURL& url,
   return g_next_image_download_id;
 }
 
+const GURL& TestWebContents::GetLastCommittedURL() const {
+  if (last_committed_url_.is_valid()) {
+    return last_committed_url_;
+  }
+  return WebContentsImpl::GetLastCommittedURL();
+}
+
 void TestWebContents::TestDidNavigate(RenderFrameHost* render_frame_host,
                                       int nav_entry_id,
                                       bool did_create_new_entry,
@@ -206,6 +213,10 @@ bool TestWebContents::TestDidDownloadImage(
   pending_image_downloads_[url].pop_front();
   callback.Run(id, http_status_code, url, bitmaps, original_bitmap_sizes);
   return true;
+}
+
+void TestWebContents::SetLastCommittedURL(const GURL& url) {
+  last_committed_url_ = url;
 }
 
 bool TestWebContents::CrossProcessNavigationPending() {
@@ -389,10 +400,12 @@ void TestWebContents::CreateNewWindow(
 
 void TestWebContents::CreateNewWidget(int32_t render_process_id,
                                       int32_t route_id,
+                                      mojom::WidgetPtr widget,
                                       blink::WebPopupType popup_type) {}
 
 void TestWebContents::CreateNewFullscreenWidget(int32_t render_process_id,
-                                                int32_t route_id) {}
+                                                int32_t route_id,
+                                                mojom::WidgetPtr widget) {}
 
 void TestWebContents::ShowCreatedWindow(int process_id,
                                         int route_id,
@@ -414,6 +427,10 @@ void TestWebContents::SaveFrameWithHeaders(const GURL& url,
                                            const Referrer& referrer,
                                            const std::string& headers) {
   save_frame_headers_ = headers;
+}
+
+void TestWebContents::SetWasRecentlyAudible(bool audible) {
+  audio_stream_monitor()->set_was_recently_audible_for_testing(audible);
 }
 
 }  // namespace content

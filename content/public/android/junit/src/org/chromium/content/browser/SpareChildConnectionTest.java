@@ -8,8 +8,10 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.os.Bundle;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -23,6 +25,8 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
+import org.chromium.base.process_launcher.ChildConnectionAllocator;
+import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.process_launcher.ChildProcessCreationParams;
 import org.chromium.base.test.util.Feature;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
@@ -55,6 +59,7 @@ public class SpareChildConnectionTest {
             assert mConnection == null;
             mConnection = new TestChildProcessConnection(
                     serviceName, bindAsExternalService, serviceBundle, creationParams);
+            mConnection.setPostOnServiceConnected(false);
             return mConnection;
         }
 
@@ -130,7 +135,7 @@ public class SpareChildConnectionTest {
         ChildProcessConnection connection =
                 mSpareConnection.getConnection(mWrongConnectionAllocator, mServiceCallback);
         assertNull(connection);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        ShadowLooper.runUiThreadTasks();
         verify(mServiceCallback, times(0)).onChildStarted();
         verify(mServiceCallback, times(0)).onChildStartFailed();
         verify(mServiceCallback, times(0)).onChildProcessDied(any());
@@ -141,11 +146,17 @@ public class SpareChildConnectionTest {
     public void testCallbackCalledConnectionReady() {
         mTestConnectionFactory.simulateConnectionBindingSuccessfully();
 
+        assertFalse(mSpareConnection.isEmpty());
+
         // Now retrieve the connection, the callback should be invoked.
         ChildProcessConnection connection =
                 mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNotNull(connection);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        // No more connections are available.
+        assertTrue(mSpareConnection.isEmpty());
+
+        ShadowLooper.runUiThreadTasks();
         verify(mServiceCallback, times(1)).onChildStarted();
         verify(mServiceCallback, times(0)).onChildStartFailed();
     }
@@ -153,14 +164,19 @@ public class SpareChildConnectionTest {
     @Test
     @Feature({"ProcessManagement"})
     public void testCallbackCalledConnectionNotReady() {
+        assertFalse(mSpareConnection.isEmpty());
+
         // Retrieve the connection before it's bound.
         ChildProcessConnection connection =
                 mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNotNull(connection);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        ShadowLooper.runUiThreadTasks();
         // No callbacks are called.
         verify(mServiceCallback, times(0)).onChildStarted();
         verify(mServiceCallback, times(0)).onChildStartFailed();
+
+        // No more connections are available.
+        assertTrue(mSpareConnection.isEmpty());
 
         // Simulate the connection getting bound, it should trigger the callback.
         mTestConnectionFactory.simulateConnectionBindingSuccessfully();

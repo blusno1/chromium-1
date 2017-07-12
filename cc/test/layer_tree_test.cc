@@ -19,7 +19,6 @@
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
-#include "cc/output/buffer_to_texture_target_map.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_layer_tree_host_client.h"
@@ -34,6 +33,7 @@
 #include "cc/trees/proxy_impl.h"
 #include "cc/trees/proxy_main.h"
 #include "cc/trees/single_thread_proxy.h"
+#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
@@ -479,7 +479,7 @@ class LayerTreeTestLayerTreeFrameSinkClient
         std::move(compositor_context_provider));
   }
   void DisplayReceivedLocalSurfaceId(
-      const LocalSurfaceId& local_surface_id) override {
+      const viz::LocalSurfaceId& local_surface_id) override {
     hooks_->DisplayReceivedLocalSurfaceIdOnThread(local_surface_id);
   }
   void DisplayReceivedCompositorFrame(const CompositorFrame& frame) override {
@@ -575,7 +575,7 @@ void LayerTreeTest::PostAddLongAnimationToMainThreadPlayer(
 }
 
 void LayerTreeTest::PostSetLocalSurfaceIdToMainThread(
-    const LocalSurfaceId& local_surface_id) {
+    const viz::LocalSurfaceId& local_surface_id) {
   main_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&LayerTreeTest::DispatchSetLocalSurfaceId,
                                 main_thread_weak_ptr_, local_surface_id));
@@ -752,7 +752,7 @@ void LayerTreeTest::DispatchAddAnimationToPlayer(
 }
 
 void LayerTreeTest::DispatchSetLocalSurfaceId(
-    const LocalSurfaceId& local_surface_id) {
+    const viz::LocalSurfaceId& local_surface_id) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   if (layer_tree_host_)
     layer_tree_host_->SetLocalSurfaceId(local_surface_id);
@@ -834,7 +834,7 @@ void LayerTreeTest::RunTest(CompositorMode mode) {
   // actions and less dependent on timings to make decisions.
   settings_.enable_latency_recovery = false;
   settings_.resource_settings.buffer_to_texture_target_map =
-      DefaultBufferToTextureTargetMapForTesting();
+      viz::DefaultBufferToTextureTargetMapForTesting();
   InitializeSettings(&settings_);
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -866,7 +866,7 @@ void LayerTreeTest::RequestNewLayerTreeFrameSink() {
   // mocked out.
   constexpr double refresh_rate = 200.0;
   renderer_settings.resource_settings.buffer_to_texture_target_map =
-      DefaultBufferToTextureTargetMapForTesting();
+      viz::DefaultBufferToTextureTargetMapForTesting();
   auto layer_tree_frame_sink = CreateLayerTreeFrameSink(
       renderer_settings, refresh_rate, std::move(shared_context_provider),
       std::move(worker_context_provider));

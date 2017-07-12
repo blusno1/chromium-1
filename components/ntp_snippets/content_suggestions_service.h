@@ -289,8 +289,7 @@ class ContentSuggestionsService : public KeyedService,
 
   // SigninManagerBase::Observer implementation
   void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username,
-                             const std::string& password) override;
+                             const std::string& username) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
@@ -351,7 +350,7 @@ class ContentSuggestionsService : public KeyedService,
       int minimum_size_in_pixel,
       int desired_size_in_pixel,
       const ImageFetchedCallback& callback,
-      bool success);
+      favicon_base::GoogleFaviconServerRequestStatus status);
 
   // Whether the content suggestions feature is enabled.
   State state_;

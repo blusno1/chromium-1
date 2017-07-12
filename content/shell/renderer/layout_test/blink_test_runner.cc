@@ -536,8 +536,8 @@ bool BlinkTestRunner::IsUseZoomForDSFEnabled() {
   return content::IsUseZoomForDSFEnabled();
 }
 
-void BlinkTestRunner::SetDeviceColorProfile(const std::string& name) {
-  content::SetDeviceColorProfile(render_view(), GetTestingICCProfile(name));
+void BlinkTestRunner::SetDeviceColorSpace(const std::string& name) {
+  content::SetDeviceColorSpace(render_view(), GetTestingColorSpace(name));
 }
 
 void BlinkTestRunner::SetBluetoothFakeAdapter(const std::string& adapter_name,
@@ -723,7 +723,7 @@ void BlinkTestRunner::ResetPermissions() {
   Send(new LayoutTestHostMsg_ResetPermissions(routing_id()));
 }
 
-cc::SharedBitmapManager* BlinkTestRunner::GetSharedBitmapManager() {
+viz::SharedBitmapManager* BlinkTestRunner::GetSharedBitmapManager() {
   return RenderThread::Get()->GetSharedBitmapManager();
 }
 
@@ -923,8 +923,13 @@ void BlinkTestRunner::CaptureDumpContinued() {
       interfaces->TestRunner()->ShouldGeneratePixelResults() &&
       !interfaces->TestRunner()->ShouldDumpAsAudio()) {
     CHECK(render_view()->GetWebView()->IsAcceleratedCompositingActive());
+
+    // Test finish should only be processed in the BlinkTestRunner associated
+    // with the current, non-swapped-out RenderView.
+    DCHECK(render_view()->GetWebView()->MainFrame()->IsWebLocalFrame());
+
     interfaces->TestRunner()->DumpPixelsAsync(
-        render_view()->GetWebView(),
+        render_view()->GetWebView()->MainFrame()->ToWebLocalFrame(),
         base::Bind(&BlinkTestRunner::OnPixelsDumpCompleted,
                    base::Unretained(this)));
     return;

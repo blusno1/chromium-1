@@ -27,6 +27,7 @@ chrome_ios_eg_test("ios_chrome_integration_egtests") {
     "//ios/chrome/browser/device_sharing:eg_tests",
     "//ios/chrome/browser/metrics:eg_tests",
     "//ios/chrome/browser/net:eg_tests",
+    "//ios/chrome/browser/ntp_tiles:eg_tests",
   ]
 }
 
@@ -46,6 +47,7 @@ chrome_ios_eg_test("ios_chrome_settings_egtests") {
 chrome_ios_eg_test("ios_chrome_ui_egtests") {
   deps = [
     "//ios/chrome/app/safe_mode:eg_tests",
+    "//ios/chrome/browser/content_suggestions:eg_tests",
     "//ios/chrome/browser/ui:eg_tests",
     "//ios/chrome/browser/ui/activity_services:eg_tests",
     "//ios/chrome/browser/ui/alert_coordinator:eg_tests",
@@ -155,8 +157,6 @@ source_set("test_support") {
     "accessibility_util.mm",
     "chrome_actions.h",
     "chrome_actions.mm",
-    "chrome_assertions.h",
-    "chrome_assertions.mm",
     "chrome_earl_grey.h",
     "chrome_earl_grey.mm",
     "chrome_earl_grey_ui.h",

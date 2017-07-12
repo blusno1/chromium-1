@@ -11,9 +11,9 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/strings/utf_string_conversions.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "third_party/protobuf/src/google/protobuf/io/tokenizer.h"
 #include "third_party/protobuf/src/google/protobuf/text_format.h"
 #include "tools/traffic_annotation/auditor/traffic_annotation_file_filter.h"
 
@@ -28,9 +28,146 @@ uint32_t recursive_hash(const char* str, int N) {
     return (recursive_hash(str, N - 1) * 31 + str[N - 1]) % 138003713;
 }
 
+std::map<int, std::string> kReservedAnnotations = {
+    {TRAFFIC_ANNOTATION_FOR_TESTS.unique_id_hash_code, "test"},
+    {PARTIAL_TRAFFIC_ANNOTATION_FOR_TESTS.unique_id_hash_code, "test_partial"},
+    {NO_TRAFFIC_ANNOTATION_YET.unique_id_hash_code, "undefined"},
+    {MISSING_TRAFFIC_ANNOTATION.unique_id_hash_code, "missing"},
+};
+
+// This class receives parsing errors from google::protobuf::TextFormat::Parser
+// which is used during protobuf deserialization.
+class SimpleErrorCollector : public google::protobuf::io::ErrorCollector {
+ public:
+  SimpleErrorCollector(int proto_starting_line)
+      : google::protobuf::io::ErrorCollector(),
+        line_offset_(proto_starting_line) {}
+
+  ~SimpleErrorCollector() override {}
+
+  void AddError(int line,
+                google::protobuf::io::ColumnNumber column,
+                const std::string& message) override {
+    AddMessage(line, column, message);
+  }
+
+  void AddWarning(int line,
+                  google::protobuf::io::ColumnNumber column,
+                  const std::string& message) override {
+    AddMessage(line, column, message);
+  }
+
+  std::string GetMessage() { return message_; }
+
+ private:
+  void AddMessage(int line,
+                  google::protobuf::io::ColumnNumber column,
+                  const std::string& message) {
+    message_ += base::StringPrintf(
+        "%sLine %i, column %i, %s", message_.length() ? " " : "",
+        line_offset_ + line, static_cast<int>(column), message.c_str());
+  }
+
+  std::string message_;
+  int line_offset_;
+};
+
 }  // namespace
 
-namespace traffic_annotation_auditor {
+const int AuditorResult::kNoCodeLineSpecified = -1;
+
+AuditorResult::AuditorResult(ResultType type,
+                             const std::string& message,
+                             const std::string& file_path,
+                             int line)
+    : type_(type), file_path_(file_path), line_(line) {
+  DCHECK(line != kNoCodeLineSpecified ||
+         type == AuditorResult::ResultType::RESULT_OK ||
+         type == AuditorResult::ResultType::RESULT_IGNORE ||
+         type == AuditorResult::ResultType::ERROR_FATAL ||
+         type ==
+             AuditorResult::ResultType::ERROR_DUPLICATE_UNIQUE_ID_HASH_CODE);
+  DCHECK(!message.empty() || type == AuditorResult::ResultType::RESULT_OK ||
+         type == AuditorResult::ResultType::RESULT_IGNORE ||
+         type == AuditorResult::ResultType::ERROR_MISSING ||
+         type == AuditorResult::ResultType::ERROR_NO_ANNOTATION ||
+         type ==
+             AuditorResult::ResultType::ERROR_DUPLICATE_UNIQUE_ID_HASH_CODE);
+  if (!message.empty())
+    details_.push_back(message);
+};
+
+AuditorResult::AuditorResult(ResultType type, const std::string& message)
+    : AuditorResult::AuditorResult(type,
+                                   message,
+                                   std::string(),
+                                   kNoCodeLineSpecified) {}
+
+AuditorResult::AuditorResult(ResultType type)
+    : AuditorResult::AuditorResult(type,
+                                   std::string(),
+                                   std::string(),
+                                   kNoCodeLineSpecified) {}
+
+AuditorResult::AuditorResult(const AuditorResult& other)
+    : type_(other.type_),
+      details_(other.details_),
+      file_path_(other.file_path_),
+      line_(other.line_){};
+
+AuditorResult::~AuditorResult() {}
+
+void AuditorResult::AddDetail(const std::string& message) {
+  details_.push_back(message);
+}
+
+std::string AuditorResult::ToText() const {
+  switch (type_) {
+    case AuditorResult::ResultType::ERROR_FATAL:
+      DCHECK(details_.size());
+      return details_[0];
+
+    case AuditorResult::ResultType::ERROR_MISSING:
+      return base::StringPrintf("Missing annotation in '%s', line %i.",
+                                file_path_.c_str(), line_);
+
+    case AuditorResult::ResultType::ERROR_NO_ANNOTATION:
+      return base::StringPrintf("Empty annotation in '%s', line %i.",
+                                file_path_.c_str(), line_);
+
+    case AuditorResult::ResultType::ERROR_SYNTAX: {
+      DCHECK(details_.size());
+      std::string flat_message(details_[0]);
+      std::replace(flat_message.begin(), flat_message.end(), '\n', ' ');
+      return base::StringPrintf("Syntax error in '%s': %s", file_path_.c_str(),
+                                flat_message.c_str());
+    }
+
+    case AuditorResult::ResultType::ERROR_RESERVED_UNIQUE_ID_HASH_CODE:
+      DCHECK(details_.size());
+      return base::StringPrintf(
+          "Unique id '%s' in '%s:%i' has a hash code similar to a reserved "
+          "word and should be changed.",
+          details_[0].c_str(), file_path_.c_str(), line_);
+
+    case AuditorResult::ResultType::ERROR_DUPLICATE_UNIQUE_ID_HASH_CODE: {
+      DCHECK(details_.size());
+      std::string error_text(
+          "The following annotations have similar unique id "
+          "hash codes and should be updated: ");
+      for (const std::string& duplicate : details_)
+        error_text += duplicate + ", ";
+      error_text.pop_back();
+      error_text.pop_back();
+      error_text += ".";
+
+      return error_text;
+    }
+
+    default:
+      return std::string();
+  }
+}
 
 AnnotationInstance::AnnotationInstance()
     : annotation_type(AnnotationType::ANNOTATION_COMPLETE) {}
@@ -42,15 +179,13 @@ AnnotationInstance::AnnotationInstance(const AnnotationInstance& other)
       unique_id_hash_code(other.unique_id_hash_code),
       extra_id_hash_code(other.extra_id_hash_code){};
 
-bool AnnotationInstance::Deserialize(
+AuditorResult AnnotationInstance::Deserialize(
     const std::vector<std::string>& serialized_lines,
     int start_line,
-    int end_line,
-    std::string* error_text) {
+    int end_line) {
   if (end_line - start_line < 7) {
-    LOG(ERROR) << "Not enough lines to deserialize annotation.";
-    *error_text = "FATAL";
-    return false;
+    return AuditorResult(AuditorResult::ResultType::ERROR_FATAL,
+                         "Not enough lines to deserialize annotation.");
   }
 
   // Extract header lines.
@@ -72,51 +207,46 @@ bool AnnotationInstance::Deserialize(
   } else if (function_type == "BranchedCompleting") {
     annotation_type = AnnotationType::ANNOTATION_BRANCHED_COMPLETING;
   } else {
-    LOG(ERROR) << "Unexpected function type: " << function_type;
-    *error_text = "FATAL";
-    return false;
+    return AuditorResult(AuditorResult::ResultType::ERROR_FATAL,
+                         base::StringPrintf("Unexpected function type: %s",
+                                            function_type.c_str()));
   }
 
   // Process test tags.
-  unique_id_hash_code = ComputeHashValue(unique_id);
+  unique_id_hash_code = TrafficAnnotationAuditor::ComputeHashValue(unique_id);
   if (unique_id_hash_code == TRAFFIC_ANNOTATION_FOR_TESTS.unique_id_hash_code ||
       unique_id_hash_code ==
           PARTIAL_TRAFFIC_ANNOTATION_FOR_TESTS.unique_id_hash_code) {
-    return false;
+    return AuditorResult(AuditorResult::ResultType::RESULT_IGNORE);
   }
 
   // Process undefined tags.
   if (unique_id_hash_code == NO_TRAFFIC_ANNOTATION_YET.unique_id_hash_code ||
       unique_id_hash_code ==
           NO_PARTIAL_TRAFFIC_ANNOTATION_YET.unique_id_hash_code) {
-    *error_text = base::StringPrintf(
-        "Annotation is defined with temporary tag for file '%s', line %i.",
-        file_path.c_str(), line_number);
-    return false;
+    return AuditorResult(AuditorResult::ResultType::ERROR_NO_ANNOTATION, "",
+                         file_path, line_number);
   }
 
   // Process missing tag.
-  if (unique_id_hash_code == MISSING_TRAFFIC_ANNOTATION.unique_id_hash_code) {
-    *error_text =
-        base::StringPrintf("Missing annotation in file '%s', line %i.",
-                           file_path.c_str(), line_number);
-    return false;
-  }
+  if (unique_id_hash_code == MISSING_TRAFFIC_ANNOTATION.unique_id_hash_code)
+    return AuditorResult(AuditorResult::ResultType::ERROR_MISSING, "",
+                         file_path, line_number);
 
   // Decode serialized proto.
   std::string annotation_text = "";
   while (start_line < end_line) {
     annotation_text += serialized_lines[start_line++] + "\n";
   }
-  if (!google::protobuf::TextFormat::ParseFromString(
-          annotation_text, (google::protobuf::Message*)&proto)) {
-    // TODO(rhalavati@): Find exact error message using:
-    // google::protobuf::io::ErrorCollector error_collector;
-    // google::protobuf::TextFormat::Parser::RecordErrorsTo(&error_collector);
-    *error_text =
-        base::StringPrintf("Could not parse protobuf for file '%s', line %i.",
-                           file_path.c_str(), line_number);
-    return false;
+
+  SimpleErrorCollector error_collector(line_number);
+  google::protobuf::TextFormat::Parser parser;
+  parser.RecordErrorsTo(&error_collector);
+  if (!parser.ParseFromString(annotation_text,
+                              (google::protobuf::Message*)&proto)) {
+    return AuditorResult(AuditorResult::ResultType::ERROR_SYNTAX,
+                         error_collector.GetMessage().c_str(), file_path,
+                         line_number);
   }
 
   // Add other fields.
@@ -126,9 +256,9 @@ bool AnnotationInstance::Deserialize(
   src->set_function(function_context);
   src->set_line(line_number);
   proto.set_unique_id(unique_id);
-  extra_id_hash_code = ComputeHashValue(extra_id);
+  extra_id_hash_code = TrafficAnnotationAuditor::ComputeHashValue(extra_id);
 
-  return true;
+  return AuditorResult(AuditorResult::ResultType::RESULT_OK);
 }
 
 CallInstance::CallInstance() : line_number(0), is_annotated(false) {}
@@ -140,14 +270,13 @@ CallInstance::CallInstance(const CallInstance& other)
       function_name(other.function_name),
       is_annotated(other.is_annotated){};
 
-bool CallInstance::Deserialize(const std::vector<std::string>& serialized_lines,
-                               int start_line,
-                               int end_line,
-                               std::string* error_text) {
+AuditorResult CallInstance::Deserialize(
+    const std::vector<std::string>& serialized_lines,
+    int start_line,
+    int end_line) {
   if (end_line - start_line != 5) {
-    LOG(ERROR) << "Incorrect number of lines to deserialize call.";
-    *error_text = "FATAL";
-    return false;
+    return AuditorResult(AuditorResult::ResultType::ERROR_FATAL,
+                         "Not enough lines to deserialize call.");
   }
 
   file_path = serialized_lines[start_line++];
@@ -159,71 +288,76 @@ bool CallInstance::Deserialize(const std::vector<std::string>& serialized_lines,
   int is_annotated_int;
   base::StringToInt(serialized_lines[start_line++], &is_annotated_int);
   is_annotated = is_annotated_int != 0;
-  return true;
+  return AuditorResult(AuditorResult::ResultType::RESULT_OK);
 }
 
-int ComputeHashValue(const std::string& unique_id) {
+int TrafficAnnotationAuditor::ComputeHashValue(const std::string& unique_id) {
   return unique_id.length() ? static_cast<int>(recursive_hash(
                                   unique_id.c_str(), unique_id.length()))
                             : -1;
 }
 
-std::string RunClangTool(const base::FilePath& source_path,
-                         const base::FilePath& build_path,
-                         const base::CommandLine::StringVector& path_filters,
-                         const bool full_run) {
+TrafficAnnotationAuditor::TrafficAnnotationAuditor(
+    const base::FilePath& source_path,
+    const base::FilePath& build_path)
+    : source_path_(source_path), build_path_(build_path) {
+  LoadWhiteList();
+};
+
+TrafficAnnotationAuditor::~TrafficAnnotationAuditor(){};
+
+bool TrafficAnnotationAuditor::RunClangTool(
+    const std::vector<std::string>& path_filters,
+    const bool full_run) {
   base::FilePath options_filepath;
   if (!base::CreateTemporaryFile(&options_filepath)) {
     LOG(ERROR) << "Could not create temporary options file.";
-    return std::string();
+    return false;
   }
   FILE* options_file = base::OpenFile(options_filepath, "wt");
   if (!options_file) {
     LOG(ERROR) << "Could not create temporary options file.";
-    return std::string();
+    return false;
   }
   fprintf(options_file,
           "--generate-compdb --tool=traffic_annotation_extractor -p=%s ",
-          build_path.MaybeAsASCII().c_str());
+          build_path_.MaybeAsASCII().c_str());
 
+  // |ignore_list_[ALL]| is not passed when |full_run| is happening as there is
+  // no way to pass it to run_tools.py except enumerating all alternatives.
+  // The paths in |ignore_list_[ALL]| are removed later from the results.
   if (full_run) {
-    for (const auto& file_path : path_filters)
-      fprintf(options_file, "%s ",
-#if defined(OS_WIN)
-              base::WideToUTF8(file_path).c_str()
-#else
-              file_path.c_str()
-#endif
-                  );
+    for (const std::string& file_path : path_filters)
+      fprintf(options_file, "%s ", file_path.c_str());
   } else {
     TrafficAnnotationFileFilter filter;
     std::vector<std::string> file_paths;
 
     if (path_filters.size()) {
       for (const auto& path_filter : path_filters) {
-        filter.GetRelevantFiles(source_path,
-#if defined(OS_WIN)
-                                base::UTF16ToASCII(path_filter),
-#else
-                                path_filter,
-#endif
-                                &file_paths);
+        filter.GetRelevantFiles(source_path_,
+                                ignore_list_[static_cast<int>(
+                                    AuditorException::ExceptionType::ALL)],
+                                path_filter, &file_paths);
       }
     } else {
-      filter.GetRelevantFiles(source_path, "", &file_paths);
+      filter.GetRelevantFiles(
+          source_path_,
+          ignore_list_[static_cast<int>(AuditorException::ExceptionType::ALL)],
+          "", &file_paths);
     }
 
     if (!file_paths.size()) {
       base::CloseFile(options_file);
       base::DeleteFile(options_filepath, false);
-      return std::string();
+      return false;
     }
     for (const auto& file_path : file_paths)
       fprintf(options_file, "%s ", file_path.c_str());
   }
   base::CloseFile(options_file);
 
-  base::CommandLine cmdline(source_path.Append(FILE_PATH_LITERAL("tools"))
+  base::CommandLine cmdline(source_path_.Append(FILE_PATH_LITERAL("tools"))
                                 .Append(FILE_PATH_LITERAL("clang"))
                                 .Append(FILE_PATH_LITERAL("scripts"))
                                 .Append(FILE_PATH_LITERAL("run_tool.py")));
@@ -235,24 +369,32 @@ std::string RunClangTool(const base::FilePath& source_path,
   cmdline.AppendArg(base::StringPrintf(
       "--options-file=%s", options_filepath.MaybeAsASCII().c_str()));
 
-  std::string results;
-  if (!base::GetAppOutput(cmdline, &results))
-    results = std::string();
+  bool result = base::GetAppOutput(cmdline, &clang_tool_raw_output_);
 
   base::DeleteFile(options_filepath, false);
 
-  return results;
+  return result;
 }
 
-bool ParseClangToolRawOutput(const std::string& clang_output,
-                             std::vector<AnnotationInstance>* annotations,
-                             std::vector<CallInstance>* calls,
-                             std::vector<std::string>* errors) {
+bool TrafficAnnotationAuditor::IsWhitelisted(
+    const std::string& file_path,
+    AuditorException::ExceptionType whitelist_type) {
+  const std::vector<std::string>& whitelist =
+      ignore_list_[static_cast<int>(whitelist_type)];
+
+  for (const std::string& ignore_path : whitelist) {
+    if (!strncmp(file_path.c_str(), ignore_path.c_str(), ignore_path.length()))
+      return true;
+  }
+  return false;
+}
+
+bool TrafficAnnotationAuditor::ParseClangToolRawOutput() {
   // Remove possible carriage return characters before splitting lines.
-  std::string trimmed_input;
-  base::RemoveChars(clang_output, "\r", &trimmed_input);
-  std::vector<std::string> lines = base::SplitString(
-      trimmed_input, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  base::RemoveChars(clang_tool_raw_output_, "\r", &clang_tool_raw_output_);
+  std::vector<std::string> lines =
+      base::SplitString(clang_tool_raw_output_, "\n", base::KEEP_WHITESPACE,
+                        base::SPLIT_WANT_ALL);
 
   for (unsigned int current = 0; current < lines.size(); current++) {
     bool annotation_block;
@@ -281,22 +423,37 @@ bool ParseClangToolRawOutput(const std::string& clang_output,
     }
 
     // Deserialize and handle errors.
-    std::string error_text;
-    if (annotation_block) {
-      AnnotationInstance new_annotation;
-      if (new_annotation.Deserialize(lines, current, end_line, &error_text))
-        annotations->push_back(new_annotation);
-    } else {
-      CallInstance new_call;
-      if (new_call.Deserialize(lines, current, end_line, &error_text))
-        calls->push_back(new_call);
-    }
-    if (!error_text.empty()) {
-      if (error_text == "FATAL") {
-        LOG(ERROR) << "Aborting after line " << current << ".";
-        return false;
+    AnnotationInstance new_annotation;
+    CallInstance new_call;
+    AuditorResult result(AuditorResult::ResultType::RESULT_OK);
+
+    result = annotation_block
+                 ? new_annotation.Deserialize(lines, current, end_line)
+                 : new_call.Deserialize(lines, current, end_line);
+
+    if (!IsWhitelisted(result.file_path(),
+                       AuditorException::ExceptionType::ALL) &&
+        (result.type() != AuditorResult::ResultType::ERROR_MISSING ||
+         !IsWhitelisted(result.file_path(),
+                        AuditorException::ExceptionType::MISSING))) {
+      switch (result.type()) {
+        case AuditorResult::ResultType::RESULT_OK: {
+          if (annotation_block)
+            extracted_annotations_.push_back(new_annotation);
+          else
+            extracted_calls_.push_back(new_call);
+          break;
+        }
+        case AuditorResult::ResultType::RESULT_IGNORE:
+          break;
+        case AuditorResult::ResultType::ERROR_FATAL: {
+          LOG(ERROR) << "Aborting after line " << current
+                     << " because: " << result.ToText().c_str();
+          return false;
+        }
+        default:
+          errors_.push_back(result);
       }
-      errors->push_back(error_text);
     }
 
     current = end_line;
@@ -305,4 +462,92 @@ bool ParseClangToolRawOutput(const std::string& clang_output,
   return true;
 }
 
-}  // namespace traffic_annotation_auditor
+bool TrafficAnnotationAuditor::LoadWhiteList() {
+  base::FilePath white_list_file = base::MakeAbsoluteFilePath(
+      source_path_.Append(FILE_PATH_LITERAL("tools"))
+          .Append(FILE_PATH_LITERAL("traffic_annotation"))
+          .Append(FILE_PATH_LITERAL("auditor"))
+          .Append(FILE_PATH_LITERAL("white_list.txt")));
+  std::string file_content;
+  if (base::ReadFileToString(white_list_file, &file_content)) {
+    base::RemoveChars(file_content, "\r", &file_content);
+    std::vector<std::string> lines = base::SplitString(
+        file_content, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+    for (const std::string& line : lines) {
+      // Ignore comments.
+      if (line.length() && line[0] == '#')
+        continue;
+      size_t comma = line.find(',');
+      if (comma == std::string::npos) {
+        LOG(ERROR) << "Unexpected syntax in white_list.txt, line: " << line;
+        return false;
+      }
+
+      AuditorException::ExceptionType exception_type;
+      if (AuditorException::TypeFromString(line.substr(0, comma),
+                                           &exception_type)) {
+        ignore_list_[static_cast<int>(exception_type)].push_back(
+            line.substr(comma + 1, line.length() - comma - 1));
+      } else {
+        LOG(ERROR) << "Unexpected type in white_list.txt line: " << line;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  LOG(ERROR)
+      << "Could not read tools/traffic_annotation/auditor/white_list.txt";
+  return false;
+}
+
+const std::map<int, std::string>&
+TrafficAnnotationAuditor::GetReservedUniqueIDs() {
+  return kReservedAnnotations;
+}
+
+void TrafficAnnotationAuditor::CheckDuplicateHashes() {
+  const std::map<int, std::string> reserved_ids = GetReservedUniqueIDs();
+
+  std::map<int, std::vector<unsigned int>> unique_ids;
+  for (unsigned int index = 0; index < extracted_annotations_.size(); index++) {
+    AnnotationInstance& instance = extracted_annotations_[index];
+
+    // If unique id's hash code is similar to a reserved id, add an error.
+    if (reserved_ids.find(instance.unique_id_hash_code) != reserved_ids.end()) {
+      errors_.push_back(AuditorResult(
+          AuditorResult::ResultType::ERROR_RESERVED_UNIQUE_ID_HASH_CODE,
+          instance.proto.unique_id(), instance.proto.source().file(),
+          instance.proto.source().line()));
+      continue;
+    }
+
+    // Find unique ids with similar hash codes.
+    if (unique_ids.find(instance.unique_id_hash_code) == unique_ids.end()) {
+      std::vector<unsigned> empty_list;
+      unique_ids.insert(
+          std::make_pair(instance.unique_id_hash_code, empty_list));
+    }
+    unique_ids[instance.unique_id_hash_code].push_back(index);
+  }
+
+  // Add error for unique ids with similar hash codes.
+  for (const auto& item : unique_ids) {
+    if (item.second.size() > 1) {
+      AuditorResult error(
+          AuditorResult::ResultType::ERROR_DUPLICATE_UNIQUE_ID_HASH_CODE);
+      for (unsigned int index : item.second) {
+        error.AddDetail(base::StringPrintf(
+            "%s in '%s:%i'",
+            extracted_annotations_[index].proto.unique_id().c_str(),
+            extracted_annotations_[index].proto.source().file().c_str(),
+            extracted_annotations_[index].proto.source().line()));
+      }
+      errors_.push_back(error);
+    }
+  }
+}
+
+void TrafficAnnotationAuditor::RunAllChecks() {
+  CheckDuplicateHashes();
+}

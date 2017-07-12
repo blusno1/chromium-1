@@ -35,28 +35,28 @@ struct DataForRecursion {
   PropertyTrees* property_trees;
   LayerType* transform_tree_parent;
   LayerType* transform_fixed_parent;
-  int clip_tree_parent;
-  int effect_tree_parent;
-  int scroll_tree_parent;
-  int closest_ancestor_with_copy_request;
   const LayerType* page_scale_layer;
   const LayerType* inner_viewport_scroll_layer;
   const LayerType* outer_viewport_scroll_layer;
   const LayerType* overscroll_elasticity_layer;
-  gfx::Vector2dF elastic_overscroll;
+  const gfx::Transform* device_transform;
   float page_scale_factor;
+  int clip_tree_parent;
+  int effect_tree_parent;
+  int scroll_tree_parent;
+  int closest_ancestor_with_copy_request;
+  uint32_t main_thread_scrolling_reasons;
+  SkColor safe_opaque_background_color;
   bool in_subtree_of_page_scale_layer;
   bool affected_by_inner_viewport_bounds_delta;
   bool affected_by_outer_viewport_bounds_delta;
   bool should_flatten;
   bool is_hidden;
-  uint32_t main_thread_scrolling_reasons;
   bool scroll_tree_parent_created_by_uninheritable_criteria;
-  const gfx::Transform* device_transform;
-  gfx::Transform compound_transform_since_render_target;
   bool animation_axis_aligned_since_render_target;
   bool not_axis_aligned_since_last_clip;
-  SkColor safe_opaque_background_color;
+  gfx::Transform compound_transform_since_render_target;
+  gfx::Vector2dF elastic_overscroll;
 };
 
 static LayerPositionConstraint PositionConstraint(Layer* layer) {
@@ -1027,7 +1027,6 @@ void AddScrollNodeIfNeeded(
     data_for_children->scroll_tree_parent = node_id;
   } else {
     ScrollNode node;
-    node.owning_layer_id = layer->id();
     node.scrollable = scrollable;
     node.main_thread_scrolling_reasons = main_thread_scrolling_reasons;
     node.non_fast_scrollable_region = layer->non_fast_scrollable_region();
@@ -1042,7 +1041,7 @@ void AddScrollNodeIfNeeded(
     }
 
     node.bounds = layer->bounds();
-    node.scroll_clip_layer_bounds = layer->scroll_container_bounds();
+    node.container_bounds = layer->scroll_container_bounds();
     node.offset_to_transform_parent = layer->offset_to_transform_parent();
     node.should_flatten = layer->should_flatten_transform_from_property_tree();
     node.user_scrollable_horizontal = UserScrollableHorizontal(layer);

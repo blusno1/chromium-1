@@ -112,7 +112,6 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/ui/webui/offline/offline_internals_ui.h"
-#include "chrome/browser/ui/webui/popular_sites_internals_ui.h"
 #include "chrome/browser/ui/webui/snippets_internals_ui.h"
 #include "chrome/browser/ui/webui/webapks_ui.h"
 #else
@@ -371,7 +370,7 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host() == chrome::kChromeUIQuotaInternalsHost)
     return &NewWebUI<QuotaInternalsUI>;
   if (url.host() == safe_browsing::kChromeUISafeBrowsingHost)
-    return &NewWebUI<SafeBrowsingUI>;
+    return &NewWebUI<safe_browsing::SafeBrowsingUI>;
   if (url.host() == chrome::kChromeUISignInInternalsHost)
     return &NewWebUI<SignInInternalsUI>;
   if (url.host_piece() == chrome::kChromeUISuggestionsHost)
@@ -495,8 +494,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
 #if defined(OS_ANDROID)
   if (url.host_piece() == chrome::kChromeUIOfflineInternalsHost)
     return &NewWebUI<OfflineInternalsUI>;
-  if (url.host_piece() == chrome::kChromeUIPopularSitesInternalsHost)
-    return &NewWebUI<PopularSitesInternalsUI>;
   if (url.host_piece() == chrome::kChromeUISnippetsInternalsHost &&
       !profile->IsOffTheRecord())
     return &NewWebUI<SnippetsInternalsUI>;

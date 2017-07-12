@@ -42,6 +42,7 @@
 #include "content/common/frame_messages.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/common/render_process_messages.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/webplugininfo.h"
@@ -311,10 +312,7 @@ std::unique_ptr<blink::WebURLLoader> RendererBlinkPlatformImpl::CreateURLLoader(
   ChildThreadImpl* child_thread = ChildThreadImpl::current();
 
   if (!url_loader_factory_ && child_thread) {
-    bool network_service_enabled =
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableNetworkService);
-    if (network_service_enabled) {
+    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
       mojom::URLLoaderFactoryPtr factory_ptr;
       connector_->BindInterface(mojom::kBrowserServiceName, &factory_ptr);
       url_loader_factory_ = std::move(factory_ptr);
@@ -649,9 +647,9 @@ WebString RendererBlinkPlatformImpl::DatabaseCreateOriginIdentifier(
       storage::GetIdentifierFromOrigin(WebSecurityOriginToGURL(origin)));
 }
 
-cc::FrameSinkId RendererBlinkPlatformImpl::GenerateFrameSinkId() {
-  return cc::FrameSinkId(RenderThread::Get()->GetClientId(),
-                         RenderThread::Get()->GenerateRoutingID());
+viz::FrameSinkId RendererBlinkPlatformImpl::GenerateFrameSinkId() {
+  return viz::FrameSinkId(RenderThread::Get()->GetClientId(),
+                          RenderThread::Get()->GenerateRoutingID());
 }
 
 bool RendererBlinkPlatformImpl::IsThreadedCompositingEnabled() {
@@ -1097,7 +1095,7 @@ RendererBlinkPlatformImpl::GetGpuMemoryBufferManager() {
 
 //------------------------------------------------------------------------------
 
-std::unique_ptr<cc::SharedBitmap>
+std::unique_ptr<viz::SharedBitmap>
 RendererBlinkPlatformImpl::AllocateSharedBitmap(const blink::WebSize& size) {
   return shared_bitmap_manager_
       ->AllocateSharedBitmap(gfx::Size(size.width, size.height));

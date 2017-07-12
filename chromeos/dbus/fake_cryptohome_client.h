@@ -14,6 +14,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/dbus/cryptohome/key.pb.h"
 #include "chromeos/dbus/cryptohome_client.h"
 
 namespace chromeos {
@@ -72,8 +74,8 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   bool CallTpmIsOwnedAndBlock(bool* owned) override;
   void TpmIsBeingOwned(const BoolDBusMethodCallback& callback) override;
   bool CallTpmIsBeingOwnedAndBlock(bool* owning) override;
-  void TpmCanAttemptOwnership(const VoidDBusMethodCallback& callback) override;
-  void TpmClearStoredPassword(const VoidDBusMethodCallback& callback) override;
+  void TpmCanAttemptOwnership(VoidDBusMethodCallback callback) override;
+  void TpmClearStoredPassword(VoidDBusMethodCallback callback) override;
   bool CallTpmClearStoredPasswordAndBlock() override;
   void Pkcs11IsTpmTokenReady(const BoolDBusMethodCallback& callback) override;
   void Pkcs11GetTpmTokenInfo(
@@ -197,7 +199,7 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
       const cryptohome::FlushAndSignBootAttributesRequest& request,
       const ProtobufMethodCallback& callback) override;
   void MigrateToDircrypto(const cryptohome::Identification& cryptohome_id,
-                          const VoidDBusMethodCallback& callback) override;
+                          VoidDBusMethodCallback callback) override;
   void SetDircryptoMigrationProgressHandler(
       const DircryptoMigrationProgessHandler& handler) override;
   void RemoveFirmwareManagementParametersFromTpm(
@@ -271,6 +273,8 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   // associated data blob. Used to implement InstallAttributesSet and -Get.
   std::map<std::string, std::vector<uint8_t>> install_attrs_;
   bool locked_;
+
+  std::map<cryptohome::Identification, cryptohome::KeyData> key_data_map_;
 
   DircryptoMigrationProgessHandler dircrypto_migration_progress_handler_;
   base::RepeatingTimer dircrypto_migration_progress_timer_;

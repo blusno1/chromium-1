@@ -78,6 +78,7 @@
 #include "core/probe/CoreProbes.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "core/xml/parser/XMLDocumentParser.h"
+#include "platform/Histogram.h"
 #include "platform/InstanceCounters.h"
 #include "platform/PluginScriptForbiddenScope.h"
 #include "platform/ScriptForbiddenScope.h"
@@ -193,6 +194,31 @@ static NavigationPolicy MaybeCheckCSP(
   }
 
   return policy;
+}
+
+static SinglePageAppNavigationType CategorizeSinglePageAppNavigation(
+    SameDocumentNavigationSource same_document_navigation_source,
+    FrameLoadType frame_load_type) {
+  // |SinglePageAppNavigationType| falls into this grid according to different
+  // combinations of |FrameLoadType| and |SameDocumentNavigationSource|:
+  //
+  //                              HistoryApi           Default
+  //  kFrameLoadTypeBackForward   illegal              otherFragmentNav
+  // !kFrameLoadTypeBackForward   sameDocBack/Forward  historyPushOrReplace
+  switch (same_document_navigation_source) {
+    case kSameDocumentNavigationDefault:
+      if (frame_load_type == kFrameLoadTypeBackForward) {
+        return kSPANavTypeSameDocumentBackwardOrForward;
+      }
+      return kSPANavTypeOtherFragmentNavigation;
+    case kSameDocumentNavigationHistoryApi:
+      // It's illegal to have both kSameDocumentNavigationHistoryApi and
+      // kFrameLoadTypeBackForward.
+      DCHECK(frame_load_type != kFrameLoadTypeBackForward);
+      return kSPANavTypeHistoryPushStateOrReplaceState;
+  }
+  NOTREACHED();
+  return kSPANavTypeSameDocumentBackwardOrForward;
 }
 
 ResourceRequest FrameLoader::ResourceRequestForReload(
@@ -477,8 +503,7 @@ bool FrameLoader::AllowPlugins(ReasonForCallingAllowPlugins reason) {
   if (!Client())
     return false;
   Settings* settings = frame_->GetSettings();
-  bool allowed = frame_->GetContentSettingsClient()->AllowPlugins(
-      settings && settings->GetPluginsEnabled());
+  bool allowed = settings && settings->GetPluginsEnabled();
   if (!allowed && reason == kAboutToInstantiatePlugin)
     frame_->GetContentSettingsClient()->DidNotAllowPlugins();
   return allowed;
@@ -491,6 +516,12 @@ void FrameLoader::UpdateForSameDocumentNavigation(
     HistoryScrollRestorationType scroll_restoration_type,
     FrameLoadType type,
     Document* initiating_document) {
+  SinglePageAppNavigationType single_page_app_navigation_type =
+      CategorizeSinglePageAppNavigation(same_document_navigation_source, type);
+  UMA_HISTOGRAM_ENUMERATION(
+      "RendererScheduler.UpdateForSameDocumentNavigationCount",
+      single_page_app_navigation_type, kSPANavTypeCount);
+
   TRACE_EVENT1("blink", "FrameLoader::updateForSameDocumentNavigation", "url",
                new_url.GetString().Ascii().data());
 
@@ -564,8 +595,10 @@ void FrameLoader::LoadInSameDocument(
                                        ? std::move(state_object)
                                        : SerializedScriptValue::NullValue());
 
-  if (history_item)
-    RestoreScrollPositionAndViewStateForLoadType(frame_load_type);
+  if (history_item) {
+    RestoreScrollPositionAndViewStateForLoadType(frame_load_type,
+                                                 kHistorySameDocumentLoad);
+  }
 
   // We need to scroll to the fragment whether or not a hash change occurred,
   // since the user might have scrolled since the previous navigation.
@@ -902,7 +935,7 @@ SubstituteData FrameLoader::DefaultSubstituteDataForURL(const KURL& url) {
   CString encoded_srcdoc = srcdoc.Utf8();
   return SubstituteData(
       SharedBuffer::Create(encoded_srcdoc.data(), encoded_srcdoc.length()),
-      "text/html", "UTF-8", KURL());
+      "text/html", "UTF-8", NullURL());
 }
 
 void FrameLoader::StopAllLoaders() {
@@ -1062,11 +1095,13 @@ bool FrameLoader::IsLoadingMainFrame() const {
 void FrameLoader::RestoreScrollPositionAndViewState() {
   if (!frame_->GetPage() || !GetDocumentLoader())
     return;
-  RestoreScrollPositionAndViewStateForLoadType(GetDocumentLoader()->LoadType());
+  RestoreScrollPositionAndViewStateForLoadType(GetDocumentLoader()->LoadType(),
+                                               kHistoryDifferentDocumentLoad);
 }
 
 void FrameLoader::RestoreScrollPositionAndViewStateForLoadType(
-    FrameLoadType load_type) {
+    FrameLoadType load_type,
+    HistoryLoadType history_load_type) {
   LocalFrameView* view = frame_->View();
   if (!view || !view->LayoutViewportScrollableArea() ||
       !state_machine_.CommittedFirstRealDocumentLoad() ||
@@ -1084,19 +1119,28 @@ void FrameLoader::RestoreScrollPositionAndViewStateForLoadType(
   bool should_restore_scale = history_item->PageScaleFactor();
 
   // This tries to balance:
-  // 1. restoring as soon as possible
-  // 2. not overriding user scroll (TODO(majidvp): also respect user scale)
+  // 1. restoring as soon as possible.
+  // 2. not overriding user scroll (TODO(majidvp): also respect user scale).
   // 3. detecting clamping to avoid repeatedly popping the scroll position down
-  //    as the page height increases
-  // 4. ignore clamp detection if we are not restoring scroll or after load
-  //    completes because that may be because the page will never reach its
-  //    previous height
+  //    as the page height increases.
+  // 4. forcing a layout if necessary to avoid clamping.
+  // 5. ignoring clamp detection if scroll state is not being restored, if load
+  //    is complete, or if the navigation is same-document (as the new page may
+  //    be smaller than the previous page).
   bool can_restore_without_clamping =
       view->LayoutViewportScrollableArea()->ClampScrollOffset(
           history_item->GetScrollOffset()) == history_item->GetScrollOffset();
+
+  bool should_force_clamping =
+      !frame_->IsLoading() || history_load_type == kHistorySameDocumentLoad;
+  // Here |can_restore_without_clamping| is false, but layout might be necessary
+  // to ensure correct content size.
+  if (!can_restore_without_clamping && should_force_clamping)
+    frame_->GetDocument()->UpdateStyleAndLayout();
+
   bool can_restore_without_annoying_user =
       !GetDocumentLoader()->GetInitialScrollState().was_scrolled_by_user &&
-      (can_restore_without_clamping || !frame_->IsLoading() ||
+      (can_restore_without_clamping || should_force_clamping ||
        !should_restore_scroll);
   if (!can_restore_without_annoying_user)
     return;
@@ -1141,7 +1185,7 @@ void FrameLoader::RestoreScrollPositionAndViewStateForLoadType(
 
 String FrameLoader::UserAgent() const {
   String user_agent = Client()->UserAgent();
-  probe::applyUserAgentOverride(frame_, &user_agent);
+  probe::applyUserAgentOverride(frame_->GetDocument(), &user_agent);
   return user_agent;
 }
 

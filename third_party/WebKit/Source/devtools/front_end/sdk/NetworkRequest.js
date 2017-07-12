@@ -63,8 +63,8 @@ SDK.NetworkRequest = class extends Common.Object {
     this.requestMethod = '';
     this.requestTime = 0;
     this.protocol = '';
-    /** @type {!Protocol.Network.RequestMixedContentType} */
-    this.mixedContentType = Protocol.Network.RequestMixedContentType.None;
+    /** @type {!Protocol.Security.MixedContentType} */
+    this.mixedContentType = Protocol.Security.MixedContentType.None;
 
     /** @type {?Protocol.Network.ResourcePriority} */
     this._initialPriority = null;
@@ -73,9 +73,8 @@ SDK.NetworkRequest = class extends Common.Object {
 
     /** @type {!Common.ResourceType} */
     this._resourceType = Common.resourceTypes.Other;
-    // TODO(allada) Migrate everything away from this and remove it.
-    this._contentEncoded = false;
-    this._pendingContentCallbacks = [];
+    /** @type {?Promise<!SDK.NetworkRequest.ContentData>} */
+    this._contentData = null;
     /** @type {!Array.<!SDK.NetworkRequest.WebSocketFrame>} */
     this._frames = [];
     /** @type {!Array.<!SDK.NetworkRequest.EventSourceMessage>} */
@@ -464,18 +463,22 @@ SDK.NetworkRequest = class extends Common.Object {
   }
 
   /**
-   * @param {!Protocol.Network.ResourceTiming|undefined} x
+   * @param {!Protocol.Network.ResourceTiming|undefined} timingInfo
    */
-  set timing(x) {
-    if (x && !this._fromMemoryCache) {
-      // Take startTime and responseReceivedTime from timing data for better accuracy.
-      // Timing's requestTime is a baseline in seconds, rest of the numbers there are ticks in millis.
-      this._startTime = x.requestTime;
-      this._responseReceivedTime = x.requestTime + x.receiveHeadersEnd / 1000.0;
+  set timing(timingInfo) {
+    if (!timingInfo || this._fromMemoryCache)
+      return;
+    // Take startTime and responseReceivedTime from timing data for better accuracy.
+    // Timing's requestTime is a baseline in seconds, rest of the numbers there are ticks in millis.
+    this._startTime = timingInfo.requestTime;
+    var headersReceivedTime = timingInfo.requestTime + timingInfo.receiveHeadersEnd / 1000.0;
+    if ((this._responseReceivedTime || -1) < 0 || this._responseReceivedTime > headersReceivedTime)
+      this._responseReceivedTime = headersReceivedTime;
+    if (this._startTime > this._responseReceivedTime)
+      this._responseReceivedTime = this._startTime;
 
-      this._timing = x;
-      this.dispatchEventToListeners(SDK.NetworkRequest.Events.TimingChanged, this);
-    }
+    this._timing = timingInfo;
+    this.dispatchEventToListeners(SDK.NetworkRequest.Events.TimingChanged, this);
   }
 
   /**
@@ -669,10 +672,24 @@ SDK.NetworkRequest = class extends Common.Object {
   /**
    * @return {string}
    */
+  _filteredProtocolName() {
+    var protocol = this.protocol.toLowerCase();
+    if (protocol === 'h2')
+      return 'http/2.0';
+    return protocol.replace(/^http\/2(\.0)?\+/, 'http/2.0+');
+  }
+
+  /**
+   * @return {string}
+   */
   requestHttpVersion() {
     var headersText = this.requestHeadersText();
-    if (!headersText)
-      return this.requestHeaderValue('version') || this.requestHeaderValue(':version') || 'unknown';
+    if (!headersText) {
+      var version = this.requestHeaderValue('version') || this.requestHeaderValue(':version');
+      if (version)
+        return version;
+      return this._filteredProtocolName();
+    }
     var firstLine = headersText.split(/\r\n/)[0];
     var match = firstLine.match(/(HTTP\/\d+\.\d+)$/);
     return match ? match[1] : 'HTTP/0.9';
@@ -819,8 +836,12 @@ SDK.NetworkRequest = class extends Common.Object {
    */
   responseHttpVersion() {
     var headersText = this._responseHeadersText;
-    if (!headersText)
-      return this.responseHeaderValue('version') || this.responseHeaderValue(':version') || 'unknown';
+    if (!headersText) {
+      var version = this.responseHeaderValue('version') || this.responseHeaderValue(':version');
+      if (version)
+        return version;
+      return this._filteredProtocolName();
+    }
     var firstLine = headersText.split(/\r\n/)[0];
     var match = firstLine.match(/^(HTTP\/\d+\.\d+)/);
     return match ? match[1] : 'HTTP/0.9';
@@ -862,30 +883,6 @@ SDK.NetworkRequest = class extends Common.Object {
     return values.join(', ');
   }
 
-  // TODO(allada) Migrate everything away from using this function and use .contentData() instead.
-  /**
-   * @return {?string|undefined}
-   */
-  get content() {
-    return this._content;
-  }
-
-  // TODO(allada) Migrate everything away from using this function and use .contentData() instead.
-  /**
-   * @return {?Protocol.Error|undefined}
-   */
-  contentError() {
-    return this._contentError;
-  }
-
-  // TODO(allada) Migrate everything away from using this function and use .contentData() instead.
-  /**
-   * @return {boolean}
-   */
-  get contentEncoded() {
-    return this._contentEncoded;
-  }
-
   /**
    * @return {!Promise<!SDK.NetworkRequest.ContentData>}
    */
@@ -917,12 +914,7 @@ SDK.NetworkRequest = class extends Common.Object {
    * @return {!Promise<?string>}
    */
   async requestContent() {
-    var contentData = await this.contentData();
-    // TODO(allada) Migrate away from anyone using .content, .contentError and .contentEncoded.
-    this._content = contentData.content;
-    this._contentError = contentData.error;
-    this._contentEncoded = contentData.encoded;
-    return contentData.content;
+    return (await this.contentData()).content;
   }
 
   /**

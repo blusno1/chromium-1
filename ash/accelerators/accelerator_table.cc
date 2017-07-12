@@ -69,7 +69,7 @@ const AcceleratorData kAcceleratorData[] = {
      TOUCH_HUD_CLEAR},
     {true, ui::VKEY_P, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
      TOUCH_HUD_PROJECTION_TOGGLE},
-    {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
+    {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN,
      TOGGLE_HIGH_CONTRAST},
     {true, ui::VKEY_Z, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
      TOGGLE_SPOKEN_FEEDBACK},
@@ -161,6 +161,7 @@ const AcceleratorData kAcceleratorData[] = {
 
     // Voice Interaction shortcuts.
     {true, ui::VKEY_A, ui::EF_COMMAND_DOWN, START_VOICE_INTERACTION},
+    {true, ui::VKEY_ASSISTANT, ui::EF_NONE, START_VOICE_INTERACTION},
     // Temporary shortcut added for UX/PM exploration.
     // TODO(updowndota): Remove the temporary shortcut.
     {true, ui::VKEY_SPACE, ui::EF_COMMAND_DOWN, START_VOICE_INTERACTION},
@@ -203,7 +204,11 @@ const AcceleratorData kDeprecatedAccelerators[] = {
 
     // Deprecated in M59.
     {true, ui::VKEY_K, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN,
-     SHOW_IME_MENU_BUBBLE}};
+     SHOW_IME_MENU_BUBBLE},
+
+    // Deprecated in M61.
+    {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
+     TOGGLE_HIGH_CONTRAST}};
 
 const size_t kDeprecatedAcceleratorsLength = arraysize(kDeprecatedAccelerators);
 
@@ -219,7 +224,14 @@ const DeprecatedAcceleratorData kDeprecatedAcceleratorsData[] = {
      IDS_SHORTCUT_TASK_MANAGER_NEW, true},
     {SHOW_IME_MENU_BUBBLE, "Ash.Accelerators.Deprecated.ShowImeMenuBubble",
      IDS_DEPRECATED_SHOW_IME_BUBBLE_MSG, IDS_SHORTCUT_IME_BUBBLE_OLD,
-     IDS_SHORTCUT_IME_BUBBLE_NEW, true}};
+     IDS_SHORTCUT_IME_BUBBLE_NEW, true},
+    {
+        TOGGLE_HIGH_CONTRAST, "Ash.Accelerators.Deprecated.ToggleHighContrast",
+        IDS_DEPRECATED_TOGGLE_HIGH_CONTRAST_MSG,
+        IDS_SHORTCUT_TOGGLE_HIGH_CONTRAST_OLD,
+        IDS_SHORTCUT_TOGGLE_HIGH_CONTRAST_NEW,
+        false  // Old accelerator was disabled immediately upon deprecation.
+    }};
 
 const size_t kDeprecatedAcceleratorsDataLength =
     arraysize(kDeprecatedAcceleratorsData);

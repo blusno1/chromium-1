@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -147,15 +149,18 @@ void FakeCryptohomeClient::GetSanitizedUsername(
     const StringDBusMethodCallback& callback) {
   // Even for stub implementation we have to return different values so that
   // multi-profiles would work.
-  std::string sanitized_username = GetStubSanitizedUsername(cryptohome_id);
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(callback, DBUS_METHOD_CALL_SUCCESS, sanitized_username));
+  auto task =
+      service_is_available_
+          ? base::BindOnce(callback, DBUS_METHOD_CALL_SUCCESS,
+                           GetStubSanitizedUsername(cryptohome_id))
+          : base::BindOnce(callback, DBUS_METHOD_CALL_FAILURE, std::string());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(task));
 }
 
 std::string FakeCryptohomeClient::BlockingGetSanitizedUsername(
     const cryptohome::Identification& cryptohome_id) {
-  return GetStubSanitizedUsername(cryptohome_id);
+  return service_is_available_ ? GetStubSanitizedUsername(cryptohome_id)
+                               : std::string();
 }
 
 void FakeCryptohomeClient::AsyncMount(
@@ -234,15 +239,15 @@ bool FakeCryptohomeClient::CallTpmIsBeingOwnedAndBlock(bool* owning) {
 }
 
 void FakeCryptohomeClient::TpmCanAttemptOwnership(
-    const VoidDBusMethodCallback& callback) {
+    VoidDBusMethodCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, DBUS_METHOD_CALL_SUCCESS));
+      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_SUCCESS));
 }
 
 void FakeCryptohomeClient::TpmClearStoredPassword(
-    const VoidDBusMethodCallback& callback) {
+    VoidDBusMethodCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, DBUS_METHOD_CALL_SUCCESS));
+      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_SUCCESS));
 }
 
 bool FakeCryptohomeClient::CallTpmClearStoredPasswordAndBlock() {
@@ -510,7 +515,14 @@ void FakeCryptohomeClient::GetKeyDataEx(
     const cryptohome::GetKeyDataRequest& request,
     const ProtobufMethodCallback& callback) {
   cryptohome::BaseReply reply;
-  reply.MutableExtension(cryptohome::GetKeyDataReply::reply);
+  auto it = key_data_map_.find(cryptohome_id);
+  if (it == key_data_map_.end()) {
+    reply.set_error(cryptohome::CRYPTOHOME_ERROR_ACCOUNT_NOT_FOUND);
+  } else {
+    cryptohome::GetKeyDataReply* key_data_reply =
+        reply.MutableExtension(cryptohome::GetKeyDataReply::reply);
+    *key_data_reply->add_key_data() = it->second;
+  }
   ReturnProtobufMethodCallback(reply, callback);
 }
 
@@ -545,6 +557,7 @@ void FakeCryptohomeClient::AddKeyEx(
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::AddKeyRequest& request,
     const ProtobufMethodCallback& callback) {
+  key_data_map_.insert(std::make_pair(cryptohome_id, request.key().data()));
   cryptohome::BaseReply reply;
   ReturnProtobufMethodCallback(reply, callback);
 }
@@ -593,9 +606,9 @@ void FakeCryptohomeClient::FlushAndSignBootAttributes(
 
 void FakeCryptohomeClient::MigrateToDircrypto(
     const cryptohome::Identification& cryptohome_id,
-    const VoidDBusMethodCallback& callback) {
+    VoidDBusMethodCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, DBUS_METHOD_CALL_SUCCESS));
+      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_SUCCESS));
   dircrypto_migration_progress_ = 0;
   dircrypto_migration_progress_timer_.Start(
       FROM_HERE,

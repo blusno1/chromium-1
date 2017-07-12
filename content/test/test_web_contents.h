@@ -55,6 +55,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
                     uint32_t max_bitmap_size,
                     bool bypass_cache,
                     const ImageDownloadCallback& callback) override;
+  const GURL& GetLastCommittedURL() const override;
 
   // WebContentsTester implementation.
   void CommitPendingNavigation() override;
@@ -90,6 +91,8 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       int http_status_code,
       const std::vector<SkBitmap>& bitmaps,
       const std::vector<gfx::Size>& original_bitmap_sizes) override;
+  void SetLastCommittedURL(const GURL& url) override;
+  void SetWasRecentlyAudible(bool audible) override;
 
   // True if a cross-site navigation is pending.
   bool CrossProcessNavigationPending();
@@ -159,9 +162,11 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       SessionStorageNamespace* session_storage_namespace) override;
   void CreateNewWidget(int32_t render_process_id,
                        int32_t route_id,
+                       mojom::WidgetPtr widget,
                        blink::WebPopupType popup_type) override;
   void CreateNewFullscreenWidget(int32_t render_process_id,
-                                 int32_t route_id) override;
+                                 int32_t route_id,
+                                 mojom::WidgetPtr widget) override;
   void ShowCreatedWindow(int process_id,
                          int route_id,
                          WindowOpenDisposition disposition,
@@ -185,6 +190,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   // Map keyed by image URL. Values are <id, callback> pairs.
   std::map<GURL, std::list<std::pair<int, ImageDownloadCallback>>>
       pending_image_downloads_;
+  GURL last_committed_url_;
 };
 
 }  // namespace content

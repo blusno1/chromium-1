@@ -27,7 +27,6 @@
 #include "content/browser/webui/url_data_manager_backend.h"
 #include "content/browser/webui/web_ui_url_loader_factory.h"
 #include "content/common/throttling_url_loader.h"
-#include "content/common/url_loader_factory.mojom.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -38,6 +37,7 @@
 #include "content/public/browser/stream_handle.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
@@ -63,28 +63,28 @@ WebContents* GetWebContentsFromFrameTreeNodeID(int frame_tree_node_id) {
 
 net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("navigation_url_loader", R"(
-        semantics {
-          sender: "Navigation URL Loader"
-          description:
-            "This request is issued by a main frame navigation to fetch the "
-            "content of the page that is being navigated to."
-          trigger:
-            "Navigating Chrome (by clicking on a link, bookmark, history item, "
-            "using session restore, etc)."
-          data:
-            "Arbitrary site-controlled data can be included in the URL, HTTP "
-            "headers, and request body. Requests may include cookies and "
-            "site-specific credentials."
-          destination: WEBSITE
-        }
-        policy {
-          cookies_allowed: true
-          cookies_store: "user"
-          setting: "This feature cannot be disabled."
-          policy_exception_justification:
-            "Not implemented, without this type of request, Chrome would be "
-            "unable to navigate to websites."
-        })");
+      semantics {
+        sender: "Navigation URL Loader"
+        description:
+          "This request is issued by a main frame navigation to fetch the "
+          "content of the page that is being navigated to."
+        trigger:
+          "Navigating Chrome (by clicking on a link, bookmark, history item, "
+          "using session restore, etc)."
+        data:
+          "Arbitrary site-controlled data can be included in the URL, HTTP "
+          "headers, and request body. Requests may include cookies and "
+          "site-specific credentials."
+        destination: WEBSITE
+      }
+      policy {
+        cookies_allowed: true
+        cookies_store: "user"
+        setting: "This feature cannot be disabled."
+        policy_exception_justification:
+          "Not implemented, without this type of request, Chrome would be "
+          "unable to navigate to websites."
+      })");
 
 }  // namespace
 
@@ -139,7 +139,7 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
               web_contents_getter_),
           0 /* routing_id? */, 0 /* request_id? */,
           mojom::kURLLoadOptionSendSSLInfo, *resource_request_, this,
-          net::MutableNetworkTrafficAnnotationTag(kTrafficAnnotation));
+          kTrafficAnnotation);
       return;
     }
 
@@ -187,7 +187,7 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
           std::move(start_loader_callback),
           GetContentClient()->browser()->CreateURLLoaderThrottles(
               web_contents_getter_),
-          *resource_request_, this);
+          *resource_request_, this, kTrafficAnnotation);
 
       DCHECK_GT(handler_index_, 0U);
 
@@ -221,7 +221,7 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
             web_contents_getter_),
         0 /* routing_id? */, 0 /* request_id? */,
         mojom::kURLLoadOptionSendSSLInfo, *resource_request_, this,
-        net::MutableNetworkTrafficAnnotationTag(kTrafficAnnotation));
+        kTrafficAnnotation);
   }
 
   void FollowRedirect() {

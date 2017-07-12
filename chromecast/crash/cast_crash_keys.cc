@@ -14,6 +14,11 @@ const char kLastApp[] = "last_app";
 const char kCurrentApp[] = "current_app";
 const char kPreviousApp[] = "previous_app";
 
+// TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+// TODO(sunnyps): Remove after fixing https://crbug.com/622080
+const char kBeginMainFrameHangCompositorState[] =
+    "begin-main-frame-hang-compositor-state";
+
 size_t RegisterCastCrashKeys() {
   const base::debug::CrashKey fixed_keys[] = {
       {kLastApp, ::crash_keys::kSmallSize},
@@ -37,6 +42,7 @@ size_t RegisterCastCrashKeys() {
       {gpu::crash_keys::kGPUDriverVersion, ::crash_keys::kSmallSize},
       {gpu::crash_keys::kGPUPixelShaderVersion, ::crash_keys::kSmallSize},
       {gpu::crash_keys::kGPUVertexShaderVersion, ::crash_keys::kSmallSize},
+      {gpu::crash_keys::kGPUGLContextIsVirtual, ::crash_keys::kSmallSize},
 
       // content/:
       {"bad_message_reason", ::crash_keys::kSmallSize},
@@ -87,6 +93,13 @@ size_t RegisterCastCrashKeys() {
       {"swdh_set_hosted_version_host_pid", ::crash_keys::kSmallSize},
       {"swdh_set_hosted_version_is_new_process", ::crash_keys::kSmallSize},
       {"swdh_set_hosted_version_restart_count", ::crash_keys::kSmallSize},
+
+      // Temporary for https://crbug.com/685996.
+      {"user-cloud-policy-manager-connect-trace", ::crash_keys::kMediumSize},
+
+      // TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+      // TODO(sunnyps): Remove after fixing https://crbug.com/622080
+      {kBeginMainFrameHangCompositorState, ::crash_keys::kSmallSize},
   };
 
   return base::debug::InitCrashKeys(fixed_keys, arraysize(fixed_keys),

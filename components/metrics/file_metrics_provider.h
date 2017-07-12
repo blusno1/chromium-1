@@ -14,7 +14,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_provider.h"
 
@@ -57,7 +57,9 @@ class FileMetricsProvider : public MetricsProvider,
     // the ImportantFileWriter) will not get read. Files that have been
     // read will be attempted to be deleted; should those files not be
     // deletable by this process, it is the reponsibility of the producer
-    // to keep the directory pruned in some manner.
+    // to keep the directory pruned in some manner. Added files must have a
+    // timestamp later (not the same or earlier) than the newest file that
+    // already exists or it may be assumed to have been already uploaded.
     SOURCE_HISTOGRAMS_ATOMIC_DIR,
 
     // "Active" files may be open by one or more other processes and updated
@@ -95,8 +97,7 @@ class FileMetricsProvider : public MetricsProvider,
     ASSOCIATE_INTERNAL_PROFILE_OR_PREVIOUS_RUN,
   };
 
-  FileMetricsProvider(const scoped_refptr<base::TaskRunner>& task_runner,
-                      PrefService* local_state);
+  explicit FileMetricsProvider(PrefService* local_state);
   ~FileMetricsProvider() override;
 
   // Indicates a file or directory to be monitored and how the file or files
@@ -116,6 +117,10 @@ class FileMetricsProvider : public MetricsProvider,
   // typically the filename.
   static void RegisterPrefs(PrefRegistrySimple* prefs,
                             const base::StringPiece prefs_key);
+
+  // Sets the task runner to use for testing.
+  static void SetTaskRunnerForTesting(
+      const scoped_refptr<base::TaskRunner>& task_runner);
 
  private:
   friend class FileMetricsProviderTest;
@@ -223,7 +228,7 @@ class FileMetricsProvider : public MetricsProvider,
   // The preferences-service used to store persistent state about sources.
   PrefService* pref_service_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<FileMetricsProvider> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(FileMetricsProvider);

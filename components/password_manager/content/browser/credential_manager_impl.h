@@ -10,7 +10,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/password_manager/content/common/credential_manager.mojom.h"
 #include "components/password_manager/core/browser/credential_manager_password_form_manager.h"
 #include "components/password_manager/core/browser/credential_manager_pending_prevent_silent_access_task.h"
 #include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
@@ -18,7 +17,8 @@
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/prefs/pref_member.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "third_party/WebKit/public/platform/modules/credentialmanager/credential_manager.mojom.h"
 
 class GURL;
 
@@ -48,7 +48,9 @@ class CredentialManagerImpl
                         PasswordManagerClient* client);
   ~CredentialManagerImpl() override;
 
-  void BindRequest(mojom::CredentialManagerRequest request);
+  void BindRequest(mojom::CredentialManagerAssociatedRequest request);
+  bool HasBinding() const;
+  void DisconnectBinding();
 
   // mojom::CredentialManager methods:
   void Store(const CredentialInfo& credential, StoreCallback callback) override;
@@ -97,7 +99,7 @@ class CredentialManagerImpl
   std::unique_ptr<CredentialManagerPendingPreventSilentAccessTask>
       pending_require_user_mediation_;
 
-  mojo::BindingSet<mojom::CredentialManager> bindings_;
+  mojo::AssociatedBinding<mojom::CredentialManager> binding_;
 
   base::WeakPtrFactory<CredentialManagerImpl> weak_factory_;
 

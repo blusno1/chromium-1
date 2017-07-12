@@ -50,9 +50,9 @@
 #include "core/dom/TreeScope.h"
 #include "core/dom/UserActionElementSet.h"
 #include "core/dom/ViewportDescription.h"
-#include "core/dom/custom/V0CustomElement.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/frame/HostsUsingFeatures.h"
+#include "core/html/custom/V0CustomElement.h"
 #include "core/html/parser/ParserSynchronizationPolicy.h"
 #include "core/page/PageVisibilityState.h"
 #include "platform/Length.h"
@@ -302,7 +302,6 @@ class CORE_EXPORT Document : public ContainerNode,
   DEFINE_ATTRIBUTE_EVENT_LISTENER(securitypolicyviolation);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectionchange);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectstart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
 
   bool ShouldMergeWithLegacyDescription(ViewportDescription::Type) const;
   bool ShouldOverrideLegacyDescription(ViewportDescription::Type) const;
@@ -1463,7 +1462,7 @@ class CORE_EXPORT Document : public ContainerNode,
   TraceWrapperMember<HTMLImportsController> imports_controller_;
 
   Member<ResourceFetcher> fetcher_;
-  Member<DocumentParser> parser_;
+  TraceWrapperMember<DocumentParser> parser_;
   Member<ContextFeatures> context_features_;
 
   bool well_formed_;

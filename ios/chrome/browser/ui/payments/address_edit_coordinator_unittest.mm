@@ -17,12 +17,13 @@
 #include "components/autofill/core/browser/test_region_data_loader.h"
 #include "components/payments/core/payments_profile_comparator.h"
 #include "components/prefs/pref_service.h"
-#include "ios/chrome/browser/application_context.h"
+#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
 #include "ios/chrome/browser/payments/test_payment_request.h"
 #import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller.h"
 #import "ios/chrome/browser/ui/payments/payment_request_editor_field.h"
 #import "ios/chrome/test/scoped_key_window.h"
+#import "ios/web/public/test/fakes/test_web_state.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -50,11 +51,16 @@ class MockPaymentsProfileComparator
   MOCK_METHOD1(Invalidate, void(const autofill::AutofillProfile&));
 };
 
-class MockTestPaymentRequest : public TestPaymentRequest {
+class MockTestPaymentRequest : public payments::TestPaymentRequest {
  public:
   MockTestPaymentRequest(web::PaymentRequest web_payment_request,
+                         ios::ChromeBrowserState* browser_state,
+                         web::WebState* web_state,
                          autofill::PersonalDataManager* personal_data_manager)
-      : TestPaymentRequest(web_payment_request, personal_data_manager) {}
+      : payments::TestPaymentRequest(web_payment_request,
+                                     browser_state,
+                                     web_state,
+                                     personal_data_manager) {}
   MOCK_METHOD1(AddAutofillProfile,
                autofill::AutofillProfile*(const autofill::AutofillProfile&));
 };
@@ -103,16 +109,17 @@ using ::testing::_;
 class PaymentRequestAddressEditCoordinatorTest : public PlatformTest {
  protected:
   PaymentRequestAddressEditCoordinatorTest()
-      : pref_service_(autofill::test::PrefServiceForTesting()) {
+      : pref_service_(autofill::test::PrefServiceForTesting()),
+        chrome_browser_state_(TestChromeBrowserState::Builder().Build()) {
     autofill::CountryNames::SetLocaleString("en-US");
     personal_data_manager_.SetTestingPrefService(pref_service_.get());
+
     payment_request_ = base::MakeUnique<MockTestPaymentRequest>(
         payment_request_test_util::CreateTestWebPaymentRequest(),
-        &personal_data_manager_);
+        chrome_browser_state_.get(), &web_state_, &personal_data_manager_);
 
     profile_comparator_ = base::MakeUnique<MockPaymentsProfileComparator>(
-        GetApplicationContext()->GetApplicationLocale(),
-        *payment_request_.get());
+        payment_request_->GetApplicationLocale(), *payment_request_.get());
     payment_request_->SetProfileComparator(profile_comparator_.get());
 
     test_region_data_loader_.set_synchronous_callback(true);
@@ -125,10 +132,12 @@ class PaymentRequestAddressEditCoordinatorTest : public PlatformTest {
 
   base::test::ScopedTaskEnvironment scoped_task_evironment_;
 
+  web::TestWebState web_state_;
   std::unique_ptr<PrefService> pref_service_;
   MockTestPersonalDataManager personal_data_manager_;
   autofill::TestRegionDataLoader test_region_data_loader_;
   std::unique_ptr<MockPaymentsProfileComparator> profile_comparator_;
+  std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<MockTestPaymentRequest> payment_request_;
 };
 

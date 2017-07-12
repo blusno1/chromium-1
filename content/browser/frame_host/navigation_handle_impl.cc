@@ -6,6 +6,7 @@
 
 #include <iterator>
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
@@ -27,13 +28,13 @@
 #include "content/browser/service_worker/service_worker_navigation_handle.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/net_errors.h"
 #include "net/url_request/redirect_info.h"
@@ -123,6 +124,7 @@ NavigationHandleImpl::NavigationHandleImpl(
       is_form_submission_(is_form_submission),
       expected_render_process_host_id_(ChildProcessHost::kInvalidUniqueID),
       weak_factory_(this) {
+  is_in_constructor = true;
   TRACE_EVENT_ASYNC_BEGIN2("navigation", "NavigationHandle", this,
                            "frame_tree_node",
                            frame_tree_node_->frame_tree_node_id(), "url",
@@ -176,9 +178,15 @@ NavigationHandleImpl::NavigationHandleImpl(
     TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
                                  "Same document");
   }
+  is_in_constructor = false;
 }
 
 NavigationHandleImpl::~NavigationHandleImpl() {
+  // TODO(arthursonzogni): Remove this when we understand the root cause behind
+  // crbug.com/704892.
+  if (is_in_constructor)
+    base::debug::DumpWithoutCrashing();
+
   // Inform the RenderProcessHost to no longer expect a navigation.
   if (expected_render_process_host_id_ != ChildProcessHost::kInvalidUniqueID) {
     RenderProcessHost* process =
@@ -367,10 +375,25 @@ void NavigationHandleImpl::Resume() {
   NavigationThrottle::ThrottleCheckResult result = NavigationThrottle::DEFER;
   if (state_ == DEFERRING_START) {
     result = CheckWillStartRequest();
+    if (result == NavigationThrottle::DEFER) {
+      // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+      // one of the NavigationThrottle checks.
+      return;
+    }
   } else if (state_ == DEFERRING_REDIRECT) {
     result = CheckWillRedirectRequest();
+    if (result == NavigationThrottle::DEFER) {
+      // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+      // one of the NavigationThrottle checks.
+      return;
+    }
   } else {
     result = CheckWillProcessResponse();
+    if (result == NavigationThrottle::DEFER) {
+      // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+      // one of the NavigationThrottle checks.
+      return;
+    }
 
     // If the navigation is about to proceed after having been deferred while
     // processing the response, then it's ready to commit. Determine which
@@ -381,12 +404,11 @@ void NavigationHandleImpl::Resume() {
     if (result == NavigationThrottle::PROCEED && !MaybeTransferAndProceed())
       return;
   }
+  DCHECK_NE(NavigationThrottle::DEFER, result);
 
-  if (result != NavigationThrottle::DEFER) {
-    TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
-                                 "Resuming");
-    RunCompleteCallback(result);
-  }
+  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
+                               "Resuming");
+  RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::CancelDeferredNavigation(
@@ -424,13 +446,13 @@ NavigationHandleImpl::CallWillStartRequestForTesting(
     bool is_external_protocol) {
   NavigationThrottle::ThrottleCheckResult result = NavigationThrottle::DEFER;
 
-  scoped_refptr<ResourceRequestBodyImpl> resource_request_body;
+  scoped_refptr<ResourceRequestBody> resource_request_body;
   std::string method = "GET";
   if (is_post) {
     method = "POST";
 
     std::string body = "test=body";
-    resource_request_body = new ResourceRequestBodyImpl();
+    resource_request_body = new ResourceRequestBody();
     resource_request_body->AppendBytes(body.data(), body.size());
   }
 
@@ -455,7 +477,7 @@ NavigationHandleImpl::CallWillRedirectRequestForTesting(
   WillRedirectRequest(new_url, new_method_is_post ? "POST" : "GET",
                       new_referrer_url, new_is_external_protocol,
                       scoped_refptr<net::HttpResponseHeaders>(),
-                      net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN,
+                      net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN, nullptr,
                       base::Bind(&UpdateThrottleCheckResult, &result));
 
   // Reset the callback to ensure it will not be called later.
@@ -552,7 +574,7 @@ void NavigationHandleImpl::InitAppCacheHandle(
 
 void NavigationHandleImpl::WillStartRequest(
     const std::string& method,
-    scoped_refptr<content::ResourceRequestBodyImpl> resource_request_body,
+    scoped_refptr<content::ResourceRequestBody> resource_request_body,
     const Referrer& sanitized_referrer,
     bool has_user_gesture,
     ui::PageTransition transition,
@@ -562,6 +584,13 @@ void NavigationHandleImpl::WillStartRequest(
     const ThrottleChecksFinishedCallback& callback) {
   TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
                                "WillStartRequest");
+  // WillStartRequest should only be called once.
+  if (state_ != INITIAL) {
+    state_ = CANCELING;
+    RunCompleteCallback(NavigationThrottle::CANCEL);
+    return;
+  }
+
   if (method != "POST")
     DCHECK(!resource_request_body);
 
@@ -600,13 +629,15 @@ void NavigationHandleImpl::WillStartRequest(
 
   // Notify each throttle of the request.
   NavigationThrottle::ThrottleCheckResult result = CheckWillStartRequest();
-
-  // If the navigation is not deferred, run the callback.
-  if (result != NavigationThrottle::DEFER) {
-    TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
-                                 "StartRequest", "result", result);
-    RunCompleteCallback(result);
+  if (result == NavigationThrottle::DEFER) {
+    // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+    // one of the NavigationThrottle checks.
+    return;
   }
+
+  TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
+                               "StartRequest", "result", result);
+  RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::WillRedirectRequest(
@@ -616,15 +647,21 @@ void NavigationHandleImpl::WillRedirectRequest(
     bool new_is_external_protocol,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     net::HttpResponseInfo::ConnectionInfo connection_info,
+    RenderProcessHost* post_redirect_process,
     const ThrottleChecksFinishedCallback& callback) {
   TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
                                "WillRedirectRequest", "url",
                                new_url.possibly_invalid_spec());
 
+  // TODO(arthursonzogni): Remove this when we understand the root cause behind
+  // crbug.com/704892 and crbug.com/736658
+  if (IsRendererDebugURL(new_url))
+    base::debug::DumpWithoutCrashing();
+
   // Update the navigation parameters.
   url_ = new_url;
   method_ = new_method;
-  UpdateSiteURL();
+  UpdateSiteURL(post_redirect_process);
 
   if (!(transition_ & ui::PAGE_TRANSITION_CLIENT_REDIRECT)) {
     sanitized_referrer_.url = new_referrer_url;
@@ -651,13 +688,15 @@ void NavigationHandleImpl::WillRedirectRequest(
 
   // Notify each throttle of the request.
   NavigationThrottle::ThrottleCheckResult result = CheckWillRedirectRequest();
-
-  // If the navigation is not deferred, run the callback.
-  if (result != NavigationThrottle::DEFER) {
-    TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
-                                 "RedirectRequest", "result", result);
-    RunCompleteCallback(result);
+  if (result == NavigationThrottle::DEFER) {
+    // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+    // one of the NavigationThrottle checks.
+    return;
   }
+
+  TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
+                               "RedirectRequest", "result", result);
+  RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::WillProcessResponse(
@@ -689,6 +728,11 @@ void NavigationHandleImpl::WillProcessResponse(
 
   // Notify each throttle of the response.
   NavigationThrottle::ThrottleCheckResult result = CheckWillProcessResponse();
+  if (result == NavigationThrottle::DEFER) {
+    // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+    // one of the NavigationThrottle checks.
+    return;
+  }
 
   // If the navigation is done processing the response, then it's ready to
   // commit. Determine which RenderFrameHost should render the response, based
@@ -698,12 +742,9 @@ void NavigationHandleImpl::WillProcessResponse(
   if (result == NavigationThrottle::PROCEED && !MaybeTransferAndProceed())
     return;
 
-  // If the navigation is not deferred, run the callback.
-  if (result != NavigationThrottle::DEFER) {
-    TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
-                                 "ProcessResponse", "result", result);
-    RunCompleteCallback(result);
-  }
+  TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
+                               "ProcessResponse", "result", result);
+  RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::ReadyToCommitNavigation(
@@ -844,9 +885,15 @@ NavigationHandleImpl::CheckWillStartRequest() {
   DCHECK(state_ == WILL_SEND_REQUEST || state_ == DEFERRING_START);
   DCHECK(state_ != WILL_SEND_REQUEST || next_index_ == 0);
   DCHECK(state_ != DEFERRING_START || next_index_ != 0);
+  base::WeakPtr<NavigationHandleImpl> weak_ref = weak_factory_.GetWeakPtr();
   for (size_t i = next_index_; i < throttles_.size(); ++i) {
     NavigationThrottle::ThrottleCheckResult result =
         throttles_[i]->WillStartRequest();
+    if (!weak_ref) {
+      // The NavigationThrottle execution has destroyed this NavigationHandle.
+      // Return immediately.
+      return NavigationThrottle::DEFER;
+    }
     TRACE_EVENT_ASYNC_STEP_INTO0(
         "navigation", "NavigationHandle", this,
         base::StringPrintf("CheckWillStartRequest: %s: %d",
@@ -884,9 +931,15 @@ NavigationHandleImpl::CheckWillRedirectRequest() {
   DCHECK(state_ != WILL_REDIRECT_REQUEST || next_index_ == 0);
   DCHECK(state_ != DEFERRING_REDIRECT || next_index_ != 0);
 
+  base::WeakPtr<NavigationHandleImpl> weak_ref = weak_factory_.GetWeakPtr();
   for (size_t i = next_index_; i < throttles_.size(); ++i) {
     NavigationThrottle::ThrottleCheckResult result =
         throttles_[i]->WillRedirectRequest();
+    if (!weak_ref) {
+      // The NavigationThrottle execution has destroyed this NavigationHandle.
+      // Return immediately.
+      return NavigationThrottle::DEFER;
+    }
     TRACE_EVENT_ASYNC_STEP_INTO0(
         "navigation", "NavigationHandle", this,
         base::StringPrintf("CheckWillRedirectRequest: %s: %d",
@@ -931,9 +984,15 @@ NavigationHandleImpl::CheckWillProcessResponse() {
   DCHECK(state_ != WILL_PROCESS_RESPONSE || next_index_ == 0);
   DCHECK(state_ != DEFERRING_RESPONSE || next_index_ != 0);
 
+  base::WeakPtr<NavigationHandleImpl> weak_ref = weak_factory_.GetWeakPtr();
   for (size_t i = next_index_; i < throttles_.size(); ++i) {
     NavigationThrottle::ThrottleCheckResult result =
         throttles_[i]->WillProcessResponse();
+    if (!weak_ref) {
+      // The NavigationThrottle execution has destroyed this NavigationHandle.
+      // Return immediately.
+      return NavigationThrottle::DEFER;
+    }
     TRACE_EVENT_ASYNC_STEP_INTO0(
         "navigation", "NavigationHandle", this,
         base::StringPrintf("CheckWillProcessResponse: %s: %d",
@@ -1077,50 +1136,43 @@ void NavigationHandleImpl::RunCompleteCallback(
 }
 
 void NavigationHandleImpl::RegisterNavigationThrottles() {
-  // Register the navigation throttles. The vector returned by
-  // CreateThrottlesForNavigation is not assigned to throttles_ directly because
-  // it would overwrite any throttles previously added with
-  // RegisterThrottleForTesting.
-  // TODO(carlosk, arthursonzogni): should simplify this to either use
-  // |throttles_| directly (except for the case described above) or
-  // |throttles_to_register| for registering all throttles.
-  std::vector<std::unique_ptr<NavigationThrottle>> throttles_to_register =
-      GetDelegate()->CreateThrottlesForNavigation(this);
+  // Note: |throttle_| might not be empty. Some NavigationThrottles might have
+  // been registered with RegisterThrottleForTesting. These must reside at the
+  // end of |throttles_|. TestNavigationManagerThrottle expects that the
+  // NavigationThrottles added for test are the last NavigationThrottles to
+  // execute. Take them out while appending the rest of the
+  // NavigationThrottles.
+  std::vector<std::unique_ptr<NavigationThrottle>> testing_throttles =
+      std::move(throttles_);
+
+  throttles_ = GetDelegate()->CreateThrottlesForNavigation(this);
 
   // Check for renderer-inititated main frame navigations to data URLs. This is
   // done first as it may block the main frame navigation altogether.
-  std::unique_ptr<NavigationThrottle> data_url_navigation_throttle =
-      DataUrlNavigationThrottle::CreateThrottleForNavigation(this);
-  if (data_url_navigation_throttle)
-    throttles_to_register.push_back(std::move(data_url_navigation_throttle));
+  AddThrottle(DataUrlNavigationThrottle::CreateThrottleForNavigation(this));
 
-  std::unique_ptr<content::NavigationThrottle> ancestor_throttle =
-      content::AncestorThrottle::MaybeCreateThrottleFor(this);
-  if (ancestor_throttle)
-    throttles_.push_back(std::move(ancestor_throttle));
-
-  std::unique_ptr<content::NavigationThrottle> form_submission_throttle =
-      content::FormSubmissionThrottle::MaybeCreateThrottleFor(this);
-  if (form_submission_throttle)
-    throttles_.push_back(std::move(form_submission_throttle));
+  AddThrottle(AncestorThrottle::MaybeCreateThrottleFor(this));
+  AddThrottle(FormSubmissionThrottle::MaybeCreateThrottleFor(this));
 
   // Check for mixed content. This is done after the AncestorThrottle and the
   // FormSubmissionThrottle so that when folks block mixed content with a CSP
   // policy, they don't get a warning. They'll still get a warning in the
   // console about CSP blocking the load.
-  std::unique_ptr<NavigationThrottle> mixed_content_throttle =
-      MixedContentNavigationThrottle::CreateThrottleForNavigation(this);
-  if (mixed_content_throttle)
-    throttles_to_register.push_back(std::move(mixed_content_throttle));
+  AddThrottle(
+      MixedContentNavigationThrottle::CreateThrottleForNavigation(this));
 
-  std::unique_ptr<NavigationThrottle> devtools_throttle =
-      RenderFrameDevToolsAgentHost::CreateThrottleForNavigation(this);
-  if (devtools_throttle)
-    throttles_to_register.push_back(std::move(devtools_throttle));
+  AddThrottle(RenderFrameDevToolsAgentHost::CreateThrottleForNavigation(this));
 
-  throttles_.insert(throttles_.begin(),
-                    std::make_move_iterator(throttles_to_register.begin()),
-                    std::make_move_iterator(throttles_to_register.end()));
+  // Insert all testing NavigationThrottles last.
+  throttles_.insert(throttles_.end(),
+                    std::make_move_iterator(testing_throttles.begin()),
+                    std::make_move_iterator(testing_throttles.end()));
+}
+
+void NavigationHandleImpl::AddThrottle(
+    std::unique_ptr<NavigationThrottle> throttle) {
+  if (throttle)
+    throttles_.push_back(std::move(throttle));
 }
 
 bool NavigationHandleImpl::IsSelfReferentialURL() {
@@ -1154,17 +1206,26 @@ bool NavigationHandleImpl::IsSelfReferentialURL() {
   return false;
 }
 
-void NavigationHandleImpl::UpdateSiteURL() {
+void NavigationHandleImpl::UpdateSiteURL(
+    RenderProcessHost* post_redirect_process) {
   GURL new_site_url = SiteInstance::GetSiteForURL(
       frame_tree_node_->navigator()->GetController()->GetBrowserContext(),
       url_);
-  if (new_site_url == site_url_)
+  int post_redirect_process_id = post_redirect_process
+                                     ? post_redirect_process->GetID()
+                                     : ChildProcessHost::kInvalidUniqueID;
+  if (new_site_url == site_url_ &&
+      post_redirect_process_id == expected_render_process_host_id_) {
     return;
+  }
 
-  // When redirecting cross-site, stop telling the speculative
-  // RenderProcessHost to expect a navigation commit.
+  // Stop expecting a navigation to the current site URL in the current expected
+  // process.
   SetExpectedProcess(nullptr);
+
+  // Update the site URL and the expected process.
   site_url_ = new_site_url;
+  SetExpectedProcess(post_redirect_process);
 }
 
 }  // namespace content

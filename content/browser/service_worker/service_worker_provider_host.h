@@ -29,6 +29,7 @@
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/service_worker_modes.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 
 namespace storage {
@@ -38,7 +39,7 @@ class BlobStorageContext;
 namespace content {
 
 class MessagePort;
-class ResourceRequestBodyImpl;
+class ResourceRequestBody;
 class ServiceWorkerContextCore;
 class ServiceWorkerDispatcherHost;
 class ServiceWorkerRequestHandler;
@@ -202,6 +203,12 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
 
   void SetHostedVersion(ServiceWorkerVersion* version);
 
+  // Creates a per-controller-worker URLLoaderFactory for script loading.
+  // The created factory is kept alive while the controller worker is alive.
+  // Used only when IsServicificationEnabled is true.
+  void CreateScriptURLLoaderFactory(
+      mojom::URLLoaderFactoryAssociatedRequest script_loader_factory_request);
+
   // Returns a handler for a request, the handler may return NULL if
   // the request doesn't require special handling.
   std::unique_ptr<ServiceWorkerRequestHandler> CreateRequestHandler(
@@ -212,7 +219,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
       base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
-      scoped_refptr<ResourceRequestBodyImpl> body,
+      scoped_refptr<ResourceRequestBody> body,
       bool skip_service_worker);
 
   // Used to get a ServiceWorkerObjectInfo to send to the renderer. Finds an

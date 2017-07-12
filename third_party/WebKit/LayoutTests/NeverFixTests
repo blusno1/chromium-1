@@ -252,7 +252,6 @@ webaudio/codec-tests/aac [ WontFix ]
 # WPT subdirectories without owners.
 external/wpt/accelerometer [ WontFix ]
 external/wpt/assumptions [ WontFix ]
-external/wpt/clear-site-data [ WontFix ]
 external/wpt/css/css-transforms-2 [ WontFix ]
 external/wpt/css-values [ WontFix ]
 external/wpt/gyroscope [ WontFix ]
@@ -262,7 +261,7 @@ external/wpt/upgrade-insecure-requests [ WontFix ]
 
 # Upstreaming WPT font matching tests first, then activating those once the new
 # font matching algorithm implementation is in place.
-crbug.com/733154 external/wpt/fonts/matching [ WontFix ]
+crbug.com/733154 external/wpt/css-fonts/matching [ WontFix ]
 
 # Temporary disabling of all encrypted-media WPT tests while enabling
 # https only. Once the switch is complete (and the WPT tests renamed so they
@@ -366,8 +365,6 @@ crbug.com/672605 external/wpt/encrypted-media [ WontFix ]
 
 # This W3C EME test fetches a file, which is not allowed.
 #external/wpt/encrypted-media/idlharness.html [ WontFix ]
-
-[ Win7 Debug ] virtual/disable-spinvalidation/compositing/perpendicular-layer-sorting.html [ WontFix ]
 
 # Below are manual tests from web-platform-tests without automation.
 external/wpt/2dcontext/drawing-paths-to-the-canvas/canvas_focus_drawFocusIfNeeded_AAPI_001-manual.html [ WontFix ]
@@ -826,6 +823,20 @@ external/wpt/viewport/viewport-resize-event-manual.html [ WontFix ]
 external/wpt/viewport/viewport-scale-iframe-manual.html [ WontFix ]
 external/wpt/viewport/viewport-scale-manual.html [ WontFix ]
 external/wpt/viewport/viewport-scroll-event-manual.html [ WontFix ]
+external/wpt/web-share/share-cancel-manual.html [ WontFix ]
+external/wpt/web-share/share-extra-argument-manual.html [ WontFix ]
+external/wpt/web-share/share-extra-field-manual.html [ WontFix ]
+external/wpt/web-share/share-non-string-manual.html [ WontFix ]
+external/wpt/web-share/share-null-manual.html [ WontFix ]
+external/wpt/web-share/share-simple-manual.html [ WontFix ]
+external/wpt/web-share/share-unicode-strings-manual.html [ WontFix ]
+external/wpt/web-share/share-unicode-strings-nonutf8-manual.html [ WontFix ]
+external/wpt/web-share/share-url-data-manual.html [ WontFix ]
+external/wpt/web-share/share-url-empty-manual.html [ WontFix ]
+external/wpt/web-share/share-url-encoding-manual.html [ WontFix ]
+external/wpt/web-share/share-url-noscheme-manual.html [ WontFix ]
+external/wpt/web-share/share-url-pathonly-manual.html [ WontFix ]
+external/wpt/web-share/share-url-relative-manual.html [ WontFix ]
 external/wpt/webstorage/storage_local-manual.html [ WontFix ]
 external/wpt/webstorage/storage_session-manual.html [ WontFix ]
 external/wpt/XMLHttpRequest/send-authentication-existing-session-manual.htm [ WontFix ]
@@ -891,3 +902,8 @@ virtual/mojo-loading/http/tests/ManualTests/ [ WontFix ]
 [ Win7 Debug ] fast/table/backgr_border-table-column-group-collapsed-border.html [ WontFix ]
 [ Win7 Debug ] virtual/mojo-loading/fast/table/backgr_border-table-column-group-collapsed-border.html [ WontFix ]
 
+# Fails in debug mode, because in debug mode we recompute visual rects after
+# changes to subpixel offsets of composited layers to detect under-invalidation
+# in testing, whereas otherwise we do not do so if the composited layer has a
+# direct compositing reason (for performance). Only applies to SPv1.
+Bug(none) paint/invalidation/compositing/subpixel-offset-scaled-transform-composited.html [ WontFix ]

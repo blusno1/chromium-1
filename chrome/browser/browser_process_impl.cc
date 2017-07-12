@@ -236,12 +236,14 @@ BrowserProcessImpl::BrowserProcessImpl(
   print_job_manager_.reset(new printing::PrintJobManager);
 #endif
 
-  base::FilePath net_log_path;
-  if (command_line.HasSwitch(switches::kLogNetLog))
-    net_log_path = command_line.GetSwitchValuePath(switches::kLogNetLog);
-  net_log_.reset(new net_log::ChromeNetLog(
-      net_log_path, GetNetCaptureModeFromCommandLine(command_line),
-      command_line.GetCommandLineString(), chrome::GetChannelString()));
+  net_log_ = base::MakeUnique<net_log::ChromeNetLog>();
+
+  if (command_line.HasSwitch(switches::kLogNetLog)) {
+    net_log_->StartWritingToFile(
+        command_line.GetSwitchValuePath(switches::kLogNetLog),
+        GetNetCaptureModeFromCommandLine(command_line),
+        command_line.GetCommandLineString(), chrome::GetChannelString());
+  }
 
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       chrome::kChromeSearchScheme);
@@ -440,9 +442,9 @@ RundownTaskCounter::RundownTaskCounter()
 void RundownTaskCounter::Post(base::SequencedTaskRunner* task_runner) {
   // As the count starts off at one, it should never get to zero unless
   // TimedWait has been called.
-  DCHECK(!base::AtomicRefCountIsZero(&count_));
+  DCHECK(!count_.IsZero());
 
-  base::AtomicRefCountInc(&count_);
+  count_.Increment();
 
   // The task must be non-nestable to guarantee that it runs after all tasks
   // currently scheduled on |task_runner| have completed.
@@ -451,7 +453,7 @@ void RundownTaskCounter::Post(base::SequencedTaskRunner* task_runner) {
 }
 
 void RundownTaskCounter::Decrement() {
-  if (!base::AtomicRefCountDec(&count_))
+  if (!count_.Decrement())
     waitable_event_.Signal();
 }
 
@@ -1298,15 +1300,15 @@ void BrowserProcessImpl::ApplyAllowCrossOriginAuthPromptPolicy() {
   ResourceDispatcherHost::Get()->SetAllowCrossOriginAuthPrompt(value);
 }
 
-void BrowserProcessImpl::ApplyMetricsReportingPolicy() {
 #if !defined(OS_ANDROID)
-  CHECK(BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
+void BrowserProcessImpl::ApplyMetricsReportingPolicy() {
+  GoogleUpdateSettings::CollectStatsConsentTaskRunner()->PostTask(
+      FROM_HERE,
       base::BindOnce(
           base::IgnoreResult(&GoogleUpdateSettings::SetCollectStatsConsent),
-          ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled())));
-#endif
+          ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()));
 }
+#endif
 
 void BrowserProcessImpl::CacheDefaultWebClientState() {
 #if defined(OS_CHROMEOS)

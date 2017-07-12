@@ -13,6 +13,7 @@
 #include "WebFrameLoadType.h"
 #include "WebHistoryItem.h"
 #include "public/platform/WebCachePolicy.h"
+#include "public/platform/WebFocusType.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
@@ -26,8 +27,8 @@ class SingleThreadTaskRunner;
 
 namespace blink {
 
-class InterfaceProvider;
 class InterfaceRegistry;
+class WebAssociatedURLLoader;
 class WebAutofillClient;
 class WebContentSettingsClient;
 class WebData;
@@ -51,6 +52,7 @@ class WebURL;
 class WebURLLoader;
 class WebView;
 enum class WebTreeScopeType;
+struct WebAssociatedURLLoaderOptions;
 struct WebConsoleMessage;
 struct WebContentSecurityPolicyViolation;
 struct WebFindOptions;
@@ -74,7 +76,6 @@ class WebLocalFrame : public WebFrame {
   BLINK_EXPORT static WebLocalFrame* CreateMainFrame(
       WebView*,
       WebFrameClient*,
-      blink::InterfaceProvider*,
       blink::InterfaceRegistry*,
       WebFrame* opener = nullptr,
       const WebString& name = WebString(),
@@ -99,7 +100,6 @@ class WebLocalFrame : public WebFrame {
   // frame.
   BLINK_EXPORT static WebLocalFrame* CreateProvisional(
       WebFrameClient*,
-      blink::InterfaceProvider*,
       blink::InterfaceRegistry*,
       WebRemoteFrame*,
       WebSandboxFlags,
@@ -110,7 +110,6 @@ class WebLocalFrame : public WebFrame {
   // it's no longer needed.
   virtual WebLocalFrame* CreateLocalChild(WebTreeScopeType,
                                           WebFrameClient*,
-                                          blink::InterfaceProvider*,
                                           blink::InterfaceRegistry*) = 0;
 
   // Returns the WebFrame associated with the current V8 context. This
@@ -703,6 +702,14 @@ class WebLocalFrame : public WebFrame {
       const WebURLRequest&,
       base::SingleThreadTaskRunner*) = 0;
 
+  // Returns an AssociatedURLLoader that is associated with this frame.  The
+  // loader will, for example, be cancelled when WebFrame::stopLoading is
+  // called.
+  //
+  // FIXME: stopLoading does not yet cancel an associated loader!!
+  virtual WebAssociatedURLLoader* CreateAssociatedURLLoader(
+      const WebAssociatedURLLoaderOptions&) = 0;
+
   // Reload the current document.
   // Note: reload() and reloadWithOverrideURL() will be deprecated.
   // Do not use these APIs any more, but use loadRequest() instead.
@@ -763,6 +770,13 @@ class WebLocalFrame : public WebFrame {
   // plugin whose content indicates that printed output should not be scaled,
   // return true, otherwise return false.
   virtual bool IsPrintScalingDisabledForPlugin(const WebNode& = WebNode()) = 0;
+
+  // Advance the focus of the WebView to next text input element from current
+  // input field wrt sequential navigation with TAB or Shift + TAB
+  // WebFocusTypeForward simulates TAB and WebFocusTypeBackward simulates
+  // Shift + TAB. (Will be extended to other form controls like select element,
+  // checkbox, radio etc.)
+  virtual void AdvanceFocusInForm(WebFocusType) = 0;
 
   // Testing ------------------------------------------------------------------
 

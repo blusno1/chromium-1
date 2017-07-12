@@ -37,7 +37,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
-#include "core/dom/Range.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/PlainTextRange.h"
 #include "core/editing/VisibleUnits.h"
@@ -58,7 +57,6 @@
 #include "public/web/WebFrameWidget.h"
 #include "public/web/WebHitTestResult.h"
 #include "public/web/WebLocalFrame.h"
-#include "public/web/WebRange.h"
 
 using namespace blink;
 
@@ -169,11 +167,9 @@ NSAttributedString* WebSubstringUtil::AttributedWordAtPoint(
     return nil;
 
   // Expand to word under point.
-  const VisibleSelection& selection =
-      CreateVisibleSelection(SelectionInDOMTree::Builder()
-                                 .SetBaseAndExtent(range)
-                                 .SetGranularity(kWordGranularity)
-                                 .Build());
+  const VisibleSelection& selection = CreateVisibleSelectionWithGranularity(
+      SelectionInDOMTree::Builder().SetBaseAndExtent(range).Build(),
+      TextGranularity::kWord);
   const EphemeralRange word_range = selection.ToNormalizedEphemeralRange();
 
   // Convert to NSAttributedString.

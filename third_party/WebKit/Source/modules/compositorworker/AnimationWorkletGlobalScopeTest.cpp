@@ -51,7 +51,7 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
             nullptr, kDontPauseWorkerGlobalScopeOnStart, nullptr, "",
             security_origin_.Get(), clients, kWebAddressSpaceLocal, nullptr,
             nullptr, WorkerV8Settings::Default()),
-        ParentFrameTaskRunners::Create(nullptr));
+        ParentFrameTaskRunners::Create());
     return thread;
   }
 
@@ -69,7 +69,8 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
                                    CrossThreadUnretained(&waitable_event)));
     waitable_event.Wait();
 
-    worklet->TerminateAndWait();
+    worklet->Terminate();
+    worklet->WaitForShutdownForTesting();
   }
 
   void RunBasicParsingTestOnWorklet(WorkerThread* thread,

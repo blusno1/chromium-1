@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/input_messages.h"
 #include "content/common/resize_params.h"
@@ -50,7 +51,8 @@ enum {
 bool ShouldBlockEventStream(const blink::WebInputEvent& event) {
   return ui::WebInputEventTraits::ShouldBlockEventStream(
       event,
-      base::FeatureList::IsEnabled(features::kRafAlignedTouchInputEvents));
+      base::FeatureList::IsEnabled(features::kRafAlignedTouchInputEvents),
+      base::FeatureList::IsEnabled(features::kTouchpadAndWheelScrollLatching));
 }
 
 class MockWebWidget : public blink::WebWidget {
@@ -153,6 +155,7 @@ class RenderWidgetUnittest : public testing::Test {
     widget_->Release();
     DCHECK(widget_->HasOneRef());
   }
+
   ~RenderWidgetUnittest() override {}
 
   InteractiveRenderWidget* widget() const { return widget_.get(); }
@@ -160,6 +163,9 @@ class RenderWidgetUnittest : public testing::Test {
   const base::HistogramTester& histogram_tester() const {
     return histogram_tester_;
   }
+
+ protected:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
  private:
   MockRenderProcess render_process_;
@@ -460,6 +466,9 @@ class RenderWidgetPopupUnittest : public testing::Test {
 
   PopupRenderWidget* widget() const { return widget_.get(); }
   FakeCompositorDependencies compositor_deps_;
+
+ protected:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
  private:
   MockRenderProcess render_process_;

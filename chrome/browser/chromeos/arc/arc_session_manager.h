@@ -59,6 +59,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // REMOVING_DATA_DIR: When ARC is disabled, the data directory is removed.
   //   While removing is processed, ARC cannot be started. This is the state.
   // ACTIVE: ARC is running.
+  // STOPPING: ARC is being shut down.
   //
   // State transition should be as follows:
   //
@@ -77,6 +78,15 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   //   STOPPED -> ACTIVE: when arc.enabled preference is checked that it is
   //     true. Practically, this is when the primary Profile gets ready.
   //
+  // In the disabling case:
+  //   NEGOTIATING_TERMS_OF_SERVICE -> STOPPED
+  //   CHECKING_ANDROID_MANAGEMENT -> STOPPED
+  //   ACTIVE -> STOPPING -> (maybe REMOVING_DATA_DIR ->) STOPPED
+  //   STOPPING: Eventually change the state to STOPPED. Do nothing
+  //     immediately.
+  //   REMOVING_DATA_DIR: Eventually state will become STOPPED. Do nothing
+  //     immediately.
+  //
   // TODO(hidehiko): Fix the state machine, and update the comment including
   // relationship with |enable_requested_|.
   enum class State {
@@ -86,6 +96,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
     CHECKING_ANDROID_MANAGEMENT,
     REMOVING_DATA_DIR,
     ACTIVE,
+    STOPPING,
   };
 
   // Observer for those services outside of ARC which want to know ARC events.
@@ -126,7 +137,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
 
   static ArcSessionManager* Get();
 
-  // Exposed here for unit_tests validation.
+  // Returns true if OOBE flow is active currently.
   static bool IsOobeOptInActive();
 
   // It is called from chrome/browser/prefs/browser_prefs.cc.
@@ -140,12 +151,15 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // has different meaning. Clean this up.
   bool IsAllowed() const;
 
+  // Initializes ArcSessionManager. Before this runs, Profile must be set
+  // via SetProfile().
+  void Initialize();
+
   void Shutdown();
 
   // Sets the |profile|, and sets up Profile related fields in this instance.
   // IsArcAllowedForProfile() must return true for the given |profile|.
   void SetProfile(Profile* profile);
-
   Profile* profile() { return profile_; }
   const Profile* profile() const { return profile_; }
 
@@ -244,6 +258,11 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // Service then passing Android management check successfully.
   void StartArcForTesting() { StartArc(); }
 
+  // Invokes OnTermsOfServiceNegotiated as if negotiation is done for testing.
+  void OnTermsOfServiceNegotiatedForTesting(bool accepted) {
+    OnTermsOfServiceNegotiated(accepted);
+  }
+
  private:
   // Reports statuses of OptIn flow to UMA.
   class ScopedOptInFlowTracker;
@@ -262,7 +281,6 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   //   ToS related code from ArcSessionManager into a dedicated class.
   bool IsArcTermsOfServiceNegotiationNeeded() const;
 
-  void SetState(State state);
   void ShutdownSession();
   void OnArcSignInTimeout();
 
@@ -337,6 +355,11 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   std::unique_ptr<ArcAppLauncher> playstore_launcher_;
   bool reenable_arc_ = false;
   bool provisioning_reported_ = false;
+  // In case ARC is started from OOBE |oobe_start_|, set to true. This flag is
+  // used to remember |IsOobeOptInActive| state when ARC start request was made.
+  // |IsOobeOptInActive| will be changed by the time when |oobe_start_| is
+  // checked to prevent the Play Store auto-launch.
+  bool oobe_start_ = false;
   base::OneShotTimer arc_sign_in_timer_;
 
   std::unique_ptr<ArcSupportHost> support_host_;

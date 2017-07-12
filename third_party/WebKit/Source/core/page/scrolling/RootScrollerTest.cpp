@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "bindings/core/v8/NodeOrString.h"
-#include "core/dom/ClientRect.h"
 #include "core/exported/WebRemoteFrameImpl.h"
 #include "core/frame/BrowserControls.h"
 #include "core/frame/FrameTestHelpers.h"
@@ -11,6 +10,7 @@
 #include "core/frame/RootFrameViewport.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/WebLocalFrameBase.h"
+#include "core/geometry/DOMRect.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/api/LayoutViewItem.h"
@@ -36,7 +36,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using blink::testing::RunPendingTasks;
-using testing::Mock;
+using ::testing::Mock;
 
 namespace blink {
 
@@ -89,7 +89,7 @@ class RootScrollerTest : public ::testing::Test,
 
   void RegisterMockedHttpURLLoad(const std::string& file_name) {
     URLTestHelpers::RegisterMockedURLLoadFromBase(
-        WebString::FromUTF8(base_url_), testing::WebTestDataPath(),
+        WebString::FromUTF8(base_url_), testing::CoreTestDataPath(),
         WebString::FromUTF8(file_name));
   }
 
@@ -614,6 +614,51 @@ TEST_P(RootScrollerTest, SetRootScrollerIframeUsesCorrectLayerAndCallback) {
   }
 }
 
+// Ensures that disconnecting the element currently set as the root scroller
+// recomputes the effective root scroller, before a lifecycle update.
+TEST_P(RootScrollerTest, RemoveCurrentRootScroller) {
+  Initialize();
+
+  WebURL base_url = URLTestHelpers::ToKURL("http://www.test.com/");
+  FrameTestHelpers::LoadHTMLString(GetWebView()->MainFrameImpl(),
+                                   "<!DOCTYPE html>"
+                                   "<style>"
+                                   "  body {"
+                                   "    margin: 0px;"
+                                   "  }"
+                                   "  #container {"
+                                   "    width: 100%;"
+                                   "    height: 100%;"
+                                   "    position: absolute;"
+                                   "    overflow: auto;"
+                                   "  }"
+                                   "</style>"
+                                   "<div id='container'></div>",
+                                   base_url);
+
+  RootScrollerController& controller =
+      MainFrame()->GetDocument()->GetRootScrollerController();
+  Element* container = MainFrame()->GetDocument()->getElementById("container");
+
+  // Set the div as the rootScroller. After a lifecycle update it will be the
+  // effective root scroller.
+  {
+    MainFrame()->GetDocument()->setRootScroller(container, ASSERT_NO_EXCEPTION);
+    ASSERT_EQ(container, controller.Get());
+    MainFrameView()->UpdateAllLifecyclePhases();
+    ASSERT_EQ(container, controller.EffectiveRootScroller());
+  }
+
+  // Remove the div from the document. It should remain the
+  // document.rootScroller, however, it should be demoted from the effective
+  // root scroller. The effective will fallback to the document Node.
+  {
+    MainFrame()->GetDocument()->body()->setTextContent("");
+    EXPECT_EQ(container, controller.Get());
+    EXPECT_EQ(MainFrame()->GetDocument(), controller.EffectiveRootScroller());
+  }
+}
+
 // Ensures that the root scroller always gets composited with scrolling layers.
 // This is necessary since we replace the Frame scrolling layers in CC as the
 // OuterViewport, we need something to replace them with.
@@ -994,7 +1039,7 @@ TEST_P(RootScrollerTest, RotationAnchoring) {
   MainFrameView()->UpdateAllLifecyclePhases();
 
   // The visual viewport should remain fully filled by the target.
-  ClientRect* rect = target->getBoundingClientRect();
+  DOMRect* rect = target->getBoundingClientRect();
   EXPECT_EQ(rect->left(), GetVisualViewport().GetScrollOffset().Width());
   EXPECT_EQ(rect->top(), GetVisualViewport().GetScrollOffset().Height());
 }
@@ -1117,6 +1162,49 @@ TEST_P(RootScrollerTest, ImmediateUpdateOfLayoutViewport) {
 
   EXPECT_EQ(MainFrameView()->LayoutViewportScrollableArea(),
             &MainFrameView()->GetRootFrameViewport()->LayoutViewport());
+}
+
+// Ensure that background style is propagated to the layout view.
+TEST_P(RootScrollerTest, PropagateBackgroundToLayoutView) {
+  Initialize();
+
+  WebURL base_url = URLTestHelpers::ToKURL("http://www.test.com/");
+  FrameTestHelpers::LoadHTMLString(GetWebView()->MainFrameImpl(),
+                                   "<!DOCTYPE html>"
+                                   "<style>"
+                                   "  body, html {"
+                                   "    width: 100%;"
+                                   "    height: 100%;"
+                                   "    margin: 0px;"
+                                   "    background-color: #ff0000;"
+                                   "  }"
+                                   "  #container {"
+                                   "    width: 100%;"
+                                   "    height: 100%;"
+                                   "    overflow: auto;"
+                                   "    background-color: #0000ff;"
+                                   "  }"
+                                   "</style>"
+                                   "<div id='container'>"
+                                   "  <div style='height:1000px'>test</div>"
+                                   "</div>",
+                                   base_url);
+  MainFrameView()->UpdateAllLifecyclePhases();
+
+  Document* document = MainFrame()->GetDocument();
+  ASSERT_EQ(Color(255, 0, 0),
+            document->GetLayoutView()->Style()->VisitedDependentColor(
+                CSSPropertyBackgroundColor));
+
+  Element* container = MainFrame()->GetDocument()->getElementById("container");
+  document->setRootScroller(container, ASSERT_NO_EXCEPTION);
+
+  document->setRootScroller(container);
+  MainFrameView()->UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(Color(0, 0, 255),
+            document->GetLayoutView()->Style()->VisitedDependentColor(
+                CSSPropertyBackgroundColor));
 }
 
 class RootScrollerHitTest : public RootScrollerTest {

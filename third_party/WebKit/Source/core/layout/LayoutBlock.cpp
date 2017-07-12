@@ -278,11 +278,9 @@ void LayoutBlock::UpdateFromStyle() {
     if (!should_clip_overflow)
       GetScrollableArea()->InvalidateAllStickyConstraints();
     SetMayNeedPaintInvalidationSubtree();
-    if (RuntimeEnabledFeatures::SlimmingPaintInvalidationEnabled()) {
-      // The overflow clip paint property depends on whether overflow clip is
-      // present so we need to update paint properties if this changes.
-      SetNeedsPaintPropertyUpdate();
-    }
+    // The overflow clip paint property depends on whether overflow clip is
+    // present so we need to update paint properties if this changes.
+    SetNeedsPaintPropertyUpdate();
   }
   SetHasOverflowClip(should_clip_overflow);
 }
@@ -924,6 +922,8 @@ TrackedLayoutBoxListHashSet* LayoutBlock::PositionedObjectsInternal() const {
 void LayoutBlock::InsertPositionedObject(LayoutBox* o) {
   DCHECK(!IsAnonymousBlock());
   DCHECK_EQ(o->ContainingBlock(), this);
+
+  o->ClearContainingBlockOverrideSize();
 
   if (g_positioned_container_map) {
     auto container_map_it = g_positioned_container_map->find(o);
@@ -1723,11 +1723,23 @@ int LayoutBlock::FirstLineBoxBaseline() const {
   return -1;
 }
 
+bool LayoutBlock::UseLogicalBottomMarginEdgeForInlineBlockBaseline() const {
+  // CSS2.1 states that the baseline of an 'inline-block' is:
+  // the baseline of the last line box in the normal flow, unless it has
+  // either no in-flow line boxes or if its 'overflow' property has a computed
+  // value other than 'visible', in which case the baseline is the bottom
+  // margin edge.
+  // We likewise avoid using the last line box in the case of size containment,
+  // where the block's contents shouldn't be considered when laying out its
+  // ancestors or siblings.
+  return (!Style()->IsOverflowVisible() &&
+          !ShouldIgnoreOverflowPropertyForInlineBlockBaseline()) ||
+         Style()->ContainsSize();
+}
+
 int LayoutBlock::InlineBlockBaseline(LineDirectionMode line_direction) const {
   DCHECK(!ChildrenInline());
-  if ((!Style()->IsOverflowVisible() &&
-       !ShouldIgnoreOverflowPropertyForInlineBlockBaseline()) ||
-      Style()->ContainsSize()) {
+  if (UseLogicalBottomMarginEdgeForInlineBlockBaseline()) {
     // We are not calling LayoutBox::baselinePosition here because the caller
     // should add the margin-top/margin-right, not us.
     return (line_direction == kHorizontalLine ? Size().Height() + MarginBottom()

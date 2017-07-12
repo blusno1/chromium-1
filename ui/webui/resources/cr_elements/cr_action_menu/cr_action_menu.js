@@ -6,14 +6,14 @@
  * @typedef {{
  *   top: number,
  *   left: number,
- *   width: (number| undefined),
- *   height: (number| undefined),
- *   anchorAlignmentX: (number| undefined),
- *   anchorAlignmentY: (number| undefined),
- *   minX: (number| undefined),
- *   minY: (number| undefined),
- *   maxX: (number| undefined),
- *   maxY: (number| undefined),
+ *   width: (number|undefined),
+ *   height: (number|undefined),
+ *   anchorAlignmentX: (number|undefined),
+ *   anchorAlignmentY: (number|undefined),
+ *   minX: (number|undefined),
+ *   minY: (number|undefined),
+ *   maxX: (number|undefined),
+ *   maxY: (number|undefined),
  * }}
  */
 var ShowConfig;
@@ -39,46 +39,49 @@ var AnchorAlignment = {
  * @private
  * @param {number} start
  * @param {number} end
- * @param {number} length
+ * @param {number} menuLength
  * @param {AnchorAlignment} anchorAlignment
  * @param {number} min
  * @param {number} max
  * @return {number}
  */
 function getStartPointWithAnchor(
-    start, end, length, anchorAlignment, min, max) {
+    start, end, menuLength, anchorAlignment, min, max) {
   var startPoint = 0;
   switch (anchorAlignment) {
     case AnchorAlignment.BEFORE_START:
-      startPoint = -length;
+      startPoint = -menuLength;
       break;
     case AnchorAlignment.AFTER_START:
       startPoint = start;
       break;
     case AnchorAlignment.CENTER:
-      startPoint = (start + end - length) / 2;
+      startPoint = (start + end - menuLength) / 2;
       break;
     case AnchorAlignment.BEFORE_END:
-      startPoint = end - length;
+      startPoint = end - menuLength;
       break;
     case AnchorAlignment.AFTER_END:
       startPoint = end;
       break;
   }
 
-  if (startPoint + length > max)
-    startPoint = end - length;
+  if (startPoint + menuLength > max)
+    startPoint = end - menuLength;
   if (startPoint < min)
     startPoint = start;
+
+  startPoint = Math.max(min, Math.min(startPoint, max - menuLength));
+
   return startPoint;
 }
-
 
 /**
  * @private
  * @return {!ShowConfig}
  */
 function getDefaultShowConfig() {
+  var doc = document.scrollingElement;
   return {
     top: 0,
     left: 0,
@@ -88,8 +91,8 @@ function getDefaultShowConfig() {
     anchorAlignmentY: AnchorAlignment.AFTER_START,
     minX: 0,
     minY: 0,
-    maxX: window.innerWidth,
-    maxY: window.innerHeight,
+    maxX: 0,
+    maxY: 0,
   };
 }
 
@@ -186,7 +189,8 @@ Polymer({
     var i = 0;
     do {
       var target = e.path[i++];
-      if (target.classList && target.classList.contains('dropdown-item')) {
+      if (target.classList && target.classList.contains('dropdown-item') &&
+          !target.disabled) {
         target.focus();
         return;
       }
@@ -242,19 +246,25 @@ Polymer({
   /**
    * Shows the menu anchored to the given element.
    * @param {!Element} anchorElement
+   * @param {ShowConfig=} opt_config
    */
-  showAt: function(anchorElement) {
+  showAt: function(anchorElement, opt_config) {
     this.anchorElement_ = anchorElement;
+    // Scroll the anchor element into view so that the bounding rect will be
+    // accurate for where the menu should be shown.
     this.anchorElement_.scrollIntoViewIfNeeded();
+
     var rect = this.anchorElement_.getBoundingClientRect();
-    this.showAtPosition({
-      top: rect.top,
-      left: rect.left,
-      height: rect.height,
-      width: rect.width,
-      // Default to anchoring towards the left.
-      anchorAlignmentX: AnchorAlignment.BEFORE_END,
-    });
+    this.showAtPosition(/** @type {ShowConfig} */ (Object.assign(
+        {
+          top: rect.top,
+          left: rect.left,
+          height: rect.height,
+          width: rect.width,
+          // Default to anchoring towards the left.
+          anchorAlignmentX: AnchorAlignment.BEFORE_END,
+        },
+        opt_config)));
   },
 
   /**
@@ -262,7 +272,8 @@ Polymer({
    * specified as an X and Y alignment which represents a point in the anchor
    * where the menu will align to, which can have the menu either before or
    * after the given point in each axis. Center alignment places the center of
-   * the menu in line with the center of the anchor.
+   * the menu in line with the center of the anchor. Coordinates are relative to
+   * the top-left of the viewport.
    *
    *            y-start
    *         _____________
@@ -284,26 +295,55 @@ Polymer({
    * @param {!ShowConfig} config
    */
   showAtPosition: function(config) {
+    // Save the scroll position of the viewport.
+    var doc = document.scrollingElement;
+    var scrollLeft = doc.scrollLeft;
+    var scrollTop = doc.scrollTop;
+
+    // Reset position so that layout isn't affected by the previous position,
+    // and so that the dialog is positioned at the top-start corner of the
+    // document.
+    this.resetStyle_();
+    this.showModal();
+
+    config.top += scrollTop;
+    config.left += scrollLeft;
+
+    this.positionDialog_(/** @type {ShowConfig} */ (Object.assign(
+        {
+          minX: scrollLeft,
+          minY: scrollTop,
+          maxX: scrollLeft + doc.clientWidth,
+          maxY: scrollTop + doc.clientHeight,
+        },
+        config)));
+
+    // Restore the scroll position.
+    doc.scrollTop = scrollTop;
+    doc.scrollLeft = scrollLeft;
+    this.addCloseListeners_();
+  },
+
+  /** @private */
+  resetStyle_: function() {
+    this.style.left = '';
+    this.style.right = '';
+    this.style.top = '0';
+  },
+
+  /**
+   * Position the dialog using the coordinates in config. Coordinates are
+   * relative to the top-left of the viewport when scrolled to (0, 0).
+   * @param {!ShowConfig} config
+   * @private
+   */
+  positionDialog_: function(config) {
     var c = Object.assign(getDefaultShowConfig(), config);
 
     var top = c.top;
     var left = c.left;
     var bottom = top + c.height;
     var right = left + c.width;
-
-    this.boundClose_ = this.boundClose_ || function() {
-      if (this.open)
-        this.close();
-    }.bind(this);
-    window.addEventListener('resize', this.boundClose_);
-    window.addEventListener('popstate', this.boundClose_);
-
-    // Reset position to prevent previous values from affecting layout.
-    this.style.left = '';
-    this.style.right = '';
-    this.style.top = '';
-
-    this.showModal();
 
     // Flip the X anchor in RTL.
     var rtl = getComputedStyle(this).direction == 'rtl';
@@ -314,7 +354,8 @@ Polymer({
         left, right, this.offsetWidth, c.anchorAlignmentX, c.minX, c.maxX);
 
     if (rtl) {
-      var menuRight = window.innerWidth - menuLeft - this.offsetWidth;
+      var menuRight =
+          document.scrollingElement.clientWidth - menuLeft - this.offsetWidth;
       this.style.right = menuRight + 'px';
     } else {
       this.style.left = menuLeft + 'px';
@@ -323,6 +364,18 @@ Polymer({
     var menuTop = getStartPointWithAnchor(
         top, bottom, this.offsetHeight, c.anchorAlignmentY, c.minY, c.maxY);
     this.style.top = menuTop + 'px';
+  },
+
+  /**
+   * @private
+   */
+  addCloseListeners_: function() {
+    this.boundClose_ = this.boundClose_ || function() {
+      if (this.open)
+        this.close();
+    }.bind(this);
+    window.addEventListener('resize', this.boundClose_);
+    window.addEventListener('popstate', this.boundClose_);
   },
 });
 })();

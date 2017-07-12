@@ -103,7 +103,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter message
 [Worker]     getter name
 [Worker]     method constructor
-[Worker]     method toString
 [Worker] interface DOMMatrix : DOMMatrixReadOnly
 [Worker]     attribute @@toStringTag
 [Worker]     getter a
@@ -137,7 +136,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method rotateSelf
 [Worker]     method scale3dSelf
 [Worker]     method scaleSelf
-[Worker]     method setMatrixValue
 [Worker]     method skewXSelf
 [Worker]     method skewYSelf
 [Worker]     method translateSelf
@@ -207,7 +205,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method toFloat32Array
 [Worker]     method toFloat64Array
 [Worker]     method toJSON
-[Worker]     method toString
 [Worker]     method transformPoint
 [Worker]     method translate
 [Worker] interface DOMPoint : DOMPointReadOnly
@@ -761,6 +758,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method unwrapKey
 [Worker]     method verify
 [Worker]     method wrapKey
+[Worker] interface SyncManager
+[Worker]     attribute @@toStringTag
+[Worker]     method constructor
+[Worker]     method getTags
+[Worker]     method register
 [Worker] interface TextDecoder
 [Worker]     attribute @@toStringTag
 [Worker]     getter encoding

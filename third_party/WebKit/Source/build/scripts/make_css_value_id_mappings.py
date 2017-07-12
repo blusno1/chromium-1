@@ -17,12 +17,12 @@ class CSSValueIDMappingsWriter(make_style_builder.StyleBuilderWriter):
             'CSSValueIDMappingsGenerated.h': self.generate_css_value_mappings,
         }
 
-    @template_expander.use_jinja('CSSValueIDMappingsGenerated.h.tmpl')
+    @template_expander.use_jinja('templates/CSSValueIDMappingsGenerated.h.tmpl')
     def generate_css_value_mappings(self):
         mappings = {}
         include_paths = set()
         for property_ in self._properties.values():
-            if property_['field_template'] == 'keyword':
+            if property_['field_template'] in ('keyword', 'multi_keyword'):
                 include_paths.update(property_['include_paths'])
 
                 mappings[property_['type_name']] = {

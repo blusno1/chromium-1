@@ -1667,7 +1667,7 @@ void TestRunner::Reset() {
   if (delegate_) {
     // Reset the default quota for each origin to 5MB
     delegate_->SetDatabaseQuota(5 * 1024 * 1024);
-    delegate_->SetDeviceColorProfile("reset");
+    delegate_->SetDeviceColorSpace("reset");
     delegate_->SetDeviceScaleFactor(GetDefaultDeviceScaleFactor());
     delegate_->SetBlockThirdPartyCookies(true);
     delegate_->SetLocale("");
@@ -1768,8 +1768,8 @@ std::string TestRunner::DumpLayout(blink::WebLocalFrame* frame) {
 }
 
 void TestRunner::DumpPixelsAsync(
-    blink::WebView* web_view,
-    const base::Callback<void(const SkBitmap&)>& callback) {
+    blink::WebLocalFrame* frame,
+    base::OnceCallback<void(const SkBitmap&)> callback) {
   if (layout_test_runtime_flags_.dump_drag_image()) {
     if (drag_image_.IsNull()) {
       // This means the test called dumpDragImage but did not initiate a drag.
@@ -1777,23 +1777,41 @@ void TestRunner::DumpPixelsAsync(
       SkBitmap bitmap;
       bitmap.allocN32Pixels(1, 1);
       bitmap.eraseColor(0);
-      callback.Run(bitmap);
+      std::move(callback).Run(bitmap);
       return;
     }
 
-    callback.Run(drag_image_.GetSkBitmap());
+    std::move(callback).Run(drag_image_.GetSkBitmap());
     return;
   }
 
-  test_runner::DumpPixelsAsync(web_view, layout_test_runtime_flags_,
-                               delegate_->GetDeviceScaleFactor(), callback);
+  // See if we need to draw the selection bounds rect on top of the snapshot.
+  if (layout_test_runtime_flags_.dump_selection_rect()) {
+    callback =
+        CreateSelectionBoundsRectDrawingCallback(frame, std::move(callback));
+  }
+
+  // Request appropriate kind of pixel dump.
+  if (layout_test_runtime_flags_.is_printing()) {
+    test_runner::PrintFrameAsync(frame, std::move(callback));
+  } else {
+    // TODO(lukasza): Ask the |delegate_| to capture the pixels in the browser
+    // process, so that OOPIF pixels are also captured.
+    test_runner::DumpPixelsAsync(frame, delegate_->GetDeviceScaleFactor(),
+                                 std::move(callback));
+  }
 }
 
 void TestRunner::ReplicateLayoutTestRuntimeFlagsChanges(
     const base::DictionaryValue& changed_values) {
-  if (test_is_running_)
+  if (test_is_running_) {
     layout_test_runtime_flags_.tracked_dictionary().ApplyUntrackedChanges(
         changed_values);
+
+    bool allowed = layout_test_runtime_flags_.plugins_allowed();
+    for (WebViewTestProxyBase* window : test_interfaces_->GetWindowList())
+      window->web_view()->GetSettings()->SetPluginsEnabled(allowed);
+  }
 }
 
 bool TestRunner::HasCustomTextDump(std::string* custom_text_dump) const {
@@ -2548,6 +2566,10 @@ void TestRunner::SetStorageAllowed(bool allowed) {
 
 void TestRunner::SetPluginsAllowed(bool allowed) {
   layout_test_runtime_flags_.set_plugins_allowed(allowed);
+
+  for (WebViewTestProxyBase* window : test_interfaces_->GetWindowList())
+    window->web_view()->GetSettings()->SetPluginsEnabled(allowed);
+
   OnLayoutTestRuntimeFlagsChanged();
 }
 

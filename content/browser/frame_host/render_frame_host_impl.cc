@@ -45,6 +45,7 @@
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/media/media_interface_proxy.h"
 #include "content/browser/media/session/media_session_service_impl.h"
+#include "content/browser/payments/payment_app_context_impl.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_service_impl.h"
 #include "content/browser/presentation/presentation_service_impl.h"
@@ -60,6 +61,8 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/shared_worker/shared_worker_service_impl.h"
+#include "content/browser/storage_partition_impl.h"
+#include "content/browser/webauth/authenticator_impl.h"
 #include "content/browser/websockets/websocket_manager.h"
 #include "content/browser/webui/url_data_manager_backend.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
@@ -103,10 +106,8 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
-#include "device/geolocation/geolocation_service_context.h"
+#include "device/geolocation/geolocation_context.h"
 #include "device/vr/features/features.h"
-#include "device/wake_lock/public/interfaces/wake_lock.mojom.h"
-#include "device/wake_lock/public/interfaces/wake_lock_context.mojom.h"
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
 #include "media/mojo/interfaces/media_service.mojom.h"
@@ -115,6 +116,8 @@
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
+#include "services/device/public/interfaces/wake_lock_context.mojom.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_interface.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -349,6 +352,16 @@ void ForwardShapeDetectionRequest(const service_manager::BindSourceInfo&,
       ServiceManagerConnection::GetForProcess()->GetConnector();
   connector->BindInterface(shape_detection::mojom::kServiceName,
                            std::move(request));
+}
+
+void CreatePaymentManager(RenderFrameHostImpl* rfh,
+                          const service_manager::BindSourceInfo& source_info,
+                          payments::mojom::PaymentManagerRequest request) {
+  StoragePartitionImpl* storage_partition =
+      static_cast<StoragePartitionImpl*>(BrowserContext::GetStoragePartition(
+          rfh->GetSiteInstance()->GetBrowserContext(), rfh->GetSiteInstance()));
+  storage_partition->GetPaymentAppContext()->CreatePaymentManager(
+      source_info, std::move(request));
 }
 
 }  // namespace
@@ -773,11 +786,7 @@ blink::WebPageVisibilityState RenderFrameHostImpl::GetVisibilityState() {
 }
 
 bool RenderFrameHostImpl::Send(IPC::Message* message) {
-  if (IPC_MESSAGE_ID_CLASS(message->type()) == InputMsgStart) {
-    return GetRenderWidgetHost()->input_router()->SendInput(
-        base::WrapUnique(message));
-  }
-
+  DCHECK(IPC_MESSAGE_ID_CLASS(message->type()) != InputMsgStart);
   return GetProcess()->Send(message);
 }
 
@@ -911,9 +920,11 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
 void RenderFrameHostImpl::OnAssociatedInterfaceRequest(
     const std::string& interface_name,
     mojo::ScopedInterfaceEndpointHandle handle) {
+  ContentBrowserClient* browser_client = GetContentClient()->browser();
   if (associated_registry_->CanBindRequest(interface_name)) {
     associated_registry_->BindRequest(interface_name, std::move(handle));
-  } else {
+  } else if (!browser_client->BindAssociatedInterfaceRequestFromFrame(
+                 this, interface_name, &handle)) {
     delegate_->OnAssociatedInterfaceRequest(this, interface_name,
                                             std::move(handle));
   }
@@ -2798,8 +2809,8 @@ void RenderFrameHostImpl::RunCreateWindowCompleteCallback(
 }
 
 void RenderFrameHostImpl::RegisterMojoInterfaces() {
-  device::GeolocationServiceContext* geolocation_service_context =
-      delegate_ ? delegate_->GetGeolocationServiceContext() : NULL;
+  device::GeolocationContext* geolocation_context =
+      delegate_ ? delegate_->GetGeolocationContext() : NULL;
 
 #if !defined(OS_ANDROID)
   // The default (no-op) implementation of InstalledAppProvider. On Android, the
@@ -2808,19 +2819,19 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
       base::Bind(&InstalledAppProviderImplDefault::Create));
 #endif  // !defined(OS_ANDROID)
 
-  if (geolocation_service_context) {
-    // TODO(creis): Bind process ID here so that GeolocationServiceImpl
+  if (geolocation_context) {
+    // TODO(creis): Bind process ID here so that GeolocationImpl
     // can perform permissions checks once site isolation is complete.
     // crbug.com/426384
     // NOTE: At shutdown, there is no guaranteed ordering between destruction of
-    // this object and destruction of any GeolocationServicesImpls created via
+    // this object and destruction of any GeolocationsImpls created via
     // the below service registry, the reason being that the destruction of the
     // latter is triggered by receiving a message that the pipe was closed from
     // the renderer side. Hence, supply the reference to this object as a weak
     // pointer.
     GetInterfaceRegistry()->AddInterface(
-        base::Bind(&device::GeolocationServiceContext::CreateService,
-                   base::Unretained(geolocation_service_context)));
+        base::Bind(&device::GeolocationContext::Bind,
+                   base::Unretained(geolocation_context)));
   }
 
   GetInterfaceRegistry()->AddInterface<device::mojom::WakeLock>(base::Bind(
@@ -2923,6 +2934,14 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
   GetInterfaceRegistry()->AddInterface(
       base::Bind(&ForwardShapeDetectionRequest<
                  shape_detection::mojom::TextDetectionRequest>));
+
+  GetInterfaceRegistry()->AddInterface(
+      base::Bind(&CreatePaymentManager, base::Unretained(this)));
+
+  if (base::FeatureList::IsEnabled(features::kWebAuth)) {
+    GetInterfaceRegistry()->AddInterface(
+        base::Bind(&AuthenticatorImpl::Create, base::Unretained(this)));
+  }
 }
 
 void RenderFrameHostImpl::ResetWaitingState() {
@@ -3211,8 +3230,7 @@ void RenderFrameHostImpl::CommitNavigation(
   FrameMsg_CommitDataNetworkService_Params commit_data;
   commit_data.handle = handle.release();
   // TODO(scottmg): Pass a factory for SW, etc. once we have one.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNetworkService)) {
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     if (!subresource_url_loader_factory_info.is_valid()) {
       const auto& schemes = URLDataManagerBackend::GetWebUISchemes();
       if (std::find(schemes.begin(), schemes.end(),
@@ -3311,8 +3329,7 @@ void RenderFrameHostImpl::SetUpMojoIfNeeded() {
   if (base::FeatureList::IsEnabled(features::kMojoInputMessages)) {
     GetRemoteInterfaces()->GetInterface(&frame_input_handler_);
   } else {
-    legacy_frame_input_handler_.reset(
-        new LegacyIPCFrameInputHandler(this, routing_id_));
+    legacy_frame_input_handler_.reset(new LegacyIPCFrameInputHandler(this));
   }
 }
 
@@ -3440,6 +3457,10 @@ RenderFrameHostImpl::GetFrameResourceCoordinator() {
         base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
             ServiceManagerConnection::GetForProcess()->GetConnector(),
             resource_coordinator::CoordinationUnitType::kFrame);
+    if (parent_) {
+      parent_->GetFrameResourceCoordinator()->AddChild(
+          *frame_resource_coordinator_);
+    }
   }
   return frame_resource_coordinator_.get();
 }
@@ -3712,7 +3733,7 @@ void RenderFrameHostImpl::GrantFileAccessFromPageState(const PageState& state) {
 }
 
 void RenderFrameHostImpl::GrantFileAccessFromResourceRequestBody(
-    const ResourceRequestBodyImpl& body) {
+    const ResourceRequestBody& body) {
   GrantFileAccess(GetProcess()->GetID(), body.GetReferencedFiles());
 }
 

@@ -8,8 +8,12 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 
-constexpr base::TimeDelta
-    MediaEngagementContentsObserver::kSignificantMediaPlaybackTime;
+namespace {
+
+constexpr base::TimeDelta kSignificantMediaPlaybackTime =
+    base::TimeDelta::FromSeconds(7);
+
+}  // namespace.
 
 // This is the minimum size (in px) of each dimension that a media
 // element has to be in order to be determined significant.
@@ -35,6 +39,7 @@ void MediaEngagementContentsObserver::ClearPlayerStates() {
   for (auto const& p : player_states_)
     delete p.second;
   player_states_.clear();
+  significant_players_.clear();
 }
 
 void MediaEngagementContentsObserver::DidFinishNavigation(
@@ -45,9 +50,7 @@ void MediaEngagementContentsObserver::DidFinishNavigation(
     return;
   }
 
-  DCHECK(!playback_timer_->IsRunning());
-  DCHECK(significant_players_.empty());
-
+  playback_timer_->Stop();
   ClearPlayerStates();
 
   url::Origin new_origin(navigation_handle->GetURL());
@@ -59,8 +62,7 @@ void MediaEngagementContentsObserver::DidFinishNavigation(
 
   if (committed_origin_.unique())
     return;
-
-  // TODO(mlamouri): record the visit into content settings.
+  service_->RecordVisit(committed_origin_.GetURL());
 }
 
 void MediaEngagementContentsObserver::WasShown() {
@@ -87,8 +89,6 @@ MediaEngagementContentsObserver::GetPlayerState(const MediaPlayerId& id) {
 void MediaEngagementContentsObserver::MediaStartedPlaying(
     const MediaPlayerInfo& media_player_info,
     const MediaPlayerId& media_player_id) {
-  // TODO(mlamouri): check if:
-  // - the playback has the minimum size requirements;
   if (!media_player_info.has_audio)
     return;
 
@@ -97,12 +97,12 @@ void MediaEngagementContentsObserver::MediaStartedPlaying(
   UpdateTimer();
 }
 
-void MediaEngagementContentsObserver::MediaMutedStateChanged(
+void MediaEngagementContentsObserver::MediaMutedStatusChanged(
     const MediaPlayerId& id,
-    bool muted_state) {
-  GetPlayerState(id)->muted = muted_state;
+    bool muted) {
+  GetPlayerState(id)->muted = muted;
 
-  if (muted_state)
+  if (muted)
     MaybeRemoveSignificantPlayer(id);
   else
     MaybeInsertSignificantPlayer(id);
@@ -144,12 +144,17 @@ bool MediaEngagementContentsObserver::IsSignificantPlayer(
 void MediaEngagementContentsObserver::OnSignificantMediaPlaybackTime() {
   DCHECK(!significant_playback_recorded_);
 
+  // Do not record significant playback if the tab did not make
+  // a sound in the last two seconds.
+  if (!web_contents()->WasRecentlyAudible())
+    return;
+
   significant_playback_recorded_ = true;
 
   if (committed_origin_.unique())
     return;
 
-  // TODO(mlamouri): record the playback into content settings.
+  service_->RecordPlayback(committed_origin_.GetURL());
 }
 
 void MediaEngagementContentsObserver::MaybeInsertSignificantPlayer(
@@ -184,6 +189,7 @@ void MediaEngagementContentsObserver::UpdateTimer() {
   if (AreConditionsMet()) {
     if (playback_timer_->IsRunning())
       return;
+
     playback_timer_->Start(
         FROM_HERE, kSignificantMediaPlaybackTime,
         base::Bind(

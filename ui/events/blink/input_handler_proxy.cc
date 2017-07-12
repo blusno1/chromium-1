@@ -327,9 +327,17 @@ void InputHandlerProxy::HandleInputEventWithLatencyInfo(
 
   if (has_ongoing_compositor_scroll_fling_pinch_) {
     const auto& gesture_event = ToWebGestureEvent(event_with_callback->event());
-    if (gesture_event.source_device == blink::kWebGestureDeviceTouchscreen &&
-        gesture_event.is_source_touch_event_set_non_blocking) {
-      // Dispatch immediately to avoid regression in
+    bool is_from_set_non_blocking_touch =
+        gesture_event.source_device == blink::kWebGestureDeviceTouchscreen &&
+        gesture_event.is_source_touch_event_set_non_blocking;
+    bool is_scroll_end_from_wheel =
+        gesture_event.source_device == blink::kWebGestureDeviceTouchpad &&
+        gesture_event.GetType() == blink::WebGestureEvent::kGestureScrollEnd;
+    if (is_from_set_non_blocking_touch || is_scroll_end_from_wheel) {
+      // Gesture events was already delayed by blocking events in rAF aligned
+      // queue. We want to avoid additional one frame delay by flushing the
+      // VSync queue immediately.
+      // The first GSU latency was tracked by:
       // |smoothness.tough_scrolling_cases:first_gesture_scroll_update_latency|.
       compositor_event_queue_->Queue(std::move(event_with_callback),
                                      tick_clock_->NowTicks());
@@ -1084,18 +1092,30 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureFlingStart(
 
 InputHandlerProxy::EventDisposition InputHandlerProxy::HitTestTouchEvent(
     const blink::WebTouchEvent& touch_event,
-    bool* is_touching_scrolling_layer) {
+    bool* is_touching_scrolling_layer,
+    cc::TouchAction* white_listed_touch_action) {
   *is_touching_scrolling_layer = false;
   EventDisposition result = DROP_EVENT;
   for (size_t i = 0; i < touch_event.touches_length; ++i) {
+    if (touch_event.GetType() == WebInputEvent::kTouchStart)
+      DCHECK(white_listed_touch_action);
+    else
+      DCHECK(!white_listed_touch_action);
+
     if (touch_event.GetType() == WebInputEvent::kTouchStart &&
         touch_event.touches[i].state != WebTouchPoint::kStatePressed) {
       continue;
     }
+
+    cc::TouchAction touch_action = cc::kTouchActionAuto;
     cc::InputHandler::TouchStartOrMoveEventListenerType event_listener_type =
         input_handler_->EventListenerTypeForTouchStartOrMoveAt(
             gfx::Point(touch_event.touches[i].PositionInWidget().x,
-                       touch_event.touches[i].PositionInWidget().y));
+                       touch_event.touches[i].PositionInWidget().y),
+            &touch_action);
+    if (white_listed_touch_action)
+      *white_listed_touch_action &= touch_action;
+
     if (event_listener_type !=
         cc::InputHandler::TouchStartOrMoveEventListenerType::NO_HANDLER) {
       *is_touching_scrolling_layer =
@@ -1146,8 +1166,11 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HitTestTouchEvent(
 InputHandlerProxy::EventDisposition InputHandlerProxy::HandleTouchStart(
     const blink::WebTouchEvent& touch_event) {
   bool is_touching_scrolling_layer;
-  EventDisposition result =
-      HitTestTouchEvent(touch_event, &is_touching_scrolling_layer);
+  cc::TouchAction white_listed_touch_action = cc::kTouchActionAuto;
+  EventDisposition result = HitTestTouchEvent(
+      touch_event, &is_touching_scrolling_layer, &white_listed_touch_action);
+  // TODO(hayleyferr) : Send |white_listed_touch_action| to browser.
+
   // If |result| is still DROP_EVENT look at the touch end handler as
   // we may not want to discard the entire touch sequence. Note this
   // code is explicitly after the assignment of the |touch_result_|
@@ -1174,7 +1197,8 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleTouchMove(
   if (touch_result_ == kEventDispositionUndefined ||
       touch_event.touch_start_or_first_touch_move) {
     bool is_touching_scrolling_layer;
-    return HitTestTouchEvent(touch_event, &is_touching_scrolling_layer);
+    return HitTestTouchEvent(touch_event, &is_touching_scrolling_layer,
+                             nullptr);
   }
   return static_cast<EventDisposition>(touch_result_);
 }
@@ -1575,6 +1599,7 @@ bool InputHandlerProxy::TouchpadFlingScroll(
       synthetic_wheel.delta_x = increment.width;
       synthetic_wheel.delta_y = increment.height;
       synthetic_wheel.has_precise_scrolling_deltas = true;
+      synthetic_wheel.phase = WebMouseWheelEvent::kPhaseChanged;
       synthetic_wheel.SetPositionInWidget(fling_parameters_.point.x,
                                           fling_parameters_.point.y);
       synthetic_wheel.SetPositionInScreen(fling_parameters_.global_point.x,

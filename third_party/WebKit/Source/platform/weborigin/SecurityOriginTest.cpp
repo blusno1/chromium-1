@@ -206,7 +206,7 @@ TEST_F(SecurityOriginTest, IsSecure) {
               SecurityOrigin::IsSecure(KURL(kParsedURLString, test.url)))
         << "URL: '" << test.url << "'";
 
-  EXPECT_FALSE(SecurityOrigin::IsSecure(KURL()));
+  EXPECT_FALSE(SecurityOrigin::IsSecure(NullURL()));
 }
 
 TEST_F(SecurityOriginTest, IsSecureViaTrustworthy) {
@@ -516,7 +516,7 @@ TEST_F(SecurityOriginTest, CanonicalizeHost) {
   };
 
   for (const TestCase& test : cases) {
-    SCOPED_TRACE(testing::Message() << "raw host: '" << test.host << "'");
+    SCOPED_TRACE(::testing::Message() << "raw host: '" << test.host << "'");
     String host = String::FromUTF8(test.host);
     bool success = false;
     String canonical_host = SecurityOrigin::CanonicalizeHost(host, &success);

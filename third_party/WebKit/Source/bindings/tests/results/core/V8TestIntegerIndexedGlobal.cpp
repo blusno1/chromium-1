@@ -26,7 +26,7 @@ namespace blink {
 
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -43,7 +43,7 @@ const WrapperTypeInfo V8TestIntegerIndexedGlobal::wrapperTypeInfo = {
     WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
     WrapperTypeInfo::kIndependent,
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -177,6 +177,28 @@ void V8TestIntegerIndexedGlobal::indexedPropertyDeleterCallback(uint32_t index, 
   V8TestIntegerIndexedGlobal::indexedPropertyDeleterCustom(index, info);
 }
 
+void V8TestIntegerIndexedGlobal::indexedPropertyDefinerCallback(
+    uint32_t index,
+    const v8::PropertyDescriptor& desc,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  // https://heycam.github.io/webidl/#legacy-platform-object-defineownproperty
+  // 3.9.3. [[DefineOwnProperty]]
+  // step 1.1. If the result of calling IsDataDescriptor(Desc) is false, then
+  //   return false.
+  if (desc.has_get() || desc.has_set()) {
+    V8SetReturnValue(info, v8::Null(info.GetIsolate()));
+    if (info.ShouldThrowOnError()) {
+      ExceptionState exceptionState(info.GetIsolate(),
+                                    ExceptionState::kIndexedSetterContext,
+                                    "TestIntegerIndexedGlobal");
+      exceptionState.ThrowTypeError("Accessor properties are not allowed.");
+    }
+    return;
+  }
+
+  // Return nothing and fall back to indexedPropertySetterCallback.
+}
+
 static const V8DOMConfiguration::AccessorConfiguration V8TestIntegerIndexedGlobalAccessors[] = {
     { "length", V8TestIntegerIndexedGlobal::lengthAttributeGetterCallback, V8TestIntegerIndexedGlobal::lengthAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
 };
@@ -214,7 +236,15 @@ static void installV8TestIntegerIndexedGlobalTemplate(
       signature, V8TestIntegerIndexedGlobalMethods, WTF_ARRAY_LENGTH(V8TestIntegerIndexedGlobalMethods));
 
   // Indexed properties
-  v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(V8TestIntegerIndexedGlobal::indexedPropertyGetterCallback, V8TestIntegerIndexedGlobal::indexedPropertySetterCallback, nullptr, V8TestIntegerIndexedGlobal::indexedPropertyDeleterCallback, IndexedPropertyEnumerator<TestIntegerIndexedGlobal>, v8::Local<v8::Value>(), v8::PropertyHandlerFlags::kNone);
+  v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(
+      V8TestIntegerIndexedGlobal::indexedPropertyGetterCallback,
+      V8TestIntegerIndexedGlobal::indexedPropertySetterCallback,
+      nullptr,
+      V8TestIntegerIndexedGlobal::indexedPropertyDeleterCallback,
+      IndexedPropertyEnumerator<TestIntegerIndexedGlobal>,
+      V8TestIntegerIndexedGlobal::indexedPropertyDefinerCallback,
+      v8::Local<v8::Value>(),
+      v8::PropertyHandlerFlags::kNone);
   instanceTemplate->SetHandler(indexedPropertyHandlerConfig);
 
   // Array iterator (@@iterator)

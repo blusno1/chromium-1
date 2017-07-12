@@ -61,15 +61,17 @@ class CORE_EXPORT ModuleScript final : public Script, public TraceWrapperBase {
 
   ModuleInstantiationState State() const { return state_; }
 
+  // Corresponds to spec concept: module script's record's [[Status]]
+  ScriptModuleState RecordStatus() const;
+
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-has-instantiated
+  bool HasInstantiated() const;
+
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-is-errored
-  bool IsErrored() const { return record_.IsEmpty(); }
+  bool IsErrored() const;
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-set-pre-instantiation-error
   void SetErrorAndClearRecord(ScriptValue error);
-
-  // Implements Step 7.2 of:
-  // https://html.spec.whatwg.org/multipage/webappapis.html#internal-module-script-graph-fetching-procedure
-  void SetInstantiationSuccess();
 
   v8::Local<v8::Value> CreateError(v8::Isolate* isolate) const {
     return preinstantiation_error_.NewLocal(isolate);
@@ -106,7 +108,6 @@ class CORE_EXPORT ModuleScript final : public Script, public TraceWrapperBase {
                                       const TextPosition&);
 
   ScriptType GetScriptType() const override { return ScriptType::kModule; }
-  bool IsEmpty() const override;
   bool CheckMIMETypeBeforeRunScript(Document* context_document,
                                     const SecurityOrigin*) const override;
   void RunScript(LocalFrame*, const SecurityOrigin*) const override;
@@ -145,9 +146,13 @@ class CORE_EXPORT ModuleScript final : public Script, public TraceWrapperBase {
   //   DOMWindow -> Modulator/ModulatorImpl -> ModuleTreeLinkerRegistry
   //   -> ModuleTreeLinker -> ModuleScript
   // * inline module script case, after the PendingScript is created.
-  //   HTMLScriptElement -> ScriptLoader -> PendingScript -> ModulePendingScript
+  //   HTMLScriptElement -> ScriptLoader -> ModulePendingScript
   //   -> ModulePendingScriptTreeClient -> ModuleScript.
-  //
+  // * inline module script case, queued in HTMLParserScriptRunner,
+  //   when HTMLScriptElement is removed before execution.
+  //   Document -> HTMLDocumentParser -> HTMLParserScriptRunner
+  //   -> ModulePendingScript -> ModulePendingScriptTreeClient
+  //   -> ModuleScript.
   // All the classes/references on the graphs above should be
   // TraceWrapperBase/TraceWrapperMember<>/etc.,
   TraceWrapperV8Reference<v8::Value> preinstantiation_error_;
@@ -166,6 +171,8 @@ class CORE_EXPORT ModuleScript final : public Script, public TraceWrapperBase {
 
   const TextPosition start_position_;
 };
+
+CORE_EXPORT std::ostream& operator<<(std::ostream&, const ModuleScript&);
 
 }  // namespace blink
 

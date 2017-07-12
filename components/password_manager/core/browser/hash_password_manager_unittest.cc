@@ -5,6 +5,8 @@
 #include "components/password_manager/core/browser/hash_password_manager.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "components/os_crypt/os_crypt_mocker.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
@@ -15,17 +17,23 @@ namespace {
 
 class HashPasswordManagerTest : public testing::Test {
  public:
-  // testing::Test:
-  void SetUp() override;
+  HashPasswordManagerTest() {
+    prefs_.registry()->RegisterStringPref(prefs::kSyncPasswordHash,
+                                          std::string(),
+                                          PrefRegistry::NO_REGISTRATION_FLAGS);
+    prefs_.registry()->RegisterStringPref(prefs::kSyncPasswordLengthAndHashSalt,
+                                          std::string(),
+                                          PrefRegistry::NO_REGISTRATION_FLAGS);
+#if defined(OS_MACOSX)
+    // Mock Keychain. There is a call to Keychain on initializling
+    // PasswordReuseDetector, so it should be mocked.
+    OSCryptMocker::SetUpWithSingleton();
+#endif
+  }
 
  protected:
   TestingPrefServiceSimple prefs_;
 };
-
-void HashPasswordManagerTest::SetUp() {
-  prefs_.registry()->RegisterStringPref(prefs::kSyncPasswordHash, std::string(),
-                                        PrefRegistry::NO_REGISTRATION_FLAGS);
-}
 
 TEST_F(HashPasswordManagerTest, Saving) {
   ASSERT_FALSE(prefs_.HasPrefPath(prefs::kSyncPasswordHash));
@@ -49,8 +57,16 @@ TEST_F(HashPasswordManagerTest, Retrieving) {
   HashPasswordManager hash_password_manager;
   hash_password_manager.set_prefs(&prefs_);
   hash_password_manager.SavePasswordHash(base::ASCIIToUTF16("sync_password"));
-  // TODO(crbug.com/657041) Fix this text when hash calculation is implemented.
-  EXPECT_FALSE(hash_password_manager.RetrievePasswordHash());
+  EXPECT_TRUE(prefs_.HasPrefPath(prefs::kSyncPasswordLengthAndHashSalt));
+
+  base::Optional<SyncPasswordData> sync_password_data =
+      hash_password_manager.RetrievePasswordHash();
+  ASSERT_TRUE(sync_password_data);
+  EXPECT_EQ(13u, sync_password_data->length);
+  EXPECT_EQ(16u, sync_password_data->salt.size());
+  uint64_t expected_hash = password_manager_util::CalculateSyncPasswordHash(
+      base::ASCIIToUTF16("sync_password"), sync_password_data->salt);
+  EXPECT_EQ(expected_hash, sync_password_data->hash);
 }
 
 }  // namespace

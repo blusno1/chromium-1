@@ -4,6 +4,7 @@
 
 #include "core/paint/InlineTextBoxPainter.h"
 
+#include "build/build_config.h"
 #include "core/editing/Editor.h"
 #include "core/editing/markers/CompositionMarker.h"
 #include "core/editing/markers/DocumentMarkerController.h"
@@ -219,11 +220,12 @@ static void PaintDecorationsExceptLineThrough(
 
   for (const AppliedTextDecoration& decoration : decorations) {
     TextDecoration lines = decoration.Lines();
+    bool has_underline = EnumHasFlags(lines, TextDecoration::kUnderline);
+    bool has_overline = EnumHasFlags(lines, TextDecoration::kOverline);
     if (flip_underline_and_overline) {
-      lines ^= (TextDecoration::kUnderline | TextDecoration::kOverline);
+      std::swap(has_underline, has_overline);
     }
-    if (EnumHasFlags(lines, TextDecoration::kUnderline) &&
-        decoration_info.font_data) {
+    if (has_underline && decoration_info.font_data) {
       const int underline_offset = ComputeUnderlineOffset(
           underline_position, *decoration_info.style,
           decoration_info.font_data->GetFontMetrics(), &box, decorating_box,
@@ -232,7 +234,7 @@ static void PaintDecorationsExceptLineThrough(
           context, decoration_info, decoration, underline_offset,
           decoration_info.double_offset);
     }
-    if (EnumHasFlags(lines, TextDecoration::kOverline)) {
+    if (has_overline) {
       const int overline_offset = ComputeUnderlineOffsetForUnder(
           *decoration_info.style, &box, decorating_box,
           decoration_info.thickness,
@@ -322,8 +324,12 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
                                              inline_text_box_.LogicalHeight()));
 
   int length = inline_text_box_.Len();
-  StringView string = StringView(inline_text_box_.GetLineLayoutItem().GetText(),
-                                 inline_text_box_.Start(), length);
+  const String& layout_item_string =
+      inline_text_box_.GetLineLayoutItem().GetText();
+  // TODO(szager): Figure out why this CHECK sometimes fails, it shouldn't.
+  CHECK(inline_text_box_.Start() + length <= layout_item_string.length());
+  StringView string =
+      StringView(layout_item_string, inline_text_box_.Start(), length);
   int maximum_length = inline_text_box_.GetLineLayoutItem().TextLength() -
                        inline_text_box_.Start();
 
@@ -695,7 +701,7 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
 
 namespace {
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
 
 static const float kMarkerWidth = 4;
 static const float kMarkerHeight = 2;
@@ -739,7 +745,7 @@ sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
   return recorder.finishRecordingAsPicture();
 }
 
-#else  // OS(MACOSX)
+#else  // defined(OS_MACOSX)
 
 static const float kMarkerWidth = 4;
 static const float kMarkerHeight = 3;
@@ -780,7 +786,7 @@ sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
   return recorder.finishRecordingAsPicture();
 }
 
-#endif  // OS(MACOSX)
+#endif  // defined(OS_MACOSX)
 
 void DrawDocumentMarker(GraphicsContext& context,
                         const FloatPoint& pt,
@@ -802,7 +808,7 @@ void DrawDocumentMarker(GraphicsContext& context,
   SkScalar origin_x = WebCoreFloatToSkScalar(pt.X());
   SkScalar origin_y = WebCoreFloatToSkScalar(pt.Y());
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   // Make sure to draw only complete dots, and finish inside the marked text.
   width -= fmodf(width, kMarkerWidth * zoom);
 #else

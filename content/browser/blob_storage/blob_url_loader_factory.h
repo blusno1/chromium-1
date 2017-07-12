@@ -9,8 +9,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
-#include "content/common/url_loader_factory.mojom.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 
 namespace storage {
@@ -30,7 +30,8 @@ class BlobURLLoaderFactory
  public:
   using BlobContextGetter =
       base::OnceCallback<base::WeakPtr<storage::BlobStorageContext>()>;
-  CONTENT_EXPORT BlobURLLoaderFactory(
+
+  static CONTENT_EXPORT scoped_refptr<BlobURLLoaderFactory> Create(
       BlobContextGetter blob_storage_context_getter,
       scoped_refptr<storage::FileSystemContext> file_system_context);
 
@@ -66,7 +67,11 @@ class BlobURLLoaderFactory
  private:
   friend class base::DeleteHelper<BlobURLLoaderFactory>;
   friend struct BrowserThread::DeleteOnThread<BrowserThread::IO>;
+  template <typename T, typename... Args>
+  friend scoped_refptr<T> base::MakeRefCounted(Args&&... args);
 
+  BlobURLLoaderFactory(
+      scoped_refptr<storage::FileSystemContext> file_system_context);
   ~BlobURLLoaderFactory() override;
 
   void InitializeOnIO(BlobContextGetter blob_storage_context_getter);

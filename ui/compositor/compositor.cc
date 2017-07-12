@@ -15,6 +15,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
@@ -30,10 +31,12 @@
 #include "cc/output/context_provider.h"
 #include "cc/output/latency_info_swap_promise.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
-#include "cc/surfaces/surface_manager.h"
+#include "cc/surfaces/frame_sink_manager.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "components/viz/common/local_surface_id_allocator.h"
+#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_settings.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/compositor_switches.h"
@@ -50,7 +53,7 @@
 
 namespace ui {
 
-Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
+Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
                        ui::ContextFactory* context_factory,
                        ui::ContextFactoryPrivate* context_factory_private,
                        scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -66,7 +69,7 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
       weak_ptr_factory_(this),
       lock_timeout_weak_ptr_factory_(this) {
   if (context_factory_private) {
-    context_factory_private->GetSurfaceManager()->RegisterFrameSinkId(
+    context_factory_private->GetFrameSinkManager()->RegisterFrameSinkId(
         frame_sink_id_);
   }
   root_web_layer_ = cc::Layer::Create();
@@ -83,6 +86,15 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
   settings.use_occlusion_for_tile_prioritization = true;
   refresh_rate_ = context_factory_->GetRefreshRate();
   settings.main_frame_before_activation_enabled = false;
+
+  if (command_line->HasSwitch(switches::kLimitFps)) {
+    std::string fps_str =
+        command_line->GetSwitchValueASCII(switches::kLimitFps);
+    double fps;
+    if (base::StringToDouble(fps_str, &fps) && fps > 0) {
+      forced_refresh_rate_ = fps;
+    }
+  }
 
   if (command_line->HasSwitch(cc::switches::kUIShowCompositedLayerBorders)) {
     std::string layer_borders_string = command_line->GetSwitchValueASCII(
@@ -141,7 +153,7 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
   settings.use_partial_raster = !settings.use_zero_copy;
 
   if (command_line->HasSwitch(switches::kUIEnableRGBA4444Textures))
-    settings.preferred_tile_format = cc::RGBA_4444;
+    settings.preferred_tile_format = viz::RGBA_4444;
   settings.resource_settings = context_factory_->GetResourceSettings();
 
   settings.gpu_memory_policy.bytes_limit_when_visible = 512 * 1024 * 1024;
@@ -200,7 +212,7 @@ Compositor::~Compositor() {
 
   context_factory_->RemoveCompositor(this);
   if (context_factory_private_) {
-    auto* manager = context_factory_private_->GetSurfaceManager();
+    auto* manager = context_factory_private_->GetFrameSinkManager();
     for (auto& client : child_frame_sinks_) {
       DCHECK(client.is_valid());
       manager->UnregisterFrameSinkHierarchy(frame_sink_id_, client);
@@ -213,26 +225,27 @@ bool Compositor::IsForSubframe() {
   return false;
 }
 
-void Compositor::AddFrameSink(const cc::FrameSinkId& frame_sink_id) {
+void Compositor::AddFrameSink(const viz::FrameSinkId& frame_sink_id) {
   if (!context_factory_private_)
     return;
-  context_factory_private_->GetSurfaceManager()->RegisterFrameSinkHierarchy(
+  context_factory_private_->GetFrameSinkManager()->RegisterFrameSinkHierarchy(
       frame_sink_id_, frame_sink_id);
   child_frame_sinks_.insert(frame_sink_id);
 }
 
-void Compositor::RemoveFrameSink(const cc::FrameSinkId& frame_sink_id) {
+void Compositor::RemoveFrameSink(const viz::FrameSinkId& frame_sink_id) {
   if (!context_factory_private_)
     return;
   auto it = child_frame_sinks_.find(frame_sink_id);
   DCHECK(it != child_frame_sinks_.end());
   DCHECK(it->is_valid());
-  context_factory_private_->GetSurfaceManager()->UnregisterFrameSinkHierarchy(
+  context_factory_private_->GetFrameSinkManager()->UnregisterFrameSinkHierarchy(
       frame_sink_id_, *it);
   child_frame_sinks_.erase(it);
 }
 
-void Compositor::SetLocalSurfaceId(const cc::LocalSurfaceId& local_surface_id) {
+void Compositor::SetLocalSurfaceId(
+    const viz::LocalSurfaceId& local_surface_id) {
   host_->SetLocalSurfaceId(local_surface_id);
 }
 
@@ -372,6 +385,10 @@ void Compositor::SetAuthoritativeVSyncInterval(
 
 void Compositor::SetDisplayVSyncParameters(base::TimeTicks timebase,
                                            base::TimeDelta interval) {
+  if (forced_refresh_rate_) {
+    timebase = base::TimeTicks();
+    interval = base::TimeDelta::FromSeconds(1) / forced_refresh_rate_;
+  }
   if (interval.is_zero()) {
     // TODO(brianderson): We should not be receiving 0 intervals.
     interval = cc::BeginFrameArgs::DefaultInterval();

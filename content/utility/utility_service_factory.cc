@@ -9,6 +9,7 @@
 #include "content/child/child_process.h"
 #include "content/network/network_service.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/utility/content_utility_client.h"
@@ -26,6 +27,7 @@
 #include "base/memory/ptr_util.h"
 #include "media/cdm/cdm_adapter_factory.h"           // nogncheck
 #include "media/mojo/features.h"                     // nogncheck
+#include "media/mojo/interfaces/constants.mojom.h"   // nogncheck
 #include "media/mojo/services/media_service.h"       // nogncheck
 #include "media/mojo/services/mojo_cdm_allocator.h"  // nogncheck
 #include "media/mojo/services/mojo_media_client.h"   // nogncheck
@@ -93,7 +95,7 @@ void UtilityServiceFactory::RegisterServices(ServiceMap* services) {
 #if BUILDFLAG(ENABLE_PEPPER_CDMS)
   service_manager::EmbeddedServiceInfo info;
   info.factory = base::Bind(&CreateMediaService);
-  services->insert(std::make_pair("media", info));
+  services->insert(std::make_pair(media::mojom::kMediaServiceName, info));
 #endif
 
   service_manager::EmbeddedServiceInfo shape_detection_info;
@@ -107,8 +109,7 @@ void UtilityServiceFactory::RegisterServices(ServiceMap* services) {
   services->insert(
       std::make_pair(data_decoder::mojom::kServiceName, data_decoder_info));
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNetworkService)) {
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     GetContentClient()->utility()->RegisterNetworkBinders(
         network_registry_.get());
     service_manager::EmbeddedServiceInfo network_info;
@@ -121,14 +122,14 @@ void UtilityServiceFactory::RegisterServices(ServiceMap* services) {
 }
 
 void UtilityServiceFactory::OnServiceQuit() {
-  UtilityThread::Get()->ReleaseProcessIfNeeded();
+  UtilityThread::Get()->ReleaseProcess();
 }
 
 void UtilityServiceFactory::OnLoadFailed() {
   UtilityThreadImpl* utility_thread =
       static_cast<UtilityThreadImpl*>(UtilityThread::Get());
   utility_thread->Shutdown();
-  utility_thread->ReleaseProcessIfNeeded();
+  utility_thread->ReleaseProcess();
 }
 
 std::unique_ptr<service_manager::Service>

@@ -460,19 +460,14 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
   //      run these substeps:"
   if (!element_->HasSourceAttribute()) {
     // 22.1. "Let source text be the value of the text IDL attribute."
-    // This step is done later:
-    // - in ScriptLoader::pendingScript() (Step 23, 6th Clause),
-    //   as Element::textFromChildren() in ScriptLoader::scriptContent(),
-    // - in HTMLParserScriptRunner::processScriptElementInternal()
+    // This step is done later as ScriptElementBase::TextFromChildren():
+    // - in ScriptLoader::PrepareScript() (Step 23, 6th Clause),
+    // - in HTMLParserScriptRunner::ProcessScriptElementInternal()
     //   (Duplicated code of Step 23, 6th Clause),
-    //   as Element::textContent(),
-    // - in XMLDocumentParser::endElementNs() (Step 23, 5th Clause),
-    //   as Element::textFromChildren() in ScriptLoader::scriptContent(),
-    // - PendingScript::getSource() (Indirectly used via
-    //   HTMLParserScriptRunner::processScriptElementInternal(),
-    //   Step 23, 5th Clause),
-    //   as Element::textContent().
-    // TODO(hiroshige): Make them merged or consistent.
+    // - in XMLDocumentParser::EndElementNs() (Step 23, 5th Clause), or
+    // - in PendingScript::GetSource() (Indirectly used via
+    //   HTMLParserScriptRunner::ProcessScriptElementInternal(),
+    //   Step 23, 5th Clause).
 
     // 22.2. "Switch on the script's type:"
     switch (GetScriptType()) {
@@ -496,8 +491,8 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
         Modulator* modulator = Modulator::From(
             ToScriptStateForMainWorld(context_document->GetFrame()));
         ModuleScript* module_script = ModuleScript::Create(
-            ScriptContent(), modulator, base_url, nonce, parser_state,
-            credentials_mode, kSharableCrossOrigin, position);
+            element_->TextFromChildren(), modulator, base_url, nonce,
+            parser_state, credentials_mode, kSharableCrossOrigin, position);
 
         // 3. "If this returns null, set the script's script to null and abort
         //     these substeps; the script is ready."
@@ -681,13 +676,8 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
                         ? element_document.Url()
                         : KURL();
 
-  if (!ExecuteScript(ClassicScript::Create(
-          ScriptSourceCode(ScriptContent(), script_url, position)))) {
-    DispatchErrorEvent();
-    return false;
-  }
-
-  return true;
+  return ExecuteScriptBlock(ClassicPendingScript::Create(element_, position),
+                            script_url);
 }
 
 bool ScriptLoader::FetchClassicScript(
@@ -787,15 +777,17 @@ PendingScript* ScriptLoader::CreatePendingScript() {
       return ClassicPendingScript::Create(element_, resource_);
     case ScriptType::kModule:
       CHECK(module_tree_client_);
-      return ModulePendingScript::Create(element_, module_tree_client_);
+      return ModulePendingScript::Create(element_, module_tree_client_,
+                                         is_external_script_);
   }
   NOTREACHED();
   return nullptr;
 }
 
-bool ScriptLoader::ExecuteScript(const Script* script) {
+ScriptLoader::ExecuteScriptResult ScriptLoader::ExecuteScript(
+    const Script* script) {
   double script_exec_start_time = MonotonicallyIncreasingTime();
-  bool result = DoExecuteScript(script);
+  ExecuteScriptResult result = DoExecuteScript(script);
 
   // NOTE: we do not check m_willBeParserExecuted here, since
   // m_willBeParserExecuted is false for inline scripts, and we want to
@@ -815,21 +807,19 @@ bool ScriptLoader::ExecuteScript(const Script* script) {
 // i.e. load/error events are dispatched by the caller.
 // Steps 3--7 are implemented here in doExecuteScript().
 // TODO(hiroshige): Move event dispatching code to doExecuteScript().
-bool ScriptLoader::DoExecuteScript(const Script* script) {
+ScriptLoader::ExecuteScriptResult ScriptLoader::DoExecuteScript(
+    const Script* script) {
   DCHECK(already_started_);
   CHECK_EQ(script->GetScriptType(), GetScriptType());
-
-  if (script->IsEmpty())
-    return true;
 
   Document* element_document = &(element_->GetDocument());
   Document* context_document = element_document->ContextDocument();
   if (!context_document)
-    return true;
+    return ExecuteScriptResult::kShouldFireNone;
 
   LocalFrame* frame = context_document->GetFrame();
   if (!frame)
-    return true;
+    return ExecuteScriptResult::kShouldFireNone;
 
   if (!is_external_script_) {
     const ContentSecurityPolicy* csp =
@@ -843,14 +833,14 @@ bool ScriptLoader::DoExecuteScript(const Script* script) {
     if (!should_bypass_main_world_csp &&
         !element_->AllowInlineScriptForCSP(nonce, start_line_number_,
                                            script->InlineSourceTextForCSP())) {
-      return false;
+      return ExecuteScriptResult::kShouldFireErrorEvent;
     }
   }
 
   if (is_external_script_) {
     if (!script->CheckMIMETypeBeforeRunScript(
             context_document, element_->GetDocument().GetSecurityOrigin()))
-      return false;
+      return ExecuteScriptResult::kShouldFireErrorEvent;
   }
 
   const bool is_imported_script = context_document != element_document;
@@ -895,7 +885,7 @@ bool ScriptLoader::DoExecuteScript(const Script* script) {
   //     to old script element."
   context_document->PopCurrentScript(current_script);
 
-  return true;
+  return ExecuteScriptResult::kShouldFireLoadEvent;
 
   // 7. "Decrement the ignore-destructive-writes counter of neutralized doc,
   //     if it was incremented in the earlier step."
@@ -905,21 +895,57 @@ bool ScriptLoader::DoExecuteScript(const Script* script) {
 void ScriptLoader::Execute() {
   DCHECK(!will_be_parser_executed_);
   DCHECK(async_exec_type_ != ScriptRunner::kNone);
-  DCHECK(pending_script_->IsExternal());
-  bool error_occurred = false;
-  Script* script = pending_script_->GetSource(KURL(), error_occurred);
-  const bool wasCanceled = pending_script_->WasCanceled();
-  DetachPendingScript();
-  if (error_occurred) {
-    DispatchErrorEvent();
-  } else if (!wasCanceled) {
-    if (ExecuteScript(script))
-      DispatchLoadEvent();
-    else
-      DispatchErrorEvent();
-  }
+  DCHECK(pending_script_->IsExternalOrModule());
+  PendingScript* pending_script = pending_script_;
+  pending_script_ = nullptr;
+  ExecuteScriptBlock(pending_script, NullURL());
   resource_ = nullptr;
   module_tree_client_ = nullptr;
+}
+
+// https://html.spec.whatwg.org/#execute-the-script-block
+bool ScriptLoader::ExecuteScriptBlock(PendingScript* pending_script,
+                                      const KURL& document_url) {
+  DCHECK(pending_script);
+  DCHECK_EQ(pending_script->IsExternal(), is_external_script_);
+
+  bool error_occurred = false;
+  Script* script = pending_script->GetSource(document_url, error_occurred);
+  const bool was_canceled = pending_script->WasCanceled();
+  const bool is_external = pending_script->IsExternal();
+  pending_script->Dispose();
+
+  // 2. "If the script's script is null, fire an event named error at the
+  //     element, and abort these steps."
+  if (error_occurred) {
+    DispatchErrorEvent();
+    return false;
+  }
+
+  if (was_canceled)
+    return false;
+
+  // Steps 3--7 are in ExecuteScript().
+  switch (ExecuteScript(script)) {
+    case ExecuteScriptResult::kShouldFireLoadEvent:
+      // 8. "If the script is from an external file, then fire an event named
+      //     load at the script element."
+      if (is_external)
+        DispatchLoadEvent();
+      return true;
+
+    case ExecuteScriptResult::kShouldFireErrorEvent:
+      // Consider as if "the script's script is null" retrospectively,
+      // due to CSP check failures etc., which are considered as load failure.
+      DispatchErrorEvent();
+      return false;
+
+    case ExecuteScriptResult::kShouldFireNone:
+      return true;
+  }
+
+  NOTREACHED();
+  return false;
 }
 
 void ScriptLoader::PendingScriptFinished(PendingScript* pending_script) {
@@ -947,13 +973,6 @@ void ScriptLoader::PendingScriptFinished(PendingScript* pending_script) {
     return;
   }
 
-  if (ErrorOccurred()) {
-    context_document->GetScriptRunner()->NotifyScriptLoadError(
-        this, async_exec_type_);
-    DetachPendingScript();
-    DispatchErrorEvent();
-    return;
-  }
   context_document->GetScriptRunner()->NotifyScriptReady(this,
                                                          async_exec_type_);
   pending_script_->StopWatchingForLoad();
@@ -990,10 +1009,6 @@ bool ScriptLoader::IsScriptForEventSupported() const {
   //     then abort these steps at this point. The script is not executed.
   return DeprecatedEqualIgnoringCase(event_attribute, "onload") ||
          DeprecatedEqualIgnoringCase(event_attribute, "onload()");
-}
-
-String ScriptLoader::ScriptContent() const {
-  return element_->TextFromChildren();
 }
 
 }  // namespace blink

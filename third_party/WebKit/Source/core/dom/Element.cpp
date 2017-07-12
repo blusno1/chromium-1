@@ -51,8 +51,6 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CSSSelectorWatch.h"
-#include "core/dom/ClientRect.h"
-#include "core/dom/ClientRectList.h"
 #include "core/dom/DOMTokenList.h"
 #include "core/dom/DatasetDOMStringMap.h"
 #include "core/dom/ElementDataCache.h"
@@ -64,7 +62,6 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/Fullscreen.h"
-#include "core/dom/InsertionPoint.h"
 #include "core/dom/LayoutTreeBuilder.h"
 #include "core/dom/MutationObserverInterestGroup.h"
 #include "core/dom/MutationRecord.h"
@@ -81,10 +78,8 @@
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
-#include "core/dom/custom/CustomElement.h"
-#include "core/dom/custom/CustomElementRegistry.h"
-#include "core/dom/custom/V0CustomElement.h"
-#include "core/dom/custom/V0CustomElementRegistrationContext.h"
+#include "core/dom/V0InsertionPoint.h"
+#include "core/dom/WhitespaceAttacher.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/iterators/TextIterator.h"
@@ -101,6 +96,8 @@
 #include "core/frame/UseCounter.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/geometry/DOMRect.h"
+#include "core/geometry/DOMRectList.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDocument.h"
@@ -113,6 +110,10 @@
 #include "core/html/HTMLSlotElement.h"
 #include "core/html/HTMLTableRowsCollection.h"
 #include "core/html/HTMLTemplateElement.h"
+#include "core/html/custom/CustomElement.h"
+#include "core/html/custom/CustomElementRegistry.h"
+#include "core/html/custom/V0CustomElement.h"
+#include "core/html/custom/V0CustomElementRegistrationContext.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutTextFragment.h"
@@ -1203,24 +1204,24 @@ void Element::ClientQuads(Vector<FloatQuad>& quads) {
     element_layout_object->AbsoluteQuads(quads, kUseTransforms);
 }
 
-ClientRectList* Element::getClientRects() {
+DOMRectList* Element::getClientRects() {
   Vector<FloatQuad> quads;
   ClientQuads(quads);
   if (quads.IsEmpty())
-    return ClientRectList::Create();
+    return DOMRectList::Create();
 
   LayoutObject* element_layout_object = GetLayoutObject();
   DCHECK(element_layout_object);
   GetDocument().AdjustFloatQuadsForScrollAndAbsoluteZoom(
       quads, *element_layout_object);
-  return ClientRectList::Create(quads);
+  return DOMRectList::Create(quads);
 }
 
-ClientRect* Element::getBoundingClientRect() {
+DOMRect* Element::getBoundingClientRect() {
   Vector<FloatQuad> quads;
   ClientQuads(quads);
   if (quads.IsEmpty())
-    return ClientRect::Create();
+    return DOMRect::Create();
 
   FloatRect result = quads[0].BoundingBox();
   for (size_t i = 1; i < quads.size(); ++i)
@@ -1230,7 +1231,7 @@ ClientRect* Element::getBoundingClientRect() {
   DCHECK(element_layout_object);
   GetDocument().AdjustFloatRectForScrollAndAbsoluteZoom(result,
                                                         *element_layout_object);
-  return ClientRect::Create(result);
+  return DOMRect::FromFloatRect(result);
 }
 
 const AtomicString& Element::computedRole() {
@@ -1763,6 +1764,8 @@ void Element::RemovedFrom(ContainerNode* insertion_point) {
           *this);
   }
 
+  GetDocument().GetRootScrollerController().ElementRemoved(*this);
+
   GetDocument().RemoveFromTopLayer(this);
 
   ClearElementFlag(kIsInCanvasSubtree);
@@ -1794,7 +1797,7 @@ void Element::AttachLayoutTree(AttachContext& context) {
     data->ClearComputedStyle();
   }
 
-  if (!IsActiveSlotOrActiveInsertionPoint()) {
+  if (!IsActiveSlotOrActiveV0InsertionPoint()) {
     LayoutTreeBuilderForElement builder(*this, context.resolved_style);
     builder.CreateLayoutObjectIfNeeded();
 
@@ -2116,29 +2119,42 @@ StyleRecalcChange Element::RecalcOwnStyle(StyleRecalcChange change) {
   return local_change;
 }
 
-void Element::RebuildLayoutTree(Text* next_text_sibling) {
+void Element::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
   DCHECK(InActiveDocument());
   DCHECK(parentNode());
 
   if (NeedsReattachLayoutTree()) {
     AttachContext reattach_context;
     reattach_context.resolved_style = GetNonAttachedStyle();
-    bool layout_object_will_change = NeedsAttach() || GetLayoutObject();
     ReattachLayoutTree(reattach_context);
-    if (layout_object_will_change || GetLayoutObject())
-      ReattachWhitespaceSiblingsIfNeeded(next_text_sibling);
     SetNonAttachedStyle(nullptr);
-  } else if (ChildNeedsReattachLayoutTree()) {
-    DCHECK(!NeedsReattachLayoutTree());
+    whitespace_attacher.DidReattachElement(this,
+                                           reattach_context.previous_in_flow);
+  } else {
     SelectorFilterParentScope filter_scope(*this);
     StyleSharingDepthScope sharing_scope(*this);
-    Text* next_text_sibling = nullptr;
-    RebuildPseudoElementLayoutTree(kPseudoIdAfter);
-    RebuildShadowRootLayoutTree(next_text_sibling);
-    RebuildChildrenLayoutTrees(next_text_sibling);
-    RebuildPseudoElementLayoutTree(kPseudoIdBefore, next_text_sibling);
-    RebuildPseudoElementLayoutTree(kPseudoIdBackdrop);
-    RebuildPseudoElementLayoutTree(kPseudoIdFirstLetter);
+    // We create a local WhitespaceAttacher when rebuilding children of an
+    // element with a LayoutObject since whitespace nodes do not rely on layout
+    // objects further up the tree. Also, if this Element's layout object is an
+    // out-of-flow box, in-flow children should not affect whitespace siblings
+    // of the out-of-flow box. However, if this element is a display:contents
+    // element. Continue using the passed in attacher as display:contents
+    // children may affect whitespace nodes further up the tree as they may be
+    // layout tree siblings.
+    WhitespaceAttacher local_attacher;
+    WhitespaceAttacher* child_attacher;
+    if (GetLayoutObject()) {
+      whitespace_attacher.DidVisitElement(this);
+      child_attacher = &local_attacher;
+    } else {
+      child_attacher = &whitespace_attacher;
+    }
+    RebuildPseudoElementLayoutTree(kPseudoIdAfter, *child_attacher);
+    RebuildShadowRootLayoutTree(*child_attacher);
+    RebuildChildrenLayoutTrees(*child_attacher);
+    RebuildPseudoElementLayoutTree(kPseudoIdBefore, *child_attacher);
+    RebuildPseudoElementLayoutTree(kPseudoIdBackdrop, *child_attacher);
+    RebuildPseudoElementLayoutTree(kPseudoIdFirstLetter, *child_attacher);
   }
   DCHECK(!NeedsStyleRecalc());
   DCHECK(!ChildNeedsStyleRecalc());
@@ -2146,25 +2162,22 @@ void Element::RebuildLayoutTree(Text* next_text_sibling) {
   DCHECK(!ChildNeedsReattachLayoutTree());
 }
 
-void Element::RebuildShadowRootLayoutTree(Text*& next_text_sibling) {
+void Element::RebuildShadowRootLayoutTree(
+    WhitespaceAttacher& whitespace_attacher) {
   for (ShadowRoot* root = YoungestShadowRoot(); root;
        root = root->OlderShadowRoot()) {
-    // TODO(rune@opera.com): nextTextSibling is not set correctly when we have
-    // slotted nodes (crbug.com/648931). Also, it may be incorrect when we have
-    // multiple shadow roots (for V0 shadow hosts).
-    root->RebuildLayoutTree(next_text_sibling);
+    root->RebuildLayoutTree(whitespace_attacher);
   }
 }
 
-void Element::RebuildPseudoElementLayoutTree(PseudoId pseudo_id,
-                                             Text* next_text_sibling) {
+void Element::RebuildPseudoElementLayoutTree(
+    PseudoId pseudo_id,
+    WhitespaceAttacher& whitespace_attacher) {
   if (PseudoElement* element = GetPseudoElement(pseudo_id)) {
     if (pseudo_id == kPseudoIdFirstLetter && UpdateFirstLetter(element))
       return;
-    if (element->NeedsReattachLayoutTree() ||
-        element->ChildNeedsReattachLayoutTree()) {
-      element->RebuildLayoutTree(next_text_sibling);
-    }
+    if (element->NeedsRebuildLayoutTree(whitespace_attacher))
+      element->RebuildLayoutTree(whitespace_attacher);
   } else {
     CreatePseudoElementIfNeeded(pseudo_id);
   }

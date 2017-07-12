@@ -11,9 +11,10 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_form_user_action.h"
-#include "components/ukm/public/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 
 namespace password_manager {
 
@@ -40,9 +41,20 @@ constexpr char kUkmSubmissionFormType[] = "Submission.SubmittedFormType";
 class FormFetcher;
 
 // The pupose of this class is to record various types of metrics about the
-// behavior of the PasswordFormManager and its interaction with the user and the
-// page.
-class PasswordFormMetricsRecorder {
+// behavior of the PasswordFormManager and its interaction with the user and
+// the page. The recorder tracks events tied to the logical life of a password
+// form, from parsing to having been saved. These events happen on different
+// places in the code and the logical password form can be captured by multiple
+// instances of real objects. To allow sharing the single recorder object among
+// those, this class is refcounted. Reporting happens on destruction of the
+// metrics recorder. Note that UKM metrics are reported for intervals of length
+// metrics::GetUploadInterval(). Only metrics that are reported from the time
+// of creating the PasswordFormMetricsRecorder until the end of current upload
+// interval are recorded. Everything after the end of the current upload
+// interval is discarded. For this reason, it is essential that references are
+// not just kept until browser shutdown.
+class PasswordFormMetricsRecorder
+    : public base::RefCounted<PasswordFormMetricsRecorder> {
  public:
   // |ukm_entry_builder| is the destination into which UKM metrics are recorded.
   // It may be nullptr, in which case no UKM metrics are recorded. This should
@@ -50,7 +62,6 @@ class PasswordFormMetricsRecorder {
   PasswordFormMetricsRecorder(
       bool is_main_frame_secure,
       std::unique_ptr<ukm::UkmEntryBuilder> ukm_entry_builder);
-  ~PasswordFormMetricsRecorder();
 
   // Creates a UkmEntryBuilder that can be used to record metrics into the event
   // "PasswordForm". |source_id| should be bound the the correct URL in the
@@ -165,7 +176,7 @@ class PasswordFormMetricsRecorder {
   void RecordHistogramsOnSuppressedAccounts(
       bool observed_form_origin_has_cryptographic_scheme,
       const FormFetcher& form_fetcher,
-      const autofill::PasswordForm& pending_credentials) const;
+      const autofill::PasswordForm& pending_credentials);
 
   // Converts the "ActionsTaken" fields (using ManagerActionNew) into an int so
   // they can be logged to UMA.
@@ -173,27 +184,38 @@ class PasswordFormMetricsRecorder {
   int GetActionsTakenNew() const;
 
  private:
+  friend class base::RefCounted<PasswordFormMetricsRecorder>;
+
+  // Destructor reports a couple of UMA metrics as well as calls
+  // RecordUkmMetric.
+  ~PasswordFormMetricsRecorder();
+
   // Converts the "ActionsTaken" fields into an int so they can be logged to
   // UMA.
   int GetActionsTaken() const;
 
   // When supplied with the list of all |suppressed_forms| that belong to
   // certain suppressed credential type (see FormFetcher::GetSuppressed*),
-  // filters that list down to forms that are either |manual_or_generated|, and
-  // based on that, computes the histogram sample that is a mixed-based
-  // representation of a combination of four attributes:
+  // filters that list down to forms whose type matches |manual_or_generated|,
+  // and selects the suppressed account that matches |pending_credentials| most
+  // closely. |pending_credentials| stores credentials when the form was
+  // submitted but success was still unknown. It contains credentials that are
+  // ready to be written (saved or updated) to a password store.
+  SuppressedAccountExistence GetBestMatchingSuppressedAccount(
+      const std::vector<const autofill::PasswordForm*>& suppressed_forms,
+      autofill::PasswordForm::Type manual_or_generated,
+      const autofill::PasswordForm& pending_credentials) const;
+
+  // Encodes a UMA histogram sample for |best_matching_account| and
+  // GetActionsTakenNew(). This is a mixed-based representation of a combination
+  // of four attributes:
   //  -- whether there were suppressed credentials (and if so, their relation to
   //     the submitted username/password).
   //  -- whether the |observed_form_| got ultimately submitted
   //  -- what action the password manager performed (|manager_action_|),
   //  -- and what action the user performed (|user_action_|_).
-  // |pending_credentials| stores credentials when the form was submitted but
-  // success was still unknown. It contains credentials that are ready to be
-  // written (saved or updated) to a password store.
   int GetHistogramSampleForSuppressedAccounts(
-      const std::vector<const autofill::PasswordForm*>& suppressed_forms,
-      autofill::PasswordForm::Type manual_or_generated,
-      const autofill::PasswordForm& pending_credentials) const;
+      SuppressedAccountExistence best_matching_account) const;
 
   // Records a metric into |ukm_entry_builder_| if it is not nullptr.
   void RecordUkmMetric(const char* metric_name, int64_t value);

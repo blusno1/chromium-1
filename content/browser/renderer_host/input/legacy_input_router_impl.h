@@ -58,8 +58,9 @@ class CONTENT_EXPORT LegacyInputRouterImpl
                         const Config& config);
   ~LegacyInputRouterImpl() override;
 
+  bool SendInput(std::unique_ptr<IPC::Message> message);
+
   // InputRouter
-  bool SendInput(std::unique_ptr<IPC::Message> message) override;
   void SendMouseEvent(const MouseEventWithLatencyInfo& mouse_event) override;
   void SendWheelEvent(
       const MouseWheelEventWithLatencyInfo& wheel_event) override;
@@ -79,6 +80,8 @@ class CONTENT_EXPORT LegacyInputRouterImpl
   void SetFrameTreeNodeId(int frameTreeNodeId) override;
 
   cc::TouchAction AllowedTouchAction() override;
+
+  int routing_id() const { return routing_id_; }
 
  private:
   friend class LegacyInputRouterImplTest;
@@ -194,8 +197,6 @@ class CONTENT_EXPORT LegacyInputRouterImpl
   // non-zero touch timeout configuration.
   void UpdateTouchAckTimeoutEnabled();
 
-  int routing_id() const { return routing_id_; }
-
   IPC::Sender* sender_;
   InputRouterClient* client_;
   InputAckHandler* ack_handler_;
@@ -239,6 +240,8 @@ class CONTENT_EXPORT LegacyInputRouterImpl
   // Whether the TouchScrollStarted event has been sent for the current
   // gesture scroll yet.
   bool touch_scroll_started_sent_;
+
+  bool wheel_scroll_latching_enabled_;
 
   MouseWheelEventQueue wheel_event_queue_;
   std::unique_ptr<TouchEventQueue> touch_event_queue_;

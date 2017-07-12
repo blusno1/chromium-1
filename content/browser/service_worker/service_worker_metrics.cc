@@ -12,7 +12,6 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
-#include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
@@ -26,15 +25,19 @@ std::string StartSituationToSuffix(
   // Don't change these returned strings. They are written (in hashed form) into
   // logs.
   switch (situation) {
+    case ServiceWorkerMetrics::StartSituation::UNKNOWN:
+      NOTREACHED();
+      return "_Unknown";
     case ServiceWorkerMetrics::StartSituation::DURING_STARTUP:
       return "_DuringStartup";
     case ServiceWorkerMetrics::StartSituation::NEW_PROCESS:
       return "_NewProcess";
-    case ServiceWorkerMetrics::StartSituation::EXISTING_PROCESS:
-      return "_ExistingProcess";
-    default:
-      NOTREACHED() << static_cast<int>(situation);
+    case ServiceWorkerMetrics::StartSituation::EXISTING_UNREADY_PROCESS:
+      return "_ExistingUnreadyProcess";
+    case ServiceWorkerMetrics::StartSituation::EXISTING_READY_PROCESS:
+      return "_ExistingReadyProcess";
   }
+  NOTREACHED() << static_cast<int>(situation);
   return "_Unknown";
 }
 
@@ -104,8 +107,10 @@ ServiceWorkerMetrics::WorkerPreparationType GetWorkerPreparationType(
           return Preparation::START_DURING_STARTUP;
         case Situation::NEW_PROCESS:
           return Preparation::START_IN_NEW_PROCESS;
-        case Situation::EXISTING_PROCESS:
-          return Preparation::START_IN_EXISTING_PROCESS;
+        case Situation::EXISTING_UNREADY_PROCESS:
+          return Preparation::START_IN_EXISTING_UNREADY_PROCESS;
+        case Situation::EXISTING_READY_PROCESS:
+          return Preparation::START_IN_EXISTING_READY_PROCESS;
         case Situation::UNKNOWN:
           break;
       }
@@ -133,8 +138,10 @@ std::string GetWorkerPreparationSuffix(
       return "_StartWorkerDuringStartup";
     case Preparation::START_IN_NEW_PROCESS:
       return "_StartWorkerNewProcess";
-    case Preparation::START_IN_EXISTING_PROCESS:
-      return "_StartWorkerExistingProcess";
+    case Preparation::START_IN_EXISTING_UNREADY_PROCESS:
+      return "_StartWorkerExistingUnreadyProcess";
+    case Preparation::START_IN_EXISTING_READY_PROCESS:
+      return "_StartWorkerExistingReadyProcess";
     case Preparation::STARTING:
       return "_StartingWorker";
     case Preparation::RUNNING:
@@ -225,12 +232,21 @@ enum EventHandledRatioType {
 
 using ScopedEventRecorder = ServiceWorkerMetrics::ScopedEventRecorder;
 
-ScopedEventRecorder::ScopedEventRecorder() {}
+ScopedEventRecorder::ScopedEventRecorder(
+    ServiceWorkerMetrics::EventType start_worker_purpose)
+    : start_worker_purpose_(start_worker_purpose) {}
 
 ScopedEventRecorder::~ScopedEventRecorder() {
   for (const auto& ev : event_stats_) {
     RecordEventHandledRatio(ev.first, ev.second.handled_events,
                             ev.second.fired_events);
+  }
+  if (start_worker_purpose_ == EventType::NAVIGATION_HINT) {
+    bool frame_fetch_event_fired =
+        event_stats_[EventType::FETCH_MAIN_FRAME].fired_events ||
+        event_stats_[EventType::FETCH_SUB_FRAME].fired_events;
+    UMA_HISTOGRAM_BOOLEAN("ServiceWorker.StartHintPrecision",
+                          frame_fetch_event_fired);
   }
 }
 
@@ -324,6 +340,26 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       break;
   }
   NOTREACHED() << "Got unexpected event type: " << static_cast<int>(event_type);
+  return "error";
+}
+
+const char* ServiceWorkerMetrics::StartSituationToString(
+    StartSituation start_situation) {
+  switch (start_situation) {
+    case StartSituation::UNKNOWN:
+      return "Unknown";
+    case StartSituation::DURING_STARTUP:
+      return "During startup";
+    case StartSituation::NEW_PROCESS:
+      return "New process";
+    case StartSituation::EXISTING_UNREADY_PROCESS:
+      return "Existing unready process";
+    case StartSituation::EXISTING_READY_PROCESS:
+      return "Existing ready process";
+      break;
+  }
+  NOTREACHED() << "Got unexpected start situation: "
+               << static_cast<int>(start_situation);
   return "error";
 }
 
@@ -847,16 +883,6 @@ const char* ServiceWorkerMetrics::LoadSourceToString(LoadSource source) {
   }
   NOTREACHED() << static_cast<int>(source);
   return nullptr;
-}
-
-ServiceWorkerMetrics::StartSituation ServiceWorkerMetrics::GetStartSituation(
-    bool is_browser_startup_complete,
-    bool is_new_process) {
-  if (!is_browser_startup_complete)
-    return StartSituation::DURING_STARTUP;
-  if (is_new_process)
-    return StartSituation::NEW_PROCESS;
-  return StartSituation::EXISTING_PROCESS;
 }
 
 void ServiceWorkerMetrics::RecordStartStatusAfterFailure(

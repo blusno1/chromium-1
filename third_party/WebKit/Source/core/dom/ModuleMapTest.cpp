@@ -146,7 +146,7 @@ void ModuleMapTestModulator::ResolveFetches() {
   test_requests_.clear();
 }
 
-class ModuleMapTest : public testing::Test {
+class ModuleMapTest : public ::testing::Test {
  public:
   void SetUp() override;
 
@@ -168,7 +168,7 @@ TEST_F(ModuleMapTest, sequentialRequests) {
       platform;
   platform->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
 
-  KURL url(KURL(), "https://example.com/foo.js");
+  KURL url(NullURL(), "https://example.com/foo.js");
   ModuleScriptFetchRequest module_request(
       url, String(), kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
 
@@ -187,8 +187,7 @@ TEST_F(ModuleMapTest, sequentialRequests) {
             1);
   EXPECT_TRUE(client->WasNotifyFinished());
   EXPECT_TRUE(client->GetModuleScript());
-  EXPECT_EQ(client->GetModuleScript()->State(),
-            ModuleInstantiationState::kUninstantiated);
+  EXPECT_FALSE(client->GetModuleScript()->HasInstantiated());
 
   // Secondary request
   TestSingleModuleClient* client2 = new TestSingleModuleClient;
@@ -206,8 +205,7 @@ TEST_F(ModuleMapTest, sequentialRequests) {
       << "registerModuleScript sholudn't be called in secondary request.";
   EXPECT_TRUE(client2->WasNotifyFinished());
   EXPECT_TRUE(client2->GetModuleScript());
-  EXPECT_EQ(client2->GetModuleScript()->State(),
-            ModuleInstantiationState::kUninstantiated);
+  EXPECT_FALSE(client2->GetModuleScript()->HasInstantiated());
 }
 
 TEST_F(ModuleMapTest, concurrentRequestsShouldJoin) {
@@ -215,7 +213,7 @@ TEST_F(ModuleMapTest, concurrentRequestsShouldJoin) {
       platform;
   platform->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
 
-  KURL url(KURL(), "https://example.com/foo.js");
+  KURL url(NullURL(), "https://example.com/foo.js");
   ModuleScriptFetchRequest module_request(
       url, String(), kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
 
@@ -243,12 +241,10 @@ TEST_F(ModuleMapTest, concurrentRequestsShouldJoin) {
 
   EXPECT_TRUE(client->WasNotifyFinished());
   EXPECT_TRUE(client->GetModuleScript());
-  EXPECT_EQ(client->GetModuleScript()->State(),
-            ModuleInstantiationState::kUninstantiated);
+  EXPECT_FALSE(client->GetModuleScript()->HasInstantiated());
   EXPECT_TRUE(client2->WasNotifyFinished());
   EXPECT_TRUE(client2->GetModuleScript());
-  EXPECT_EQ(client2->GetModuleScript()->State(),
-            ModuleInstantiationState::kUninstantiated);
+  EXPECT_FALSE(client2->GetModuleScript()->HasInstantiated());
 }
 
 }  // namespace blink

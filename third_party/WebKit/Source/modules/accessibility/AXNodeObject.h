@@ -70,8 +70,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   String AriaAccessibilityDescription() const;
   String AriaAutoComplete() const;
   AccessibilityRole DetermineAriaRoleAttribute() const;
-  void AccessibilityChildrenFromAttribute(QualifiedName attr,
-                                          AXObject::AXObjectVector&) const;
+  void AccessibilityChildrenFromAOMProperty(AOMRelationListProperty,
+                                            AXObject::AXObjectVector&) const;
 
   bool HasContentEditableAttributeSet() const;
   bool IsTextControl() const override;
@@ -102,6 +102,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsAnchor() const final;
   bool IsControl() const override;
   bool IsControllingVideoElement() const;
+  bool IsMultiline() const override;
   bool IsEditable() const override { return IsNativeTextControl(); }
   bool IsEmbeddedObject() const final;
   bool IsFieldset() const final;

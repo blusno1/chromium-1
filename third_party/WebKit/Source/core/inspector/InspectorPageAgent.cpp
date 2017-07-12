@@ -31,8 +31,10 @@
 #include "core/inspector/InspectorPageAgent.h"
 
 #include <memory>
+
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptRegexp.h"
+#include "build/build_config.h"
 #include "core/HTMLNames.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/Document.h"
@@ -47,7 +49,6 @@
 #include "core/html/imports/HTMLImportLoader.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/html/parser/TextResourceDecoder.h"
-#include "core/inspector/DOMPatchSupport.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorCSSAgent.h"
@@ -448,6 +449,17 @@ Response InspectorPageAgent::removeScriptToEvaluateOnLoad(
   return Response::OK();
 }
 
+Response InspectorPageAgent::addScriptToEvaluateOnNewDocument(
+    const String& source,
+    String* identifier) {
+  return addScriptToEvaluateOnLoad(source, identifier);
+}
+
+Response InspectorPageAgent::removeScriptToEvaluateOnNewDocument(
+    const String& identifier) {
+  return removeScriptToEvaluateOnLoad(identifier);
+}
+
 Response InspectorPageAgent::setAutoAttachToCreatedPages(bool auto_attach) {
   state_->setBoolean(PageAgentState::kAutoAttachToCreatedPages, auto_attach);
   return Response::OK();
@@ -642,7 +654,7 @@ Response InspectorPageAgent::setDocumentContent(const String& frame_id,
   Document* document = frame->GetDocument();
   if (!document)
     return Response::Error("No Document instance to set HTML for");
-  DOMPatchSupport::PatchDocument(*document, html);
+  document->SetContent(html);
   return Response::OK();
 }
 
@@ -742,7 +754,7 @@ void InspectorPageAgent::DidRunJavaScriptDialog(bool result) {
 void InspectorPageAgent::DidResizeMainFrame() {
   if (!inspected_frames_->Root()->IsMainFrame())
     return;
-#if !OS(ANDROID)
+#if !defined(OS_ANDROID)
   PageLayoutInvalidated(true);
 #endif
   GetFrontend()->frameResized();

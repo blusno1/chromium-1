@@ -2,6 +2,7 @@ include_rules = [
   "-storage/browser",
 
   "+components/discardable_memory/common",
+  "+components/viz/common",
   "+components/payments",
   "+device/base/synchronization",
   "+services/resource_coordinator/public/interfaces",

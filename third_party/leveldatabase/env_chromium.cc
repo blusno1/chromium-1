@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #endif
 
+#include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -425,7 +426,11 @@ Status MakeIOError(Slice filename,
   char buf[512];
   base::snprintf(buf, sizeof(buf), "%s (ChromeMethodBFE: %d::%s::%d)",
            message.c_str(), method, MethodIDToString(method), -error);
-  return Status::IOError(filename, buf);
+  if (error == base::File::FILE_ERROR_NOT_FOUND) {
+    return Status::NotFound(filename, buf);
+  } else {
+    return Status::IOError(filename, buf);
+  }
 }
 
 Status MakeIOError(Slice filename,
@@ -1192,7 +1197,9 @@ class DBTracker::MemoryDumpProvider
  public:
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override {
-    auto db_visitor = [&](TrackedDB* db) {
+    auto db_visitor = [](const base::trace_event::MemoryDumpArgs& args,
+                         base::trace_event::ProcessMemoryDump* pmd,
+                         TrackedDB* db) {
       std::string db_dump_name = base::StringPrintf(
           "leveldatabase/0x%" PRIXPTR, reinterpret_cast<uintptr_t>(db));
       auto* db_dump = pmd->CreateAllocatorDump(db_dump_name.c_str());
@@ -1222,7 +1229,8 @@ class DBTracker::MemoryDumpProvider
       }
     };
 
-    DBTracker::GetInstance()->VisitDatabases(db_visitor);
+    DBTracker::GetInstance()->VisitDatabases(
+        base::BindRepeating(db_visitor, args, base::Unretained(pmd)));
     return true;
   }
 };
@@ -1256,7 +1264,7 @@ leveldb::Status DBTracker::OpenDatabase(const leveldb::Options& options,
 void DBTracker::VisitDatabases(const DatabaseVisitor& visitor) {
   base::AutoLock lock(databases_lock_);
   for (auto* i = databases_.head(); i != databases_.end(); i = i->next()) {
-    visitor(i->value());
+    visitor.Run(i->value());
   }
 }
 

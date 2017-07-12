@@ -10,6 +10,7 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/output/layer_tree_frame_sink_client.h"
 #include "components/viz/client/local_surface_id_provider.h"
+#include "components/viz/common/resources/shared_bitmap_manager.h"
 
 namespace viz {
 
@@ -17,7 +18,7 @@ ClientLayerTreeFrameSink::ClientLayerTreeFrameSink(
     scoped_refptr<cc::ContextProvider> context_provider,
     scoped_refptr<cc::ContextProvider> worker_context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    cc::SharedBitmapManager* shared_bitmap_manager,
+    SharedBitmapManager* shared_bitmap_manager,
     std::unique_ptr<cc::SyntheticBeginFrameSource> synthetic_begin_frame_source,
     cc::mojom::CompositorFrameSinkPtrInfo compositor_frame_sink_info,
     cc::mojom::CompositorFrameSinkClientRequest client_request,
@@ -95,7 +96,7 @@ void ClientLayerTreeFrameSink::DetachFromClient() {
 }
 
 void ClientLayerTreeFrameSink::SetLocalSurfaceId(
-    const cc::LocalSurfaceId& local_surface_id) {
+    const LocalSurfaceId& local_surface_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(local_surface_id.is_valid());
   DCHECK(enable_surface_synchronization_);

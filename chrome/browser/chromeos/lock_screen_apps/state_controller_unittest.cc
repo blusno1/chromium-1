@@ -24,6 +24,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_power_manager_client.h"
 #include "components/session_manager/core/session_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -36,6 +38,9 @@
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/value_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/devices/input_device_manager.h"
+#include "ui/events/devices/stylus_state.h"
+#include "ui/events/test/device_data_manager_test_api.h"
 
 using ash::mojom::TrayActionState;
 using extensions::DictionaryBuilder;
@@ -46,6 +51,9 @@ namespace {
 // App IDs used for test apps.
 const char kTestAppId[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const char kSecondaryTestAppId[] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+// The primary tesing profile.
+const char kPrimaryProfileName[] = "primary_profile";
 
 scoped_refptr<extensions::Extension> CreateTestNoteTakingApp(
     const std::string& app_id) {
@@ -143,6 +151,7 @@ class TestAppManager : public lock_screen_apps::AppManager {
   State state() const { return state_; }
 
   int launch_count() const { return launch_count_; }
+  void ResetLaunchCount() { launch_count_ = 0; }
 
  private:
   const Profile* const expected_primary_profile_;
@@ -321,6 +330,12 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
 
     ASSERT_TRUE(profile_manager_.SetUp());
 
+    auto power_client = base::MakeUnique<chromeos::FakePowerManagerClient>();
+    power_manager_client_ = power_client.get();
+    std::unique_ptr<chromeos::DBusThreadManagerSetter> dbus_setter =
+        chromeos::DBusThreadManager::GetSetterForTesting();
+    dbus_setter->SetPowerManagerClient(std::move(power_client));
+
     BrowserWithTestWindowTest::SetUp();
 
     session_manager_ = base::MakeUnique<session_manager::SessionManager>();
@@ -338,7 +353,7 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
 
     std::unique_ptr<TestAppManager> app_manager =
         base::MakeUnique<TestAppManager>(
-            &profile_, lock_screen_profile_->GetOriginalProfile());
+            profile(), lock_screen_profile()->GetOriginalProfile());
     app_manager_ = app_manager.get();
 
     state_controller_ = base::MakeUnique<lock_screen_apps::StateController>();
@@ -357,10 +372,28 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
     extensions::ExtensionSystem::Get(lock_screen_profile())->Shutdown();
 
     state_controller_->RemoveObserver(&observer_);
-    state_controller_.reset();
+    state_controller_->Shutdown();
     session_manager_.reset();
     app_manager_ = nullptr;
+    app_window_.reset();
     BrowserWithTestWindowTest::TearDown();
+    DestroyProfile(lock_screen_profile());
+  }
+
+  TestingProfile* CreateProfile() override {
+    return profile_manager_.CreateTestingProfile(kPrimaryProfileName);
+  }
+
+  void DestroyProfile(TestingProfile* test_profile) override {
+    if (test_profile == profile()) {
+      profile_manager_.DeleteTestingProfile(kPrimaryProfileName);
+    } else if (test_profile == lock_screen_profile()) {
+      lock_screen_profile_ = nullptr;
+      profile_manager_.DeleteTestingProfile(
+          chromeos::ProfileHelper::GetLockScreenAppProfileName());
+    } else {
+      ADD_FAILURE() << "Request to destroy unknown profile.";
+    }
   }
 
   void InitExtensionSystem(Profile* profile) {
@@ -402,7 +435,7 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
   }
 
   void SetPrimaryProfileAndWaitUntilReady() {
-    state_controller_->SetPrimaryProfile(&profile_);
+    state_controller_->SetPrimaryProfile(profile());
     ready_waiter_.Run();
   }
 
@@ -447,6 +480,8 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
       ADD_FAILURE() << "Unable to move to launching state.";
       return false;
     }
+    app_manager_->ResetLaunchCount();
+
     if (target_state == TrayActionState::kLaunching)
       return true;
 
@@ -464,8 +499,11 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
            TrayActionState::kActive;
   }
 
-  TestingProfile* profile() { return &profile_; }
   TestingProfile* lock_screen_profile() { return lock_screen_profile_; }
+
+  chromeos::FakePowerManagerClient* power_manager_client() {
+    return power_manager_client_;
+  }
 
   session_manager::SessionManager* session_manager() {
     return session_manager_.get();
@@ -487,7 +525,6 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
  private:
   std::unique_ptr<base::test::ScopedCommandLine> command_line_;
   TestingProfileManager profile_manager_;
-  TestingProfile profile_;
   TestingProfile* lock_screen_profile_ = nullptr;
 
   // Run loop used to throttle test until async state controller initialization
@@ -498,6 +535,10 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
   // before running the loop, as that is the method that starts the state
   // controller.
   base::RunLoop ready_waiter_;
+
+  // Power manager client set by the test - the power manager client instance is
+  // owned by DBusThreadManager.
+  chromeos::FakePowerManagerClient* power_manager_client_ = nullptr;
 
   std::unique_ptr<session_manager::SessionManager> session_manager_;
 
@@ -792,6 +833,72 @@ TEST_F(LockScreenAppStateTest, HandleActionWithLaunchFailure) {
   EXPECT_EQ(2, app_manager()->launch_count());
 }
 
+TEST_F(LockScreenAppStateTest, LaunchActionWhenStylusGetsRemoved) {
+  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kAvailable,
+                                      true /* enable_app_launch */));
+  devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
+
+  ExpectObservedStatesMatch({TrayActionState::kLaunching},
+                            "Launch on new note request");
+  ClearObservedStates();
+  EXPECT_EQ(1, app_manager()->launch_count());
+
+  // If the stylus is inserted and removed while launching the app, there should
+  // be no new launch event.
+  devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::INSERTED);
+  devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
+  EXPECT_EQ(0u, observer()->observed_states().size());
+  EXPECT_EQ(0u, tray_action()->observed_states().size());
+  EXPECT_EQ(1, app_manager()->launch_count());
+}
+
+TEST_F(LockScreenAppStateTest, StylusRemovedBeforeScreenLock) {
+  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kNotAvailable,
+                                      true /* enable_app_launch */));
+
+  devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
+  session_manager()->SetSessionState(session_manager::SessionState::LOCKED);
+
+  // Stylus removed event should be ignored if it came before note taking on
+  // lock screen was available (in this case due to session being active).
+  // Screen unlock should still make lock screen note taking available.
+  ExpectObservedStatesMatch({TrayActionState::kAvailable},
+                            "Remove stylus, then unlock.");
+
+  ClearObservedStates();
+  EXPECT_EQ(0, app_manager()->launch_count());
+}
+
+TEST_F(LockScreenAppStateTest, StylusRemovedWhileActive) {
+  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kActive,
+                                      true /* enable_app_launch */));
+
+  devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
+
+  EXPECT_EQ(0u, observer()->observed_states().size());
+  EXPECT_EQ(0u, tray_action()->observed_states().size());
+
+  ClearObservedStates();
+  EXPECT_EQ(0, app_manager()->launch_count());
+}
+
+TEST_F(LockScreenAppStateTest, StylusRemovedWhileInBackground) {
+  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kBackground,
+                                      true /* enable_app_launch */));
+
+  devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
+
+  EXPECT_EQ(0u, observer()->observed_states().size());
+  EXPECT_EQ(0u, tray_action()->observed_states().size());
+
+  ClearObservedStates();
+  EXPECT_EQ(0, app_manager()->launch_count());
+}
+
 TEST_F(LockScreenAppStateTest, AppWindowRegistration) {
   ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kAvailable,
                                       true /* enable_app_launch */));
@@ -870,6 +977,51 @@ TEST_F(LockScreenAppStateTest, AppWindowClosedOnSessionUnlock) {
 
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(app_window()->closed());
+}
+
+TEST_F(LockScreenAppStateTest, CloseAppWindowOnSuspend) {
+  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kActive,
+                                      true /* enable_app_launch */));
+
+  power_manager_client()->SendSuspendImminent();
+  EXPECT_EQ(TrayActionState::kAvailable,
+            state_controller()->GetLockScreenNoteState());
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(app_window()->closed());
+}
+
+TEST_F(LockScreenAppStateTest, CloseAppWindowOnScreenOff) {
+  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kActive,
+                                      true /* enable_app_launch */));
+
+  power_manager_client()->SendBrightnessChanged(10 /* level */,
+                                                true /* user_initiated */);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(app_window()->closed());
+  EXPECT_EQ(TrayActionState::kActive,
+            state_controller()->GetLockScreenNoteState());
+
+  power_manager_client()->SendBrightnessChanged(0 /* level */,
+                                                true /* user_initiated */);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(app_window()->closed());
+  EXPECT_EQ(TrayActionState::kActive,
+            state_controller()->GetLockScreenNoteState());
+
+  power_manager_client()->SendBrightnessChanged(10 /* level */,
+                                                false /* user_initiated */);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(app_window()->closed());
+  EXPECT_EQ(TrayActionState::kActive,
+            state_controller()->GetLockScreenNoteState());
+
+  power_manager_client()->SendBrightnessChanged(0 /* level */,
+                                                false /* user_initiated */);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(app_window()->closed());
+  EXPECT_EQ(TrayActionState::kAvailable,
+            state_controller()->GetLockScreenNoteState());
 }
 
 TEST_F(LockScreenAppStateTest, AppWindowClosedOnAppUnload) {

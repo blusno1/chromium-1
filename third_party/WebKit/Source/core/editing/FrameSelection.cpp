@@ -96,7 +96,7 @@ FrameSelection::FrameSelection(LocalFrame& frame)
     : frame_(frame),
       layout_selection_(LayoutSelection::Create(*this)),
       selection_editor_(SelectionEditor::Create(frame)),
-      granularity_(kCharacterGranularity),
+      granularity_(TextGranularity::kCharacter),
       x_pos_for_vertical_arrow_navigation_(NoXPosForVerticalArrowNavigation()),
       focused_(frame.GetPage() &&
                frame.GetPage()->GetFocusController().FocusedFrame() == frame),
@@ -303,10 +303,8 @@ void FrameSelection::SetSelection(const SelectionInFlatTree& new_selection,
   builder.SetAffinity(new_selection.Affinity())
       .SetBaseAndExtent(ToPositionInDOMTree(new_selection.Base()),
                         ToPositionInDOMTree(new_selection.Extent()))
-      .SetGranularity(new_selection.Granularity())
       .SetIsDirectional(new_selection.IsDirectional())
-      .SetIsHandleVisible(new_selection.IsHandleVisible())
-      .SetHasTrailingWhitespace(new_selection.HasTrailingWhitespace());
+      .SetIsHandleVisible(new_selection.IsHandleVisible());
   return SetSelection(builder.Build(), options, align, granularity);
 }
 
@@ -386,12 +384,13 @@ bool FrameSelection::Modify(EAlteration alter,
       kCloseTyping | kClearTypingStyle | user_triggered;
   SetSelection(selection_modifier.Selection().AsSelection(), options);
 
-  if (granularity == kLineGranularity || granularity == kParagraphGranularity)
+  if (granularity == TextGranularity::kLine ||
+      granularity == TextGranularity::kParagraph)
     x_pos_for_vertical_arrow_navigation_ =
         selection_modifier.XPosForVerticalArrowNavigation();
 
   if (user_triggered == kUserTriggered)
-    granularity_ = kCharacterGranularity;
+    granularity_ = TextGranularity::kCharacter;
 
   ScheduleVisualUpdateForPaintInvalidationIfNeeded();
 
@@ -413,13 +412,13 @@ bool FrameSelection::Modify(EAlteration alter,
                alter == kAlterationMove ? CursorAlignOnScroll::kAlways
                                         : CursorAlignOnScroll::kIfNeeded);
 
-  granularity_ = kCharacterGranularity;
+  granularity_ = TextGranularity::kCharacter;
 
   return true;
 }
 
 void FrameSelection::Clear() {
-  granularity_ = kCharacterGranularity;
+  granularity_ = TextGranularity::kCharacter;
   if (granularity_strategy_)
     granularity_strategy_->Clear();
   SetSelection(SelectionInDOMTree());
@@ -497,7 +496,7 @@ void FrameSelection::DocumentAttached(Document* document) {
 }
 
 void FrameSelection::ContextDestroyed(Document* document) {
-  granularity_ = kCharacterGranularity;
+  granularity_ = TextGranularity::kCharacter;
 
   layout_selection_->OnDocumentShutdown();
 
@@ -593,8 +592,7 @@ void FrameSelection::SelectFrameElementInParentIfFullySelected() {
 
   // Check if the selection contains the entire frame contents; if not, then
   // there is nothing to do.
-  if (GetSelectionInDOMTree().SelectionTypeWithLegacyGranularity() !=
-      kRangeSelection) {
+  if (GetSelectionInDOMTree().Type() != kRangeSelection) {
     return;
   }
 
@@ -948,10 +946,23 @@ LayoutRect FrameSelection::UnclippedBounds() const {
   return LayoutRect(layout_selection_->SelectionBounds());
 }
 
-static IntRect AbsoluteSelectionBoundsOf(
-    const VisibleSelectionInFlatTree& selection) {
-  return ComputeTextRect(
-      EphemeralRangeInFlatTree(selection.Start(), selection.End()));
+IntRect FrameSelection::ComputeRectToScroll(
+    RevealExtentOption reveal_extent_option) {
+  const VisibleSelection& selection = ComputeVisibleSelectionInDOMTree();
+  LayoutRect rect;
+  switch (selection.GetSelectionType()) {
+    case kCaretSelection:
+      return AbsoluteCaretBounds();
+    case kRangeSelection: {
+      if (reveal_extent_option == kRevealExtent)
+        return AbsoluteCaretBoundsOf(CreateVisiblePosition(selection.Extent()));
+      layout_selection_->SetHasPendingSelection();
+      return layout_selection_->SelectionBounds();
+    }
+    default:
+      NOTREACHED();
+      return {};
+  }
 }
 
 // TODO(editing-dev): This should be done in FlatTree world.
@@ -964,34 +975,23 @@ void FrameSelection::RevealSelection(const ScrollAlignment& alignment,
   // Calculation of absolute caret bounds requires clean layout.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
-  LayoutRect rect;
+  const VisibleSelection& selection = ComputeVisibleSelectionInDOMTree();
+  if (selection.GetSelectionType() == kNoSelection)
+    return;
 
-  switch (ComputeVisibleSelectionInDOMTree().GetSelectionType()) {
-    case kNoSelection:
-      return;
-    case kCaretSelection:
-      rect = LayoutRect(AbsoluteCaretBounds());
-      break;
-    case kRangeSelection:
-      rect = LayoutRect(
-          reveal_extent_option == kRevealExtent
-              ? AbsoluteCaretBoundsOf(CreateVisiblePosition(
-                    ComputeVisibleSelectionInDOMTree().Extent()))
-              : AbsoluteSelectionBoundsOf(ComputeVisibleSelectionInFlatTree()));
-      break;
-  }
-
-  Position start = ComputeVisibleSelectionInDOMTree().Start();
+  // FIXME: This code only handles scrolling the startContainer's layer, but
+  // the selection rect could intersect more than just that.
+  if (DocumentLoader* document_loader = frame_->Loader().GetDocumentLoader())
+    document_loader->GetInitialScrollState().was_scrolled_by_user = true;
+  const Position& start = selection.Start();
   DCHECK(start.AnchorNode());
-  if (start.AnchorNode() && start.AnchorNode()->GetLayoutObject()) {
-    // FIXME: This code only handles scrolling the startContainer's layer, but
-    // the selection rect could intersect more than just that.
-    if (DocumentLoader* document_loader = frame_->Loader().GetDocumentLoader())
-      document_loader->GetInitialScrollState().was_scrolled_by_user = true;
-    if (start.AnchorNode()->GetLayoutObject()->ScrollRectToVisible(
-            rect, alignment, alignment))
-      UpdateAppearance();
-  }
+  DCHECK(start.AnchorNode()->GetLayoutObject());
+  if (!start.AnchorNode()->GetLayoutObject()->ScrollRectToVisible(
+          LayoutRect(ComputeRectToScroll(reveal_extent_option)), alignment,
+          alignment))
+    return;
+
+  UpdateAppearance();
 }
 
 void FrameSelection::SetSelectionFromNone() {
@@ -1074,7 +1074,7 @@ bool FrameSelection::SelectWordAroundPosition(const VisiblePosition& position) {
                        .Extend(end.DeepEquivalent())
                        .Build(),
                    kCloseTyping | kClearTypingStyle,
-                   CursorAlignOnScroll::kIfNeeded, kWordGranularity);
+                   CursorAlignOnScroll::kIfNeeded, TextGranularity::kWord);
       return true;
     }
   }
@@ -1129,14 +1129,28 @@ void FrameSelection::MoveRangeSelection(const VisiblePosition& base_position,
           .SetBaseAndExtentDeprecated(base_position.DeepEquivalent(),
                                       extent_position.DeepEquivalent())
           .SetAffinity(base_position.Affinity())
-          .SetGranularity(granularity)
           .SetIsHandleVisible(IsHandleVisible())
           .Build();
 
   if (new_selection.IsNone())
     return;
 
-  SetSelection(new_selection, kCloseTyping | kClearTypingStyle,
+  const VisibleSelection& visible_selection =
+      CreateVisibleSelectionWithGranularity(new_selection, granularity);
+  if (visible_selection.IsNone())
+    return;
+
+  SelectionInDOMTree::Builder builder;
+  if (visible_selection.IsBaseFirst()) {
+    builder.SetBaseAndExtent(visible_selection.Start(),
+                             visible_selection.End());
+  } else {
+    builder.SetBaseAndExtent(visible_selection.End(),
+                             visible_selection.Start());
+  }
+  builder.SetAffinity(visible_selection.Affinity());
+  builder.SetIsHandleVisible(IsHandleVisible());
+  SetSelection(builder.Build(), kCloseTyping | kClearTypingStyle,
                CursorAlignOnScroll::kIfNeeded, granularity);
 }
 

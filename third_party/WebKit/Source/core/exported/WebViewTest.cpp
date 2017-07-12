@@ -35,6 +35,7 @@
 #include <string>
 
 #include "bindings/core/v8/V8Document.h"
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Fullscreen.h"
@@ -114,7 +115,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 #include "public/web/mac/WebSubstringUtil.h"
 #endif
 
@@ -244,7 +245,7 @@ class WebViewTest
  protected:
   std::string RegisterMockedHttpURLLoad(const std::string& file_name) {
     return URLTestHelpers::RegisterMockedURLLoadFromBase(
-               WebString::FromUTF8(base_url_), testing::WebTestDataPath(),
+               WebString::FromUTF8(base_url_), testing::CoreTestDataPath(),
                WebString::FromUTF8(file_name))
         .GetString()
         .Utf8();
@@ -556,7 +557,7 @@ TEST_P(WebViewTest, ActiveState) {
 TEST_P(WebViewTest, HitTestResultAtWithPageScale) {
   std::string url = base_url_ + "specify_size.html?" + "50px" + ":" + "50px";
   URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL(url), testing::WebTestDataPath("specify_size.html"));
+      ToKURL(url), testing::CoreTestDataPath("specify_size.html"));
   WebView* web_view = web_view_helper_.InitializeAndLoad(url);
   web_view->Resize(WebSize(100, 100));
   WebPoint hit_point(75, 75);
@@ -577,7 +578,7 @@ TEST_P(WebViewTest, HitTestResultAtWithPageScale) {
 TEST_P(WebViewTest, HitTestResultAtWithPageScaleAndPan) {
   std::string url = base_url_ + "specify_size.html?" + "50px" + ":" + "50px";
   URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL(url), testing::WebTestDataPath("specify_size.html"));
+      ToKURL(url), testing::CoreTestDataPath("specify_size.html"));
   WebViewBase* web_view = web_view_helper_.Initialize();
   LoadFrame(web_view->MainFrameImpl(), url);
   web_view->Resize(WebSize(100, 100));
@@ -674,7 +675,7 @@ void WebViewTest::TestAutoResize(
   std::string url =
       base_url_ + "specify_size.html?" + page_width + ":" + page_height;
   URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL(url), testing::WebTestDataPath("specify_size.html"));
+      ToKURL(url), testing::CoreTestDataPath("specify_size.html"));
   WebViewBase* web_view =
       web_view_helper_.InitializeAndLoad(url, nullptr, &client);
   client.GetTestData().SetWebView(web_view);
@@ -696,7 +697,7 @@ void WebViewTest::TestAutoResize(
   EXPECT_EQ(expected_height, client.GetTestData().Height());
 
 // Android disables main frame scrollbars.
-#if !OS(ANDROID)
+#if !defined(OS_ANDROID)
   EXPECT_EQ(expected_horizontal_state,
             client.GetTestData().GetHorizontalScrollbarState());
   EXPECT_EQ(expected_vertical_state,
@@ -896,7 +897,7 @@ TEST_P(WebViewTest, TextInputInfoWithReplacedElements) {
   std::string url = RegisterMockedHttpURLLoad("div_with_image.html");
   URLTestHelpers::RegisterMockedURLLoad(
       ToKURL("http://www.test.com/foo.png"),
-      testing::WebTestDataPath("white-1x1.png"));
+      testing::CoreTestDataPath("white-1x1.png"));
   WebViewBase* web_view_impl = web_view_helper_.InitializeAndLoad(url);
   web_view_impl->SetInitialFocus(false);
   WebTextInputInfo info = web_view_impl->MainFrameImpl()
@@ -2234,7 +2235,7 @@ TEST_P(WebViewTest, showContextMenuOnLongPressingLinks) {
 
   URLTestHelpers::RegisterMockedURLLoad(
       ToKURL("http://www.test.com/foo.png"),
-      testing::WebTestDataPath("white-1x1.png"));
+      testing::CoreTestDataPath("white-1x1.png"));
   WebViewBase* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "long_press_links_and_images.html");
 
@@ -2353,7 +2354,7 @@ TEST_P(WebViewTest, FinishComposingTextDoesNotDismissHandles) {
   EXPECT_TRUE(frame->GetFrame()->Selection().IsHandleVisible());
 }
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
 TEST_P(WebViewTest, TouchDoesntSelectEmptyTextarea) {
   RegisterMockedHttpURLLoad("longpress_textarea.html");
 
@@ -2984,7 +2985,7 @@ static void OpenDateTimeChooser(WebView* web_view,
 }
 
 // TODO(crbug.com/605112) This test is crashing on Android (Nexus 4) bot.
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 TEST_P(WebViewTest, DISABLED_ChooseValueFromDateTimeChooser) {
 #else
 TEST_P(WebViewTest, ChooseValueFromDateTimeChooser) {
@@ -3626,7 +3627,7 @@ TEST_P(WebViewTest, AutoResizeSubtreeLayout) {
 TEST_P(WebViewTest, PreferredSize) {
   std::string url = base_url_ + "specify_size.html?100px:100px";
   URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL(url), testing::WebTestDataPath("specify_size.html"));
+      ToKURL(url), testing::CoreTestDataPath("specify_size.html"));
   WebView* web_view = web_view_helper_.InitializeAndLoad(url);
 
   WebSize size = web_view->ContentsPreferredMinimumSize();
@@ -3652,7 +3653,7 @@ TEST_P(WebViewTest, PreferredSize) {
 
   url = base_url_ + "specify_size.html?1.5px:1.5px";
   URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL(url), testing::WebTestDataPath("specify_size.html"));
+      ToKURL(url), testing::CoreTestDataPath("specify_size.html"));
   web_view = web_view_helper_.InitializeAndLoad(url);
 
   web_view->SetZoomLevel(WebView::ZoomFactorToZoomLevel(1));
@@ -3664,7 +3665,7 @@ TEST_P(WebViewTest, PreferredSize) {
 TEST_P(WebViewTest, PreferredSizeDirtyLayout) {
   std::string url = base_url_ + "specify_size.html?100px:100px";
   URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL(url), testing::WebTestDataPath("specify_size.html"));
+      ToKURL(url), testing::CoreTestDataPath("specify_size.html"));
   WebViewBase* web_view = web_view_helper_.InitializeAndLoad(url);
   WebElement document_element =
       web_view->MainFrameImpl()->GetDocument().DocumentElement();
@@ -3880,7 +3881,7 @@ TEST_P(WebViewTest, StopLoadingIfJavaScriptURLReturnsNoStringResult) {
   EXPECT_FALSE(document->GetFrame()->IsLoading());
 }
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 TEST_P(WebViewTest, WebSubstringUtil) {
   RegisterMockedHttpURLLoad("content_editable_populated.html");
   WebViewBase* web_view = web_view_helper_.InitializeAndLoad(

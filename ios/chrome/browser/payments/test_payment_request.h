@@ -24,27 +24,39 @@ class PaymentsProfileComparator;
 namespace web {
 class PaymentRequest;
 class PaymentShippingOption;
+class WebState;
 }  // namespace web
+
+class PrefService;
+
+namespace payments {
 
 // PaymentRequest for use in tests.
 class TestPaymentRequest : public PaymentRequest {
  public:
-  // |personal_data_manager| should not be null and should outlive this object.
+  // |browser_state|, |web_state|, and |personal_data_manager| should not be
+  // null and should outlive this object.
   TestPaymentRequest(const web::PaymentRequest& web_payment_request,
                      ios::ChromeBrowserState* browser_state,
+                     web::WebState* web_state,
                      autofill::PersonalDataManager* personal_data_manager,
                      id<PaymentRequestUIDelegate> payment_request_ui_delegate)
       : PaymentRequest(web_payment_request,
                        browser_state,
+                       web_state,
                        personal_data_manager,
                        payment_request_ui_delegate),
         region_data_loader_(nullptr),
+        pref_service_(nullptr),
         profile_comparator_(nullptr) {}
 
   TestPaymentRequest(const web::PaymentRequest& web_payment_request,
+                     ios::ChromeBrowserState* browser_state,
+                     web::WebState* web_state,
                      autofill::PersonalDataManager* personal_data_manager)
       : TestPaymentRequest(web_payment_request,
-                           nil,
+                           browser_state,
+                           web_state,
                            personal_data_manager,
                            nil) {}
 
@@ -54,8 +66,11 @@ class TestPaymentRequest : public PaymentRequest {
     region_data_loader_ = region_data_loader;
   }
 
-  void SetProfileComparator(
-      payments::PaymentsProfileComparator* profile_comparator) {
+  void SetPrefService(PrefService* pref_service) {
+    pref_service_ = pref_service;
+  }
+
+  void SetProfileComparator(PaymentsProfileComparator* profile_comparator) {
     profile_comparator_ = profile_comparator;
   }
 
@@ -69,8 +84,8 @@ class TestPaymentRequest : public PaymentRequest {
   // Removes all the contact profiles.
   void ClearContactProfiles();
 
-  // Removes all the credit cards.
-  void ClearCreditCards();
+  // Removes all the payment methods.
+  void ClearPaymentMethods();
 
   // Sets the currently selected shipping option for this PaymentRequest flow.
   void set_selected_shipping_option(web::PaymentShippingOption* option) {
@@ -79,16 +94,22 @@ class TestPaymentRequest : public PaymentRequest {
 
   // PaymentRequest
   autofill::RegionDataLoader* GetRegionDataLoader() override;
-  payments::PaymentsProfileComparator* profile_comparator() override;
+  PrefService* GetPrefService() override;
+  PaymentsProfileComparator* profile_comparator() override;
 
  private:
   // Not owned and must outlive this object.
   autofill::RegionDataLoader* region_data_loader_;
 
   // Not owned and must outlive this object.
-  payments::PaymentsProfileComparator* profile_comparator_;
+  PrefService* pref_service_;
+
+  // Not owned and must outlive this object.
+  PaymentsProfileComparator* profile_comparator_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPaymentRequest);
 };
+
+}  // namespace payments
 
 #endif  // IOS_CHROME_BROWSER_PAYMENTS_TEST_PAYMENT_REQUEST_H_

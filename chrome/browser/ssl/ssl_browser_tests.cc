@@ -3338,8 +3338,9 @@ class DelayableNetworkTimeURLRequestJob : public net::URLRequestJob {
     // Start reading asynchronously as would a normal network request.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&DelayableNetworkTimeURLRequestJob::NotifyHeadersComplete,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(
+            &DelayableNetworkTimeURLRequestJob::NotifyHeadersComplete,
+            weak_factory_.GetWeakPtr()));
   }
 
  private:
@@ -3456,7 +3457,7 @@ class SSLNetworkTimeBrowserTest : public SSLUITest {
 
   void TearDownOnMainThread() override {
     content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
-                                     base::Bind(&CleanUpOnIOThread));
+                                     base::BindOnce(&CleanUpOnIOThread));
   }
 
  protected:
@@ -3465,17 +3466,17 @@ class SSLNetworkTimeBrowserTest : public SSLUITest {
     interceptor_ = new DelayedNetworkTimeInterceptor();
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&SetUpNetworkTimeInterceptorOnIOThread,
-                   base::Unretained(interceptor_),
-                   g_browser_process->network_time_tracker()
-                       ->GetTimeServerURLForTesting()));
+        base::BindOnce(&SetUpNetworkTimeInterceptorOnIOThread,
+                       base::Unretained(interceptor_),
+                       g_browser_process->network_time_tracker()
+                           ->GetTimeServerURLForTesting()));
   }
 
   void TriggerTimeResponse() {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&ResumeDelayedNetworkTimeRequest,
-                   base::Unretained(interceptor_)));
+        base::BindOnce(&ResumeDelayedNetworkTimeRequest,
+                       base::Unretained(interceptor_)));
   }
 
   // Asserts that the first time request to the server is currently pending.
@@ -3823,12 +3824,12 @@ class CommonNameMismatchBrowserTest : public CertVerifierBrowserTest {
     host_resolver()->AddRule("*", "127.0.0.1");
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&SetUpHttpNameMismatchPingInterceptorOnIOThread));
+        base::BindOnce(&SetUpHttpNameMismatchPingInterceptorOnIOThread));
   }
 
   void TearDownOnMainThread() override {
     content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
-                                     base::Bind(&CleanUpOnIOThread));
+                                     base::BindOnce(&CleanUpOnIOThread));
     CertVerifierBrowserTest::TearDownOnMainThread();
   }
 };
@@ -4348,6 +4349,35 @@ IN_PROC_BROWSER_TEST_F(SSLUITest,
       tab, "location.replace(window.location.href + '#1')"));
   observer.Wait();
   content::WaitForLoadStop(tab);
+  CheckAuthenticatedState(tab, AuthState::NONE);
+}
+
+// Checks that a restore followed immediately by a history navigation doesn't
+// lose SSL state.
+// Disabled since this is a test for bug 738177.
+IN_PROC_BROWSER_TEST_F(SSLUITest, DISABLED_RestoreThenNavigateHasSSLState) {
+  // This race condition only happens with PlzNavigate.
+  if (!content::IsBrowserSideNavigationEnabled())
+    return;
+  ASSERT_TRUE(https_server_.Start());
+  GURL url1(https_server_.GetURL("/ssl/google.html"));
+  GURL url2(https_server_.GetURL("/ssl/page_with_refs.html"));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url1, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  ui_test_utils::NavigateToURL(browser(), url2);
+  chrome::CloseTab(browser());
+
+  content::WindowedNotificationObserver tab_added_observer(
+      chrome::NOTIFICATION_TAB_PARENTED,
+      content::NotificationService::AllSources());
+  chrome::RestoreTab(browser());
+  tab_added_observer.Wait();
+
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  content::TestNavigationManager observer(tab, url1);
+  chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
+  observer.WaitForNavigationFinished();
   CheckAuthenticatedState(tab, AuthState::NONE);
 }
 
@@ -5047,6 +5077,10 @@ IN_PROC_BROWSER_TEST_F(SuperfishSSLUITest, NoSuperfishRecorded) {
 // Tests that the Superfish interstitial is shown when the Finch feature is
 // enabled and the Superfish certificate is present.
 IN_PROC_BROWSER_TEST_F(SuperfishSSLUITest, SuperfishInterstitial) {
+  base::HistogramTester histograms;
+  const char kDecisionHistogram[] = "interstitial.superfish.decision";
+  const char kInteractionHistogram[] = "interstitial.superfish.interaction";
+
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitFromCommandLine("SuperfishInterstitial",
                                           std::string());
@@ -5068,6 +5102,15 @@ IN_PROC_BROWSER_TEST_F(SuperfishSSLUITest, SuperfishInterstitial) {
       l10n_util::GetStringUTF8(IDS_SSL_SUPERFISH_HEADING);
   EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
       interstitial_page, expected_title));
+
+  // Check that the correct histograms were recorded.
+  histograms.ExpectTotalCount(kDecisionHistogram, 1);
+  histograms.ExpectBucketCount(kDecisionHistogram,
+                               security_interstitials::MetricsHelper::SHOW, 1);
+  histograms.ExpectTotalCount(kInteractionHistogram, 1);
+  histograms.ExpectBucketCount(
+      kInteractionHistogram,
+      security_interstitials::MetricsHelper::TOTAL_VISITS, 1);
 }
 
 // Tests that the Superfish interstitial is not shown when the Finch feature is

@@ -243,6 +243,10 @@ const base::Feature kUseNewMediaCache{"use-new-media-cache",
 const base::Feature kVideoColorManagement{"video-color-management",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Use SurfaceLayer instead of VideoLayer.
+const base::Feature kUseSurfaceLayerForVideo{"UseSurfaceLayerForVideo",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Inform video blitter of video color space.
 const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
@@ -252,6 +256,9 @@ const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
 // no effect.
 const base::Feature kExternalClearKeyForTesting{
     "external-clear-key-for-testing", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSupportExperimentalCdmInterface{
+    "SupportExperimentalCdmInterface", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables low-delay video rendering in media pipeline on "live" stream.
 const base::Feature kLowDelayVideoRenderingOnLiveStream{

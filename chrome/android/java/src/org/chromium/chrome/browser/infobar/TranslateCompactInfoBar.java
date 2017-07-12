@@ -103,6 +103,8 @@ public class TranslateCompactInfoBar extends InfoBar
     private TranslateMenuHelper mLanguageMenuHelper;
     private TintedImageButton mMenuButton;
 
+    private TranslateSnackbarController mSnackbarController;
+
     private boolean mMenuExpanded;
     private boolean mIsFirstLayout = true;
     private boolean mUserInteracted;
@@ -117,11 +119,13 @@ public class TranslateCompactInfoBar extends InfoBar
 
         @Override
         public void onDismissNoAction(Object actionData) {
+            mSnackbarController = null;
             handleTranslateOptionPostSnackbar(mActionId);
         }
 
         @Override
         public void onAction(Object actionData) {
+            mSnackbarController = null;
             switch (mActionId) {
                 case ACTION_OVERFLOW_ALWAYS_TRANSLATE:
                     recordInfobarAction(INFOBAR_SNACKBAR_CANCEL_ALWAYS);
@@ -177,6 +181,17 @@ public class TranslateCompactInfoBar extends InfoBar
         LinearLayout content =
                 (LinearLayout) LayoutInflater.from(getContext())
                         .inflate(R.layout.infobar_translate_compact_content, parent, false);
+
+        // When parent tab is being switched out (view detached), dismiss all menus and snackbars.
+        content.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View view) {}
+
+            @Override
+            public void onViewDetachedFromWindow(View view) {
+                dismissMenusAndSnackbars();
+            }
+        });
 
         mTabLayout = (TranslateTabLayout) content.findViewById(R.id.translate_infobar_tabs);
         mTabLayout.addTabs(mOptions.sourceLanguageName(), mOptions.targetLanguageName());
@@ -411,6 +426,12 @@ public class TranslateCompactInfoBar extends InfoBar
 
     @Override
     public void onSourceMenuItemClicked(String code) {
+        // If source language is same as target language, the infobar will dismiss and no
+        // translation will be done.
+        if (mOptions.targetLanguageCode().equals(code)) {
+            closeInfobar(true);
+            return;
+        }
         // Reset source code in both UI and native.
         if (mNativeTranslateInfoBarPtr != 0 && mOptions.setSourceLanguage(code)) {
             recordInfobarLanguageData(
@@ -430,11 +451,17 @@ public class TranslateCompactInfoBar extends InfoBar
         if (mLanguageMenuHelper != null) mLanguageMenuHelper.dismiss();
     }
 
+    // Dismiss all overflow menus and snackbars that belong to this infobar and remain open.
+    private void dismissMenusAndSnackbars() {
+        dismissMenus();
+        if (getSnackbarManager() != null && mSnackbarController != null) {
+            getSnackbarManager().dismissSnackbars(mSnackbarController);
+        }
+    }
+
     @Override
     protected void onStartedHiding() {
-        dismissMenus();
-        if (getSnackbarManager() != null) getSnackbarManager().dismissAllSnackbars();
-        super.onStartedHiding();
+        dismissMenusAndSnackbars();
     }
 
     /**
@@ -479,9 +506,9 @@ public class TranslateCompactInfoBar extends InfoBar
                 assert false : "Unsupported Menu Item Id, to show snackbar.";
         }
 
+        mSnackbarController = new TranslateSnackbarController(actionId);
         getSnackbarManager().showSnackbar(
-                Snackbar.make(title, new TranslateSnackbarController(actionId),
-                                Snackbar.TYPE_NOTIFICATION, umaType)
+                Snackbar.make(title, mSnackbarController, Snackbar.TYPE_NOTIFICATION, umaType)
                         .setSingleLine(false)
                         .setAction(
                                 getContext().getString(R.string.translate_snackbar_cancel), null));

@@ -50,11 +50,11 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/user_agent.h"
-#include "device/wake_lock/public/interfaces/wake_lock_provider.mojom.h"
 #include "google_apis/drive/auth_service.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -294,15 +294,13 @@ DriveIntegrationService::DriveIntegrationService(
   resource_metadata_.reset(new internal::ResourceMetadata(
       metadata_storage_.get(), cache_.get(), blocking_task_runner_));
 
-  file_task_runner_ =
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE);
   file_system_.reset(
       test_file_system
           ? test_file_system
           : new FileSystem(
                 profile_->GetPrefs(), logger_.get(), cache_.get(),
                 scheduler_.get(), resource_metadata_.get(),
-                blocking_task_runner_.get(), file_task_runner_.get(),
+                blocking_task_runner_.get(),
                 cache_root_directory_.Append(kTemporaryFileDirectory)));
   download_handler_.reset(new DownloadHandler(file_system()));
   debug_info_collector_.reset(new DebugInfoCollector(

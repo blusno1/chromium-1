@@ -15,7 +15,7 @@
 #include "cc/ipc/cc_param_traits.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/resources/shared_bitmap.h"
+#include "components/viz/common/quads/shared_bitmap.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/date_time_suggestion.h"
@@ -38,7 +38,6 @@
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/ipc/media_param_traits.h"
-#include "media/base/media_log_event.h"
 #include "media/capture/ipc/capture_param_traits.h"
 #include "net/base/network_change_notifier.h"
 #include "ppapi/features/features.h"
@@ -109,8 +108,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::TapMultipleTargetsStrategy,
                           content::TAP_MULTIPLE_TARGETS_STRATEGY_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(content::ThreeDAPIType,
                           content::THREE_D_API_TYPE_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(media::MediaLogEvent::Type,
-                          media::MediaLogEvent::TYPE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::TextInputMode, ui::TEXT_INPUT_MODE_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::TextInputType, ui::TEXT_INPUT_TYPE_MAX)
 
@@ -158,6 +155,8 @@ IPC_STRUCT_TRAITS_BEGIN(blink::WebDeviceEmulationParams)
   IPC_STRUCT_TRAITS_MEMBER(fit_to_view)
   IPC_STRUCT_TRAITS_MEMBER(offset)
   IPC_STRUCT_TRAITS_MEMBER(scale)
+  IPC_STRUCT_TRAITS_MEMBER(viewport_offset)
+  IPC_STRUCT_TRAITS_MEMBER(viewport_scale)
   IPC_STRUCT_TRAITS_MEMBER(screen_orientation_angle)
   IPC_STRUCT_TRAITS_MEMBER(screen_orientation_type)
 IPC_STRUCT_TRAITS_END()
@@ -256,13 +255,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(arrow_bitmap_width_horizontal_scroll_bar_in_dips)
 #endif
   IPC_STRUCT_TRAITS_MEMBER(default_font_size)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(media::MediaLogEvent)
-  IPC_STRUCT_TRAITS_MEMBER(id)
-  IPC_STRUCT_TRAITS_MEMBER(type)
-  IPC_STRUCT_TRAITS_MEMBER(params)
-  IPC_STRUCT_TRAITS_MEMBER(time)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::TextInputState)
@@ -567,7 +559,7 @@ IPC_MESSAGE_ROUTED1(ViewMsg_PpapiBrokerPermissionResult,
 // An acknowledgement to ViewHostMsg_ShowDisambiguationPopup to notify the
 // renderer process to release the magnified image.
 IPC_MESSAGE_ROUTED1(ViewMsg_ReleaseDisambiguationPopupBitmap,
-                    cc::SharedBitmapId /* id */)
+                    viz::SharedBitmapId /* id */)
 
 // If the ViewHostMsg_ShowDisambiguationPopup resulted in the user tapping
 // inside the popup, instruct the renderer to generate a synthetic tap at that
@@ -836,7 +828,7 @@ IPC_MESSAGE_ROUTED0(ViewHostMsg_UnlockMouse)
 IPC_MESSAGE_ROUTED3(ViewHostMsg_ShowDisambiguationPopup,
                     gfx::Rect, /* Border of touched targets */
                     gfx::Size, /* Size of zoomed image */
-                    cc::SharedBitmapId /* id */)
+                    viz::SharedBitmapId /* id */)
 
 // Message sent from renderer to the browser when the element that is focused
 // has been touched. A bool is passed in this message which indicates if the

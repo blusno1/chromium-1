@@ -682,6 +682,8 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
       selecting_(false),
       mouse_down_state_(PDFiumPage::NONSELECTABLE_AREA,
                         PDFiumPage::LinkTarget()),
+      in_form_text_area_(false),
+      mouse_left_button_down_(false),
       next_page_to_search_(-1),
       last_page_to_search_(-1),
       last_character_index_to_search_(-1),
@@ -1635,10 +1637,10 @@ void PDFiumEngine::SetFormSelectedText(FPDF_FORMHANDLE form_handle,
   unsigned long form_sel_text_len =
       FORM_GetSelectedText(form_handle, page, nullptr, 0);
 
-  // Check to see if there is selected text in the form. When
-  // |form_sel_text_len| is 2, that represents a wide string with just a
-  // NUL-terminator.
-  if (form_sel_text_len <= 2)
+  // If form selected text is empty and there was no previous form text
+  // selection, exit early because nothing has changed. When |form_sel_text_len|
+  // is 2, that represents a wide string with just a NUL-terminator.
+  if (form_sel_text_len <= 2 && selected_form_text_.empty())
     return;
 
   base::string16 selected_form_text16;
@@ -1647,9 +1649,13 @@ void PDFiumEngine::SetFormSelectedText(FPDF_FORMHANDLE form_handle,
   string_adapter.Close(FORM_GetSelectedText(
       form_handle, page, string_adapter.GetData(), form_sel_text_len));
 
-  std::string selected_form_text = base::UTF16ToUTF8(selected_form_text16);
-  if (!selected_form_text.empty()) {
-    pp::PDF::SetSelectedText(GetPluginInstance(), selected_form_text.c_str());
+  // Update previous and current selections, then compare them to check if
+  // selection has changed. If so, set plugin text selection.
+  std::string selected_form_text = selected_form_text_;
+  selected_form_text_ = base::UTF16ToUTF8(selected_form_text16);
+  if (selected_form_text != selected_form_text_) {
+    DCHECK(in_form_text_area_);
+    pp::PDF::SetSelectedText(GetPluginInstance(), selected_form_text_.c_str());
   }
 }
 
@@ -1719,7 +1725,10 @@ bool PDFiumEngine::OnMouseDown(const pp::MouseInputEvent& event) {
     return false;
   }
 
-  SelectionChangeInvalidator selection_invalidator(this);
+  SetMouseLeftButtonDown(event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT);
+
+  auto selection_invalidator =
+      base::MakeUnique<SelectionChangeInvalidator>(this);
   selection_.clear();
 
   int page_index = -1;
@@ -1748,6 +1757,14 @@ bool PDFiumEngine::OnMouseDown(const pp::MouseInputEvent& event) {
     FORM_OnLButtonDown(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
     if (form_type > FPDF_FORMFIELD_UNKNOWN) {  // returns -1 sometimes...
       mouse_down_state_.Set(PDFiumPage::FormTypeToArea(form_type), target);
+
+      // Destroy SelectionChangeInvalidator object before SetInFormTextArea()
+      // changes plugin's focus to be in form text area. This way, regular text
+      // selection can be cleared when a user clicks into a form text area
+      // because the pp::PDF::SetSelectedText() call in
+      // ~SelectionChangeInvalidator() still goes to the Mimehandler
+      // (not the Renderer).
+      selection_invalidator.reset();
 
       bool is_valid_control = (form_type == FPDF_FORMFIELD_TEXTFIELD ||
                                form_type == FPDF_FORMFIELD_COMBOBOX);
@@ -1814,6 +1831,9 @@ bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
     return false;
   }
 
+  if (event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT)
+    SetMouseLeftButtonDown(false);
+
   int page_index = -1;
   int char_index = -1;
   int form_type = FPDF_FORMFIELD_UNKNOWN;
@@ -1856,9 +1876,6 @@ bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
     DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
     FORM_OnLButtonUp(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
   }
-
-  if (area == PDFiumPage::FORM_TEXT_AREA && last_page_mouse_down_ != -1)
-    SetFormSelectedText(form_, pages_[last_page_mouse_down_]->GetPage());
 
   if (!selecting_)
     return false;
@@ -1924,6 +1941,14 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
       link_under_cursor_ = url;
       pp::PDF::SetLinkUnderCursor(GetPluginInstance(), url.c_str());
     }
+
+    // If in form text area while left mouse button is held down, check if form
+    // text selection needs to be updated.
+    if (mouse_left_button_down_ && area == PDFiumPage::FORM_TEXT_AREA &&
+        last_page_mouse_down_ != -1) {
+      SetFormSelectedText(form_, pages_[last_page_mouse_down_]->GetPage());
+    }
+
     // No need to swallow the event, since this might interfere with the
     // scrollbars if the user is dragging them.
     return false;
@@ -2018,14 +2043,6 @@ bool PDFiumEngine::OnKeyDown(const pp::KeyboardInputEvent& event) {
     OnChar(synthesized);
   }
 
-  // If form selected text is empty and key pressed within form text area,
-  // plugin text selection should be cleared.
-  if (in_form_text_area_ &&
-      FORM_GetSelectedText(form_, pages_[last_page_mouse_down_]->GetPage(),
-                           nullptr, 0) <= 2) {
-    pp::PDF::SetSelectedText(GetPluginInstance(), "");
-  }
-
   return rv;
 }
 
@@ -2033,9 +2050,9 @@ bool PDFiumEngine::OnKeyUp(const pp::KeyboardInputEvent& event) {
   if (last_page_mouse_down_ == -1)
     return false;
 
+  // Check if form text selection needs to be updated.
   if (in_form_text_area_) {
-    if (event.GetKeyCode() == ui::VKEY_SHIFT)
-      SetFormSelectedText(form_, pages_[last_page_mouse_down_]->GetPage());
+    SetFormSelectedText(form_, pages_[last_page_mouse_down_]->GetPage());
   }
 
   return !!FORM_OnKeyUp(form_, pages_[last_page_mouse_down_]->GetPage(),
@@ -2429,6 +2446,9 @@ bool PDFiumEngine::HasPermission(DocumentPermission permission) const {
 }
 
 void PDFiumEngine::SelectAll() {
+  if (in_form_text_area_)
+    return;
+
   SelectionChangeInvalidator selection_invalidator(this);
 
   selection_.clear();
@@ -3574,6 +3594,7 @@ void PDFiumEngine::GetRegion(const pp::Point& location,
 }
 
 void PDFiumEngine::OnSelectionChanged() {
+  DCHECK(!in_form_text_area_);
   pp::PDF::SetSelectedText(GetPluginInstance(), GetSelectedText().c_str());
 }
 
@@ -3612,8 +3633,19 @@ void PDFiumEngine::SetSelecting(bool selecting) {
 }
 
 void PDFiumEngine::SetInFormTextArea(bool in_form_text_area) {
+  // If focus was previously in form text area, clear form text selection.
+  // Clearing needs to be done before changing focus to ensure the correct
+  // observer is notified of the change in selection. When |in_form_text_area_|
+  // is true, this is the Renderer. After it flips, the MimeHandler is notified.
+  if (in_form_text_area_)
+    pp::PDF::SetSelectedText(GetPluginInstance(), "");
+
   client_->FormTextFieldFocusChange(in_form_text_area);
   in_form_text_area_ = in_form_text_area;
+}
+
+void PDFiumEngine::SetMouseLeftButtonDown(bool is_mouse_left_button_down) {
+  mouse_left_button_down_ = is_mouse_left_button_down;
 }
 
 void PDFiumEngine::ScheduleTouchTimer(const pp::TouchInputEvent& evt) {

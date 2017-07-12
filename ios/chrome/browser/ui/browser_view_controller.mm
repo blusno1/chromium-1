@@ -16,6 +16,7 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/format_macros.h"
 #include "base/i18n/rtl.h"
@@ -37,6 +38,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/image_fetcher/ios/ios_image_data_fetcher_wrapper.h"
 #include "components/infobars/core/infobar_manager.h"
+#include "components/payments/core/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/search_engines/search_engines_pref_names.h"
@@ -93,6 +95,8 @@
 #import "ios/chrome/browser/ui/browser_view_controller_dependency_factory.h"
 #import "ios/chrome/browser/ui/chrome_web_view_factory.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
@@ -636,9 +640,6 @@ NSString* const kNativeControllerTemporaryKey = @"NativeControllerTemporaryKey";
 - (void)displayTab:(Tab*)tab isNewSelection:(BOOL)newSelection;
 // Initializes the bookmark interaction controller if not already initialized.
 - (void)initializeBookmarkInteractionController;
-
-// Shows the tools menu popup.
-- (void)showToolsMenuPopup;
 // Add all delegates to the provided |tab|.
 - (void)installDelegatesForTab:(Tab*)tab;
 // Remove delegates from the provided |tab|.
@@ -938,10 +939,11 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 
 #pragma mark - Object lifecycle
 
-- (instancetype)initWithTabModel:(TabModel*)model
-                    browserState:(ios::ChromeBrowserState*)browserState
-               dependencyFactory:
-                   (BrowserViewControllerDependencyFactory*)factory {
+- (instancetype)
+          initWithTabModel:(TabModel*)model
+              browserState:(ios::ChromeBrowserState*)browserState
+         dependencyFactory:(BrowserViewControllerDependencyFactory*)factory
+applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   self = [super initWithNibName:nil bundle:base::mac::FrameworkBundle()];
   if (self) {
     DCHECK(factory);
@@ -957,6 +959,10 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
                               forProtocol:@protocol(WebToolbarDelegate)];
     [_dispatcher startDispatchingToTarget:self
                               forSelector:@selector(chromeExecuteCommand:)];
+    [_dispatcher startDispatchingToTarget:self
+                              forProtocol:@protocol(BrowserCommands)];
+    [_dispatcher startDispatchingToTarget:applicationCommandEndpoint
+                              forProtocol:@protocol(ApplicationCommands)];
 
     _javaScriptDialogPresenter.reset(
         new JavaScriptDialogPresenterImpl(_dialogPresenter));
@@ -997,6 +1003,10 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 }
 
 #pragma mark - Properties
+
+- (id<ApplicationCommands, BrowserCommands>)dispatcher {
+  return static_cast<id<ApplicationCommands, BrowserCommands>>(_dispatcher);
+}
 
 - (void)setActive:(BOOL)active {
   if (_active == active) {
@@ -1780,10 +1790,11 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
       new ToolbarModelDelegateIOS([_model webStateList]));
   _toolbarModelIOS.reset([_dependencyFactory
       newToolbarModelIOSWithDelegate:_toolbarModelDelegate.get()]);
-  _toolbarController = [_dependencyFactory
-      newWebToolbarControllerWithDelegate:self
-                                urlLoader:self
-                          preloadProvider:_preloadController];
+  _toolbarController =
+      [_dependencyFactory newWebToolbarControllerWithDelegate:self
+                                                    urlLoader:self
+                                              preloadProvider:_preloadController
+                                                   dispatcher:self.dispatcher];
   [_dispatcher startDispatchingToTarget:_toolbarController
                             forProtocol:@protocol(OmniboxFocuser)];
   [_toolbarController setTabCount:[_model count]];
@@ -1835,12 +1846,12 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
     [_contextualSearchController setTab:[_model currentTab]];
   }
 
-  if (experimental_flags::IsPaymentRequestEnabled()) {
+  if (base::FeatureList::IsEnabled(payments::features::kWebPayments)) {
     _paymentRequestManager = [[PaymentRequestManager alloc]
         initWithBaseViewController:self
                       browserState:_browserState];
     [_paymentRequestManager setToolbarModel:_toolbarModelIOS.get()];
-    [_paymentRequestManager setWebState:[_model currentTab].webState];
+    [_paymentRequestManager setActiveWebState:[_model currentTab].webState];
   }
 }
 
@@ -2969,7 +2980,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
       [self newTab:nil];
       break;
     case OverscrollAction::CLOSE_TAB:
-      [self closeCurrentTab];
+      [self.dispatcher closeCurrentTab];
       break;
     case OverscrollAction::REFRESH: {
       if ([[[_model currentTab] webController] loadPhase] ==
@@ -3083,7 +3094,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
     pageController.swipeRecognizerProvider = self.sideSwipeController;
 
     // Panel is always NTP for iPhone.
-    NewTabPage::PanelIdentifier panelType = NewTabPage::kMostVisitedPanel;
+    NewTabPage::PanelIdentifier panelType = NewTabPage::kHomePanel;
 
     if (IsIPadIdiom()) {
       // New Tab Page can have multiple panels. Each panel is addressable
@@ -3428,56 +3439,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 
 #pragma mark - Showing popups
 
-- (void)showToolsMenuPopup {
-  DCHECK(_browserState);
-  DCHECK(self.visible || self.dismissingModal);
-
-  // Record the time this menu was requested; to be stored in the configuration
-  // object.
-  NSDate* showToolsMenuPopupRequestDate = [NSDate date];
-
-  // Dismiss the omnibox (if open).
-  [_toolbarController cancelOmniboxEdit];
-  // Dismiss the soft keyboard (if open).
-  [[_model currentTab].webController dismissKeyboard];
-  // Dismiss Find in Page focus.
-  [self updateFindBar:NO shouldFocus:NO];
-
-  ToolsMenuConfiguration* configuration =
-      [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]];
-  configuration.requestStartTime =
-      showToolsMenuPopupRequestDate.timeIntervalSinceReferenceDate;
-  if ([_model count] == 0)
-    [configuration setNoOpenedTabs:YES];
-
-  if (_isOffTheRecord)
-    [configuration setInIncognito:YES];
-
-  if (!_readingListMenuNotifier) {
-    _readingListMenuNotifier = [[ReadingListMenuNotifier alloc]
-        initWithReadingList:ReadingListModelFactory::GetForBrowserState(
-                                _browserState)];
-  }
-  [configuration setReadingListMenuNotifier:_readingListMenuNotifier];
-
-  [configuration setUserAgentType:self.userAgentType];
-
-  [_toolbarController showToolsMenuPopupWithConfiguration:configuration];
-
-  ToolsPopupController* toolsPopupController =
-      [_toolbarController toolsPopupController];
-  if ([_model currentTab]) {
-    BOOL isBookmarked = _toolbarModelIOS->IsCurrentTabBookmarked();
-    [toolsPopupController setIsCurrentPageBookmarked:isBookmarked];
-    [toolsPopupController setCanShowFindBar:self.canShowFindBar];
-    [toolsPopupController setCanUseReaderMode:self.canUseReaderMode];
-    [toolsPopupController setCanShowShareMenu:self.canShowShareMenu];
-
-    if (!IsIPadIdiom())
-      [toolsPopupController setIsTabLoading:_toolbarModelIOS->IsLoading()];
-  }
-}
-
 - (void)showPageInfoPopupForView:(UIView*)sourceView {
   Tab* tab = [_model currentTab];
   DCHECK([tab navigationManager]);
@@ -3523,6 +3484,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
              bridge:bridge
         sourceFrame:[sourceView convertRect:[sourceView bounds] toView:view]
          parentView:view];
+  _pageInfoController.dispatcher = self.dispatcher;
   bridge->set_controller(_pageInfoController);
 }
 
@@ -3714,6 +3676,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   }
   return [self.keyCommandsProvider
       keyCommandsForConsumer:self
+                  dispatcher:self.dispatcher
                  editingText:![self isFirstResponder]];
 }
 
@@ -3959,9 +3922,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 - (IBAction)locationBarBeganEdit:(id)sender {
   // On handsets, if a page is currently loading it should be stopped.
   if (!IsIPadIdiom() && _toolbarModelIOS->IsLoading()) {
-    GenericChromeCommand* command =
-        [[GenericChromeCommand alloc] initWithTag:IDC_STOP];
-    [self chromeExecuteCommand:command];
+    [self.dispatcher stopLoading];
     _locationBarEditCancelledLoad = YES;
   }
 }
@@ -4010,6 +3971,95 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   return card;
 }
 
+#pragma mark - BrowserCommands
+
+- (void)goBack {
+  [[_model currentTab] goBack];
+}
+
+- (void)goForward {
+  [[_model currentTab] goForward];
+}
+
+- (void)stopLoading {
+  [_model currentTab].webState->Stop();
+}
+
+- (void)reload {
+  web::WebState* webState = [_model currentTab].webState;
+  if (webState) {
+    // |check_for_repost| is true because the reload is explicitly initiated
+    // by the user.
+    webState->GetNavigationManager()->Reload(web::ReloadType::NORMAL,
+                                             true /* check_for_repost */);
+  }
+}
+
+- (void)sharePage {
+  ShareToData* data = activity_services::ShareToDataForTab([_model currentTab]);
+  if (data)
+    [self sharePageWithData:data];
+}
+
+- (void)bookmarkPage {
+  [self initializeBookmarkInteractionController];
+  [_bookmarkInteractionController
+      presentBookmarkForTab:[_model currentTab]
+        currentlyBookmarked:_toolbarModelIOS->IsCurrentTabBookmarkedByUser()
+                     inView:[_toolbarController bookmarkButtonView]
+                 originRect:[_toolbarController bookmarkButtonAnchorRect]];
+}
+
+- (void)showToolsMenu {
+  DCHECK(_browserState);
+  DCHECK(self.visible || self.dismissingModal);
+
+  // Record the time this menu was requested; to be stored in the configuration
+  // object.
+  NSDate* showToolsMenuPopupRequestDate = [NSDate date];
+
+  // Dismiss the omnibox (if open).
+  [_toolbarController cancelOmniboxEdit];
+  // Dismiss the soft keyboard (if open).
+  [[_model currentTab].webController dismissKeyboard];
+  // Dismiss Find in Page focus.
+  [self updateFindBar:NO shouldFocus:NO];
+
+  ToolsMenuConfiguration* configuration =
+      [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]];
+  configuration.requestStartTime =
+      showToolsMenuPopupRequestDate.timeIntervalSinceReferenceDate;
+  if ([_model count] == 0)
+    [configuration setNoOpenedTabs:YES];
+
+  if (_isOffTheRecord)
+    [configuration setInIncognito:YES];
+
+  if (!_readingListMenuNotifier) {
+    _readingListMenuNotifier = [[ReadingListMenuNotifier alloc]
+        initWithReadingList:ReadingListModelFactory::GetForBrowserState(
+                                _browserState)];
+  }
+  [configuration setReadingListMenuNotifier:_readingListMenuNotifier];
+
+  [configuration setUserAgentType:self.userAgentType];
+
+  [_toolbarController showToolsMenuPopupWithConfiguration:configuration];
+
+  ToolsPopupController* toolsPopupController =
+      [_toolbarController toolsPopupController];
+  if ([_model currentTab]) {
+    BOOL isBookmarked = _toolbarModelIOS->IsCurrentTabBookmarked();
+    [toolsPopupController setIsCurrentPageBookmarked:isBookmarked];
+    [toolsPopupController setCanShowFindBar:self.canShowFindBar];
+    [toolsPopupController setCanUseReaderMode:self.canUseReaderMode];
+    [toolsPopupController setCanShowShareMenu:self.canShowShareMenu];
+
+    if (!IsIPadIdiom())
+      [toolsPopupController setIsTabLoading:_toolbarModelIOS->IsLoading()];
+  }
+}
+
 #pragma mark - Command Handling
 
 - (IBAction)chromeExecuteCommand:(id)sender {
@@ -4020,20 +4070,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   Tab* currentTab = [_model currentTab];
 
   switch (command) {
-    case IDC_BACK:
-      [[_model currentTab] goBack];
-      break;
-    case IDC_BOOKMARK_PAGE:
-      [self initializeBookmarkInteractionController];
-      [_bookmarkInteractionController
-          presentBookmarkForTab:[_model currentTab]
-            currentlyBookmarked:_toolbarModelIOS->IsCurrentTabBookmarkedByUser()
-                         inView:[_toolbarController bookmarkButtonView]
-                     originRect:[_toolbarController bookmarkButtonAnchorRect]];
-      break;
-    case IDC_CLOSE_TAB:
-      [self closeCurrentTab];
-      break;
     case IDC_FIND:
       [self initFindBarForTab];
       break;
@@ -4060,9 +4096,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
       break;
     case IDC_FIND_UPDATE:
       [self searchFindInPage];
-      break;
-    case IDC_FORWARD:
-      [[_model currentTab] goForward];
       break;
     case IDC_FULLSCREEN:
       NOTIMPLEMENTED();
@@ -4092,18 +4125,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
         [super chromeExecuteCommand:sender];
       }
       break;
-    case IDC_RELOAD: {
-      web::WebState* webState = [_model currentTab].webState;
-      if (webState)
-        // |check_for_repost| is true because the reload is explicitly initiated
-        // by the user.
-        webState->GetNavigationManager()->Reload(web::ReloadType::NORMAL,
-                                                 true /* check_for_repost */);
-      break;
-    }
-    case IDC_SHARE_PAGE:
-      [self sharePage];
-      break;
     case IDC_SHOW_MAIL_COMPOSER:
       [self showMailComposer:sender];
       break;
@@ -4116,10 +4137,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
     case IDC_REQUEST_MOBILE_SITE:
       [[_model currentTab] reloadWithUserAgentType:web::UserAgentType::MOBILE];
       break;
-    case IDC_SHOW_TOOLS_MENU: {
-      [self showToolsMenuPopup];
-      break;
-    }
     case IDC_SHOW_BOOKMARK_MANAGER: {
       if (IsIPadIdiom()) {
         [self showAllBookmarks];
@@ -4142,9 +4159,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
       }
       break;
     }
-    case IDC_STOP:
-      [_model currentTab].webState->Stop();
-      break;
 #if !defined(NDEBUG)
     case IDC_VIEW_SOURCE:
       [self viewSource];
@@ -4230,11 +4244,6 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   }
 }
 
-- (void)sharePage {
-  ShareToData* data = activity_services::ShareToDataForTab([_model currentTab]);
-  if (data)
-    [self sharePageWithData:data];
-}
 
 - (void)sharePageWithData:(ShareToData*)data {
   id<ShareProtocol> controller = [_dependencyFactory shareControllerInstance];
@@ -4609,7 +4618,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
 
   if (fg) {
     [_contextualSearchController setTab:tab];
-    [_paymentRequestManager setWebState:tab.webState];
+    [_paymentRequestManager setActiveWebState:tab.webState];
   }
 }
 
@@ -4629,7 +4638,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   [self updateVoiceSearchBarVisibilityAnimated:NO];
 
   [_contextualSearchController setTab:newTab];
-  [_paymentRequestManager setWebState:newTab.webState];
+  [_paymentRequestManager setActiveWebState:newTab.webState];
 
   [self tabSelected:newTab];
   DCHECK_EQ(newTab, [model currentTab]);
@@ -4692,10 +4701,12 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
     [_toolbarController selectedTabChanged];
   }
 
+  [_paymentRequestManager stopTrackingWebState:tab.webState];
+
   [[UpgradeCenter sharedInstance] tabWillClose:tab.tabId];
   if ([model count] == 1) {  // About to remove the last tab.
     [_contextualSearchController setTab:nil];
-    [_paymentRequestManager setWebState:nil];
+    [_paymentRequestManager setActiveWebState:nullptr];
   }
 }
 

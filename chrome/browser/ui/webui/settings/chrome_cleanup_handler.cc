@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/webui/settings/chrome_cleanup_handler.h"
 
+#include <string>
+
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
 #include "base/values.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_field_trial_win.h"
@@ -73,6 +76,10 @@ void ChromeCleanupHandler::RegisterMessages() {
       base::Bind(&ChromeCleanupHandler::HandleRestartComputer,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
+      "setLogsUploadPermission",
+      base::Bind(&ChromeCleanupHandler::HandleSetLogsUploadPermission,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
       "startCleanup", base::Bind(&ChromeCleanupHandler::HandleStartCleanup,
                                  base::Unretained(this)));
 }
@@ -114,10 +121,17 @@ void ChromeCleanupHandler::OnRebootRequired() {
                          base::Value("chrome-cleanup-on-reboot-required"));
 }
 
+void ChromeCleanupHandler::OnLogsEnabledChanged(bool logs_enabled) {
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::Value("chrome-cleanup-upload-permission-change"),
+                         base::Value(logs_enabled));
+}
+
 void ChromeCleanupHandler::HandleDismiss(const base::ListValue* args) {
   DCHECK_EQ(0U, args->GetSize());
 
   controller_->RemoveObserver(this);
+  controller_->ResetIdleState();
 
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::Value("chrome-cleanup-on-dismiss"));
@@ -131,7 +145,11 @@ void ChromeCleanupHandler::HandleRegisterChromeCleanerObserver(
   DCHECK(
       base::FeatureList::IsEnabled(safe_browsing::kInBrowserCleanerUIFeature));
 
+  UMA_HISTOGRAM_BOOLEAN("SoftwareReporter.CleanupCard", true);
   AllowJavascript();
+
+  // Send the current logs upload state.
+  OnLogsEnabledChanged(controller_->logs_enabled());
 }
 
 void ChromeCleanupHandler::HandleRestartComputer(const base::ListValue* args) {
@@ -139,14 +157,34 @@ void ChromeCleanupHandler::HandleRestartComputer(const base::ListValue* args) {
 
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::Value("chrome-cleanup-on-dismiss"));
-  // TODO(proberge): Show a prompt to reboot the system.
+
+  controller_->Reboot();
+}
+
+void ChromeCleanupHandler::HandleSetLogsUploadPermission(
+    const base::ListValue* args) {
+  CHECK_EQ(1U, args->GetSize());
+  bool allow_logs_upload = false;
+  args->GetBoolean(0, &allow_logs_upload);
+
+  controller_->SetLogsEnabled(allow_logs_upload);
 }
 
 void ChromeCleanupHandler::HandleStartCleanup(const base::ListValue* args) {
-  DCHECK_EQ(0U, args->GetSize());
+  CHECK_EQ(1U, args->GetSize());
+  bool allow_logs_upload = false;
+  args->GetBoolean(0, &allow_logs_upload);
 
+  // The state is propagated to all open tabs and should be consistent.
+  DCHECK_EQ(controller_->logs_enabled(), allow_logs_upload);
+
+  safe_browsing::RecordCleanupStartedHistogram(
+      safe_browsing::CLEANUP_STARTED_FROM_PROMPT_IN_SETTINGS);
   controller_->ReplyWithUserResponse(
-      profile_, ChromeCleanerController::UserResponse::kAccepted);
+      profile_,
+      allow_logs_upload
+          ? ChromeCleanerController::UserResponse::kAcceptedWithLogs
+          : ChromeCleanerController::UserResponse::kAcceptedWithoutLogs);
 }
 
 }  // namespace settings

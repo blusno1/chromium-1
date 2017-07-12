@@ -156,40 +156,39 @@ void LayerTreeImpl::DidUpdateScrollOffset(ElementId id) {
   SetScrollbarGeometriesNeedUpdate();
 
   DCHECK(lifecycle().AllowsPropertyTreeAccess());
-  TransformTree& transform_tree = property_trees()->transform_tree;
   ScrollTree& scroll_tree = property_trees()->scroll_tree;
-  int transform_id = TransformTree::kInvalidNodeId;
+  const auto* scroll_node = scroll_tree.FindNodeFromElementId(id);
 
-  // If pending tree topology changed and we still want to notify the pending
-  // tree about scroll offset in the active tree, we may not find the
-  // corresponding pending layer.
-  // TODO(pdr): Remove this use of LayerByElementId and instead look up the
-  // scroll node via ElementId and then set transform_id to the scroll node's
-  // transform node index.
-  if (auto* layer = LayerByElementId(id)) {
-    // TODO(sunxd): when we have a layer_id to property_tree index map in
-    // property trees, use the transform_id parameter instead of looking for
-    // indices from LayerImpls.
-    transform_id = layer->transform_tree_index();
-  } else {
+  // TODO(pdr): There shouldn't be any cases where scroll offset is updated
+  // without a scroll node and we should remove this check entirely.
+  if (!scroll_node) {
     DCHECK(!IsActiveTree());
+
+    // If a scroll node does not yet exist, ensure the property trees are marked
+    // for rebuilding which will update the TransformNode scroll offset.
+    DCHECK(property_trees()->needs_rebuild);
     return;
   }
 
-  if (transform_id != TransformTree::kInvalidNodeId) {
-    TransformNode* node = transform_tree.Node(transform_id);
-    if (node->scroll_offset != scroll_tree.current_scroll_offset(id)) {
-      node->scroll_offset = scroll_tree.current_scroll_offset(id);
-      node->needs_local_transform_update = true;
-      transform_tree.set_needs_update(true);
-    }
-    node->transform_changed = true;
-    property_trees()->changed = true;
-    set_needs_update_draw_properties();
+  DCHECK(scroll_node->transform_id != TransformTree::kInvalidNodeId);
+  TransformTree& transform_tree = property_trees()->transform_tree;
+  auto* transform_node = transform_tree.Node(scroll_node->transform_id);
+  if (transform_node->scroll_offset != scroll_tree.current_scroll_offset(id)) {
+    transform_node->scroll_offset = scroll_tree.current_scroll_offset(id);
+    transform_node->needs_local_transform_update = true;
+    transform_tree.set_needs_update(true);
   }
+  transform_node->transform_changed = true;
+  property_trees()->changed = true;
+  set_needs_update_draw_properties();
 
-  if (IsActiveTree() && layer_tree_host_impl_->pending_tree())
-    layer_tree_host_impl_->pending_tree()->DidUpdateScrollOffset(id);
+  if (IsActiveTree()) {
+    // Ensure the other trees are kept in sync.
+    if (layer_tree_host_impl_->pending_tree())
+      layer_tree_host_impl_->pending_tree()->DidUpdateScrollOffset(id);
+    if (layer_tree_host_impl_->recycle_tree())
+      layer_tree_host_impl_->recycle_tree()->DidUpdateScrollOffset(id);
+  }
 }
 
 void LayerTreeImpl::UpdateScrollbarGeometries() {
@@ -214,8 +213,7 @@ void LayerTreeImpl::UpdateScrollbarGeometries() {
     gfx::ScrollOffset current_offset =
         scroll_tree.current_scroll_offset(scrolling_element_id);
     gfx::SizeF scrolling_size(scroll_node->bounds);
-    gfx::SizeF bounds_size(
-        scroll_tree.scroll_clip_layer_bounds(scroll_node->id));
+    gfx::SizeF bounds_size(scroll_tree.container_bounds(scroll_node->id));
 
     bool is_viewport_scrollbar = scroll_node->scrolls_inner_viewport ||
                                  scroll_node->scrolls_outer_viewport;
@@ -223,7 +221,7 @@ void LayerTreeImpl::UpdateScrollbarGeometries() {
       if (scroll_node->scrolls_inner_viewport) {
         // Add offset and bounds contribution of outer viewport.
         current_offset += OuterViewportScrollLayer()->CurrentScrollOffset();
-        gfx::SizeF outer_viewport_bounds(scroll_tree.scroll_clip_layer_bounds(
+        gfx::SizeF outer_viewport_bounds(scroll_tree.container_bounds(
             OuterViewportScrollLayer()->scroll_tree_index()));
         bounds_size.SetToMin(outer_viewport_bounds);
 
@@ -234,7 +232,7 @@ void LayerTreeImpl::UpdateScrollbarGeometries() {
       } else {
         // Add offset and bounds contribution of inner viewport.
         current_offset += InnerViewportScrollLayer()->CurrentScrollOffset();
-        gfx::SizeF inner_viewport_bounds(scroll_tree.scroll_clip_layer_bounds(
+        gfx::SizeF inner_viewport_bounds(scroll_tree.container_bounds(
             InnerViewportScrollLayer()->scroll_tree_index()));
         bounds_size.SetToMin(inner_viewport_bounds);
       }
@@ -643,18 +641,6 @@ void LayerTreeImpl::SetCurrentlyScrollingNode(ScrollNode* node) {
 
   ElementId old_element_id = old_node ? old_node->element_id : ElementId();
   ElementId new_element_id = node ? node->element_id : ElementId();
-
-#if DCHECK_IS_ON()
-  // In SPv2 scrolling is driven solely by element id and
-  // layer/element-id maps should not be required.
-  if (!settings().use_layer_lists) {
-    int old_layer_id = old_node ? old_node->owning_layer_id : Layer::INVALID_ID;
-    int new_layer_id = node ? node->owning_layer_id : Layer::INVALID_ID;
-    DCHECK(old_layer_id == LayerIdByElementId(old_element_id));
-    DCHECK(new_layer_id == LayerIdByElementId(new_element_id));
-  }
-#endif
-
   if (old_element_id == new_element_id)
     return;
 
@@ -686,29 +672,21 @@ float LayerTreeImpl::ClampPageScaleFactorToLimits(
   return page_scale_factor;
 }
 
-void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread(
-    bool is_impl_side_update) {
-  // TODO(enne): This should get replaced by pulling out scrolling and
-  // animations into their own trees.  Then scrolls and animations would have
-  // their own ways of synchronizing across commits.  This occurs to push
-  // updates from scrolling deltas on the compositor thread that have occurred
-  // after begin frame and updates from animations that have ticked since begin
-  // frame to a newly-committed property tree.
+void LayerTreeImpl::UpdatePropertyTreeAnimationFromMainThread() {
+  // TODO(enne): This should get replaced by pulling out animations into their
+  // own trees.  Then animations would have their own ways of synchronizing
+  // across commits.  This occurs to push updates from animations that have
+  // ticked since begin frame to a newly-committed property tree.
   if (layer_list_.empty())
     return;
 
-  // Entries from |element_id_to_*_animations_| should be deleted only after
-  // they have been synchronized with the main thread, which will not be the
-  // case if this is an impl-side invalidation.
-  const bool can_delete_animations = !is_impl_side_update;
   auto element_id_to_opacity = element_id_to_opacity_animations_.begin();
   while (element_id_to_opacity != element_id_to_opacity_animations_.end()) {
     const ElementId id = element_id_to_opacity->first;
     if (EffectNode* node =
             property_trees_.effect_tree.FindNodeFromElementId(id)) {
-      if ((!node->is_currently_animating_opacity ||
-           node->opacity == element_id_to_opacity->second) &&
-          can_delete_animations) {
+      if (!node->is_currently_animating_opacity ||
+          node->opacity == element_id_to_opacity->second) {
         element_id_to_opacity_animations_.erase(element_id_to_opacity++);
         continue;
       }
@@ -723,9 +701,8 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread(
     const ElementId id = element_id_to_filter->first;
     if (EffectNode* node =
             property_trees_.effect_tree.FindNodeFromElementId(id)) {
-      if ((!node->is_currently_animating_filter ||
-           node->filters == element_id_to_filter->second) &&
-          can_delete_animations) {
+      if (!node->is_currently_animating_filter ||
+          node->filters == element_id_to_filter->second) {
         element_id_to_filter_animations_.erase(element_id_to_filter++);
         continue;
       }
@@ -740,9 +717,8 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread(
     const ElementId id = element_id_to_transform->first;
     if (TransformNode* node =
             property_trees_.transform_tree.FindNodeFromElementId(id)) {
-      if ((!node->is_currently_animating ||
-           node->local == element_id_to_transform->second) &&
-          can_delete_animations) {
+      if (!node->is_currently_animating ||
+          node->local == element_id_to_transform->second) {
         element_id_to_transform_animations_.erase(element_id_to_transform++);
         continue;
       }
@@ -754,7 +730,7 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread(
   }
 
   LayerTreeHostCommon::CallFunctionForEveryLayer(this, [](LayerImpl* layer) {
-    layer->UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
+    layer->UpdatePropertyTreeForAnimationIfNeeded();
   });
 }
 
@@ -1221,13 +1197,13 @@ LayerImpl* LayerTreeImpl::LayerById(int id) const {
 }
 
 void LayerTreeImpl::SetSurfaceLayerIds(
-    const base::flat_set<SurfaceId>& surface_layer_ids) {
+    const base::flat_set<viz::SurfaceId>& surface_layer_ids) {
   DCHECK(surface_layer_ids_.empty());
   surface_layer_ids_ = surface_layer_ids;
   needs_surface_ids_sync_ = true;
 }
 
-const base::flat_set<SurfaceId>& LayerTreeImpl::SurfaceLayerIds() const {
+const base::flat_set<viz::SurfaceId>& LayerTreeImpl::SurfaceLayerIds() const {
   return surface_layer_ids_;
 }
 

@@ -158,6 +158,10 @@ const char kDebugEnableFrameToggle[]        = "debug-enable-frame-toggle";
 // apps.
 const char kDebugPackedApps[]               = "debug-packed-apps";
 
+// Delay the toolbar icon switching between reload and stop when page load state
+// changes.
+const char kDelayReloadStopButtonChange[] = "delay-reload-stop-button-change";
+
 // Passes command line parameters to the DevTools front-end.
 const char kDevToolsFlags[]                 = "devtools-flags";
 
@@ -296,9 +300,6 @@ const char kEnableAudioDebugRecordingsFromExtension[] =
 // Inform users that their browser is being controlled by an automated test.
 const char kEnableAutomation[] = "enable-automation";
 
-// Enables the benchmarking extensions.
-const char kEnableBenchmarking[]            = "enable-benchmarking";
-
 // Enables the multi-level undo system for bookmarks.
 const char kEnableBookmarkUndo[]            = "enable-bookmark-undo";
 
@@ -319,6 +320,11 @@ const char kEnableDevToolsExperiments[]     = "enable-devtools-experiments";
 
 // Enables Domain Reliability Monitoring.
 const char kEnableDomainReliability[] = "enable-domain-reliability";
+
+// Enables an experimental full screen exit UI to allow exiting fullscreen from
+// mouse or touch.
+const char kEnableExperimentalFullscreenExitUI[] =
+    "enable-experimental-fullscreen-exit-ui";
 
 // Enables experimental hotword features specific to always-on.
 const char kEnableExperimentalHotwordHardware[] = "enable-hotword-hardware";
@@ -464,11 +470,6 @@ const char kForceFirstRun[]                 = "force-first-run";
 
 // Forces Chrome to use localNTP instead of server (GWS) NTP.
 const char kForceLocalNtp[]                 = "force-local-ntp";
-
-// Forces additional Chrome Variation Ids that will be sent in X-Client-Data
-// header, specified as a 64-bit encoded list of numeric experiment ids. Ids
-// prefixed with the character "t" will be treated as Trigger Variation Ids.
-const char kForceVariationIds[]             = "force-variation-ids";
 
 // Specifies which page will be displayed in newly-opened tabs. We need this
 // for testing purposes so that the UI tests don't depend on what comes up for
@@ -764,6 +765,10 @@ const char kSystemLogUploadFrequency[] = "system-log-upload-frequency";
 // Passes the name of the current running automated test to Chrome.
 const char kTestName[]                      = "test-name";
 
+// Identifies a list of download sources as trusted, but only if proper group
+// policy is set.
+const char kTrustedDownloadSources[] = "trusted-download-sources";
+
 // Experimental. Shows a dialog asking the user to try chrome. This flag is to
 // be used only by the upgrade process.
 const char kTryChromeAgain[]                = "try-chrome-again";
@@ -869,6 +874,9 @@ const char kNtpSwitchToExistingTab[] = "ntp-switch-to-existing-tab";
 // Specifies Android phone page loading progress bar animation.
 const char kProgressBarAnimation[]          = "progress-bar-animation";
 
+// Use a static URL for the logo of the default search engine.
+const char kSearchProviderLogoURL[] = "search-provider-logo-url";
+
 // Specifies a particular tab management experiment to enable.
 const char kTabManagementExperimentTypeDisabled[] =
     "tab-management-experiment-type-disabled";
@@ -913,6 +921,10 @@ const char kHelpShort[]                     = "h";
 // rely on it keeping large amounts of testing passwords out of their Keyrings
 // or KWallets.
 const char kPasswordStore[]                 = "password-store";
+
+// Enables the feature of allowing the user to disable the backend via a
+// setting.
+const char kEnableEncryptionSelection[] = "enable-encryption-selection";
 
 // The same as the --class argument in X applications.  Overrides the WM_CLASS
 // window property with the given value.

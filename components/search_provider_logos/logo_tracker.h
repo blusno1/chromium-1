@@ -67,18 +67,6 @@ class LogoDelegate {
       base::Callback<void(const SkBitmap&)> image_decoded_callback) = 0;
 };
 
-// Parses the response from the server and returns it as an EncodedLogo. Returns
-// null if the response is invalid.
-using ParseLogoResponse = base::Callback<std::unique_ptr<EncodedLogo>(
-    std::unique_ptr<std::string> response,
-    base::Time response_time,
-    bool* parsing_failed)>;
-
-// Encodes the fingerprint of the cached logo in the logo URL. This enables the
-// server to verify whether the cached logo is up to date.
-using AppendQueryparamsToLogoURL =
-    base::Callback<GURL(const GURL& logo_url, const std::string& fingerprint)>;
-
 // This class provides the logo for a search provider. Logos are downloaded from
 // the search provider's logo URL and cached on disk.
 //
@@ -93,9 +81,6 @@ class LogoTracker : public net::URLFetcherDelegate {
   // |cached_logo_directory| is the directory in which the cached logo and its
   // metadata should be saved.
   //
-  // |file_task_runner| is the SequencedTaskRunner that should be used to run
-  // file system operations.
-  //
   // |background_task_runner| is the TaskRunner that should be used to for
   // CPU-intensive background operations.
   //
@@ -103,8 +88,6 @@ class LogoTracker : public net::URLFetcherDelegate {
   // the logo.
   explicit LogoTracker(
       base::FilePath cached_logo_directory,
-      scoped_refptr<base::SequencedTaskRunner> file_task_runner,
-      scoped_refptr<base::TaskRunner> background_task_runner,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
       std::unique_ptr<LogoDelegate> delegate);
 
@@ -234,17 +217,15 @@ class LogoTracker : public net::URLFetcherDelegate {
 
   std::unique_ptr<LogoDelegate> logo_delegate_;
 
-  // The cache used to persist the logo on disk. Used only on the file thread.
-  LogoCache* logo_cache_;
+  // The SequencedTaskRunner on which the cache lives.
+  scoped_refptr<base::SequencedTaskRunner> cache_task_runner_;
+
+  // The cache used to persist the logo on disk. Used only on a background
+  // SequencedTaskRunner.
+  std::unique_ptr<LogoCache, base::OnTaskRunnerDeleter> logo_cache_;
 
   // Clock used to determine current time. Can be overridden in tests.
   std::unique_ptr<base::Clock> clock_;
-
-  // The SequencedTaskRunner on which file system operations will be run.
-  scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
-
-  // The TaskRunner on which the server's response will be parsed.
-  scoped_refptr<base::TaskRunner> background_task_runner_;
 
   // The URLRequestContextGetter used for network requests.
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;

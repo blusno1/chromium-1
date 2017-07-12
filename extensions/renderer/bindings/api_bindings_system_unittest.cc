@@ -94,6 +94,11 @@ bool AllowAllAPIs(v8::Local<v8::Context> context, const std::string& name) {
   return true;
 }
 
+void DoNothingWithSilentRequest(
+    v8::Local<v8::Context> context,
+    const std::string& call_name,
+    const std::vector<v8::Local<v8::Value>>& arguments) {}
+
 }  // namespace
 
 APIBindingsSystemTest::APIBindingsSystemTest() {}
@@ -118,9 +123,10 @@ void APIBindingsSystemTest::SetUp() {
       base::Bind(&APIBindingsSystemTest::OnAPIRequest, base::Unretained(this)),
       base::Bind(&APIBindingsSystemTest::OnEventListenersChanged,
                  base::Unretained(this)),
+      base::Bind(&DoNothingWithSilentRequest), binding::AddConsoleError(),
       APILastError(base::Bind(&APIBindingsSystemTest::GetLastErrorParent,
                               base::Unretained(this)),
-                   APILastError::AddConsoleError()));
+                   binding::AddConsoleError()));
 }
 
 void APIBindingsSystemTest::TearDown() {

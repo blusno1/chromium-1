@@ -143,7 +143,7 @@ Polymer({
    * network properties have been fetched in networkPropertiesChanged_().
    * @private {boolean}
    */
-  shoudlShowConfigureWhenNetworkLoaded_: false,
+  shouldShowConfigureWhenNetworkLoaded_: false,
 
   /**
    * Whether the previous route was also the network detail page.
@@ -158,7 +158,7 @@ Polymer({
    * @protected
    */
   currentRouteChanged: function(route, oldRoute) {
-    if (route != settings.Route.NETWORK_DETAIL) {
+    if (route != settings.routes.NETWORK_DETAIL) {
       if (this.networksChangedListener_) {
         this.networkingPrivate.onNetworksChanged.removeListener(
             this.networksChangedListener_);
@@ -182,10 +182,10 @@ Polymer({
     var type = /** @type {!chrome.networkingPrivate.NetworkType} */ (
                    queryParams.get('type')) ||
         CrOnc.Type.WI_FI;
-    this.shoudlShowConfigureWhenNetworkLoaded_ =
+    this.shouldShowConfigureWhenNetworkLoaded_ =
         queryParams.get('showConfigure') == 'true';
     this.wasPreviousRouteNetworkDetailPage_ =
-        oldRoute == settings.Route.NETWORK_DETAIL;
+        oldRoute == settings.routes.NETWORK_DETAIL;
     var name = queryParams.get('name') || type;
     this.networkProperties = {
       GUID: this.guid,
@@ -242,7 +242,7 @@ Polymer({
       button.focus();
     }
 
-    if (this.shoudlShowConfigureWhenNetworkLoaded_ &&
+    if (this.shouldShowConfigureWhenNetworkLoaded_ &&
         this.networkProperties.Tether) {
       this.showTetherDialog_();
     }
@@ -630,7 +630,7 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   toggleAdvancedExpanded_: function(event) {
@@ -640,7 +640,7 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   toggleNetworkExpanded_: function(event) {
@@ -650,7 +650,7 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   toggleProxyExpanded_: function(event) {
@@ -674,6 +674,9 @@ Polymer({
       CrOnc.setTypeProperty(onc, 'APN', value);
     } else if (field == 'SIMLockStatus') {
       CrOnc.setTypeProperty(onc, 'SIMLockStatus', value);
+    } else if (field == 'VPN.Host') {
+      // TODO(stevenjb): Generalize this section if we add more editable fields.
+      CrOnc.setProperty(onc, field, value);
     } else {
       console.error('Unexpected property change event: ' + field);
       return;
@@ -885,6 +888,21 @@ Polymer({
       fields.push('RestrictedConnectivity', 'WiMAX.EAP.Identity');
     }
     return fields;
+  },
+
+  /**
+   * @return {!Object} A dictionary of editable fields in the info section.
+   * @private
+   */
+  getInfoEditFieldTypes_: function() {
+    /** @dict */ var editFields = {};
+    var type = this.networkProperties.Type;
+    if (type == CrOnc.Type.VPN && !!this.networkProperties.VPN) {
+      var vpnType = CrOnc.getActiveValue(this.networkProperties.VPN.Type);
+      if (vpnType != 'ThirdPartyVPN')
+        editFields['VPN.Host'] = 'String';
+    }
+    return editFields;
   },
 
   /**

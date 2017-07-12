@@ -41,8 +41,7 @@ namespace blink {
 class Document;
 class PendingScript;
 
-class CORE_EXPORT PendingScriptClient
-    : public GarbageCollectedFinalized<PendingScriptClient> {
+class CORE_EXPORT PendingScriptClient : public GarbageCollectedMixin {
  public:
   virtual ~PendingScriptClient() {}
 
@@ -99,6 +98,11 @@ class CORE_EXPORT PendingScript
   // have effects only for classic scripts.
   virtual KURL UrlForClassicScript() const = 0;
   virtual void RemoveFromMemoryCache() = 0;
+
+  // Used for DCHECK()s.
+  bool IsExternalOrModule() const {
+    return IsExternal() || GetScriptType() == ScriptType::kModule;
+  }
 
   void Dispose();
 

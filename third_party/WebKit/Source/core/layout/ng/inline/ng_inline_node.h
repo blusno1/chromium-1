@@ -21,7 +21,6 @@ class NGInlineItemsBuilderTemplate;
 class EmptyOffsetMappingBuilder;
 class LayoutBlockFlow;
 class LayoutNGBlockFlow;
-class LayoutObject;
 struct MinMaxContentSize;
 class NGConstraintSpace;
 class NGInlineItem;
@@ -68,6 +67,8 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   bool IsBidiEnabled() const { return Data().is_bidi_enabled_; }
   TextDirection BaseDirection() const { return Data().BaseDirection(); }
 
+  bool IsEmptyInline() const { return Data().is_empty_inline_; }
+
   void AssertOffset(unsigned index, unsigned offset) const;
   void AssertEndOffset(unsigned index, unsigned offset) const;
   void CheckConsistency() const;
@@ -80,8 +81,7 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   void PrepareLayout();
   bool IsPrepareLayoutFinished() const { return !Text().IsNull(); }
 
-  void CollectInlines(LayoutBlockFlow*);
-  LayoutObject* CollectInlines(LayoutBlockFlow*, NGInlineItemsBuilder*);
+  void CollectInlines();
   void SegmentText();
   void ShapeText();
 

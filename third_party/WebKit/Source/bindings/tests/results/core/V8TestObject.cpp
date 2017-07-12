@@ -36,7 +36,6 @@
 #include "bindings/core/v8/V8HTMLElement.h"
 #include "bindings/core/v8/V8Int32Array.h"
 #include "bindings/core/v8/V8Iterator.h"
-#include "bindings/core/v8/V8MessagePort.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8NodeFilterCondition.h"
 #include "bindings/core/v8/V8ShadowRoot.h"
@@ -60,13 +59,13 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/FlexibleArrayBufferView.h"
 #include "core/dom/TagCollection.h"
-#include "core/dom/custom/V0CustomElementProcessingStack.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDataListOptionsCollection.h"
 #include "core/html/HTMLFormControlsCollection.h"
 #include "core/html/HTMLTableRowsCollection.h"
+#include "core/html/custom/V0CustomElementProcessingStack.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ScriptArguments.h"
@@ -78,13 +77,12 @@
 #include "platform/bindings/V8PrivateProperty.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
-#include "public/platform/WebFeature.h"
 
 namespace blink {
 
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -101,7 +99,7 @@ const WrapperTypeInfo V8TestObject::wrapperTypeInfo = {
     WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
     WrapperTypeInfo::kIndependent,
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -12267,9 +12265,31 @@ void V8TestObject::indexedPropertyDeleterCallback(uint32_t index, const v8::Prop
   TestObjectV8Internal::indexedPropertyDeleter(index, info);
 }
 
+void V8TestObject::indexedPropertyDefinerCallback(
+    uint32_t index,
+    const v8::PropertyDescriptor& desc,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  // https://heycam.github.io/webidl/#legacy-platform-object-defineownproperty
+  // 3.9.3. [[DefineOwnProperty]]
+  // step 1.1. If the result of calling IsDataDescriptor(Desc) is false, then
+  //   return false.
+  if (desc.has_get() || desc.has_set()) {
+    V8SetReturnValue(info, v8::Null(info.GetIsolate()));
+    if (info.ShouldThrowOnError()) {
+      ExceptionState exceptionState(info.GetIsolate(),
+                                    ExceptionState::kIndexedSetterContext,
+                                    "TestObject");
+      exceptionState.ThrowTypeError("Accessor properties are not allowed.");
+    }
+    return;
+  }
+
+  // Return nothing and fall back to indexedPropertySetterCallback.
+}
+
 // Suppress warning: global constructors, because AttributeConfiguration is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -12278,20 +12298,20 @@ static const V8DOMConfiguration::AttributeConfiguration V8TestObjectAttributes[]
 
     { "measureAsFeatureNameTestInterfaceEmptyConstructorAttribute", V8TestObject::measureAsFeatureNameTestInterfaceEmptyConstructorAttributeConstructorGetterCallback, nullptr, const_cast<WrapperTypeInfo*>(&V8TestInterfaceEmpty::wrapperTypeInfo), static_cast<v8::PropertyAttribute>(v8::DontEnum), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
 // Suppress warning: global constructors, because AttributeConfiguration is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
 static const V8DOMConfiguration::AttributeConfiguration V8TestObjectLazyDataAttributes[] = {
     { "testInterfaceEmptyConstructorAttribute", V8ConstructorAttributeGetter, nullptr, const_cast<WrapperTypeInfo*>(&V8TestInterfaceEmpty::wrapperTypeInfo), static_cast<v8::PropertyAttribute>(v8::DontEnum), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -12875,7 +12895,15 @@ static void installV8TestObjectTemplate(
       signature, V8TestObjectMethods, WTF_ARRAY_LENGTH(V8TestObjectMethods));
 
   // Indexed properties
-  v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(V8TestObject::indexedPropertyGetterCallback, V8TestObject::indexedPropertySetterCallback, nullptr, V8TestObject::indexedPropertyDeleterCallback, IndexedPropertyEnumerator<TestObject>, v8::Local<v8::Value>(), v8::PropertyHandlerFlags::kNone);
+  v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(
+      V8TestObject::indexedPropertyGetterCallback,
+      V8TestObject::indexedPropertySetterCallback,
+      nullptr,
+      V8TestObject::indexedPropertyDeleterCallback,
+      IndexedPropertyEnumerator<TestObject>,
+      V8TestObject::indexedPropertyDefinerCallback,
+      v8::Local<v8::Value>(),
+      v8::PropertyHandlerFlags::kNone);
   instanceTemplate->SetHandler(indexedPropertyHandlerConfig);
   // Named properties
   v8::NamedPropertyHandlerConfiguration namedPropertyHandlerConfig(V8TestObject::namedPropertyGetterCallback, V8TestObject::namedPropertySetterCallback, V8TestObject::namedPropertyQueryCallback, V8TestObject::namedPropertyDeleterCallback, V8TestObject::namedPropertyEnumeratorCallback, v8::Local<v8::Value>(), static_cast<v8::PropertyHandlerFlags>(int(v8::PropertyHandlerFlags::kOnlyInterceptStrings) | int(v8::PropertyHandlerFlags::kNonMasking)));

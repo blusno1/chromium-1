@@ -7,13 +7,14 @@
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/surfaces/compositor_frame_sink_support.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
+#include "cc/surfaces/frame_sink_manager.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_aggregator.h"
 #include "cc/surfaces/surface_manager.h"
 #include "cc/test/compositor_frame_helpers.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test.h"
+#include "components/viz/common/local_surface_id_allocator.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if !defined(OS_ANDROID)
@@ -21,10 +22,10 @@
 namespace cc {
 namespace {
 
-constexpr FrameSinkId kArbitraryRootFrameSinkId(1, 1);
-constexpr FrameSinkId kArbitraryChildFrameSinkId(2, 2);
-constexpr FrameSinkId kArbitraryLeftFrameSinkId(3, 3);
-constexpr FrameSinkId kArbitraryRightFrameSinkId(4, 4);
+constexpr viz::FrameSinkId kArbitraryRootFrameSinkId(1, 1);
+constexpr viz::FrameSinkId kArbitraryChildFrameSinkId(2, 2);
+constexpr viz::FrameSinkId kArbitraryLeftFrameSinkId(3, 3);
+constexpr viz::FrameSinkId kArbitraryRightFrameSinkId(4, 4);
 constexpr bool kIsRoot = true;
 constexpr bool kIsChildRoot = false;
 constexpr bool kHandlesFrameSinkIdInvalidation = true;
@@ -43,8 +44,8 @@ class SurfacesPixelTest : public RendererPixelTest<GLRenderer> {
   ~SurfacesPixelTest() override { support_->EvictCurrentSurface(); }
 
  protected:
-  SurfaceManager manager_;
-  LocalSurfaceIdAllocator allocator_;
+  FrameSinkManager manager_;
+  viz::LocalSurfaceIdAllocator allocator_;
   std::unique_ptr<CompositorFrameSinkSupport> support_;
 };
 
@@ -86,11 +87,13 @@ TEST_F(SurfacesPixelTest, DrawSimpleFrame) {
   CompositorFrame root_frame = test::MakeCompositorFrame();
   root_frame.render_pass_list.push_back(std::move(pass));
 
-  LocalSurfaceId root_local_surface_id = allocator_.GenerateId();
-  SurfaceId root_surface_id(support_->frame_sink_id(), root_local_surface_id);
+  viz::LocalSurfaceId root_local_surface_id = allocator_.GenerateId();
+  viz::SurfaceId root_surface_id(support_->frame_sink_id(),
+                                 root_local_surface_id);
   support_->SubmitCompositorFrame(root_local_surface_id, std::move(root_frame));
 
-  SurfaceAggregator aggregator(&manager_, resource_provider_.get(), true);
+  SurfaceAggregator aggregator(manager_.surface_manager(),
+                               resource_provider_.get(), true);
   CompositorFrame aggregated_frame = aggregator.Aggregate(root_surface_id);
 
   bool discard_alpha = false;
@@ -109,11 +112,12 @@ TEST_F(SurfacesPixelTest, DrawSimpleAggregatedFrame) {
           nullptr, &manager_, kArbitraryChildFrameSinkId, kIsChildRoot,
           kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
 
-  LocalSurfaceId child_local_surface_id = allocator_.GenerateId();
-  SurfaceId child_surface_id(child_support->frame_sink_id(),
-                             child_local_surface_id);
-  LocalSurfaceId root_local_surface_id = allocator_.GenerateId();
-  SurfaceId root_surface_id(support_->frame_sink_id(), root_local_surface_id);
+  viz::LocalSurfaceId child_local_surface_id = allocator_.GenerateId();
+  viz::SurfaceId child_surface_id(child_support->frame_sink_id(),
+                                  child_local_surface_id);
+  viz::LocalSurfaceId root_local_surface_id = allocator_.GenerateId();
+  viz::SurfaceId root_surface_id(support_->frame_sink_id(),
+                                 root_local_surface_id);
 
   {
     gfx::Rect rect(device_viewport_size_);
@@ -172,7 +176,8 @@ TEST_F(SurfacesPixelTest, DrawSimpleAggregatedFrame) {
                                          std::move(child_frame));
   }
 
-  SurfaceAggregator aggregator(&manager_, resource_provider_.get(), true);
+  SurfaceAggregator aggregator(manager_.surface_manager(),
+                               resource_provider_.get(), true);
   CompositorFrame aggregated_frame = aggregator.Aggregate(root_surface_id);
 
   bool discard_alpha = false;
@@ -204,13 +209,15 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
       CompositorFrameSinkSupport::Create(
           nullptr, &manager_, kArbitraryRightFrameSinkId, kIsChildRoot,
           kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
-  LocalSurfaceId left_child_local_id = allocator_.GenerateId();
-  SurfaceId left_child_id(left_support->frame_sink_id(), left_child_local_id);
-  LocalSurfaceId right_child_local_id = allocator_.GenerateId();
-  SurfaceId right_child_id(right_support->frame_sink_id(),
-                           right_child_local_id);
-  LocalSurfaceId root_local_surface_id = allocator_.GenerateId();
-  SurfaceId root_surface_id(support_->frame_sink_id(), root_local_surface_id);
+  viz::LocalSurfaceId left_child_local_id = allocator_.GenerateId();
+  viz::SurfaceId left_child_id(left_support->frame_sink_id(),
+                               left_child_local_id);
+  viz::LocalSurfaceId right_child_local_id = allocator_.GenerateId();
+  viz::SurfaceId right_child_id(right_support->frame_sink_id(),
+                                right_child_local_id);
+  viz::LocalSurfaceId root_local_surface_id = allocator_.GenerateId();
+  viz::SurfaceId root_surface_id(support_->frame_sink_id(),
+                                 root_local_surface_id);
 
   {
     gfx::Rect rect(device_viewport_size_);
@@ -313,7 +320,8 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
                                          std::move(child_frame));
   }
 
-  SurfaceAggregator aggregator(&manager_, resource_provider_.get(), true);
+  SurfaceAggregator aggregator(manager_.surface_manager(),
+                               resource_provider_.get(), true);
   CompositorFrame aggregated_frame = aggregator.Aggregate(root_surface_id);
 
   bool discard_alpha = false;

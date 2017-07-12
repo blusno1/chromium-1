@@ -11,6 +11,7 @@
 #import "ios/shared/chrome/browser/ui/browser_list/browser.h"
 #import "ios/shared/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 #import "ios/shared/chrome/browser/ui/coordinators/browser_coordinator_test.h"
+#import "ios/shared/chrome/browser/ui/tab/tab_test_util.h"
 #import "ios/shared/chrome/browser/ui/toolbar/toolbar_test_util.h"
 #include "ios/web/public/test/test_web_thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -31,8 +32,9 @@ class TabCoordinatorTest : public BrowserCoordinatorTest {
         objectForKey:@"EnableBottomToolbar"];
 
     // Initialize the web state.
-    navigation_manager_ = base::MakeUnique<ToolbarTestNavigationManager>();
-    web_state_.SetNavigationManager(std::move(navigation_manager_));
+    auto navigation_manager = base::MakeUnique<TabNavigationManager>();
+    navigation_manager->SetItemCount(0);
+    web_state_.SetNavigationManager(std::move(navigation_manager));
 
     // Initialize the coordinator.
     coordinator_ = [[TabCoordinator alloc] init];
@@ -43,6 +45,10 @@ class TabCoordinatorTest : public BrowserCoordinatorTest {
     // Restore the initial setting.
     [[NSUserDefaults standardUserDefaults] setObject:initial_setting_
                                               forKey:@"EnableBottomToolbar"];
+
+    // Explicitly disconnect the mediator so there won't be any WebStateList
+    // observers when web_state_list_ gets dealloc.
+    [coordinator_ disconnect];
   }
   void TearDown() override {
     if (coordinator_.started) {
@@ -50,7 +56,6 @@ class TabCoordinatorTest : public BrowserCoordinatorTest {
     }
     coordinator_ = nil;
   }
-  TabCoordinator* GetCoordinator() { return coordinator_; }
 
  protected:
   TabCoordinator* coordinator_;
@@ -60,7 +65,6 @@ class TabCoordinatorTest : public BrowserCoordinatorTest {
   base::MessageLoop loop_;
   web::TestWebThread ui_thread_;
   ToolbarTestWebState web_state_;
-  std::unique_ptr<ToolbarTestNavigationManager> navigation_manager_;
 };
 
 }  // namespace
@@ -76,15 +80,15 @@ TEST_F(TabCoordinatorTest, DefaultToolbar) {
 TEST_F(TabCoordinatorTest, TopToolbar) {
   [[NSUserDefaults standardUserDefaults] setObject:@"Disabled"
                                             forKey:@"EnableBottomToolbar"];
-  [GetCoordinator() start];
+  [coordinator_ start];
   EXPECT_EQ([TopToolbarTabViewController class],
-            [GetCoordinator().viewController class]);
+            [coordinator_.viewController class]);
 }
 
 TEST_F(TabCoordinatorTest, BottomToolbar) {
   [[NSUserDefaults standardUserDefaults] setObject:@"Enabled"
                                             forKey:@"EnableBottomToolbar"];
-  [GetCoordinator() start];
+  [coordinator_ start];
   EXPECT_EQ([BottomToolbarTabViewController class],
-            [GetCoordinator().viewController class]);
+            [coordinator_.viewController class]);
 }

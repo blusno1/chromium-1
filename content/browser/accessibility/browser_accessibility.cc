@@ -128,6 +128,11 @@ bool BrowserAccessibility::IsDescendantOf(
   return false;
 }
 
+bool BrowserAccessibility::IsDocument() const {
+  return GetRole() == ui::AX_ROLE_ROOT_WEB_AREA ||
+         GetRole() == ui::AX_ROLE_WEB_AREA;
+}
+
 bool BrowserAccessibility::IsTextOnlyObject() const {
   return GetRole() == ui::AX_ROLE_STATIC_TEXT ||
          GetRole() == ui::AX_ROLE_LINE_BREAK ||
@@ -741,116 +746,6 @@ bool BrowserAccessibility::GetHtmlAttribute(
   return GetData().GetHtmlAttribute(html_attr, value);
 }
 
-BrowserAccessibility* BrowserAccessibility::GetTable() const {
-  BrowserAccessibility* table = const_cast<BrowserAccessibility*>(this);
-  while (table && !ui::IsTableLikeRole(table->GetRole()))
-    table = table->PlatformGetParent();
-  return table;
-}
-
-BrowserAccessibility* BrowserAccessibility::GetTableCell(int index) const {
-  if (!ui::IsTableLikeRole(GetRole()) &&
-      !ui::IsCellOrTableHeaderRole(GetRole()))
-    return nullptr;
-
-  BrowserAccessibility* table = GetTable();
-  if (!table)
-    return nullptr;
-  const std::vector<int32_t>& unique_cell_ids =
-      table->GetIntListAttribute(ui::AX_ATTR_UNIQUE_CELL_IDS);
-  if (index < 0 || index >= static_cast<int>(unique_cell_ids.size()))
-    return nullptr;
-  return table->manager_->GetFromID(unique_cell_ids[index]);
-}
-
-BrowserAccessibility* BrowserAccessibility::GetTableCell(int row,
-                                                         int column) const {
-  if (!ui::IsTableLikeRole(GetRole()) &&
-      !ui::IsCellOrTableHeaderRole(GetRole()))
-    return nullptr;
-  if (row < 0 || row >= GetTableRowCount() || column < 0 ||
-      column >= GetTableColumnCount()) {
-    return nullptr;
-  }
-
-  BrowserAccessibility* table = GetTable();
-  if (!table)
-    return nullptr;
-
-  // In contrast to unique cell IDs, these are duplicated whenever a cell spans
-  // multiple columns or rows.
-  const std::vector<int32_t>& cell_ids =
-      table->GetIntListAttribute(ui::AX_ATTR_CELL_IDS);
-  DCHECK_EQ(GetTableRowCount() * GetTableColumnCount(),
-            static_cast<int>(cell_ids.size()));
-  int position = row * GetTableColumnCount() + column;
-  if (position < 0 || position >= static_cast<int>(cell_ids.size()))
-    return nullptr;
-  return table->manager_->GetFromID(cell_ids[position]);
-}
-
-int BrowserAccessibility::GetTableCellIndex() const {
-  if (!ui::IsCellOrTableHeaderRole(GetRole()))
-    return -1;
-
-  BrowserAccessibility* table = GetTable();
-  if (!table)
-    return -1;
-
-  const std::vector<int32_t>& unique_cell_ids =
-      table->GetIntListAttribute(ui::AX_ATTR_UNIQUE_CELL_IDS);
-  auto iter =
-      std::find(unique_cell_ids.begin(), unique_cell_ids.end(), GetId());
-  if (iter == unique_cell_ids.end())
-    return -1;
-
-  return std::distance(unique_cell_ids.begin(), iter);
-}
-
-int BrowserAccessibility::GetTableColumn() const {
-  return GetIntAttribute(ui::AX_ATTR_TABLE_CELL_COLUMN_INDEX);
-}
-
-int BrowserAccessibility::GetTableColumnCount() const {
-  BrowserAccessibility* table = GetTable();
-  if (!table)
-    return 0;
-
-  return table->GetIntAttribute(ui::AX_ATTR_TABLE_COLUMN_COUNT);
-}
-
-int BrowserAccessibility::GetTableColumnSpan() const {
-  if (!ui::IsCellOrTableHeaderRole(GetRole()))
-    return 0;
-
-  int column_span;
-  if (GetIntAttribute(ui::AX_ATTR_TABLE_CELL_COLUMN_SPAN, &column_span))
-    return column_span;
-  return 1;
-}
-
-int BrowserAccessibility::GetTableRow() const {
-  return GetIntAttribute(ui::AX_ATTR_TABLE_CELL_ROW_INDEX);
-}
-
-int BrowserAccessibility::GetTableRowCount() const {
-  BrowserAccessibility* table = GetTable();
-  if (!table)
-    return 0;
-
-  return table->GetIntAttribute(ui::AX_ATTR_TABLE_ROW_COUNT);
-}
-
-int BrowserAccessibility::GetTableRowSpan() const {
-  if (!ui::IsCellOrTableHeaderRole(GetRole()))
-    return 0;
-
-  int row_span;
-  if (GetIntAttribute(ui::AX_ATTR_TABLE_CELL_ROW_SPAN, &row_span))
-    return row_span;
-  return 1;
-}
-
 base::string16 BrowserAccessibility::GetText() const {
   return GetInnerText();
 }
@@ -895,55 +790,6 @@ bool BrowserAccessibility::IsClickable() const {
   return ui::IsRoleClickable(GetRole());
 }
 
-bool BrowserAccessibility::IsControl() const {
-  switch (GetRole()) {
-    case ui::AX_ROLE_BUTTON:
-    case ui::AX_ROLE_CHECK_BOX:
-    case ui::AX_ROLE_COLOR_WELL:
-    case ui::AX_ROLE_COMBO_BOX:
-    case ui::AX_ROLE_DISCLOSURE_TRIANGLE:
-    case ui::AX_ROLE_LIST_BOX:
-    case ui::AX_ROLE_MENU:
-    case ui::AX_ROLE_MENU_BAR:
-    case ui::AX_ROLE_MENU_BUTTON:
-    case ui::AX_ROLE_MENU_ITEM:
-    case ui::AX_ROLE_MENU_ITEM_CHECK_BOX:
-    case ui::AX_ROLE_MENU_ITEM_RADIO:
-    case ui::AX_ROLE_MENU_LIST_OPTION:
-    case ui::AX_ROLE_MENU_LIST_POPUP:
-    case ui::AX_ROLE_POP_UP_BUTTON:
-    case ui::AX_ROLE_RADIO_BUTTON:
-    case ui::AX_ROLE_SCROLL_BAR:
-    case ui::AX_ROLE_SEARCH_BOX:
-    case ui::AX_ROLE_SLIDER:
-    case ui::AX_ROLE_SPIN_BUTTON:
-    case ui::AX_ROLE_SWITCH:
-    case ui::AX_ROLE_TAB:
-    case ui::AX_ROLE_TEXT_FIELD:
-    case ui::AX_ROLE_TOGGLE_BUTTON:
-    case ui::AX_ROLE_TREE:
-      return true;
-    default:
-      return false;
-  }
-}
-
-bool BrowserAccessibility::IsMenuRelated() const {
-  switch (GetRole()) {
-    case ui::AX_ROLE_MENU:
-    case ui::AX_ROLE_MENU_BAR:
-    case ui::AX_ROLE_MENU_BUTTON:
-    case ui::AX_ROLE_MENU_ITEM:
-    case ui::AX_ROLE_MENU_ITEM_CHECK_BOX:
-    case ui::AX_ROLE_MENU_ITEM_RADIO:
-    case ui::AX_ROLE_MENU_LIST_OPTION:
-    case ui::AX_ROLE_MENU_LIST_POPUP:
-      return true;
-    default:
-      return false;
-  }
-}
-
 bool BrowserAccessibility::IsNativeTextControl() const {
   const std::string& html_tag = GetStringAttribute(ui::AX_ATTR_HTML_TAG);
   if (html_tag == "input") {
@@ -958,6 +804,14 @@ bool BrowserAccessibility::IsNativeTextControl() const {
   return html_tag == "textarea";
 }
 
+// In general we should use ui::IsEditField() instead if we want to check for
+// something that has a caret and the user can edit.
+// TODO(aleventhal) this name is confusing because it returns true for combobox,
+// and we should take a look at why a combobox is considered a text control. The
+// ARIA spec says a combobox would contain (but not be) a text field. It looks
+// like a mistake may have been made in that comboboxes have been considered a
+// kind of textbox. Find an appropriate name for this function, and consider
+// returning false for comboboxes it doesn't break existing websites.
 bool BrowserAccessibility::IsSimpleTextControl() const {
   // Time fields, color wells and spinner buttons might also use text fields as
   // constituent parts, but they are not considered text fields as a whole.
@@ -1134,6 +988,12 @@ gfx::NativeViewAccessible BrowserAccessibility::GetFocus() {
     return nullptr;
 
   return focused->GetNativeViewAccessible();
+}
+
+ui::AXPlatformNode* BrowserAccessibility::GetFromNodeID(int32_t id) {
+  // Not all BrowserAccessibility subclasses can return an AXPlatformNode yet.
+  // So, here we just return nullptr.
+  return nullptr;
 }
 
 gfx::AcceleratedWidget

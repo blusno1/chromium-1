@@ -94,22 +94,16 @@ std::string GetInputMessageTypes(MockRenderProcessHost* process) {
 class MockInputRouter : public InputRouter {
  public:
   explicit MockInputRouter(InputRouterClient* client)
-      : send_event_called_(false),
-        sent_mouse_event_(false),
+      : sent_mouse_event_(false),
         sent_wheel_event_(false),
         sent_keyboard_event_(false),
         sent_gesture_event_(false),
         send_touch_event_not_cancelled_(false),
         message_received_(false),
-        client_(client) {
-  }
+        client_(client) {}
   ~MockInputRouter() override {}
 
   // InputRouter
-  bool SendInput(std::unique_ptr<IPC::Message> message) override {
-    send_event_called_ = true;
-    return true;
-  }
   void SendMouseEvent(const MouseEventWithLatencyInfo& mouse_event) override {
     sent_mouse_event_ = true;
   }
@@ -146,7 +140,6 @@ class MockInputRouter : public InputRouter {
     return false;
   }
 
-  bool send_event_called_;
   bool sent_mouse_event_;
   bool sent_wheel_event_;
   bool sent_keyboard_event_;
@@ -205,6 +198,9 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
   void DisableGestureDebounce() {
     input_router_.reset(new LegacyInputRouterImpl(
         process_, this, this, routing_id_, InputRouter::Config()));
+    legacy_widget_input_handler_ =
+        base::MakeUnique<LegacyIPCWidgetInputHandler>(
+            static_cast<LegacyInputRouterImpl*>(input_router_.get()));
   }
 
   WebInputEvent::Type acked_touch_event_type() const {
@@ -213,6 +209,7 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
 
   void SetupForInputRouterTest() {
     input_router_.reset(new MockInputRouter(this));
+    legacy_widget_input_handler_ = nullptr;
   }
 
   MockInputRouter* mock_input_router() {
@@ -487,6 +484,10 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
     unresponsive_timer_fired_ = true;
   }
 
+  void ExecuteEditCommand(
+      const std::string& command,
+      const base::Optional<base::string16>& value) override {}
+
   void Cut() override {}
   void Copy() override {}
   void Paste() override {}
@@ -643,6 +644,13 @@ class RenderWidgetHostTest : public testing::Test {
     DCHECK(!WebInputEvent::IsTouchEventType(type));
     InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD, type, ack_result);
     host_->OnMessageReceived(InputHostMsg_HandleInputEvent_ACK(0, ack));
+  }
+
+  void SendScrollBeginAckIfneeded(InputEventAckState ack_result) {
+    if (wheel_scroll_latching_enabled_) {
+      // GSB events are blocking, send the ack.
+      SendInputEventACK(WebInputEvent::kGestureScrollBegin, ack_result);
+    }
   }
 
   double GetNextSimulatedEventTimeSeconds() {
@@ -1420,8 +1428,8 @@ TEST_F(RenderWidgetHostTest, MultipleInputEvents) {
 // when enough time passes without receiving a new compositor frame.
 TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
   const gfx::Size frame_size(50, 50);
-  const cc::LocalSurfaceId local_surface_id(1,
-                                            base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_surface_id(1,
+                                             base::UnguessableToken::Create());
 
   host_->set_new_content_rendering_delay_for_testing(
       base::TimeDelta::FromMicroseconds(10));
@@ -1482,8 +1490,8 @@ TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
 // in its metadata is properly discarded.
 TEST_F(RenderWidgetHostTest, SwapCompositorFrameWithBadSourceId) {
   const gfx::Size frame_size(50, 50);
-  const cc::LocalSurfaceId local_surface_id(1,
-                                            base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_surface_id(1,
+                                             base::UnguessableToken::Create());
 
   host_->StartNewContentRenderingTimeout(100);
   host_->set_new_content_rendering_delay_for_testing(
@@ -1543,6 +1551,7 @@ TEST_F(RenderWidgetHostTest, TouchEmulator) {
   // Mouse drag generates touch move, cancels tap and starts scroll.
   SimulateMouseEvent(WebInputEvent::kMouseMove, 10, 30, 0, true);
   EXPECT_EQ(WebInputEvent::kTouchMove, host_->acked_touch_event_type());
+  SendScrollBeginAckIfneeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(
       "GestureTapCancel GestureScrollBegin TouchScrollStarted "
       "GestureScrollUpdate",
@@ -1602,6 +1611,7 @@ TEST_F(RenderWidgetHostTest, TouchEmulator) {
 
   SimulateMouseEvent(WebInputEvent::kMouseMove, 10, 100, 0, true);
   EXPECT_EQ(WebInputEvent::kTouchMove, host_->acked_touch_event_type());
+  SendScrollBeginAckIfneeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(
       "GestureTapCancel GestureScrollBegin TouchScrollStarted "
       "GestureScrollUpdate",
@@ -1656,6 +1666,7 @@ TEST_F(RenderWidgetHostTest, TouchEmulator) {
   // Scroll.
   SimulateMouseEvent(WebInputEvent::kMouseMove, 10, 30, 0, true);
   EXPECT_EQ(WebInputEvent::kTouchMove, host_->acked_touch_event_type());
+  SendScrollBeginAckIfneeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(
       "GestureTapCancel GestureScrollBegin TouchScrollStarted "
       "GestureScrollUpdate",
@@ -1670,54 +1681,6 @@ TEST_F(RenderWidgetHostTest, TouchEmulator) {
 
   EXPECT_EQ("GestureScrollEnd", GetInputMessageTypes(process_));
   EXPECT_EQ(0U, process_->sink().message_count());
-}
-
-#define TEST_InputRouterRoutes_NOARGS(INPUTMSG) \
-  TEST_F(RenderWidgetHostTest, InputRouterRoutes##INPUTMSG) { \
-    host_->SetupForInputRouterTest(); \
-    host_->INPUTMSG(); \
-    EXPECT_TRUE(host_->mock_input_router()->send_event_called_); \
-  }
-
-TEST_InputRouterRoutes_NOARGS(Focus);
-TEST_InputRouterRoutes_NOARGS(Blur);
-TEST_InputRouterRoutes_NOARGS(LostCapture);
-
-#undef TEST_InputRouterRoutes_NOARGS
-
-#define TEST_InputRouterRoutes_NOARGS_FromRFH(INPUTMSG) \
-  TEST_F(RenderWidgetHostTest, InputRouterRoutes##INPUTMSG) { \
-    host_->SetupForInputRouterTest(); \
-    host_->Send(new INPUTMSG(host_->GetRoutingID())); \
-    EXPECT_TRUE(host_->mock_input_router()->send_event_called_); \
-  }
-
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Undo);
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Redo);
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Cut);
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Copy);
-#if defined(OS_MACOSX)
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_CopyToFindPboard);
-#endif
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Paste);
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_PasteAndMatchStyle);
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Delete);
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_SelectAll);
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_CollapseSelection);
-
-#undef TEST_InputRouterRoutes_NOARGS_FromRFH
-
-TEST_F(RenderWidgetHostTest, InputRouterRoutesReplace) {
-  host_->SetupForInputRouterTest();
-  host_->Send(new InputMsg_Replace(host_->GetRoutingID(), base::string16()));
-  EXPECT_TRUE(host_->mock_input_router()->send_event_called_);
-}
-
-TEST_F(RenderWidgetHostTest, InputRouterRoutesReplaceMisspelling) {
-  host_->SetupForInputRouterTest();
-  host_->Send(new InputMsg_ReplaceMisspelling(host_->GetRoutingID(),
-                                              base::string16()));
-  EXPECT_TRUE(host_->mock_input_router()->send_event_called_);
 }
 
 TEST_F(RenderWidgetHostTest, IgnoreInputEvent) {
@@ -1919,6 +1882,7 @@ void RenderWidgetHostTest::InputEventRWHLatencyComponent() {
   // Tests RWHI::ForwardGestureEvent().
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfneeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   CheckLatencyInfoComponentInMessage(process_, GetLatencyComponentId(),
                                      WebInputEvent::kGestureScrollBegin);
 
@@ -2059,8 +2023,8 @@ TEST_F(RenderWidgetHostTest, EventDispatchPostDetach) {
 TEST_F(RenderWidgetHostTest, FrameToken_MessageThenFrame) {
   const uint32_t frame_token = 99;
   const gfx::Size frame_size(50, 50);
-  const cc::LocalSurfaceId local_surface_id(1,
-                                            base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_surface_id(1,
+                                             base::UnguessableToken::Create());
   std::vector<IPC::Message> messages;
   messages.push_back(ViewHostMsg_DidFirstVisuallyNonEmptyPaint(5));
 
@@ -2084,8 +2048,8 @@ TEST_F(RenderWidgetHostTest, FrameToken_MessageThenFrame) {
 TEST_F(RenderWidgetHostTest, FrameToken_FrameThenMessage) {
   const uint32_t frame_token = 99;
   const gfx::Size frame_size(50, 50);
-  const cc::LocalSurfaceId local_surface_id(1,
-                                            base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_surface_id(1,
+                                             base::UnguessableToken::Create());
   std::vector<IPC::Message> messages;
   messages.push_back(ViewHostMsg_DidFirstVisuallyNonEmptyPaint(5));
 
@@ -2110,8 +2074,8 @@ TEST_F(RenderWidgetHostTest, FrameToken_MultipleMessagesThenTokens) {
   const uint32_t frame_token1 = 99;
   const uint32_t frame_token2 = 100;
   const gfx::Size frame_size(50, 50);
-  const cc::LocalSurfaceId local_surface_id(1,
-                                            base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_surface_id(1,
+                                             base::UnguessableToken::Create());
   std::vector<IPC::Message> messages1;
   std::vector<IPC::Message> messages2;
   messages1.push_back(ViewHostMsg_DidFirstVisuallyNonEmptyPaint(5));
@@ -2149,8 +2113,8 @@ TEST_F(RenderWidgetHostTest, FrameToken_MultipleTokensThenMessages) {
   const uint32_t frame_token1 = 99;
   const uint32_t frame_token2 = 100;
   const gfx::Size frame_size(50, 50);
-  const cc::LocalSurfaceId local_surface_id(1,
-                                            base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_surface_id(1,
+                                             base::UnguessableToken::Create());
   std::vector<IPC::Message> messages1;
   std::vector<IPC::Message> messages2;
   messages1.push_back(ViewHostMsg_DidFirstVisuallyNonEmptyPaint(5));
@@ -2188,8 +2152,8 @@ TEST_F(RenderWidgetHostTest, FrameToken_DroppedFrame) {
   const uint32_t frame_token1 = 99;
   const uint32_t frame_token2 = 100;
   const gfx::Size frame_size(50, 50);
-  const cc::LocalSurfaceId local_surface_id(1,
-                                            base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_surface_id(1,
+                                             base::UnguessableToken::Create());
   std::vector<IPC::Message> messages1;
   std::vector<IPC::Message> messages2;
   messages1.push_back(ViewHostMsg_DidFirstVisuallyNonEmptyPaint(5));
@@ -2222,8 +2186,8 @@ TEST_F(RenderWidgetHostTest, FrameToken_RendererCrash) {
   const uint32_t frame_token2 = 50;
   const uint32_t frame_token3 = 30;
   const gfx::Size frame_size(50, 50);
-  const cc::LocalSurfaceId local_surface_id(1,
-                                            base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_surface_id(1,
+                                             base::UnguessableToken::Create());
   std::vector<IPC::Message> messages1;
   std::vector<IPC::Message> messages3;
   messages1.push_back(ViewHostMsg_DidFirstVisuallyNonEmptyPaint(5));

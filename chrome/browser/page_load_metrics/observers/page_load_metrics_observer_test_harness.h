@@ -13,6 +13,7 @@
 #include "chrome/common/page_load_metrics/test/weak_mock_timer.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/test/web_contents_tester.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -27,6 +28,9 @@ class PageLoadMetricsObserverTestHarness
     : public ChromeRenderViewHostTestHarness,
       public test::WeakMockTimerProvider {
  public:
+  // Sample URL for resource loads.
+  static const char kResourceUrl[];
+
   PageLoadMetricsObserverTestHarness();
   ~PageLoadMetricsObserverTestHarness() override;
 
@@ -83,8 +87,13 @@ class PageLoadMetricsObserverTestHarness
   // Gets the PageLoadExtraInfo for the committed_load_ in observer_.
   const PageLoadExtraInfo GetPageLoadExtraInfoForCommittedLoad();
 
+  const ukm::TestUkmRecorder& test_ukm_recorder() const {
+    return test_ukm_recorder_;
+  }
+
  private:
   base::HistogramTester histogram_tester_;
+  ukm::TestUkmRecorder test_ukm_recorder_;
   MetricsWebContentsObserver* observer_;
 
   DISALLOW_COPY_AND_ASSIGN(PageLoadMetricsObserverTestHarness);

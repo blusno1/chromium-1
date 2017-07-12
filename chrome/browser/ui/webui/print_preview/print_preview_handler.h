@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_WEBUI_PRINT_PREVIEW_PRINT_PREVIEW_HANDLER_H_
 
 #include <memory>
+#include <queue>
 #include <string>
 
 #include "base/files/file_path.h"
@@ -76,6 +77,35 @@ class PrintPreviewHandler
   // Called when print preview failed.
   void OnPrintPreviewFailed();
 
+  // Called when print preview is cancelled due to a new request.
+  void OnPrintPreviewCancelled();
+
+  // Called when printer settings were invalid.
+  void OnInvalidPrinterSettings();
+
+  // Called when print preview is ready.
+  void OnPrintPreviewReady(int preview_uid, int request_id);
+
+  // Called when a print request is cancelled due to its initiator closing.
+  void OnPrintRequestCancelled();
+
+  // Send the print preset options from the document.
+  void SendPrintPresetOptions(bool disable_scaling, int copies, int duplex);
+
+  // Send the print preview page count and fit to page scaling
+  void SendPageCountReady(int page_count,
+                          int request_id,
+                          int fit_to_page_scaling);
+
+  // Send the default page layout
+  void SendPageLayoutReady(const base::DictionaryValue& layout,
+                           bool has_custom_page_size_style);
+
+  // Notify the WebUI that the page preview is ready.
+  void SendPagePreviewReady(int page_index,
+                            int preview_uid,
+                            int preview_response_id);
+
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Called when the user press ctrl+shift+p to display the native system
   // dialog.
@@ -105,6 +135,12 @@ class PrintPreviewHandler
 
   // Sets |pdf_file_saved_closure_| to |closure|.
   void SetPdfSavedClosureForTesting(const base::Closure& closure);
+
+  // Fires the 'enable-manipulate-settings-for-test' WebUI event.
+  void SendEnableManipulateSettingsForTest();
+
+  // Fires the 'manipulate-settings-for-test' WebUI event with |settings|.
+  void SendManipulateSettingsForTest(const base::DictionaryValue& settings);
 
  protected:
   // If |prompt_user| is true, starts a task to create the default Save As PDF
@@ -177,7 +213,7 @@ class PrintPreviewHandler
 #endif
 
   // Callback for the signin dialog to call once signin is complete.
-  void OnSigninComplete();
+  void OnSigninComplete(const std::string& callback_id);
 
   // Brings up a dialog to allow the user to sign into cloud print.
   // |args| is unused.
@@ -420,6 +456,8 @@ class PrintPreviewHandler
   // Notifies tests that want to know if the PDF has been saved. This doesn't
   // notify the test if it was a successful save, only that it was attempted.
   base::Closure pdf_file_saved_closure_;
+
+  std::queue<std::string> preview_callbacks_;
 
 #if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
   // Callback ID to be used to notify UI that privet search is finished.

@@ -9,6 +9,7 @@
 
 #include "base/ios/block_types.h"
 #include "base/strings/string16.h"
+#include "components/autofill/core/browser/payments/full_card_request.h"
 #import "ios/chrome/browser/chrome_coordinator.h"
 #import "ios/chrome/browser/ui/payments/address_edit_coordinator.h"
 #import "ios/chrome/browser/ui/payments/contact_info_edit_coordinator.h"
@@ -22,8 +23,6 @@
 #import "ios/chrome/browser/ui/payments/shipping_address_selection_coordinator.h"
 #import "ios/chrome/browser/ui/payments/shipping_option_selection_coordinator.h"
 
-class PaymentRequest;
-
 namespace autofill {
 class AutofillManager;
 }  // namespace autofill
@@ -31,6 +30,10 @@ class AutofillManager;
 namespace ios {
 class ChromeBrowserState;
 }  // namespace ios
+
+namespace payments {
+class PaymentRequest;
+}  // namespace payments
 
 namespace web {
 class PaymentDetails;
@@ -51,10 +54,11 @@ class PaymentShippingOption;
 - (void)paymentRequestCoordinatorDidSelectSettings:
     (PaymentRequestCoordinator*)coordinator;
 
-// Notifies the delegate that the user has completed the payment request.
+// Notifies the delegate that the full payment method name and details
+// have been receieved.
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
-    didCompletePaymentRequestWithCard:(const autofill::CreditCard&)card
-                     verificationCode:(const base::string16&)verificationCode;
+         didReceiveFullMethodName:(const std::string&)methodName
+               stringifiedDetails:(const std::string&)stringifiedDetails;
 
 // Notifies the delegate that the user has selected a shipping address.
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
@@ -87,7 +91,7 @@ class PaymentShippingOption;
 // The PaymentRequest object having a copy of web::PaymentRequest as provided by
 // the page invoking the Payment Request API. This pointer is not owned by this
 // class and should outlive it.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // An instance of autofill::AutofillManager used for credit card unmasking. This
 // reference is not owned by this class.
@@ -115,8 +119,12 @@ class PaymentShippingOption;
 // The delegate to be notified when the user confirms or cancels the request.
 @property(nonatomic, weak) id<PaymentRequestCoordinatorDelegate> delegate;
 
-// Initiates the UI that will process payment with a payment method.
-- (void)sendPaymentResponse;
+// Initiates the UI that will request card details from the user.
+- (void)
+requestFullCreditCard:(const autofill::CreditCard&)card
+       resultDelegate:
+           (base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>)
+               resultDelegate;
 
 // Updates the payment details of the PaymentRequest and updates the UI.
 - (void)updatePaymentDetails:(web::PaymentDetails)paymentDetails;

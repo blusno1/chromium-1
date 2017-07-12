@@ -87,10 +87,10 @@ AppBannerManagerAndroid::GetJavaBannerManager() const {
   return java_banner_manager_;
 }
 
-bool AppBannerManagerAndroid::IsActiveForTesting(
+bool AppBannerManagerAndroid::IsRunningForTesting(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return is_active();
+  return IsRunning();
 }
 
 void AppBannerManagerAndroid::RecordMenuOpen(JNIEnv* env,
@@ -225,10 +225,8 @@ void AppBannerManagerAndroid::OnAppIconFetched(const SkBitmap& bitmap) {
   if (bitmap.drawsNothing()) {
     ReportStatus(web_contents(), NO_ICON_AVAILABLE);
     Stop();
-  }
-
-  if (!is_active())
     return;
+  }
 
   primary_icon_ = bitmap;
   SendBannerPromptRequest();
@@ -249,7 +247,7 @@ void AppBannerManagerAndroid::ShowBanner() {
             contents, GetWeakPtr(),
             CreateShortcutInfo(manifest_url_, manifest_, primary_icon_url_,
                                badge_icon_url_, can_install_webapk_),
-            primary_icon_, badge_icon_, event_request_id(), can_install_webapk_,
+            primary_icon_, badge_icon_, can_install_webapk_,
             webapk::INSTALL_SOURCE_BANNER)) {
       RecordDidShowBanner("AppBanner.WebApp.Shown");
       TrackDisplayEvent(DISPLAY_EVENT_WEB_APP_BANNER_CREATED);
@@ -260,7 +258,7 @@ void AppBannerManagerAndroid::ShowBanner() {
   } else {
     if (AppBannerInfoBarDelegateAndroid::Create(
             contents, native_app_title_, native_app_data_, primary_icon_,
-            native_app_package_, referrer_, event_request_id())) {
+            native_app_package_, referrer_)) {
       RecordDidShowBanner("AppBanner.NativeApp.Shown");
       TrackDisplayEvent(DISPLAY_EVENT_NATIVE_APP_BANNER_CREATED);
       ReportStatus(contents, SHOWING_NATIVE_APP_BANNER);

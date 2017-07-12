@@ -81,6 +81,8 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
                      IDS_BOOKMARK_BAR_OPEN_INCOGNITO);
   AddLocalizedString(source, "menuRename", IDS_MD_BOOKMARK_MANAGER_MENU_RENAME);
   AddLocalizedString(source, "menuSort", IDS_MD_BOOKMARK_MANAGER_MENU_SORT);
+  AddLocalizedString(source, "moreActionsButtonTitle",
+                     IDS_MD_BOOKMARK_MANAGER_MORE_ACTIONS);
   AddLocalizedString(source, "noSearchResults",
                      IDS_MD_BOOKMARK_MANAGER_NO_SEARCH_RESULTS);
   AddLocalizedString(source, "openDialogBody",
@@ -89,6 +91,8 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
                      IDS_MD_BOOKMARK_MANAGER_OPEN_DIALOG_CONFIRM);
   AddLocalizedString(source, "openDialogTitle",
                      IDS_MD_BOOKMARK_MANAGER_OPEN_DIALOG_TITLE);
+  AddLocalizedString(source, "organizeButtonTitle",
+                     IDS_BOOKMARK_MANAGER_ORGANIZE_MENU);
   AddLocalizedString(source, "renameFolderTitle",
                      IDS_MD_BOOKMARK_MANAGER_FOLDER_RENAME_TITLE);
   AddLocalizedString(source, "searchPrompt",
@@ -124,6 +128,8 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
                           IDR_MD_BOOKMARKS_DIALOG_FOCUS_MANAGER_HTML);
   source->AddResourcePath("dialog_focus_manager.js",
                           IDR_MD_BOOKMARKS_DIALOG_FOCUS_MANAGER_JS);
+  source->AddResourcePath("dnd_chip.html", IDR_MD_BOOKMARKS_DND_CHIP_HTML);
+  source->AddResourcePath("dnd_chip.js", IDR_MD_BOOKMARKS_DND_CHIP_JS);
   source->AddResourcePath("dnd_manager.html",
                           IDR_MD_BOOKMARKS_DND_MANAGER_HTML);
   source->AddResourcePath("dnd_manager.js", IDR_MD_BOOKMARKS_DND_MANAGER_JS);
@@ -187,6 +193,8 @@ MdBookmarksUI::MdBookmarksUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   auto plural_string_handler = base::MakeUnique<PluralStringHandler>();
   plural_string_handler->AddLocalizedString(
       "toastItemsDeleted", IDS_MD_BOOKMARK_MANAGER_TOAST_ITEMS_DELETED);
+  plural_string_handler->AddLocalizedString(
+      "toastItemsCopied", IDS_MD_BOOKMARK_MANAGER_TOAST_ITEMS_COPIED);
   web_ui->AddMessageHandler(std::move(plural_string_handler));
 
   web_ui->AddMessageHandler(base::MakeUnique<BookmarksMessageHandler>());

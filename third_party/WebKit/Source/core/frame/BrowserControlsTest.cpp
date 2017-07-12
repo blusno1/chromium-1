@@ -29,12 +29,13 @@
  */
 #include "core/frame/BrowserControls.h"
 
-#include "core/dom/ClientRect.h"
+#include "build/build_config.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/WebLocalFrameBase.h"
+#include "core/geometry/DOMRect.h"
 #include "core/page/Page.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -93,7 +94,7 @@ class BrowserControlsTest : public ::testing::Test {
 
   void RegisterMockedHttpURLLoad(const std::string& file_name) {
     URLTestHelpers::RegisterMockedURLLoadFromBase(
-        WebString::FromUTF8(base_url_), testing::WebTestDataPath(),
+        WebString::FromUTF8(base_url_), testing::CoreTestDataPath(),
         WebString::FromUTF8(file_name));
   }
 
@@ -149,7 +150,7 @@ class BrowserControlsTest : public ::testing::Test {
 // Disable these tests on Mac OSX until further investigation.
 // Local build on Mac is OK but the bot fails. This is not an issue as
 // Browser Controls are currently only used on Android.
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE(test) DISABLED_##test
 #else
 #define MAYBE(test) test

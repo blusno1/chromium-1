@@ -29,17 +29,13 @@
 
 #include <memory>
 #include "core/CoreExport.h"
-#include "core/dom/Range.h"
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleSelection.h"
-#include "core/editing/iterators/TextIteratorBehavior.h"
 #include "core/layout/ScrollAlignment.h"
-#include "platform/Timer.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
-#include "platform/graphics/PaintInvalidationReason.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Noncopyable.h"
 
@@ -51,6 +47,7 @@ class LocalFrame;
 class FrameCaret;
 class GranularityStrategy;
 class GraphicsContext;
+class Range;
 class SelectionEditor;
 class LayoutSelection;
 class TextIteratorBehavior;
@@ -116,12 +113,12 @@ class CORE_EXPORT FrameSelection final
   void SetSelection(const SelectionInDOMTree&,
                     SetSelectionOptions = kCloseTyping | kClearTypingStyle,
                     CursorAlignOnScroll = CursorAlignOnScroll::kIfNeeded,
-                    TextGranularity = kCharacterGranularity);
+                    TextGranularity = TextGranularity::kCharacter);
 
   void SetSelection(const SelectionInFlatTree&,
                     SetSelectionOptions = kCloseTyping | kClearTypingStyle,
                     CursorAlignOnScroll = CursorAlignOnScroll::kIfNeeded,
-                    TextGranularity = kCharacterGranularity);
+                    TextGranularity = TextGranularity::kCharacter);
   void SelectAll(EUserTriggered = kNotUserTriggered);
   void Clear();
   bool IsHidden() const;
@@ -134,7 +131,7 @@ class CORE_EXPORT FrameSelection final
   bool SetSelectionDeprecated(const SelectionInDOMTree&,
                               SetSelectionOptions = kCloseTyping |
                                                     kClearTypingStyle,
-                              TextGranularity = kCharacterGranularity);
+                              TextGranularity = TextGranularity::kCharacter);
   void DidSetSelectionDeprecated(
       SetSelectionOptions = kCloseTyping | kClearTypingStyle,
       CursorAlignOnScroll = CursorAlignOnScroll::kIfNeeded);
@@ -282,6 +279,8 @@ class CORE_EXPORT FrameSelection final
                                const Position& end);
 
   GranularityStrategy* GetGranularityStrategy();
+
+  IntRect ComputeRectToScroll(RevealExtentOption);
 
   // Implementation of |SynchronousMutationObserver| member functions.
   void ContextDestroyed(Document*) final;

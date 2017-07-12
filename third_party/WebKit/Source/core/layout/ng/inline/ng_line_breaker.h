@@ -72,7 +72,9 @@ class CORE_EXPORT NGLineBreaker {
                  LayoutUnit available_width);
 
   LineBreakState HandleControlItem(const NGInlineItem&, NGInlineItemResult*);
-  LineBreakState HandleAtomicInline(const NGInlineItem&, NGInlineItemResult*);
+  LineBreakState HandleAtomicInline(const NGInlineItem&,
+                                    NGInlineItemResult*,
+                                    const NGLineInfo&);
   void HandleFloat(const NGInlineItem&,
                    NGInlineItemResults*);
 
@@ -81,8 +83,6 @@ class CORE_EXPORT NGLineBreaker {
 
   void HandleOverflow(NGLineInfo*);
   void Rewind(NGLineInfo*, unsigned new_end);
-
-  void SetShouldCreateLineBox();
 
   void SetCurrentStyle(const ComputedStyle&);
   bool IsFirstBreakOpportunity(unsigned, const NGInlineItemResults&) const;

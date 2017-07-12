@@ -32,6 +32,7 @@
 
 #include <memory>
 
+#include "build/build_config.h"
 #include "core/animation/CompositorMutatorImpl.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/editing/CompositionUnderlineVectorBuilder.h"
@@ -61,8 +62,7 @@
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
-#include "modules/compositorworker/AnimationWorkletProxyClientImpl.h"
-#include "modules/compositorworker/CompositorWorkerProxyClientImpl.h"
+#include "core/page/ValidationMessageClient.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/animation/CompositorAnimationHost.h"
@@ -250,6 +250,7 @@ void WebFrameWidgetImpl::BeginFrame(double last_frame_time_monotonic) {
                last_frame_time_monotonic);
   DCHECK(last_frame_time_monotonic);
   PageWidgetDelegate::Animate(*GetPage(), last_frame_time_monotonic);
+  GetPage()->GetValidationMessageClient().LayoutOverlay();
 }
 
 void WebFrameWidgetImpl::UpdateAllLifecyclePhases() {
@@ -482,6 +483,10 @@ void WebFrameWidgetImpl::ScheduleAnimation() {
 }
 
 CompositorMutatorImpl& WebFrameWidgetImpl::Mutator() {
+  return *CompositorMutator();
+}
+
+CompositorMutatorImpl* WebFrameWidgetImpl::CompositorMutator() {
   if (!mutator_) {
     std::unique_ptr<CompositorMutatorClient> mutator_client =
         CompositorMutatorImpl::CreateClient();
@@ -489,17 +494,7 @@ CompositorMutatorImpl& WebFrameWidgetImpl::Mutator() {
     layer_tree_view_->SetMutatorClient(std::move(mutator_client));
   }
 
-  return *mutator_;
-}
-
-CompositorWorkerProxyClient*
-WebFrameWidgetImpl::CreateCompositorWorkerProxyClient() {
-  return new CompositorWorkerProxyClientImpl(&Mutator());
-}
-
-AnimationWorkletProxyClient*
-WebFrameWidgetImpl::CreateAnimationWorkletProxyClient() {
-  return new AnimationWorkletProxyClientImpl(&Mutator());
+  return mutator_;
 }
 
 void WebFrameWidgetImpl::ApplyViewportDeltas(
@@ -843,7 +838,7 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
 
   // Dispatch the contextmenu event regardless of if the click was swallowed.
   if (!GetPage()->GetSettings().GetShowContextMenuOnMouseUp()) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
     if (event.button == WebMouseEvent::Button::kRight ||
         (event.button == WebMouseEvent::Button::kLeft &&
          event.GetModifiers() & WebMouseEvent::kControlKey))
@@ -987,9 +982,9 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
     return result;
   }
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
   const WebInputEvent::Type kContextMenuKeyTriggeringEventType =
-#if OS(WIN)
+#if defined(OS_WIN)
       WebInputEvent::kKeyUp;
 #else
       WebInputEvent::kRawKeyDown;
@@ -1009,7 +1004,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
     View()->SendContextMenuEvent(event);
     return WebInputEventResult::kHandledSystem;
   }
-#endif  // !OS(MACOSX)
+#endif  // !defined(OS_MACOSX)
 
   return WebInputEventResult::kNotHandled;
 }

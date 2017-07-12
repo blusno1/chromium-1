@@ -69,6 +69,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   gfx::Size GetPhysicalBackingSize() const override;
   base::string16 GetSelectedText() override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
+  TouchSelectionControllerClientManager*
+  GetTouchSelectionControllerClientManager() override;
 
   // RenderWidgetHostViewBase implementation.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -92,7 +94,7 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
                         const gfx::Range& range) override;
   void SelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params) override;
-  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
 #if defined(USE_AURA)
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,

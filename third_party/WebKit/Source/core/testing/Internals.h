@@ -43,8 +43,9 @@ namespace blink {
 class Animation;
 class CallbackFunctionTest;
 class CanvasRenderingContext;
-class ClientRect;
-class ClientRectList;
+class DOMRect;
+class DOMRectList;
+class DOMRectReadOnly;
 class DOMArrayBuffer;
 class DOMPoint;
 class DOMWindow;
@@ -106,6 +107,8 @@ class Internals final : public GarbageCollected<Internals>,
   bool isSharingStyle(Element*, Element*) const;
 
   CSSStyleDeclaration* computedStyleIncludingVisitedInfo(Node*) const;
+
+  void setBrowserControlsState(float height, bool shrinks_layout);
 
   ShadowRoot* createUserAgentShadowRoot(Element* host);
 
@@ -171,9 +174,9 @@ class Internals final : public GarbageCollected<Internals>,
   void setFormControlStateOfHistoryItem(const Vector<String>&, ExceptionState&);
   DOMWindow* pagePopupWindow() const;
 
-  ClientRect* absoluteCaretBounds(ExceptionState&);
+  DOMRectReadOnly* absoluteCaretBounds(ExceptionState&);
 
-  ClientRect* boundingBox(Element*);
+  DOMRectReadOnly* boundingBox(Element*);
 
   void setMarker(Document*, const Range*, const String&, ExceptionState&);
   unsigned markerCountForNode(Node*, const String&, ExceptionState&);
@@ -249,12 +252,12 @@ class Internals final : public GarbageCollected<Internals>,
                                                long height,
                                                Document*,
                                                ExceptionState&);
-  ClientRect* bestZoomableAreaForTouchPoint(long x,
-                                            long y,
-                                            long width,
-                                            long height,
-                                            Document*,
-                                            ExceptionState&);
+  DOMRectReadOnly* bestZoomableAreaForTouchPoint(long x,
+                                                 long y,
+                                                 long width,
+                                                 long height,
+                                                 Document*,
+                                                 ExceptionState&);
 
   int lastSpellCheckRequestSequence(Document*, ExceptionState&);
   int lastSpellCheckProcessedSequence(Document*, ExceptionState&);
@@ -335,7 +338,7 @@ class Internals final : public GarbageCollected<Internals>,
 
   String scrollingStateTreeAsText(Document*) const;
   String mainThreadScrollingReasons(Document*, ExceptionState&) const;
-  ClientRectList* nonFastScrollableRects(Document*, ExceptionState&) const;
+  DOMRectList* nonFastScrollableRects(Document*, ExceptionState&) const;
 
   void evictAllResources() const;
 
@@ -407,8 +410,8 @@ class Internals final : public GarbageCollected<Internals>,
       ExceptionState&);
   void forceFullRepaint(Document*, ExceptionState&);
 
-  ClientRectList* draggableRegions(Document*, ExceptionState&);
-  ClientRectList* nonDraggableRegions(Document*, ExceptionState&);
+  DOMRectList* draggableRegions(Document*, ExceptionState&);
+  DOMRectList* nonDraggableRegions(Document*, ExceptionState&);
 
   DOMArrayBuffer* serializeObject(PassRefPtr<SerializedScriptValue>) const;
   PassRefPtr<SerializedScriptValue> deserializeBuffer(DOMArrayBuffer*) const;
@@ -438,7 +441,7 @@ class Internals final : public GarbageCollected<Internals>,
   unsigned visibleSelectionAnchorOffset();
   Node* visibleSelectionFocusNode();
   unsigned visibleSelectionFocusOffset();
-  ClientRect* selectionBounds(ExceptionState&);
+  DOMRect* selectionBounds(ExceptionState&);
   String textAffinity();
 
   bool loseSharedGraphicsContext3D();
@@ -536,8 +539,8 @@ class Internals final : public GarbageCollected<Internals>,
   String unscopableAttribute();
   String unscopableMethod();
 
-  ClientRectList* focusRingRects(Element*);
-  ClientRectList* outlineRects(Element*);
+  DOMRectList* focusRingRects(Element*);
+  DOMRectList* outlineRects(Element*);
 
   void setCapsLockState(bool enabled);
 
@@ -558,20 +561,22 @@ class Internals final : public GarbageCollected<Internals>,
   String getProgrammaticScrollAnimationState(Node*) const;
 
   // Returns the visual rect of a node's LayoutObject.
-  ClientRect* visualRect(Node*);
+  DOMRect* visualRect(Node*);
 
   // Intentional crash.
   void crash();
 
   // Overrides if the device is low-end (low on memory).
   void setIsLowEndDevice(bool);
+  // Returns if the device is low-end.
+  bool isLowEndDevice() const;
 
  private:
   explicit Internals(ExecutionContext*);
   Document* ContextDocument() const;
   LocalFrame* GetFrame() const;
   Vector<String> IconURLs(Document*, int icon_types_mask) const;
-  ClientRectList* AnnotatedRegions(Document*, bool draggable, ExceptionState&);
+  DOMRectList* AnnotatedRegions(Document*, bool draggable, ExceptionState&);
 
   DocumentMarker* MarkerAt(Node*,
                            const String& marker_type,

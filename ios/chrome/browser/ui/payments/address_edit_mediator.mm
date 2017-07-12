@@ -23,7 +23,6 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type.h"
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type_util.h"
@@ -44,7 +43,7 @@
 // The PaymentRequest object owning an instance of web::PaymentRequest as
 // provided by the page invoking the Payment Request API. This is a weak
 // pointer and should outlive this class.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // The address to be edited, if any. This pointer is not owned by this class and
 // should outlive it.
@@ -76,7 +75,7 @@
 @synthesize fields = _fields;
 @synthesize regionField = _regionField;
 
-- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+- (instancetype)initWithPaymentRequest:(payments::PaymentRequest*)paymentRequest
                                address:(autofill::AutofillProfile*)address {
   self = [super init];
   if (self) {
@@ -153,7 +152,7 @@
     if ([regions objectForKey:region]) {
       self.regionField.value = region;
     } else if ([[regions allKeysForObject:region] count]) {
-      DCHECK(1 == [[regions allKeysForObject:region] count]);
+      DCHECK_EQ(1U, [[regions allKeysForObject:region] count]);
       self.regionField.value = [regions allKeysForObject:region][0];
     }
   }
@@ -173,7 +172,7 @@
   autofill::CountryComboboxModel countryModel;
   countryModel.SetCountries(*_paymentRequest->GetPersonalDataManager(),
                             base::Callback<bool(const std::string&)>(),
-                            GetApplicationContext()->GetApplicationLocale());
+                            _paymentRequest->GetApplicationLocale());
   const autofill::CountryComboboxModel::CountryVector& countriesVector =
       countryModel.countries();
 
@@ -189,16 +188,23 @@
   }
   _countries = countries;
 
-  // If an address is being edited and it has a valid country code, the selected
-  // country code is set to that value. Otherwise, it is set to the default
-  // country code.
-  NSString* countryCode =
+  // If an address is being edited and it has a valid country code or a valid
+  // country name for the autofill::ADDRESS_HOME_COUNTRY field, the selected
+  // country code is set to the respective country code. Otherwise, the selected
+  // country code is set to the default country code.
+  NSString* country =
       [self fieldValueFromProfile:_address
                         fieldType:autofill::ADDRESS_HOME_COUNTRY];
-  _selectedCountryCode =
-      countryCode && [_countries objectForKey:countryCode]
-          ? countryCode
-          : base::SysUTF8ToNSString(countryModel.GetDefaultCountryCode());
+
+  if ([countries objectForKey:country]) {
+    _selectedCountryCode = country;
+  } else if ([[countries allKeysForObject:country] count]) {
+    DCHECK_EQ(1U, [[countries allKeysForObject:country] count]);
+    _selectedCountryCode = [countries allKeysForObject:country][0];
+  } else {
+    _selectedCountryCode =
+        base::SysUTF8ToNSString(countryModel.GetDefaultCountryCode());
+  }
 }
 
 // Queries the region names based on the selected country code.
@@ -220,8 +226,7 @@
   std::string unused;
   autofill::GetAddressComponents(
       base::SysNSStringToUTF8(self.selectedCountryCode),
-      GetApplicationContext()->GetApplicationLocale(), &addressComponents,
-      &unused);
+      _paymentRequest->GetApplicationLocale(), &addressComponents, &unused);
 
   for (size_t lineIndex = 0; lineIndex < addressComponents.GetSize();
        ++lineIndex) {
@@ -321,8 +326,7 @@
         self.address
             ? base::SysUTF16ToNSString(
                   payments::data_util::GetFormattedPhoneNumberForDisplay(
-                      *self.address,
-                      GetApplicationContext()->GetApplicationLocale()))
+                      *self.address, _paymentRequest->GetApplicationLocale()))
             : nil;
     field = [[EditorField alloc]
         initWithAutofillUIType:AutofillUITypeProfileHomePhoneWholeNumber
@@ -345,7 +349,7 @@
                          fieldType:(autofill::ServerFieldType)fieldType {
   return profile ? base::SysUTF16ToNSString(profile->GetInfo(
                        autofill::AutofillType(fieldType),
-                       GetApplicationContext()->GetApplicationLocale()))
+                       _paymentRequest->GetApplicationLocale()))
                  : nil;
 }
 

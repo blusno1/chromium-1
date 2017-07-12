@@ -31,6 +31,7 @@
 
 #include "platform/scroll/ScrollableArea.h"
 
+#include "build/build_config.h"
 #include "platform/PlatformChromeClient.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
@@ -74,7 +75,7 @@ ScrollableArea::ScrollableArea()
 ScrollableArea::~ScrollableArea() {}
 
 void ScrollableArea::ClearScrollableArea() {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   if (scroll_animator_)
     scroll_animator_->Dispose();
 #endif
@@ -606,20 +607,6 @@ void ScrollableArea::ShowOverlayScrollbars() {
     fade_overlay_scrollbars_timer_->StartOneShot(time_until_disable,
                                                  BLINK_FROM_HERE);
   }
-}
-
-IntRect ScrollableArea::VisibleContentRect(
-    IncludeScrollbarsInRect scrollbar_inclusion) const {
-  int scrollbar_width =
-      scrollbar_inclusion == kIncludeScrollbars ? VerticalScrollbarWidth() : 0;
-  int scrollbar_height = scrollbar_inclusion == kIncludeScrollbars
-                             ? HorizontalScrollbarHeight()
-                             : 0;
-
-  return EnclosingIntRect(
-      IntRect(GetScrollOffset().Width(), GetScrollOffset().Height(),
-              std::max(0, VisibleWidth() + scrollbar_width),
-              std::max(0, VisibleHeight() + scrollbar_height)));
 }
 
 IntSize ScrollableArea::ClampScrollOffset(const IntSize& scroll_offset) const {

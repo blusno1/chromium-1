@@ -6,12 +6,14 @@
 
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/texture_draw_quad.h"
+#include "components/viz/common/quads/resource_format.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/graphics/OffscreenCanvasPlaceholder.h"
 #include "platform/graphics/gpu/SharedGpuContext.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/typed_arrays/ArrayBuffer.h"
 #include "platform/wtf/typed_arrays/Uint8Array.h"
 #include "public/platform/InterfaceProvider.h"
@@ -39,7 +41,7 @@ OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
     int width,
     int height)
     : OffscreenCanvasFrameDispatcher(client),
-      frame_sink_id_(cc::FrameSinkId(client_id, sink_id)),
+      frame_sink_id_(viz::FrameSinkId(client_id, sink_id)),
       width_(width),
       height_(height),
       change_size_for_next_commit_(false),
@@ -56,8 +58,20 @@ OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
     Platform::Current()->GetInterfaceProvider()->GetInterface(
         mojo::MakeRequest(&provider));
 
+    scoped_refptr<base::SequencedTaskRunner> task_runner;
+    auto scheduler = blink::Platform::Current()->CurrentThread()->Scheduler();
+    if (scheduler) {
+      WebTaskRunner* web_task_runner = scheduler->CompositorTaskRunner();
+      if (web_task_runner) {
+        task_runner = web_task_runner->ToSingleThreadTaskRunner();
+      }
+    }
+    if (!task_runner) {
+      task_runner = base::SequencedTaskRunnerHandle::Get();
+    }
+
     cc::mojom::blink::CompositorFrameSinkClientPtr client;
-    binding_.Bind(mojo::MakeRequest(&client));
+    binding_.Bind(mojo::MakeRequest(&client), task_runner);
     provider->CreateCompositorFrameSink(frame_sink_id_, std::move(client),
                                         mojo::MakeRequest(&sink_));
   }
@@ -211,12 +225,15 @@ void OffscreenCanvasFrameDispatcherImpl::PostImageToPlaceholder(
   RefPtr<WebTaskRunner> dispatcher_task_runner =
       Platform::Current()->CurrentThread()->GetWebTaskRunner();
 
-  Platform::Current()->MainThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(UpdatePlaceholderImage, this->CreateWeakPtr(),
-                      WTF::Passed(std::move(dispatcher_task_runner)),
-                      placeholder_canvas_id_, std::move(image),
-                      next_resource_id_));
+  Platform::Current()
+      ->MainThread()
+      ->Scheduler()
+      ->CompositorTaskRunner()
+      ->PostTask(BLINK_FROM_HERE,
+                 CrossThreadBind(UpdatePlaceholderImage, this->CreateWeakPtr(),
+                                 WTF::Passed(std::move(dispatcher_task_runner)),
+                                 placeholder_canvas_id_, std::move(image),
+                                 next_resource_id_));
 }
 
 void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
@@ -259,7 +276,7 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
 
   cc::TransferableResource resource;
   resource.id = next_resource_id_;
-  resource.format = cc::ResourceFormat::RGBA_8888;
+  resource.format = viz::ResourceFormat::RGBA_8888;
   resource.size = gfx::Size(width_, height_);
   // This indicates the filtering on the resource inherently, not the desired
   // filtering effect on the quad.

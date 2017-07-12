@@ -26,8 +26,9 @@
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/string16.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -178,7 +179,6 @@ void RegisterOrRemovePreviousRunMetricsFile(
     const base::FilePath& dir,
     base::StringPiece metrics_name,
     metrics::FileMetricsProvider::SourceAssociation association,
-    scoped_refptr<base::TaskRunner> task_runner,
     metrics::FileMetricsProvider* file_metrics_provider) {
   base::FilePath metrics_file;
   base::GlobalHistogramAllocator::ConstructFilePaths(
@@ -193,41 +193,23 @@ void RegisterOrRemovePreviousRunMetricsFile(
   } else {
     // When metrics reporting is not enabled, any existing file should be
     // deleted in order to preserve user privacy.
-    task_runner->PostTask(FROM_HERE,
-                          base::BindOnce(base::IgnoreResult(&base::DeleteFile),
-                                         metrics_file, /*recursive=*/false));
+    base::PostTaskWithTraits(
+        FROM_HERE,
+        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+        base::BindOnce(base::IgnoreResult(&base::DeleteFile), metrics_file,
+                       /*recursive=*/false));
   }
 }
 
 std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
     bool metrics_reporting_enabled) {
-  // Fetch a worker-pool for performing I/O tasks that are not allowed on
-  // the main UI thread.
-  scoped_refptr<base::TaskRunner> task_runner =
-      content::BrowserThread::GetBlockingPool()
-          ->GetTaskRunnerWithShutdownBehavior(
-              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
-
   // Create an object to monitor files of metrics and include them in reports.
   std::unique_ptr<metrics::FileMetricsProvider> file_metrics_provider(
-      new metrics::FileMetricsProvider(task_runner,
-                                       g_browser_process->local_state()));
+      new metrics::FileMetricsProvider(g_browser_process->local_state()));
 
   base::FilePath user_data_dir;
   if (base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
-    // Reporting of persistent histograms from last session is controlled by
-    // a feature param. TODO(bcwhite): The current default is not to upload
-    // until some issues are resolved. See crbug.com/706422 for details.
-    std::string send_unreported = base::GetFieldTrialParamValueByFeature(
-        base::kPersistentHistogramsFeature, "send_unreported_metrics");
-    bool report_previous_persistent_histograms =
-        metrics_reporting_enabled && (send_unreported == "yes");
-    RegisterOrRemovePreviousRunMetricsFile(
-        report_previous_persistent_histograms, user_data_dir,
-        ChromeMetricsServiceClient::kBrowserMetricsName,
-        metrics::FileMetricsProvider::ASSOCIATE_INTERNAL_PROFILE, task_runner,
-        file_metrics_provider.get());
-
     // Register the Crashpad metrics files.
     // Register the data from the previous run if crashpad_handler didn't exit
     // cleanly.
@@ -236,8 +218,17 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
         kCrashpadHistogramAllocatorName,
         metrics::FileMetricsProvider::
             ASSOCIATE_INTERNAL_PROFILE_OR_PREVIOUS_RUN,
-        task_runner, file_metrics_provider.get());
+        file_metrics_provider.get());
+
+    base::FilePath browser_metrics_upload_dir = user_data_dir.AppendASCII(
+        ChromeMetricsServiceClient::kBrowserMetricsName);
     if (metrics_reporting_enabled) {
+      file_metrics_provider->RegisterSource(
+          browser_metrics_upload_dir,
+          metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_DIR,
+          metrics::FileMetricsProvider::ASSOCIATE_INTERNAL_PROFILE,
+          ChromeMetricsServiceClient::kBrowserMetricsName);
+
       base::FilePath active_path;
       base::GlobalHistogramAllocator::ConstructFilePaths(
           user_data_dir, kCrashpadHistogramAllocatorName, nullptr, &active_path,
@@ -249,6 +240,16 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
           metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ACTIVE_FILE,
           metrics::FileMetricsProvider::ASSOCIATE_CURRENT_RUN,
           base::StringPiece());
+    } else {
+      // When metrics reporting is not enabled, any existing files should be
+      // deleted in order to preserve user privacy.
+      base::PostTaskWithTraits(
+          FROM_HERE,
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+          base::BindOnce(base::IgnoreResult(&base::DeleteFile),
+                         base::Passed(&browser_metrics_upload_dir),
+                         /*recursive=*/true));
     }
   }
 
@@ -547,14 +548,6 @@ base::TimeDelta ChromeMetricsServiceClient::GetStandardUploadInterval() {
   return metrics::GetUploadInterval();
 }
 
-base::string16 ChromeMetricsServiceClient::GetRegistryBackupKey() {
-#if defined(OS_WIN)
-  return install_static::GetRegistryPath().append(L"\\StabilityMetrics");
-#else
-  return base::string16();
-#endif
-}
-
 void ChromeMetricsServiceClient::OnPluginLoadingError(
     const base::FilePath& plugin_path) {
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -644,8 +637,6 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()));
 
   drive_metrics_provider_ = new metrics::DriveMetricsProvider(
-      content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::FILE),
       chrome::FILE_LOCAL_STATE);
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(drive_metrics_provider_));
@@ -690,8 +681,7 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   }
   watcher_metrics_provider_ = new browser_watcher::WatcherMetricsProviderWin(
       chrome::GetBrowserExitCodesRegistryPath(), user_data_dir, crash_dir,
-      base::Bind(&GetExecutableVersionDetails),
-      content::BrowserThread::GetBlockingPool());
+      base::Bind(&GetExecutableVersionDetails));
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(watcher_metrics_provider_));
 

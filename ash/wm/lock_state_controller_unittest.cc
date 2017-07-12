@@ -11,6 +11,7 @@
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shutdown_controller.h"
+#include "ash/shutdown_reason.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/lock_state_controller_test_api.h"
 #include "ash/test/test_screenshot_delegate.h"
@@ -21,7 +22,6 @@
 #include "ash/wm/power_button_controller.h"
 #include "ash/wm/session_state_animator.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
@@ -54,7 +54,9 @@ class TestShutdownController : public ShutdownController {
 
  private:
   // ShutdownController:
-  void ShutDownOrReboot() override { num_shutdown_requests_++; }
+  void ShutDownOrReboot(ShutdownReason reason) override {
+    num_shutdown_requests_++;
+  }
 
   int num_shutdown_requests_ = 0;
 
@@ -819,7 +821,8 @@ TEST_F(LockStateControllerTest, ShutdownWithoutButton) {
 TEST_F(LockStateControllerTest, RequestShutdownFromLoginScreen) {
   Initialize(false, LoginStatus::NOT_LOGGED_IN);
 
-  lock_state_controller_->RequestShutdown();
+  lock_state_controller_->RequestShutdown(
+      ShutdownReason::LOGIN_SHUT_DOWN_BUTTON);
 
   ExpectShutdownAnimationStarted();
   Advance(SessionStateAnimator::ANIMATION_SPEED_SHUTDOWN);
@@ -843,7 +846,8 @@ TEST_F(LockStateControllerTest, RequestShutdownFromLockScreen) {
   Advance(SessionStateAnimator::ANIMATION_SPEED_SHUTDOWN);
   ExpectPostLockAnimationFinished();
 
-  lock_state_controller_->RequestShutdown();
+  lock_state_controller_->RequestShutdown(
+      ShutdownReason::LOGIN_SHUT_DOWN_BUTTON);
 
   ExpectShutdownAnimationStarted();
   Advance(SessionStateAnimator::ANIMATION_SPEED_SHUTDOWN);

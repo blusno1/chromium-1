@@ -88,16 +88,16 @@ bool IsNotCancellation(const ResourceError& error) {
 }
 
 KURL SuccessURL() {
-  return KURL(KURL(), "http://example.com/success");
+  return KURL(NullURL(), "http://example.com/success");
 }
 KURL ErrorURL() {
-  return KURL(KURL(), "http://example.com/error");
+  return KURL(NullURL(), "http://example.com/error");
 }
 KURL RedirectURL() {
-  return KURL(KURL(), "http://example.com/redirect");
+  return KURL(NullURL(), "http://example.com/redirect");
 }
 KURL RedirectLoopURL() {
-  return KURL(KURL(), "http://example.com/loop");
+  return KURL(NullURL(), "http://example.com/loop");
 }
 
 enum ThreadableLoaderToTest {
@@ -235,7 +235,7 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
     reporting_proxy_ = WTF::MakeUnique<WorkerReportingProxy>();
     security_origin_ = GetDocument().GetSecurityOrigin();
     parent_frame_task_runners_ =
-        ParentFrameTaskRunners::Create(&dummy_page_holder_->GetFrame());
+        ParentFrameTaskRunners::Create(dummy_page_holder_->GetFrame());
     worker_thread_ = WTF::MakeUnique<WorkerThreadForTest>(
         ThreadableLoadingContext::Create(GetDocument()), *reporting_proxy_);
 
@@ -259,7 +259,8 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
         BLINK_FROM_HERE,
         CrossThreadBind(&WaitableEvent::Signal, CrossThreadUnretained(&event)));
     event.Wait();
-    worker_thread_->TerminateAndWait();
+    worker_thread_->Terminate();
+    worker_thread_->WaitForShutdownForTesting();
 
     // Needed to clean up the things on the main thread side and
     // avoid Resource leaks.
@@ -381,7 +382,7 @@ class ThreadableLoaderTest
 
   void SetUpSuccessURL() {
     URLTestHelpers::RegisterMockedURLLoad(
-        SuccessURL(), testing::WebTestDataPath(kFileName), "text/html");
+        SuccessURL(), testing::CoreTestDataPath(kFileName), "text/html");
   }
 
   void SetUpErrorURL() {
@@ -402,7 +403,7 @@ class ThreadableLoaderTest
     response.AddHTTPHeaderField("Access-Control-Allow-Origin", "null");
 
     URLTestHelpers::RegisterMockedURLLoadWithCustomResponse(
-        url, testing::WebTestDataPath(kFileName), response);
+        url, testing::CoreTestDataPath(kFileName), response);
   }
 
   void SetUpRedirectLoopURL() {
@@ -419,7 +420,7 @@ class ThreadableLoaderTest
     response.AddHTTPHeaderField("Access-Control-Allow-Origin", "null");
 
     URLTestHelpers::RegisterMockedURLLoadWithCustomResponse(
-        url, testing::WebTestDataPath(kFileName), response);
+        url, testing::CoreTestDataPath(kFileName), response);
   }
 
   std::unique_ptr<MockThreadableLoaderClient> client_;
@@ -850,7 +851,7 @@ TEST_P(ThreadableLoaderTest, GetResponseSynchronously) {
   // test is not saying that didFailAccessControlCheck should be dispatched
   // synchronously, but is saying that even when a response is served
   // synchronously it should not lead to a crash.
-  StartLoader(KURL(KURL(), "about:blank"),
+  StartLoader(KURL(NullURL(), "about:blank"),
               WebURLRequest::kFetchRequestModeCORS);
   CallCheckpoint(2);
 }

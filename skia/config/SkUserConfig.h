@@ -202,6 +202,10 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
 #endif
 
+#ifndef SK_SUPPORT_LEGACY_IMAGE_ENCODE_API
+#define SK_SUPPORT_LEGACY_IMAGE_ENCODE_API
+#endif
+
 // Remove this after we fixed all the issues related to the new SDF algorithm
 // (https://codereview.chromium.org/1643143002)
 #ifndef    SK_USE_LEGACY_DISTANCE_FIELDS
@@ -216,8 +220,20 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_SUPPORT_LEGACY_TILED_BITMAPS
 #endif
 
-#ifndef SK_SUPPORT_LEGACY_2PTCONICAL_GRADIENT
-#define SK_SUPPORT_LEGACY_2PTCONICAL_GRADIENT
+#ifndef SK_SUPPORT_NONSTD_BLENDMODES
+#define SK_SUPPORT_NONSTD_BLENDMODES
+#endif
+
+#ifndef SK_SUPPORT_LEGACY_BILERP_IGNORING_HACK
+#define SK_SUPPORT_LEGACY_BILERP_IGNORING_HACK
+#endif
+
+#ifndef SK_SUPPORT_LEGACY_MASK_BLUR
+#define SK_SUPPORT_LEGACY_MASK_BLUR
+#endif
+
+#ifndef SK_SUPPORT_LEGACY_RECT
+#define SK_SUPPORT_LEGACY_RECT
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi

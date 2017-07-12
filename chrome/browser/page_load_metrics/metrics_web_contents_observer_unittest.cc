@@ -26,6 +26,7 @@
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
+#include "net/base/net_errors.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -965,7 +966,7 @@ TEST_F(MetricsWebContentsObserverTest, DispatchDelayedMetricsOnPageClose) {
   CheckNoErrorEvents();
 }
 
-TEST_F(MetricsWebContentsObserverTest, OnLoadedResourceMainFrame) {
+TEST_F(MetricsWebContentsObserverTest, OnLoadedResource_MainFrame) {
   GURL main_resource_url(kDefaultTestUrl);
   content::WebContentsTester::For(web_contents())
       ->NavigateAndCommit(main_resource_url);
@@ -982,8 +983,9 @@ TEST_F(MetricsWebContentsObserverTest, OnLoadedResourceMainFrame) {
 
   observer()->OnRequestComplete(
       main_resource_url, net::HostPortPair(), frame_tree_node_id, request_id,
+      web_contents()->GetMainFrame(),
       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME, false, nullptr, 0, 0,
-      base::TimeTicks::Now(), 0);
+      base::TimeTicks::Now(), net::OK);
   EXPECT_EQ(1u, loaded_resources().size());
   EXPECT_EQ(main_resource_url, loaded_resources().back().url);
 
@@ -993,13 +995,14 @@ TEST_F(MetricsWebContentsObserverTest, OnLoadedResourceMainFrame) {
   // specified |request_id| is no longer associated with any tracked page loads.
   observer()->OnRequestComplete(
       main_resource_url, net::HostPortPair(), frame_tree_node_id, request_id,
+      web_contents()->GetMainFrame(),
       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME, false, nullptr, 0, 0,
-      base::TimeTicks::Now(), 0);
+      base::TimeTicks::Now(), net::OK);
   EXPECT_EQ(1u, loaded_resources().size());
   EXPECT_EQ(main_resource_url, loaded_resources().back().url);
 }
 
-TEST_F(MetricsWebContentsObserverTest, OnLoadedResource) {
+TEST_F(MetricsWebContentsObserverTest, OnLoadedResource_Subresource) {
   content::WebContentsTester* web_contents_tester =
       content::WebContentsTester::For(web_contents());
   web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl));
@@ -1007,11 +1010,53 @@ TEST_F(MetricsWebContentsObserverTest, OnLoadedResource) {
   observer()->OnRequestComplete(
       loaded_resource_url, net::HostPortPair(),
       web_contents()->GetMainFrame()->GetFrameTreeNodeId(),
-      content::GlobalRequestID(), content::RESOURCE_TYPE_SCRIPT, false, nullptr,
-      0, 0, base::TimeTicks::Now(), 0);
+      content::GlobalRequestID(), web_contents()->GetMainFrame(),
+      content::RESOURCE_TYPE_SCRIPT, false, nullptr, 0, 0,
+      base::TimeTicks::Now(), net::OK);
 
   EXPECT_EQ(1u, loaded_resources().size());
   EXPECT_EQ(loaded_resource_url, loaded_resources().back().url);
+}
+
+TEST_F(MetricsWebContentsObserverTest,
+       OnLoadedResource_ResourceFromOtherRFHIgnored) {
+  content::WebContentsTester* web_contents_tester =
+      content::WebContentsTester::For(web_contents());
+  web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl));
+
+  // This is a bit of a hack. We want to simulate giving the
+  // MetricsWebContentsObserver a RenderFrameHost from a previously committed
+  // page, to verify that resources for RFHs that don't match the currently
+  // committed RFH are ignored. There isn't a way to hold on to an old RFH (it
+  // gets cleaned up soon after being navigated away from) so instead we use an
+  // RFH from another WebContents, as a way to simulate the desired behavior.
+  content::WebContents* other_web_contents =
+      content::WebContentsTester::CreateTestWebContents(browser_context(),
+                                                        nullptr);
+  observer()->OnRequestComplete(
+      GURL("http://www.other.com/"), net::HostPortPair(),
+      other_web_contents->GetMainFrame()->GetFrameTreeNodeId(),
+      content::GlobalRequestID(), other_web_contents->GetMainFrame(),
+      content::RESOURCE_TYPE_SCRIPT, false, nullptr, 0, 0,
+      base::TimeTicks::Now(), net::OK);
+
+  EXPECT_TRUE(loaded_resources().empty());
+}
+
+TEST_F(MetricsWebContentsObserverTest,
+       OnLoadedResource_IgnoreNonHttpOrHttpsScheme) {
+  content::WebContentsTester* web_contents_tester =
+      content::WebContentsTester::For(web_contents());
+  web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl));
+  GURL loaded_resource_url("data:text/html,Hello world");
+  observer()->OnRequestComplete(
+      loaded_resource_url, net::HostPortPair(),
+      web_contents()->GetMainFrame()->GetFrameTreeNodeId(),
+      content::GlobalRequestID(), web_contents()->GetMainFrame(),
+      content::RESOURCE_TYPE_SCRIPT, false, nullptr, 0, 0,
+      base::TimeTicks::Now(), net::OK);
+
+  EXPECT_TRUE(loaded_resources().empty());
 }
 
 }  // namespace page_load_metrics

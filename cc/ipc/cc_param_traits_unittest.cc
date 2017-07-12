@@ -44,7 +44,7 @@ using gfx::Transform;
 namespace content {
 namespace {
 
-static constexpr cc::FrameSinkId kArbitraryFrameSinkId(1, 1);
+static constexpr viz::FrameSinkId kArbitraryFrameSinkId(1, 1);
 
 class CCParamTraitsTest : public testing::Test {
  protected:
@@ -383,9 +383,9 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   pass_cmp->CopyFromAndAppendDrawQuad(streamvideo_in,
                                       streamvideo_in->shared_quad_state);
 
-  cc::SurfaceId arbitrary_surface_id(
+  viz::SurfaceId arbitrary_surface_id(
       kArbitraryFrameSinkId,
-      cc::LocalSurfaceId(3, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(3, base::UnguessableToken::Create()));
   SurfaceDrawQuad* surface_in =
       pass_in->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
   surface_in->SetAll(shared_state3_in, arbitrary_rect2,
@@ -592,7 +592,7 @@ TEST_F(CCParamTraitsTest, Resources) {
 
   TransferableResource arbitrary_resource1;
   arbitrary_resource1.id = 2178312;
-  arbitrary_resource1.format = cc::RGBA_8888;
+  arbitrary_resource1.format = viz::RGBA_8888;
   arbitrary_resource1.filter = 53;
   arbitrary_resource1.size = gfx::Size(37189, 123123);
   arbitrary_resource1.mailbox_holder.mailbox.SetName(arbitrary_mailbox1);
@@ -606,7 +606,7 @@ TEST_F(CCParamTraitsTest, Resources) {
 
   TransferableResource arbitrary_resource2;
   arbitrary_resource2.id = 789132;
-  arbitrary_resource2.format = cc::RGBA_4444;
+  arbitrary_resource2.format = viz::RGBA_4444;
   arbitrary_resource2.filter = 47;
   arbitrary_resource2.size = gfx::Size(89123, 23789);
   arbitrary_resource2.mailbox_holder.mailbox.SetName(arbitrary_mailbox2);
@@ -641,9 +641,9 @@ TEST_F(CCParamTraitsTest, Resources) {
 
 TEST_F(CCParamTraitsTest, SurfaceInfo) {
   IPC::Message msg(1, 2, IPC::Message::PRIORITY_NORMAL);
-  const cc::SurfaceId kArbitrarySurfaceId(
+  const viz::SurfaceId kArbitrarySurfaceId(
       kArbitraryFrameSinkId,
-      cc::LocalSurfaceId(3, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(3, base::UnguessableToken::Create()));
   constexpr float kArbitraryDeviceScaleFactor = 0.9f;
   const gfx::Size kArbitrarySize(65, 321);
   const cc::SurfaceInfo surface_info_in(

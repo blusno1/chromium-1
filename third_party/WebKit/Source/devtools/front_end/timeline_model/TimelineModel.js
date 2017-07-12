@@ -1021,7 +1021,7 @@ TimelineModel.TimelineModel = class {
     var types = TimelineModel.TimelineModel.RecordType;
     var resourceTypes = new Set(
         [types.ResourceSendRequest, types.ResourceReceiveResponse, types.ResourceReceivedData, types.ResourceFinish]);
-    var events = this.mainThreadEvents();
+    var events = this.inspectedTargetEvents();
     for (var i = 0; i < events.length; ++i) {
       var e = events[i];
       if (!resourceTypes.has(e.name))
@@ -1353,6 +1353,13 @@ TimelineModel.TimelineModel.NetworkRequest = class {
       this.timing = eventData['timing'];
     if (eventData['fromServiceWorker'])
       this.fromServiceWorker = true;
+  }
+
+  /**
+   * @return {number}
+   */
+  beginTime() {
+    return Math.min(this.startTime, this.timing && this.timing.pushStart * 1000 || Infinity);
   }
 };
 

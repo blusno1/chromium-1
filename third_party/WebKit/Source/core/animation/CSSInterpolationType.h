@@ -11,6 +11,7 @@
 namespace blink {
 
 class CSSCustomPropertyDeclaration;
+class CSSVariableResolver;
 class ComputedStyle;
 class PropertyRegistration;
 class StyleResolverState;
@@ -73,10 +74,7 @@ class CSSInterpolationType : public InterpolationType {
   InterpolationValue MaybeConvertCustomPropertyDeclaration(
       const CSSCustomPropertyDeclaration&,
       const StyleResolverState&,
-      ConversionCheckers&) const;
-  InterpolationValue MaybeConvertCustomPropertyDeclarationInternal(
-      const CSSCustomPropertyDeclaration&,
-      const StyleResolverState&,
+      CSSVariableResolver&,
       ConversionCheckers&) const;
 
   virtual const CSSValue* CreateCSSValue(const InterpolableValue&,
@@ -87,6 +85,11 @@ class CSSInterpolationType : public InterpolationType {
     // const CSSValue&.
     NOTREACHED();
     return nullptr;
+  }
+
+  const PropertyRegistration& Registration() const {
+    DCHECK(GetProperty().IsCSSCustomProperty());
+    return *registration_;
   }
 
   void ApplyCustomPropertyValue(const InterpolableValue&,

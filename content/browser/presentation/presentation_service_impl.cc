@@ -125,7 +125,7 @@ void PresentationServiceImpl::SetClient(
 
 void PresentationServiceImpl::ListenForScreenAvailability(const GURL& url) {
   DVLOG(2) << "ListenForScreenAvailability " << url.spec();
-  if (!controller_delegate_) {
+  if (!controller_delegate_ || !url.is_valid()) {
     client_->OnScreenAvailabilityUpdated(
         url, blink::mojom::ScreenAvailability::UNAVAILABLE);
     return;
@@ -298,7 +298,7 @@ bool PresentationServiceImpl::RunAndEraseReconnectPresentationMojoCallback(
 void PresentationServiceImpl::SetDefaultPresentationUrls(
     const std::vector<GURL>& presentation_urls) {
   DVLOG(2) << "SetDefaultPresentationUrls";
-  if (!controller_delegate_)
+  if (!controller_delegate_ || !is_main_frame_)
     return;
 
   if (default_presentation_urls_ == presentation_urls)
@@ -464,13 +464,13 @@ PresentationServiceImpl::ScreenAvailabilityListenerImpl::
     ScreenAvailabilityListenerImpl(const GURL& availability_url,
                                    PresentationServiceImpl* service)
     : availability_url_(availability_url), service_(service) {
+  DCHECK(availability_url_.is_valid());
   DCHECK(service_);
   DCHECK(service_->client_.get());
 }
 
 PresentationServiceImpl::ScreenAvailabilityListenerImpl::
-~ScreenAvailabilityListenerImpl() {
-}
+    ~ScreenAvailabilityListenerImpl() = default;
 
 GURL PresentationServiceImpl::ScreenAvailabilityListenerImpl::
     GetAvailabilityUrl() const {

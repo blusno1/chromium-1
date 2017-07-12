@@ -23,13 +23,16 @@ namespace gpu {
 class GpuMemoryBufferManager;
 }
 
+namespace viz {
+class LocalSurfaceId;
+class SharedBitmapManager;
+}
+
 namespace cc {
 
 struct BeginFrameAck;
 class CompositorFrame;
 class LayerTreeFrameSinkClient;
-class LocalSurfaceId;
-class SharedBitmapManager;
 
 // An interface for submitting CompositorFrames to a display compositor
 // which will compose frames from multiple clients to show on screen to the
@@ -64,7 +67,7 @@ class CC_EXPORT LayerTreeFrameSink {
   LayerTreeFrameSink(scoped_refptr<ContextProvider> context_provider,
                      scoped_refptr<ContextProvider> worker_context_provider,
                      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-                     SharedBitmapManager* shared_bitmap_manager);
+                     viz::SharedBitmapManager* shared_bitmap_manager);
 
   // Constructor for Vulkan-based resources.
   explicit LayerTreeFrameSink(
@@ -103,13 +106,13 @@ class CC_EXPORT LayerTreeFrameSink {
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() const {
     return gpu_memory_buffer_manager_;
   }
-  SharedBitmapManager* shared_bitmap_manager() const {
+  viz::SharedBitmapManager* shared_bitmap_manager() const {
     return shared_bitmap_manager_;
   }
 
-  // If supported, this sets the LocalSurfaceId the LayerTreeFrameSink will use
-  // to submit a CompositorFrame.
-  virtual void SetLocalSurfaceId(const LocalSurfaceId& local_surface_id) {}
+  // If supported, this sets the viz::LocalSurfaceId the LayerTreeFrameSink will
+  // use to submit a CompositorFrame.
+  virtual void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) {}
 
   // Support for a pull-model where draws are requested by the implementation of
   // LayerTreeFrameSink. This is called by the compositor to notify that there's
@@ -137,7 +140,7 @@ class CC_EXPORT LayerTreeFrameSink {
   scoped_refptr<ContextProvider> worker_context_provider_;
   scoped_refptr<VulkanContextProvider> vulkan_context_provider_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
-  SharedBitmapManager* shared_bitmap_manager_;
+  viz::SharedBitmapManager* shared_bitmap_manager_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(LayerTreeFrameSink);

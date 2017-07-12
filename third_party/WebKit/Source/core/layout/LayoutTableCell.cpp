@@ -322,34 +322,60 @@ void LayoutTableCell::UpdateLayout() {
 
 LayoutUnit LayoutTableCell::PaddingTop() const {
   LayoutUnit result = ComputedCSSPaddingTop();
-  result += LogicalIntrinsicPaddingToPhysical().Top();
-  // TODO(crbug.com/377847): The ToInt call should be removed when Table is
-  // sub-pixel aware.
-  return LayoutUnit(result.ToInt());
+  if (IsHorizontalWritingMode()) {
+    result += (blink::IsHorizontalWritingMode(Style()->GetWritingMode())
+                   ? IntrinsicPaddingBefore()
+                   : IntrinsicPaddingAfter());
+  }
+  // TODO(leviw): The floor call should be removed when Table is sub-pixel
+  // aware. crbug.com/377847
+  return LayoutUnit(result.Floor());
 }
 
 LayoutUnit LayoutTableCell::PaddingBottom() const {
   LayoutUnit result = ComputedCSSPaddingBottom();
-  result += LogicalIntrinsicPaddingToPhysical().Bottom();
-  // TODO(crbug.com/377847): The ToInt call should be removed when Table is
-  // sub-pixel aware.
-  return LayoutUnit(result.ToInt());
+  if (IsHorizontalWritingMode()) {
+    result += (blink::IsHorizontalWritingMode(Style()->GetWritingMode())
+                   ? IntrinsicPaddingAfter()
+                   : IntrinsicPaddingBefore());
+  }
+  // TODO(leviw): The floor call should be removed when Table is sub-pixel
+  // aware. crbug.com/377847
+  return LayoutUnit(result.Floor());
 }
 
 LayoutUnit LayoutTableCell::PaddingLeft() const {
   LayoutUnit result = ComputedCSSPaddingLeft();
-  result += LogicalIntrinsicPaddingToPhysical().Left();
-  // TODO(crbug.com/377847): The ToInt call should be removed when Table is
-  // sub-pixel aware.
-  return LayoutUnit(result.ToInt());
+  if (!IsHorizontalWritingMode()) {
+    result += (IsFlippedLinesWritingMode(Style()->GetWritingMode())
+                   ? IntrinsicPaddingBefore()
+                   : IntrinsicPaddingAfter());
+  }
+  // TODO(leviw): The floor call should be removed when Table is sub-pixel
+  // aware. crbug.com/377847
+  return LayoutUnit(result.Floor());
 }
 
 LayoutUnit LayoutTableCell::PaddingRight() const {
   LayoutUnit result = ComputedCSSPaddingRight();
-  result += LogicalIntrinsicPaddingToPhysical().Right();
-  // TODO(crbug.com/377847): The ToInt call should be removed when Table is
-  // sub-pixel aware.
-  return LayoutUnit(result.ToInt());
+  if (!IsHorizontalWritingMode()) {
+    result += (IsFlippedLinesWritingMode(Style()->GetWritingMode())
+                   ? IntrinsicPaddingAfter()
+                   : IntrinsicPaddingBefore());
+  }
+  // TODO(leviw): The floor call should be removed when Table is sub-pixel
+  // aware. crbug.com/377847
+  return LayoutUnit(result.Floor());
+}
+
+LayoutUnit LayoutTableCell::PaddingBefore() const {
+  return LayoutUnit(ComputedCSSPaddingBefore().Floor() +
+                    IntrinsicPaddingBefore());
+}
+
+LayoutUnit LayoutTableCell::PaddingAfter() const {
+  return LayoutUnit(ComputedCSSPaddingAfter().Floor() +
+                    IntrinsicPaddingAfter());
 }
 
 void LayoutTableCell::SetOverrideLogicalContentHeightFromRowHeight(
@@ -1034,64 +1060,31 @@ LayoutUnit LayoutTableCell::BorderBottom() const {
              : LayoutBlockFlow::BorderBottom();
 }
 
-unsigned LayoutTableCell::CollapsedBorderHalfStart(bool outer) const {
-  UpdateCollapsedBorderValues();
-  const auto* collapsed_border_values = this->GetCollapsedBorderValues();
-  if (!collapsed_border_values)
-    return 0;
-
-  const auto& border = collapsed_border_values->StartBorder();
-  if (border.Exists()) {
-    return (border.Width() +
-            ((TableStyle().IsLeftToRightDirection() ^ outer) ? 1 : 0)) /
-           2;  // Give the extra pixel to top and left.
-  }
-  return 0;
+// FIXME: https://bugs.webkit.org/show_bug.cgi?id=46191, make the collapsed
+// border drawing work with different block flow values instead of being
+// hard-coded to top-to-bottom.
+LayoutUnit LayoutTableCell::BorderStart() const {
+  return Table()->ShouldCollapseBorders()
+             ? LayoutUnit(CollapsedBorderHalfStart(false))
+             : LayoutBlockFlow::BorderStart();
 }
 
-unsigned LayoutTableCell::CollapsedBorderHalfEnd(bool outer) const {
-  UpdateCollapsedBorderValues();
-  const auto* collapsed_border_values = this->GetCollapsedBorderValues();
-  if (!collapsed_border_values)
-    return 0;
-
-  const auto& border = collapsed_border_values->EndBorder();
-  if (border.Exists()) {
-    return (border.Width() +
-            ((TableStyle().IsLeftToRightDirection() ^ outer) ? 0 : 1)) /
-           2;
-  }
-  return 0;
+LayoutUnit LayoutTableCell::BorderEnd() const {
+  return Table()->ShouldCollapseBorders()
+             ? LayoutUnit(CollapsedBorderHalfEnd(false))
+             : LayoutBlockFlow::BorderEnd();
 }
 
-unsigned LayoutTableCell::CollapsedBorderHalfBefore(bool outer) const {
-  UpdateCollapsedBorderValues();
-  const auto* collapsed_border_values = this->GetCollapsedBorderValues();
-  if (!collapsed_border_values)
-    return 0;
-
-  const auto& border = collapsed_border_values->BeforeBorder();
-  if (border.Exists()) {
-    return (border.Width() +
-            ((TableStyle().IsFlippedBlocksWritingMode() ^ outer) ? 0 : 1)) /
-           2;  // Give the extra pixel to top and left.
-  }
-  return 0;
+LayoutUnit LayoutTableCell::BorderBefore() const {
+  return Table()->ShouldCollapseBorders()
+             ? LayoutUnit(CollapsedBorderHalfBefore(false))
+             : LayoutBlockFlow::BorderBefore();
 }
 
-unsigned LayoutTableCell::CollapsedBorderHalfAfter(bool outer) const {
-  UpdateCollapsedBorderValues();
-  const auto* collapsed_border_values = this->GetCollapsedBorderValues();
-  if (!collapsed_border_values)
-    return 0;
-
-  const auto& border = collapsed_border_values->AfterBorder();
-  if (border.Exists()) {
-    return (border.Width() +
-            ((TableStyle().IsFlippedBlocksWritingMode() ^ outer) ? 1 : 0)) /
-           2;
-  }
-  return 0;
+LayoutUnit LayoutTableCell::BorderAfter() const {
+  return Table()->ShouldCollapseBorders()
+             ? LayoutUnit(CollapsedBorderHalfAfter(false))
+             : LayoutBlockFlow::BorderAfter();
 }
 
 void LayoutTableCell::Paint(const PaintInfo& paint_info,

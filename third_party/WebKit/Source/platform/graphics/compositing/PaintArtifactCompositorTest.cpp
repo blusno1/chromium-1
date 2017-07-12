@@ -749,7 +749,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
   // Node #0 reserved for null; #1 for root render surface.
   ASSERT_EQ(3u, scroll_tree.size());
   const cc::ScrollNode& scroll_node = *scroll_tree.Node(2);
-  EXPECT_EQ(gfx::Size(11, 13), scroll_node.scroll_clip_layer_bounds);
+  EXPECT_EQ(gfx::Size(11, 13), scroll_node.container_bounds);
   EXPECT_EQ(gfx::Size(27, 31), scroll_node.bounds);
   EXPECT_TRUE(scroll_node.user_scrollable_horizontal);
   EXPECT_FALSE(scroll_node.user_scrollable_vertical);
@@ -769,7 +769,6 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
             scroll_node.main_thread_scrolling_reasons);
 
   auto* layer = ContentLayerAt(0);
-  EXPECT_EQ(layer->id(), scroll_node.owning_layer_id);
   auto scroll_node_index = layer->scroll_tree_index();
   EXPECT_EQ(scroll_node_index, scroll_node.id);
 
@@ -865,7 +864,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
   // Node #0 reserved for null; #1 for root render surface.
   ASSERT_EQ(3u, scroll_tree.size());
   const cc::ScrollNode& scroll_node = *scroll_tree.Node(2);
-  EXPECT_EQ(gfx::Size(2, 3), scroll_node.scroll_clip_layer_bounds);
+  EXPECT_EQ(gfx::Size(2, 3), scroll_node.container_bounds);
   EXPECT_EQ(gfx::Size(5, 7), scroll_node.bounds);
   EXPECT_FALSE(scroll_node.user_scrollable_horizontal);
   EXPECT_TRUE(scroll_node.user_scrollable_vertical);
@@ -1479,7 +1478,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, TwoTransformsClipBetween) {
     rects_with_color.push_back(
         RectWithColor(FloatRect(0, 0, 100, 100), Color::kWhite));
     rects_with_color.push_back(
-        RectWithColor(FloatRect(40, 50, 50, 60), Color(Color::kBlack)));
+        RectWithColor(FloatRect(40, 50, 10, 10), Color(Color::kBlack)));
     rects_with_color.push_back(
         RectWithColor(FloatRect(0, 0, 200, 300), Color::kGray));
     const cc::Layer* layer = ContentLayerAt(0);

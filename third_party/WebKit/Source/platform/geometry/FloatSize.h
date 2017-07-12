@@ -29,13 +29,15 @@
 #define FloatSize_h
 
 #include <iosfwd>
+
+#include "build/build_config.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/MathExtras.h"
 #include "third_party/skia/include/core/SkSize.h"
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 typedef struct CGSize CGSize;
 
 #ifdef __OBJC__
@@ -114,15 +116,10 @@ class PLATFORM_EXPORT FloatSize {
     return FloatSize(width_ * scale_x, height_ * scale_y);
   }
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   explicit FloatSize(
       const CGSize&);  // don't do this implicitly since it's lossy
   operator CGSize() const;
-#if defined(__OBJC__) && !defined(NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES)
-  explicit FloatSize(
-      const NSSize&);  // don't do this implicitly since it's lossy
-  operator NSSize() const;
-#endif
 #endif
 
   operator SkSize() const { return SkSize::Make(width_, height_); }

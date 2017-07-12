@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_fetch_throttler_delegate.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_fetcher_delegate.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_service.h"
@@ -24,9 +25,8 @@
 namespace base {
 class Clock;
 class FilePath;
-class SingleThreadTaskRunner;
+class SequencedTaskRunner;
 class TaskRunner;
-class ThreadChecker;
 class TickClock;
 class Time;
 }  // namespace base
@@ -62,7 +62,7 @@ class AffiliationBackend : public FacetManagerHost,
   // Construction is very cheap, expensive steps are deferred to Initialize().
   AffiliationBackend(
       const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       std::unique_ptr<base::Clock> time_source,
       std::unique_ptr<base::TickClock> time_tick_source);
   ~AffiliationBackend() override;
@@ -81,8 +81,7 @@ class AffiliationBackend : public FacetManagerHost,
   void Prefetch(const FacetURI& facet_uri, const base::Time& keep_fresh_until);
   void CancelPrefetch(const FacetURI& facet_uri,
                       const base::Time& keep_fresh_until);
-  void TrimCache();
-  void TrimCacheForFacet(const FacetURI& facet_uri);
+  void TrimCacheForFacetURI(const FacetURI& facet_uri);
 
   // Deletes the cache database file at |db_path|, and all auxiliary files. The
   // database must be closed before calling this.
@@ -136,12 +135,12 @@ class AffiliationBackend : public FacetManagerHost,
   void SetThrottlerForTesting(
       std::unique_ptr<AffiliationFetchThrottler> throttler);
 
-  // Created in Initialize(), and ensures that all subsequent methods are called
-  // on the same thread.
-  std::unique_ptr<base::ThreadChecker> thread_checker_;
+  // Ensures that all methods, excluding construction, are called on the same
+  // sequence.
+  SEQUENCE_CHECKER(sequence_checker_);
 
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
   std::unique_ptr<base::Clock> clock_;
   std::unique_ptr<base::TickClock> tick_clock_;
 

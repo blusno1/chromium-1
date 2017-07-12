@@ -118,10 +118,14 @@ public class AwContents implements SmartClipProvider {
     // produce little visible difference.
     private static final float ZOOM_CONTROLS_EPSILON = 0.007f;
 
-    private static final boolean FORCE_AUXILIARY_BITMAP_RENDERING =
-            "goldfish".equals(Build.HARDWARE) || "ranchu".equals(Build.HARDWARE);
-
     private static final double MIN_SCREEN_HEIGHT_PERCENTAGE_FOR_INTERSTITIAL = 0.7;
+
+    private static class ForceAuxiliaryBitmapRendering {
+        private static final boolean sResult = lazyCheck();
+        private static boolean lazyCheck() {
+            return !nativeHasRequiredHardwareExtensions();
+        }
+    }
 
     /**
      * WebKit hit test related data structure. These are used to implement
@@ -832,6 +836,10 @@ public class AwContents implements SmartClipProvider {
         contentViewCore.setActionModeCallback(
                 new AwActionModeCallback(mContext, this,
                         contentViewCore.getActionModeCallbackHelper()));
+        if (mAutofillProvider != null) {
+            contentViewCore.setNonSelectionActionModeCallback(
+                    new AutofillActionModeCallback(context, mAutofillProvider));
+        }
         contentViewCore.addGestureStateListener(gestureStateListener);
     }
 
@@ -1319,8 +1327,6 @@ public class AwContents implements SmartClipProvider {
 
     public static void setAwDrawSWFunctionTable(long functionTablePointer) {
         nativeSetAwDrawSWFunctionTable(functionTablePointer);
-        // Force auxiliary bitmap rendering in emulators.
-        nativeSetForceAuxiliaryBitmapRendering(FORCE_AUXILIARY_BITMAP_RENDERING);
     }
 
     public static void setAwDrawGLFunctionTable(long functionTablePointer) {
@@ -1626,8 +1632,7 @@ public class AwContents implements SmartClipProvider {
         }
 
         // If we are reloading the same url, then set transition type as reload.
-        if (params.getUrl() != null
-                && params.getUrl().equals(mWebContents.getUrl())
+        if (params.getUrl() != null && params.getUrl().equals(mWebContents.getLastCommittedUrl())
                 && params.getTransitionType() == PageTransition.LINK) {
             params.setTransitionType(PageTransition.RELOAD);
         }
@@ -1678,13 +1683,15 @@ public class AwContents implements SmartClipProvider {
     }
 
     /**
-     * Get the URL of the current page.
+     * Get the URL of the current page. This is the visible URL of the {@link WebContents} which may
+     * be a pending navigation or the last committed URL. For the last committed URL use
+     * #getLastCommittedUrl().
      *
      * @return The URL of the current page or null if it's empty.
      */
     public String getUrl() {
         if (isDestroyedOrNoOperation(WARN)) return null;
-        String url =  mWebContents.getUrl();
+        String url = mWebContents.getVisibleUrl();
         if (url == null || url.trim().isEmpty()) return null;
         return url;
     }
@@ -2352,7 +2359,7 @@ public class AwContents implements SmartClipProvider {
         }
     }
 
-    public void autofill(final SparseArray<String> values) {
+    public void autofill(final SparseArray<Object> values) {
         if (mAutofillProvider != null) {
             mAutofillProvider.autofill(values);
         }
@@ -3010,15 +3017,28 @@ public class AwContents implements SmartClipProvider {
     }
 
     @VisibleForTesting
-    public void callProceedOnInterstitial() {
-        if (isDestroyedOrNoOperation(NO_WARN)) return;
-        nativeCallProceedOnInterstitialForTesting(mNativeAwContents);
+    public void evaluateJavaScriptOnInterstitialForTesting(
+            String script, final ValueCallback<String> callback) {
+        if (TRACE) Log.i(TAG, "%s evaluateJavascriptOnInterstitial=%s", this, script);
+        if (isDestroyedOrNoOperation(WARN)) return;
+        JavaScriptCallback jsCallback = null;
+        if (callback != null) {
+            jsCallback = new JavaScriptCallback() {
+                @Override
+                public void handleJavaScriptResult(String jsonResult) {
+                    callback.onReceiveValue(jsonResult);
+                }
+            };
+        }
+
+        // mWebContents.evaluateJavaScript(script, jsCallback);
+        nativeEvaluateJavaScriptOnInterstitialForTesting(mNativeAwContents, script, jsCallback);
     }
 
-    @VisibleForTesting
-    public void callDontProceedOnInterstitial() {
-        if (isDestroyedOrNoOperation(NO_WARN)) return;
-        nativeCallDontProceedOnInterstitialForTesting(mNativeAwContents);
+    @CalledByNative
+    private static void onEvaluateJavaScriptResultForTesting(
+            String jsonResult, JavaScriptCallback callback) {
+        callback.handleJavaScriptResult(jsonResult);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -3159,8 +3179,10 @@ public class AwContents implements SmartClipProvider {
             }
             boolean did_draw = nativeOnDraw(mNativeAwContents, canvas,
                     canvas.isHardwareAccelerated(), scrollX, scrollY, globalVisibleRect.left,
-                    globalVisibleRect.top, globalVisibleRect.right, globalVisibleRect.bottom);
-            if (did_draw && canvas.isHardwareAccelerated() && !FORCE_AUXILIARY_BITMAP_RENDERING) {
+                    globalVisibleRect.top, globalVisibleRect.right, globalVisibleRect.bottom,
+                    ForceAuxiliaryBitmapRendering.sResult);
+            if (did_draw && canvas.isHardwareAccelerated()
+                    && !ForceAuxiliaryBitmapRendering.sResult) {
                 did_draw = mCurrentFunctor.requestDrawGL(canvas);
             }
             if (did_draw) {
@@ -3475,16 +3497,15 @@ public class AwContents implements SmartClipProvider {
 
     private static native long nativeInit(AwBrowserContext browserContext);
     private static native void nativeDestroy(long nativeAwContents);
-    private static native void nativeSetForceAuxiliaryBitmapRendering(
-            boolean forceAuxiliaryBitmapRendering);
+    private static native boolean nativeHasRequiredHardwareExtensions();
     private static native void nativeSetAwDrawSWFunctionTable(long functionTablePointer);
     private static native void nativeSetAwDrawGLFunctionTable(long functionTablePointer);
     private static native int nativeGetNativeInstanceCount();
     private static native void nativeSetShouldDownloadFavicons();
     private static native void nativeUpdateDefaultLocale(String locale, String localeList);
 
-    private native void nativeCallProceedOnInterstitialForTesting(long nativeAwContents);
-    private native void nativeCallDontProceedOnInterstitialForTesting(long nativeAwContents);
+    private native void nativeEvaluateJavaScriptOnInterstitialForTesting(
+            long nativeAwContents, String script, JavaScriptCallback jsCallback);
     private native void nativeSetJavaPeers(long nativeAwContents, AwContents awContents,
             AwWebContentsDelegate webViewWebContentsDelegate,
             AwContentsClientBridge contentsClientBridge, AwContentsIoThreadClient ioThreadClient,
@@ -3502,8 +3523,9 @@ public class AwContents implements SmartClipProvider {
     private native void nativeOnComputeScroll(
             long nativeAwContents, long currentAnimationTimeMillis);
     private native boolean nativeOnDraw(long nativeAwContents, Canvas canvas,
-            boolean isHardwareAccelerated, int scrollX, int scrollY,
-            int visibleLeft, int visibleTop, int visibleRight, int visibleBottom);
+            boolean isHardwareAccelerated, int scrollX, int scrollY, int visibleLeft,
+            int visibleTop, int visibleRight, int visibleBottom,
+            boolean forceAuxiliaryBitmapRendering);
     private native void nativeFindAllAsync(long nativeAwContents, String searchString);
     private native void nativeFindNext(long nativeAwContents, boolean forward);
     private native void nativeClearMatches(long nativeAwContents);

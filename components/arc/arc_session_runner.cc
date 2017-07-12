@@ -223,12 +223,13 @@ void ArcSessionRunner::OnSessionStopped(ArcStopReason stop_reason) {
 }
 
 void ArcSessionRunner::EmitLoginPromptVisibleCalled() {
-  DCHECK(!arc_session_);
   // Since 'login-prompt-visible' Upstart signal starts all Upstart jobs the
   // container may depend on such as cras, EmitLoginPromptVisibleCalled() is the
   // safe place to start the container for login screen.
-  // TODO(yusukes): Once Chrome OS side is ready, uncomment the following:
+  DCHECK(!arc_session_);
+  DCHECK_EQ(state_, State::STOPPED);
 
+  // TODO(yusukes): Once Chrome OS side is ready, uncomment the following:
   // arc_session_ = factory_.Run();
   // arc_session_->AddObserver(this);
   // state_ = State::STARTING_FOR_LOGIN_SCREEN;

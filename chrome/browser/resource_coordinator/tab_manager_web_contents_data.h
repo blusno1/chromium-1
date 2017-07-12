@@ -29,11 +29,13 @@ namespace resource_coordinator {
 // occurs in the main frame, which happens if the user navigates to a new page
 // and the WebContents is reused.
 //
+// These values are used in the TabManager.SessionRestore.SwitchToTab UMA.
+//
 // TODO(shaseley): *switch to the new done signal (network and cpu quiescence)
 // when available.
 //
-// TODO(shaseley): This will become an UMA histogram once the TabManager is
-// aware of session restore begin/end and background tab loading begin/end.
+// These values are written to logs.  New enum values can be added, but existing
+// enums must never be renumbered or deleted and reused.
 enum TabLoadingState {
   TAB_IS_NOT_LOADING = 0,
   TAB_IS_LOADING = 1,
@@ -54,6 +56,8 @@ class TabManager::WebContentsData
   void DidStartLoading() override;
   void DidStopLoading() override;
   void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
   void WebContentsDestroyed() override;
 
@@ -120,6 +124,11 @@ class TabManager::WebContentsData
   // Returns the time to first purge after the tab is backgrounded.
   base::TimeDelta time_to_purge() const { return time_to_purge_; }
 
+  // Sets the tab loading state.
+  void SetTabLoadingState(TabLoadingState state) {
+    tab_data_.tab_loading_state = state;
+  }
+
   // Returns the TabLoadingState of the tab.
   TabLoadingState tab_loading_state() const {
     return tab_data_.tab_loading_state;
@@ -129,6 +138,7 @@ class TabManager::WebContentsData
   // Needed to access tab_data_.
   FRIEND_TEST_ALL_PREFIXES(TabManagerWebContentsDataTest, CopyState);
   FRIEND_TEST_ALL_PREFIXES(TabManagerWebContentsDataTest, TabLoadingState);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, HistogramsSessionRestoreSwitchToTab);
 
   struct Data {
     Data();
@@ -161,11 +171,6 @@ class TabManager::WebContentsData
   // Returns either the system's clock or the test clock. See |test_tick_clock_|
   // for more details.
   base::TimeTicks NowTicks() const;
-
-  // Sets the tab loading state.
-  void SetTabLoadingState(TabLoadingState state) {
-    tab_data_.tab_loading_state = state;
-  }
 
   // Contains all the needed data for the tab.
   Data tab_data_;

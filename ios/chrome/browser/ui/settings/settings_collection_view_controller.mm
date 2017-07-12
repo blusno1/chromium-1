@@ -144,8 +144,7 @@ class SigninObserverBridge : public SigninManagerBase::Observer {
 
   // SigninManagerBase::Observer implementation:
   void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username,
-                             const std::string& password) override;
+                             const std::string& username) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
@@ -167,8 +166,7 @@ SigninObserverBridge::SigninObserverBridge(
 }
 
 void SigninObserverBridge::GoogleSigninSucceeded(const std::string& account_id,
-                                                 const std::string& username,
-                                                 const std::string& password) {
+                                                 const std::string& username) {
   [owner_ onSignInStateChanged];
 }
 
@@ -317,18 +315,6 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   [self updateSearchCell];
 }
 
-- (void)viewDidDisappear:(BOOL)animated {
-  [super viewDidDisappear:animated];
-  if (!_signinStarted && _signinPromoViewMediator) {
-    PrefService* prefs = _browserState->GetPrefs();
-    int displayedCount =
-        prefs->GetInteger(prefs::kIosSettingsSigninPromoDisplayedCount);
-    UMA_HISTOGRAM_COUNTS_100(
-        "MobileSignInPromo.SettingsManager.ImpressionsTilDismiss",
-        displayedCount);
-  }
-}
-
 #pragma mark SettingsRootCollectionViewController
 
 - (void)loadModel {
@@ -353,11 +339,13 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
         prefs->GetInteger(prefs::kIosSettingsSigninPromoDisplayedCount);
     if (experimental_flags::IsSigninPromoEnabled() &&
         displayedCount < kAutomaticSigninPromoViewDismissCount) {
-      _signinPromoViewMediator =
-          [[SigninPromoViewMediator alloc] initWithBrowserState:_browserState];
-      _signinPromoViewMediator.consumer = self;
-      prefs->SetInteger(prefs::kIosSettingsSigninPromoDisplayedCount,
-                        displayedCount + 1);
+      if (!_signinPromoViewMediator) {
+        _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
+            initWithBrowserState:_browserState];
+        _signinPromoViewMediator.consumer = self;
+        prefs->SetInteger(prefs::kIosSettingsSigninPromoDisplayedCount,
+                          displayedCount + 1);
+      }
     }
     [model addItem:[self signInTextItem]
         toSectionWithIdentifier:SectionIdentifierSignIn];
@@ -1038,6 +1026,14 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 #pragma mark SettingsControllerProtocol
 
 - (void)settingsWillBeDismissed {
+  if (!_signinStarted && _signinPromoViewMediator) {
+    PrefService* prefs = _browserState->GetPrefs();
+    int displayedCount =
+        prefs->GetInteger(prefs::kIosSettingsSigninPromoDisplayedCount);
+    UMA_HISTOGRAM_COUNTS_100(
+        "MobileSignInPromo.SettingsManager.ImpressionsTilDismiss",
+        displayedCount);
+  }
   [_signinInteractionController cancel];
   [self stopBrowserStateServiceObservers];
 }
@@ -1085,13 +1081,13 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
 #pragma mark ChromeIdentityServiceObserver
 
-- (void)onProfileUpdate:(ChromeIdentity*)identity {
+- (void)profileUpdate:(ChromeIdentity*)identity {
   if (identity == _identity) {
     [self reloadAccountCell];
   }
 }
 
-- (void)onChromeIdentityServiceWillBeDestroyed {
+- (void)chromeIdentityServiceWillBeDestroyed {
   _identityServiceObserver.reset();
 }
 

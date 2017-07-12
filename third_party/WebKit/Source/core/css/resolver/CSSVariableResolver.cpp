@@ -8,6 +8,7 @@
 #include "core/CSSValueKeywords.h"
 #include "core/StyleBuilderFunctions.h"
 #include "core/StylePropertyShorthand.h"
+#include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSPendingSubstitutionValue.h"
 #include "core/css/CSSUnsetValue.h"
 #include "core/css/CSSVariableData.h"
@@ -65,8 +66,9 @@ CSSVariableData* CSSVariableResolver::ValueForCustomProperty(
   if (!variable_data->NeedsVariableResolution())
     return variable_data;
 
+  bool unused_cycle_detected;
   RefPtr<CSSVariableData> new_variable_data =
-      ResolveCustomProperty(name, *variable_data);
+      ResolveCustomProperty(name, *variable_data, unused_cycle_detected);
   if (!registration) {
     inherited_variables_->SetVariable(name, new_variable_data);
     return new_variable_data.Get();
@@ -92,7 +94,8 @@ CSSVariableData* CSSVariableResolver::ValueForCustomProperty(
 
 PassRefPtr<CSSVariableData> CSSVariableResolver::ResolveCustomProperty(
     AtomicString name,
-    const CSSVariableData& variable_data) {
+    const CSSVariableData& variable_data,
+    bool& cycle_detected) {
   DCHECK(variable_data.NeedsVariableResolution());
 
   bool disallow_animation_tainted = false;
@@ -100,6 +103,7 @@ PassRefPtr<CSSVariableData> CSSVariableResolver::ResolveCustomProperty(
   Vector<CSSParserToken> tokens;
   Vector<String> backing_strings;
   backing_strings.AppendVector(variable_data.BackingStrings());
+  DCHECK(!variables_seen_.Contains(name));
   variables_seen_.insert(name);
   bool success =
       ResolveTokenRange(variable_data.Tokens(), disallow_animation_tainted,
@@ -108,8 +112,10 @@ PassRefPtr<CSSVariableData> CSSVariableResolver::ResolveCustomProperty(
 
   if (!success || !cycle_start_points_.IsEmpty()) {
     cycle_start_points_.erase(name);
+    cycle_detected = true;
     return nullptr;
   }
+  cycle_detected = false;
   return CSSVariableData::CreateResolved(tokens, std::move(backing_strings),
                                          is_animation_tainted);
 }
@@ -126,6 +132,20 @@ bool CSSVariableResolver::ResolveVariableReference(
       range.ConsumeIncludingWhitespace().Value().ToAtomicString();
   DCHECK(range.AtEnd() || (range.Peek().GetType() == kCommaToken));
 
+  PropertyHandle property(variable_name);
+  if (state_.AnimationPendingCustomProperties().Contains(property) &&
+      !variables_seen_.Contains(variable_name)) {
+    // We make the StyleResolverState mutable for animated custom properties as
+    // an optimisation. Without this we would need to compute animated values on
+    // the stack without saving the result or perform an expensive and complex
+    // value dependency graph analysis to compute them in the required order.
+    StyleResolver::ApplyAnimatedCustomProperty(
+        const_cast<StyleResolverState&>(state_), *this, property);
+    // Null custom property storage may become non-null after application, we
+    // must refresh these cached values.
+    inherited_variables_ = state_.Style()->InheritedVariables();
+    non_inherited_variables_ = state_.Style()->NonInheritedVariables();
+  }
   CSSVariableData* variable_data = ValueForCustomProperty(variable_name);
   if (!variable_data ||
       (disallow_animation_tainted && variable_data->IsAnimationTainted())) {
@@ -281,6 +301,23 @@ const CSSValue* CSSVariableResolver::ResolvePendingSubstitutions(
     return value;
 
   return CSSUnsetValue::Create();
+}
+
+RefPtr<CSSVariableData>
+CSSVariableResolver::ResolveCustomPropertyAnimationKeyframe(
+    const CSSCustomPropertyDeclaration& keyframe,
+    bool& cycle_detected) {
+  DCHECK(keyframe.Value());
+  DCHECK(keyframe.Value()->NeedsVariableResolution());
+  const AtomicString& name = keyframe.GetName();
+
+  if (variables_seen_.Contains(name)) {
+    cycle_start_points_.insert(name);
+    cycle_detected = true;
+    return nullptr;
+  }
+
+  return ResolveCustomProperty(name, *keyframe.Value(), cycle_detected);
 }
 
 void CSSVariableResolver::ResolveVariableDefinitions() {

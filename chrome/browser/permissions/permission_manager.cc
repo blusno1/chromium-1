@@ -24,6 +24,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/storage/durable_storage_permission_context.h"
 #include "chrome/browser/tab_contents/tab_util.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/features.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/browser_thread.h"
@@ -33,10 +34,6 @@
 #include "content/public/browser/web_contents.h"
 #include "device/vr/features/features.h"
 #include "ppapi/features/features.h"
-
-#if BUILDFLAG(ENABLE_VR) && defined(OS_ANDROID)
-#include "chrome/browser/android/vr_shell/vr_tab_helper.h"
-#endif  // BUILDFLAG(ENABLE_VR) && defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/flash_permission_context.h"
@@ -196,6 +193,46 @@ class PermissionManager::PendingRequest {
   size_t remaining_results_;
 };
 
+// Object to track the callback passed to
+// PermissionContextBase::RequestPermission. The callback passed in will never
+// be run when a permission prompt has been ignored, but it's important that we
+// know when a prompt is ignored to clean up |pending_requests_| correctly.
+// If the callback is destroyed without being run, the destructor here will
+// cancel the request to clean up.
+class PermissionManager::PermissionResponseCallback {
+ public:
+  PermissionResponseCallback(
+      const base::WeakPtr<PermissionManager>& permission_manager,
+      int request_id,
+      int permission_id)
+      : permission_manager_(permission_manager),
+        request_id_(request_id),
+        permission_id_(permission_id),
+        request_answered_(false) {}
+
+  ~PermissionResponseCallback() {
+    if (!request_answered_ &&
+        permission_manager_->pending_requests_.Lookup(request_id_)) {
+      permission_manager_->pending_requests_.Remove(request_id_);
+    }
+  }
+
+  void OnPermissionsRequestResponseStatus(ContentSetting content_setting) {
+    request_answered_ = true;
+    permission_manager_->OnPermissionsRequestResponseStatus(
+        request_id_, permission_id_, content_setting);
+  }
+
+ private:
+  base::WeakPtr<PermissionManager> permission_manager_;
+  int request_id_;
+  int permission_id_;
+
+  bool request_answered_;
+
+  DISALLOW_COPY_AND_ASSIGN(PermissionResponseCallback);
+};
+
 struct PermissionManager::Subscription {
   ContentSettingsType permission;
   GURL requesting_origin;
@@ -250,6 +287,7 @@ PermissionManager::PermissionManager(Profile* profile)
 }
 
 PermissionManager::~PermissionManager() {
+  DCHECK(pending_requests_.IsEmpty());
   DCHECK(subscriptions_.IsEmpty());
 }
 
@@ -288,13 +326,11 @@ int PermissionManager::RequestPermissions(
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
 
-#if BUILDFLAG(ENABLE_VR) && defined(OS_ANDROID)
-  if (vr_shell::VrTabHelper::IsInVr(web_contents)) {
+  if (vr::VrTabHelper::IsInVr(web_contents)) {
     callback.Run(
         std::vector<ContentSetting>(permissions.size(), CONTENT_SETTING_BLOCK));
     return kNoPendingOperation;
   }
-#endif  // BUILDFLAG(ENABLE_VR) && defined(OS_ANDROID)
 
   GURL embedding_origin = web_contents->GetLastCommittedURL().GetOrigin();
 
@@ -308,10 +344,13 @@ int PermissionManager::RequestPermissions(
 
     PermissionContextBase* context = GetPermissionContext(permission);
     DCHECK(context);
+    auto callback = base::MakeUnique<PermissionResponseCallback>(
+        weak_ptr_factory_.GetWeakPtr(), request_id, i);
     context->RequestPermission(
         web_contents, request, requesting_origin, user_gesture,
-        base::Bind(&PermissionManager::OnPermissionsRequestResponseStatus,
-                   weak_ptr_factory_.GetWeakPtr(), request_id, i));
+        base::Bind(
+            &PermissionResponseCallback::OnPermissionsRequestResponseStatus,
+            base::Passed(&callback)));
   }
 
   // The request might have been resolved already.
@@ -413,7 +452,8 @@ void PermissionManager::CancelPermissionRequest(int request_id) {
       continue;
     context->CancelPermissionRequest(web_contents, request);
   }
-  pending_requests_.Remove(request_id);
+  // The request should be automatically removed from |pending_requests_| as a
+  // result of it being cancelled but not necessarily immediately.
 }
 
 void PermissionManager::ResetPermission(PermissionType permission,

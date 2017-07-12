@@ -111,15 +111,15 @@ class CONTENT_EXPORT RenderWidgetCompositor
       std::unique_ptr<base::Value> value,
       const base::Callback<void(std::unique_ptr<base::Value>)>& callback);
   bool SendMessageToMicroBenchmark(int id, std::unique_ptr<base::Value> value);
-  void SetFrameSinkId(const cc::FrameSinkId& frame_sink_id);
+  void SetFrameSinkId(const viz::FrameSinkId& frame_sink_id);
   void SetPaintedDeviceScaleFactor(float device_scale);
   void SetRasterColorSpace(const gfx::ColorSpace& color_space);
   void SetIsForOopif(bool is_for_oopif);
   void SetContentSourceId(uint32_t source_id);
-  void SetLocalSurfaceId(const cc::LocalSurfaceId& local_surface_id);
+  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id);
 
   // WebLayerTreeView implementation.
-  cc::FrameSinkId GetFrameSinkId() override;
+  viz::FrameSinkId GetFrameSinkId() override;
   void SetRootLayer(const blink::WebLayer& layer) override;
   void ClearRootLayer() override;
   cc::AnimationHost* CompositorAnimationHost() override;
@@ -146,14 +146,8 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void CompositeAndReadbackAsync(
       blink::WebCompositeAndReadbackAsyncCallback* callback) override;
   void SetDeferCommits(bool defer_commits) override;
-  // TODO(pdr): Refactor to use a struct like LayerTreeHost::ViewportLayers.
   void RegisterViewportLayers(
-      const blink::WebLayer* overscrollElasticityLayer,
-      const blink::WebLayer* pageScaleLayer,
-      const blink::WebLayer* innerViewportContainerLayer,
-      const blink::WebLayer* outerViewportContainerLayer,
-      const blink::WebLayer* innerViewportScrollLayer,
-      const blink::WebLayer* outerViewportScrollLayer) override;
+      const blink::WebLayerTreeView::ViewportLayers& viewport_layers) override;
   void ClearViewportLayers() override;
   void RegisterSelection(const blink::WebSelection& selection) override;
   void ClearSelection() override;
@@ -248,7 +242,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
 
   blink::WebLayoutAndPaintAsyncCallback* layout_and_paint_async_callback_;
 
-  cc::FrameSinkId frame_sink_id_;
+  viz::FrameSinkId frame_sink_id_;
 
   base::WeakPtrFactory<RenderWidgetCompositor> weak_factory_;
 

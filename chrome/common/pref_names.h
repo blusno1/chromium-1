@@ -39,6 +39,7 @@ extern const char kVoiceInteractionContextEnabled[];
 #endif
 extern const char kChildAccountStatusKnown[];
 extern const char kDefaultApps[];
+extern const char kSafeBrowsingForTrustedSourcesEnabled[];
 extern const char kDisableScreenshots[];
 extern const char kDownloadRestrictions[];
 extern const char kForceEphemeralProfiles[];
@@ -172,9 +173,6 @@ extern const char kWebKitForceEnableZoom[];
 extern const char kWebKitPasswordEchoEnabled[];
 #endif
 extern const char kDataSaverEnabled[];
-extern const char kSafeBrowsingEnabled[];
-extern const char kSafeBrowsingProceedAnywayDisabled[];
-extern const char kSafeBrowsingIncidentsSent[];
 extern const char kSSLErrorOverrideAllowed[];
 extern const char kIncognitoModeAvailability[];
 extern const char kSearchSuggestEnabled[];
@@ -545,6 +543,7 @@ extern const char kOpenPdfDownloadInSystemReader[];
 
 extern const char kSaveFileDefaultDirectory[];
 extern const char kSaveFileType[];
+extern const char kTrustedDownloadSources[];
 
 extern const char kAllowFileSelectionDialogs[];
 extern const char kDefaultTasksByMimeType[];
@@ -930,6 +929,15 @@ extern const char kClipboardLastModifiedTime[];
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
 extern const char kOfflinePrefetchBackoff[];
+extern const char kOfflineUsageStartObserved[];
+extern const char kOfflineUsageOnlineObserved[];
+extern const char kOfflineUsageOfflineObserved[];
+extern const char kOfflineUsageTrackingDay[];
+extern const char kOfflineUsageUnusedCount[];
+extern const char kOfflineUsageStartedCount[];
+extern const char kOfflineUsageOfflineCount[];
+extern const char kOfflineUsageOnlineCount[];
+extern const char kOfflineUsageMixedCount[];
 #endif
 
 }  // namespace prefs

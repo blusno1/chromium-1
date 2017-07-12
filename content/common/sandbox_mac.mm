@@ -41,12 +41,6 @@
 #include "ui/base/layout.h"
 #include "ui/gl/init/gl_factory.h"
 
-extern "C" {
-void CGSSetDenyWindowServerConnections(bool);
-void CGSShutdownServerConnections();
-OSStatus SetApplicationIsDaemon(Boolean isDaemon);
-};
-
 namespace content {
 namespace {
 
@@ -74,17 +68,19 @@ static_assert(arraysize(kDefaultSandboxTypeToResourceIDMapping) == \
 }  // namespace
 
 // Static variable declarations.
-const char* Sandbox::kSandboxEnableLogging = "ENABLE_LOGGING";
-const char* Sandbox::kSandboxDisableDenialLogging =
-    "DISABLE_SANDBOX_DENIAL_LOGGING";
-const char* Sandbox::kSandboxHomedirAsLiteral = "USER_HOMEDIR_AS_LITERAL";
-const char* Sandbox::kSandboxElCapOrLater = "ELCAP_OR_LATER";
-const char* Sandbox::kSandboxPermittedDir = "PERMITTED_DIR";
+const char* Sandbox::kSandboxBrowserPID = "BROWSER_PID";
 const char* Sandbox::kSandboxBundlePath = "BUNDLE_PATH";
-const char* Sandbox::kSandboxLoggingPathAsLiteral = "LOG_FILE_PATH";
 const char* Sandbox::kSandboxChromeBundleId = "BUNDLE_ID";
 const char* Sandbox::kSandboxComponentPath = "COMPONENT_PATH";
-const char* Sandbox::kSandboxChromePID = "CHROMIUM_PID";
+const char* Sandbox::kSandboxDisableDenialLogging =
+    "DISABLE_SANDBOX_DENIAL_LOGGING";
+const char* Sandbox::kSandboxEnableLogging = "ENABLE_LOGGING";
+const char* Sandbox::kSandboxHomedirAsLiteral = "USER_HOMEDIR_AS_LITERAL";
+const char* Sandbox::kSandboxLoggingPathAsLiteral = "LOG_FILE_PATH";
+const char* Sandbox::kSandboxOSVersion = "OS_VERSION";
+const char* Sandbox::kSandboxPermittedDir = "PERMITTED_DIR";
+
+const char* Sandbox::kSandboxElCapOrLater = "ELCAP_OR_LATER";
 
 // Warm up System APIs that empirically need to be accessed before the Sandbox
 // is turned on.
@@ -173,21 +169,6 @@ void Sandbox::SandboxWarmup(int sandbox_type) {
     // Preload AppKit color spaces used for Flash/ppapi. http://crbug.com/348304
     NSColor* color = [NSColor controlTextColor];
     [color colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
-  }
-
-  if (sandbox_type == SANDBOX_TYPE_RENDERER) {
-    // Now disconnect from WindowServer, after all objects have been warmed up.
-    // Shutting down the connection requires connecting to WindowServer,
-    // so do this before actually engaging the sandbox. This may cause two log
-    // messages to be printed to the system logger on certain OS versions.
-    CGSSetDenyWindowServerConnections(true);
-    CGSShutdownServerConnections();
-
-    // Allow the process to continue without a LaunchServices ASN. The
-    // INIT_Process function in HIServices will abort if it cannot connect to
-    // launchservicesd to get an ASN. By setting this flag, HIServices skips
-    // that.
-    SetApplicationIsDaemon(true);
   }
 }
 

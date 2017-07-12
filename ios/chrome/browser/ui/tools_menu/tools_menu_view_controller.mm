@@ -14,6 +14,7 @@
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notification_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
@@ -133,6 +134,7 @@ NS_INLINE void AnimateInViews(NSArray* views,
 @synthesize toolbarType = _toolbarType;
 @synthesize menuItems = _menuItems;
 @synthesize delegate = _delegate;
+@synthesize dispatcher = _dispatcher;
 @synthesize requestStartTime = _requestStartTime;
 
 #pragma mark Public methods
@@ -192,7 +194,6 @@ NS_INLINE void AnimateInViews(NSArray* views,
 - (void)setCanShowShareMenu:(BOOL)enabled {
   ToolsMenuViewToolsCell* toolsCell = [self toolsCell];
   [[toolsCell shareButton] setEnabled:enabled];
-  [self setItemEnabled:enabled withTag:IDC_SHARE_PAGE];
 }
 
 - (UIButton*)toolsButton {
@@ -247,11 +248,12 @@ NS_INLINE void AnimateInViews(NSArray* views,
     Class itemClass =
         item.item_class ? item.item_class : [ToolsMenuViewItem class];
     // Sanity check that the class is a useful one.
-    DCHECK([itemClass respondsToSelector:@selector(menuItemWithTitle:
-                                             accessibilityIdentifier:
-                                                             command:)]);
+    DCHECK([itemClass
+        respondsToSelector:@selector
+        (menuItemWithTitle:accessibilityIdentifier:selector:command:)]);
     [menu addObject:[itemClass menuItemWithTitle:title
                          accessibilityIdentifier:item.accessibility_id
+                                        selector:item.selector
                                          command:item.command_id]];
   }
 
@@ -297,6 +299,7 @@ NS_INLINE void AnimateInViews(NSArray* views,
 - (ToolsMenuViewItem*)createViewSourceItem {
   return [ToolsMenuViewItem menuItemWithTitle:@"View Source"
                       accessibilityIdentifier:@"View Source"
+                                     selector:nullptr
                                       command:IDC_VIEW_SOURCE];
 }
 #endif  // !defined(NDEBUG)
@@ -459,31 +462,41 @@ NS_INLINE void AnimateInViews(NSArray* views,
   [toolsButton removeTarget:self
                      action:@selector(buttonPressed:)
            forControlEvents:UIControlEventTouchUpInside];
-  for (UIButton* button in [[self toolsCell] allButtons]) {
+  ToolsMenuViewToolsCell* toolsCell = [self toolsCell];
+  for (UIButton* button in [toolsCell allButtons]) {
     [button removeTarget:self
                   action:@selector(buttonPressed:)
         forControlEvents:UIControlEventTouchUpInside];
   }
+  [toolsCell.stopButton removeTarget:self.dispatcher
+                              action:@selector(stopLoading)
+                    forControlEvents:UIControlEventTouchUpInside];
+  [toolsCell.reloadButton removeTarget:self.dispatcher
+                                action:@selector(reload)
+                      forControlEvents:UIControlEventTouchUpInside];
+  [toolsCell.shareButton removeTarget:self.dispatcher
+                               action:@selector(sharePage)
+                     forControlEvents:UIControlEventTouchUpInside];
+  [toolsCell.starButton removeTarget:self.dispatcher
+                              action:@selector(bookmarkPage)
+                    forControlEvents:UIControlEventTouchUpInside];
+  [toolsCell.starredButton removeTarget:self.dispatcher
+                                 action:@selector(bookmarkPage)
+                       forControlEvents:UIControlEventTouchUpInside];
 }
 
 #pragma mark - Button event handling
 
-- (IBAction)buttonPressed:(id)sender {
+- (void)buttonPressed:(id)sender {
   int commandId = [sender tag];
   DCHECK(commandId);
-  // The bookmark command workaround is only needed for metrics; remap it
-  // to the real command for the dispatch. This is very hacky, but it will go
-  // away soon.  See crbug/228521
-  DCHECK([sender respondsToSelector:@selector(setTag:)]);
-  if (commandId == IDC_TEMP_EDIT_BOOKMARK)
-    [sender setTag:IDC_BOOKMARK_PAGE];
-  // Do nothing when tapping the tools menu a second time.
-  if (commandId != IDC_SHOW_TOOLS_MENU) {
+  // Do not use -chromeExecuteCommand: for tags < 0 -- that is, items that have
+  // been refactored to use the dispatcher.
+  if (commandId > 0) {
     [self chromeExecuteCommand:sender];
   }
-  if (commandId == IDC_TEMP_EDIT_BOOKMARK)
-    [sender setTag:IDC_TEMP_EDIT_BOOKMARK];
 
+  // Do any metrics logging for the command, and then close the menu.
   [_delegate commandWasSelected:commandId];
 }
 
@@ -554,7 +567,17 @@ NS_INLINE void AnimateInViews(NSArray* views,
         ToolsMenuViewItem* menuItem = [_menuItems objectAtIndex:item];
         DCHECK([menuItem tag]);
         [_delegate commandWasSelected:[menuItem tag]];
-        [self chromeExecuteCommand:menuItem];
+        if ([menuItem tag] > 0) {
+          [self chromeExecuteCommand:menuItem];
+        } else {
+          DCHECK([menuItem selector]);
+          DCHECK([self.dispatcher respondsToSelector:[menuItem selector]]);
+// TODO(crbug.com/738881): Find a better way to call these methods.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+          [self.dispatcher performSelector:[menuItem selector]];
+#pragma clang diagnostic pop
+        }
       });
 }
 
@@ -576,11 +599,31 @@ NS_INLINE void AnimateInViews(NSArray* views,
     ToolsMenuViewToolsCell* cell =
         [view dequeueReusableCellWithReuseIdentifier:kToolsItemCellID
                                         forIndexPath:path];
+    // Add specific target/action dispatch for buttons refactored away from
+    // ChromeExecuteCommand. These need to be added *before* -buttonPressed:,
+    // because -buttonPressed: closes the popup menu, which will usually
+    // destroy the buttons before any other actions can be called.
+    [cell.stopButton addTarget:self.dispatcher
+                        action:@selector(stopLoading)
+              forControlEvents:UIControlEventTouchUpInside];
+    [cell.reloadButton addTarget:self.dispatcher
+                          action:@selector(reload)
+                forControlEvents:UIControlEventTouchUpInside];
+    [cell.shareButton addTarget:self.dispatcher
+                         action:@selector(sharePage)
+               forControlEvents:UIControlEventTouchUpInside];
+    [cell.starButton addTarget:self.dispatcher
+                        action:@selector(bookmarkPage)
+              forControlEvents:UIControlEventTouchUpInside];
+    [cell.starredButton addTarget:self.dispatcher
+                           action:@selector(bookmarkPage)
+                 forControlEvents:UIControlEventTouchUpInside];
     for (UIButton* button in [cell allButtons]) {
       [button addTarget:self
                     action:@selector(buttonPressed:)
           forControlEvents:UIControlEventTouchUpInside];
     }
+
     return cell;
   }
 

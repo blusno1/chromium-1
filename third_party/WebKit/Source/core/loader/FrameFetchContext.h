@@ -52,6 +52,7 @@ class LocalFrame;
 class LocalFrameClient;
 class ResourceError;
 class ResourceResponse;
+class Settings;
 class WebTaskRunner;
 
 class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
@@ -124,6 +125,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   bool AllowImage(bool images_enabled, const KURL&) const override;
   bool IsControlledByServiceWorker() const override;
   int64_t ServiceWorkerID() const override;
+  int ApplicationCacheHostID() const override;
 
   bool IsMainFrame() const override;
   bool DefersLoading() const override;
@@ -178,9 +180,12 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   LocalFrame* FrameOfImportsController() const;
   RefPtr<WebTaskRunner> GetTaskRunner() const;
 
+  // FetchContext overrides:
+  WebFrameScheduler* GetFrameScheduler() override;
+
   // BaseFetchContext overrides:
-  ContentSettingsClient* GetContentSettingsClient() const override;
-  Settings* GetSettings() const override;
+  KURL GetFirstPartyForCookies() const override;
+  bool AllowScriptFromSource(const KURL&) const override;
   SubresourceFilter* GetSubresourceFilter() const override;
   bool ShouldBlockRequestByInspector(const ResourceRequest&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
@@ -205,12 +210,15 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   const ContentSecurityPolicy* GetContentSecurityPolicy() const override;
   void AddConsoleMessage(ConsoleMessage*) const override;
 
+  ContentSettingsClient* GetContentSettingsClient() const;
+  Settings* GetSettings() const;
   String GetUserAgent() const;
-  KURL GetFirstPartyForCookies() const;
   RefPtr<SecurityOrigin> GetRequestorOrigin();
   RefPtr<SecurityOrigin> GetRequestorOriginForFrameLoading();
   ClientHintsPreferences GetClientHintsPreferences() const;
   float GetDevicePixelRatio() const;
+  bool ShouldSendClientHint(WebClientHintsType,
+                            const ClientHintsPreferences&) const;
 
   Member<DocumentLoader> document_loader_;
   Member<Document> document_;

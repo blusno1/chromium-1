@@ -125,26 +125,24 @@ static std::string GetUnitTestResultMessage(bool success) {
   return message;
 }
 
-static cdm::Error ConvertException(
+static cdm::Exception ConvertException(
     media::CdmPromise::Exception exception_code) {
   switch (exception_code) {
     case media::CdmPromise::NOT_SUPPORTED_ERROR:
-      return cdm::kNotSupportedError;
+      return cdm::Exception::kExceptionNotSupportedError;
     case media::CdmPromise::INVALID_STATE_ERROR:
-      return cdm::kInvalidStateError;
+      return cdm::Exception::kExceptionInvalidStateError;
     case media::CdmPromise::INVALID_ACCESS_ERROR:
-      return cdm::kInvalidAccessError;
+      return cdm::Exception::kExceptionTypeError;
     case media::CdmPromise::QUOTA_EXCEEDED_ERROR:
-      return cdm::kQuotaExceededError;
+      return cdm::Exception::kExceptionQuotaExceededError;
     case media::CdmPromise::UNKNOWN_ERROR:
-      return cdm::kUnknownError;
     case media::CdmPromise::CLIENT_ERROR:
-      return cdm::kClientError;
     case media::CdmPromise::OUTPUT_ERROR:
-      return cdm::kOutputError;
+      break;
   }
   NOTREACHED();
-  return cdm::kUnknownError;
+  return cdm::Exception::kExceptionNotSupportedError;
 }
 
 static media::CdmSessionType ConvertSessionType(cdm::SessionType session_type) {
@@ -351,6 +349,13 @@ void ClearKeyCdm::Initialize(bool allow_distinctive_identifier,
   allow_persistent_state_ = allow_persistent_state;
 }
 
+void ClearKeyCdm::GetStatusForPolicy(uint32_t promise_id,
+                                     const cdm::Policy& policy) {
+  NOTREACHED() << "GetStatusForPolicy() called unexpectedly.";
+  OnPromiseFailed(promise_id, CdmPromise::INVALID_STATE_ERROR, 0,
+                  "GetStatusForPolicy() called unexpectedly.");
+}
+
 void ClearKeyCdm::CreateSessionAndGenerateRequest(
     uint32_t promise_id,
     cdm::SessionType session_type,
@@ -508,7 +513,7 @@ void ClearKeyCdm::TimerExpired(void* context) {
 
   host_->OnSessionMessage(last_session_id_.data(), last_session_id_.length(),
                           cdm::kLicenseRenewal, renewal_message.data(),
-                          renewal_message.length(), nullptr, 0);
+                          renewal_message.length());
 
   ScheduleNextRenewal();
 }
@@ -548,14 +553,14 @@ cdm::Status ClearKeyCdm::Decrypt(const cdm::InputBuffer& encrypted_buffer,
 cdm::Status ClearKeyCdm::InitializeAudioDecoder(
     const cdm::AudioDecoderConfig& audio_decoder_config) {
   if (key_system_ == kExternalClearKeyDecryptOnlyKeySystem)
-    return cdm::kSessionError;
+    return cdm::kInitializationError;
 
 #if defined(CLEAR_KEY_CDM_USE_FFMPEG_DECODER)
   if (!audio_decoder_)
     audio_decoder_.reset(new media::FFmpegCdmAudioDecoder(host_));
 
   if (!audio_decoder_->Initialize(audio_decoder_config))
-    return cdm::kSessionError;
+    return cdm::kInitializationError;
 
   return cdm::kSuccess;
 #elif defined(CLEAR_KEY_CDM_USE_FAKE_AUDIO_DECODER)
@@ -572,17 +577,17 @@ cdm::Status ClearKeyCdm::InitializeAudioDecoder(
 cdm::Status ClearKeyCdm::InitializeVideoDecoder(
     const cdm::VideoDecoderConfig& video_decoder_config) {
   if (key_system_ == kExternalClearKeyDecryptOnlyKeySystem)
-    return cdm::kSessionError;
+    return cdm::kInitializationError;
 
   if (video_decoder_ && video_decoder_->is_initialized()) {
     DCHECK(!video_decoder_->is_initialized());
-    return cdm::kSessionError;
+    return cdm::kInitializationError;
   }
 
   // Any uninitialized decoder will be replaced.
   video_decoder_ = CreateVideoDecoder(host_, video_decoder_config);
   if (!video_decoder_)
-    return cdm::kSessionError;
+    return cdm::kInitializationError;
 
   return cdm::kSuccess;
 }
@@ -786,15 +791,19 @@ void ClearKeyCdm::OnQueryOutputProtectionStatus(
   OnUnitTestComplete(true);
 };
 
+void ClearKeyCdm::OnStorageId(const uint8_t* storage_id,
+                              uint32_t storage_id_size) {
+  NOTREACHED() << "OnStorageId() called unexpectedly.";
+}
+
 void ClearKeyCdm::OnSessionMessage(const std::string& session_id,
                                    CdmMessageType message_type,
                                    const std::vector<uint8_t>& message) {
   DVLOG(1) << __func__ << ": size = " << message.size();
 
-  host_->OnSessionMessage(session_id.data(), session_id.length(),
-                          cdm::kLicenseRequest,
-                          reinterpret_cast<const char*>(message.data()),
-                          message.size(), nullptr, 0);
+  host_->OnSessionMessage(
+      session_id.data(), session_id.length(), cdm::kLicenseRequest,
+      reinterpret_cast<const char*>(message.data()), message.size());
 }
 
 void ClearKeyCdm::OnSessionKeysChange(const std::string& session_id,
@@ -910,7 +919,7 @@ void ClearKeyCdm::OnUnitTestComplete(bool success) {
   std::string message = GetUnitTestResultMessage(success);
   host_->OnSessionMessage(last_session_id_.data(), last_session_id_.length(),
                           cdm::kLicenseRequest, message.data(),
-                          message.length(), nullptr, 0);
+                          message.length());
 }
 
 void ClearKeyCdm::StartFileIOTest() {

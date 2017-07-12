@@ -275,8 +275,13 @@ void JumpList::TopSitesChanged(history::TopSites* top_sites,
   // If we have a pending favicon request, cancel it here as it's out of date.
   CancelPendingUpdate();
 
-  // Initialize the one-shot timer to update the JumpList in a while.
-  InitializeTimerForUpdate();
+  // When the first tab is closed in one session, it doesn't trigger an update
+  // but a TopSites sync. This sync will trigger an update for both mostly
+  // visited and recently closed categories. We don't delay this TopSites sync.
+  if (has_topsites_sync)
+    InitializeTimerForUpdate();
+  else
+    ProcessNotifications();
 }
 
 void JumpList::TabRestoreServiceChanged(sessions::TabRestoreService* service) {
@@ -309,15 +314,24 @@ void JumpList::InitializeTimerForUpdate() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (timer_.IsRunning()) {
+    // TODO(chengx): Remove the UMA histogram below after fixing crbug/733034.
+    UMA_HISTOGRAM_COUNTS_10000(
+        "WinJumplist.NotificationTimeInterval2",
+        (timer_.desired_run_time() - base::TimeTicks::Now()).InMilliseconds());
     timer_.Reset();
   } else {
+    // TODO(chengx): Remove the UMA histogram below after fixing crbug/733034.
+    // If the notification interval is larger than 3500 ms, add a "0" to the
+    // histogram so that we know how many notifications get coalesced.
+    UMA_HISTOGRAM_COUNTS_10000("WinJumplist.NotificationTimeInterval2", 0);
     // base::Unretained is safe since |this| is guaranteed to outlive timer_.
-    timer_.Start(FROM_HERE, kDelayForJumplistUpdate,
-                 base::Bind(&JumpList::OnDelayTimer, base::Unretained(this)));
+    timer_.Start(
+        FROM_HERE, kDelayForJumplistUpdate,
+        base::Bind(&JumpList::ProcessNotifications, base::Unretained(this)));
   }
 }
 
-void JumpList::OnDelayTimer() {
+void JumpList::ProcessNotifications() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!update_in_progress_);
 
@@ -330,6 +344,17 @@ void JumpList::OnDelayTimer() {
   if (tab_restore_has_pending_notification_) {
     tab_restore_has_pending_notification_ = false;
     ProcessTabRestoreServiceNotification();
+
+    // Force a TopSite history sync when closing a first tab in one session.
+    if (!has_tab_closed_) {
+      has_tab_closed_ = true;
+      scoped_refptr<history::TopSites> top_sites =
+          TopSitesFactory::GetForProfile(profile_);
+      if (top_sites) {
+        top_sites->SyncWithHistory();
+        return;
+      }
+    }
   }
 
   // If TopSites has updates, retrieve the URLs asynchronously, and on its
@@ -353,6 +378,8 @@ void JumpList::ProcessTopSitesNotification() {
     top_sites_has_pending_notification_ = false;
     return;
   }
+
+  has_topsites_sync = true;
 
   scoped_refptr<history::TopSites> top_sites =
       TopSitesFactory::GetForProfile(profile_);
@@ -400,15 +427,6 @@ void JumpList::ProcessTabRestoreServiceNotification() {
   }
 
   recently_closed_should_update_ = true;
-
-  // Force a TopSite history sync when closing a first tab in one session.
-  if (!has_tab_closed_) {
-    has_tab_closed_ = true;
-    scoped_refptr<history::TopSites> top_sites =
-        TopSitesFactory::GetForProfile(profile_);
-    if (top_sites)
-      top_sites->SyncWithHistory();
-  }
 }
 
 void JumpList::OnMostVisitedURLsAvailable(
@@ -663,9 +681,6 @@ void JumpList::RunUpdateJumpList(
     bool recently_closed_should_update,
     IncognitoModePrefs::Availability incognito_availability,
     UpdateTransaction* update_transaction) {
-  if (!JumpListUpdater::IsEnabled())
-    return;
-
   DCHECK(update_transaction);
 
   base::FilePath most_visited_icon_dir = GenerateJumplistIconDirName(
@@ -739,12 +754,6 @@ void JumpList::CreateNewJumpListAndNotifyOS(
         &recently_closed_icons_next);
   }
 
-  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
-  UMA_HISTOGRAM_COUNTS_100("WinJumplist.CreateIconFilesCount", icons_created);
-
-  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
-  SCOPED_UMA_HISTOGRAM_TIMER("WinJumplist.UpdateJumpListDuration");
-
   base::ElapsedTimer add_custom_category_timer;
 
   // Update the "Most Visited" category of the JumpList if it exists.
@@ -756,6 +765,9 @@ void JumpList::CreateNewJumpListAndNotifyOS(
     return;
   }
 
+  base::TimeDelta most_visited_category_time =
+      add_custom_category_timer.Elapsed();
+
   // Update the "Recently Closed" category of the JumpList.
   if (!jumplist_updater.AddCustomCategory(
           l10n_util::GetStringUTF16(IDS_RECENTLY_CLOSED), recently_closed_pages,
@@ -763,9 +775,25 @@ void JumpList::CreateNewJumpListAndNotifyOS(
     return;
   }
 
+  base::TimeDelta add_category_total_time = add_custom_category_timer.Elapsed();
+
+  if (recently_closed_pages.size() == kRecentlyClosedItems &&
+      most_visited_pages.size() == kMostVisitedItems) {
+    // TODO(chengx): Remove the UMA histogram after fixing crbug/736530.
+    double most_visited_over_recently_closed =
+        most_visited_category_time.InMillisecondsF() /
+        (add_category_total_time - most_visited_category_time)
+            .InMillisecondsF();
+
+    // The ratio above is typically between 1 and 10. Multiply it by 10 to
+    // retain decimal precision.
+    UMA_HISTOGRAM_COUNTS_100("WinJumplist.RatioAddCategoryTime",
+                             most_visited_over_recently_closed * 10);
+  }
+
   // If AddCustomCategory takes longer than the maximum allowed time, abort the
   // current update and skip the next |kUpdatesToSkipUnderHeavyLoad| updates.
-  if (add_custom_category_timer.Elapsed() >= kTimeOutForAddCustomCategory) {
+  if (add_category_total_time >= kTimeOutForAddCustomCategory) {
     update_transaction->update_timeout = true;
     return;
   }
@@ -814,7 +842,7 @@ int JumpList::UpdateIconFiles(const base::FilePath& icon_dir,
   //    closed" category updates for the 1st time after Chrome is launched.
   // 2) The number of icons in |icon_dir| has exceeded the limit.
   if (icon_cur->empty() || FilesExceedLimitInDir(icon_dir, max_items * 2)) {
-    DeleteDirectoryContentAndLogRuntime(icon_dir, kFileDeleteLimit);
+    DeleteDirectoryContent(icon_dir, kFileDeleteLimit);
     icon_cur->clear();
     icon_next->clear();
     // Create new icons only when the directory exists and is empty.
@@ -834,9 +862,6 @@ int JumpList::CreateIconFiles(const base::FilePath& icon_dir,
                               const URLIconCache& icon_cur,
                               URLIconCache* icon_next) {
   DCHECK(icon_next);
-
-  // TODO(chengx): Remove the UMA histogram after fixing http://crbug.com/40407.
-  SCOPED_UMA_HISTOGRAM_TIMER("WinJumplist.CreateIconFilesDuration");
 
   int icons_created = 0;
 

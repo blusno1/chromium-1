@@ -74,6 +74,11 @@ constexpr char kZeroEncodeDetails[] = "zero-encode-details";
 constexpr size_t kPrinterInfoCount = 4;
 constexpr char kPrinterInfo[] = "prn-info-%" PRIuS;
 
+// TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+// TODO(sunnyps): Remove after fixing https://crbug.com/622080
+constexpr char kBeginMainFrameHangCompositorState[] =
+    "begin-main-frame-hang-compositor-state";
+
 using namespace crash_keys;
 
 int snprintf(char* buffer,
@@ -111,6 +116,7 @@ size_t RegisterCrashKeysHelper() {
       {gpu::crash_keys::kGPUDriverVersion, kSmallSize},
       {gpu::crash_keys::kGPUPixelShaderVersion, kSmallSize},
       {gpu::crash_keys::kGPUVertexShaderVersion, kSmallSize},
+      {gpu::crash_keys::kGPUGLContextIsVirtual, kSmallSize},
 
       // browser/:
       {kThirdPartyModulesLoaded, kSmallSize},
@@ -170,15 +176,22 @@ size_t RegisterCrashKeysHelper() {
       {"postmessage_script_info", kLargeSize},
 
       // Temporary for https://crbug.com/668633.
-      {"swdh_set_hosted_version_worker_pid", crash_keys::kSmallSize},
-      {"swdh_set_hosted_version_host_pid", crash_keys::kSmallSize},
-      {"swdh_set_hosted_version_is_new_process", crash_keys::kSmallSize},
-      {"swdh_set_hosted_version_restart_count", crash_keys::kSmallSize},
+      {"swdh_set_hosted_version_worker_pid", kSmallSize},
+      {"swdh_set_hosted_version_host_pid", kSmallSize},
+      {"swdh_set_hosted_version_is_new_process", kSmallSize},
+      {"swdh_set_hosted_version_restart_count", kSmallSize},
 
       // Temporary for https://crbug.com/697745.
-      {"engine_params", crash_keys::kMediumSize},
-      {"engine1_params", crash_keys::kMediumSize},
-      {"engine2_params", crash_keys::kMediumSize},
+      {"engine_params", kMediumSize},
+      {"engine1_params", kMediumSize},
+      {"engine2_params", kMediumSize},
+
+      // Temporary for https://crbug.com/685996.
+      {"user-cloud-policy-manager-connect-trace", kMediumSize},
+
+      // TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+      // TODO(sunnyps): Remove after fixing https://crbug.com/622080
+      {kBeginMainFrameHangCompositorState, kSmallSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

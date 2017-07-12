@@ -50,6 +50,43 @@ class AppBannerManager : public content::WebContentsObserver,
                          public blink::mojom::AppBannerService,
                          public SiteEngagementObserver {
  public:
+  enum class State {
+    // The banner pipeline has not yet been triggered for this page load.
+    INACTIVE,
+
+    // The banner pipeline is currently running for this page load.
+    ACTIVE,
+
+    // The banner pipeline is currently waiting for the page manifest to be
+    // fetched.
+    FETCHING_MANIFEST,
+
+    // The banner pipeline is currently waiting for the installability criteria
+    // to be checked. In this state the pipeline could be paused while waiting
+    // for the site to register a service worker.
+    PENDING_INSTALLABLE_CHECK,
+
+    // The banner pipeline has finished running, but is waiting for sufficient
+    // engagement to trigger the banner.
+    PENDING_ENGAGEMENT,
+
+    // The banner has sent the beforeinstallprompt event and is waiting for the
+    // response to the event.
+    SENDING_EVENT,
+
+    // The banner has sent the beforeinstallprompt, and the web page called
+    // prompt on the event while the event was being handled.
+    SENDING_EVENT_GOT_EARLY_PROMPT,
+
+    // The banner pipeline has finished running, but is waiting for the web page
+    // to call prompt on the event.
+    PENDING_PROMPT,
+
+    // The banner pipeline has finished running for this page load and no more
+    // processing is to be done.
+    COMPLETE,
+  };
+
   // Returns the current time.
   static base::Time GetCurrentTime();
 
@@ -68,13 +105,11 @@ class AppBannerManager : public content::WebContentsObserver,
   // resolved, but is required by the install event spec.
   void OnInstall();
 
-  // Sends a message to the renderer that the user accepted the banner. Does
-  // nothing if |request_id| does not match the current request.
-  void SendBannerAccepted(int request_id);
+  // Sends a message to the renderer that the user accepted the banner.
+  void SendBannerAccepted();
 
-  // Sends a message to the renderer that the user dismissed the banner. Does
-  // nothing if |request_id| does not match the current request.
-  void SendBannerDismissed(int request_id);
+  // Sends a message to the renderer that the user dismissed the banner.
+  void SendBannerDismissed();
 
   // Returns a WeakPtr to this object. Exposed so subclasses/infobars may
   // may bind callbacks without needing their own WeakPtrFactory.
@@ -94,34 +129,6 @@ class AppBannerManager : public content::WebContentsObserver,
   virtual void OnAppIconFetched(const SkBitmap& bitmap) {}
 
  protected:
-  enum class State {
-    // The banner pipeline has not yet been triggered for this page load.
-    INACTIVE,
-
-    // The banner pipeline is currently running for this page load.
-    ACTIVE,
-
-    // The banner pipeline is currently waiting for the page manifest to be
-    // fetched.
-    PENDING_MANIFEST,
-
-    // The banner pipeline is currently waiting for the installability criteria
-    // to be checked.
-    PENDING_INSTALLABLE_CHECK,
-
-    // The banner pipeline has finished running, but is waiting for sufficient
-    // engagement to trigger the banner.
-    PENDING_ENGAGEMENT,
-
-    // The banner pipeline has finished running, but is waiting for an event to
-    // trigger the banner.
-    PENDING_EVENT,
-
-    // The banner pipeline has finished running for this page load and no more
-    // processing is to be done.
-    COMPLETE,
-  };
-
   explicit AppBannerManager(content::WebContents* web_contents);
   ~AppBannerManager() override;
 
@@ -217,29 +224,9 @@ class AppBannerManager : public content::WebContentsObserver,
   // Subclass accessors for private fields which should not be changed outside
   // this class.
   InstallableManager* manager() const { return manager_; }
-  int event_request_id() const { return event_request_id_; }
-  bool is_active() const { return state_ == State::ACTIVE; }
-  bool is_active_or_pending() const {
-    switch (state_) {
-      case State::ACTIVE:
-      case State::PENDING_MANIFEST:
-      case State::PENDING_INSTALLABLE_CHECK:
-      case State::PENDING_ENGAGEMENT:
-      case State::PENDING_EVENT:
-        return true;
-      case State::INACTIVE:
-      case State::COMPLETE:
-        return false;
-    }
-    return false;
-  }
-  bool is_complete() const { return state_ == State::COMPLETE; }
-  bool is_pending_engagement() const {
-    return state_ == State::PENDING_ENGAGEMENT;
-  }
-  bool is_pending_event() const {
-    return state_ == State::PENDING_EVENT || page_requested_prompt_;
-  }
+  State state() const { return state_; }
+  bool IsRunning() const;
+  bool IsWaitingForData() const;
 
   // The URL for which the banner check is being conducted.
   GURL validated_url_;
@@ -266,6 +253,9 @@ class AppBannerManager : public content::WebContentsObserver,
  private:
   friend class AppBannerManagerTest;
 
+  // Voids all outstanding weak pointers and service pointers.
+  void ResetBindings();
+
   // Record that the banner could be shown at this point, if the triggering
   // heuristic allowed.
   void RecordCouldShowBanner();
@@ -288,10 +278,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // Fetches the data required to display a banner for the current page.
   InstallableManager* manager_;
 
-  // A monotonically increasing id to verify the response to the
-  // beforeinstallprompt event from the renderer.
-  int event_request_id_;
-
   // We do not want to trigger a banner when the manager is attached to
   // a WebContents that is playing video. Banners triggering on a site in the
   // background will appear when the tab is reactivated.
@@ -306,9 +292,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // triggering the pipeline until the load is complete.
   bool has_sufficient_engagement_;
   bool load_finished_;
-
-  // Record whether the page requests for a banner to be shown later on.
-  bool page_requested_prompt_;
 
   // Whether the current flow was begun via devtools.
   bool triggered_by_devtools_;

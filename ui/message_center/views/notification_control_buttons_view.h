@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef UI_MESSAGE_CENTER_VIEWS_NOTIFICATION_CONTROL_BUTTONS_VIEW_H_
+#define UI_MESSAGE_CENTER_VIEWS_NOTIFICATION_CONTROL_BUTTONS_VIEW_H_
+
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -51,12 +54,9 @@ class MESSAGE_CENTER_EXPORT NotificationControlButtonsView
   // close button, false otherwise.
   bool IsSettingsButtonFocused() const;
 
-  message_center::PaddedButton* close_button_for_testing() const {
-    return close_button_;
-  }
-  message_center::PaddedButton* settings_button_for_testing() const {
-    return settings_button_;
-  }
+  // Methods for testing.
+  message_center::PaddedButton* close_button_for_testing() const;
+  message_center::PaddedButton* settings_button_for_testing() const;
 
   // views::View
   const char* GetClassName() const override;
@@ -72,8 +72,8 @@ class MESSAGE_CENTER_EXPORT NotificationControlButtonsView
  private:
   MessageView* message_view_;
 
-  message_center::PaddedButton* close_button_ = nullptr;
-  message_center::PaddedButton* settings_button_ = nullptr;
+  std::unique_ptr<message_center::PaddedButton> close_button_;
+  std::unique_ptr<message_center::PaddedButton> settings_button_;
 
   std::unique_ptr<gfx::LinearAnimation> bgcolor_animation_;
   SkColor bgcolor_origin_;
@@ -83,3 +83,5 @@ class MESSAGE_CENTER_EXPORT NotificationControlButtonsView
 };
 
 }  // namespace message_center
+
+#endif  // UI_MESSAGE_CENTER_VIEWS_NOTIFICATION_CONTROL_BUTTONS_VIEW_H_

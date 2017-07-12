@@ -12,13 +12,16 @@
 #include "cc/surfaces/compositor_frame_sink_support.h"
 #include "cc/surfaces/compositor_frame_sink_support_client.h"
 #include "cc/surfaces/display_client.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surfaces_export.h"
+#include "components/viz/common/local_surface_id_allocator.h"
+
+namespace viz {
+class LocalSurfaceIdAllocator;
+}
 
 namespace cc {
 class Display;
-class LocalSurfaceIdAllocator;
-class SurfaceManager;
+class FrameSinkManager;
 
 // This class submits compositor frames to an in-process Display, with the
 // client's frame being the root surface of the Display.
@@ -28,19 +31,19 @@ class CC_SURFACES_EXPORT DirectLayerTreeFrameSink
       public ExternalBeginFrameSourceClient,
       public NON_EXPORTED_BASE(DisplayClient) {
  public:
-  // The underlying Display, SurfaceManager, and LocalSurfaceIdAllocator must
-  // outlive this class.
+  // The underlying Display, FrameSinkManager, and viz::LocalSurfaceIdAllocator
+  // must outlive this class.
   DirectLayerTreeFrameSink(
-      const FrameSinkId& frame_sink_id,
-      SurfaceManager* surface_manager,
+      const viz::FrameSinkId& frame_sink_id,
+      FrameSinkManager* frame_sink_manager,
       Display* display,
       scoped_refptr<ContextProvider> context_provider,
       scoped_refptr<ContextProvider> worker_context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      SharedBitmapManager* shared_bitmap_manager);
+      viz::SharedBitmapManager* shared_bitmap_manager);
   DirectLayerTreeFrameSink(
-      const FrameSinkId& frame_sink_id,
-      SurfaceManager* surface_manager,
+      const viz::FrameSinkId& frame_sink_id,
+      FrameSinkManager* frame_sink_manager,
       Display* display,
       scoped_refptr<VulkanContextProvider> vulkan_context_provider);
   ~DirectLayerTreeFrameSink() override;
@@ -67,7 +70,7 @@ class CC_SURFACES_EXPORT DirectLayerTreeFrameSink
   void OnBeginFrame(const BeginFrameArgs& args) override;
   void ReclaimResources(
       const std::vector<ReturnedResource>& resources) override;
-  void WillDrawSurface(const LocalSurfaceId& local_surface_id,
+  void WillDrawSurface(const viz::LocalSurfaceId& local_surface_id,
                        const gfx::Rect& damage_rect) override;
 
   // ExternalBeginFrameSourceClient implementation:
@@ -76,10 +79,10 @@ class CC_SURFACES_EXPORT DirectLayerTreeFrameSink
   // This class is only meant to be used on a single thread.
   base::ThreadChecker thread_checker_;
 
-  const FrameSinkId frame_sink_id_;
-  LocalSurfaceId local_surface_id_;
-  SurfaceManager* surface_manager_;
-  LocalSurfaceIdAllocator local_surface_id_allocator_;
+  const viz::FrameSinkId frame_sink_id_;
+  viz::LocalSurfaceId local_surface_id_;
+  FrameSinkManager* frame_sink_manager_;
+  viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
   Display* display_;
   gfx::Size last_swap_frame_size_;
   float device_scale_factor_ = 1.f;

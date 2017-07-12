@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/i18n/case_conversion.h"
 #include "base/strings/string_util.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -72,7 +73,6 @@ const SkColor kActionButtonTextColor = SkColorSetRGB(0x33, 0x67, 0xD6);
 constexpr int kMaxLinesForMessageView = 1;
 constexpr int kMaxLinesForExpandedMessageView = 4;
 
-constexpr int kListNotificationOverflowIndicatorSpacing = 4;
 constexpr int kCompactTitleMessageViewSpacing = 12;
 
 constexpr int kProgressBarHeight = 4;
@@ -117,84 +117,36 @@ class ItemView : public views::View {
   explicit ItemView(const message_center::NotificationItem& item);
   ~ItemView() override;
 
-  void SetRemainingCount(int num_remaining);
-  void SetRemainingCountVisible(bool visible);
+  const char* GetClassName() const override;
 
  private:
-  class LayoutManager : public views::FillLayout {
-   public:
-    LayoutManager(ItemView* item_view)
-        : views::FillLayout(), item_view_(item_view) {}
-
-    void Layout(View* host) override {
-      gfx::Rect container_bounds = host->GetContentsBounds();
-      if (item_view_->remaining_count_->visible()) {
-        // Show the full content of the overflow indicator and collapse the
-        // message container.
-        container_bounds.set_width(
-            container_bounds.width() -
-            item_view_->remaining_count_->GetPreferredSize().width() -
-            kListNotificationOverflowIndicatorSpacing);
-      }
-      item_view_->container_->SetBoundsRect(container_bounds);
-      item_view_->remaining_count_->SetBoundsRect(host->GetContentsBounds());
-    }
-
-   private:
-    ItemView* item_view_;
-  };
-
-  // Container of the title and the message.
-  views::View* container_;
-  // Overflow indicator e.g. "+3" shown on the right bottom.
-  views::Label* remaining_count_;
-
   DISALLOW_COPY_AND_ASSIGN(ItemView);
 };
 
 ItemView::ItemView(const message_center::NotificationItem& item) {
-  SetLayoutManager(new ItemView::LayoutManager(this));
-
-  container_ = new views::View;
-  AddChildView(container_);
-  container_->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(),
-                           message_center::kItemTitleToMessagePadding));
+  SetLayoutManager(
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(), 0));
 
   views::Label* title = new views::Label(item.title);
   title->set_collapse_when_hidden(true);
   title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title->SetEnabledColor(message_center::kRegularTextColor);
   title->SetBackgroundColor(message_center::kDimTextBackgroundColor);
-  container_->AddChildView(title);
+  AddChildView(title);
 
-  views::Label* message = new views::Label(item.message);
+  views::Label* message = new views::Label(l10n_util::GetStringFUTF16(
+      IDS_MESSAGE_CENTER_LIST_NOTIFICATION_MESSAGE_WITH_DIVIDER, item.message));
   message->set_collapse_when_hidden(true);
   message->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   message->SetEnabledColor(message_center::kDimTextColor);
   message->SetBackgroundColor(message_center::kDimTextBackgroundColor);
-  container_->AddChildView(message);
-
-  remaining_count_ = new views::Label();
-  remaining_count_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
-  remaining_count_->SetEnabledColor(message_center::kDimTextColor);
-  remaining_count_->SetBackgroundColor(message_center::kDimTextBackgroundColor);
-  remaining_count_->SetVisible(false);
-  AddChildView(remaining_count_);
+  AddChildView(message);
 }
 
-ItemView::~ItemView() {}
+ItemView::~ItemView() = default;
 
-void ItemView::SetRemainingCount(int num_remaining) {
-  if (num_remaining > 0) {
-    remaining_count_->SetText(l10n_util::GetStringFUTF16Int(
-        IDS_MESSAGE_CENTER_LIST_NOTIFICATION_OVERFLOW_INDICATOR,
-        num_remaining));
-  }
-}
-
-void ItemView::SetRemainingCountVisible(bool visible) {
-  remaining_count_->SetVisible(visible);
+const char* ItemView::GetClassName() const {
+  return "ItemView";
 }
 
 // CompactTitleMessageView /////////////////////////////////////////////////////
@@ -205,6 +157,8 @@ class CompactTitleMessageView : public views::View {
  public:
   explicit CompactTitleMessageView();
   ~CompactTitleMessageView() override;
+
+  const char* GetClassName() const override;
 
   void OnPaint(gfx::Canvas* canvas) override;
 
@@ -221,7 +175,11 @@ class CompactTitleMessageView : public views::View {
   views::Label* message_view_ = nullptr;
 };
 
-CompactTitleMessageView::~CompactTitleMessageView() {}
+CompactTitleMessageView::~CompactTitleMessageView() = default;
+
+const char* CompactTitleMessageView::GetClassName() const {
+  return "CompactTitleMessageView";
+}
 
 CompactTitleMessageView::CompactTitleMessageView() {
   SetLayoutManager(new views::FillLayout());
@@ -276,11 +234,15 @@ void CompactTitleMessageView::OnPaint(gfx::Canvas* canvas) {
 
 // This class is needed in addition to LabelButton mainly becuase we want to set
 // visible_opacity of InkDropHighlight.
+// This button capitalizes the given label string.
 class NotificationButtonMD : public views::LabelButton {
  public:
   NotificationButtonMD(views::ButtonListener* listener,
                        const base::string16& text);
   ~NotificationButtonMD() override;
+
+  void SetText(const base::string16& text) override;
+  const char* GetClassName() const override;
 
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
@@ -291,7 +253,10 @@ class NotificationButtonMD : public views::LabelButton {
 
 NotificationButtonMD::NotificationButtonMD(views::ButtonListener* listener,
                                            const base::string16& text)
-    : views::LabelButton(listener, text, views::style::CONTEXT_BUTTON_MD) {
+    : views::LabelButton(listener,
+                         base::i18n::ToUpper(text),
+                         views::style::CONTEXT_BUTTON_MD) {
+  SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetInkDropMode(views::LabelButton::InkDropMode::ON);
   set_has_ink_drop_action_on_click(true);
   set_ink_drop_base_color(kActionButtonInkDropBaseColor);
@@ -303,6 +268,14 @@ NotificationButtonMD::NotificationButtonMD(views::ButtonListener* listener,
 }
 
 NotificationButtonMD::~NotificationButtonMD() = default;
+
+void NotificationButtonMD::SetText(const base::string16& text) {
+  views::LabelButton::SetText(base::i18n::ToUpper(text));
+}
+
+const char* NotificationButtonMD::GetClassName() const {
+  return "NotificationButtonMD";
+}
 
 std::unique_ptr<views::InkDropHighlight>
 NotificationButtonMD::CreateInkDropHighlight() const {
@@ -359,10 +332,12 @@ void NotificationViewMD::CreateOrUpdateViews(const Notification& notification) {
   CreateOrUpdateIconView(notification);
   CreateOrUpdateSmallIconView(notification);
   CreateOrUpdateImageView(notification);
-  CreateOrUpdateActionButtonViews(notification);
   CreateOrUpdateCloseButtonView(notification);
   CreateOrUpdateSettingsButtonView(notification);
   UpdateViewForExpandedState(expanded_);
+  // Should be called at the last because SynthesizeMouseMoveEvent() requires
+  // everything is in the right location when called.
+  CreateOrUpdateActionButtonViews(notification);
 }
 
 NotificationViewMD::NotificationViewMD(MessageCenterController* controller,
@@ -489,8 +464,7 @@ void NotificationViewMD::ButtonPressed(views::Button* sender,
 
   // Tapping anywhere on |header_row_| can expand the notification, though only
   // |expand_button| can be focused by TAB.
-  if (IsExpandable() &&
-      (sender == header_row_ || sender == header_row_->expand_button())) {
+  if (IsExpandable() && sender == header_row_) {
     ToggleExpanded();
     Layout();
     SchedulePaint();
@@ -523,12 +497,15 @@ void NotificationViewMD::RequestFocusOnCloseButton() {
 void NotificationViewMD::CreateOrUpdateContextTitleView(
     const Notification& notification) {
   header_row_->SetAppName(notification.display_source());
+  header_row_->SetTimestamp(notification.timestamp());
 }
 
 void NotificationViewMD::CreateOrUpdateTitleView(
     const Notification& notification) {
-  if (notification.type() == NOTIFICATION_TYPE_PROGRESS) {
-    left_content_->RemoveChildView(title_view_);
+  if (notification.title().empty() ||
+      notification.type() == NOTIFICATION_TYPE_PROGRESS) {
+    DCHECK(!title_view_ || left_content_->Contains(title_view_));
+    delete title_view_;
     title_view_ = nullptr;
     return;
   }
@@ -583,7 +560,9 @@ void NotificationViewMD::CreateOrUpdateMessageView(
 void NotificationViewMD::CreateOrUpdateCompactTitleMessageView(
     const Notification& notification) {
   if (notification.type() != NOTIFICATION_TYPE_PROGRESS) {
-    left_content_->RemoveChildView(compact_title_message_view_);
+    DCHECK(!compact_title_message_view_ ||
+           left_content_->Contains(compact_title_message_view_));
+    delete compact_title_message_view_;
     compact_title_message_view_ = nullptr;
     return;
   }
@@ -600,7 +579,8 @@ void NotificationViewMD::CreateOrUpdateCompactTitleMessageView(
 void NotificationViewMD::CreateOrUpdateProgressBarView(
     const Notification& notification) {
   if (notification.type() != NOTIFICATION_TYPE_PROGRESS) {
-    left_content_->RemoveChildView(progress_bar_view_);
+    DCHECK(!progress_bar_view_ || left_content_->Contains(progress_bar_view_));
+    delete progress_bar_view_;
     progress_bar_view_ = nullptr;
     header_row_->ClearProgress();
     return;
@@ -637,20 +617,19 @@ void NotificationViewMD::CreateOrUpdateListItemViews(
     left_content_->AddChildView(item_view);
   }
 
-  if (!item_views_.empty()) {
-    item_views_.front()->SetRemainingCount(items.size() - 1);
-    item_views_.back()->SetRemainingCount(items.size() - item_views_.size());
+  list_items_count_ = items.size();
 
-    // Needed when CreateOrUpdateViews is called for update.
+  // Needed when CreateOrUpdateViews is called for update.
+  if (!item_views_.empty())
     left_content_->InvalidateLayout();
-  }
 }
 
 void NotificationViewMD::CreateOrUpdateIconView(
     const Notification& notification) {
   if (notification.type() == NOTIFICATION_TYPE_PROGRESS ||
       notification.type() == NOTIFICATION_TYPE_MULTIPLE) {
-    right_content_->RemoveChildView(icon_view_);
+    DCHECK(!icon_view_ || right_content_->Contains(icon_view_));
+    delete icon_view_;
     icon_view_ = nullptr;
     return;
   }
@@ -683,8 +662,8 @@ void NotificationViewMD::CreateOrUpdateImageView(
   if (notification.image().IsEmpty()) {
     if (image_container_) {
       DCHECK(image_view_);
-
-      left_content_->RemoveChildView(image_container_);
+      DCHECK(Contains(image_container_));
+      delete image_container_;
       image_container_ = NULL;
       image_view_ = NULL;
     } else {
@@ -742,11 +721,14 @@ void NotificationViewMD::CreateOrUpdateActionButtonViews(
     }
   }
 
-  if (new_buttons) {
-    // TODO(fukino): Investigate if this Layout() is necessary.
-    Layout();
+  // Inherit mouse hover state when action button views reset.
+  // If the view is not expanded, there should be no hover state.
+  if (new_buttons && expanded_) {
     views::Widget* widget = GetWidget();
-    if (widget != NULL) {
+    if (widget) {
+      // This Layout() is needed because button should be in the right location
+      // in the view hierarchy when SynthesizeMouseMoveEvent() is called.
+      Layout();
       widget->SetSize(widget->GetContentsView()->GetPreferredSize());
       GetWidget()->SynthesizeMouseMoveEvent();
     }
@@ -811,13 +793,12 @@ void NotificationViewMD::UpdateViewForExpandedState(bool expanded) {
   if (image_container_)
     image_container_->SetVisible(expanded);
   actions_row_->SetVisible(expanded && actions_row_->has_children());
-  for (size_t i = 1; i < item_views_.size(); ++i) {
+  for (size_t i = kMaxLinesForMessageView; i < item_views_.size(); ++i) {
     item_views_[i]->SetVisible(expanded);
   }
-  if (!item_views_.empty()) {
-    item_views_.front()->SetRemainingCountVisible(!expanded);
-    item_views_.back()->SetRemainingCountVisible(expanded);
-  }
+  header_row_->SetOverflowIndicator(
+      list_items_count_ -
+      (expanded ? item_views_.size() : kMaxLinesForMessageView));
 }
 
 void NotificationViewMD::UpdateControlButtonsVisibility() {

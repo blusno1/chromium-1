@@ -907,9 +907,9 @@ void WizardController::OnOobeFlowFinished() {
   // Launch browser and delete login host controller.
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&UserSessionManager::DoBrowserLaunch,
-                 base::Unretained(UserSessionManager::GetInstance()),
-                 ProfileManager::GetActiveUserProfile(), host_));
+      base::BindOnce(&UserSessionManager::DoBrowserLaunch,
+                     base::Unretained(UserSessionManager::GetInstance()),
+                     ProfileManager::GetActiveUserProfile(), host_));
   host_ = nullptr;
 }
 
@@ -1027,6 +1027,8 @@ void WizardController::ShowCurrentScreen() {
 
 void WizardController::SetCurrentScreenSmooth(BaseScreen* new_current,
                                               bool use_smoothing) {
+  VLOG(1) << "SetCurrentScreenrSmooth: "
+          << GetOobeScreenName(new_current->screen_id());
   if (current_screen_ == new_current || new_current == nullptr ||
       oobe_ui_ == nullptr) {
     return;

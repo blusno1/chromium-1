@@ -951,13 +951,6 @@ void DocumentLoader::DidInstallNewDocument(Document* document) {
     document->ParseAndSetReferrerPolicy(referrer_policy_header);
   }
 
-  if (RuntimeEnabledFeatures::ServerTimingEnabled() &&
-      frame_->GetDocument()->domWindow()) {
-    DOMWindowPerformance::performance(*(frame_->GetDocument()->domWindow()))
-        ->AddServerTiming(response_,
-                          PerformanceBase::ShouldAddToBuffer::Always);
-  }
-
   GetLocalFrameClient().DidCreateNewDocument();
 }
 
@@ -1110,8 +1103,14 @@ void DocumentLoader::InstallNewDocument(
   // FeaturePolicy is reset in the browser process on commit, so this needs to
   // be initialized and replicated to the browser process after commit messages
   // are sent in didCommitNavigation().
+  // Feature-Policy header is currently disabled while the details of the policy
+  // syntax are being worked out. Unless the Feature Policy experimental
+  // features flag is enabled, then ignore any header received.
+  // TODO(iclelland): Re-enable once the syntax is finalized. (crbug.com/737643)
   document->SetFeaturePolicy(
-      response_.HttpHeaderField(HTTPNames::Feature_Policy));
+      RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled()
+          ? response_.HttpHeaderField(HTTPNames::Feature_Policy)
+          : g_empty_string);
 
   GetFrameLoader().DispatchDidClearDocumentOfWindowObject();
 }
@@ -1130,7 +1129,7 @@ void DocumentLoader::ReplaceDocumentWhileExecutingJavaScriptURL(
   InstallNewDocument(init, MimeType(),
                      writer_ ? writer_->Encoding() : g_empty_atom,
                      InstallNewDocumentReason::kJavascriptURL,
-                     kForceSynchronousParsing, KURL());
+                     kForceSynchronousParsing, NullURL());
   if (!source.IsNull())
     writer_->AppendReplacingData(source);
   EndWriting();

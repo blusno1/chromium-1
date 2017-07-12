@@ -23,6 +23,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -52,6 +53,7 @@ namespace content {
 
 class MessagePort;
 class ServiceWorkerContextCore;
+class ServiceWorkerInstalledScriptsSender;
 class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
 class ServiceWorkerURLRequestJob;
@@ -164,6 +166,14 @@ class CONTENT_EXPORT ServiceWorkerVersion
   }
   void set_foreign_fetch_origins(const std::vector<url::Origin>& origins) {
     foreign_fetch_origins_ = origins;
+  }
+
+  base::TimeDelta TimeSinceNoControllees() const {
+    return GetTickDuration(no_controllees_time_);
+  }
+
+  base::TimeDelta TimeSinceSkipWaiting() const {
+    return GetTickDuration(skip_waiting_time_);
   }
 
   // Meaningful only if this version is active.
@@ -400,6 +410,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   friend class base::RefCounted<ServiceWorkerVersion>;
   friend class ServiceWorkerReadFromCacheJobTest;
   friend class ServiceWorkerVersionBrowserTest;
+  friend class ServiceWorkerActivationTest;
 
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
                            ActivateWaitingVersion);
@@ -431,9 +442,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, MixedRequestTimeouts);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, EarlyResponse);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, CancelRequest);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerActivationTest, SkipWaiting);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerActivationTest,
-                           SkipWaitingWithInflightRequest);
 
   class PingController;
 
@@ -670,7 +678,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   void OnStoppedInternal(EmbeddedWorkerStatus old_status);
 
-  // Fires and clears all start callbacks.
+  // Resets |start_worker_first_purpose_| and fires and clears all start
+  // callbacks.
   void FinishStartWorker(ServiceWorkerStatusCode status);
 
   // Removes any pending external request that has GUID of |request_uuid|.
@@ -708,6 +717,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Connected to ServiceWorkerContextClient while the worker is running.
   mojom::ServiceWorkerEventDispatcherPtr event_dispatcher_;
+
+  std::unique_ptr<ServiceWorkerInstalledScriptsSender>
+      installed_scripts_sender_;
 
   std::set<const ServiceWorkerURLRequestJob*> streaming_url_request_jobs_;
 
@@ -752,6 +764,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   bool in_dtor_ = false;
 
   std::vector<int> pending_skip_waiting_requests_;
+  base::TimeTicks skip_waiting_time_;
+  base::TimeTicks no_controllees_time_;
+
   std::unique_ptr<net::HttpResponseInfo> main_script_http_info_;
 
   std::unique_ptr<TrialTokenValidator::FeatureToTokensMap> origin_trial_tokens_;
@@ -771,6 +786,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::unique_ptr<ServiceWorkerMetrics::ScopedEventRecorder> event_recorder_;
 
   bool stop_when_devtools_detached_ = false;
+
+  // Keeps the first purpose of starting the worker for UMA. Cleared in
+  // FinishStartWorker().
+  base::Optional<ServiceWorkerMetrics::EventType> start_worker_first_purpose_;
 
   // This is the set of features that were used up until installation of this
   // version completed, or used during the lifetime of |this|. The values must

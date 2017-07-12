@@ -11,11 +11,11 @@
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "components/rappor/public/rappor_utils.h"
-#include "components/ukm/public/ukm_entry_builder.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/latency/latency_histogram_macros.h"
 
@@ -399,7 +399,7 @@ void RenderWidgetHostLatencyTracker::ReportRapporScrollLatency(
 
 ukm::SourceId RenderWidgetHostLatencyTracker::GetUkmSourceId() {
   ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
-  if (ukm_recorder && ukm_source_id_ == -1) {
+  if (ukm_recorder && ukm_source_id_ == -1 && render_widget_host_delegate_) {
     ukm_source_id_ = ukm_recorder->GetNewSourceID();
     render_widget_host_delegate_->UpdateUrlForUkmSource(ukm_recorder,
                                                         ukm_source_id_);

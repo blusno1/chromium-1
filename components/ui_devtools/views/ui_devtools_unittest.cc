@@ -139,11 +139,10 @@ int GetPropertyByName(const std::string& name,
   return -1;
 }
 
-aura::Window* GetHighlightingWindow(aura::Window* root_window) {
-  const aura::Window::Windows& overlay_windows = root_window->children();
-  for (aura::Window* window : overlay_windows) {
-    if (window->GetName() == "HighlightingWidget")
-      return window;
+ui::Layer* GetHighlightingLayer(aura::Window* root_window) {
+  for (auto* layer : root_window->layer()->children()) {
+    if (layer->name() == "HighlightingLayer")
+      return layer;
   }
   NOTREACHED();
   return nullptr;
@@ -168,14 +167,10 @@ std::unique_ptr<DOM::HighlightConfig> CreateHighlightConfig(
 }
 
 void ExpectHighlighted(const gfx::Rect& bounds, aura::Window* root_window) {
-  aura::Window* highlighting_window = GetHighlightingWindow(root_window);
-  EXPECT_TRUE(highlighting_window->IsVisible());
-  EXPECT_EQ(bounds, highlighting_window->GetBoundsInScreen());
-  EXPECT_EQ(kBackgroundColor,
-            views::Widget::GetWidgetForNativeView(highlighting_window)
-                ->GetRootView()
-                ->background()
-                ->get_color());
+  ui::Layer* highlighting_layer = GetHighlightingLayer(root_window);
+  EXPECT_TRUE(highlighting_layer->visible());
+  EXPECT_EQ(bounds, highlighting_layer->bounds());
+  EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
 }
 
 }  // namespace
@@ -314,8 +309,8 @@ class UIDevToolsTest : public views::ViewsTestBase {
     DCHECK_LE(root_window_index,
               static_cast<int>(dom_agent()->root_windows().size()));
     ASSERT_FALSE(
-        GetHighlightingWindow(dom_agent()->root_windows()[root_window_index])
-            ->IsVisible());
+        GetHighlightingLayer(dom_agent()->root_windows()[root_window_index])
+            ->visible());
   }
 
   FakeFrontendChannel* frontend_channel() {
@@ -726,7 +721,7 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
 
   // Highlight non-existent node
   HighlightNode(10000);
-  EXPECT_FALSE(GetHighlightingWindow(GetPrimaryRootWindow())->IsVisible());
+  EXPECT_FALSE(GetHighlightingLayer(GetPrimaryRootWindow())->visible());
 }
 
 int GetNodeIdFromWindow(ui_devtools::UIElement* ui_element,

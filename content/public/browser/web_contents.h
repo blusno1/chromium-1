@@ -442,6 +442,11 @@ class WebContents : public PageNavigator,
   virtual void WasShown() = 0;
   virtual void WasHidden() = 0;
 
+  // Whether the WebContents is visible. This can return true even if the page
+  // is still loading, as opposed to RenderWidgetHostView::IsShowing(), which
+  // always returns false when the page is still loading.
+  virtual bool IsVisible() const = 0;
+
   // Returns true if the before unload and unload listeners need to be
   // fired. The value of this changes over time. For example, if true and the
   // before unload listener is executed and allows the user to exit, then this
@@ -593,7 +598,7 @@ class WebContents : public PageNavigator,
   // Saves the given frame's URL to the local filesystem. The headers, if
   // provided, is used to make a request to the URL rather than using cache.
   // Format of |headers| is a new line separated list of key value pairs:
-  // "<key1>: <value1>\n<key2>: <value2>".
+  // "<key1>: <value1>\r\n<key2>: <value2>".
   virtual void SaveFrameWithHeaders(const GURL& url,
                                     const Referrer& referrer,
                                     const std::string& headers) = 0;
@@ -831,6 +836,9 @@ class WebContents : public PageNavigator,
 
   // Returns true if other views are allowed, false otherwise.
   virtual bool GetAllowOtherViews() = 0;
+
+  // Returns true if the WebContents has completed its first meaningful paint.
+  virtual bool CompletedFirstVisuallyNonEmptyPaint() const = 0;
 #endif  // OS_ANDROID
 
  private:

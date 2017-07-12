@@ -222,7 +222,7 @@ function runGenericSensorTests(sensorType, updateReading, verifyReading) {
               resolve(mockSensor);
             }, reject);
 
-            sensorObject.onchange = wrapper.callback;
+            sensorObject.onreading = wrapper.callback;
             sensorObject.onerror = reject;
           });
         })
@@ -233,7 +233,7 @@ function runGenericSensorTests(sensorType, updateReading, verifyReading) {
 
   sensor_test(sensor => {
     return checkOnChangeIsCalledAndReadingIsValid(sensor);
-  }, prefix + 'Test that onChange is called and sensor reading is valid (onchange reporting).');
+  }, prefix + 'Test that onChange is called and sensor reading is valid (onreading reporting).');
 
   sensor_test(sensor => {
     sensor.mockSensorProvider.setContinuousReportingMode();
@@ -254,7 +254,7 @@ function runGenericSensorTests(sensorType, updateReading, verifyReading) {
               resolve(mockSensor);
             }, reject);
 
-            sensorObject.onchange = wrapper.callback;
+            sensorObject.onreading = wrapper.callback;
             sensorObject.onerror = reject;
           });
         })
@@ -296,7 +296,7 @@ function runGenericSensorTests(sensorType, updateReading, verifyReading) {
             resolve(mockSensor);
           }, reject);
 
-          sensorObject.onchange = wrapper.callback;
+          sensorObject.onreading = wrapper.callback;
           sensorObject.onerror = reject;
         }))
         .then(mockSensor => {
@@ -346,7 +346,7 @@ function runGenericSensorTests(sensorType, updateReading, verifyReading) {
               resolve(mockSensor);
             }, reject);
 
-            sensor1.onchange = wrapper.callback;
+            sensor1.onreading = wrapper.callback;
             sensor1.onerror = reject;
             sensor2.onerror = reject;
           });
@@ -385,15 +385,18 @@ function runGenericSensorTests(sensorType, updateReading, verifyReading) {
                 // next time, the fast sensor (30 Hz) has been notified
                 // for int(30/9) = 3 times.
                 let elapsedUpdates = mockSensor.reading_updates_count() - readingUpdatesCounter;
-                assert_equals(fastSensorNotifiedCounter, elapsedUpdates);
+                // Approximation because 'slowSensor.onreading' is sometimes
+                // called before 'fastSensor.onreading', in this case
+                // 'fastSensorNotifiedCounter == elapsedUpdates - 1'.
+                assert_approx_equals(fastSensorNotifiedCounter, elapsedUpdates, 1);
                 fastSensor.stop();
                 slowSensor.stop();
                 resolve(mockSensor);
               }
             }, reject);
 
-            fastSensor.onchange = fastSensorWrapper.callback;
-            slowSensor.onchange = slowSensorWrapper.callback;
+            fastSensor.onreading = fastSensorWrapper.callback;
+            slowSensor.onreading = slowSensorWrapper.callback;
             fastSensor.onerror = reject;
             slowSensor.onerror = reject;
           });
@@ -405,10 +408,37 @@ function runGenericSensorTests(sensorType, updateReading, verifyReading) {
 
   sensor_test(sensor => {
     return checkFrequencyHintWorks(sensor);
-  }, prefix + 'Test that frequency hint works (onchange reporting).');
+  }, prefix + 'Test that frequency hint works (onreading reporting).');
 
   sensor_test(sensor => {
     sensor.mockSensorProvider.setContinuousReportingMode();
     return checkFrequencyHintWorks(sensor);
   }, prefix + 'Test that frequency hint works (continuous reporting).');
+
+  promise_test(() => {
+    return new Promise((resolve,reject) => {
+      let iframe = document.createElement('iframe');
+      iframe.srcdoc = '<script>' +
+                      '  window.onmessage = message => {' +
+                      '    if (message.data === "LOADED") {' +
+                      '      try {' +
+                      '        new ' + sensorType.name + '();' +
+                      '        parent.postMessage("FAIL", "*");' +
+                      '      } catch (e) {' +
+                      '        parent.postMessage("PASS", "*");' +
+                      '      }' +
+                      '    }' +
+                      '   };' +
+                      '<\/script>';
+      iframe.onload = () => iframe.contentWindow.postMessage('LOADED', '*');
+      document.body.appendChild(iframe);
+      window.onmessage = message => {
+        if (message.data == 'PASS') {
+          resolve();
+        } else if (message.data == 'FAIL') {
+          reject();
+        }
+      }
+    });
+  }, prefix + 'Test that sensor cannot be constructed within iframe.');
 }

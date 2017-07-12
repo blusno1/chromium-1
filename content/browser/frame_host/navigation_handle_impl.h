@@ -38,7 +38,7 @@ class AppCacheNavigationHandle;
 class ChromeAppCacheService;
 class NavigationUIData;
 class NavigatorDelegate;
-class ResourceRequestBodyImpl;
+class ResourceRequestBody;
 class ServiceWorkerContextWrapper;
 class ServiceWorkerNavigationHandle;
 
@@ -239,7 +239,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // Returns the POST body associated with this navigation.  This will be
   // null for GET and/or other non-POST requests (or if a response to a POST
   // request was a redirect that changed the method to GET - for example 302).
-  const scoped_refptr<ResourceRequestBodyImpl>& resource_request_body() const {
+  const scoped_refptr<ResourceRequestBody>& resource_request_body() const {
     return resource_request_body_;
   }
 
@@ -264,7 +264,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // the caller to cancel the navigation or let it proceed.
   void WillStartRequest(
       const std::string& method,
-      scoped_refptr<content::ResourceRequestBodyImpl> resource_request_body,
+      scoped_refptr<content::ResourceRequestBody> resource_request_body,
       const Referrer& sanitized_referrer,
       bool has_user_gesture,
       ui::PageTransition transition,
@@ -277,6 +277,11 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // |callback| will be called when all throttles check have completed. This
   // will allow the caller to cancel the navigation or let it proceed.
   // This will also inform the delegate that the request was redirected.
+  //
+  // PlzNavigate: |post_redirect_process| is the renderer process we expect to
+  // use to commit the navigation now that it has been redirected. It can be
+  // null if there is no live process that can be used. In that case, a suitable
+  // renderer process will be created at commit time.
   void WillRedirectRequest(
       const GURL& new_url,
       const std::string& new_method,
@@ -284,6 +289,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       bool new_is_external_protocol,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       net::HttpResponseInfo::ConnectionInfo connection_info,
+      RenderProcessHost* post_redirect_process,
       const ThrottleChecksFinishedCallback& callback);
 
   // Called when the URLRequest has delivered response headers and metadata.
@@ -423,6 +429,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // Populates |throttles_| with the throttles for this navigation.
   void RegisterNavigationThrottles();
 
+  // Takes ownership of |throttle| (if any) and appends it to |throttles_|.
+  void AddThrottle(std::unique_ptr<NavigationThrottle> throttle);
+
   // Checks for attempts to navigate to a page that is already referenced more
   // than once in the frame's ancestors.  This is a helper function used by
   // WillStartRequest and WillRedirectRequest to prevent the navigation.
@@ -430,9 +439,10 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // Updates the destination site URL for this navigation. This is called on
   // redirects.
-  // PlzNavigate: When redirected cross-site, the speculative RenderProcessHost
-  // will stop expecting this navigation to commit.
-  void UpdateSiteURL();
+  // PlzNavigate: |post_redirect_process| is the renderer process that should
+  // handle the navigation following the redirect if it can be handled by an
+  // existing RenderProcessHost. Otherwise, it should be null.
+  void UpdateSiteURL(RenderProcessHost* post_redirect_process);
 
   // See NavigationHandle for a description of those member variables.
   GURL url_;
@@ -465,7 +475,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // The POST body associated with this navigation.  This will be null for GET
   // and/or other non-POST requests (or if a response to a POST request was a
   // redirect that changed the method to GET - for example 302).
-  scoped_refptr<ResourceRequestBodyImpl> resource_request_body_;
+  scoped_refptr<ResourceRequestBody> resource_request_body_;
 
   // The state the navigation is in.
   State state_;
@@ -579,6 +589,10 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // Used to inform a RenderProcessHost that we expect this navigation to commit
   // in it.
   int expected_render_process_host_id_;
+
+  // TODO(arthursonzogni): Remove this when we understand the root cause behind
+  // crbug.com/704892.
+  bool is_in_constructor;
 
   base::WeakPtrFactory<NavigationHandleImpl> weak_factory_;
 

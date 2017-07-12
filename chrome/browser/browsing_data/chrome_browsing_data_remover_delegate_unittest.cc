@@ -4,6 +4,8 @@
 
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 
+#include <stdint.h>
+
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -169,7 +171,7 @@ class TestWebappRegistry : public WebappRegistry {
 void FakeDBusCall(const chromeos::BoolDBusMethodCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(callback, chromeos::DBUS_METHOD_CALL_SUCCESS, true));
+      base::BindOnce(callback, chromeos::DBUS_METHOD_CALL_SUCCESS, true));
 }
 #endif
 
@@ -185,8 +187,8 @@ class RemoveCookieTester {
     get_cookie_success_ = false;
     cookie_store_->GetCookiesWithOptionsAsync(
         kOrigin1, net::CookieOptions(),
-        base::Bind(&RemoveCookieTester::GetCookieCallback,
-                   base::Unretained(this)));
+        base::BindOnce(&RemoveCookieTester::GetCookieCallback,
+                       base::Unretained(this)));
     message_loop_runner->Run();
     return get_cookie_success_;
   }
@@ -197,8 +199,8 @@ class RemoveCookieTester {
     quit_closure_ = message_loop_runner->QuitClosure();
     cookie_store_->SetCookieWithOptionsAsync(
         kOrigin1, "A=1", net::CookieOptions(),
-        base::Bind(&RemoveCookieTester::SetCookieCallback,
-                   base::Unretained(this)));
+        base::BindOnce(&RemoveCookieTester::SetCookieCallback,
+                       base::Unretained(this)));
     message_loop_runner->Run();
   }
 
@@ -233,7 +235,7 @@ class RemoveCookieTester {
 };
 
 void RunClosureAfterCookiesCleared(const base::Closure& task,
-                                   int cookies_deleted) {
+                                   uint32_t cookies_deleted) {
   task.Run();
 }
 
@@ -253,7 +255,7 @@ class RemoveSafeBrowsingCookieTester : public RemoveCookieTester {
     net::URLRequestContext* request_context =
         sb_service->url_request_context()->GetURLRequestContext();
     request_context->cookie_store()->DeleteAllAsync(
-        base::Bind(&RunClosureAfterCookiesCleared, run_loop.QuitClosure()));
+        base::BindOnce(&RunClosureAfterCookiesCleared, run_loop.QuitClosure()));
     run_loop.Run();
 
     SetCookieStore(request_context->cookie_store());
@@ -1697,12 +1699,12 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveContentSettings) {
   EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(kOrigin1),
             host_settings[0].primary_pattern)
       << host_settings[0].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].setting);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].GetContentSetting());
   // And the wildcard.
   EXPECT_EQ(ContentSettingsPattern::Wildcard(),
             host_settings[1].primary_pattern)
       << host_settings[1].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[1].setting);
+  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[1].GetContentSetting());
 
   // There should also only be one setting for origin3
   map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string(),
@@ -1711,12 +1713,12 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveContentSettings) {
   EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(kOrigin3),
             host_settings[0].primary_pattern)
       << host_settings[0].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].setting);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].GetContentSetting());
   // And the wildcard.
   EXPECT_EQ(ContentSettingsPattern::Wildcard(),
             host_settings[1].primary_pattern)
       << host_settings[1].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[1].setting);
+  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[1].GetContentSetting());
 
   BlockUntilOriginDataRemoved(
       base::Time(), base::Time::Max(),
@@ -1730,7 +1732,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveContentSettings) {
   EXPECT_EQ(ContentSettingsPattern::Wildcard(),
             host_settings[0].primary_pattern)
       << host_settings[0].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[0].setting);
+  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[0].GetContentSetting());
 
   map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string(),
                              &host_settings);
@@ -1738,7 +1740,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveContentSettings) {
   EXPECT_EQ(ContentSettingsPattern::Wildcard(),
             host_settings[0].primary_pattern)
       << host_settings[0].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[0].setting);
+  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[0].GetContentSetting());
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveDurablePermission) {
@@ -1777,13 +1779,13 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveDurablePermission) {
   EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(kOrigin1),
             host_settings[0].primary_pattern)
       << host_settings[0].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].setting);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].GetContentSetting());
 
   // And our wildcard.
   EXPECT_EQ(ContentSettingsPattern::Wildcard(),
             host_settings[1].primary_pattern)
       << host_settings[1].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[1].setting);
+  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[1].GetContentSetting());
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,

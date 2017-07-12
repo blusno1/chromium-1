@@ -182,23 +182,48 @@ SDK.NetworkManager._MIMETypes = {
   'text/vtt': {'texttrack': true},
 };
 
-
-/** @typedef {{download: number, upload: number, latency: number, title: string}} */
+/**
+ * @typedef {{
+ *   download: number,
+ *   upload: number,
+ *   latency: number,
+ *   title: string,
+ * }}
+ **/
 SDK.NetworkManager.Conditions;
+
 /** @type {!SDK.NetworkManager.Conditions} */
 SDK.NetworkManager.NoThrottlingConditions = {
-  title: Common.UIString('No throttling'),
+  title: Common.UIString('Online'),
   download: -1,
   upload: -1,
   latency: 0
 };
+
 /** @type {!SDK.NetworkManager.Conditions} */
 SDK.NetworkManager.OfflineConditions = {
   title: Common.UIString('Offline'),
   download: 0,
   upload: 0,
-  latency: 0
+  latency: 0,
 };
+
+/** @type {!SDK.NetworkManager.Conditions} */
+SDK.NetworkManager.Slow3GConditions = {
+  title: Common.UIString('Slow 3G'),
+  download: 500 * 1024 / 8 * .8,
+  upload: 500 * 1024 / 8 * .8,
+  latency: 400 * 5,
+};
+
+/** @type {!SDK.NetworkManager.Conditions} */
+SDK.NetworkManager.Fast3GConditions = {
+  title: Common.UIString('Fast 3G'),
+  download: 1.6 * 1024 * 1024 / 8 * .9,
+  upload: 750 * 1024 / 8 * .9,
+  latency: 150 * 3.75,
+};
+
 /** @typedef {{url: string, enabled: boolean}} */
 SDK.NetworkManager.BlockedPattern;
 
@@ -243,7 +268,7 @@ SDK.NetworkDispatcher = class {
     networkRequest.setRequestHeaders(this._headersMapToHeadersArray(request.headers));
     networkRequest.requestFormData = request.postData;
     networkRequest.setInitialPriority(request.initialPriority);
-    networkRequest.mixedContentType = request.mixedContentType || Protocol.Network.RequestMixedContentType.None;
+    networkRequest.mixedContentType = request.mixedContentType || Protocol.Security.MixedContentType.None;
     networkRequest.setReferrerPolicy(request.referrerPolicy);
   }
 
@@ -329,7 +354,7 @@ SDK.NetworkDispatcher = class {
    * @override
    * @param {!Protocol.Network.RequestId} requestId
    * @param {!Protocol.Network.ResourcePriority} newPriority
-   * @param {!Protocol.Network.Timestamp} timestamp
+   * @param {!Protocol.Network.MonotonicTime} timestamp
    */
   resourceChangedPriority(requestId, newPriority, timestamp) {
     var networkRequest = this._inflightRequestsById[requestId];
@@ -340,37 +365,29 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Page.FrameId} frameId
    * @param {!Protocol.Network.LoaderId} loaderId
    * @param {string} documentURL
    * @param {!Protocol.Network.Request} request
-   * @param {!Protocol.Network.Timestamp} time
-   * @param {!Protocol.Network.Timestamp} wallTime
+   * @param {!Protocol.Network.MonotonicTime} time
+   * @param {!Protocol.Network.TimeSinceEpoch} wallTime
    * @param {!Protocol.Network.Initiator} initiator
    * @param {!Protocol.Network.Response=} redirectResponse
    * @param {!Protocol.Page.ResourceType=} resourceType
+   * @param {!Protocol.Page.FrameId=} frameId
    */
   requestWillBeSent(
-      requestId,
-      frameId,
-      loaderId,
-      documentURL,
-      request,
-      time,
-      wallTime,
-      initiator,
-      redirectResponse,
-      resourceType) {
+      requestId, loaderId, documentURL, request, time, wallTime, initiator, redirectResponse, resourceType, frameId) {
     var networkRequest = this._inflightRequestsById[requestId];
     if (networkRequest) {
       // FIXME: move this check to the backend.
       if (!redirectResponse)
         return;
-      this.responseReceived(requestId, frameId, loaderId, time, Protocol.Page.ResourceType.Other, redirectResponse);
+      this.responseReceived(requestId, loaderId, time, Protocol.Page.ResourceType.Other, redirectResponse, frameId);
       networkRequest = this._appendRedirect(requestId, time, request.url);
       this._manager.dispatchEventToListeners(SDK.NetworkManager.Events.RequestRedirected, networkRequest);
     } else {
-      networkRequest = this._createNetworkRequest(requestId, frameId, loaderId, request.url, documentURL, initiator);
+      networkRequest =
+          this._createNetworkRequest(requestId, frameId || '', loaderId, request.url, documentURL, initiator);
     }
     networkRequest.hasNetworkData = true;
     this._updateNetworkRequestWithRequest(networkRequest, request);
@@ -396,19 +413,19 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Page.FrameId} frameId
    * @param {!Protocol.Network.LoaderId} loaderId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {!Protocol.Page.ResourceType} resourceType
    * @param {!Protocol.Network.Response} response
+   * @param {!Protocol.Page.FrameId=} frameId
    */
-  responseReceived(requestId, frameId, loaderId, time, resourceType, response) {
+  responseReceived(requestId, loaderId, time, resourceType, response, frameId) {
     var networkRequest = this._inflightRequestsById[requestId];
     if (!networkRequest) {
       // We missed the requestWillBeSent.
       var eventData = {};
       eventData.url = response.url;
-      eventData.frameId = frameId;
+      eventData.frameId = frameId || '';
       eventData.loaderId = loaderId;
       eventData.resourceType = resourceType;
       eventData.mimeType = response.mimeType;
@@ -439,7 +456,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {number} dataLength
    * @param {number} encodedDataLength
    */
@@ -459,7 +476,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} finishTime
+   * @param {!Protocol.Network.MonotonicTime} finishTime
    * @param {number} encodedDataLength
    */
   loadingFinished(requestId, finishTime, encodedDataLength) {
@@ -472,7 +489,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {!Protocol.Page.ResourceType} resourceType
    * @param {string} localizedDescription
    * @param {boolean=} canceled
@@ -514,8 +531,8 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
-   * @param {!Protocol.Network.Timestamp} wallTime
+   * @param {!Protocol.Network.MonotonicTime} time
+   * @param {!Protocol.Network.TimeSinceEpoch} wallTime
    * @param {!Protocol.Network.WebSocketRequest} request
    */
   webSocketWillSendHandshakeRequest(requestId, time, wallTime, request) {
@@ -533,7 +550,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {!Protocol.Network.WebSocketResponse} response
    */
   webSocketHandshakeResponseReceived(requestId, time, response) {
@@ -558,7 +575,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {!Protocol.Network.WebSocketFrame} response
    */
   webSocketFrameReceived(requestId, time, response) {
@@ -575,7 +592,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {!Protocol.Network.WebSocketFrame} response
    */
   webSocketFrameSent(requestId, time, response) {
@@ -592,7 +609,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {string} errorMessage
    */
   webSocketFrameError(requestId, time, errorMessage) {
@@ -609,7 +626,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    */
   webSocketClosed(requestId, time) {
     var networkRequest = this._inflightRequestsById[requestId];
@@ -621,7 +638,7 @@ SDK.NetworkDispatcher = class {
   /**
    * @override
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {string} eventName
    * @param {string} eventId
    * @param {string} data
@@ -648,7 +665,7 @@ SDK.NetworkDispatcher = class {
 
   /**
    * @param {!Protocol.Network.RequestId} requestId
-   * @param {!Protocol.Network.Timestamp} time
+   * @param {!Protocol.Network.MonotonicTime} time
    * @param {string} redirectURL
    * @return {!SDK.NetworkRequest}
    */
@@ -685,7 +702,7 @@ SDK.NetworkDispatcher = class {
 
   /**
    * @param {!SDK.NetworkRequest} networkRequest
-   * @param {!Protocol.Network.Timestamp} finishTime
+   * @param {!Protocol.Network.MonotonicTime} finishTime
    * @param {number} encodedDataLength
    */
   _finishNetworkRequest(networkRequest, finishTime, encodedDataLength) {

@@ -20,7 +20,7 @@
 #include "content/child/blink_platform_impl.h"
 #include "content/common/content_export.h"
 #include "content/common/possibly_associated_interface_ptr.h"
-#include "content/common/url_loader_factory.mojom.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "content/renderer/origin_trials/web_trial_token_validator_impl.h"
 #include "content/renderer/top_level_blame_context.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
@@ -122,7 +122,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
                            long long size) override;
   blink::WebString DatabaseCreateOriginIdentifier(
       const blink::WebSecurityOrigin& origin) override;
-  cc::FrameSinkId GenerateFrameSinkId() override;
+  viz::FrameSinkId GenerateFrameSinkId() override;
 
   void GetPluginList(bool refresh,
                      const blink::WebSecurityOrigin& mainFrameOrigin,
@@ -193,7 +193,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   std::unique_ptr<blink::WebGraphicsContext3DProvider>
   CreateSharedOffscreenGraphicsContext3DProvider() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
-  std::unique_ptr<cc::SharedBitmap> AllocateSharedBitmap(
+  std::unique_ptr<viz::SharedBitmap> AllocateSharedBitmap(
       const blink::WebSize& size) override;
   blink::WebCompositorSupport* CompositorSupport() override;
   blink::WebString ConvertIDNToUnicode(const blink::WebString& host) override;

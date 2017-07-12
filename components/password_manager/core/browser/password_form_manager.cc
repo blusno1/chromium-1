@@ -238,24 +238,37 @@ PasswordFormManager::PasswordFormManager(
                              true /* should_migrate_http_passwords */,
                              true /* should_query_suppressed_https_forms */)),
       form_fetcher_(form_fetcher ? form_fetcher : owned_form_fetcher_.get()),
-      is_main_frame_secure_(client->IsMainFrameSecure()),
-      metrics_recorder_(client->IsMainFrameSecure(),
-                        PasswordFormMetricsRecorder::CreateUkmEntryBuilder(
-                            client->GetUkmRecorder(),
-                            client->GetUkmSourceId())) {
-  if (owned_form_fetcher_)
-    owned_form_fetcher_->Fetch();
-  DCHECK_EQ(observed_form.scheme == PasswordForm::SCHEME_HTML,
-            driver != nullptr);
+      is_main_frame_secure_(client->IsMainFrameSecure()) {
+  // Non-HTML forms should not need any interaction with the renderer, and hence
+  // no driver. Note that cloned PasswordFormManager instances can have HTML
+  // forms without drivers as well.
+  DCHECK((observed_form.scheme == PasswordForm::SCHEME_HTML) ||
+         (driver == nullptr))
+      << observed_form.scheme;
   if (driver)
     drivers_.push_back(driver);
+}
+
+void PasswordFormManager::Init(
+    scoped_refptr<PasswordFormMetricsRecorder> metrics_recorder) {
+  DCHECK(!metrics_recorder_) << "Do not call Init twice.";
+  metrics_recorder_ = std::move(metrics_recorder);
+  if (!metrics_recorder_) {
+    metrics_recorder_ = base::MakeRefCounted<PasswordFormMetricsRecorder>(
+        client_->IsMainFrameSecure(),
+        PasswordFormMetricsRecorder::CreateUkmEntryBuilder(
+            client_->GetUkmRecorder(), client_->GetUkmSourceId()));
+  }
+
+  if (owned_form_fetcher_)
+    owned_form_fetcher_->Fetch();
   form_fetcher_->AddConsumer(this);
 }
 
 PasswordFormManager::~PasswordFormManager() {
   form_fetcher_->RemoveConsumer(this);
 
-  metrics_recorder_.RecordHistogramsOnSuppressedAccounts(
+  metrics_recorder_->RecordHistogramsOnSuppressedAccounts(
       observed_form_.origin.SchemeIsCryptographic(), *form_fetcher_,
       pending_credentials_);
 }
@@ -447,7 +460,7 @@ void PasswordFormManager::Update(
 void PasswordFormManager::PresaveGeneratedPassword(
     const autofill::PasswordForm& form) {
   form_saver()->PresaveGeneratedPassword(form);
-  metrics_recorder_.SetHasGeneratedPassword(true);
+  metrics_recorder_->SetHasGeneratedPassword(true);
   if (has_generated_password_) {
     generated_password_changed_ = true;
   } else {
@@ -486,7 +499,7 @@ void PasswordFormManager::SetSubmittedForm(const autofill::PasswordForm& form) {
   } else {
     type = PasswordFormMetricsRecorder::kSubmittedFormTypeLogin;
   }
-  metrics_recorder_.SetSubmittedFormType(type);
+  metrics_recorder_->SetSubmittedFormType(type);
 }
 
 void PasswordFormManager::ScoreMatches(
@@ -624,11 +637,11 @@ void PasswordFormManager::ProcessFrameInternal(
                            preferred_match_->is_public_suffix_match ||
                            observed_form_.IsPossibleChangePasswordForm();
   if (wait_for_username) {
-    metrics_recorder_.SetManagerAction(
+    metrics_recorder_->SetManagerAction(
         PasswordFormMetricsRecorder::kManagerActionNone);
   } else {
     has_autofilled_ = true;
-    metrics_recorder_.SetManagerAction(
+    metrics_recorder_->SetManagerAction(
         PasswordFormMetricsRecorder::kManagerActionAutofilled);
     base::RecordAction(base::UserMetricsAction("PasswordManager_Autofilled"));
   }
@@ -655,7 +668,7 @@ void PasswordFormManager::ProcessLoginPrompt() {
     return;
 
   has_autofilled_ = true;
-  metrics_recorder_.SetManagerAction(
+  metrics_recorder_->SetManagerAction(
       PasswordFormMetricsRecorder::kManagerActionAutofilled);
   password_manager_->AutofillHttpAuth(best_matches_, *preferred_match_);
 }
@@ -1228,19 +1241,19 @@ void PasswordFormManager::OnNoInteraction(bool is_update) {
 
 void PasswordFormManager::SetHasGeneratedPassword(bool generated_password) {
   has_generated_password_ = generated_password;
-  metrics_recorder_.SetHasGeneratedPassword(generated_password);
+  metrics_recorder_->SetHasGeneratedPassword(generated_password);
 }
 
 void PasswordFormManager::LogSubmitPassed() {
-  metrics_recorder_.LogSubmitPassed();
+  metrics_recorder_->LogSubmitPassed();
 }
 
 void PasswordFormManager::LogSubmitFailed() {
-  metrics_recorder_.LogSubmitFailed();
+  metrics_recorder_->LogSubmitFailed();
 }
 
 void PasswordFormManager::MarkGenerationAvailable() {
-  metrics_recorder_.MarkGenerationAvailable();
+  metrics_recorder_->MarkGenerationAvailable();
 }
 
 void PasswordFormManager::WipeStoreCopyIfOutdated() {
@@ -1276,6 +1289,63 @@ void PasswordFormManager::GrabFetcher(std::unique_ptr<FormFetcher> fetcher) {
   form_fetcher_->RemoveConsumer(this);
   form_fetcher_ = owned_form_fetcher_.get();
   form_fetcher_->AddConsumer(this);
+}
+
+std::unique_ptr<PasswordFormManager> PasswordFormManager::Clone() {
+  // Fetcher is cloned to avoid re-fetching data from PasswordStore.
+  std::unique_ptr<FormFetcher> fetcher = form_fetcher_->Clone();
+
+  // Some data is filled through the constructor. No PasswordManagerDriver is
+  // needed, because the UI does not need any functionality related to the
+  // renderer process, to which the driver serves as an interface. The full
+  // |observed_form_| needs to be copied, because it is used to created the
+  // blacklisting entry if needed.
+  auto result = base::MakeUnique<PasswordFormManager>(
+      password_manager_, client_, base::WeakPtr<PasswordManagerDriver>(),
+      observed_form_, form_saver_->Clone(), fetcher.get());
+  result->Init(metrics_recorder_);
+
+  // The constructor only can take a weak pointer to the fetcher, so moving the
+  // owning one needs to happen explicitly.
+  result->GrabFetcher(std::move(fetcher));
+
+  // |best_matches_| are skipped, because those are regenerated from the new
+  // fetcher automatically.
+
+  // These data members all satisfy:
+  //   (1) They could have been changed by |*this| between its construction and
+  //       calling Clone().
+  //   (2) They are potentially used in the clone as the clone is used in the UI
+  //       code.
+  //   (3) They are not changed during ProcessMatches, triggered at some point
+  //       by the cloned FormFetcher.
+  if (submitted_form_)
+    result->submitted_form_ = base::MakeUnique<PasswordForm>(*submitted_form_);
+  result->other_possible_username_action_ = other_possible_username_action_;
+  if (username_correction_vote_) {
+    result->username_correction_vote_ =
+        base::MakeUnique<PasswordForm>(*username_correction_vote_);
+  }
+  result->pending_credentials_ = pending_credentials_;
+  result->is_new_login_ = is_new_login_;
+  result->has_autofilled_ = has_autofilled_;
+  result->has_generated_password_ = has_generated_password_;
+  result->generated_password_changed_ = generated_password_changed_;
+  result->is_manual_generation_ = is_manual_generation_;
+  result->generation_element_ = generation_element_;
+  result->generation_popup_was_shown_ = generation_popup_was_shown_;
+  result->form_classifier_outcome_ = form_classifier_outcome_;
+  result->generation_element_detected_by_classifier_ =
+      generation_element_detected_by_classifier_;
+  result->password_overridden_ = password_overridden_;
+  result->retry_password_form_password_update_ =
+      retry_password_form_password_update_;
+  result->selected_username_ = selected_username_;
+  result->is_possible_change_password_form_without_username_ =
+      is_possible_change_password_form_without_username_;
+  result->user_action_ = user_action_;
+
+  return result;
 }
 
 void PasswordFormManager::SendVotesOnSave() {
@@ -1329,7 +1399,7 @@ void PasswordFormManager::SendSignInVote(const FormData& form_data) {
 
 void PasswordFormManager::SetUserAction(UserAction user_action) {
   user_action_ = user_action;
-  metrics_recorder_.SetUserAction(user_action);
+  metrics_recorder_->SetUserAction(user_action);
 }
 
 base::Optional<PasswordForm> PasswordFormManager::UpdatePendingAndGetOldKey(

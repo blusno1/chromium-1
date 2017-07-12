@@ -53,11 +53,12 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kCCTBackgroundTab,
     &kCCTExternalLinkHandling,
     &kCCTPostMessageAPI,
+    &kCCTRedirectPreconnect,
     &kChromeHomeFeature,
     &kChromeHomeExpandButton,
     &kChromeHomeSwipeLogic,
-    &kContentSuggestionsCategories,
     &kContentSuggestionsLargeThumbnail,
+    &kContentSuggestionsVideoOverlay,
     &kContentSuggestionsSettings,
     &kContentSuggestionsShowSummary,
     &kContextualSearchSingleActions,
@@ -82,6 +83,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kPhysicalWebSharing,
     &kSearchEnginePromoExistingDevice,
     &kSearchEnginePromoNewDevice,
+    &kSpannableInlineAutocomplete,
     &kSpecialLocaleFeature,
     &kSpecialLocaleWrapper,
     &kTabReparenting,
@@ -135,6 +137,9 @@ const base::Feature kCCTExternalLinkHandling{"CCTExternalLinkHandling",
 const base::Feature kCCTPostMessageAPI{"CCTPostMessageAPI",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kCCTRedirectPreconnect{"CCTRedirectPreconnect",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kChromeHomeFeature{"ChromeHome",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -144,11 +149,11 @@ const base::Feature kChromeHomeExpandButton{"ChromeHomeExpandButton",
 const base::Feature kChromeHomeSwipeLogic{"ChromeHomeSwipeLogic",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kContentSuggestionsCategories{
-    "ContentSuggestionsCategories", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kContentSuggestionsLargeThumbnail{
     "ContentSuggestionsLargeThumbnail", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kContentSuggestionsVideoOverlay{
+    "ContentSuggestionsVideoOverlay", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kContentSuggestionsSettings{
     "ContentSuggestionsSettings", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -220,6 +225,9 @@ const base::Feature kPhysicalWebFeature{"PhysicalWeb",
 
 const base::Feature kPhysicalWebSharing{"PhysicalWebSharing",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSpannableInlineAutocomplete{
+    "SpannableInlineAutocomplete", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kSpecialLocaleFeature{"SpecialLocale",
                                           base::FEATURE_DISABLED_BY_DEFAULT};

@@ -170,6 +170,7 @@ class SmoothnessToughWebGLCases(_Smoothness):
     return StoryExpectations()
 
 
+@benchmark.Disabled('win') # http://crbug.com/692663
 @benchmark.Disabled('android-webview')  # http://crbug.com/653933
 @benchmark.Owner(emails=['kbr@chromium.org', 'zmo@chromium.org'])
 class SmoothnessMaps(perf_benchmark.PerfBenchmark):
@@ -752,20 +753,3 @@ class SmoothnessToughSchedulingCases(_Smoothness):
     # has been named this way for long time, we keep the name as-is to avoid
     # data migration.
     return 'scheduler.tough_scheduling_cases'
-
-  def GetExpectations(self):
-    class StoryExpectations(story_module.expectations.StoryExpectations):
-      def SetExpectations(self):
-
-        self.DisableStory('simple_text_page.html?medium_raster',
-                          [story_module.expectations.ALL], 'crbug.com/413829')
-        self.DisableStory('simple_text_page.html?heavy_raster',
-                          [story_module.expectations.ALL],
-                          'crbug.com/413829 and crbug.com/368532')
-        self.DisableStory('raf.html?medium_handler',
-                          [story_module.expectations.ALL],
-                          'crbug.com/413829')
-        self.DisableStory('raf.html?heavy_handler',
-                          [story_module.expectations.ALL],
-                          'crbug.com/413829 and crbug.com/368532')
-    return StoryExpectations()

@@ -167,9 +167,12 @@ devtools_domains = [
 
 generated_devtools_api = []
 generated_devtools_api_js = []
+generated_devtools_api_js_externs = []
 foreach(domain, devtools_domains) {
   generated_devtools_api_js +=
       [ "$target_gen_dir/public/devtools_js/" + domain + ".js" ]
+  generated_devtools_api_js_externs +=
+      [ "$target_gen_dir/public/devtools_js/externs/externs_" + domain + ".js" ]
   generated_devtools_api += [
     "$target_gen_dir/public/devtools/domains/" + domain + ".cc",
     "$target_gen_dir/public/devtools/domains/" + domain + ".h",
@@ -191,10 +194,12 @@ action("gen_devtools_client_api") {
     "$root_gen_dir/blink/core/inspector/protocol.json",
   ]
 
-  outputs = generated_devtools_api + generated_devtools_api_js
+  outputs = generated_devtools_api + generated_devtools_api_js +
+            generated_devtools_api_js_externs
 
   sources = [
     "lib/browser/devtools_api/domain_cc.template",
+    "lib/browser/devtools_api/domain_externs_js.template",
     "lib/browser/devtools_api/domain_h.template",
     "lib/browser/devtools_api/domain_js.template",
     "lib/browser/devtools_api/domain_type_conversions_h.template",
@@ -377,6 +382,10 @@ component("headless") {
       "lib/headless_content_main_delegate.h",
       "lib/renderer/headless_content_renderer_client.cc",
       "lib/renderer/headless_content_renderer_client.h",
+      "lib/renderer/headless_render_frame_controller_impl.cc",
+      "lib/renderer/headless_render_frame_controller_impl.h",
+      "lib/renderer/headless_tab_socket_bindings.cc",
+      "lib/renderer/headless_tab_socket_bindings.h",
     ]
 
     deps += [
@@ -431,12 +440,17 @@ if (!is_component_build) {
       "lib/headless_content_main_delegate.h",
       "lib/renderer/headless_content_renderer_client.cc",
       "lib/renderer/headless_content_renderer_client.h",
+      "lib/renderer/headless_render_frame_controller_impl.cc",
+      "lib/renderer/headless_render_frame_controller_impl.h",
+      "lib/renderer/headless_tab_socket_bindings.cc",
+      "lib/renderer/headless_tab_socket_bindings.h",
     ]
 
     deps = [
       ":headless",
       "//third_party/WebKit/public:blink_headers",
       "//ui/base",
+      "//v8",
     ]
     if (enable_basic_printing) {
       deps += [ "//components/printing/renderer" ]
@@ -591,6 +605,8 @@ test("headless_browsertests") {
     "test/headless_browser_test.cc",
     "test/headless_browser_test.h",
     "test/headless_test_launcher.cc",
+    "test/tab_socket_test.cc",
+    "test/tab_socket_test.h",
     "test/test_protocol_handler.cc",
     "test/test_protocol_handler.h",
     "test/test_url_request_job.cc",
@@ -598,6 +614,8 @@ test("headless_browsertests") {
   ]
 
   data = [
+    "lib/dom_tree_extraction_expected_nodes.txt",
+    "lib/dom_tree_extraction_expected_styles.txt",
     "$root_out_dir/headless_lib.pak",
     "//net/tools/testserver/",
     "//third_party/pyftpdlib/",

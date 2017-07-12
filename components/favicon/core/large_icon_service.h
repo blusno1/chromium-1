@@ -100,7 +100,15 @@ class LargeIconService : public KeyedService {
       int desired_size_in_pixel,
       bool may_page_url_be_private,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
-      const base::Callback<void(bool success)>& callback);
+      const favicon_base::GoogleFaviconServerCallback& callback);
+
+  // Update the time that the icon at |icon_url| was requested. This should be
+  // called after obtaining the icon by GetLargeIcon*OrFallbackStyle() for any
+  // icon that _may_ originate from the Google favicon server (i.e. if the
+  // caller uses
+  // GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache()). This
+  // postpones the automatic eviction of the favicon from the database.
+  void TouchIconFromGoogleServer(const GURL& icon_url);
 
  private:
   base::CancelableTaskTracker::TaskId GetLargeIconOrFallbackStyleImpl(

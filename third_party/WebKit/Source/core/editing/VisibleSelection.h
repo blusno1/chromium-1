@@ -61,6 +61,12 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   // Note: |create()| should be used only by |createVisibleSelection|.
   static VisibleSelectionTemplate Create(const SelectionTemplate<Strategy>&);
 
+  // Note: |CreateWithGranularity()| should be used only by
+  // |CreateVisibleSelectionWithGranularity()|.
+  static VisibleSelectionTemplate CreateWithGranularity(
+      const SelectionTemplate<Strategy>&,
+      TextGranularity);
+
   SelectionType GetSelectionType() const { return selection_type_; }
 
   TextAffinity Affinity() const { return affinity_; }
@@ -111,7 +117,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   bool IsBaseFirst() const { return base_is_first_; }
   bool IsDirectional() const { return is_directional_; }
 
-  void AppendTrailingWhitespace();
+  VisibleSelectionTemplate<Strategy> AppendTrailingWhitespace() const;
 
   // TODO(yosin) Most callers probably don't want these functions, but
   // are using them for historical reasons. |toNormalizedEphemeralRange()|
@@ -144,9 +150,9 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
  private:
   friend class SelectionAdjuster;
 
-  VisibleSelectionTemplate(const SelectionTemplate<Strategy>&);
+  VisibleSelectionTemplate(const SelectionTemplate<Strategy>&, TextGranularity);
 
-  void Validate(TextGranularity = kCharacterGranularity);
+  void Validate(TextGranularity = TextGranularity::kCharacter);
 
   // Support methods for validate()
   void SetBaseAndExtentToDeepEquivalents();
@@ -176,13 +182,6 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   // Non-directional ignores m_baseIsFirst and selection always extends on shift
   // + arrow key.
   bool is_directional_ : 1;
-
-  TextGranularity granularity_;
-  // |updateIfNeeded()| uses |m_hasTrailingWhitespace| for word granularity.
-  // |m_hasTrailingWhitespace| is set by |appendTrailingWhitespace()|.
-  // TODO(yosin): Once we unify start/end and base/extent, we should get rid
-  // of |m_hasTrailingWhitespace|.
-  bool has_trailing_whitespace_ : 1;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT
@@ -198,6 +197,14 @@ CORE_EXPORT VisibleSelection CreateVisibleSelection(const SelectionInDOMTree&);
 CORE_EXPORT VisibleSelectionInFlatTree
 CreateVisibleSelection(const SelectionInFlatTree&);
 
+CORE_EXPORT VisibleSelection
+CreateVisibleSelectionWithGranularity(const SelectionInDOMTree&,
+                                      TextGranularity);
+
+CORE_EXPORT VisibleSelectionInFlatTree
+CreateVisibleSelectionWithGranularity(const SelectionInFlatTree&,
+                                      TextGranularity);
+
 // We don't yet support multi-range selections, so we only ever have one range
 // to return.
 CORE_EXPORT EphemeralRange FirstEphemeralRangeOf(const VisibleSelection&);
@@ -205,6 +212,15 @@ CORE_EXPORT EphemeralRange FirstEphemeralRangeOf(const VisibleSelection&);
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const VisibleSelection&);
 CORE_EXPORT std::ostream& operator<<(std::ostream&,
                                      const VisibleSelectionInFlatTree&);
+
+PositionInFlatTree ComputeStartRespectingGranularity(
+    const PositionInFlatTreeWithAffinity&,
+    TextGranularity);
+
+PositionInFlatTree ComputeEndRespectingGranularity(
+    const PositionInFlatTree&,
+    const PositionInFlatTreeWithAffinity&,
+    TextGranularity);
 
 }  // namespace blink
 

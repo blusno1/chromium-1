@@ -14,6 +14,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -34,13 +35,15 @@
 #include "content/child/web_url_request_util.h"
 #include "content/child/weburlresponse_extradata_impl.h"
 #include "content/common/resource_messages.h"
-#include "content/common/resource_request.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/common/url_loader.mojom.h"
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/content_features.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/resource_request_body.h"
+#include "content/public/common/service_worker_modes.h"
+#include "content/public/common/url_loader.mojom.h"
 #include "net/base/data_url.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
@@ -463,7 +466,13 @@ WebURLLoaderImpl::Context::Context(
       task_runner_(std::move(task_runner)),
       defers_loading_(NOT_DEFERRING),
       request_id_(-1),
-      url_loader_factory_(url_loader_factory) {}
+      url_loader_factory_(url_loader_factory) {
+#if DCHECK_IS_ON()
+  const bool mojo_loading_enabled =
+      base::FeatureList::IsEnabled(features::kLoadingWithMojo);
+  DCHECK(url_loader_factory_ || !mojo_loading_enabled);
+#endif
+}
 
 void WebURLLoaderImpl::Context::Cancel() {
   TRACE_EVENT_WITH_FLOW0("loading", "WebURLLoaderImpl::Context::Cancel", this,

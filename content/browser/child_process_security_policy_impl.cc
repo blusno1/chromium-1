@@ -17,8 +17,8 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "content/browser/isolated_origin_util.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -27,6 +27,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/filename_util.h"
 #include "net/url_request/url_request.h"
@@ -442,10 +443,12 @@ void ChildProcessSecurityPolicyImpl::GrantRequestURL(
   if (!url.is_valid())
     return;  // Can't grant the capability to request invalid URLs.
 
-  if (IsWebSafeScheme(url.scheme()))
+  const std::string& scheme = url.scheme();
+
+  if (IsWebSafeScheme(scheme))
     return;  // The scheme has already been whitelisted for every child process.
 
-  if (IsPseudoScheme(url.scheme())) {
+  if (IsPseudoScheme(scheme)) {
     return;  // Can't grant the capability to request pseudo schemes.
   }
 
@@ -461,7 +464,7 @@ void ChildProcessSecurityPolicyImpl::GrantRequestURL(
 
     // When the child process has been commanded to request this scheme,
     // we grant it the capability to request all URLs of that scheme.
-    state->second->GrantScheme(url.scheme());
+    state->second->GrantScheme(scheme);
   }
 }
 
@@ -631,7 +634,9 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
   if (!url.is_valid())
     return false;  // Can't request invalid URLs.
 
-  if (IsPseudoScheme(url.scheme())) {
+  const std::string& scheme = url.scheme();
+
+  if (IsPseudoScheme(scheme)) {
     // Every child process can request <about:blank>, <about:blank?foo>,
     // <about:blank/#foo> and <about:srcdoc>.
     if (url.IsAboutBlank() || url == kAboutSrcDocURL)
@@ -654,7 +659,7 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
            CanCommitURL(child_id, GURL(origin.Serialize()));
   }
 
-  if (IsWebSafeScheme(url.scheme()))
+  if (IsWebSafeScheme(scheme))
     return true;
 
   // If the process can commit the URL, it can request it.
@@ -671,9 +676,11 @@ bool ChildProcessSecurityPolicyImpl::CanCommitURL(int child_id,
   if (!url.is_valid())
     return false;  // Can't commit invalid URLs.
 
+  const std::string& scheme = url.scheme();
+
   // Of all the pseudo schemes, only about:blank and about:srcdoc are allowed to
   // commit.
-  if (IsPseudoScheme(url.scheme()))
+  if (IsPseudoScheme(scheme))
     return url == url::kAboutBlankURL || url == kAboutSrcDocURL;
 
   // Blob and filesystem URLs require special treatment; validate the inner
@@ -700,7 +707,7 @@ bool ChildProcessSecurityPolicyImpl::CanCommitURL(int child_id,
     // site, so CanCommitURL will need to rely on explicit, per-process grants.
     // Note how today, even with extension isolation, the line below does not
     // enforce that http pages cannot commit in an extension process.
-    if (base::ContainsKey(schemes_okay_to_commit_in_any_process_, url.scheme()))
+    if (base::ContainsKey(schemes_okay_to_commit_in_any_process_, scheme))
       return true;
 
     SecurityStateMap::iterator state = security_state_.find(child_id);
@@ -718,10 +725,12 @@ bool ChildProcessSecurityPolicyImpl::CanSetAsOriginHeader(int child_id,
   if (!url.is_valid())
     return false;  // Can't set invalid URLs as origin headers.
 
+  const std::string& scheme = url.scheme();
+
   // Suborigin URLs are a special case and are allowed to be an origin header.
-  if (url.scheme() == url::kHttpSuboriginScheme ||
-      url.scheme() == url::kHttpsSuboriginScheme) {
-    DCHECK(IsPseudoScheme(url.scheme()));
+  if (scheme == url::kHttpSuboriginScheme ||
+      scheme == url::kHttpsSuboriginScheme) {
+    DCHECK(IsPseudoScheme(scheme));
     return true;
   }
 
@@ -739,8 +748,7 @@ bool ChildProcessSecurityPolicyImpl::CanSetAsOriginHeader(int child_id,
   // document origin.
   {
     base::AutoLock lock(lock_);
-    if (base::ContainsKey(schemes_okay_to_appear_as_origin_headers_,
-                          url.scheme()))
+    if (base::ContainsKey(schemes_okay_to_appear_as_origin_headers_, scheme))
       return true;
   }
   return false;
@@ -763,40 +771,40 @@ bool ChildProcessSecurityPolicyImpl::CanReadAllFiles(
 bool ChildProcessSecurityPolicyImpl::CanReadRequestBody(
     int child_id,
     const storage::FileSystemContext* file_system_context,
-    const scoped_refptr<ResourceRequestBodyImpl>& body) {
+    const scoped_refptr<ResourceRequestBody>& body) {
   if (!body)
     return true;
 
-  for (const ResourceRequestBodyImpl::Element& element : *body->elements()) {
+  for (const ResourceRequestBody::Element& element : *body->elements()) {
     switch (element.type()) {
-      case ResourceRequestBodyImpl::Element::TYPE_FILE:
+      case ResourceRequestBody::Element::TYPE_FILE:
         if (!CanReadFile(child_id, element.path()))
           return false;
         break;
 
-      case ResourceRequestBodyImpl::Element::TYPE_FILE_FILESYSTEM:
+      case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
         if (!CanReadFileSystemFile(child_id, file_system_context->CrackURL(
                                                  element.filesystem_url())))
           return false;
         break;
 
-      case ResourceRequestBodyImpl::Element::TYPE_DISK_CACHE_ENTRY:
+      case ResourceRequestBody::Element::TYPE_DISK_CACHE_ENTRY:
         // TYPE_DISK_CACHE_ENTRY can't be sent via IPC according to
         // content/common/resource_messages.cc
         NOTREACHED();
         return false;
 
-      case ResourceRequestBodyImpl::Element::TYPE_BYTES:
-      case ResourceRequestBodyImpl::Element::TYPE_BYTES_DESCRIPTION:
+      case ResourceRequestBody::Element::TYPE_BYTES:
+      case ResourceRequestBody::Element::TYPE_BYTES_DESCRIPTION:
         // Data is self-contained within |body| - no need to check access.
         break;
 
-      case ResourceRequestBodyImpl::Element::TYPE_BLOB:
+      case ResourceRequestBody::Element::TYPE_BLOB:
         // No need to validate - the unguessability of the uuid of the blob is a
         // sufficient defense against access from an unrelated renderer.
         break;
 
-      case ResourceRequestBodyImpl::Element::TYPE_UNKNOWN:
+      case ResourceRequestBody::Element::TYPE_UNKNOWN:
       default:
         // Fail safe - deny access.
         NOTREACHED();
@@ -808,7 +816,7 @@ bool ChildProcessSecurityPolicyImpl::CanReadRequestBody(
 
 bool ChildProcessSecurityPolicyImpl::CanReadRequestBody(
     SiteInstance* site_instance,
-    const scoped_refptr<ResourceRequestBodyImpl>& body) {
+    const scoped_refptr<ResourceRequestBody>& body) {
   DCHECK(site_instance);
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -1092,12 +1100,12 @@ bool ChildProcessSecurityPolicyImpl::CanSendMidiSysExMessage(int child_id) {
 
 void ChildProcessSecurityPolicyImpl::AddIsolatedOrigin(
     const url::Origin& origin) {
-  CHECK(!origin.unique())
-      << "Cannot register a unique origin as an isolated origin.";
-  CHECK(!IsIsolatedOrigin(origin))
-      << "Duplicate isolated origin: " << origin.Serialize();
+  CHECK(IsolatedOriginUtil::IsValidIsolatedOrigin(origin));
 
   base::AutoLock lock(lock_);
+  CHECK(!isolated_origins_.count(origin))
+      << "Duplicate isolated origin: " << origin.Serialize();
+
   isolated_origins_.insert(origin);
 }
 
@@ -1114,8 +1122,38 @@ void ChildProcessSecurityPolicyImpl::AddIsolatedOriginsFromCommandLine(
 
 bool ChildProcessSecurityPolicyImpl::IsIsolatedOrigin(
     const url::Origin& origin) {
+  url::Origin unused_result;
+  return GetMatchingIsolatedOrigin(origin, &unused_result);
+}
+
+bool ChildProcessSecurityPolicyImpl::GetMatchingIsolatedOrigin(
+    const url::Origin& origin,
+    url::Origin* result) {
+  *result = url::Origin();
   base::AutoLock lock(lock_);
-  return isolated_origins_.find(origin) != isolated_origins_.end();
+
+  // If multiple isolated origins are registered with a common domain suffix,
+  // return the most specific one.  For example, if foo.isolated.com and
+  // isolated.com are both isolated origins, bar.foo.isolated.com should return
+  // foo.isolated.com.
+  bool found = false;
+  for (auto isolated_origin : isolated_origins_) {
+    if (IsolatedOriginUtil::DoesOriginMatchIsolatedOrigin(origin,
+                                                          isolated_origin)) {
+      if (!found || result->host().length() < isolated_origin.host().length()) {
+        *result = isolated_origin;
+        found = true;
+      }
+    }
+  }
+
+  return found;
+}
+
+void ChildProcessSecurityPolicyImpl::RemoveIsolatedOriginForTesting(
+    const url::Origin& origin) {
+  base::AutoLock lock(lock_);
+  isolated_origins_.erase(origin);
 }
 
 }  // namespace content

@@ -410,10 +410,11 @@ def main(argv):
     deps_info['gradle_treat_as_prebuilt'] = options.gradle_treat_as_prebuilt
 
   if options.android_manifest:
-    gradle['android_manifest'] = options.android_manifest
+    deps_info['android_manifest'] = options.android_manifest
+
   if options.type in ('java_binary', 'java_library', 'android_apk'):
     if options.java_sources_file:
-      gradle['java_sources_file'] = options.java_sources_file
+      deps_info['java_sources_file'] = options.java_sources_file
     if options.bundled_srcjars:
       gradle['bundled_srcjars'] = (
           build_utils.ParseGnList(options.bundled_srcjars))
@@ -435,6 +436,14 @@ def main(argv):
       else:
         gradle['dependent_java_projects'].append(c['path'])
 
+
+  if options.type == 'android_apk':
+    config['jni'] = {}
+    all_java_sources = [c['java_sources_file'] for c in all_library_deps
+                        if 'java_sources_file' in c]
+    if options.java_sources_file:
+      all_java_sources.append(options.java_sources_file)
+    config['jni']['all_source'] = all_java_sources
 
   if (options.type in ('java_binary', 'java_library')):
     deps_info['requires_android'] = options.requires_android
@@ -697,6 +706,9 @@ def main(argv):
         _CreateLocalePaksAssetJavaList(config['assets']))
     config['uncompressed_locales_java_list'] = (
         _CreateLocalePaksAssetJavaList(config['uncompressed_assets']))
+
+    config['extra_android_manifests'] = filter(None, (
+        d.get('android_manifest') for d in all_resources_deps))
 
     # Collect java resources
     java_resources_jars = [d['java_resources_jar'] for d in all_library_deps

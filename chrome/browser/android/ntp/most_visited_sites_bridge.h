@@ -25,6 +25,9 @@ class MostVisitedSitesBridge {
 
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
+  void OnHomePageStateChanged(JNIEnv* env,
+                              const base::android::JavaParamRef<jobject>& obj);
+
   void SetObserver(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& obj,
                    const base::android::JavaParamRef<jobject>& j_observer,
@@ -65,6 +68,7 @@ class MostVisitedSitesBridge {
   std::unique_ptr<JavaObserver> java_observer_;
 
   std::unique_ptr<ntp_tiles::MostVisitedSites> most_visited_;
+  Profile* profile_;
 
   DISALLOW_COPY_AND_ASSIGN(MostVisitedSitesBridge);
 };

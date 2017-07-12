@@ -37,6 +37,7 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
+#include "components/signin/core/common/profile_management_switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/base/cryptographer.h"
@@ -955,11 +956,6 @@ void ProfileSyncService::OnEngineInitialized(
   crypto_->SetSyncEngine(engine_.get());
   crypto_->SetDataTypeManager(data_type_manager_.get());
 
-  // If we have a cached passphrase use it to decrypt/encrypt data now that the
-  // backend is initialized. We want to call this before notifying observers in
-  // case this operation affects the "passphrase required" status.
-  crypto_->ConsumeCachedPassphraseIfPossible();
-
   // Auto-start means IsFirstSetupComplete gets set automatically.
   if (start_behavior_ == AUTO_START && !IsFirstSetupComplete()) {
     // This will trigger a configure if it completes setup.
@@ -1211,10 +1207,6 @@ void ProfileSyncService::OnConfigureDone(
   DCHECK(thread_checker_.CalledOnValidThread());
   configure_status_ = result.status;
   data_type_status_table_ = result.data_type_status_table;
-
-  // We should have cleared our cached passphrase before we get here (in
-  // OnEngineInitialized()).
-  DCHECK(crypto_->cached_passphrase().empty());
 
   if (!sync_configure_start_time_.is_null()) {
     if (configure_status_ == DataTypeManager::OK) {
@@ -1553,23 +1545,6 @@ void ProfileSyncService::UpdateSelectedTypesHistogram(
     }
   }
 }
-
-#if defined(OS_CHROMEOS)
-void ProfileSyncService::RefreshSpareBootstrapToken(
-    const std::string& passphrase) {
-  syncer::SystemEncryptor encryptor;
-  syncer::Cryptographer temp_cryptographer(&encryptor);
-  // The first 2 params (hostname and username) doesn't have any effect here.
-  syncer::KeyParams key_params = {"localhost", "dummy", passphrase};
-
-  std::string bootstrap_token;
-  if (!temp_cryptographer.AddKey(key_params)) {
-    NOTREACHED() << "Failed to add key to cryptographer.";
-  }
-  temp_cryptographer.GetBootstrapToken(&bootstrap_token);
-  sync_prefs_.SetSpareBootstrapToken(bootstrap_token);
-}
-#endif
 
 void ProfileSyncService::OnUserChoseDatatypes(
     bool sync_everything,
@@ -1944,22 +1919,19 @@ void ProfileSyncService::OnSyncManagedPrefChange(bool is_sync_managed) {
 }
 
 void ProfileSyncService::GoogleSigninSucceeded(const std::string& account_id,
-                                               const std::string& username,
-                                               const std::string& password) {
+                                               const std::string& username) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (IsSyncRequested() && !password.empty()) {
-    crypto_->CachePassphrase(password);
-    // Try to consume the passphrase we just cached. If the sync engine
-    // is not running yet, the passphrase will remain cached until the
-    // engine starts up.
-    crypto_->ConsumeCachedPassphraseIfPossible();
-  }
-#if defined(OS_CHROMEOS)
-  RefreshSpareBootstrapToken(password);
-#endif
   if (!IsEngineInitialized() || GetAuthError().state() != AuthError::NONE) {
     // Track the fact that we're still waiting for auth to complete.
     is_auth_in_progress_ = true;
+  }
+
+  if (switches::IsAccountConsistencyDiceEnabled() &&
+      oauth2_token_service_->RefreshTokenIsAvailable(account_id)) {
+    // When Dice is enabled, the refresh token may be available before the user
+    // enables sync. Start sync if the refresh token is already available in the
+    // token service when the authenticated account is set.
+    OnRefreshTokenAvailable(account_id);
   }
 }
 

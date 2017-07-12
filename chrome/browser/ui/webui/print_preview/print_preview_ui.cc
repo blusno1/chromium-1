@@ -533,13 +533,24 @@ void PrintPreviewUI::OnPrintPreviewDialogClosed() {
 }
 
 void PrintPreviewUI::OnInitiatorClosed() {
+  // Should only get here if the initiator was still tracked by the Print
+  // Preview Dialog Controller, so the print job has not yet been sent.
   WebContents* preview_dialog = web_ui()->GetWebContents();
   printing::BackgroundPrintingManager* background_printing_manager =
       g_browser_process->background_printing_manager();
-  if (background_printing_manager->HasPrintPreviewDialog(preview_dialog))
-    web_ui()->CallJavascriptFunctionUnsafe("cancelPendingPrintRequest");
-  else
+  if (background_printing_manager->HasPrintPreviewDialog(preview_dialog)) {
+    // Dialog is hidden but is still generating the preview. Cancel the print
+    // request as it can't be completed.
+    background_printing_manager->OnPrintRequestCancelled(preview_dialog);
+    handler_->OnPrintRequestCancelled();
+  } else {
+    // Initiator was closed while print preview dialog was still open.
     OnClosePrintPreviewDialog();
+  }
+}
+
+void PrintPreviewUI::OnPrintPreviewCancelled() {
+  handler_->OnPrintPreviewCancelled();
 }
 
 void PrintPreviewUI::OnPrintPreviewRequest(int request_id) {
@@ -555,11 +566,8 @@ void PrintPreviewUI::OnDidGetPreviewPageCount(
   DCHECK_GT(params.page_count, 0);
   if (g_testing_delegate)
     g_testing_delegate->DidGetPreviewPageCount(params.page_count);
-  base::Value count(params.page_count);
-  base::Value request_id(params.preview_request_id);
-  base::Value fit_to_page_scaling(params.fit_to_page_scaling);
-  web_ui()->CallJavascriptFunctionUnsafe("onDidGetPreviewPageCount", count,
-                                         request_id, fit_to_page_scaling);
+  handler_->SendPageCountReady(params.page_count, params.preview_request_id,
+                               params.fit_to_page_scaling);
 }
 
 void PrintPreviewUI::OnDidGetDefaultPageLayout(
@@ -586,22 +594,15 @@ void PrintPreviewUI::OnDidGetDefaultPageLayout(
                     printable_area.width());
   layout.SetInteger(printing::kSettingPrintableAreaHeight,
                     printable_area.height());
-
-  base::Value has_page_size_style(has_custom_page_size_style);
-  web_ui()->CallJavascriptFunctionUnsafe("onDidGetDefaultPageLayout", layout,
-                                         has_page_size_style);
+  handler_->SendPageLayoutReady(layout, has_custom_page_size_style);
 }
 
 void PrintPreviewUI::OnDidPreviewPage(int page_number,
                                       int preview_request_id) {
   DCHECK_GE(page_number, 0);
-  base::Value number(page_number);
-  base::Value ui_identifier(id_);
-  base::Value request_id(preview_request_id);
   if (g_testing_delegate)
     g_testing_delegate->DidRenderPreviewPage(web_ui()->GetWebContents());
-  web_ui()->CallJavascriptFunctionUnsafe("onDidPreviewPage", number,
-                                         ui_identifier, request_id);
+  handler_->SendPagePreviewReady(page_number, id_, preview_request_id);
 }
 
 void PrintPreviewUI::OnPreviewDataIsAvailable(int expected_pages_count,
@@ -619,10 +620,7 @@ void PrintPreviewUI::OnPreviewDataIsAvailable(int expected_pages_count,
         handler_->regenerate_preview_request_count());
     initial_preview_start_time_ = base::TimeTicks();
   }
-  base::Value ui_identifier(id_);
-  base::Value ui_preview_request_id(preview_request_id);
-  web_ui()->CallJavascriptFunctionUnsafe("updatePrintPreview", ui_identifier,
-                                         ui_preview_request_id);
+  handler_->OnPrintPreviewReady(id_, preview_request_id);
 }
 
 void PrintPreviewUI::OnCancelPendingPreviewRequest() {
@@ -631,11 +629,10 @@ void PrintPreviewUI::OnCancelPendingPreviewRequest() {
 
 void PrintPreviewUI::OnPrintPreviewFailed() {
   handler_->OnPrintPreviewFailed();
-  web_ui()->CallJavascriptFunctionUnsafe("printPreviewFailed");
 }
 
 void PrintPreviewUI::OnInvalidPrinterSettings() {
-  web_ui()->CallJavascriptFunctionUnsafe("invalidPrinterSettings");
+  handler_->OnInvalidPrinterSettings();
 }
 
 void PrintPreviewUI::OnHidePreviewDialog() {
@@ -667,19 +664,10 @@ void PrintPreviewUI::OnClosePrintPreviewDialog() {
   delegate->OnDialogCloseFromWebUI();
 }
 
-void PrintPreviewUI::OnReloadPrintersList() {
-  web_ui()->CallJavascriptFunctionUnsafe("reloadPrintersList");
-}
-
 void PrintPreviewUI::OnSetOptionsFromDocument(
     const PrintHostMsg_SetOptionsFromDocument_Params& params) {
-  base::DictionaryValue options;
-  options.SetBoolean(printing::kSettingDisableScaling,
-                     params.is_scaling_disabled);
-  options.SetInteger(printing::kSettingCopies, params.copies);
-  options.SetInteger(printing::kSettingDuplexMode, params.duplex);
-  web_ui()->CallJavascriptFunctionUnsafe("printPresetOptionsFromDocument",
-                                         options);
+  handler_->SendPrintPresetOptions(params.is_scaling_disabled, params.copies,
+                                   params.duplex);
 }
 
 // static
@@ -694,4 +682,13 @@ void PrintPreviewUI::SetSelectedFileForTesting(const base::FilePath& path) {
 void PrintPreviewUI::SetPdfSavedClosureForTesting(
     const base::Closure& closure) {
   handler_->SetPdfSavedClosureForTesting(closure);
+}
+
+void PrintPreviewUI::SendEnableManipulateSettingsForTest() {
+  handler_->SendEnableManipulateSettingsForTest();
+}
+
+void PrintPreviewUI::SendManipulateSettingsForTest(
+    const base::DictionaryValue& settings) {
+  handler_->SendManipulateSettingsForTest(settings);
 }

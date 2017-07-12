@@ -13,13 +13,13 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/url_constants.h"
-#include "device/geolocation/geolocation_service_context.h"
+#include "device/geolocation/geolocation_context.h"
 #include "device/geolocation/geoposition.h"
 
 namespace content {
 namespace protocol {
 
-using GeolocationServiceContext = device::GeolocationServiceContext;
+using GeolocationContext = device::GeolocationContext;
 using Geoposition = device::Geoposition;
 
 namespace {
@@ -90,8 +90,8 @@ Response EmulationHandler::SetGeolocationOverride(
   if (!GetWebContents())
     return Response::InternalError();
 
-  GeolocationServiceContext* geolocation_context =
-      GetWebContents()->GetGeolocationServiceContext();
+  GeolocationContext* geolocation_context =
+      GetWebContents()->GetGeolocationContext();
   std::unique_ptr<Geoposition> geoposition(new Geoposition());
   if (latitude.isJust() && longitude.isJust() && accuracy.isJust()) {
     geoposition->latitude = latitude.fromJust();
@@ -111,8 +111,8 @@ Response EmulationHandler::ClearGeolocationOverride() {
   if (!GetWebContents())
     return Response::InternalError();
 
-  GeolocationServiceContext* geolocation_context =
-      GetWebContents()->GetGeolocationServiceContext();
+  GeolocationContext* geolocation_context =
+      GetWebContents()->GetGeolocationContext();
   geolocation_context->ClearOverride();
   return Response::OK();
 }
@@ -143,7 +143,7 @@ Response EmulationHandler::SetDeviceMetricsOverride(
     int height,
     double device_scale_factor,
     bool mobile,
-    bool fit_window,
+    Maybe<bool> fit_window,
     Maybe<double> scale,
     Maybe<double> offset_x,
     Maybe<double> offset_y,
@@ -156,8 +156,10 @@ Response EmulationHandler::SetDeviceMetricsOverride(
   const static double max_scale = 10;
   const static int max_orientation_angle = 360;
 
-  if (!host_)
-    return Response::InternalError();
+  RenderWidgetHostImpl* widget_host =
+      host_ ? host_->GetRenderWidgetHost() : nullptr;
+  if (!widget_host)
+    return Response::Error("Target does not support metrics override");
 
   if (screen_width.fromMaybe(0) < 0 || screen_height.fromMaybe(0) < 0 ||
       screen_width.fromMaybe(0) > max_size ||
@@ -214,7 +216,7 @@ Response EmulationHandler::SetDeviceMetricsOverride(
       blink::WebPoint(position_x.fromMaybe(0), position_y.fromMaybe(0));
   params.device_scale_factor = device_scale_factor;
   params.view_size = blink::WebSize(width, height);
-  params.fit_to_view = fit_window;
+  params.fit_to_view = fit_window.fromMaybe(false);
   params.scale = scale.fromMaybe(1);
   params.screen_orientation_type = orientationType;
   params.screen_orientation_angle = orientationAngle;
@@ -224,31 +226,44 @@ Response EmulationHandler::SetDeviceMetricsOverride(
 
   device_emulation_enabled_ = true;
   device_emulation_params_ = params;
+  if (width > 0 && height > 0) {
+    original_view_size_ = widget_host->GetView()->GetViewBounds().size();
+    widget_host->GetView()->SetSize(gfx::Size(width, height));
+  } else {
+    original_view_size_ = gfx::Size();
+  }
   UpdateDeviceEmulationState();
   return Response::OK();
 }
 
 Response EmulationHandler::ClearDeviceMetricsOverride() {
+  RenderWidgetHostImpl* widget_host =
+      host_ ? host_->GetRenderWidgetHost() : nullptr;
+  if (!widget_host)
+    return Response::Error("Target does not support metrics override");
   if (!device_emulation_enabled_)
     return Response::OK();
 
   device_emulation_enabled_ = false;
+  if (original_view_size_.width())
+    widget_host->GetView()->SetSize(original_view_size_);
+  original_view_size_ = gfx::Size();
   UpdateDeviceEmulationState();
   return Response::OK();
 }
 
 Response EmulationHandler::SetVisibleSize(int width, int height) {
-  if (width < 0 || height < 0)
-    return Response::InvalidParams("Width and height must be non-negative");
-
-  // Set size of frame by resizing RWHV if available.
-  RenderWidgetHostImpl* widget_host =
-      host_ ? host_->GetRenderWidgetHost() : nullptr;
-  if (!widget_host)
-    return Response::Error("Target does not support setVisibleSize");
-
-  widget_host->GetView()->SetSize(gfx::Size(width, height));
   return Response::OK();
+}
+
+blink::WebDeviceEmulationParams EmulationHandler::GetDeviceEmulationParams() {
+  return device_emulation_params_;
+}
+
+void EmulationHandler::SetDeviceEmulationParams(
+    const blink::WebDeviceEmulationParams& params) {
+  device_emulation_params_ = params;
+  UpdateDeviceEmulationState();
 }
 
 WebContentsImpl* EmulationHandler::GetWebContents() {

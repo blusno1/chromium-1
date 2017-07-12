@@ -135,22 +135,12 @@ SafeBrowsingBlockingPage::SafeBrowsingBlockingPage(
         g_browser_process->safe_browsing_service()
             ->trigger_manager()
             ->StartCollectingThreatDetails(
-                SafeBrowsingTriggerType::SECURITY_INTERSTITIAL, web_contents,
+                TriggerType::SECURITY_INTERSTITIAL, web_contents,
                 unsafe_resources[0], profile->GetRequestContext(),
                 HistoryServiceFactory::GetForProfile(
                     profile, ServiceAccessType::EXPLICIT_ACCESS),
                 sb_error_ui()->get_error_display_options());
   }
-}
-
-bool SafeBrowsingBlockingPage::ShouldReportThreatDetails(
-    SBThreatType threat_type) {
-  return threat_type == SB_THREAT_TYPE_URL_PHISHING ||
-         threat_type == SB_THREAT_TYPE_URL_MALWARE ||
-         threat_type == SB_THREAT_TYPE_URL_UNWANTED ||
-         threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING ||
-         threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE ||
-         threat_type == SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING;
 }
 
 SafeBrowsingBlockingPage::~SafeBrowsingBlockingPage() {
@@ -209,8 +199,8 @@ void SafeBrowsingBlockingPage::FinishThreatDetails(const base::TimeDelta& delay,
   bool report_sent = g_browser_process->safe_browsing_service()
                          ->trigger_manager()
                          ->FinishCollectingThreatDetails(
-                             SafeBrowsingTriggerType::SECURITY_INTERSTITIAL,
-                             web_contents(), delay, did_proceed, num_visits,
+                             TriggerType::SECURITY_INTERSTITIAL, web_contents(),
+                             delay, did_proceed, num_visits,
                              sb_error_ui()->get_error_display_options());
 
   if (report_sent) {

@@ -64,6 +64,13 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   views::View* TargetForRect(views::View* root, const gfx::Rect& rect) override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, CreateOrUpdateTest);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, TestIconSizing);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, UpdateButtonsStateTest);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, UpdateButtonCountTest);
+
+  friend class NotificationViewMDTest;
+
   void CreateOrUpdateViews(const Notification& notification);
 
   void CreateOrUpdateContextTitleView(const Notification& notification);
@@ -85,6 +92,9 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
 
   // Whether this notification is expanded or not.
   bool expanded_ = false;
+
+  // Number of total list items in the given Notification class.
+  int list_items_count_ = 0;
 
   // Describes whether the view should display a hand pointer or not.
   bool clickable_;

@@ -74,6 +74,14 @@ interface CacheStorage
     method keys
     method match
     method open
+interface CanMakePaymentEvent : ExtendableEvent
+    attribute @@toStringTag
+    getter methodData
+    getter modifiers
+    getter paymentRequestOrigin
+    getter topLevelOrigin
+    method constructor
+    method respondWith
 interface CanvasGradient
     method addColorStop
     method constructor
@@ -144,7 +152,6 @@ interface DOMException
     getter message
     getter name
     method constructor
-    method toString
 interface DOMMatrix : DOMMatrixReadOnly
     getter a
     getter b
@@ -177,7 +184,6 @@ interface DOMMatrix : DOMMatrixReadOnly
     method rotateSelf
     method scale3dSelf
     method scaleSelf
-    method setMatrixValue
     method skewXSelf
     method skewYSelf
     method translateSelf
@@ -246,7 +252,6 @@ interface DOMMatrixReadOnly
     method toFloat32Array
     method toFloat64Array
     method toJSON
-    method toString
     method transformPoint
     method translate
 interface DOMPoint : DOMPointReadOnly
@@ -2293,6 +2298,7 @@ global object
     getter onbackgroundfetchclick
     getter onbackgroundfetched
     getter onbackgroundfetchfail
+    getter oncanmakepayment
     getter onfetch
     getter onforeignfetch
     getter oninstall
@@ -2311,6 +2317,7 @@ global object
     setter onbackgroundfetchclick
     setter onbackgroundfetched
     setter onbackgroundfetchfail
+    setter oncanmakepayment
     setter onfetch
     setter onforeignfetch
     setter oninstall

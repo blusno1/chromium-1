@@ -74,9 +74,6 @@
 #include "content/browser/streams/stream_registry.h"
 #include "content/common/net/url_request_service_worker_data.h"
 #include "content/common/resource_messages.h"
-#include "content/common/resource_request.h"
-#include "content/common/resource_request_body_impl.h"
-#include "content/common/resource_request_completion_status.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_thread.h"
@@ -90,7 +87,9 @@
 #include "content/public/browser/stream_info.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/resource_request_body.h"
+#include "content/public/common/resource_request_completion_status.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_start.h"
 #include "net/base/auth.h"
@@ -133,7 +132,8 @@ using SyncLoadResultCallback =
 namespace {
 
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
-    net::DefineNetworkTrafficAnnotation("resource_dispather_host", R"(
+    net::DefineNetworkTrafficAnnotation("resource_dispather_host",
+                                        R"(
         semantics {
           sender: "Resource Dispatcher Host"
           description:
@@ -142,7 +142,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
             "chrome URLs, resources for installed extensions, as well as "
             "downloads."
           trigger:
-            "Navigating to a URL or downloading a file.  A webpage, "
+            "Navigating to a URL or downloading a file. A webpage, "
             "ServiceWorker, chrome:// page, or extension may also initiate "
             "requests in the background."
           data: "Anything the initiator wants to send."
@@ -248,14 +248,26 @@ bool IsValidatedSCT(
 
 // Returns the PreviewsState after requesting it from the delegate. The
 // PreviewsState is a bitmask of potentially several Previews optimizations.
-PreviewsState GetPreviewsState(PreviewsState previews_state,
+// If previews_to_allow is set to anything other than PREVIEWS_UNSPECIFIED,
+// it is either the values passed in for a sub-frame to use, or if this is
+// the main frame, it is a limitation on which previews to allow.
+PreviewsState GetPreviewsState(PreviewsState previews_to_allow,
                                ResourceDispatcherHostDelegate* delegate,
                                const net::URLRequest& request,
                                ResourceContext* resource_context,
                                bool is_main_frame) {
-  // previews_state is set to PREVIEWS_OFF when reloading with Lo-Fi disabled.
-  if (previews_state == PREVIEWS_UNSPECIFIED && delegate && is_main_frame)
-    return delegate->GetPreviewsState(request, resource_context);
+  // If previews have already been turned off, or we are inheriting values on a
+  // sub-frame, don't check any further.
+  if (previews_to_allow & PREVIEWS_OFF ||
+      previews_to_allow & PREVIEWS_NO_TRANSFORM || !is_main_frame ||
+      !delegate) {
+    return previews_to_allow;
+  }
+
+  // Get the mask of previews we could apply to the current navigation.
+  PreviewsState previews_state =
+      delegate->GetPreviewsState(request, resource_context, previews_to_allow);
+
   return previews_state;
 }
 
@@ -347,10 +359,7 @@ ResourceDispatcherHostImpl::ResourceDispatcherHostImpl(
       allow_cross_origin_auth_prompt_(false),
       create_download_handler_intercept_(download_handler_intercept),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      io_thread_task_runner_(io_thread_runner),
-      experimental_web_features_enabled_(
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kEnableExperimentalWebPlatformFeatures)) {
+      io_thread_task_runner_(io_thread_runner) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
   DCHECK(!g_resource_dispatcher_host);
   g_resource_dispatcher_host = this;
@@ -874,9 +883,11 @@ void ResourceDispatcherHostImpl::OnRequestResource(
     ResourceRequesterInfo* requester_info,
     int routing_id,
     int request_id,
-    const ResourceRequest& request_data) {
-  OnRequestResourceInternal(requester_info, routing_id, request_id,
-                            request_data, nullptr, nullptr);
+    const ResourceRequest& request_data,
+    net::MutableNetworkTrafficAnnotationTag traffic_annotation) {
+  OnRequestResourceInternal(
+      requester_info, routing_id, request_id, request_data, nullptr, nullptr,
+      net::NetworkTrafficAnnotationTag(traffic_annotation));
 }
 
 void ResourceDispatcherHostImpl::OnRequestResourceInternal(
@@ -885,7 +896,8 @@ void ResourceDispatcherHostImpl::OnRequestResourceInternal(
     int request_id,
     const ResourceRequest& request_data,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
@@ -905,7 +917,7 @@ void ResourceDispatcherHostImpl::OnRequestResourceInternal(
   }
   BeginRequest(requester_info, request_id, request_data,
                SyncLoadResultCallback(), routing_id, std::move(mojo_request),
-               std::move(url_loader_client));
+               std::move(url_loader_client), traffic_annotation);
 }
 
 // Begins a resource request with the given params on behalf of the specified
@@ -925,7 +937,7 @@ void ResourceDispatcherHostImpl::OnSyncLoad(
       base::Bind(&HandleSyncLoadResult, requester_info->filter()->GetWeakPtr(),
                  base::Passed(WrapUnique(sync_result)));
   BeginRequest(requester_info, request_id, request_data, callback,
-               sync_result->routing_id(), nullptr, nullptr);
+               sync_result->routing_id(), nullptr, nullptr, kTrafficAnnotation);
 }
 
 bool ResourceDispatcherHostImpl::IsRequestIDInUse(
@@ -1087,7 +1099,8 @@ void ResourceDispatcherHostImpl::BeginRequest(
     const SyncLoadResultCallback& sync_result_handler,  // only valid for sync
     int route_id,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
   int child_id = requester_info->child_id();
 
@@ -1206,7 +1219,7 @@ void ResourceDispatcherHostImpl::BeginRequest(
                   request_id, request_data, sync_result_handler, route_id,
                   headers, base::Passed(std::move(mojo_request)),
                   base::Passed(std::move(url_loader_client)),
-                  base::Passed(std::move(blob_handles))));
+                  base::Passed(std::move(blob_handles)), traffic_annotation));
           return;
         }
       }
@@ -1215,7 +1228,8 @@ void ResourceDispatcherHostImpl::BeginRequest(
   ContinuePendingBeginRequest(
       requester_info, request_id, request_data, sync_result_handler, route_id,
       headers, std::move(mojo_request), std::move(url_loader_client),
-      std::move(blob_handles), HeaderInterceptorResult::CONTINUE);
+      std::move(blob_handles), traffic_annotation,
+      HeaderInterceptorResult::CONTINUE);
 }
 
 void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
@@ -1228,6 +1242,7 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
     mojom::URLLoaderAssociatedRequest mojo_request,
     mojom::URLLoaderClientPtr url_loader_client,
     BlobHandles blob_handles,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation,
     HeaderInterceptorResult interceptor_result) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
   if (interceptor_result != HeaderInterceptorResult::CONTINUE) {
@@ -1273,7 +1288,7 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
   std::unique_ptr<net::URLRequest> new_request = request_context->CreateRequest(
       is_navigation_stream_request ? request_data.resource_body_stream_url
                                    : request_data.url,
-      request_data.priority, nullptr, kTrafficAnnotation);
+      request_data.priority, nullptr, traffic_annotation);
 
   if (is_navigation_stream_request) {
     // PlzNavigate: Always set the method to GET when gaining access to the
@@ -1389,6 +1404,14 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
 
   new_request->SetLoadFlags(load_flags);
 
+  // Update the previews state, but only if this is not using PlzNavigate.
+  PreviewsState previews_state = request_data.previews_state;
+  if (!IsBrowserSideNavigationEnabled()) {
+    previews_state = GetPreviewsState(
+        request_data.previews_state, delegate_, *new_request, resource_context,
+        request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME);
+  }
+
   // Make extra info and read footer (contains request ID).
   ResourceRequestInfoImpl* extra_info = new ResourceRequestInfoImpl(
       requester_info, route_id,
@@ -1403,12 +1426,10 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
       request_data.enable_load_timing, request_data.enable_upload_progress,
       do_not_prompt_for_login, request_data.referrer_policy,
       request_data.visibility_state, resource_context, report_raw_headers,
-      !is_sync_load,
-      GetPreviewsState(request_data.previews_state, delegate_, *new_request,
-                       resource_context,
-                       request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME),
-      request_data.request_body, request_data.initiated_in_secure_context);
+      !is_sync_load, previews_state, request_data.request_body,
+      request_data.initiated_in_secure_context);
   extra_info->SetBlobHandles(std::move(blob_handles));
+
   // Request takes ownership.
   extra_info->AssociateWithRequest(new_request.get());
 
@@ -1603,13 +1624,11 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
         base::MakeUnique<WakeLockResourceThrottle>(request->url().host()));
   }
 
-  // The experimental Clear-Site-Data throttle.
-  if (experimental_web_features_enabled_) {
-    std::unique_ptr<ResourceThrottle> clear_site_data_throttle =
-        ClearSiteDataThrottle::MaybeCreateThrottleForRequest(request);
-    if (clear_site_data_throttle)
-      throttles.push_back(std::move(clear_site_data_throttle));
-  }
+  // The Clear-Site-Data throttle.
+  std::unique_ptr<ResourceThrottle> clear_site_data_throttle =
+      ClearSiteDataThrottle::MaybeCreateThrottleForRequest(request);
+  if (clear_site_data_throttle)
+    throttles.push_back(std::move(clear_site_data_throttle));
 
   // TODO(ricea): Stop looking this up so much.
   ResourceRequestInfoImpl* info = ResourceRequestInfoImpl::ForRequest(request);
@@ -2116,7 +2135,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       GetChromeBlobStorageContextForResourceContext(resource_context));
 
   // Resolve elements from request_body and prepare upload data.
-  ResourceRequestBodyImpl* body = info.common_params.post_data.get();
+  ResourceRequestBody* body = info.common_params.post_data.get();
   BlobHandles blob_handles;
   if (body) {
     if (!GetBodyBlobDataHandles(body, resource_context, &blob_handles)) {
@@ -2128,6 +2147,10 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
         body, blob_context, upload_file_system_context,
         BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get()));
   }
+
+  PreviewsState previews_state =
+      GetPreviewsState(info.common_params.previews_state, delegate_,
+                       *new_request, resource_context, info.is_main_frame);
 
   // Make extra info and read footer (contains request ID).
   //
@@ -2157,9 +2180,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       info.common_params.referrer.policy, info.page_visibility_state,
       resource_context, info.report_raw_headers,
       true,  // is_async
-      GetPreviewsState(info.common_params.previews_state, delegate_,
-                       *new_request, resource_context, info.is_main_frame),
-      info.common_params.post_data,
+      previews_state, info.common_params.post_data,
       // TODO(mek): Currently initiated_in_secure_context is only used for
       // subresource requests, so it doesn't matter what value it gets here.
       // If in the future this changes this should be updated to somehow get a
@@ -2240,10 +2261,11 @@ void ResourceDispatcherHostImpl::OnRequestResourceWithMojo(
     int request_id,
     const ResourceRequest& request,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   OnRequestResourceInternal(requester_info, routing_id, request_id, request,
                             std::move(mojo_request),
-                            std::move(url_loader_client));
+                            std::move(url_loader_client), traffic_annotation);
 }
 
 void ResourceDispatcherHostImpl::OnSyncLoadWithMojo(
@@ -2253,7 +2275,7 @@ void ResourceDispatcherHostImpl::OnSyncLoadWithMojo(
     const ResourceRequest& request_data,
     const SyncLoadResultCallback& result_handler) {
   BeginRequest(requester_info, request_id, request_data, result_handler,
-               routing_id, nullptr, nullptr);
+               routing_id, nullptr, nullptr, kTrafficAnnotation);
 }
 
 // static

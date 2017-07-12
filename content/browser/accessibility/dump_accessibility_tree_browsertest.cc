@@ -198,7 +198,7 @@ void DumpAccessibilityTreeTest::AddDefaultFilters(
   AddFilter(filters, "haspopup");
   AddFilter(filters, "horizontal");
   AddFilter(filters, "invisible");
-  // TODO(aleventhal) multiline
+  AddFilter(filters, "multiline");
   AddFilter(filters, "multiselectable");
   AddFilter(filters, "protected");
   // TODO(aleventhal) Add readonly support back after control mode refactor
@@ -246,6 +246,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityCSSFontStyle) {
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityCSSFontFamily) {
   RunCSSTest(FILE_PATH_LITERAL("font-family.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityCSSInlinePositionRelative) {
+  RunCSSTest(FILE_PATH_LITERAL("inline-position-relative.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityCSSLanguage) {
@@ -1405,8 +1410,9 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-opened.html"));
 }
 
+// http://crbug.com/738497
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       AccessibilityModalDialogInIframeClosed) {
+                       DISABLED_AccessibilityModalDialogInIframeClosed) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-in-iframe-closed.html"));
 }
 

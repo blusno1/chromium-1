@@ -90,7 +90,6 @@ class LayoutScrollbarPart;
 class LayoutView;
 class PaintArtifactCompositor;
 class PaintController;
-class PaintInvalidationState;
 class Page;
 class PluginView;
 class PrintContext;
@@ -121,7 +120,6 @@ class CORE_EXPORT LocalFrameView final
 
   void Invalidate() { InvalidateRect(IntRect(0, 0, Width(), Height())); }
   void InvalidateRect(const IntRect&);
-  LayoutEmbeddedContent* OwnerLayoutObject() const override;
   void SetFrameRect(const IntRect&) override;
   const IntRect& FrameRect() const override { return frame_rect_; }
   int X() const { return frame_rect_.X(); }
@@ -182,6 +180,7 @@ class CORE_EXPORT LocalFrameView final
   void SetNeedsLayout();
 
   void SetNeedsUpdateGeometries() { needs_update_geometries_ = true; }
+  void UpdateGeometry() override;
 
   // Methods for getting/setting the size Blink should use to layout the
   // contents.
@@ -282,17 +281,15 @@ class CORE_EXPORT LocalFrameView final
     safe_to_propagate_scroll_to_parent_ = is_safe;
   }
 
-  void UpdateGeometries();
-
   void AddPartToUpdate(LayoutEmbeddedObject&);
 
   Color DocumentBackgroundColor() const;
 
   // Run all needed lifecycle stages. After calling this method, all frames will
-  // be in the lifecycle state PaintInvalidationClean.  If lifecycle throttling
-  // is allowed (see DocumentLifecycle::AllowThrottlingScope), some frames may
-  // skip the lifecycle update (e.g., based on visibility) and will not end up
-  // being PaintInvalidationClean.
+  // be in the lifecycle state PaintClean.  If lifecycle throttling is allowed
+  // (see DocumentLifecycle::AllowThrottlingScope), some frames may skip the
+  // lifecycle update (e.g., based on visibility) and will not end up being
+  // PaintClean.
   void UpdateAllLifecyclePhases();
 
   // Everything except paint (the last phase).
@@ -777,10 +774,6 @@ class CORE_EXPORT LocalFrameView final
   void EnqueueScrollAnchoringAdjustment(ScrollableArea*);
   void PerformScrollAnchoringAdjustments();
 
-  // For PaintInvalidator temporarily. TODO(wangxianzhu): Move into
-  // PaintInvalidator.
-  void InvalidatePaint(const PaintInvalidationState&);
-
   // Only for SPv2.
   std::unique_ptr<JSONObject> CompositedLayersAsJSON(LayerTreeFlags);
 
@@ -877,10 +870,6 @@ class CORE_EXPORT LocalFrameView final
     AutoReset<bool> scope_;
   };
 
-  // Only for LayoutEmbeddedContent to traverse into sub frames during paint
-  // invalidation.
-  void DeprecatedInvalidateTree(const PaintInvalidationState&);
-
  private:
   explicit LocalFrameView(LocalFrame&, IntRect);
   class ScrollbarManager : public blink::ScrollbarManager {
@@ -916,7 +905,6 @@ class CORE_EXPORT LocalFrameView final
   void UpdateLifecyclePhasesInternal(
       DocumentLifecycle::LifecycleState target_state);
 
-  void DeprecatedInvalidateTreeRecursive();
   void ScrollContentsIfNeededRecursive();
   void UpdateStyleAndLayoutIfNeededRecursive();
   void PrePaint();
@@ -924,7 +912,6 @@ class CORE_EXPORT LocalFrameView final
   void PaintGraphicsLayerRecursively(GraphicsLayer*);
 
   void UpdateStyleAndLayoutIfNeededRecursiveInternal();
-  void DeprecatedInvalidateTreeRecursiveInternal();
 
   void PushPaintArtifactToCompositor(
       CompositorElementIdSet& composited_element_ids);
@@ -964,6 +951,7 @@ class CORE_EXPORT LocalFrameView final
   void DidChangeGlobalRootScroller() override;
 
   void UpdateGeometriesIfNeeded();
+  void UpdateGeometries();
 
   bool WasViewportResized();
   void SendResizeEventIfNeeded();

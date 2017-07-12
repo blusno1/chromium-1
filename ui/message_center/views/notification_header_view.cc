@@ -6,6 +6,7 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font_list.h"
@@ -34,7 +35,7 @@ constexpr gfx::Insets kHeaderPadding(0, 12, 0, 2);
 constexpr int kHeaderHorizontalSpacing = 2;
 constexpr int kAppInfoConatainerTopPadding = 12;
 // Bullet character. The divider symbol between different parts of the header.
-constexpr base::char16 kNotificationHeaderDividerSymbol = 0x2022;
+constexpr wchar_t kNotificationHeaderDivider[] = L" \u2022 ";
 
 // Base ink drop color of action buttons.
 const SkColor kInkDropBaseColor = SkColorSetRGB(0x0, 0x0, 0x0);
@@ -42,6 +43,82 @@ const SkColor kInkDropBaseColor = SkColorSetRGB(0x0, 0x0, 0x0);
 constexpr float kInkDropRippleVisibleOpacity = 0.08f;
 // Highlight (hover) ink drop opacity of action buttons.
 constexpr float kInkDropHighlightVisibleOpacity = 0.08f;
+
+// base::TimeBase has similar constants, but some of them are missing.
+constexpr int64_t kMinuteInMillis = 60LL * 1000LL;
+constexpr int64_t kHourInMillis = 60LL * kMinuteInMillis;
+constexpr int64_t kDayInMillis = 24LL * kHourInMillis;
+// In Android, DateUtils.YEAR_IN_MILLIS is 364 days.
+constexpr int64_t kYearInMillis = 364LL * kDayInMillis;
+
+// ExpandButtton forwards all mouse and key events to NotificationHeaderView,
+// but takes tab focus for accessibility purpose.
+class ExpandButton : public views::ImageView {
+ public:
+  ExpandButton();
+  ~ExpandButton() override;
+
+  void OnPaint(gfx::Canvas* canvas) override;
+  void OnFocus() override;
+  void OnBlur() override;
+
+ private:
+  std::unique_ptr<views::Painter> focus_painter_;
+};
+
+ExpandButton::ExpandButton() {
+  SetImage(gfx::CreateVectorIcon(kNotificationExpandMoreIcon, kExpandIconSize,
+                                 gfx::kChromeIconGrey));
+  focus_painter_ = views::Painter::CreateSolidFocusPainter(
+      kFocusBorderColor, gfx::Insets(1, 2, 2, 2));
+  SetFocusBehavior(FocusBehavior::ALWAYS);
+}
+
+ExpandButton::~ExpandButton() = default;
+
+void ExpandButton::OnPaint(gfx::Canvas* canvas) {
+  views::ImageView::OnPaint(canvas);
+  views::Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
+}
+
+void ExpandButton::OnFocus() {
+  views::ImageView::OnFocus();
+  SchedulePaint();
+}
+
+void ExpandButton::OnBlur() {
+  views::ImageView::OnBlur();
+  SchedulePaint();
+}
+
+// Do relative time string formatting that is similar to
+// com.java.android.widget.DateTimeView.updateRelativeTime.
+// Chromium has its own base::TimeFormat::Simple(), but none of the formats
+// supported by the function is similar to Android's one.
+base::string16 FormatToRelativeTime(base::Time past) {
+  base::Time now = base::Time::Now();
+  int64_t duration = (now - past).InMilliseconds();
+  if (duration < kMinuteInMillis) {
+    return l10n_util::GetStringUTF16(
+        IDS_MESSAGE_NOTIFICATION_NOW_STRING_SHORTEST);
+  } else if (duration < kHourInMillis) {
+    int count = static_cast<int>(duration / kMinuteInMillis);
+    return l10n_util::GetPluralStringFUTF16(
+        IDS_MESSAGE_NOTIFICATION_DURATION_MINUTES_SHORTEST, count);
+  } else if (duration < kDayInMillis) {
+    int count = static_cast<int>(duration / kHourInMillis);
+    return l10n_util::GetPluralStringFUTF16(
+        IDS_MESSAGE_NOTIFICATION_DURATION_HOURS_SHORTEST, count);
+  } else if (duration < kYearInMillis) {
+    int count = static_cast<int>(duration / kDayInMillis);
+    return l10n_util::GetPluralStringFUTF16(
+        IDS_MESSAGE_NOTIFICATION_DURATION_DAYS_SHORTEST, count);
+  } else {
+    int count = static_cast<int>(duration / kYearInMillis);
+    return l10n_util::GetPluralStringFUTF16(
+        IDS_MESSAGE_NOTIFICATION_DURATION_YEARS_SHORTEST, count);
+  }
+}
 
 }  // namespace
 
@@ -85,9 +162,7 @@ NotificationHeaderView::NotificationHeaderView(views::ButtonListener* listener)
 
   // Summary text divider
   summary_text_divider_ =
-      new views::Label(base::ASCIIToUTF16(" ") +
-                       base::string16(1, kNotificationHeaderDividerSymbol) +
-                       base::ASCIIToUTF16(" "));
+      new views::Label(base::WideToUTF16(kNotificationHeaderDivider));
   summary_text_divider_->SetFontList(font_list);
   summary_text_divider_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   summary_text_divider_->SetVisible(false);
@@ -100,15 +175,23 @@ NotificationHeaderView::NotificationHeaderView(views::ButtonListener* listener)
   summary_text_view_->SetVisible(false);
   app_info_container->AddChildView(summary_text_view_);
 
+  // Timestamp divider
+  timestamp_divider_ =
+      new views::Label(base::WideToUTF16(kNotificationHeaderDivider));
+  timestamp_divider_->SetFontList(font_list);
+  timestamp_divider_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  timestamp_divider_->SetVisible(false);
+  app_info_container->AddChildView(timestamp_divider_);
+
+  // Timestamp view
+  timestamp_view_ = new views::Label(base::string16());
+  timestamp_view_->SetFontList(font_list);
+  timestamp_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  timestamp_view_->SetVisible(false);
+  app_info_container->AddChildView(timestamp_view_);
+
   // Expand button view
-  expand_button_ = new views::ImageButton(listener);
-  expand_button_->SetImage(
-      views::Button::STATE_NORMAL,
-      gfx::CreateVectorIcon(kNotificationExpandMoreIcon, kExpandIconSize,
-                            gfx::kChromeIconGrey));
-  expand_button_->SetFocusForPlatform();
-  expand_button_->SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, gfx::Insets(1, 2, 2, 2)));
+  expand_button_ = new ExpandButton();
   app_info_container->AddChildView(expand_button_);
 
   // Spacer between left-aligned views and right-aligned views
@@ -147,22 +230,53 @@ void NotificationHeaderView::SetAppName(const base::string16& name) {
 void NotificationHeaderView::SetProgress(int progress) {
   summary_text_view_->SetText(l10n_util::GetStringFUTF16Int(
       IDS_MESSAGE_CENTER_NOTIFICATION_PROGRESS_PERCENTAGE, progress));
-  has_summary_text_ = true;
+  has_progress_ = true;
   UpdateSummaryTextVisibility();
 }
 
 void NotificationHeaderView::ClearProgress() {
-  has_summary_text_ = false;
+  has_progress_ = false;
+  UpdateSummaryTextVisibility();
+}
+
+void NotificationHeaderView::SetOverflowIndicator(int count) {
+  if (count > 0) {
+    summary_text_view_->SetText(l10n_util::GetStringFUTF16Int(
+        IDS_MESSAGE_CENTER_LIST_NOTIFICATION_HEADER_OVERFLOW_INDICATOR, count));
+    has_overflow_indicator_ = true;
+  } else {
+    has_overflow_indicator_ = false;
+  }
+  UpdateSummaryTextVisibility();
+}
+
+void NotificationHeaderView::ClearOverflowIndicator() {
+  has_overflow_indicator_ = false;
+  UpdateSummaryTextVisibility();
+}
+
+void NotificationHeaderView::SetTimestamp(base::Time past) {
+  timestamp_view_->SetText(FormatToRelativeTime(past));
+  has_timestamp_ = true;
+  UpdateSummaryTextVisibility();
+}
+
+void NotificationHeaderView::ClearTimestamp() {
+  has_timestamp_ = false;
   UpdateSummaryTextVisibility();
 }
 
 void NotificationHeaderView::SetExpandButtonEnabled(bool enabled) {
+  // SetInkDropMode iff. the visibility changed.
+  // Otherwise, the ink drop animation cannot finish.
+  if (expand_button_->visible() != enabled)
+    SetInkDropMode(enabled ? InkDropMode::ON : InkDropMode::OFF);
+
   expand_button_->SetVisible(enabled);
 }
 
 void NotificationHeaderView::SetExpanded(bool expanded) {
   expand_button_->SetImage(
-      views::Button::STATE_NORMAL,
       gfx::CreateVectorIcon(
           expanded ? kNotificationExpandLessIcon : kNotificationExpandMoreIcon,
           kExpandIconSize, gfx::kChromeIconGrey));
@@ -234,8 +348,11 @@ void NotificationHeaderView::UpdateControlButtonsVisibility() {
 }
 
 void NotificationHeaderView::UpdateSummaryTextVisibility() {
-  summary_text_divider_->SetVisible(has_summary_text_);
-  summary_text_view_->SetVisible(has_summary_text_);
+  const bool visible = has_progress_ || has_overflow_indicator_;
+  summary_text_divider_->SetVisible(visible);
+  summary_text_view_->SetVisible(visible);
+  timestamp_divider_->SetVisible(!has_progress_ && has_timestamp_);
+  timestamp_view_->SetVisible(!has_progress_ && has_timestamp_);
   Layout();
 }
 

@@ -11,9 +11,9 @@
 #include "platform/mojo/MojoHelper.h"
 #include "public/platform/Platform.h"
 
-using namespace device::mojom::blink;
-
 namespace blink {
+
+using namespace device::mojom::blink;
 
 SensorProxy::SensorProxy(SensorType sensor_type,
                          SensorProviderProxy* provider,
@@ -113,7 +113,7 @@ const SensorConfiguration* SensorProxy::DefaultConfig() const {
 }
 
 void SensorProxy::UpdateSensorReading() {
-  DCHECK(IsInitialized());
+  DCHECK(ShouldProcessReadings());
   int read_attempts = 0;
   const int kMaxReadAttemptsCount = 10;
   device::SensorReading reading_data;
@@ -139,7 +139,8 @@ void SensorProxy::RaiseError() {
 
 void SensorProxy::SensorReadingChanged() {
   DCHECK_EQ(ReportingMode::ON_CHANGE, mode_);
-  UpdateSensorReading();
+  if (ShouldProcessReadings())
+    UpdateSensorReading();
 }
 
 void SensorProxy::PageVisibilityChanged() {
@@ -238,8 +239,10 @@ void SensorProxy::OnAddConfigurationCompleted(
 
 void SensorProxy::OnRemoveConfigurationCompleted(double frequency,
                                                  bool result) {
-  if (!result)
+  if (!result) {
     DVLOG(1) << "Failure at sensor configuration removal";
+    return;
+  }
 
   size_t index = frequencies_used_.Find(frequency);
   if (index == kNotFound) {
@@ -248,6 +251,7 @@ void SensorProxy::OnRemoveConfigurationCompleted(double frequency,
   }
 
   frequencies_used_.erase(index);
+  UpdatePollingStatus();
 }
 
 bool SensorProxy::TryReadFromBuffer(device::SensorReading& result) {
@@ -267,11 +271,15 @@ void SensorProxy::OnPollingTimer(TimerBase*) {
   UpdateSensorReading();
 }
 
+bool SensorProxy::ShouldProcessReadings() const {
+  return IsInitialized() && !suspended_ && !frequencies_used_.IsEmpty();
+}
+
 void SensorProxy::UpdatePollingStatus() {
-  bool start_polling = (mode_ == ReportingMode::CONTINUOUS) &&
-                       IsInitialized() && !suspended_ &&
-                       !frequencies_used_.IsEmpty();
-  if (start_polling) {
+  if (mode_ != ReportingMode::CONTINUOUS)
+    return;
+
+  if (ShouldProcessReadings()) {
     // TODO(crbug/721297) : We need to find out an algorithm for resulting
     // polling frequency.
     polling_timer_.StartRepeating(1 / frequencies_used_.back(),

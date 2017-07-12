@@ -47,10 +47,6 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/color_space.h"
 
-namespace cc {
-class SharedBitmap;
-}
-
 namespace gfx {
 class GpuMemoryBuffer;
 }
@@ -59,6 +55,10 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
+}
+
+namespace viz {
+class SharedBitmap;
 }
 
 namespace WTF {
@@ -193,7 +193,7 @@ class PLATFORM_EXPORT DrawingBuffer
   WebGraphicsContext3DProvider* ContextProvider();
 
   // cc::TextureLayerClient implementation.
-  bool PrepareTextureMailbox(cc::TextureMailbox* out_mailbox,
+  bool PrepareTextureMailbox(viz::TextureMailbox* out_mailbox,
                              std::unique_ptr<cc::SingleReleaseCallback>*
                                  out_release_callback) override;
 
@@ -260,7 +260,7 @@ class PLATFORM_EXPORT DrawingBuffer
   // Shared memory bitmaps that were released by the compositor and can be used
   // again by this DrawingBuffer.
   struct RecycledBitmap {
-    std::unique_ptr<cc::SharedBitmap> bitmap;
+    std::unique_ptr<viz::SharedBitmap> bitmap;
     IntSize size;
   };
   Vector<RecycledBitmap> recycled_bitmaps_;
@@ -364,16 +364,16 @@ class PLATFORM_EXPORT DrawingBuffer
   void ResolveIfNeeded();
 
   bool PrepareTextureMailboxInternal(
-      cc::TextureMailbox* out_mailbox,
+      viz::TextureMailbox* out_mailbox,
       std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback,
       bool force_gpu_result);
 
   // Helper functions to be called only by prepareTextureMailboxInternal.
   bool FinishPrepareTextureMailboxGpu(
-      cc::TextureMailbox* out_mailbox,
+      viz::TextureMailbox* out_mailbox,
       std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback);
   bool FinishPrepareTextureMailboxSoftware(
-      cc::TextureMailbox* out_mailbox,
+      viz::TextureMailbox* out_mailbox,
       std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback);
 
   // Callbacks for mailboxes given to the compositor from
@@ -381,7 +381,7 @@ class PLATFORM_EXPORT DrawingBuffer
   void MailboxReleasedGpu(RefPtr<ColorBuffer>,
                           const gpu::SyncToken&,
                           bool lost_resource);
-  void MailboxReleasedSoftware(std::unique_ptr<cc::SharedBitmap>,
+  void MailboxReleasedSoftware(std::unique_ptr<viz::SharedBitmap>,
                                const IntSize&,
                                const gpu::SyncToken&,
                                bool lost_resource);
@@ -399,7 +399,7 @@ class PLATFORM_EXPORT DrawingBuffer
 
   void ClearPlatformLayer();
 
-  std::unique_ptr<cc::SharedBitmap> CreateOrRecycleBitmap();
+  std::unique_ptr<viz::SharedBitmap> CreateOrRecycleBitmap();
 
   // Updates the current size of the buffer, ensuring that
   // s_currentResourceUsePixels is updated.

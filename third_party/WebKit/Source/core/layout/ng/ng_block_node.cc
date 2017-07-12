@@ -120,10 +120,7 @@ void UpdateLegacyMultiColumnFlowThread(LayoutBox* layout_box,
 
 }  // namespace
 
-NGBlockNode::NGBlockNode(LayoutBox* box) : NGLayoutInputNode(box) {
-  if (box)
-    box->SetLayoutNGInline(false);
-}
+NGBlockNode::NGBlockNode(LayoutBox* box) : NGLayoutInputNode(box, kBlock) {}
 
 RefPtr<NGLayoutResult> NGBlockNode::Layout(NGConstraintSpace* constraint_space,
                                            NGBreakToken* break_token) {
@@ -255,6 +252,22 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
   intrinsic_logical_height -= border_scrollbar_padding.BlockSum();
   box_->SetIntrinsicContentLogicalHeight(intrinsic_logical_height);
 
+  // LayoutBox::Margin*() should be used value, while we set computed value
+  // here. This is not entirely correct, but these values are not used for
+  // layout purpose.
+  // BaselinePosition() relies on margins set to the box, and computed value is
+  // good enough for it to work correctly.
+  // Set this only for atomic inlines, or we end up adding margins twice.
+  if (box_->IsAtomicInlineLevel()) {
+    NGBoxStrut margins =
+        ComputeMargins(constraint_space, Style(),
+                       constraint_space.WritingMode(), Style().Direction());
+    box_->SetMarginBefore(margins.block_start);
+    box_->SetMarginAfter(margins.block_end);
+    box_->SetMarginStart(margins.inline_start);
+    box_->SetMarginEnd(margins.inline_end);
+  }
+
   // TODO(ikilpatrick) is this the right thing to do?
   if (box_->IsLayoutBlockFlow()) {
     ToLayoutBlockFlow(box_)->RemoveFloatingObjects();
@@ -344,7 +357,62 @@ RefPtr<NGLayoutResult> NGBlockNode::RunOldLayout(
       .SetDirection(box_->StyleRef().Direction())
       .SetWritingMode(writing_mode)
       .SetOverflowSize(overflow_size);
+  CopyBaselinesFromOldLayout(constraint_space, &builder);
   return builder.ToBoxFragment();
+}
+
+void NGBlockNode::CopyBaselinesFromOldLayout(
+    const NGConstraintSpace& constraint_space,
+    NGFragmentBuilder* builder) {
+  const Vector<NGBaselineRequest>& requests =
+      constraint_space.BaselineRequests();
+  if (requests.IsEmpty())
+    return;
+
+  for (const auto& request : requests) {
+    switch (request.algorithm_type) {
+      case NGBaselineAlgorithmType::kAtomicInline:
+        AddAtomicInlineBaselineFromOldLayout(request, false, builder);
+        break;
+      case NGBaselineAlgorithmType::kAtomicInlineForFirstLine:
+        AddAtomicInlineBaselineFromOldLayout(request, true, builder);
+        break;
+      case NGBaselineAlgorithmType::kFirstLine: {
+        int position = box_->FirstLineBoxBaseline();
+        if (position != -1) {
+          builder->AddBaseline(request.algorithm_type, request.baseline_type,
+                               LayoutUnit(position));
+        }
+        break;
+      }
+    }
+  }
+}
+
+void NGBlockNode::AddAtomicInlineBaselineFromOldLayout(
+    const NGBaselineRequest& request,
+    bool is_first_line,
+    NGFragmentBuilder* builder) {
+  LineDirectionMode line_direction =
+      IsHorizontalWritingMode(builder->WritingMode())
+          ? LineDirectionMode::kHorizontalLine
+          : LineDirectionMode::kVerticalLine;
+  LayoutUnit position = LayoutUnit(box_->BaselinePosition(
+      request.baseline_type, is_first_line, line_direction));
+
+  // Some form controls return 0 for BaselinePosition() if 'display:block'.
+  // Blocks without line boxes should not produce baselines.
+  if (!position && !box_->IsAtomicInlineLevel() &&
+      !box_->IsLayoutNGBlockFlow() &&
+      box_->InlineBlockBaseline(line_direction) == -1) {
+    return;
+  }
+
+  // BaselinePosition() uses margin edge for atomic inlines.
+  if (box_->IsAtomicInlineLevel())
+    position -= box_->MarginOver();
+
+  builder->AddBaseline(request.algorithm_type, request.baseline_type, position);
 }
 
 void NGBlockNode::UseOldOutOfFlowPositioning() {

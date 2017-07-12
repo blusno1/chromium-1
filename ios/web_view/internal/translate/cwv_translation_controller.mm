@@ -11,9 +11,11 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
-#import "ios/web_view/internal/translate/cwv_language_detection_result_internal.h"
+#import "ios/web_view/internal/cwv_web_view_configuration_internal.h"
+#include "ios/web_view/internal/pref_names.h"
 #import "ios/web_view/internal/translate/cwv_translation_language_internal.h"
 #import "ios/web_view/internal/translate/web_view_translate_client.h"
+#include "ios/web_view/internal/web_view_browser_state.h"
 #import "ios/web_view/public/cwv_translation_controller_delegate.h"
 #import "ios/web_view/public/cwv_translation_policy.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -66,6 +68,17 @@ const NSInteger CWVTranslationErrorScriptLoadError =
 @synthesize supportedLanguagesByCode = _supportedLanguagesByCode;
 @synthesize webState = _webState;
 
+#pragma mark - Class Methods
+
++ (void)resetTranslationPolicies {
+  CWVWebViewConfiguration* configuration =
+      [CWVWebViewConfiguration defaultConfiguration];
+  PrefService* prefService = configuration.browserState->GetPrefs();
+  translate::TranslatePrefs translatePrefs(prefService, prefs::kAcceptLanguages,
+                                           nullptr);
+  translatePrefs.ResetToDefaults();
+}
+
 #pragma mark - Internal Methods
 
 - (void)setWebState:(web::WebState*)webState {
@@ -97,36 +110,27 @@ const NSInteger CWVTranslationErrorScriptLoadError =
 
   switch (step) {
     case translate::TRANSLATE_STEP_BEFORE_TRANSLATE: {
-      NSArray* supportedLanguages = [self.supportedLanguagesByCode.allValues
-          sortedArrayUsingComparator:^NSComparisonResult(
-              CWVTranslationLanguage* languageA,
-              CWVTranslationLanguage* languageB) {
-            return [languageA.languageName compare:languageB.languageName];
-          }];
-      CWVLanguageDetectionResult* languageDetectionResult =
-          [[CWVLanguageDetectionResult alloc]
-                 initWithPageLanguage:source
-              suggestedTargetLanguage:target
-                   supportedLanguages:supportedLanguages];
       if ([_delegate respondsToSelector:@selector
-                     (translationController:didFinishLanguageDetectionWithResult
-                                              :error:)]) {
+                     (translationController:canOfferTranslationFromLanguage
+                                              :toLanguage:)]) {
         [_delegate translationController:self
-            didFinishLanguageDetectionWithResult:languageDetectionResult
-                                           error:error];
+            canOfferTranslationFromLanguage:source
+                                 toLanguage:target];
       }
       break;
     }
     case translate::TRANSLATE_STEP_TRANSLATING:
       if ([_delegate respondsToSelector:@selector
                      (translationController:didStartTranslationFromLanguage
-                                              :toLanguage:)]) {
+                                              :toLanguage:userInitiated:)]) {
         [_delegate translationController:self
             didStartTranslationFromLanguage:source
-                                 toLanguage:target];
+                                 toLanguage:target
+                              userInitiated:triggeredFromMenu];
       }
       break;
     case translate::TRANSLATE_STEP_AFTER_TRANSLATE:
+    case translate::TRANSLATE_STEP_TRANSLATE_ERROR:
       if ([_delegate respondsToSelector:@selector
                      (translationController:didFinishTranslationFromLanguage
                                               :toLanguage:error:)]) {
@@ -137,22 +141,26 @@ const NSInteger CWVTranslationErrorScriptLoadError =
       }
       break;
     case translate::TRANSLATE_STEP_NEVER_TRANSLATE:
-      break;
-    case translate::TRANSLATE_STEP_TRANSLATE_ERROR:
+      // Not supported.
       break;
   }
 }
 
 #pragma mark - Public Methods
 
+- (NSSet*)supportedLanguages {
+  return [NSSet setWithArray:self.supportedLanguagesByCode.allValues];
+}
+
 - (void)translatePageFromLanguage:(CWVTranslationLanguage*)sourceLanguage
-                       toLanguage:(CWVTranslationLanguage*)targetLanguage {
+                       toLanguage:(CWVTranslationLanguage*)targetLanguage
+                    userInitiated:(BOOL)userInitiated {
   std::string sourceLanguageCode =
       base::SysNSStringToUTF8(sourceLanguage.languageCode);
   std::string targetLanguageCode =
       base::SysNSStringToUTF8(targetLanguage.languageCode);
   _translateClient->translate_manager()->TranslatePage(
-      sourceLanguageCode, targetLanguageCode, false);
+      sourceLanguageCode, targetLanguageCode, userInitiated);
 }
 
 - (void)revertTranslation {
@@ -161,6 +169,7 @@ const NSInteger CWVTranslationErrorScriptLoadError =
 
 - (void)setTranslationPolicy:(CWVTranslationPolicy*)policy
              forPageLanguage:(CWVTranslationLanguage*)pageLanguage {
+  DCHECK(!_webState->GetBrowserState()->IsOffTheRecord());
   std::string languageCode = base::SysNSStringToUTF8(pageLanguage.languageCode);
   switch (policy.type) {
     case CWVTranslationPolicyAsk: {
@@ -204,6 +213,7 @@ const NSInteger CWVTranslationErrorScriptLoadError =
 
 - (void)setTranslationPolicy:(CWVTranslationPolicy*)policy
                  forPageHost:(NSString*)pageHost {
+  DCHECK(!_webState->GetBrowserState()->IsOffTheRecord());
   DCHECK(pageHost.length);
   switch (policy.type) {
     case CWVTranslationPolicyAsk: {
@@ -244,11 +254,14 @@ const NSInteger CWVTranslationErrorScriptLoadError =
     std::string locale = translate::TranslateDownloadManager::GetInstance()
                              ->application_locale();
     for (const std::string& languageCode : languageCodes) {
-      base::string16 languageName =
+      base::string16 localizedName =
           l10n_util::GetDisplayNameForLocale(languageCode, locale, true);
+      base::string16 nativeName =
+          l10n_util::GetDisplayNameForLocale(languageCode, languageCode, true);
       CWVTranslationLanguage* language =
           [[CWVTranslationLanguage alloc] initWithLanguageCode:languageCode
-                                                  languageName:languageName];
+                                                 localizedName:localizedName
+                                                    nativeName:nativeName];
 
       supportedLanguagesByCode[language.languageCode] = language;
     }

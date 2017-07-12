@@ -374,6 +374,12 @@ enum class SnapshotViewOption {
   return _delegate;
 }
 
+- (id<ApplicationCommands, BrowserCommands>)dispatcher {
+  // TODO(crbug.com/738881) add a dispatcher instance to this class and
+  // return it here when needed.
+  return nil;
+}
+
 - (IBAction)chromeExecuteCommand:(id)sender {
   int command = [sender tag];
 
@@ -462,8 +468,8 @@ enum class SnapshotViewOption {
 
 - (UIImage*)updateScreenshotForCellIfNeeded:(TabSwitcherLocalSessionCell*)cell
                                    tabModel:(TabModel*)tabModel {
-  if (cell.screenshot)
-    return cell.screenshot;
+  if (cell.snapshot)
+    return cell.snapshot;
   UIColor* backgroundColor = [tabModel isOffTheRecord]
                                  ? [[MDCPalette greyPalette] tint700]
                                  : [UIColor whiteColor];

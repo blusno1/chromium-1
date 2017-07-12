@@ -16,11 +16,12 @@ mojom("interfaces_internal") {
     "service_callbacks.mojom",
     "service_constants.mojom",
     "tracing/tracing.mojom",
+    "tracing/tracing_constants.mojom",
   ]
 
   public_deps = [
-    "//components/ukm/public/interfaces:interfaces",
     "//mojo/common:common_custom_types",
+    "//services/metrics/public/interfaces",
   ]
 
   component_output_prefix = "resource_coordinator_public_interfaces_internal"

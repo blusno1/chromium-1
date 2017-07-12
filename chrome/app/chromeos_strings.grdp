@@ -511,8 +511,8 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_REMOVE_FOLDER_SHORTCUT_BUTTON_LABEL" desc="Menu item label, unpinning the selected folder from the left nav.">
     Remove shortcut
   </message>
-  <message name="IDS_FILE_BROWSER_SHARE_BUTTON_LABEL" desc="Menu item label, showing dialog to share the selected file.">
-    Share
+  <message name="IDS_FILE_BROWSER_SHARE_BUTTON_LABEL" desc="Menu item's label, showing dialog to share the selected Google Drive files. This message is also used as a tooltip label and a spoken feedback label of a button which also shows the dialog to share the files. The translation should be consistent with the sharing dialog's title in Google Drive Web UI.">
+    Share with others
   </message>
   <message name="IDS_FILE_BROWSER_TOGGLE_HIDDEN_FILES_COMMAND_LABEL" desc="Label for menu or button with checkmark that toggles visibility of hidden files.">
     Show hidden files
@@ -6093,10 +6093,25 @@ All users must sign out to continue.
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_SUCCESS_MESSAGE" desc="Message of the toast shown on the first sign-in after the successfully completed migration needed for using Android apps.">
     Update successful. You can now use Android apps.
   </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_NO_THANKS_BUTTON" desc="Button label for skipping voice interaction value proposition">
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOADING" desc="Loading message of the voice interaction value prop dialog.">
+    Loading Google Assistant...
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_TITLE" desc="Load error title of the voice interaction value prop dialog.">
+    Google Assistant
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_MESSAGE" desc="Load error message of the voice interaction value prop dialog.">
+    Google Assistant was unable to load, please retry.
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_SKIP_BUTTON" desc="Button label for skipping voice interaction value prop upon error.">
+    Skip
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_RETRY_BUTTON" desc="Button label for retry loading voice interaction value prop.">
+    Retry
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_NO_THANKS_BUTTON" desc="Button label for skipping voice interaction value proposition.">
     No thanks
   </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_CONTINUE_BUTTION" desc="Button label for accepting voice interaction value proposition">
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_CONTINUE_BUTTION" desc="Button label for accepting voice interaction value proposition.">
     Continue
   </message>
   <message name="IDS_WAIT_FOR_CONTAINER_READY_TITLE" desc="Title of the wait for container ready OOBE screen.">

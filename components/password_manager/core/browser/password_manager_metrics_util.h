@@ -193,6 +193,37 @@ enum class SubmittedFormFrame {
   SUBMITTED_FORM_FRAME_COUNT
 };
 
+// Metrics: "PasswordManager.AccessPasswordInSettings"
+enum AccessPasswordInSettingsEvent {
+  ACCESS_PASSWORD_VIEWED = 0,
+  ACCESS_PASSWORD_COPIED = 1,
+  ACCESS_PASSWORD_COUNT
+};
+
+// Metrics: PasswordManager.ReauthToAccessPasswordInSettings
+enum ReauthToAccessPasswordInSettingsEvent {
+  REAUTH_SUCCESS = 0,
+  REAUTH_FAILURE = 1,
+  REAUTH_SKIPPED = 2,
+  REAUTH_COUNT
+};
+
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
+    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+enum class SyncPasswordHashChange {
+  SAVED_ON_CHROME_SIGNIN,
+  SAVED_IN_CONTENT_AREA,
+  CLEARED_ON_CHROME_SIGNOUT,
+  SAVED_SYNC_PASSWORD_CHANGE_COUNT
+};
+
+enum class IsSyncPasswordHashSaved {
+  NOT_SAVED,
+  SAVED,
+  IS_SYNC_PASSWORD_HASH_SAVED_COUNT
+};
+#endif
+
 // A version of the UMA_HISTOGRAM_BOOLEAN macro that allows the |name|
 // to vary over the program's runtime.
 void LogUMAHistogramBoolean(const std::string& name, bool sample);
@@ -281,6 +312,15 @@ void LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
 
 // Log a frame of a submitted password form.
 void LogSubmittedFormFrame(SubmittedFormFrame frame);
+
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
+    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+// Log a save sync password change event.
+void LogSyncPasswordHashChange(SyncPasswordHashChange event);
+
+// Log whether a sync password hash saved.
+void LogIsSyncPasswordHashSaved(IsSyncPasswordHashSaved state);
+#endif
 
 }  // namespace metrics_util
 

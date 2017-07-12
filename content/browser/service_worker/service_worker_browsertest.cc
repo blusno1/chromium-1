@@ -22,6 +22,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -641,7 +643,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     const GURL pattern = embedded_test_server()->GetURL("/service_worker/");
     registration_ = new ServiceWorkerRegistration(
-        pattern,
+        ServiceWorkerRegistrationOptions(pattern),
         wrapper()->context()->storage()->NewRegistrationId(),
         wrapper()->context()->AsWeakPtr());
     // Set the update check time to avoid triggering updates in the middle of
@@ -2657,7 +2659,7 @@ class CacheStorageSideDataSizeChecker
     blob_data_handle_ = std::move(blob_data_handle);
     blob_reader_ = blob_data_handle_->CreateReader(
         file_system_context_,
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
+        base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}).get());
     const storage::BlobReader::Status status = blob_reader_->CalculateSize(
         base::Bind(&self::OnBlobReaderCalculateSizeCallback, this, result,
                    continuation));

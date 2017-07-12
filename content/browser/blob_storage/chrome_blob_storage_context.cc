@@ -19,14 +19,13 @@
 #include "base/task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "content/browser/resource_context_impl.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/blob_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/resource_request_body.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_memory_controller.h"
-#include "storage/browser/blob/blob_registry_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
 
 using base::FilePath;
@@ -81,6 +80,8 @@ ChromeBlobStorageContext::ChromeBlobStorageContext() {}
 
 ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
     BrowserContext* context) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   if (!context->GetUserData(kBlobStorageContextKeyName)) {
     scoped_refptr<ChromeBlobStorageContext> blob =
         new ChromeBlobStorageContext();
@@ -134,9 +135,6 @@ void ChromeBlobStorageContext::InitializeOnIOThread(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   context_.reset(new BlobStorageContext(std::move(blob_storage_dir),
                                         std::move(file_task_runner)));
-  if (base::FeatureList::IsEnabled(features::kMojoBlobs))
-    blob_registry_ =
-        base::MakeUnique<storage::BlobRegistryImpl>(context_.get());
   // Signal the BlobMemoryController when it's appropriate to calculate its
   // storage limits.
   BrowserThread::PostAfterStartupTask(
@@ -185,13 +183,6 @@ std::unique_ptr<BlobHandle> ChromeBlobStorageContext::CreateFileBackedBlob(
   return blob_handle;
 }
 
-void ChromeBlobStorageContext::BindBlobRegistry(
-    const service_manager::BindSourceInfo& source_info,
-    storage::mojom::BlobRegistryRequest request) {
-  DCHECK(base::FeatureList::IsEnabled(features::kMojoBlobs));
-  blob_registry_->Bind(std::move(request));
-}
-
 ChromeBlobStorageContext::~ChromeBlobStorageContext() {}
 
 void ChromeBlobStorageContext::DeleteOnCorrectThread() const {
@@ -210,7 +201,7 @@ storage::BlobStorageContext* GetBlobStorageContext(
   return blob_storage_context->context();
 }
 
-bool GetBodyBlobDataHandles(ResourceRequestBodyImpl* body,
+bool GetBodyBlobDataHandles(ResourceRequestBody* body,
                             ResourceContext* resource_context,
                             BlobHandles* blob_handles) {
   blob_handles->clear();
@@ -220,8 +211,8 @@ bool GetBodyBlobDataHandles(ResourceRequestBodyImpl* body,
 
   DCHECK(blob_context);
   for (size_t i = 0; i < body->elements()->size(); ++i) {
-    const ResourceRequestBodyImpl::Element& element = (*body->elements())[i];
-    if (element.type() != ResourceRequestBodyImpl::Element::TYPE_BLOB)
+    const ResourceRequestBody::Element& element = (*body->elements())[i];
+    if (element.type() != ResourceRequestBody::Element::TYPE_BLOB)
       continue;
     std::unique_ptr<storage::BlobDataHandle> handle =
         blob_context->GetBlobDataFromUUID(element.blob_uuid());

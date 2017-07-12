@@ -22,7 +22,7 @@ namespace blink {
 {% if not is_partial %}
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -39,7 +39,7 @@ namespace blink {
     WrapperTypeInfo::{{active_scriptwrappable_inheritance}},
     WrapperTypeInfo::{{lifetime}},
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -244,6 +244,7 @@ static const struct {
 {% block indexed_property_getter_callback %}{% endblock %}
 {% block indexed_property_setter_callback %}{% endblock %}
 {% block indexed_property_deleter_callback %}{% endblock %}
+{% block indexed_property_definer_callback %}{% endblock %}
 
 {% if has_access_check_callbacks and not is_partial %}
 bool {{v8_class_or_partial}}::securityCheck(v8::Local<v8::Context> accessingContext, v8::Local<v8::Object> accessedObject, v8::Local<v8::Value> data) {
@@ -347,7 +348,7 @@ void {{v8_class_or_partial}}::crossOriginIndexedGetter(uint32_t index, const v8:
 {% if data_attributes %}
 // Suppress warning: global constructors, because AttributeConfiguration is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -356,7 +357,7 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}Attributes[]
     {{attribute_configuration(data_attribute) | indent(4)}},
     {% endfor %}
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -368,7 +369,7 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}Attributes[]
 {% if lazy_data_attributes %}
 // Suppress warning: global constructors, because AttributeConfiguration is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -377,7 +378,7 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}LazyDataAttr
     {{attribute_configuration(data_attribute) | indent(4)}},
     {% endfor %}
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -583,7 +584,8 @@ static void install{{v8_class}}Template(
   //   and sets the "prototype" property of its function object.
   //   When |interfaceTemplate|'s function object is created, its
   //   prototype.__proto__ will point to the value of the "prototype" property
-  //   of |iteratorPrototypeTemplate|, which is exactly what we want.
+  //   of |intrinsicIteratorPrototypeInterfaceTemplate|, which is exactly what
+  //   we want.
   //
   // Finally, creating a FunctionTemplate here might look expensive since they
   // have the same lifetime as their context, but:
@@ -598,6 +600,30 @@ static void install{{v8_class}}Template(
   intrinsicIteratorPrototypeInterfaceTemplate->SetIntrinsicDataProperty(
       V8AtomicString(isolate, "prototype"), v8::kIteratorPrototype);
   interfaceTemplate->Inherit(intrinsicIteratorPrototypeInterfaceTemplate);
+  {% endif %}
+
+  {% if interface_name == 'DOMException' %}
+  // The WebIDL spec states that DOMException objects have a few peculiarities.
+  // One of them is similar to what it mandates for Iterator objects when it
+  // comes to the inheritance chain. Instead of
+  //     DOMException -> prototype -> %ObjectPrototype%
+  // we have
+  //     DOMException -> prototype -> %ErrorPrototype% -> %ObjectPrototype%
+  // so that DOMException objects "inherit" toString() and a few properties
+  // from %ErrorPrototype%.
+  // See https://heycam.github.io/webidl/#es-DOMException-specialness.
+  //
+  // We achieve this with the same hack we use for Iterators: create a new
+  // function template with no prototype, set its "prototype" property to
+  // %ErrorPrototype% and make |interfaceTemplate| inherit from it. When
+  // |interfaceTemplate| is instantiated, its prototype.__proto__ will point to
+  // |intrinsicErrorPrototypeInterfaceTemplate|'s "prototype" property.
+  v8::Local<v8::FunctionTemplate> intrinsicErrorPrototypeInterfaceTemplate =
+      v8::FunctionTemplate::New(isolate);
+  intrinsicErrorPrototypeInterfaceTemplate->RemovePrototype();
+  intrinsicErrorPrototypeInterfaceTemplate->SetIntrinsicDataProperty(
+      V8AtomicString(isolate, "prototype"), v8::kErrorPrototype);
+  interfaceTemplate->Inherit(intrinsicErrorPrototypeInterfaceTemplate);
   {% endif %}
 
   {% if interface_name == 'Location' %}

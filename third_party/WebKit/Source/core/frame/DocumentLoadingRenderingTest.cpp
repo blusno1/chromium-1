@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "core/dom/ClientRect.h"
 #include "core/dom/Document.h"
 #include "core/dom/FrameRequestCallback.h"
+#include "core/geometry/DOMRect.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/paint/PaintLayer.h"
@@ -15,8 +15,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
-
-using namespace HTMLNames;
 
 class DocumentLoadingRenderingTest : public SimTest {};
 
@@ -218,7 +216,7 @@ TEST_F(DocumentLoadingRenderingTest, ShouldScheduleFrameAfterSheetsLoaded) {
   // Replace the stylesheet by changing href.
   auto* element = GetDocument().getElementById("link");
   EXPECT_NE(nullptr, element);
-  element->setAttribute(hrefAttr, "second.css");
+  element->setAttribute(HTMLNames::hrefAttr, "second.css");
   EXPECT_FALSE(Compositor().NeedsBeginFrame());
 
   second_css_resource.Complete("body { color: red; }");
@@ -412,7 +410,7 @@ TEST_F(DocumentLoadingRenderingTest,
 
   // If ignoringPendingStylesheets==true, element should get non-empty rect.
   Element* element = GetDocument().getElementById("test");
-  ClientRect* rect = element->getBoundingClientRect();
+  DOMRect* rect = element->getBoundingClientRect();
   EXPECT_TRUE(rect->width() > 0.f);
   EXPECT_TRUE(rect->height() > 0.f);
 

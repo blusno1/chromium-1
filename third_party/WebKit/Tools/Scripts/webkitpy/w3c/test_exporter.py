@@ -8,7 +8,9 @@ from webkitpy.w3c.local_wpt import LocalWPT
 from webkitpy.w3c.common import (
     exportable_commits_over_last_n_commits,
     WPT_GH_URL,
-    WPT_REVISION_FOOTER
+    WPT_REVISION_FOOTER,
+    EXPORT_PR_LABEL,
+    PROVISIONAL_PR_LABEL
 )
 from webkitpy.w3c.gerrit import GerritAPI, GerritCL
 from webkitpy.w3c.wpt_github import WPTGitHub, MergeError
@@ -53,8 +55,8 @@ class TestExporter(object):
         for cl in gerrit_cls:
             _log.info('Found Gerrit in-flight CL: "%s" %s', cl.subject, cl.url)
 
-            if not cl.reviewers:
-                _log.info('CL has no reviewers, skipping.')
+            if not cl.has_review_started:
+                _log.info('CL review has not started, skipping.')
                 continue
 
             # Check if CL already has a corresponding PR
@@ -86,6 +88,10 @@ class TestExporter(object):
         if self.dry_run:
             _log.info('[dry_run] Would have attempted to merge PR')
             return
+
+        if PROVISIONAL_PR_LABEL in pull_request.labels:
+            _log.info('Removing provisional label "%s"...', PROVISIONAL_PR_LABEL)
+            self.wpt_github.remove_label(pull_request.number, PROVISIONAL_PR_LABEL)
 
         _log.info('Attempting to merge...')
 
@@ -170,7 +176,7 @@ class TestExporter(object):
         _log.info('Create PR response: %s', response_data)
 
         if response_data:
-            data, status_code = self.wpt_github.add_label(response_data['number'])
+            data, status_code = self.wpt_github.add_label(response_data['number'], EXPORT_PR_LABEL)
             _log.info('Add label response (status %s): %s', status_code, data)
 
         return response_data
@@ -219,14 +225,20 @@ class TestExporter(object):
             response_data = self.wpt_github.create_pr(branch_name, cl.subject, message)
             _log.debug('Create PR response: %s', response_data)
 
-            self.wpt_github.add_label(response_data['number'])
-            self.wpt_github.add_label(response_data['number'], 'do not merge yet')
+            self.wpt_github.add_label(response_data['number'], EXPORT_PR_LABEL)
+            self.wpt_github.add_label(response_data['number'], PROVISIONAL_PR_LABEL)
 
             cl.post_comment((
                 'Exportable changes to web-platform-tests were detected in this CL '
                 'and a pull request in the upstream repo has been made: {pr_url}.\n\n'
-                'Travis CI has been kicked off and if it fails, we will let you know here. '
-                'If this CL lands and Travis CI is green, we will auto-merge the PR.'
+                'If this CL lands and Travis CI upstream is green, we will auto-merge the PR.\n\n'
+                'Note: Please check the Travis CI status (at the bottom of the PR) '
+                'before landing this CL and only land this CL if the status is green. '
+                'Otherwise a human needs to step in and resolve it manually, during which time '
+                'the WPT Importer is blocked from operating.\n\n'
+                '(There is ongoing work to 1. prevent CLs with red upstream PRs from landing '
+                '(https://crbug.com/711447) and 2. prevent the importer from being blocked on '
+                'stuck exportable changes (https://crbug.com/734121))'
             ).format(
                 pr_url='%spull/%d' % (WPT_GH_URL, response_data['number'])
             ))

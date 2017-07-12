@@ -4,7 +4,6 @@
 # found in the LICENSE file.
 
 import math
-import sys
 
 import json5_generator
 import template_expander
@@ -14,7 +13,6 @@ from name_utilities import (
     enum_for_css_keyword, enum_type_name, enum_value_name, class_member_name, method_name,
     class_name, join_name
 )
-from collections import defaultdict, OrderedDict
 from itertools import chain
 
 # Heuristic ordering of types from largest to smallest, used to sort fields by their alignment sizes.
@@ -29,7 +27,7 @@ ALIGNMENT_ORDER = [
     # Aligns like a pointer (can be 32 or 64 bits)
     'NamedGridLinesMap', 'OrderedNamedGridLines', 'NamedGridAreaMap', 'TransformOperations',
     'Vector<CSSPropertyID>', 'Vector<GridTrackSize>', 'GridPosition', 'AtomicString',
-    'RefPtr', 'DataPersistent', 'Persistent', 'std::unique_ptr',
+    'RefPtr', 'Persistent', 'std::unique_ptr',
     'Vector<String>', 'Font', 'FillLayer', 'NinePieceImage',
     # Aligns like float
     'StyleOffsetRotation', 'TransformOrigin', 'ScrollPadding', 'ScrollSnapMargin', 'LengthBox',
@@ -109,6 +107,14 @@ class Group(object):
         return group_path
 
 
+class Enum(object):
+    """Represents a generated enum in ComputedStyleBaseConstants."""
+    def __init__(self, type_name, keywords, is_set):
+        self.type_name = type_name
+        self.values = [enum_value_name(keyword) for keyword in keywords]
+        self.is_set = is_set
+
+
 class DiffGroup(object):
     """Represents a group of expressions and subgroups that need to be diffed
     for a function in ComputedStyle.
@@ -156,7 +162,7 @@ class Field(object):
 
     def __init__(self, field_role, name_for_methods, property_name, type_name, wrapper_pointer_name,
                  field_template, size, default_value, custom_copy, custom_compare, mutable,
-                 getter_method_name, setter_method_name, initial_method_name, **kwargs):
+                 getter_method_name, setter_method_name, initial_method_name, default_generated_functions, **kwargs):
         """Creates a new field."""
         self.name = class_member_name(name_for_methods)
         self.property_name = property_name
@@ -193,7 +199,7 @@ class Field(object):
         self.internal_setter_method_name = method_name(join_name(setter_method_name, 'Internal'))
         self.initial_method_name = initial_method_name
         self.resetter_method_name = method_name(join_name('Reset', name_for_methods))
-
+        self.default_generated_functions = default_generated_functions
         # If the size of the field is not None, it means it is a bit field
         self.is_bit_field = self.size is not None
 
@@ -294,27 +300,29 @@ def _create_diff_groups(fields_to_diff, methods_to_diff, predicates_to_test, roo
 
 
 def _create_enums(properties):
-    """
-    Returns an OrderedDict of enums to be generated, enum name -> [list of enum values]
-    """
+    """Returns a list of Enums to be generated"""
     enums = {}
     for property_ in properties:
         # Only generate enums for keyword properties that do not require includes.
-        if property_['field_template'] == 'keyword' and len(property_['include_paths']) == 0:
-            enum_name = property_['type_name']
-            enum_values = [enum_value_name(k) for k in property_['keywords']]
+        if property_['field_template'] in ('keyword', 'multi_keyword') and len(property_['include_paths']) == 0:
+            enum = Enum(property_['type_name'], property_['keywords'],
+                        is_set=(property_['field_template'] == 'multi_keyword'))
 
-            if enum_name in enums:
+            if property_['field_template'] == 'multi_keyword':
+                assert property_['keywords'][0] == 'none', \
+                    "First keyword in a 'multi_keyword' field must be 'none' in '{}'.".format(property_['name'])
+
+            if enum.type_name in enums:
                 # There's an enum with the same name, check if the enum values are the same
-                assert set(enums[enum_name]) == set(enum_values), \
-                    ("'" + property_['name'] + "' can't have type_name '" + enum_name + "' "
+                assert set(enums[enum.type_name].values) == set(enum.values), \
+                    ("'" + property_['name'] + "' can't have type_name '" + enum.type_name + "' "
                      "because it was used by a previous property, but with a different set of keywords. "
                      "Either give it a different name or ensure the keywords are the same.")
 
-            enums[enum_name] = enum_values
+            enums[enum.type_name] = enum
 
-    # Return the enums sorted by key (enum name)
-    return OrderedDict(sorted(enums.items(), key=lambda t: t[0]))
+    # Return the enums sorted by type name
+    return list(sorted(enums.values(), key=lambda e: e.type_name))
 
 
 def _create_property_field(property_):
@@ -334,10 +342,24 @@ def _create_property_field(property_):
             ("'" + property_['name'] + "' is a keyword field, "
              "so it should not specify a field_size")
         size = int(math.ceil(math.log(len(property_['keywords']), 2)))
+    elif property_['field_template'] == 'multi_keyword':
+        type_name = property_['type_name']
+        default_value = type_name + '::' + enum_value_name(property_['default_value'])
+        size = len(property_['keywords']) - 1  # Subtract 1 for 'none' keyword
     elif property_['field_template'] == 'storage_only':
         type_name = property_['type_name']
         default_value = property_['default_value']
-        size = 1 if type_name == 'bool' else property_['field_size']
+        size = None
+        if type_name == 'bool':
+            size = 1
+        elif len(property_["keywords"]) > 0 and len(property_["include_paths"]) == 0:
+            # Assume that no property will ever have one keyword.
+            assert len(property_['keywords']) > 1, "There must be more than 1 keywords in a CSS property"
+            # Each keyword is represented as a number and the number of bit
+            # to represent the maximum number is calculated here
+            size = int(math.ceil(math.log(len(property_['keywords']), 2)))
+        else:
+            size = property_["field_size"]
     elif property_['field_template'] == 'external':
         type_name = property_['type_name']
         default_value = property_['default_value']
@@ -346,6 +368,16 @@ def _create_property_field(property_):
         type_name = property_['type_name']
         default_value = property_['default_value']
         size = 1 if type_name == 'bool' else None  # pack bools with 1 bit.
+    elif property_['field_template'] == 'pointer':
+        type_name = property_['type_name']
+        default_value = property_['default_value']
+        size = None
+    elif property_['field_template'] == '<length>':
+        property_['field_template'] = 'external'
+        property_['type_name'] = type_name = 'Length'
+        default_value = property_['default_value']
+        property_['include_paths'] = ["platform/Length.h"]
+        size = None
     else:
         assert property_['field_template'] in ('monotonic_flag',)
         type_name = 'bool'
@@ -353,8 +385,9 @@ def _create_property_field(property_):
         size = 1
 
     if property_['wrapper_pointer_name']:
-        assert property_['field_template'] == 'storage_only'
-        type_name = '{}<{}>'.format(property_['wrapper_pointer_name'], type_name)
+        assert property_['field_template'] in ['storage_only', 'pointer']
+        if property_['field_template'] == 'storage_only':
+            type_name = '{}<{}>'.format(property_['wrapper_pointer_name'], type_name)
 
     return Field(
         'property',
@@ -373,6 +406,7 @@ def _create_property_field(property_):
         getter_method_name=property_['getter'],
         setter_method_name=property_['setter'],
         initial_method_name=property_['initial'],
+        default_generated_functions=property_['default_generated_functions'],
     )
 
 
@@ -397,6 +431,7 @@ def _create_inherited_flag_field(property_):
         getter_method_name=method_name(name_for_methods),
         setter_method_name=method_name(join_name('set', name_for_methods)),
         initial_method_name=method_name(join_name('initial', name_for_methods)),
+        default_generated_functions=property_["default_generated_functions"]
     )
 
 
@@ -516,7 +551,7 @@ class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
             'ComputedStyleBaseConstants.h': self.generate_base_computed_style_constants,
         }
 
-    @template_expander.use_jinja('ComputedStyleBase.h.tmpl', tests={'in': lambda a, b: a in b})
+    @template_expander.use_jinja('templates/ComputedStyleBase.h.tmpl', tests={'in': lambda a, b: a in b})
     def generate_base_computed_style_h(self):
         return {
             'properties': self._properties,
@@ -526,7 +561,7 @@ class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
             'diff_functions_map': self._diff_functions_map,
         }
 
-    @template_expander.use_jinja('ComputedStyleBase.cpp.tmpl', tests={'in': lambda a, b: a in b})
+    @template_expander.use_jinja('templates/ComputedStyleBase.cpp.tmpl', tests={'in': lambda a, b: a in b})
     def generate_base_computed_style_cpp(self):
         return {
             'properties': self._properties,
@@ -536,7 +571,7 @@ class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
             'diff_functions_map': self._diff_functions_map,
         }
 
-    @template_expander.use_jinja('ComputedStyleBaseConstants.h.tmpl')
+    @template_expander.use_jinja('templates/ComputedStyleBaseConstants.h.tmpl')
     def generate_base_computed_style_constants(self):
         return {
             'properties': self._properties,

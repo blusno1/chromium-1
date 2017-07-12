@@ -22,9 +22,10 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_data_source.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_image_fetcher.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestions_section_information.h"
-#import "ios/chrome/browser/ui/favicon/favicon_attributes.h"
+#import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -124,6 +125,8 @@ const CGFloat kNumberOfMostVisitedLines = 2;
         sectionInfoBySectionIdentifier;
 // Width of the collection. Upon size change, it reflects the new size.
 @property(nonatomic, assign) CGFloat collectionWidth;
+// Whether an item of type ItemTypePromo has already been added to the model.
+@property(nonatomic, assign) BOOL promoAdded;
 
 @end
 
@@ -133,11 +136,13 @@ const CGFloat kNumberOfMostVisitedLines = 2;
 @synthesize dataSource = _dataSource;
 @synthesize sectionInfoBySectionIdentifier = _sectionInfoBySectionIdentifier;
 @synthesize collectionWidth = _collectionWidth;
+@synthesize promoAdded = _promoAdded;
 
 - (instancetype)initWithDataSource:
     (id<ContentSuggestionsDataSource>)dataSource {
   self = [super init];
   if (self) {
+    _promoAdded = NO;
     _dataSource = dataSource;
     _dataSource.dataSink = self;
   }
@@ -259,10 +264,11 @@ const CGFloat kNumberOfMostVisitedLines = 2;
       reloadSections:[NSIndexSet indexSetWithIndex:section]];
 }
 
-- (void)faviconAvailableForItem:(CollectionViewItem<SuggestedContent>*)item {
-  if ([self.collectionViewController.collectionViewModel hasItem:item]) {
-    [self fetchFaviconForItem:item];
+- (void)itemHasChanged:(CollectionViewItem<SuggestedContent>*)item {
+  if (![self.collectionViewController.collectionViewModel hasItem:item]) {
+    return;
   }
+  [self.collectionViewController reconfigureCellsForItems:@[ item ]];
 }
 
 #pragma mark - Public methods
@@ -329,10 +335,13 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
       return;
     }
     ItemType type = ItemTypeForInfo(sectionInfo);
+    if (type == ItemTypePromo && !self.promoAdded) {
+      self.promoAdded = YES;
+      [self.collectionViewController.audience promoShown];
+    }
     item.type = type;
     NSIndexPath* addedIndexPath =
         [self addItem:item toSectionWithIdentifier:sectionIdentifier];
-    [self fetchFaviconForItem:item];
     item.delegate = self;
 
     [indexPaths addObject:addedIndexPath];
@@ -438,24 +447,22 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
   if (currentCount == newCount)
     return;
 
-  // If the animations are enabled, the items are added then the rotation
-  // animation is triggered, creating a weird sequenced animation.
-  [UIView setAnimationsEnabled:NO];
   if (currentCount > newCount) {
     for (NSInteger i = newCount; i < currentCount; i++) {
-      NSIndexPath* itemToRemove =
-          [NSIndexPath indexPathForItem:newCount inSection:mostVisitedSection];
-      [self.collectionViewController dismissEntryAtIndexPath:itemToRemove];
+      [self.collectionViewController.collectionViewModel
+                 removeItemWithType:ItemTypeMostVisited
+          fromSectionWithIdentifier:SectionIdentifierMostVisited
+                            atIndex:newCount];
     }
   } else {
-    NSMutableArray* itemsToBeAdded = [NSMutableArray array];
     for (NSInteger i = currentCount; i < newCount; i++) {
-      [itemsToBeAdded addObject:mostVisited[i]];
+      CSCollectionViewItem* item = mostVisited[i];
+      item.type = ItemTypeMostVisited;
+      [self.collectionViewController.collectionViewModel
+                          addItem:item
+          toSectionWithIdentifier:SectionIdentifierMostVisited];
     }
-    [self.collectionViewController addSuggestions:itemsToBeAdded
-                                    toSectionInfo:mostVisitedSectionInfo];
   }
-  [UIView setAnimationsEnabled:YES];
 }
 
 - (void)dismissItem:(CSCollectionViewItem*)item {
@@ -520,6 +527,7 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
     CollectionViewTextItem* header =
         [[CollectionViewTextItem alloc] initWithType:ItemTypeHeader];
     header.text = sectionInfo.title;
+    header.textColor = [[MDCPalette greyPalette] tint500];
     [self.collectionViewController.collectionViewModel
                        setHeader:header
         forSectionWithIdentifier:sectionIdentifier];
@@ -545,53 +553,6 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
 - (void)resetModels {
   [self.collectionViewController loadModel];
   self.sectionInfoBySectionIdentifier = [[NSMutableDictionary alloc] init];
-}
-
-// Fetches the favicon attributes for the |item|.
-- (void)fetchFaviconForItem:(CSCollectionViewItem*)item {
-  __weak ContentSuggestionsCollectionUpdater* weakSelf = self;
-  __weak CSCollectionViewItem* weakItem = item;
-
-  [self.dataSource
-      fetchFaviconAttributesForItem:item
-                         completion:^(FaviconAttributes* attributes) {
-                           ContentSuggestionsCollectionUpdater* strongSelf =
-                               weakSelf;
-                           CSCollectionViewItem* strongItem = weakItem;
-                           if (!strongSelf || !strongItem)
-                             return;
-
-                           [strongSelf reconfigure:strongItem
-                                    withAttributes:attributes];
-
-                           [strongSelf fetchFaviconImageForItem:strongItem];
-                         }];
-}
-
-// Fetches the favicon image for the |item|.
-- (void)fetchFaviconImageForItem:(CSCollectionViewItem*)item {
-  __weak ContentSuggestionsCollectionUpdater* weakSelf = self;
-  __weak CSCollectionViewItem* weakItem = item;
-
-  [self.dataSource
-      fetchFaviconImageForItem:item
-                    completion:^(UIImage* image) {
-                      [weakSelf reconfigure:weakItem
-                             withAttributes:[FaviconAttributes
-                                                attributesWithImage:image]];
-                    }];
-}
-
-// Sets the attributes of |item| to |attributes| and reconfigures it.
-- (void)reconfigure:(CSCollectionViewItem*)item
-     withAttributes:(FaviconAttributes*)attributes {
-  if (!item || !attributes ||
-      ![self.collectionViewController.collectionViewModel hasItem:item]) {
-    return;
-  }
-
-  item.attributes = attributes;
-  [self.collectionViewController reconfigureCellsForItems:@[ item ]];
 }
 
 // Runs the additional action for the section identified by |sectionInfo|.

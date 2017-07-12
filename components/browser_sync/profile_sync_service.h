@@ -382,8 +382,7 @@ class ProfileSyncService : public syncer::SyncServiceBase,
 
   // SigninManagerBase::Observer implementation.
   void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username,
-                             const std::string& password) override;
+                             const std::string& username) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
@@ -682,12 +681,6 @@ class ProfileSyncService : public syncer::SyncServiceBase,
   void UpdateSelectedTypesHistogram(
       bool sync_everything,
       const syncer::ModelTypeSet chosen_types) const;
-
-#if defined(OS_CHROMEOS)
-  // Refresh spare sync bootstrap token for re-enabling the sync service.
-  // Called on successful sign-in notifications.
-  void RefreshSpareBootstrapToken(const std::string& passphrase);
-#endif
 
   // Internal unrecoverable error handler. Used to track error reason via
   // Sync.UnrecoverableErrors histogram.

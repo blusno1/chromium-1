@@ -17,7 +17,7 @@
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "cc/output/renderer_settings.h"
-#include "cc/surfaces/frame_sink_id_allocator.h"
+#include "components/viz/common/frame_sink_id_allocator.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
@@ -53,7 +53,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   double GetRefreshRate() const override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  const cc::ResourceSettings& GetResourceSettings() const override;
+  const viz::ResourceSettings& GetResourceSettings() const override;
   void AddObserver(ui::ContextFactoryObserver* observer) override;
   void RemoveObserver(ui::ContextFactoryObserver* observer) override;
 
@@ -62,8 +62,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
                                                  ui::Layer* target) override;
   void RemoveReflector(ui::Reflector* reflector) override;
   void RemoveCompositor(ui::Compositor* compositor) override;
-  cc::FrameSinkId AllocateFrameSinkId() override;
-  cc::SurfaceManager* GetSurfaceManager() override;
+  viz::FrameSinkId AllocateFrameSinkId() override;
   viz::HostFrameSinkManager* GetHostFrameSinkManager() override;
   void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
@@ -81,6 +80,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   // ImageTransportFactory implementation.
   ui::ContextFactory* GetContextFactory() override;
   ui::ContextFactoryPrivate* GetContextFactoryPrivate() override;
+  cc::FrameSinkManager* GetFrameSinkManager() override;
   viz::GLHelper* GetGLHelper() override;
   void SetGpuChannelEstablishFactory(
       gpu::GpuChannelEstablishFactory* factory) override;
@@ -107,7 +107,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   scoped_refptr<cc::VulkanInProcessContextProvider>
   SharedVulkanContextProvider();
 
-  cc::FrameSinkIdAllocator frame_sink_id_allocator_;
+  viz::FrameSinkIdAllocator frame_sink_id_allocator_;
 
 #if defined(OS_WIN)
   // Used by output surface, stored in PerCompositorData.

@@ -18,6 +18,7 @@
 #include "ui/base/ime/text_input_type.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/widget_test.h"
@@ -138,6 +139,88 @@ class NativeWidgetMacAccessibilityTest : public test::WidgetTest {
 };
 
 }  // namespace
+
+// Test that all methods in the NSAccessibility informal protocol can be called
+// on a retained accessibility object after the source view is deleted.
+TEST_F(NativeWidgetMacAccessibilityTest, Lifetime) {
+  Textfield* view = AddChildTextfield(widget()->GetContentsView()->size());
+  base::scoped_nsobject<NSObject> ax_node(view->GetNativeViewAccessible(),
+                                          base::scoped_policy::RETAIN);
+
+  NSString* kAttribute = NSAccessibilityValueAttribute;
+  NSString* kParamAttribute =
+      NSAccessibilityStringForRangeParameterizedAttribute;
+  NSString* kAction = NSAccessibilityShowMenuAction;
+
+  EXPECT_TRUE(
+      [[ax_node accessibilityAttributeNames] containsObject:kAttribute]);
+  EXPECT_NSEQ(kTestStringValue,
+              [ax_node accessibilityAttributeValue:kAttribute]);
+  EXPECT_TRUE([ax_node accessibilityIsAttributeSettable:kAttribute]);
+  EXPECT_TRUE([[ax_node accessibilityActionNames] containsObject:kAction]);
+  EXPECT_FALSE([ax_node accessibilityIsIgnored]);
+
+  // Not implemented, but be sure to update this test if it ever is.
+  EXPECT_FALSE(
+      [ax_node respondsToSelector:@selector(accessibilityActionDescription:)]);
+
+  EXPECT_TRUE([[ax_node accessibilityParameterizedAttributeNames]
+      containsObject:kParamAttribute]);
+  NSValue* range = [NSValue valueWithRange:NSMakeRange(0, kTestStringLength)];
+  EXPECT_NSEQ(
+      kTestStringValue,
+      [ax_node accessibilityAttributeValue:kParamAttribute forParameter:range]);
+
+  // The following is also "not implemented", but the informal protocol category
+  // provides a default implementation.
+  EXPECT_EQ(NSNotFound, static_cast<NSInteger>(
+                            [ax_node accessibilityIndexOfChild:ax_node]));
+
+  // The only usually available array attribute is AXChildren, so go up a level
+  // to the Widget to test that a bit. The default implementation just gets the
+  // attribute normally and returns its size (if it's an array).
+  NSString* kChildren = NSAccessibilityChildrenAttribute;
+  base::scoped_nsobject<NSObject> ax_parent(
+      [ax_node accessibilityAttributeValue:NSAccessibilityParentAttribute],
+      base::scoped_policy::RETAIN);
+  EXPECT_EQ(1u, [ax_parent accessibilityArrayAttributeCount:kChildren]);
+  EXPECT_EQ(
+      ax_node.get(),
+      [ax_parent accessibilityArrayAttributeValues:kChildren index:0
+                                          maxCount:1][0]);
+
+  // If it is not an array, the default implementation throws an exception, so
+  // it's impossible to test these methods further on |ax_node|, apart from the
+  // following, before deleting the view.
+  EXPECT_EQ(0u, [ax_node accessibilityArrayAttributeCount:kChildren]);
+
+  delete view;
+
+  EXPECT_TRUE(
+      [ax_node respondsToSelector:@selector(accessibilityAttributeNames)]);
+  EXPECT_EQ(@[], [ax_node accessibilityAttributeNames]);
+  EXPECT_EQ(nil, [ax_node accessibilityAttributeValue:kAttribute]);
+  EXPECT_FALSE([ax_node accessibilityIsAttributeSettable:kAttribute]);
+  [ax_node accessibilitySetValue:kTestStringValue forAttribute:kAttribute];
+
+  EXPECT_EQ(@[], [ax_node accessibilityActionNames]);
+  [ax_node accessibilityPerformAction:kAction];
+
+  EXPECT_TRUE([ax_node accessibilityIsIgnored]);
+  EXPECT_EQ(nil, [ax_node accessibilityHitTest:NSZeroPoint]);
+  EXPECT_EQ(nil, [ax_node accessibilityFocusedUIElement]);
+
+  EXPECT_EQ(@[], [ax_node accessibilityParameterizedAttributeNames]);
+  EXPECT_NSEQ(nil, [ax_node accessibilityAttributeValue:kParamAttribute
+                                           forParameter:range]);
+
+  // Test the attributes with default implementations provided.
+  EXPECT_EQ(NSNotFound, static_cast<NSInteger>(
+                            [ax_node accessibilityIndexOfChild:ax_node]));
+
+  // The Widget is currently still around, but the child should be gone.
+  EXPECT_EQ(0u, [ax_parent accessibilityArrayAttributeCount:kChildren]);
+}
 
 // Check that potentially keyboard-focusable elements are always leaf nodes.
 TEST_F(NativeWidgetMacAccessibilityTest, FocusableElementsAreLeafNodes) {
@@ -319,6 +402,10 @@ TEST_F(NativeWidgetMacAccessibilityTest, TextfieldGenericAttributes) {
       NSAccessibilityTextFieldRole, NSAccessibilitySecureTextFieldSubrole);
   EXPECT_NSEQ(role_description, AttributeValueAtMidpoint(
                                     NSAccessibilityRoleDescriptionAttribute));
+
+  // Expect to see the action to show a context menu.
+  EXPECT_NSEQ(@[ NSAccessibilityShowMenuAction ],
+              [A11yElementAtMidpoint() accessibilityActionNames]);
 
   // Prevent the textfield from interfering with hit tests on the widget itself.
   widget()->GetContentsView()->RemoveChildView(textfield);
@@ -731,6 +818,43 @@ TEST_F(NativeWidgetMacAccessibilityTest, Label) {
   EXPECT_NSEQ(([NSValue valueWithRange:{0, kTestStringLength}]),
               [ax_node AXVisibleCharacterRange]);
   EXPECT_EQ(0, [[ax_node AXInsertionPointLineNumber] intValue]);
+}
+
+class TestComboboxModel : public ui::ComboboxModel {
+ public:
+  TestComboboxModel() = default;
+
+  // ui::ComboboxModel:
+  int GetItemCount() const override { return 2; }
+  base::string16 GetItemAt(int index) override {
+    return index == 0 ? base::SysNSStringToUTF16(kTestStringValue)
+                      : base::ASCIIToUTF16("Second Item");
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestComboboxModel);
+};
+
+// Test a11y attributes of Comboboxes.
+TEST_F(NativeWidgetMacAccessibilityTest, Combobox) {
+  Combobox* combobox = new Combobox(base::MakeUnique<TestComboboxModel>());
+  combobox->SetSize(GetWidgetBounds().size());
+  widget()->GetContentsView()->AddChildView(combobox);
+
+  id ax_node = A11yElementAtMidpoint();
+  EXPECT_TRUE(ax_node);
+
+  EXPECT_NSEQ(NSAccessibilityPopUpButtonRole, [ax_node AXRole]);
+
+  // The initial value should be the first item in the menu.
+  EXPECT_NSEQ(kTestStringValue, [ax_node AXValue]);
+  combobox->SetSelectedIndex(1);
+  EXPECT_NSEQ(@"Second Item", [ax_node AXValue]);
+
+  // Expect to see both a press action and a show menu action. This matches
+  // Cocoa behavior.
+  EXPECT_NSEQ((@[ NSAccessibilityPressAction, NSAccessibilityShowMenuAction ]),
+              [ax_node accessibilityActionNames]);
 }
 
 }  // namespace views

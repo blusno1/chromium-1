@@ -26,22 +26,6 @@ suite('SiteDetailsPermission', function() {
     }
   };
 
-  /**
-   * An example pref with only one entry allowed.
-   */
-  var prefsCookies = {
-    exceptions: {
-      cookies: [
-        {
-          embeddingOrigin: '',
-          origin: 'https://www.example.com',
-          setting: 'allow',
-          source: 'preference',
-        },
-      ]
-    }
-  };
-
   // Initialize a site-details-permission before each test.
   setup(function() {
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
@@ -66,11 +50,11 @@ suite('SiteDetailsPermission', function() {
     return false;
   };
 
-  function validatePermissionFlipWorks(origin, expectedPermissionValue) {
+  function validatePermissionFlipWorks(origin, expectedContentSetting) {
     browserProxy.resetResolver('setCategoryPermissionForOrigin');
 
     // Simulate permission change initiated by the user.
-    testElement.$.permission.value = expectedPermissionValue;
+    testElement.$.permission.value = expectedContentSetting;
     testElement.$.permission.dispatchEvent(new CustomEvent('change'));
 
     return browserProxy.whenCalled('setCategoryPermissionForOrigin')
@@ -78,7 +62,7 @@ suite('SiteDetailsPermission', function() {
           assertEquals(origin, args[0]);
           assertEquals('', args[1]);
           assertEquals(testElement.category, args[2]);
-          assertEquals(expectedPermissionValue, args[3]);
+          assertEquals(expectedContentSetting, args[3]);
         });
   };
 
@@ -92,59 +76,22 @@ suite('SiteDetailsPermission', function() {
       embeddingOrigin: '',
     };
 
-    return browserProxy.whenCalled('getExceptionList')
+    assertFalse(testElement.$.details.hidden);
+
+    var header = testElement.$.details.querySelector('#permissionHeader');
+    assertEquals(
+        'Camera', header.innerText.trim(),
+        'Widget should be labelled correctly');
+
+    // Flip the permission and validate that prefs stay in sync.
+    return validatePermissionFlipWorks(origin, settings.ContentSetting.ALLOW)
         .then(function() {
-          assertFalse(testElement.$.details.hidden);
-
-          var header = testElement.$.details.querySelector('#permissionHeader');
-          assertEquals(
-              'Camera', header.innerText.trim(),
-              'Widget should be labelled correctly');
-
-          // Flip the permission and validate that prefs stay in sync.
           return validatePermissionFlipWorks(
-              origin, settings.PermissionValues.ALLOW);
+              origin, settings.ContentSetting.BLOCK);
         })
         .then(function() {
           return validatePermissionFlipWorks(
-              origin, settings.PermissionValues.BLOCK);
-        })
-        .then(function() {
-          return validatePermissionFlipWorks(
-              origin, settings.PermissionValues.ALLOW);
-        });
-  });
-
-  test('cookies category', function() {
-    var origin = 'https://www.example.com';
-    browserProxy.setPrefs(prefsCookies);
-    testElement.category = settings.ContentSettingsTypes.COOKIES;
-    testElement.label = 'Cookies';
-    testElement.site = {
-      origin: origin,
-      embeddingOrigin: '',
-    };
-
-    return browserProxy.whenCalled('getExceptionList')
-        .then(function() {
-          assertFalse(testElement.$.details.hidden);
-
-          var header = testElement.$.details.querySelector('#permissionHeader');
-          assertEquals(
-              'Cookies', header.innerText.trim(),
-              'Widget should be labelled correctly');
-
-          return validatePermissionFlipWorks(
-              origin, settings.PermissionValues.SESSION_ONLY);
-        })
-        .then(function() {
-          // Flip the permission and validate that prefs stay in sync.
-          return validatePermissionFlipWorks(
-              origin, settings.PermissionValues.ALLOW);
-        })
-        .then(function() {
-          return validatePermissionFlipWorks(
-              origin, settings.PermissionValues.BLOCK);
+              origin, settings.ContentSetting.ALLOW);
         });
   });
 });

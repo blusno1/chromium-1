@@ -34,6 +34,7 @@
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8InspectorOverlayHost.h"
+#include "build/build_config.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Node.h"
 #include "core/dom/StaticNodeList.h"
@@ -841,10 +842,9 @@ Page* InspectorOverlayAgent::OverlayPage() {
 
   const WebData& overlay_page_html_resource =
       Platform::Current()->GetDataResource("InspectorOverlayPage.html");
-  loader.Load(
-      FrameLoadRequest(0, ResourceRequest(BlankURL()),
-                       SubstituteData(overlay_page_html_resource, "text/html",
-                                      "UTF-8", KURL(), kForceSynchronousLoad)));
+  loader.Load(FrameLoadRequest(
+      0, ResourceRequest(BlankURL()),
+      SubstituteData(overlay_page_html_resource, kForceSynchronousLoad)));
   v8::Isolate* isolate = ToIsolate(frame);
   ScriptState* script_state = ToScriptStateForMainWorld(frame);
   DCHECK(script_state);
@@ -858,11 +858,11 @@ Page* InspectorOverlayAgent::OverlayPage() {
             V8AtomicString(isolate, "InspectorOverlayHost"), overlay_host_obj)
       .ToChecked();
 
-#if OS(WIN)
+#if defined(OS_WIN)
   EvaluateInOverlay("setPlatform", "windows");
-#elif OS(MACOSX)
+#elif defined(OS_MACOSX)
   EvaluateInOverlay("setPlatform", "mac");
-#elif OS(POSIX)
+#elif defined(OS_POSIX)
   EvaluateInOverlay("setPlatform", "linux");
 #endif
 

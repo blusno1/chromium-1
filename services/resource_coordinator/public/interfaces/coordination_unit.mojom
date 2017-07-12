@@ -34,13 +34,7 @@ interface CoordinationPolicyCallback {
 // CoordinationUnitImpl internal key-value store.
 enum PropertyType {
   kTest,
-};
-
-// Key-value pair that corresponds to an entry in the CoordinationUnitImpl's
-// internal key-value store
-struct Property {
-  PropertyType property;
-  mojo.common.mojom.Value value;
+  kCPUUsage,
 };
 
 interface CoordinationUnit {
@@ -64,5 +58,5 @@ interface CoordinationUnit {
   SetCoordinationPolicyCallback(CoordinationPolicyCallback callback);
 
   // Sets a property on the CoordinationUnitImpl's internal key-value store.
-  SetProperty(Property property);
+  SetProperty(PropertyType property_type, mojo.common.mojom.Value value);
 };

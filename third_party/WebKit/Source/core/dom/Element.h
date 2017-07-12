@@ -35,6 +35,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ElementData.h"
 #include "core/dom/SpaceSplitString.h"
+#include "core/dom/WhitespaceAttacher.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "public/platform/WebFocusType.h"
@@ -46,10 +47,10 @@ class AccessibleNode;
 class Attr;
 class Attribute;
 class CSSStyleDeclaration;
-class ClientRect;
-class ClientRectList;
 class CompositorMutation;
 class CustomElementDefinition;
+class DOMRect;
+class DOMRectList;
 class DOMStringMap;
 class DOMTokenList;
 class ElementRareData;
@@ -139,7 +140,6 @@ class CORE_EXPORT Element : public ContainerNode {
   DEFINE_ATTRIBUTE_EVENT_LISTENER(paste);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(search);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectstart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
 
   bool hasAttribute(const QualifiedName&) const;
   const AtomicString& getAttribute(const QualifiedName&) const;
@@ -262,8 +262,8 @@ class CORE_EXPORT Element : public ContainerNode {
   // used to show popups beside this element.
   IntRect VisibleBoundsInVisualViewport() const;
 
-  ClientRectList* getClientRects();
-  ClientRect* getBoundingClientRect();
+  DOMRectList* getClientRects();
+  DOMRect* getBoundingClientRect();
 
   bool HasNonEmptyLayoutSize() const;
 
@@ -438,7 +438,14 @@ class CORE_EXPORT Element : public ContainerNode {
   virtual LayoutObject* CreateLayoutObject(const ComputedStyle&);
   virtual bool LayoutObjectIsNeeded(const ComputedStyle&);
   void RecalcStyle(StyleRecalcChange);
-  void RebuildLayoutTree(Text* next_text_sibling = nullptr);
+  bool NeedsRebuildLayoutTree(
+      const WhitespaceAttacher& whitespace_attacher) const {
+    return NeedsReattachLayoutTree() || ChildNeedsReattachLayoutTree() ||
+           IsActiveSlotOrActiveV0InsertionPoint() ||
+           (whitespace_attacher.LastTextNodeNeedsReattach() &&
+            HasDisplayContentsStyle());
+  }
+  void RebuildLayoutTree(WhitespaceAttacher&);
   void PseudoStateChanged(CSSSelector::PseudoType);
   void SetAnimationStyleChange(bool);
   void ClearAnimationStyleChange();
@@ -881,9 +888,8 @@ class CORE_EXPORT Element : public ContainerNode {
   PassRefPtr<ComputedStyle> PropagateInheritedProperties(StyleRecalcChange);
 
   StyleRecalcChange RecalcOwnStyle(StyleRecalcChange);
-  void RebuildPseudoElementLayoutTree(PseudoId,
-                                      Text* next_text_sibling = nullptr);
-  void RebuildShadowRootLayoutTree(Text*& next_text_sibling);
+  void RebuildPseudoElementLayoutTree(PseudoId, WhitespaceAttacher&);
+  void RebuildShadowRootLayoutTree(WhitespaceAttacher&);
   inline void CheckForEmptyStyleChange();
 
   void UpdatePseudoElement(PseudoId, StyleRecalcChange);

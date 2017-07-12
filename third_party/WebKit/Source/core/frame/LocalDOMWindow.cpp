@@ -26,6 +26,10 @@
 
 #include "core/frame/LocalDOMWindow.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/WindowProxy.h"
@@ -43,7 +47,6 @@
 #include "core/dom/SinkDocument.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/dom/custom/CustomElementRegistry.h"
 #include "core/editing/Editor.h"
 #include "core/events/DOMWindowEventQueue.h"
 #include "core/events/HashChangeEvent.h"
@@ -68,6 +71,7 @@
 #include "core/frame/VisualViewport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html/custom/CustomElementRegistry.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -90,8 +94,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/site_engagement.mojom-blink.h"
-
-#include <memory>
 
 namespace blink {
 
@@ -263,11 +265,6 @@ static bool AllowsBeforeUnloadListeners(LocalDOMWindow* window) {
   if (!frame)
     return false;
   return frame->IsMainFrame();
-}
-
-unsigned LocalDOMWindow::PendingUnloadEventListeners() const {
-  return WindowsWithUnloadEventListeners().count(
-      const_cast<LocalDOMWindow*>(this));
 }
 
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
@@ -1496,7 +1493,6 @@ void LocalDOMWindow::DispatchLoadEvent() {
     DocumentLoadTiming& timing = document_loader->GetTiming();
     timing.MarkLoadEventStart();
     DispatchEvent(load_event, document());
-    SetHasLoadEventFired();
     timing.MarkLoadEventEnd();
     DCHECK(document_loader->Fetcher());
     // If fetcher->countPreloads() is not empty here, it's full of link

@@ -17,6 +17,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "content/public/common/service_manager_connection.h"
@@ -24,6 +25,8 @@
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/common/extension.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "ui/events/devices/input_device_manager.h"
+#include "ui/events/devices/stylus_state.h"
 
 using ash::mojom::TrayActionState;
 
@@ -51,6 +54,8 @@ StateController::StateController()
     : binding_(this),
       app_window_observer_(this),
       session_observer_(this),
+      input_devices_observer_(this),
+      power_manager_client_observer_(this),
       weak_ptr_factory_(this) {
   DCHECK(!g_instance);
   DCHECK(IsEnabled());
@@ -107,6 +112,19 @@ void StateController::SetPrimaryProfile(Profile* profile) {
       "" /* supervised_user_id */);
 }
 
+void StateController::Shutdown() {
+  session_observer_.RemoveAll();
+  if (app_manager_) {
+    app_manager_->Stop();
+    ResetNoteTakingWindowAndMoveToNextState(true /*close_window*/);
+    app_manager_.reset();
+  }
+  power_manager_client_observer_.RemoveAll();
+  input_devices_observer_.RemoveAll();
+  binding_.Close();
+  weak_ptr_factory_.InvalidateWeakPtrs();
+}
+
 void StateController::OnProfilesReady(Profile* primary_profile,
                                       Profile* lock_screen_profile,
                                       Profile::CreateStatus status) {
@@ -134,6 +152,9 @@ void StateController::OnProfilesReady(Profile* primary_profile,
   app_manager_->Initialize(primary_profile,
                            lock_screen_profile->GetOriginalProfile());
 
+  input_devices_observer_.Add(ui::InputDeviceManager::GetInstance());
+  power_manager_client_observer_.Add(
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient());
   session_observer_.Add(session_manager::SessionManager::Get());
   OnSessionStateChanged();
 
@@ -172,7 +193,7 @@ void StateController::RequestNewLockScreenNote() {
 void StateController::OnSessionStateChanged() {
   if (!session_manager::SessionManager::Get()->IsScreenLocked()) {
     app_manager_->Stop();
-    ResetNoteTakingWindowAndMoveToNextState(true /* close_window */);
+    ResetNoteTakingWindowAndMoveToNextState(true /*close_window*/);
     return;
   }
 
@@ -188,7 +209,24 @@ void StateController::OnSessionStateChanged() {
 void StateController::OnAppWindowRemoved(extensions::AppWindow* app_window) {
   if (note_app_window_ != app_window)
     return;
-  ResetNoteTakingWindowAndMoveToNextState(false /* close_window */);
+  ResetNoteTakingWindowAndMoveToNextState(false /*close_window*/);
+}
+
+void StateController::OnStylusStateChanged(ui::StylusState state) {
+  if (lock_screen_note_state_ != TrayActionState::kAvailable)
+    return;
+
+  if (state == ui::StylusState::REMOVED)
+    RequestNewLockScreenNote();
+}
+
+void StateController::BrightnessChanged(int level, bool user_initiated) {
+  if (level == 0 && !user_initiated)
+    ResetNoteTakingWindowAndMoveToNextState(true /*close_window*/);
+}
+
+void StateController::SuspendImminent() {
+  ResetNoteTakingWindowAndMoveToNextState(true /*close_window*/);
 }
 
 extensions::AppWindow* StateController::CreateAppWindowForLockScreenAction(
@@ -235,7 +273,7 @@ void StateController::OnNoteTakingAvailabilityChanged() {
   if (!app_manager_->IsNoteTakingAppAvailable() ||
       (note_app_window_ && note_app_window_->GetExtension()->id() !=
                                app_manager_->GetNoteTakingAppId())) {
-    ResetNoteTakingWindowAndMoveToNextState(true /* close_window */);
+    ResetNoteTakingWindowAndMoveToNextState(true /*close_window*/);
     return;
   }
 

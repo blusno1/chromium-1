@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
-#include "net/proxy/proxy_server.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -170,6 +169,10 @@ bool GetOverrideProxiesForHttpFromCommandLine(
 // Returns the name of the server side experiment field trial.
 const char* GetServerExperimentsFieldTrialName();
 
+// Returns the URL to check to decide if the secure proxy origin should be
+// used.
+GURL GetSecureProxyCheckURL();
+
 // Returns true if fetching of the warmup URL is enabled.
 bool FetchWarmupURLEnabled();
 
@@ -209,34 +212,8 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
   const std::vector<DataReductionProxyServer>& proxies_for_http()
       const override;
 
-  const GURL& secure_proxy_check_url() const override;
-
- protected:
-  // Test constructor that optionally won't call Init();
-  explicit DataReductionProxyParams(bool should_call_init);
-
-  // Initialize the values of the proxies, and secure proxy check URL, from
-  // command line flags and preprocessor constants, and check that there are
-  // corresponding definitions for the allowed configurations.
-  bool Init();
-
-  // Initialize the values of the proxies, and secure proxy check URL from
-  // command line flags and preprocessor constants.
-  void InitWithoutChecks();
-
-  // Returns the corresponding string from preprocessor constants if defined,
-  // and an empty string otherwise.
-  virtual std::string GetDefaultOrigin() const;
-  virtual std::string GetDefaultFallbackOrigin() const;
-  virtual std::string GetDefaultSecureProxyCheckURL() const;
-
  private:
   std::vector<DataReductionProxyServer> proxies_for_http_;
-
-  net::ProxyServer origin_;
-  net::ProxyServer fallback_origin_;
-
-  GURL secure_proxy_check_url_;
 
   bool use_override_proxies_for_http_;
   std::vector<DataReductionProxyServer> override_data_reduction_proxy_servers_;

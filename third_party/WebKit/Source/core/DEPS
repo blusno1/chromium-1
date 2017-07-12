@@ -11,7 +11,6 @@ include_rules = [
     "+platform",
     "+public/platform",
     "+public/web",
-    "+services/service_manager/public/cpp",
     "+third_party/skia/include",
     "+ui/gfx/geometry",
     "-web",
@@ -21,5 +20,6 @@ include_rules = [
     # We do not want any new dependencies on Web(Local|Remote)FrameBase.h until
     # we resolve the control layer.
     "!core/frame/WebLocalFrameBase.h",
-    "!core/frame/WebRemoteFrameBase.h"
+    "!core/frame/WebRemoteFrameBase.h",
+    "!core/frame/WebRemoteFrameImpl.h",
 ]

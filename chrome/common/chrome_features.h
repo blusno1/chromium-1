@@ -9,6 +9,7 @@
 #define CHROME_COMMON_CHROME_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "build/build_config.h"
 #include "chrome/common/features.h"
 #include "extensions/features/features.h"
 #include "ppapi/features/features.h"
@@ -80,6 +81,8 @@ extern const base::Feature kCopylessPaste;
 extern const base::Feature kDesktopIOSPromotion;
 #endif  // defined(OS_WIN)
 
+extern const base::Feature kDesktopPWAWindowing;
+
 extern const base::Feature kDisplayPersistenceToggleInPermissionPrompts;
 
 extern const base::Feature kExpectCTReporting;
@@ -107,6 +110,7 @@ extern const base::Feature kLsdPermissionPrompt;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kMacRTL;
+extern const base::Feature kMacFullSizeContentView;
 #endif
 
 extern const base::Feature kMaterialDesignBookmarks;
@@ -129,9 +133,15 @@ extern const base::Feature kModalPermissionPrompts;
 extern const base::Feature kModuleDatabase;
 #endif
 
+#if defined(OS_CHROMEOS)
+extern const base::Feature kMultidevice;
+#endif
+
 #if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
 extern const base::Feature kNativeNotifications;
 #endif
+
+extern const base::Feature kNetworkPrediction;
 
 extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
@@ -177,6 +187,10 @@ extern const base::Feature kSiteDetails;
 
 #if defined(OS_ANDROID)
 extern const base::Feature kSiteNotificationChannels;
+#endif
+
+#if !defined(OS_ANDROID)
+extern const base::Feature kStaggeredBackgroundTabOpen;
 #endif
 
 extern const base::Feature kSupervisedUserCreation;

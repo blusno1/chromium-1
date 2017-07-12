@@ -43,8 +43,6 @@ static_library("arc") {
     "intent_helper/intent_filter.h",
     "intent_helper/link_handler_model_impl.cc",
     "intent_helper/link_handler_model_impl.h",
-    "intent_helper/local_activity_resolver.cc",
-    "intent_helper/local_activity_resolver.h",
     "intent_helper/page_transition_util.cc",
     "intent_helper/page_transition_util.h",
     "kiosk/arc_kiosk_bridge.cc",
@@ -61,6 +59,8 @@ static_library("arc") {
     "storage_manager/arc_storage_manager.h",
     "video_accelerator/video_accelerator_struct_traits.cc",
     "video_accelerator/video_accelerator_struct_traits.h",
+    "volume_mounter/arc_volume_mounter_bridge.cc",
+    "volume_mounter/arc_volume_mounter_bridge.h",
   ]
 
   public_deps = [
@@ -165,6 +165,7 @@ mojom("arc_bindings") {
     "common/video_encode_accelerator.mojom",
     "common/voice_interaction_arc_home.mojom",
     "common/voice_interaction_framework.mojom",
+    "common/volume_mounter.mojom",
     "common/wallpaper.mojom",
   ]
 
@@ -222,7 +223,6 @@ source_set("unit_tests") {
     "intent_helper/font_size_util_unittest.cc",
     "intent_helper/intent_filter_unittest.cc",
     "intent_helper/link_handler_model_impl_unittest.cc",
-    "intent_helper/local_activity_resolver_unittest.cc",
     "intent_helper/page_transition_util_unittest.cc",
     "kiosk/arc_kiosk_bridge_unittest.cc",
   ]

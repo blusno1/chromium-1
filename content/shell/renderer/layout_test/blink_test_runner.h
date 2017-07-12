@@ -104,7 +104,7 @@ class BlinkTestRunner : public RenderViewObserver,
   void SimulateWebNotificationClose(const std::string& title,
                                     bool by_user) override;
   void SetDeviceScaleFactor(float factor) override;
-  void SetDeviceColorProfile(const std::string& name) override;
+  void SetDeviceColorSpace(const std::string& name) override;
   float GetWindowToViewportScale() override;
   std::unique_ptr<blink::WebInputEvent> TransformScreenToWidgetCoordinates(
       test_runner::WebWidgetTestProxyBase* web_widget_test_proxy_base,
@@ -150,7 +150,7 @@ class BlinkTestRunner : public RenderViewObserver,
       blink::WebMediaStream* stream) override;
   bool AddMediaStreamAudioSourceAndTrack(
       blink::WebMediaStream* stream) override;
-  cc::SharedBitmapManager* GetSharedBitmapManager() override;
+  viz::SharedBitmapManager* GetSharedBitmapManager() override;
   void DispatchBeforeInstallPromptEvent(
       const std::vector<std::string>& event_platforms,
       const base::Callback<void(bool)>& callback) override;

@@ -7,8 +7,8 @@
 
 #include <stdint.h>
 
+#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "ui/compositor/compositor_export.h"
-#include "ui/gfx/buffer_types.h"
 
 namespace cc {
 class RendererSettings;
@@ -16,8 +16,8 @@ class RendererSettings;
 
 namespace ui {
 
-COMPOSITOR_EXPORT cc::RendererSettings CreateRendererSettings(uint32_t (
-    *get_texture_target)(gfx::BufferFormat format, gfx::BufferUsage usage));
+COMPOSITOR_EXPORT cc::RendererSettings CreateRendererSettings(
+    const viz::BufferToTextureTargetMap& image_targets);
 
 }  // namespace ui
 

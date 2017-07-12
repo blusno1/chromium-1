@@ -21,15 +21,16 @@
 #include "platform/scheduler/child/scheduler_helper.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate_for_test.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate_impl.h"
+#include "platform/scheduler/child/worker_scheduler_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using testing::_;
-using testing::AnyNumber;
-using testing::AtLeast;
-using testing::Exactly;
-using testing::Invoke;
-using testing::Return;
+using ::testing::_;
+using ::testing::AnyNumber;
+using ::testing::AtLeast;
+using ::testing::Exactly;
+using ::testing::Invoke;
+using ::testing::Return;
 
 namespace blink {
 namespace scheduler {
@@ -158,11 +159,13 @@ class IdleHelperForTest : public IdleHelper, public IdleHelper::Delegate {
  public:
   explicit IdleHelperForTest(
       SchedulerHelper* scheduler_helper,
-      base::TimeDelta required_quiescence_duration_before_long_idle_period)
+      base::TimeDelta required_quiescence_duration_before_long_idle_period,
+      scoped_refptr<TaskQueue> idle_task_runner)
       : IdleHelper(scheduler_helper,
                    this,
                    "TestSchedulerIdlePeriod",
-                   required_quiescence_duration_before_long_idle_period) {}
+                   required_quiescence_duration_before_long_idle_period,
+                   idle_task_runner) {}
 
   ~IdleHelperForTest() override {}
 
@@ -177,7 +180,7 @@ class IdleHelperForTest : public IdleHelper, public IdleHelper::Delegate {
   MOCK_METHOD1(OnPendingTasksChanged, void(bool has_tasks));
 };
 
-class BaseIdleHelperTest : public testing::Test {
+class BaseIdleHelperTest : public ::testing::Test {
  public:
   BaseIdleHelperTest(
       base::MessageLoop* message_loop,
@@ -192,11 +195,12 @@ class BaseIdleHelperTest : public testing::Test {
             message_loop,
             mock_task_runner_,
             base::WrapUnique(new TestTimeSource(clock_.get())))),
-        scheduler_helper_(new SchedulerHelper(main_task_runner_)),
+        scheduler_helper_(new WorkerSchedulerHelper(main_task_runner_)),
         idle_helper_(new IdleHelperForTest(
             scheduler_helper_.get(),
-            required_quiescence_duration_before_long_idle_period)),
-        default_task_runner_(scheduler_helper_->DefaultTaskQueue()),
+            required_quiescence_duration_before_long_idle_period,
+            scheduler_helper_->NewTaskQueue(TaskQueue::Spec("idle_test")))),
+        default_task_runner_(scheduler_helper_->DefaultWorkerTaskQueue()),
         idle_task_runner_(idle_helper_->IdleTaskRunner()) {
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
   }
@@ -292,7 +296,7 @@ class BaseIdleHelperTest : public testing::Test {
   std::unique_ptr<base::MessageLoop> message_loop_;
 
   scoped_refptr<SchedulerTqmDelegate> main_task_runner_;
-  std::unique_ptr<SchedulerHelper> scheduler_helper_;
+  std::unique_ptr<WorkerSchedulerHelper> scheduler_helper_;
   std::unique_ptr<IdleHelperForTest> idle_helper_;
   scoped_refptr<base::SingleThreadTaskRunner> default_task_runner_;
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
@@ -427,7 +431,8 @@ class IdleHelperTestWithIdlePeriodObserver : public BaseIdleHelperTest {
     EXPECT_CALL(*idle_helper_, OnIdlePeriodEnded()).Times(0);
   }
 
-  void ExpectIdlePeriodStartsAndEnds(const testing::Cardinality& cardinality) {
+  void ExpectIdlePeriodStartsAndEnds(
+      const ::testing::Cardinality& cardinality) {
     EXPECT_CALL(*idle_helper_, OnIdlePeriodStarted()).Times(cardinality);
     EXPECT_CALL(*idle_helper_, OnIdlePeriodEnded()).Times(cardinality);
   }
@@ -524,9 +529,9 @@ TEST_F(IdleHelperWithMessageLoopTest,
       clock_->NowTicks() + base::TimeDelta::FromMilliseconds(10));
   RunUntilIdle();
   // Note we expect task 3 to run last because it's non-nestable.
-  EXPECT_THAT(order, testing::ElementsAre(std::string("1"), std::string("2"),
-                                          std::string("4"), std::string("5"),
-                                          std::string("3")));
+  EXPECT_THAT(order, ::testing::ElementsAre(std::string("1"), std::string("2"),
+                                            std::string("4"), std::string("5"),
+                                            std::string("3")));
 }
 
 TEST_F(IdleHelperTestWithIdlePeriodObserver, TestLongIdlePeriod) {
@@ -619,7 +624,7 @@ TEST_F(IdleHelperTestWithIdlePeriodObserver, TestLongIdlePeriodRepeating) {
   EXPECT_EQ(3, run_count);
   EXPECT_THAT(
       actual_deadlines,
-      testing::ElementsAre(
+      ::testing::ElementsAre(
           clock_before + maximum_idle_period_duration(),
           clock_before + idle_task_runtime + maximum_idle_period_duration(),
           clock_before + (2 * idle_task_runtime) +
@@ -701,7 +706,7 @@ TEST_F(IdleHelperTest, TestLongIdlePeriodImmediatelyRestartsIfMaxDeadline) {
   EXPECT_EQ(2, run_count);
   EXPECT_THAT(
       actual_deadlines,
-      testing::ElementsAre(
+      ::testing::ElementsAre(
           clock_before + maximum_idle_period_duration(),
           clock_before + idle_task_runtime + maximum_idle_period_duration()));
 }
@@ -772,7 +777,7 @@ TEST_F(IdleHelperTest, TestLongIdlePeriodPaused) {
   EXPECT_EQ(2, run_count);
   EXPECT_THAT(
       actual_deadlines,
-      testing::ElementsAre(
+      ::testing::ElementsAre(
           clock_before + maximum_idle_period_duration(),
           clock_before + idle_task_runtime + maximum_idle_period_duration()));
 
@@ -1126,7 +1131,7 @@ TEST_F(IdleHelperTest, OnPendingTasksChanged) {
   base::TimeTicks deadline_in_task;
 
   {
-    testing::InSequence dummy;
+    ::testing::InSequence dummy;
     // This will be called once. I.e when the one and only task is posted.
     EXPECT_CALL(*idle_helper_, OnPendingTasksChanged(true)).Times(1);
     // This will be called once. I.e when the one and only task completes.
@@ -1157,7 +1162,7 @@ TEST_F(IdleHelperTest, OnPendingTasksChanged_TwoTasksAtTheSameTime) {
   base::TimeTicks deadline_in_task;
 
   {
-    testing::InSequence dummy;
+    ::testing::InSequence dummy;
     // This will be called 3 times. I.e when T1 and T2 are posted and when T1
     // completes.
     EXPECT_CALL(*idle_helper_, OnPendingTasksChanged(true)).Times(3);

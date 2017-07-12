@@ -54,6 +54,17 @@ using base::FieldTrialList;
 
 namespace {
 
+// Values of the UMA DataReductionProxy.Protocol.NotAcceptingTransform histogram
+// defined in metrics/histograms/histograms.xml. This enum must remain
+// synchronized with DataReductionProxyProtocolNotAcceptingTransformReason in
+// tools/metrics/histograms/enums.xml.
+enum NotAcceptingTransformReason {
+  NOT_ACCEPTING_TRANSFORM_DISABLED = 0,
+  NOT_ACCEPTING_TRANSFORM_BLACKLISTED = 1,
+  NOT_ACCEPTING_TRANSFORM_CELLULAR_ONLY = 2,
+  NOT_ACCEPTING_TRANSFORM_REASON_BOUNDARY
+};
+
 // Values of the UMA DataReductionProxy.NetworkChangeEvents histograms.
 // This enum must remain synchronized with the enum of the same
 // name in metrics/histograms/histograms.xml.
@@ -246,8 +257,7 @@ class SecureProxyChecker : public net::URLFetcherDelegate {
     fetcher_callback_.Run(response, status, source->GetResponseCode());
   }
 
-  void CheckIfSecureProxyIsAllowed(const GURL& secure_proxy_check_url,
-                                   FetcherResponseCallback fetcher_callback) {
+  void CheckIfSecureProxyIsAllowed(FetcherResponseCallback fetcher_callback) {
     net::NetworkTrafficAnnotationTag traffic_annotation =
         net::DefineNetworkTrafficAnnotation(
             "data_reduction_proxy_secure_proxy_check", R"(
@@ -272,8 +282,9 @@ class SecureProxyChecker : public net::URLFetcherDelegate {
                 "it is enabled by installing the Data Saver extension."
               policy_exception_justification: "Not implemented."
             })");
-    fetcher_ = net::URLFetcher::Create(
-        secure_proxy_check_url, net::URLFetcher::GET, this, traffic_annotation);
+    fetcher_ =
+        net::URLFetcher::Create(params::GetSecureProxyCheckURL(),
+                                net::URLFetcher::GET, this, traffic_annotation);
     data_use_measurement::DataUseUserData::AttachToFetcher(
         fetcher_.get(),
         data_use_measurement::DataUseUserData::DATA_REDUCTION_PROXY);
@@ -750,7 +761,6 @@ void DataReductionProxyConfig::SetProxyConfig(bool enabled, bool at_startup) {
     // synchronously on the IO thread, and |this| outlives
     // |secure_proxy_checker_|.
     SecureProxyCheck(
-        config_values_->secure_proxy_check_url(),
         base::Bind(&DataReductionProxyConfig::HandleSecureProxyCheckResponse,
                    base::Unretained(this)));
   }
@@ -851,7 +861,6 @@ void DataReductionProxyConfig::OnIPAddressChanged() {
     // synchronously on the IO thread, and |this| outlives
     // |secure_proxy_checker_|.
     SecureProxyCheck(
-        config_values_->secure_proxy_check_url(),
         base::Bind(&DataReductionProxyConfig::HandleSecureProxyCheckResponse,
                    base::Unretained(this)));
   }
@@ -884,17 +893,15 @@ void DataReductionProxyConfig::AddDefaultProxyBypassRules() {
 }
 
 void DataReductionProxyConfig::SecureProxyCheck(
-    const GURL& secure_proxy_check_url,
     FetcherResponseCallback fetcher_callback) {
   net_log_with_source_ = net::NetLogWithSource::Make(
       net_log_, net::NetLogSourceType::DATA_REDUCTION_PROXY);
   if (event_creator_) {
-    event_creator_->BeginSecureProxyCheck(
-        net_log_with_source_, config_values_->secure_proxy_check_url());
+    event_creator_->BeginSecureProxyCheck(net_log_with_source_,
+                                          params::GetSecureProxyCheckURL());
   }
 
-  secure_proxy_checker_->CheckIfSecureProxyIsAllowed(secure_proxy_check_url,
-                                                     fetcher_callback);
+  secure_proxy_checker_->CheckIfSecureProxyIsAllowed(fetcher_callback);
 }
 
 void DataReductionProxyConfig::FetchWarmupURL() {
@@ -1073,7 +1080,11 @@ bool DataReductionProxyConfig::ShouldAcceptServerPreview(
   // For the transition to server-driven previews decisions, we will
   // use existing Lo-Fi flags for disabling and cellular-only mode.
   // TODO(dougarnett): Refactor flag names as part of bug 725645.
-  if (params::IsLoFiDisabledViaFlags()) {
+  if (params::IsLoFiDisabledViaFlags() || lofi_off()) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "DataReductionProxy.Protocol.NotAcceptingTransform",
+        NOT_ACCEPTING_TRANSFORM_DISABLED,
+        NOT_ACCEPTING_TRANSFORM_REASON_BOUNDARY);
     return false;
   }
 
@@ -1083,11 +1094,20 @@ bool DataReductionProxyConfig::ShouldAcceptServerPreview(
 
   if (IsBlackListedOrDisabled(request, previews_decider,
                               previews::PreviewsType::LITE_PAGE)) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "DataReductionProxy.Protocol.NotAcceptingTransform",
+        NOT_ACCEPTING_TRANSFORM_BLACKLISTED,
+        NOT_ACCEPTING_TRANSFORM_REASON_BOUNDARY);
     return false;
   }
 
-  if (params::IsLoFiCellularOnlyViaFlags()) {
-    return net::NetworkChangeNotifier::IsConnectionCellular(connection_type_);
+  if (params::IsLoFiCellularOnlyViaFlags() &&
+      !net::NetworkChangeNotifier::IsConnectionCellular(connection_type_)) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "DataReductionProxy.Protocol.NotAcceptingTransform",
+        NOT_ACCEPTING_TRANSFORM_CELLULAR_ONLY,
+        NOT_ACCEPTING_TRANSFORM_REASON_BOUNDARY);
+    return false;
   }
 
   return true;

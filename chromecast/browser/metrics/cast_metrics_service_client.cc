@@ -9,6 +9,7 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -112,10 +113,9 @@ void CastMetricsServiceClient::SetMetricsClientId(
 
 void CastMetricsServiceClient::StoreClientInfo(
     const ::metrics::ClientInfo& client_info) {
-  const std::string& client_id = client_info.client_id;
-  DCHECK(client_id.empty() || base::IsValidGUID(client_id));
-  // backup client_id or reset to empty.
-  SetMetricsClientId(client_id);
+  // TODO(gfhuang): |force_client_id_| logic is super ugly, we should refactor
+  // to align load/save logic of |force_client_id_| with Load/StoreClientInfo.
+  // Currently it's lumped inside SetMetricsClientId(client_id).
 }
 
 std::unique_ptr<::metrics::ClientInfo>
@@ -323,7 +323,7 @@ void CastMetricsServiceClient::Initialize(CastService* cast_service) {
   cast_service_ = cast_service;
 
   metrics_state_manager_ = ::metrics::MetricsStateManager::Create(
-      pref_service_, this,
+      pref_service_, this, base::string16(),
       base::Bind(&CastMetricsServiceClient::StoreClientInfo,
                  base::Unretained(this)),
       base::Bind(&CastMetricsServiceClient::LoadClientInfo,
@@ -339,6 +339,8 @@ void CastMetricsServiceClient::Initialize(CastService* cast_service) {
   // report the client-id and expect that setup will handle the current opt-in
   // value.
   metrics_state_manager_->ForceClientIdCreation();
+  // Populate |client_id| to other component parts.
+  SetMetricsClientId(metrics_state_manager_->client_id());
 
   CastStabilityMetricsProvider* stability_provider =
       new CastStabilityMetricsProvider(metrics_service_.get());

@@ -134,7 +134,7 @@ const base::Feature kConsistentOmniboxGeolocation{
 #if defined(OS_ANDROID)
 // Experiment to extract structured metadata for app indexing.
 const base::Feature kCopylessPaste{"CopylessPaste",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_WIN)
@@ -143,6 +143,10 @@ const base::Feature kCopylessPaste{"CopylessPaste",
 const base::Feature kDesktopIOSPromotion{"DesktopIOSPromotion",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
+
+// Enables or disables windowing related features for desktop PWAs.
+const base::Feature kDesktopPWAWindowing{"DesktopPWAWindowing",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Experiment to display a toggle allowing users to opt-out of persisting a
 // Grant or Deny decision in a permission prompt.
@@ -202,6 +206,12 @@ const base::Feature kLsdPermissionPrompt{"LsdPermissionPrompt",
 #if defined(OS_MACOSX)
 // Enables RTL layout in macOS top chrome.
 const base::Feature kMacRTL{"MacRTL", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Uses NSFullSizeContentViewWindowMask where available instead of adding our
+// own views to the window frame. This is a temporary kill switch, it can be
+// removed once we feel okay about leaving it on.
+const base::Feature kMacFullSizeContentView{"MacFullSizeContentView",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables or disables the Material Design version of chrome://bookmarks.
@@ -252,6 +262,12 @@ const base::Feature kModuleDatabase{"ModuleDatabase",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+#if defined(OS_CHROMEOS)
+// Enables or disables multidevice features and corresponding UI on Chrome OS.
+const base::Feature kMultidevice{"Multidevice",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 // Enables the use of native notification centers instead of using the Message
 // Center for displaying the toasts.
 #if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
@@ -263,6 +279,9 @@ const base::Feature kNativeNotifications{"NativeNotifications",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 #endif  // BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
+
+const base::Feature kNetworkPrediction{"NetworkPrediction",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // If enabled, the list of content suggestions on the New Tab page will contain
 // pages that the user downloaded for later use.
@@ -347,6 +366,13 @@ const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
 // origin.
 const base::Feature kSiteDetails{"SiteDetails",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if !defined(OS_ANDROID)
+// Enables delaying the navigation of background tabs in order to improve
+// foreground tab's user experience.
+const base::Feature kStaggeredBackgroundTabOpen{
+    "StaggeredBackgroundTabOpen", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Enables or disables the creation of (legacy) supervised users. Does not
 // affect existing supervised users.

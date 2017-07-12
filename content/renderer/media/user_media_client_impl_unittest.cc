@@ -98,11 +98,10 @@ blink::WebMediaConstraints CreateFacingModeConstraints(
 
 class MockMediaStreamVideoCapturerSource : public MockMediaStreamVideoSource {
  public:
-  MockMediaStreamVideoCapturerSource(
-      const StreamDeviceInfo& device,
-      const SourceStoppedCallback& stop_callback,
-      PeerConnectionDependencyFactory* factory)
-  : MockMediaStreamVideoSource(false) {
+  MockMediaStreamVideoCapturerSource(const StreamDeviceInfo& device,
+                                     const SourceStoppedCallback& stop_callback,
+                                     PeerConnectionDependencyFactory* factory)
+      : MockMediaStreamVideoSource() {
     SetDeviceInfo(device);
     SetStopCallback(stop_callback);
   }
@@ -284,7 +283,8 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
   MediaStreamAudioSource* CreateAudioSource(
       const StreamDeviceInfo& device,
       const blink::WebMediaConstraints& constraints,
-      const MediaStreamSource::ConstraintsCallback& source_ready) override {
+      const MediaStreamSource::ConstraintsCallback& source_ready,
+      bool* has_sw_echo_cancellation) override {
     MediaStreamAudioSource* source;
     if (create_source_that_fails_) {
       class FailedAtLifeAudioSource : public MediaStreamAudioSource {
@@ -310,6 +310,7 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
                      source_ready, source));
     }
 
+    *has_sw_echo_cancellation = false;
     return source;
   }
 

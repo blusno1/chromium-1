@@ -142,31 +142,18 @@ class BASE_EXPORT RefCountedThreadSafeBase {
 
   ~RefCountedThreadSafeBase();
 
-  void AddRef() const {
-#if DCHECK_IS_ON()
-    DCHECK(!in_dtor_);
-    DCHECK(!needs_adopt_ref_)
-        << "This RefCounted object is created with non-zero reference count."
-        << " The first reference to such a object has to be made by AdoptRef or"
-        << " MakeRefCounted.";
-#endif
-    AtomicRefCountInc(&ref_count_);
-  }
-
+// Release and AddRef are suitable for inlining on X86 because they generate
+// very small code sequences. On other platforms (ARM), it causes a size
+// regression and is probably not worth it.
+#if defined(ARCH_CPU_X86_FAMILY)
   // Returns true if the object should self-delete.
-  bool Release() const {
-#if DCHECK_IS_ON()
-    DCHECK(!in_dtor_);
-    DCHECK(!AtomicRefCountIsZero(&ref_count_));
+  bool Release() const { return ReleaseImpl(); }
+  void AddRef() const { AddRefImpl(); }
+#else
+  // Returns true if the object should self-delete.
+  bool Release() const;
+  void AddRef() const;
 #endif
-    if (!AtomicRefCountDec(&ref_count_)) {
-#if DCHECK_IS_ON()
-      in_dtor_ = true;
-#endif
-      return true;
-    }
-    return false;
-  }
 
  private:
   template <typename U>
@@ -177,6 +164,31 @@ class BASE_EXPORT RefCountedThreadSafeBase {
     DCHECK(needs_adopt_ref_);
     needs_adopt_ref_ = false;
 #endif
+  }
+
+  ALWAYS_INLINE void AddRefImpl() const {
+#if DCHECK_IS_ON()
+    DCHECK(!in_dtor_);
+    DCHECK(!needs_adopt_ref_)
+        << "This RefCounted object is created with non-zero reference count."
+        << " The first reference to such a object has to be made by AdoptRef or"
+        << " MakeRefCounted.";
+#endif
+    ref_count_.Increment();
+  }
+
+  ALWAYS_INLINE bool ReleaseImpl() const {
+#if DCHECK_IS_ON()
+    DCHECK(!in_dtor_);
+    DCHECK(!ref_count_.IsZero());
+#endif
+    if (!ref_count_.Decrement()) {
+#if DCHECK_IS_ON()
+      in_dtor_ = true;
+#endif
+      return true;
+    }
+    return false;
   }
 
   mutable AtomicRefCount ref_count_{0};

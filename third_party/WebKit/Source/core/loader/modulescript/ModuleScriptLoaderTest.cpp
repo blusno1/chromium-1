@@ -87,6 +87,9 @@ class ModuleScriptLoaderTestModulator final : public DummyModulator {
   Vector<ModuleRequest> ModuleRequestsFromScriptModule(ScriptModule) override {
     return requests_;
   }
+  ScriptModuleState GetRecordStatus(ScriptModule) override {
+    return ScriptModuleState::kUninstantiated;
+  }
 
   DECLARE_TRACE();
 
@@ -124,10 +127,10 @@ class ModuleScriptLoaderTest : public ::testing::Test {
 void ModuleScriptLoaderTest::SetUp() {
   platform_->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
   dummy_page_holder_ = DummyPageHolder::Create(IntSize(500, 500));
-  GetDocument().SetURL(KURL(KURL(), "https://example.test"));
+  GetDocument().SetURL(KURL(NullURL(), "https://example.test"));
   auto* context =
       MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource);
-  fetcher_ = ResourceFetcher::Create(context, context->GetTaskRunner().Get());
+  fetcher_ = ResourceFetcher::Create(context);
   modulator_ = new ModuleScriptLoaderTestModulator(
       ToScriptStateForMainWorld(&GetFrame()),
       GetDocument().GetSecurityOrigin());
@@ -135,7 +138,7 @@ void ModuleScriptLoaderTest::SetUp() {
 
 TEST_F(ModuleScriptLoaderTest, fetchDataURL) {
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
-  KURL url(KURL(), "data:text/javascript,export default 'grapes';");
+  KURL url(NullURL(), "data:text/javascript,export default 'grapes';");
   ModuleScriptFetchRequest module_request(
       url, String(), kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
   TestModuleScriptLoaderClient* client = new TestModuleScriptLoaderClient;
@@ -145,13 +148,12 @@ TEST_F(ModuleScriptLoaderTest, fetchDataURL) {
   EXPECT_TRUE(client->WasNotifyFinished())
       << "ModuleScriptLoader should finish synchronously.";
   ASSERT_TRUE(client->GetModuleScript());
-  EXPECT_EQ(client->GetModuleScript()->State(),
-            ModuleInstantiationState::kUninstantiated);
+  EXPECT_FALSE(client->GetModuleScript()->IsErrored());
 }
 
 TEST_F(ModuleScriptLoaderTest, InvalidSpecifier) {
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
-  KURL url(KURL(),
+  KURL url(NullURL(),
            "data:text/javascript,import 'invalid';export default 'grapes';");
   ModuleScriptFetchRequest module_request(
       url, String(), kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
@@ -184,7 +186,7 @@ TEST_F(ModuleScriptLoaderTest, fetchInvalidURL) {
 TEST_F(ModuleScriptLoaderTest, fetchURL) {
   KURL url(kParsedURLString, "http://127.0.0.1:8000/module.js");
   URLTestHelpers::RegisterMockedURLLoad(
-      url, testing::WebTestDataPath("module.js"), "text/javascript");
+      url, testing::CoreTestDataPath("module.js"), "text/javascript");
 
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
   ModuleScriptFetchRequest module_request(

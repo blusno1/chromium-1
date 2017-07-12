@@ -80,7 +80,8 @@ std::vector<DisplayInfo> FindAndRemoveTouchingDisplayInfos(
   return touching_display_infos;
 }
 
-Display CreateDisplayFromDisplayInfo(const DisplayInfo& display_info) {
+Display CreateDisplayFromDisplayInfo(const DisplayInfo& display_info,
+                                     ColorProfileReader* color_profile_reader) {
   Display display(display_info.id());
   float scale_factor = display_info.device_scale_factor();
   display.set_device_scale_factor(scale_factor);
@@ -90,11 +91,10 @@ Display CreateDisplayFromDisplayInfo(const DisplayInfo& display_info) {
   display.set_bounds(gfx::ScaleToEnclosingRect(display_info.screen_rect(),
                      1.0f / scale_factor));
   display.set_rotation(display_info.rotation());
-
-  // TODO(ccameron): Populate this based on this specific display.
-  // http://crbug.com/735613
-  display.set_color_space(gfx::ICCProfile::FromBestMonitor().GetColorSpace());
-
+  if (!Display::HasForceColorProfile()) {
+    display.set_color_space(
+        color_profile_reader->GetDisplayColorSpace(display_info.id()));
+  }
   return display;
 }
 
@@ -116,7 +116,8 @@ Display CreateDisplayFromDisplayInfo(const DisplayInfo& display_info) {
 // map to multiple screen points due to overlap. The first discovered screen
 // will take precedence.
 std::vector<ScreenWinDisplay> DisplayInfosToScreenWinDisplays(
-    const std::vector<DisplayInfo>& display_infos) {
+    const std::vector<DisplayInfo>& display_infos,
+    ColorProfileReader* color_profile_reader) {
   // Find and extract the primary display.
   std::vector<DisplayInfo> display_infos_remaining = display_infos;
   auto primary_display_iter = std::find_if(
@@ -145,7 +146,8 @@ std::vector<ScreenWinDisplay> DisplayInfosToScreenWinDisplays(
   // Layout and create the ScreenWinDisplays.
   std::vector<Display> displays;
   for (const auto& display_info : display_infos)
-    displays.push_back(CreateDisplayFromDisplayInfo(display_info));
+    displays.push_back(
+        CreateDisplayFromDisplayInfo(display_info, color_profile_reader));
 
   std::unique_ptr<DisplayLayout> layout(builder.Build());
   layout->ApplyToDisplayList(&displays, nullptr, 0);
@@ -163,7 +165,6 @@ std::vector<Display> ScreenWinDisplaysToDisplays(
   std::vector<Display> displays;
   for (const auto& screen_win_display : screen_win_displays)
     displays.push_back(screen_win_display.display());
-
   return displays;
 }
 
@@ -211,10 +212,14 @@ gfx::Point ScalePointRelative(const gfx::Point& from_origin,
 
 }  // namespace
 
-ScreenWin::ScreenWin() {
+ScreenWin::ScreenWin() : ScreenWin(true) {}
+
+ScreenWin::ScreenWin(bool initialize)
+    : color_profile_reader_(new ColorProfileReader(this)) {
   DCHECK(!g_screen_win_instance);
   g_screen_win_instance = this;
-  Initialize();
+  if (initialize)
+    Initialize();
 }
 
 ScreenWin::~ScreenWin() {
@@ -452,11 +457,13 @@ gfx::Rect ScreenWin::DIPToScreenRectInWindow(gfx::NativeView view,
 
 void ScreenWin::UpdateFromDisplayInfos(
     const std::vector<DisplayInfo>& display_infos) {
-  screen_win_displays_ = DisplayInfosToScreenWinDisplays(display_infos);
+  screen_win_displays_ = DisplayInfosToScreenWinDisplays(
+      display_infos, color_profile_reader_.get());
   displays_ = ScreenWinDisplaysToDisplays(screen_win_displays_);
 }
 
 void ScreenWin::Initialize() {
+  color_profile_reader_->UpdateIfNeeded();
   singleton_hwnd_observer_.reset(
       new gfx::SingletonHwndObserver(
           base::Bind(&ScreenWin::OnWndProc, base::Unretained(this))));
@@ -497,6 +504,27 @@ void ScreenWin::OnWndProc(HWND hwnd,
                           LPARAM lparam) {
   if (message != WM_DISPLAYCHANGE &&
     !(message == WM_SETTINGCHANGE && wparam == SPI_SETWORKAREA))
+    return;
+
+  color_profile_reader_->UpdateIfNeeded();
+  std::vector<Display> old_displays = std::move(displays_);
+  UpdateFromDisplayInfos(GetDisplayInfosFromSystem());
+  change_notifier_.NotifyDisplaysChanged(old_displays, displays_);
+}
+
+void ScreenWin::OnColorProfilesChanged() {
+  // The color profile reader will often just confirm that our guess that the
+  // color profile was sRGB was indeed correct. Avoid doing an update in these
+  // cases.
+  bool changed = false;
+  for (const auto& display : displays_) {
+    if (display.color_space() !=
+        color_profile_reader_->GetDisplayColorSpace(display.id())) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed)
     return;
 
   std::vector<Display> old_displays = std::move(displays_);

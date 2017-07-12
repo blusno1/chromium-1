@@ -64,11 +64,11 @@ template <typename Strategy>
 VisibleSelectionTemplate<Strategy> ExpandUsingGranularity(
     const VisibleSelectionTemplate<Strategy>& selection,
     TextGranularity granularity) {
-  return CreateVisibleSelection(
+  return CreateVisibleSelectionWithGranularity(
       typename SelectionTemplate<Strategy>::Builder()
           .SetBaseAndExtent(selection.Base(), selection.Extent())
-          .SetGranularity(granularity)
-          .Build());
+          .Build(),
+      granularity);
 }
 
 // For http://crbug.com/700368
@@ -82,16 +82,16 @@ TEST_F(VisibleSelectionTest, appendTrailingWhitespaceWithAfterAnchor) {
   // TODO(editing-dev): We should remove above comment once we fix [1].
   // [1] http://crbug.com/701657 double-click on user-select:none should not
   // compute selection.
-  VisibleSelection selection =
-      CreateVisibleSelection(SelectionInDOMTree::Builder()
-                                 .Collapse(Position::BeforeNode(*input))
-                                 .Extend(Position::AfterNode(*input))
-                                 .SetGranularity(kWordGranularity)
-                                 .Build());
-  selection.AppendTrailingWhitespace();
+  const VisibleSelection selection = CreateVisibleSelectionWithGranularity(
+      SelectionInDOMTree::Builder()
+          .Collapse(Position::BeforeNode(*input))
+          .Extend(Position::AfterNode(*input))
+          .Build(),
+      TextGranularity::kWord);
+  const VisibleSelection result = selection.AppendTrailingWhitespace();
 
-  EXPECT_EQ(Position::BeforeNode(*input), selection.Start());
-  EXPECT_EQ(Position::AfterNode(*input), selection.End());
+  EXPECT_EQ(Position::BeforeNode(*input), result.Start());
+  EXPECT_EQ(Position::AfterNode(*input), result.End());
 }
 
 TEST_F(VisibleSelectionTest, expandUsingGranularity) {
@@ -116,13 +116,13 @@ TEST_F(VisibleSelectionTest, expandUsingGranularity) {
   // From a position at distributed node
   selection = CreateVisibleSelection(
       SelectionInDOMTree::Builder().Collapse(Position(one, 1)).Build());
-  selection = ExpandUsingGranularity(selection, kWordGranularity);
+  selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
   selection_in_flat_tree =
       CreateVisibleSelection(SelectionInFlatTree::Builder()
                                  .Collapse(PositionInFlatTree(one, 1))
                                  .Build());
   selection_in_flat_tree =
-      ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+      ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
   EXPECT_EQ(Position(one, 1), selection.Base());
   EXPECT_EQ(Position(one, 1), selection.Extent());
@@ -137,13 +137,13 @@ TEST_F(VisibleSelectionTest, expandUsingGranularity) {
   // From a position at distributed node
   selection = CreateVisibleSelection(
       SelectionInDOMTree::Builder().Collapse(Position(two, 1)).Build());
-  selection = ExpandUsingGranularity(selection, kWordGranularity);
+  selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
   selection_in_flat_tree =
       CreateVisibleSelection(SelectionInFlatTree::Builder()
                                  .Collapse(PositionInFlatTree(two, 1))
                                  .Build());
   selection_in_flat_tree =
-      ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+      ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
   EXPECT_EQ(Position(two, 1), selection.Base());
   EXPECT_EQ(Position(two, 1), selection.Extent());
@@ -158,13 +158,13 @@ TEST_F(VisibleSelectionTest, expandUsingGranularity) {
   // From a position at node in shadow tree
   selection = CreateVisibleSelection(
       SelectionInDOMTree::Builder().Collapse(Position(three, 1)).Build());
-  selection = ExpandUsingGranularity(selection, kWordGranularity);
+  selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
   selection_in_flat_tree =
       CreateVisibleSelection(SelectionInFlatTree::Builder()
                                  .Collapse(PositionInFlatTree(three, 1))
                                  .Build());
   selection_in_flat_tree =
-      ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+      ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
   EXPECT_EQ(Position(three, 1), selection.Base());
   EXPECT_EQ(Position(three, 1), selection.Extent());
@@ -179,13 +179,13 @@ TEST_F(VisibleSelectionTest, expandUsingGranularity) {
   // From a position at node in shadow tree
   selection = CreateVisibleSelection(
       SelectionInDOMTree::Builder().Collapse(Position(four, 1)).Build());
-  selection = ExpandUsingGranularity(selection, kWordGranularity);
+  selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
   selection_in_flat_tree =
       CreateVisibleSelection(SelectionInFlatTree::Builder()
                                  .Collapse(PositionInFlatTree(four, 1))
                                  .Build());
   selection_in_flat_tree =
-      ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+      ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
   EXPECT_EQ(Position(four, 1), selection.Base());
   EXPECT_EQ(Position(four, 1), selection.Extent());
@@ -200,13 +200,13 @@ TEST_F(VisibleSelectionTest, expandUsingGranularity) {
   // From a position at node in shadow tree
   selection = CreateVisibleSelection(
       SelectionInDOMTree::Builder().Collapse(Position(five, 1)).Build());
-  selection = ExpandUsingGranularity(selection, kWordGranularity);
+  selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
   selection_in_flat_tree =
       CreateVisibleSelection(SelectionInFlatTree::Builder()
                                  .Collapse(PositionInFlatTree(five, 1))
                                  .Build());
   selection_in_flat_tree =
-      ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+      ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
   EXPECT_EQ(Position(five, 1), selection.Base());
   EXPECT_EQ(Position(five, 1), selection.Extent());
@@ -217,6 +217,24 @@ TEST_F(VisibleSelectionTest, expandUsingGranularity) {
   EXPECT_EQ(PositionInFlatTree(five, 1), selection_in_flat_tree.Extent());
   EXPECT_EQ(PositionInFlatTree(one, 0), selection_in_flat_tree.Start());
   EXPECT_EQ(PositionInFlatTree(five, 5), selection_in_flat_tree.End());
+}
+
+// For http://wkb.ug/32622
+TEST_F(VisibleSelectionTest, ExpandUsingGranularityWithEmptyCell) {
+  SetBodyContent(
+      "<div contentEditable><table cellspacing=0><tr>"
+      "<td id='first' width='50' height='25pt'></td>"
+      "<td id='second' width='50' height='25pt'></td>"
+      "</tr></table></div>");
+  Element* const first = GetDocument().getElementById("first");
+  const VisibleSelectionInFlatTree& selection =
+      CreateVisibleSelectionWithGranularity(
+          SelectionInFlatTree::Builder()
+              .Collapse(PositionInFlatTree(first, 0))
+              .Build(),
+          TextGranularity::kWord);
+  EXPECT_EQ(PositionInFlatTree(first, 0), selection.Start());
+  EXPECT_EQ(PositionInFlatTree(first, 0), selection.End());
 }
 
 TEST_F(VisibleSelectionTest, Initialisation) {
@@ -401,9 +419,9 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
   {
     SetSelection(selection, 0);
     SetSelection(selection_in_flat_tree, 0);
-    selection = ExpandUsingGranularity(selection, kWordGranularity);
+    selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
     selection_in_flat_tree =
-        ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+        ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
     Range* range = CreateRange(FirstEphemeralRangeOf(selection));
     EXPECT_EQ(0u, range->startOffset());
@@ -417,9 +435,9 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
   {
     SetSelection(selection, 8);
     SetSelection(selection_in_flat_tree, 8);
-    selection = ExpandUsingGranularity(selection, kWordGranularity);
+    selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
     selection_in_flat_tree =
-        ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+        ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
     Range* range = CreateRange(FirstEphemeralRangeOf(selection));
     EXPECT_EQ(6u, range->startOffset());
@@ -435,9 +453,9 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
   {
     SetSelection(selection, 5);
     SetSelection(selection_in_flat_tree, 5);
-    selection = ExpandUsingGranularity(selection, kWordGranularity);
+    selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
     selection_in_flat_tree =
-        ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+        ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
     Range* range = CreateRange(FirstEphemeralRangeOf(selection));
     EXPECT_EQ(5u, range->startOffset());
@@ -453,9 +471,9 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
   {
     SetSelection(selection, 26);
     SetSelection(selection_in_flat_tree, 26);
-    selection = ExpandUsingGranularity(selection, kWordGranularity);
+    selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
     selection_in_flat_tree =
-        ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+        ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
     Range* range = CreateRange(FirstEphemeralRangeOf(selection));
     EXPECT_EQ(26u, range->startOffset());
@@ -469,9 +487,9 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
   {
     SetSelection(selection, 27);
     SetSelection(selection_in_flat_tree, 27);
-    selection = ExpandUsingGranularity(selection, kWordGranularity);
+    selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
     selection_in_flat_tree =
-        ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+        ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
     Range* range = CreateRange(FirstEphemeralRangeOf(selection));
     EXPECT_EQ(27u, range->startOffset());
@@ -485,9 +503,9 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
   {
     SetSelection(selection, 0, 1);
     SetSelection(selection_in_flat_tree, 0, 1);
-    selection = ExpandUsingGranularity(selection, kWordGranularity);
+    selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
     selection_in_flat_tree =
-        ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+        ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
     Range* range = CreateRange(FirstEphemeralRangeOf(selection));
     EXPECT_EQ(0u, range->startOffset());
@@ -501,9 +519,9 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
   {
     SetSelection(selection, 2, 8);
     SetSelection(selection_in_flat_tree, 2, 8);
-    selection = ExpandUsingGranularity(selection, kWordGranularity);
+    selection = ExpandUsingGranularity(selection, TextGranularity::kWord);
     selection_in_flat_tree =
-        ExpandUsingGranularity(selection_in_flat_tree, kWordGranularity);
+        ExpandUsingGranularity(selection_in_flat_tree, TextGranularity::kWord);
 
     Range* range = CreateRange(FirstEphemeralRangeOf(selection));
     EXPECT_EQ(0u, range->startOffset());

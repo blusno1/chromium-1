@@ -21,7 +21,6 @@
 
 @interface ContentSuggestionsItem ()
 
-@property(nonatomic, copy) NSString* subtitle;
 // Used to check if the image has already been fetched. There is no way to
 // discriminate between failed image download and nonexitent image. The
 // suggestion tries to download the image only once.
@@ -36,7 +35,6 @@
 @implementation ContentSuggestionsItem
 
 @synthesize title = _title;
-@synthesize subtitle = _subtitle;
 @synthesize image = _image;
 @synthesize URL = _URL;
 @synthesize publisher = _publisher;
@@ -45,19 +43,18 @@
 @synthesize delegate = _delegate;
 @synthesize imageFetched = _imageFetched;
 @synthesize attributes = _attributes;
+@synthesize faviconURL = _faviconURL;
 @synthesize hasImage = _hasImage;
 @synthesize availableOffline = _availableOffline;
 @synthesize firstTimeWithImage = _firstTimeWithImage;
 
 - (instancetype)initWithType:(NSInteger)type
                        title:(NSString*)title
-                    subtitle:(NSString*)subtitle
                          url:(const GURL&)url {
   self = [super initWithType:type];
   if (self) {
     self.cellClass = [ContentSuggestionsCell class];
     _title = [title copy];
-    _subtitle = [subtitle copy];
     _URL = url;
   }
   return self;
@@ -72,7 +69,6 @@
   }
   [cell.faviconView configureWithAttributes:self.attributes];
   cell.titleLabel.text = self.title;
-  [cell setSubtitleText:self.subtitle];
   cell.displayImage = self.hasImage;
   [cell setContentImage:self.image animated:self.firstTimeWithImage];
   self.firstTimeWithImage = NO;
@@ -87,6 +83,15 @@
   _image = image;
   if (image)
     self.firstTimeWithImage = YES;
+}
+
+- (CGFloat)cellHeightForWidth:(CGFloat)width {
+  return [self.cellClass heightForWidth:width
+                              withImage:self.hasImage
+                                  title:self.title
+                          publisherName:self.publisher
+                        publicationDate:[self relativeDate]
+                       availableOffline:self.availableOffline];
 }
 
 #pragma mark - Private
@@ -123,8 +128,7 @@
       base::SysNSStringToUTF16(self.title),
       base::SysNSStringToUTF16(self.publisher),
       base::SysNSStringToUTF16([self relativeDate]),
-      base::SysNSStringToUTF16(offlineAvailability),
-      base::SysNSStringToUTF16(self.subtitle));
+      base::SysNSStringToUTF16(offlineAvailability));
 }
 
 @end

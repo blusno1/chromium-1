@@ -53,15 +53,16 @@
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
-#include "cc/output/buffer_to_texture_target_map.h"
 #include "components/metrics/single_sample_metrics.h"
 #include "components/tracing/common/tracing_switches.h"
+#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "content/browser/appcache/appcache_dispatcher_host.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_fetch/background_fetch_service_impl.h"
 #include "content/browser/background_sync/background_sync_service_impl.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/blob_storage/blob_dispatcher_host.h"
+#include "content/browser/blob_storage/blob_registry_wrapper.h"
 #include "content/browser/blob_storage/blob_url_loader_factory.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/broadcast_channel/broadcast_channel_provider.h"
@@ -78,7 +79,6 @@
 #include "content/browser/field_trial_recorder.h"
 #include "content/browser/fileapi/fileapi_message_filter.h"
 #include "content/browser/frame_host/render_frame_message_filter.h"
-#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_client.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
@@ -95,6 +95,7 @@
 #include "content/browser/media/midi_host.h"
 #include "content/browser/memory/memory_coordinator_impl.h"
 #include "content/browser/mime_registry_impl.h"
+#include "content/browser/net/reporting_service_proxy.h"
 #include "content/browser/notifications/notification_message_filter.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/payments/payment_manager.h"
@@ -138,7 +139,6 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/in_process_child_thread_params.h"
-#include "content/common/network_service.mojom.h"
 #include "content/common/render_process_messages.h"
 #include "content/common/resource_messages.h"
 #include "content/common/service_manager/child_connection.h"
@@ -163,6 +163,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
+#include "content/public/common/network_service.mojom.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/result_codes.h"
@@ -186,6 +187,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/features/features.h"
+#include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_interface.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -202,7 +204,6 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gpu_switching_manager.h"
 #include "ui/native_theme/native_theme_features.h"
@@ -526,6 +527,14 @@ void CreateMemoryCoordinatorHandle(
     mojom::MemoryCoordinatorHandleRequest request) {
   MemoryCoordinatorImpl::GetInstance()->CreateHandle(render_process_id,
                                                      std::move(request));
+}
+
+void CreateResourceCoordinatorProcessInterface(
+    RenderProcessHostImpl* render_process_host,
+    const service_manager::BindSourceInfo& source_info,
+    resource_coordinator::mojom::CoordinationUnitRequest request) {
+  render_process_host->GetProcessResourceCoordinator()->service()->AddBinding(
+      std::move(request));
 }
 
 // Forwards service requests to Service Manager since the renderer cannot launch
@@ -1662,6 +1671,11 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
   registry->AddInterface(
       base::Bind(&metrics::CreateSingleSampleMetricsProvider));
 
+  if (base::FeatureList::IsEnabled(features::kGlobalResourceCoordinator)) {
+    registry->AddInterface(base::Bind(
+        &CreateResourceCoordinatorProcessInterface, base::Unretained(this)));
+  }
+
   if (base::FeatureList::IsEnabled(features::kOffMainThreadFetch)) {
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context(
         static_cast<ServiceWorkerContextWrapper*>(
@@ -1670,6 +1684,9 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
         base::Bind(&WorkerURLLoaderFactoryProviderImpl::Create, GetID(),
                    resource_message_filter_, service_worker_context));
   }
+
+  registry->AddInterface(
+      base::Bind(&CreateReportingServiceProxy, storage_partition_impl_));
 
   // This is to support usage of WebSockets in cases in which there is no
   // associated RenderFrame (e.g., Shared Workers).
@@ -1690,8 +1707,7 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
                        base::Bind(&RenderProcessHostImpl::CreateRendererHost,
                                   base::Unretained(this)));
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNetworkService)) {
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     AddUIThreadInterface(
         registry.get(),
         base::Bind(&RenderProcessHostImpl::CreateURLLoaderFactory,
@@ -1699,9 +1715,9 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
   }
 
   if (base::FeatureList::IsEnabled(features::kMojoBlobs)) {
-    registry->AddInterface(base::Bind(
-        &ChromeBlobStorageContext::BindBlobRegistry,
-        base::Unretained(ChromeBlobStorageContext::GetFor(browser_context_))));
+    registry->AddInterface(
+        base::Bind(&BlobRegistryWrapper::Bind,
+                   storage_partition_impl_->GetBlobRegistry(), GetID()));
   }
 
   ServiceManagerConnection* service_manager_connection =
@@ -1741,8 +1757,7 @@ void RenderProcessHostImpl::GetAssociatedInterface(
 
 void RenderProcessHostImpl::GetBlobURLLoaderFactory(
     mojom::URLLoaderFactoryRequest request) {
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNetworkService)) {
+  if (!base::FeatureList::IsEnabled(features::kNetworkService)) {
     NOTREACHED();
     return;
   }
@@ -1796,8 +1811,7 @@ void RenderProcessHostImpl::CreateRendererHost(
 void RenderProcessHostImpl::CreateURLLoaderFactory(
     const service_manager::BindSourceInfo& source_info,
     mojom::URLLoaderFactoryRequest request) {
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNetworkService)) {
+  if (!base::FeatureList::IsEnabled(features::kNetworkService)) {
     NOTREACHED();
     return;
   }
@@ -2148,21 +2162,9 @@ static void AppendCompositorCommandLineFlags(base::CommandLine* command_line) {
   if (IsCheckerImagingEnabled())
     command_line->AppendSwitch(cc::switches::kEnableCheckerImaging);
 
-  cc::BufferToTextureTargetMap image_targets;
-  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
-       ++usage_idx) {
-    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
-    for (int format_idx = 0;
-         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
-         ++format_idx) {
-      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
-      uint32_t target = gpu::GetImageTextureTarget(format, usage);
-      image_targets[std::make_pair(usage, format)] = target;
-    }
-  }
   command_line->AppendSwitchASCII(
       switches::kContentImageTextureTarget,
-      cc::BufferToTextureTargetMapToString(image_targets));
+      viz::BufferToTextureTargetMapToString(CreateBufferToTextureTargetMap()));
 
   // Appending disable-gpu-feature switches due to software rendering list.
   GpuDataManagerImpl* gpu_data_manager = GpuDataManagerImpl::GetInstance();
@@ -2299,7 +2301,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnableLCDText,
     switches::kEnableLogging,
     switches::kEnableNetworkInformation,
-    switches::kEnableNetworkService,
     switches::kEnablePinch,
     switches::kEnablePluginPlaceholderTesting,
     switches::kEnablePreciseMemoryInfo,
@@ -2896,6 +2897,10 @@ bool RenderProcessHostImpl::StopWebRTCEventLog() {
 
 void RenderProcessHostImpl::SetEchoCanceller3(bool enable) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // TODO(hlundin) Implement a test to verify that the setting works both with
+  // aec_dump_consumers already registered, and with those registered in the
+  // future. crbug.com/740104
+  override_aec3_ = enable;
 
   // Piggybacking on AEC dumps.
   // TODO(hlundin): Change name for aec_dump_consumers_;
@@ -3727,6 +3732,9 @@ void RenderProcessHostImpl::RegisterAecDumpConsumerOnUIThread(int id) {
     base::FilePath file_with_extensions = GetAecDumpFilePathWithExtensions(
         WebRTCInternals::GetInstance()->GetAudioDebugRecordingsFilePath());
     EnableAecDumpForId(file_with_extensions, id);
+  }
+  if (override_aec3_) {
+    Send(new AudioProcessingMsg_EnableAec3(id, *override_aec3_));
   }
 }
 

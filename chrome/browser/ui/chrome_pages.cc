@@ -169,17 +169,10 @@ std::string GenerateContentSettingsExceptionsSubPage(ContentSettingsType type) {
 
 void ShowBookmarkManager(Browser* browser) {
   base::RecordAction(UserMetricsAction("ShowBookmarkManager"));
-  if (MdBookmarksUI::IsEnabled()) {
-    const bookmarks::BookmarkNode* bookmark_bar_node =
-        BookmarkModelFactory::GetForBrowserContext(browser->profile())
-            ->bookmark_bar_node();
-    OpenBookmarkManagerForNode(browser, bookmark_bar_node->id());
-    return;
-  }
-
-  ShowSingletonTabOverwritingNTP(
-      browser,
+  NavigateParams params(
       GetSingletonTabNavigateParams(browser, GURL(kChromeUIBookmarksURL)));
+  params.path_behavior = NavigateParams::IGNORE_AND_STAY_PUT;
+  ShowSingletonTabOverwritingNTP(browser, params);
 }
 
 void ShowBookmarkManagerForNode(Browser* browser, int64_t node_id) {
@@ -223,16 +216,9 @@ void ShowExtensions(Browser* browser,
 
 void ShowConflicts(Browser* browser) {
 #if defined(OS_WIN)
-  EnumerateModulesModel* model = EnumerateModulesModel::GetInstance();
-  GURL conflict_url = model->GetConflictUrl();
-  if (conflict_url.is_valid()) {
-    ShowSingletonTab(browser, conflict_url);
-    model->AcknowledgeConflictNotification();
-    return;
-  }
+  EnumerateModulesModel::GetInstance()->AcknowledgeConflictNotification();
 #endif
 
-  base::RecordAction(UserMetricsAction("AboutConflicts"));
   ShowSingletonTab(browser, GURL(kChromeUIConflictsURL));
 }
 

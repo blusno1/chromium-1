@@ -41,8 +41,6 @@
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/css/CSSPropertyMetadata.h"
-#include "core/dom/ClientRect.h"
-#include "core/dom/ClientRectList.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/DOMStringList.h"
@@ -82,6 +80,8 @@
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/geometry/DOMPoint.h"
+#include "core/geometry/DOMRect.h"
+#include "core/geometry/DOMRectList.h"
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLImageElement.h"
@@ -250,7 +250,7 @@ void Internals::ResetToConsistentState(Page* page) {
       ->View()
       ->LayoutViewportScrollableArea()
       ->SetScrollOffset(ScrollOffset(), kProgrammaticScroll);
-  OverrideUserPreferredLanguages(Vector<AtomicString>());
+  OverrideUserPreferredLanguagesForTesting(Vector<AtomicString>());
   if (!page->DeprecatedLocalMainFrame()
            ->GetSpellChecker()
            .IsSpellCheckingEnabled())
@@ -472,7 +472,7 @@ bool Internals::isSharingStyle(Element* element1, Element* element2) const {
 bool Internals::isValidContentSelect(Element* insertion_point,
                                      ExceptionState& exception_state) {
   DCHECK(insertion_point);
-  if (!insertion_point->IsInsertionPoint()) {
+  if (!insertion_point->IsV0InsertionPoint()) {
     exception_state.ThrowDOMException(kInvalidAccessError,
                                       "The element is not an insertion point.");
     return false;
@@ -733,6 +733,11 @@ ShadowRoot* Internals::createUserAgentShadowRoot(Element* host) {
   return &host->EnsureUserAgentShadowRoot();
 }
 
+void Internals::setBrowserControlsState(float height, bool shrinks_layout) {
+  document_->GetPage()->GetChromeClient().SetBrowserControlsState(
+      height, shrinks_layout);
+}
+
 ShadowRoot* Internals::shadowRoot(Element* host) {
   // FIXME: Internals::shadowRoot() in tests should be converted to
   // youngestShadowRoot() or oldestShadowRoot().
@@ -880,15 +885,17 @@ DOMWindow* Internals::pagePopupWindow() const {
   return nullptr;
 }
 
-ClientRect* Internals::absoluteCaretBounds(ExceptionState& exception_state) {
+DOMRectReadOnly* Internals::absoluteCaretBounds(
+    ExceptionState& exception_state) {
   if (!GetFrame()) {
     exception_state.ThrowDOMException(
         kInvalidAccessError, "The document's frame cannot be retrieved.");
-    return ClientRect::Create();
+    return nullptr;
   }
 
   document_->UpdateStyleAndLayoutIgnorePendingStylesheets();
-  return ClientRect::Create(GetFrame()->Selection().AbsoluteCaretBounds());
+  return DOMRectReadOnly::FromIntRect(
+      GetFrame()->Selection().AbsoluteCaretBounds());
 }
 
 String Internals::textAffinity() {
@@ -904,14 +911,14 @@ String Internals::textAffinity() {
   return "Downstream";
 }
 
-ClientRect* Internals::boundingBox(Element* element) {
+DOMRectReadOnly* Internals::boundingBox(Element* element) {
   DCHECK(element);
 
   element->GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
   LayoutObject* layout_object = element->GetLayoutObject();
   if (!layout_object)
-    return ClientRect::Create();
-  return ClientRect::Create(
+    return DOMRectReadOnly::Create(0, 0, 0, 0);
+  return DOMRectReadOnly::FromIntRect(
       layout_object->AbsoluteBoundingBoxRectIgnoringTransforms());
 }
 
@@ -1511,7 +1518,7 @@ Node* Internals::touchNodeAdjustedToBestContextMenuNode(
   return target_node;
 }
 
-ClientRect* Internals::bestZoomableAreaForTouchPoint(
+DOMRectReadOnly* Internals::bestZoomableAreaForTouchPoint(
     long x,
     long y,
     long width,
@@ -1536,7 +1543,7 @@ ClientRect* Internals::bestZoomableAreaForTouchPoint(
       document->GetFrame()->GetEventHandler().BestZoomableAreaForTouchPoint(
           point, radius, zoomable_area, target_node);
   if (found_node)
-    return ClientRect::Create(zoomable_area);
+    return DOMRectReadOnly::FromIntRect(zoomable_area);
 
   return nullptr;
 }
@@ -1620,7 +1627,7 @@ void Internals::setUserPreferredLanguages(const Vector<String>& languages) {
   Vector<AtomicString> atomic_languages;
   for (size_t i = 0; i < languages.size(); ++i)
     atomic_languages.push_back(AtomicString(languages[i]));
-  OverrideUserPreferredLanguages(atomic_languages);
+  OverrideUserPreferredLanguagesForTesting(atomic_languages);
 }
 
 unsigned Internals::mediaKeysCount() {
@@ -1861,7 +1868,7 @@ static void AccumulateLayerRectList(PaintLayerCompositor* compositor,
       if (!layer_rects[i].IsEmpty()) {
         rects->Append(node, layer_type, layer_offset.Width(),
                       layer_offset.Height(),
-                      ClientRect::Create(layer_rects[i]));
+                      DOMRectReadOnly::FromIntRect(layer_rects[i]));
       }
     }
   }
@@ -2231,7 +2238,7 @@ String Internals::mainThreadScrollingReasons(
   return document->GetFrame()->View()->MainThreadScrollingReasonsAsText();
 }
 
-ClientRectList* Internals::nonFastScrollableRects(
+DOMRectList* Internals::nonFastScrollableRects(
     Document* document,
     ExceptionState& exception_state) const {
   DCHECK(document);
@@ -2567,25 +2574,24 @@ void Internals::forceFullRepaint(Document* document,
     layout_view_item.InvalidatePaintForViewAndCompositedLayers();
 }
 
-ClientRectList* Internals::draggableRegions(Document* document,
-                                            ExceptionState& exception_state) {
+DOMRectList* Internals::draggableRegions(Document* document,
+                                         ExceptionState& exception_state) {
   return AnnotatedRegions(document, true, exception_state);
 }
 
-ClientRectList* Internals::nonDraggableRegions(
-    Document* document,
-    ExceptionState& exception_state) {
+DOMRectList* Internals::nonDraggableRegions(Document* document,
+                                            ExceptionState& exception_state) {
   return AnnotatedRegions(document, false, exception_state);
 }
 
-ClientRectList* Internals::AnnotatedRegions(Document* document,
-                                            bool draggable,
-                                            ExceptionState& exception_state) {
+DOMRectList* Internals::AnnotatedRegions(Document* document,
+                                         bool draggable,
+                                         ExceptionState& exception_state) {
   DCHECK(document);
   if (!document->View()) {
     exception_state.ThrowDOMException(kInvalidAccessError,
                                       "The document provided is invalid.");
-    return ClientRectList::Create();
+    return DOMRectList::Create();
   }
 
   document->UpdateStyleAndLayout();
@@ -2597,7 +2603,7 @@ ClientRectList* Internals::AnnotatedRegions(Document* document,
     if (regions[i].draggable == draggable)
       quads.push_back(FloatQuad(FloatRect(regions[i].bounds)));
   }
-  return ClientRectList::Create(quads);
+  return DOMRectList::Create(quads);
 }
 
 static const char* CursorTypeToString(Cursor::Type cursor_type) {
@@ -2826,14 +2832,14 @@ unsigned Internals::visibleSelectionFocusOffset() {
   return position.IsNull() ? 0 : position.ComputeOffsetInContainerNode();
 }
 
-ClientRect* Internals::selectionBounds(ExceptionState& exception_state) {
+DOMRect* Internals::selectionBounds(ExceptionState& exception_state) {
   if (!GetFrame()) {
     exception_state.ThrowDOMException(
         kInvalidAccessError, "The document's frame cannot be retrieved.");
     return nullptr;
   }
 
-  return ClientRect::Create(FloatRect(GetFrame()->Selection().Bounds()));
+  return DOMRect::FromFloatRect(FloatRect(GetFrame()->Selection().Bounds()));
 }
 
 String Internals::markerTextForListItem(Element* element) {
@@ -3262,7 +3268,7 @@ float Internals::visualViewportScrollY() {
 }
 
 bool Internals::isUseCounted(Document* document, uint32_t feature) {
-  if (feature >= static_cast<uint32_t>(WebFeature::kNumberOfFeatures))
+  if (feature >= static_cast<int32_t>(WebFeature::kNumberOfFeatures))
     return false;
   return UseCounter::IsCounted(*document, static_cast<WebFeature>(feature));
 }
@@ -3313,7 +3319,7 @@ ScriptPromise Internals::observeUseCounter(ScriptState* script_state,
                                            uint32_t feature) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   ScriptPromise promise = resolver->Promise();
-  if (feature >= static_cast<uint32_t>(WebFeature::kNumberOfFeatures)) {
+  if (feature >= static_cast<int32_t>(WebFeature::kNumberOfFeatures)) {
     resolver->Reject();
     return promise;
   }
@@ -3343,20 +3349,20 @@ String Internals::unscopableMethod() {
   return "unscopableMethod";
 }
 
-ClientRectList* Internals::focusRingRects(Element* element) {
+DOMRectList* Internals::focusRingRects(Element* element) {
   Vector<LayoutRect> rects;
   if (element && element->GetLayoutObject())
     element->GetLayoutObject()->AddOutlineRects(
         rects, LayoutPoint(), LayoutObject::kIncludeBlockVisualOverflow);
-  return ClientRectList::Create(rects);
+  return DOMRectList::Create(rects);
 }
 
-ClientRectList* Internals::outlineRects(Element* element) {
+DOMRectList* Internals::outlineRects(Element* element) {
   Vector<LayoutRect> rects;
   if (element && element->GetLayoutObject())
     element->GetLayoutObject()->AddOutlineRects(
         rects, LayoutPoint(), LayoutObject::kDontIncludeBlockVisualOverflow);
-  return ClientRectList::Create(rects);
+  return DOMRectList::Create(rects);
 }
 
 void Internals::setCapsLockState(bool enabled) {
@@ -3394,11 +3400,12 @@ String Internals::getProgrammaticScrollAnimationState(Node* node) const {
   return String();
 }
 
-ClientRect* Internals::visualRect(Node* node) {
+DOMRect* Internals::visualRect(Node* node) {
   if (!node || !node->GetLayoutObject())
-    return ClientRect::Create();
+    return DOMRect::Create();
 
-  return ClientRect::Create(FloatRect(node->GetLayoutObject()->VisualRect()));
+  return DOMRect::FromFloatRect(
+      FloatRect(node->GetLayoutObject()->VisualRect()));
 }
 
 void Internals::crash() {
@@ -3407,6 +3414,10 @@ void Internals::crash() {
 
 void Internals::setIsLowEndDevice(bool is_low_end_device) {
   MemoryCoordinator::SetIsLowEndDeviceForTesting(is_low_end_device);
+}
+
+bool Internals::isLowEndDevice() const {
+  return MemoryCoordinator::IsLowEndDevice();
 }
 
 }  // namespace blink

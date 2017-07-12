@@ -16,7 +16,7 @@
 #include "base/strings/stringprintf.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/layers/texture_layer.h"
-#include "cc/resources/shared_bitmap_manager.h"
+#include "components/viz/common/resources/shared_bitmap_manager.h"
 #include "content/shell/test_runner/web_test_delegate.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "third_party/WebKit/public/platform/Platform.h"
@@ -241,7 +241,7 @@ void TestPlugin::UpdateGeometry(
   rect_ = clip_rect;
 
   if (rect_.IsEmpty()) {
-    texture_mailbox_ = cc::TextureMailbox();
+    texture_mailbox_ = viz::TextureMailbox();
   } else if (gl_) {
     gl_->Viewport(0, 0, rect_.width, rect_.height);
 
@@ -266,16 +266,16 @@ void TestPlugin::UpdateGeometry(
 
     gpu::SyncToken sync_token;
     gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
-    texture_mailbox_ = cc::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D);
+    texture_mailbox_ = viz::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D);
   } else {
-    std::unique_ptr<cc::SharedBitmap> bitmap =
+    std::unique_ptr<viz::SharedBitmap> bitmap =
         delegate_->GetSharedBitmapManager()->AllocateSharedBitmap(
             gfx::Rect(rect_).size());
     if (!bitmap) {
-      texture_mailbox_ = cc::TextureMailbox();
+      texture_mailbox_ = viz::TextureMailbox();
     } else {
       DrawSceneSoftware(bitmap->pixels());
-      texture_mailbox_ = cc::TextureMailbox(
+      texture_mailbox_ = viz::TextureMailbox(
           bitmap.get(), gfx::Size(rect_.width, rect_.height));
       shared_bitmap_ = std::move(bitmap);
     }
@@ -292,12 +292,12 @@ bool TestPlugin::IsPlaceholder() {
 static void IgnoreReleaseCallback(const gpu::SyncToken& sync_token, bool lost) {
 }
 
-static void ReleaseSharedMemory(std::unique_ptr<cc::SharedBitmap> bitmap,
+static void ReleaseSharedMemory(std::unique_ptr<viz::SharedBitmap> bitmap,
                                 const gpu::SyncToken& sync_token,
                                 bool lost) {}
 
 bool TestPlugin::PrepareTextureMailbox(
-    cc::TextureMailbox* mailbox,
+    viz::TextureMailbox* mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* release_callback) {
   if (!mailbox_changed_)
     return false;

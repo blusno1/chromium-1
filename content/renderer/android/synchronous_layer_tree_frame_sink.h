@@ -30,14 +30,17 @@ class BeginFrameSource;
 class CompositorFrameSinkSupport;
 class ContextProvider;
 class Display;
-class LocalSurfaceIdAllocator;
-class SurfaceManager;
+class FrameSinkManager;
 }  // namespace cc
 
 namespace IPC {
 class Message;
 class Sender;
 }  // namespace IPC
+
+namespace viz {
+class LocalSurfaceIdAllocator;
+}
 
 namespace content {
 
@@ -71,7 +74,7 @@ class SynchronousLayerTreeFrameSink
       scoped_refptr<cc::ContextProvider> context_provider,
       scoped_refptr<cc::ContextProvider> worker_context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      cc::SharedBitmapManager* shared_bitmap_manager,
+      viz::SharedBitmapManager* shared_bitmap_manager,
       int routing_id,
       uint32_t layer_tree_frame_sink_id,
       std::unique_ptr<cc::BeginFrameSource> begin_frame_source,
@@ -101,7 +104,7 @@ class SynchronousLayerTreeFrameSink
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
   void ReclaimResources(
       const std::vector<cc::ReturnedResource>& resources) override;
-  void WillDrawSurface(const cc::LocalSurfaceId& local_surface_id,
+  void WillDrawSurface(const viz::LocalSurfaceId& local_surface_id,
                        const gfx::Rect& damage_rect) override;
 
  private:
@@ -125,7 +128,7 @@ class SynchronousLayerTreeFrameSink
   const int routing_id_;
   const uint32_t layer_tree_frame_sink_id_;
   SynchronousCompositorRegistry* const registry_;         // Not owned.
-  cc::SharedBitmapManager* const shared_bitmap_manager_;  // Not owned.
+  viz::SharedBitmapManager* const shared_bitmap_manager_;  // Not owned.
   IPC::Sender* const sender_;                             // Not owned.
 
   // Not owned.
@@ -153,19 +156,19 @@ class SynchronousLayerTreeFrameSink
 
   // TODO(danakj): These don't to be stored in unique_ptrs when OutputSurface
   // is owned/destroyed on the compositor thread.
-  std::unique_ptr<cc::SurfaceManager> surface_manager_;
-  std::unique_ptr<cc::LocalSurfaceIdAllocator> local_surface_id_allocator_;
-  cc::LocalSurfaceId child_local_surface_id_;
-  cc::LocalSurfaceId root_local_surface_id_;
+  std::unique_ptr<cc::FrameSinkManager> frame_sink_manager_;
+  std::unique_ptr<viz::LocalSurfaceIdAllocator> local_surface_id_allocator_;
+  viz::LocalSurfaceId child_local_surface_id_;
+  viz::LocalSurfaceId root_local_surface_id_;
   gfx::Size child_size_;
   gfx::Size display_size_;
   float device_scale_factor_ = 0;
-  // Uses surface_manager_.
+  // Uses frame_sink_manager_.
   std::unique_ptr<cc::CompositorFrameSinkSupport> root_support_;
-  // Uses surface_manager_.
+  // Uses frame_sink_manager_.
   std::unique_ptr<cc::CompositorFrameSinkSupport> child_support_;
   StubDisplayClient display_client_;
-  // Uses surface_manager_.
+  // Uses frame_sink_manager_.
   std::unique_ptr<cc::Display> display_;
   // Owned by |display_|.
   SoftwareOutputSurface* software_output_surface_ = nullptr;

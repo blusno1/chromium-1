@@ -474,7 +474,7 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     // and are disabled for Android WebView as it doesn't support the format.
     if (!cmd.HasSwitch(switches::kDisableRGBA4444Textures) &&
         base::SysInfo::AmountOfPhysicalMemoryMB() <= 512)
-      settings.preferred_tile_format = cc::RGBA_4444;
+      settings.preferred_tile_format = viz::RGBA_4444;
   } else {
     // On other devices we have increased memory excessively to avoid
     // raster-on-demand already, so now we reserve 50% _only_ to avoid
@@ -522,11 +522,11 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
 
   if (cmd.HasSwitch(switches::kEnableRGBA4444Textures) &&
       !cmd.HasSwitch(switches::kDisableRGBA4444Textures)) {
-    settings.preferred_tile_format = cc::RGBA_4444;
+    settings.preferred_tile_format = viz::RGBA_4444;
   }
 
   if (cmd.HasSwitch(cc::switches::kEnableTileCompression)) {
-    settings.preferred_tile_format = cc::ETC1;
+    settings.preferred_tile_format = viz::ETC1;
   }
 
   settings.max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;  // 32MB
@@ -691,7 +691,7 @@ bool RenderWidgetCompositor::SendMessageToMicroBenchmark(
   return layer_tree_host_->SendMessageToMicroBenchmark(id, std::move(value));
 }
 
-cc::FrameSinkId RenderWidgetCompositor::GetFrameSinkId() {
+viz::FrameSinkId RenderWidgetCompositor::GetFrameSinkId() {
   return frame_sink_id_;
 }
 
@@ -777,44 +777,39 @@ void RenderWidgetCompositor::DidStopFlinging() {
 }
 
 void RenderWidgetCompositor::RegisterViewportLayers(
-    const blink::WebLayer* overscroll_elasticity_layer,
-    const blink::WebLayer* page_scale_layer,
-    const blink::WebLayer* inner_viewport_container_layer,
-    const blink::WebLayer* outer_viewport_container_layer,
-    const blink::WebLayer* inner_viewport_scroll_layer,
-    const blink::WebLayer* outer_viewport_scroll_layer) {
+    const blink::WebLayerTreeView::ViewportLayers& layers) {
   cc::LayerTreeHost::ViewportLayers viewport_layers;
   // TODO(bokan): This check can probably be removed now, but it looks
   // like overscroll elasticity may still be nullptr until VisualViewport
   // registers its layers.
-  if (overscroll_elasticity_layer) {
+  if (layers.overscroll_elasticity) {
     viewport_layers.overscroll_elasticity =
-        static_cast<const cc_blink::WebLayerImpl*>(overscroll_elasticity_layer)
+        static_cast<const cc_blink::WebLayerImpl*>(layers.overscroll_elasticity)
             ->layer();
   }
   viewport_layers.page_scale =
-      static_cast<const cc_blink::WebLayerImpl*>(page_scale_layer)->layer();
-  if (inner_viewport_container_layer) {
+      static_cast<const cc_blink::WebLayerImpl*>(layers.page_scale)->layer();
+  if (layers.inner_viewport_container) {
     viewport_layers.inner_viewport_container =
         static_cast<const cc_blink::WebLayerImpl*>(
-            inner_viewport_container_layer)
+            layers.inner_viewport_container)
             ->layer();
   }
-  if (outer_viewport_container_layer) {
+  if (layers.outer_viewport_container) {
     viewport_layers.outer_viewport_container =
         static_cast<const cc_blink::WebLayerImpl*>(
-            outer_viewport_container_layer)
+            layers.outer_viewport_container)
             ->layer();
   }
   viewport_layers.inner_viewport_scroll =
-      static_cast<const cc_blink::WebLayerImpl*>(inner_viewport_scroll_layer)
+      static_cast<const cc_blink::WebLayerImpl*>(layers.inner_viewport_scroll)
           ->layer();
   // TODO(bokan): This check can probably be removed now, but it looks
   // like overscroll elasticity may still be nullptr until VisualViewport
   // registers its layers.
-  if (outer_viewport_scroll_layer) {
+  if (layers.outer_viewport_scroll) {
     viewport_layers.outer_viewport_scroll =
-        static_cast<const cc_blink::WebLayerImpl*>(outer_viewport_scroll_layer)
+        static_cast<const cc_blink::WebLayerImpl*>(layers.outer_viewport_scroll)
             ->layer();
   }
   layer_tree_host_->RegisterViewportLayers(viewport_layers);
@@ -1223,7 +1218,7 @@ void RenderWidgetCompositor::DidSubmitCompositorFrame() {}
 void RenderWidgetCompositor::DidLoseLayerTreeFrameSink() {}
 
 void RenderWidgetCompositor::SetFrameSinkId(
-    const cc::FrameSinkId& frame_sink_id) {
+    const viz::FrameSinkId& frame_sink_id) {
   frame_sink_id_ = frame_sink_id;
   layer_tree_host_->SetFrameSinkId(frame_sink_id);
 }
@@ -1246,7 +1241,7 @@ void RenderWidgetCompositor::SetContentSourceId(uint32_t id) {
 }
 
 void RenderWidgetCompositor::SetLocalSurfaceId(
-    const cc::LocalSurfaceId& local_surface_id) {
+    const viz::LocalSurfaceId& local_surface_id) {
   layer_tree_host_->SetLocalSurfaceId(local_surface_id);
 }
 

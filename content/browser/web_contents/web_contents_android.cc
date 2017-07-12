@@ -317,12 +317,6 @@ jint WebContentsAndroid::GetBackgroundColor(JNIEnv* env,
   return rwhva->GetCachedBackgroundColor();
 }
 
-ScopedJavaLocalRef<jstring> WebContentsAndroid::GetURL(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) const {
-  return ConvertUTF8ToJavaString(env, web_contents_->GetURL().spec());
-}
-
 ScopedJavaLocalRef<jstring> WebContentsAndroid::GetLastCommittedURL(
     JNIEnv* env,
     const JavaParamRef<jobject>&) const {
@@ -415,11 +409,10 @@ void WebContentsAndroid::UpdateBrowserControlsState(
 void WebContentsAndroid::ScrollFocusedEditableNodeIntoView(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  RenderViewHost* host = web_contents_->GetRenderViewHost();
-  if (!host)
+  RenderFrameHostImpl* frame = web_contents_->GetFocusedFrame();
+  if (!frame)
     return;
-  host->Send(new InputMsg_ScrollFocusedEditableNodeIntoRect(
-      host->GetRoutingID(), gfx::Rect()));
+  frame->GetFrameInputHandler()->ScrollFocusedEditableNodeIntoRect(gfx::Rect());
 }
 
 void WebContentsAndroid::SelectWordAroundCaret(

@@ -64,6 +64,7 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
@@ -93,6 +94,7 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
+#include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/latency/latency_info.h"
 #include "ui/native_theme/native_theme_features.h"
@@ -109,8 +111,11 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/json/json_reader.h"
 #include "content/browser/android/ime_adapter_android.h"
+#include "content/browser/renderer_host/input/touch_selection_controller_client_manager_android.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
+#include "ui/gfx/geometry/point_f.h"
 #endif
 
 using ::testing::SizeIs;
@@ -1086,6 +1091,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ViewBoundsInNestedFrameTest) {
                         scale_factor));
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = -30.0f;
+  scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
   rwhv_root->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
 
   filter->Wait();
@@ -1113,14 +1119,23 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 
   FrameTreeNode* child_iframe_node = root->child_at(0);
 
+  RenderWidgetHost* child_rwh =
+      child_iframe_node->current_frame_host()->GetRenderWidgetHost();
+
+  RenderWidgetHostViewBase* child_rwhv =
+      static_cast<RenderWidgetHostViewBase*>(child_rwh->GetView());
+
   std::unique_ptr<InputEventAckWaiter> gesture_fling_start_ack_observer =
       base::MakeUnique<InputEventAckWaiter>(
           blink::WebInputEvent::kGestureFlingStart);
-  root->current_frame_host()->GetRenderWidgetHost()->AddInputEventObserver(
-      gesture_fling_start_ack_observer.get());
-
-  RenderWidgetHost* child_rwh =
-      child_iframe_node->current_frame_host()->GetRenderWidgetHost();
+  if (child_rwhv->wheel_scroll_latching_enabled()) {
+    // If wheel scroll latching is enabled, the fling start won't bubble since
+    // its corresponding GSB hasn't bubbled.
+    child_rwh->AddInputEventObserver(gesture_fling_start_ack_observer.get());
+  } else {
+    root->current_frame_host()->GetRenderWidgetHost()->AddInputEventObserver(
+        gesture_fling_start_ack_observer.get());
+  }
 
   WaitForChildFrameSurfaceReady(child_iframe_node->current_frame_host());
 
@@ -1169,6 +1184,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 // Test that scrolling a nested out-of-process iframe bubbles unused scroll
 // delta to a parent frame.
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
+  ui::GestureConfiguration::GetInstance()->set_scroll_debounce_interval_in_ms(
+      0);
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -1243,11 +1260,24 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
   scroll_event.SetPositionInWidget(1, 1);
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = -5.0f;
+  scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
   // Set has_precise_scroll_deltas to keep these events off the animated scroll
   // pathways, which currently break this test.
   // https://bugs.chromium.org/p/chromium/issues/detail?id=710513
   scroll_event.has_precise_scrolling_deltas = true;
   rwhv_parent->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
+
+  if (rwhv_parent->wheel_scroll_latching_enabled()) {
+    // When scroll latching is enabled the event router sends wheel events of a
+    // single scroll sequence to the target under the first wheel event. Send a
+    // wheel end event to the current target view before sending a wheel event
+    // to a different one.
+    scroll_event.delta_y = 0.0f;
+    scroll_event.phase = blink::WebMouseWheelEvent::kPhaseEnded;
+    scroll_event.dispatch_type =
+        blink::WebInputEvent::DispatchType::kEventNonBlocking;
+    rwhv_parent->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
+  }
 
   // Ensure that the view position is propagated to the child properly.
   filter->Wait();
@@ -1260,6 +1290,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
   // The upscroll exceeds the amount that the frame was initially scrolled
   // down to account for rounding.
   scroll_event.delta_y = 6.0f;
+  scroll_event.dispatch_type = blink::WebInputEvent::DispatchType::kBlocking;
+  scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
   rwhv_nested->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
 
   filter->Wait();
@@ -1278,6 +1310,18 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
     update_rect = filter->last_rect();
   }
 
+  if (rwhv_parent->wheel_scroll_latching_enabled()) {
+    // When scroll latching is enabled the event router sends wheel events of a
+    // single scroll sequence to the target under the first wheel event. Send a
+    // wheel end event to the current target view before sending a wheel event
+    // to a different one.
+    scroll_event.delta_y = 0.0f;
+    scroll_event.phase = blink::WebMouseWheelEvent::kPhaseEnded;
+    scroll_event.dispatch_type =
+        blink::WebInputEvent::DispatchType::kEventNonBlocking;
+    rwhv_nested->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
+  }
+
   filter->Reset();
   // Once we've sent a wheel to the nested iframe that we expect to turn into
   // a bubbling scroll, we need to delay to make sure the GestureScrollBegin
@@ -1291,7 +1335,21 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
   // Scroll the parent down again in order to test scroll bubbling from
   // gestures.
   scroll_event.delta_y = -5.0f;
+  scroll_event.dispatch_type = blink::WebInputEvent::DispatchType::kBlocking;
+  scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
   rwhv_parent->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
+
+  if (rwhv_parent->wheel_scroll_latching_enabled()) {
+    // When scroll latching is enabled the event router sends wheel events of a
+    // single scroll sequence to the target under the first wheel event. Send a
+    // wheel end event to the current target view before sending a wheel event
+    // to a different one.
+    scroll_event.delta_y = 0.0f;
+    scroll_event.phase = blink::WebMouseWheelEvent::kPhaseEnded;
+    scroll_event.dispatch_type =
+        blink::WebInputEvent::DispatchType::kEventNonBlocking;
+    rwhv_parent->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
+  }
 
   // Ensure ensuing offset change is received, and then reset the filter.
   filter->Wait();
@@ -1306,6 +1364,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
   gesture_event.source_device = blink::kWebGestureDeviceTouchpad;
   gesture_event.x = 1;
   gesture_event.y = 1;
+  gesture_event.data.scroll_begin.delta_x_hint = 0.0f;
+  gesture_event.data.scroll_begin.delta_y_hint = 6.0f;
   rwhv_nested->GetRenderWidgetHost()->ForwardGestureEvent(gesture_event);
 
   gesture_event.SetType(blink::WebGestureEvent::kGestureScrollUpdate);
@@ -1334,6 +1394,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
   // not propagate to the parent (see https://crbug.com/621624).
   filter->Reset();
   scroll_event.delta_y = -5.0f;
+  scroll_event.dispatch_type = blink::WebInputEvent::DispatchType::kBlocking;
+  scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
   rwhv_nested->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
   // It isn't possible to busy loop waiting on the renderer here because we
   // are explicitly testing that something does *not* happen. This creates a
@@ -2133,11 +2195,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // Navigate the iframe itself to about:blank using a script executing in its
   // own context. It should stay in the same SiteInstance as before, not the
   // parent one.
-  std::string script(
-      "window.domAutomationController.send("
-      "window.location.href = 'about:blank');");
   TestFrameNavigationObserver frame_observer(child);
-  EXPECT_TRUE(ExecuteScript(child, script));
+  ExecuteScriptAsync(child, "window.location.href = 'about:blank';");
   frame_observer.Wait();
   EXPECT_EQ(about_blank_url, child->current_url());
 
@@ -2442,8 +2501,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ProcessTransferAfterError) {
   // Disable host resolution in the test server and try to navigate the subframe
   // cross-site, which will lead to a committed net error.
   GURL url_b = embedded_test_server()->GetURL("b.com", "/title3.html");
-  bool network_service = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableNetworkService);
+  bool network_service =
+      base::FeatureList::IsEnabled(features::kNetworkService);
   mojom::URLLoaderFactoryPtr failing_factory;
   mojo::MakeStrongBinding(base::MakeUnique<FailingLoadFactory>(),
                           mojo::MakeRequest(&failing_factory));
@@ -5386,22 +5445,20 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, SubframeWindowFocus) {
   // window gets or loses focus.
   const char kSetupFocusEvents[] =
       "window.addEventListener('focus', function() {"
-      "  domAutomationController.setAutomationId(0);"
       "  domAutomationController.send('%s-got-focus');"
       "});"
       "window.addEventListener('blur', function() {"
-      "  domAutomationController.setAutomationId(0);"
       "  domAutomationController.send('%s-lost-focus');"
       "});";
   std::string script = base::StringPrintf(kSetupFocusEvents, "main", "main");
-  EXPECT_TRUE(ExecuteScript(shell(), script));
+  ExecuteScriptAsync(shell(), script);
   script = base::StringPrintf(kSetupFocusEvents, "child1", "child1");
-  EXPECT_TRUE(ExecuteScript(child1, script));
+  ExecuteScriptAsync(child1, script);
   script = base::StringPrintf(kSetupFocusEvents, "child2", "child2");
-  EXPECT_TRUE(ExecuteScript(child2, script));
+  ExecuteScriptAsync(child2, script);
 
   // Execute window.focus on the B subframe from the A main frame.
-  EXPECT_TRUE(ExecuteScript(root, "frames[0].focus()"));
+  ExecuteScriptAsync(root, "frames[0].focus()");
 
   // Helper to wait for two specified messages to arrive on the specified
   // DOMMessageQueue, assuming that the two messages can arrive in any order.
@@ -5431,7 +5488,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, SubframeWindowFocus) {
 
   // Now, execute window.focus on the C subframe from A main frame.  This
   // checks that we can shift focus from one remote frame to another.
-  EXPECT_TRUE(ExecuteScript(root, "frames[1].focus()"));
+  ExecuteScriptAsync(root, "frames[1].focus()");
 
   // Wait for the two subframes (B and C) to fire blur and focus events.
   wait_for_two_messages(&msg_queue, "\"child1-lost-focus\"",
@@ -5441,7 +5498,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, SubframeWindowFocus) {
   EXPECT_EQ(child2, root->frame_tree()->GetFocusedFrame());
 
   // window.focus the main frame from the C subframe.
-  EXPECT_TRUE(ExecuteScript(child2, "parent.focus()"));
+  ExecuteScriptAsync(child2, "parent.focus()");
 
   // Wait for the C subframe to blur and main frame to focus.
   wait_for_two_messages(&msg_queue, "\"child2-lost-focus\"",
@@ -5575,18 +5632,14 @@ class SitePerProcessMouseWheelBrowserTest : public SitePerProcessBrowserTest {
         "  wheel_count++;"
         "  if (wheel_count % 2 == 0)"
         "    e.preventDefault();\n"
-        "  domAutomationController.setAutomationId(0);"
         "  domAutomationController.send('wheel: ' + wheel_count);"
         "}"
         "function scroll_handler(e) {"
-        "  domAutomationController.setAutomationId(0);"
         "  domAutomationController.send('scroll: ' + wheel_count);"
         "}"
         "scroll_div = document.getElementById('scrollable_div');"
         "scroll_div.addEventListener('wheel', wheel_handler);"
         "scroll_div.addEventListener('scroll', scroll_handler);"
-        "domAutomationController.setAutomationId(0);"
-        "domAutomationController.send('wheel handler installed');"
         "document.body.style.background = 'black';";
 
     content::DOMMessageQueue msg_queue;
@@ -5633,10 +5686,16 @@ class SitePerProcessMouseWheelBrowserTest : public SitePerProcessBrowserTest {
 
     SendMouseWheel(pos);
 
-    // This time only the wheel handler fires, since it prevent defaults on
-    // even numbered scrolls.
+    // If async_wheel_events is disabled, this time only the wheel handler
+    // fires, since even numbered scrolls are prevent-defaulted. If it is
+    // enabled, then this wheel event will be sent non-blockingly and won't be
+    // cancellable.
     EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
     EXPECT_EQ("\"wheel: 2\"", reply);
+    if (base::FeatureList::IsEnabled(features::kAsyncWheelEvents)) {
+      EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
+      EXPECT_EQ("\"scroll: 2\"", reply);
+    }
 
     SendMouseWheel(pos);
 
@@ -5849,14 +5908,9 @@ void OnSyntheticGestureCompleted(scoped_refptr<MessageLoopRunner> runner,
 
 }  // namespace anonymous
 
-// Flaky under Linux and Tsan. https://crbug.com/592320
-#if defined(THREAD_SANITIZER) || defined(OS_LINUX)
-#define MAYBE_SubframeGestureEventRouting DISABLED_SubframeGestureEventRouting
-#else
-#define MAYBE_SubframeGestureEventRouting SubframeGestureEventRouting
-#endif
+// https://crbug.com/592320
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
-                       MAYBE_SubframeGestureEventRouting) {
+                       DISABLED_SubframeGestureEventRouting) {
   GURL main_url(embedded_test_server()->GetURL(
       "/frame_tree/page_with_positioned_nested_frames.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -7790,10 +7844,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 
   // Have the child frame navigate its parent to its SiteInstance.
   GURL b_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
-  std::string script = base::StringPrintf(
-      "window.domAutomationController.send("
-      "parent.location = '%s');",
-      b_url.spec().c_str());
+  std::string script =
+      base::StringPrintf("parent.location = '%s';", b_url.spec().c_str());
 
   // Ensure the child has received a user gesture, so that it has permission
   // to framebust.
@@ -10426,5 +10478,307 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
                 ->current_frame_host()
                 ->GetProcess());
 }
+
+#if defined(OS_ANDROID)
+// Tests for Android TouchSelectionEditing.
+class TouchSelectionControllerClientAndroidSiteIsolationTest
+    : public SitePerProcessBrowserTest {
+ public:
+  TouchSelectionControllerClientAndroidSiteIsolationTest() {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    IsolateAllSitesForTesting(command_line);
+  }
+
+  RenderWidgetHostViewAndroid* GetRenderWidgetHostViewAndroid() {
+    return static_cast<RenderWidgetHostViewAndroid*>(
+        shell()->web_contents()->GetRenderWidgetHostView());
+  }
+
+  void SelectWithLongPress(gfx::Point point) {
+    // Get main frame view for event insertion.
+    RenderWidgetHostViewAndroid* main_view = GetRenderWidgetHostViewAndroid();
+
+    SendTouch(main_view, ui::MotionEvent::ACTION_DOWN, point);
+    // action_timeout() is far longer than needed for a LongPress, so we use
+    // a custom timeout here.
+    DelayBy(base::TimeDelta::FromMilliseconds(2000));
+    SendTouch(main_view, ui::MotionEvent::ACTION_UP, point);
+  }
+
+  void SimpleTap(gfx::Point point) {
+    // Get main frame view for event insertion.
+    RenderWidgetHostViewAndroid* main_view = GetRenderWidgetHostViewAndroid();
+
+    SendTouch(main_view, ui::MotionEvent::ACTION_DOWN, point);
+    // tiny_timeout() is way shorter than a reasonable user-created tap gesture,
+    // so we use a custom timeout here.
+    DelayBy(base::TimeDelta::FromMilliseconds(300));
+    SendTouch(main_view, ui::MotionEvent::ACTION_UP, point);
+  }
+
+ protected:
+  void DelayBy(base::TimeDelta delta) {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), delta);
+    run_loop.Run();
+  }
+
+ private:
+  void SendTouch(RenderWidgetHostViewAndroid* view,
+                 ui::MotionEvent::Action action,
+                 gfx::Point point) {
+    DCHECK(action >= ui::MotionEvent::ACTION_DOWN &&
+           action << ui::MotionEvent::ACTION_CANCEL);
+    ui::MotionEventGeneric touch(
+        action, ui::EventTimeForNow(),
+        ui::PointerProperties(point.x(), point.y(), 10));
+    view->OnTouchEvent(touch);
+  }
+};
+
+class FrameStableObserver {
+ public:
+  FrameStableObserver(RenderWidgetHostViewBase* view, base::TimeDelta delta)
+      : view_(view), delta_(delta) {}
+  virtual ~FrameStableObserver() {}
+
+  void WaitUntilStable() {
+    uint32_t current_frame_number = view_->RendererFrameNumber();
+    uint32_t previous_frame_number;
+
+    do {
+      base::RunLoop run_loop;
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE, run_loop.QuitClosure(), delta_);
+      run_loop.Run();
+      previous_frame_number = current_frame_number;
+      current_frame_number = view_->RendererFrameNumber();
+    } while (current_frame_number != previous_frame_number);
+  }
+
+ private:
+  RenderWidgetHostViewBase* view_;
+  base::TimeDelta delta_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameStableObserver);
+};
+
+class TouchSelectionControllerClientTestWrapper
+    : public ui::TouchSelectionControllerClient {
+ public:
+  explicit TouchSelectionControllerClientTestWrapper(
+      ui::TouchSelectionControllerClient* client)
+      : expected_event_(ui::SELECTION_HANDLES_SHOWN), client_(client) {}
+
+  ~TouchSelectionControllerClientTestWrapper() override {}
+
+  void InitWaitForSelectionEvent(ui::SelectionEventType expected_event) {
+    DCHECK(!run_loop_);
+    expected_event_ = expected_event;
+    run_loop_.reset(new base::RunLoop());
+  }
+
+  void Wait() {
+    DCHECK(run_loop_);
+    run_loop_->Run();
+    run_loop_.reset();
+  }
+
+ private:
+  // TouchSelectionControllerClient:
+  void OnSelectionEvent(ui::SelectionEventType event) override {
+    client_->OnSelectionEvent(event);
+    if (run_loop_ && event == expected_event_)
+      run_loop_->Quit();
+  }
+
+  bool SupportsAnimation() const override {
+    return client_->SupportsAnimation();
+  }
+
+  void SetNeedsAnimate() override { client_->SetNeedsAnimate(); }
+
+  void MoveCaret(const gfx::PointF& position) override {
+    client_->MoveCaret(position);
+  }
+
+  void MoveRangeSelectionExtent(const gfx::PointF& extent) override {
+    client_->MoveRangeSelectionExtent(extent);
+  }
+
+  void SelectBetweenCoordinates(const gfx::PointF& base,
+                                const gfx::PointF& extent) override {
+    client_->SelectBetweenCoordinates(base, extent);
+  }
+
+  std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() override {
+    return client_->CreateDrawable();
+  }
+
+  ui::SelectionEventType expected_event_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+  // Not owned.
+  ui::TouchSelectionControllerClient* client_;
+
+  DISALLOW_COPY_AND_ASSIGN(TouchSelectionControllerClientTestWrapper);
+};
+
+namespace {
+
+bool ConvertJSONToPoint(const std::string& str, gfx::PointF* point) {
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(str);
+  if (!value)
+    return false;
+  base::DictionaryValue* root;
+  if (!value->GetAsDictionary(&root))
+    return false;
+  double x, y;
+  if (!root->GetDouble("x", &x))
+    return false;
+  if (!root->GetDouble("y", &y))
+    return false;
+  point->set_x(x);
+  point->set_y(y);
+  return true;
+}
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAndroidSiteIsolationTest,
+                       BasicSelectionIsolatedIframe) {
+  GURL test_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(a)"));
+  EXPECT_TRUE(NavigateToURL(shell(), test_url));
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  EXPECT_EQ(
+      " Site A\n"
+      "   +--Site A\n"
+      "Where A = http://a.com/",
+      FrameTreeVisualizer().DepictFrameTree(root));
+  TestNavigationObserver observer(shell()->web_contents());
+  EXPECT_EQ(1u, root->child_count());
+  FrameTreeNode* child = root->child_at(0);
+
+  RenderWidgetHostViewAndroid* parent_view =
+      static_cast<RenderWidgetHostViewAndroid*>(
+          root->current_frame_host()->GetRenderWidgetHost()->GetView());
+  TouchSelectionControllerClientTestWrapper* selection_controller_client =
+      new TouchSelectionControllerClientTestWrapper(
+          parent_view->GetSelectionControllerClientManagerForTesting());
+  parent_view->SetSelectionControllerClientForTesting(
+      base::WrapUnique(selection_controller_client));
+
+  // We need to load the desired subframe and then wait until it's stable, i.e.
+  // generates no new compositor frames for some reasonable time period: a stray
+  // frame between touch selection's pre-handling of GestureLongPress and the
+  // expected frame containing the selected region can confuse the
+  // TouchSelectionController, causing it to fail to show selection handles.
+  // Note this is an issue with the TouchSelectionController in general, and
+  // not a property of this test.
+  GURL child_url(
+      embedded_test_server()->GetURL("b.com", "/touch_selection.html"));
+  NavigateFrameToURL(child, child_url);
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   +--Site B ------- proxies for A\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/",
+      FrameTreeVisualizer().DepictFrameTree(root));
+  // The child will change with the cross-site navigation. It shouldn't change
+  // after this.
+  child = root->child_at(0);
+  WaitForChildFrameSurfaceReady(child->current_frame_host());
+
+  RenderWidgetHostViewChildFrame* child_view =
+      static_cast<RenderWidgetHostViewChildFrame*>(
+          child->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  EXPECT_EQ(child_url, observer.last_navigation_url());
+  EXPECT_TRUE(observer.last_navigation_succeeded());
+  FrameStableObserver child_frame_stable_observer(child_view,
+                                                  TestTimeouts::tiny_timeout());
+  child_frame_stable_observer.WaitUntilStable();
+
+  EXPECT_EQ(ui::TouchSelectionController::INACTIVE,
+            parent_view->touch_selection_controller()->active_status());
+  // Find the location of some text to select.
+  auto* manager = static_cast<TouchSelectionControllerClientManagerAndroid*>(
+      parent_view->GetTouchSelectionControllerClientManager());
+  float page_scale_factor = manager->page_scale_factor();
+  gfx::PointF point_f;
+  std::string str;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(child->current_frame_host(),
+                                            "get_point_inside_text()", &str));
+  ConvertJSONToPoint(str, &point_f);
+  gfx::Point origin = child_view->GetViewOriginInRoot();
+  gfx::Vector2dF origin_vec(origin.x(), origin.y());
+  point_f += origin_vec;
+  point_f.Scale(page_scale_factor);
+
+  // Initiate selection with a sequence of events that go through the targeting
+  // system.
+  selection_controller_client->InitWaitForSelectionEvent(
+      ui::SELECTION_HANDLES_SHOWN);
+
+  SelectWithLongPress(gfx::Point(point_f.x(), point_f.y()));
+
+  selection_controller_client->Wait();
+
+  // Check that selection is active and the quick menu is showing.
+  EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
+            parent_view->touch_selection_controller()->active_status());
+
+  // Tap inside/outside the iframe and make sure the selection handles go away.
+  selection_controller_client->InitWaitForSelectionEvent(
+      ui::SELECTION_HANDLES_CLEARED);
+  // Since Android tests may run with page_scale_factor < 1, use an offset a
+  // bigger than +/-1 for doing the inside/outside taps to cancel the selection
+  // handles.
+  gfx::PointF point_inside_iframe = gfx::PointF(+5.f, +5.f) + origin_vec;
+  point_inside_iframe.Scale(page_scale_factor);
+  SimpleTap(gfx::Point(point_inside_iframe.x(), point_inside_iframe.y()));
+  selection_controller_client->Wait();
+
+  EXPECT_EQ(ui::TouchSelectionController::INACTIVE,
+            parent_view->touch_selection_controller()->active_status());
+
+  // Let's wait for the previous events to clear the round-trip to the renders
+  // and back.
+  DelayBy(base::TimeDelta::FromMilliseconds(2000));
+
+  // Initiate selection with a sequence of events that go through the targeting
+  // system. Repeat of above but this time we'l cancel the selection by
+  // tapping outside of the OOPIF.
+  selection_controller_client->InitWaitForSelectionEvent(
+      ui::SELECTION_HANDLES_SHOWN);
+
+  SelectWithLongPress(gfx::Point(point_f.x(), point_f.y()));
+
+  selection_controller_client->Wait();
+
+  // Check that selection is active and the quick menu is showing.
+  EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
+            parent_view->touch_selection_controller()->active_status());
+
+  // Tap inside/outside the iframe and make sure the selection handles go away.
+  selection_controller_client->InitWaitForSelectionEvent(
+      ui::SELECTION_HANDLES_CLEARED);
+  // Since Android tests may run with page_scale_factor < 1, use an offset a
+  // bigger than +/-1 for doing the inside/outside taps to cancel the selection
+  // handles.
+  gfx::PointF point_outside_iframe = gfx::PointF(-5.f, -5.f) + origin_vec;
+  point_outside_iframe.Scale(page_scale_factor);
+  SimpleTap(gfx::Point(point_outside_iframe.x(), point_outside_iframe.y()));
+  selection_controller_client->Wait();
+
+  EXPECT_EQ(ui::TouchSelectionController::INACTIVE,
+            parent_view->touch_selection_controller()->active_status());
+}
+
+#endif  // defined(OS_ANDROID)
 
 }  // namespace content

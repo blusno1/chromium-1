@@ -21,7 +21,7 @@ namespace {
 
 const int kMaxPendingSwaps = 1;
 
-static constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
+static constexpr viz::FrameSinkId kArbitraryFrameSinkId(1, 1);
 
 class FakeDisplaySchedulerClient : public DisplaySchedulerClient {
  public:
@@ -41,29 +41,29 @@ class FakeDisplaySchedulerClient : public DisplaySchedulerClient {
     return success;
   }
 
-  bool SurfaceHasUndrawnFrame(const SurfaceId& surface_id) const override {
+  bool SurfaceHasUndrawnFrame(const viz::SurfaceId& surface_id) const override {
     return base::ContainsKey(undrawn_surfaces_, surface_id);
   }
 
-  bool SurfaceDamaged(const SurfaceId& surface_id,
+  bool SurfaceDamaged(const viz::SurfaceId& surface_id,
                       const BeginFrameAck& ack) override {
     return false;
   }
 
-  void SurfaceDiscarded(const SurfaceId& surface_id) override {}
+  void SurfaceDiscarded(const viz::SurfaceId& surface_id) override {}
 
   int draw_and_swap_count() const { return draw_and_swap_count_; }
 
   void SetNextDrawAndSwapFails() { next_draw_and_swap_fails_ = true; }
 
-  void SurfaceDamaged(const SurfaceId& surface_id) {
+  void SurfaceDamaged(const viz::SurfaceId& surface_id) {
     undrawn_surfaces_.insert(surface_id);
   }
 
  protected:
   int draw_and_swap_count_;
   bool next_draw_and_swap_fails_;
-  std::set<SurfaceId> undrawn_surfaces_;
+  std::set<viz::SurfaceId> undrawn_surfaces_;
 };
 
 class TestDisplayScheduler : public DisplayScheduler {
@@ -71,8 +71,12 @@ class TestDisplayScheduler : public DisplayScheduler {
   TestDisplayScheduler(BeginFrameSource* begin_frame_source,
                        SurfaceManager* surface_manager,
                        base::SingleThreadTaskRunner* task_runner,
-                       int max_pending_swaps)
-      : DisplayScheduler(begin_frame_source, task_runner, max_pending_swaps),
+                       int max_pending_swaps,
+                       bool wait_for_all_surfaces_before_draw)
+      : DisplayScheduler(begin_frame_source,
+                         task_runner,
+                         max_pending_swaps,
+                         wait_for_all_surfaces_before_draw),
         scheduler_begin_frame_deadline_count_(0) {}
 
   base::TimeTicks DesiredBeginFrameDeadlineTimeForTest() {
@@ -108,13 +112,14 @@ class TestDisplayScheduler : public DisplayScheduler {
 
 class DisplaySchedulerTest : public testing::Test {
  public:
-  DisplaySchedulerTest()
+  explicit DisplaySchedulerTest(bool wait_for_all_surfaces_before_draw = false)
       : fake_begin_frame_source_(0.f, false),
         task_runner_(new base::NullTaskRunner),
         scheduler_(&fake_begin_frame_source_,
                    &surface_manager_,
                    task_runner_.get(),
-                   kMaxPendingSwaps) {
+                   kMaxPendingSwaps,
+                   wait_for_all_surfaces_before_draw) {
     now_src_.Advance(base::TimeDelta::FromMicroseconds(10000));
     surface_manager_.AddObserver(&scheduler_);
     scheduler_.SetClient(&client_);
@@ -127,17 +132,17 @@ class DisplaySchedulerTest : public testing::Test {
   void SetUp() override { scheduler_.SetRootSurfaceResourcesLocked(false); }
 
   void AdvanceTimeAndBeginFrameForTest(
-      const std::vector<SurfaceId>& observing_surfaces) {
+      const std::vector<viz::SurfaceId>& observing_surfaces) {
     now_src_.Advance(base::TimeDelta::FromMicroseconds(10000));
     // FakeBeginFrameSource deals with |source_id| and |sequence_number|.
     last_begin_frame_args_ = fake_begin_frame_source_.CreateBeginFrameArgs(
         BEGINFRAME_FROM_HERE, &now_src_);
     fake_begin_frame_source_.TestOnBeginFrame(last_begin_frame_args_);
-    for (const SurfaceId& surface : observing_surfaces)
+    for (const viz::SurfaceId& surface : observing_surfaces)
       scheduler_.OnSurfaceDamageExpected(surface, last_begin_frame_args_);
   }
 
-  void SurfaceDamaged(const SurfaceId& surface_id) {
+  void SurfaceDamaged(const viz::SurfaceId& surface_id) {
     client_.SurfaceDamaged(surface_id);
     scheduler_.ProcessSurfaceDamage(surface_id, AckForCurrentBeginFrame(),
                                     true);
@@ -165,20 +170,20 @@ class DisplaySchedulerTest : public testing::Test {
 };
 
 TEST_F(DisplaySchedulerTest, ResizeHasLateDeadlineUntilNewRootSurface) {
-  SurfaceId root_surface_id1(
+  viz::SurfaceId root_surface_id1(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId root_surface_id2(
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId root_surface_id2(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(2, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(3, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(3, base::UnguessableToken::Create()));
   base::TimeTicks late_deadline;
 
   scheduler_.SetVisible(true);
 
   // Go trough an initial BeginFrame cycle with the root surface.
-  AdvanceTimeAndBeginFrameForTest(std::vector<SurfaceId>());
+  AdvanceTimeAndBeginFrameForTest(std::vector<viz::SurfaceId>());
   scheduler_.SetNewRootSurface(root_surface_id1);
   scheduler_.BeginFrameDeadlineForTest();
 
@@ -208,17 +213,17 @@ TEST_F(DisplaySchedulerTest, ResizeHasLateDeadlineUntilNewRootSurface) {
 }
 
 TEST_F(DisplaySchedulerTest, ResizeHasLateDeadlineUntilDamagedSurface) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
   base::TimeTicks late_deadline;
 
   scheduler_.SetVisible(true);
 
   // Go trough an initial BeginFrame cycle with the root surface.
-  AdvanceTimeAndBeginFrameForTest(std::vector<SurfaceId>());
+  AdvanceTimeAndBeginFrameForTest(std::vector<viz::SurfaceId>());
   scheduler_.SetNewRootSurface(root_surface_id);
   scheduler_.BeginFrameDeadlineForTest();
 
@@ -247,13 +252,13 @@ TEST_F(DisplaySchedulerTest, ResizeHasLateDeadlineUntilDamagedSurface) {
 }
 
 TEST_F(DisplaySchedulerTest, SurfaceDamaged) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
-  SurfaceId sid2(kArbitraryFrameSinkId,
-                 LocalSurfaceId(3, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
+  viz::SurfaceId sid2(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(3, base::UnguessableToken::Create()));
 
   scheduler_.SetVisible(true);
   scheduler_.SetNewRootSurface(root_surface_id);
@@ -288,7 +293,7 @@ TEST_F(DisplaySchedulerTest, SurfaceDamaged) {
             scheduler_.DesiredBeginFrameDeadlineTimeForTest());
   scheduler_.BeginFrameDeadlineForTest();
 
-  // SurfaceDamage with |!has_damage| triggers early deadline if other damage
+  // Surface damage with |!has_damage| triggers early deadline if other damage
   // exists.
   AdvanceTimeAndBeginFrameForTest({sid1, sid2});
   EXPECT_LT(now_src().NowTicks(),
@@ -303,7 +308,7 @@ TEST_F(DisplaySchedulerTest, SurfaceDamaged) {
             scheduler_.DesiredBeginFrameDeadlineTimeForTest());
   scheduler_.BeginFrameDeadlineForTest();
 
-  // SurfaceDamage with |!has_damage| does not trigger early deadline if no
+  // Surface damage with |!has_damage| does not trigger early deadline if no
   // other damage exists.
   AdvanceTimeAndBeginFrameForTest({sid1});
   EXPECT_LT(now_src().NowTicks(),
@@ -316,10 +321,10 @@ TEST_F(DisplaySchedulerTest, SurfaceDamaged) {
   scheduler_.BeginFrameDeadlineForTest();
 
   // System should be idle now.
-  AdvanceTimeAndBeginFrameForTest(std::vector<SurfaceId>());
+  AdvanceTimeAndBeginFrameForTest(std::vector<viz::SurfaceId>());
   EXPECT_FALSE(scheduler_.inside_begin_frame_deadline_interval());
 
-  // SurfaceDamage with |!display_damaged| does not affect needs_draw and
+  // Surface damage with |!display_damaged| does not affect needs_draw and
   // scheduler stays idle.
   scheduler_.ProcessSurfaceDamage(sid1, AckForCurrentBeginFrame(), false);
   EXPECT_FALSE(scheduler_.inside_begin_frame_deadline_interval());
@@ -334,12 +339,92 @@ TEST_F(DisplaySchedulerTest, SurfaceDamaged) {
   scheduler_.BeginFrameDeadlineForTest();
 }
 
-TEST_F(DisplaySchedulerTest, OutputSurfaceLost) {
-  SurfaceId root_surface_id(
+class DisplaySchedulerWaitForAllSurfacesTest : public DisplaySchedulerTest {
+ public:
+  DisplaySchedulerWaitForAllSurfacesTest()
+      : DisplaySchedulerTest(true /* wait_for_all_surfaces_before_draw */) {}
+};
+
+TEST_F(DisplaySchedulerWaitForAllSurfacesTest, WaitForAllSurfacesBeforeDraw) {
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
+  viz::SurfaceId sid2(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(3, base::UnguessableToken::Create()));
+
+  scheduler_.SetVisible(true);
+  scheduler_.SetNewRootSurface(root_surface_id);
+
+  // Set surface1 as active via SurfaceDamageExpected().
+  AdvanceTimeAndBeginFrameForTest({sid1});
+
+  // Deadline is blocked indefinitely until surface 1 is damaged.
+  EXPECT_EQ(base::TimeTicks::Max(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+
+  // Damage only from surface 2 (inactive) does not change deadline.
+  SurfaceDamaged(sid2);
+  EXPECT_TRUE(scheduler_.has_pending_surfaces());
+  EXPECT_EQ(base::TimeTicks::Max(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+
+  // Damage from surface 1 triggers deadline immediately.
+  SurfaceDamaged(sid1);
+  EXPECT_FALSE(scheduler_.has_pending_surfaces());
+  EXPECT_GE(now_src().NowTicks(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+  scheduler_.BeginFrameDeadlineForTest();
+
+  // Surface damage with |!has_damage| triggers immediate deadline if other
+  // damage exists.
+  AdvanceTimeAndBeginFrameForTest({sid1, sid2});
+  EXPECT_EQ(base::TimeTicks::Max(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+  SurfaceDamaged(sid2);
+  EXPECT_EQ(base::TimeTicks::Max(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+  BeginFrameAck ack = AckForCurrentBeginFrame();
+  ack.has_damage = false;
+  scheduler_.ProcessSurfaceDamage(sid1, ack, false);
+  EXPECT_GE(now_src().NowTicks(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+  scheduler_.BeginFrameDeadlineForTest();
+
+  // Surface damage with |!has_damage| also triggers immediate deadline even if
+  // no other damage exists.
+  AdvanceTimeAndBeginFrameForTest({sid1});
+  EXPECT_EQ(base::TimeTicks::Max(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+  ack = AckForCurrentBeginFrame();
+  ack.has_damage = false;
+  scheduler_.ProcessSurfaceDamage(sid1, ack, false);
+  EXPECT_GE(now_src().NowTicks(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+  scheduler_.BeginFrameDeadlineForTest();
+
+  // System should be idle now because we had a frame without damage. Restore it
+  // to active state (DisplayScheduler observing BeginFrames) for the next test.
+  AdvanceTimeAndBeginFrameForTest(std::vector<viz::SurfaceId>());
+  EXPECT_FALSE(scheduler_.inside_begin_frame_deadline_interval());
+  SurfaceDamaged(sid1);
+  scheduler_.BeginFrameDeadlineForTest();
+
+  // BeginFrame without expected surface damage triggers immediate deadline.
+  AdvanceTimeAndBeginFrameForTest(std::vector<viz::SurfaceId>());
+  EXPECT_TRUE(scheduler_.inside_begin_frame_deadline_interval());
+  EXPECT_GE(now_src().NowTicks(),
+            scheduler_.DesiredBeginFrameDeadlineTimeForTest());
+  scheduler_.BeginFrameDeadlineForTest();
+}
+
+TEST_F(DisplaySchedulerTest, OutputSurfaceLost) {
+  viz::SurfaceId root_surface_id(
+      kArbitraryFrameSinkId,
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
 
   scheduler_.SetVisible(true);
   scheduler_.SetNewRootSurface(root_surface_id);
@@ -369,9 +454,9 @@ TEST_F(DisplaySchedulerTest, OutputSurfaceLost) {
 }
 
 TEST_F(DisplaySchedulerTest, VisibleWithoutDamageNoTicks) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
 
   EXPECT_EQ(0u, fake_begin_frame_source_.num_observers());
   scheduler_.SetVisible(true);
@@ -385,11 +470,11 @@ TEST_F(DisplaySchedulerTest, VisibleWithoutDamageNoTicks) {
 }
 
 TEST_F(DisplaySchedulerTest, VisibleWithDamageTicks) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
 
   scheduler_.SetNewRootSurface(root_surface_id);
 
@@ -402,11 +487,11 @@ TEST_F(DisplaySchedulerTest, VisibleWithDamageTicks) {
 }
 
 TEST_F(DisplaySchedulerTest, Visibility) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
 
   // Set the root surface.
   scheduler_.SetNewRootSurface(root_surface_id);
@@ -455,11 +540,11 @@ TEST_F(DisplaySchedulerTest, Visibility) {
 }
 
 TEST_F(DisplaySchedulerTest, ResizeCausesSwap) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
 
   scheduler_.SetVisible(true);
   scheduler_.SetNewRootSurface(root_surface_id);
@@ -474,18 +559,18 @@ TEST_F(DisplaySchedulerTest, ResizeCausesSwap) {
   EXPECT_EQ(1, client_.draw_and_swap_count());
 
   scheduler_.DisplayResized();
-  AdvanceTimeAndBeginFrameForTest(std::vector<SurfaceId>());
+  AdvanceTimeAndBeginFrameForTest(std::vector<viz::SurfaceId>());
   // DisplayResized should trigger a swap to happen.
   scheduler_.BeginFrameDeadlineForTest();
   EXPECT_EQ(2, client_.draw_and_swap_count());
 }
 
 TEST_F(DisplaySchedulerTest, RootSurfaceResourcesLocked) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
   base::TimeTicks late_deadline;
 
   scheduler_.SetVisible(true);
@@ -530,13 +615,13 @@ TEST_F(DisplaySchedulerTest, RootSurfaceResourcesLocked) {
 }
 
 TEST_F(DisplaySchedulerTest, DidSwapBuffers) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
-  SurfaceId sid2(kArbitraryFrameSinkId,
-                 LocalSurfaceId(3, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
+  viz::SurfaceId sid2(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(3, base::UnguessableToken::Create()));
 
   scheduler_.SetVisible(true);
   scheduler_.SetNewRootSurface(root_surface_id);
@@ -591,11 +676,11 @@ TEST_F(DisplaySchedulerTest, DidSwapBuffers) {
 // This test verfies that we try to reschedule the deadline
 // after any event that may change what deadline we want.
 TEST_F(DisplaySchedulerTest, ScheduleBeginFrameDeadline) {
-  SurfaceId root_surface_id(
+  viz::SurfaceId root_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(1, base::UnguessableToken::Create()));
-  SurfaceId sid1(kArbitraryFrameSinkId,
-                 LocalSurfaceId(2, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+  viz::SurfaceId sid1(kArbitraryFrameSinkId,
+                      viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
   int count = 1;
   EXPECT_EQ(count, scheduler_.scheduler_begin_frame_deadline_count());
 
@@ -619,12 +704,12 @@ TEST_F(DisplaySchedulerTest, ScheduleBeginFrameDeadline) {
   scheduler_.SetNewRootSurface(root_surface_id);
   EXPECT_EQ(++count, scheduler_.scheduler_begin_frame_deadline_count());
 
-  AdvanceTimeAndBeginFrameForTest(std::vector<SurfaceId>());
+  AdvanceTimeAndBeginFrameForTest(std::vector<viz::SurfaceId>());
   EXPECT_EQ(++count, scheduler_.scheduler_begin_frame_deadline_count());
 
   scheduler_.BeginFrameDeadlineForTest();
   scheduler_.DidSwapBuffers();
-  AdvanceTimeAndBeginFrameForTest(std::vector<SurfaceId>());
+  AdvanceTimeAndBeginFrameForTest(std::vector<viz::SurfaceId>());
   EXPECT_EQ(++count, scheduler_.scheduler_begin_frame_deadline_count());
 
   scheduler_.DidReceiveSwapBuffersAck();

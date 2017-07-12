@@ -5,20 +5,14 @@
 #ifndef SERVICES_RESOURCE_COORDINATOR_COORDINATION_UNIT_PROCESS_COORDINATION_UNIT_IMPL_H_
 #define SERVICES_RESOURCE_COORDINATOR_COORDINATION_UNIT_PROCESS_COORDINATION_UNIT_IMPL_H_
 
-#include <memory>
+#include <set>
 
 #include "base/macros.h"
 #include "base/process/process_metrics.h"
 #include "base/timer/timer.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_impl.h"
 
-namespace service_manager {
-class ServiceContextRef;
-}
-
 namespace resource_coordinator {
-
-struct CoordinationUnitID;
 
 class ProcessCoordinationUnitImpl : public CoordinationUnitImpl {
  public:
@@ -26,13 +20,20 @@ class ProcessCoordinationUnitImpl : public CoordinationUnitImpl {
       const CoordinationUnitID& id,
       std::unique_ptr<service_manager::ServiceContextRef> service_ref);
   ~ProcessCoordinationUnitImpl() override;
-  void MeasureProcessCPUUsage();
-  double GetCPUUsageForTesting() override;
+
+  // CoordinationUnitImpl implementation.
+  std::set<CoordinationUnitImpl*> GetAssociatedCoordinationUnitsOfType(
+      CoordinationUnitType type) override;
 
  private:
+  // CoordinationUnitImpl implementation.
+  void PropagateProperty(mojom::PropertyType property_type,
+                         const base::Value& value) override;
+
+  void MeasureProcessCPUUsage();
+
   std::unique_ptr<base::ProcessMetrics> process_metrics_;
   base::OneShotTimer repeating_timer_;
-  double cpu_usage_;
 
   DISALLOW_COPY_AND_ASSIGN(ProcessCoordinationUnitImpl);
 };

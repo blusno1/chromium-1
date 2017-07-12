@@ -18,6 +18,7 @@
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
+#include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/mac/sdk_forward_declarations.h"
@@ -156,7 +157,6 @@ RenderWidgetHostView* GetRenderWidgetHostViewToUse(
                    consumed:(BOOL)consumed;
 - (void)processedGestureScrollEvent:(const blink::WebGestureEvent&)event
                            consumed:(BOOL)consumed;
-
 - (void)keyEvent:(NSEvent*)theEvent wasKeyEquivalent:(BOOL)equiv;
 - (void)windowDidChangeBackingProperties:(NSNotification*)notification;
 - (void)windowChangedGlobalFrame:(NSNotification*)notification;
@@ -279,9 +279,8 @@ blink::WebColor WebColorFromNSColor(NSColor *color) {
 
 // Extract underline information from an attributed string. Mostly copied from
 // third_party/WebKit/Source/WebKit/mac/WebView/WebHTMLView.mm
-void ExtractUnderlines(
-    NSAttributedString* string,
-    std::vector<blink::WebCompositionUnderline>* underlines) {
+void ExtractUnderlines(NSAttributedString* string,
+                       std::vector<ui::CompositionUnderline>* underlines) {
   int length = [[string string] length];
   int i = 0;
   while (i < length) {
@@ -297,11 +296,8 @@ void ExtractUnderlines(
             [colorAttr colorUsingColorSpaceName:NSDeviceRGBColorSpace]);
       }
       underlines->push_back(
-          blink::WebCompositionUnderline(range.location,
-                                         NSMaxRange(range),
-                                         color,
-                                         [style intValue] > 1,
-                                         SK_ColorTRANSPARENT));
+          ui::CompositionUnderline(range.location, NSMaxRange(range), color,
+                                   [style intValue] > 1, SK_ColorTRANSPARENT));
     }
     i = range.location + range.length;
   }
@@ -454,7 +450,7 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget,
   [cocoa_view_ setLayer:background_layer_];
   [cocoa_view_ setWantsLayer:YES];
 
-  cc::FrameSinkId frame_sink_id =
+  viz::FrameSinkId frame_sink_id =
       render_widget_host_->AllocateFrameSinkId(is_guest_view_hack_);
   browser_compositor_.reset(
       new BrowserCompositorMac(this, this, render_widget_host_->is_hidden(),
@@ -536,7 +532,7 @@ void RenderWidgetHostViewMac::SetAllowPauseForResizeOrRepaint(bool allow) {
   allow_pause_for_resize_or_repaint_ = allow;
 }
 
-cc::SurfaceId RenderWidgetHostViewMac::SurfaceIdForTesting() const {
+viz::SurfaceId RenderWidgetHostViewMac::SurfaceIdForTesting() const {
   return browser_compositor_->GetDelegatedFrameHost()->SurfaceIdForTesting();
 }
 
@@ -1421,7 +1417,7 @@ void RenderWidgetHostViewMac::DidCreateNewRendererCompositorFrameSink(
 }
 
 void RenderWidgetHostViewMac::SubmitCompositorFrame(
-    const cc::LocalSurfaceId& local_surface_id,
+    const viz::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
   TRACE_EVENT0("browser", "RenderWidgetHostViewMac::OnSwapCompositorFrame");
 
@@ -1508,11 +1504,11 @@ RenderWidgetHostViewMac::CreateSyntheticGestureTarget() {
       new SyntheticGestureTargetMac(host, cocoa_view_));
 }
 
-cc::FrameSinkId RenderWidgetHostViewMac::GetFrameSinkId() {
+viz::FrameSinkId RenderWidgetHostViewMac::GetFrameSinkId() {
   return browser_compositor_->GetDelegatedFrameHost()->GetFrameSinkId();
 }
 
-cc::FrameSinkId RenderWidgetHostViewMac::FrameSinkIdAtPoint(
+viz::FrameSinkId RenderWidgetHostViewMac::FrameSinkIdAtPoint(
     cc::SurfaceHittestDelegate* delegate,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
@@ -1520,7 +1516,7 @@ cc::FrameSinkId RenderWidgetHostViewMac::FrameSinkIdAtPoint(
   // |point| from DIPs to pixels before hittesting.
   float scale_factor = ui::GetScaleFactorForNativeView(cocoa_view_);
   gfx::Point point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
-  cc::SurfaceId id =
+  viz::SurfaceId id =
       browser_compositor_->GetDelegatedFrameHost()->SurfaceIdAtPoint(
           delegate, point_in_pixels, transformed_point);
   *transformed_point = gfx::ConvertPointToDIP(scale_factor, *transformed_point);
@@ -1569,7 +1565,7 @@ void RenderWidgetHostViewMac::ProcessGestureEvent(
 
 bool RenderWidgetHostViewMac::TransformPointToLocalCoordSpace(
     const gfx::Point& point,
-    const cc::SurfaceId& original_surface,
+    const viz::SurfaceId& original_surface,
     gfx::Point* transformed_point) {
   // Transformations use physical pixels rather than DIP, so conversion
   // is necessary.
@@ -2244,7 +2240,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   if (textToBeInserted_.length() >
       ((hasMarkedText_ || oldHasMarkedText) ? 0u : 1u)) {
     widgetHost->ImeCommitText(textToBeInserted_,
-                              std::vector<blink::WebCompositionUnderline>(),
+                              std::vector<ui::CompositionUnderline>(),
                               gfx::Range::InvalidRange(), 0);
     textInserted = YES;
   }
@@ -2362,7 +2358,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   }
 }
 
-- (void)beginGestureWithEvent:(NSEvent*)event {
+- (void)handleBeginGestureWithEvent:(NSEvent*)event {
   [responderDelegate_ beginGestureWithEvent:event];
   gestureBeginEvent_.reset(
       new WebGestureEvent(WebGestureEventBuilder::Build(event, self)));
@@ -2375,7 +2371,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   }
 }
 
-- (void)endGestureWithEvent:(NSEvent*)event {
+- (void)handleEndGestureWithEvent:(NSEvent*)event {
   [responderDelegate_ endGestureWithEvent:event];
   gestureBeginEvent_.reset();
 
@@ -2387,6 +2383,38 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
     endEvent.SetType(WebInputEvent::kGesturePinchEnd);
     renderWidgetHostView_->render_widget_host_->ForwardGestureEvent(endEvent);
     gestureBeginPinchSent_ = NO;
+  }
+}
+
+- (void)beginGestureWithEvent:(NSEvent*)event {
+  // This method must be handled when linking with the 10.10 SDK or earlier, or
+  // when the app is running on 10.10 or earlier.  In other circumstances, the
+  // event will be handled by |magnifyWithEvent:|, so this method should do
+  // nothing.
+  bool shouldHandle = true;
+#if defined(MAC_OS_X_VERSION_10_11) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_11
+  shouldHandle = base::mac::IsAtMostOS10_10();
+#endif
+
+  if (shouldHandle) {
+    [self handleBeginGestureWithEvent:event];
+  }
+}
+
+- (void)endGestureWithEvent:(NSEvent*)event {
+  // This method must be handled when linking with the 10.10 SDK or earlier, or
+  // when the app is running on 10.10 or earlier.  In other circumstances, the
+  // event will be handled by |magnifyWithEvent:|, so this method should do
+  // nothing.
+  bool shouldHandle = true;
+#if defined(MAC_OS_X_VERSION_10_11) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_11
+  shouldHandle = base::mac::IsAtMostOS10_10();
+#endif
+
+  if (shouldHandle) {
+    [self handleEndGestureWithEvent:event];
   }
 }
 
@@ -2605,6 +2633,33 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   if (!renderWidgetHostView_->render_widget_host_)
     return;
 
+#if defined(MAC_OS_X_VERSION_10_11) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_11
+  // When linking against the 10.11 (or later) SDK and running on 10.11 or
+  // later, check the phase of the event and specially handle the "begin" and
+  // "end" phases.
+  if (base::mac::IsAtLeastOS10_11()) {
+    if (event.phase == NSEventPhaseBegan) {
+      [self handleBeginGestureWithEvent:event];
+      return;
+    }
+
+    if (event.phase == NSEventPhaseEnded ||
+        event.phase == NSEventPhaseCancelled) {
+      [self handleEndGestureWithEvent:event];
+      return;
+    }
+  }
+#endif
+
+  // If this conditional evalutes to true, and the function has not
+  // short-circuited from the previous block, then this event is a duplicate of
+  // a gesture event, and should be ignored.
+  if (event.phase == NSEventPhaseBegan || event.phase == NSEventPhaseEnded ||
+      event.phase == NSEventPhaseCancelled) {
+    return;
+  }
+
   // If, due to nesting of multiple gestures (e.g, from multiple touch
   // devices), the beginning of the gesture has been lost, skip the remainder
   // of the gesture.
@@ -2619,6 +2674,12 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
 
   // Send a GesturePinchBegin event if none has been sent yet.
   if (!gestureBeginPinchSent_) {
+    if (renderWidgetHostView_->wheel_scroll_latching_enabled()) {
+      // Before starting a pinch sequence, send the pending wheel end event to
+      // finish scrolling.
+      renderWidgetHostView_->mouse_wheel_phase_handler_
+          .DispatchPendingWheelEndEvent();
+    }
     WebGestureEvent beginEvent(*gestureBeginEvent_);
     beginEvent.SetType(WebInputEvent::kGesturePinchBegin);
     renderWidgetHostView_->render_widget_host_->ForwardGestureEvent(beginEvent);
@@ -3257,8 +3318,8 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
     ExtractUnderlines(string, &underlines_);
   } else {
     // Use a thin black underline by default.
-    underlines_.push_back(blink::WebCompositionUnderline(
-        0, length, SK_ColorBLACK, false, SK_ColorTRANSPARENT));
+    underlines_.push_back(ui::CompositionUnderline(0, length, SK_ColorBLACK,
+                                                   false, SK_ColorTRANSPARENT));
   }
 
   // If we are handling a key down event, then SetComposition() will be
@@ -3301,9 +3362,10 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
                           base::CompareCase::INSENSITIVE_ASCII))
       editCommands_.push_back(EditCommand(command, ""));
   } else {
-    RenderWidgetHostImpl* rwh = renderWidgetHostView_->render_widget_host_;
-    rwh->Send(new InputMsg_ExecuteEditCommand(rwh->GetRoutingID(),
-                                              command, ""));
+    if (renderWidgetHostView_->render_widget_host_->delegate()) {
+      renderWidgetHostView_->render_widget_host_->delegate()
+          ->ExecuteEditCommand(command, base::nullopt);
+    }
   }
 }
 
@@ -3332,7 +3394,7 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
     if (renderWidgetHostView_->GetActiveWidget()) {
       renderWidgetHostView_->GetActiveWidget()->ImeCommitText(
           base::SysNSStringToUTF16(im_text),
-          std::vector<blink::WebCompositionUnderline>(), replacement_range, 0);
+          std::vector<ui::CompositionUnderline>(), replacement_range, 0);
     }
   }
 

@@ -188,6 +188,9 @@ class WebServiceWorkerContextClient {
       const WebServiceWorkerResponse& response,
       WebServiceWorkerStreamHandle* body_as_stream,
       double event_dispatch_time) {}
+  virtual void RespondToCanMakePaymentEvent(int event_id,
+                                            bool can_make_payment,
+                                            double event_dispatch_time) {}
   virtual void RespondToPaymentRequestEvent(
       int event_id,
       const WebPaymentAppResponse& response,
@@ -232,6 +235,13 @@ class WebServiceWorkerContextClient {
   virtual void DidHandleSyncEvent(int sync_event_id,
                                   WebServiceWorkerEventResult result,
                                   double event_dispatch_time) {}
+
+  // ServiceWorker specific method. Called after PaymentRequestEvent (dispatched
+  // via WebServiceWorkerContextProxy) is handled by the ServiceWorker's script
+  // context.
+  virtual void DidHandleCanMakePaymentEvent(int payment_request_event_id,
+                                            WebServiceWorkerEventResult result,
+                                            double event_dispatch_time) {}
 
   // ServiceWorker specific method. Called after PaymentRequestEvent (dispatched
   // via WebServiceWorkerContextProxy) is handled by the ServiceWorker's script

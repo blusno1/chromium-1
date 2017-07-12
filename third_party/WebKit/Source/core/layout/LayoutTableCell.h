@@ -182,6 +182,10 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   LayoutUnit BorderRight() const override;
   LayoutUnit BorderTop() const override;
   LayoutUnit BorderBottom() const override;
+  LayoutUnit BorderStart() const override;
+  LayoutUnit BorderEnd() const override;
+  LayoutUnit BorderBefore() const override;
+  LayoutUnit BorderAfter() const override;
 
   void UpdateLayout() override;
 
@@ -212,6 +216,13 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   LayoutUnit PaddingBottom() const override;
   LayoutUnit PaddingLeft() const override;
   LayoutUnit PaddingRight() const override;
+
+  // FIXME: For now we just assume the cell has the same block flow direction as
+  // the table. It's likely we'll create an extra anonymous LayoutBlock to
+  // handle mixing directionality anyway, in which case we can lock the block
+  // flow directionality of the cells to the table's directionality.
+  LayoutUnit PaddingBefore() const override;
+  LayoutUnit PaddingAfter() const override;
 
   void SetOverrideLogicalContentHeightFromRowHeight(LayoutUnit);
 
@@ -349,41 +360,76 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   void ComputeOverflow(LayoutUnit old_client_after_edge,
                        bool recompute_floats = false) override;
 
-  // Converts collapsed border half width from the table's logical orientation
-  // to physical orientation.
-  LogicalToPhysical<unsigned> LogicalCollapsedBorderHalfToPhysical(
-      bool outer) const {
-    return LogicalToPhysical<unsigned>(
+  using CollapsedBorderValuesMethod =
+      const CollapsedBorderValue& (CollapsedBorderValues::*)() const;
+  LogicalToPhysical<CollapsedBorderValuesMethod>
+  CollapsedBorderValuesMethodsPhysical() const {
+    return LogicalToPhysical<CollapsedBorderValuesMethod>(
+        // Collapsed border logical directions are in table's directions.
         TableStyle().GetWritingMode(), TableStyle().Direction(),
-        CollapsedBorderHalfStart(outer), CollapsedBorderHalfEnd(outer),
-        CollapsedBorderHalfBefore(outer), CollapsedBorderHalfAfter(outer));
+        &CollapsedBorderValues::StartBorder, &CollapsedBorderValues::EndBorder,
+        &CollapsedBorderValues::BeforeBorder,
+        &CollapsedBorderValues::AfterBorder);
+  }
+
+  // Give the extra pixel of half collapsed border to top and left.
+  static constexpr bool kInnerHalfPixelAsOneTop = true;
+  static constexpr bool kInnerHalfPixelAsOneRight = false;
+  static constexpr bool kInnerHalfPixelAsOneBottom = false;
+  static constexpr bool kInnerHalfPixelAsOneLeft = true;
+
+  PhysicalToLogical<bool> InnerHalfPixelAsOneLogical() const {
+    return PhysicalToLogical<bool>(
+        // Collapsed border logical directions are in table's directions.
+        TableStyle().GetWritingMode(), TableStyle().Direction(),
+        kInnerHalfPixelAsOneTop, kInnerHalfPixelAsOneRight,
+        kInnerHalfPixelAsOneBottom, kInnerHalfPixelAsOneLeft);
   }
 
   unsigned CollapsedBorderHalfLeft(bool outer) const {
-    return LogicalCollapsedBorderHalfToPhysical(outer).Left();
+    return CollapsedBorderHalf(kInnerHalfPixelAsOneLeft ^ outer,
+                               CollapsedBorderValuesMethodsPhysical().Left());
   }
   unsigned CollapsedBorderHalfRight(bool outer) const {
-    return LogicalCollapsedBorderHalfToPhysical(outer).Right();
+    return CollapsedBorderHalf(kInnerHalfPixelAsOneRight ^ outer,
+                               CollapsedBorderValuesMethodsPhysical().Right());
   }
   unsigned CollapsedBorderHalfTop(bool outer) const {
-    return LogicalCollapsedBorderHalfToPhysical(outer).Top();
+    return CollapsedBorderHalf(kInnerHalfPixelAsOneTop ^ outer,
+                               CollapsedBorderValuesMethodsPhysical().Top());
   }
   unsigned CollapsedBorderHalfBottom(bool outer) const {
-    return LogicalCollapsedBorderHalfToPhysical(outer).Bottom();
+    return CollapsedBorderHalf(kInnerHalfPixelAsOneBottom ^ outer,
+                               CollapsedBorderValuesMethodsPhysical().Bottom());
   }
 
   // For the following methods, the 'start', 'end', 'before', 'after' directions
   // are all in the table's inline and block directions.
-  unsigned CollapsedBorderHalfStart(bool outer) const;
-  unsigned CollapsedBorderHalfEnd(bool outer) const;
-  unsigned CollapsedBorderHalfBefore(bool outer) const;
-  unsigned CollapsedBorderHalfAfter(bool outer) const;
-
-  LogicalToPhysical<int> LogicalIntrinsicPaddingToPhysical() const {
-    return LogicalToPhysical<int>(
-        StyleRef().GetWritingMode(), StyleRef().Direction(), 0, 0,
-        intrinsic_padding_before_, intrinsic_padding_after_);
+  unsigned CollapsedBorderHalfStart(bool outer) const {
+    return CollapsedBorderHalf(InnerHalfPixelAsOneLogical().Start() ^ outer,
+                               &CollapsedBorderValues::StartBorder);
   }
+  unsigned CollapsedBorderHalfEnd(bool outer) const {
+    return CollapsedBorderHalf(InnerHalfPixelAsOneLogical().End() ^ outer,
+                               &CollapsedBorderValues::EndBorder);
+  }
+  unsigned CollapsedBorderHalfBefore(bool outer) const {
+    return CollapsedBorderHalf(InnerHalfPixelAsOneLogical().Before() ^ outer,
+                               &CollapsedBorderValues::BeforeBorder);
+  }
+  unsigned CollapsedBorderHalfAfter(bool outer) const {
+    return CollapsedBorderHalf(InnerHalfPixelAsOneLogical().After() ^ outer,
+                               &CollapsedBorderValues::AfterBorder);
+  }
+
+  unsigned CollapsedBorderHalf(bool half_pixel_as_one,
+                               CollapsedBorderValuesMethod m) const {
+    UpdateCollapsedBorderValues();
+    if (const auto* values = GetCollapsedBorderValues())
+      return ((values->*m)().Width() + (half_pixel_as_one ? 1 : 0)) / 2;
+    return 0;
+  }
+
   void SetIntrinsicPaddingBefore(int p) { intrinsic_padding_before_ = p; }
   void SetIntrinsicPaddingAfter(int p) { intrinsic_padding_after_ = p; }
   void SetIntrinsicPadding(int before, int after) {

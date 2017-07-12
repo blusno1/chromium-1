@@ -97,14 +97,6 @@ const gfx::SelectionBehavior kMoveParagraphSelectionBehavior =
 // Default placeholder text color.
 const SkColor kDefaultPlaceholderTextColor = SK_ColorLTGRAY;
 
-void ConvertRectToScreen(const View* src, gfx::Rect* r) {
-  DCHECK(src);
-
-  gfx::Point new_origin = r->origin();
-  View::ConvertPointToScreen(src, &new_origin);
-  r->set_origin(new_origin);
-}
-
 // Get the default command for a given key |event|.
 ui::TextEditCommand GetCommandForKeyEvent(const ui::KeyEvent& event) {
   if (event.type() != ui::ET_KEY_PRESSED || event.IsUnicodeKeyCode())
@@ -346,6 +338,7 @@ void Textfield::AppendText(const base::string16& new_text) {
   model_->Append(new_text);
   OnCaretBoundsChanged();
   SchedulePaint();
+  NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_CHANGED, true);
 }
 
 void Textfield::InsertOrReplaceText(const base::string16& new_text) {
@@ -385,9 +378,9 @@ SkColor Textfield::GetTextColor() const {
   if (!use_default_text_color_)
     return text_color_;
 
-  return GetNativeTheme()->GetSystemColor(read_only() || !enabled() ?
-      ui::NativeTheme::kColorId_TextfieldReadOnlyColor :
-      ui::NativeTheme::kColorId_TextfieldDefaultColor);
+  int style = (read_only() || !enabled()) ? style::STYLE_DISABLED
+                                          : style::STYLE_PRIMARY;
+  return style::GetColor(style::CONTEXT_TEXTFIELD, style, GetNativeTheme());
 }
 
 void Textfield::SetTextColor(SkColor color) {
@@ -696,6 +689,10 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
       event->SetHandled();
       break;
     case ui::ET_GESTURE_TAP:
+      if (controller_ && controller_->HandleGestureEvent(this, *event)) {
+        event->SetHandled();
+        return;
+      }
       if (event->details().tap_count() == 1) {
         // If tap is on the selection and touch handles are not present, handles
         // should be shown without changing selection. Otherwise, cursor should
@@ -977,6 +974,8 @@ void Textfield::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   bounds.Inset(gfx::Insets(0, kTextPadding, 0, kTextPadding));
   GetRenderText()->SetDisplayRect(bounds);
   OnCaretBoundsChanged();
+  UpdateCursorViewPosition();
+  UpdateCursorVisibility();
 }
 
 bool Textfield::GetNeedsNotificationWhenVisibleBoundsChange() const {
@@ -2122,8 +2121,8 @@ void Textfield::StopBlinkingCursor() {
 
 void Textfield::OnCursorBlinkTimerFired() {
   DCHECK(ShouldBlinkCursor());
-  cursor_view_.SetVisible(!cursor_view_.visible());
   UpdateCursorViewPosition();
+  cursor_view_.SetVisible(!cursor_view_.visible());
 }
 
 }  // namespace views

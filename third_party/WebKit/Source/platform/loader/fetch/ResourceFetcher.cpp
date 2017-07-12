@@ -282,7 +282,7 @@ WebURLRequest::RequestContext ResourceFetcher::DetermineRequestContext(
 ResourceFetcher::ResourceFetcher(FetchContext* new_context,
                                  RefPtr<WebTaskRunner> task_runner)
     : context_(new_context),
-      scheduler_(ResourceLoadScheduler::Create()),
+      scheduler_(ResourceLoadScheduler::Create(&Context())),
       archive_(Context().IsMainFrame() ? nullptr : Context().Archive()),
       resource_timing_report_timer_(
           std::move(task_runner),
@@ -592,29 +592,22 @@ ResourceFetcher::PrepareRequestResult ResourceFetcher::PrepareRequest(
 
   if (params.Options().cors_handling_by_resource_fetcher ==
       kEnableCORSHandlingByResourceFetcher) {
-    if (resource_request.GetFetchRequestMode() ==
-        WebURLRequest::kFetchRequestModeCORS) {
-      bool allow_stored_credentials = false;
-      switch (resource_request.GetFetchCredentialsMode()) {
-        case WebURLRequest::kFetchCredentialsModeOmit:
-          break;
-        case WebURLRequest::kFetchCredentialsModeSameOrigin:
-          allow_stored_credentials =
-              !params.Options().cors_flag ||
-              (origin &&
-               origin->HasSuboriginAndShouldAllowCredentialsFor(params.Url()));
-          break;
-        case WebURLRequest::kFetchCredentialsModeInclude:
-        case WebURLRequest::kFetchCredentialsModePassword:
-          allow_stored_credentials = true;
-          break;
-      }
-      resource_request.SetAllowStoredCredentials(allow_stored_credentials);
-    } else {
-      resource_request.SetAllowStoredCredentials(
-          resource_request.GetFetchCredentialsMode() !=
-          WebURLRequest::kFetchCredentialsModeOmit);
+    bool allow_stored_credentials = false;
+    switch (resource_request.GetFetchCredentialsMode()) {
+      case WebURLRequest::kFetchCredentialsModeOmit:
+        break;
+      case WebURLRequest::kFetchCredentialsModeSameOrigin:
+        allow_stored_credentials =
+            !params.Options().cors_flag ||
+            (origin &&
+             origin->HasSuboriginAndShouldAllowCredentialsFor(params.Url()));
+        break;
+      case WebURLRequest::kFetchCredentialsModeInclude:
+      case WebURLRequest::kFetchCredentialsModePassword:
+        allow_stored_credentials = true;
+        break;
     }
+    resource_request.SetAllowStoredCredentials(allow_stored_credentials);
   }
 
   return kContinue;
@@ -1200,6 +1193,7 @@ void ResourceFetcher::ReloadImagesIfNotDeferred() {
 }
 
 void ResourceFetcher::ClearContext() {
+  scheduler_->Shutdown();
   ClearPreloads(ResourceFetcher::kClearAllPreloads);
   context_ = Context().Detach();
 }
@@ -1392,10 +1386,8 @@ bool ResourceFetcher::StartLoad(Resource* resource) {
   ResourceLoader* loader = nullptr;
 
   {
-    // Forbids JavaScript/addClient/removeClient/revalidation until start()
+    // Forbids JavaScript/revalidation until start()
     // to prevent unintended state transitions.
-    Resource::ProhibitAddRemoveClientInScope
-        prohibit_add_remove_client_in_scope(resource);
     Resource::RevalidationStartForbiddenScope
         revalidation_start_forbidden_scope(resource);
     ScriptForbiddenIfMainThreadScope script_forbidden_scope;
@@ -1437,6 +1429,10 @@ bool ResourceFetcher::StartLoad(Resource* resource) {
     StorePerformanceTimingInitiatorInformation(resource);
     resource->SetFetcherSecurityOrigin(source_origin);
 
+    // NotifyStartLoad() shouldn't cause AddClient/RemoveClient().
+    Resource::ProhibitAddRemoveClientInScope
+        prohibit_add_remove_client_in_scope(resource);
+
     resource->NotifyStartLoad();
   }
 
@@ -1455,6 +1451,9 @@ void ResourceFetcher::RemoveResourceLoader(ResourceLoader* loader) {
 }
 
 void ResourceFetcher::StopFetching() {
+  // TODO(toyoshim): May want to suspend scheduler while canceling loaders so
+  // that the cancellations below do not awake unnecessary scheduling.
+
   HeapVector<Member<ResourceLoader>> loaders_to_cancel;
   for (const auto& loader : non_blocking_loaders_) {
     if (!loader->GetKeepalive())
@@ -1472,6 +1471,8 @@ void ResourceFetcher::StopFetching() {
 }
 
 void ResourceFetcher::SetDefersLoading(bool defers) {
+  // TODO(toyoshim): Let |scheduler_| know |defers| too.
+
   for (const auto& loader : non_blocking_loaders_)
     loader->SetDefersLoading(defers);
   for (const auto& loader : loaders_)

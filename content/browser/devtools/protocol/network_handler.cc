@@ -5,6 +5,7 @@
 #include "content/browser/devtools/protocol/network_handler.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "base/barrier_closure.h"
 #include "base/base64.h"
@@ -21,8 +22,6 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/common/navigation_params.h"
-#include "content/common/resource_request.h"
-#include "content/common/resource_request_completion_status.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_remover.h"
@@ -35,6 +34,8 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/resource_devtools_info.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/resource_request_completion_status.h"
 #include "content/public/common/resource_response.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_bytes_element_reader.h"
@@ -190,7 +191,7 @@ class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
 };
 
 void ClearedCookiesOnIO(std::unique_ptr<ClearBrowserCookiesCallback> callback,
-                        int num_deleted) {
+                        uint32_t num_deleted) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::Bind(&ClearBrowserCookiesCallback::sendSuccess,
@@ -508,7 +509,7 @@ Response NetworkHandler::Enable(Maybe<int> max_total_size,
 Response NetworkHandler::Disable() {
   enabled_ = false;
   user_agent_ = std::string();
-  EnableRequestInterception(false);
+  SetRequestInterceptionEnabled(false);
   return Response::FallThrough();
 }
 
@@ -679,8 +680,7 @@ void NetworkHandler::NavigationPreloadRequestSent(
   for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();)
     headers_dict->setString(it.name(), it.value());
   frontend_->RequestWillBeSent(
-      request_id, version_id /* frameId */, version_id /* loaderId */,
-      "" /* documentURL */,
+      request_id, "" /* loader_id */, request.url.spec(),
       Network::Request::Create()
           .SetUrl(request.url.spec())
           .SetMethod(request.method)
@@ -750,7 +750,7 @@ void NetworkHandler::NavigationPreloadResponseReceived(
   response->SetRemoteIPAddress(head.socket_address.HostForURL());
   response->SetRemotePort(head.socket_address.port());
   frontend_->ResponseReceived(
-      request_id, version_id /* frameId */, version_id /* loaderId */,
+      request_id, "" /* loader_id */,
       base::TimeTicks::Now().ToInternalValue() /
           static_cast<double>(base::Time::kMicrosecondsPerSecond),
       Page::ResourceTypeEnum::Other, std::move(response));
@@ -796,8 +796,7 @@ void NetworkHandler::NavigationFailed(
   for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();)
     headers_dict->setString(it.name(), it.value());
   frontend_->RequestWillBeSent(
-      request_id, request_id /* frameId */, request_id /* loaderId */,
-      common_params.url.spec(),
+      request_id, "" /* loader_id */, common_params.url.spec(),
       Network::Request::Create()
           .SetUrl(common_params.url.spec())
           .SetMethod(common_params.method)
@@ -828,7 +827,7 @@ std::string NetworkHandler::UserAgentOverride() const {
   return enabled_ ? user_agent_ : std::string();
 }
 
-DispatchResponse NetworkHandler::EnableRequestInterception(bool enabled) {
+DispatchResponse NetworkHandler::SetRequestInterceptionEnabled(bool enabled) {
   if (interception_enabled_ == enabled)
     return Response::OK();  // Nothing to do.
 

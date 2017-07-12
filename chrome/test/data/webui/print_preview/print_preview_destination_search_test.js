@@ -124,26 +124,16 @@ TEST_F('PrintPreviewDestinationSearchTest', 'Select', function() {
     };
 
     setup(function() {
-      Mock4JS.clearMocksToVerify();
       nativeLayer_ = new print_preview.NativeLayerStub();
-      var nativeLayerEventTarget = mock(cr.EventTarget);
-      nativeLayer_.setEventTarget(nativeLayerEventTarget.proxy());
-      nativeLayerEventTarget.expects(atLeastOnce())
-          .addEventListener(ANYTHING, ANYTHING, ANYTHING);
-
       invitationStore_ = new print_preview.InvitationStore();
       destinationStore_ = new print_preview.DestinationStore(
           nativeLayer_, new print_preview.UserInfo(),
-          new print_preview.AppState());
+          new print_preview.AppState(), new WebUIListenerTracker());
       userInfo_ = new print_preview.UserInfo();
 
       destinationSearch_ = new print_preview.DestinationSearch(
           destinationStore_, invitationStore_, userInfo_);
       destinationSearch_.decorate($('destination-search'));
-    });
-
-    teardown(function() {
-      Mock4JS.verifyAllMocks();
     });
 
     test('ResolutionFails', function() {

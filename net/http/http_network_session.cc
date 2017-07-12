@@ -125,11 +125,10 @@ HttpNetworkSession::Params::Params()
       quic_disable_bidirectional_streams(false),
       quic_force_hol_blocking(false),
       quic_race_cert_verification(false),
-      quic_do_not_fragment(false),
       quic_estimate_initial_rtt(false),
       enable_token_binding(false),
       http_09_on_non_default_ports_enabled(false) {
-  quic_supported_versions.push_back(QUIC_VERSION_37);
+  quic_supported_versions.push_back(QUIC_VERSION_39);
 }
 
 HttpNetworkSession::Params::Params(const Params& other) = default;
@@ -190,7 +189,6 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
                              : QuicChromiumClock::GetInstance(),
           params.quic_max_packet_length,
           params.quic_user_agent_id,
-          params.quic_supported_versions,
           params.quic_max_server_configs_stored_in_properties > 0,
           params.quic_close_sessions_on_ip_change,
           params.mark_quic_broken_when_network_blackholes,
@@ -202,7 +200,6 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
           params.quic_allow_server_migration,
           params.quic_force_hol_blocking,
           params.quic_race_cert_verification,
-          params.quic_do_not_fragment,
           params.quic_estimate_initial_rtt,
           params.quic_connection_options,
           params.enable_token_binding),
@@ -354,7 +351,6 @@ std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
                    params_.quic_migrate_sessions_early);
   dict->SetBoolean("allow_server_migration",
                    params_.quic_allow_server_migration);
-  dict->SetBoolean("do_not_fragment", params_.quic_do_not_fragment);
   dict->SetBoolean("estimate_initial_rtt", params_.quic_estimate_initial_rtt);
   dict->SetBoolean("force_hol_blocking", params_.quic_force_hol_blocking);
   dict->SetBoolean("server_push_cancellation",

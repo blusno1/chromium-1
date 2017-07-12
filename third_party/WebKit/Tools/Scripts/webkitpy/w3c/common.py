@@ -18,6 +18,8 @@ WPT_GH_URL = 'https://github.com/%s/%s/' % (WPT_GH_ORG, WPT_GH_REPO_NAME)
 WPT_GH_SSH_URL_TEMPLATE = 'https://{}@github.com/%s/%s.git' % (WPT_GH_ORG, WPT_GH_REPO_NAME)
 WPT_REVISION_FOOTER = 'WPT-Export-Revision:'
 DEFAULT_COMMIT_HISTORY_WINDOW = 5000
+EXPORT_PR_LABEL = 'chromium-export'
+PROVISIONAL_PR_LABEL = 'do not merge yet'
 
 # TODO(qyearsley): This directory should be able to be constructed with
 # PathFinder and WPT_DEST_NAME, plus the string "external".
@@ -85,7 +87,7 @@ def _exportable_commits_since(chromium_commit_hash, host, local_wpt, wpt_github)
 def is_exportable(chromium_commit, local_wpt, wpt_github):
     """Checks whether a given patch is exportable and can be applied."""
     message = chromium_commit.message()
-    if 'NOEXPORT=true' in message or message.startswith('Import'):
+    if 'NOEXPORT=true' in message or 'No-Export: true' in message or message.startswith('Import'):
         return False
     patch = chromium_commit.format_patch()
     if not (patch and local_wpt.test_patch(patch, chromium_commit)):
@@ -94,11 +96,7 @@ def is_exportable(chromium_commit, local_wpt, wpt_github):
     # If there's a corresponding closed PR, then this commit should not
     # be considered exportable; the PR might have been merged and reverted,
     # or it might have been closed manually without merging.
-    pull_request = wpt_github.pr_with_change_id(chromium_commit.change_id())
-    if not pull_request:
-        # The Change ID can't be used for commits made via Rietveld.
-        # TODO(qyearsley): Remove this fallback after Gerrit migration.
-        pull_request = wpt_github.pr_with_position(chromium_commit.position)
+    pull_request = wpt_github.pr_for_chromium_commit(chromium_commit)
     if pull_request and pull_request.state == 'closed':
         return False
     return True

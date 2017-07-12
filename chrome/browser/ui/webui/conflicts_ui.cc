@@ -6,9 +6,10 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/metrics/user_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/conflicts_handler.h"
+#include "chrome/browser/ui/webui/module_database_conflicts_handler.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
@@ -58,8 +59,12 @@ content::WebUIDataSource* CreateConflictsUIHTMLSource() {
 
 ConflictsUI::ConflictsUI(content::WebUI* web_ui)
     : content::WebUIController(web_ui) {
-  base::RecordAction(base::UserMetricsAction("ViewAboutConflicts"));
-  web_ui->AddMessageHandler(base::MakeUnique<ConflictsHandler>());
+  if (base::FeatureList::IsEnabled(features::kModuleDatabase)) {
+    web_ui->AddMessageHandler(
+        base::MakeUnique<ModuleDatabaseConflictsHandler>());
+  } else {
+    web_ui->AddMessageHandler(base::MakeUnique<ConflictsHandler>());
+  }
 
   // Set up the about:conflicts source.
   Profile* profile = Profile::FromWebUI(web_ui);

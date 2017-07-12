@@ -5,16 +5,12 @@
 #ifndef SERVICES_RESOURCE_COORDINATOR_COORDINATION_UNIT_COORDINATION_UNIT_GRAPH_OBSERVER_H_
 #define SERVICES_RESOURCE_COORDINATOR_COORDINATION_UNIT_COORDINATION_UNIT_GRAPH_OBSERVER_H_
 
-#include <memory>
-#include <unordered_map>
-
 #include "base/macros.h"
-#include "services/resource_coordinator/coordination_unit/coordination_unit_impl.h"
-#include "services/resource_coordinator/public/cpp/coordination_unit_id.h"
-#include "services/resource_coordinator/public/cpp/coordination_unit_types.h"
 #include "services/resource_coordinator/public/interfaces/coordination_unit.mojom.h"
 
 namespace resource_coordinator {
+
+class CoordinationUnitImpl;
 
 // An observer API for the coordination unit graph maintained by GRC.
 //
@@ -27,9 +23,9 @@ namespace resource_coordinator {
 // initialized and valid.
 //
 // To create and install a new observer:
-//   (1) derive from this class
-//   (2) register in CoordinationUnitManager::RegisterObserver
-//       inside of CoordinationUnitManager::CoordinationUnitManager
+//   (1) Derive from this class.
+//   (2) Register by calling on |coordination_unit_manager().ResgiterObserver|
+//       inside of the ResourceCoordinatorService::Create.
 class CoordinationUnitGraphObserver {
  public:
   CoordinationUnitGraphObserver();
@@ -58,7 +54,8 @@ class CoordinationUnitGraphObserver {
   // Called whenever a |property| within the |coordination_unit|'s
   // internal property store has changed.
   virtual void OnPropertyChanged(const CoordinationUnitImpl* coordination_unit,
-                                 mojom::PropertyType property) {}
+                                 const mojom::PropertyType property_type,
+                                 const base::Value& value) {}
 
   // Called whenever parent-child relationship ends where the
   // |coordination_unit| was the parent and the |child_coordination_unit|.
@@ -73,7 +70,7 @@ class CoordinationUnitGraphObserver {
       const CoordinationUnitImpl* parent_coordination_unit) {}
 
   // Called when the |coordination_unit| is about to be destroyed.
-  virtual void OnCoordinationUnitWillBeDestroyed(
+  virtual void OnBeforeCoordinationUnitDestroyed(
       const CoordinationUnitImpl* coordination_unit) {}
 
  private:

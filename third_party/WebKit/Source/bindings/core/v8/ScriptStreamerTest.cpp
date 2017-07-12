@@ -34,7 +34,8 @@ class ScriptStreamingTest : public ::testing::Test {
                                  ->CurrentThread()
                                  ->Scheduler()
                                  ->LoadingTaskRunner()),
-        settings_(Settings::Create()) {
+        settings_(Settings::Create()),
+        dummy_document_(Document::Create()) {
     resource_ = ScriptResource::CreateForTest(
         KURL(kParsedURLString, "http://www.streaming-test.com/"),
         UTF8Encoding());
@@ -45,6 +46,8 @@ class ScriptStreamingTest : public ::testing::Test {
     // the method(s) to return default values.
     EXPECT_CALL(*element, IntegrityAttributeValue())
         .WillRepeatedly(::testing::Return(String()));
+    EXPECT_CALL(*element, GetDocument())
+        .WillRepeatedly(::testing::ReturnRef(*dummy_document_.Get()));
 
     pending_script_ = ClassicPendingScript::Create(element, resource_.Get());
     ScriptStreamer::SetSmallScriptThresholdForTesting(0);
@@ -100,9 +103,15 @@ class ScriptStreamingTest : public ::testing::Test {
   // ScriptResource::appendData.
   Persistent<ScriptResource> resource_;
   Persistent<ClassicPendingScript> pending_script_;
+
+  Persistent<Document> dummy_document_;
 };
 
-class TestPendingScriptClient final : public PendingScriptClient {
+class TestPendingScriptClient final
+    : public GarbageCollectedFinalized<TestPendingScriptClient>,
+      public PendingScriptClient {
+  USING_GARBAGE_COLLECTED_MIXIN(TestPendingScriptClient);
+
  public:
   TestPendingScriptClient() : finished_(false) {}
   void PendingScriptFinished(PendingScript*) override { finished_ = true; }
@@ -135,7 +144,7 @@ TEST_F(ScriptStreamingTest, CompilingStreamedScript) {
   EXPECT_TRUE(client->Finished());
   bool error_occurred = false;
   ScriptSourceCode source_code = GetPendingScript()
-                                     ->GetSource(KURL(), error_occurred)
+                                     ->GetSource(NullURL(), error_occurred)
                                      ->GetScriptSourceCode();
   EXPECT_FALSE(error_occurred);
   EXPECT_TRUE(source_code.Streamer());
@@ -175,7 +184,7 @@ TEST_F(ScriptStreamingTest, CompilingStreamedScriptWithParseError) {
 
   bool error_occurred = false;
   ScriptSourceCode source_code = GetPendingScript()
-                                     ->GetSource(KURL(), error_occurred)
+                                     ->GetSource(NullURL(), error_occurred)
                                      ->GetScriptSourceCode();
   EXPECT_FALSE(error_occurred);
   EXPECT_TRUE(source_code.Streamer());
@@ -243,7 +252,7 @@ TEST_F(ScriptStreamingTest, SuppressingStreaming) {
 
   bool error_occurred = false;
   ScriptSourceCode source_code = GetPendingScript()
-                                     ->GetSource(KURL(), error_occurred)
+                                     ->GetSource(NullURL(), error_occurred)
                                      ->GetScriptSourceCode();
   EXPECT_FALSE(error_occurred);
   // ScriptSourceCode doesn't refer to the streamer, since we have suppressed
@@ -271,7 +280,7 @@ TEST_F(ScriptStreamingTest, EmptyScripts) {
 
   bool error_occurred = false;
   ScriptSourceCode source_code = GetPendingScript()
-                                     ->GetSource(KURL(), error_occurred)
+                                     ->GetSource(NullURL(), error_occurred)
                                      ->GetScriptSourceCode();
   EXPECT_FALSE(error_occurred);
   EXPECT_FALSE(source_code.Streamer());
@@ -298,7 +307,7 @@ TEST_F(ScriptStreamingTest, SmallScripts) {
 
   bool error_occurred = false;
   ScriptSourceCode source_code = GetPendingScript()
-                                     ->GetSource(KURL(), error_occurred)
+                                     ->GetSource(NullURL(), error_occurred)
                                      ->GetScriptSourceCode();
   EXPECT_FALSE(error_occurred);
   EXPECT_FALSE(source_code.Streamer());
@@ -328,7 +337,7 @@ TEST_F(ScriptStreamingTest, ScriptsWithSmallFirstChunk) {
   EXPECT_TRUE(client->Finished());
   bool error_occurred = false;
   ScriptSourceCode source_code = GetPendingScript()
-                                     ->GetSource(KURL(), error_occurred)
+                                     ->GetSource(NullURL(), error_occurred)
                                      ->GetScriptSourceCode();
   EXPECT_FALSE(error_occurred);
   EXPECT_TRUE(source_code.Streamer());
@@ -365,7 +374,7 @@ TEST_F(ScriptStreamingTest, EncodingChanges) {
   EXPECT_TRUE(client->Finished());
   bool error_occurred = false;
   ScriptSourceCode source_code = GetPendingScript()
-                                     ->GetSource(KURL(), error_occurred)
+                                     ->GetSource(NullURL(), error_occurred)
                                      ->GetScriptSourceCode();
   EXPECT_FALSE(error_occurred);
   EXPECT_TRUE(source_code.Streamer());
@@ -403,7 +412,7 @@ TEST_F(ScriptStreamingTest, EncodingFromBOM) {
   EXPECT_TRUE(client->Finished());
   bool error_occurred = false;
   ScriptSourceCode source_code = GetPendingScript()
-                                     ->GetSource(KURL(), error_occurred)
+                                     ->GetSource(NullURL(), error_occurred)
                                      ->GetScriptSourceCode();
   EXPECT_FALSE(error_occurred);
   EXPECT_TRUE(source_code.Streamer());

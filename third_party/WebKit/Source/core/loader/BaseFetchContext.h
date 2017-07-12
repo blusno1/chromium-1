@@ -18,10 +18,8 @@
 namespace blink {
 
 class ConsoleMessage;
-class ContentSettingsClient;
 class KURL;
 class SecurityOrigin;
-class Settings;
 class SubresourceFilter;
 
 // A core-level implementaiton of FetchContext that does not depend on
@@ -52,11 +50,13 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
 
   DECLARE_VIRTUAL_TRACE();
 
+  virtual KURL GetFirstPartyForCookies() const = 0;
+  virtual void CountUsage(WebFeature) const = 0;
+  virtual void CountDeprecation(WebFeature) const = 0;
+
  protected:
-  // Used for security checks. It is valid that they return nullptr,
-  // while returning nullptr may result in disable some security checks.
-  virtual ContentSettingsClient* GetContentSettingsClient() const = 0;
-  virtual Settings* GetSettings() const = 0;
+  // Used for security checks.
+  virtual bool AllowScriptFromSource(const KURL&) const = 0;
   virtual SubresourceFilter* GetSubresourceFilter() const = 0;
 
   // Note: subclasses are expected to override following methods.
@@ -68,8 +68,6 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
                                        ResourceRequestBlockedReason) const = 0;
   virtual bool ShouldBypassMainWorldCSP() const = 0;
   virtual bool IsSVGImageChromeClient() const = 0;
-  virtual void CountUsage(WebFeature) const = 0;
-  virtual void CountDeprecation(WebFeature) const = 0;
   virtual bool ShouldBlockFetchByMixedContentCheck(
       const ResourceRequest&,
       const KURL&,

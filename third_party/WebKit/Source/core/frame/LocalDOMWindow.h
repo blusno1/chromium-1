@@ -247,7 +247,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   DEFINE_ATTRIBUTE_EVENT_LISTENER(animationstart);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(search);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(transitionend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
 
   DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkitanimationstart,
                                          webkitAnimationStart);
@@ -264,8 +263,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   void FrameDestroyed();
   void Reset();
-
-  unsigned PendingUnloadEventListeners() const;
 
   Element* frameElement() const;
 
@@ -317,9 +314,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void AcceptLanguagesChanged();
 
   FloatSize GetViewportSize(IncludeScrollbarsInRect) const;
-
-  void SetHasLoadEventFired() { has_load_event_fired_ = true; }
-  bool HasLoadEventFired() { return has_load_event_fired_; }
 
  protected:
   // EventTarget overrides.

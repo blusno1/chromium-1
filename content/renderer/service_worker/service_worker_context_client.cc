@@ -38,6 +38,7 @@
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_status_code.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/common/worker_url_loader_factory_provider.mojom.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/push_event_payload.h"
@@ -101,6 +102,19 @@ class WebServiceWorkerNetworkProviderImpl
     // are initiated in a secure context.
     extra_data->set_initiated_in_secure_context(true);
     request.SetExtraData(extra_data.release());
+  }
+
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
+      const blink::WebURLRequest& request,
+      base::SingleThreadTaskRunner* task_runner) override {
+    RenderThreadImpl* child_thread = RenderThreadImpl::current();
+    if (child_thread && provider_->script_loader_factory() &&
+        ServiceWorkerUtils::IsServicificationEnabled()) {
+      return base::MakeUnique<WebURLLoaderImpl>(
+          child_thread->resource_dispatcher(), task_runner,
+          provider_->script_loader_factory());
+    }
+    return nullptr;
   }
 
   int GetProviderID() const override { return provider_->provider_id(); }
@@ -744,7 +758,8 @@ void ServiceWorkerContextClient::DidInitializeWorkerContext(
   GetContentClient()
       ->renderer()
       ->DidInitializeServiceWorkerContextOnWorkerThread(
-          context, service_worker_version_id_, script_url_);
+          context, service_worker_version_id_, service_worker_scope_,
+          script_url_);
 }
 
 void ServiceWorkerContextClient::WillDestroyWorkerContext(
@@ -778,7 +793,7 @@ void ServiceWorkerContextClient::WillDestroyWorkerContext(
   g_worker_client_tls.Pointer()->Set(NULL);
 
   GetContentClient()->renderer()->WillDestroyServiceWorkerContextOnWorkerThread(
-      context, service_worker_version_id_, script_url_);
+      context, service_worker_version_id_, service_worker_scope_, script_url_);
 }
 
 void ServiceWorkerContextClient::WorkerContextDestroyed() {
@@ -990,12 +1005,11 @@ void ServiceWorkerContextClient::RespondToFetchEventWithResponseStream(
   blink::mojom::ServiceWorkerStreamCallbackPtr callback_ptr;
   body_as_stream->callback_request = mojo::MakeRequest(&callback_ptr);
   body_as_stream->stream = web_body_as_stream->DrainStreamDataPipe();
+  DCHECK(body_as_stream->stream.is_valid());
 
   web_body_as_stream->SetListener(
       base::MakeUnique<StreamHandleListener>(std::move(callback_ptr)));
 
-  // Temporary CHECK to debug https://crbug.com/734978.
-  CHECK(body_as_stream->stream.is_valid());
   response_callback->OnResponseStream(
       response, std::move(body_as_stream),
       base::Time::FromDoubleT(event_dispatch_time));

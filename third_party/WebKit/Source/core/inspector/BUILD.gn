@@ -11,6 +11,8 @@ _inspector_protocol_dir = "//third_party/inspector_protocol"
 
 blink_core_sources("inspector") {
   sources = [
+    "AddStringToDigestor.cpp",
+    "AddStringToDigestor.h",
     "ConsoleMessage.cpp",
     "ConsoleMessage.h",
     "ConsoleMessageStorage.cpp",
@@ -92,6 +94,18 @@ blink_core_sources("inspector") {
     "WorkerInspectorController.h",
     "WorkerThreadDebugger.cpp",
     "WorkerThreadDebugger.h",
+  ]
+
+  jumbo_excluded_sources = [
+    # Collides with InspectorPageAgent.cpp and
+    # NetworkResourcesData.cpp (patch incoming)
+    "InspectorNetworkAgent.cpp",
+
+    # Collides with InspectorPageAgent.cpp (patch incoming)
+    "MainThreadDebugger.cpp",
+
+    "InspectorOverlayAgent.cpp",  # Way too many different "Response"
+    "InspectorEmulationAgent.cpp",  # Way too many different "Response"
   ]
 
   configs += [

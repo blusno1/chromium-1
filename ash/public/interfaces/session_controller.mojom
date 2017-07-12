@@ -123,6 +123,11 @@ interface SessionController {
   // active user session.
   SetUserSessionOrder(array<uint32> user_session_ids);
 
+  // Prepares ash for lock screen. Currently this ensures the current active
+  // window could not be used to mimic the lock screen. Lock screen is created
+  // after this call returns.
+  PrepareForLock() => ();
+
   // Runs the pre-lock animation to start locking ash. When the call returns,
   // |locked| == true means that the ash post-lock animation is finished and ash
   // is fully locked. Otherwise |locked| is false, which means something is
@@ -164,4 +169,7 @@ interface SessionControllerClient {
 
   // Switch the active user to the next or previous user.
   CycleActiveUser(CycleUserDirection direction);
+
+  // Show the multi-profile login UI to add another user to this session.
+  ShowMultiProfileLogin();
 };

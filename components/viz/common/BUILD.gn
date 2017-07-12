@@ -6,38 +6,62 @@ import("//testing/test.gni")
 
 source_set("common") {
   sources = [
+    "frame_sink_id.cc",
+    "frame_sink_id.h",
+    "frame_sink_id_allocator.h",
     "gl_helper.cc",
     "gl_helper.h",
     "gl_helper_readback_support.cc",
     "gl_helper_readback_support.h",
     "gl_helper_scaling.cc",
     "gl_helper_scaling.h",
+    "local_surface_id.cc",
+    "local_surface_id.h",
+    "local_surface_id_allocator.cc",
+    "local_surface_id_allocator.h",
+    "quads/resource_format.h",
+    "quads/shared_bitmap.cc",
+    "quads/shared_bitmap.h",
+    "quads/texture_mailbox.cc",
+    "quads/texture_mailbox.h",
+    "resources/buffer_to_texture_target_map.cc",
+    "resources/buffer_to_texture_target_map.h",
+    "resources/platform_color.h",
+    "resources/resource_format_utils.cc",
+    "resources/resource_format_utils.h",
+    "resources/resource_settings.cc",
+    "resources/resource_settings.h",
+    "resources/shared_bitmap_manager.h",
+    "surface_id.cc",
+    "surface_id.h",
   ]
 
   deps = [
+    "//base",
     "//gpu/command_buffer/client:gles2_interface",
+    "//mojo/public/cpp/bindings",
     "//skia",
+    "//ui/gfx:color_space",
     "//ui/gfx/geometry",
   ]
 
   public_deps = [
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/common",
+    "//mojo/public/cpp/bindings",
   ]
 }
 
+# These tests don't pass on Android so this target isn't in viz_unittests. If
+# you add a test here that should run on Android you need to change that.
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "gl_helper_unittest.cc",
+    "resources/buffer_to_texture_target_map_unittest.cc",
+    "resources/platform_color_unittest.cc",
     "yuv_readback_unittest.cc",
   ]
-
-  if (!is_android) {
-    sources += [
-      # Many of these fail on Android with the test GL implementation.
-      "gl_helper_unittest.cc",
-    ]
-  }
 
   deps = [
     ":common",

@@ -176,6 +176,7 @@
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebData.h"
+#include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
@@ -993,7 +994,6 @@ RenderFrameImpl* RenderFrameImpl::CreateMainFrame(
   render_frame->InitializeBlameContext(nullptr);
   WebLocalFrame* web_frame = WebLocalFrame::CreateMainFrame(
       render_view->webview(), render_frame,
-      render_frame->blink_interface_provider_.get(),
       render_frame->blink_interface_registry_.get(), opener,
       // This conversion is a little sad, as this often comes from a
       // WebString...
@@ -1044,7 +1044,6 @@ void RenderFrameImpl::CreateFrame(
     web_frame = parent_web_frame->CreateLocalChild(
         replicated_state.scope, WebString::FromUTF8(replicated_state.name),
         replicated_state.sandbox_flags, render_frame,
-        render_frame->blink_interface_provider_.get(),
         render_frame->blink_interface_registry_.get(),
         previous_sibling_web_frame,
         FeaturePolicyHeaderToWeb(replicated_state.container_policy),
@@ -1070,9 +1069,8 @@ void RenderFrameImpl::CreateFrame(
     render_frame->proxy_routing_id_ = proxy_routing_id;
     proxy->set_provisional_frame_routing_id(routing_id);
     web_frame = blink::WebLocalFrame::CreateProvisional(
-        render_frame, render_frame->blink_interface_provider_.get(),
-        render_frame->blink_interface_registry_.get(), proxy->web_frame(),
-        replicated_state.sandbox_flags,
+        render_frame, render_frame->blink_interface_registry_.get(),
+        proxy->web_frame(), replicated_state.sandbox_flags,
         FeaturePolicyHeaderToWeb(replicated_state.container_policy));
   }
   CHECK(parent_routing_id != MSG_ROUTING_NONE || !web_frame->Parent());
@@ -1208,8 +1206,6 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
   pending_remote_interface_provider_request_ = MakeRequest(&remote_interfaces);
   remote_interfaces_.reset(new service_manager::InterfaceProvider);
   remote_interfaces_->Bind(std::move(remote_interfaces));
-  blink_interface_provider_.reset(new BlinkInterfaceProviderImpl(
-      remote_interfaces_->GetWeakPtr()));
   blink_interface_registry_.reset(
       new BlinkInterfaceRegistryImpl(interface_registry_->GetWeakPtr()));
 
@@ -1428,10 +1424,15 @@ RenderWidgetFullscreenPepper* RenderFrameImpl::CreatePepperFullscreenContainer(
   if (render_view()->webview())
     active_url = render_view()->GetURLForGraphicsContext3D();
 
+  mojom::WidgetPtr widget_channel;
+  mojom::WidgetRequest widget_channel_request =
+      mojo::MakeRequest(&widget_channel);
+
   // Synchronous IPC to obtain a routing id for the fullscreen widget.
   int32_t fullscreen_widget_routing_id = MSG_ROUTING_NONE;
   if (!RenderThreadImpl::current_render_message_filter()
            ->CreateFullscreenWidget(render_view()->routing_id(),
+                                    std::move(widget_channel),
                                     &fullscreen_widget_routing_id)) {
     return nullptr;
   }
@@ -1442,7 +1443,7 @@ RenderWidgetFullscreenPepper* RenderFrameImpl::CreatePepperFullscreenContainer(
   RenderWidgetFullscreenPepper* widget = RenderWidgetFullscreenPepper::Create(
       fullscreen_widget_routing_id, show_callback,
       GetRenderWidget()->compositor_deps(), plugin, active_url,
-      GetRenderWidget()->screen_info());
+      GetRenderWidget()->screen_info(), std::move(widget_channel_request));
   // TODO(nick): The show() handshake seems like unnecessary complexity here,
   // since there's no real delay between CreateFullscreenWidget and
   // ShowCreatedFullscreenWidget. Would it be simpler to have the
@@ -1608,6 +1609,9 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnMoveRangeSelectionExtent)
     IPC_MESSAGE_HANDLER(InputMsg_Replace, OnReplace)
     IPC_MESSAGE_HANDLER(InputMsg_ReplaceMisspelling, OnReplaceMisspelling)
+    IPC_MESSAGE_HANDLER(InputMsg_MoveCaret, OnMoveCaret)
+    IPC_MESSAGE_HANDLER(InputMsg_ScrollFocusedEditableNodeIntoRect,
+                        OnScrollFocusedEditableNodeIntoRect)
     IPC_MESSAGE_HANDLER(FrameMsg_CopyImageAt, OnCopyImageAt)
     IPC_MESSAGE_HANDLER(FrameMsg_SaveImageAt, OnSaveImageAt)
     IPC_MESSAGE_HANDLER(InputMsg_ExtendSelectionAndDelete,
@@ -1645,6 +1649,7 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_SetFrameOwnerProperties,
                         OnSetFrameOwnerProperties)
     IPC_MESSAGE_HANDLER(FrameMsg_AdvanceFocus, OnAdvanceFocus)
+    IPC_MESSAGE_HANDLER(FrameMsg_AdvanceFocusInForm, OnAdvanceFocusInForm)
     IPC_MESSAGE_HANDLER(FrameMsg_SetFocusedFrame, OnSetFocusedFrame)
     IPC_MESSAGE_HANDLER(FrameMsg_SetTextTrackSettings,
                         OnTextTrackSettingsChanged)
@@ -1896,6 +1901,18 @@ void RenderFrameImpl::OnCustomContextMenuAction(
     // Internal request, forward to WebKit.
     render_view_->webview()->PerformCustomContextMenuAction(action);
   }
+}
+
+void RenderFrameImpl::OnMoveCaret(const gfx::Point& point) {
+  Send(new InputHostMsg_MoveCaret_ACK(render_view_->GetRoutingID()));
+  frame_->MoveCaretSelection(render_view_->ConvertWindowPointToViewport(point));
+}
+
+void RenderFrameImpl::OnScrollFocusedEditableNodeIntoRect(
+    const gfx::Rect& rect) {
+  // TODO(dtapuska): Move the implementation of scroll focused
+  // editable node into rect into this class.
+  render_view_->ScrollFocusedEditableNodeIntoRect(rect);
 }
 
 void RenderFrameImpl::OnUndo() {
@@ -2273,6 +2290,12 @@ void RenderFrameImpl::OnAdvanceFocus(blink::WebFocusType type,
 
   render_view_->webview()->AdvanceFocusAcrossFrames(
       type, source_frame->web_frame(), frame_);
+}
+
+void RenderFrameImpl::OnAdvanceFocusInForm(blink::WebFocusType focus_type) {
+  if (render_view_->webview()->FocusedFrame() != frame_)
+    return;
+  frame_->AdvanceFocusInForm(focus_type);
 }
 
 void RenderFrameImpl::OnSetFocusedFrame() {
@@ -2937,6 +2960,8 @@ RenderFrameImpl::CreateWorkerFetchContext() {
     worker_fetch_context->set_is_controlled_by_service_worker(
         provider->IsControlledByServiceWorker());
   }
+  for (auto& observer : observers_)
+    observer.WillCreateWorkerFetchContext(worker_fetch_context.get());
   return std::move(worker_fetch_context);
 }
 
@@ -3081,7 +3106,6 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
   child_render_frame->InitializeBlameContext(this);
   blink::WebLocalFrame* web_frame = parent->CreateLocalChild(
       scope, child_render_frame,
-      child_render_frame->blink_interface_provider_.get(),
       child_render_frame->blink_interface_registry_.get());
 
   child_render_frame->in_frame_tree_ = true;
@@ -4923,20 +4947,7 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     params.contents_mime_type = ds->GetResponse().MimeType().Utf8();
 
     params.transition = navigation_state->GetTransitionType();
-    if (!ui::PageTransitionIsMainFrame(params.transition)) {
-      // If the main frame does a load, it should not be reported as a subframe
-      // navigation.  This can occur in the following case:
-      // 1. You're on a site with frames.
-      // 2. You do a subframe navigation.  This is stored with transition type
-      //    MANUAL_SUBFRAME.
-      // 3. You navigate to some non-frame site, say, google.com.
-      // 4. You navigate back to the page from step 2.  Since it was initially
-      //    MANUAL_SUBFRAME, it will be that same transition type here.
-      // We don't want that, because any navigation that changes the toplevel
-      // frame should be tracked as a toplevel navigation (this allows us to
-      // update the URL bar, etc).
-      params.transition = ui::PAGE_TRANSITION_LINK;
-    }
+    DCHECK(ui::PageTransitionIsMainFrame(params.transition));
 
     // If the page contained a client redirect (meta refresh, document.loc...),
     // set the transition appropriately.
@@ -5874,7 +5885,7 @@ void RenderFrameImpl::OnSelectPopupMenuItems(
 void RenderFrameImpl::OpenURL(
     const GURL& url,
     bool uses_post,
-    const scoped_refptr<ResourceRequestBodyImpl>& resource_request_body,
+    const scoped_refptr<ResourceRequestBody>& resource_request_body,
     const std::string& extra_headers,
     const Referrer& referrer,
     WebNavigationPolicy policy,
@@ -6703,17 +6714,19 @@ std::unique_ptr<blink::WebURLLoader> RenderFrameImpl::CreateURLLoader(
     const blink::WebURLRequest& request,
     base::SingleThreadTaskRunner* task_runner) {
   ChildThreadImpl* child_thread = ChildThreadImpl::current();
-  const bool network_service_enabled =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNetworkService);
-  if (network_service_enabled && child_thread) {
+  if (base::FeatureList::IsEnabled(features::kNetworkService) && child_thread) {
+    // Use if per-frame or per-scheme URLLoaderFactory is given.
     mojom::URLLoaderFactory* factory = url_loader_factory_.get();
 
     if (request.Url().ProtocolIs(url::kBlobScheme))
       factory = RenderThreadImpl::current()->GetBlobURLLoaderFactory();
 
-    return base::MakeUnique<WebURLLoaderImpl>(
-        child_thread->resource_dispatcher(), task_runner, factory);
+    if (factory) {
+      return base::MakeUnique<WebURLLoaderImpl>(
+          child_thread->resource_dispatcher(), task_runner, factory);
+    }
+    // Otherwise fallback to the platform one, which will use the default
+    // network service's URLLoaderFactory.
   }
 
   return RenderThreadImpl::current()->blink_platform_impl()->CreateURLLoader(

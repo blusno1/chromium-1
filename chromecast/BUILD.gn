@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//base/android/jni_generator/jni_exception_list.gni")
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -60,11 +61,7 @@ cast_test_group("cast_tests") {
   }
 
   if (!is_android && use_alsa) {
-    tests += [
-      "//chromecast/media/cma/backend/alsa:cast_alsa_cma_backend_unittests",
-      "//chromecast/media/cma/backend/alsa:libcast_governor_unittests",
-      "//chromecast/media/cma/backend/alsa:slew_volume_unittests",
-    ]
+    tests += [ "//chromecast/media/cma/backend/alsa:cast_alsa_cma_backend_unittests" ]
   }
 
   if (!is_android) {
@@ -475,12 +472,20 @@ group("chromecast_locales_pak") {
 buildflag_header("chromecast_features") {
   header = "chromecast_features.h"
   flags = [
+    "ENABLE_ASSISTANT=$enable_assistant",
+    "IS_ANDROID_THINGS=$is_android_things",
     "IS_CAST_AUDIO_ONLY=$is_cast_audio_only",
     "IS_CAST_USING_CMA_BACKEND=$is_cast_using_cma_backend",
+    "SUPPORTS_MULTIZONE=$supports_multizone",
   ]
 }
 
 if (is_android) {
+  generate_jni_registration("cast_shell_jni_registration") {
+    target = ":cast_shell_apk"
+    output = "$root_gen_dir/chromecast/android/${target_name}.h"
+    exception_files = jni_exception_files
+  }
   android_assets("cast_shell_apk_assets") {
     assert(v8_use_external_startup_data)
 

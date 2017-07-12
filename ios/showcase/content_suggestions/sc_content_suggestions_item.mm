@@ -18,7 +18,6 @@
 @synthesize suggestionIdentifier;
 @synthesize image;
 @synthesize title;
-@synthesize subtitle;
 @synthesize hasImage;
 @synthesize publisher;
 @synthesize publicationDate;
@@ -36,7 +35,6 @@
   [super configureCell:cell];
   [cell.faviconView configureWithAttributes:self.attributes];
   cell.titleLabel.text = self.title;
-  [cell setSubtitleText:self.subtitle];
   cell.displayImage = self.hasImage;
   [cell setContentImage:self.image animated:NO];
   [cell setAdditionalInformationWithPublisherName:self.publisher
@@ -49,6 +47,15 @@
 
 - (NSString*)description {
   return self.title;
+}
+
+- (CGFloat)cellHeightForWidth:(CGFloat)width {
+  return [self.cellClass heightForWidth:width
+                              withImage:self.hasImage
+                                  title:self.title
+                          publisherName:self.publisher
+                        publicationDate:self.publicationDate
+                       availableOffline:self.availableOffline];
 }
 
 @end

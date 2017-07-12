@@ -9,10 +9,6 @@
 # ask hajimehoshi@.                                                       #
 ###########################################################################
 
-# FIXME: The below tests fails when the leak detector is disabled.
-crbug.com/366029 compositing/fixed-body-background-positioned.html [ Failure Pass ]
-crbug.com/366029 virtual/disable-spinvalidation/compositing/fixed-body-background-positioned.html [ Failure Pass ]
-
 # FIXME: The below tests crashes when the leak detector is run on debug builds
 crbug.com/366043 [ Debug ] fast/history/history-traversal-is-asynchronous.html [ Crash ]
 
@@ -42,9 +38,11 @@ crbug.com/661182 fast/loader/open-in-srcdoc-unload.html [ Leak ]
 crbug.com/506754 http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
 crbug.com/506754 virtual/mojo-loading/http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
 crbug.com/506754 virtual/off-main-thread-fetch/http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
+crbug.com/506754 virtual/service-worker-script-streaming/http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
 crbug.com/506754 http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
 crbug.com/506754 virtual/mojo-loading/http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
 crbug.com/506754 virtual/off-main-thread-fetch/http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
+crbug.com/506754 virtual/service-worker-script-streaming/http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
 
 # -----------------------------------------------------------------
 # Leaks in external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/*

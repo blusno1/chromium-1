@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -88,6 +89,9 @@ const ui::AXNodeData& NativeViewAccessibilityBase::GetData() const {
 
   if (!view_->IsDrawn())
     data_.AddState(ui::AX_STATE_INVISIBLE);
+
+  if (view_->context_menu_controller())
+    data_.AddAction(ui::AX_ACTION_SHOW_CONTEXT_MENU);
 
   // Make sure this element is excluded from the a11y tree if there's a
   // focusable parent. All keyboard focusable elements should be leaf nodes.
@@ -192,6 +196,10 @@ gfx::NativeViewAccessible NativeViewAccessibilityBase::GetFocus() {
   View* focused_view =
       focus_manager ? focus_manager->GetFocusedView() : nullptr;
   return focused_view ? focused_view->GetNativeViewAccessible() : nullptr;
+}
+
+ui::AXPlatformNode* NativeViewAccessibilityBase::GetFromNodeID(int32_t id) {
+  return nullptr;
 }
 
 gfx::AcceleratedWidget

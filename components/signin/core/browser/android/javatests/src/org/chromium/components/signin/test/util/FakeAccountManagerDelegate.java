@@ -9,12 +9,17 @@ import android.accounts.AuthenticatorDescription;
 import android.app.Activity;
 import android.content.Context;
 
+import org.junit.Assert;
+
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
+import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.components.signin.AccountManagerDelegate;
+import org.chromium.components.signin.AccountManagerDelegateException;
 import org.chromium.components.signin.AccountManagerHelper;
+import org.chromium.components.signin.AccountsChangeObserver;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -41,6 +46,7 @@ public class FakeAccountManagerDelegate implements AccountManagerDelegate {
 
     private final Context mContext;
     private final Set<AccountHolder> mAccounts = new HashSet<>();
+    private final ObserverList<AccountsChangeObserver> mObservers = new ObserverList<>();
 
     @VisibleForTesting
     public FakeAccountManagerDelegate(Context context, Account... accounts) {
@@ -53,37 +59,52 @@ public class FakeAccountManagerDelegate implements AccountManagerDelegate {
     }
 
     @Override
-    public Account[] getAccountsByType(String type) {
-        if (!AccountManagerHelper.GOOGLE_ACCOUNT_TYPE.equals(type)) {
-            throw new IllegalArgumentException("Invalid account type: " + type);
-        }
-        ArrayList<Account> validAccounts = new ArrayList<>();
+    public void addObserver(AccountsChangeObserver observer) {
+        mObservers.addObserver(observer);
+    }
+
+    @Override
+    public void removeObserver(AccountsChangeObserver observer) {
+        mObservers.removeObserver(observer);
+    }
+
+    @Override
+    public Account[] getAccountsSync() throws AccountManagerDelegateException {
+        return getAccountsSyncNoThrow();
+    }
+
+    public Account[] getAccountsSyncNoThrow() {
+        ArrayList<Account> result = new ArrayList<>();
         for (AccountHolder ah : mAccounts) {
-            if (type.equals(ah.getAccount().type)) {
-                validAccounts.add(ah.getAccount());
-            }
+            result.add(ah.getAccount());
         }
-        return validAccounts.toArray(new Account[0]);
+        return result.toArray(new Account[0]);
     }
 
     /**
      * Add an AccountHolder directly.
      *
      * @param accountHolder the account holder to add
-     * @return whether the account holder was added successfully
      */
-    public boolean addAccountHolderExplicitly(AccountHolder accountHolder) {
-        return mAccounts.add(accountHolder);
+    public void addAccountHolderExplicitly(AccountHolder accountHolder) {
+        boolean added = mAccounts.add(accountHolder);
+        Assert.assertTrue("Account was already added", added);
+        for (AccountsChangeObserver observer : mObservers) {
+            observer.onAccountsChanged();
+        }
     }
 
     /**
      * Remove an AccountHolder directly.
      *
      * @param accountHolder the account holder to remove
-     * @return whether the account holder was removed successfully
      */
-    public boolean removeAccountHolderExplicitly(AccountHolder accountHolder) {
-        return mAccounts.remove(accountHolder);
+    public void removeAccountHolderExplicitly(AccountHolder accountHolder) {
+        boolean removed = mAccounts.remove(accountHolder);
+        Assert.assertTrue("Account was already added", removed);
+        for (AccountsChangeObserver observer : mObservers) {
+            observer.onAccountsChanged();
+        }
     }
 
     @Override

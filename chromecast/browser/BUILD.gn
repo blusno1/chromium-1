@@ -4,6 +4,7 @@
 
 import("//build/config/ui.gni")
 import("//chromecast/chromecast.gni")
+import("//media/media_options.gni")
 import("//services/service_manager/public/service_manifest.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
@@ -132,12 +133,16 @@ source_set("browser") {
       "cast_content_window_linux.h",
       "cast_memory_pressure_monitor.cc",
       "cast_memory_pressure_monitor.h",
+      "memory_pressure_controller_impl.cc",
+      "memory_pressure_controller_impl.h",
       "metrics/external_metrics.cc",
       "metrics/external_metrics.h",
     ]
 
     deps += [
+      "//chromecast/common:interfaces",
       "//components/metrics:serialization",
+      "//mojo/public/cpp/bindings",
       "//third_party/fontconfig",
       "//ui/aura",
     ]
@@ -161,6 +166,13 @@ source_set("browser") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
+  }
+
+  if (enable_mojo_media) {
+    deps += [
+      "//media/mojo/interfaces:constants",
+      "//media/mojo/services",
+    ]
   }
 }
 

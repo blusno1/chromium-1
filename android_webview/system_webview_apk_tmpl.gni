@@ -32,6 +32,16 @@ template("system_webview_apk_tmpl") {
     }
     aapt_locale_whitelist = locales
 
+    # Whitelist rationale in https://crbug.com/691733.
+    exclude_xxxhdpi = true
+    xxxhdpi_whitelist = [
+      "*shadow*",  # Combination of gradient & transparency cause pixelation.
+      "*.9.*",  # Most nine-patches contain shadows.
+    ]
+
+    # Used as an additional apk in test scripts.
+    never_incremental = true
+
     if (is_java_debug) {
       enable_multidex = true
     } else {
@@ -44,6 +54,7 @@ template("system_webview_apk_tmpl") {
         "//base/android/proguard/chromium_apk.flags",
         "//base/android/proguard/chromium_code.flags",
       ]
+      png_to_webp = true
     }
   }
 }

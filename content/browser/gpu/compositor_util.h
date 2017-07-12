@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/values.h"
+#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -47,6 +48,9 @@ CONTENT_EXPORT bool IsCheckerImagingEnabled();
 CONTENT_EXPORT std::unique_ptr<base::DictionaryValue> GetFeatureStatus();
 CONTENT_EXPORT std::unique_ptr<base::ListValue> GetProblems();
 CONTENT_EXPORT std::vector<std::string> GetDriverBugWorkarounds();
+
+// Populate BufferToTextureTargetMap for all buffer usage/formats.
+CONTENT_EXPORT viz::BufferToTextureTargetMap CreateBufferToTextureTargetMap();
 
 }  // namespace content
 

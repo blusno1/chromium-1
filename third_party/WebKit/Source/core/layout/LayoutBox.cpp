@@ -332,8 +332,7 @@ void LayoutBox::StyleDidChange(StyleDifference diff,
 
     UpdateScrollSnapMappingAfterStyleChange(&new_style, old_style);
 
-    if (RuntimeEnabledFeatures::SlimmingPaintInvalidationEnabled() &&
-        ShouldClipOverflow()) {
+    if (ShouldClipOverflow()) {
       // The overflow clip paint property depends on border sizes through
       // overflowClipRect(), and border radii, so we update properties on
       // border size or radii change.
@@ -1633,11 +1632,11 @@ bool LayoutBox::GetBackgroundPaintedExtent(LayoutRect& painted_extent) const {
     return true;
   }
 
-  BackgroundImageGeometry geometry;
+  BackgroundImageGeometry geometry(*this);
   // TODO(jchaffraix): This function should be rethought as it's called during
   // and outside of the paint phase. Potentially returning different results at
   // different phases.
-  geometry.Calculate(*this, nullptr, nullptr, kGlobalPaintNormalPhase,
+  geometry.Calculate(nullptr, kGlobalPaintNormalPhase,
                      Style()->BackgroundLayers(), background_rect);
   if (geometry.HasNonLocalGeometry())
     return false;
@@ -1888,20 +1887,6 @@ void LayoutBox::EnsureIsReadyForPaintInvalidation() {
   SetBackgroundChangedSinceLastPaintInvalidation();
   SetShouldDoFullPaintInvalidationWithoutGeometryChange(
       PaintInvalidationReason::kFull);
-}
-
-PaintInvalidationReason LayoutBox::DeprecatedInvalidatePaint(
-    const PaintInvalidationState& paint_invalidation_state) {
-  if (HasBoxDecorationBackground()
-      // We also paint overflow controls in background phase.
-      || (HasOverflowClip() && GetScrollableArea()->HasOverflowControls())) {
-    PaintLayer& layer = paint_invalidation_state.PaintingLayer();
-    if (&layer.GetLayoutObject() != this)
-      layer.SetNeedsPaintPhaseDescendantBlockBackgrounds();
-  }
-
-  return LayoutBoxModelObject::DeprecatedInvalidatePaint(
-      paint_invalidation_state);
 }
 
 PaintInvalidationReason LayoutBox::InvalidatePaint(
@@ -5744,7 +5729,7 @@ bool LayoutBox::MustInvalidateBackgroundOrBorderPaintOnWidthChange() const {
     return true;
 
   // Our fill layers are ok. Let's check border.
-  if (Style()->HasBorderDecoration() && CanRenderBorderImage())
+  if (Style()->CanRenderBorderImage())
     return true;
 
   return false;
@@ -5763,18 +5748,10 @@ bool LayoutBox::MustInvalidateBackgroundOrBorderPaintOnHeightChange() const {
     return true;
 
   // Our fill layers are ok.  Let's check border.
-  if (Style()->HasBorderDecoration() && CanRenderBorderImage())
+  if (Style()->CanRenderBorderImage())
     return true;
 
   return false;
-}
-
-bool LayoutBox::CanRenderBorderImage() const {
-  if (!Style()->HasBorderDecoration())
-    return false;
-
-  StyleImage* border_image = Style()->BorderImage().GetImage();
-  return border_image && border_image->CanRender() && border_image->IsLoaded();
 }
 
 ShapeOutsideInfo* LayoutBox::GetShapeOutsideInfo() const {

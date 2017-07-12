@@ -42,7 +42,8 @@ enable_net_mojo = !is_ios && !is_proto_quic
 # in addition to use_openssl_certs or use_nss_certs, in that case byte certs
 # are used internally but OpenSSL or NSS are used for certificate verification.
 # TODO(mattm): crbug.com/671420: Implement and enable this for all platforms.
-use_byte_certs = is_mac || is_android || is_nacl || is_ios || is_win
+use_byte_certs =
+    is_mac || is_android || is_nacl || is_ios || is_win || is_fuchsia
 
 buildflag_header("features") {
   header = "net_features.h"
@@ -140,8 +141,6 @@ component("net") {
     "base/net_string_util.h",
     "base/network_interfaces.cc",
     "base/network_interfaces.h",
-    "base/network_interfaces_posix.cc",
-    "base/network_interfaces_posix.h",
     "base/parse_number.cc",
     "base/parse_number.h",
     "base/port_util.cc",
@@ -465,10 +464,13 @@ component("net") {
       "base/network_delegate.h",
       "base/network_delegate_impl.cc",
       "base/network_delegate_impl.h",
+      "base/network_interfaces_getifaddrs.cc",
+      "base/network_interfaces_getifaddrs.h",
       "base/network_interfaces_linux.cc",
       "base/network_interfaces_linux.h",
-      "base/network_interfaces_mac.cc",
-      "base/network_interfaces_mac.h",
+      "base/network_interfaces_nacl.cc",
+      "base/network_interfaces_posix.cc",
+      "base/network_interfaces_posix.h",
       "base/network_interfaces_win.cc",
       "base/network_interfaces_win.h",
       "base/network_throttle_manager.h",
@@ -977,8 +979,14 @@ component("net") {
       "http2/http2_structures.h",
       "http2/platform/api/http2_export.h",
       "http2/platform/api/http2_reconstruct_object.h",
+      "http2/platform/api/http2_string.h",
+      "http2/platform/api/http2_string_piece.h",
+      "http2/platform/api/http2_string_utils.h",
       "http2/platform/impl/http2_export_impl.h",
       "http2/platform/impl/http2_reconstruct_object_impl.h",
+      "http2/platform/impl/http2_string_impl.h",
+      "http2/platform/impl/http2_string_piece_impl.h",
+      "http2/platform/impl/http2_string_utils_impl.h",
       "http2/tools/http2_bug_tracker.h",
       "log/file_net_log_observer.cc",
       "log/file_net_log_observer.h",
@@ -1315,6 +1323,9 @@ component("net") {
       "quic/core/quic_spdy_stream.h",
       "quic/core/quic_stream.cc",
       "quic/core/quic_stream.h",
+      "quic/core/quic_stream_frame_data_producer.h",
+      "quic/core/quic_stream_send_buffer.cc",
+      "quic/core/quic_stream_send_buffer.h",
       "quic/core/quic_stream_sequencer.cc",
       "quic/core/quic_stream_sequencer.h",
       "quic/core/quic_stream_sequencer_buffer.cc",
@@ -1807,6 +1818,18 @@ component("net") {
       ]
     }
 
+    if (!is_nacl) {
+      sources -= [ "base/network_interfaces_nacl.cc" ]
+    }
+
+    # Use getifaddrs() on POSIX platforms, except Linux and Android.
+    if (!is_posix || is_linux || is_android) {
+      sources -= [
+        "base/network_interfaces_getifaddrs.cc",
+        "base/network_interfaces_getifaddrs.h",
+      ]
+    }
+
     if (use_gio) {
       deps += [ "//build/linux/libgio" ]
     }
@@ -1900,8 +1923,6 @@ component("net") {
         "base/network_change_notifier_mac.h",
         "base/network_config_watcher_mac.cc",
         "base/network_config_watcher_mac.h",
-        "base/network_interfaces_mac.cc",
-        "base/network_interfaces_mac.h",
         "base/platform_mime_util_mac.mm",
         "cert/test_root_certs_mac.cc",
         "cert/x509_util_ios_and_mac.cc",
@@ -1932,6 +1953,14 @@ component("net") {
         "base/network_interfaces_linux.cc",
         "base/network_interfaces_linux.h",
         "base/platform_mime_util_linux.cc",
+      ]
+    }
+
+    if (is_fuchsia) {
+      sources += [
+        "base/platform_mime_util_fuchsia.cc",
+        "cert/cert_database_fuchsia.cc",
+        "cert/test_root_certs_fuchsia.cc",
       ]
     }
   } else {
@@ -3104,6 +3133,8 @@ source_set("quic_test_tools") {
     "quic/test_tools/quic_time_wait_list_manager_peer.h",
     "quic/test_tools/rtt_stats_peer.cc",
     "quic/test_tools/rtt_stats_peer.h",
+    "quic/test_tools/simple_data_producer.cc",
+    "quic/test_tools/simple_data_producer.h",
     "quic/test_tools/simple_quic_framer.cc",
     "quic/test_tools/simple_quic_framer.h",
     "quic/test_tools/simulator/actor.cc",
@@ -4515,7 +4546,10 @@ test("net_unittests") {
     "base/network_activity_monitor_unittest.cc",
     "base/network_change_notifier_unittest.cc",
     "base/network_change_notifier_win_unittest.cc",
+    "base/network_interfaces_getifaddrs_unittest.cc",
+    "base/network_interfaces_linux_unittest.cc",
     "base/network_interfaces_unittest.cc",
+    "base/network_interfaces_win_unittest.cc",
     "base/network_throttle_manager_impl_unittest.cc",
     "base/parse_number_unittest.cc",
     "base/percentile_estimator_unittest.cc",
@@ -4765,6 +4799,7 @@ test("net_unittests") {
     "http2/http2_structures_test.cc",
     "http2/http2_structures_test_util.cc",
     "http2/http2_structures_test_util.h",
+    "http2/platform/api/http2_string_utils_test.cc",
     "http2/test_tools/frame_parts.cc",
     "http2/test_tools/frame_parts.h",
     "http2/test_tools/frame_parts_collector.cc",
@@ -4921,6 +4956,7 @@ test("net_unittests") {
     "quic/core/quic_simple_buffer_allocator_test.cc",
     "quic/core/quic_socket_address_coder_test.cc",
     "quic/core/quic_spdy_stream_test.cc",
+    "quic/core/quic_stream_send_buffer_test.cc",
     "quic/core/quic_stream_sequencer_buffer_test.cc",
     "quic/core/quic_stream_sequencer_test.cc",
     "quic/core/quic_stream_test.cc",
@@ -5378,6 +5414,11 @@ test("net_unittests") {
     bundle_deps = [ ":net_unittests_bundle_data" ]
   }
 
+  # Use getifaddrs() on POSIX platforms, except Linux and Android.
+  if (!is_posix || is_linux || is_android) {
+    sources -= [ "base/network_interfaces_getifaddrs_unittest.cc" ]
+  }
+
   # Unit tests that aren't supported by the current ICU alternatives on Android.
   if (is_android && use_platform_icu_alternatives) {
     sources -= [
@@ -5433,7 +5474,10 @@ test("net_unittests") {
     ]
     android_manifest = "//net/android/unittest_support/AndroidManifest.xml"
     set_sources_assignment_filter([])
-    sources += [ "base/address_tracker_linux_unittest.cc" ]
+    sources += [
+      "base/address_tracker_linux_unittest.cc",
+      "base/network_interfaces_linux_unittest.cc",
+    ]
     set_sources_assignment_filter(sources_assignment_filter)
     shard_timeout = 300
   }

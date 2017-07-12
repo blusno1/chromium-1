@@ -56,13 +56,13 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Persistent.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebContentSettingsClient.h"
 #include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebString.h"
@@ -139,7 +139,7 @@ void WebSharedWorkerImpl::InitializeLoader(bool data_saver_enabled) {
   // Browser process when the worker is created (similar to
   // RenderThread::OnCreateNewView).
   main_frame_ = WebFactory::GetInstance().CreateMainWebLocalFrameBase(
-      web_view_, this, Platform::Current()->GetInterfaceProvider(), nullptr);
+      web_view_, this, nullptr);
   main_frame_->SetDevToolsAgentClient(this);
 
   // If we were asked to pause worker context on start and wait for debugger
@@ -167,9 +167,9 @@ void WebSharedWorkerImpl::LoadShadowPage() {
   CString content("");
   RefPtr<SharedBuffer> buffer(
       SharedBuffer::Create(content.data(), content.length()));
-  main_frame_->GetFrame()->Loader().Load(
-      FrameLoadRequest(0, ResourceRequest(url_),
-                       SubstituteData(buffer, "text/html", "UTF-8", KURL())));
+  main_frame_->GetFrame()->Loader().Load(FrameLoadRequest(
+      0, ResourceRequest(url_),
+      SubstituteData(buffer, "text/html", "UTF-8", NullURL())));
 }
 
 void WebSharedWorkerImpl::FrameDetached(WebLocalFrame* frame, DetachType type) {
@@ -339,8 +339,12 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
                 ->DataSource()
                 ->GetServiceWorkerNetworkProvider());
     DCHECK(web_worker_fetch_context);
-    // TODO(horo): Set more information about the context (ex: AppCacheHostID)
-    // to |web_worker_fetch_context|.
+    web_worker_fetch_context->SetApplicationCacheHostID(
+        main_frame_->GetFrame()
+            ->GetDocument()
+            ->Fetcher()
+            ->Context()
+            .ApplicationCacheHostID());
     web_worker_fetch_context->SetDataSaverEnabled(
         main_frame_->GetFrame()->GetSettings()->GetDataSaverEnabled());
     ProvideWorkerFetchContextToWorker(worker_clients,
@@ -369,12 +373,11 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
 
   // SharedWorker can sometimes run tasks that are initiated by/associated with
   // a document's frame but these documents can be from a different process. So
-  // we intentionally populate the task runners with null document in order to
-  // use the thread's default task runner. Note that |m_document| should not be
-  // used as it's a dummy document for loading that doesn't represent the frame
-  // of any associated document.
-  ParentFrameTaskRunners* task_runners =
-      ParentFrameTaskRunners::Create(nullptr);
+  // we intentionally populate the task runners with default task runners of the
+  // main thread. Note that |m_document| should not be used as it's a dummy
+  // document for loading that doesn't represent the frame of any associated
+  // document.
+  ParentFrameTaskRunners* task_runners = ParentFrameTaskRunners::Create();
 
   reporting_proxy_ = new SharedWorkerReportingProxy(this, task_runners);
   worker_thread_ = WTF::MakeUnique<SharedWorkerThread>(

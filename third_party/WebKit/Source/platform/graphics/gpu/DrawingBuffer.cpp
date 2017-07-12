@@ -32,7 +32,9 @@
 
 #include <algorithm>
 #include <memory>
-#include "cc/resources/shared_bitmap.h"
+
+#include "build/build_config.h"
+#include "components/viz/common/quads/shared_bitmap.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
@@ -232,7 +234,7 @@ bool DrawingBuffer::DefaultBufferRequiresAlphaChannelToBePreserved() {
   return !want_alpha_channel_ && rgb_emulation;
 }
 
-std::unique_ptr<cc::SharedBitmap> DrawingBuffer::CreateOrRecycleBitmap() {
+std::unique_ptr<viz::SharedBitmap> DrawingBuffer::CreateOrRecycleBitmap() {
   auto it = std::remove_if(
       recycled_bitmaps_.begin(), recycled_bitmaps_.end(),
       [this](const RecycledBitmap& bitmap) { return bitmap.size != size_; });
@@ -249,7 +251,7 @@ std::unique_ptr<cc::SharedBitmap> DrawingBuffer::CreateOrRecycleBitmap() {
 }
 
 bool DrawingBuffer::PrepareTextureMailbox(
-    cc::TextureMailbox* out_mailbox,
+    viz::TextureMailbox* out_mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
   ScopedStateRestorer scoped_state_restorer(this);
   bool force_gpu_result = false;
@@ -258,7 +260,7 @@ bool DrawingBuffer::PrepareTextureMailbox(
 }
 
 bool DrawingBuffer::PrepareTextureMailboxInternal(
-    cc::TextureMailbox* out_mailbox,
+    viz::TextureMailbox* out_mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback,
     bool force_gpu_result) {
   DCHECK(state_restorer_);
@@ -294,10 +296,10 @@ bool DrawingBuffer::PrepareTextureMailboxInternal(
 }
 
 bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
-    cc::TextureMailbox* out_mailbox,
+    viz::TextureMailbox* out_mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
   DCHECK(state_restorer_);
-  std::unique_ptr<cc::SharedBitmap> bitmap = CreateOrRecycleBitmap();
+  std::unique_ptr<viz::SharedBitmap> bitmap = CreateOrRecycleBitmap();
   if (!bitmap)
     return false;
 
@@ -315,7 +317,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
                         op);
   }
 
-  *out_mailbox = cc::TextureMailbox(bitmap.get(), size_);
+  *out_mailbox = viz::TextureMailbox(bitmap.get(), size_);
   out_mailbox->set_color_space(color_space_);
 
   // This holds a ref on the DrawingBuffer that will keep it alive until the
@@ -335,7 +337,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
 }
 
 bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
-    cc::TextureMailbox* out_mailbox,
+    viz::TextureMailbox* out_mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
   DCHECK(state_restorer_);
   if (web_gl_version_ > kWebGL1) {
@@ -381,7 +383,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
         color_buffer_for_mailbox->parameters.target,
         color_buffer_for_mailbox->mailbox.name);
     const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
     gl_->DescheduleUntilFinishedCHROMIUM();
 #endif
     gl_->Flush();
@@ -393,7 +395,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
   {
     bool is_overlay_candidate = color_buffer_for_mailbox->image_id != 0;
     bool secure_output_only = false;
-    *out_mailbox = cc::TextureMailbox(
+    *out_mailbox = viz::TextureMailbox(
         color_buffer_for_mailbox->mailbox,
         color_buffer_for_mailbox->produce_sync_token,
         color_buffer_for_mailbox->parameters.target, gfx::Size(size_),
@@ -447,7 +449,7 @@ void DrawingBuffer::MailboxReleasedGpu(RefPtr<ColorBuffer> color_buffer,
 }
 
 void DrawingBuffer::MailboxReleasedSoftware(
-    std::unique_ptr<cc::SharedBitmap> bitmap,
+    std::unique_ptr<viz::SharedBitmap> bitmap,
     const IntSize& size,
     const gpu::SyncToken& sync_token,
     bool lost_resource) {
@@ -466,7 +468,7 @@ PassRefPtr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   // grContext().
   GrContext* gr_context = ContextProvider()->GetGrContext();
 
-  cc::TextureMailbox texture_mailbox;
+  viz::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
   bool success = false;
   if (gr_context) {
@@ -523,7 +525,7 @@ PassRefPtr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
 
 DrawingBuffer::ColorBufferParameters
 DrawingBuffer::GpuMemoryBufferColorBufferParameters() {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   // A CHROMIUM_image backed texture requires a specialized set of parameters
   // on OSX.
   ColorBufferParameters parameters;

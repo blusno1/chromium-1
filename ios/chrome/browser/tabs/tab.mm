@@ -102,12 +102,12 @@
 #include "ios/chrome/browser/web/print_observer.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #include "ios/chrome/grit/ios_strings.h"
-#import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/public/favicon_status.h"
 #include "ios/web/public/favicon_url.h"
 #include "ios/web/public/interstitials/web_interstitial.h"
 #include "ios/web/public/load_committed_details.h"
+#import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
 #import "ios/web/public/serializable_user_data_manager.h"
@@ -1339,9 +1339,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   DCHECK(self.webController.loadPhase == web::LOAD_REQUESTED);
   DCHECK([self navigationManager]);
 
-  // Move the toolbar to visible during page load.
-  [_fullScreenController disableFullScreen];
-
   BOOL isUserNavigationEvent =
       (transition & ui::PAGE_TRANSITION_IS_REDIRECT_MASK) == 0;
   // Check for link-follow clobbers. These are changes where there is no
@@ -1370,6 +1367,11 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
                                ui::PAGE_TRANSITION_RELOAD)) {
     [_parentTabModel tabUsageRecorder]->RecordReload(self);
   }
+
+  // Move the toolbar to visible during page load.
+  // TODO(crbug.com/707305): Do not disable fullscreen for same-document
+  // navigations.
+  [_fullScreenController disableFullScreen];
 
   [self.dialogDelegate cancelDialogForTab:self];
   [_parentTabModel notifyTabChanged:self];

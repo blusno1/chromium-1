@@ -59,6 +59,13 @@ You can of course still use
 if you have access to the TaskRunner instance (generic asserts discussed above
 are meant for anonymous methods that require static checks).
 
+Note: Contrary to overheard belief: SequencedWorkerPool::PostTask() resulted in
+an unsequenced (parallel) task. The SequencedWorkerPool allowed posting to
+sequences but on its own was just a plain TaskRunner (despite having sequence in
+its name...). base::PostTaskWithTraits() is thus the proper replacement if not
+having explicit sequencing was intended, otherwise
+base::CreateSequenceTaskRunnerWithTraits() is what you're looking for.
+
 ## BrowserThreads
 
 All BrowserThreads but UI/IO are being migrated to TaskScheduler
@@ -92,8 +99,10 @@ assigned files by:
 ## Relevant single-thread -> sequence mappings
 
 * base::SingleThreadTaskRunner -> base::SequencedTaskRunner
+  * SingleThreadTaskRunner::BelongsToCurrentThread() -> SeqeuenceTaskRunner::RunsTasksInCurrentSequence()
 * base::ThreadTaskRunnerHandle -> base::SequencedTaskRunnerHandle
 * base::ThreadChecker -> base::SequenceChecker
+  * ThreadChecker::CalledOnValidThread() -> DCHECK_CALLED_ON_VALID_SEQUENCE(...)
 * base::ThreadLocalStorage::Slot -> base::SequenceLocalStorageSlot
 * BrowserThread::DeleteOnThread -> base::DeleteOnTaskRunner / base::RefCountedDeleteOnSequence
 * CreateSingleThreadTaskRunnerWithTraits() -> CreateSequencedTaskRunnerWithTraits()
@@ -101,6 +110,7 @@ assigned files by:
      with a comment and ideally a bug to make it sequence when the sequence-unfriendly
      dependency is addressed (again [Prefer Sequences to
      Threads](threading_and_tasks.md#Prefer-Sequences-to-Threads)).
+
 
 ### Other relevant mappings for tests
 
@@ -123,10 +133,6 @@ assigned files by:
 * Everything in a file/component needs to run on the same sequence but there
   isn't a clear place to own/access the common SequencedTaskRunner =>
   base::Lazy(Sequenced|SingleThread|COMSTA)TaskRunner.
-* Mojo isn't sequence-friendly yet ([coming soon](https://crbug.com/678155)).
-  Use base::CreateSingleThreadTaskRunnerWithTraits() instead of
-  base::CreateSequencedTaskRunnerWithTraits() for sequences that need to use
-  mojo constructs for now (tag with TODO against https://crbug.com/678155).
 * For anything else, ping [base/task_scheduler/OWNERS](https://cs.chromium.org/chromium/src/base/task_scheduler/OWNERS)
   or [scheduler-dev@chromium.org](https://groups.google.com/a/chromium.org/forum/#!forum/scheduler-dev),
   thanks!

@@ -27,9 +27,14 @@
                                              date:(NSString*)publishDate
                               offlineAvailability:(BOOL)availableOffline;
 
-// Setst the subtitle text. If |subtitle| is nil, the space taken by the
-// subtitle is removed.
-- (void)setSubtitleText:(NSString*)subtitle;
+// Returns the height needed by a cell contained in |width| and containing the
+// listed informations.
++ (CGFloat)heightForWidth:(CGFloat)width
+                withImage:(BOOL)hasImage
+                    title:(NSString*)title
+            publisherName:(NSString*)publisherName
+          publicationDate:(NSString*)publicationDate
+         availableOffline:(BOOL)availableOffline;
 
 @end
 

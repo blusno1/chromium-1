@@ -14,6 +14,7 @@ namespace payments {
 
 enum class DialogViewID : int {
   VIEW_ID_NONE = autofill::MAX_VALID_FIELD_TYPE,
+  CONTENT_VIEW,  // The main content view filled by each sheet
 
   // The following are views::Button (clickable).
   PAYMENT_SHEET_CONTACT_INFO_SECTION,
@@ -47,6 +48,9 @@ enum class DialogViewID : int {
   ORDER_SUMMARY_LINE_ITEM_2,
   ORDER_SUMMARY_LINE_ITEM_3,
   DATA_SOURCE_LABEL,
+
+  // This is the title used at the top of each sheet.
+  SHEET_TITLE,
 
   // The following are Label objects.
   SHIPPING_OPTION_DESCRIPTION,

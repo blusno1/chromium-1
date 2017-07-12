@@ -6,12 +6,13 @@
 
 #include "cc/output/compositor_frame.h"
 #include "cc/surfaces/compositor_frame_sink_support.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
+#include "cc/surfaces/frame_sink_manager.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_hittest.h"
 #include "cc/surfaces/surface_manager.h"
 #include "cc/test/compositor_frame_helpers.h"
 #include "cc/test/surface_hittest_test_helpers.h"
+#include "components/viz/common/local_surface_id_allocator.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
@@ -20,16 +21,16 @@ namespace cc {
 
 namespace {
 
-constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
+constexpr viz::FrameSinkId kArbitraryFrameSinkId(1, 1);
 constexpr bool kIsRoot = true;
 constexpr bool kIsChildRoot = false;
 constexpr bool kHandlesFrameSinkIdInvalidation = true;
 constexpr bool kNeedsSyncPoints = true;
 
 struct TestCase {
-  SurfaceId input_surface_id;
+  viz::SurfaceId input_surface_id;
   gfx::Point input_point;
-  SurfaceId expected_layer_tree_frame_sink_id;
+  viz::SurfaceId expected_layer_tree_frame_sink_id;
   gfx::Point expected_output_point;
 };
 
@@ -65,8 +66,8 @@ using namespace test;
 // This test verifies that hit testing on a surface that does not exist does
 // not crash.
 TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
-  SurfaceManager manager;
-  FrameSinkId root_frame_sink_id(kArbitraryFrameSinkId);
+  FrameSinkManager manager;
+  viz::FrameSinkId root_frame_sink_id(kArbitraryFrameSinkId);
   std::unique_ptr<CompositorFrameSinkSupport> root_support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, kArbitraryFrameSinkId, kIsRoot,
@@ -78,9 +79,9 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to a non-existant child surface on the root surface.
-  SurfaceId child_surface_id(
+  viz::SurfaceId child_surface_id(
       kArbitraryFrameSinkId,
-      LocalSurfaceId(0xdeadbeef, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(0xdeadbeef, base::UnguessableToken::Create()));
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(root_pass,
                         gfx::Transform(),
@@ -89,14 +90,14 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
                         child_surface_id);
 
   // Submit the root frame.
-  LocalSurfaceIdAllocator root_allocator;
-  LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
-  SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
+  viz::LocalSurfaceIdAllocator root_allocator;
+  viz::LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
+  viz::SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
   root_support->SubmitCompositorFrame(root_local_surface_id,
                                       std::move(root_frame));
 
   {
-    SurfaceHittest hittest(nullptr, &manager);
+    SurfaceHittest hittest(nullptr, manager.surface_manager());
     // It is expected this test will complete without crashes.
     gfx::Transform transform;
     EXPECT_EQ(root_surface_id,
@@ -108,10 +109,10 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
 }
 
 TEST(SurfaceHittestTest, Hittest_SingleSurface) {
-  SurfaceManager manager;
+  FrameSinkManager manager;
 
   // Set up root FrameSink.
-  FrameSinkId root_frame_sink_id(1, 1);
+  viz::FrameSinkId root_frame_sink_id(1, 1);
   std::unique_ptr<CompositorFrameSinkSupport> root_support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, root_frame_sink_id, kIsRoot,
@@ -123,9 +124,9 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Submit the root frame.
-  LocalSurfaceIdAllocator root_allocator;
-  LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
-  SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
+  viz::LocalSurfaceIdAllocator root_allocator;
+  viz::LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
+  viz::SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
   root_support->SubmitCompositorFrame(root_local_surface_id,
                                       std::move(root_frame));
   TestCase tests[] = {
@@ -137,23 +138,23 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface) {
     },
   };
 
-  RunTests(nullptr, &manager, tests, arraysize(tests));
+  RunTests(nullptr, manager.surface_manager(), tests, arraysize(tests));
 
   root_support->EvictCurrentSurface();
 }
 
 TEST(SurfaceHittestTest, Hittest_ChildSurface) {
-  SurfaceManager manager;
+  FrameSinkManager manager;
 
   // Set up root FrameSink.
-  FrameSinkId root_frame_sink_id(1, 1);
+  viz::FrameSinkId root_frame_sink_id(1, 1);
   std::unique_ptr<CompositorFrameSinkSupport> root_support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, root_frame_sink_id, kIsRoot,
           kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
 
   // Set up child FrameSink.
-  FrameSinkId child_frame_sink_id(2, 2);
+  viz::FrameSinkId child_frame_sink_id(2, 2);
   std::unique_ptr<CompositorFrameSinkSupport> child_support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, child_frame_sink_id, kIsChildRoot,
@@ -165,9 +166,9 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to the child surface on the root surface.
-  LocalSurfaceIdAllocator child_allocator;
-  LocalSurfaceId child_local_surface_id = child_allocator.GenerateId();
-  SurfaceId child_surface_id(child_frame_sink_id, child_local_surface_id);
+  viz::LocalSurfaceIdAllocator child_allocator;
+  viz::LocalSurfaceId child_local_surface_id = child_allocator.GenerateId();
+  viz::SurfaceId child_surface_id(child_frame_sink_id, child_local_surface_id);
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(root_pass,
                         gfx::Transform(1.0f, 0.0f, 0.0f, 50.0f,
@@ -179,9 +180,9 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
                         child_surface_id);
 
   // Submit the root frame.
-  LocalSurfaceIdAllocator root_allocator;
-  LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
-  SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
+  viz::LocalSurfaceIdAllocator root_allocator;
+  viz::LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
+  viz::SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
   root_support->SubmitCompositorFrame(root_local_surface_id,
                                       std::move(root_frame));
 
@@ -242,7 +243,7 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
     }
   };
 
-  RunTests(nullptr, &manager, tests, arraysize(tests));
+  RunTests(nullptr, manager.surface_manager(), tests, arraysize(tests));
 
   // Submit another root frame, with a slightly perturbed child Surface.
   root_frame = CreateCompositorFrame(root_rect, &root_pass);
@@ -260,7 +261,7 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
   // Verify that point (100, 100) no longer falls on the child surface.
   // Verify that the transform to the child surface's space has also shifted.
   {
-    SurfaceHittest hittest(nullptr, &manager);
+    SurfaceHittest hittest(nullptr, manager.surface_manager());
 
     gfx::Point point(100, 100);
     gfx::Transform transform;
@@ -286,17 +287,17 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
 // This test verifies that hit testing will progress to the next quad if it
 // encounters an invalid RenderPassDrawQuad for whatever reason.
 TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
-  SurfaceManager manager;
+  FrameSinkManager manager;
 
   // Set up root FrameSink.
-  FrameSinkId root_frame_sink_id(1, 1);
+  viz::FrameSinkId root_frame_sink_id(1, 1);
   std::unique_ptr<CompositorFrameSinkSupport> root_support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, root_frame_sink_id, kIsRoot,
           kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
 
   // Set up child FrameSink.
-  FrameSinkId child_frame_sink_id(2, 2);
+  viz::FrameSinkId child_frame_sink_id(2, 2);
   std::unique_ptr<CompositorFrameSinkSupport> child_support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, child_frame_sink_id, kIsChildRoot,
@@ -313,9 +314,9 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
                            invalid_render_pass_id);
 
   // Add a reference to the child surface on the root surface.
-  LocalSurfaceIdAllocator child_allocator;
-  LocalSurfaceId child_local_surface_id = child_allocator.GenerateId();
-  SurfaceId child_surface_id(child_frame_sink_id, child_local_surface_id);
+  viz::LocalSurfaceIdAllocator child_allocator;
+  viz::LocalSurfaceId child_local_surface_id = child_allocator.GenerateId();
+  viz::SurfaceId child_surface_id(child_frame_sink_id, child_local_surface_id);
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(root_pass,
                         gfx::Transform(1.0f, 0.0f, 0.0f, 50.0f,
@@ -327,9 +328,9 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
                         child_surface_id);
 
   // Submit the root frame.
-  LocalSurfaceIdAllocator root_allocator;
-  LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
-  SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
+  viz::LocalSurfaceIdAllocator root_allocator;
+  viz::LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
+  viz::SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
   root_support->SubmitCompositorFrame(root_local_surface_id,
                                       std::move(root_frame));
 
@@ -390,15 +391,15 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
     }
   };
 
-  RunTests(nullptr, &manager, tests, arraysize(tests));
+  RunTests(nullptr, manager.surface_manager(), tests, arraysize(tests));
 
   root_support->EvictCurrentSurface();
   child_support->EvictCurrentSurface();
 }
 
 TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
-  SurfaceManager manager;
-  FrameSinkId root_frame_sink_id(kArbitraryFrameSinkId);
+  FrameSinkManager manager;
+  viz::FrameSinkId root_frame_sink_id(kArbitraryFrameSinkId);
   std::unique_ptr<CompositorFrameSinkSupport> support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, root_frame_sink_id, kIsRoot,
@@ -445,9 +446,9 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
                            child_solid_quad_rect);
 
   // Submit the root frame.
-  LocalSurfaceIdAllocator root_allocator;
-  LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
-  SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
+  viz::LocalSurfaceIdAllocator root_allocator;
+  viz::LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
+  viz::SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
   support->SubmitCompositorFrame(root_local_surface_id, std::move(root_frame));
 
   TestCase tests[] = {
@@ -494,23 +495,23 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
     }
   };
 
-  RunTests(nullptr, &manager, tests, arraysize(tests));
+  RunTests(nullptr, manager.surface_manager(), tests, arraysize(tests));
 
   support->EvictCurrentSurface();
 }
 
 TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
-  SurfaceManager manager;
+  FrameSinkManager manager;
 
   // Set up root FrameSink.
-  FrameSinkId root_frame_sink_id(1, 1);
+  viz::FrameSinkId root_frame_sink_id(1, 1);
   std::unique_ptr<CompositorFrameSinkSupport> root_support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, root_frame_sink_id, kIsRoot,
           kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
 
   // Set up child FrameSink.
-  FrameSinkId child_frame_sink_id(2, 2);
+  viz::FrameSinkId child_frame_sink_id(2, 2);
   std::unique_ptr<CompositorFrameSinkSupport> child_support =
       CompositorFrameSinkSupport::Create(
           nullptr, &manager, child_frame_sink_id, kIsRoot,
@@ -522,9 +523,9 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to the child surface on the root surface.
-  LocalSurfaceIdAllocator child_allocator;
-  LocalSurfaceId child_local_surface_id = child_allocator.GenerateId();
-  SurfaceId child_surface_id(child_frame_sink_id, child_local_surface_id);
+  viz::LocalSurfaceIdAllocator child_allocator;
+  viz::LocalSurfaceId child_local_surface_id = child_allocator.GenerateId();
+  viz::SurfaceId child_surface_id(child_frame_sink_id, child_local_surface_id);
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(
       root_pass,
@@ -535,9 +536,9 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
       root_rect, child_rect, child_surface_id);
 
   // Submit the root frame.
-  LocalSurfaceIdAllocator root_allocator;
-  LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
-  SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
+  viz::LocalSurfaceIdAllocator root_allocator;
+  viz::LocalSurfaceId root_local_surface_id = root_allocator.GenerateId();
+  viz::SurfaceId root_surface_id(root_frame_sink_id, root_local_surface_id);
   root_support->SubmitCompositorFrame(root_local_surface_id,
                                       std::move(root_frame));
 
@@ -572,7 +573,8 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   };
 
   TestSurfaceHittestDelegate empty_delegate;
-  RunTests(&empty_delegate, &manager, test_expectations_without_insets,
+  RunTests(&empty_delegate, manager.surface_manager(),
+           test_expectations_without_insets,
            arraysize(test_expectations_without_insets));
 
   // Verify that insets have NOT affected hit targeting.
@@ -603,7 +605,8 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   TestSurfaceHittestDelegate reject_delegate;
   reject_delegate.AddInsetsForRejectSurface(child_surface_id,
                                             gfx::Insets(10, 10, 10, 10));
-  RunTests(&reject_delegate, &manager, test_expectations_with_reject_insets,
+  RunTests(&reject_delegate, manager.surface_manager(),
+           test_expectations_with_reject_insets,
            arraysize(test_expectations_with_reject_insets));
 
   // Verify that insets have affected hit targeting.
@@ -627,7 +630,8 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   TestSurfaceHittestDelegate accept_delegate;
   accept_delegate.AddInsetsForAcceptSurface(child_surface_id,
                                             gfx::Insets(5, 5, 5, 5));
-  RunTests(&accept_delegate, &manager, test_expectations_with_accept_insets,
+  RunTests(&accept_delegate, manager.surface_manager(),
+           test_expectations_with_accept_insets,
            arraysize(test_expectations_with_accept_insets));
 
   // Verify that insets have affected hit targeting.

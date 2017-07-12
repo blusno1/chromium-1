@@ -24,21 +24,26 @@ interface AccessibleNode
     getter colCount
     getter colIndex
     getter colSpan
+    getter controls
     getter current
+    getter describedBy
     getter details
     getter disabled
     getter errorMessage
     getter expanded
+    getter flowTo
     getter hidden
     getter invalid
     getter keyShortcuts
     getter label
+    getter labeledBy
     getter level
     getter live
     getter modal
     getter multiline
     getter multiselectable
     getter orientation
+    getter owns
     getter placeholder
     getter posInSet
     getter pressed
@@ -66,21 +71,26 @@ interface AccessibleNode
     setter colCount
     setter colIndex
     setter colSpan
+    setter controls
     setter current
+    setter describedBy
     setter details
     setter disabled
     setter errorMessage
     setter expanded
+    setter flowTo
     setter hidden
     setter invalid
     setter keyShortcuts
     setter label
+    setter labeledBy
     setter level
     setter live
     setter modal
     setter multiline
     setter multiselectable
     setter orientation
+    setter owns
     setter placeholder
     setter posInSet
     setter pressed
@@ -99,6 +109,15 @@ interface AccessibleNode
     setter valueMin
     setter valueNow
     setter valueText
+interface AccessibleNodeList
+    attribute @@toStringTag
+    getter length
+    method @@iterator
+    method add
+    method constructor
+    method item
+    method remove
+    setter length
 interface AmbientLightSensor : Sensor
     attribute @@toStringTag
     getter illuminance
@@ -791,9 +810,10 @@ interface CSSSupportsRule : CSSConditionRule
     method constructor
 interface CSSTransformComponent
     attribute @@toStringTag
+    getter is2D
     method constructor
-    method is2D
     method toString
+    setter is2D
 interface CSSTransformValue : CSSStyleValue
     attribute @@toStringTag
     getter is2D
@@ -990,21 +1010,13 @@ interface CharacterData : Node
     method replaceWith
     method substringData
     setter data
-interface ClientRect
+interface Clipboard : EventTarget
     attribute @@toStringTag
-    getter bottom
-    getter height
-    getter left
-    getter right
-    getter top
-    getter width
     method constructor
-interface ClientRectList
-    attribute @@toStringTag
-    getter length
-    method @@iterator
-    method constructor
-    method item
+    method read
+    method readText
+    method write
+    method writeText
 interface ClipboardEvent : Event
     attribute @@toStringTag
     getter clipboardData
@@ -1118,7 +1130,6 @@ interface DOMException
     getter message
     getter name
     method constructor
-    method toString
 interface DOMImplementation
     attribute @@toStringTag
     method constructor
@@ -1788,7 +1799,6 @@ interface Element : Node
     getter onselectstart
     getter onwebkitfullscreenchange
     getter onwebkitfullscreenerror
-    getter onwheel
     getter outerHTML
     getter prefix
     getter previousElementSibling
@@ -1868,7 +1878,6 @@ interface Element : Node
     setter onselectstart
     setter onwebkitfullscreenchange
     setter onwebkitfullscreenerror
-    setter onwheel
     setter outerHTML
     setter scrollLeft
     setter scrollTop
@@ -2439,6 +2448,7 @@ interface HTMLElement : Element
     getter ontouchstart
     getter onvolumechange
     getter onwaiting
+    getter onwheel
     getter outerText
     getter spellcheck
     getter style
@@ -2532,6 +2542,7 @@ interface HTMLElement : Element
     setter ontouchstart
     setter onvolumechange
     setter onwaiting
+    setter onwheel
     setter outerText
     setter spellcheck
     setter style
@@ -3892,6 +3903,9 @@ interface KeyframeEffect : KeyframeEffectReadOnly
 interface KeyframeEffectReadOnly : AnimationEffectReadOnly
     attribute @@toStringTag
     method constructor
+interface LinearAccelerationSensor : Accelerometer
+    attribute @@toStringTag
+    method constructor
 interface Location
     attribute @@toStringTag
     method constructor
@@ -4049,7 +4063,12 @@ interface MediaKeys
     attribute @@toStringTag
     method constructor
     method createSession
+    method getStatusForPolicy
     method setServerCertificate
+interface MediaKeysPolicy
+    attribute @@toStringTag
+    getter minHdcpVersion
+    method constructor
 interface MediaList
     attribute @@toStringTag
     getter length
@@ -4383,6 +4402,7 @@ interface Navigator
     getter authentication
     getter bluetooth
     getter budget
+    getter clipboard
     getter connection
     getter cookieEnabled
     getter credentials
@@ -4779,10 +4799,8 @@ interface Performance : EventTarget
     attribute @@toStringTag
     getter memory
     getter navigation
-    getter onframetimingbufferfull
     getter onresourcetimingbufferfull
     getter timing
-    method clearFrameTimings
     method clearMarks
     method clearMeasures
     method clearResourceTimings
@@ -4793,10 +4811,8 @@ interface Performance : EventTarget
     method mark
     method measure
     method now
-    method setFrameTimingBufferSize
     method setResourceTimingBufferSize
     method toJSON
-    setter onframetimingbufferfull
     setter onresourcetimingbufferfull
 interface PerformanceEntry
     attribute @@toStringTag
@@ -4871,13 +4887,15 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter responseEnd
     getter responseStart
     getter secureConnectionStart
+    getter serverTiming
     getter transferSize
     getter workerStart
     method constructor
-interface PerformanceServerTiming : PerformanceEntry
+interface PerformanceServerTiming
     attribute @@toStringTag
     getter description
     getter metric
+    getter value
     method constructor
 interface PerformanceTiming
     attribute @@toStringTag
@@ -5124,6 +5142,7 @@ interface RTCPeerConnection : EventTarget
     getter signalingState
     method addIceCandidate
     method addStream
+    method addTrack
     method close
     method constructor
     method createAnswer
@@ -5137,6 +5156,7 @@ interface RTCPeerConnection : EventTarget
     method getStats
     method getStreamById
     method removeStream
+    method removeTrack
     method setConfiguration
     method setLocalDescription
     method setRemoteDescription
@@ -5531,6 +5551,7 @@ interface SVGElement : Element
     getter ontouchstart
     getter onvolumechange
     getter onwaiting
+    getter onwheel
     getter ownerSVGElement
     getter style
     getter tabIndex
@@ -5612,6 +5633,7 @@ interface SVGElement : Element
     setter ontouchstart
     setter onvolumechange
     setter onwaiting
+    setter onwheel
     setter style
     setter tabIndex
 interface SVGEllipseElement : SVGGeometryElement
@@ -6420,6 +6442,12 @@ interface ScriptProcessorNode : AudioNode
     getter onaudioprocess
     method constructor
     setter onaudioprocess
+interface ScrollTimeline : AnimationTimeline
+    attribute @@toStringTag
+    getter orientation
+    getter scrollSource
+    getter timeRange
+    method constructor
 interface SecurityPolicyViolationEvent : Event
     attribute @@toStringTag
     getter blockedURI
@@ -6469,15 +6497,15 @@ interface Sensor : EventTarget
     attribute @@toStringTag
     getter activated
     getter onactivate
-    getter onchange
     getter onerror
+    getter onreading
     getter timestamp
     method constructor
     method start
     method stop
     setter onactivate
-    setter onchange
     setter onerror
+    setter onreading
 interface SensorErrorEvent : Event
     attribute @@toStringTag
     getter error
@@ -8770,6 +8798,7 @@ interface webkitRTCPeerConnection : EventTarget
     getter signalingState
     method addIceCandidate
     method addStream
+    method addTrack
     method close
     method constructor
     method createAnswer
@@ -8783,6 +8812,7 @@ interface webkitRTCPeerConnection : EventTarget
     method getStats
     method getStreamById
     method removeStream
+    method removeTrack
     method setConfiguration
     method setLocalDescription
     method setRemoteDescription

@@ -48,6 +48,9 @@ class SessionControllerClient
 
   static SessionControllerClient* Get();
 
+  // Calls SessionController to prepare locking ash.
+  void PrepareForLock(base::OnceClosure callback);
+
   // Calls SessionController to start locking ash. |callback| will be invoked
   // to indicate whether the lock is successful. If |locked| is true, the post
   // lock animation is finished and ash is fully locked. Otherwise, the lock
@@ -66,6 +69,9 @@ class SessionControllerClient
   void RequestLockScreen() override;
   void SwitchActiveUser(const AccountId& account_id) override;
   void CycleActiveUser(ash::CycleUserDirection direction) override;
+  void ShowMultiProfileLogin() override;
+
+  static bool IsMultiProfileEnabled();
 
   // user_manager::UserManager::UserSessionStateObserver:
   void ActiveUserChanged(const user_manager::User* active_user) override;

@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "extensions/renderer/bindings/api_binding_hooks.h"
 #include "extensions/renderer/bindings/api_binding_types.h"
+#include "extensions/renderer/bindings/api_binding_util.h"
 #include "extensions/renderer/bindings/api_event_handler.h"
 #include "extensions/renderer/bindings/api_invocation_errors.h"
 #include "extensions/renderer/bindings/api_request_handler.h"
@@ -178,6 +179,7 @@ APIBinding::APIBinding(const std::string& api_name,
                        const base::ListValue* event_definitions,
                        const base::DictionaryValue* property_definitions,
                        const CreateCustomType& create_custom_type,
+                       const OnSilentRequest& on_silent_request,
                        std::unique_ptr<APIBindingHooks> binding_hooks,
                        APITypeReferenceMap* type_refs,
                        APIRequestHandler* request_handler,
@@ -186,6 +188,7 @@ APIBinding::APIBinding(const std::string& api_name,
     : api_name_(api_name),
       property_definitions_(property_definitions),
       create_custom_type_(create_custom_type),
+      on_silent_request_(on_silent_request),
       binding_hooks_(std::move(binding_hooks)),
       type_refs_(type_refs),
       request_handler_(request_handler),
@@ -428,6 +431,23 @@ void APIBinding::DecorateTemplateWithProperties(
       continue;
     }
 
+    const base::ListValue* platforms = nullptr;
+    // TODO(devlin): This isn't great. It's bad to have availability primarily
+    // defined in the features files, and then partially defined within the
+    // API specification itself. Additionally, they aren't equivalent
+    // definitions. But given the rarity of property restrictions, and the fact
+    // that they are all limited by platform, it makes more sense to isolate
+    // this check here. If this becomes more common, we should really find a
+    // way of moving these checks to the features files.
+    if (dict->GetList("platforms", &platforms)) {
+      std::string this_platform = binding::GetPlatformString();
+      auto is_this_platform = [&this_platform](const base::Value& platform) {
+        return platform.is_string() && platform.GetString() == this_platform;
+      };
+      if (std::none_of(platforms->begin(), platforms->end(), is_this_platform))
+        continue;
+    }
+
     v8::Local<v8::String> v8_key = gin::StringToSymbol(isolate, iter.key());
     std::string ref;
     if (dict->GetString("$ref", &ref)) {
@@ -552,6 +572,7 @@ void APIBinding::HandleCall(const std::string& name,
   bool invalid_invocation = false;
   v8::Local<v8::Function> custom_callback;
   bool updated_args = false;
+  int old_request_id = request_handler_->last_sent_request_id();
   {
     v8::TryCatch try_catch(isolate);
     APIBindingHooks::RequestResult hooks_result = binding_hooks_->RunHooks(
@@ -570,6 +591,14 @@ void APIBinding::HandleCall(const std::string& name,
       case APIBindingHooks::RequestResult::HANDLED:
         if (!hooks_result.return_value.IsEmpty())
           arguments->Return(hooks_result.return_value);
+
+        // TODO(devlin): This is a pretty simplistic implementation of this,
+        // but it's similar to the current JS logic. If we wanted to be more
+        // correct, we could create a RequestScope object that watches outgoing
+        // requests.
+        if (old_request_id == request_handler_->last_sent_request_id())
+          on_silent_request_.Run(context, name, argument_list);
+
         return;  // Our work here is done.
       case APIBindingHooks::RequestResult::ARGUMENTS_UPDATED:
         updated_args = true;  // Intentional fall-through.

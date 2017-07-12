@@ -10,11 +10,9 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
-#include "device/generic_sensor/public/interfaces/sensor.mojom-blink.h"
 #include "modules/sensor/SensorErrorEvent.h"
 #include "modules/sensor/SensorProviderProxy.h"
-
-using namespace device::mojom::blink;
+#include "services/device/public/interfaces/sensor.mojom-blink.h"
 
 namespace blink {
 
@@ -28,7 +26,7 @@ constexpr double kMinWaitingInterval =
 Sensor::Sensor(ExecutionContext* execution_context,
                const SensorOptions& sensor_options,
                ExceptionState& exception_state,
-               SensorType type)
+               device::mojom::blink::SensorType type)
     : ContextLifecycleObserver(execution_context),
       sensor_options_(sensor_options),
       type_(type),
@@ -189,7 +187,7 @@ void Sensor::OnSensorReadingChanged() {
   // We also avoid scheduling if the elapsed time is slightly behind the
   // polling period.
   auto sensor_reading_changed =
-      WTF::Bind(&Sensor::NotifyChange, WrapWeakPersistent(this));
+      WTF::Bind(&Sensor::NotifyReading, WrapWeakPersistent(this));
   if (waitingTime < kMinWaitingInterval) {
     // Invoke JS callbacks in a different callchain to obviate
     // possible modifications of SensorProxy::observers_ container
@@ -302,9 +300,9 @@ void Sensor::HandleError(ExceptionCode code,
   }
 }
 
-void Sensor::NotifyChange() {
+void Sensor::NotifyReading() {
   last_reported_timestamp_ = sensor_proxy_->reading().timestamp;
-  DispatchEvent(Event::Create(EventTypeNames::change));
+  DispatchEvent(Event::Create(EventTypeNames::reading));
 }
 
 void Sensor::NotifyActivate() {

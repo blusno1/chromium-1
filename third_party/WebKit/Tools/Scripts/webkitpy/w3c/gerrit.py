@@ -80,16 +80,16 @@ class GerritCL(object):
         return self._data['owner']['email']
 
     @property
-    def reviewers(self):
-        return self._data['reviewers']
-
-    @property
     def current_revision_sha(self):
         return self._data['current_revision']
 
     @property
     def current_revision(self):
         return self._data['revisions'][self.current_revision_sha]
+
+    @property
+    def has_review_started(self):
+        return self._data.get('has_review_started')
 
     def latest_commit_message_with_footers(self):
         return self.current_revision['commit_with_footers']
@@ -116,6 +116,9 @@ class GerritCL(object):
             return False
 
         if 'Import' in self.subject:
+            return False
+
+        if 'No-Export: true' in self.current_revision['commit_with_footers']:
             return False
 
         if 'NOEXPORT=true' in self.current_revision['commit_with_footers']:

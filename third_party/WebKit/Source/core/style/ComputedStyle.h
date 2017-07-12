@@ -81,8 +81,6 @@ class CSSTransitionData;
 class CSSVariableData;
 class Font;
 class Hyphenation;
-class RotateTransformOperation;
-class ScaleTransformOperation;
 class ShadowList;
 class ShapeValue;
 class StyleDifference;
@@ -90,7 +88,6 @@ class StyleImage;
 class StylePath;
 class StyleResolver;
 class TransformationMatrix;
-class TranslateTransformOperation;
 
 class ContentData;
 
@@ -310,7 +307,7 @@ class ComputedStyle : public ComputedStyleBase,
   }
   FilterOperations& MutableBackdropFilter() {
     DCHECK(BackdropFilterInternal().Get());
-    return MutableBackdropFilterInternal().Access()->operations_;
+    return MutableBackdropFilterInternal()->operations_;
   }
   bool HasBackdropFilter() const {
     DCHECK(BackdropFilterInternal().Get());
@@ -319,14 +316,17 @@ class ComputedStyle : public ComputedStyleBase,
   void SetBackdropFilter(const FilterOperations& ops) {
     DCHECK(BackdropFilterInternal().Get());
     if (BackdropFilterInternal()->operations_ != ops)
-      MutableBackdropFilterInternal().Access()->operations_ = ops;
+      MutableBackdropFilterInternal()->operations_ = ops;
+  }
+  bool BackdropFilterDataEquivalent(const ComputedStyle& o) const {
+    return DataEquivalent(BackdropFilterInternal(), o.BackdropFilterInternal());
   }
 
   // filter (aka -webkit-filter)
   static const FilterOperations& InitialFilter();
   FilterOperations& MutableFilter() {
     DCHECK(FilterInternal().Get());
-    return MutableFilterInternal().Access()->operations_;
+    return MutableFilterInternal()->operations_;
   }
   const FilterOperations& Filter() const {
     DCHECK(FilterInternal().Get());
@@ -339,15 +339,16 @@ class ComputedStyle : public ComputedStyleBase,
   void SetFilter(const FilterOperations& v) {
     DCHECK(FilterInternal().Get());
     if (FilterInternal()->operations_ != v)
-      MutableFilterInternal().Access()->operations_ = v;
+      MutableFilterInternal()->operations_ = v;
+  }
+  bool FilterDataEquivalent(const ComputedStyle& o) const {
+    return DataEquivalent(FilterInternal(), o.FilterInternal());
   }
 
   // Background properties.
   // background-color
   static Color InitialBackgroundColor() { return Color::kTransparent; }
-  void SetBackgroundColor(const StyleColor& v) {
-    SetBackgroundColorInternal(v);
-  }
+
 
   // background-image
   bool HasBackgroundImage() const { return BackgroundInternal().HasImage(); }
@@ -477,16 +478,12 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // box-shadow (aka -webkit-box-shadow)
-  static ShadowList* InitialBoxShadow() { return 0; }
-  ShadowList* BoxShadow() const { return BoxShadowInternal().Get(); }
-  void SetBoxShadow(RefPtr<ShadowList>);
   bool BoxShadowDataEquivalent(const ComputedStyle& other) const {
     return DataEquivalent(BoxShadow(), other.BoxShadow());
   }
 
   // clip
   static LengthBox InitialClip() { return LengthBox(); }
-  const LengthBox& Clip() const { return ClipInternal(); }
   void SetClip(const LengthBox& box) {
     SetHasAutoClipInternal(false);
     SetClipInternal(box);
@@ -500,7 +497,6 @@ class ComputedStyle : public ComputedStyleBase,
   // Column properties.
   // column-count (aka -webkit-column-count)
   static unsigned short InitialColumnCount() { return 1; }
-  unsigned short ColumnCount() const { return ColumnCountInternal(); }
   void SetColumnCount(unsigned short c) {
     SetColumnAutoCountInternal(false);
     SetColumnCountInternal(c);
@@ -512,7 +508,6 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // column-gap (aka -webkit-column-gap)
-  float ColumnGap() const { return ColumnGapInternal(); }
   void SetColumnGap(float f) {
     SetColumnNormalGapInternal(false);
     SetColumnGapInternal(f);
@@ -544,7 +539,6 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // column-width (aka -webkit-column-width)
-  float ColumnWidth() const { return ColumnWidthInternal(); }
   void SetColumnWidth(float f) {
     SetColumnAutoWidthInternal(false);
     SetColumnWidthInternal(f);
@@ -557,8 +551,6 @@ class ComputedStyle : public ComputedStyleBase,
 
   // contain
   static Containment InitialContain() { return kContainsNone; }
-  Containment Contain() const { return ContainInternal(); }
-  void SetContain(Containment contain) { SetContainInternal(contain); }
 
   // content
   ContentData* GetContentData() const { return ContentInternal().Get(); }
@@ -566,17 +558,9 @@ class ComputedStyle : public ComputedStyleBase,
 
   // -webkit-box-ordinal-group
   static unsigned InitialBoxOrdinalGroup() { return 1; }
-  unsigned BoxOrdinalGroup() const { return BoxOrdinalGroupInternal(); }
   void SetBoxOrdinalGroup(unsigned og) {
     SetBoxOrdinalGroupInternal(
         std::min(std::numeric_limits<unsigned>::max() - 1, og));
-  }
-
-  // -webkit-box-reflect
-  static StyleReflection* InitialBoxReflect() { return 0; }
-  StyleReflection* BoxReflect() const { return BoxReflectInternal().Get(); }
-  void SetBoxReflect(RefPtr<StyleReflection> reflect) {
-    SetBoxReflectInternal(std::move(reflect));
   }
 
   // Grid properties.
@@ -587,16 +571,9 @@ class ComputedStyle : public ComputedStyleBase,
 
   // grid-auto-flow
   static GridAutoFlow InitialGridAutoFlow() { return kAutoFlowRow; }
-  void SetGridAutoFlow(GridAutoFlow flow) { SetGridAutoFlowInternal(flow); }
-
-  // offset-path
-  static BasicShape* InitialOffsetPath() { return nullptr; }
-  BasicShape* OffsetPath() const { return OffsetPathInternal().Get(); }
-  void SetOffsetPath(RefPtr<BasicShape>);
 
   // opacity (aka -webkit-opacity)
   static float InitialOpacity() { return 1.0f; }
-  float Opacity() const { return OpacityInternal(); }
   void SetOpacity(float f) {
     float v = clampTo<float>(f, 0, 1);
     SetOpacityInternal(v);
@@ -622,7 +599,6 @@ class ComputedStyle : public ComputedStyleBase,
 
   // order (aka -webkit-order)
   static int InitialOrder() { return 0; }
-  int Order() const { return OrderInternal(); }
   // We restrict the smallest value to int min + 2 because we use int min and
   // int min + 1 as special values in a hash set.
   void SetOrder(int o) {
@@ -670,7 +646,6 @@ class ComputedStyle : public ComputedStyleBase,
       return 0;
     return OutlineOffsetInternal();
   }
-  void SetOutlineOffset(int v) { SetOutlineOffsetInternal(v); }
 
   // -webkit-perspective-origin-x
   static Length InitialPerspectiveOriginX() { return Length(50.0, kPercent); }
@@ -690,10 +665,6 @@ class ComputedStyle : public ComputedStyleBase,
   // transform (aka -webkit-transform)
   static EmptyTransformOperations InitialTransform() {
     return EmptyTransformOperations();
-  }
-  const TransformOperations& Transform() const { return TransformInternal(); }
-  void SetTransform(const TransformOperations& ops) {
-    SetTransformInternal(ops);
   }
 
   // -webkit-transform-origin-x
@@ -720,37 +691,9 @@ class ComputedStyle : public ComputedStyleBase,
         TransformOrigin(TransformOriginX(), TransformOriginY(), f));
   }
 
-  // Independent transform properties.
-  // translate
-  static RefPtr<TranslateTransformOperation> InitialTranslate() {
-    return nullptr;
-  }
-  TranslateTransformOperation* Translate() const {
-    return TranslateInternal().Get();
-  }
-  void SetTranslate(RefPtr<TranslateTransformOperation> v) {
-    SetTranslateInternal(std::move(v));
-  }
-
-  // rotate
-  static RefPtr<RotateTransformOperation> InitialRotate() { return nullptr; }
-  RotateTransformOperation* Rotate() const { return RotateInternal().Get(); }
-  void SetRotate(RefPtr<RotateTransformOperation> v) {
-    SetRotateInternal(std::move(v));
-  }
-
-  // scale
-  static RefPtr<ScaleTransformOperation> InitialScale() { return nullptr; }
-  ScaleTransformOperation* Scale() const { return ScaleInternal().Get(); }
-  void SetScale(RefPtr<ScaleTransformOperation> v) {
-    SetScaleInternal(std::move(v));
-  }
-
   // Scroll properties.
   // scroll-behavior
   static ScrollBehavior InitialScrollBehavior() { return kScrollBehaviorAuto; }
-  ScrollBehavior GetScrollBehavior() const { return ScrollBehaviorInternal(); }
-  void SetScrollBehavior(ScrollBehavior b) { SetScrollBehaviorInternal(b); }
 
   // scroll-padding-block-start
   const Length& ScrollPaddingBlockStart() const {
@@ -848,7 +791,6 @@ class ComputedStyle : public ComputedStyleBase,
 
   // shape-image-threshold (aka -webkit-shape-image-threshold)
   static float InitialShapeImageThreshold() { return 0; }
-  float ShapeImageThreshold() const { return ShapeImageThresholdInternal(); }
   void SetShapeImageThreshold(float shape_image_threshold) {
     float clamped_shape_image_threshold =
         clampTo<float>(shape_image_threshold, 0, 1);
@@ -858,38 +800,20 @@ class ComputedStyle : public ComputedStyleBase,
   // shape-outside (aka -webkit-shape-outside)
   static ShapeValue* InitialShapeOutside() { return 0; }
   ShapeValue* ShapeOutside() const { return ShapeOutsideInternal().Get(); }
-  void SetShapeOutside(ShapeValue* value) { SetShapeOutsideInternal(value); }
   bool ShapeOutsideDataEquivalent(const ComputedStyle& other) const {
     return DataEquivalent(ShapeOutside(), other.ShapeOutside());
   }
 
   // Text decoration properties.
-  // text-decoration-line
-  static TextDecoration InitialTextDecoration() {
-    return TextDecoration::kNone;
-  }
-  TextDecoration GetTextDecoration() const {
-    return static_cast<TextDecoration>(TextDecorationInternal());
-  }
-  void SetTextDecoration(TextDecoration v) { SetTextDecorationInternal(v); }
-
   // text-decoration-skip
   static TextDecorationSkip InitialTextDecorationSkip() {
     return TextDecorationSkip::kObjects;
-  }
-  TextDecorationSkip GetTextDecorationSkip() const {
-    return TextDecorationSkipInternal();
-  }
-  void SetTextDecorationSkip(TextDecorationSkip v) {
-    SetTextDecorationSkipInternal(v);
   }
 
   // touch-action
   static TouchAction InitialTouchAction() {
     return TouchAction::kTouchActionAuto;
   }
-  TouchAction GetTouchAction() const { return TouchActionInternal(); }
-  void SetTouchAction(TouchAction t) { return SetTouchActionInternal(t); }
 
   // vertical-align
   static EVerticalAlign InitialVerticalAlign() {
@@ -906,7 +830,6 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // z-index
-  int ZIndex() const { return ZIndexInternal(); }
   bool HasAutoZIndex() const { return HasAutoZIndexInternal(); }
   void SetZIndex(int v) {
     SetHasAutoZIndexInternal(false);
@@ -918,23 +841,15 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // zoom
-  static float InitialZoom() { return 1.0f; }
-  float Zoom() const { return ZoomInternal(); }
   float EffectiveZoom() const { return EffectiveZoomInternal(); }
   bool SetZoom(float);
   bool SetEffectiveZoom(float);
 
   // -webkit-appearance
   static ControlPart InitialAppearance() { return kNoControlPart; }
-  ControlPart Appearance() const { return AppearanceInternal(); }
-  void SetAppearance(ControlPart a) { SetAppearanceInternal(a); }
+
 
   // -webkit-clip-path
-  static ClipPathOperation* InitialClipPath() { return 0; }
-  ClipPathOperation* ClipPath() const { return ClipPathInternal().Get(); }
-  void SetClipPath(RefPtr<ClipPathOperation> operation) {
-    SetClipPathInternal(std::move(operation));
-  }
   bool ClipPathDataEquivalent(const ComputedStyle& other) const {
     return DataEquivalent(ClipPath(), other.ClipPath());
   }
@@ -991,17 +906,9 @@ class ComputedStyle : public ComputedStyleBase,
   void SetListStyleImage(StyleImage*);
 
   // quotes
-  static QuotesData* InitialQuotes() { return 0; }
-  QuotesData* Quotes() const { return QuotesInternal().Get(); }
-  void SetQuotes(RefPtr<QuotesData>);
-
   bool QuotesDataEquivalent(const ComputedStyle&) const;
 
   // text-shadow
-  static ShadowList* InitialTextShadow() { return 0; }
-  ShadowList* TextShadow() const { return TextShadowInternal().Get(); }
-  void SetTextShadow(RefPtr<ShadowList>);
-
   bool TextShadowDataEquivalent(const ComputedStyle&) const;
 
   // Text emphasis properties.
@@ -1298,12 +1205,12 @@ class ComputedStyle : public ComputedStyleBase,
   }
   bool ColumnRuleEquivalent(const ComputedStyle& other_style) const;
   void InheritColumnPropertiesFrom(const ComputedStyle& parent) {
-    SetColumnGapInternal(parent.ColumnGapInternal());
-    SetColumnWidthInternal(parent.ColumnWidthInternal());
+    SetColumnGapInternal(parent.ColumnGap());
+    SetColumnWidthInternal(parent.ColumnWidth());
     SetVisitedLinkColumnRuleColorInternal(
         parent.VisitedLinkColumnRuleColorInternal());
     SetColumnRuleColorInternal(parent.ColumnRuleColorInternal());
-    SetColumnCountInternal(parent.ColumnCountInternal());
+    SetColumnCountInternal(parent.ColumnCount());
     SetColumnRuleStyle(parent.ColumnRuleStyle());
     SetColumnAutoCountInternal(parent.ColumnAutoCountInternal());
     SetColumnAutoWidthInternal(parent.ColumnAutoWidthInternal());
@@ -1905,6 +1812,8 @@ class ComputedStyle : public ComputedStyleBase,
       bool include_logical_left_edge,
       bool include_logical_right_edge) const;
 
+  bool CanRenderBorderImage() const;
+
   // Float utility functions.
   bool IsFloating() const { return Floating() != EFloat::kNone; }
 
@@ -1953,10 +1862,10 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // Clip utility functions.
-  const Length& ClipLeft() const { return ClipInternal().Left(); }
-  const Length& ClipRight() const { return ClipInternal().Right(); }
-  const Length& ClipTop() const { return ClipInternal().Top(); }
-  const Length& ClipBottom() const { return ClipInternal().Bottom(); }
+  const Length& ClipLeft() const { return Clip().Left(); }
+  const Length& ClipRight() const { return Clip().Right(); }
+  const Length& ClipTop() const { return Clip().Top(); }
+  const Length& ClipBottom() const { return Clip().Bottom(); }
 
   // Offset utility functions.
   // Accessors for positioned object edges that take into account writing mode.
@@ -2089,7 +1998,7 @@ class ComputedStyle : public ComputedStyleBase,
 
   // Filter/transform utility functions.
   bool Has3DTransform() const {
-    return TransformInternal().Has3DOperation() ||
+    return Transform().Has3DOperation() ||
            (Translate() && Translate()->Z() != 0) ||
            (Rotate() && (Rotate()->X() != 0 || Rotate()->Y() != 0)) ||
            (Scale() && Scale()->Z() != 1);
@@ -2099,7 +2008,7 @@ class ComputedStyle : public ComputedStyleBase,
            HasCurrentTransformAnimation() || Translate() || Rotate() || Scale();
   }
   bool HasTransformOperations() const {
-    return !TransformInternal().Operations().IsEmpty();
+    return !Transform().Operations().IsEmpty();
   }
   ETransformStyle3D UsedTransformStyle3D() const {
     return HasGroupingProperty() ? ETransformStyle3D::kFlat
@@ -2665,7 +2574,7 @@ inline float AdjustScrollForAbsoluteZoom(float scroll_offset,
 }
 
 inline bool ComputedStyle::SetZoom(float f) {
-  if (ZoomInternal() == f)
+  if (Zoom() == f)
     return false;
   SetZoomInternal(f);
   SetEffectiveZoom(EffectiveZoom() * Zoom());

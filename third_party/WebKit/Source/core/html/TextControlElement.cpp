@@ -503,7 +503,7 @@ unsigned TextControlElement::ComputeSelectionStart() const {
         GetDocument().Lifecycle());
     const SelectionInDOMTree& selection =
         frame->Selection().GetSelectionInDOMTree();
-    if (selection.Granularity() == kCharacterGranularity) {
+    if (frame->Selection().Granularity() == TextGranularity::kCharacter) {
       return IndexForPosition(InnerEditorElement(),
                               selection.ComputeStartPosition());
     }
@@ -534,7 +534,7 @@ unsigned TextControlElement::ComputeSelectionEnd() const {
         GetDocument().Lifecycle());
     const SelectionInDOMTree& selection =
         frame->Selection().GetSelectionInDOMTree();
-    if (selection.Granularity() == kCharacterGranularity) {
+    if (frame->Selection().Granularity() == TextGranularity::kCharacter) {
       return IndexForPosition(InnerEditorElement(),
                               selection.ComputeEndPosition());
     }
@@ -744,7 +744,7 @@ void TextControlElement::SelectionChanged(bool user_triggered) {
     return;
   const SelectionInDOMTree& selection =
       frame->Selection().GetSelectionInDOMTree();
-  if (selection.SelectionTypeWithLegacyGranularity() != kRangeSelection)
+  if (selection.Type() != kRangeSelection)
     return;
   DispatchEvent(Event::CreateBubble(EventTypeNames::select));
 }

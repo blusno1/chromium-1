@@ -15,7 +15,6 @@
 #include "ios/chrome/test/app/history_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
-#import "ios/chrome/test/earl_grey/chrome_assertions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
@@ -29,7 +28,6 @@
 #error "This file requires ARC support."
 #endif
 
-using chrome_test_util::WebViewContainingText;
 using web::test::HttpServer;
 
 namespace {
@@ -160,9 +158,7 @@ class ScopedBlockPopupsPref {
 // Reloads the web view and waits for the loading to complete.
 // TODO(crbug.com/638674): Evaluate if this can move to shared code
 - (void)reloadPage {
-  GenericChromeCommand* reloadCommand =
-      [[GenericChromeCommand alloc] initWithTag:IDC_RELOAD];
-  chrome_test_util::RunCommandWithActiveViewController(reloadCommand);
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
 
   [ChromeEarlGrey waitForPageToFinishLoading];
 }
@@ -170,9 +166,7 @@ class ScopedBlockPopupsPref {
 // Navigates back to the previous webpage.
 // TODO(crbug.com/638674): Evaluate if this can move to shared code.
 - (void)goBack {
-  GenericChromeCommand* backCommand =
-      [[GenericChromeCommand alloc] initWithTag:IDC_BACK];
-  chrome_test_util::RunCommandWithActiveViewController(backCommand);
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() goBack];
 
   [ChromeEarlGrey waitForPageToFinishLoading];
 }
@@ -231,7 +225,7 @@ class ScopedBlockPopupsPref {
   // first allow popups.
   ScopedBlockPopupsPref prefSetter(CONTENT_SETTING_ALLOW);
   chrome_test_util::TapWebViewElementWithId(kCacheTestLinkID);
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
   [ChromeEarlGrey waitForPageToFinishLoading];
   [ChromeEarlGrey waitForWebViewContainingText:"First Page"];
   [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 3"];

@@ -154,6 +154,13 @@ void ServiceWorkerGlobalScopeClient::RespondToFetchEventWithResponseStream(
       fetch_event_id, response, stream_handle, event_dispatch_time);
 }
 
+void ServiceWorkerGlobalScopeClient::RespondToCanMakePaymentEvent(
+    int event_id,
+    bool response,
+    double event_dispatch_time) {
+  client_.RespondToCanMakePaymentEvent(event_id, response, event_dispatch_time);
+}
+
 void ServiceWorkerGlobalScopeClient::RespondToPaymentRequestEvent(
     int event_id,
     const WebPaymentAppResponse& response,
@@ -203,6 +210,14 @@ void ServiceWorkerGlobalScopeClient::DidHandleSyncEvent(
     WebServiceWorkerEventResult result,
     double event_dispatch_time) {
   client_.DidHandleSyncEvent(sync_event_id, result, event_dispatch_time);
+}
+
+void ServiceWorkerGlobalScopeClient::DidHandleCanMakePaymentEvent(
+    int payment_request_event_id,
+    WebServiceWorkerEventResult result,
+    double event_dispatch_time) {
+  client_.DidHandleCanMakePaymentEvent(payment_request_event_id, result,
+                                       event_dispatch_time);
 }
 
 void ServiceWorkerGlobalScopeClient::DidHandlePaymentRequestEvent(

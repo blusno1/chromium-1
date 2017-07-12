@@ -66,7 +66,6 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CDATASection.h"
-#include "core/dom/ClientRect.h"
 #include "core/dom/Comment.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/DOMImplementation.h"
@@ -109,13 +108,8 @@
 #include "core/dom/TransformSource.h"
 #include "core/dom/TreeWalker.h"
 #include "core/dom/VisitedLinkState.h"
+#include "core/dom/WhitespaceAttacher.h"
 #include "core/dom/XMLDocument.h"
-#include "core/dom/custom/CustomElement.h"
-#include "core/dom/custom/CustomElementDefinition.h"
-#include "core/dom/custom/CustomElementDescriptor.h"
-#include "core/dom/custom/CustomElementRegistry.h"
-#include "core/dom/custom/V0CustomElementMicrotaskRunQueue.h"
-#include "core/dom/custom/V0CustomElementRegistrationContext.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/markers/DocumentMarkerController.h"
@@ -170,6 +164,12 @@
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasFontCache.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
+#include "core/html/custom/CustomElement.h"
+#include "core/html/custom/CustomElementDefinition.h"
+#include "core/html/custom/CustomElementDescriptor.h"
+#include "core/html/custom/CustomElementRegistry.h"
+#include "core/html/custom/V0CustomElementMicrotaskRunQueue.h"
+#include "core/html/custom/V0CustomElementRegistrationContext.h"
 #include "core/html/forms/FormController.h"
 #include "core/html/imports/HTMLImportLoader.h"
 #include "core/html/imports/HTMLImportsController.h"
@@ -253,12 +253,12 @@
 #include "platform/wtf/text/CharacterNames.h"
 #include "platform/wtf/text/StringBuffer.h"
 #include "platform/wtf/text/TextEncodingRegistry.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebPrerenderingSupport.h"
 #include "public/platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom-blink.h"
 #include "public/platform/site_engagement.mojom-blink.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 #include <memory>
 
@@ -513,6 +513,7 @@ Document::Document(const DocumentInit& initializer,
       // pointer?
       dom_window_(frame_ ? frame_->DomWindow() : nullptr),
       imports_controller_(this, initializer.ImportsController()),
+      parser_(this, nullptr),
       context_features_(ContextFeatures::DefaultSwitch()),
       well_formed_(false),
       implementation_(this, nullptr),
@@ -683,6 +684,12 @@ void Document::MediaQueryAffectingValueChanged() {
 void Document::SetCompatibilityMode(CompatibilityMode mode) {
   if (compatibility_mode_locked_ || mode == compatibility_mode_)
     return;
+
+  if (compatibility_mode_ == kQuirksMode)
+    UseCounter::Count(*this, WebFeature::kQuirksModeDocument);
+  else if (compatibility_mode_ == kLimitedQuirksMode)
+    UseCounter::Count(*this, WebFeature::kLimitedQuirksModeDocument);
+
   compatibility_mode_ = mode;
   GetSelectorQueryCache().Invalidate();
 }
@@ -1793,9 +1800,6 @@ void Document::ScheduleLayoutTreeUpdate() {
   DCHECK(ShouldScheduleLayoutTreeUpdate());
   DCHECK(NeedsLayoutTreeUpdate());
 
-  // TODO(szager): Remove this CHECK after checking crash reports.
-  CHECK(lifecycle_.GetState() != DocumentLifecycle::kInPerformLayout);
-
   if (!View()->CanThrottleRendering())
     GetPage()->Animator().ScheduleVisualUpdate(GetFrame());
   lifecycle_.EnsureStateAtMost(DocumentLifecycle::kVisualUpdatePending);
@@ -1871,6 +1875,24 @@ void Document::InheritHtmlAndBodyElementStyles(StyleRecalcChange change) {
   if (isHTMLHtmlElement(documentElement()) && isHTMLBodyElement(body) &&
       !background_style->HasBackground())
     background_style = body_style.Get();
+
+  // If the page set a rootScroller, we should use its background for painting
+  // the document background.
+  Node& root_scroller = GetRootScrollerController().EffectiveRootScroller();
+  RefPtr<ComputedStyle> root_scroller_style;
+  if (this != &root_scroller) {
+    DCHECK(root_scroller.IsElementNode());
+    Element* root_scroller_element = ToElement(&root_scroller);
+    root_scroller_style = root_scroller_element->MutableComputedStyle();
+
+    if (!root_scroller_style || root_scroller_element->NeedsStyleRecalc()) {
+      root_scroller_style =
+          EnsureStyleResolver().StyleForElement(root_scroller_element);
+    }
+
+    background_style = root_scroller_style.Get();
+  }
+
   Color background_color =
       background_style->VisitedDependentColor(CSSPropertyBackgroundColor);
   FillLayer background_layers = background_style->BackgroundLayers();
@@ -2171,7 +2193,8 @@ void Document::UpdateStyle() {
     if (document_element->NeedsReattachLayoutTree() ||
         document_element->ChildNeedsReattachLayoutTree()) {
       TRACE_EVENT0("blink,blink_style", "Document::rebuildLayoutTree");
-      document_element->RebuildLayoutTree();
+      WhitespaceAttacher whitespace_attacher;
+      document_element->RebuildLayoutTree(whitespace_attacher);
     }
   }
 
@@ -4709,7 +4732,7 @@ void Document::SendSensitiveInputVisibilityInternal() {
     return;
 
   mojom::blink::SensitiveInputVisibilityServicePtr sensitive_input_service_ptr;
-  GetFrame()->GetInterfaceProvider()->GetInterface(
+  GetFrame()->GetInterfaceProvider().GetInterface(
       mojo::MakeRequest(&sensitive_input_service_ptr));
   if (password_count_ > 0) {
     sensitive_input_service_ptr->PasswordFieldVisibleInInsecureContext();
@@ -5040,7 +5063,7 @@ const KURL Document::FirstPartyForCookies() const {
     SecurityOrigin* origin = top.GetSecurityContext()->GetSecurityOrigin();
     // TODO(yhirano): Ideally |origin| should not be null here.
     if (origin)
-      top_document_url = KURL(KURL(), origin->ToString());
+      top_document_url = KURL(NullURL(), origin->ToString());
     else
       top_document_url = SecurityOrigin::UrlWithUniqueSecurityOrigin();
   }
@@ -6907,6 +6930,7 @@ DEFINE_TRACE_WRAPPERS(Document) {
   // them only alive for live nodes. Otherwise we would keep lists of dead
   // nodes alive that have not yet been invalidated.
   visitor->TraceWrappers(imports_controller_);
+  visitor->TraceWrappers(parser_);
   visitor->TraceWrappers(implementation_);
   visitor->TraceWrappers(style_sheet_list_);
   visitor->TraceWrappers(style_engine_);

@@ -31,6 +31,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/service_worker_context_observer.h"
 #include "net/base/url_util.h"
+#include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/quota/special_storage_policy.h"
 
@@ -80,6 +81,41 @@ void SkipWaitingWorkerOnIO(
 
   registration->waiting_version()->set_skip_waiting(true);
   registration->ActivateWaitingVersionWhenReady();
+}
+
+void DidStartWorker(
+    scoped_refptr<ServiceWorkerVersion> version,
+    ServiceWorkerContext::StartActiveWorkerCallback info_callback) {
+  EmbeddedWorkerInstance* instance = version->embedded_worker();
+  std::move(info_callback).Run(instance->process_id(), instance->thread_id());
+}
+
+void DidFailStartWorker(base::OnceClosure error_callback,
+                        ServiceWorkerStatusCode code) {
+  std::move(error_callback).Run();
+}
+
+void FoundReadyRegistrationForStartActiveWorker(
+    ServiceWorkerContext::StartActiveWorkerCallback info_callback,
+    base::OnceClosure failure_callback,
+    ServiceWorkerStatusCode service_worker_status,
+    scoped_refptr<ServiceWorkerRegistration> service_worker_registration) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (service_worker_status == SERVICE_WORKER_OK) {
+    // Note: There might be a remote possibility that
+    // |service_worker_registration|'s active version might change between here
+    // and DidStartWorker, so bind |active_version| to RunAfterStartWorker.
+    scoped_refptr<ServiceWorkerVersion> active_version =
+        service_worker_registration->active_version();
+    DCHECK(active_version.get());
+    active_version->RunAfterStartWorker(
+        ServiceWorkerMetrics::EventType::EXTERNAL_REQUEST,
+        base::Bind(&DidStartWorker, active_version,
+                   base::Passed(&info_callback)),
+        base::Bind(&DidFailStartWorker, base::Passed(&failure_callback)));
+  } else {
+    std::move(failure_callback).Run();
+  }
 }
 
 }  // namespace
@@ -148,7 +184,9 @@ ServiceWorkerContextWrapper::~ServiceWorkerContextWrapper() {
 void ServiceWorkerContextWrapper::Init(
     const base::FilePath& user_data_directory,
     storage::QuotaManagerProxy* quota_manager_proxy,
-    storage::SpecialStoragePolicy* special_storage_policy) {
+    storage::SpecialStoragePolicy* special_storage_policy,
+    ChromeBlobStorageContext* blob_context,
+    URLLoaderFactoryGetter* loader_factory_getter) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   is_incognito_ = user_data_directory.empty();
@@ -158,7 +196,8 @@ void ServiceWorkerContextWrapper::Init(
   scoped_refptr<base::SingleThreadTaskRunner> disk_cache_thread =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE);
   InitInternal(user_data_directory, std::move(database_task_manager),
-               disk_cache_thread, quota_manager_proxy, special_storage_policy);
+               disk_cache_thread, quota_manager_proxy, special_storage_policy,
+               blob_context, loader_factory_getter);
 }
 
 void ServiceWorkerContextWrapper::Shutdown() {
@@ -238,9 +277,10 @@ void ServiceWorkerContextWrapper::RegisterServiceWorker(
                             base::Bind(continuation, false));
     return;
   }
+  ServiceWorkerRegistrationOptions options(net::SimplifyUrlForRequest(pattern));
   context()->RegisterServiceWorker(
-      net::SimplifyUrlForRequest(pattern),
-      net::SimplifyUrlForRequest(script_url), NULL /* provider_host */,
+      net::SimplifyUrlForRequest(script_url), options,
+      nullptr /* provider_host */,
       base::Bind(&FinishRegistrationOnIO, continuation));
 }
 
@@ -569,6 +609,24 @@ void ServiceWorkerContextWrapper::HasMainFrameProviderHost(
   context_core_->HasMainFrameProviderHost(origin, callback);
 }
 
+std::unique_ptr<std::vector<std::pair<int, int>>>
+ServiceWorkerContextWrapper::GetProviderHostIds(const GURL& origin) const {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  std::unique_ptr<std::vector<std::pair<int, int>>> provider_host_ids(
+      new std::vector<std::pair<int, int>>());
+
+  for (std::unique_ptr<ServiceWorkerContextCore::ProviderHostIterator> it =
+           context_core_->GetClientProviderHostIterator(origin);
+       !it->IsAtEnd(); it->Advance()) {
+    ServiceWorkerProviderHost* provider_host = it->GetProviderHost();
+    provider_host_ids->push_back(
+        std::make_pair(provider_host->process_id(), provider_host->frame_id()));
+  }
+
+  return provider_host_ids;
+}
+
 void ServiceWorkerContextWrapper::FindReadyRegistrationForDocument(
     const GURL& document_url,
     const FindRegistrationCallback& callback) {
@@ -789,14 +847,18 @@ void ServiceWorkerContextWrapper::InitInternal(
     std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
     const scoped_refptr<base::SingleThreadTaskRunner>& disk_cache_thread,
     storage::QuotaManagerProxy* quota_manager_proxy,
-    storage::SpecialStoragePolicy* special_storage_policy) {
+    storage::SpecialStoragePolicy* special_storage_policy,
+    ChromeBlobStorageContext* blob_context,
+    URLLoaderFactoryGetter* loader_factory_getter) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&ServiceWorkerContextWrapper::InitInternal, this,
                    user_data_directory, base::Passed(&database_task_manager),
                    disk_cache_thread, base::RetainedRef(quota_manager_proxy),
-                   base::RetainedRef(special_storage_policy)));
+                   base::RetainedRef(special_storage_policy),
+                   base::RetainedRef(blob_context),
+                   base::RetainedRef(loader_factory_getter)));
     return;
   }
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
@@ -807,10 +869,15 @@ void ServiceWorkerContextWrapper::InitInternal(
   if (quota_manager_proxy) {
     quota_manager_proxy->RegisterClient(new ServiceWorkerQuotaClient(this));
   }
+
+  base::WeakPtr<storage::BlobStorageContext> blob_storage_context =
+      (blob_context && blob_context->context())
+          ? blob_context->context()->AsWeakPtr()
+          : nullptr;
   context_core_.reset(new ServiceWorkerContextCore(
       user_data_directory, std::move(database_task_manager), disk_cache_thread,
-      quota_manager_proxy, special_storage_policy, core_observer_list_.get(),
-      this));
+      quota_manager_proxy, special_storage_policy, blob_storage_context,
+      loader_factory_getter, core_observer_list_.get(), this));
 }
 
 void ServiceWorkerContextWrapper::ShutdownOnIO() {
@@ -839,6 +906,17 @@ bool ServiceWorkerContextWrapper::FinishedExternalRequest(
   if (!version)
     return false;
   return version->FinishExternalRequest(request_uuid);
+}
+
+void ServiceWorkerContextWrapper::StartActiveWorkerForPattern(
+    const GURL& pattern,
+    StartActiveWorkerCallback info_callback,
+    base::OnceClosure failure_callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  FindReadyRegistrationForPattern(
+      pattern, base::Bind(&FoundReadyRegistrationForStartActiveWorker,
+                          base::Passed(&info_callback),
+                          base::Passed(&failure_callback)));
 }
 
 void ServiceWorkerContextWrapper::DidDeleteAndStartOver(

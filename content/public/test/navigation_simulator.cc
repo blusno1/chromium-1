@@ -13,8 +13,10 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/test/test_navigation_url_loader.h"
 #include "content/test/test_render_frame_host.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
 #include "net/url_request/redirect_info.h"
 
@@ -97,6 +99,7 @@ NavigationSimulator::NavigationSimulator(const GURL& original_url,
       render_frame_host_(render_frame_host),
       handle_(nullptr),
       navigation_url_(original_url),
+      socket_address_("2001:db8::1", 80),
       weak_factory_(this) {
   if (render_frame_host->GetParent()) {
     if (!render_frame_host->frame_tree_node()->has_committed_real_load())
@@ -145,7 +148,7 @@ void NavigationSimulator::Start() {
         std::vector<GURL>(), base::TimeTicks::Now()));
     DCHECK_EQ(handle_, render_frame_host_->navigation_handle());
     handle_->WillStartRequest(
-        "GET", scoped_refptr<content::ResourceRequestBodyImpl>(), referrer_,
+        "GET", scoped_refptr<content::ResourceRequestBody>(), referrer_,
         true /* user_gesture */, transition_, false /* is_external_protocol */,
         REQUEST_CONTEXT_TYPE_LOCATION,
         blink::WebMixedContentContextType::kNotMixedContent,
@@ -206,7 +209,7 @@ void NavigationSimulator::Redirect(const GURL& new_url) {
     handle_->WillRedirectRequest(
         new_url, "GET", referrer_.url, false /* is_external_protocol */,
         scoped_refptr<net::HttpResponseHeaders>(),
-        net::HttpResponseInfo::ConnectionInfo(),
+        net::HttpResponseInfo::ConnectionInfo(), nullptr,
         base::Callback<void(NavigationThrottle::ThrottleCheckResult)>());
   }
 
@@ -317,8 +320,7 @@ void NavigationSimulator::Commit() {
   params.contents_mime_type = "text/html";
   params.method = "GET";
   params.http_status_code = 200;
-  params.socket_address.set_host("2001:db8::1");
-  params.socket_address.set_port(80);
+  params.socket_address = socket_address_;
   params.history_list_was_cleared = false;
   params.original_request_url = navigation_url_;
   params.was_within_same_document = false;
@@ -449,8 +451,7 @@ void NavigationSimulator::CommitSameDocument() {
   params.contents_mime_type = "text/html";
   params.method = "GET";
   params.http_status_code = 200;
-  params.socket_address.set_host("2001:db8::1");
-  params.socket_address.set_port(80);
+  params.socket_address = socket_address_;
   params.history_list_was_cleared = false;
   params.original_request_url = navigation_url_;
   params.was_within_same_document = true;
@@ -481,6 +482,13 @@ void NavigationSimulator::SetReferrer(const Referrer& referrer) {
   CHECK_LE(state_, STARTED) << "The referrer cannot be set after the "
                                "navigation has committed or has failed";
   referrer_ = referrer;
+}
+
+void NavigationSimulator::SetSocketAddress(
+    const net::HostPortPair& socket_address) {
+  CHECK_LE(state_, STARTED) << "The socket address cannot be set after the "
+                               "navigation has committed or failed";
+  socket_address_ = socket_address;
 }
 
 NavigationThrottle::ThrottleCheckResult

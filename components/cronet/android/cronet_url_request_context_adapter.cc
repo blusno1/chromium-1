@@ -607,6 +607,17 @@ void CronetURLRequestContextAdapter::ProvideThroughputObservations(
                             base::Unretained(this), should));
 }
 
+void CronetURLRequestContextAdapter::InitializeNQEPrefsOnNetworkThread() const {
+  DCHECK(GetNetworkTaskRunner()->BelongsToCurrentThread());
+
+  // Initializing |network_qualities_prefs_manager_| may post a callback to
+  // |this|. So, |network_qualities_prefs_manager_| should be initialized after
+  // |jcronet_url_request_context_| has been constructed.
+  DCHECK(jcronet_url_request_context_.obj() != nullptr);
+  network_qualities_prefs_manager_->InitializeOnNetworkThread(
+      network_quality_estimator_.get());
+}
+
 void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     std::unique_ptr<URLRequestContextConfig> config,
     const base::android::ScopedJavaGlobalRef<jobject>&
@@ -648,7 +659,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     json_pref_store_ =
         new JsonPrefStore(filepath, GetFileThread()->task_runner(),
                           std::unique_ptr<PrefFilter>());
-    context_builder.SetFileTaskRunner(GetFileThread()->task_runner());
+    context_builder.SetCacheThreadTaskRunner(GetFileThread()->task_runner());
 
     // Register prefs and set up the PrefService.
     PrefServiceFactory factory;
@@ -664,7 +675,11 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     if (config->enable_host_cache_persistence) {
       registry->RegisterListPref(kHostCachePref);
     }
-    pref_service_ = factory.Create(registry.get());
+
+    {
+      SCOPED_UMA_HISTOGRAM_TIMER("Net.Cronet.PrefsInitTime");
+      pref_service_ = factory.Create(registry.get());
+    }
 
     // Set up the HttpServerPropertiesManager.
     std::unique_ptr<net::HttpServerPropertiesManager>
@@ -688,18 +703,18 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
 
   if (config->enable_network_quality_estimator) {
     DCHECK(!network_quality_estimator_);
-    std::map<std::string, std::string> variation_params;
-    // Configure network quality estimator: Specify the algorithm that should
-    // be used for computing the effective connection type. The algorithm
-    // is specified using the key-value pairs defined in
-    // //net/nqe/network_quality_estimator.cc.
-    // TODO(tbansal): Investigate a more robust way of configuring the network
-    // quality estimator.
-    variation_params["effective_connection_type_algorithm"] =
-        "TransportRTTOrDownstreamThroughput";
+    std::unique_ptr<net::NetworkQualityEstimatorParams> nqe_params =
+        base::MakeUnique<net::NetworkQualityEstimatorParams>(
+            std::map<std::string, std::string>());
+    nqe_params->set_persistent_cache_reading_enabled(
+        config->nqe_persistent_caching_enabled);
+    if (config->nqe_forced_effective_connection_type) {
+      nqe_params->SetForcedEffectiveConnectionType(
+          config->nqe_forced_effective_connection_type.value());
+    }
+
     network_quality_estimator_ = base::MakeUnique<net::NetworkQualityEstimator>(
-        std::unique_ptr<net::ExternalEstimateProvider>(),
-        base::MakeUnique<net::NetworkQualityEstimatorParams>(variation_params),
+        std::unique_ptr<net::ExternalEstimateProvider>(), std::move(nqe_params),
         g_net_log.Get().net_log());
     network_quality_estimator_->AddEffectiveConnectionTypeObserver(this);
     network_quality_estimator_->AddRTTAndThroughputEstimatesObserver(this);
@@ -711,8 +726,10 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
           base::MakeUnique<net::NetworkQualitiesPrefsManager>(
               base::MakeUnique<NetworkQualitiesPrefDelegateImpl>(
                   pref_service_.get()));
-      network_qualities_prefs_manager_->InitializeOnNetworkThread(
-          network_quality_estimator_.get());
+      PostTaskToNetworkThread(FROM_HERE,
+                              base::Bind(&CronetURLRequestContextAdapter::
+                                             InitializeNQEPrefsOnNetworkThread,
+                                         base::Unretained(this)));
     }
     context_builder.set_network_quality_estimator(
         network_quality_estimator_.get());
@@ -728,7 +745,8 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
         base::MakeUnique<HostCachePersistenceManager>(
             host_cache, pref_service_.get(), kHostCachePref,
             base::TimeDelta::FromMilliseconds(
-                config->host_cache_persistence_delay_ms));
+                config->host_cache_persistence_delay_ms),
+            g_net_log.Get().net_log());
   }
 
   context_->set_check_cleartext_permitted(true);
@@ -1009,7 +1027,7 @@ void CronetURLRequestContextAdapter::StartNetLogOnNetworkThread(
   if (net_log_file_observer_)
     return;
   net_log_file_observer_ = net::FileNetLogObserver::CreateUnbounded(
-      GetFileThread()->task_runner(), file_path, /*constants=*/nullptr);
+      file_path, /*constants=*/nullptr);
   CreateNetLogEntriesForActiveObjects({context_.get()},
                                       net_log_file_observer_.get());
   net::NetLogCaptureMode capture_mode =
@@ -1034,8 +1052,7 @@ void CronetURLRequestContextAdapter::StartNetLogToBoundedFileOnNetworkThread(
   DCHECK(base::PathIsWritable(file_path));
 
   net_log_file_observer_ = net::FileNetLogObserver::CreateBounded(
-      GetFileThread()->task_runner(), file_path, size, kNumNetLogEventFiles,
-      /*constants=*/nullptr);
+      file_path, size, kNumNetLogEventFiles, /*constants=*/nullptr);
 
   CreateNetLogEntriesForActiveObjects({context_.get()},
                                       net_log_file_observer_.get());

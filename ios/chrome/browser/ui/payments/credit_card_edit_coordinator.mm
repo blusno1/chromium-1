@@ -15,8 +15,9 @@
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #import "components/autofill/ios/browser/credit_card_util.h"
+#include "components/payments/core/autofill_payment_instrument.h"
+#include "components/payments/core/payment_instrument.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type_util.h"
 #import "ios/chrome/browser/ui/payments/credit_card_edit_mediator.h"
@@ -36,7 +37,7 @@ using ::AutofillTypeFromAutofillUIType;
 // |error_message| can't be null and will be filled with the appropriate error
 // message iff the return value is false.
 bool IsValidCreditCardNumber(const base::string16& card_number,
-                             PaymentRequest* payment_request,
+                             payments::PaymentRequest* payment_request,
                              const autofill::CreditCard* credit_card_to_edit,
                              base::string16* error_message) {
   std::set<std::string> supported_card_networks(
@@ -69,8 +70,12 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
 
 @interface CreditCardEditCoordinator ()
 
+@property(nonatomic, assign) autofill::CreditCard* creditCard;
+
 @property(nonatomic, strong)
     BillingAddressSelectionCoordinator* billingAddressSelectionCoordinator;
+
+@property(nonatomic, strong) AddressEditCoordinator* addressEditCoordinator;
 
 @property(nonatomic, strong) UINavigationController* viewController;
 
@@ -83,16 +88,20 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
 
 @implementation CreditCardEditCoordinator
 
-@synthesize creditCard = _creditCard;
+@synthesize paymentMethod = _paymentMethod;
 @synthesize paymentRequest = _paymentRequest;
 @synthesize delegate = _delegate;
+@synthesize creditCard = _creditCard;
 @synthesize billingAddressSelectionCoordinator =
     _billingAddressSelectionCoordinator;
+@synthesize addressEditCoordinator = _addressEditCoordinator;
 @synthesize viewController = _viewController;
 @synthesize editViewController = _editViewController;
 @synthesize mediator = _mediator;
 
 - (void)start {
+  _creditCard = _paymentMethod ? _paymentMethod->credit_card() : nil;
+
   _editViewController = [[PaymentRequestEditViewController alloc] init];
   // TODO(crbug.com/602666): Title varies depending on the missing fields.
   NSString* title = _creditCard
@@ -124,6 +133,8 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
   [[self.viewController presentingViewController]
       dismissViewControllerAnimated:YES
                          completion:nil];
+  [self.addressEditCoordinator stop];
+  self.addressEditCoordinator = nil;
   [self.billingAddressSelectionCoordinator stop];
   self.billingAddressSelectionCoordinator = nil;
   self.editViewController = nil;
@@ -171,15 +182,24 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
             (PaymentRequestEditViewController*)controller
                           didSelectField:(EditorField*)field {
   if (field.autofillUIType == AutofillUITypeCreditCardBillingAddress) {
-    self.billingAddressSelectionCoordinator =
-        [[BillingAddressSelectionCoordinator alloc]
-            initWithBaseViewController:self.editViewController];
-    [self.billingAddressSelectionCoordinator
-        setPaymentRequest:self.paymentRequest];
-    [self.billingAddressSelectionCoordinator
-        setSelectedBillingProfile:self.mediator.billingProfile];
-    [self.billingAddressSelectionCoordinator setDelegate:self];
-    [self.billingAddressSelectionCoordinator start];
+    if (_paymentRequest->billing_profiles().empty()) {
+      self.addressEditCoordinator = [[AddressEditCoordinator alloc]
+          initWithBaseViewController:_viewController];
+      [self.addressEditCoordinator setPaymentRequest:_paymentRequest];
+      [self.addressEditCoordinator setDelegate:self];
+      [self.addressEditCoordinator start];
+      return;
+    } else {
+      self.billingAddressSelectionCoordinator =
+          [[BillingAddressSelectionCoordinator alloc]
+              initWithBaseViewController:self.editViewController];
+      [self.billingAddressSelectionCoordinator
+          setPaymentRequest:self.paymentRequest];
+      [self.billingAddressSelectionCoordinator
+          setSelectedBillingProfile:self.mediator.billingProfile];
+      [self.billingAddressSelectionCoordinator setDelegate:self];
+      [self.billingAddressSelectionCoordinator start];
+    }
   }
 }
 
@@ -202,12 +222,12 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
       creditCard.SetInfo(
           autofill::AutofillType(autofill::CREDIT_CARD_EXP_MONTH),
           base::SysNSStringToUTF16(expMonth),
-          GetApplicationContext()->GetApplicationLocale());
+          _paymentRequest->GetApplicationLocale());
       NSString* expYear = fieldComponents[1];
       creditCard.SetInfo(
           autofill::AutofillType(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR),
           base::SysNSStringToUTF16(expYear),
-          GetApplicationContext()->GetApplicationLocale());
+          _paymentRequest->GetApplicationLocale());
     } else if (field.autofillUIType == AutofillUITypeCreditCardSaveToChrome) {
       saveCreditCard = [field.value boolValue];
     } else if (field.autofillUIType == AutofillUITypeCreditCardBillingAddress) {
@@ -216,7 +236,7 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
       creditCard.SetInfo(autofill::AutofillType(AutofillTypeFromAutofillUIType(
                              field.autofillUIType)),
                          base::SysNSStringToUTF16(field.value),
-                         GetApplicationContext()->GetApplicationLocale());
+                         _paymentRequest->GetApplicationLocale());
     }
   }
 
@@ -224,8 +244,8 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
     if (saveCreditCard)
       _paymentRequest->GetPersonalDataManager()->AddCreditCard(creditCard);
 
-    // Add the credit card to the list of credit cards in |_paymentRequest|.
-    _creditCard = _paymentRequest->AddCreditCard(creditCard);
+    // Add the credit card to the list of payment methods in |_paymentRequest|.
+    _paymentMethod = _paymentRequest->AddAutofillPaymentInstrument(creditCard);
   } else {
     // Override the origin.
     creditCard.set_origin(autofill::kSettingsOrigin);
@@ -243,7 +263,7 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
   }
 
   [_delegate creditCardEditCoordinator:self
-            didFinishEditingCreditCard:_creditCard];
+         didFinishEditingPaymentMethod:_paymentMethod];
 }
 
 - (void)paymentRequestEditViewControllerDidCancel:
@@ -272,6 +292,26 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
     (BillingAddressSelectionCoordinator*)coordinator {
   [self.billingAddressSelectionCoordinator stop];
   self.billingAddressSelectionCoordinator = nil;
+}
+
+#pragma mark - AddressEditCoordinatorDelegate
+
+- (void)addressEditCoordinator:(AddressEditCoordinator*)coordinator
+       didFinishEditingAddress:(autofill::AutofillProfile*)address {
+  // Update view controller's data source with the selection and reload the view
+  // controller.
+  DCHECK(address);
+  [self.mediator setBillingProfile:address];
+  [self.editViewController loadModel];
+  [self.editViewController.collectionView reloadData];
+
+  [self.addressEditCoordinator stop];
+  self.addressEditCoordinator = nil;
+}
+
+- (void)addressEditCoordinatorDidCancel:(AddressEditCoordinator*)coordinator {
+  [self.addressEditCoordinator stop];
+  self.addressEditCoordinator = nil;
 }
 
 @end

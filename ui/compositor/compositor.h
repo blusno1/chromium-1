@@ -41,13 +41,11 @@ namespace cc {
 class AnimationHost;
 class AnimationTimeline;
 class ContextProvider;
+class FrameSinkManager;
 class Layer;
 class LayerTreeDebugState;
 class LayerTreeFrameSink;
 class LayerTreeHost;
-class LocalSurfaceId;
-class ResourceSettings;
-class SurfaceManager;
 class TaskGraphRunner;
 }
 
@@ -63,6 +61,8 @@ class GpuMemoryBufferManager;
 
 namespace viz {
 class HostFrameSinkManager;
+class LocalSurfaceId;
+class ResourceSettings;
 }
 
 namespace ui {
@@ -103,10 +103,12 @@ class COMPOSITOR_EXPORT ContextFactoryPrivate {
   virtual void RemoveReflector(Reflector* reflector) = 0;
 
   // Allocate a new client ID for the display compositor.
-  virtual cc::FrameSinkId AllocateFrameSinkId() = 0;
+  virtual viz::FrameSinkId AllocateFrameSinkId() = 0;
 
-  // Gets the surface manager.
-  virtual cc::SurfaceManager* GetSurfaceManager() = 0;
+  // Gets the frame sink manager.
+  // TODO(staraz): Remove GetFrameSinkManager once FrameSinkManager is merged
+  // into FrameSinkManagerImpl.
+  virtual cc::FrameSinkManager* GetFrameSinkManager() = 0;
 
   // Gets the frame sink manager host instance.
   virtual viz::HostFrameSinkManager* GetHostFrameSinkManager() = 0;
@@ -167,7 +169,7 @@ class COMPOSITOR_EXPORT ContextFactory {
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
 
   // Gets the renderer settings.
-  virtual const cc::ResourceSettings& GetResourceSettings() const = 0;
+  virtual const viz::ResourceSettings& GetResourceSettings() const = 0;
 
   virtual void AddObserver(ContextFactoryObserver* observer) = 0;
 
@@ -184,7 +186,7 @@ class COMPOSITOR_EXPORT Compositor
       NON_EXPORTED_BASE(public cc::LayerTreeHostSingleThreadClient),
       NON_EXPORTED_BASE(public CompositorLockDelegate) {
  public:
-  Compositor(const cc::FrameSinkId& frame_sink_id,
+  Compositor(const viz::FrameSinkId& frame_sink_id,
              ui::ContextFactory* context_factory,
              ui::ContextFactoryPrivate* context_factory_private,
              scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -197,10 +199,10 @@ class COMPOSITOR_EXPORT Compositor
     return context_factory_private_;
   }
 
-  void AddFrameSink(const cc::FrameSinkId& frame_sink_id);
-  void RemoveFrameSink(const cc::FrameSinkId& frame_sink_id);
+  void AddFrameSink(const viz::FrameSinkId& frame_sink_id);
+  void RemoveFrameSink(const viz::FrameSinkId& frame_sink_id);
 
-  void SetLocalSurfaceId(const cc::LocalSurfaceId& local_surface_id);
+  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id);
 
   void SetLayerTreeFrameSink(std::unique_ptr<cc::LayerTreeFrameSink> surface);
 
@@ -367,7 +369,7 @@ class COMPOSITOR_EXPORT Compositor
     return &layer_animator_collection_;
   }
 
-  const cc::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
+  const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
   int activated_frame_count() const { return activated_frame_count_; }
   float refresh_rate() const { return refresh_rate_; }
 
@@ -402,11 +404,14 @@ class COMPOSITOR_EXPORT Compositor
   // Current vsync refresh rate per second.
   float refresh_rate_ = 0.f;
 
+  // If nonzero, this is the refresh rate forced from the command-line.
+  double forced_refresh_rate_ = 0.f;
+
   // A map from child id to parent id.
-  std::unordered_set<cc::FrameSinkId, cc::FrameSinkIdHash> child_frame_sinks_;
+  std::unordered_set<viz::FrameSinkId, viz::FrameSinkIdHash> child_frame_sinks_;
   bool widget_valid_ = false;
   bool layer_tree_frame_sink_requested_ = false;
-  const cc::FrameSinkId frame_sink_id_;
+  const viz::FrameSinkId frame_sink_id_;
   scoped_refptr<cc::Layer> root_web_layer_;
   std::unique_ptr<cc::AnimationHost> animation_host_;
   std::unique_ptr<cc::LayerTreeHost> host_;

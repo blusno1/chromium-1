@@ -59,12 +59,7 @@ checkout, for example), you can omit the `--nohooks` flag and `fetch`
 will automatically execute `gclient runhooks` at the end.
 
 When `fetch` completes, it will have created a hidden `.gclient` file and a
-directory called `src` in the working directory. The remaining instructions
-assume you have switched to the `src` directory:
-
-```shell
-$ cd src
-```
+directory called `src` in the working directory.
 
 ### Configure for building on Fuchsia
 
@@ -75,9 +70,17 @@ etc. if necessary.)
 target_os = ['fuchsia']
 ```
 
+Note that this should be added as a top-level statement in the `.gclient` file,
+not an entry inside the `solutions` dict.
+
 You will then need to re-run `gclient runhooks`. This makes sure the Fuchsia SDK
 is available in third\_party and keeps it up to date.
 
+The remaining instructions assume you have switched to the `src` directory:
+
+```shell
+$ cd src
+```
 
 ## Setting up the build
 
@@ -87,8 +90,11 @@ files. You can create any number of *build directories* with different
 configurations. To create a build directory, run:
 
 ```shell
-$ gn gen out/fuch --args="is_debug=false dcheck_always_on=true is_component_build=false target_os=\"fuchsia\""
+$ gn gen out/fuchsia --args="is_debug=false dcheck_always_on=true is_component_build=false target_os=\"fuchsia\""
 ```
+
+You can also build for Debug, with `is_debug=true`, but since we don't currently
+have any Debug build-bots, it may be more broken than Release.
 
 `use_goma=true` is fine to use also if you're a Googler.
 
@@ -98,7 +104,7 @@ Currently, not all targets build on Fuchsia. You can build base\_unittests, for
 example:
 
 ```shell
-$ ninja -C out/fuch base_unittests
+$ ninja -C out/fuchsia base_unittests
 ```
 
 ## Run
@@ -106,7 +112,7 @@ $ ninja -C out/fuch base_unittests
 Once it is built, you can run by:
 
 ```shell
-$ out/fuch/bin/run_base_unittests
+$ out/fuchsia/bin/run_base_unittests
 ```
 
 This packages the built binary and test data into a disk image, and runs a QEMU
@@ -119,6 +125,6 @@ The run script also symbolizes backtraces.
 
 A useful alias (for "Build And Run Filtered") is:
 ```shell
-alias barf='ninja -C out/fuch base_unittests -j1000 && out/fuch/bin/run_base_unittests --test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.base_unittests.filter'
+alias barf='ninja -C out/fuchsia base_unittests -j1000 && out/fuchsia/bin/run_base_unittests --test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.base_unittests.filter'
 ```
 to build and run only the tests that are not excluded/known-failing on the bot.

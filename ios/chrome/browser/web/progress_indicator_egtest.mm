@@ -13,7 +13,6 @@
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
-#import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/third_party/material_components_ios/src/components/ProgressView/src/MaterialProgressView.h"
 #include "ios/web/public/test/http_server/html_response_provider.h"
@@ -24,8 +23,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-using chrome_test_util::WebViewContainingText;
 
 namespace {
 
@@ -163,8 +160,7 @@ class InfinitePendingResponseProvider : public HtmlResponseProvider {
 
 // Tests that the progress indicator is shown and has expected progress value
 // after a form is submitted, and the toolbar is visible.
-// TODO(crbug.com/734874): Reenable test when fixed.
-- (void)DISABLED_testProgressIndicatorShownOnFormSubmit {
+- (void)testProgressIndicatorShownOnFormSubmit {
   if (IsIPadIdiom()) {
     EARL_GREY_TEST_SKIPPED(@"Skipped for iPad (no progress view in tablet)");
   }
@@ -184,20 +180,12 @@ class InfinitePendingResponseProvider : public HtmlResponseProvider {
 
   // Load form first.
   [ChromeEarlGrey loadURL:formURL];
-
-  // TODO(crbug.com/707009): Replace this matcher with
-  // [ChromeEarlGrey waitForWebViewContainingText]. It fails to synchronize with
-  // the progress bar.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kFormPageText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kFormPageText];
 
   chrome_test_util::SubmitWebViewFormWithId(kFormID);
 
   // Wait until the page is half loaded.
-  // TODO(crbug.com/707009): Replace this matcher with
-  // [ChromeEarlGrey waitForWebViewContainingText].
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kPageText];
 
   // Verify progress view visible and halfway progress.
   [[EarlGrey selectElementWithMatcher:ProgressViewWithProgress(0.5)]

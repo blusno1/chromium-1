@@ -15,7 +15,6 @@ namespace cc {
 ScrollNode::ScrollNode()
     : id(ScrollTree::kInvalidNodeId),
       parent_id(ScrollTree::kInvalidNodeId),
-      owning_layer_id(Layer::INVALID_ID),
       main_thread_scrolling_reasons(
           MainThreadScrollingReason::kNotScrollingOnMain),
       scrollable(false),
@@ -31,12 +30,10 @@ ScrollNode::ScrollNode(const ScrollNode& other) = default;
 
 bool ScrollNode::operator==(const ScrollNode& other) const {
   return id == other.id && parent_id == other.parent_id &&
-         owning_layer_id == other.owning_layer_id &&
          scrollable == other.scrollable &&
          main_thread_scrolling_reasons == other.main_thread_scrolling_reasons &&
          non_fast_scrollable_region == other.non_fast_scrollable_region &&
-         scroll_clip_layer_bounds == other.scroll_clip_layer_bounds &&
-         bounds == other.bounds &&
+         container_bounds == other.container_bounds && bounds == other.bounds &&
          max_scroll_offset_affected_by_page_scale ==
              other.max_scroll_offset_affected_by_page_scale &&
          scrolls_inner_viewport == other.scrolls_inner_viewport &&
@@ -51,10 +48,8 @@ bool ScrollNode::operator==(const ScrollNode& other) const {
 void ScrollNode::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetInteger("id", id);
   value->SetInteger("parent_id", parent_id);
-  value->SetInteger("owning_layer_id", owning_layer_id);
   value->SetBoolean("scrollable", scrollable);
-  MathUtil::AddToTracedValue("scroll_clip_layer_bounds",
-                             scroll_clip_layer_bounds, value);
+  MathUtil::AddToTracedValue("container_bounds", container_bounds, value);
   MathUtil::AddToTracedValue("bounds", bounds, value);
   MathUtil::AddToTracedValue("offset_to_transform_parent",
                              offset_to_transform_parent, value);

@@ -142,13 +142,14 @@ group("gn_all") {
       "//printing:printing_unittests",
       "//third_party/cacheinvalidation:cacheinvalidation_unittests",
       "//third_party/pdfium/samples:pdfium_test",
-      "//third_party/webrtc/tools:frame_analyzer",
+      "//third_party/webrtc/rtc_tools:frame_analyzer",
       "//tools/battor_agent",
       "//tools/battor_agent:battor_agent_unittests",
       "//tools/gn",
       "//tools/gn:gn_unittests",
       "//tools/perf/clear_system_cache",
       "//tools/traffic_annotation/auditor:traffic_annotation_auditor",
+      "//tools/traffic_annotation/auditor:traffic_annotation_auditor_unittests",
       "//ui/accessibility:accessibility_unittests",
       "//ui/accessibility/extensions",
     ]
@@ -161,6 +162,7 @@ group("gn_all") {
       "//chrome/test:unit_tests",
       "//components:components_browsertests",
       "//components/policy:policy_templates",
+      "//components/viz:viz_unittests",
       "//components/viz/common:viz_benchmark",
       "//content/shell:content_shell",
       "//content/test:content_browsertests",
@@ -273,6 +275,7 @@ group("gn_all") {
       "//base/android/linker:chromium_android_linker",
       "//build/android/gyp/test:hello_world",
       "//build/android/gyp/test:hello_world",
+      "//build/android/stacktrace:java_deobfuscate",
       "//chrome/android/webapk/shell_apk:webapk",
       "//chrome/test/vr/perf:motopho_latency_test",
       "//components/invalidation/impl:components_invalidation_impl_junit_tests",
@@ -674,12 +677,6 @@ group("gn_all") {
       "//third_party/icu/fuzzers",
       "//third_party/qcms:fuzzers",
     ]
-
-    # TODO(miu): Remove this dependency once the build configuration in
-    # chrome/browser/BUILD.gn is migrated to chrome/browser/media/BUILD.gn.
-    # This dependency here only exists to allow GN to discover the
-    # fuzzer_test target there.
-    deps += [ "//chrome/browser/media:cast_remoting_connector_fuzzer" ]
   }
 
   if (enable_nacl) {
@@ -694,7 +691,10 @@ group("gn_all") {
   }
 
   if (enable_vr) {
-    deps += [ "//chrome/browser/android/vr_shell:vr_common_unittests" ]
+    deps += [
+      "//chrome/browser/vr:vr_common_unittests",
+      "//tools/perf/contrib/vr_benchmarks:vr_perf_tests",
+    ]
   }
 }
 
@@ -706,17 +706,6 @@ group("All") {
   deps = [
     ":gn_all",
   ]
-}
-
-# TODO(GYP_GONE): This target exists for compatibility with GYP for the
-# builders that specify targets in the recipes directly.
-# Ideally it should not exist, and the builders should be specifying
-# more specific targets (or 'All') via the source-side
-# //testing/buildbot/*.json files. We should simply delete this target
-# and update any recipes that are using it.
-group("chromium_builder_tests") {
-  testonly = true
-  deps = []
 }
 
 # TODO(GYP_GONE): Figure out if we really need this target or if there's
@@ -871,13 +860,13 @@ if (!is_ios && !is_fuchsia) {
       "//content/shell:content_shell",
       "//content/test:mojo_layouttest_bindings_js_data_deps",
       "//device/bluetooth/public/interfaces:fake_bluetooth_interfaces_js_data_deps",
-      "//device/generic_sensor/public/interfaces:interfaces_js_data_deps",
       "//device/geolocation/public/interfaces:interfaces_js_data_deps",
       "//device/usb/public/interfaces:interfaces_js_data_deps",
       "//device/vr:mojo_bindings_js_data_deps",
       "//media/capture/mojo:image_capture_js_data_deps",
       "//mojo/public/interfaces/bindings/tests:test_data_deps",
       "//services/device/public/interfaces:interfaces_js_data_deps",
+      "//services/device/public/interfaces:generic_sensor_js_data_deps",
       "//services/service_manager/public/interfaces:interfaces_js_data_deps",
       "//services/shape_detection/public/interfaces:interfaces_js_data_deps",
       "//third_party/WebKit/public:blink_devtools_frontend_resources_files",

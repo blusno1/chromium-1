@@ -148,10 +148,29 @@ ScriptValue ModulatorImpl::InstantiateModule(ScriptModule script_module) {
   return script_module.Instantiate(script_state_.Get());
 }
 
-ScriptValue ModulatorImpl::GetError(const ModuleScript* module_script) {
+ScriptModuleState ModulatorImpl::GetRecordStatus(ScriptModule script_module) {
   ScriptState::Scope scope(script_state_.Get());
-  return ScriptValue(script_state_.Get(), module_script->CreateErrorInternal(
-                                              script_state_->GetIsolate()));
+  return script_module.Status(script_state_.Get());
+}
+
+ScriptValue ModulatorImpl::GetError(const ModuleScript* module_script) {
+  DCHECK(module_script);
+  ScriptState::Scope scope(script_state_.Get());
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-error
+  // "When a module script is errored, ..." [spec text]
+
+  // "we say that its error is either its pre-instantiation error, when its
+  // module record is null, ..." [spec text]
+  ScriptModule record = module_script->Record();
+  if (record.IsNull()) {
+    return ScriptValue(script_state_.Get(), module_script->CreateErrorInternal(
+                                                script_state_->GetIsolate()));
+  }
+
+  // "or its module record's [[ErrorCompletion]] field's [[Value]] field,
+  // otherwise." [spec text]
+  return ScriptValue(script_state_.Get(),
+                     record.ErrorCompletion(script_state_.Get()));
 }
 
 Vector<Modulator::ModuleRequest> ModulatorImpl::ModuleRequestsFromScriptModule(
@@ -195,10 +214,10 @@ void ModulatorImpl::ExecuteModule(const ModuleScript* module_script) {
   // Step 3. "If s is errored, then report the exception given by s's error for
   // s and abort these steps." [spec text]
   if (module_script->IsErrored()) {
-    v8::Isolate* isolate = script_state_->GetIsolate();
-    ScriptModule::ReportException(
-        script_state_.Get(), module_script->CreateErrorInternal(isolate),
-        module_script->BaseURL().GetString(), module_script->StartPosition());
+    ScriptValue error = GetError(module_script);
+    ScriptModule::ReportException(script_state_.Get(), error.V8Value(),
+                                  module_script->BaseURL().GetString(),
+                                  module_script->StartPosition());
     return;
   }
 

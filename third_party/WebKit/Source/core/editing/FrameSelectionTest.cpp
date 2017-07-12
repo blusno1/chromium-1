@@ -171,7 +171,7 @@ TEST_F(FrameSelectionTest, ModifyExtendWithFlatTree) {
           .Extend(PositionInFlatTree(GetDocument().body(), 2))
           .Build());
   Selection().Modify(FrameSelection::kAlterationExtend, kDirectionForward,
-                     kWordGranularity);
+                     TextGranularity::kWord);
   EXPECT_EQ(Position(two, 0), VisibleSelectionInDOMTree().Start());
   EXPECT_EQ(Position(two, 3), VisibleSelectionInDOMTree().End());
   EXPECT_EQ(PositionInFlatTree(two, 0),
@@ -186,9 +186,9 @@ TEST_F(FrameSelectionTest, ModifyWithUserTriggered) {
   Selection().SetSelection(
       SelectionInDOMTree::Builder().Collapse(end_of_text).Build());
 
-  EXPECT_FALSE(Selection().Modify(FrameSelection::kAlterationMove,
-                                  kDirectionForward, kCharacterGranularity,
-                                  kNotUserTriggered))
+  EXPECT_FALSE(
+      Selection().Modify(FrameSelection::kAlterationMove, kDirectionForward,
+                         TextGranularity::kCharacter, kNotUserTriggered))
       << "Selection.modify() returns false for non-user-triggered call when "
          "selection isn't modified.";
   EXPECT_EQ(end_of_text,
@@ -196,7 +196,7 @@ TEST_F(FrameSelectionTest, ModifyWithUserTriggered) {
       << "Selection isn't modified";
 
   EXPECT_TRUE(Selection().Modify(FrameSelection::kAlterationMove,
-                                 kDirectionForward, kCharacterGranularity,
+                                 kDirectionForward, TextGranularity::kCharacter,
                                  kUserTriggered))
       << "Selection.modify() returns true for user-triggered call";
   EXPECT_EQ(end_of_text,
@@ -219,23 +219,44 @@ TEST_F(FrameSelectionTest, MoveRangeSelectionTest) {
   // "Foo B|ar B>az," with the Character granularity.
   Selection().MoveRangeSelection(CreateVisiblePosition(Position(text, 5)),
                                  CreateVisiblePosition(Position(text, 9)),
-                                 kCharacterGranularity);
+                                 TextGranularity::kCharacter);
   EXPECT_EQ_SELECTED_TEXT("ar B");
   // "Foo B|ar B>az," with the Word granularity.
   Selection().MoveRangeSelection(CreateVisiblePosition(Position(text, 5)),
                                  CreateVisiblePosition(Position(text, 9)),
-                                 kWordGranularity);
+                                 TextGranularity::kWord);
   EXPECT_EQ_SELECTED_TEXT("Bar Baz");
   // "Fo<o B|ar Baz," with the Character granularity.
   Selection().MoveRangeSelection(CreateVisiblePosition(Position(text, 5)),
                                  CreateVisiblePosition(Position(text, 2)),
-                                 kCharacterGranularity);
+                                 TextGranularity::kCharacter);
   EXPECT_EQ_SELECTED_TEXT("o B");
   // "Fo<o B|ar Baz," with the Word granularity.
   Selection().MoveRangeSelection(CreateVisiblePosition(Position(text, 5)),
                                  CreateVisiblePosition(Position(text, 2)),
-                                 kWordGranularity);
+                                 TextGranularity::kWord);
   EXPECT_EQ_SELECTED_TEXT("Foo Bar");
+}
+
+TEST_F(FrameSelectionTest, MoveRangeSelectionNoLiveness) {
+  SetBodyContent("<span id=sample>xyz</span>");
+  Element* const sample = GetDocument().getElementById("sample");
+  // Select as: <span id=sample>^xyz|</span>
+  Selection().MoveRangeSelection(
+      CreateVisiblePosition(Position(sample->firstChild(), 1)),
+      CreateVisiblePosition(Position(sample->firstChild(), 1)),
+      TextGranularity::kWord);
+  EXPECT_EQ("xyz", Selection().SelectedText());
+  sample->insertBefore(Text::Create(GetDocument(), "abc"),
+                       sample->firstChild());
+  GetDocument().UpdateStyleAndLayout();
+  const VisibleSelection& selection =
+      Selection().ComputeVisibleSelectionInDOMTree();
+  // Inserting "abc" before "xyz" should not affect to selection.
+  EXPECT_EQ(Position(sample->lastChild(), 0), selection.Start());
+  EXPECT_EQ(Position(sample->lastChild(), 3), selection.End());
+  EXPECT_EQ("xyz", Selection().SelectedText());
+  EXPECT_EQ("abcxyz", sample->innerText());
 }
 
 // For http://crbug.com/695317

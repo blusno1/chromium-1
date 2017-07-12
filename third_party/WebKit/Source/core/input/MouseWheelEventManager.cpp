@@ -4,6 +4,7 @@
 
 #include "core/input/MouseWheelEventManager.h"
 
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/events/WheelEvent.h"
 #include "core/frame/LocalFrameView.h"
@@ -61,15 +62,21 @@ WebInputEventResult MouseWheelEventManager::HandleWheelEvent(
       return WebInputEventResult::kNotHandled;
     }
 
-    if (event.phase == WebMouseWheelEvent::kPhaseBegan) {
+    bool has_phase_info =
+        event.phase != WebMouseWheelEvent::kPhaseNone ||
+        event.momentum_phase != WebMouseWheelEvent::kPhaseNone;
+    if (!has_phase_info) {
+      // Synthetic wheel events generated from GesturePinchUpdate don't have
+      // phase info. Send these events to the target under the cursor.
+      wheel_target_ = FindTargetNode(event, doc, view);
+    } else if (event.phase == WebMouseWheelEvent::kPhaseBegan) {
       // Find and save the wheel_target_, this target will be used for the rest
       // of the current scrolling sequence.
-      DCHECK(!wheel_target_);
       wheel_target_ = FindTargetNode(event, doc, view);
     }
   } else {  // !wheel_scroll_latching, wheel_target_ will be updated for each
             // wheel event.
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
     // Filter Mac OS specific phases, usually with a zero-delta.
     // https://crbug.com/553732
     // TODO(chongz): EventSender sends events with

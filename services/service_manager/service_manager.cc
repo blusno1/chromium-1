@@ -455,8 +455,10 @@ class ServiceManager::Instance
       mojom::PIDReceiverRequest pid_receiver_request,
       StartServiceWithProcessCallback callback) override {
     Identity target = in_target;
+    mojom::ServicePtr service;
+    service.Bind(mojom::ServicePtrInfo(std::move(service_handle), 0));
     mojom::ConnectResult result =
-        ValidateConnectParams(&target, nullptr, nullptr);
+        ValidateConnectParams(&target, &service, &pid_receiver_request);
     if (!Succeeded(result)) {
       std::move(callback).Run(result, Identity());
       return;
@@ -466,8 +468,6 @@ class ServiceManager::Instance
     params->set_source(identity_);
     params->set_target(target);
 
-    mojom::ServicePtr service;
-    service.Bind(mojom::ServicePtrInfo(std::move(service_handle), 0));
     params->set_client_process_info(std::move(service),
                                     std::move(pid_receiver_request));
     params->set_start_service_callback(std::move(callback));
@@ -612,6 +612,7 @@ class ServiceManager::Instance
     }
 #endif
     pid_ = pid;
+    service_manager_->NotifyServicePIDReceived(identity_, pid_);
   }
 
   void OnServiceLost(
@@ -976,7 +977,7 @@ void ServiceManager::OnInstanceUnreachable(Instance* instance) {
 }
 
 void ServiceManager::OnInstanceStopped(const Identity& identity) {
-  listeners_.ForAllPtrs([identity](mojom::ServiceManagerListener* listener) {
+  listeners_.ForAllPtrs([&identity](mojom::ServiceManagerListener* listener) {
     listener->OnServiceStopped(identity);
   });
   if (!instance_quit_callback_.is_null())
@@ -1026,15 +1027,22 @@ void ServiceManager::EraseInstanceIdentity(Instance* instance) {
 void ServiceManager::NotifyServiceStarted(const Identity& identity,
                                           base::ProcessId pid) {
   listeners_.ForAllPtrs(
-      [identity, pid](mojom::ServiceManagerListener* listener) {
+      [&identity, pid](mojom::ServiceManagerListener* listener) {
         listener->OnServiceStarted(identity, pid);
       });
 }
 
 void ServiceManager::NotifyServiceFailedToStart(const Identity& identity) {
+  listeners_.ForAllPtrs([&identity](mojom::ServiceManagerListener* listener) {
+    listener->OnServiceFailedToStart(identity);
+  });
+}
+
+void ServiceManager::NotifyServicePIDReceived(const Identity& identity,
+                                              base::ProcessId pid) {
   listeners_.ForAllPtrs(
-      [identity](mojom::ServiceManagerListener* listener) {
-        listener->OnServiceFailedToStart(identity);
+      [&identity, pid](mojom::ServiceManagerListener* listener) {
+        listener->OnServicePIDReceived(identity, pid);
       });
 }
 

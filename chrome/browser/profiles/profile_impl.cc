@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -132,6 +133,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/authpolicy/auth_policy_credentials_manager.h"
 #include "chrome/browser/chromeos/locale_change_guard.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -400,7 +402,6 @@ void ProfileImpl::RegisterProfilePrefs(
                                home_page_flags);
   registry->RegisterStringPref(prefs::kNewTabPageLocationOverride,
                                std::string());
-  registry->RegisterIntegerPref(prefs::kDownloadRestrictions, 0);
 
 #if BUILDFLAG(ENABLE_PRINTING)
   registry->RegisterBooleanPref(prefs::kPrintingEnabled, true);
@@ -911,10 +912,14 @@ void ProfileImpl::OnLocaleReady() {
 
   g_browser_process->profile_manager()->InitProfileUserPrefs(this);
 
+#if defined(OS_CHROMEOS)
+  arc::ArcServiceLauncher::Get()->MaybeSetProfile(this);
+#endif
+
   {
     SCOPED_UMA_HISTOGRAM_TIMER("Profile.CreateBrowserContextServicesTime");
-    BrowserContextDependencyManager::GetInstance()->
-      CreateBrowserContextServices(this);
+    BrowserContextDependencyManager::GetInstance()
+        ->CreateBrowserContextServices(this);
   }
 
   ChromeVersionService::OnProfileLoaded(prefs_.get(), IsNewProfile());

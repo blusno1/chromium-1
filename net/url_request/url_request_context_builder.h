@@ -44,8 +44,6 @@
 
 namespace base {
 class SingleThreadTaskRunner;
-class SequencedTaskRunner;
-class TaskRunner;
 }
 
 namespace net {
@@ -53,6 +51,7 @@ namespace net {
 class CertVerifier;
 class ChannelIDService;
 class CookieStore;
+class CTPolicyEnforcer;
 class CTVerifier;
 class HttpAuthHandlerFactory;
 class HttpServerProperties;
@@ -250,61 +249,13 @@ class NET_EXPORT URLRequestContextBuilder {
   void SetSpdyAndQuicEnabled(bool spdy_enabled,
                              bool quic_enabled);
 
-  void set_quic_connection_options(
-      const QuicTagVector& quic_connection_options) {
-    http_network_session_params_.quic_connection_options =
-        quic_connection_options;
-  }
-
-  void set_quic_user_agent_id(const std::string& quic_user_agent_id) {
-    http_network_session_params_.quic_user_agent_id = quic_user_agent_id;
-  }
-
-  void set_quic_max_server_configs_stored_in_properties(
-      int quic_max_server_configs_stored_in_properties) {
-    http_network_session_params_.quic_max_server_configs_stored_in_properties =
-        quic_max_server_configs_stored_in_properties;
-  }
-
-  void set_quic_idle_connection_timeout_seconds(
-      int quic_idle_connection_timeout_seconds) {
-    http_network_session_params_.quic_idle_connection_timeout_seconds =
-        quic_idle_connection_timeout_seconds;
-  }
-
-  void set_quic_close_sessions_on_ip_change(
-      bool quic_close_sessions_on_ip_change) {
-    http_network_session_params_.quic_close_sessions_on_ip_change =
-        quic_close_sessions_on_ip_change;
-  }
-
-  void set_quic_migrate_sessions_on_network_change(
-      bool quic_migrate_sessions_on_network_change) {
-    http_network_session_params_.quic_migrate_sessions_on_network_change =
-        quic_migrate_sessions_on_network_change;
-  }
-
-  void set_quic_migrate_sessions_early(bool quic_migrate_sessions_early) {
-    http_network_session_params_.quic_migrate_sessions_early =
-        quic_migrate_sessions_early;
-  }
-
-  void set_quic_disable_bidirectional_streams(
-      bool quic_disable_bidirectional_streams) {
-    http_network_session_params_.quic_disable_bidirectional_streams =
-        quic_disable_bidirectional_streams;
-  }
-
-  void set_quic_race_cert_verification(bool quic_race_cert_verification) {
-    http_network_session_params_.quic_race_cert_verification =
-        quic_race_cert_verification;
-  }
-
   void set_throttling_enabled(bool throttling_enabled) {
     throttling_enabled_ = throttling_enabled;
   }
 
   void set_ct_verifier(std::unique_ptr<CTVerifier> ct_verifier);
+  void set_ct_policy_enforcer(
+      std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer);
 
   void SetCertVerifier(std::unique_ptr<CertVerifier> cert_verifier);
 
@@ -329,10 +280,12 @@ class NET_EXPORT URLRequestContextBuilder {
       std::unique_ptr<CookieStore> cookie_store,
       std::unique_ptr<ChannelIDService> channel_id_service);
 
-  // Sets the task runner used to perform file operations. If not set,
-  // TaskSchedulers will be used instead.
-  void SetFileTaskRunner(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+  // Sets the SingleThreadTaskRunner used to perform cache operations. If not
+  // set, one will be created via a TaskScheduler instead. Other file tasks will
+  // use the task scheduler, but the cache needs a SingleThreadTaskRunner, so
+  // best to keep that configurable by the consumer.
+  void SetCacheThreadTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> cache_thread_task_runner);
 
   // Note that if SDCH is enabled without a policy object observing
   // the SDCH manager and handling at least Get-Dictionary events, the
@@ -362,16 +315,6 @@ class NET_EXPORT URLRequestContextBuilder {
       NetworkDelegate* network_delegate,
       NetLog* net_log);
 
-  // Returns a TaskRunner with the specified traits. If |file_task_runner_| is
-  // non-NULL, uses that. Otherwise, uses base/task_scheduler/ and the specified
-  // traits.
-  scoped_refptr<base::TaskRunner> GetFileTaskRunner(
-      const base::TaskTraits& traits);
-  scoped_refptr<base::SequencedTaskRunner> GetFileSequencedTaskRunner(
-      const base::TaskTraits& traits);
-  scoped_refptr<base::SingleThreadTaskRunner> GetFileSingleThreadTaskRunner(
-      const base::TaskTraits& traits);
-
  private:
   const char* name_;
   bool enable_brotli_;
@@ -394,7 +337,7 @@ class NET_EXPORT URLRequestContextBuilder {
   bool sdch_enabled_;
   bool cookie_store_set_by_client_;
 
-  scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> cache_thread_task_runner_;
   HttpCacheParams http_cache_params_;
   HttpNetworkSession::Params http_network_session_params_;
   base::FilePath transport_security_persister_path_;
@@ -412,6 +355,7 @@ class NET_EXPORT URLRequestContextBuilder {
   std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_;
   std::unique_ptr<CertVerifier> cert_verifier_;
   std::unique_ptr<CTVerifier> ct_verifier_;
+  std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer_;
 #if BUILDFLAG(ENABLE_REPORTING)
   std::unique_ptr<net::ReportingPolicy> reporting_policy_;
 #endif  // BUILDFLAG(ENABLE_REPORTING)

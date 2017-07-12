@@ -42,28 +42,13 @@ Polymer({
         this.removePatternWildcard(right);
   },
 
-  /** @private */
-  isCookiesCategory_: function(category) {
-    return category == settings.ContentSettingsTypes.COOKIES;
-  },
-
   /**
-   * Sets the site to display.
+   * Updates the drop-down value after |site| has changed.
    * @param {!SiteException} site The site to display.
    * @private
    */
   siteChanged_: function(site) {
-
-    this.browserProxy.getExceptionList(this.category)
-        .then(function(exceptionList) {
-          for (var i = 0; i < exceptionList.length; ++i) {
-            if (exceptionList[i].embeddingOrigin == site.embeddingOrigin &&
-                this.sameOrigin_(exceptionList[i].origin, site.origin)) {
-              this.$.permission.value = exceptionList[i].setting;
-              break;
-            }
-          }
-        }.bind(this));
+    this.$.permission.value = site.setting;
   },
 
   /**

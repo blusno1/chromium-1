@@ -31,6 +31,7 @@
 #include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_content_client.h"
 #include "content/shell/common/shell_switches.h"
+#include "content/shell/gpu/shell_content_gpu_client.h"
 #include "content/shell/renderer/layout_test/layout_test_content_renderer_client.h"
 #include "content/shell/renderer/shell_content_renderer_client.h"
 #include "content/shell/utility/shell_content_utility_client.h"
@@ -44,7 +45,6 @@
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 
@@ -166,7 +166,6 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
     }
 #endif
     command_line.AppendSwitch(cc::switches::kEnableGpuBenchmarking);
-    command_line.AppendSwitch(switches::kProcessPerTab);
     command_line.AppendSwitch(switches::kEnableLogging);
     command_line.AppendSwitch(switches::kAllowFileAccessFromFiles);
     // only default to a software GL if the flag isn't already specified.
@@ -376,6 +375,11 @@ ContentBrowserClient* ShellMainDelegate::CreateContentBrowserClient() {
                             : new ShellContentBrowserClient);
 
   return browser_client_.get();
+}
+
+ContentGpuClient* ShellMainDelegate::CreateContentGpuClient() {
+  gpu_client_.reset(new ShellContentGpuClient);
+  return gpu_client_.get();
 }
 
 ContentRendererClient* ShellMainDelegate::CreateContentRendererClient() {

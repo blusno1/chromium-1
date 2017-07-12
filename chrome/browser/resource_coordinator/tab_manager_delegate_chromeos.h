@@ -96,7 +96,7 @@ class TabManagerDelegate : public wm::ActivationChangeObserver,
 
   // Kills a tab. Returns true if the tab is killed successfully.
   // Virtual for unit testing.
-  virtual bool KillTab(int64_t tab_id);
+  virtual bool KillTab(const TabStats& tab_stats);
 
   // Get debugd client instance. Virtual for unit testing.
   virtual chromeos::DebugDaemonClient* GetDebugDaemonClient();
@@ -141,7 +141,7 @@ class TabManagerDelegate : public wm::ActivationChangeObserver,
 
   // Kills a process after getting all info of tabs and apps.
   void LowMemoryKillImpl(const TabStatsList& tab_list,
-                         const std::vector<arc::ArcProcess>& arc_processes);
+                         std::vector<arc::ArcProcess> arc_processes);
 
   // Public interface to adjust OOM scores.
   void AdjustOomPriorities(const TabStatsList& tab_list,
@@ -151,9 +151,8 @@ class TabManagerDelegate : public wm::ActivationChangeObserver,
   void AdjustFocusedTabScore(base::ProcessHandle pid);
 
   // Called by AdjustOomPriorities. Runs on the main thread.
-  void AdjustOomPrioritiesImpl(
-      const TabStatsList& tab_list,
-      const std::vector<arc::ArcProcess>& arc_processes);
+  void AdjustOomPrioritiesImpl(const TabStatsList& tab_list,
+                               std::vector<arc::ArcProcess> arc_processes);
 
   // Sets OOM score for processes in the range [|rbegin|, |rend|) to integers
   // distributed evenly in [|range_begin|, |range_end|).

@@ -32,6 +32,8 @@
 #define WebViewImpl_h
 
 #include <memory>
+
+#include "build/build_config.h"
 #include "core/editing/spellcheck/SpellCheckerClientImpl.h"
 #include "core/exported/WebPagePopupImpl.h"
 #include "core/exported/WebViewBase.h"
@@ -82,6 +84,7 @@ class PageOverlay;
 class PageScaleConstraintsSet;
 class PaintLayerCompositor;
 class UserGestureToken;
+class ValidationMessageClient;
 class WebActiveGestureAnimation;
 class WebDevToolsAgentImpl;
 class WebElement;
@@ -116,7 +119,7 @@ class WEB_EXPORT WebViewImpl final
 
   void UpdateAllLifecyclePhases() override;
   void Paint(WebCanvas*, const WebRect&) override;
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
   void PaintIgnoringCompositing(WebCanvas*, const WebRect&) override;
 #endif
   void LayoutAndPaintAsync(WebLayoutAndPaintAsyncCallback*) override;
@@ -285,6 +288,8 @@ class WEB_EXPORT WebViewImpl final
   // the page is shutting down, but will be valid at all other times.
   Page* GetPage() const override { return page_.Get(); }
 
+  // Returns a ValidationMessageClient associated to the Page. This is nullable.
+  ValidationMessageClient* GetValidationMessageClient() const;
   WebDevToolsAgentImpl* MainFrameDevToolsAgentImpl();
 
   DevToolsEmulator* GetDevToolsEmulator() const override {
@@ -464,9 +469,6 @@ class WEB_EXPORT WebViewImpl final
   void ForceNextWebGLContextCreationToFail() override;
   void ForceNextDrawingBufferCreationToFail() override;
 
-  CompositorWorkerProxyClient* CreateCompositorWorkerProxyClient() override;
-  AnimationWorkletProxyClient* CreateAnimationWorkletProxyClient() override;
-
   IntSize MainFrameSize() override;
   WebDisplayMode DisplayMode() const override { return display_mode_; }
 
@@ -585,6 +587,7 @@ class WEB_EXPORT WebViewImpl final
   LocalFrame* FocusedLocalFrameAvailableForIme() const;
 
   CompositorMutatorImpl& Mutator();
+  CompositorMutatorImpl* CompositorMutator() override;
 
   WebViewClient* client_;  // Can be 0 (e.g. unittests, shared workers, etc.)
 

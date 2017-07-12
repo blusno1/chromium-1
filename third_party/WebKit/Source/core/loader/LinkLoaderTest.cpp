@@ -116,7 +116,7 @@ TEST_P(LinkLoaderPreloadTest, Preload) {
   Persistent<MockLinkLoaderClient> loader_client =
       MockLinkLoaderClient::Create(test_case.link_loader_should_load_value);
   LinkLoader* loader = LinkLoader::Create(loader_client.Get());
-  KURL href_url = KURL(KURL(), test_case.href);
+  KURL href_url = KURL(NullURL(), test_case.href);
   URLTestHelpers::RegisterMockedErrorURLLoad(href_url);
   loader->LoadLink(LinkRelAttribute("preload"), kCrossOriginAttributeNotSet,
                    test_case.type, test_case.as, test_case.media,
@@ -303,7 +303,7 @@ TEST(LinkLoaderTest, Prefetch) {
     Persistent<MockLinkLoaderClient> loader_client =
         MockLinkLoaderClient::Create(test_case.link_loader_should_load_value);
     LinkLoader* loader = LinkLoader::Create(loader_client.Get());
-    KURL href_url = KURL(KURL(), test_case.href);
+    KURL href_url = KURL(NullURL(), test_case.href);
     URLTestHelpers::RegisterMockedErrorURLLoad(href_url);
     loader->LoadLink(LinkRelAttribute("prefetch"), kCrossOriginAttributeNotSet,
                      test_case.type, "", test_case.media,
@@ -395,6 +395,27 @@ TEST(LinkLoaderTest, Preconnect) {
     EXPECT_EQ(test_case.is_https, network_hints.IsHTTPS());
     EXPECT_EQ(test_case.is_cross_origin, network_hints.IsCrossOrigin());
   }
+}
+
+TEST(LinkLoaderTest, PreloadAndPrefetch) {
+  std::unique_ptr<DummyPageHolder> dummy_page_holder =
+      DummyPageHolder::Create(IntSize(500, 500));
+  ResourceFetcher* fetcher = dummy_page_holder->GetDocument().Fetcher();
+  ASSERT_TRUE(fetcher);
+  dummy_page_holder->GetFrame().GetSettings()->SetScriptEnabled(true);
+  Persistent<MockLinkLoaderClient> loader_client =
+      MockLinkLoaderClient::Create(true);
+  LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+  KURL href_url = KURL(KURL(), "https://www.example.com/");
+  URLTestHelpers::RegisterMockedErrorURLLoad(href_url);
+  loader->LoadLink(LinkRelAttribute("preload prefetch"),
+                   kCrossOriginAttributeNotSet, "application/javascript",
+                   "script", "", kReferrerPolicyDefault, href_url,
+                   dummy_page_holder->GetDocument(), NetworkHintsMock());
+  ASSERT_EQ(1, fetcher->CountPreloads());
+  Resource* resource = loader->GetResourceForTesting();
+  ASSERT_NE(resource, nullptr);
+  EXPECT_TRUE(resource->IsLinkPreload());
 }
 
 }  // namespace

@@ -5,6 +5,7 @@
 
 <RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:chrome="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/snippets_card_view"
@@ -23,7 +24,7 @@
         android:ellipsize="end"
         android:textSize="16sp"
         android:textColor="@color/snippets_headline_text_color"
-        chrome:leading="24dp" />
+        chrome:leading="24sp" />
 
     <org.chromium.ui.widget.TextViewWithLeading
         android:id="@+id/article_snippet"
@@ -37,7 +38,7 @@
         android:ellipsize="end"
         android:textSize="14sp"
         android:textColor="@color/snippets_text_color"
-        chrome:leading="20dp" />
+        chrome:leading="20sp" />
 
     <LinearLayout
         tools:ignore="UseCompoundDrawables"
@@ -106,4 +107,15 @@
         android:scaleType="centerCrop"
         android:contentDescription="@null"
         android:src="@null" />
+
+    <ImageView
+        android:id="@+id/article_thumbnail_video_overlay"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_alignTop="@+id/article_thumbnail"
+        android:layout_alignStart="@+id/article_thumbnail"
+        android:layout_marginStart="18dp"
+        android:layout_marginTop="18dp"
+        android:contentDescription="@null"
+        app:srcCompat="@drawable/ic_play_circle_filled" />
 </RelativeLayout>

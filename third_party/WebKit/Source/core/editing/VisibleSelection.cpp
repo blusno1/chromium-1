@@ -45,27 +45,24 @@ VisibleSelectionTemplate<Strategy>::VisibleSelectionTemplate()
     : affinity_(TextAffinity::kDownstream),
       selection_type_(kNoSelection),
       base_is_first_(true),
-      is_directional_(false),
-      granularity_(kCharacterGranularity),
-      has_trailing_whitespace_(false) {}
+      is_directional_(false) {}
 
 template <typename Strategy>
 VisibleSelectionTemplate<Strategy>::VisibleSelectionTemplate(
-    const SelectionTemplate<Strategy>& selection)
+    const SelectionTemplate<Strategy>& selection,
+    TextGranularity granularity)
     : base_(selection.Base()),
       extent_(selection.Extent()),
       affinity_(selection.Affinity()),
       selection_type_(kNoSelection),
-      is_directional_(selection.IsDirectional()),
-      granularity_(selection.Granularity()),
-      has_trailing_whitespace_(selection.HasTrailingWhitespace()) {
-  Validate(granularity_);
+      is_directional_(selection.IsDirectional()) {
+  Validate(granularity);
 }
 
 template <typename Strategy>
 VisibleSelectionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::Create(
     const SelectionTemplate<Strategy>& selection) {
-  return VisibleSelectionTemplate(selection);
+  return VisibleSelectionTemplate(selection, TextGranularity::kCharacter);
 }
 
 VisibleSelection CreateVisibleSelection(const SelectionInDOMTree& selection) {
@@ -75,6 +72,27 @@ VisibleSelection CreateVisibleSelection(const SelectionInDOMTree& selection) {
 VisibleSelectionInFlatTree CreateVisibleSelection(
     const SelectionInFlatTree& selection) {
   return VisibleSelectionInFlatTree::Create(selection);
+}
+
+template <typename Strategy>
+VisibleSelectionTemplate<Strategy>
+VisibleSelectionTemplate<Strategy>::CreateWithGranularity(
+    const SelectionTemplate<Strategy>& selection,
+    TextGranularity granularity) {
+  return VisibleSelectionTemplate(selection, granularity);
+}
+
+VisibleSelection CreateVisibleSelectionWithGranularity(
+    const SelectionInDOMTree& selection,
+    TextGranularity granularity) {
+  return VisibleSelection::CreateWithGranularity(selection, granularity);
+}
+
+VisibleSelectionInFlatTree CreateVisibleSelectionWithGranularity(
+    const SelectionInFlatTree& selection,
+    TextGranularity granularity) {
+  return VisibleSelectionInFlatTree::CreateWithGranularity(selection,
+                                                           granularity);
 }
 
 template <typename Strategy>
@@ -103,9 +121,7 @@ VisibleSelectionTemplate<Strategy>::VisibleSelectionTemplate(
       affinity_(other.affinity_),
       selection_type_(other.selection_type_),
       base_is_first_(other.base_is_first_),
-      is_directional_(other.is_directional_),
-      granularity_(other.granularity_),
-      has_trailing_whitespace_(other.has_trailing_whitespace_) {}
+      is_directional_(other.is_directional_) {}
 
 template <typename Strategy>
 VisibleSelectionTemplate<Strategy>& VisibleSelectionTemplate<Strategy>::
@@ -118,8 +134,6 @@ operator=(const VisibleSelectionTemplate<Strategy>& other) {
   selection_type_ = other.selection_type_;
   base_is_first_ = other.base_is_first_;
   is_directional_ = other.is_directional_;
-  granularity_ = other.granularity_;
-  has_trailing_whitespace_ = other.has_trailing_whitespace_;
   return *this;
 }
 
@@ -130,9 +144,7 @@ SelectionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::AsSelection()
   if (base_.IsNotNull())
     builder.SetBaseAndExtent(base_, extent_);
   return builder.SetAffinity(affinity_)
-      .SetGranularity(granularity_)
       .SetIsDirectional(is_directional_)
-      .SetHasTrailingWhitespace(has_trailing_whitespace_)
       .Build();
 }
 
@@ -180,17 +192,18 @@ VisibleSelectionTemplate<Strategy>::ToNormalizedEphemeralRange() const {
 }
 
 template <typename Strategy>
-void VisibleSelectionTemplate<Strategy>::AppendTrailingWhitespace() {
+VisibleSelectionTemplate<Strategy>
+VisibleSelectionTemplate<Strategy>::AppendTrailingWhitespace() const {
   if (IsNone())
-    return;
-  DCHECK_EQ(granularity_, kWordGranularity);
+    return *this;
   if (!IsRange())
-    return;
+    return *this;
   const PositionTemplate<Strategy>& new_end = SkipWhitespace(end_);
   if (end_ == new_end)
-    return;
-  has_trailing_whitespace_ = true;
-  end_ = new_end;
+    return *this;
+  VisibleSelectionTemplate<Strategy> result = *this;
+  result.end_ = new_end;
+  return result;
 }
 
 template <typename Strategy>
@@ -220,16 +233,16 @@ void VisibleSelectionTemplate<Strategy>::SetBaseAndExtentToDeepEquivalents() {
 }
 
 template <typename Strategy>
-static PositionTemplate<Strategy> ComputeStartRespectingGranularity(
+static PositionTemplate<Strategy> ComputeStartRespectingGranularityAlgorithm(
     const PositionWithAffinityTemplate<Strategy>& passed_start,
     TextGranularity granularity) {
   DCHECK(passed_start.IsNotNull());
 
   switch (granularity) {
-    case kCharacterGranularity:
+    case TextGranularity::kCharacter:
       // Don't do any expansion.
       return passed_start.GetPosition();
-    case kWordGranularity: {
+    case TextGranularity::kWord: {
       // General case: Select the word the caret is positioned inside of.
       // If the caret is on the word boundary, select the word according to
       // |wordSide|.
@@ -250,27 +263,27 @@ static PositionTemplate<Strategy> ComputeStartRespectingGranularity(
       return StartOfWord(visible_start, kRightWordIfOnBoundary)
           .DeepEquivalent();
     }
-    case kSentenceGranularity:
+    case TextGranularity::kSentence:
       return StartOfSentence(CreateVisiblePosition(passed_start))
           .DeepEquivalent();
-    case kLineGranularity:
+    case TextGranularity::kLine:
       return StartOfLine(CreateVisiblePosition(passed_start)).DeepEquivalent();
-    case kLineBoundary:
+    case TextGranularity::kLineBoundary:
       return StartOfLine(CreateVisiblePosition(passed_start)).DeepEquivalent();
-    case kParagraphGranularity: {
+    case TextGranularity::kParagraph: {
       const VisiblePositionTemplate<Strategy> pos =
           CreateVisiblePosition(passed_start);
       if (IsStartOfLine(pos) && IsEndOfEditableOrNonEditableContent(pos))
         return StartOfParagraph(PreviousPositionOf(pos)).DeepEquivalent();
       return StartOfParagraph(pos).DeepEquivalent();
     }
-    case kDocumentBoundary:
+    case TextGranularity::kDocumentBoundary:
       return StartOfDocument(CreateVisiblePosition(passed_start))
           .DeepEquivalent();
-    case kParagraphBoundary:
+    case TextGranularity::kParagraphBoundary:
       return StartOfParagraph(CreateVisiblePosition(passed_start))
           .DeepEquivalent();
-    case kSentenceBoundary:
+    case TextGranularity::kSentenceBoundary:
       return StartOfSentence(CreateVisiblePosition(passed_start))
           .DeepEquivalent();
   }
@@ -279,18 +292,30 @@ static PositionTemplate<Strategy> ComputeStartRespectingGranularity(
   return passed_start.GetPosition();
 }
 
+static Position ComputeStartRespectingGranularity(
+    const PositionWithAffinity& start,
+    TextGranularity granularity) {
+  return ComputeStartRespectingGranularityAlgorithm(start, granularity);
+}
+
+PositionInFlatTree ComputeStartRespectingGranularity(
+    const PositionInFlatTreeWithAffinity& start,
+    TextGranularity granularity) {
+  return ComputeStartRespectingGranularityAlgorithm(start, granularity);
+}
+
 template <typename Strategy>
-static PositionTemplate<Strategy> ComputeEndRespectingGranularity(
+static PositionTemplate<Strategy> ComputeEndRespectingGranularityAlgorithm(
     const PositionTemplate<Strategy>& start,
     const PositionWithAffinityTemplate<Strategy>& passed_end,
     TextGranularity granularity) {
   DCHECK(passed_end.IsNotNull());
 
   switch (granularity) {
-    case kCharacterGranularity:
+    case TextGranularity::kCharacter:
       // Don't do any expansion.
       return passed_end.GetPosition();
-    case kWordGranularity: {
+    case TextGranularity::kWord: {
       // General case: Select the word the caret is positioned inside of.
       // If the caret is on the word boundary, select the word according to
       // |wordSide|.
@@ -337,9 +362,9 @@ static PositionTemplate<Strategy> ComputeEndRespectingGranularity(
         return word_end.DeepEquivalent();
       return next.DeepEquivalent();
     }
-    case kSentenceGranularity:
+    case TextGranularity::kSentence:
       return EndOfSentence(CreateVisiblePosition(passed_end)).DeepEquivalent();
-    case kLineGranularity: {
+    case TextGranularity::kLine: {
       const VisiblePositionTemplate<Strategy> end =
           EndOfLine(CreateVisiblePosition(passed_end));
       if (!IsEndOfParagraph(end))
@@ -351,9 +376,9 @@ static PositionTemplate<Strategy> ComputeEndRespectingGranularity(
         return end.DeepEquivalent();
       return next.DeepEquivalent();
     }
-    case kLineBoundary:
+    case TextGranularity::kLineBoundary:
       return EndOfLine(CreateVisiblePosition(passed_end)).DeepEquivalent();
-    case kParagraphGranularity: {
+    case TextGranularity::kParagraph: {
       const VisiblePositionTemplate<Strategy> visible_paragraph_end =
           EndOfParagraph(CreateVisiblePosition(passed_end));
 
@@ -384,15 +409,28 @@ static PositionTemplate<Strategy> ComputeEndRespectingGranularity(
         return visible_paragraph_end.DeepEquivalent();
       return next.DeepEquivalent();
     }
-    case kDocumentBoundary:
+    case TextGranularity::kDocumentBoundary:
       return EndOfDocument(CreateVisiblePosition(passed_end)).DeepEquivalent();
-    case kParagraphBoundary:
+    case TextGranularity::kParagraphBoundary:
       return EndOfParagraph(CreateVisiblePosition(passed_end)).DeepEquivalent();
-    case kSentenceBoundary:
+    case TextGranularity::kSentenceBoundary:
       return EndOfSentence(CreateVisiblePosition(passed_end)).DeepEquivalent();
   }
   NOTREACHED();
   return passed_end.GetPosition();
+}
+
+static Position ComputeEndRespectingGranularity(const Position& start,
+                                                const PositionWithAffinity& end,
+                                                TextGranularity granularity) {
+  return ComputeEndRespectingGranularityAlgorithm(start, end, granularity);
+}
+
+PositionInFlatTree ComputeEndRespectingGranularity(
+    const PositionInFlatTree& start,
+    const PositionInFlatTreeWithAffinity& end,
+    TextGranularity granularity) {
+  return ComputeEndRespectingGranularityAlgorithm(start, end, granularity);
 }
 
 template <typename Strategy>
@@ -410,9 +448,6 @@ void VisibleSelectionTemplate<Strategy>::Validate(TextGranularity granularity) {
   DCHECK(!NeedsLayoutTreeUpdate(extent_));
   // TODO(xiaochengh): Add a DocumentLifecycle::DisallowTransitionScope here.
 
-  granularity_ = granularity;
-  if (granularity_ != kWordGranularity)
-    has_trailing_whitespace_ = false;
   SetBaseAndExtentToDeepEquivalents();
   if (base_.IsNull() || extent_.IsNull()) {
     base_ = extent_ = start_ = end_ = PositionTemplate<Strategy>();
@@ -437,22 +472,20 @@ void VisibleSelectionTemplate<Strategy>::Validate(TextGranularity granularity) {
   AdjustSelectionToAvoidCrossingEditingBoundaries();
   UpdateSelectionType();
 
-  if (GetSelectionType() == kRangeSelection) {
-    // "Constrain" the selection to be the smallest equivalent range of
-    // nodes. This is a somewhat arbitrary choice, but experience shows that
-    // it is useful to make to make the selection "canonical" (if only for
-    // purposes of comparing selections). This is an ideal point of the code
-    // to do this operation, since all selection changes that result in a
-    // RANGE come through here before anyone uses it.
-    // TODO(yosin) Canonicalizing is good, but haven't we already done it
-    // (when we set these two positions to |VisiblePosition|
-    // |deepEquivalent()|s above)?
-    start_ = MostForwardCaretPosition(start_);
-    end_ = MostBackwardCaretPosition(end_);
-  }
-  if (!has_trailing_whitespace_)
+  if (GetSelectionType() != kRangeSelection)
     return;
-  AppendTrailingWhitespace();
+
+  // "Constrain" the selection to be the smallest equivalent range of
+  // nodes. This is a somewhat arbitrary choice, but experience shows that
+  // it is useful to make to make the selection "canonical" (if only for
+  // purposes of comparing selections). This is an ideal point of the code
+  // to do this operation, since all selection changes that result in a
+  // RANGE come through here before anyone uses it.
+  // TODO(yosin) Canonicalizing is good, but haven't we already done it
+  // (when we set these two positions to |VisiblePosition|
+  // |deepEquivalent()|s above)?
+  start_ = MostForwardCaretPosition(start_);
+  end_ = MostBackwardCaretPosition(end_);
 }
 
 template <typename Strategy>

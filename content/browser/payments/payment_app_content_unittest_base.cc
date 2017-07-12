@@ -112,7 +112,7 @@ PaymentManager* PaymentAppContentUnitTestBase::CreatePaymentManager(
   // Register service worker for payment manager.
   bool called = false;
   worker_helper_->context()->RegisterServiceWorker(
-      scope_url, sw_script_url, nullptr,
+      sw_script_url, ServiceWorkerRegistrationOptions(scope_url), nullptr,
       base::Bind(&RegisterServiceWorkerCallback, &called));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
@@ -141,7 +141,7 @@ PaymentManager* PaymentAppContentUnitTestBase::CreatePaymentManager(
   for (const auto& candidate_manager :
        payment_app_context()->payment_managers_) {
     if (!base::ContainsKey(existing_managers, candidate_manager.first)) {
-      candidate_manager.first->Init(scope_url.spec());
+      candidate_manager.first->Init(sw_script_url.spec(), scope_url.spec());
       base::RunLoop().RunUntilIdle();
       return candidate_manager.first;
     }

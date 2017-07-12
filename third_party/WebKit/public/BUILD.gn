@@ -18,6 +18,7 @@ group("blink") {
     ":blink_headers",
   ]
   deps = [
+    "//third_party/WebKit/Source/controller",
     "//third_party/WebKit/Source/core",
     "//third_party/WebKit/Source/modules",
     "//third_party/WebKit/Source/platform",
@@ -39,6 +40,7 @@ group("all_blink") {
   testonly = true
 
   public_deps = [
+    "//third_party/WebKit/Source/controller",
     "//third_party/WebKit/Source/core",
     "//third_party/WebKit/Source/modules",
     "//third_party/WebKit/Source/platform:blink_platform_unittests",
@@ -73,6 +75,7 @@ if (is_android) {
   java_cpp_enum("blink_headers_java_enums_srcjar") {
     sources = [
       "./platform/WebDisplayMode.h",
+      "./platform/WebFocusType.h",
       "./platform/WebInputEvent.h",
       "./platform/WebTextInputMode.h",
       "./platform/WebTextInputType.h",
@@ -136,6 +139,7 @@ source_set("blink_headers") {
     "platform/WebCallbacks.h",
     "platform/WebCanvas.h",
     "platform/WebCanvasCaptureHandler.h",
+    "platform/WebClientHintsType.h",
     "platform/WebClipboard.h",
     "platform/WebCoalescedInputEvent.h",
     "platform/WebColor.h",
@@ -335,6 +339,7 @@ source_set("blink_headers") {
     "platform/WebStorageQuotaError.h",
     "platform/WebStorageQuotaType.h",
     "platform/WebString.h",
+    "platform/WebSurfaceLayerBridge.h",
     "platform/WebTextInputInfo.h",
     "platform/WebTextInputMode.h",
     "platform/WebTextInputType.h",
@@ -435,6 +440,7 @@ source_set("blink_headers") {
     "platform/modules/serviceworker/WebServiceWorkerClientsInfo.h",
     "platform/modules/serviceworker/WebServiceWorkerError.h",
     "platform/modules/serviceworker/WebServiceWorkerEventResult.h",
+    "platform/modules/serviceworker/WebServiceWorkerInstalledScriptsManager.h",
     "platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h",
     "platform/modules/serviceworker/WebServiceWorkerProvider.h",
     "platform/modules/serviceworker/WebServiceWorkerProviderClient.h",
@@ -705,10 +711,7 @@ grit("image_resources") {
 }
 
 mojom("mojo_bindings") {
-  visibility = [
-    "//components/payments/content/*",
-    "//content/*",
-  ]
+  visibility = [ "//content/*" ]
   visibility_blink = [
     "//content/common:mojo_bindings_blink",
     "//third_party/WebKit/Source/platform",
@@ -722,6 +725,7 @@ mojom("mojo_bindings") {
     "platform/modules/bluetooth/web_bluetooth.mojom",
     "platform/modules/broadcastchannel/broadcast_channel.mojom",
     "platform/modules/budget_service/budget_service.mojom",
+    "platform/modules/credentialmanager/credential_manager.mojom",
     "platform/modules/fetch/fetch_api_request.mojom",
     "platform/modules/hyphenation/hyphenation.mojom",
     "platform/modules/keyboard_lock/keyboard_lock.mojom",
@@ -736,9 +740,12 @@ mojom("mojo_bindings") {
     "platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom",
     "platform/modules/serviceworker/service_worker_event_status.mojom",
     "platform/modules/serviceworker/service_worker_stream_handle.mojom",
+    "platform/modules/webauth/authenticator.mojom",
     "platform/modules/websockets/websocket.mojom",
     "platform/referrer.mojom",
+    "platform/reporting.mojom",
     "platform/site_engagement.mojom",
+    "platform/web_feature.mojom",
     "web/console_message.mojom",
     "web/window_features.mojom",
   ]
@@ -768,7 +775,7 @@ mojom("mojo_bindings") {
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
 
   # TODO(crbug.com/699569): Convert to use the new JS bindings.
-  use_new_js_bindings = false
+  js_bindings_mode = "both"
 }
 
 mojom("android_mojo_bindings") {
@@ -800,7 +807,7 @@ mojom("android_mojo_bindings") {
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
 
   # TODO(crbug.com/699569): Convert to use the new JS bindings.
-  use_new_js_bindings = false
+  js_bindings_mode = "both"
 }
 
 # The offscreen_canvas_mojo_bindings is separated from the rest of mojom files
@@ -827,8 +834,16 @@ mojom("offscreen_canvas_mojo_bindings") {
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
 }
 
+# Note that this intentionally depends on the generator target of the mojom
+# target instead of the mojom target itself directly. This is to ensure that the
+# dependencies are header-only and don't link against any bindings code.
 group("generate_mojo_bindings") {
   deps = [
+    # It's important to generate both the regular and the Blink variants. The
+    # Blink public API exposes a number of Mojo interfaces; omitting it will
+    # cause non-deterministic compile failures for code that uses the regular
+    # variant of the generated files.
+    ":mojo_bindings__generator",
     ":mojo_bindings_blink__generator",
     ":offscreen_canvas_mojo_bindings_blink__generator",
   ]

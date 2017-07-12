@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/android/jni_android.h"
+#include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -53,10 +54,10 @@ class AudioSinkAndroidAudioTrackImpl : public AudioSinkAndroid {
   // AudioSinkAndroid implementation
   void WritePcm(scoped_refptr<DecoderBufferBase> data) override;
   void SetPaused(bool paused) override;
-  void SetVolumeMultiplier(float multiplier) override;
-  void SetContentTypeVolume(float volume, int fade_ms) override;
-  void SetMuted(bool muted) override;
+  void SetStreamVolumeMultiplier(float multiplier) override;
+  void SetLimiterVolumeMultiplier(float multiplier) override;
   float EffectiveVolume() const override;
+
   // Getters
   int input_samples_per_second() const override;
   bool primary() const override;
@@ -86,6 +87,9 @@ class AudioSinkAndroidAudioTrackImpl : public AudioSinkAndroid {
   void FeedData();
   void FeedDataContinue();
 
+  void ScheduleWaitForEosTask();
+  void OnPlayoutDone();
+
   // Reformats audio data from planar float into interleaved float for
   // AudioTrack. I.e.:
   // "LLLLLLLLLLLLLLLLRRRRRRRRRRRRRRRR" -> "LRLRLRLRLRLRLRLRLRLRLRLRLRLRLRLR".
@@ -109,11 +113,7 @@ class AudioSinkAndroidAudioTrackImpl : public AudioSinkAndroid {
   const AudioContentType content_type_;
 
   float stream_volume_multiplier_;
-  float type_volume_multiplier_;
-  float mute_volume_multiplier_;
-  // TODO(ckuiper): Use this to configure the fading logic in Android's audio
-  // subsystem.
-  int fade_ms_;
+  float limiter_volume_multiplier_;
 
   // Java AudioSinkAudioTrackImpl instance.
   base::android::ScopedJavaGlobalRef<jobject> j_audio_sink_audiotrack_impl_;
@@ -125,6 +125,8 @@ class AudioSinkAndroidAudioTrackImpl : public AudioSinkAndroid {
   // is handled separately via FeedDataContinue().
   base::Thread feeder_thread_;
   scoped_refptr<base::SingleThreadTaskRunner> feeder_task_runner_;
+
+  base::CancelableClosure wait_for_eos_task_;
 
   const scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner_;
 

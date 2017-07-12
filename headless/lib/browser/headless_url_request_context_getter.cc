@@ -29,11 +29,9 @@ HeadlessURLRequestContextGetter::HeadlessURLRequestContextGetter(
     net::NetLog* net_log,
     HeadlessBrowserContextImpl* headless_browser_context)
     : io_task_runner_(std::move(io_task_runner)),
-      file_task_runner_(base::CreateSingleThreadTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND})),
       user_agent_(options->user_agent()),
       host_resolver_rules_(options->host_resolver_rules()),
-      proxy_server_(options->proxy_server()),
+      proxy_config_(options->proxy_config()),
       request_interceptors_(std::move(request_interceptors)),
       net_log_(net_log),
       headless_browser_context_(headless_browser_context) {
@@ -52,7 +50,7 @@ HeadlessURLRequestContextGetter::HeadlessURLRequestContextGetter(
   // We must create the proxy config service on the UI loop on Linux because it
   // must synchronously run on the glib message loop. This will be passed to
   // the URLRequestContextStorage on the IO thread in GetURLRequestContext().
-  if (proxy_server_.IsEmpty()) {
+  if (!proxy_config_) {
     proxy_config_service_ =
         net::ProxyService::CreateSystemProxyConfigService(io_task_runner_);
   }
@@ -70,10 +68,8 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
     // TODO(skyostil): Make these configurable.
     builder.set_data_enabled(true);
     builder.set_file_enabled(true);
-    builder.SetFileTaskRunner(file_task_runner_);
-    if (!proxy_server_.IsEmpty()) {
-      builder.set_proxy_service(
-          net::ProxyService::CreateFixed(proxy_server_.ToString()));
+    if (proxy_config_) {
+      builder.set_proxy_service(net::ProxyService::CreateFixed(*proxy_config_));
     } else {
       builder.set_proxy_config_service(std::move(proxy_config_service_));
     }

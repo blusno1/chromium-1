@@ -122,8 +122,6 @@ class CORE_EXPORT FrameLoader final {
   bool ShouldTreatURLAsSameAsCurrent(const KURL&) const;
   bool ShouldTreatURLAsSrcdocDocument(const KURL&) const;
 
-  LocalFrameClient* Client() const;
-
   void SetDefersLoading(bool);
 
   void DidExplicitOpen();
@@ -247,7 +245,8 @@ class CORE_EXPORT FrameLoader final {
                           HistoryItem*,
                           ClientRedirectPolicy,
                           Document*);
-  void RestoreScrollPositionAndViewStateForLoadType(FrameLoadType);
+  void RestoreScrollPositionAndViewStateForLoadType(FrameLoadType,
+                                                    HistoryLoadType);
 
   void ScheduleCheckCompleted();
 
@@ -262,6 +261,8 @@ class CORE_EXPORT FrameLoader final {
                                        const FrameLoadRequest&,
                                        FrameLoadType,
                                        NavigationType);
+
+  LocalFrameClient* Client() const;
 
   Member<LocalFrame> frame_;
   AtomicString required_csp_;

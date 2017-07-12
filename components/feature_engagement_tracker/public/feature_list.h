@@ -49,11 +49,18 @@ DEFINE_VARIATION_PARAM(kIPHDataSaverDetailFeature, "IPH_DataSaverDetail");
 DEFINE_VARIATION_PARAM(kIPHDataSaverPreviewFeature, "IPH_DataSaverPreview");
 DEFINE_VARIATION_PARAM(kIPHDownloadHomeFeature, "IPH_DownloadHome");
 DEFINE_VARIATION_PARAM(kIPHDownloadPageFeature, "IPH_DownloadPage");
+DEFINE_VARIATION_PARAM(kIPHDownloadPageScreenshotFeature,
+                       "IPH_DownloadPageScreenshot");
 #endif  // defined(OS_ANDROID)
 #if defined(OS_WIN) || defined(OS_LINUX)
 DEFINE_VARIATION_PARAM(kIPHIncognitoWindowFeature, "IPH_IncognitoWindow");
 DEFINE_VARIATION_PARAM(kIPHNewTabFeature, "IPH_NewTab");
 #endif  // defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_IOS)
+DEFINE_VARIATION_PARAM(kIPHNewTabTipFeature, "IPH_NewTabTip");
+DEFINE_VARIATION_PARAM(kIPHNewIncognitoTabTipFeature, "IPH_NewIncognitoTabTip");
+DEFINE_VARIATION_PARAM(kIPHBadgedReadingListFeature, "IPH_BadgedReadingList");
+#endif  // defined(OS_IOS)
 
 }  // namespace
 
@@ -67,9 +74,14 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHDataSaverPreviewFeature),
         VARIATION_ENTRY(kIPHDownloadHomeFeature),
         VARIATION_ENTRY(kIPHDownloadPageFeature),
+        VARIATION_ENTRY(kIPHDownloadPageScreenshotFeature),
 #elif defined(OS_WIN) || defined(OS_LINUX)
         VARIATION_ENTRY(kIPHIncognitoWindowFeature),
         VARIATION_ENTRY(kIPHNewTabFeature),
+#elif defined(OS_IOS)
+        VARIATION_ENTRY(kIPHNewTabTipFeature),
+        VARIATION_ENTRY(kIPHNewIncognitoTabTipFeature),
+        VARIATION_ENTRY(kIPHBadgedReadingListFeature),
 #else
         VARIATION_ENTRY(kIPHDummyFeature),  // Ensures non-empty array.
 #endif

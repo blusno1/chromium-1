@@ -27,7 +27,6 @@
 #include "modules/media_controls/MediaControlsImpl.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/ClientRect.h"
 #include "core/dom/Fullscreen.h"
 #include "core/dom/MutationCallback.h"
 #include "core/dom/MutationObserver.h"
@@ -40,6 +39,7 @@
 #include "core/events/MouseEvent.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/geometry/DOMRect.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/media/AutoplayPolicy.h"
@@ -1029,7 +1029,7 @@ void MediaControlsImpl::OnPanelKeypress() {
   ResetHideMediaControlsTimer();
 }
 
-void MediaControlsImpl::NotifyElementSizeChanged(ClientRect* new_size) {
+void MediaControlsImpl::NotifyElementSizeChanged(DOMRectReadOnly* new_size) {
   // Note that this code permits a bad frame on resize, since it is
   // run after the relayout / paint happens.  It would be great to improve
   // this, but it would be even greater to move this code entirely to
@@ -1062,7 +1062,7 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
   // won't benefit from that anwyay, we just do it here like JS will.
 
   // Controls that we'll hide / show, in order of decreasing priority.
-  MediaControlElement* elements[] = {
+  MediaControlElementBase* elements[] = {
       // Exclude m_overflowMenu; we handle it specially.
       play_button_.Get(),
       fullscreen_button_.Get(),
@@ -1085,7 +1085,7 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
     // This prevents the wrong controls from being shown briefly
     // immediately after the first layout and paint, but before we have
     // a chance to revise them.
-    for (MediaControlElement* element : elements) {
+    for (MediaControlElementBase* element : elements) {
       if (element)
         element->SetDoesFit(false);
     }
@@ -1115,10 +1115,10 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
   overflow_menu_->SetIsWanted(true);
   int used_width = minimum_width;
 
-  std::list<MediaControlElement*> overflow_elements;
-  MediaControlElement* first_displaced_element = nullptr;
+  std::list<MediaControlElementBase*> overflow_elements;
+  MediaControlElementBase* first_displaced_element = nullptr;
   // For each control that fits, enable it in order of decreasing priority.
-  for (MediaControlElement* element : elements) {
+  for (MediaControlElementBase* element : elements) {
     if (!element)
       continue;
     int width = minimum_width;

@@ -215,6 +215,8 @@ struct CONTENT_EXPORT WebPreferences {
   // Cues will not be placed in this margin area.
   float text_track_margin_percentage;
 
+  bool page_popups_suppressed;
+
 #if defined(OS_ANDROID)
   bool text_autosizing_enabled;
   float font_scale_factor;
@@ -251,7 +253,6 @@ struct CONTENT_EXPORT WebPreferences {
   // If enabled, video fullscreen detection will be enabled.
   bool video_fullscreen_detection_enabled;
   bool embedded_media_experience_enabled;
-  bool page_popups_suppressed;
 #else  // defined(OS_ANDROID)
 #endif  // defined(OS_ANDROID)
 
@@ -266,14 +267,6 @@ struct CONTENT_EXPORT WebPreferences {
 
   // If enabled, disabled video track when the video is in the background.
   bool background_video_track_optimization_enabled;
-
-  // When memory pressure based garbage collection is enabled for MSE, the
-  // |enable_instant_source_buffer_gc| flag controls whether the GC is done
-  // immediately on memory pressure notification or during the next SourceBuffer
-  // append (slower, but is MSE-spec compliant).
-  // TODO(servolk, asvitkine): Query the value directly when it is available in
-  // the renderer process. See https://crbug.com/681160.
-  bool enable_instant_source_buffer_gc;
 
   // Whether it is a presentation receiver.
   bool presentation_receiver;

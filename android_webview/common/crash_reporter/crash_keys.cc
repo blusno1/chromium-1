@@ -32,6 +32,11 @@ const char kViewCount[] = "view-count";
 
 const char kZeroEncodeDetails[] = "zero-encode-details";
 
+// TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+// TODO(sunnyps): Remove after fixing https://crbug.com/622080
+const char kBeginMainFrameHangCompositorState[] =
+    "begin-main-frame-hang-compositor-state";
+
 size_t RegisterWebViewCrashKeys() {
   base::debug::CrashKey fixed_keys[] = {
       {"AW_WHITELISTED_DEBUG_KEY", kSmallSize},
@@ -53,6 +58,7 @@ size_t RegisterWebViewCrashKeys() {
       {gpu::crash_keys::kGPUVertexShaderVersion, kSmallSize},
       {gpu::crash_keys::kGPUVendor, kSmallSize},
       {gpu::crash_keys::kGPURenderer, kSmallSize},
+      {gpu::crash_keys::kGPUGLContextIsVirtual, kSmallSize},
 
       // content/:
       {"bad_message_reason", kSmallSize},
@@ -125,6 +131,13 @@ size_t RegisterWebViewCrashKeys() {
       {"swdh_set_hosted_version_host_pid", kSmallSize},
       {"swdh_set_hosted_version_is_new_process", kSmallSize},
       {"swdh_set_hosted_version_restart_count", kSmallSize},
+
+      // Temporary for https://crbug.com/685996.
+      {"user-cloud-policy-manager-connect-trace", kMediumSize},
+
+      // TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+      // TODO(sunnyps): Remove after fixing https://crbug.com/622080
+      {kBeginMainFrameHangCompositorState, kSmallSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

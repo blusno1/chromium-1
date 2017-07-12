@@ -88,6 +88,7 @@
 #import "ios/web/web_state/ui/crw_swipe_recognizer_provider.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
+#import "ios/web/web_state/ui/crw_web_view_navigation_proxy.h"
 #import "ios/web/web_state/ui/crw_web_view_proxy_impl.h"
 #import "ios/web/web_state/ui/crw_wk_navigation_states.h"
 #import "ios/web/web_state/ui/crw_wk_script_message_router.h"
@@ -564,6 +565,8 @@ NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
 // the data is passed to |_wkWebView| on main thread.
 // This is necessary because WKWebView ignores POST request body.
 // Workaround for https://bugs.webkit.org/show_bug.cgi?id=145410
+// TODO(crbug.com/740987): Remove |loadPOSTRequest:| workaround once iOS 10 is
+// dropped.
 - (WKNavigation*)loadPOSTRequest:(NSMutableURLRequest*)request;
 // Loads the HTML into the page at the given URL.
 - (void)loadHTML:(NSString*)html forURL:(const GURL&)url;
@@ -682,6 +685,14 @@ registerLoadRequestForURL:(const GURL&)URL
 // incorrectly trigger |-webPageChanged| calls.
 - (void)injectHTML5HistoryScriptWithHashChange:(BOOL)dispatchHashChange
                         sameDocumentNavigation:(BOOL)sameDocumentNavigation;
+
+// WKNavigation objects are used as a weak key to store web::NavigationContext.
+// WKWebView manages WKNavigation lifetime and destroys them after the
+// navigation is finished. However for window opening navigations WKWebView
+// passes null WKNavigation to WKNavigationDelegate callbacks and strong key is
+// used to store web::NavigationContext. Those "null" navigations have to be
+// cleaned up manually by calling this method.
+- (void)forgetNullWKNavigation:(WKNavigation*)navigation;
 
 - (BOOL)isLoaded;
 // Extracts the current page's viewport tag information and calls |completion|.
@@ -1423,6 +1434,12 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 - (id<CRWWebViewProxy>)webViewProxy {
   return _webViewProxy.get();
+}
+
+- (id<CRWWebViewNavigationProxy>)webViewNavigationProxy {
+  DCHECK(
+      [self.webView conformsToProtocol:@protocol(CRWWebViewNavigationProxy)]);
+  return static_cast<id<CRWWebViewNavigationProxy>>(self.webView);
 }
 
 - (UIView*)viewForPrinting {
@@ -3443,6 +3460,11 @@ registerLoadRequestForURL:(const GURL&)requestURL
   return currentItem ? currentItem->GetHttpRequestHeaders() : nil;
 }
 
+- (void)forgetNullWKNavigation:(WKNavigation*)navigation {
+  if (!navigation)
+    [_navigationStates removeNavigation:navigation];
+}
+
 #pragma mark -
 #pragma mark CRWWebViewScrollViewProxyObserver
 
@@ -4494,7 +4516,7 @@ registerLoadRequestForURL:(const GURL&)requestURL
   // the pending load.
   _pendingNavigationInfo.reset();
   _certVerificationErrors->Clear();
-  [_navigationStates removeNavigation:navigation];
+  [self forgetNullWKNavigation:navigation];
 }
 
 - (void)webView:(WKWebView*)webView
@@ -4598,9 +4620,9 @@ registerLoadRequestForURL:(const GURL&)requestURL
 
   if (navigationFinished) {
     // webView:didFinishNavigation: was called before
-    // webView:didCommitNavigation:, so remove the navigation now and signal
+    // webView:didCommitNavigation:, so forget null navigation now and signal
     // that navigation was finished.
-    [_navigationStates removeNavigation:navigation];
+    [self forgetNullWKNavigation:navigation];
     [self didFinishNavigation:navigation];
   }
 }
@@ -4621,10 +4643,10 @@ registerLoadRequestForURL:(const GURL&)requestURL
   web::ExecuteJavaScript(webView, @"__gCrWeb.didFinishNavigation()", nil);
   [self didFinishNavigation:navigation];
 
-  // Remove navigation only if it has been committed. Otherwise it will be
-  // removed in webView:didCommitNavigation: callback.
+  // Forget null navigation only if it has been committed. Otherwise it will be
+  // forgotten in webView:didCommitNavigation: callback.
   if (navigationCommitted) {
-    [_navigationStates removeNavigation:navigation];
+    [self forgetNullWKNavigation:navigation];
   }
 }
 
@@ -4638,7 +4660,7 @@ registerLoadRequestForURL:(const GURL&)requestURL
             inMainFrame:YES
           forNavigation:navigation];
   _certVerificationErrors->Clear();
-  [_navigationStates removeNavigation:navigation];
+  [self forgetNullWKNavigation:navigation];
 }
 
 - (void)webView:(WKWebView*)webView
@@ -4788,15 +4810,24 @@ registerLoadRequestForURL:(const GURL&)requestURL
     [self setDocumentURL:webViewURL];
     [self webPageChanged];
 
-    web::NavigationContextImpl* context =
+    web::NavigationContextImpl* existingContext =
         [self contextForPendingNavigationWithURL:webViewURL];
-    // Same document navigation does not contain response headers.
-    net::HttpResponseHeaders* headers =
-        isSameDocumentNavigation ? nullptr
-                                 : _webStateImpl->GetHttpResponseHeaders();
-    context->SetResponseHeaders(headers);
-    context->SetIsSameDocument(isSameDocumentNavigation);
-    _webStateImpl->OnNavigationFinished(context);
+    if (!existingContext && isSameDocumentNavigation) {
+      // This is a renderer-initiated same-document navigation, which needs to
+      // be registered.
+      std::unique_ptr<web::NavigationContextImpl> newContext =
+          [self registerLoadRequestForURL:webViewURL];
+      newContext->SetIsSameDocument(true);
+      _webStateImpl->OnNavigationFinished(newContext.get());
+    } else {
+      // Same document navigation does not contain response headers.
+      net::HttpResponseHeaders* headers =
+          isSameDocumentNavigation ? nullptr
+                                   : _webStateImpl->GetHttpResponseHeaders();
+      existingContext->SetResponseHeaders(headers);
+      existingContext->SetIsSameDocument(isSameDocumentNavigation);
+      _webStateImpl->OnNavigationFinished(existingContext);
+    }
   }
 
   [self updateSSLStatusForCurrentNavigationItem];
@@ -5028,16 +5059,22 @@ registerLoadRequestForURL:(const GURL&)requestURL
     [request setHTTPMethod:@"POST"];
     [request setHTTPBody:POSTData];
     [request setAllHTTPHeaderFields:self.currentHTTPHeaders];
-    GURL navigationURL =
-        currentItem ? currentItem->GetURL() : GURL::EmptyGURL();
-    std::unique_ptr<web::NavigationContextImpl> navigationContext =
-        [self registerLoadRequestForURL:navigationURL
-                               referrer:self.currentNavItemReferrer
-                             transition:self.currentTransition];
-    WKNavigation* navigation = [self loadPOSTRequest:request];
-    [_navigationStates setContext:std::move(navigationContext)
-                    forNavigation:navigation];
-    return;
+    // As of iOS 11, WKWebView supports requests with POST data, so the
+    // Javascript POST workaround only needs to be used if the OS version is
+    // less than iOS 11.
+    // TODO(crbug.com/740987): Remove POST workaround once iOS 10 is dropped.
+    if (!base::ios::IsRunningOnIOS11OrLater()) {
+      GURL navigationURL =
+          currentItem ? currentItem->GetURL() : GURL::EmptyGURL();
+      std::unique_ptr<web::NavigationContextImpl> navigationContext =
+          [self registerLoadRequestForURL:navigationURL
+                                 referrer:self.currentNavItemReferrer
+                               transition:self.currentTransition];
+      WKNavigation* navigation = [self loadPOSTRequest:request];
+      [_navigationStates setContext:std::move(navigationContext)
+                      forNavigation:navigation];
+      return;
+    }
   }
 
   ProceduralBlock defaultNavigationBlock = ^{

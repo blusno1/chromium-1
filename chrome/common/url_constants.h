@@ -278,7 +278,6 @@ extern const char kChromeUISandboxHost[];
 extern const char kChromeUIContextualSearchPromoHost[];
 extern const char kChromeUIOfflineInternalsURL[];
 extern const char kChromeUIPhysicalWebDiagnosticsHost[];
-extern const char kChromeUIPopularSitesInternalsHost[];
 extern const char kChromeUISnippetsInternalsHost[];
 extern const char kChromeUIWebApksHost[];
 #endif
@@ -526,6 +525,9 @@ extern const char kRemoveNonCWSExtensionURL[];
 
 #if defined(OS_WIN)
 extern const char kNotificationsHelpURL[];
+
+// The URL for the Learn More link in the Chrome Cleanup settings card.
+extern const char kChromeCleanerLearnMoreURL[];
 #endif
 
 // The Welcome Notification More Info URL.

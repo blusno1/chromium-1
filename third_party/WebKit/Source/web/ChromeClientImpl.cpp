@@ -32,7 +32,9 @@
 #include "web/ChromeClientImpl.h"
 
 #include <memory>
+
 #include "bindings/core/v8/ScriptController.h"
+#include "build/build_config.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Fullscreen.h"
@@ -631,7 +633,7 @@ void ChromeClientImpl::SetCursor(const WebCursorInfo& cursor,
   if (cursor_overridden_)
     return;
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   // On Mac the mousemove event propagates to both the popup and main window.
   // If a popup is open we don't want the main window to change the cursor.
   if (web_view_->HasOpenedPopup())
@@ -796,6 +798,16 @@ void ChromeClientImpl::ClosePagePopup(PagePopup* popup) {
 
 DOMWindow* ChromeClientImpl::PagePopupWindowForTesting() const {
   return web_view_->PagePopupWindow();
+}
+
+void ChromeClientImpl::SetBrowserControlsState(float height,
+                                               bool shrinks_layout) {
+  WebSize size = web_view_->Size();
+  if (shrinks_layout)
+    size.height -= height;
+
+  web_view_->ResizeWithBrowserControls(
+      size, height, shrinks_layout);
 }
 
 bool ChromeClientImpl::ShouldOpenModalDialogDuringPageDismissal(
@@ -1067,22 +1079,6 @@ void ChromeClientImpl::RegisterViewportLayers() const {
 
 void ChromeClientImpl::DidUpdateBrowserControls() const {
   web_view_->DidUpdateBrowserControls();
-}
-
-CompositorWorkerProxyClient*
-ChromeClientImpl::CreateCompositorWorkerProxyClient(LocalFrame* frame) {
-  WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
-  return web_frame->LocalRoot()
-      ->FrameWidget()
-      ->CreateCompositorWorkerProxyClient();
-}
-
-AnimationWorkletProxyClient*
-ChromeClientImpl::CreateAnimationWorkletProxyClient(LocalFrame* frame) {
-  WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
-  return web_frame->LocalRoot()
-      ->FrameWidget()
-      ->CreateAnimationWorkletProxyClient();
 }
 
 void ChromeClientImpl::RegisterPopupOpeningObserver(

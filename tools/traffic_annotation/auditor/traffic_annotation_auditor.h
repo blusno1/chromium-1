@@ -5,17 +5,89 @@
 #ifndef TOOLS_TRAFFIC_ANNOTATION_AUDITOR_TRAFFIC_ANNOTATION_AUDITOR_H_
 #define TOOLS_TRAFFIC_ANNOTATION_AUDITOR_TRAFFIC_ANNOTATION_AUDITOR_H_
 
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "tools/traffic_annotation/traffic_annotation.pb.h"
 
-namespace traffic_annotation_auditor {
+// Holds an item of whitelist exception rule for auditor.
+struct AuditorException {
+  enum class ExceptionType {
+    ALL,            // Ignore all errors (doesn't check the files at all).
+    MISSING,        // Ignore missing annotations.
+    EMPTY_MUTABLE,  // Ignore empty mutable annotation constructor.
+    EXCEPTION_TYPE_LAST = EMPTY_MUTABLE
+  } type;
+  std::string partial_path;
+
+  static bool TypeFromString(const std::string& type_string,
+                             ExceptionType* type_value) {
+    if (type_string == "all") {
+      *type_value = ExceptionType::ALL;
+    } else if (type_string == "missing") {
+      *type_value = ExceptionType::MISSING;
+    } else if (type_string == "empty_mutable") {
+      *type_value = ExceptionType::EMPTY_MUTABLE;
+    } else {
+      return false;
+    }
+    return true;
+  }
+};
+
+// Holds the auditor processing results on one unit of annotation or function.
+class AuditorResult {
+ public:
+  enum class ResultType {
+    RESULT_OK,            // No error
+    RESULT_IGNORE,        // The item does not require furthure processing.
+    ERROR_FATAL,          // A fatal error that should stop process.
+    ERROR_MISSING,        // A function is called without annotation.
+    ERROR_NO_ANNOTATION,  // A function is called with NO_ANNOTATION tag.
+    ERROR_SYNTAX,         // Annotation syntax is not right.
+    ERROR_RESERVED_UNIQUE_ID_HASH_CODE,  // A unique id has a hash code similar
+                                         // to a reserved word.
+    ERROR_DUPLICATE_UNIQUE_ID_HASH_CODE  // Two unique ids have similar hash
+                                         // codes.
+  };
+
+  static const int kNoCodeLineSpecified;
+
+  AuditorResult(ResultType type,
+                const std::string& message,
+                const std::string& file_path,
+                int line);
+
+  AuditorResult(ResultType type, const std::string& message);
+
+  AuditorResult(ResultType type);
+
+  ~AuditorResult();
+
+  AuditorResult(const AuditorResult& other);
+
+  void AddDetail(const std::string& message);
+
+  ResultType type() const { return type_; };
+
+  std::string file_path() const { return file_path_; }
+
+  // Formats the error message into one line of text.
+  std::string ToText() const;
+
+ private:
+  ResultType type_;
+  std::vector<std::string> details_;
+  std::string file_path_;
+  int line_;
+};
 
 // Holds an instance of network traffic annotation.
 // TODO(rhalavati): Check if this class can also be reused in clang tool.
 class AnnotationInstance {
  public:
-  // Annotation Type
+  // Annotation Type.
   enum class AnnotationType {
     ANNOTATION_COMPLETE,
     ANNOTATION_PARTIAL,
@@ -41,10 +113,9 @@ class AnnotationInstance {
   // not available, or missing), returns true, otherwise false.
   // If any error happens, |error_text| will be set. If it would be set to
   // FATAL, furthur processing of the text should be stopped.
-  bool Deserialize(const std::vector<std::string>& serialized_lines,
-                   int start_line,
-                   int end_line,
-                   std::string* error_text);
+  AuditorResult Deserialize(const std::vector<std::string>& serialized_lines,
+                            int start_line,
+                            int end_line);
 
   // Protobuf of the annotation.
   traffic_annotation::NetworkTrafficAnnotation proto;
@@ -79,10 +150,9 @@ class CallInstance {
   // If the call instance is correctly read returns true, otherwise false.
   // If any error happens, |error_text| will be set. If it would be set to
   // FATAL, further processing of the text should be stopped.
-  bool Deserialize(const std::vector<std::string>& serialized_lines,
-                   int start_line,
-                   int end_line,
-                   std::string* error_text);
+  AuditorResult Deserialize(const std::vector<std::string>& serialized_lines,
+                            int start_line,
+                            int end_line);
 
   std::string file_path;
   uint32_t line_number;
@@ -97,23 +167,74 @@ class CallInstance {
   bool is_annotated;
 };
 
-// Runs traffic_annotation_extractor clang tool and returns its output.
-std::string RunClangTool(const base::FilePath& source_path,
-                         const base::FilePath& build_path,
-                         const base::CommandLine::StringVector& path_filters,
-                         bool full_run);
+class TrafficAnnotationAuditor {
+ public:
+  TrafficAnnotationAuditor(const base::FilePath& source_path,
+                           const base::FilePath& build_path);
+  ~TrafficAnnotationAuditor();
 
-// Parses the output of clang tool and populates instances, calls, and errors.
-// Errors include not finding the file, incorrect content, or missing or not
-// provided annotations.
-bool ParseClangToolRawOutput(const std::string& clang_output,
-                             std::vector<AnnotationInstance>* annotations,
-                             std::vector<CallInstance>* calls,
-                             std::vector<std::string>* errors);
+  // Runs traffic_annotation_extractor clang tool and puts its output in
+  // |clang_tool_raw_output_|.
+  bool RunClangTool(const std::vector<std::string>& path_filters,
+                    bool full_run);
 
-// Computes the hash value of a traffic annotation unique id.
-int ComputeHashValue(const std::string& unique_id);
+  // Parses the output of clang tool (|clang_tool_raw_output_|) and populates
+  // |extracted_annotations_|, |extracted_calls_|, and |errors_|.
+  // Errors include not finding the file, incorrect content, or missing or not
+  // provided annotations.
+  bool ParseClangToolRawOutput();
 
-}  // namespace traffic_annotation_auditor
+  // Computes the hash value of a traffic annotation unique id.
+  static int ComputeHashValue(const std::string& unique_id);
+
+  // Loads the whitelist file and populates |ignore_list_|.
+  bool LoadWhiteList();
+
+  // Checks to see if a |file_path| matches a whitelist with given type.
+  bool IsWhitelisted(const std::string& file_path,
+                     AuditorException::ExceptionType whitelist_type);
+
+  // Checks to see if any unique id or its hash code is duplicated.
+  void CheckDuplicateHashes();
+
+  // Preforms all checks on extracted annotations and calls, and adds the
+  // results to |errors_|.
+  void RunAllChecks();
+
+  // Returns a mapping of reserved unique ids' hash codes to the unique ids'
+  // texts. This list includes all unique ids that are defined in
+  // net/traffic_annotation/network_traffic_annotation.h and
+  // net/traffic_annotation/network_traffic_annotation_test_helper.h
+  const std::map<int, std::string>& GetReservedUniqueIDs();
+
+  std::string clang_tool_raw_output() const { return clang_tool_raw_output_; };
+
+  void set_clang_tool_raw_output(const std::string& raw_output) {
+    clang_tool_raw_output_ = raw_output;
+  };
+
+  const std::vector<AnnotationInstance>& extracted_annotations() const {
+    return extracted_annotations_;
+  }
+
+  const std::vector<CallInstance>& extracted_calls() const {
+    return extracted_calls_;
+  }
+
+  const std::vector<AuditorResult>& errors() const { return errors_; }
+
+ private:
+
+  const base::FilePath source_path_;
+  const base::FilePath build_path_;
+
+  std::string clang_tool_raw_output_;
+  std::vector<AnnotationInstance> extracted_annotations_;
+  std::vector<CallInstance> extracted_calls_;
+  std::vector<AuditorResult> errors_;
+
+  std::vector<std::string> ignore_list_[static_cast<int>(
+      AuditorException::ExceptionType::EXCEPTION_TYPE_LAST)];
+};
 
 #endif  // TOOLS_TRAFFIC_ANNOTATION_AUDITOR_TRAFFIC_ANNOTATION_AUDITOR_H_

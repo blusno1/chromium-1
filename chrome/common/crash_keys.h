@@ -145,6 +145,15 @@ extern const char kViewCount[];
 // was encountered.  http://crbug.com/519022
 extern const char kZeroEncodeDetails[];
 
+// TEMPORARY: Stack trace for the previous call of the
+// UserCloudPolicyManager::Connect() method. The value is set when we trigger a
+// browser crash due to an attempt to connect twice.  https://crbug.com/685996.
+extern const char kUserCloudPolicyManagerConnectTrace[];
+
+// TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+// TODO(sunnyps): Remove after fixing https://crbug.com/622080
+extern const char kBeginMainFrameHangCompositorState[];
+
 }  // namespace crash_keys
 
 #endif  // CHROME_COMMON_CRASH_KEYS_H_

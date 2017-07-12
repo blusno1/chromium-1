@@ -6,6 +6,7 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutBox.h"
@@ -84,6 +85,7 @@ Node& RootScrollerController::EffectiveRootScroller() const {
 }
 
 void RootScrollerController::DidUpdateLayout() {
+  DCHECK(document_->Lifecycle().GetState() == DocumentLifecycle::kLayoutClean);
   RecomputeEffectiveRootScroller();
 }
 
@@ -132,11 +134,22 @@ void RootScrollerController::RecomputeEffectiveRootScroller() {
   ApplyRootScrollerProperties(*old_effective_root_scroller);
   ApplyRootScrollerProperties(*effective_root_scroller_);
 
+  // Document (i.e. LayoutView) gets its background style from the rootScroller
+  // so we need to recalc its style. Ensure that we get back to a LayoutClean
+  // state after.
+  document_->SetNeedsStyleRecalc(kLocalStyleChange,
+                                 StyleChangeReasonForTracing::Create(
+                                     StyleChangeReason::kStyleInvalidator));
+  document_->UpdateStyleAndLayout();
+
   if (Page* page = document_->GetPage())
     page->GlobalRootScrollerController().DidChangeRootScroller();
 }
 
 bool RootScrollerController::IsValidRootScroller(const Element& element) const {
+  if (!element.IsInTreeScope())
+    return false;
+
   if (!element.GetLayoutObject())
     return false;
 
@@ -156,6 +169,11 @@ bool RootScrollerController::IsValidRootScroller(const Element& element) const {
 void RootScrollerController::ApplyRootScrollerProperties(Node& node) const {
   DCHECK(document_->GetFrame());
   DCHECK(document_->GetFrame()->View());
+
+  // If the node has been removed from the Document, we shouldn't be touching
+  // anything related to the Frame- or Layout- hierarchies.
+  if (!node.IsInTreeScope())
+    return;
 
   if (node.IsFrameOwnerElement()) {
     HTMLFrameOwnerElement* frame_owner = ToHTMLFrameOwnerElement(&node);
@@ -182,18 +200,15 @@ void RootScrollerController::ApplyRootScrollerProperties(Node& node) const {
 
 void RootScrollerController::UpdateIFrameGeometryAndLayoutSize(
     HTMLFrameOwnerElement& frame_owner) const {
-  LayoutEmbeddedContent* part = frame_owner.GetLayoutEmbeddedContent();
-  if (!part)
-    return;
+  DCHECK(document_->GetFrame());
+  DCHECK(document_->GetFrame()->View());
 
-  part->UpdateGeometry();
+  LocalFrameView* view =
+      ToLocalFrameView(frame_owner.OwnedEmbeddedContentView());
+  view->UpdateGeometry();
 
-  if (!document_->GetFrame() || !document_->GetFrame()->View())
-    return;
-
-  LocalFrameView* frame_view = document_->GetFrame()->View();
-  if (part->ChildFrameView() && (&EffectiveRootScroller() == &frame_owner))
-    part->ChildFrameView()->SetLayoutSize(frame_view->GetLayoutSize());
+  if (&EffectiveRootScroller() == frame_owner)
+    view->SetLayoutSize(document_->GetFrame()->View()->GetLayoutSize());
 }
 
 PaintLayer* RootScrollerController::RootScrollerPaintLayer() const {
@@ -205,6 +220,14 @@ bool RootScrollerController::ScrollsViewport(const Element& element) const {
     return element == document_->documentElement();
 
   return element == effective_root_scroller_.Get();
+}
+
+void RootScrollerController::ElementRemoved(const Element& element) {
+  if ((Node&)element != effective_root_scroller_)
+    return;
+
+  RecomputeEffectiveRootScroller();
+  DCHECK((Node&)element != effective_root_scroller_);
 }
 
 }  // namespace blink

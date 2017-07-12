@@ -102,7 +102,7 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
     std::move(callback).Run(s);
   }
 
-  void EchoSurfaceId(const SurfaceId& s,
+  void EchoSurfaceId(const viz::SurfaceId& s,
                      EchoSurfaceIdCallback callback) override {
     std::move(callback).Run(s);
   }
@@ -117,7 +117,7 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
     std::move(callback).Run(s);
   }
 
-  void EchoTextureMailbox(const TextureMailbox& t,
+  void EchoTextureMailbox(const viz::TextureMailbox& t,
                           EchoTextureMailboxCallback callback) override {
     std::move(callback).Run(t);
   }
@@ -254,7 +254,7 @@ TEST_F(StructTraitsTest, CompositorFrame) {
 
   // TransferableResource constants.
   const uint32_t tr_id = 1337;
-  const ResourceFormat tr_format = ALPHA_8;
+  const viz::ResourceFormat tr_format = viz::ALPHA_8;
   const gfx::BufferFormat tr_buffer_format = gfx::BufferFormat::R_8;
   const uint32_t tr_filter = 1234;
   const gfx::Size tr_size(1234, 5678);
@@ -366,13 +366,15 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   latency_info.AddLatencyNumber(
       ui::LATENCY_BEGIN_SCROLL_LISTENER_UPDATE_MAIN_COMPONENT, 1337, 7331);
   std::vector<ui::LatencyInfo> latency_infos = {latency_info};
-  std::vector<SurfaceId> referenced_surfaces;
-  SurfaceId id(FrameSinkId(1234, 4321),
-               LocalSurfaceId(5678, base::UnguessableToken::Create()));
+  std::vector<viz::SurfaceId> referenced_surfaces;
+  viz::SurfaceId id(
+      viz::FrameSinkId(1234, 4321),
+      viz::LocalSurfaceId(5678, base::UnguessableToken::Create()));
   referenced_surfaces.push_back(id);
-  std::vector<SurfaceId> activation_dependencies;
-  SurfaceId id2(FrameSinkId(4321, 1234),
-                LocalSurfaceId(8765, base::UnguessableToken::Create()));
+  std::vector<viz::SurfaceId> activation_dependencies;
+  viz::SurfaceId id2(
+      viz::FrameSinkId(4321, 1234),
+      viz::LocalSurfaceId(8765, base::UnguessableToken::Create()));
   activation_dependencies.push_back(id2);
   uint32_t frame_token = 0xdeadbeef;
   uint64_t begin_frame_ack_sequence_number = 0xdeadbeef;
@@ -477,7 +479,7 @@ TEST_F(StructTraitsTest, CopyOutputRequest_TextureRequest) {
   const uint32_t target = 3;
   gpu::Mailbox mailbox;
   mailbox.SetName(mailbox_name);
-  TextureMailbox texture_mailbox(mailbox, gpu::SyncToken(), target);
+  viz::TextureMailbox texture_mailbox(mailbox, gpu::SyncToken(), target);
   base::RunLoop run_loop;
   auto callback = base::Bind(CopyOutputRequestCallback, run_loop.QuitClosure(),
                              gfx::Size());
@@ -565,7 +567,7 @@ TEST_F(StructTraitsTest, CopyOutputResult_Texture) {
       CopyOutputResultCallback, run_loop.QuitClosure(), sync_token, is_lost));
   gpu::Mailbox mailbox;
   mailbox.SetName(mailbox_name);
-  TextureMailbox texture_mailbox(mailbox, gpu::SyncToken(), target);
+  viz::TextureMailbox texture_mailbox(mailbox, gpu::SyncToken(), target);
 
   auto input = CopyOutputResult::CreateTextureResult(size, texture_mailbox,
                                                      std::move(callback));
@@ -578,7 +580,7 @@ TEST_F(StructTraitsTest, CopyOutputResult_Texture) {
   EXPECT_TRUE(output->HasTexture());
   EXPECT_EQ(size, output->size());
 
-  TextureMailbox out_mailbox;
+  viz::TextureMailbox out_mailbox;
   std::unique_ptr<SingleReleaseCallback> out_callback;
   output->TakeTexture(&out_mailbox, &out_callback);
   EXPECT_EQ(mailbox, out_mailbox.mailbox());
@@ -680,12 +682,12 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   solid_quad->SetNew(sqs, rect2, rect2, color2, force_anti_aliasing_off);
 
   const gfx::Rect rect3(1029, 3847, 5610, 2938);
-  const SurfaceId primary_surface_id(
-      FrameSinkId(1234, 4321),
-      LocalSurfaceId(5678, base::UnguessableToken::Create()));
-  const SurfaceId fallback_surface_id(
-      FrameSinkId(2468, 1357),
-      LocalSurfaceId(1234, base::UnguessableToken::Create()));
+  const viz::SurfaceId primary_surface_id(
+      viz::FrameSinkId(1234, 4321),
+      viz::LocalSurfaceId(5678, base::UnguessableToken::Create()));
+  const viz::SurfaceId fallback_surface_id(
+      viz::FrameSinkId(2468, 1357),
+      viz::LocalSurfaceId(1234, base::UnguessableToken::Create()));
   SurfaceDrawQuad* primary_surface_quad =
       render_pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
   SurfaceDrawQuad* fallback_surface_quad =
@@ -876,8 +878,9 @@ TEST_F(StructTraitsTest, RenderPass) {
   const gfx::Rect surface_quad_rect(1337, 2448, 1234, 5678);
   surface_quad->SetNew(
       shared_state_2, surface_quad_rect, surface_quad_rect,
-      SurfaceId(FrameSinkId(1337, 1234),
-                LocalSurfaceId(1234, base::UnguessableToken::Create())),
+      viz::SurfaceId(
+          viz::FrameSinkId(1337, 1234),
+          viz::LocalSurfaceId(1234, base::UnguessableToken::Create())),
       SurfaceDrawQuadType::PRIMARY, nullptr);
 
   std::unique_ptr<RenderPass> output;
@@ -1023,26 +1026,26 @@ TEST_F(StructTraitsTest, Selection) {
 }
 
 TEST_F(StructTraitsTest, SurfaceId) {
-  static constexpr FrameSinkId frame_sink_id(1337, 1234);
-  static LocalSurfaceId local_surface_id(0xfbadbeef,
-                                         base::UnguessableToken::Create());
-  SurfaceId input(frame_sink_id, local_surface_id);
+  static constexpr viz::FrameSinkId frame_sink_id(1337, 1234);
+  static viz::LocalSurfaceId local_surface_id(0xfbadbeef,
+                                              base::UnguessableToken::Create());
+  viz::SurfaceId input(frame_sink_id, local_surface_id);
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  SurfaceId output;
+  viz::SurfaceId output;
   proxy->EchoSurfaceId(input, &output);
   EXPECT_EQ(frame_sink_id, output.frame_sink_id());
   EXPECT_EQ(local_surface_id, output.local_surface_id());
 }
 
 TEST_F(StructTraitsTest, SurfaceReference) {
-  const SurfaceId parent_id(
-      FrameSinkId(2016, 1234),
-      LocalSurfaceId(0xfbadbeef,
-                     base::UnguessableToken::Deserialize(123, 456)));
-  const SurfaceId child_id(
-      FrameSinkId(1111, 9999),
-      LocalSurfaceId(0xabcdabcd,
-                     base::UnguessableToken::Deserialize(333, 333)));
+  const viz::SurfaceId parent_id(
+      viz::FrameSinkId(2016, 1234),
+      viz::LocalSurfaceId(0xfbadbeef,
+                          base::UnguessableToken::Deserialize(123, 456)));
+  const viz::SurfaceId child_id(
+      viz::FrameSinkId(1111, 9999),
+      viz::LocalSurfaceId(0xabcdabcd,
+                          base::UnguessableToken::Deserialize(333, 333)));
   const SurfaceReference input(parent_id, child_id);
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
@@ -1053,7 +1056,7 @@ TEST_F(StructTraitsTest, SurfaceReference) {
 }
 
 TEST_F(StructTraitsTest, SurfaceSequence) {
-  const FrameSinkId frame_sink_id(2016, 1234);
+  const viz::FrameSinkId frame_sink_id(2016, 1234);
   const uint32_t sequence = 0xfbadbeef;
   SurfaceSequence input(frame_sink_id, sequence);
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
@@ -1116,8 +1119,8 @@ TEST_F(StructTraitsTest, TextureMailbox) {
 
   gpu::Mailbox mailbox;
   mailbox.SetName(mailbox_name);
-  TextureMailbox input(mailbox, sync_token, texture_target, size_in_pixels,
-                       is_overlay_candidate, secure_output_only);
+  viz::TextureMailbox input(mailbox, sync_token, texture_target, size_in_pixels,
+                            is_overlay_candidate, secure_output_only);
   input.set_nearest_neighbor(nearest_neighbor);
   input.set_color_space(color_space);
 #if defined(OS_ANDROID)
@@ -1126,7 +1129,7 @@ TEST_F(StructTraitsTest, TextureMailbox) {
 #endif
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  TextureMailbox output;
+  viz::TextureMailbox output;
   proxy->EchoTextureMailbox(input, &output);
 
   EXPECT_EQ(mailbox, output.mailbox());
@@ -1146,7 +1149,7 @@ TEST_F(StructTraitsTest, TextureMailbox) {
 
 TEST_F(StructTraitsTest, TransferableResource) {
   const uint32_t id = 1337;
-  const ResourceFormat format = ALPHA_8;
+  const viz::ResourceFormat format = viz::ALPHA_8;
   const uint32_t filter = 1234;
   const gfx::Size size(1234, 5678);
   const int8_t mailbox_name[GL_MAILBOX_SIZE_CHROMIUM] = {

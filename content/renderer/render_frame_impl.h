@@ -37,7 +37,6 @@
 #include "content/common/host_zoom.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/unique_name_helper.h"
-#include "content/common/url_loader_factory.mojom.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/previews_state.h"
@@ -45,10 +44,10 @@
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/stop_find_action.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/frame_blame_context.h"
 #include "content/renderer/media/media_factory.h"
-#include "content/renderer/mojo/blink_interface_provider_impl.h"
 #include "content/renderer/renderer_webcookiejar_impl.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_platform_file.h"
@@ -148,7 +147,7 @@ class RenderFrameObserver;
 class RenderViewImpl;
 class RenderWidget;
 class RenderWidgetFullscreenPepper;
-class ResourceRequestBodyImpl;
+class ResourceRequestBody;
 class ScreenOrientationDispatcher;
 class SharedWorkerRepository;
 class UserMediaClientImpl;
@@ -858,6 +857,8 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnContextMenuClosed(const CustomContextMenuContext& custom_context);
   void OnCustomContextMenuAction(const CustomContextMenuContext& custom_context,
                                  unsigned action);
+  void OnMoveCaret(const gfx::Point& point);
+  void OnScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
   void OnUndo();
   void OnRedo();
   void OnCut();
@@ -909,6 +910,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnSetFrameOwnerProperties(
       const FrameOwnerProperties& frame_owner_properties);
   void OnAdvanceFocus(blink::WebFocusType type, int32_t source_routing_id);
+  void OnAdvanceFocusInForm(blink::WebFocusType focus_type);
   void OnSetFocusedFrame();
   void OnTextTrackSettingsChanged(
       const FrameMsg_TextTrackSettings_Params& params);
@@ -970,16 +972,15 @@ class CONTENT_EXPORT RenderFrameImpl
   // |is_history_navigation_in_new_child| is true, the browser process should
   // look for a matching FrameNavigationEntry in the last committed entry to use
   // instead of |url|.
-  void OpenURL(
-      const GURL& url,
-      bool uses_post,
-      const scoped_refptr<ResourceRequestBodyImpl>& resource_request_body,
-      const std::string& extra_headers,
-      const Referrer& referrer,
-      blink::WebNavigationPolicy policy,
-      bool should_replace_current_entry,
-      bool is_history_navigation_in_new_child,
-      blink::WebTriggeringEventInfo triggering_event_info);
+  void OpenURL(const GURL& url,
+               bool uses_post,
+               const scoped_refptr<ResourceRequestBody>& resource_request_body,
+               const std::string& extra_headers,
+               const Referrer& referrer,
+               blink::WebNavigationPolicy policy,
+               bool should_replace_current_entry,
+               bool is_history_navigation_in_new_child,
+               blink::WebTriggeringEventInfo triggering_event_info);
 
   // Performs a navigation in the frame. This provides a unified function for
   // the current code path and the browser-side navigation path (in
@@ -1274,7 +1275,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   std::unique_ptr<service_manager::BinderRegistry> interface_registry_;
   std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
-  std::unique_ptr<BlinkInterfaceProviderImpl> blink_interface_provider_;
   std::unique_ptr<BlinkInterfaceRegistryImpl> blink_interface_registry_;
   service_manager::mojom::InterfaceProviderRequest
       pending_remote_interface_provider_request_;

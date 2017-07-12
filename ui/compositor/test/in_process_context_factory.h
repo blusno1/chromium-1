@@ -10,17 +10,18 @@
 
 #include "base/macros.h"
 #include "cc/surfaces/display.h"
-#include "cc/surfaces/frame_sink_id_allocator.h"
+#include "cc/surfaces/frame_sink_manager.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_image_factory.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
+#include "components/viz/common/frame_sink_id_allocator.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ui/compositor/compositor.h"
 
 namespace cc {
+class FrameSinkManager;
 class ResourceSettings;
-class SurfaceManager;
 }
 
 namespace viz {
@@ -33,12 +34,12 @@ class InProcessContextProvider;
 class InProcessContextFactory : public ContextFactory,
                                 public ContextFactoryPrivate {
  public:
-  // Both |host_frame_sink_manager| and |surface_manager| must outlive the
+  // Both |host_frame_sink_manager| and |frame_sink_manager| must outlive the
   // ContextFactory.
-  // TODO(crbug.com/657959): |surface_manager| should go away and we should use
-  // the LayerTreeFrameSink from the HostFrameSinkManager.
+  // TODO(crbug.com/657959): |frame_sink_manager| should go away and we should
+  // use the LayerTreeFrameSink from the HostFrameSinkManager.
   InProcessContextFactory(viz::HostFrameSinkManager* host_frame_sink_manager,
-                          cc::SurfaceManager* surface_manager);
+                          cc::FrameSinkManager* frame_sink_manager);
   ~InProcessContextFactory() override;
 
   // If true (the default) an OutputSurface is created that does not display
@@ -67,8 +68,7 @@ class InProcessContextFactory : public ContextFactory,
   double GetRefreshRate() const override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  cc::FrameSinkId AllocateFrameSinkId() override;
-  cc::SurfaceManager* GetSurfaceManager() override;
+  viz::FrameSinkId AllocateFrameSinkId() override;
   viz::HostFrameSinkManager* GetHostFrameSinkManager() override;
   void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
@@ -83,9 +83,10 @@ class InProcessContextFactory : public ContextFactory,
                                  base::TimeTicks timebase,
                                  base::TimeDelta interval) override {}
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override {}
-  const cc::ResourceSettings& GetResourceSettings() const override;
+  const viz::ResourceSettings& GetResourceSettings() const override;
   void AddObserver(ContextFactoryObserver* observer) override;
   void RemoveObserver(ContextFactoryObserver* observer) override;
+  cc::FrameSinkManager* GetFrameSinkManager() override;
 
  private:
   struct PerCompositorData;
@@ -98,11 +99,11 @@ class InProcessContextFactory : public ContextFactory,
   cc::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   cc::TestImageFactory image_factory_;
   cc::TestTaskGraphRunner task_graph_runner_;
-  cc::FrameSinkIdAllocator frame_sink_id_allocator_;
+  viz::FrameSinkIdAllocator frame_sink_id_allocator_;
   bool use_test_surface_;
   double refresh_rate_ = 60.0;
-  viz::HostFrameSinkManager* frame_sink_manager_;
-  cc::SurfaceManager* surface_manager_;
+  viz::HostFrameSinkManager* const host_frame_sink_manager_;
+  cc::FrameSinkManager* const frame_sink_manager_;
   base::ObserverList<ContextFactoryObserver> observer_list_;
 
   cc::RendererSettings renderer_settings_;

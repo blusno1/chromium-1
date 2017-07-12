@@ -338,7 +338,12 @@ bool RenderViewHostImpl::CreateRenderView(
     gfx::ColorSpace::CreateSRGB().GetICCProfile(
         &params->image_decode_color_space);
   } else {
-    params->image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
+    if (display::Display::HasForceColorProfile()) {
+      display::Display::GetForcedColorProfile().GetICCProfile(
+          &params->image_decode_color_space);
+    } else {
+      params->image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
+    }
   }
 
   GetWidget()->GetResizeParams(&params->initial_size);
@@ -551,13 +556,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.background_video_track_optimization_enabled =
       base::FeatureList::IsEnabled(media::kBackgroundVideoTrackOptimization);
 
-  // TODO(servolk, asvitkine): Query the value directly when it is available in
-  // the renderer process. See https://crbug.com/681160.
-  prefs.enable_instant_source_buffer_gc =
-      variations::GetVariationParamByFeatureAsBool(
-          media::kMemoryPressureBasedSourceBufferGC,
-          "enable_instant_source_buffer_gc", false);
-
   GetContentClient()->browser()->OverrideWebkitPrefs(this, &prefs);
   return prefs;
 }
@@ -756,12 +754,16 @@ void RenderViewHostImpl::ShutdownAndDestroy() {
 }
 
 void RenderViewHostImpl::CreateNewWidget(int32_t route_id,
+                                         mojom::WidgetPtr widget,
                                          blink::WebPopupType popup_type) {
-  delegate_->CreateNewWidget(GetProcess()->GetID(), route_id, popup_type);
+  delegate_->CreateNewWidget(GetProcess()->GetID(), route_id, std::move(widget),
+                             popup_type);
 }
 
-void RenderViewHostImpl::CreateNewFullscreenWidget(int32_t route_id) {
-  delegate_->CreateNewFullscreenWidget(GetProcess()->GetID(), route_id);
+void RenderViewHostImpl::CreateNewFullscreenWidget(int32_t route_id,
+                                                   mojom::WidgetPtr widget) {
+  delegate_->CreateNewFullscreenWidget(GetProcess()->GetID(), route_id,
+                                       std::move(widget));
 }
 
 void RenderViewHostImpl::OnShowWidget(int route_id,

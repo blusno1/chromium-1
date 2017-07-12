@@ -7,7 +7,8 @@
 
 @class CollectionViewItem;
 
-// Commands protocol for the ContentSuggestionsViewController.
+// Commands protocol allowing the ContentSuggestions ViewControllers to interact
+// with the coordinator layer, and from there to the rest of the application.
 @protocol ContentSuggestionsCommands
 
 // Opens the Reading List.
@@ -27,7 +28,7 @@
                                      atPoint:(CGPoint)touchLocation
                                  atIndexPath:(nonnull NSIndexPath*)indexPath;
 // Dismisses the context menu if it is displayed.
-- (void)dismissContextMenu;
+- (void)dismissModals;
 // Handles the actions following a tap on the promo.
 - (void)handlePromoTapped;
 

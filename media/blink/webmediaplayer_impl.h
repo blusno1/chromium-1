@@ -44,6 +44,7 @@
 #include "third_party/WebKit/public/platform/WebAudioSourceProvider.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModuleResult.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
+#include "third_party/WebKit/public/platform/WebSurfaceLayerBridge.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)  // WMPI_CAST
@@ -282,6 +283,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnAddTextTrack(const TextTrackConfig& config,
                       const AddTextTrackDoneCB& done_cb) override;
   void OnWaitingForDecryptionKey() override;
+  void OnAudioConfigChange(const AudioDecoderConfig& config) override;
+  void OnVideoConfigChange(const VideoDecoderConfig& config) override;
   void OnVideoNaturalSizeChange(const gfx::Size& size) override;
   void OnVideoOpacityChange(bool opaque) override;
   void OnVideoAverageKeyframeDistanceUpdate() override;
@@ -721,6 +724,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Monitors the player events.
   base::WeakPtr<MediaObserver> observer_;
 
+  // Owns the weblayer and obtains/maintains SurfaceIds for
+  // kUseSurfaceLayerForVideo feature.
+  std::unique_ptr<blink::WebSurfaceLayerBridge> bridge_;
+
   // The maximum video keyframe distance that allows triggering background
   // playback optimizations (non-MSE).
   base::TimeDelta max_keyframe_distance_to_disable_background_video_;
@@ -756,6 +763,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Whether embedded media experience is currently enabled.
   bool embedded_media_experience_enabled_ = false;
+
+  // Whether the use of a surface layer instead of a video layer is enabled.
+  bool surface_layer_for_video_enabled_ = false;
 
   gfx::Size last_uploaded_frame_size_;
   base::TimeDelta last_uploaded_frame_timestamp_;

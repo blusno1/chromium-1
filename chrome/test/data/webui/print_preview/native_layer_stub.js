@@ -13,23 +13,12 @@ cr.define('print_preview', function() {
         'getInitialSettings',
         'getPrinters',
         'getExtensionPrinters',
+        'getPreview',
         'getPrivetPrinters',
         'getPrinterCapabilities',
         'print',
         'setupPrinter'
       ]);
-
-    /**
-     * @private {!cr.EventTarget} The event target used for dispatching and
-     *     receiving events.
-     */
-    this.eventTarget_ = new cr.EventTarget();
-
-    /**
-     * @private {boolean} Whether the native layer has set the generate draft
-     *      parameter when requesting an updated preview.
-     */
-    this.generateDraft_ = false;
 
     /**
      * @private {!print_preview.NativeInitialSettings} The initial settings
@@ -62,6 +51,11 @@ cr.define('print_preview', function() {
      * @private {boolean} Whether the printer setup request should be rejected.
      */
     this.shouldRejectPrinterSetup_ = false;
+
+    /**
+     * @private {string} The ID of a printer with a bad driver.
+     */
+    this.badPrinterId_ = '';
   }
 
   NativeLayerStub.prototype = {
@@ -83,6 +77,43 @@ cr.define('print_preview', function() {
     getExtensionPrinters: function() {
       this.methodCalled('getExtensionPrinters');
       return Promise.resolve(true);
+    },
+
+    /** @override */
+    getPreview: function(
+        destination, printTicketStore, documentInfo, generateDraft, requestId) {
+      this.methodCalled('getPreview', {
+        destination: destination,
+        printTicketStore: printTicketStore,
+        documentInfo: documentInfo,
+        generateDraft: generateDraft,
+        requestId: requestId,
+      });
+      if (destination.id == this.badPrinterId_) {
+        var rejectString = print_preview.PreviewArea.EventType.SETTINGS_INVALID;
+        rejectString = rejectString.substring(
+            rejectString.lastIndexOf('.') + 1, rejectString.length);
+        return Promise.reject(rejectString);
+      }
+      var pageRanges = printTicketStore.pageRange.getDocumentPageRanges();
+      if (pageRanges.length == 0) {  // assume full length document, 1 page.
+        cr.webUIListenerCallback('page-count-ready', 1, requestId, 100);
+        cr.webUIListenerCallback('page-preview-ready', 0, 0, requestId);
+      } else {
+        var pages = pageRanges.reduce(function(soFar, range) {
+          for (var page = range.from; page <= range.to; page++) {
+            soFar.push(page);
+          }
+          return soFar;
+        }, []);
+        cr.webUIListenerCallback(
+            'page-count-ready', pages.length, requestId, 100);
+        pages.forEach(function(page) {
+          cr.webUIListenerCallback(
+              'page-preview-ready', page - 1, 0, requestId);
+        });
+      }
+      return Promise.resolve(requestId);
     },
 
     /** @override */
@@ -118,24 +149,7 @@ cr.define('print_preview', function() {
     },
 
     /** Stubs for |print_preview.NativeLayer| methods that call C++ handlers. */
-    previewReadyForTest: function() {},
-
-    startGetPreview: function(destination, printTicketStore, documentInfo,
-                              generateDraft, requestId) {
-      this.generateDraft_ = generateDraft;
-    },
     startHideDialog: function () {},
-
-    /** @return {!cr.EventTarget} The native layer event target. */
-    getEventTarget: function() { return this.eventTarget_; },
-
-    /** @param {!cr.EventTarget} eventTarget The event target to use. */
-    setEventTarget: function(eventTarget) {
-      this.eventTarget_ = eventTarget;
-    },
-
-    /** @return {boolean} Whether a new draft was requested for preview. */
-    generateDraft: function() { return this.generateDraft_; },
 
     /**
      * @param {!print_preview.NativeInitialSettings} settings The settings
@@ -173,6 +187,15 @@ cr.define('print_preview', function() {
     setSetupPrinterResponse: function(reject, response) {
       this.shouldRejectPrinterSetup_ = reject;
       this.setupPrinterResponse_ = response;
+    },
+
+    /**
+     * @param {string} bad_id The printer ID that should cause an
+     *     SETTINGS_INVALID error in response to a preview request. Models a
+     *     bad printer driver.
+     */
+    setInvalidPrinterId: function(id) {
+      this.badPrinterId_ = id;
     },
   };
 

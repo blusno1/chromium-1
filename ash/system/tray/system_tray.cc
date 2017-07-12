@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/key_event_watcher.h"
 #include "ash/login_status.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/config.h"
@@ -28,6 +27,7 @@
 #include "ash/system/display_scale/tray_scale.h"
 #include "ash/system/enterprise/tray_enterprise.h"
 #include "ash/system/ime/tray_ime_chromeos.h"
+#include "ash/system/keyboard_brightness/tray_keyboard_brightness.h"
 #include "ash/system/media_security/multi_profile_media_tray_item.h"
 #include "ash/system/network/tray_network.h"
 #include "ash/system/network/tray_vpn.h"
@@ -246,7 +246,8 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   AddTrayItem(base::MakeUnique<TrayIME>(this));
   tray_accessibility_ = new TrayAccessibility(this);
   AddTrayItem(base::WrapUnique(tray_accessibility_));
-  AddTrayItem(base::MakeUnique<TrayTracing>(this));
+  tray_tracing_ = new TrayTracing(this);
+  AddTrayItem(base::WrapUnique(tray_tracing_));
   AddTrayItem(
       base::MakeUnique<TrayPower>(this, message_center::MessageCenter::Get()));
   tray_network_ = new TrayNetwork(this);
@@ -265,6 +266,7 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   tray_scale_ = new TrayScale(this);
   AddTrayItem(base::WrapUnique(tray_scale_));
   AddTrayItem(base::MakeUnique<TrayBrightness>(this));
+  AddTrayItem(base::MakeUnique<TrayKeyboardBrightness>(this));
   AddTrayItem(base::MakeUnique<TrayCapsLock>(this));
   if (NightLightController::IsFeatureEnabled()) {
     tray_night_light_ = new TrayNightLight(this);
@@ -599,10 +601,6 @@ bool SystemTray::ShouldEnableExtraKeyboardAccessibility() {
 
 void SystemTray::HideBubble(const TrayBubbleView* bubble_view) {
   HideBubbleWithView(bubble_view);
-}
-
-void SystemTray::CloseBubble(const ui::KeyEvent& key_event) {
-  CloseSystemBubble();
 }
 
 void SystemTray::ActivateAndStartNavigation(const ui::KeyEvent& key_event) {

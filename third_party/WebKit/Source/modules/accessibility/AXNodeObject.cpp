@@ -30,6 +30,7 @@
 
 #include "core/InputTypeNames.h"
 #include "core/dom/AccessibleNode.h"
+#include "core/dom/AccessibleNodeList.h"
 #include "core/dom/Element.h"
 #include "core/dom/FlatTreeTraversal.h"
 #include "core/dom/NodeTraversal.h"
@@ -62,11 +63,11 @@
 #include "core/html/TextControlElement.h"
 #include "core/html/forms/RadioInputType.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/html/shadow/MediaControlElementTypes.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutObject.h"
 #include "core/svg/SVGElement.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
+#include "modules/media_controls/elements/MediaControlElementsHelper.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -266,6 +267,34 @@ class AXSparseAttributeAOMPropertyClient : public AOMPropertyClient {
     AXObject* target_obj = ax_object_cache_->GetOrCreate(target_element);
     if (target_element)
       sparse_attribute_client_.AddObjectAttribute(attribute, *target_obj);
+  }
+
+  void AddRelationListProperty(AOMRelationListProperty property,
+                               const AccessibleNodeList& relations) override {
+    AXObjectVectorAttribute attribute;
+    switch (property) {
+      case AOMRelationListProperty::kControls:
+        attribute = AXObjectVectorAttribute::kAriaControls;
+        break;
+      case AOMRelationListProperty::kFlowTo:
+        attribute = AXObjectVectorAttribute::kAriaFlowTo;
+        break;
+      default:
+        return;
+    }
+
+    HeapVector<Member<AXObject>> objects;
+    for (size_t i = 0; i < relations.length(); ++i) {
+      AccessibleNode* accessible_node = relations.item(i);
+      if (accessible_node) {
+        Element* element = accessible_node->element();
+        AXObject* ax_element = ax_object_cache_->GetOrCreate(element);
+        if (ax_element && !ax_element->AccessibilityIsIgnored())
+          objects.push_back(ax_element);
+      }
+    }
+
+    sparse_attribute_client_.AddObjectVectorAttribute(attribute, objects);
   }
 
  private:
@@ -773,23 +802,55 @@ AccessibilityRole AXNodeObject::DetermineAriaRoleAttribute() const {
   return kUnknownRole;
 }
 
-void AXNodeObject::AccessibilityChildrenFromAttribute(
-    QualifiedName attr,
+void AXNodeObject::AccessibilityChildrenFromAOMProperty(
+    AOMRelationListProperty property,
     AXObject::AXObjectVector& children) const {
   HeapVector<Member<Element>> elements;
-  ElementsFromAttribute(elements, attr);
+  if (!HasAOMPropertyOrARIAAttribute(property, elements))
+    return;
 
   AXObjectCacheImpl& cache = AxObjectCache();
   for (const auto& element : elements) {
     if (AXObject* child = cache.GetOrCreate(element)) {
       // Only aria-labelledby and aria-describedby can target hidden elements.
-      if (child->AccessibilityIsIgnored() && attr != aria_labelledbyAttr &&
-          attr != aria_labeledbyAttr && attr != aria_describedbyAttr) {
+      if (child->AccessibilityIsIgnored() &&
+          property != AOMRelationListProperty::kLabeledBy &&
+          property != AOMRelationListProperty::kDescribedBy) {
         continue;
       }
       children.push_back(child);
     }
   }
+}
+
+bool AXNodeObject::IsMultiline() const {
+  Node* node = this->GetNode();
+  if (!node)
+    return false;
+
+  const AccessibilityRole role = RoleValue();
+  const bool is_edit_box = role == kSearchBoxRole || role == kTextFieldRole;
+  if (!IsEditable() && !is_edit_box)
+    return false;  // Doesn't support multiline.
+
+  // Supports aria-multiline, so check for attribute.
+  bool is_multiline = false;
+  if (HasAOMPropertyOrARIAAttribute(AOMBooleanProperty::kMultiline,
+                                    is_multiline)) {
+    return is_multiline;
+  }
+
+  // Default for <textarea> is true.
+  if (isHTMLTextAreaElement(*node))
+    return true;
+
+  // Default for other edit boxes is false, including for ARIA, says CORE-AAM.
+  if (is_edit_box)
+    return false;
+
+  // If root of contenteditable area and no ARIA role of textbox/searchbox used,
+  // default to multiline=true which is what the default behavior is.
+  return HasContentEditableAttributeSet();
 }
 
 // This only returns true if this is the element that actually has the
@@ -805,6 +866,9 @@ bool AXNodeObject::HasContentEditableAttributeSet() const {
          EqualIgnoringASCIICase(content_editable_value, "true");
 }
 
+// TODO(aleventhal) Find a more appropriate name or consider returning false
+// for everything but a searchbox or textfield, as a combobox and spinbox
+// can contain a field but should not be considered edit controls themselves.
 bool AXNodeObject::IsTextControl() const {
   if (HasContentEditableAttributeSet())
     return true;
@@ -1012,7 +1076,8 @@ bool AXNodeObject::IsControllingVideoElement() const {
   if (!node)
     return true;
 
-  return isHTMLVideoElement(ToParentMediaElement(node));
+  return isHTMLVideoElement(
+      MediaControlElementsHelper::ToParentMediaElement(node));
 }
 
 bool AXNodeObject::IsEmbeddedObject() const {
@@ -2536,14 +2601,30 @@ void AXNodeObject::UpdateAccessibilityRole() {
 
 void AXNodeObject::ComputeAriaOwnsChildren(
     HeapVector<Member<AXObject>>& owned_children) const {
+  Vector<String> id_vector;
+  if (!CanHaveChildren() || IsNativeTextControl() ||
+      HasContentEditableAttributeSet()) {
+    AxObjectCache().UpdateAriaOwns(this, id_vector, owned_children);
+    return;
+  }
+
+  HeapVector<Member<Element>> elements;
+  if (HasAOMProperty(AOMRelationListProperty::kOwns, elements)) {
+    AxObjectCache().UpdateAriaOwns(this, id_vector, owned_children);
+
+    for (const auto& element : elements) {
+      AXObject* ax_element = ax_object_cache_->GetOrCreate(&*element);
+      if (ax_element && !ax_element->AccessibilityIsIgnored())
+        owned_children.push_back(ax_element);
+    }
+
+    return;
+  }
+
   if (!HasAttribute(aria_ownsAttr))
     return;
 
-  Vector<String> id_vector;
-  if (CanHaveChildren() && !IsNativeTextControl() &&
-      !HasContentEditableAttributeSet())
-    TokenVectorFromAttribute(id_vector, aria_ownsAttr);
-
+  TokenVectorFromAttribute(id_vector, aria_ownsAttr);
   AxObjectCache().UpdateAriaOwns(this, id_vector, owned_children);
 }
 
@@ -3064,6 +3145,28 @@ String AXNodeObject::Description(AXNameFrom name_from,
     description_sources->push_back(
         DescriptionSource(found_description, aria_describedbyAttr));
     description_sources->back().type = description_from;
+  }
+
+  // aria-describedby overrides any other accessible description, from:
+  // http://rawgit.com/w3c/aria/master/html-aam/html-aam.html
+  // AOM version.
+  HeapVector<Member<Element>> elements;
+  if (HasAOMProperty(AOMRelationListProperty::kDescribedBy, elements)) {
+    AXObjectSet visited;
+    description = TextFromElements(true, visited, elements, related_objects);
+    if (!description.IsNull()) {
+      if (description_sources) {
+        DescriptionSource& source = description_sources->back();
+        source.type = description_from;
+        source.related_objects = *related_objects;
+        source.text = description;
+        found_description = true;
+      } else {
+        return description;
+      }
+    } else if (description_sources) {
+      description_sources->back().invalid = true;
+    }
   }
 
   // aria-describedby overrides any other accessible description, from:

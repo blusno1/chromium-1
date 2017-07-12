@@ -11,7 +11,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
@@ -20,8 +19,6 @@ import org.chromium.webapk.lib.common.WebApkConstants;
 import org.chromium.webapk.lib.common.WebApkMetaDataKeys;
 
 import java.io.File;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.List;
 
 /**
@@ -102,7 +99,7 @@ public class MainActivity extends Activity {
         if (!TextUtils.isEmpty(runtimeHostInPreferences)
                 && !runtimeHostInPreferences.equals(runtimeHost)) {
             deleteSharedPref(this);
-            deleteInternalStorageAsync();
+            deleteInternalStorage();
         }
 
         if (!TextUtils.isEmpty(runtimeHost)) {
@@ -111,20 +108,11 @@ public class MainActivity extends Activity {
             return;
         }
 
-        String hostUrl = "";
-        try {
-            hostUrl = new URL(mStartUrl).getHost();
-        } catch (MalformedURLException e) {
-            Log.e(TAG, "Invalid URL of the WebApk.");
-            finish();
-            return;
-        }
-
         List<ResolveInfo> infos = WebApkUtils.getInstalledBrowserResolveInfos(getPackageManager());
         if (hasBrowserSupportingWebApks(infos)) {
-            showChooseHostBrowserDialog(infos, hostUrl);
+            showChooseHostBrowserDialog(infos);
         } else {
-            showInstallHostBrowserDialog(hostUrl, metadata);
+            showInstallHostBrowserDialog(metadata);
         }
     }
 
@@ -137,16 +125,11 @@ public class MainActivity extends Activity {
         editor.apply();
     }
 
-    /** Deletes the internal storage asynchronously. */
-    private void deleteInternalStorageAsync() {
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                deletePath(getCacheDir());
-                deletePath(getFilesDir());
-                return null;
-            }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    /** Deletes the internal storage. */
+    private void deleteInternalStorage() {
+        deletePath(getCacheDir());
+        deletePath(getFilesDir());
+        deletePath(getDir(HostBrowserClassLoader.DEX_DIR_NAME, Context.MODE_PRIVATE));
     }
 
     private void deletePath(File file) {
@@ -227,7 +210,7 @@ public class MainActivity extends Activity {
     }
 
     /** Shows a dialog to choose the host browser. */
-    private void showChooseHostBrowserDialog(List<ResolveInfo> infos, String hostUrl) {
+    private void showChooseHostBrowserDialog(List<ResolveInfo> infos) {
         ChooseHostBrowserDialog.DialogListener listener =
                 new ChooseHostBrowserDialog.DialogListener() {
                     @Override
@@ -242,11 +225,11 @@ public class MainActivity extends Activity {
                         finish();
                     }
                 };
-        ChooseHostBrowserDialog.show(this, listener, infos, hostUrl);
+        ChooseHostBrowserDialog.show(this, listener, infos, getString(R.string.name));
     }
 
     /** Shows a dialog to install the host browser. */
-    private void showInstallHostBrowserDialog(String hostUrl, Bundle metadata) {
+    private void showInstallHostBrowserDialog(Bundle metadata) {
         String lastResortHostBrowserPackageName =
                 metadata.getString(WebApkMetaDataKeys.RUNTIME_HOST);
         String lastResortHostBrowserApplicationName =
@@ -273,7 +256,8 @@ public class MainActivity extends Activity {
                     }
                 };
 
-        InstallHostBrowserDialog.show(this, listener, hostUrl, lastResortHostBrowserPackageName,
-                lastResortHostBrowserApplicationName, R.drawable.last_resort_runtime_host_logo);
+        InstallHostBrowserDialog.show(this, listener, getString(R.string.name),
+                lastResortHostBrowserPackageName, lastResortHostBrowserApplicationName,
+                R.drawable.last_resort_runtime_host_logo);
     }
 }

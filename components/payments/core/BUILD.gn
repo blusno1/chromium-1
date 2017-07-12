@@ -17,6 +17,8 @@ static_library("core") {
     "can_make_payment_query.h",
     "currency_formatter.cc",
     "currency_formatter.h",
+    "features.cc",
+    "features.h",
     "journey_logger.cc",
     "journey_logger.h",
     "payment_address.cc",
@@ -61,6 +63,8 @@ static_library("core") {
 static_library("test_support") {
   testonly = true
   sources = [
+    "payments_test_util.cc",
+    "payments_test_util.h",
     "test_address_normalizer.cc",
     "test_address_normalizer.h",
     "test_payment_request_delegate.cc",
@@ -71,6 +75,9 @@ static_library("test_support") {
     ":core",
     "//base",
     "//components/autofill/core/browser",
+    "//components/autofill/core/browser:test_support",
+    "//components/pref_registry",
+    "//components/prefs",
   ]
 }
 

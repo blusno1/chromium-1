@@ -37,6 +37,7 @@
 #include "core/loader/ThreadableLoadingContext.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
+#include "core/workers/WorkerThreadLifecycleContext.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/heap/SafePoint.h"
@@ -45,7 +46,7 @@
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/Platform.h"
+#include "public/platform/InterfaceProvider.h"
 
 namespace blink {
 
@@ -182,11 +183,13 @@ bool MainChannelClient::Initialize(std::unique_ptr<SourceLocation> location,
   return true;
 }
 
-bool MainChannelClient::Connect(const KURL& url, const String& protocol) {
+bool MainChannelClient::Connect(const KURL& url,
+                                const String& protocol,
+                                mojom::blink::WebSocketPtr socket_ptr) {
   DCHECK(IsMainThread());
   if (!main_channel_)
     return false;
-  return main_channel_->Connect(url, protocol);
+  return main_channel_->Connect(url, protocol, std::move(socket_ptr));
 }
 
 void MainChannelClient::SendTextAsCharVector(
@@ -374,6 +377,7 @@ void Bridge::ConnectOnMainThread(
     WorkerThreadLifecycleContext* worker_thread_lifecycle_context,
     const KURL& url,
     const String& protocol,
+    mojom::blink::WebSocketPtrInfo socket_ptr_info,
     WebSocketChannelSyncHelper* sync_helper) {
   DCHECK(IsMainThread());
   DCHECK(!main_channel_client_);
@@ -382,8 +386,8 @@ void Bridge::ConnectOnMainThread(
                             worker_thread_lifecycle_context);
   if (main_channel_client->Initialize(std::move(location), loading_context)) {
     main_channel_client_ = main_channel_client;
-    sync_helper->SetConnectRequestResult(
-        main_channel_client_->Connect(url, protocol));
+    sync_helper->SetConnectRequestResult(main_channel_client_->Connect(
+        url, protocol, mojo::MakeProxy(std::move(socket_ptr_info))));
   }
   sync_helper->SignalWorkerThread();
 }
@@ -398,6 +402,9 @@ bool Bridge::Connect(std::unique_ptr<SourceLocation> location,
   RefPtr<WebTaskRunner> worker_networking_task_runner =
       TaskRunnerHelper::Get(TaskType::kNetworking, worker_global_scope_.Get());
   WorkerThread* worker_thread = worker_global_scope_->GetThread();
+  mojom::blink::WebSocketPtrInfo socket_ptr_info;
+  worker_thread->GetInterfaceProvider().GetInterface(
+      mojo::MakeRequest(&socket_ptr_info));
   parent_frame_task_runners_->Get(TaskType::kNetworking)
       ->PostTask(
           BLINK_FROM_HERE,
@@ -408,7 +415,8 @@ bool Bridge::Connect(std::unique_ptr<SourceLocation> location,
               std::move(worker_networking_task_runner),
               WrapCrossThreadPersistent(
                   worker_thread->GetWorkerThreadLifecycleContext()),
-              url, protocol, CrossThreadUnretained(&sync_helper)));
+              url, protocol, WTF::Passed(std::move(socket_ptr_info)),
+              CrossThreadUnretained(&sync_helper)));
   sync_helper.Wait();
   return sync_helper.ConnectRequestResult();
 }

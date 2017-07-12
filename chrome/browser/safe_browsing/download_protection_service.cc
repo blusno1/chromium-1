@@ -157,6 +157,19 @@ enum SBStatsType {
   DOWNLOAD_CHECKS_MAX
 };
 
+void AddEventUrlToReferrerChain(const content::DownloadItem& item,
+                                ReferrerChain* out_referrer_chain) {
+  ReferrerChainEntry* event_url_entry = out_referrer_chain->Add();
+  event_url_entry->set_url(item.GetURL().spec());
+  event_url_entry->set_type(ReferrerChainEntry::EVENT_URL);
+  event_url_entry->set_referrer_url(
+      item.GetWebContents()->GetLastCommittedURL().spec());
+  event_url_entry->set_is_retargeting(false);
+  event_url_entry->set_navigation_time_msec(base::Time::Now().ToJavaTime());
+  for (const GURL& url : item.GetUrlChain())
+    event_url_entry->add_server_redirect_chain()->set_url(url.spec());
+}
+
 }  // namespace
 
 const char DownloadProtectionService::kDownloadRequestUrl[] =
@@ -252,13 +265,14 @@ class DownloadUrlSBClient
       UpdateDownloadCheckStats(dangerous_type_);
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
-          base::Bind(&DownloadUrlSBClient::ReportMalware, this, threat_type));
+          base::BindOnce(&DownloadUrlSBClient::ReportMalware, this,
+                         threat_type));
     } else {
       // Identify download referrer chain, which will be used in
       // ClientDownloadRequest.
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
-          base::Bind(&DownloadUrlSBClient::IdentifyReferrerChain, this));
+          base::BindOnce(&DownloadUrlSBClient::IdentifyReferrerChain, this));
     }
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                             base::BindOnce(callback_, result));
@@ -297,10 +311,9 @@ class DownloadUrlSBClient
     if (!item_)
       return;
 
-    item_->SetUserData(
-        kDownloadReferrerChainDataKey,
-        base::MakeUnique<ReferrerChainData>(service_->IdentifyReferrerChain(
-            item_->GetURL(), item_->GetWebContents())));
+    item_->SetUserData(kDownloadReferrerChainDataKey,
+                       base::MakeUnique<ReferrerChainData>(
+                           service_->IdentifyReferrerChain(*item_)));
   }
 
   void UpdateDownloadCheckStats(SBStatsType stat_type) {
@@ -1957,8 +1970,7 @@ GURL DownloadProtectionService::GetDownloadRequestUrl() {
 }
 
 std::unique_ptr<ReferrerChain> DownloadProtectionService::IdentifyReferrerChain(
-    const GURL& download_url,
-    content::WebContents* web_contents) {
+    const content::DownloadItem& item) {
   // If navigation_observer_manager_ is null, return immediately. This could
   // happen in tests.
   if (!navigation_observer_manager_)
@@ -1966,6 +1978,7 @@ std::unique_ptr<ReferrerChain> DownloadProtectionService::IdentifyReferrerChain(
 
   std::unique_ptr<ReferrerChain> referrer_chain =
       base::MakeUnique<ReferrerChain>();
+  content::WebContents* web_contents = item.GetWebContents();
   int download_tab_id = SessionTabHelper::IdForTab(web_contents);
   UMA_HISTOGRAM_BOOLEAN(
       "SafeBrowsing.ReferrerHasInvalidTabID.DownloadAttribution",
@@ -1973,7 +1986,7 @@ std::unique_ptr<ReferrerChain> DownloadProtectionService::IdentifyReferrerChain(
   // We look for the referrer chain that leads to the download url first.
   SafeBrowsingNavigationObserverManager::AttributionResult result =
       navigation_observer_manager_->IdentifyReferrerChainByEventURL(
-          download_url, download_tab_id, kDownloadAttributionUserGestureLimit,
+          item.GetURL(), download_tab_id, kDownloadAttributionUserGestureLimit,
           referrer_chain.get());
 
   // If no navigation event is found, this download is not triggered by regular
@@ -1982,6 +1995,7 @@ std::unique_ptr<ReferrerChain> DownloadProtectionService::IdentifyReferrerChain(
   if (result ==
           SafeBrowsingNavigationObserverManager::NAVIGATION_EVENT_NOT_FOUND &&
       web_contents && web_contents->GetLastCommittedURL().is_valid()) {
+    AddEventUrlToReferrerChain(item, referrer_chain.get());
     result = navigation_observer_manager_->IdentifyReferrerChainByWebContents(
         web_contents, kDownloadAttributionUserGestureLimit,
         referrer_chain.get());

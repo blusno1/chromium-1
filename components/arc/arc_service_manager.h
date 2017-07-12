@@ -14,10 +14,12 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "components/arc/arc_service.h"
-#include "components/arc/intent_helper/local_activity_resolver.h"
+
+namespace content {
+class BrowserContext;
+}  // namespace content
 
 namespace arc {
 
@@ -61,9 +63,20 @@ std::string GetArcServiceName(...) {
 // instance via the ArcBridgeService.
 class ArcServiceManager {
  public:
-  explicit ArcServiceManager(
-      scoped_refptr<base::TaskRunner> blocking_task_runner);
+  ArcServiceManager();
   ~ArcServiceManager();
+
+  // Returns the current BrowserContext which ARC is allowed.
+  // This is workaround to split the dependency from chrome/.
+  // TODO(hidehiko): Remove this when we move IsArcAllowedForProfile() to
+  // components/arc.
+  content::BrowserContext* browser_context() { return browser_context_; }
+
+  // TODO(hidehiko): Remove this when we move IsArcAllowedForProfile() to
+  // components/arc. See browser_context() for details.
+  void set_browser_context(content::BrowserContext* browser_context) {
+    browser_context_ = browser_context;
+  }
 
   // |arc_bridge_service| can only be accessed on the thread that this
   // class was created on.
@@ -102,29 +115,27 @@ class ArcServiceManager {
   // Called to shut down all ARC services.
   void Shutdown();
 
-  scoped_refptr<base::TaskRunner> blocking_task_runner() const {
-    return blocking_task_runner_;
-  }
-
-  // Returns the activity resolver owned by ArcServiceManager.
-  scoped_refptr<LocalActivityResolver> activity_resolver() {
-    return activity_resolver_;
-  }
-
  private:
-  class IntentHelperObserverImpl;  // implemented in arc_service_manager.cc.
-
   // Helper methods for AddService and GetService.
   bool AddServiceInternal(const std::string& name,
                           std::unique_ptr<ArcService> service);
   ArcService* GetNamedServiceInternal(const std::string& name);
 
   THREAD_CHECKER(thread_checker_);
-  scoped_refptr<base::TaskRunner> blocking_task_runner_;
 
   std::unique_ptr<ArcBridgeService> arc_bridge_service_;
   std::unordered_multimap<std::string, std::unique_ptr<ArcService>> services_;
-  scoped_refptr<LocalActivityResolver> activity_resolver_;
+
+  // This holds the pointer to the BrowserContext (practically Profile)
+  // which is allowed to use ARC.
+  // This is set just before BrowserContextKeyedService classes are
+  // instantiated.
+  // So, in BrowserContextKeyedServiceFactory::BuildServiceInstanceFor(),
+  // given BrowserContext pointer can be compared to this to check if it is
+  // allowed to use ARC.
+  // TODO(hidehiko): Remove this when we move IsArcAllowedForProfile() to
+  // components/arc. See browser_context() for details.
+  content::BrowserContext* browser_context_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ArcServiceManager);
 };

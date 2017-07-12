@@ -44,10 +44,8 @@ class MockBaseFetchContext final : public BaseFetchContext {
   ~MockBaseFetchContext() override {}
 
   // BaseFetchContext overrides:
-  ContentSettingsClient* GetContentSettingsClient() const override {
-    return nullptr;
-  }
-  Settings* GetSettings() const override { return nullptr; }
+  KURL GetFirstPartyForCookies() const override { return KURL(); }
+  bool AllowScriptFromSource(const KURL&) const { return false; }
   SubresourceFilter* GetSubresourceFilter() const override { return nullptr; }
   bool ShouldBlockRequestByInspector(const ResourceRequest&) const override {
     return false;
@@ -265,7 +263,7 @@ TEST_F(BaseFetchContextTest, RedirectChecksReportedAndEnforcedCSP) {
                            kContentSecurityPolicyHeaderTypeReport,
                            kContentSecurityPolicyHeaderSourceHTTP);
 
-  KURL url(KURL(), "http://baz.test");
+  KURL url(NullURL(), "http://baz.test");
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
   resource_request.SetFetchCredentialsMode(
@@ -292,7 +290,7 @@ TEST_F(BaseFetchContextTest, AllowResponseChecksReportedAndEnforcedCSP) {
                            kContentSecurityPolicyHeaderTypeReport,
                            kContentSecurityPolicyHeaderSourceHTTP);
 
-  KURL url(KURL(), "http://baz.test");
+  KURL url(NullURL(), "http://baz.test");
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
   resource_request.SetFetchCredentialsMode(
@@ -307,7 +305,7 @@ TEST_F(BaseFetchContextTest, AllowResponseChecksReportedAndEnforcedCSP) {
 }
 
 TEST_F(BaseFetchContextTest, CanRequestWhenDetached) {
-  KURL url(KURL(), "http://www.example.com/");
+  KURL url(NullURL(), "http://www.example.com/");
   ResourceRequest request(url);
   ResourceRequest keepalive_request(url);
   keepalive_request.SetKeepalive(true);

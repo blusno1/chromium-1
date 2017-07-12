@@ -71,10 +71,8 @@ class PLATFORM_EXPORT PaintController {
 
   // Provide a new set of paint chunk properties to apply to recorded display
   // items, for Slimming Paint v2.
-  void UpdateCurrentPaintChunkProperties(
-      const PaintChunk::Id*,
-      const PaintChunkProperties&,
-      NewChunkForceState force_new_chunk = kDontForceNewChunk);
+  void UpdateCurrentPaintChunkProperties(const PaintChunk::Id*,
+                                         const PaintChunkProperties&);
 
   // Retrieve the current paint properties.
   const PaintChunkProperties& CurrentPaintChunkProperties() const;
@@ -104,6 +102,8 @@ class PLATFORM_EXPORT PaintController {
   // item construction is disabled, no list mutations will be performed.
   template <typename DisplayItemClass, typename... Args>
   void EndItem(Args&&... args) {
+    DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+
     if (DisplayItemConstructionIsDisabled())
       return;
     if (LastDisplayItemIsNoopBegin())
@@ -122,9 +122,10 @@ class PLATFORM_EXPORT PaintController {
   // true. Otherwise returns false.
   bool UseCachedSubsequenceIfPossible(const DisplayItemClient&);
 
-  void AddCachedSubsequence(const DisplayItemClient&,
-                            unsigned start,
-                            unsigned end);
+  size_t BeginSubsequence();
+  // The |start| parameter should be the return value of the corresponding
+  // BeginSubsequence().
+  void EndSubsequence(const DisplayItemClient&, size_t start);
 
   // True if the last display item is a begin that doesn't draw content.
   void RemoveLastDisplayItem();
@@ -175,17 +176,17 @@ class PLATFORM_EXPORT PaintController {
   void SetTextPainted();
   void SetImagePainted();
 
-  // Returns displayItemList added using createAndAppend() since beginning or
-  // the last commitNewDisplayItems(). Use with care.
+  // Returns DisplayItemList added using CreateAndAppend() since beginning or
+  // the last CommitNewDisplayItems(). Use with care.
   DisplayItemList& NewDisplayItemList() { return new_display_item_list_; }
 
   void AppendDebugDrawingAfterCommit(const DisplayItemClient&,
                                      sk_sp<PaintRecord>,
                                      const FloatRect& record_bounds);
 
-  void ShowDebugData() const { ShowDebugDataInternal(false); }
+  void ShowDebugData() const;
 #ifndef NDEBUG
-  void ShowDebugDataWithRecords() const { ShowDebugDataInternal(true); }
+  void ShowDebugDataWithRecords() const;
 #endif
 
 #if DCHECK_IS_ON()
@@ -250,10 +251,6 @@ class PLATFORM_EXPORT PaintController {
   void ProcessNewItem(DisplayItem&);
   DisplayItem& MoveItemFromCurrentListToNewList(size_t);
 
-  void ShowDebugDataInternal(bool show_paint_records) const;
-  String DisplayItemListAsDebugString(const DisplayItemList&,
-                                      bool show_paint_records) const;
-
   // Maps clients to indices of display items or chunks of each client.
   using IndicesByClientMap = HashMap<const DisplayItemClient*, Vector<size_t>>;
 
@@ -268,9 +265,9 @@ class PLATFORM_EXPORT PaintController {
   size_t FindOutOfOrderCachedItemForward(const DisplayItem::Id&);
   void CopyCachedSubsequence(size_t begin_index, size_t end_index);
 
-  // Resets the indices (e.g. m_nextItemToMatch) of
-  // m_currentPaintArtifact.getDisplayItemList() to their initial values. This
-  // should be called when the DisplayItemList in m_currentPaintArtifact is
+  // Resets the indices (e.g. next_item_to_match_) of
+  // current_paint_artifact_.GetDisplayItemList() to their initial values. This
+  // should be called when the DisplayItemList in current_paint_artifact_ is
   // newly created, or is changed causing the previous indices to be invalid.
   void ResetCurrentListIndices();
 
@@ -318,13 +315,15 @@ class PLATFORM_EXPORT PaintController {
     SubsequenceMarkers() : start(0), end(0) {}
     SubsequenceMarkers(size_t start_arg, size_t end_arg)
         : start(start_arg), end(end_arg) {}
-    // The start and end index within m_currentPaintArtifact of this
-    // subsequence.
+    // The start and end (not included) index within current_paint_artifact_
+    // of this subsequence.
     size_t start;
     size_t end;
   };
 
   SubsequenceMarkers* GetSubsequenceMarkers(const DisplayItemClient&);
+
+  void ShowDebugDataInternal(bool show_paint_records) const;
 
   // The last complete paint artifact.
   // In SPv2, this includes paint chunks as well as display items.
@@ -334,8 +333,8 @@ class PLATFORM_EXPORT PaintController {
   DisplayItemList new_display_item_list_;
   PaintChunker new_paint_chunks_;
 
-  // Stores indices into m_newDisplayItemList for display items that have been
-  // moved from m_currentPaintArtifact.getDisplayItemList(), indexed by the
+  // Stores indices into new_display_item_list_ for display items that have been
+  // moved from current_paint_artifact_.GetDisplayItemList(), indexed by the
   // positions of the display items before the move. The values are undefined
   // for display items that are not moved.
   Vector<size_t> items_moved_into_new_list_;
@@ -356,9 +355,9 @@ class PLATFORM_EXPORT PaintController {
   int num_cached_new_items_;
 
   // Stores indices to valid cacheable display items in
-  // m_currentPaintArtifact.displayItemList() that have not been matched by
-  // requests of cached display items (using useCachedDrawingIfPossible() and
-  // useCachedSubsequenceIfPossible()) during sequential matching. The indexed
+  // current_paint_artifact_.GetDisplayItemList() that have not been matched by
+  // requests of cached display items (using UseCachedDrawingIfPossible() and
+  // UseCachedSubsequenceIfPossible()) during sequential matching. The indexed
   // items will be matched by later out-of-order requests of cached display
   // items. This ensures that when out-of-order cached display items are
   // requested, we only traverse at most once over the current display list
@@ -373,8 +372,8 @@ class PLATFORM_EXPORT PaintController {
   // requests.
   size_t next_item_to_index_;
 
-  // Similar to m_outOfOrderItemIndices but
-  // - the indices are chunk indices in m_currentPaintArtifacts.paintChunks();
+  // Similar to out_of_order_item_indices_ but
+  // - the indices are chunk indices in current_paint_artifacts_.PaintChunks();
   // - chunks are matched not only for requests of cached display items, but
   //   also non-cached display items.
   IndicesByClientMap out_of_order_chunk_indices_;
@@ -392,14 +391,14 @@ class PLATFORM_EXPORT PaintController {
 #endif
 
 #if DCHECK_IS_ON()
-  // This is used to check duplicated ids during createAndAppend().
+  // This is used to check duplicated ids during CreateAndAppend().
   IndicesByClientMap new_display_item_indices_by_client_;
 
   Usage usage_ = kForNormalUsage;
 #endif
 
-  // These are set in useCachedDrawingIfPossible() and
-  // useCachedSubsequenceIfPossible() when we could use cached drawing or
+  // These are set in UseCachedDrawingIfPossible() and
+  // UseCachedSubsequenceIfPossible() when we could use cached drawing or
   // subsequence and under-invalidation checking is on, indicating the begin and
   // end of the cached drawing or subsequence in the current list. The functions
   // return false to let the client do actual painting, and PaintController will
@@ -421,11 +420,13 @@ class PLATFORM_EXPORT PaintController {
   std::unique_ptr<RasterInvalidationTrackingInfo>
       raster_invalidation_tracking_info_;
 
-  typedef HashMap<const DisplayItemClient*, SubsequenceMarkers>
-      CachedSubsequenceMap;
+  using CachedSubsequenceMap =
+      HashMap<const DisplayItemClient*, SubsequenceMarkers>;
   CachedSubsequenceMap current_cached_subsequences_;
   CachedSubsequenceMap new_cached_subsequences_;
   size_t last_cached_subsequence_end_;
+
+  class DisplayItemListAsJSON;
 
   FRIEND_TEST_ALL_PREFIXES(PaintControllerTest, CachedSubsequenceSwapOrder);
   FRIEND_TEST_ALL_PREFIXES(PaintControllerTest, CachedNestedSubsequenceUpdate);

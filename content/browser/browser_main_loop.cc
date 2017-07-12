@@ -54,7 +54,7 @@
 #include "components/tracing/common/trace_to_console.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/viz/host/host_frame_sink_manager.h"
-#include "components/viz/service/display_compositor/server_shared_bitmap_manager.h"
+#include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -926,6 +926,11 @@ void BrowserMainLoop::CreateStartupTasks() {
 #endif
 }
 
+gpu::GpuChannelEstablishFactory*
+BrowserMainLoop::gpu_channel_establish_factory() const {
+  return BrowserGpuChannelHostFactory::instance();
+}
+
 #if defined(OS_ANDROID)
 void BrowserMainLoop::SynchronouslyFlushStartupTasks() {
   startup_task_runner_->RunAllTasksNow();
@@ -1200,17 +1205,17 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   BrowserCompositorMac::DisableRecyclingForShutdown();
 #endif
 
-#if !defined(OS_ANDROID)
-  frame_sink_manager_.reset();
-  host_frame_sink_manager_.reset();
-#endif
-
 #if defined(USE_AURA) || defined(OS_MACOSX)
   {
     TRACE_EVENT0("shutdown",
                  "BrowserMainLoop::Subsystem:ImageTransportFactory");
     ImageTransportFactory::Terminate();
   }
+#endif
+
+#if !defined(OS_ANDROID)
+  host_frame_sink_manager_.reset();
+  frame_sink_manager_impl_.reset();
 #endif
 
   // The device monitors are using |system_monitor_| as dependency, so delete
@@ -1356,8 +1361,8 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
 }
 
 #if !defined(OS_ANDROID)
-cc::SurfaceManager* BrowserMainLoop::GetSurfaceManager() const {
-  return frame_sink_manager_->surface_manager();
+cc::FrameSinkManager* BrowserMainLoop::GetFrameSinkManager() const {
+  return frame_sink_manager_impl_->frame_sink_manager();
 }
 #endif
 
@@ -1445,6 +1450,20 @@ int BrowserMainLoop::BrowserThreadsStarted() {
     BrowserGpuChannelHostFactory::Initialize(established_gpu_channel);
     factory = BrowserGpuChannelHostFactory::instance();
   }
+#if !defined(OS_ANDROID)
+  if (!service_manager::ServiceManagerIsRemote()) {
+    frame_sink_manager_impl_ =
+        base::MakeUnique<viz::FrameSinkManagerImpl>(false, nullptr);
+
+    host_frame_sink_manager_ = base::MakeUnique<viz::HostFrameSinkManager>();
+
+    // TODO(danakj): Don't make a FrameSinkManagerImpl when display is in the
+    // Gpu process, instead get the mojo pointer from the Gpu process.
+    surface_utils::ConnectWithInProcessFrameSinkManager(
+        host_frame_sink_manager_.get(), frame_sink_manager_impl_.get());
+  }
+#endif
+
   DCHECK(factory);
   ImageTransportFactory::Initialize();
   ImageTransportFactory::GetInstance()->SetGpuChannelEstablishFactory(factory);
@@ -1456,25 +1475,6 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 #endif  // defined(USE_AURA)
 #endif  // defined(OS_ANDROID)
 
-#if !defined(OS_ANDROID)
-  if (!service_manager::ServiceManagerIsRemote()) {
-    host_frame_sink_manager_ = base::MakeUnique<viz::HostFrameSinkManager>();
-
-    // TODO(danakj): Don't make a FrameSinkManagerImpl when display is in the
-    // Gpu process, instead get the mojo pointer from the Gpu process.
-    frame_sink_manager_ =
-        base::MakeUnique<viz::FrameSinkManagerImpl>(false, nullptr);
-    surface_utils::ConnectWithInProcessFrameSinkManager(
-        host_frame_sink_manager_.get(), frame_sink_manager_.get());
-  }
-#endif
-
-  // Enable the GpuMemoryBuffer dump provider with IO thread affinity. Note that
-  // unregistration happens on the IO thread (See
-  // BrowserProcessSubThread::IOThreadPreCleanUp).
-  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      BrowserGpuMemoryBufferManager::current(), "BrowserGpuMemoryBufferManager",
-      io_thread_->task_runner());
 #if defined(OS_ANDROID)
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       tracing::GraphicsMemoryDumpProvider::GetInstance(), "AndroidGraphics",

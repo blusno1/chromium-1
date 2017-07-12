@@ -31,7 +31,6 @@
 #include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
@@ -39,7 +38,9 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/service_worker_modes.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -110,7 +111,7 @@ class MockHttpProtocolHandler
         FETCH_CREDENTIALS_MODE_OMIT, FetchRedirectMode::FOLLOW_MODE,
         resource_type_, REQUEST_CONTEXT_TYPE_HYPERLINK,
         REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
-        scoped_refptr<ResourceRequestBodyImpl>(), ServiceWorkerFetchType::FETCH,
+        scoped_refptr<ResourceRequestBody>(), ServiceWorkerFetchType::FETCH,
         custom_timeout_, delegate_);
     if (simulate_navigation_preload_) {
       job_->set_simulate_navigation_preload_for_test();
@@ -178,7 +179,8 @@ class ServiceWorkerURLRequestJobTest
     helper_ = std::move(helper);
 
     registration_ = new ServiceWorkerRegistration(
-        GURL("https://example.com/"), 1L, helper_->context()->AsWeakPtr());
+        ServiceWorkerRegistrationOptions(GURL("https://example.com/")), 1L,
+        helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
         registration_.get(), GURL("https://example.com/service_worker.js"), 1L,
         helper_->context()->AsWeakPtr());
@@ -558,7 +560,7 @@ TEST_F(ServiceWorkerURLRequestJobTest,
       "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Type_"
       "NavigationPreloadEnabled",
       static_cast<int>(ServiceWorkerMetrics::WorkerPreparationType::
-                           START_IN_EXISTING_PROCESS),
+                           START_IN_EXISTING_READY_PROCESS),
       1);
   histogram_tester.ExpectUniqueSample(
       "ServiceWorker.NavPreload.FinishedFirst_MainFrame", false, 1);
@@ -585,7 +587,7 @@ TEST_F(ServiceWorkerURLRequestJobTest,
       "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Type_"
       "NavigationPreloadEnabled",
       static_cast<int>(ServiceWorkerMetrics::WorkerPreparationType::
-                           START_IN_EXISTING_PROCESS),
+                           START_IN_EXISTING_READY_PROCESS),
       1);
   histogram_tester.ExpectUniqueSample(
       "ServiceWorker.NavPreload.FinishedFirst_MainFrame", true, 1);

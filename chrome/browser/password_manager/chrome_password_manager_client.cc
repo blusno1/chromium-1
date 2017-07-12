@@ -26,6 +26,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/autofill/password_generation_popup_controller_impl.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
@@ -52,7 +53,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/sessions/content/content_record_password_state.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -66,6 +66,7 @@
 #include "extensions/features/features.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/re2/src/re2/re2.h"
 
 #if defined(SAFE_BROWSING_DB_LOCAL)
@@ -90,6 +91,7 @@
 
 using password_manager::ContentPasswordManagerDriverFactory;
 using password_manager::PasswordManagerInternalsService;
+using password_manager::PasswordManagerMetricsRecorder;
 using sessions::SerializedNavigationEntry;
 
 // Shorten the name to spare line breaks. The code provides enough context
@@ -209,6 +211,12 @@ bool ChromePasswordManagerClient::IsPasswordManagementEnabledForCurrentPage()
     is_enabled =
         entry->GetURL().host_piece() != chrome::kChromeUIChromeSigninHost;
   }
+
+  // The password manager is disabled while VR (virtual reality) is being used,
+  // as the use of conventional UI elements might harm the user experience in
+  // VR.
+  is_enabled = is_enabled && !vr::VrTabHelper::IsInVr(web_contents());
+
   if (log_manager_->IsLoggingActive()) {
     password_manager::BrowserSavePasswordProgressLogger logger(
         log_manager_.get());
@@ -373,6 +381,7 @@ void ChromePasswordManagerClient::NotifyStorePasswordCalled() {
   // If a site stores a credential the autofill password manager shouldn't kick
   // in.
   password_manager_.DropFormManagers();
+  was_store_ever_called_ = true;
 }
 
 void ChromePasswordManagerClient::AutomaticPasswordSave(
@@ -454,16 +463,35 @@ ukm::SourceId ChromePasswordManagerClient::GetUkmSourceId() {
   return *ukm_source_id_;
 }
 
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
-#if !defined(OS_ANDROID)
+PasswordManagerMetricsRecorder&
+ChromePasswordManagerClient::GetMetricsRecorder() {
+  if (!metrics_recorder_) {
+    metrics_recorder_.emplace(
+        PasswordManagerMetricsRecorder::CreateUkmEntryBuilder(
+            GetUkmRecorder(), GetUkmSourceId()));
+  }
+  return metrics_recorder_.value();
+}
+
 void ChromePasswordManagerClient::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() || !navigation_handle->HasCommitted())
     return;
 
-  if (!navigation_handle->IsSameDocument())
+  if (!navigation_handle->IsSameDocument()) {
     ukm_source_id_.reset();
+    // Send any collected metrics by destroying the metrics recorder.
+    metrics_recorder_.reset();
+  }
 
+  // From this point on, the CredentialManagerImpl will service API calls in the
+  // context of the new WebContents::GetLastCommittedURL, which may very well be
+  // cross-origin. Disconnect existing client, and drop pending requests.
+  if (!navigation_handle->IsSameDocument())
+    credential_manager_impl_.DisconnectBinding();
+
+// TODO(crbug.com/706392): Fix password reuse detection for Android.
+#if !defined(OS_ANDROID)
   password_reuse_detection_manager_.DidNavigateMainFrame(GetMainFrameURL());
   // After some navigations RenderViewHost persists and just adding the observer
   // will cause multiple call of OnInputEvent. Since Widget API doesn't allow to
@@ -472,8 +500,10 @@ void ChromePasswordManagerClient::DidFinishNavigation(
   web_contents()->GetRenderViewHost()->GetWidget()->RemoveInputEventObserver(
       this);
   web_contents()->GetRenderViewHost()->GetWidget()->AddInputEventObserver(this);
+#endif
 }
 
+#if !defined(OS_ANDROID)
 void ChromePasswordManagerClient::OnInputEvent(
     const blink::WebInputEvent& event) {
   if (event.GetType() != blink::WebInputEvent::kChar)
@@ -714,8 +744,7 @@ const password_manager::LogManager* ChromePasswordManagerClient::GetLogManager()
 
 // static
 void ChromePasswordManagerClient::BindCredentialManager(
-    const service_manager::BindSourceInfo& source_info,
-    password_manager::mojom::CredentialManagerRequest request,
+    password_manager::mojom::CredentialManagerAssociatedRequest request,
     content::RenderFrameHost* render_frame_host) {
   // Only valid for the main frame.
   if (render_frame_host->GetParent())
@@ -724,6 +753,11 @@ void ChromePasswordManagerClient::BindCredentialManager(
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
   DCHECK(web_contents);
+
+  // Only valid for the currently committed RenderFrameHost, and not, e.g. old
+  // zombie RFH's being swapped out following cross-origin navigations.
+  if (web_contents->GetMainFrame() != render_frame_host)
+    return;
 
   ChromePasswordManagerClient* instance =
       ChromePasswordManagerClient::FromWebContents(web_contents);

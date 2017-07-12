@@ -6,13 +6,16 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_embedder_interface.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/web_contents_tester.h"
@@ -58,6 +61,7 @@ PageLoadMetricsObserverTestHarness::~PageLoadMetricsObserverTestHarness() {}
 
 void PageLoadMetricsObserverTestHarness::SetUp() {
   ChromeRenderViewHostTestHarness::SetUp();
+  TestingBrowserProcess::GetGlobal()->SetUkmRecorder(&test_ukm_recorder_);
   SetContents(CreateTestWebContents());
   NavigateAndCommit(GURL("http://www.google.com"));
   observer_ = MetricsWebContentsObserver::CreateForWebContents(
@@ -97,14 +101,22 @@ void PageLoadMetricsObserverTestHarness::SimulateLoadedResource(
         << "Main frame resources must have a GlobalRequestID.";
   }
 
+  // For consistency with browser-side navigation, we provide a null RFH for
+  // main frame and sub frame resources.
+  content::RenderFrameHost* render_frame_host_or_null =
+      (info.resource_type == content::RESOURCE_TYPE_MAIN_FRAME ||
+       info.resource_type == content::RESOURCE_TYPE_SUB_FRAME)
+          ? nullptr
+          : web_contents()->GetMainFrame();
+
   observer_->OnRequestComplete(
       info.url, info.host_port_pair, info.frame_tree_node_id, request_id,
-      info.resource_type, info.was_cached,
+      render_frame_host_or_null, info.resource_type, info.was_cached,
       info.data_reduction_proxy_data
           ? info.data_reduction_proxy_data->DeepCopy()
           : nullptr,
       info.raw_body_bytes, info.original_network_content_length,
-      base::TimeTicks::Now(), 0);
+      base::TimeTicks::Now(), info.net_error);
 }
 
 void PageLoadMetricsObserverTestHarness::SimulateInputEvent(
@@ -145,5 +157,8 @@ void PageLoadMetricsObserverTestHarness::NavigateWithPageTransitionAndCommit(
   controller().LoadURL(url, content::Referrer(), transition, std::string());
   content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
 }
+
+const char PageLoadMetricsObserverTestHarness::kResourceUrl[] =
+    "https://www.example.com/resource";
 
 }  // namespace page_load_metrics

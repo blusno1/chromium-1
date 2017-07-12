@@ -158,9 +158,9 @@ class DataReductionProxyConfigTest : public testing::Test {
     responder.response = response;
     responder.status = status;
     responder.http_response_code = response_code;
-    EXPECT_CALL(*config(), SecureProxyCheck(_, _))
+    EXPECT_CALL(*config(), SecureProxyCheck(_))
         .Times(1)
-        .WillRepeatedly(testing::WithArgs<1>(
+        .WillRepeatedly(testing::WithArgs<0>(
             testing::Invoke(&responder, &TestResponder::ExecuteCallback)));
     config()->SetIsCaptivePortal(is_captive_portal);
     net::NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
@@ -568,10 +568,19 @@ TEST_F(DataReductionProxyConfigTest, AreProxiesBypassed) {
   };
 
   // The retry map has the scheme prefix for https but not for http.
-  std::string origin = GetRetryMapKeyFromOrigin(
-      TestDataReductionProxyParams::DefaultOrigin());
-  std::string fallback_origin = GetRetryMapKeyFromOrigin(
-      TestDataReductionProxyParams::DefaultFallbackOrigin());
+  std::string origin = GetRetryMapKeyFromOrigin(params()
+                                                    ->proxies_for_http()
+                                                    .front()
+                                                    .proxy_server()
+                                                    .host_port_pair()
+                                                    .ToString());
+  std::string fallback_origin =
+      GetRetryMapKeyFromOrigin(params()
+                                   ->proxies_for_http()
+                                   .at(1)
+                                   .proxy_server()
+                                   .host_port_pair()
+                                   .ToString());
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
     net::ProxyConfig::ProxyRules rules;
@@ -611,10 +620,19 @@ TEST_F(DataReductionProxyConfigTest, AreProxiesBypassed) {
 }
 
 TEST_F(DataReductionProxyConfigTest, AreProxiesBypassedRetryDelay) {
-  std::string origin = GetRetryMapKeyFromOrigin(
-      TestDataReductionProxyParams::DefaultOrigin());
-  std::string fallback_origin = GetRetryMapKeyFromOrigin(
-      TestDataReductionProxyParams::DefaultFallbackOrigin());
+  std::string origin = GetRetryMapKeyFromOrigin(params()
+                                                    ->proxies_for_http()
+                                                    .front()
+                                                    .proxy_server()
+                                                    .host_port_pair()
+                                                    .ToString());
+  std::string fallback_origin =
+      GetRetryMapKeyFromOrigin(params()
+                                   ->proxies_for_http()
+                                   .at(1)
+                                   .proxy_server()
+                                   .host_port_pair()
+                                   .ToString());
 
   net::ProxyConfig::ProxyRules rules;
   std::vector<std::string> proxies;
@@ -675,22 +693,12 @@ TEST_F(DataReductionProxyConfigTest, IsDataReductionProxyWithParams) {
     net::ProxyServer expected_second;
     bool expected_is_fallback;
   } tests[] = {
-      {net::ProxyServer::FromURI(TestDataReductionProxyParams::DefaultOrigin(),
-                                 net::ProxyServer::SCHEME_HTTP),
-       true,
-       net::ProxyServer::FromURI(TestDataReductionProxyParams::DefaultOrigin(),
-                                 net::ProxyServer::SCHEME_HTTP),
-       net::ProxyServer::FromURI(
-           TestDataReductionProxyParams::DefaultFallbackOrigin(),
-           net::ProxyServer::SCHEME_HTTP),
-       false},
-      {net::ProxyServer::FromURI(
-           TestDataReductionProxyParams::DefaultFallbackOrigin(),
-           net::ProxyServer::SCHEME_HTTP),
-       true, net::ProxyServer::FromURI(
-                 TestDataReductionProxyParams::DefaultFallbackOrigin(),
-                 net::ProxyServer::SCHEME_HTTP),
-       net::ProxyServer(), true},
+      {params()->proxies_for_http().front().proxy_server(), true,
+       params()->proxies_for_http().front().proxy_server(),
+       params()->proxies_for_http().at(1).proxy_server(), false},
+      {params()->proxies_for_http().at(1).proxy_server(), true,
+       params()->proxies_for_http().at(1).proxy_server(), net::ProxyServer(),
+       true},
   };
   for (size_t i = 0; i < arraysize(tests); ++i) {
     std::unique_ptr<TestDataReductionProxyParams> params(
@@ -1544,7 +1552,11 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
       features::kDataReductionProxyDecidesTransform);
+  base::FieldTrialList field_trial_list(nullptr);
+  base::FieldTrialList::CreateFieldTrial(
+      "DataReductionProxyPreviewsBlackListTransition", "Enabled");
 
+  base::HistogramTester histogram_tester;
   net::TestURLRequestContext context_;
   net::TestDelegate delegate_;
   std::unique_ptr<net::URLRequest> request = context_.CreateRequest(
@@ -1552,7 +1564,7 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
   request->SetLoadFlags(request->load_flags() |
                         net::LOAD_MAIN_FRAME_DEPRECATED);
   std::unique_ptr<TestPreviewsDecider> previews_decider =
-      base::MakeUnique<TestPreviewsDecider>(false);
+      base::MakeUnique<TestPreviewsDecider>(true);
 
   // Verify true for no flags.
   EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
@@ -1565,6 +1577,9 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
       switches::kDataReductionProxyLoFiValueDisabled);
   EXPECT_FALSE(config()->ShouldAcceptServerPreview(*request.get(),
                                                    *previews_decider.get()));
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.NotAcceptingTransform",
+      0 /* NOT_ACCEPTING_TRANSFORM_DISABLED */, 1);
 
   // Verify true for Slow Connection flag.
   base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
@@ -1573,12 +1588,6 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
       switches::kDataReductionProxyLoFiValueSlowConnectionsOnly);
   EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
                                                   *previews_decider.get()));
-
-  // Verify PreviewsDecider check.
-  previews_decider = base::MakeUnique<TestPreviewsDecider>(true);
-  EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
-                                                  *previews_decider.get()));
-  previews_decider = base::MakeUnique<TestPreviewsDecider>(false);
 
   // Verify false for Cellular Only flag and WIFI connection.
   base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
@@ -1589,6 +1598,9 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
       net::NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI);
   EXPECT_FALSE(config()->ShouldAcceptServerPreview(*request.get(),
                                                    *previews_decider.get()));
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.NotAcceptingTransform",
+      2 /* NOT_ACCEPTING_TRANSFORM_CELLULAR_ONLY */, 1);
 
   // Verify true for Cellular Only flag and 3G connection.
   config()->SetConnectionTypeForTesting(
@@ -1596,18 +1608,22 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
   EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
                                                   *previews_decider.get()));
 
-  {
-    // Verfiy true for always on.
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kDataReductionProxyLoFi,
-        switches::kDataReductionProxyLoFiValueAlwaysOn);
-    base::FieldTrialList field_trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(
-        "DataReductionProxyPreviewsBlackListTransition", "Enabled");
-    EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
-                                                    *previews_decider.get()));
-  }
+  // Verify PreviewsDecider check.
+  previews_decider = base::MakeUnique<TestPreviewsDecider>(false);
+  EXPECT_FALSE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                   *previews_decider.get()));
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.NotAcceptingTransform",
+      1 /* NOT_ACCEPTING_TRANSFORM_BLACKLISTED */, 1);
+  previews_decider = base::MakeUnique<TestPreviewsDecider>(true);
+
+  // Verfiy true for always on.
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kDataReductionProxyLoFi,
+      switches::kDataReductionProxyLoFiValueAlwaysOn);
+  EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                  *previews_decider.get()));
 }
 
 }  // namespace data_reduction_proxy

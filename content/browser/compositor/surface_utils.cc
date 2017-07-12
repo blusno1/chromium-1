@@ -89,7 +89,7 @@ void PrepareTextureCopyOutputResult(
 
   uint8_t* pixels = static_cast<uint8_t*>(bitmap->getPixels());
 
-  cc::TextureMailbox texture_mailbox;
+  viz::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
   result->TakeTexture(&texture_mailbox, &release_callback);
   DCHECK(texture_mailbox.IsTexture());
@@ -155,7 +155,7 @@ void PrepareBitmapCopyOutputResult(
 
 namespace content {
 
-cc::FrameSinkId AllocateFrameSinkId() {
+viz::FrameSinkId AllocateFrameSinkId() {
 #if defined(OS_ANDROID)
   return CompositorImpl::AllocateFrameSinkId();
 #else
@@ -164,14 +164,14 @@ cc::FrameSinkId AllocateFrameSinkId() {
 #endif
 }
 
-cc::SurfaceManager* GetSurfaceManager() {
+cc::FrameSinkManager* GetFrameSinkManager() {
 #if defined(OS_ANDROID)
-  return CompositorImpl::GetSurfaceManager();
+  return CompositorImpl::GetFrameSinkManager();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   if (factory == NULL)
     return nullptr;
-  return factory->GetContextFactoryPrivate()->GetSurfaceManager();
+  return factory->GetContextFactoryPrivate()->GetFrameSinkManager();
 #endif
 }
 

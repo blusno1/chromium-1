@@ -16,6 +16,8 @@
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/public/provider/chrome/browser/voice/voice_search_presenter.h"
 
+@protocol ApplicationCommands;
+@protocol BrowserCommands;
 @class BrowserContainerView;
 @class BrowserViewControllerDependencyFactory;
 @class ContextualSearchController;
@@ -60,16 +62,20 @@ extern NSString* const kLocationBarResignsFirstResponderNotification;
 // webUsageSuspended property for this BVC will be based on |model|, and future
 // changes to |model|'s suspension state should be made through this BVC
 // instead of directly on the model.
-- (instancetype)initWithTabModel:(TabModel*)model
-                    browserState:(ios::ChromeBrowserState*)browserState
-               dependencyFactory:
-                   (BrowserViewControllerDependencyFactory*)factory
+- (instancetype)
+          initWithTabModel:(TabModel*)model
+              browserState:(ios::ChromeBrowserState*)browserState
+         dependencyFactory:(BrowserViewControllerDependencyFactory*)factory
+applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
+
+@property(nonatomic, readonly) id<ApplicationCommands, BrowserCommands>
+    dispatcher;
 
 // The top-level browser container view.
 @property(nonatomic, strong) BrowserContainerView* contentArea;

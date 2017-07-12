@@ -35,7 +35,7 @@
 #include "platform/wtf/BitVector.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/WebFeature.h"
+#include "public/platform/web_feature.mojom-blink.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -46,6 +46,9 @@ class EnumerationHistogram;
 class ExecutionContext;
 class LocalFrame;
 class StyleSheetContents;
+// Definition for UseCounter features can be found in:
+// third_party/WebKit/public/platform/web_feature.mojom
+using WebFeature = mojom::WebFeature;
 
 // UseCounter is used for counting the number of times features of
 // Blink are used on real web pages and help us know commonly
@@ -123,7 +126,7 @@ class CORE_EXPORT UseCounter {
   void AddObserver(Observer*);
 
   // Invoked when a new document is loaded into the main frame of the page.
-  void DidCommitLoad(KURL);
+  void DidCommitLoad(const KURL&);
 
   static int MapCSSPropertyIdToCSSSampleIdForHistogram(CSSPropertyID);
 

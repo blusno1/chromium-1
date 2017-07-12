@@ -31,6 +31,14 @@
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
+namespace {
+
+// The length of time to allow the add to homescreen data fetcher to run before
+// timing out and generating an icon.
+const int kDataTimeoutInMilliseconds = 4000;
+
+}  // namespace
+
 jlong InitializeAndStart(JNIEnv* env,
                          const JavaParamRef<jobject>& obj,
                          const JavaParamRef<jobject>& java_web_contents) {
@@ -66,8 +74,7 @@ void AddToHomescreenManager::AddShortcut(
 
   base::string16 user_title =
       base::android::ConvertJavaStringToUTF16(env, j_user_title);
-  if (!user_title.empty())
-    data_fetcher_->shortcut_info().user_title = user_title;
+  data_fetcher_->shortcut_info().user_title = user_title;
 
   RecordAddToHomescreen();
   ShortcutHelper::AddToLauncherWithSkBitmap(web_contents,
@@ -89,21 +96,16 @@ void AddToHomescreenManager::Start(content::WebContents* web_contents) {
     ShowDialog();
   }
 
-  data_fetcher_ = new AddToHomescreenDataFetcher(
+  data_fetcher_ = base::MakeUnique<AddToHomescreenDataFetcher>(
       web_contents, ShortcutHelper::GetIdealHomescreenIconSizeInPx(),
       ShortcutHelper::GetMinimumHomescreenIconSizeInPx(),
       ShortcutHelper::GetIdealSplashImageSizeInPx(),
       ShortcutHelper::GetMinimumSplashImageSizeInPx(),
-      ShortcutHelper::GetIdealBadgeIconSizeInPx(),
+      ShortcutHelper::GetIdealBadgeIconSizeInPx(), kDataTimeoutInMilliseconds,
       check_webapk_compatible, this);
 }
 
-AddToHomescreenManager::~AddToHomescreenManager() {
-  if (data_fetcher_) {
-    data_fetcher_->set_weak_observer(nullptr);
-    data_fetcher_ = nullptr;
-  }
-}
+AddToHomescreenManager::~AddToHomescreenManager() {}
 
 void AddToHomescreenManager::ShowDialog() {
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -178,16 +180,5 @@ void AddToHomescreenManager::CreateInfoBarForWebApk(
   banners::AppBannerInfoBarDelegateAndroid::Create(
       web_contents, app_banner_manager->GetWeakPtr(),
       base::MakeUnique<ShortcutInfo>(info), primary_icon, badge_icon,
-      -1 /* event_request_id */, true /* is_webapk */,
-      webapk::INSTALL_SOURCE_MENU);
-}
-
-SkBitmap AddToHomescreenManager::FinalizeLauncherIconInBackground(
-    const SkBitmap& bitmap,
-    const GURL& url,
-    bool* is_generated) {
-  base::ThreadRestrictions::AssertIOAllowed();
-
-  return ShortcutHelper::FinalizeLauncherIconInBackground(bitmap, url,
-                                                          is_generated);
+      true /* is_webapk */, webapk::INSTALL_SOURCE_MENU);
 }

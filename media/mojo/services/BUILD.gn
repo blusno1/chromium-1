@@ -55,6 +55,8 @@ source_set("lib") {
     "mojo_demuxer_stream_adapter.h",
     "mojo_media_client.cc",
     "mojo_media_client.h",
+    "mojo_media_log.cc",
+    "mojo_media_log.h",
     "mojo_provision_fetcher.cc",
     "mojo_provision_fetcher.h",
     "mojo_renderer_service.cc",
@@ -82,9 +84,9 @@ source_set("lib") {
   ]
 
   deps = [
-    "//media:cdm_api",
-    "//media:cdm_manager",
     "//media:shared_memory_support",
+    "//media/cdm:cdm_api",
+    "//media/cdm:cdm_manager",
     "//media/mojo/common",
     "//media/mojo/common:mojo_shared_buffer_video_frame",
     "//mojo/common",
@@ -146,6 +148,7 @@ if (!(is_win && is_component_build)) {
       "//media/mojo/clients",
       "//media/mojo/common",
       "//media/mojo/interfaces",
+      "//media/mojo/interfaces:constants",
       "//services/service_manager/public/cpp:service_test_support",
       "//testing/gmock",
       "//testing/gtest",

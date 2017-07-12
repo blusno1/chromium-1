@@ -1149,10 +1149,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderViewImpl, message)
-    IPC_MESSAGE_HANDLER(InputMsg_ExecuteEditCommand, OnExecuteEditCommand)
-    IPC_MESSAGE_HANDLER(InputMsg_MoveCaret, OnMoveCaret)
-    IPC_MESSAGE_HANDLER(InputMsg_ScrollFocusedEditableNodeIntoRect,
-                        OnScrollFocusedEditableNodeIntoRect)
     IPC_MESSAGE_HANDLER(ViewMsg_SetPageScale, OnSetPageScale)
     IPC_MESSAGE_HANDLER(ViewMsg_SetInitialFocus, OnSetInitialFocus)
     IPC_MESSAGE_HANDLER(ViewMsg_UpdateTargetURL_ACK, OnUpdateTargetURLAck)
@@ -1243,26 +1239,7 @@ void RenderViewImpl::OnUpdateTargetURLAck() {
   target_url_status_ = TARGET_NONE;
 }
 
-void RenderViewImpl::OnExecuteEditCommand(const std::string& name,
-    const std::string& value) {
-  if (!webview() || !webview()->FocusedFrame())
-    return;
-
-  webview()->FocusedFrame()->ExecuteCommand(WebString::FromUTF8(name),
-                                            WebString::FromUTF8(value));
-}
-
-void RenderViewImpl::OnMoveCaret(const gfx::Point& point) {
-  if (!webview())
-    return;
-
-  Send(new InputHostMsg_MoveCaret_ACK(GetRoutingID()));
-  webview()->FocusedFrame()->MoveCaretSelection(
-      ConvertWindowPointToViewport(point));
-}
-
-void RenderViewImpl::OnScrollFocusedEditableNodeIntoRect(
-    const gfx::Rect& rect) {
+void RenderViewImpl::ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect) {
   blink::WebAutofillClient* autofill_client = nullptr;
   if (auto* focused_frame = GetWebView()->FocusedFrame())
     autofill_client = focused_frame->AutofillClient();
@@ -2369,9 +2346,9 @@ bool RenderViewImpl::DidTapMultipleTargets(
     case TAP_MULTIPLE_TARGETS_STRATEGY_POPUP: {
       gfx::Size canvas_size =
           gfx::ScaleToCeiledSize(zoom_rect.size(), new_total_scale);
-      cc::SharedBitmapManager* manager =
+      viz::SharedBitmapManager* manager =
           RenderThreadImpl::current()->shared_bitmap_manager();
-      std::unique_ptr<cc::SharedBitmap> shared_bitmap =
+      std::unique_ptr<viz::SharedBitmap> shared_bitmap =
           manager->AllocateSharedBitmap(canvas_size);
       CHECK(!!shared_bitmap);
       {
@@ -2404,7 +2381,7 @@ bool RenderViewImpl::DidTapMultipleTargets(
       Send(new ViewHostMsg_ShowDisambiguationPopup(
           GetRoutingID(), physical_window_zoom_rect, canvas_size,
           shared_bitmap->id()));
-      cc::SharedBitmapId id = shared_bitmap->id();
+      viz::SharedBitmapId id = shared_bitmap->id();
       disambiguation_bitmaps_[id] = shared_bitmap.release();
       handled = true;
       break;
@@ -2467,11 +2444,11 @@ void RenderViewImpl::SetDeviceScaleFactorForTesting(float factor) {
   OnResize(params);
 }
 
-void RenderViewImpl::SetDeviceColorProfileForTesting(
-    const gfx::ICCProfile& icc_profile) {
+void RenderViewImpl::SetDeviceColorSpaceForTesting(
+    const gfx::ColorSpace& color_space) {
   ResizeParams params;
   params.screen_info = screen_info_;
-  params.screen_info.color_space = icc_profile.GetColorSpace();
+  params.screen_info.color_space = color_space;
   params.new_size = size();
   params.visible_viewport_size = visible_viewport_size_;
   params.physical_backing_size = physical_backing_size_;
@@ -2502,7 +2479,7 @@ void RenderViewImpl::DisableAutoResizeForTesting(const gfx::Size& new_size) {
 }
 
 void RenderViewImpl::OnReleaseDisambiguationPopupBitmap(
-    const cc::SharedBitmapId& id) {
+    const viz::SharedBitmapId& id) {
   BitmapMap::iterator it = disambiguation_bitmaps_.find(id);
   DCHECK(it != disambiguation_bitmaps_.end());
   delete it->second;

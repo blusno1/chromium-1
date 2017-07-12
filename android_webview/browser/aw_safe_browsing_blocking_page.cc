@@ -7,6 +7,8 @@
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_safe_browsing_ui_manager.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
+#include "components/safe_browsing/browser/threat_details.h"
+#include "components/safe_browsing/triggers/trigger_manager.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "components/security_interstitials/core/base_safe_browsing_error_ui.h"
@@ -36,7 +38,8 @@ AwSafeBrowsingBlockingPage::AwSafeBrowsingBlockingPage(
                        main_frame_url,
                        unsafe_resources,
                        std::move(controller_client),
-                       display_options) {
+                       display_options),
+      threat_details_in_progress_(false) {
   if (errorUiType == ErrorUiType::QUIET_SMALL ||
       errorUiType == ErrorUiType::QUIET_GIANT) {
     set_sb_error_ui(base::MakeUnique<SafeBrowsingQuietErrorUI>(
@@ -46,15 +49,29 @@ AwSafeBrowsingBlockingPage::AwSafeBrowsingBlockingPage(
         errorUiType == ErrorUiType::QUIET_GIANT));
   }
 
-  // TODO(timvolodine): invoke TriggerManager::StartCollectingThreatDetails(),
-  // (via AwBrowserContext, e.g.
-  // AwBrowserContext::FromWebContents(web_contents)), crbug.com/731747.
+  if (unsafe_resources.size() == 1 &&
+      ShouldReportThreatDetails(unsafe_resources[0].threat_type)) {
+    AwBrowserContext* aw_browser_context =
+        AwBrowserContext::FromWebContents(web_contents);
+    // TODO(timvolodine): create a proper history service; currently the
+    // HistoryServiceFactory lives in the chrome/ layer and relies on Profile
+    // which we don't have in Android WebView (crbug.com/731744).
+    threat_details_in_progress_ =
+        aw_browser_context->GetSafeBrowsingTriggerManager()
+            ->StartCollectingThreatDetails(
+                safe_browsing::TriggerType::SECURITY_INTERSTITIAL, web_contents,
+                unsafe_resources[0],
+                aw_browser_context->GetAwURLRequestContext(),
+                /*history_service*/ nullptr,
+                sb_error_ui()->get_error_display_options());
+  }
 }
 
 // static
 void AwSafeBrowsingBlockingPage::ShowBlockingPage(
     AwSafeBrowsingUIManager* ui_manager,
-    const UnsafeResource& unsafe_resource) {
+    const UnsafeResource& unsafe_resource,
+    bool extended_reporting_allowed) {
   DVLOG(1) << __func__ << " " << unsafe_resource.url.spec();
   WebContents* web_contents = unsafe_resource.web_contents_getter.Run();
 
@@ -72,13 +89,12 @@ void AwSafeBrowsingBlockingPage::ShowBlockingPage(
     const UnsafeResourceList unsafe_resources{unsafe_resource};
     BaseSafeBrowsingErrorUI::SBErrorDisplayOptions display_options =
         BaseSafeBrowsingErrorUI::SBErrorDisplayOptions(
-            IsMainPageLoadBlocked(unsafe_resources),
-            false,  // kSafeBrowsingExtendedReportingOptInAllowed
-            false,  // is_off_the_record
-            false,  // is_extended_reporting
-            false,  // is_scout
-            false,  // kSafeBrowsingProceedAnywayDisabled
-            false,  // should_open_links_in_new_tab
+            IsMainPageLoadBlocked(unsafe_resources), extended_reporting_allowed,
+            false,                    // is_off_the_record
+            false,                    // is_extended_reporting
+            false,                    // is_scout
+            false,                    // kSafeBrowsingProceedAnywayDisabled
+            false,                    // should_open_links_in_new_tab
             "cpn_safe_browsing_wv");  // help_center_article_link
 
     ErrorUiType errorType =
@@ -90,6 +106,30 @@ void AwSafeBrowsingBlockingPage::ShowBlockingPage(
         CreateControllerClient(web_contents, unsafe_resources, ui_manager),
         display_options, errorType);
     blocking_page->Show();
+  }
+}
+
+void AwSafeBrowsingBlockingPage::FinishThreatDetails(
+    const base::TimeDelta& delay,
+    bool did_proceed,
+    int num_visits) {
+  // Not all interstitials collect threat details, e.g. when not opted in.
+  if (!threat_details_in_progress_)
+    return;
+
+  // Finish computing threat details. TriggerManager will decide if it is safe
+  // to send the report.
+  AwBrowserContext* aw_browser_context =
+      AwBrowserContext::FromWebContents(web_contents());
+  bool report_sent = aw_browser_context->GetSafeBrowsingTriggerManager()
+                         ->FinishCollectingThreatDetails(
+                             safe_browsing::TriggerType::SECURITY_INTERSTITIAL,
+                             web_contents(), delay, did_proceed, num_visits,
+                             sb_error_ui()->get_error_display_options());
+
+  if (report_sent) {
+    controller()->metrics_helper()->RecordUserInteraction(
+        security_interstitials::MetricsHelper::EXTENDED_REPORTING_IS_ENABLED);
   }
 }
 

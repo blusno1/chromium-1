@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "cc/surfaces/surface_manager.h"
+#include "cc/surfaces/frame_sink_manager.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/surface_utils.h"
 
@@ -16,8 +16,8 @@ namespace content {
 
 OffscreenCanvasSurfaceImpl::OffscreenCanvasSurfaceImpl(
     viz::HostFrameSinkManager* host_frame_sink_manager,
-    const cc::FrameSinkId& parent_frame_sink_id,
-    const cc::FrameSinkId& frame_sink_id,
+    const viz::FrameSinkId& parent_frame_sink_id,
+    const viz::FrameSinkId& frame_sink_id,
     blink::mojom::OffscreenCanvasSurfaceClientPtr client,
     blink::mojom::OffscreenCanvasSurfaceRequest request,
     DestroyCallback destroy_callback)
@@ -68,13 +68,14 @@ void OffscreenCanvasSurfaceImpl::OnSurfaceCreated(
     client_->OnSurfaceCreated(surface_info);
 }
 
-void OffscreenCanvasSurfaceImpl::Require(const cc::SurfaceId& surface_id,
+void OffscreenCanvasSurfaceImpl::Require(const viz::SurfaceId& surface_id,
                                          const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->RequireSequence(surface_id, sequence);
+  GetFrameSinkManager()->surface_manager()->RequireSequence(surface_id,
+                                                            sequence);
 }
 
 void OffscreenCanvasSurfaceImpl::Satisfy(const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->SatisfySequence(sequence);
+  GetFrameSinkManager()->surface_manager()->SatisfySequence(sequence);
 }
 
 void OffscreenCanvasSurfaceImpl::OnSurfaceConnectionClosed() {

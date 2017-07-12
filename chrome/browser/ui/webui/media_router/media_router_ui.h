@@ -44,6 +44,7 @@ class Browser;
 namespace media_router {
 
 class CreatePresentationConnectionRequest;
+class EventPageRequestManager;
 class IssuesObserver;
 class MediaRoute;
 class MediaRouter;
@@ -296,6 +297,9 @@ class MediaRouterUI
   // Logs a UMA stat for the source that was cast if the result is successful.
   void MaybeReportCastingSource(MediaCastMode cast_mode,
                                 const RouteRequestResult& result);
+  // Sends a request to the file dialog to log UMA stats for the file that was
+  // cast if the result is successful.
+  void MaybeReportFileInformation(const RouteRequestResult& result);
 
   // Closes the dialog after receiving a route response when using
   // |create_session_request_|. This prevents the dialog from trying to use the
@@ -410,6 +414,9 @@ class MediaRouterUI
 
   // Pointer to the MediaRouter for this instance's BrowserContext.
   MediaRouter* router_;
+
+  // Request manager for the Media Router component extension.
+  const EventPageRequestManager* event_page_request_manager_;
 
   // The start time for UI initialization metrics timer. When a dialog has been
   // been painted and initialized with initial data, this should be cleared.

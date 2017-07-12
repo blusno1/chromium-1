@@ -600,21 +600,13 @@ interface CharacterData : Node
     method replaceWith
     method substringData
     setter data
-interface ClientRect
+interface Clipboard : EventTarget
     attribute @@toStringTag
-    getter bottom
-    getter height
-    getter left
-    getter right
-    getter top
-    getter width
     method constructor
-interface ClientRectList
-    attribute @@toStringTag
-    getter length
-    method @@iterator
-    method constructor
-    method item
+    method read
+    method readText
+    method write
+    method writeText
 interface ClipboardEvent : Event
     attribute @@toStringTag
     getter clipboardData
@@ -719,7 +711,6 @@ interface DOMException
     getter message
     getter name
     method constructor
-    method toString
 interface DOMImplementation
     attribute @@toStringTag
     method constructor
@@ -1350,7 +1341,6 @@ interface Element : Node
     getter onselectstart
     getter onwebkitfullscreenchange
     getter onwebkitfullscreenerror
-    getter onwheel
     getter outerHTML
     getter prefix
     getter previousElementSibling
@@ -1425,7 +1415,6 @@ interface Element : Node
     setter onselectstart
     setter onwebkitfullscreenchange
     setter onwebkitfullscreenerror
-    setter onwheel
     setter outerHTML
     setter scrollLeft
     setter scrollTop
@@ -1968,6 +1957,7 @@ interface HTMLElement : Element
     getter ontouchstart
     getter onvolumechange
     getter onwaiting
+    getter onwheel
     getter outerText
     getter spellcheck
     getter style
@@ -2059,6 +2049,7 @@ interface HTMLElement : Element
     setter ontouchstart
     setter onvolumechange
     setter onwaiting
+    setter onwheel
     setter outerText
     setter spellcheck
     setter style
@@ -2774,6 +2765,7 @@ interface HTMLScriptElement : HTMLElement
     getter event
     getter htmlFor
     getter integrity
+    getter noModule
     getter src
     getter text
     getter type
@@ -2785,6 +2777,7 @@ interface HTMLScriptElement : HTMLElement
     setter event
     setter htmlFor
     setter integrity
+    setter noModule
     setter src
     setter text
     setter type
@@ -4780,6 +4773,7 @@ interface SVGElement : Element
     getter ontouchstart
     getter onvolumechange
     getter onwaiting
+    getter onwheel
     getter ownerSVGElement
     getter style
     getter tabIndex
@@ -4861,6 +4855,7 @@ interface SVGElement : Element
     setter ontouchstart
     setter onvolumechange
     setter onwaiting
+    setter onwheel
     setter style
     setter tabIndex
 interface SVGEllipseElement : SVGGeometryElement

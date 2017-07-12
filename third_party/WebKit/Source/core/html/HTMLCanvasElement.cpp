@@ -34,6 +34,7 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "build/build_config.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
@@ -95,7 +96,7 @@ namespace {
 const int kDefaultWidth = 300;
 const int kDefaultHeight = 150;
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 // We estimate that the max limit for android phones is a quarter of that for
 // desktops based on local experimental results on Android One.
 const int kMaxGlobalAcceleratedImageBufferCount = 25;
@@ -891,7 +892,10 @@ bool HTMLCanvasElement::ShouldUseDisplayList() {
   if (!RuntimeEnabledFeatures::DisplayList2dCanvasEnabled())
     return false;
 
-  return true;
+  // TODO(crbug.com/721727): Due to a rendering regression with display-
+  // list-2d-canvas, this feature is now disabled by default.  For now, the
+  // feature will only be enabled with --force-display-list-2d-canvas.
+  return false;
 }
 
 std::unique_ptr<ImageBufferSurface>
@@ -1454,7 +1458,7 @@ void HTMLCanvasElement::CreateLayer() {
     layer_tree_view =
         frame->GetPage()->GetChromeClient().GetWebLayerTreeView(frame);
     surface_layer_bridge_ =
-        WTF::MakeUnique<CanvasSurfaceLayerBridge>(this, layer_tree_view);
+        WTF::MakeUnique<::blink::SurfaceLayerBridge>(this, layer_tree_view);
     // Creates a placeholder layer first before Surface is created.
     surface_layer_bridge_->CreateSolidColorLayer();
   }

@@ -6,7 +6,6 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/task_runner.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_session.h"
 #include "components/arc/arc_session_runner.h"
@@ -20,11 +19,8 @@ ArcServiceManager* g_arc_service_manager = nullptr;
 
 }  // namespace
 
-ArcServiceManager::ArcServiceManager(
-    scoped_refptr<base::TaskRunner> blocking_task_runner)
-    : blocking_task_runner_(blocking_task_runner),
-      arc_bridge_service_(base::MakeUnique<ArcBridgeService>()),
-      activity_resolver_(new LocalActivityResolver()) {
+ArcServiceManager::ArcServiceManager()
+    : arc_bridge_service_(base::MakeUnique<ArcBridgeService>()) {
   DCHECK(!g_arc_service_manager);
   g_arc_service_manager = this;
 }
@@ -78,7 +74,6 @@ ArcService* ArcServiceManager::GetNamedServiceInternal(
 
 void ArcServiceManager::Shutdown() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  activity_resolver_ = nullptr;
   services_.clear();
 }
 

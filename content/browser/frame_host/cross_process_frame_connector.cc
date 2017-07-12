@@ -4,9 +4,9 @@
 
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 
+#include "cc/surfaces/frame_sink_manager.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_hittest.h"
-#include "cc/surfaces/surface_manager.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
@@ -97,13 +97,13 @@ void CrossProcessFrameConnector::SetChildFrameSurface(
 
 void CrossProcessFrameConnector::OnSatisfySequence(
     const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->SatisfySequence(sequence);
+  GetFrameSinkManager()->surface_manager()->SatisfySequence(sequence);
 }
 
 void CrossProcessFrameConnector::OnRequireSequence(
-    const cc::SurfaceId& id,
+    const viz::SurfaceId& id,
     const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->RequireSequence(id, sequence);
+  GetFrameSinkManager()->surface_manager()->RequireSequence(id, sequence);
 }
 
 gfx::Rect CrossProcessFrameConnector::ChildFrameRect() {
@@ -118,7 +118,7 @@ void CrossProcessFrameConnector::UpdateCursor(const WebCursor& cursor) {
 
 gfx::Point CrossProcessFrameConnector::TransformPointToRootCoordSpace(
     const gfx::Point& point,
-    const cc::SurfaceId& surface_id) {
+    const viz::SurfaceId& surface_id) {
   gfx::Point transformed_point;
   TransformPointToCoordSpaceForView(point, GetRootRenderWidgetHostView(),
                                     surface_id, &transformed_point);
@@ -127,8 +127,8 @@ gfx::Point CrossProcessFrameConnector::TransformPointToRootCoordSpace(
 
 bool CrossProcessFrameConnector::TransformPointToLocalCoordSpace(
     const gfx::Point& point,
-    const cc::SurfaceId& original_surface,
-    const cc::SurfaceId& local_surface_id,
+    const viz::SurfaceId& original_surface,
+    const viz::SurfaceId& local_surface_id,
     gfx::Point* transformed_point) {
   if (original_surface == local_surface_id) {
     *transformed_point = point;
@@ -139,7 +139,7 @@ bool CrossProcessFrameConnector::TransformPointToLocalCoordSpace(
   // is necessary.
   *transformed_point =
       gfx::ConvertPointToPixel(view_->current_surface_scale_factor(), point);
-  cc::SurfaceHittest hittest(nullptr, GetSurfaceManager());
+  cc::SurfaceHittest hittest(nullptr, GetFrameSinkManager()->surface_manager());
   if (!hittest.TransformPointToTargetSurface(original_surface, local_surface_id,
                                              transformed_point))
     return false;
@@ -152,7 +152,7 @@ bool CrossProcessFrameConnector::TransformPointToLocalCoordSpace(
 bool CrossProcessFrameConnector::TransformPointToCoordSpaceForView(
     const gfx::Point& point,
     RenderWidgetHostViewBase* target_view,
-    const cc::SurfaceId& local_surface_id,
+    const viz::SurfaceId& local_surface_id,
     gfx::Point* transformed_point) {
   RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
   if (!root_view)
@@ -183,7 +183,9 @@ void CrossProcessFrameConnector::ForwardProcessAckedTouchEvent(
 
 void CrossProcessFrameConnector::BubbleScrollEvent(
     const blink::WebGestureEvent& event) {
-  DCHECK(event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
+  DCHECK((view_->wheel_scroll_latching_enabled() &&
+          event.GetType() == blink::WebInputEvent::kGestureScrollBegin) ||
+         event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
          event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
          event.GetType() == blink::WebInputEvent::kGestureFlingStart);
   auto* parent_view = GetParentRenderWidgetHostView();
@@ -202,14 +204,28 @@ void CrossProcessFrameConnector::BubbleScrollEvent(
   // See https://crbug.com/626020.
   resent_gesture_event.x += offset_from_parent.x();
   resent_gesture_event.y += offset_from_parent.y();
-  if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
-    event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
-    is_scroll_bubbling_ = true;
-  } else if ((event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
-              event.GetType() == blink::WebInputEvent::kGestureFlingStart) &&
-             is_scroll_bubbling_) {
-    event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
-    is_scroll_bubbling_ = false;
+
+  if (view_->wheel_scroll_latching_enabled()) {
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
+      event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+      is_scroll_bubbling_ = true;
+    } else if (is_scroll_bubbling_) {
+      event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+    }
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+        event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
+      is_scroll_bubbling_ = false;
+    }
+  } else {  // !view_->wheel_scroll_latching_enabled()
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
+      event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+      is_scroll_bubbling_ = true;
+    } else if ((event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+                event.GetType() == blink::WebInputEvent::kGestureFlingStart) &&
+               is_scroll_bubbling_) {
+      event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+      is_scroll_bubbling_ = false;
+    }
   }
 }
 

@@ -26,14 +26,6 @@
 #include "chrome/utility/safe_browsing/mac/udif.h"
 #include "sandbox/mac/seatbelt.h"
 
-// This executable only works on 10.10+, so unconditionally use these functions
-// to make sandboxing easier.
-extern "C" {
-int mkdirat(int, const char *, mode_t);
-int openat(int, const char *, int, ...);
-int unlinkat(int, const char *, int);
-}
-
 namespace {
 
 // SafeDMG (crdmg) is a utility that can perform a list or extract operation
@@ -61,7 +53,7 @@ class SafeDMG {
   bool EnableSandbox();
 
   // Performs the actual DMG operation.
-  bool ParseDMG();
+  __attribute__((availability(macos, introduced = 10.10))) bool ParseDMG();
 
   base::File dmg_file_;
 
@@ -99,8 +91,13 @@ int SafeDMG::Main(int argc, const char* argv[]) {
   if (!EnableSandbox())
     return EXIT_FAILURE;
 
-  if (!ParseDMG())
+  if (__builtin_available(macOS 10.10, *)) {
+    if (!ParseDMG())
+      return EXIT_FAILURE;
+  } else {
+    LOG(ERROR) << "Requires 10.10 or higher";
     return EXIT_FAILURE;
+  }
 
   return EXIT_SUCCESS;
 }

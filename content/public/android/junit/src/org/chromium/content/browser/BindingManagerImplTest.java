@@ -22,6 +22,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
+import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.process_launcher.ChildProcessCreationParams;
 import org.chromium.base.test.util.Feature;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
@@ -49,7 +50,8 @@ public class BindingManagerImplTest {
                 new ComponentName(packageName, "TestService"), false /* bindAsExternalService */,
                 null /* serviceBundle */, creationParams);
         connection.setPid(pid);
-        connection.start(false /* useStrongBinding */, null /* serviceCallback */);
+        connection.start(false /* useStrongBinding */, null /* serviceCallback */,
+                false /* retryOnTimeout */);
         if (manager != null) {
             manager.addNewConnection(pid, connection);
         }

@@ -30,7 +30,7 @@ namespace blink {
 
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -47,7 +47,7 @@ const WrapperTypeInfo V8TestSpecialOperations::wrapperTypeInfo = {
     WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
     WrapperTypeInfo::kIndependent,
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -206,7 +206,15 @@ static void installV8TestSpecialOperationsTemplate(
       signature, V8TestSpecialOperationsMethods, WTF_ARRAY_LENGTH(V8TestSpecialOperationsMethods));
 
   // Indexed properties
-  v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(V8TestSpecialOperations::indexedPropertyGetterCallback, V8TestSpecialOperations::indexedPropertySetterCallback, nullptr, nullptr, nullptr, v8::Local<v8::Value>(), v8::PropertyHandlerFlags::kNone);
+  v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(
+      V8TestSpecialOperations::indexedPropertyGetterCallback,
+      V8TestSpecialOperations::indexedPropertySetterCallback,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      v8::Local<v8::Value>(),
+      v8::PropertyHandlerFlags::kNone);
   instanceTemplate->SetHandler(indexedPropertyHandlerConfig);
   // Named properties
   v8::NamedPropertyHandlerConfiguration namedPropertyHandlerConfig(V8TestSpecialOperations::namedPropertyGetterCallback, V8TestSpecialOperations::namedPropertySetterCallback, V8TestSpecialOperations::namedPropertyQueryCallback, nullptr, V8TestSpecialOperations::namedPropertyEnumeratorCallback, v8::Local<v8::Value>(), static_cast<v8::PropertyHandlerFlags>(int(v8::PropertyHandlerFlags::kOnlyInterceptStrings)));

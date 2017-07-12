@@ -16,8 +16,8 @@ namespace scheduler {
 
 namespace {
 
-using testing::_;
-using testing::Mock;
+using ::testing::_;
+using ::testing::Mock;
 
 class FakeHistogram : public base::HistogramBase {
  public:
@@ -57,22 +57,22 @@ TEST(TaskDurationMetricReporterTest, Test) {
   TaskDurationMetricReporter metric_reporter(&histogram);
 
   EXPECT_CALL(histogram, AddCount(2, 3));
-  metric_reporter.RecordTask(static_cast<TaskQueue::QueueType>(2),
+  metric_reporter.RecordTask(static_cast<MainThreadTaskQueue::QueueType>(2),
                              base::TimeDelta::FromMicroseconds(3400));
   Mock::VerifyAndClearExpectations(&histogram);
 
   EXPECT_CALL(histogram, AddCount(_, _)).Times(0);
-  metric_reporter.RecordTask(static_cast<TaskQueue::QueueType>(2),
+  metric_reporter.RecordTask(static_cast<MainThreadTaskQueue::QueueType>(2),
                              base::TimeDelta::FromMicroseconds(300));
   Mock::VerifyAndClearExpectations(&histogram);
 
   EXPECT_CALL(histogram, AddCount(2, 1));
-  metric_reporter.RecordTask(static_cast<TaskQueue::QueueType>(2),
+  metric_reporter.RecordTask(static_cast<MainThreadTaskQueue::QueueType>(2),
                              base::TimeDelta::FromMicroseconds(800));
   Mock::VerifyAndClearExpectations(&histogram);
 
   EXPECT_CALL(histogram, AddCount(2, 16));
-  metric_reporter.RecordTask(static_cast<TaskQueue::QueueType>(2),
+  metric_reporter.RecordTask(static_cast<MainThreadTaskQueue::QueueType>(2),
                              base::TimeDelta::FromMicroseconds(15600));
   Mock::VerifyAndClearExpectations(&histogram);
 }

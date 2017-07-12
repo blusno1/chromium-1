@@ -16,6 +16,7 @@ component("web") {
 
   deps = [
     "//skia",
+    "//third_party/WebKit/Source/controller",
     "//third_party/WebKit/Source/core",
     "//third_party/WebKit/Source/modules",
     "//third_party/WebKit/Source/platform",
@@ -70,7 +71,7 @@ component("web") {
 
 group("webkit_unit_tests_data") {
   data = [
-    "tests/data/",
+    "../core/testing/data/",
     "../core/paint/test_data/",
   ]
 }
@@ -85,14 +86,9 @@ test("webkit_unit_tests") {
 
     "tests/AccessibilityObjectModelTest.cpp",
     "tests/ChromeClientImplTest.cpp",
-    "tests/DeferredLoadingTest.cpp",
     "tests/HTMLImportSheetsTest.cpp",
     "tests/LayoutGeometryMapTest.cpp",
-    "tests/ListenerLeakTest.cpp",
     "tests/LocalFrameClientImplTest.cpp",
-    "tests/MHTMLTest.cpp",
-    "tests/PrerenderingTest.cpp",
-    "tests/ProgrammaticScrollTest.cpp",
     "tests/RunAllTests.cpp",
     "tests/ScrollMetricsTest.cpp",
     "tests/SmoothScrollTest.cpp",
@@ -100,10 +96,6 @@ test("webkit_unit_tests") {
     "tests/VirtualTimeTest.cpp",
     "tests/WebFrameSerializerSanitizationTest.cpp",
     "tests/WebFrameTest.cpp",
-    "tests/WebMeaningfulLayoutsTest.cpp",
-    "tests/scheduler/ActiveConnectionThrottlingTest.cpp",
-    "tests/scheduler/FrameThrottlingTest.cpp",
-    "tests/scheduler/ThrottlingTest.cpp",
   ]
   sources += bindings_unittest_files
 
@@ -113,10 +105,11 @@ test("webkit_unit_tests") {
     "//base:i18n",
     "//base/test:test_support",
     "//content/test:test_support",
-    "//device/wake_lock/public/interfaces:interfaces_blink",
     "//gpu:test_support",
+    "//services/device/public/interfaces:interfaces_blink",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/WebKit/Source/controller",
     "//third_party/WebKit/Source/core:unit_tests",
     "//third_party/WebKit/Source/modules:unit_tests",
     "//third_party/WebKit/Source/modules/exported:test_support",

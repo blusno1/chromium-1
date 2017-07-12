@@ -56,6 +56,7 @@ class RenderWidgetHostImpl;
 class SelectionPopupController;
 class SynchronousCompositorHost;
 class SynchronousCompositorClient;
+class TouchSelectionControllerClientManagerAndroid;
 class WebContentsAccessibilityAndroid;
 struct NativeWebKeyboardEvent;
 struct ContextMenuParams;
@@ -94,6 +95,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void AddDestructionObserver(DestructionObserver* connector);
   void RemoveDestructionObserver(DestructionObserver* connector);
+
+  ui::TouchSelectionController* touch_selection_controller() {
+    return touch_selection_controller_.get();
+  }
 
   // RenderWidgetHostView implementation.
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -148,7 +153,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void DidCreateNewRendererCompositorFrameSink(
       cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
       override;
-  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
   void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
@@ -162,10 +167,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       override;
   void OnDidNavigateMainFrameToNewPage() override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
-  cc::FrameSinkId GetFrameSinkId() override;
-  cc::FrameSinkId FrameSinkIdAtPoint(cc::SurfaceHittestDelegate* delegate,
-                                     const gfx::Point& point,
-                                     gfx::Point* transformed_point) override;
+  viz::FrameSinkId GetFrameSinkId() override;
+  viz::FrameSinkId FrameSinkIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                      const gfx::Point& point,
+                                      gfx::Point* transformed_point) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
@@ -175,12 +180,14 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
                            const ui::LatencyInfo& latency) override;
   bool TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                       const cc::SurfaceId& original_surface,
+                                       const viz::SurfaceId& original_surface,
                                        gfx::Point* transformed_point) override;
   bool TransformPointToCoordSpaceForView(
       const gfx::Point& point,
       RenderWidgetHostViewBase* target_view,
       gfx::Point* transformed_point) override;
+  TouchSelectionControllerClientManager*
+  GetTouchSelectionControllerClientManager() override;
 
   // ui::ViewClient implementation.
   bool OnTouchEvent(const ui::MotionEventAndroid& m,
@@ -303,7 +310,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   ImeAdapterAndroid* ime_adapter_for_testing() { return ime_adapter_android_; }
 
   // Exposed for tests.
-  cc::SurfaceId SurfaceIdForTesting() const override;
+  viz::SurfaceId SurfaceIdForTesting() const override;
+
+  ui::TouchSelectionControllerClient*
+  GetSelectionControllerClientManagerForTesting();
+  void SetSelectionControllerClientForTesting(
+      std::unique_ptr<ui::TouchSelectionControllerClient> client);
 
  private:
   void RunAckCallbacks();
@@ -414,6 +426,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Manages selection handle rendering and manipulation.
   // This will always be NULL if |content_view_core_| is NULL.
   std::unique_ptr<ui::TouchSelectionController> touch_selection_controller_;
+  std::unique_ptr<ui::TouchSelectionControllerClient>
+      touch_selection_controller_client_for_test_;
+  // Keeps track of currently active touch selection controller clients (some
+  // may be representing out-of-process iframes).
+  std::unique_ptr<TouchSelectionControllerClientManagerAndroid>
+      touch_selection_controller_client_manager_;
 
   // Bounds to use if we have no backing ContentViewCore
   gfx::Rect default_bounds_;

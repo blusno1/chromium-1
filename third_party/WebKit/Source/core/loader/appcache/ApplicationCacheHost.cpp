@@ -97,7 +97,7 @@ void ApplicationCacheHost::WillStartLoadingMainResource(
 
   DCHECK(document_loader_->GetFrame());
   LocalFrame& frame = *document_loader_->GetFrame();
-  host_ = frame.Loader().Client()->CreateApplicationCacheHost(this);
+  host_ = frame.Client()->CreateApplicationCacheHost(this);
   if (!host_)
     return;
 
@@ -235,12 +235,18 @@ void ApplicationCacheHost::NotifyApplicationCache(
 
 ApplicationCacheHost::CacheInfo ApplicationCacheHost::ApplicationCacheInfo() {
   if (!host_)
-    return CacheInfo(KURL(), 0, 0, 0);
+    return CacheInfo(NullURL(), 0, 0, 0);
 
   WebApplicationCacheHost::CacheInfo web_info;
   host_->GetAssociatedCacheInfo(&web_info);
   return CacheInfo(web_info.manifest_url, web_info.creation_time,
                    web_info.update_time, web_info.total_size);
+}
+
+int ApplicationCacheHost::GetHostID() const {
+  if (!host_)
+    return WebApplicationCacheHost::kAppCacheNoHostId;
+  return host_->GetHostID();
 }
 
 void ApplicationCacheHost::FillResourceList(ResourceInfoList* resources) {

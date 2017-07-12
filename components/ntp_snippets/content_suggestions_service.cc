@@ -233,6 +233,9 @@ void ContentSuggestionsService::OnGetFaviconFromCacheFinished(
     RecordFaviconFetchResult(continue_to_google_server
                                  ? FaviconFetchResult::SUCCESS_CACHED
                                  : FaviconFetchResult::SUCCESS_FETCHED);
+    // Update the time when the icon was last requested - postpone thus the
+    // automatic eviction of the favicon from the favicon database.
+    large_icon_service_->TouchIconFromGoogleServer(result.icon_url);
     return;
   }
 
@@ -285,8 +288,8 @@ void ContentSuggestionsService::OnGetFaviconFromGoogleServerFinished(
     int minimum_size_in_pixel,
     int desired_size_in_pixel,
     const ImageFetchedCallback& callback,
-    bool success) {
-  if (!success) {
+    favicon_base::GoogleFaviconServerRequestStatus status) {
+  if (status != favicon_base::GoogleFaviconServerRequestStatus::SUCCESS) {
     callback.Run(gfx::Image());
     RecordFaviconFetchResult(FaviconFetchResult::FAILURE);
     return;
@@ -432,19 +435,27 @@ void ContentSuggestionsService::ReloadSuggestions() {
 }
 
 void ContentSuggestionsService::SetRemoteSuggestionsEnabled(bool enabled) {
-  pref_service_->SetBoolean(prefs::kEnableSnippets, enabled);
+  // TODO(dgn): Rewire if we decide to implement a dedicated prefs page. If not
+  // remove by M62.
+  NOTREACHED();
 }
 
 bool ContentSuggestionsService::AreRemoteSuggestionsEnabled() const {
-  return pref_service_->GetBoolean(prefs::kEnableSnippets);
+  return !remote_suggestions_provider_->IsDisabled();
 }
 
 bool ContentSuggestionsService::AreRemoteSuggestionsManaged() const {
-  return pref_service_->IsManagedPreference(prefs::kEnableSnippets);
+  // TODO(dgn): Rewire if we decide to implement a dedicated prefs page. If not
+  // remove by M62.
+  NOTREACHED();
+  return false;
 }
 
 bool ContentSuggestionsService::AreRemoteSuggestionsManagedByCustodian() const {
-  return pref_service_->IsPreferenceManagedByCustodian(prefs::kEnableSnippets);
+  // TODO(dgn): Rewire if we decide to implement a dedicated prefs page. If not
+  // remove by M62.
+  NOTREACHED();
+  return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -517,8 +528,7 @@ void ContentSuggestionsService::OnSuggestionInvalidated(
 // SigninManagerBase::Observer implementation
 void ContentSuggestionsService::GoogleSigninSucceeded(
     const std::string& account_id,
-    const std::string& username,
-    const std::string& password) {
+    const std::string& username) {
   OnSignInStateChanged();
 }
 

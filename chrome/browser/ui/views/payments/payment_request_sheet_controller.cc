@@ -72,6 +72,20 @@ class SheetView : public views::View, public views::FocusTraversable {
   views::FocusTraversable* GetPaneFocusTraversable() override { return this; }
 
   void RequestFocus() override {
+    // In accessibility contexts, we want to focus the title of the sheet.
+    views::View* title =
+        GetViewByID(static_cast<int>(DialogViewID::SHEET_TITLE));
+    views::FocusManager* focus = GetFocusManager();
+    DCHECK(focus);
+
+    title->RequestFocus();
+
+    // RequestFocus only works if we are in an accessible context, and is a
+    // no-op otherwise. Thus, if the focused view didn't change, we need to
+    // proceed with setting the focus for standard usage.
+    if (focus->GetFocusedView() == title)
+      return;
+
     views::View* first_focusable = first_focusable_;
 
     if (!first_focusable) {
@@ -236,6 +250,7 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   content_view_->SetPaintToLayer();
   content_view_->layer()->SetFillsBoundsOpaquely(true);
   content_view_->SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
+  content_view_->set_id(static_cast<int>(DialogViewID::CONTENT_VIEW));
   pane_layout->AddView(content_view_);
   pane_->SizeToPreferredSize();
 

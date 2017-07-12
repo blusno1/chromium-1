@@ -85,6 +85,7 @@ source_set("main") {
     "//ios/chrome/browser:browser_internal",
     "//ios/chrome/browser/crash_report",
     "//ios/chrome/common",
+    "//ios/testing/perf:startup",
     "//third_party/google_toolbox_for_mac",
   ]
 
@@ -104,6 +105,7 @@ source_set("application_state") {
   deps = [
     "//base",
     "//ios/shared/chrome/browser/ui/coordinators",
+    "//ios/testing/perf:startup",
   ]
 }
 
@@ -118,5 +120,6 @@ source_set("app") {
   deps = [
     ":application_state",
     "//ios/clean/chrome/app/steps",
+    "//ios/testing/perf:startup",
   ]
 }

@@ -43,6 +43,7 @@
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
 #include "bindings/core/v8/serialization/V8ScriptValueSerializer.h"
+#include "build/build_config.h"
 #include "core/clipboard/DataTransfer.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/resolver/StyleResolver.h"
@@ -112,6 +113,7 @@
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/scroll/ScrollbarThemeMock.h"
 #include "platform/scroll/ScrollbarThemeOverlayMock.h"
+#include "platform/testing/HistogramTester.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -166,9 +168,9 @@
 
 using blink::URLTestHelpers::ToKURL;
 using blink::testing::RunPendingTasks;
-using testing::ElementsAre;
-using testing::Mock;
-using testing::_;
+using ::testing::ElementsAre;
+using ::testing::Mock;
+using ::testing::_;
 
 namespace blink {
 
@@ -232,7 +234,7 @@ class WebFrameTest : public ::testing::Test {
   void RegisterMockedURLLoadFromBase(const std::string& base_url,
                                      const std::string& file_name) {
     URLTestHelpers::RegisterMockedURLLoadFromBase(
-        WebString::FromUTF8(base_url), testing::WebTestDataPath(),
+        WebString::FromUTF8(base_url), testing::CoreTestDataPath(),
         WebString::FromUTF8(file_name));
   }
 
@@ -248,13 +250,13 @@ class WebFrameTest : public ::testing::Test {
     std::string full_string = base_url_ + file_name;
     URLTestHelpers::RegisterMockedURLLoadWithCustomResponse(
         ToKURL(full_string),
-        testing::WebTestDataPath(WebString::FromUTF8(file_name)), response);
+        testing::CoreTestDataPath(WebString::FromUTF8(file_name)), response);
   }
 
   void RegisterMockedHttpURLLoadWithMimeType(const std::string& file_name,
                                              const std::string& mime_type) {
     URLTestHelpers::RegisterMockedURLLoadFromBase(
-        WebString::FromUTF8(base_url_), testing::WebTestDataPath(),
+        WebString::FromUTF8(base_url_), testing::CoreTestDataPath(),
         WebString::FromUTF8(file_name), WebString::FromUTF8(mime_type));
   }
 
@@ -3183,7 +3185,7 @@ TEST_P(ParameterizedWebFrameTest, CanOverrideScaleLimits) {
 }
 
 // Android doesn't have scrollbars on the main LocalFrameView
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 TEST_F(WebFrameTest, DISABLED_updateOverlayScrollbarLayers)
 #else
 TEST_F(WebFrameTest, updateOverlayScrollbarLayers)
@@ -5760,7 +5762,7 @@ TEST_P(ParameterizedWebFrameTest, DISABLED_PositionForPointTest) {
   EXPECT_EQ(64, ComputeOffset(layout_object, 1000, 1000));
 }
 
-#if !OS(MACOSX) && !OS(LINUX)
+#if !defined(OS_MACOSX) && !defined(OS_LINUX)
 TEST_P(ParameterizedWebFrameTest,
        SelectRangeStaysHorizontallyAlignedWhenMoved) {
   RegisterMockedHttpURLLoad("move_caret.html");
@@ -7141,7 +7143,7 @@ TEST_F(WebFrameTest, CompositorScrollIsUserScrollLongPage) {
 }
 
 TEST_P(ParameterizedWebFrameTest, FirstPartyForCookiesForRedirect) {
-  String file_path = testing::WebTestDataPath("first_party.html");
+  String file_path = testing::CoreTestDataPath("first_party.html");
 
   WebURL test_url(ToKURL("http://internal.test/first_party_redirect.html"));
   char redirect[] = "http://internal.test/first_party.html";
@@ -8691,7 +8693,7 @@ TEST_P(ParameterizedWebFrameTest, NodeImageTestFloatLeft) {
 }
 
 // Crashes on Android: http://crbug.com/403804
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 TEST_P(ParameterizedWebFrameTest, DISABLED_PrintingBasic)
 #else
 TEST_P(ParameterizedWebFrameTest, PrintingBasic)
@@ -10414,7 +10416,7 @@ TEST_F(WebFrameTest, SaveImageAt) {
   std::string url = base_url_ + "image-with-data-url.html";
   RegisterMockedURLLoadFromBase(base_url_, "image-with-data-url.html");
   URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL("http://test"), testing::WebTestDataPath("white-1x1.png"));
+      ToKURL("http://test"), testing::CoreTestDataPath("white-1x1.png"));
 
   FrameTestHelpers::WebViewHelper helper;
   SaveImageFromDataURLWebFrameClient client;
@@ -10571,7 +10573,7 @@ TEST_F(WebFrameTest, LoadJavascriptURLInNewFrame) {
 
   std::string redirect_url = base_url_ + "foo.html";
   URLTestHelpers::RegisterMockedURLLoad(ToKURL(redirect_url),
-                                        testing::WebTestDataPath("foo.html"));
+                                        testing::CoreTestDataPath("foo.html"));
   WebURLRequest request(ToKURL("javascript:location='" + redirect_url + "'"));
   helper.LocalMainFrame()->LoadRequest(request);
 
@@ -10704,7 +10706,7 @@ class MultipleDataChunkDelegate : public WebURLLoaderTestDelegate {
 TEST_F(WebFrameTest, ImageDocumentDecodeError) {
   std::string url = base_url_ + "not_an_image.ico";
   URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL(url), testing::WebTestDataPath("not_an_image.ico"),
+      ToKURL(url), testing::CoreTestDataPath("not_an_image.ico"),
       "image/x-icon");
   MultipleDataChunkDelegate delegate;
   Platform::Current()->GetURLLoaderMockFactory()->SetLoaderDelegate(&delegate);
@@ -11504,6 +11506,8 @@ TEST_F(WebFrameTest, DISABLE_ON_TSAN(TestNonCompositedOverlayScrollbarsFade)) {
       nullptr, nullptr, nullptr, &DisableCompositing);
 
   constexpr double kMockOverlayFadeOutDelayMs = 5.0;
+  constexpr TimeDelta kMockOverlayFadeOutDelay =
+      TimeDelta::FromMillisecondsD(kMockOverlayFadeOutDelayMs);
 
   ScrollbarTheme& theme = ScrollbarTheme::GetTheme();
   // This test relies on mock overlay scrollbars.
@@ -11545,14 +11549,14 @@ TEST_F(WebFrameTest, DISABLE_ON_TSAN(TestNonCompositedOverlayScrollbarsFade)) {
       ToLayoutBox(container->GetLayoutObject())->GetScrollableArea();
 
   EXPECT_FALSE(scrollable_area->ScrollbarsHidden());
-  testing::RunDelayedTasks(kMockOverlayFadeOutDelayMs);
+  testing::RunDelayedTasks(kMockOverlayFadeOutDelay);
   EXPECT_TRUE(scrollable_area->ScrollbarsHidden());
 
   scrollable_area->SetScrollOffset(ScrollOffset(10, 10), kProgrammaticScroll,
                                    kScrollBehaviorInstant);
 
   EXPECT_FALSE(scrollable_area->ScrollbarsHidden());
-  testing::RunDelayedTasks(kMockOverlayFadeOutDelayMs);
+  testing::RunDelayedTasks(kMockOverlayFadeOutDelay);
   EXPECT_TRUE(scrollable_area->ScrollbarsHidden());
 
   frame->ExecuteScript(WebScriptSource(
@@ -11565,7 +11569,7 @@ TEST_F(WebFrameTest, DISABLE_ON_TSAN(TestNonCompositedOverlayScrollbarsFade)) {
   frame->View()->UpdateAllLifecyclePhases();
 
   EXPECT_FALSE(scrollable_area->ScrollbarsHidden());
-  testing::RunDelayedTasks(kMockOverlayFadeOutDelayMs);
+  testing::RunDelayedTasks(kMockOverlayFadeOutDelay);
   EXPECT_TRUE(scrollable_area->ScrollbarsHidden());
 
   // Non-composited scrollbars don't fade out while mouse is over.
@@ -11574,10 +11578,10 @@ TEST_F(WebFrameTest, DISABLE_ON_TSAN(TestNonCompositedOverlayScrollbarsFade)) {
                                    kScrollBehaviorInstant);
   EXPECT_FALSE(scrollable_area->ScrollbarsHidden());
   scrollable_area->MouseEnteredScrollbar(*scrollable_area->VerticalScrollbar());
-  testing::RunDelayedTasks(kMockOverlayFadeOutDelayMs);
+  testing::RunDelayedTasks(kMockOverlayFadeOutDelay);
   EXPECT_FALSE(scrollable_area->ScrollbarsHidden());
   scrollable_area->MouseExitedScrollbar(*scrollable_area->VerticalScrollbar());
-  testing::RunDelayedTasks(kMockOverlayFadeOutDelayMs);
+  testing::RunDelayedTasks(kMockOverlayFadeOutDelay);
   EXPECT_TRUE(scrollable_area->ScrollbarsHidden());
 
   mock_overlay_theme.SetOverlayScrollbarFadeOutDelay(0.0);
@@ -11762,7 +11766,7 @@ TEST_F(WebFrameTest, NoLoadingCompletionCallbacksInDetach) {
   RegisterMockedHttpURLLoad("single_iframe.html");
   URLTestHelpers::RegisterMockedURLLoad(
       ToKURL(base_url_ + "visible_iframe.html"),
-      testing::WebTestDataPath("frame_with_frame.html"));
+      testing::CoreTestDataPath("frame_with_frame.html"));
   RegisterMockedHttpURLLoad("parent_detaching_frame.html");
 
   FrameTestHelpers::WebViewHelper web_view_helper;
@@ -12023,6 +12027,47 @@ TEST_F(WebFrameTest, NavigatorPluginsClearedWhenPluginsDisabled) {
   result = web_view_helper.LocalMainFrame()->ExecuteScriptAndReturnValue(
       WebScriptSource("navigator.plugins.length"));
   EXPECT_EQ(0, result->Int32Value());
+}
+
+TEST_F(WebFrameTest, RecordSameDocumentNavigationToHistogram) {
+  const char* histogramName =
+      "RendererScheduler.UpdateForSameDocumentNavigationCount";
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  HistogramTester tester;
+  web_view_helper.InitializeAndLoad("about:blank");
+  LocalFrame* frame =
+      ToLocalFrame(web_view_helper.WebView()->GetPage()->MainFrame());
+
+  FrameLoader& main_frame_loader =
+      web_view_helper.WebView()->MainFrameImpl()->GetFrame()->Loader();
+  RefPtr<SerializedScriptValue> message =
+      SerializeString("message", ToScriptStateForMainWorld(frame));
+  tester.ExpectTotalCount(histogramName, 0);
+  main_frame_loader.UpdateForSameDocumentNavigation(
+      ToKURL("about:blank"), kSameDocumentNavigationHistoryApi, message,
+      kScrollRestorationAuto, kFrameLoadTypeInitialHistoryLoad,
+      frame->GetDocument());
+  // The bucket index corresponds to the definition of
+  // |SinglePageAppNavigationType|.
+  tester.ExpectBucketCount(histogramName,
+                           kSPANavTypeHistoryPushStateOrReplaceState, 1);
+  main_frame_loader.UpdateForSameDocumentNavigation(
+      ToKURL("about:blank"), kSameDocumentNavigationDefault, message,
+      kScrollRestorationManual, kFrameLoadTypeBackForward,
+      frame->GetDocument());
+  tester.ExpectBucketCount(histogramName,
+                           kSPANavTypeSameDocumentBackwardOrForward, 1);
+  main_frame_loader.UpdateForSameDocumentNavigation(
+      ToKURL("about:blank"), kSameDocumentNavigationDefault, message,
+      kScrollRestorationManual, kFrameLoadTypeInitialHistoryLoad,
+      frame->GetDocument());
+  tester.ExpectBucketCount(histogramName, kSPANavTypeOtherFragmentNavigation,
+                           1);
+  // kSameDocumentNavigationHistoryApi and kFrameLoadTypeBackForward is an
+  // illegal combination, which has been caught by DCHECK in
+  // UpdateForSameDocumentNavigation().
+
+  tester.ExpectTotalCount(histogramName, 3);
 }
 
 }  // namespace blink

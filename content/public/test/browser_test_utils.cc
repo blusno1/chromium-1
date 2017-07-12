@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/process/kill.h"
@@ -20,12 +21,14 @@
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "cc/surfaces/frame_sink_manager.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/accessibility/browser_accessibility.h"
@@ -170,6 +173,36 @@ bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
     DLOG(ERROR) << reader.GetErrorMessage();
     return false;
   }
+
+  return true;
+}
+
+bool ExecuteScriptWithUserGestureControl(RenderFrameHost* frame,
+                                         const std::string& script,
+                                         bool user_gesture) {
+  // TODO(lukasza): ExecuteScript should just call
+  // ExecuteJavaScriptWithUserGestureForTests and avoid modifying the original
+  // script (and at that point we should merge it with and remove
+  // ExecuteScriptAsync).  This is difficult to change, because many tests
+  // depend on the message loop pumping done by ExecuteScriptHelper below (this
+  // is fragile - these tests should wait on a more specific thing instead).
+
+  std::string expected_response = "ExecuteScript-" + base::GenerateGUID();
+  std::string new_script = base::StringPrintf(
+      R"( %s;  // Original script.
+          window.domAutomationController.send('%s'); )",
+      script.c_str(), expected_response.c_str());
+
+  std::unique_ptr<base::Value> value;
+  if (!ExecuteScriptHelper(frame, new_script, user_gesture, &value) ||
+      !value.get()) {
+    return false;
+  }
+
+  DCHECK_EQ(base::Value::Type::STRING, value->GetType());
+  std::string actual_response;
+  if (value->GetAsString(&actual_response))
+    DCHECK_EQ(expected_response, actual_response);
 
   return true;
 }
@@ -413,19 +446,18 @@ void AppendGzippedResource(const base::RefCountedMemory& encoded,
 //
 // Returns has-video-input-device to the test if there is a webcam available,
 // no-video-input-devices otherwise.
-const char kHasVideoInputDeviceOnSystem[] =
-    "(function() {"
-      "navigator.mediaDevices.enumerateDevices()"
-      ".then(function(devices) {"
-        "devices.forEach(function(device) {"
-          "if (device.kind == 'videoinput') {"
-            "window.domAutomationController.send('has-video-input-device');"
-            "return;"
-          "}"
-        "});"
-        "window.domAutomationController.send('no-video-input-devices');"
-      "});"
-    "})()";
+const char kHasVideoInputDeviceOnSystem[] = R"(
+    (function() {
+      navigator.mediaDevices.enumerateDevices()
+      .then(function(devices) {
+        if (devices.some((device) => device.kind == 'videoinput')) {
+          window.domAutomationController.send('has-video-input-device');
+        } else {
+          window.domAutomationController.send('no-video-input-devices');
+        }
+      });
+    })()
+)";
 
 const char kHasVideoInputDevice[] = "has-video-input-device";
 
@@ -816,17 +848,20 @@ RenderFrameHost* ConvertToRenderFrameHost(RenderFrameHost* render_frame_host) {
 
 bool ExecuteScript(const ToRenderFrameHost& adapter,
                    const std::string& script) {
-  std::string new_script =
-      script + ";window.domAutomationController.send(0);";
-  return ExecuteScriptHelper(adapter.render_frame_host(), new_script, true,
-                             nullptr);
+  return ExecuteScriptWithUserGestureControl(adapter.render_frame_host(),
+                                             script, true);
 }
 
 bool ExecuteScriptWithoutUserGesture(const ToRenderFrameHost& adapter,
                                      const std::string& script) {
-  std::string new_script = script + ";window.domAutomationController.send(0);";
-  return ExecuteScriptHelper(adapter.render_frame_host(), new_script, false,
-                             nullptr);
+  return ExecuteScriptWithUserGestureControl(adapter.render_frame_host(),
+                                             script, false);
+}
+
+void ExecuteScriptAsync(const ToRenderFrameHost& adapter,
+                        const std::string& script) {
+  adapter.render_frame_host()->ExecuteJavaScriptWithUserGestureForTests(
+      base::UTF8ToUTF16(script));
 }
 
 bool ExecuteScriptAndExtractDouble(const ToRenderFrameHost& adapter,
@@ -999,12 +1034,10 @@ bool ExecuteWebUIResourceTest(WebContents* web_contents,
 
     script.append("\n");
   }
-  if (!ExecuteScript(web_contents, script))
-    return false;
+  ExecuteScriptAsync(web_contents, script);
 
   DOMMessageQueue message_queue;
-  if (!ExecuteScript(web_contents, "runTests()"))
-    return false;
+  ExecuteScriptAsync(web_contents, "runTests()");
 
   std::string message;
   do {
@@ -1308,7 +1341,7 @@ class SurfaceHitTestReadyNotifier {
   void WaitForSurfaceReady(RenderWidgetHostViewBase* root_container);
 
  private:
-  bool ContainsSurfaceId(const cc::SurfaceId& container_surface_id);
+  bool ContainsSurfaceId(const viz::SurfaceId& container_surface_id);
 
   cc::SurfaceManager* surface_manager_;
   RenderWidgetHostViewBase* target_view_;
@@ -1319,12 +1352,12 @@ class SurfaceHitTestReadyNotifier {
 SurfaceHitTestReadyNotifier::SurfaceHitTestReadyNotifier(
     RenderWidgetHostViewBase* target_view)
     : target_view_(target_view) {
-  surface_manager_ = GetSurfaceManager();
+  surface_manager_ = GetFrameSinkManager()->surface_manager();
 }
 
 void SurfaceHitTestReadyNotifier::WaitForSurfaceReady(
     RenderWidgetHostViewBase* root_view) {
-  cc::SurfaceId root_surface_id = root_view->SurfaceIdForTesting();
+  viz::SurfaceId root_surface_id = root_view->SurfaceIdForTesting();
   while (!ContainsSurfaceId(root_surface_id)) {
     // TODO(kenrb): Need a better way to do this. Needs investigation on
     // whether we can add a callback through RenderWidgetHostViewBaseObserver
@@ -1339,7 +1372,7 @@ void SurfaceHitTestReadyNotifier::WaitForSurfaceReady(
 }
 
 bool SurfaceHitTestReadyNotifier::ContainsSurfaceId(
-    const cc::SurfaceId& container_surface_id) {
+    const viz::SurfaceId& container_surface_id) {
   if (!container_surface_id.is_valid())
     return false;
 
@@ -1348,7 +1381,7 @@ bool SurfaceHitTestReadyNotifier::ContainsSurfaceId(
   if (!container_surface || !container_surface->active_referenced_surfaces())
     return false;
 
-  for (const cc::SurfaceId& id :
+  for (const viz::SurfaceId& id :
        *container_surface->active_referenced_surfaces()) {
     if (id == target_view_->SurfaceIdForTesting() || ContainsSurfaceId(id))
       return true;
@@ -1492,7 +1525,7 @@ void DOMMessageQueue::Observe(int type,
                               const NotificationDetails& details) {
   Details<std::string> dom_op_result(details);
   message_queue_.push(*dom_op_result.ptr());
-  if (message_loop_runner_.get())
+  if (message_loop_runner_)
     message_loop_runner_->Quit();
 }
 
@@ -1503,6 +1536,7 @@ void DOMMessageQueue::RenderProcessGone(base::TerminationStatus status) {
     case base::TERMINATION_STATUS_STILL_RUNNING:
       break;
     default:
+      renderer_crashed_ = true;
       if (message_loop_runner_.get())
         message_loop_runner_->Quit();
       break;
@@ -1515,7 +1549,7 @@ void DOMMessageQueue::ClearQueue() {
 
 bool DOMMessageQueue::WaitForMessage(std::string* message) {
   DCHECK(message);
-  if (message_queue_.empty()) {
+  if (!renderer_crashed_ && message_queue_.empty()) {
     // This will be quit when a new message comes in.
     message_loop_runner_ =
         new MessageLoopRunner(MessageLoopRunner::QuitMode::IMMEDIATE);
@@ -1526,7 +1560,7 @@ bool DOMMessageQueue::WaitForMessage(std::string* message) {
 
 bool DOMMessageQueue::PopMessage(std::string* message) {
   DCHECK(message);
-  if (message_queue_.empty())
+  if (renderer_crashed_ || message_queue_.empty())
     return false;
   *message = message_queue_.front();
   message_queue_.pop();

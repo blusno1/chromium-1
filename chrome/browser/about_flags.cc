@@ -64,6 +64,7 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/previews/core/previews_features.h"
 #include "components/proximity_auth/switches.h"
+#include "components/search_provider_logos/features.h"
 #include "components/security_state/core/security_state.h"
 #include "components/security_state/core/switches.h"
 #include "components/signin/core/common/signin_features.h"
@@ -339,6 +340,9 @@ const FeatureEntry::Choice kReaderModeHeuristicsChoices[] = {
      switches::reader_mode_heuristics::kAlwaysTrue},
     {flag_descriptions::kReaderModeHeuristicsAlwaysOff,
      switches::kReaderModeHeuristics, switches::reader_mode_heuristics::kNone},
+    {flag_descriptions::kReaderModeHeuristicsAllArticles,
+     switches::kReaderModeHeuristics,
+     switches::reader_mode_heuristics::kAllArticles},
 };
 
 const FeatureEntry::Choice kChromeHomeSwipeLogicChoices[] = {
@@ -1078,6 +1082,15 @@ const FeatureEntry::FeatureVariation kOmniboxUIVerticalMarginVariations[] = {
     {"14px vertical margin", kOmniboxUIVerticalMargin14px,
      arraysize(kOmniboxUIVerticalMargin14px), nullptr}};
 
+const FeatureEntry::FeatureParam kClientPlaceholdersForServerLoFiEnabled[] = {
+    {"replace_server_placeholders", "true"}};
+
+const FeatureEntry::FeatureVariation
+    kClientPlaceholdersForServerLoFiFeatureVariations[] = {
+        {"(replace Server Lo-Fi placeholders)",
+         kClientPlaceholdersForServerLoFiEnabled,
+         arraysize(kClientPlaceholdersForServerLoFiEnabled), nullptr}};
+
 // RECORDING USER METRICS FOR FLAGS:
 // -----------------------------------------------------------------------------
 // The first line of the entry is the internal name.
@@ -1439,9 +1452,18 @@ const FeatureEntry kFeatureEntries[] = {
         flag_descriptions::kDisplayColorCalibrationDescription, kOsCrOS,
         SINGLE_DISABLE_VALUE_TYPE(::switches::kDisableDisplayColorCalibration),
     },
+    {
+        "enable-fullscreen-app-list",
+        flag_descriptions::kEnableFullscreenAppListName,
+        flag_descriptions::kEnableFullscreenAppListDescription, kOsCrOS,
+        SINGLE_VALUE_TYPE(app_list::switches::kEnableFullscreenAppList),
+    },
     {"instant-tethering", flag_descriptions::kTetherName,
      flag_descriptions::kTetherDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(features::kInstantTethering)},
+    {"multidevice", flag_descriptions::kMultideviceName,
+     flag_descriptions::kMultideviceDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kMultidevice)},
 #endif  // OS_CHROMEOS
     {
         "disable-accelerated-video-decode",
@@ -1839,13 +1861,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kUserConsentForExtensionScriptsDescription, kOsAll,
      SINGLE_VALUE_TYPE(extensions::switches::kEnableScriptsRequireAction)},
 #endif  // ENABLE_EXTENSIONS
-#if defined(OS_ANDROID)
-    {"enable-data-reduction-proxy-carrier-test",
-     flag_descriptions::kDataReductionProxyCarrierTestName,
-     flag_descriptions::kDataReductionProxyCarrierTestDescription, kOsAndroid,
-     SINGLE_VALUE_TYPE(
-         data_reduction_proxy::switches::kEnableDataReductionProxyCarrierTest)},
-#endif  // OS_ANDROID
     {"enable-hotword-hardware",
      flag_descriptions::kExperimentalHotwordHardwareName,
      flag_descriptions::kExperimentalHotwordHardwareDescription, kOsCrOS,
@@ -1982,10 +1997,13 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-offline-previews", flag_descriptions::kEnableOfflinePreviewsName,
      flag_descriptions::kEnableOfflinePreviewsDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(previews::features::kOfflinePreviews)},
-    {"enable-client-lo-fi", flag_descriptions::kEnableClientLoFiName,
-     flag_descriptions::kEnableClientLoFiDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(previews::features::kClientLoFi)},
 #endif  // OS_ANDROID
+    {"enable-client-lo-fi", flag_descriptions::kEnableClientLoFiName,
+     flag_descriptions::kEnableClientLoFiDescription, kOsAll,
+     FEATURE_WITH_PARAMS_VALUE_TYPE(
+         previews::features::kClientLoFi,
+         kClientPlaceholdersForServerLoFiFeatureVariations,
+         "PreviewsClientLoFi")},
     {"allow-insecure-localhost", flag_descriptions::kAllowInsecureLocalhostName,
      flag_descriptions::kAllowInsecureLocalhostDescription, kOsAll,
      SINGLE_VALUE_TYPE(switches::kAllowInsecureLocalhost)},
@@ -2002,6 +2020,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kBypassAppBannerEngagementChecksName,
      flag_descriptions::kBypassAppBannerEngagementChecksDescription, kOsAll,
      SINGLE_VALUE_TYPE(switches::kBypassAppBannerEngagementChecks)},
+    {"enable-desktop-pwa-windowing",
+     flag_descriptions::kEnableDesktopPWAWindowingName,
+     flag_descriptions::kEnableDesktopPWAWindowingDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kDesktopPWAWindowing)},
     {"use-sync-sandbox", flag_descriptions::kSyncSandboxName,
      flag_descriptions::kSyncSandboxDescription, kOsAll,
      SINGLE_VALUE_TYPE_AND_VALUE(
@@ -2373,16 +2395,16 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableNtpMostLikelyFaviconsFromServerDescription,
      kOsAndroid,
      FEATURE_VALUE_TYPE(ntp_tiles::kNtpMostLikelyFaviconsFromServerFeature)},
-    {"enable-content-suggestions-categories",
-     flag_descriptions::kEnableContentSuggestionsCategoriesName,
-     flag_descriptions::kEnableContentSuggestionsCategoriesDescription,
-     kOsAndroid,
-     FEATURE_VALUE_TYPE(chrome::android::kContentSuggestionsCategories)},
     {"enable-content-suggestions-large-thumbnail",
      flag_descriptions::kEnableContentSuggestionsLargeThumbnailName,
      flag_descriptions::kEnableContentSuggestionsLargeThumbnailDescription,
      kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kContentSuggestionsLargeThumbnail)},
+    {"enable-content-suggestions-video-overlay",
+     flag_descriptions::kEnableContentSuggestionsVideoOverlayName,
+     flag_descriptions::kEnableContentSuggestionsVideoOverlayDescription,
+     kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kContentSuggestionsVideoOverlay)},
     {"enable-content-suggestions-settings",
      flag_descriptions::kEnableContentSuggestionsSettingsName,
      flag_descriptions::kEnableContentSuggestionsSettingsDescription,
@@ -2404,11 +2426,6 @@ const FeatureEntry kFeatureEntries[] = {
          ntp_snippets::kArticleSuggestionsFeature,
          kRemoteSuggestionsFeatureVariations,
          ntp_snippets::kArticleSuggestionsFeature.name)},
-    {"enable-ntp-recent-offline-tab-suggestions",
-     flag_descriptions::kEnableNtpRecentOfflineTabSuggestionsName,
-     flag_descriptions::kEnableNtpRecentOfflineTabSuggestionsDescription,
-     kOsAndroid,
-     FEATURE_VALUE_TYPE(ntp_snippets::kRecentOfflineTabSuggestionsFeature)},
     {"enable-ntp-asset-download-suggestions",
      flag_descriptions::kEnableNtpAssetDownloadSuggestionsName,
      flag_descriptions::kEnableNtpAssetDownloadSuggestionsDescription,
@@ -2423,11 +2440,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableNtpBookmarkSuggestionsName,
      flag_descriptions::kEnableNtpBookmarkSuggestionsDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(ntp_snippets::kBookmarkSuggestionsFeature)},
-    {"enable-ntp-physical-web-page-suggestions",
-     flag_descriptions::kEnableNtpPhysicalWebPageSuggestionsName,
-     flag_descriptions::kEnableNtpPhysicalWebPageSuggestionsDescription,
-     kOsAndroid,
-     FEATURE_VALUE_TYPE(ntp_snippets::kPhysicalWebPageSuggestionsFeature)},
     {"enable-ntp-foreign-sessions-suggestions",
      flag_descriptions::kEnableNtpForeignSessionsSuggestionsName,
      flag_descriptions::kEnableNtpForeignSessionsSuggestionsDescription,
@@ -2472,6 +2484,9 @@ const FeatureEntry kFeatureEntries[] = {
     {"offline-pages-ct", flag_descriptions::kOfflinePagesCtName,
      flag_descriptions::kOfflinePagesCtDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesCTFeature)},
+    {"offline-pages-ct-v2", flag_descriptions::kOfflinePagesCtV2Name,
+     flag_descriptions::kOfflinePagesCtV2Description, kOsAndroid,
+     FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesCTV2Feature)},
 #endif  // OS_ANDROID
     {"protect-sync-credential", flag_descriptions::kProtectSyncCredentialName,
      flag_descriptions::kProtectSyncCredentialDescription, kOsAll,
@@ -2881,6 +2896,12 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kOffMainThreadFetchDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kOffMainThreadFetch)},
 
+    {"enable-speculative-service-worker-start-on-query-input",
+     flag_descriptions::kSpeculativeServiceWorkerStartOnQueryInputName,
+     flag_descriptions::kSpeculativeServiceWorkerStartOnQueryInputDescription,
+     kOsAll,
+     FEATURE_VALUE_TYPE(omnibox::kSpeculativeServiceWorkerStartOnQueryInput)},
+
 #if defined(OS_MACOSX)
     {"tab-strip-keyboard-focus", flag_descriptions::kTabStripKeyboardFocusName,
      flag_descriptions::kTabStripKeyboardFocusDescription, kOsMac,
@@ -3004,10 +3025,11 @@ const FeatureEntry kFeatureEntries[] = {
      SINGLE_VALUE_TYPE(switches::kShowCertLink)},
 #endif
 
-    {"omnibox-ui-hide-suggestion-url-path",
-     flag_descriptions::kOmniboxUIHideSuggestionUrlPathName,
-     flag_descriptions::kOmniboxUIHideSuggestionUrlPathDescription, kOsDesktop,
-     FEATURE_VALUE_TYPE(omnibox::kUIExperimentHideSuggestionUrlPath)},
+    {"omnibox-ui-elide-suggestion-url-after-host",
+     flag_descriptions::kOmniboxUIElideSuggestionUrlAfterHostName,
+     flag_descriptions::kOmniboxUIElideSuggestionUrlAfterHostDescription,
+     kOsDesktop,
+     FEATURE_VALUE_TYPE(omnibox::kUIExperimentElideSuggestionUrlAfterHost)},
 
     {"omnibox-ui-hide-suggestion-url-scheme",
      flag_descriptions::kOmniboxUIHideSuggestionUrlSchemeName,
@@ -3051,10 +3073,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kUseSuggestionsEvenIfFewFeatureName,
      flag_descriptions::kUseSuggestionsEvenIfFewFeatureDescription, kOsAll,
      FEATURE_VALUE_TYPE(suggestions::kUseSuggestionsEvenIfFewFeature)},
-
-    {"enable-location-hard-reload", flag_descriptions::kLocationHardReloadName,
-     flag_descriptions::kLocationHardReloadDescription, kOsAll,
-     FEATURE_VALUE_TYPE(features::kLocationHardReload)},
 
     {"capture-thumbnail-on-load-finished",
      flag_descriptions::kCaptureThumbnailOnLoadFinishedName,
@@ -3106,6 +3124,48 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kMacTouchBarDescription, kOsMac,
      FEATURE_VALUE_TYPE(features::kBrowserTouchBar)},
 #endif  // defined(OS_MACOSX)
+
+#if defined(TOOLKIT_VIEWS)
+    {"enable-experimental-fullscreen-exit-ui",
+     flag_descriptions::kExperimentalFullscreenExitUIName,
+     flag_descriptions::kExperimentalFullscreenExitUIDescription,
+     kOsWin | kOsLinux | kOsCrOS,
+     SINGLE_VALUE_TYPE(switches::kEnableExperimentalFullscreenExitUI)},
+#endif  // defined(TOOLKIT_VIEWS)
+
+    {"enable-module-scripts", flag_descriptions::kModuleScriptsName,
+     flag_descriptions::kModuleScriptsDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kModuleScripts)},
+
+    {"network-service", flag_descriptions::kEnableNetworkServiceName,
+     flag_descriptions::kEnableNetworkServiceDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kNetworkService)},
+
+#if defined(OS_ANDROID)
+    {"use-ddljson-api", flag_descriptions::kUseDdljsonApiName,
+     flag_descriptions::kUseDdljsonApiDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(search_provider_logos::features::kUseDdljsonApi)},
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
+    {"spannable-inline-autocomplete",
+     flag_descriptions::kSpannableInlineAutocompleteName,
+     flag_descriptions::kSpannableInlineAutocompleteDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kSpannableInlineAutocomplete)},
+#endif  // defined(OS_ANDROID)
+
+    {"enable-resource-load-scheduler",
+     flag_descriptions::kResourceLoadSchedulerName,
+     flag_descriptions::kResourceLoadSchedulerDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kResourceLoadScheduler)},
+
+#if defined(TOOLKIT_VIEWS)
+    {"delay-reload-stop-button-change",
+     flag_descriptions::kDelayReloadStopButtonChangeName,
+     flag_descriptions::kDelayReloadStopButtonChangeDescription,
+     kOsCrOS | kOsWin | kOsLinux,
+     SINGLE_DISABLE_VALUE_TYPE(switches::kDelayReloadStopButtonChange)},
+#endif  // TOOLKIT_VIEWS
 
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms/enums.xml. See note in

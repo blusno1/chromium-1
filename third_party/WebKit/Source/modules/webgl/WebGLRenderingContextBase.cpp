@@ -26,10 +26,12 @@
 #include "modules/webgl/WebGLRenderingContextBase.h"
 
 #include <memory>
+
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/modules/v8/HTMLCanvasElementOrOffscreenCanvas.h"
 #include "bindings/modules/v8/WebGLAny.h"
+#include "build/build_config.h"
 #include "core/dom/ArrayBufferViewHelpers.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMTypedArray.h"
@@ -46,7 +48,6 @@
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutBox.h"
-#include "core/loader/FrameLoader.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "core/probe/CoreProbes.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -115,11 +116,11 @@ const double kSecondsBetweenRestoreAttempts = 1.0;
 const int kMaxGLErrorsAllowedToConsole = 256;
 const unsigned kMaxGLActiveContextsOnWorker = 4;
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 const unsigned kMaxGLActiveContexts = 8;
-#else   // OS(ANDROID)
+#else   // defined(OS_ANDROID)
 const unsigned kMaxGLActiveContexts = 16;
-#endif  // OS(ANDROID)
+#endif  // defined(OS_ANDROID)
 
 unsigned CurrentMaxGLContexts() {
   return IsMainThread() ? kMaxGLActiveContexts : kMaxGLActiveContextsOnWorker;
@@ -4868,7 +4869,7 @@ void WebGLRenderingContextBase::texImage2D(ExecutionContext* execution_context,
 
 bool WebGLRenderingContextBase::CanUseTexImageByGPU(GLenum format,
                                                     GLenum type) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   // RGB5_A1 is not color-renderable on NVIDIA Mac, see crbug.com/676209.
   // Though, glCopyTextureCHROMIUM can handle RGB5_A1 internalformat by doing a
   // fallback path, but it doesn't know the type info. So, we still cannot do
@@ -4885,7 +4886,7 @@ bool WebGLRenderingContextBase::CanUseTexImageByGPU(GLenum format,
   if (format == GL_RED || format == GL_RED_INTEGER)
     return false;
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
   // TODO(kbr): bugs were seen on Android devices with NVIDIA GPUs
   // when copying hardware-accelerated video textures to
   // floating-point textures. Investigate the root cause of this and
@@ -7442,8 +7443,7 @@ void WebGLRenderingContextBase::MaybeRestoreContext(TimerBase*) {
 
     Settings* settings = frame->GetSettings();
 
-    if (!frame->Loader().Client()->AllowWebGL(settings &&
-                                              settings->GetWebGLEnabled()))
+    if (!frame->Client()->AllowWebGL(settings && settings->GetWebGLEnabled()))
       return;
   }
 

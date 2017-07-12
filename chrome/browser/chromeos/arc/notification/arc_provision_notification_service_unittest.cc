@@ -69,7 +69,7 @@ class ArcProvisionNotificationServiceTest : public testing::Test {
     profile_builder.SetPath(temp_dir_.GetPath().AppendASCII("TestArcProfile"));
     profile_ = profile_builder.Build();
 
-    arc_service_manager_ = base::MakeUnique<ArcServiceManager>(nullptr);
+    arc_service_manager_ = base::MakeUnique<ArcServiceManager>();
     arc_session_manager_ = base::MakeUnique<ArcSessionManager>(
         base::MakeUnique<ArcSessionRunner>(base::Bind(FakeArcSession::Create)));
     std::unique_ptr<MockArcProvisionNotificationServiceDelegate>
@@ -152,14 +152,18 @@ TEST_F(ArcProvisionNotificationServiceTest,
       prefs::kArcLocationServiceEnabled, base::MakeUnique<base::Value>(false));
 
   arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
 
   // Trigger opt-in flow. The notification gets shown.
   EXPECT_CALL(*arc_provision_notification_service_delegate(),
               ShowManagedProvisionNotification());
   arc_session_manager()->RequestEnable();
-  EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
   Mock::VerifyAndClearExpectations(
       arc_provision_notification_service_delegate());
+  EXPECT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
+            arc_session_manager()->state());
+  arc_session_manager()->StartArcForTesting();
+  EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
 
   // Emulate successful provisioning. The notification gets removed.
   EXPECT_CALL(*arc_provision_notification_service_delegate(),
@@ -192,6 +196,7 @@ TEST_F(ArcProvisionNotificationServiceTest,
   profile()->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
 
   arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
 
   // Enable ARC. The opt-in flow doesn't take place, and no notification is
   // shown.
@@ -213,14 +218,18 @@ TEST_F(ArcProvisionNotificationServiceTest,
       prefs::kArcLocationServiceEnabled, base::MakeUnique<base::Value>(false));
 
   arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
 
   // Trigger opt-in flow. The notification gets shown.
   EXPECT_CALL(*arc_provision_notification_service_delegate(),
               ShowManagedProvisionNotification());
   arc_session_manager()->RequestEnable();
-  EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
   Mock::VerifyAndClearExpectations(
       arc_provision_notification_service_delegate());
+  EXPECT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
+            arc_session_manager()->state());
+  arc_session_manager()->StartArcForTesting();
+  EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
 
   // Emulate provisioning failure that leads to stopping ARC. The notification
   // gets removed.
@@ -246,14 +255,18 @@ TEST_F(ArcProvisionNotificationServiceTest,
       prefs::kArcLocationServiceEnabled, base::MakeUnique<base::Value>(false));
 
   arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
 
   // Trigger opt-in flow. The notification gets shown.
   EXPECT_CALL(*arc_provision_notification_service_delegate(),
               ShowManagedProvisionNotification());
   arc_session_manager()->RequestEnable();
-  EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
   Mock::VerifyAndClearExpectations(
       arc_provision_notification_service_delegate());
+  EXPECT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
+            arc_session_manager()->state());
+  arc_session_manager()->StartArcForTesting();
+  EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
 
   // Emulate provisioning failure that leads to showing an error screen without
   // shutting ARC down. The notification gets removed.
@@ -281,6 +294,7 @@ TEST_F(ArcProvisionNotificationServiceTest,
       prefs::kArcEnabled, base::MakeUnique<base::Value>(true));
 
   arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
 
   // Trigger opt-in flow. The notification is not shown.
   arc_session_manager()->RequestEnable();
@@ -288,7 +302,7 @@ TEST_F(ArcProvisionNotificationServiceTest,
             arc_session_manager()->state());
 
   // Emulate accepting the terms of service.
-  profile()->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted, true);
+  arc_session_manager()->OnTermsOfServiceNegotiatedForTesting(true);
   arc_session_manager()->StartArcForTesting();
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
 

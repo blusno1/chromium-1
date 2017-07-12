@@ -30,6 +30,7 @@
 
 #include "platform/fonts/WebFontDecoder.h"
 
+#include "build/build_config.h"
 #include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
 #include "platform/fonts/FontCache.h"
@@ -63,7 +64,7 @@ void BlinkOTSContext::Message(int level, const char* format, ...) {
   va_list args;
   va_start(args, format);
 
-#if COMPILER(MSVC)
+#if defined(COMPILER_MSVC)
   int result = _vscprintf(format, args);
 #else
   char ch;
@@ -215,7 +216,7 @@ sk_sp<SkTypeface> WebFontDecoder::Decode(SharedBuffer* buffer) {
 
   sk_sp<SkData> sk_data = SkData::MakeWithCopy(output.get(), decoded_length);
   SkMemoryStream* stream = new SkMemoryStream(sk_data);
-#if OS(WIN)
+#if defined(OS_WIN)
   sk_sp<SkTypeface> typeface(
       FontCache::GetFontCache()->FontManager()->createFromStream(stream));
 #else

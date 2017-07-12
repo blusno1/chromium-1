@@ -242,7 +242,8 @@ class TestLoFiDecider : public LoFiDecider {
     std::string header_value;
     if (headers.GetHeader(chrome_proxy_accept_transform_header(),
                           &header_value)) {
-      return header_value == empty_image_directive();
+      return header_value == empty_image_directive() ||
+             header_value == lite_page_directive();
     }
     return false;
   }
@@ -883,8 +884,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, AuthenticationTest) {
   net::ProxyInfo data_reduction_proxy_info;
   net::ProxyRetryInfoMap proxy_retry_info;
   std::string data_reduction_proxy;
-  base::TrimString(params()->DefaultOrigin(), "/", &data_reduction_proxy);
-  data_reduction_proxy_info.UseNamedProxy(data_reduction_proxy);
+  data_reduction_proxy_info.UseProxyServer(
+      params()->proxies_for_http().front().proxy_server());
 
   net::HttpRequestHeaders headers;
   // Call network delegate methods to ensure that appropriate chrome proxy
@@ -948,11 +949,13 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
 
     net::ProxyInfo data_reduction_proxy_info;
     std::string proxy;
-    if (tests[i].is_data_reduction_proxy)
-      base::TrimString(params()->DefaultOrigin(), "/", &proxy);
-    else
+    if (tests[i].is_data_reduction_proxy) {
+      data_reduction_proxy_info.UseProxyServer(
+          params()->proxies_for_http().front().proxy_server());
+    } else {
       base::TrimString(kOtherProxy, "/", &proxy);
-    data_reduction_proxy_info.UseNamedProxy(proxy);
+      data_reduction_proxy_info.UseNamedProxy(proxy);
+    }
 
     // Needed as a parameter, but functionality is not tested.
     TestPreviewsDecider test_previews_decider;
@@ -1090,12 +1093,12 @@ TEST_F(DataReductionProxyNetworkDelegateTest, RequestDataConfigurations) {
 
   for (const auto& test : tests) {
     net::ProxyInfo data_reduction_proxy_info;
-    std::string data_reduction_proxy;
-    base::TrimString(params()->DefaultOrigin(), "/", &data_reduction_proxy);
-    if (test.used_data_reduction_proxy)
-      data_reduction_proxy_info.UseNamedProxy(data_reduction_proxy);
-    else
+    if (test.used_data_reduction_proxy) {
+      data_reduction_proxy_info.UseProxyServer(
+          params()->proxies_for_http().front().proxy_server());
+    } else {
       data_reduction_proxy_info.UseNamedProxy("port.of.other.proxy");
+    }
     // Main frame loaded. Lo-Fi should be used.
     net::HttpRequestHeaders headers;
     net::ProxyRetryInfoMap proxy_retry_info;
@@ -1198,9 +1201,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
 TEST_F(DataReductionProxyNetworkDelegateTest, RedirectRequestDataCleared) {
   Init(USE_INSECURE_PROXY, false);
   net::ProxyInfo data_reduction_proxy_info;
-  std::string data_reduction_proxy;
-  base::TrimString(params()->DefaultOrigin(), "/", &data_reduction_proxy);
-  data_reduction_proxy_info.UseNamedProxy(data_reduction_proxy);
+  data_reduction_proxy_info.UseProxyServer(
+      params()->proxies_for_http().front().proxy_server());
 
   // Main frame loaded. Lo-Fi should be used.
   net::HttpRequestHeaders headers_original;
@@ -1839,9 +1841,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
   // This is unaffacted by brotil and insecure proxy.
   Init(USE_INSECURE_PROXY, false /* enable_brotli_globally */);
   net::ProxyInfo data_reduction_proxy_info;
-  std::string data_reduction_proxy;
-  base::TrimString(params()->DefaultOrigin(), "/", &data_reduction_proxy);
-  data_reduction_proxy_info.UseNamedProxy(data_reduction_proxy);
+  data_reduction_proxy_info.UseProxyServer(
+      params()->proxies_for_http().front().proxy_server());
 
   std::unique_ptr<net::URLRequest> request =
       context()->CreateRequest(GURL(kTestURL), net::RequestPriority::IDLE,
@@ -2162,6 +2163,89 @@ TEST_F(DataReductionProxyNetworkDelegateClientLoFiTest, DataSavingsThroughDRP) {
                                      .size() +
                                  10000 - request->GetTotalReceivedBytes()),
             GetSavings());
+}
+
+TEST_F(DataReductionProxyNetworkDelegateTest, TestAcceptTransformHistogram) {
+  Init(USE_INSECURE_PROXY, false);
+  base::HistogramTester histogram_tester;
+
+  // Verify lite page request.
+  net::HttpRequestHeaders request_headers;
+  request_headers.SetHeader("chrome-proxy-accept-transform", "lite-page");
+  FetchURLRequest(GURL(kTestURL), &request_headers, std::string(), 140, 0);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.Protocol.AcceptTransform", 1);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.AcceptTransform",
+      0 /* LITE_PAGE_REQUESTED */, 1);
+  // Check legacy histogram too:
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.LoFi.TransformationType",
+      NO_TRANSFORMATION_LITE_PAGE_REQUESTED, 1);
+
+  // Verify empty image request.
+  request_headers.SetHeader("chrome-proxy-accept-transform", "empty-image");
+  FetchURLRequest(GURL(kTestURL), &request_headers, std::string(), 140, 0);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.Protocol.AcceptTransform", 2);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.AcceptTransform",
+      3 /* EMPTY_IMAGE_REQUESTED */, 1);
+
+  // Verify lite page response.
+  std::string response_headers =
+      "HTTP/1.1 200 OK\r\n"
+      "Chrome-Proxy-Content-Transform: lite-page\r\n"
+      "Date: Wed, 28 Nov 2007 09:40:09 GMT\r\n"
+      "Expires: Mon, 24 Nov 2014 12:45:26 GMT\r\n"
+      "Via: 1.1 Chrome-Compression-Proxy\r\n"
+      "x-original-content-length: 200\r\n"
+      "\r\n";
+  auto request =
+      FetchURLRequest(GURL(kTestURL), nullptr, response_headers, 140, 0);
+  EXPECT_TRUE(DataReductionProxyData::GetData(*request)->lite_page_received());
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.Protocol.AcceptTransform", 3);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.AcceptTransform",
+      1 /* LITE_PAGE_TRANSFORM_RECEIVED */, 1);
+  // Check legacy histogram too:
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.LoFi.TransformationType", LITE_PAGE, 1);
+
+  // Verify page policy response.
+  response_headers =
+      "HTTP/1.1 200 OK\r\n"
+      "Chrome-Proxy: page-policies=empty-image\r\n"
+      "Date: Wed, 28 Nov 2007 09:40:09 GMT\r\n"
+      "Expires: Mon, 24 Nov 2014 12:45:26 GMT\r\n"
+      "Via: 1.1 Chrome-Compression-Proxy\r\n"
+      "x-original-content-length: 200\r\n"
+      "\r\n";
+  request = FetchURLRequest(GURL(kTestURL), nullptr, response_headers, 140, 0);
+  EXPECT_FALSE(DataReductionProxyData::GetData(*request)->lite_page_received());
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.Protocol.AcceptTransform", 4);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.AcceptTransform",
+      2 /* EMPTY_IMAGE_POLICY_DIRECTIVE_RECEIVED */, 1);
+
+  // Verify empty image response.
+  response_headers =
+      "HTTP/1.1 200 OK\r\n"
+      "Chrome-Proxy-Content-Transform: empty-image\r\n"
+      "Date: Wed, 28 Nov 2007 09:40:09 GMT\r\n"
+      "Expires: Mon, 24 Nov 2014 12:45:26 GMT\r\n"
+      "Via: 1.1 Chrome-Compression-Proxy\r\n"
+      "x-original-content-length: 200\r\n"
+      "\r\n";
+  request = FetchURLRequest(GURL(kTestURL), nullptr, response_headers, 140, 0);
+  EXPECT_TRUE(DataReductionProxyData::GetData(*request)->lofi_received());
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.Protocol.AcceptTransform", 5);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.AcceptTransform",
+      4 /* EMPTY_IMAGE_TRANSFORM_RECEIVED */, 1);
 }
 
 }  // namespace

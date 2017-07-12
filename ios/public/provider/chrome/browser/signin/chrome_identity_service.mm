@@ -6,6 +6,10 @@
 
 #include "ios/public/provider/chrome/browser/signin/chrome_identity_interaction_manager.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace ios {
 
 ChromeIdentityService::ChromeIdentityService() {}
@@ -77,17 +81,15 @@ NSArray* ChromeIdentityService::GetAllIdentitiesSortedForDisplay() const {
 void ChromeIdentityService::ForgetIdentity(ChromeIdentity* identity,
                                            ForgetIdentityCallback callback) {}
 
-void ChromeIdentityService::GetAccessToken(
-    ChromeIdentity* identity,
-    const std::set<std::string>& scopes,
-    const AccessTokenCallback& callback) {}
+void ChromeIdentityService::GetAccessToken(ChromeIdentity* identity,
+                                           const std::set<std::string>& scopes,
+                                           AccessTokenCallback callback) {}
 
-void ChromeIdentityService::GetAccessToken(
-    ChromeIdentity* identity,
-    const std::string& client_id,
-    const std::string& client_secret,
-    const std::set<std::string>& scopes,
-    const AccessTokenCallback& callback) {}
+void ChromeIdentityService::GetAccessToken(ChromeIdentity* identity,
+                                           const std::string& client_id,
+                                           const std::string& client_secret,
+                                           const std::set<std::string>& scopes,
+                                           AccessTokenCallback callback) {}
 
 void ChromeIdentityService::GetAvatarForIdentity(ChromeIdentity* identity,
                                                  GetAvatarCallback callback) {}

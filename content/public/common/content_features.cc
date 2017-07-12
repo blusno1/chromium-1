@@ -135,11 +135,6 @@ const base::Feature kLazyParseCSS{"LazyParseCSS",
 const base::Feature kLoadingWithMojo{"LoadingWithMojo",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Experimental feature to trigger hard-reload on Location.reload().
-// crbug.com/716339
-const base::Feature kLocationHardReload{"LocationHardReload",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
-
 // FeatureList definition for trials to enable the download button on
 // MediaDocument.
 const base::Feature kMediaDocumentDownloadButton{
@@ -149,11 +144,7 @@ const base::Feature kMediaDocumentDownloadButton{
 
 // Enables the old algorithm for processing audio constraints in getUserMedia().
 const base::Feature kMediaStreamOldAudioConstraints{
-    "MediaStreamOldAudioConstraints", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables the old algorithm for processing video constraints in getUserMedia().
-const base::Feature kMediaStreamOldVideoConstraints{
-    "MediaStreamOldVideoConstraints", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MediaStreamOldAudioConstraints", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the memory coordinator.
 // WARNING:
@@ -162,6 +153,10 @@ const base::Feature kMediaStreamOldVideoConstraints{
 const base::Feature kMemoryCoordinator {
   "MemoryCoordinator", base::FEATURE_DISABLED_BY_DEFAULT
 };
+
+// Enables the network service.
+const base::Feature kNetworkService{"NetworkService",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Kill switch for Web Notification content images.
 const base::Feature kNotificationContentImage{"NotificationContentImage",
@@ -177,6 +172,10 @@ const base::Feature kMojoBlobs{"MojoBlobs", base::FEATURE_DISABLED_BY_DEFAULT};
 // Mojo-based Input Event routing.
 const base::Feature kMojoInputMessages{"MojoInputMessages",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// ES6 Modules.
+const base::Feature kModuleScripts{"ModuleScripts",
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Experimental resource fetch optimizations for workers. See crbug.com/443374
 const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
@@ -242,6 +241,10 @@ const base::Feature kRequireSecureOriginsForPepperMediaRequests{
     "RequireSecureOriginsForPepperMediaRequests",
     base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Loading Dispatcher v0 support with ResourceLoadScheduler (crbug.com/729954).
+const base::Feature kResourceLoadScheduler{"ResourceLoadScheduler",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
 const base::Feature kScrollAnchoring{"ScrollAnchoring",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
@@ -249,6 +252,10 @@ const base::Feature kScrollAnchoring{"ScrollAnchoring",
 // Navigation preload feature of service workers.
 const base::Feature kServiceWorkerNavigationPreload{
     "ServiceWorkerNavigationPreload", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Streaming installed scripts on starting service workers.
+const base::Feature kServiceWorkerScriptStreaming{
+    "ServiceWorkerScriptStreaming", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // http://tc39.github.io/ecmascript_sharedmem/shmem.html
 const base::Feature kSharedArrayBuffer{"SharedArrayBuffer",
@@ -317,6 +324,11 @@ const base::Feature kWebAssemblyStreaming{"WebAssemblyStreaming",
 // Enable WebAssembly streamed compilation.
 const base::Feature kWebAssemblyTrapHandler{"WebAssemblyTrapHandler",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether the WebAuthentication API is enabled:
+// https://w3c.github.io/webauthn
+const base::Feature kWebAuth{"WebAuthentication",
+                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If WebGL Image Chromium is allowed, this feature controls whether it is
 // enabled.

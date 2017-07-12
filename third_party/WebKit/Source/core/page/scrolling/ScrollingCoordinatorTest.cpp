@@ -24,6 +24,7 @@
 
 #include "core/page/scrolling/ScrollingCoordinator.h"
 
+#include "build/build_config.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/StyleSheetList.h"
 #include "core/exported/WebViewBase.h"
@@ -100,7 +101,7 @@ class ScrollingCoordinatorTest : public ::testing::Test,
 
   void RegisterMockedHttpURLLoad(const std::string& file_name) {
     URLTestHelpers::RegisterMockedURLLoadFromBase(
-        WebString::FromUTF8(base_url_), testing::WebTestDataPath(),
+        WebString::FromUTF8(base_url_), testing::CoreTestDataPath(),
         WebString::FromUTF8(file_name));
   }
 
@@ -570,7 +571,7 @@ TEST_P(ScrollingCoordinatorTest, overflowScrolling) {
   ASSERT_TRUE(web_scroll_layer->UserScrollableHorizontal());
   ASSERT_TRUE(web_scroll_layer->UserScrollableVertical());
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
   // Now verify we've attached impl-side scrollbars onto the scrollbar layers
   ASSERT_TRUE(composited_layer_mapping->LayerForHorizontalScrollbar());
   ASSERT_TRUE(composited_layer_mapping->LayerForHorizontalScrollbar()
@@ -681,7 +682,7 @@ TEST_P(ScrollingCoordinatorTest, iframeScrolling) {
   WebLayer* web_scroll_layer = scroll_layer->PlatformLayer();
   ASSERT_TRUE(web_scroll_layer->Scrollable());
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
   // Now verify we've attached impl-side scrollbars onto the scrollbar layers
   GraphicsLayer* horizontal_scrollbar_layer =
       inner_frame_view->LayoutViewportScrollableArea()
@@ -777,7 +778,7 @@ TEST_P(ScrollingCoordinatorTest,
       scrollbar_graphics_layer->PlatformLayer()->ShouldScrollOnMainThread());
 }
 
-#if OS(MACOSX) || OS(ANDROID)
+#if defined(OS_MACOSX) || defined(OS_ANDROID)
 TEST_P(ScrollingCoordinatorTest,
        DISABLED_setupScrollbarLayerShouldSetScrollLayerOpaque)
 #else
@@ -1121,11 +1122,6 @@ TEST_P(NonCompositedMainThreadScrollingReasonTest, BackgroundNotOpaqueTest) {
       MainThreadScrollingReason::kBackgroundNotOpaqueInRectAndLCDText);
 }
 
-TEST_P(NonCompositedMainThreadScrollingReasonTest, BorderRadiusTest) {
-  TestNonCompositedReasons("border-radius",
-                           MainThreadScrollingReason::kHasBorderRadius);
-}
-
 TEST_P(NonCompositedMainThreadScrollingReasonTest, ClipTest) {
   TestNonCompositedReasons("clip",
                            MainThreadScrollingReason::kHasClipRelatedProperty);
@@ -1181,9 +1177,8 @@ TEST_P(NonCompositedMainThreadScrollingReasonTest, ClipPathTest) {
 }
 
 TEST_P(NonCompositedMainThreadScrollingReasonTest, LCDTextEnabledTest) {
-  TestNonCompositedReasons("transparent border-radius",
-                           MainThreadScrollingReason::kHasOpacityAndLCDText |
-                               MainThreadScrollingReason::kHasBorderRadius);
+  TestNonCompositedReasons("transparent",
+                           MainThreadScrollingReason::kHasOpacityAndLCDText);
 }
 
 TEST_P(NonCompositedMainThreadScrollingReasonTest, BoxShadowTest) {
@@ -1248,8 +1243,7 @@ TEST_P(NonCompositedMainThreadScrollingReasonTest,
       ToLayoutBoxModelObject(container2->GetLayoutObject())
           ->GetScrollableArea();
   ASSERT_TRUE(scrollable_area2);
-  EXPECT_TRUE(scrollable_area2->GetNonCompositedMainThreadScrollingReasons() &
-              MainThreadScrollingReason::kHasBorderRadius);
+  ASSERT_TRUE(scrollable_area2->UsesCompositedScrolling());
 }
 
 }  // namespace blink

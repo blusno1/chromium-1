@@ -26,19 +26,20 @@
 #include "platform/audio/VectorMath.h"
 
 #include <stdint.h>
+#include "build/build_config.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/CPU.h"
 #include "platform/wtf/MathExtras.h"
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 #include <Accelerate/Accelerate.h>
 #endif
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
 #include <emmintrin.h>
 #endif
 
-#if CPU(ARM_NEON)
+#if WTF_CPU_ARM_NEON
 #include <arm_neon.h>
 #endif
 
@@ -53,7 +54,7 @@ namespace blink {
 
 namespace VectorMath {
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 // On the Mac we use the highly optimized versions in Accelerate.framework
 // In 32-bit mode (__ppc__ or __i386__) <Accelerate/Accelerate.h> includes
 // <vecLib/vDSP_translate.h> which defines macros of the same name as
@@ -66,7 +67,7 @@ void Vsmul(const float* source_p,
            float* dest_p,
            int dest_stride,
            size_t frames_to_process) {
-#if CPU(X86)
+#if defined(ARCH_CPU_X86)
   ::vsmul(sourceP, sourceStride, scale, destP, destStride, framesToProcess);
 #else
   vDSP_vsmul(source_p, source_stride, scale, dest_p, dest_stride,
@@ -81,7 +82,7 @@ void Vadd(const float* source1p,
           float* dest_p,
           int dest_stride,
           size_t frames_to_process) {
-#if CPU(X86)
+#if defined(ARCH_CPU_X86)
   ::vadd(source1P, sourceStride1, source2P, sourceStride2, destP, destStride,
          framesToProcess);
 #else
@@ -97,7 +98,7 @@ void Vmul(const float* source1p,
           float* dest_p,
           int dest_stride,
           size_t frames_to_process) {
-#if CPU(X86)
+#if defined(ARCH_CPU_X86)
   ::vmul(source1P, sourceStride1, source2P, sourceStride2, destP, destStride,
          framesToProcess);
 #else
@@ -122,7 +123,7 @@ void Zvmul(const float* real1p,
   sc2.imagp = const_cast<float*>(imag2p);
   dest.realp = real_dest_p;
   dest.imagp = imag_dest_p;
-#if CPU(X86)
+#if defined(ARCH_CPU_X86)
   ::zvmul(&sc1, 1, &sc2, 1, &dest, 1, framesToProcess, 1);
 #else
   vDSP_zvmul(&sc1, 1, &sc2, 1, &dest, 1, frames_to_process, 1);
@@ -176,7 +177,7 @@ void Vsma(const float* source_p,
           size_t frames_to_process) {
   int n = frames_to_process;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if ((source_stride == 1) && (dest_stride == 1)) {
     float k = *scale;
 
@@ -218,7 +219,7 @@ void Vsma(const float* source_p,
 
     n = tail_frames;
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if ((source_stride == 1) && (dest_stride == 1)) {
     int tail_frames = n % 4;
     const float* end_p = dest_p + n - tail_frames;
@@ -274,7 +275,7 @@ void Vsmul(const float* source_p,
            size_t frames_to_process) {
   int n = frames_to_process;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if ((source_stride == 1) && (dest_stride == 1)) {
     float k = *scale;
 
@@ -323,7 +324,7 @@ void Vsmul(const float* source_p,
       n--;
     }
   } else {  // If strides are not 1, rollback to normal algorithm.
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if ((source_stride == 1) && (dest_stride == 1)) {
     float k = *scale;
     int tail_frames = n % 4;
@@ -363,7 +364,7 @@ void Vsmul(const float* source_p,
       source_p += source_stride;
       dest_p += dest_stride;
     }
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   }
 #endif
 }
@@ -377,7 +378,7 @@ void Vadd(const float* source1p,
           size_t frames_to_process) {
   int n = frames_to_process;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     // If the sourceP address is not 16-byte aligned, the first several frames
     // (at most three) should be processed separately.
@@ -461,7 +462,7 @@ void Vadd(const float* source1p,
       n--;
     }
   } else {  // if strides are not 1, rollback to normal algorithm
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     int tail_frames = n % 4;
     const float* end_p = dest_p + n - tail_frames;
@@ -504,7 +505,7 @@ void Vadd(const float* source1p,
       source2p += source_stride2;
       dest_p += dest_stride;
     }
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   }
 #endif
 }
@@ -518,7 +519,7 @@ void Vmul(const float* source1p,
           size_t frames_to_process) {
   int n = frames_to_process;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     // If the source1P address is not 16-byte aligned, the first several frames
     // (at most three) should be processed separately.
@@ -564,7 +565,7 @@ void Vmul(const float* source1p,
 
     n = tail_frames;
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     int tail_frames = n % 4;
     const float* end_p = dest_p + n - tail_frames;
@@ -618,7 +619,7 @@ void Zvmul(const float* real1p,
            float* imag_dest_p,
            size_t frames_to_process) {
   unsigned i = 0;
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   // Only use the SSE optimization in the very common case that all addresses
   // are 16-byte aligned.  Otherwise, fall through to the scalar code below.
   if (!(reinterpret_cast<uintptr_t>(real1p) & 0x0F) &&
@@ -642,7 +643,7 @@ void Zvmul(const float* real1p,
       i += 4;
     }
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   unsigned end_size = frames_to_process - frames_to_process % 4;
   while (i < end_size) {
     float32x4_t real1 = vld1q_f32(real1p + i);
@@ -677,7 +678,7 @@ void Vsvesq(const float* source_p,
   int n = frames_to_process;
   float sum = 0;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if (source_stride == 1) {
     // If the sourceP address is not 16-byte aligned, the first several frames
     // (at most three) should be processed separately.
@@ -707,7 +708,7 @@ void Vsvesq(const float* source_p,
 
     n = tail_frames;
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if (source_stride == 1) {
     int tail_frames = n % 4;
     const float* end_p = source_p + n - tail_frames;
@@ -746,7 +747,7 @@ void Vmaxmgv(const float* source_p,
   int n = frames_to_process;
   float max = 0;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if (source_stride == 1) {
     // If the sourceP address is not 16-byte aligned, the first several frames
     // (at most three) should be processed separately.
@@ -782,7 +783,7 @@ void Vmaxmgv(const float* source_p,
 
     n = tail_frames;
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if (source_stride == 1) {
     int tail_frames = n % 4;
     const float* end_p = source_p + n - tail_frames;
@@ -847,7 +848,7 @@ void Vclip(const float* source_p,
   float high_threshold = *high_threshold_p;
 
 // FIXME: Optimize for SSE2.
-#if CPU(ARM_NEON)
+#if WTF_CPU_ARM_NEON
   if ((source_stride == 1) && (dest_stride == 1)) {
     int tail_frames = n % 4;
     const float* end_p = dest_p + n - tail_frames;
@@ -892,7 +893,7 @@ void Vclip(const float* source_p,
   }
 }
 
-#endif  // OS(MACOSX)
+#endif  // defined(OS_MACOSX)
 
 }  // namespace VectorMath
 

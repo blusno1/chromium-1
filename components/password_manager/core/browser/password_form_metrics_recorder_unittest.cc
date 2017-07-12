@@ -9,17 +9,17 @@
 #include "base/test/histogram_tester.h"
 #include "base/test/user_action_tester.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/ukm/ukm_source.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace {
-constexpr char kTestUrl[] = "https://www.example.com/";
-}
-
 namespace password_manager {
+
+namespace {
+
+constexpr char kTestUrl[] = "https://www.example.com/";
 
 // Create a UkmEntryBuilder with a SourceId that is initialized for kTestUrl.
 std::unique_ptr<ukm::UkmEntryBuilder> CreateUkmEntryBuilder(
@@ -38,12 +38,12 @@ void ExpectUkmValueCount(ukm::TestUkmRecorder* test_ukm_recorder,
                          int64_t value,
                          int64_t expected_count) {
   const ukm::UkmSource* source = test_ukm_recorder->GetSourceForUrl(kTestUrl);
-  ASSERT_NE(nullptr, source);
+  ASSERT_TRUE(source);
 
   ASSERT_EQ(1U, test_ukm_recorder->entries_count());
   const ukm::mojom::UkmEntry* entry = test_ukm_recorder->GetEntry(0);
 
-  int occurrences = 0;
+  int64_t occurrences = 0;
   for (const ukm::mojom::UkmMetricPtr& metric : entry->metrics) {
     if (metric->metric_hash == base::HashMetricName(metric_name) &&
         metric->value == value)
@@ -51,6 +51,8 @@ void ExpectUkmValueCount(ukm::TestUkmRecorder* test_ukm_recorder,
   }
   EXPECT_EQ(expected_count, occurrences) << metric_name << ": " << value;
 }
+
+}  // namespace
 
 // Test the metrics recorded around password generation and the user's
 // interaction with the offer to generate passwords.
@@ -84,21 +86,21 @@ TEST(PasswordFormMetricsRecorder, Generation) {
     // Use a scoped PasswordFromMetricsRecorder because some metrics are recored
     // on destruction.
     {
-      PasswordFormMetricsRecorder recorder(
+      auto recorder = base::MakeRefCounted<PasswordFormMetricsRecorder>(
           /*is_main_frame_secure*/ true,
           CreateUkmEntryBuilder(&test_ukm_recorder));
       if (test.generation_available)
-        recorder.MarkGenerationAvailable();
-      recorder.SetHasGeneratedPassword(test.has_generated_password);
+        recorder->MarkGenerationAvailable();
+      recorder->SetHasGeneratedPassword(test.has_generated_password);
       switch (test.submission) {
         case PasswordFormMetricsRecorder::kSubmitResultNotSubmitted:
           // Do nothing.
           break;
         case PasswordFormMetricsRecorder::kSubmitResultFailed:
-          recorder.LogSubmitFailed();
+          recorder->LogSubmitFailed();
           break;
         case PasswordFormMetricsRecorder::kSubmitResultPassed:
-          recorder.LogSubmitPassed();
+          recorder->LogSubmitPassed();
           break;
         case PasswordFormMetricsRecorder::kSubmitResultMax:
           NOTREACHED();
@@ -243,20 +245,21 @@ TEST(PasswordFormMetricsRecorder, Actions) {
     // Use a scoped PasswordFromMetricsRecorder because some metrics are recored
     // on destruction.
     {
-      PasswordFormMetricsRecorder recorder(test.is_main_frame_secure, nullptr);
+      auto recorder = base::MakeRefCounted<PasswordFormMetricsRecorder>(
+          test.is_main_frame_secure, nullptr);
 
-      recorder.SetManagerAction(test.manager_action);
+      recorder->SetManagerAction(test.manager_action);
       if (test.user_action != UserAction::kNone)
-        recorder.SetUserAction(test.user_action);
+        recorder->SetUserAction(test.user_action);
       if (test.submit_result ==
           PasswordFormMetricsRecorder::kSubmitResultFailed) {
-        recorder.LogSubmitFailed();
+        recorder->LogSubmitFailed();
       } else if (test.submit_result ==
                  PasswordFormMetricsRecorder::kSubmitResultPassed) {
-        recorder.LogSubmitPassed();
+        recorder->LogSubmitPassed();
       }
 
-      EXPECT_EQ(test.actions_taken_new, recorder.GetActionsTakenNew());
+      EXPECT_EQ(test.actions_taken_new, recorder->GetActionsTakenNew());
     }
 
     EXPECT_THAT(
@@ -303,14 +306,14 @@ TEST(PasswordFormMetricsRecorder, ActionSequence) {
   // Use a scoped PasswordFromMetricsRecorder because some metrics are recored
   // on destruction.
   {
-    PasswordFormMetricsRecorder recorder(
+    auto recorder = base::MakeRefCounted<PasswordFormMetricsRecorder>(
         /*is_main_frame_secure*/ true,
         CreateUkmEntryBuilder(&test_ukm_recorder));
-    recorder.SetManagerAction(
+    recorder->SetManagerAction(
         PasswordFormMetricsRecorder::kManagerActionAutofilled);
-    recorder.SetUserAction(UserAction::kChoosePslMatch);
-    recorder.SetUserAction(UserAction::kOverrideUsernameAndPassword);
-    recorder.LogSubmitPassed();
+    recorder->SetUserAction(UserAction::kChoosePslMatch);
+    recorder->SetUserAction(UserAction::kOverrideUsernameAndPassword);
+    recorder->LogSubmitPassed();
   }
 
   EXPECT_THAT(histogram_tester.GetAllSamples("PasswordManager.ActionsTakenV3"),
@@ -349,9 +352,9 @@ TEST(PasswordFormMetricsRecorder, SubmittedFormType) {
     // Use a scoped PasswordFromMetricsRecorder because some metrics are recored
     // on destruction.
     {
-      PasswordFormMetricsRecorder recorder(
+      auto recorder = base::MakeRefCounted<PasswordFormMetricsRecorder>(
           test.is_main_frame_secure, CreateUkmEntryBuilder(&test_ukm_recorder));
-      recorder.SetSubmittedFormType(test.form_type);
+      recorder->SetSubmittedFormType(test.form_type);
     }
 
     if (test.form_type !=

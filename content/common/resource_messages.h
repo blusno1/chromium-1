@@ -14,12 +14,12 @@
 #include "base/process/process.h"
 #include "content/common/content_param_traits_macros.h"
 #include "content/common/navigation_params.h"
-#include "content/common/resource_request.h"
-#include "content/common/resource_request_body_impl.h"
-#include "content/common/resource_request_completion_status.h"
-#include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/common_param_traits.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/resource_request_body.h"
+#include "content/public/common/resource_request_completion_status.h"
 #include "content/public/common/resource_response.h"
+#include "content/public/common/service_worker_modes.h"
 #include "ipc/ipc_message_macros.h"
 #include "net/base/request_priority.h"
 #include "net/cert/ct_policy_status.h"
@@ -27,6 +27,7 @@
 #include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/http/http_response_info.h"
 #include "net/ssl/ssl_info.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/redirect_info.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 
@@ -110,8 +111,8 @@ struct ParamTraits<net::LoadTimingInfo> {
 };
 
 template <>
-struct ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>> {
-  typedef scoped_refptr<content::ResourceRequestBodyImpl> param_type;
+struct ParamTraits<scoped_refptr<content::ResourceRequestBody>> {
+  typedef scoped_refptr<content::ResourceRequestBody> param_type;
   static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
@@ -234,6 +235,10 @@ IPC_STRUCT_TRAITS_BEGIN(net::RedirectInfo)
   IPC_STRUCT_TRAITS_MEMBER(new_referrer)
   IPC_STRUCT_TRAITS_MEMBER(new_referrer_policy)
   IPC_STRUCT_TRAITS_MEMBER(referred_token_binding_host)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(net::MutableNetworkTrafficAnnotationTag)
+  IPC_STRUCT_TRAITS_MEMBER(unique_id_hash_code)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(net::SignedCertificateTimestampAndStatus)
@@ -369,10 +374,12 @@ IPC_MESSAGE_CONTROL2(ResourceMsg_RequestComplete,
 // Resource messages sent from the renderer to the browser.
 
 // Makes a resource request via the browser.
-IPC_MESSAGE_CONTROL3(ResourceHostMsg_RequestResource,
-                     int /* routing_id */,
-                     int /* request_id */,
-                     content::ResourceRequest)
+IPC_MESSAGE_CONTROL4(
+    ResourceHostMsg_RequestResource,
+    int /* routing_id */,
+    int /* request_id */,
+    content::ResourceRequest,
+    net::MutableNetworkTrafficAnnotationTag /* network_traffic_annotation */)
 
 // Cancels a resource request with the ID given as the parameter.
 IPC_MESSAGE_CONTROL1(ResourceHostMsg_CancelRequest,

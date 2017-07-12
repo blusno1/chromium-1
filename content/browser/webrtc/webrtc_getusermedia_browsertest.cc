@@ -109,9 +109,8 @@ namespace content {
 class WebRtcGetUserMediaBrowserTest : public WebRtcContentBrowserTestBase {
  public:
   WebRtcGetUserMediaBrowserTest() : trace_log_(NULL) {
-    scoped_feature_list_.InitWithFeatures(
-        {}, {features::kMediaStreamOldVideoConstraints,
-             features::kMediaStreamOldAudioConstraints});
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kMediaStreamOldAudioConstraints);
     // Automatically grant device permission.
     AppendUseFakeUIForMediaStreamFlag();
   }
@@ -801,15 +800,36 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
       MediaStreamManager::GenerateStreamTestCallback());
 }
 
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest, GetAudioSettingsDefault) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("getAudioSettingsDefault()");
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+                       GetAudioSettingsNoEchoCancellation) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("getAudioSettingsNoEchoCancellation()");
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+                       GetAudioSettingsDeviceId) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("getAudioSettingsDeviceId()");
+}
+
 // TODO(guidou): Remove this test. http://crbug.com/706408
 class WebRtcGetUserMediaOldConstraintsBrowserTest
     : public WebRtcContentBrowserTestBase {
  public:
   WebRtcGetUserMediaOldConstraintsBrowserTest() : trace_log_(NULL) {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kMediaStreamOldVideoConstraints,
-         features::kMediaStreamOldAudioConstraints},
-        {});
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kMediaStreamOldAudioConstraints);
     // Automatically grant device permission.
     AppendUseFakeUIForMediaStreamFlag();
   }
@@ -1189,37 +1209,6 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaOldConstraintsBrowserTest,
   const std::string& constraints2 = constraints1;
   std::string expected_result = "w=640:h=480-w=640:h=480";
 
-  RunTwoGetTwoGetUserMediaWithDifferentContraints(constraints1, constraints2,
-                                                  expected_result);
-}
-
-// TODO(guidou): Remove this test. http://crbug.com/706408
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaOldConstraintsBrowserTest,
-                       TwoGetUserMediaWithSecondVideoCropped) {
-  std::string constraints1 = "{video: true}";
-  std::string constraints2 = "{video: {mandatory: {maxHeight: 360}}}";
-  std::string expected_result = "w=640:h=480-w=640:h=360";
-  RunTwoGetTwoGetUserMediaWithDifferentContraints(constraints1, constraints2,
-                                                  expected_result);
-}
-
-// Test fails under MSan, http://crbug.com/445745
-// TODO(guidou): Remove this test. http://crbug.com/706408
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_TwoGetUserMediaWithFirstHdSecondVga \
-  DISABLED_TwoGetUserMediaWithFirstHdSecondVga
-#else
-#define MAYBE_TwoGetUserMediaWithFirstHdSecondVga \
-  TwoGetUserMediaWithFirstHdSecondVga
-#endif
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaOldConstraintsBrowserTest,
-                       MAYBE_TwoGetUserMediaWithFirstHdSecondVga) {
-  std::string constraints1 =
-      "{video: {mandatory: {maxWidth:1280 , minWidth:1280 , maxHeight: 720, "
-      "minHeight: 720}}}";
-  std::string constraints2 =
-      "{video: {mandatory: {maxWidth:640 , maxHeight: 480}}}";
-  std::string expected_result = "w=1280:h=720-w=640:h=480";
   RunTwoGetTwoGetUserMediaWithDifferentContraints(constraints1, constraints2,
                                                   expected_result);
 }

@@ -18,6 +18,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/create_presentation_connection_request.h"
+#include "chrome/browser/media/router/event_page_request_manager.h"
+#include "chrome/browser/media/router/event_page_request_manager_factory.h"
 #include "chrome/browser/media/router/issues_observer.h"
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router_factory.h"
@@ -230,9 +232,11 @@ MediaRouterUI::MediaRouterUI(content::WebUI* web_ui)
 
   content::WebContents* wc = web_ui->GetWebContents();
   DCHECK(wc);
+  content::BrowserContext* context = wc->GetBrowserContext();
 
-  router_ =
-      MediaRouterFactory::GetApiForBrowserContext(wc->GetBrowserContext());
+  router_ = MediaRouterFactory::GetApiForBrowserContext(context);
+  event_page_request_manager_ =
+      EventPageRequestManagerFactory::GetApiForBrowserContext(context);
 
   // Allows UI to load extensionview.
   // TODO(haibinlu): limit object-src to current extension once crbug/514866
@@ -547,7 +551,7 @@ bool MediaRouterUI::SetRouteParameters(
   // treat subsequent route requests from a Presentation API-initiated dialogs
   // as browser-initiated.
   if (!for_presentation_source || !create_session_request_) {
-    route_response_callbacks->push_back(base::Bind(
+    route_response_callbacks->push_back(base::BindOnce(
         &MediaRouterUI::OnRouteResponseReceived, weak_factory_.GetWeakPtr(),
         current_route_request_id_, sink_id, cast_mode,
         base::UTF8ToUTF16(GetTruncatedPresentationRequestSourceName())));
@@ -556,22 +560,28 @@ bool MediaRouterUI::SetRouteParameters(
     if (create_session_request_) {
       // |create_session_request_| will be nullptr after this call, as the
       // object will be transferred to the callback.
-      route_response_callbacks->push_back(
-          base::Bind(&CreatePresentationConnectionRequest::HandleRouteResponse,
-                     base::Passed(&create_session_request_)));
-      route_response_callbacks->push_back(
-          base::Bind(&MediaRouterUI::HandleCreateSessionRequestRouteResponse,
-                     weak_factory_.GetWeakPtr()));
+      route_response_callbacks->push_back(base::BindOnce(
+          &CreatePresentationConnectionRequest::HandleRouteResponse,
+          base::Passed(&create_session_request_)));
+      route_response_callbacks->push_back(base::BindOnce(
+          &MediaRouterUI::HandleCreateSessionRequestRouteResponse,
+          weak_factory_.GetWeakPtr()));
     } else if (presentation_service_delegate_) {
-      route_response_callbacks->push_back(
-          base::Bind(&PresentationServiceDelegateImpl::OnRouteResponse,
-                     presentation_service_delegate_, *presentation_request_));
+      route_response_callbacks->push_back(base::BindOnce(
+          &PresentationServiceDelegateImpl::OnRouteResponse,
+          presentation_service_delegate_, *presentation_request_));
     }
   }
 
   route_response_callbacks->push_back(
-      base::Bind(&MediaRouterUI::MaybeReportCastingSource,
-                 weak_factory_.GetWeakPtr(), cast_mode));
+      base::BindOnce(&MediaRouterUI::MaybeReportCastingSource,
+                     weak_factory_.GetWeakPtr(), cast_mode));
+
+  if (cast_mode == MediaCastMode::LOCAL_FILE) {
+    route_response_callbacks->push_back(
+        base::BindOnce(&MediaRouterUI::MaybeReportFileInformation,
+                       weak_factory_.GetWeakPtr()));
+  }
 
   *timeout = GetRouteRequestTimeout(cast_mode);
   *incognito = Profile::FromWebUI(web_ui())->IsOffTheRecord();
@@ -754,6 +764,12 @@ void MediaRouterUI::MaybeReportCastingSource(MediaCastMode cast_mode,
     MediaRouterMetrics::RecordMediaRouterCastingSource(cast_mode);
 }
 
+void MediaRouterUI::MaybeReportFileInformation(
+    const RouteRequestResult& result) {
+  if (result.result_code() == RouteRequestResult::OK)
+    media_router_file_dialog_->MaybeReportLastSelectedFileInformation();
+}
+
 void MediaRouterUI::HandleCreateSessionRequestRouteResponse(
     const RouteRequestResult&) {
   Close();
@@ -846,9 +862,7 @@ const std::set<MediaCastMode>& MediaRouterUI::cast_modes() const {
 }
 
 const std::string& MediaRouterUI::GetRouteProviderExtensionId() const {
-  // TODO(crbug.com/597778): remove reference to MediaRouterMojoImpl
-  return static_cast<MediaRouterMojoImpl*>(router_)
-      ->media_route_provider_extension_id();
+  return event_page_request_manager_->media_route_provider_extension_id();
 }
 
 void MediaRouterUI::SetUIInitializationTimer(const base::Time& start_time) {

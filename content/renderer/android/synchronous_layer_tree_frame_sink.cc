@@ -25,8 +25,8 @@
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/surfaces/compositor_frame_sink_support.h"
 #include "cc/surfaces/display.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
-#include "cc/surfaces/surface_manager.h"
+#include "cc/surfaces/frame_sink_manager.h"
+#include "components/viz/common/local_surface_id_allocator.h"
 #include "content/common/android/sync_compositor_messages.h"
 #include "content/common/view_messages.h"
 #include "content/renderer/android/synchronous_compositor_filter.h"
@@ -49,8 +49,8 @@ namespace content {
 namespace {
 
 const int64_t kFallbackTickTimeoutInMilliseconds = 100;
-const cc::FrameSinkId kRootFrameSinkId(1, 1);
-const cc::FrameSinkId kChildFrameSinkId(1, 2);
+const viz::FrameSinkId kRootFrameSinkId(1, 1);
+const viz::FrameSinkId kChildFrameSinkId(1, 2);
 
 // Do not limit number of resources, so use an unrealistically high value.
 const size_t kNumResourcesLimit = 10 * 1000 * 1000;
@@ -109,7 +109,7 @@ SynchronousLayerTreeFrameSink::SynchronousLayerTreeFrameSink(
     scoped_refptr<cc::ContextProvider> context_provider,
     scoped_refptr<cc::ContextProvider> worker_context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    cc::SharedBitmapManager* shared_bitmap_manager,
+    viz::SharedBitmapManager* shared_bitmap_manager,
     int routing_id,
     uint32_t layer_tree_frame_sink_id,
     std::unique_ptr<cc::BeginFrameSource> begin_frame_source,
@@ -126,8 +126,8 @@ SynchronousLayerTreeFrameSink::SynchronousLayerTreeFrameSink(
       sender_(RenderThreadImpl::current()->sync_compositor_message_filter()),
       memory_policy_(0u),
       frame_swap_message_queue_(frame_swap_message_queue),
-      surface_manager_(new cc::SurfaceManager),
-      local_surface_id_allocator_(new cc::LocalSurfaceIdAllocator()),
+      frame_sink_manager_(new cc::FrameSinkManager),
+      local_surface_id_allocator_(new viz::LocalSurfaceIdAllocator),
       begin_frame_source_(std::move(begin_frame_source)) {
   DCHECK(registry_);
   DCHECK(sender_);
@@ -177,10 +177,10 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
   constexpr bool handles_frame_sink_id_invalidation = true;
   constexpr bool needs_sync_points = true;
   root_support_ = cc::CompositorFrameSinkSupport::Create(
-      this, surface_manager_.get(), kRootFrameSinkId, root_support_is_root,
+      this, frame_sink_manager_.get(), kRootFrameSinkId, root_support_is_root,
       handles_frame_sink_id_invalidation, needs_sync_points);
   child_support_ = cc::CompositorFrameSinkSupport::Create(
-      this, surface_manager_.get(), kChildFrameSinkId, child_support_is_root,
+      this, frame_sink_manager_.get(), kChildFrameSinkId, child_support_is_root,
       handles_frame_sink_id_invalidation, needs_sync_points);
 
   cc::RendererSettings software_renderer_settings;
@@ -200,7 +200,8 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
       shared_bitmap_manager_, nullptr /* gpu_memory_buffer_manager */,
       software_renderer_settings, kRootFrameSinkId, std::move(output_surface),
       nullptr /* scheduler */, nullptr /* texture_mailbox_deleter */));
-  display_->Initialize(&display_client_, surface_manager_.get());
+  display_->Initialize(&display_client_,
+                       frame_sink_manager_->surface_manager());
   display_->SetVisible(true);
   return true;
 }
@@ -217,7 +218,7 @@ void SynchronousLayerTreeFrameSink::DetachFromClient() {
   software_output_surface_ = nullptr;
   display_ = nullptr;
   local_surface_id_allocator_ = nullptr;
-  surface_manager_ = nullptr;
+  frame_sink_manager_ = nullptr;
   cc::LayerTreeFrameSink::DetachFromClient();
   CancelFallbackTick();
 }
@@ -304,7 +305,7 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
         SkBlendMode::kSrcOver, 0 /* sorting_context_id */);
     surface_quad->SetNew(
         shared_quad_state, gfx::Rect(child_size), gfx::Rect(child_size),
-        cc::SurfaceId(kChildFrameSinkId, child_local_surface_id_),
+        viz::SurfaceId(kChildFrameSinkId, child_local_surface_id_),
         cc::SurfaceDrawQuadType::PRIMARY, nullptr);
 
     bool result = child_support_->SubmitCompositorFrame(child_local_surface_id_,
@@ -498,7 +499,7 @@ void SynchronousLayerTreeFrameSink::ReclaimResources(
 }
 
 void SynchronousLayerTreeFrameSink::WillDrawSurface(
-    const cc::LocalSurfaceId& local_surface_id,
+    const viz::LocalSurfaceId& local_surface_id,
     const gfx::Rect& damage_rect) {}
 
 }  // namespace content

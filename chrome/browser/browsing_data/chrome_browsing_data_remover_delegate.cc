@@ -4,6 +4,8 @@
 
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <utility>
@@ -23,6 +25,7 @@
 #include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/media/media_device_id_salt.h"
+#include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
 #include "chrome/browser/net/predictor.h"
@@ -82,8 +85,8 @@
 #include "url/url_util.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
+#include "chrome/browser/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/precache/precache_manager_factory.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_model.h"
@@ -192,8 +195,8 @@ void ClearCookiesOnIOThread(base::Time delete_begin,
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::CookieStore* cookie_store =
       rq_context->GetURLRequestContext()->cookie_store();
-  cookie_store->DeleteAllCreatedBetweenAsync(delete_begin, delete_end,
-                                             IgnoreArgument<int>(callback));
+  cookie_store->DeleteAllCreatedBetweenAsync(
+      delete_begin, delete_end, IgnoreArgument<uint32_t>(callback));
 }
 
 void ClearCookiesWithPredicateOnIOThread(
@@ -206,7 +209,7 @@ void ClearCookiesWithPredicateOnIOThread(
   net::CookieStore* cookie_store =
       rq_context->GetURLRequestContext()->cookie_store();
   cookie_store->DeleteAllCreatedBetweenWithPredicateAsync(
-      delete_begin, delete_end, predicate, IgnoreArgument<int>(callback));
+      delete_begin, delete_end, predicate, IgnoreArgument<uint32_t>(callback));
 }
 
 void ClearNetworkPredictorOnIOThread(chrome_browser_net::Predictor* predictor) {
@@ -749,6 +752,14 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
   }
 
   //////////////////////////////////////////////////////////////////////////////
+  // Media Engagement
+  if (remove_mask & DATA_TYPE_SITE_USAGE_DATA &&
+      MediaEngagementService::IsEnabled()) {
+    MediaEngagementService::Get(profile_)->ClearDataBetweenTime(delete_begin_,
+                                                                delete_end_);
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
   // DATA_TYPE_SITE_USAGE_DATA
   if (remove_mask & DATA_TYPE_SITE_USAGE_DATA) {
     HostContentSettingsMapFactory::GetForProfile(profile_)
@@ -951,9 +962,10 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
       base::WaitableEvent* event =
           plugin_data_remover_->StartRemoving(delete_begin_);
 
-      base::WaitableEventWatcher::EventCallback watcher_callback = base::Bind(
-          &ChromeBrowsingDataRemoverDelegate::OnWaitableEventSignaled,
-          weak_ptr_factory_.GetWeakPtr());
+      base::WaitableEventWatcher::EventCallback watcher_callback =
+          base::BindOnce(
+              &ChromeBrowsingDataRemoverDelegate::OnWaitableEventSignaled,
+              weak_ptr_factory_.GetWeakPtr());
       watcher_.StartWatching(event, std::move(watcher_callback));
     } else {
       // TODO(msramek): Store filters from the currently executed task on the
@@ -1050,9 +1062,9 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     clear_reporting_cache_.Start();
     BrowserThread::PostTaskAndReply(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ClearReportingCacheOnIOThread,
-                   base::RetainedRef(std::move(context)), data_type_mask,
-                   filter),
+        base::BindOnce(&ClearReportingCacheOnIOThread,
+                       base::RetainedRef(std::move(context)), data_type_mask,
+                       filter),
         UIThreadTrampoline(clear_reporting_cache_.GetCompletionCallback()));
   }
 

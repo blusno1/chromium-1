@@ -274,7 +274,6 @@ class ChromeServiceWorkerFetchTest : public ChromeServiceWorkerTest {
               "  issuedRequests.forEach(function(data) {"
               "      str += data + '\\n';"
               "    });"
-              "  window.domAutomationController.setAutomationId(0);"
               "  window.domAutomationController.send(str);"
               "}"
               "navigator.serviceWorker.addEventListener("
@@ -415,6 +414,7 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerManifestFetchTest,
                                "use-credentials"));
 }
 
+#if !defined(DISABLE_NACL)
 class ChromeServiceWorkerFetchPPAPITest : public ChromeServiceWorkerFetchTest {
  protected:
   ChromeServiceWorkerFetchPPAPITest() {}
@@ -603,6 +603,7 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerFetchPPAPIPrivateTest,
   EXPECT_EQ(GetRequestStringForPNACL("#OtherCORSCredentials"),
             ExecutePNACLUrlLoaderTest("OtherCORSCredentials"));
 }
+#endif  // !defined(DISABLE_NACL)
 
 class ChromeServiceWorkerNavigationHintTest : public ChromeServiceWorkerTest {
  protected:

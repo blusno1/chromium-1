@@ -13,14 +13,8 @@
 // also need to be updated.
 
 // clang-format off
-#define IDC_BACK                                       33000
-#define IDC_FORWARD                                    33001
-#define IDC_RELOAD                                     33002
-#define IDC_STOP                                       33006
 #define IDC_NEW_TAB                                    34014
-#define IDC_CLOSE_TAB                                  34015
 #define IDC_FULLSCREEN                                 34030
-#define IDC_BOOKMARK_PAGE                              35000
 #define IDC_VIEW_SOURCE                                35002
 #define IDC_PRINT                                      35003
 #define IDC_FIND                                       37000
@@ -28,9 +22,7 @@
 #define IDC_FIND_PREVIOUS                              37002
 #define IDC_SHOW_HISTORY                               40010
 #define IDC_SHOW_BOOKMARK_MANAGER                      40011
-#define IDC_OPTIONS                                    40015
 #define IDC_HELP_PAGE_VIA_MENU                         40020
-#define IDC_SHOW_TOOLS_MENU                            40900
 #define IDC_TOGGLE_TAB_SWITCHER                        40901
 #define IDC_VOICE_SEARCH                               40902
 #define IDC_NEW_INCOGNITO_TAB                          40903
@@ -56,7 +48,6 @@
 #define IDC_CLEAR_BROWSING_DATA_IOS                    40924
 #define IDC_SHOW_MAIL_COMPOSER                         40926
 #define IDC_RESET_ALL_WEBVIEWS                         40928
-#define IDC_SHARE_PAGE                                 40929
 #define IDC_BACK_FORWARD_IN_TAB_HISTORY                40930
 #define IDC_SHOW_PRIVACY_SETTINGS                      40934
 #define IDC_HIDE_SETTINGS_AND_SHOW_PRIVACY_SETTINGS    40935

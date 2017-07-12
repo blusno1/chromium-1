@@ -172,7 +172,7 @@ PushMessagingServiceImpl::~PushMessagingServiceImpl() = default;
 
 void PushMessagingServiceImpl::IncreasePushSubscriptionCount(int add,
                                                              bool is_pending) {
-  DCHECK(add > 0);
+  DCHECK_GT(add, 0);
   if (push_subscription_count_ + pending_push_subscription_count_ == 0) {
     GetGCMDriver()->AddAppHandler(kPushMessagingAppIdentifierPrefix, this);
   }
@@ -192,13 +192,13 @@ void PushMessagingServiceImpl::IncreasePushSubscriptionCount(int add,
 
 void PushMessagingServiceImpl::DecreasePushSubscriptionCount(int subtract,
                                                              bool was_pending) {
-  DCHECK(subtract > 0);
+  DCHECK_GT(subtract, 0);
   if (was_pending) {
     pending_push_subscription_count_ -= subtract;
-    DCHECK(pending_push_subscription_count_ >= 0);
+    DCHECK_GE(pending_push_subscription_count_, 0);
   } else {
     push_subscription_count_ -= subtract;
-    DCHECK(push_subscription_count_ >= 0);
+    DCHECK_GE(push_subscription_count_, 0);
   }
   if (push_subscription_count_ + pending_push_subscription_count_ == 0) {
     GetGCMDriver()->RemoveAppHandler(kPushMessagingAppIdentifierPrefix);
@@ -871,6 +871,36 @@ void PushMessagingServiceImpl::DidDeleteServiceWorkerRegistration(
 void PushMessagingServiceImpl::SetServiceWorkerUnregisteredCallbackForTesting(
     const base::Closure& callback) {
   service_worker_unregistered_callback_for_testing_ = callback;
+}
+
+// DidDeleteServiceWorkerDatabase methods --------------------------------------
+
+void PushMessagingServiceImpl::DidDeleteServiceWorkerDatabase() {
+  std::vector<PushMessagingAppIdentifier> app_identifiers =
+      PushMessagingAppIdentifier::GetAll(profile_);
+
+  base::RepeatingClosure completed_closure = base::BarrierClosure(
+      app_identifiers.size(),
+      service_worker_database_wiped_callback_for_testing_.is_null()
+          ? base::Bind(&base::DoNothing)
+          : service_worker_database_wiped_callback_for_testing_);
+
+  for (const PushMessagingAppIdentifier& app_identifier : app_identifiers) {
+    // Note this will not fully unsubscribe pre-InstanceID subscriptions on
+    // Android from GCM, as that requires a sender_id. We can't fetch those from
+    // the Service Worker database anymore as it's been deleted.
+    UnsubscribeInternal(
+        content::PUSH_UNREGISTRATION_REASON_SERVICE_WORKER_DATABASE_WIPED,
+        app_identifier.origin(),
+        app_identifier.service_worker_registration_id(),
+        app_identifier.app_id(), std::string() /* sender_id */,
+        base::Bind(&UnregisterCallbackToClosure, completed_closure));
+  }
+}
+
+void PushMessagingServiceImpl::SetServiceWorkerDatabaseWipedCallbackForTesting(
+    const base::Closure& callback) {
+  service_worker_database_wiped_callback_for_testing_ = callback;
 }
 
 // OnContentSettingChanged methods ---------------------------------------------

@@ -153,7 +153,8 @@ void WindowTreeHost::OnCursorVisibilityChanged(bool show) {
   // will trigger its own mouse enter.
   if (!show) {
     ui::EventDispatchDetails details = dispatcher()->DispatchMouseExitAtPoint(
-        nullptr, dispatcher()->GetLastMouseLocationInRoot());
+        nullptr, dispatcher()->GetLastMouseLocationInRoot(),
+        ui::EF_CURSOR_HIDE);
     if (details.dispatcher_destroyed)
       return;
   }
@@ -249,7 +250,7 @@ void WindowTreeHost::DestroyDispatcher() {
   //window()->RemoveOrDestroyChildren();
 }
 
-void WindowTreeHost::CreateCompositor(const cc::FrameSinkId& frame_sink_id) {
+void WindowTreeHost::CreateCompositor(const viz::FrameSinkId& frame_sink_id) {
   DCHECK(Env::GetInstance());
   ui::ContextFactory* context_factory = Env::GetInstance()->context_factory();
   DCHECK(context_factory);

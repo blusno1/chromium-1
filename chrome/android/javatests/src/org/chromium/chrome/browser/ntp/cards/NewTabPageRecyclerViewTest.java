@@ -85,7 +85,7 @@ public class NewTabPageRecyclerViewTest {
     // We currently mix the fake and the snippets bridge, resulting in crashes with unregistered
     // categories.
     @CategoryInt
-    private static final int TEST_CATEGORY = KnownCategories.BOOKMARKS;
+    private static final int TEST_CATEGORY = KnownCategories.ARTICLES;
 
     private Tab mTab;
     private NewTabPage mNtp;
@@ -98,7 +98,7 @@ public class NewTabPageRecyclerViewTest {
     public void setUp() throws Exception {
         mTestServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
-        mSiteSuggestionUrls = new String[] {mTestServer.getURL(TEST_PAGE)};
+        mSiteSuggestionUrls = mTestServer.getURLs(TEST_PAGE);
 
         mMostVisitedSites = new FakeMostVisitedSites();
         mMostVisitedSites.setTileSuggestions(FAKE_MOST_VISITED_TITLES, mSiteSuggestionUrls,

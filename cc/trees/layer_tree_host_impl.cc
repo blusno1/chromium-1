@@ -624,7 +624,8 @@ bool LayerTreeHostImpl::IsScrolledBy(LayerImpl* child, ScrollNode* ancestor) {
 
 InputHandler::TouchStartOrMoveEventListenerType
 LayerTreeHostImpl::EventListenerTypeForTouchStartOrMoveAt(
-    const gfx::Point& viewport_point) {
+    const gfx::Point& viewport_point,
+    TouchAction* out_touch_action) {
   gfx::PointF device_viewport_point = gfx::ScalePoint(
       gfx::PointF(viewport_point), active_tree_->device_scale_factor());
 
@@ -633,8 +634,18 @@ LayerTreeHostImpl::EventListenerTypeForTouchStartOrMoveAt(
   LayerImpl* layer_impl_with_touch_handler =
       active_tree_->FindLayerThatIsHitByPointInTouchHandlerRegion(
           device_viewport_point);
-  if (layer_impl_with_touch_handler == NULL)
+
+  if (layer_impl_with_touch_handler == nullptr) {
+    if (out_touch_action)
+      *out_touch_action = kTouchActionAuto;
     return InputHandler::TouchStartOrMoveEventListenerType::NO_HANDLER;
+  }
+
+  if (out_touch_action) {
+    const auto& region = layer_impl_with_touch_handler->touch_action_region();
+    gfx::Point point = gfx::ToRoundedPoint(device_viewport_point);
+    *out_touch_action = region.GetWhiteListedTouchAction(point);
+  }
 
   if (!CurrentlyScrollingNode())
     return InputHandler::TouchStartOrMoveEventListenerType::HANDLER;
@@ -1078,18 +1089,6 @@ void LayerTreeHostImpl::InvalidateContentOnImplSide() {
   if (!CommitToActiveTree())
     CreatePendingTree();
 
-  // The state of PropertyTrees on the recycle tree can be stale if scrolling
-  // and animation updates were made on the active tree, since these are not
-  // replicated on the recycle tree. We use the function below to handle the
-  // similar case for updates from the main thread not being in sync with
-  // changes made on the active tree.
-  // Note that while in practice only the scroll state should need to be
-  // updated, since the animation state is updated both on the recycle and
-  // active tree. We use the same function as for main thread commits for
-  // consistency.
-  bool is_impl_side_update = true;
-  sync_tree()->UpdatePropertyTreeScrollingAndAnimationFromMainThread(
-      is_impl_side_update);
   UpdateSyncTreeAfterCommitOrImplSideInvalidation();
 }
 
@@ -1756,8 +1755,8 @@ bool LayerTreeHostImpl::DrawLayers(FrameData* frame) {
   resource_provider_->PrepareSendToParent(resources,
                                           &compositor_frame.resource_list);
   compositor_frame.render_pass_list = std::move(frame->render_passes);
-  // TODO(fsamuel): Once all clients get their LocalSurfaceId from their parent,
-  // the LocalSurfaceId should hang off CompositorFrameMetadata.
+  // TODO(fsamuel): Once all clients get their viz::LocalSurfaceId from their
+  // parent, the viz::LocalSurfaceId should hang off CompositorFrameMetadata.
   if (settings_.enable_surface_synchronization &&
       active_tree()->local_surface_id().is_valid()) {
     layer_tree_frame_sink_->SetLocalSurfaceId(
@@ -2894,8 +2893,9 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBegin(
         (settings_.is_layer_tree_for_subframe ||
          (!scrolling_node->scrolls_outer_viewport &&
           !scrolling_node->scrolls_inner_viewport))) {
-      int size = scrolling_node->scroll_clip_layer_bounds.GetCheckedArea()
-                     .ValueOrDefault(std::numeric_limits<int>::max());
+      const auto& container_bounds = scrolling_node->container_bounds;
+      int size = container_bounds.GetCheckedArea().ValueOrDefault(
+          std::numeric_limits<int>::max());
       DCHECK_GT(size, 0);
       if (IsWheelBasedScroll(type)) {
         UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Scroll.ScrollerSize.OnScroll_Wheel",
@@ -3037,10 +3037,6 @@ bool LayerTreeHostImpl::ScrollAnimationCreate(ScrollNode* scroll_node,
       scroll_tree.current_scroll_offset(scroll_node->element_id);
   gfx::ScrollOffset target_offset = scroll_tree.ClampScrollOffsetToLimits(
       current_offset + gfx::ScrollOffset(delta), scroll_node);
-  DCHECK_EQ(
-      ElementId(
-          active_tree()->LayerById(scroll_node->owning_layer_id)->element_id()),
-      scroll_node->element_id);
 
   // Start the animation one full frame in. Without any offset, the animation
   // doesn't start until next frame, increasing latency, and preventing our
@@ -4042,15 +4038,15 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
     return;
   }
 
-  ResourceFormat format = resource_provider_->best_texture_format();
+  viz::ResourceFormat format = resource_provider_->best_texture_format();
   switch (bitmap.GetFormat()) {
     case UIResourceBitmap::RGBA8:
       break;
     case UIResourceBitmap::ALPHA_8:
-      format = ALPHA_8;
+      format = viz::ALPHA_8;
       break;
     case UIResourceBitmap::ETC1:
-      format = ETC1;
+      format = viz::ETC1;
       break;
   }
 
@@ -4116,7 +4112,6 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
   data.opaque = bitmap.GetOpaque();
   ui_resource_map_[uid] = data;
 
-  resource_provider_->GenerateSyncTokenForResource(id);
   MarkUIResourceNotEvicted(uid);
 }
 
@@ -4215,11 +4210,6 @@ bool LayerTreeHostImpl::ScrollAnimationUpdateTarget(
     ScrollNode* scroll_node,
     const gfx::Vector2dF& scroll_delta,
     base::TimeDelta delayed_by) {
-  DCHECK_EQ(
-      ElementId(
-          active_tree()->LayerById(scroll_node->owning_layer_id)->element_id()),
-      scroll_node->element_id);
-
   return mutator_host_->ImplOnlyScrollAnimationUpdateTarget(
       scroll_node->element_id, scroll_delta,
       active_tree_->property_trees()->scroll_tree.MaxScrollOffset(

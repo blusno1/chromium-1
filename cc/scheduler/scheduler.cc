@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/auto_reset.h"
+#include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
@@ -25,7 +26,12 @@ namespace {
 // for message latency and kernel scheduling variability.
 const base::TimeDelta kDeadlineFudgeFactor =
     base::TimeDelta::FromMicroseconds(1000);
-}
+
+// TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+// TODO(sunnyps): Remove after fixing https://crbug.com/622080
+const char kBeginMainFrameHangCompositorState[] =
+    "begin-main-frame-hang-compositor-state";
+}  // namespace
 
 Scheduler::Scheduler(
     SchedulerClient* client,
@@ -516,12 +522,11 @@ void Scheduler::ScheduleBeginImplFrameDeadline() {
       deadline_ = begin_impl_frame_tracker_.Current().frame_time +
                   begin_impl_frame_tracker_.Current().interval;
       break;
-    case SchedulerStateMachine::
-        BEGIN_IMPL_FRAME_DEADLINE_MODE_BLOCKED_ON_READY_TO_DRAW:
+    case SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_BLOCKED:
       // We are blocked because we are waiting for ReadyToDraw signal. We would
       // post deadline after we received ReadyToDraw singal.
       TRACE_EVENT1("cc", "Scheduler::ScheduleBeginImplFrameDeadline",
-                   "deadline_mode", "blocked_on_ready_to_draw");
+                   "deadline_mode", "blocked");
       return;
   }
 
@@ -702,6 +707,12 @@ void Scheduler::ProcessScheduledActions() {
 
   ScheduleBeginImplFrameDeadlineIfNeeded();
   SetupNextBeginFrameIfNeeded();
+
+  // TEMPORARY: Compositor state for debugging BeginMainFrame renderer hang.
+  // TODO(sunnyps): Remove after fixing https://crbug.com/622080
+  base::debug::SetCrashKeyValue(
+      kBeginMainFrameHangCompositorState,
+      state_machine_.CrashKeyValueForBeginMainFrameHang());
 }
 
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>

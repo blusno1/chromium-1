@@ -11,13 +11,13 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 
 namespace base {
 class FilePath;
-class SingleThreadTaskRunner;
+class SequencedTaskRunner;
 }  // namespace base
 
 namespace net {
@@ -98,8 +98,8 @@ class AffiliationService : public KeyedService {
 
   // The |backend_task_runner| should be a task runner corresponding to a thread
   // that can take blocking I/O, and is normally Chrome's DB thread.
-  AffiliationService(
-      scoped_refptr<base::SingleThreadTaskRunner> backend_task_runner);
+  explicit AffiliationService(
+      scoped_refptr<base::SequencedTaskRunner> backend_task_runner);
   ~AffiliationService() override;
 
   // Initializes the service by creating its backend and transferring it to the
@@ -108,7 +108,9 @@ class AffiliationService : public KeyedService {
                   const base::FilePath& db_path);
 
   // Looks up facets affiliated with the facet identified by |facet_uri|, and
-  // invokes |result_callback| with the results.
+  // invokes |result_callback| with the results. It is guaranteed that the
+  // results will contain one facet with URI equal to |facet_uri| when
+  // |result_callback| is invoked with success set to true.
   //
   // If the local cache contains fresh affiliation information for |facet_uri|,
   // the request will be served from cache. Otherwise, |cache_miss_policy|
@@ -139,18 +141,10 @@ class AffiliationService : public KeyedService {
   // Wipes results of on-demand fetches and expired prefetches from the cache,
   // but retains information corresponding to facets that are being kept fresh.
   // As no required data is deleted, there will be no network requests directly
-  // triggered by this call.
-  //
-  // The second version will only potentially remove data corresponding to the
-  // given |facet_uri|, but still only as long as the data is no longer needed.
-  virtual void TrimCache();
-  virtual void TrimCacheForFacet(const FacetURI& facet_uri);
-
-  // Posts a task to the |backend_task_runner| to delete the cache database file
-  // at |db_path|, and all auxiliary files. The database must be closed before
-  // calling this.
-  static void DeleteCache(const base::FilePath& db_path,
-                          base::SingleThreadTaskRunner* backend_task_runner);
+  // triggered by this call. It will only potentially remove data
+  // corresponding to the given |facet_uri|, but still only as long as the
+  // data is no longer needed.
+  virtual void TrimCacheForFacetURI(const FacetURI& facet_uri);
 
  private:
   // The backend, owned by this AffiliationService instance, but living on the
@@ -158,10 +152,10 @@ class AffiliationService : public KeyedService {
   // thread, so it will outlive |this| along with all its in-flight tasks.
   AffiliationBackend* backend_;
 
-  // TaskRunner to be used to run the |backend_| (usually the DB thread).
-  scoped_refptr<base::SingleThreadTaskRunner> backend_task_runner_;
+  // TaskRunner to be used to run the |backend_|.
+  scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<AffiliationService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AffiliationService);

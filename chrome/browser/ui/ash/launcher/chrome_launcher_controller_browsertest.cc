@@ -1327,7 +1327,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, RefocusFilterLaunch) {
 }
 
 // Check the launcher activation state for applications and browser.
-IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_ActivationStateCheck) {
+IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ActivationStateCheck) {
   TabStripModel* tab_strip = browser()->tab_strip_model();
   // Get the browser item index
   int browser_index = GetIndexOfShelfItemType(ash::TYPE_BROWSER_SHORTCUT);
@@ -2189,6 +2189,37 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_DragOffShelf) {
   RipOffItemIndex(app_index, &generator, &test, RIP_OFF_ITEM);
   EXPECT_EQ(total_count - 2, model_->item_count());
   EXPECT_FALSE(test.IsOverflowButtonVisible());
+}
+
+// Validates that context menu is shown on right click and drag context is not
+// set in this case and set on left click.
+IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ShelfButtonContextMenu) {
+  ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow(),
+                                     gfx::Point());
+  ash::test::ShelfViewTestAPI test(shelf_->GetShelfViewForTesting());
+  const int browser_index = GetIndexOfShelfItemType(ash::TYPE_BROWSER_SHORTCUT);
+  ASSERT_LE(0, browser_index);
+  ash::ShelfButton* button = test.GetButton(browser_index);
+  ASSERT_TRUE(button);
+
+  // No context menu is shown at this time.
+  EXPECT_FALSE(test.shelf_view()->IsShowingMenu());
+  const gfx::Rect bounds = button->GetBoundsInScreen();
+  generator.MoveMouseTo(bounds.CenterPoint().x(), bounds.CenterPoint().y());
+  generator.PressRightButton();
+  // Context menu is shown on right button press and no drag context is set.
+  EXPECT_TRUE(test.shelf_view()->IsShowingMenu());
+  EXPECT_FALSE(test.shelf_view()->drag_view());
+  generator.ReleaseRightButton();
+  EXPECT_FALSE(test.shelf_view()->drag_view());
+
+  // Press left button. Menu should close and drag context is set to |button|.
+  generator.PressLeftButton();
+  EXPECT_FALSE(test.shelf_view()->IsShowingMenu());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(test.shelf_view()->drag_view(), button);
+  generator.ReleaseLeftButton();
+  EXPECT_FALSE(test.shelf_view()->drag_view());
 }
 
 // Check that clicking on an app shelf item launches a new browser.

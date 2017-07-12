@@ -36,11 +36,15 @@ class TraceEventSystemStatsMonitor;
 }  // namespace base
 
 namespace cc {
-class SurfaceManager;
+class FrameSinkManager;
 }
 
 namespace discardable_memory {
 class DiscardableSharedMemoryManager;
+}
+
+namespace gpu {
+class GpuChannelEstablishFactory;
 }
 
 namespace media {
@@ -170,6 +174,8 @@ class CONTENT_EXPORT BrowserMainLoop {
     return startup_trace_file_;
   }
 
+  gpu::GpuChannelEstablishFactory* gpu_channel_establish_factory() const;
+
 #if defined(OS_ANDROID)
   void SynchronouslyFlushStartupTasks();
 #endif  // OS_ANDROID
@@ -183,7 +189,7 @@ class CONTENT_EXPORT BrowserMainLoop {
 
   // TODO(crbug.com/657959): This will be removed once there are no users, as
   // SurfaceManager is being moved out of process.
-  cc::SurfaceManager* GetSurfaceManager() const;
+  cc::FrameSinkManager* GetFrameSinkManager() const;
 #endif
 
   void StopStartupTracingTimer();
@@ -356,7 +362,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   // access to |in_process_frame_sink_manager_| should happen via
   // |host_frame_sink_manager_| instead which uses Mojo. See
   // http://crbug.com/657959.
-  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
+  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_impl_;
 #endif
 
   // DO NOT add members here. Add them to the right categories above.

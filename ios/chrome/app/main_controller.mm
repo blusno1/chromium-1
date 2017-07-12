@@ -46,6 +46,7 @@
 #include "ios/chrome/app/startup/background_upload_alert.h"
 #include "ios/chrome/app/startup/chrome_main_starter.h"
 #include "ios/chrome/app/startup/client_registration.h"
+#import "ios/chrome/app/startup/content_suggestions_scheduler_notifications.h"
 #include "ios/chrome/app/startup/ios_chrome_main.h"
 #include "ios/chrome/app/startup/network_stack_setup.h"
 #include "ios/chrome/app/startup/provider_registration.h"
@@ -99,6 +100,7 @@
 #import "ios/chrome/browser/ui/authentication/signin_interaction_controller.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/chrome_web_view_factory.h"
+#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/clear_browsing_data_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
@@ -360,8 +362,6 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 - (void)activateBVCAndMakeCurrentBVCPrimary;
 // Sets |currentBVC| as the root view controller for the window.
 - (void)displayCurrentBVC;
-// Shows the settings UI.
-- (void)showSettings;
 // Shows the accounts settings UI.
 - (void)showAccountsSettings;
 // Shows the Sync settings UI.
@@ -680,7 +680,8 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   [_browserViewWrangler shutdown];
   _browserViewWrangler =
       [[BrowserViewWrangler alloc] initWithBrowserState:_mainBrowserState
-                                       tabModelObserver:self];
+                                       tabModelObserver:self
+                             applicationCommandEndpoint:self];
   // Ensure the main tab model is created.
   ignore_result([_browserViewWrangler mainTabModel]);
 
@@ -712,6 +713,12 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   [self scheduleStartupCleanupTasks];
   [MetricsMediator logLaunchMetricsWithStartupInformation:self
                                    browserViewInformation:_browserViewWrangler];
+  if (self.isColdStart) {
+    [ContentSuggestionsSchedulerNotifications
+        notifyColdStart:_mainBrowserState];
+    [ContentSuggestionsSchedulerNotifications
+        notifyForeground:_mainBrowserState];
+  }
 
   [self scheduleLowPriorityStartupTasks];
 
@@ -721,8 +728,6 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
               startupInformation:self
                         appState:self.appState];
   _launchOptions = nil;
-
-  mojo::edk::Init();
 
   if (!_startupParameters) {
     // The startup parameters may create new tabs or navigations. If the restore
@@ -1376,9 +1381,6 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
     case IDC_OPEN_URL:
       [self openUrl:base::mac::ObjCCast<OpenUrlCommand>(sender)];
       break;
-    case IDC_OPTIONS:
-      [self showSettings];
-      break;
     case IDC_REPORT_AN_ISSUE: {
       dispatch_async(dispatch_get_main_queue(), ^{
         [self showReportAnIssue];
@@ -1428,6 +1430,7 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
     } break;
 
     case IDC_PRELOAD_VOICE_SEARCH:
+    case IDC_SHOW_MAIL_COMPOSER:
       [self.currentBVC chromeExecuteCommand:sender];
       break;
     case IDC_VOICE_SEARCH: {
@@ -1724,10 +1727,11 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
                    otrTabModel:self.otrTabModel
                 activeTabModel:self.currentTabModel];
     } else {
-      _tabSwitcherController = [[StackViewController alloc]
-          initWithMainTabModel:self.mainTabModel
-                   otrTabModel:self.otrTabModel
-                activeTabModel:self.currentTabModel];
+      _tabSwitcherController =
+          [[StackViewController alloc] initWithMainTabModel:self.mainTabModel
+                                                otrTabModel:self.otrTabModel
+                                             activeTabModel:self.currentTabModel
+                                 applicationCommandEndpoint:self];
     }
   } else {
     // The StackViewController is kept in memory to avoid the performance hit of
@@ -2537,7 +2541,8 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   [_browserViewWrangler shutdown];
   _browserViewWrangler =
       [[BrowserViewWrangler alloc] initWithBrowserState:nullptr
-                                       tabModelObserver:self];
+                                       tabModelObserver:self
+                             applicationCommandEndpoint:self];
   // This is a test utility method that bypasses the ususal setup steps, so
   // verify that the main coordinator hasn't been created yet, then start it
   // via lazy initialization.

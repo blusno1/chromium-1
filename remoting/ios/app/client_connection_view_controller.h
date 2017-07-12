@@ -14,7 +14,9 @@ typedef NS_ENUM(NSInteger, ClientConnectionViewState) {
   ClientViewConnecting,
   ClientViewPinPrompt,
   ClientViewConnected,
+  ClientViewReconnect,
   ClientViewClosed,
+  ClientViewError,
 };
 
 // This is the view that shows the user feedback while the client connection is

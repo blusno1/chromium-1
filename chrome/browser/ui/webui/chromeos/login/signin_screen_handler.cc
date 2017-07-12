@@ -13,6 +13,7 @@
 #include "ash/public/interfaces/tray_action.mojom.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
+#include "ash/shutdown_reason.h"
 #include "ash/system/devicetype_utils.h"
 #include "ash/wm/lock_state_controller.h"
 #include "base/bind.h"
@@ -283,10 +284,8 @@ SigninScreenHandler::SigninScreenHandler(
   ash::mojom::TouchViewObserverPtr observer;
   touch_view_binding_.Bind(mojo::MakeRequest(&observer));
   touch_view_manager_ptr_->AddObserver(std::move(observer));
-  if (ScreenLocker::default_screen_locker() &&
-      lock_screen_apps::StateController::IsEnabled()) {
+  if (lock_screen_apps::StateController::IsEnabled())
     lock_screen_apps_observer_.Add(lock_screen_apps::StateController::Get());
-  }
   if (WallpaperManager::HasInstance())
     WallpaperManager::Get()->AddObserver(this);
 }
@@ -1087,6 +1086,9 @@ void SigninScreenHandler::OnTouchViewToggled(bool enabled) {
 
 void SigninScreenHandler::OnLockScreenNoteStateChanged(
     ash::mojom::TrayActionState state) {
+  if (!ScreenLocker::default_screen_locker())
+    return;
+
   std::string lock_screen_apps_state;
   switch (state) {
     case ash::mojom::TrayActionState::kActive:
@@ -1184,7 +1186,8 @@ void SigninScreenHandler::HandleOfflineLogin(const base::ListValue* args) {
 }
 
 void SigninScreenHandler::HandleShutdownSystem() {
-  ash::Shell::Get()->lock_state_controller()->RequestShutdown();
+  ash::Shell::Get()->lock_state_controller()->RequestShutdown(
+      ash::ShutdownReason::LOGIN_SHUT_DOWN_BUTTON);
 }
 
 void SigninScreenHandler::HandleLoadWallpaper(const AccountId& account_id) {
@@ -1284,8 +1287,7 @@ void SigninScreenHandler::HandleAccountPickerReady() {
 
   is_account_picker_showing_first_time_ = true;
 
-  if (ScreenLocker::default_screen_locker() &&
-      lock_screen_apps::StateController::IsEnabled()) {
+  if (lock_screen_apps::StateController::IsEnabled()) {
     OnLockScreenNoteStateChanged(
         lock_screen_apps::StateController::Get()->GetLockScreenNoteState());
   }

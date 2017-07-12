@@ -14,18 +14,18 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/android/vr_shell/fps_meter.h"
 #include "chrome/browser/android/vr_shell/gl_browser_interface.h"
 #include "chrome/browser/android/vr_shell/mailbox_to_surface_bridge.h"
-#include "chrome/browser/android/vr_shell/ui_elements/ui_element.h"
-#include "chrome/browser/android/vr_shell/ui_interface.h"
-#include "chrome/browser/android/vr_shell/ui_scene.h"
 #include "chrome/browser/android/vr_shell/vr_controller.h"
 #include "chrome/browser/android/vr_shell/vr_gl_util.h"
 #include "chrome/browser/android/vr_shell/vr_metrics_util.h"
 #include "chrome/browser/android/vr_shell/vr_shell.h"
 #include "chrome/browser/android/vr_shell/vr_shell_renderer.h"
 #include "chrome/browser/android/vr_shell/vr_usage_monitor.h"
+#include "chrome/browser/vr/elements/ui_element.h"
+#include "chrome/browser/vr/fps_meter.h"
+#include "chrome/browser/vr/ui_interface.h"
+#include "chrome/browser/vr/ui_scene.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
 #include "device/vr/android/gvr/gvr_device.h"
 #include "device/vr/android/gvr/gvr_gamepad_data_provider.h"
@@ -99,17 +99,7 @@ static constexpr float kMinAppButtonGestureAngleRad = 0.25;
 static constexpr base::TimeDelta kWebVRFenceCheckInterval =
     base::TimeDelta::FromMicroseconds(250);
 
-static constexpr gfx::PointF kInvalidTargetPoint =
-    gfx::PointF(std::numeric_limits<float>::max(),
-                std::numeric_limits<float>::max());
-
 static constexpr float kEpsilon = 1e-6f;
-
-gfx::Point3F GetRayPoint(const gfx::Point3F& rayOrigin,
-                         const gfx::Vector3dF& rayVector,
-                         float scale) {
-  return rayOrigin + gfx::ScaleVector3d(rayVector, scale);
-}
 
 // Provides the direction the head is looking towards as a 3x1 unit vector.
 gfx::Vector3dF GetForwardVector(const gfx::Transform& head_pose) {
@@ -219,7 +209,7 @@ VrShellGl::VrShellGl(GlBrowserInterface* browser,
                      bool initially_web_vr,
                      bool reprojected_rendering,
                      bool daydream_support,
-                     UiScene* scene)
+                     vr::UiScene* scene)
     : web_vr_mode_(initially_web_vr),
       surfaceless_rendering_(reprojected_rendering),
       daydream_support_(daydream_support),
@@ -227,30 +217,16 @@ VrShellGl::VrShellGl(GlBrowserInterface* browser,
       binding_(this),
       browser_(browser),
       scene_(scene),
-      fps_meter_(new FPSMeter()),
-      webvr_js_time_(new SlidingAverage(kWebVRSlidingAverageSize)),
-      webvr_render_time_(new SlidingAverage(kWebVRSlidingAverageSize)),
+      fps_meter_(new vr::FPSMeter()),
+      webvr_js_time_(new vr::SlidingAverage(kWebVRSlidingAverageSize)),
+      webvr_render_time_(new vr::SlidingAverage(kWebVRSlidingAverageSize)),
       weak_ptr_factory_(this) {
   GvrInit(gvr_api);
 }
 
 VrShellGl::~VrShellGl() {
   vsync_task_.Cancel();
-  // TODO(mthiesse): Can we omit the Close() here? Concern is that if
-  // both ends of the connection ever live in the same process for
-  // some reason, we could receive another VSync request in response
-  // to the closing message in the destructor but fail to respond to
-  // the callback.
-  binding_.Close();
-  if (!callback_.is_null()) {
-    // When this VSync provider is going away we have to respond to pending
-    // callbacks, so instead of providing a VSync, tell the requester to try
-    // again. A VSyncProvider is guaranteed to exist, so the request in response
-    // to this message will go through some other VSyncProvider.
-    base::ResetAndReturn(&callback_)
-        .Run(nullptr, base::TimeDelta(), -1,
-             device::mojom::VRPresentationProvider::VSyncStatus::CLOSING);
-  }
+  closePresentationBindings();
 }
 
 void VrShellGl::Initialize() {
@@ -331,6 +307,8 @@ void VrShellGl::InitializeGl(gfx::AcceleratedWidget window) {
         base::Bind(LoadControllerModelTask, weak_ptr_factory_.GetWeakPtr(),
                    task_runner_));
   }
+
+  input_manager_ = base::MakeUnique<vr::UiInputManager>(scene_, this);
 }
 
 void VrShellGl::CreateContentSurface() {
@@ -407,14 +385,13 @@ void VrShellGl::SubmitFrame(int16_t frame_index,
 void VrShellGl::ConnectPresentingService(
     device::mojom::VRSubmitFrameClientPtrInfo submit_client_info,
     device::mojom::VRPresentationProviderRequest request) {
+  closePresentationBindings();
   submit_client_.Bind(std::move(submit_client_info));
-  binding_.Close();
   binding_.Bind(std::move(request));
 }
 
 void VrShellGl::OnContentFrameAvailable() {
   content_surface_texture_->UpdateTexImage();
-  received_frame_ = true;
 }
 
 void VrShellGl::OnWebVRFrameAvailable() {
@@ -566,59 +543,23 @@ void VrShellGl::HandleControllerInput(const gfx::Vector3dF& head_direction) {
 
   if (ShouldDrawWebVr())
     return;
-  gfx::PointF target_local_point(kInvalidTargetPoint);
-  gfx::Vector3dF eye_to_target;
-  reticle_render_target_ = nullptr;
-  GetVisualTargetElement(controller_direction, eye_to_target, target_point_,
-                         &reticle_render_target_, target_local_point);
 
-  UiElement* target_element = nullptr;
-  if (input_locked_element_) {
-    gfx::Point3F plane_intersection_point;
-    float distance_to_plane;
-    if (!GetTargetLocalPoint(eye_to_target, *input_locked_element_,
-                             2 * scene_->GetBackgroundDistance(),
-                             target_local_point, plane_intersection_point,
-                             distance_to_plane)) {
-      target_local_point = kInvalidTargetPoint;
-    }
-    target_element = input_locked_element_;
-  } else if (!in_scroll_ && !in_click_) {
-    target_element = reticle_render_target_;
-  }
-
-  // Handle input targeting on the content quad, ignoring any other elements.
-  // Content is treated specially to accomodate scrolling, flings, etc.
-  gfx::Point local_point_pixels;
-  if (target_element && (target_element->fill() == Fill::CONTENT)) {
-    local_point_pixels.set_x(content_tex_css_width_ * target_local_point.x());
-    local_point_pixels.set_y(content_tex_css_height_ * target_local_point.y());
-  }
   std::unique_ptr<GestureList> gesture_list_ptr = controller_->DetectGestures();
   GestureList& gesture_list = *gesture_list_ptr;
-  for (const std::unique_ptr<blink::WebGestureEvent>& gesture : gesture_list) {
-    gesture->x = local_point_pixels.x();
-    gesture->y = local_point_pixels.y();
+  vr::UiInputManager::ButtonState controller_button_state =
+      vr::UiInputManager::ButtonState::UP;
+  DCHECK(!(controller_->ButtonUpHappened(gvr::kControllerButtonClick) &&
+           controller_->ButtonDownHappened(gvr::kControllerButtonClick)))
+      << "Cannot handle a button down and up event within one frame.";
+  if (touch_pending_) {
+    controller_button_state = vr::UiInputManager::ButtonState::CLICKED;
+    touch_pending_ = false;
+  } else if (controller_->ButtonState(gvr::kControllerButtonClick)) {
+    controller_button_state = vr::UiInputManager::ButtonState::DOWN;
   }
-  SendFlingCancel(gesture_list);
-  // For simplicity, don't allow scrolling while clicking until we need to.
-  if (!in_click_) {
-    SendScrollEnd(gesture_list);
-    if (!SendScrollBegin(target_element, gesture_list)) {
-      SendScrollUpdate(gesture_list);
-    }
-  }
-  // If we're still scrolling, don't hover (and we can't be clicking, because
-  // click ends scroll).
-  if (in_scroll_)
-    return;
-  SendHoverLeave(target_element);
-  if (!SendHoverEnter(target_element, target_local_point, local_point_pixels)) {
-    SendHoverMove(target_local_point, local_point_pixels);
-  }
-  SendButtonDown(target_element, target_local_point, local_point_pixels);
-  if (!SendButtonUp(target_element, target_local_point, local_point_pixels))
-    SendTap(target_element, target_local_point, local_point_pixels);
+  input_manager_->HandleInput(controller_direction, pointer_start_,
+                              controller_button_state, gesture_list,
+                              &target_point_, &reticle_render_target_);
 }
 
 void VrShellGl::HandleWebVrCompatibilityClick() {
@@ -641,190 +582,16 @@ void VrShellGl::HandleWebVrCompatibilityClick() {
   }
 }
 
-void VrShellGl::SendFlingCancel(GestureList& gesture_list) {
-  if (!fling_target_)
-    return;
-  if (gesture_list.empty() || (gesture_list.front()->GetType() !=
-                               blink::WebInputEvent::kGestureFlingCancel))
-    return;
-  // Scrolling currently only supported on content window.
-  DCHECK_EQ(fling_target_->fill(), Fill::CONTENT);
-  SendGestureToContent(std::move(gesture_list.front()));
-  gesture_list.erase(gesture_list.begin());
-}
-
-void VrShellGl::SendScrollEnd(GestureList& gesture_list) {
-  if (!in_scroll_)
-    return;
-  DCHECK_NE(input_locked_element_, nullptr);
-  if (controller_->ButtonDownHappened(gvr::kControllerButtonClick)) {
-    DCHECK_GT(gesture_list.size(), 0LU);
-    DCHECK_EQ(gesture_list.front()->GetType(),
-              blink::WebInputEvent::kGestureScrollEnd);
-  }
-  // Scrolling currently only supported on content window.
-  DCHECK_EQ(input_locked_element_->fill(), Fill::CONTENT);
-  if (gesture_list.empty() || (gesture_list.front()->GetType() !=
-                               blink::WebInputEvent::kGestureScrollEnd))
-    return;
-  DCHECK_LE(gesture_list.size(), 2LU);
-  SendGestureToContent(std::move(gesture_list.front()));
-  gesture_list.erase(gesture_list.begin());
-  if (!gesture_list.empty()) {
-    DCHECK_EQ(gesture_list.front()->GetType(),
-              blink::WebInputEvent::kGestureFlingStart);
-    SendGestureToContent(std::move(gesture_list.front()));
-    fling_target_ = input_locked_element_;
-    gesture_list.erase(gesture_list.begin());
-  }
-  input_locked_element_ = nullptr;
-  in_scroll_ = false;
-}
-
-bool VrShellGl::SendScrollBegin(UiElement* target, GestureList& gesture_list) {
-  if (in_scroll_ || !target)
-    return false;
-  // Scrolling currently only supported on content window.
-  if (target->fill() != Fill::CONTENT)
-    return false;
-  if (gesture_list.empty() || (gesture_list.front()->GetType() !=
-                               blink::WebInputEvent::kGestureScrollBegin))
-    return false;
-  input_locked_element_ = target;
-  in_scroll_ = true;
-
-  SendGestureToContent(std::move(gesture_list.front()));
-  gesture_list.erase(gesture_list.begin());
-  return true;
-}
-
-void VrShellGl::SendScrollUpdate(GestureList& gesture_list) {
-  if (!in_scroll_)
-    return;
-  DCHECK(input_locked_element_);
-  if (gesture_list.empty() || (gesture_list.front()->GetType() !=
-                               blink::WebInputEvent::kGestureScrollUpdate))
-    return;
-  // Scrolling currently only supported on content window.
-  DCHECK_EQ(input_locked_element_->fill(), Fill::CONTENT);
-  SendGestureToContent(std::move(gesture_list.front()));
-  gesture_list.erase(gesture_list.begin());
-}
-
-void VrShellGl::SendHoverLeave(UiElement* target) {
-  if (!hover_target_ || (target == hover_target_))
-    return;
-  if (hover_target_->fill() == Fill::CONTENT) {
-    SendGestureToContent(
-        MakeMouseEvent(blink::WebInputEvent::kMouseLeave, gfx::Point()));
-  } else {
-    hover_target_->OnHoverLeave();
-  }
-  hover_target_ = nullptr;
-}
-
-bool VrShellGl::SendHoverEnter(UiElement* target,
-                               const gfx::PointF& target_point,
-                               const gfx::Point& local_point_pixels) {
-  if (!target || target == hover_target_)
-    return false;
-  if (target->fill() == Fill::CONTENT) {
-    SendGestureToContent(
-        MakeMouseEvent(blink::WebInputEvent::kMouseEnter, local_point_pixels));
-  } else {
-    target->OnHoverEnter(target_point);
-  }
-  hover_target_ = target;
-  return true;
-}
-
-void VrShellGl::SendHoverMove(const gfx::PointF& target_point,
-                              const gfx::Point& local_point_pixels) {
-  if (!hover_target_)
-    return;
-  if (hover_target_->fill() == Fill::CONTENT) {
-    // TODO(mthiesse, vollick): Content is currently way too sensitive to mouse
-    // moves for how noisy the controller is. It's almost impossible to click a
-    // link without unintentionally starting a drag event. For this reason we
-    // disable mouse moves, only delivering a down and up event.
-    if (in_click_)
-      return;
-    SendGestureToContent(
-        MakeMouseEvent(blink::WebInputEvent::kMouseMove, local_point_pixels));
-  } else {
-    hover_target_->OnMove(target_point);
-  }
-}
-
-void VrShellGl::SendButtonDown(UiElement* target,
-                               const gfx::PointF& target_point,
-                               const gfx::Point& local_point_pixels) {
-  if (in_click_)
-    return;
-  if (!controller_->ButtonDownHappened(gvr::kControllerButtonClick))
-    return;
-  input_locked_element_ = target;
-  in_click_ = true;
-  if (!target)
-    return;
-  if (target->fill() == Fill::CONTENT) {
-    SendGestureToContent(
-        MakeMouseEvent(blink::WebInputEvent::kMouseDown, local_point_pixels));
-  } else {
-    target->OnButtonDown(target_point);
-  }
-}
-
-bool VrShellGl::SendButtonUp(UiElement* target,
-                             const gfx::PointF& target_point,
-                             const gfx::Point& local_point_pixels) {
-  if (!in_click_)
-    return false;
-  if (!controller_->ButtonUpHappened(gvr::kControllerButtonClick) &&
-      controller_->ButtonState(gvr::kControllerButtonClick))
-    return false;
-  in_click_ = false;
-  if (!input_locked_element_)
-    return true;
-  DCHECK(input_locked_element_ == target);
-  input_locked_element_ = nullptr;
-  if (target->fill() == Fill::CONTENT) {
-    SendGestureToContent(
-        MakeMouseEvent(blink::WebInputEvent::kMouseUp, local_point_pixels));
-  } else {
-    target->OnButtonUp(target_point);
-  }
-  return true;
-}
-
-void VrShellGl::SendTap(UiElement* target,
-                        const gfx::PointF& target_point,
-                        const gfx::Point& local_point_pixels) {
-  if (!target)
-    return;
-  if (!touch_pending_)
-    return;
-  touch_pending_ = false;
-  if (target->fill() == Fill::CONTENT) {
-    auto gesture = base::MakeUnique<blink::WebGestureEvent>(
-        blink::WebInputEvent::kGestureTapDown,
-        blink::WebInputEvent::kNoModifiers, NowSeconds());
-    gesture->source_device = blink::kWebGestureDeviceTouchpad;
-    gesture->x = local_point_pixels.x();
-    gesture->y = local_point_pixels.y();
-    SendGestureToContent(std::move(gesture));
-  } else {
-    target->OnButtonDown(target_point);
-    target->OnButtonUp(target_point);
-  }
-}
-
 std::unique_ptr<blink::WebMouseEvent> VrShellGl::MakeMouseEvent(
     blink::WebInputEvent::Type type,
-    const gfx::Point& location) {
+    const gfx::PointF& normalized_web_content_location) {
+  gfx::Point location(
+      content_tex_css_width_ * normalized_web_content_location.x(),
+      content_tex_css_height_ * normalized_web_content_location.y());
   blink::WebInputEvent::Modifiers modifiers =
-      in_click_ ? blink::WebInputEvent::kLeftButtonDown
-                : blink::WebInputEvent::kNoModifiers;
+      controller_->ButtonState(gvr::kControllerButtonClick)
+          ? blink::WebInputEvent::kLeftButtonDown
+          : blink::WebInputEvent::kNoModifiers;
   base::TimeTicks timestamp;
   switch (type) {
     case blink::WebInputEvent::kMouseUp:
@@ -852,6 +619,78 @@ std::unique_ptr<blink::WebMouseEvent> VrShellGl::MakeMouseEvent(
   return mouse_event;
 }
 
+void VrShellGl::UpdateGesture(const gfx::PointF& normalized_content_hit_point,
+                              blink::WebGestureEvent& gesture) {
+  gesture.x = content_tex_css_width_ * normalized_content_hit_point.x();
+  gesture.y = content_tex_css_height_ * normalized_content_hit_point.y();
+}
+
+void VrShellGl::OnContentEnter(const gfx::PointF& normalized_hit_point) {
+  SendGestureToContent(
+      MakeMouseEvent(blink::WebInputEvent::kMouseEnter, normalized_hit_point));
+}
+
+void VrShellGl::OnContentLeave() {
+  SendGestureToContent(
+      MakeMouseEvent(blink::WebInputEvent::kMouseLeave, gfx::PointF()));
+}
+
+void VrShellGl::OnContentMove(const gfx::PointF& normalized_hit_point) {
+  // TODO(mthiesse, vollick): Content is currently way too sensitive to mouse
+  // moves for how noisy the controller is. It's almost impossible to click a
+  // link without unintentionally starting a drag event. For this reason we
+  // disable mouse moves, only delivering a down and up event.
+  if (controller_->ButtonState(gvr::kControllerButtonClick))
+    return;
+  SendGestureToContent(
+      MakeMouseEvent(blink::WebInputEvent::kMouseMove, normalized_hit_point));
+}
+
+void VrShellGl::OnContentDown(const gfx::PointF& normalized_hit_point) {
+  SendGestureToContent(
+      MakeMouseEvent(blink::WebInputEvent::kMouseDown, normalized_hit_point));
+}
+
+void VrShellGl::OnContentUp(const gfx::PointF& normalized_hit_point) {
+  SendGestureToContent(
+      MakeMouseEvent(blink::WebInputEvent::kMouseUp, normalized_hit_point));
+}
+
+void VrShellGl::OnContentFlingBegin(
+    std::unique_ptr<blink::WebGestureEvent> gesture,
+    const gfx::PointF& normalized_hit_point) {
+  UpdateGesture(normalized_hit_point, *gesture);
+  SendGestureToContent(std::move(gesture));
+}
+
+void VrShellGl::OnContentFlingCancel(
+    std::unique_ptr<blink::WebGestureEvent> gesture,
+    const gfx::PointF& normalized_hit_point) {
+  UpdateGesture(normalized_hit_point, *gesture);
+  SendGestureToContent(std::move(gesture));
+}
+
+void VrShellGl::OnContentScrollBegin(
+    std::unique_ptr<blink::WebGestureEvent> gesture,
+    const gfx::PointF& normalized_hit_point) {
+  UpdateGesture(normalized_hit_point, *gesture);
+  SendGestureToContent(std::move(gesture));
+}
+
+void VrShellGl::OnContentScrollUpdate(
+    std::unique_ptr<blink::WebGestureEvent> gesture,
+    const gfx::PointF& normalized_hit_point) {
+  UpdateGesture(normalized_hit_point, *gesture);
+  SendGestureToContent(std::move(gesture));
+}
+
+void VrShellGl::OnContentScrollEnd(
+    std::unique_ptr<blink::WebGestureEvent> gesture,
+    const gfx::PointF& normalized_hit_point) {
+  UpdateGesture(normalized_hit_point, *gesture);
+  SendGestureToContent(std::move(gesture));
+}
+
 void VrShellGl::SendImmediateExitRequestIfNecessary() {
   gvr::ControllerButton buttons[] = {
       gvr::kControllerButtonClick, gvr::kControllerButtonApp,
@@ -863,75 +702,6 @@ void VrShellGl::SendImmediateExitRequestIfNecessary() {
       browser_->ForceExitVr();
     }
   }
-}
-
-void VrShellGl::GetVisualTargetElement(
-    const gfx::Vector3dF& controller_direction,
-    gfx::Vector3dF& eye_to_target,
-    gfx::Point3F& target_point,
-    UiElement** target_element,
-    gfx::PointF& target_local_point) const {
-  // If we place the reticle based on elements intersecting the controller beam,
-  // we can end up with the reticle hiding behind elements, or jumping laterally
-  // in the field of view. This is physically correct, but hard to use. For
-  // usability, do the following instead:
-  //
-  // - Project the controller laser onto a distance-limiting sphere.
-  // - Create a vector between the eyes and the outer surface point.
-  // - If any UI elements intersect this vector, and is within the bounding
-  //   sphere, choose the closest to the eyes, and place the reticle at the
-  //   intersection point.
-
-  // Compute the distance from the eyes to the distance limiting sphere. Note
-  // that the sphere is centered at the controller, rather than the eye, for
-  // simplicity.
-  float distance = scene_->GetBackgroundDistance();
-  target_point = GetRayPoint(pointer_start_, controller_direction, distance);
-  eye_to_target = target_point - kOrigin;
-  eye_to_target.GetNormalized(&eye_to_target);
-
-  // Determine which UI element (if any) intersects the line between the eyes
-  // and the controller target position.
-  float closest_element_distance = (target_point - kOrigin).Length();
-
-  for (auto& element : scene_->GetUiElements()) {
-    if (!element->IsHitTestable())
-      continue;
-    gfx::PointF local_point;
-    gfx::Point3F plane_intersection_point;
-    float distance_to_plane;
-    if (!GetTargetLocalPoint(eye_to_target, *element.get(),
-                             closest_element_distance, local_point,
-                             plane_intersection_point, distance_to_plane))
-      continue;
-    if (!element->HitTest(local_point))
-      continue;
-
-    closest_element_distance = distance_to_plane;
-    target_point = plane_intersection_point;
-    *target_element = element.get();
-    target_local_point = local_point;
-  }
-}
-
-bool VrShellGl::GetTargetLocalPoint(const gfx::Vector3dF& eye_to_target,
-                                    const UiElement& element,
-                                    float max_distance_to_plane,
-                                    gfx::PointF& target_local_point,
-                                    gfx::Point3F& target_point,
-                                    float& distance_to_plane) const {
-  if (!element.GetRayDistance(kOrigin, eye_to_target, &distance_to_plane))
-    return false;
-
-  if (distance_to_plane < 0 || distance_to_plane >= max_distance_to_plane)
-    return false;
-
-  target_point = GetRayPoint(kOrigin, eye_to_target, distance_to_plane);
-  gfx::PointF unit_xy_point = element.GetUnitRectangleCoordinates(target_point);
-
-  target_local_point.set_x(0.5f + unit_xy_point.x());
-  target_local_point.set_y(0.5f - unit_xy_point.y());
-  return true;
 }
 
 void VrShellGl::HandleControllerAppButtonActivity(
@@ -949,7 +719,7 @@ void VrShellGl::HandleControllerAppButtonActivity(
     // considered a regular click
     // TODO(asimjour1): We need to refactor the gesture recognition outside of
     // VrShellGl.
-    UiInterface::Direction direction = UiInterface::NONE;
+    vr::UiInterface::Direction direction = vr::UiInterface::NONE;
     gfx::Vector3dF a = controller_start_direction_;
     gfx::Vector3dF b = controller_direction;
     a.set_y(0);
@@ -958,12 +728,12 @@ void VrShellGl::HandleControllerAppButtonActivity(
       float gesture_xz_angle =
           acos(gfx::DotProduct(a, b) / a.Length() / b.Length());
       if (fabs(gesture_xz_angle) > kMinAppButtonGestureAngleRad) {
-        direction =
-            gesture_xz_angle < 0 ? UiInterface::LEFT : UiInterface::RIGHT;
+        direction = gesture_xz_angle < 0 ? vr::UiInterface::LEFT
+                                         : vr::UiInterface::RIGHT;
         browser_->AppButtonGesturePerformed(direction);
       }
     }
-    if (direction == UiInterface::NONE)
+    if (direction == vr::UiInterface::NONE)
       browser_->AppButtonClicked();
   }
 }
@@ -1193,7 +963,7 @@ void VrShellGl::DrawWorldElements(const gfx::Transform& head_pose) {
                  SkColorGetA(backgroundColor) / 255.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
-  std::vector<const UiElement*> elements = scene_->GetWorldElements();
+  std::vector<const vr::UiElement*> elements = scene_->GetWorldElements();
   const bool draw_reticle =
       !(scene_->is_exiting() || scene_->showing_splash_screen() ||
         ShouldDrawWebVr());
@@ -1202,7 +972,7 @@ void VrShellGl::DrawWorldElements(const gfx::Transform& head_pose) {
 }
 
 void VrShellGl::DrawOverlayElements(const gfx::Transform& head_pose) {
-  std::vector<const UiElement*> elements = scene_->GetOverlayElements();
+  std::vector<const vr::UiElement*> elements = scene_->GetOverlayElements();
   if (elements.empty())
     return;
 
@@ -1217,7 +987,7 @@ void VrShellGl::DrawOverlayElements(const gfx::Transform& head_pose) {
 
 void VrShellGl::DrawHeadLockedElements() {
   TRACE_EVENT0("gpu", "VrShellGl::DrawHeadLockedElements");
-  std::vector<const UiElement*> elements = scene_->GetHeadLockedElements();
+  std::vector<const vr::UiElement*> elements = scene_->GetHeadLockedElements();
 
   // Add head-locked viewports. The list gets reset to just
   // the recommended viewports (for the primary buffer) each frame.
@@ -1239,7 +1009,7 @@ void VrShellGl::DrawHeadLockedElements() {
 }
 
 void VrShellGl::DrawUiView(const gfx::Transform& head_pose,
-                           const std::vector<const UiElement*>& elements,
+                           const std::vector<const vr::UiElement*>& elements,
                            const gfx::Size& render_size,
                            int viewport_offset,
                            bool draw_reticle) {
@@ -1273,7 +1043,7 @@ void VrShellGl::DrawUiView(const gfx::Transform& head_pose,
 }
 
 void VrShellGl::DrawElements(const gfx::Transform& view_proj_matrix,
-                             const std::vector<const UiElement*>& elements,
+                             const std::vector<const vr::UiElement*>& elements,
                              bool draw_reticle) {
   if (elements.empty())
     return;
@@ -1298,31 +1068,31 @@ void VrShellGl::DrawElements(const gfx::Transform& view_proj_matrix,
 }
 
 void VrShellGl::DrawElement(const gfx::Transform& view_proj_matrix,
-                            const UiElement& element) {
+                            const vr::UiElement& element) {
   gfx::Transform transform = view_proj_matrix * element.transform();
 
   switch (element.fill()) {
-    case Fill::OPAQUE_GRADIENT: {
+    case vr::Fill::OPAQUE_GRADIENT: {
       vr_shell_renderer_->GetGradientQuadRenderer()->Draw(
           transform, element.edge_color(), element.center_color(),
           element.computed_opacity());
       break;
     }
-    case Fill::GRID_GRADIENT: {
+    case vr::Fill::GRID_GRADIENT: {
       vr_shell_renderer_->GetGradientGridRenderer()->Draw(
           transform, element.edge_color(), element.center_color(),
           element.grid_color(), element.gridline_count(),
           element.computed_opacity());
       break;
     }
-    case Fill::CONTENT: {
-      gfx::RectF copy_rect(0, 0, 1, 1);
+    case vr::Fill::CONTENT: {
       vr_shell_renderer_->GetExternalTexturedQuadRenderer()->Draw(
-          content_texture_id_, transform, copy_rect,
-          element.computed_opacity());
+          content_texture_id_, transform, render_size_vrshell_,
+          gfx::SizeF(element.size().x(), element.size().y()),
+          element.computed_opacity(), element.corner_radius());
       break;
     }
-    case Fill::SELF: {
+    case vr::Fill::SELF: {
       element.Render(vr_shell_renderer_.get(), transform);
       break;
     }
@@ -1331,10 +1101,10 @@ void VrShellGl::DrawElement(const gfx::Transform& view_proj_matrix,
   }
 }
 
-std::vector<const UiElement*> VrShellGl::GetElementsInDrawOrder(
+std::vector<const vr::UiElement*> VrShellGl::GetElementsInDrawOrder(
     const gfx::Transform& view_matrix,
-    const std::vector<const UiElement*>& elements) {
-  std::vector<const UiElement*> sorted_elements = elements;
+    const std::vector<const vr::UiElement*>& elements) {
+  std::vector<const vr::UiElement*> sorted_elements = elements;
 
   // Sort elements primarily based on their draw phase (lower draw phase first)
   // and secondarily based on their z-axis distance (more distant first).
@@ -1343,7 +1113,7 @@ std::vector<const UiElement*> VrShellGl::GetElementsInDrawOrder(
   // release, and provides a consistent ordering that we can easily design
   // around.
   std::sort(sorted_elements.begin(), sorted_elements.end(),
-            [](const UiElement* first, const UiElement* second) {
+            [](const vr::UiElement* first, const vr::UiElement* second) {
               if (first->draw_phase() != second->draw_phase()) {
                 return first->draw_phase() < second->draw_phase();
               } else {
@@ -1490,7 +1260,7 @@ void VrShellGl::SetWebVrMode(bool enabled) {
   }
 
   if (!enabled) {
-    submit_client_.reset();
+    closePresentationBindings();
   }
 }
 
@@ -1522,24 +1292,23 @@ void VrShellGl::OnVSync() {
     OnWebVRFrameAvailable();
   }
 
-  base::TimeTicks now = base::TimeTicks::Now();
-  base::TimeTicks target;
-
   // Don't send VSyncs until we have a timebase/interval.
   if (vsync_interval_.is_zero())
     return;
+
+  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeTicks target;
   target = now + vsync_interval_;
   int64_t intervals = (target - vsync_timebase_) / vsync_interval_;
   target = vsync_timebase_ + intervals * vsync_interval_;
   task_runner_->PostDelayedTask(FROM_HERE, vsync_task_.callback(),
                                 target - now);
-
-  base::TimeDelta time = intervals * vsync_interval_;
+  base::TimeDelta current = target - vsync_interval_ - base::TimeTicks();
   if (!callback_.is_null()) {
-    SendVSync(time, base::ResetAndReturn(&callback_));
+    SendVSync(current, base::ResetAndReturn(&callback_));
   } else {
     pending_vsync_ = true;
-    pending_time_ = time;
+    pending_time_ = current;
   }
   if (!ShouldDrawWebVr()) {
     DrawFrame(-1);
@@ -1554,7 +1323,7 @@ void VrShellGl::GetVSync(GetVSyncCallback callback) {
     if (!callback_.is_null()) {
       mojo::ReportBadMessage(
           "Requested VSync before waiting for response to previous request.");
-      binding_.Close();
+      closePresentationBindings();
       return;
     }
     callback_ = std::move(callback);
@@ -1564,13 +1333,15 @@ void VrShellGl::GetVSync(GetVSyncCallback callback) {
   SendVSync(pending_time_, std::move(callback));
 }
 
-void VrShellGl::UpdateVSyncInterval(int64_t timebase_nanos,
-                                    double interval_seconds) {
-  vsync_timebase_ = base::TimeTicks();
-  vsync_timebase_ += base::TimeDelta::FromMicroseconds(timebase_nanos / 1000);
-  vsync_interval_ = base::TimeDelta::FromSecondsD(interval_seconds);
-  vsync_task_.Reset(base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
-  OnVSync();
+void VrShellGl::UpdateVSyncInterval(base::TimeTicks vsync_timebase,
+                                    base::TimeDelta vsync_interval) {
+  bool needs_init = vsync_timebase_ == base::TimeTicks();
+  vsync_timebase_ = vsync_timebase;
+  vsync_interval_ = vsync_interval;
+  if (needs_init) {
+    vsync_task_.Reset(base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
+    OnVSync();
+  }
 }
 
 void VrShellGl::ForceExitVr() {
@@ -1638,6 +1409,19 @@ void VrShellGl::CreateVRDisplayInfo(
       device::GvrDelegate::CreateVRDisplayInfo(gvr_api_.get(),
                                                webvr_surface_size_, device_id);
   browser_->RunVRDisplayInfoCallback(callback, &info);
+}
+
+void VrShellGl::closePresentationBindings() {
+  submit_client_.reset();
+  if (!callback_.is_null()) {
+    // When this Presentation provider is going away we have to respond to
+    // pending callbacks, so instead of providing a VSync, tell the requester
+    // the connection is closing.
+    base::ResetAndReturn(&callback_)
+        .Run(nullptr, base::TimeDelta(), -1,
+             device::mojom::VRPresentationProvider::VSyncStatus::CLOSING);
+  }
+  binding_.Close();
 }
 
 }  // namespace vr_shell

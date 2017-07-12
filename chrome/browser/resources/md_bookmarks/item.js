@@ -34,6 +34,10 @@ Polymer({
     isFolder_: Boolean,
   },
 
+  hostAttributes: {
+    'role': 'listitem',
+  },
+
   observers: [
     'updateFavicon_(item_.url)',
   ],
@@ -118,6 +122,7 @@ Polymer({
   /** @private */
   onItemChanged_: function() {
     this.isFolder_ = !this.item_.url;
+    this.setAttribute('aria-label', this.item_.title);
   },
 
   /**
@@ -143,6 +148,9 @@ Polymer({
    * @private
    */
   onDblClick_: function(e) {
+    if (!this.isSelectedItem_)
+      this.selectThisItem_();
+
     var commandManager = bookmarks.CommandManager.getInstance();
     var itemSet = this.getState().selection.items;
     if (commandManager.canExecute(Command.OPEN, itemSet))

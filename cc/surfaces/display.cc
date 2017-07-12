@@ -33,10 +33,10 @@
 
 namespace cc {
 
-Display::Display(SharedBitmapManager* bitmap_manager,
+Display::Display(viz::SharedBitmapManager* bitmap_manager,
                  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
                  const RendererSettings& settings,
-                 const FrameSinkId& frame_sink_id,
+                 const viz::FrameSinkId& frame_sink_id,
                  std::unique_ptr<OutputSurface> output_surface,
                  std::unique_ptr<DisplayScheduler> scheduler,
                  std::unique_ptr<TextureMailboxDeleter> texture_mailbox_deleter)
@@ -94,7 +94,7 @@ void Display::Initialize(DisplayClient* client,
   }
 }
 
-void Display::SetLocalSurfaceId(const LocalSurfaceId& id,
+void Display::SetLocalSurfaceId(const viz::LocalSurfaceId& id,
                                 float device_scale_factor) {
   if (current_surface_id_.local_surface_id() == id &&
       device_scale_factor_ == device_scale_factor) {
@@ -102,7 +102,7 @@ void Display::SetLocalSurfaceId(const LocalSurfaceId& id,
   }
 
   TRACE_EVENT0("cc", "Display::SetSurfaceId");
-  current_surface_id_ = SurfaceId(frame_sink_id_, id);
+  current_surface_id_ = viz::SurfaceId(frame_sink_id_, id);
   device_scale_factor_ = device_scale_factor;
 
   UpdateRootSurfaceResourcesLocked();
@@ -340,9 +340,15 @@ bool Display::DrawAndSwap() {
     if (have_damage && !size_matches)
       aggregator_->SetFullDamageForSurface(current_surface_id_);
     TRACE_EVENT_INSTANT0("cc", "Swap skipped.", TRACE_EVENT_SCOPE_THREAD);
-    stored_latency_info_.insert(stored_latency_info_.end(),
-                                frame.metadata.latency_info.begin(),
-                                frame.metadata.latency_info.end());
+
+    // Do not store more that the allowed size.
+    if (ui::LatencyInfo::Verify(frame.metadata.latency_info,
+                                "Display::DrawAndSwap")) {
+      stored_latency_info_.insert(stored_latency_info_.end(),
+                                  frame.metadata.latency_info.begin(),
+                                  frame.metadata.latency_info.end());
+    }
+
     if (scheduler_) {
       scheduler_->DidSwapBuffers();
       scheduler_->DidReceiveSwapBuffersAck();
@@ -375,7 +381,7 @@ void Display::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
   }
 }
 
-bool Display::SurfaceDamaged(const SurfaceId& surface_id,
+bool Display::SurfaceDamaged(const viz::SurfaceId& surface_id,
                              const BeginFrameAck& ack) {
   bool display_damaged = false;
   if (ack.has_damage) {
@@ -399,12 +405,12 @@ bool Display::SurfaceDamaged(const SurfaceId& surface_id,
   return display_damaged;
 }
 
-void Display::SurfaceDiscarded(const SurfaceId& surface_id) {
+void Display::SurfaceDiscarded(const viz::SurfaceId& surface_id) {
   if (aggregator_)
     aggregator_->ReleaseResources(surface_id);
 }
 
-bool Display::SurfaceHasUndrawnFrame(const SurfaceId& surface_id) const {
+bool Display::SurfaceHasUndrawnFrame(const viz::SurfaceId& surface_id) const {
   if (!surface_manager_)
     return false;
 
@@ -415,7 +421,7 @@ bool Display::SurfaceHasUndrawnFrame(const SurfaceId& surface_id) const {
   return surface->HasUndrawnActiveFrame();
 }
 
-const SurfaceId& Display::CurrentSurfaceId() {
+const viz::SurfaceId& Display::CurrentSurfaceId() {
   return current_surface_id_;
 }
 

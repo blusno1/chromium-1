@@ -52,10 +52,28 @@ SkColor DefaultTypographyProvider::GetColor(
     int context,
     int style,
     const ui::NativeTheme& theme) const {
-  return theme.GetSystemColor(
-      (style == style::STYLE_DISABLED)
-          ? ui::NativeTheme::kColorId_LabelDisabledColor
-          : ui::NativeTheme::kColorId_LabelEnabledColor);
+  ui::NativeTheme::ColorId color_id =
+      ui::NativeTheme::kColorId_LabelEnabledColor;
+  if (context == style::CONTEXT_BUTTON_MD) {
+    switch (style) {
+      case views::style::STYLE_DIALOG_BUTTON_DEFAULT:
+        color_id = ui::NativeTheme::kColorId_TextOnProminentButtonColor;
+        break;
+      case views::style::STYLE_DISABLED:
+        color_id = ui::NativeTheme::kColorId_ButtonDisabledColor;
+        break;
+      default:
+        color_id = ui::NativeTheme::kColorId_ButtonEnabledColor;
+        break;
+    }
+  } else if (context == style::CONTEXT_TEXTFIELD) {
+    color_id = style == style::STYLE_DISABLED
+                   ? ui::NativeTheme::kColorId_TextfieldReadOnlyColor
+                   : ui::NativeTheme::kColorId_TextfieldDefaultColor;
+  } else if (style == style::STYLE_DISABLED) {
+    color_id = ui::NativeTheme::kColorId_LabelDisabledColor;
+  }
+  return theme.GetSystemColor(color_id);
 }
 
 int DefaultTypographyProvider::GetLineHeight(int context, int style) const {

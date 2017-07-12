@@ -66,7 +66,7 @@ class CORE_EXPORT RootScrollerController
 
   // This class needs to be informed of changes in layout so that it can
   // determine if the current root scroller is still valid or if it must be
-  // replaced by the default root scroller.
+  // replaced by the default root scroller. Must be called from LayoutClean.
   void DidUpdateLayout();
 
   // This class needs to be informed when the FrameView of its Document changes
@@ -84,6 +84,8 @@ class CORE_EXPORT RootScrollerController
   // Element as the viewport scroller. Sadly, this is *not* the
   // document.scrollingElement in general.
   bool ScrollsViewport(const Element&) const;
+
+  void ElementRemoved(const Element&);
 
  private:
   RootScrollerController(Document&);

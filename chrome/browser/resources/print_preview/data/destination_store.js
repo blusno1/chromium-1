@@ -12,10 +12,12 @@ cr.define('print_preview', function() {
    *     destinations.
    * @param {!print_preview.UserInfo} userInfo User information repository.
    * @param {!print_preview.AppState} appState Application state.
+   * @param {!WebUIListenerTracker} listenerTracker Tracker for WebUI listeners
+   *     added in DestinationStore constructor.
    * @constructor
    * @extends {cr.EventTarget}
    */
-  function DestinationStore(nativeLayer, userInfo, appState) {
+  function DestinationStore(nativeLayer, userInfo, appState, listenerTracker) {
     cr.EventTarget.call(this);
 
     /**
@@ -177,8 +179,9 @@ cr.define('print_preview', function() {
     this.useSystemDefaultAsDefault_ =
         loadTimeData.getBoolean('useSystemDefaultPrinter');
 
-    this.addEventListeners_();
     this.reset_();
+
+    this.addWebUIEventListeners_(listenerTracker);
   }
 
   /**
@@ -546,6 +549,23 @@ cr.define('print_preview', function() {
     },
 
     /**
+     * Starts listening for relevant WebUI events and adds the listeners to
+     * |listenerTracker|. |listenerTracker| is responsible for removing the
+     * listeners when necessary.
+     * @param {!WebUIListenerTracker} listenerTracker
+     * @private
+     */
+    addWebUIEventListeners_: function(listenerTracker) {
+      listenerTracker.add(
+          'privet-printer-added', this.onPrivetPrinterAdded_.bind(this));
+      listenerTracker.add(
+          'extension-printers-added',
+          this.onExtensionPrintersAdded_.bind(this));
+      listenerTracker.add(
+          'reload-printer-list', this.onDestinationsReload.bind(this));
+    },
+
+    /**
      * Initializes the destination store. Sets the initially selected
      * destination. If any inserted destinations match this ID, that destination
      * will be automatically selected. This method must be called after the
@@ -864,6 +884,7 @@ cr.define('print_preview', function() {
      *     to set.
      */
     setCloudPrintInterface: function(cloudPrintInterface) {
+      assert(this.cloudPrintInterface_ == null);
       this.cloudPrintInterface_ = cloudPrintInterface;
       this.tracker_.add(
           this.cloudPrintInterface_,
@@ -1179,8 +1200,8 @@ cr.define('print_preview', function() {
      * @param {?print_preview.Destination} destination Information about the
      *     destination if it was resolved successfully.
      */
-    dispatchProvisionalDestinationResolvedEvent_: function(provisionalId,
-                                                           destination) {
+    dispatchProvisionalDestinationResolvedEvent_: function(
+        provisionalId, destination) {
       var event = new Event(
           DestinationStore.EventType.PROVISIONAL_DESTINATION_RESOLVED);
       event.provisionalId = provisionalId;
@@ -1330,18 +1351,6 @@ cr.define('print_preview', function() {
       } else {
         return false;
       }
-    },
-
-    /**
-     * Binds handlers to events.
-     * @private
-     */
-    addEventListeners_: function() {
-      var nativeLayerEventTarget = this.nativeLayer_.getEventTarget();
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.DESTINATIONS_RELOAD,
-          this.onDestinationsReload_.bind(this));
     },
 
     /**
@@ -1549,7 +1558,7 @@ cr.define('print_preview', function() {
       if (printer.serviceName == this.waitForRegisterDestination_ &&
           !printer.isUnregistered) {
         this.waitForRegisterDestination_ = null;
-        this.onDestinationsReload_();
+        this.onDestinationsReload();
       } else {
         this.insertDestinations_(
             print_preview.PrivetDestinationParser.parse(printer));
@@ -1617,11 +1626,10 @@ cr.define('print_preview', function() {
     },
 
     /**
-     * Called from native layer after the user was requested to sign in, and did
-     * so successfully.
-     * @private
+     * Called from print preview after the user was requested to sign in, and
+     * did so successfully.
      */
-    onDestinationsReload_: function() {
+    onDestinationsReload: function() {
       this.reset_();
       this.autoSelectMatchingDestination_ =
           this.convertPreselectedToDestinationMatch_();

@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/event_types.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "ui/aura/window_observer.h"
@@ -47,23 +46,26 @@ enum KeyboardMode {
 };
 
 // Represents the current state of the keyboard managed by the controller.
+// Don't change the numeric value of the members because they are used in UMA
+// VirtualKeyboard.ControllerStateTransition.
 enum class KeyboardControllerState {
   UNKNOWN = 0,
-  // Keyboard is shown.
-  SHOWN,
+  // Keyboard has never been shown.
+  INITIAL = 1,
+  // Waiting for an extension to be loaded. Will move to HIDDEN if this is
+  // loading pre-emptively, otherwise will move to SHOWING.
+  LOADING_EXTENSION = 2,
   // Keyboard is being shown via animation.
-  SHOWING,
-  // Waiting for an extension to be loaded and then move to SHOWING.
-  LOADING_EXTENSION,
+  SHOWING = 3,
+  // Keyboard is shown.
+  SHOWN = 4,
   // Keyboard is still shown, but will move to HIDING in a short period, or if
   // an input element gets focused again, will move to SHOWN.
-  WILL_HIDE,
+  WILL_HIDE = 5,
   // Keyboard is being hidden via animation.
-  HIDING,
+  HIDING = 6,
   // Keyboard is hidden, but has shown at least once.
-  HIDDEN,
-  // Keyboard has never been shown.
-  INITIAL,
+  HIDDEN = 7,
 };
 
 // Provides control of the virtual keyboard, including providing a container
@@ -80,7 +82,8 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   };
 
   // Takes ownership of |ui|.
-  explicit KeyboardController(KeyboardUI* ui, KeyboardLayoutDelegate* delegate);
+  explicit KeyboardController(std::unique_ptr<KeyboardUI> ui,
+                              KeyboardLayoutDelegate* delegate);
   ~KeyboardController() override;
 
   // Returns the container for the keyboard, which is owned by
@@ -126,6 +129,10 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // |lock| is true.
   void ShowKeyboard(bool lock);
 
+  // Loads the keyboard UI contents in the background, but does not display
+  // the keyboard.
+  void LoadKeyboardUiInBackground();
+
   // Force the keyboard to show up in the specific display if not showing and
   // lock the keyboard
   void ShowKeyboardInDisplay(const int64_t display_id);
@@ -158,6 +165,9 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // For access to Observer methods for simulation.
   friend class KeyboardControllerTest;
 
+  // For access to NotifyKeyboardLoadingComplete.
+  friend class KeyboardLayoutManager;
+
   // aura::WindowObserver overrides
   void OnWindowHierarchyChanged(const HierarchyChangeParams& params) override;
   void OnWindowAddedToRootWindow(aura::Window* window) override;
@@ -168,16 +178,20 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
                              const gfx::Rect& new_bounds) override;
 
   // InputMethodObserver overrides
-  void OnTextInputTypeChanged(const ui::TextInputClient* client) override {}
-  void OnFocus() override {}
   void OnBlur() override {}
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override {}
+  void OnFocus() override {}
+  void OnInputMethodDestroyed(const ui::InputMethod* input_method) override {}
+  void OnTextInputTypeChanged(const ui::TextInputClient* client) override {}
   void OnTextInputStateChanged(const ui::TextInputClient* client) override;
-  void OnInputMethodDestroyed(const ui::InputMethod* input_method) override;
   void OnShowImeIfNeeded() override;
+
+  // Notifies that the extension has completed loading
+  void NotifyKeyboardLoadingComplete();
 
   // Show virtual keyboard immediately with animation.
   void ShowKeyboardInternal(int64_t display_id);
+  void PopulateKeyboardContent(int64_t display_id, bool show_keyboard);
 
   // Returns true if keyboard is scheduled to hide.
   bool WillHideKeyboard() const;
@@ -204,7 +218,6 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // uses container_'s animator.
   std::unique_ptr<CallbackAnimationObserver> animation_observer_;
 
-  ui::InputMethod* input_method_;
   bool keyboard_visible_;
   bool show_on_resize_;
   // If true, the keyboard is always visible even if no window has input focus.

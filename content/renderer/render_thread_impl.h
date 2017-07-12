@@ -42,7 +42,7 @@
 #include "content/common/renderer.mojom.h"
 #include "content/common/renderer_host.mojom.h"
 #include "content/common/storage_partition_service.mojom.h"
-#include "content/common/url_loader_factory.mojom.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/gpu/compositor_dependencies.h"
 #include "content/renderer/layout_test_dependencies.h"
@@ -143,7 +143,7 @@ class PeerConnectionTracker;
 class CategorizedWorkerPool;
 class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
-class RendererGpuVideoAcceleratorFactories;
+class GpuVideoAcceleratorFactoriesImpl;
 class ResourceDispatchThrottler;
 class VideoCaptureImplManager;
 
@@ -214,7 +214,7 @@ class CONTENT_EXPORT RenderThreadImpl
       ResourceDispatcherDelegate* delegate) override;
   std::unique_ptr<base::SharedMemory> HostAllocateSharedMemoryBuffer(
       size_t buffer_size) override;
-  cc::SharedBitmapManager* GetSharedBitmapManager() override;
+  viz::SharedBitmapManager* GetSharedBitmapManager() override;
   void RegisterExtension(v8::Extension* extension) override;
   void ScheduleIdleHandler(int64_t initial_delay_ms) override;
   void IdleHandler() override;
@@ -248,7 +248,7 @@ class CONTENT_EXPORT RenderThreadImpl
   bool IsPartialRasterEnabled() override;
   bool IsGpuMemoryBufferCompositorResourcesEnabled() override;
   bool IsElasticOverscrollEnabled() override;
-  const cc::BufferToTextureTargetMap& GetBufferToTextureTargetMap() override;
+  const viz::BufferToTextureTargetMap& GetBufferToTextureTargetMap() override;
   scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorMainThreadTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner>
@@ -698,8 +698,7 @@ class CONTENT_EXPORT RenderThreadImpl
   // TODO(dcastagna): This should be just one scoped_ptr once
   // http://crbug.com/580386 is fixed.
   // NOTE(dcastagna): At worst this accumulates a few bytes per context lost.
-  std::vector<std::unique_ptr<RendererGpuVideoAcceleratorFactories>>
-      gpu_factories_;
+  std::vector<std::unique_ptr<GpuVideoAcceleratorFactoriesImpl>> gpu_factories_;
 
   // Thread for running multimedia operations (e.g., video decoding).
   std::unique_ptr<base::Thread> media_thread_;
@@ -751,7 +750,7 @@ class CONTENT_EXPORT RenderThreadImpl
   bool is_gpu_memory_buffer_compositor_resources_enabled_;
   bool is_partial_raster_enabled_;
   bool is_elastic_overscroll_enabled_;
-  cc::BufferToTextureTargetMap buffer_to_texture_target_map_;
+  viz::BufferToTextureTargetMap buffer_to_texture_target_map_;
   bool is_threaded_animation_enabled_;
   bool is_scroll_animator_enabled_;
 

@@ -15,7 +15,9 @@
 #include "ui/base/resource/resource_bundle.h"
 
 #import "remoting/ios/app/app_view_controller.h"
+#import "remoting/ios/app/help_and_feedback.h"
 #import "remoting/ios/app/remoting_view_controller.h"
+#import "remoting/ios/app/user_status_presenter.h"
 #import "remoting/ios/facade/remoting_oauth_authentication.h"
 
 @interface AppDelegate () {
@@ -107,6 +109,7 @@ static NSString* const kFAQsUrl =
       [[AppViewController alloc] initWithMainViewController:navController];
   self.window.rootViewController = _appViewController;
   [self.window makeKeyAndVisible];
+  [UserStatusPresenter.instance start];
 }
 
 #pragma mark - AppDelegate
@@ -123,10 +126,8 @@ static NSString* const kFAQsUrl =
       navigationController:navigationController];
 }
 
-- (void)navigateToSendFeedback:(UINavigationController*)navigationController {
-  UIViewController* feedbackController = [[UIViewController alloc] init];
-  feedbackController.title = @"Feedback";
-  [navigationController pushViewController:feedbackController animated:YES];
+- (void)presentFeedbackFlowWithContext:(NSString*)context {
+  [HelpAndFeedback.instance presentFeedbackFlowWithContext:context];
 }
 
 #pragma mark - Private

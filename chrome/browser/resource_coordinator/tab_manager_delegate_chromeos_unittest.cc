@@ -6,6 +6,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/process/process_handle.h"
@@ -101,7 +102,8 @@ TEST_F(TabManagerDelegateTest, CandidatesSortedWithFocusedAppAndTab) {
   TabStats tab1;
   tab1.tab_contents_id = 100;
   tab1.is_pinned = true;
-  tab1.is_selected = true;
+  tab1.is_in_active_window = true;
+  tab1.is_active = true;
   const TabStatsList tab_list = {tab1};
 
   const std::vector<TabManagerDelegate::Candidate> candidates =
@@ -156,8 +158,8 @@ class MockTabManagerDelegate : public TabManagerDelegate {
     return true;
   }
 
-  bool KillTab(int64_t tab_id) override {
-    killed_tabs_.push_back(tab_id);
+  bool KillTab(const TabStats& tab_stats) override {
+    killed_tabs_.push_back(tab_stats.tab_contents_id);
     return true;
   }
 
@@ -247,7 +249,8 @@ TEST_F(TabManagerDelegateTest, SetOomScoreAdj) {
   // tab1                pid: 11
   // tab5                pid: 12
   // tab2                pid: 11
-  tab_manager_delegate.AdjustOomPrioritiesImpl(tab_list, arc_processes);
+  tab_manager_delegate.AdjustOomPrioritiesImpl(tab_list,
+                                               std::move(arc_processes));
   auto& oom_score_map = tab_manager_delegate.oom_score_map_;
 
   // 6 PIDs for apps + 2 PIDs for tabs.
@@ -334,7 +337,7 @@ TEST_F(TabManagerDelegateTest, DoNotKillRecentlyKilledArcProcesses) {
   memory_stat->SetTargetMemoryToFreeKB(250000);
   memory_stat->SetProcessPss(30, 10000);
   TabStatsList tab_list;
-  tab_manager_delegate.LowMemoryKillImpl(tab_list, arc_processes);
+  tab_manager_delegate.LowMemoryKillImpl(tab_list, std::move(arc_processes));
 
   auto killed_arc_processes = tab_manager_delegate.GetKilledArcProcesses();
   EXPECT_EQ(0U, killed_arc_processes.size());
@@ -411,7 +414,7 @@ TEST_F(TabManagerDelegateTest, KillMultipleProcesses) {
   memory_stat->SetProcessPss(20, 30000);
   memory_stat->SetProcessPss(10, 100000);
 
-  tab_manager_delegate.LowMemoryKillImpl(tab_list, arc_processes);
+  tab_manager_delegate.LowMemoryKillImpl(tab_list, std::move(arc_processes));
 
   auto killed_arc_processes = tab_manager_delegate.GetKilledArcProcesses();
   auto killed_tabs = tab_manager_delegate.GetKilledTabs();

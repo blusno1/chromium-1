@@ -76,6 +76,10 @@ const char kChildAccountStatusKnown[] = "child_account_status_known";
 // Defaults apps are installed only when creating a new profile.
 const char kDefaultApps[] = "default_apps";
 
+// Disable SafeBrowsing checks for files coming from trusted URLs when false.
+const char kSafeBrowsingForTrustedSourcesEnabled[] =
+    "safebrowsing_for_trusted_sources_enabled";
+
 // Disables screenshot accelerators and extension APIs.
 // This setting resides both in profile prefs and local state. Accelerator
 // handling code reads local state, while extension APIs use profile pref.
@@ -416,17 +420,6 @@ const char kWebKitEncryptedMediaEnabled[] =
 // TODO(bengr): Migrate the preference string to "data_saver.enabled"
 // (crbug.com/564207).
 const char kDataSaverEnabled[] = "spdy_proxy.enabled";
-
-// Boolean that is true when SafeBrowsing is enabled.
-const char kSafeBrowsingEnabled[] = "safebrowsing.enabled";
-
-// Boolean that is true when the SafeBrowsing interstitial should not allow
-// users to proceed anyway.
-const char kSafeBrowsingProceedAnywayDisabled[] =
-    "safebrowsing.proceed_anyway_disabled";
-
-// A dictionary mapping incident types to a dict of incident key:digest pairs.
-const char kSafeBrowsingIncidentsSent[] = "safebrowsing.incidents_sent";
 
 // Boolean that is true when the SSL interstitial should allow users to
 // proceed anyway. Otherwise, proceeding is not possible.
@@ -1513,6 +1506,9 @@ const char kSaveFileDefaultDirectory[] = "savefile.default_directory";
 // the chrome/browser/download/save_package.h for the possible values.
 const char kSaveFileType[] = "savefile.type";
 
+// A list of download sources that can be trusted, e.g., enterprise intranet.
+const char kTrustedDownloadSources[] = "trusted_download_sources";
+
 // String which specifies the last directory that was chosen for uploading
 // or opening a file.
 const char kSelectFileLastDirectory[] = "selectfile.last_directory";
@@ -2569,6 +2565,29 @@ const char kClipboardLastModifiedTime[] = "ui.clipboard.last_modified_time";
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
 const char kOfflinePrefetchBackoff[] = "offline_prefetch.backoff";
+
+// The following set of Prefs is used by OfflineMetricsCollectorImpl to
+// backup the current Chrome usage tracking state and accumulated counters
+// of days with specific Chrome usage.
+
+// The boolean flags indicating whether the specific activity was observed
+// in Chrome during the day that started at |kOfflineUsageTrackingDay|. These
+// are used to track usage of Chrome is used while offline and how various
+// offline features affect that.
+const char kOfflineUsageStartObserved[] = "offline_pages.start_observed";
+const char kOfflineUsageOnlineObserved[] = "offline_pages.online_observed";
+const char kOfflineUsageOfflineObserved[] = "offline_pages.offline_observed";
+// A time corresponding to a midnight that starts the day for which
+// OfflineMetricsCollector tracks the Chrome usage. Once current time passes
+// 24hrs from this point, the further tracking is attributed to the next day.
+const char kOfflineUsageTrackingDay[] = "offline_pages.tracking_day";
+// Accumulated counters of days with specified Chrome usage. When there is
+// likely a network connection, these counters are reported via UMA and reset.
+const char kOfflineUsageUnusedCount[] = "offline_pages.unused_count";
+const char kOfflineUsageStartedCount[] = "offline_pages.started_count";
+const char kOfflineUsageOfflineCount[] = "offline_pages.offline_count";
+const char kOfflineUsageOnlineCount[] = "offline_pages.online_count";
+const char kOfflineUsageMixedCount[] = "offline_pages.mixed_count";
 #endif
 
 }  // namespace prefs

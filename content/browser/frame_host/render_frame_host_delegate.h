@@ -18,9 +18,9 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/media_stream_request.h"
-#include "device/wake_lock/public/interfaces/wake_lock.mojom.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/http/http_response_headers.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "ui/base/window_open_disposition.h"
 
 #if defined(OS_WIN)
@@ -39,7 +39,7 @@ class Message;
 }
 
 namespace device {
-class GeolocationServiceContext;
+class GeolocationContext;
 }
 
 namespace gfx {
@@ -189,8 +189,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       RenderFrameHost* render_frame_host,
       int browser_plugin_instance_id);
 
-  // Gets the GeolocationServiceContext associated with this delegate.
-  virtual device::GeolocationServiceContext* GetGeolocationServiceContext();
+  // Gets the GeolocationContext associated with this delegate.
+  virtual device::GeolocationContext* GetGeolocationContext();
 
   // Gets the WakeLock that serves wake lock requests from the renderer.
   virtual device::mojom::WakeLock* GetRendererWakeLock();

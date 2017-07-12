@@ -76,7 +76,7 @@ suite('AndroidAppsPageTests', function() {
       androidAppsPage.havePlayStoreApp = true;
       androidAppsPage.prefs = {arc: {enabled: {value: true}}};
       setAndroidAppsState(true, false);
-      settings.navigateTo(settings.Route.ANDROID_APPS);
+      settings.navigateTo(settings.routes.ANDROID_APPS);
       MockInteractions.tap(androidAppsPage.$$('#android-apps'));
       Polymer.dom.flush();
       subpage = androidAppsPage.$$('settings-android-apps-subpage');
@@ -98,7 +98,7 @@ suite('AndroidAppsPageTests', function() {
       assertTrue(!subpage.$$('settings-android-settings-element'));
     });
 
-    test('ManageAppsOpenReqest', function() {
+    test('ManageAppsOpenRequest', function() {
       setAndroidAppsState(true, true);
       var button = subpage.$$('settings-android-settings-element').
           $$('#manageApps');
@@ -126,12 +126,11 @@ suite('AndroidAppsPageTests', function() {
     });
 
     test('HideOnDisable', function() {
-      assertEquals(settings.getCurrentRoute(),
-                   settings.Route.ANDROID_APPS_DETAILS);
+      assertEquals(
+          settings.getCurrentRoute(), settings.routes.ANDROID_APPS_DETAILS);
       setAndroidAppsState(false, false);
       return whenPopState().then(function() {
-        assertEquals(settings.getCurrentRoute(),
-            settings.Route.ANDROID_APPS);
+        assertEquals(settings.getCurrentRoute(), settings.routes.ANDROID_APPS);
       });
     });
   });
@@ -178,7 +177,7 @@ suite('AndroidAppsPageTests', function() {
           $$("#manageApps"));
     });
 
-    test('ManageAppsOpenReqest', function() {
+    test('ManageAppsOpenRequest', function() {
       var button = androidAppsPage.$$('settings-android-settings-element').
           $$('#manageApps');
       assertTrue(!!button);

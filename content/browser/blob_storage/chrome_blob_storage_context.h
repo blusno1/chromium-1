@@ -15,9 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "content/common/content_export.h"
-#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "storage/browser/blob/blob_data_handle.h"
-#include "storage/public/interfaces/blobs.mojom.h"
 
 namespace base {
 class FilePath;
@@ -27,14 +25,13 @@ class Time;
 
 namespace storage {
 class BlobStorageContext;
-class BlobRegistryImpl;
 }
 
 namespace content {
 class BlobHandle;
 class BrowserContext;
 struct ChromeBlobStorageContextDeleter;
-class ResourceRequestBodyImpl;
+class ResourceRequestBody;
 class ResourceContext;
 
 // A context class that keeps track of BlobStorageController used by the chrome.
@@ -50,6 +47,7 @@ class CONTENT_EXPORT ChromeBlobStorageContext
  public:
   ChromeBlobStorageContext();
 
+  // Must be called on the UI thread.
   static ChromeBlobStorageContext* GetFor(
       BrowserContext* browser_context);
 
@@ -69,9 +67,6 @@ class CONTENT_EXPORT ChromeBlobStorageContext
       int64_t size,
       const base::Time& expected_modification_time);
 
-  void BindBlobRegistry(const service_manager::BindSourceInfo& source_info,
-                        storage::mojom::BlobRegistryRequest request);
-
  protected:
   virtual ~ChromeBlobStorageContext();
 
@@ -84,7 +79,6 @@ class CONTENT_EXPORT ChromeBlobStorageContext
   void DeleteOnCorrectThread() const;
 
   std::unique_ptr<storage::BlobStorageContext> context_;
-  std::unique_ptr<storage::BlobRegistryImpl> blob_registry_;
 };
 
 struct ChromeBlobStorageContextDeleter {
@@ -103,7 +97,7 @@ using BlobHandles = std::vector<std::unique_ptr<storage::BlobDataHandle>>;
 // Attempts to create a vector of BlobDataHandles that ensure any blob data
 // associated with |body| isn't cleaned up until the handles are destroyed.
 // Returns false on failure. This is used for POST and PUT requests.
-bool GetBodyBlobDataHandles(ResourceRequestBodyImpl* body,
+bool GetBodyBlobDataHandles(ResourceRequestBody* body,
                             ResourceContext* resource_context,
                             BlobHandles* blob_handles);
 

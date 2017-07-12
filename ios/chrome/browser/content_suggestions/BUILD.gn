@@ -5,14 +5,19 @@
 source_set("content_suggestions") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "content_suggestions_alert_commands.h",
+    "content_suggestions_alert_factory.h",
+    "content_suggestions_alert_factory.mm",
     "content_suggestions_category_wrapper.h",
     "content_suggestions_category_wrapper.mm",
     "content_suggestions_coordinator.h",
     "content_suggestions_coordinator.mm",
-    "content_suggestions_header_controller.h",
-    "content_suggestions_header_controller.mm",
-    "content_suggestions_header_controller_delegate.h",
+    "content_suggestions_favicon_mediator.h",
+    "content_suggestions_favicon_mediator.mm",
     "content_suggestions_header_provider.h",
+    "content_suggestions_header_view_controller.h",
+    "content_suggestions_header_view_controller.mm",
+    "content_suggestions_header_view_controller_delegate.h",
     "content_suggestions_mediator.h",
     "content_suggestions_mediator.mm",
     "content_suggestions_service_bridge_observer.h",
@@ -72,4 +77,29 @@ source_set("unit_tests") {
     "//testing/gtest",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "content_suggestions_alert_egtest.mm",
+  ]
+  deps = [
+    ":content_suggestions",
+    "//base",
+    "//base/test:test_support",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/collection_view/cells",
+    "//ios/chrome/browser/ui/util",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ui/strings",
+  ]
+  libs = [
+    "UIKit.framework",
+    "XCTest.framework",
+  ]
 }

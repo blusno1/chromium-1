@@ -15,11 +15,14 @@ remoting_ios_app_source_dir = get_path_info("./", "abspath")
 #   output_name:
 #     string, the filename of the generated .app folder
 #
-#   entitlements_path:
-#     string, ath of the .entitlements file
+#   info_plist_path:
+#     string, path of the Info.plist template
 #
-#   remoting_source_set:
-#     The source set to be compiled
+#   entitlements_path:
+#     string, path of the .entitlements file
+#
+#   deps:
+#     string array, deps to be compiled. E.g. source sets, launch screen, icons.
 #
 #   bundle_id:
 #     (optional) string, the bundle_id. If this is not set, it will come from
@@ -27,7 +30,7 @@ remoting_ios_app_source_dir = get_path_info("./", "abspath")
 template("ios_remoting_app_tmpl") {
   info_plist_target_name = "${target_name}_tweak_info_plist"
   tweak_info_plist(info_plist_target_name) {
-    info_plist = "//remoting/ios/app/resources/Info.plist"
+    info_plist = invoker.info_plist_path
     args = [ "--platform=ios" ]
   }
 
@@ -53,9 +56,9 @@ template("ios_remoting_app_tmpl") {
     extra_substitutions = [
       "BUNDLE_IDENTIFIER=$bundle_id",
       "DISPLAY_NAME=$remoting_ios_display_name",
-      "EXECUTABLE_NAME=$remoting_ios_executable_name",
+      "EXECUTABLE_NAME=$output_name",
       "MINIMUM_OS_VERSION=7.0",
-      "PRODUCT_NAME=$remoting_ios_product_name",
+      "PRODUCT_NAME=$output_name",
       "VERSION_FULL=$remoting_version_full",
       "VERSION_SHORT=$remoting_version_short",
     ]
@@ -74,15 +77,7 @@ template("ios_remoting_app_tmpl") {
       "SystemConfiguration.framework",
     ]
 
-    deps = [
-      "//base",
-      "//remoting/ios/app/resources:assets",
-      "//remoting/ios/app/resources:launchscreen_assets",
-      "//remoting/ios/app/resources:remoting_icons",
-      "//remoting/ios/display",
-    ]
-
-    deps += [ invoker.remoting_source_set ]
+    deps = invoker.deps
 
     bundle_deps = [ ":$launchscreen_storyboard_target_name" ]
   }

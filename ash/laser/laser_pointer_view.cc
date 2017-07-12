@@ -26,8 +26,9 @@
 #include "cc/output/layer_tree_frame_sink.h"
 #include "cc/output/layer_tree_frame_sink_client.h"
 #include "cc/quads/texture_draw_quad.h"
-#include "cc/resources/texture_mailbox.h"
 #include "cc/resources/transferable_resource.h"
+#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/quads/texture_mailbox.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
@@ -685,7 +686,7 @@ void LaserPointerView::UpdateSurface() {
 
   cc::TransferableResource transferable_resource;
   transferable_resource.id = next_resource_id_++;
-  transferable_resource.format = cc::RGBA_8888;
+  transferable_resource.format = viz::RGBA_8888;
   transferable_resource.filter = GL_LINEAR;
   transferable_resource.size = buffer_size;
   transferable_resource.mailbox_holder =

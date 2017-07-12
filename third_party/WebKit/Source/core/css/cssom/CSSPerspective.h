@@ -32,10 +32,14 @@ class CORE_EXPORT CSSPerspective final : public CSSTransformComponent {
   CSSNumericValue* length() { return length_.Get(); }
   void setLength(CSSNumericValue*, ExceptionState&);
 
+  // From CSSTransformComponent
+  // Setting is2D for CSSPerspective does nothing.
+  // https://drafts.css-houdini.org/css-typed-om/#dom-cssskew-is2d
+  void setIs2D(bool is2D) final {}
+
   // Internal methods - from CSSTransformComponent.
   TransformComponentType GetType() const final { return kPerspectiveType; }
-  // TODO: Implement AsMatrix for CSSPerspective.
-  DOMMatrix* AsMatrix() const final { return nullptr; }
+  DOMMatrix* AsMatrix() const final;
   CSSFunctionValue* ToCSSValue() const final;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
@@ -44,7 +48,8 @@ class CORE_EXPORT CSSPerspective final : public CSSTransformComponent {
   }
 
  private:
-  CSSPerspective(CSSNumericValue* length) : length_(length) {}
+  CSSPerspective(CSSNumericValue* length)
+      : CSSTransformComponent(false /* is2D */), length_(length) {}
 
   Member<CSSNumericValue> length_;
 };

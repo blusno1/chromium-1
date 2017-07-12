@@ -10,15 +10,17 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/suggested_content.h"
 
+@class FaviconAttributes;
+
 // Content Suggestions item configuring a ContentSuggetionsCell.
 @interface SCContentSuggestionsItem : CollectionViewItem<SuggestedContent>
 
 @property(nonatomic, copy) NSString* title;
-@property(nonatomic, copy) NSString* subtitle;
 @property(nonatomic, assign) BOOL hasImage;
 @property(nonatomic, copy) NSString* publisher;
 @property(nonatomic, copy) NSString* publicationDate;
 @property(nonatomic, assign) BOOL availableOffline;
+@property(nonatomic, strong) FaviconAttributes* attributes;
 
 @end
 

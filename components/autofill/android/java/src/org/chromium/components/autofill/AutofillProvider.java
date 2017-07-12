@@ -42,7 +42,7 @@ public abstract class AutofillProvider {
      * @param values the array of autofill values, the key is virtual id of form
      *            field.
      */
-    public abstract void autofill(final SparseArray<String> values);
+    public abstract void autofill(final SparseArray<Object> values);
 
     /**
      * Invoked when autofill service needs the form structure.
@@ -51,6 +51,17 @@ public abstract class AutofillProvider {
      * @param flags see View.onProvideAutofillVirtualStructure()
      */
     public abstract void onProvideAutoFillVirtualStructure(ViewStructure structure, int flags);
+
+    /**
+     * @return whether query autofill suggestion.
+     */
+    // TODO(michaelbai): Change it to abstract after DEP roll.
+    public boolean shouldQueryAutofillSuggestion() {
+        return false;
+    }
+
+    // TODO(michaelbai): Change it to abstract after DEP roll.
+    public void queryAutofillSuggestion() {}
 
     /**
      * Invoked when filling form is need. AutofillProvider shall ask autofill

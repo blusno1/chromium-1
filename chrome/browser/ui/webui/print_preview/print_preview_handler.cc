@@ -686,6 +686,7 @@ void PrintPreviewHandler::HandleGetPrivetPrinters(const base::ListValue* args) {
 
   if (!PrivetPrintingEnabled()) {
     RejectJavascriptCallback(base::Value(callback_id), base::Value());
+    return;
   }
 #if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
   using local_discovery::ServiceDiscoverySharedClient;
@@ -782,18 +783,23 @@ void PrintPreviewHandler::HandleGetExtensionPrinterCapabilities(
 }
 
 void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
-  DCHECK_EQ(2U, args->GetSize());
+  DCHECK_EQ(3U, args->GetSize());
+  std::string callback_id;
   std::string json_str;
-  if (!args->GetString(0, &json_str))
-    return;
+
+  // All of the conditions below should be guaranteed by the print preview
+  // javascript.
+  args->GetString(0, &callback_id);
+  CHECK(!callback_id.empty());
+  args->GetString(1, &json_str);
   std::unique_ptr<base::DictionaryValue> settings =
       GetSettingsDictionary(json_str);
-  if (!settings)
-    return;
+  CHECK(settings);
   int request_id = -1;
-  if (!settings->GetInteger(printing::kPreviewRequestID, &request_id))
-    return;
+  settings->GetInteger(printing::kPreviewRequestID, &request_id);
+  CHECK_GT(request_id, -1);
 
+  preview_callbacks_.push(callback_id);
   print_preview_ui()->OnPrintPreviewRequest(request_id);
   // Add an additional key in order to identify |print_preview_ui| later on
   // when calling PrintPreviewUI::GetCurrentPrintPreviewStatus() on the IO
@@ -844,7 +850,7 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
 
   if (!generate_draft_data) {
     int page_count = -1;
-    success = args->GetInteger(1, &page_count);
+    success = args->GetInteger(2, &page_count);
     DCHECK(success);
 
     if (page_count != -1) {
@@ -879,13 +885,14 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
   CHECK(args->GetString(0, &callback_id));
   CHECK(!callback_id.empty());
   std::string json_str;
-  if (!args->GetString(1, &json_str))
-    RejectJavascriptCallback(base::Value(callback_id), base::Value(-1));
+  CHECK(args->GetString(1, &json_str));
 
   std::unique_ptr<base::DictionaryValue> settings =
       GetSettingsDictionary(json_str);
-  if (!settings)
+  if (!settings) {
     RejectJavascriptCallback(base::Value(callback_id), base::Value(-1));
+    return;
+  }
 
   ReportPrintSettingsStats(*settings);
 
@@ -1168,24 +1175,24 @@ void PrintPreviewHandler::HandlePrinterSetup(const base::ListValue* args) {
                  weak_factory_.GetWeakPtr(), callback_id, printer_name));
 }
 
-void PrintPreviewHandler::OnSigninComplete() {
-  if (print_preview_ui())
-    print_preview_ui()->OnReloadPrintersList();
+void PrintPreviewHandler::OnSigninComplete(const std::string& callback_id) {
+  ResolveJavascriptCallback(base::Value(callback_id), base::Value());
 }
 
 void PrintPreviewHandler::HandleSignin(const base::ListValue* args) {
+  std::string callback_id;
   bool add_account = false;
-  bool success = args->GetBoolean(0, &add_account);
-  DCHECK(success);
+  CHECK(args->GetString(0, &callback_id));
+  CHECK(!callback_id.empty());
+  CHECK(args->GetBoolean(1, &add_account));
 
   Profile* profile = Profile::FromBrowserContext(
       preview_web_contents()->GetBrowserContext());
   chrome::ScopedTabbedBrowserDisplayer displayer(profile);
   print_dialog_cloud::CreateCloudPrintSigninTab(
-      displayer.browser(),
-      add_account,
+      displayer.browser(), add_account,
       base::Bind(&PrintPreviewHandler::OnSigninComplete,
-                 weak_factory_.GetWeakPtr()));
+                 weak_factory_.GetWeakPtr(), callback_id));
 }
 
 void PrintPreviewHandler::HandleGetAccessToken(const base::ListValue* args) {
@@ -1455,7 +1462,7 @@ WebContents* PrintPreviewHandler::GetInitiator() const {
 void PrintPreviewHandler::OnAddAccountToCookieCompleted(
     const std::string& account_id,
     const GoogleServiceAuthError& error) {
-  OnSigninComplete();
+  FireWebUIListener("reload-printer-list");
 }
 
 void PrintPreviewHandler::SelectFile(const base::FilePath& default_filename,
@@ -1525,11 +1532,70 @@ void PrintPreviewHandler::OnGotUniqueFileName(const base::FilePath& path) {
   FileSelected(path, 0, nullptr);
 }
 
-void PrintPreviewHandler::OnPrintPreviewFailed() {
-  if (reported_failed_preview_)
+void PrintPreviewHandler::OnPrintPreviewReady(int preview_uid, int request_id) {
+  if (request_id < 0)  // invalid ID.
     return;
-  reported_failed_preview_ = true;
-  ReportUserActionHistogram(PREVIEW_FAILED);
+  CHECK(!preview_callbacks_.empty());
+  ResolveJavascriptCallback(base::Value(preview_callbacks_.front()),
+                            base::Value(preview_uid));
+  preview_callbacks_.pop();
+}
+
+void PrintPreviewHandler::OnPrintPreviewFailed() {
+  CHECK(!preview_callbacks_.empty());
+  if (!reported_failed_preview_) {
+    reported_failed_preview_ = true;
+    ReportUserActionHistogram(PREVIEW_FAILED);
+  }
+  RejectJavascriptCallback(base::Value(preview_callbacks_.front()),
+                           base::Value("PREVIEW_FAILED"));
+  preview_callbacks_.pop();
+}
+
+void PrintPreviewHandler::OnInvalidPrinterSettings() {
+  CHECK(!preview_callbacks_.empty());
+  RejectJavascriptCallback(base::Value(preview_callbacks_.front()),
+                           base::Value("SETTINGS_INVALID"));
+  preview_callbacks_.pop();
+}
+
+void PrintPreviewHandler::SendPrintPresetOptions(bool disable_scaling,
+                                                 int copies,
+                                                 int duplex) {
+  FireWebUIListener("print-preset-options", base::Value(disable_scaling),
+                    base::Value(copies), base::Value(duplex));
+}
+
+void PrintPreviewHandler::SendPageCountReady(int page_count,
+                                             int request_id,
+                                             int fit_to_page_scaling) {
+  FireWebUIListener("page-count-ready", base::Value(page_count),
+                    base::Value(request_id), base::Value(fit_to_page_scaling));
+}
+
+void PrintPreviewHandler::SendPageLayoutReady(
+    const base::DictionaryValue& layout,
+    bool has_custom_page_size_style) {
+  FireWebUIListener("page-layout-ready", layout,
+                    base::Value(has_custom_page_size_style));
+}
+
+void PrintPreviewHandler::SendPagePreviewReady(int page_index,
+                                               int preview_uid,
+                                               int preview_response_id) {
+  FireWebUIListener("page-preview-ready", base::Value(page_index),
+                    base::Value(preview_uid), base::Value(preview_response_id));
+}
+
+void PrintPreviewHandler::OnPrintPreviewCancelled() {
+  CHECK(!preview_callbacks_.empty());
+  RejectJavascriptCallback(base::Value(preview_callbacks_.front()),
+                           base::Value("CANCELLED"));
+  preview_callbacks_.pop();
+}
+
+void PrintPreviewHandler::OnPrintRequestCancelled() {
+  HandleCancelPendingPrintRequest(nullptr);
 }
 
 #if BUILDFLAG(ENABLE_BASIC_PRINT_DIALOG)
@@ -1896,4 +1962,13 @@ void PrintPreviewHandler::UnregisterForGaiaCookieChanges() {
 void PrintPreviewHandler::SetPdfSavedClosureForTesting(
     const base::Closure& closure) {
   pdf_file_saved_closure_ = closure;
+}
+
+void PrintPreviewHandler::SendEnableManipulateSettingsForTest() {
+  FireWebUIListener("enable-manipulate-settings-for-test", base::Value());
+}
+
+void PrintPreviewHandler::SendManipulateSettingsForTest(
+    const base::DictionaryValue& settings) {
+  FireWebUIListener("manipulate-settings-for-test", settings);
 }

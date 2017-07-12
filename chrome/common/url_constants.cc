@@ -294,7 +294,6 @@ const char kChromeUISandboxHost[] = "sandbox";
 const char kChromeUIContextualSearchPromoHost[] = "contextual-search-promo";
 const char kChromeUIOfflineInternalsHost[] = "offline-internals";
 const char kChromeUIPhysicalWebDiagnosticsHost[] = "physical-web-diagnostics";
-const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 const char kChromeUISnippetsInternalsHost[] = "snippets-internals";
 const char kChromeUIWebApksHost[] = "webapks";
 #endif
@@ -633,6 +632,9 @@ const char kRemoveNonCWSExtensionURL[] =
 #if defined(OS_WIN)
 const char kNotificationsHelpURL[] =
     "https://support.google.com/chrome/?p=ui_notifications";
+
+const char kChromeCleanerLearnMoreURL[] =
+    "https://support.google.com/chrome/?p=chrome_cleanup_tool";
 #endif
 
 const char kNotificationWelcomeLearnMoreURL[] =
@@ -711,7 +713,6 @@ const char* const kChromeHostURLs[] = {
 #if defined(OS_ANDROID)
     kChromeUINetExportHost,
     kChromeUIOfflineInternalsHost,
-    kChromeUIPopularSitesInternalsHost,
     kChromeUISnippetsInternalsHost,
     kChromeUIWebApksHost,
 #endif

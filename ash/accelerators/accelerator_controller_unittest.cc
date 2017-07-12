@@ -862,6 +862,15 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
       CreateReleaseAccelerator(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE)));
   RunAllPendingInMessageLoop();
   EXPECT_EQ(3u, test_app_list_presenter.toggle_count());
+
+  // When pressed key is interrupted by mouse, the AppList should not toggle.
+  EXPECT_FALSE(
+      ProcessInController(ui::Accelerator(ui::VKEY_LWIN, ui::EF_NONE)));
+  GetController()->accelerator_history()->InterruptCurrentAccelerator();
+  EXPECT_FALSE(ProcessInController(
+      CreateReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
+  RunAllPendingInMessageLoop();
+  EXPECT_EQ(3u, test_app_list_presenter.toggle_count());
 }
 
 TEST_F(AcceleratorControllerTest, ImeGlobalAccelerators) {
@@ -1302,6 +1311,8 @@ TEST_F(DeprecatedAcceleratorTester, TestNewAccelerators) {
       {true, ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN, SHOW_TASK_MANAGER},
       {true, ui::VKEY_K, ui::EF_SHIFT_DOWN | ui::EF_COMMAND_DOWN,
        SHOW_IME_MENU_BUBBLE},
+      {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN,
+       TOGGLE_HIGH_CONTRAST},
   };
 
   // The NEXT_IME accelerator requires multiple IMEs to be available.
@@ -1313,7 +1324,11 @@ TEST_F(DeprecatedAcceleratorTester, TestNewAccelerators) {
     EXPECT_TRUE(ProcessInController(CreateAccelerator(data)));
 
     // Expect no notifications from the new accelerators.
-    EXPECT_TRUE(IsMessageCenterEmpty());
+    if (data.action != TOGGLE_HIGH_CONTRAST) {
+      // The toggle high contrast accelerator displays a notification specific
+      // to the high contrast mode.
+      EXPECT_TRUE(IsMessageCenterEmpty());
+    }
 
     // If the action is LOCK_SCREEN, we must reset the state by unlocking the
     // screen before we proceed testing the rest of accelerators.

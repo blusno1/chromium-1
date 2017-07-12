@@ -67,6 +67,9 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
 
   LayoutUnit ComputeContentSize(const NGLineInfo&, LayoutUnit line_bottom);
 
+  void PropagateBaselinesFromChildren();
+  bool AddBaseline(const NGBaselineRequest&, unsigned);
+
   NGInlineLayoutStateStack box_states_;
   LayoutUnit content_size_;
   LayoutUnit max_inline_size_;
@@ -78,7 +81,6 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
   unsigned is_horizontal_writing_mode_ : 1;
 
   NGConstraintSpaceBuilder space_builder_;
-  NGBoxStrut border_and_padding_;
 };
 
 }  // namespace blink

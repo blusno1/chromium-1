@@ -25,6 +25,8 @@
 
 #include <algorithm>
 #include <memory>
+
+#include "build/build_config.h"
 #include "core/animation/css/CSSAnimationData.h"
 #include "core/animation/css/CSSTransitionData.h"
 #include "core/css/CSSPaintValue.h"
@@ -686,7 +688,7 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
   bool other_has_clip =
       other.HasOutOfFlowPosition() && !other.HasAutoClipInternal();
   if (has_clip != other_has_clip ||
-      (has_clip && ClipInternal() != other.ClipInternal()))
+      (has_clip && Clip() != other.Clip()))
     diff.SetCSSClipChanged();
 }
 
@@ -708,10 +710,6 @@ void ComputedStyle::AddCursor(StyleImage* image,
 
 void ComputedStyle::SetCursorList(CursorList* other) {
   SetCursorDataInternal(other);
-}
-
-void ComputedStyle::SetQuotes(RefPtr<QuotesData> q) {
-  SetQuotesInternal(std::move(q));
 }
 
 bool ComputedStyle::QuotesDataEquivalent(const ComputedStyle& other) const {
@@ -994,16 +992,8 @@ void ComputedStyle::ApplyMotionPathTransform(
     transform.Translate(-origin_shift_x, -origin_shift_y);
 }
 
-void ComputedStyle::SetTextShadow(RefPtr<ShadowList> s) {
-  SetTextShadowInternal(std::move(s));
-}
-
 bool ComputedStyle::TextShadowDataEquivalent(const ComputedStyle& other) const {
   return DataEquivalent(TextShadow(), other.TextShadow());
-}
-
-void ComputedStyle::SetBoxShadow(RefPtr<ShadowList> s) {
-  SetBoxShadowInternal(std::move(s));
 }
 
 static FloatRoundedRect::Radii CalcRadiiFor(const LengthSize& top_left,
@@ -1104,6 +1094,14 @@ FloatRoundedRect ComputedStyle::GetRoundedInnerBorderFor(
                                      include_logical_right_edge);
   }
   return rounded_rect;
+}
+
+bool ComputedStyle::CanRenderBorderImage() const {
+  if (!HasBorderDecoration())
+    return false;
+
+  StyleImage* border_image = BorderImage().GetImage();
+  return border_image && border_image->CanRender() && border_image->IsLoaded();
 }
 
 static bool AllLayersAreFixed(const FillLayer& layer) {
@@ -1883,10 +1881,6 @@ void ComputedStyle::SetMarginEnd(const Length& margin) {
   }
 }
 
-void ComputedStyle::SetOffsetPath(RefPtr<BasicShape> path) {
-  SetOffsetPathInternal(std::move(path));
-}
-
 int ComputedStyle::OutlineOutsetExtent() const {
   if (!HasOutline())
     return 0;
@@ -1898,7 +1892,7 @@ int ComputedStyle::OutlineOutsetExtent() const {
 }
 
 float ComputedStyle::GetOutlineStrokeWidthForFocusRing() const {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   return OutlineWidth();
 #else
   // Draw an outline with thickness in proportion to the zoom level, but never

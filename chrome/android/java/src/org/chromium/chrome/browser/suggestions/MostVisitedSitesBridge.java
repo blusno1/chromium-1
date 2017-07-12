@@ -17,6 +17,12 @@ import org.chromium.chrome.browser.util.FeatureUtilities;
 @JNIAdditionalImport(MostVisitedSites.class) // Needed for the Observer usage in the native calls.
 public class MostVisitedSitesBridge
         implements MostVisitedSites, HomepageManager.HomepageStateListener {
+    /**
+     * Maximum number of tiles that is explicitly supported. UMA relies on this value, so even if
+     * the UI supports it, getting more can raise unexpected issues.
+     */
+    public static final int MAX_TILE_COUNT = 12;
+
     private long mNativeMostVisitedSitesBridge;
 
     /**
@@ -63,6 +69,8 @@ public class MostVisitedSitesBridge
 
     @Override
     public void setObserver(final Observer observer, int numSites) {
+        assert numSites <= MAX_TILE_COUNT;
+
         Observer wrappedObserver = new Observer() {
             @Override
             public void onMostVisitedURLsAvailable(
@@ -117,10 +125,12 @@ public class MostVisitedSitesBridge
             removeBlacklistedUrl(
                     HomepageManager.getHomepageUri(ContextUtils.getApplicationContext()));
         }
+        nativeOnHomePageStateChanged(mNativeMostVisitedSitesBridge);
     }
 
     private native long nativeInit(Profile profile);
     private native void nativeDestroy(long nativeMostVisitedSitesBridge);
+    private native void nativeOnHomePageStateChanged(long nativeMostVisitedSitesBridge);
     private native void nativeSetObserver(
             long nativeMostVisitedSitesBridge, MostVisitedSites.Observer observer, int numSites);
     private native void nativeSetHomePageClient(

@@ -30,6 +30,7 @@
 
 #include "core/layout/LayoutGeometryMap.h"
 
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/WebLocalFrameBase.h"
@@ -164,7 +165,7 @@ class LayoutGeometryMapTest
 
   void RegisterMockedHttpURLLoad(const std::string& file_name) {
     URLTestHelpers::RegisterMockedURLLoadFromBase(
-        WebString::FromUTF8(base_url_), testing::WebTestDataPath(),
+        WebString::FromUTF8(base_url_), testing::CoreTestDataPath(),
         WebString::FromUTF8(file_name));
   }
 
@@ -212,7 +213,7 @@ TEST_P(LayoutGeometryMapTest, SimpleGeometryMapTest) {
 
 // Fails on Windows due to crbug.com/391457. When run through the transform the
 // position on windows differs by a pixel
-#if OS(WIN)
+#if defined(OS_WIN)
 TEST_P(LayoutGeometryMapTest, DISABLED_TransformedGeometryTest)
 #else
 TEST_P(LayoutGeometryMapTest, TransformedGeometryTest)

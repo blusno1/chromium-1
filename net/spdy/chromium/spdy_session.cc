@@ -45,6 +45,7 @@
 #include "net/proxy/proxy_server.h"
 #include "net/socket/socket.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/spdy/chromium/header_coalescer.h"
 #include "net/spdy/chromium/spdy_buffer_producer.h"
 #include "net/spdy/chromium/spdy_http_utils.h"
 #include "net/spdy/chromium/spdy_log_util.h"
@@ -753,7 +754,6 @@ SpdySession::SpdySession(const SpdySessionKey& spdy_session_key,
       bytes_pushed_and_unclaimed_count_(0u),
       in_flight_write_frame_type_(SpdyFrameType::DATA),
       in_flight_write_frame_size_(0),
-      is_secure_(false),
       availability_state_(STATE_AVAILABLE),
       read_state_(READ_STATE_DO_READ),
       write_state_(WRITE_STATE_IDLE),
@@ -875,8 +875,7 @@ void SpdySession::CancelPush(const GURL& url) {
 
 void SpdySession::InitializeWithSocket(
     std::unique_ptr<ClientSocketHandle> connection,
-    SpdySessionPool* pool,
-    bool is_secure) {
+    SpdySessionPool* pool) {
   CHECK(!in_io_loop_);
   DCHECK_EQ(availability_state_, STATE_AVAILABLE);
   DCHECK_EQ(read_state_, READ_STATE_DO_READ);
@@ -888,7 +887,6 @@ void SpdySession::InitializeWithSocket(
   DCHECK(connection->socket());
 
   connection_ = std::move(connection);
-  is_secure_ = is_secure;
 
   session_send_window_size_ = kDefaultInitialWindowSize;
   session_recv_window_size_ = kDefaultInitialWindowSize;
@@ -897,6 +895,9 @@ void SpdySession::InitializeWithSocket(
   buffered_spdy_framer_->set_visitor(this);
   buffered_spdy_framer_->set_debug_visitor(this);
   buffered_spdy_framer_->UpdateHeaderDecoderTableSize(max_header_table_size_);
+  // Do not bother decoding response headers more than a factor over the limit.
+  buffered_spdy_framer_->set_max_decode_buffer_size_bytes(2 *
+                                                          kMaxHeaderListSize);
 
   net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_INITIALIZED,
                     base::Bind(&NetLogSpdyInitializedCallback,
@@ -1140,11 +1141,6 @@ LoadState SpdySession::GetLoadState() const {
   return LOAD_STATE_IDLE;
 }
 
-url::SchemeHostPort SpdySession::GetServer() {
-  return url::SchemeHostPort(is_secure_ ? "https" : "http",
-                             host_port_pair().host(), host_port_pair().port());
-}
-
 bool SpdySession::GetRemoteEndpoint(IPEndPoint* endpoint) {
   return GetPeerAddress(endpoint) == OK;
 }
@@ -1156,10 +1152,6 @@ bool SpdySession::GetSSLInfo(SSLInfo* ssl_info) const {
 Error SpdySession::GetTokenBindingSignature(crypto::ECPrivateKey* key,
                                             TokenBindingType tb_type,
                                             std::vector<uint8_t>* out) {
-  if (!is_secure_) {
-    NOTREACHED();
-    return ERR_FAILED;
-  }
   SSLClientSocket* ssl_socket =
       static_cast<SSLClientSocket*>(connection_->socket());
   return ssl_socket->GetTokenBindingSignature(key, tb_type, out);
@@ -1268,8 +1260,6 @@ std::unique_ptr<base::Value> SpdySession::GetInfoAsValue() const {
   dict->SetInteger("unclaimed_pushed_streams",
                    unclaimed_pushed_streams_.size());
 
-  dict->SetBoolean("is_secure", is_secure_);
-
   dict->SetString(
       "negotiated_protocol",
       NextProtoToString(connection_->socket()->GetNegotiatedProtocol()));
@@ -1335,11 +1325,6 @@ void SpdySession::RemovePooledAlias(const SpdySessionKey& alias_key) {
 }
 
 bool SpdySession::HasAcceptableTransportSecurity() const {
-  // If we're not even using TLS, we have no standards to meet.
-  if (!is_secure_) {
-    return true;
-  }
-
   SSLInfo ssl_info;
   CHECK(GetSSLInfo(&ssl_info));
 
@@ -2981,9 +2966,6 @@ void SpdySession::OnAltSvc(
     SpdyStreamId stream_id,
     SpdyStringPiece origin,
     const SpdyAltSvcWireFormat::AlternativeServiceVector& altsvc_vector) {
-  if (!is_secure_)
-    return;
-
   url::SchemeHostPort scheme_host_port;
   if (stream_id == 0) {
     if (origin.empty())

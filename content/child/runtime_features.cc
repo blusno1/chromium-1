@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -266,15 +267,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV2))
     WebRuntimeFeatures::EnableSlimmingPaintV2(true);
 
-  WebRuntimeFeatures::EnableSlimmingPaintInvalidation(
-      base::FeatureList::IsEnabled(features::kSlimmingPaintInvalidation));
-
-  if (command_line.HasSwitch(switches::kEnableSlimmingPaintInvalidation))
-    WebRuntimeFeatures::EnableSlimmingPaintInvalidation(true);
-
-  if (command_line.HasSwitch(switches::kDisableSlimmingPaintInvalidation))
-    WebRuntimeFeatures::EnableSlimmingPaintInvalidation(false);
-
   if (base::FeatureList::IsEnabled(features::kDocumentWriteEvaluator))
     WebRuntimeFeatures::EnableDocumentWriteEvaluator(true);
 
@@ -334,6 +326,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableServiceWorkerNavigationPreload(
       base::FeatureList::IsEnabled(features::kServiceWorkerNavigationPreload));
 
+  WebRuntimeFeatures::EnableServiceWorkerScriptStreaming(
+      base::FeatureList::IsEnabled(features::kServiceWorkerScriptStreaming));
+
   WebRuntimeFeatures::EnableOffMainThreadFetch(
       base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
 
@@ -359,7 +354,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kGenericSensor))
     WebRuntimeFeatures::EnableGenericSensor(true);
 
-  if (base::FeatureList::IsEnabled(features::kLoadingWithMojo))
+  if (base::FeatureList::IsEnabled(features::kLoadingWithMojo) ||
+      base::FeatureList::IsEnabled(features::kNetworkService))
     WebRuntimeFeatures::EnableLoadingWithMojo(true);
 
   WebRuntimeFeatures::EnableMediaCastOverlayButton(
@@ -388,8 +384,19 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     WebRuntimeFeatures::EnableAutoplayMutedVideos(true);
   }
 
-  WebRuntimeFeatures::EnableLocationHardReload(
-      base::FeatureList::IsEnabled(features::kLocationHardReload));
+  if (!base::FeatureList::IsEnabled(features::kWebAuth) &&
+      !enableExperimentalWebPlatformFeatures)
+    WebRuntimeFeatures::EnableWebAuth(false);
+
+  WebRuntimeFeatures::EnableModuleScripts(
+      base::FeatureList::IsEnabled(features::kModuleScripts));
+
+  WebRuntimeFeatures::EnableClientPlaceholdersForServerLoFi(
+      base::GetFieldTrialParamValue("PreviewsClientLoFi",
+                                    "replace_server_placeholders") == "true");
+
+  WebRuntimeFeatures::EnableResourceLoadScheduler(
+      base::FeatureList::IsEnabled(features::kResourceLoadScheduler));
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

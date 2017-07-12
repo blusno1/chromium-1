@@ -110,6 +110,9 @@ class ASH_EXPORT SessionController
   // ordering as user sessions are created.
   void CycleActiveUser(CycleUserDirection direction);
 
+  // Show the multi-profile login UI to add another user to this session.
+  void ShowMultiProfileLogin();
+
   void AddObserver(SessionObserver* observer);
   void RemoveObserver(SessionObserver* observer);
 
@@ -124,6 +127,7 @@ class ASH_EXPORT SessionController
   void UpdateUserSession(mojom::UserSessionPtr user_session) override;
   void SetUserSessionOrder(
       const std::vector<uint32_t>& user_session_order) override;
+  void PrepareForLock(PrepareForLockCallback callback) override;
   void StartLock(StartLockCallback callback) override;
   void NotifyChromeLockAnimationsComplete() override;
   void RunUnlockAnimation(RunUnlockAnimationCallback callback) override;

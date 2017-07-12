@@ -788,6 +788,7 @@ void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
       {"chromeCleanupDoneButtonLabel",
        IDS_CHROME_CLEANUP_WEBUI_DONE_BUTTON_LABEL},
       {"chromeCleanupLinkShowFiles", IDS_CHROME_CLEANUP_WEBUI_LINK_SHOW_FILES},
+      {"chromeCleanupLogsUploadPermission", IDS_CHROME_CLEANUP_LOGS_PERMISSION},
       {"chromeCleanupRemoveButtonLabel",
        IDS_CHROME_CLEANUP_WEBUI_REMOVE_BUTTON_LABEL},
       {"chromeCleanupRestartButtonLabel",
@@ -801,6 +802,12 @@ void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
+  const std::string cleanup_learn_more_url =
+      google_util::AppendGoogleLocaleParam(
+          GURL(chrome::kChromeCleanerLearnMoreURL),
+          g_browser_process->GetApplicationLocale())
+          .spec();
+  html_source->AddString("chromeCleanupLearnMoreUrl", cleanup_learn_more_url);
 }
 #endif  // defined(OS_WIN)
 
@@ -1179,6 +1186,9 @@ void AddChromeOSUserStrings(content::WebUIDataSource* html_source,
 void AddOnStartupStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
       {"onStartup", IDS_SETTINGS_ON_STARTUP},
+      {"onStartupDescription", IDS_SETTINGS_ON_STARTUP_DESCRIPTION},
+      {"onStartupManage", IDS_SETTINGS_ON_STARTUP_MANAGE},
+      {"onStartupPages", IDS_SETTINGS_ON_STARTUP_PAGES},
       {"onStartupOpenNewTab", IDS_SETTINGS_ON_STARTUP_OPEN_NEW_TAB},
       {"onStartupContinue", IDS_SETTINGS_ON_STARTUP_CONTINUE},
       {"onStartupOpenSpecific", IDS_SETTINGS_ON_STARTUP_OPEN_SPECIFIC},
@@ -1359,7 +1369,7 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
     {"oldPhoto", IDS_SETTINGS_CHANGE_PICTURE_OLD_PHOTO},
     {"profilePhotoLoading", IDS_SETTINGS_CHANGE_PICTURE_PROFILE_LOADING_PHOTO},
     {"previewAltText", IDS_SETTINGS_CHANGE_PICTURE_PREVIEW_ALT},
-    {"authorCredit", IDS_SETTINGS_CHANGE_PICTURE_AUTHOR_TEXT},
+    {"authorCreditText", IDS_SETTINGS_CHANGE_PICTURE_AUTHOR_CREDIT_TEXT},
     {"photoFlippedAccessibleText", IDS_SETTINGS_PHOTO_FLIP_ACCESSIBLE_TEXT},
     {"photoFlippedBackAccessibleText",
      IDS_SETTINGS_PHOTO_FLIPBACK_ACCESSIBLE_TEXT},
@@ -1833,9 +1843,9 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsFlashAllow", IDS_SETTINGS_SITE_SETTINGS_FLASH_ALLOW},
     {"siteSettingsFlashBlock", IDS_SETTINGS_SITE_SETTINGS_FLASH_BLOCK},
     {"siteSettingsAllowRecentlyClosedSites",
-     IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_ALLOW_RECENTLY_CLOSED_SITES},
+     IDS_SETTINGS_SITE_SETTINGS_ALLOW_RECENTLY_CLOSED_SITES},
     {"siteSettingsAllowRecentlyClosedSitesRecommended",
-     IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_ALLOW_RECENTLY_CLOSED_SITES_RECOMMENDED},
+     IDS_SETTINGS_SITE_SETTINGS_ALLOW_RECENTLY_CLOSED_SITES_RECOMMENDED},
     {"siteSettingsBackgroundSyncBlocked",
      IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_BLOCKED},
     {"siteSettingsHandlersAsk", IDS_SETTINGS_SITE_SETTINGS_HANDLERS_ASK},

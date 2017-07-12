@@ -77,7 +77,6 @@ def _CommonChecks(input_api, output_api):
         maxlen=800, license_header=license_header))
     results.extend(_CheckForNonBlinkVariantMojomIncludes(input_api, output_api))
     results.extend(_CheckTestExpectations(input_api, output_api))
-    results.extend(_CheckChromiumPlatformMacros(input_api, output_api))
     results.extend(_CheckWatchlist(input_api, output_api))
     return results
 
@@ -129,21 +128,6 @@ def _CheckStyle(input_api, output_api):
             'Could not run check-webkit-style', [str(e)]))
 
     return results
-
-
-def _CheckChromiumPlatformMacros(input_api, output_api, source_file_filter=None):
-    """Ensures that Blink code uses WTF's platform macros instead of
-    Chromium's. Using the latter has resulted in at least one subtle
-    build breakage."""
-    os_macro_re = input_api.re.compile(r'^\s*#(el)?if.*\bOS_')
-    errors = input_api.canned_checks._FindNewViolationsOfRule(
-        lambda _, x: not os_macro_re.search(x),
-        input_api, source_file_filter)
-    errors = ['Found use of Chromium OS_* macro in %s. '
-        'Use WTF platform macros instead.' % violation for violation in errors]
-    if errors:
-        return [output_api.PresubmitPromptWarning('\n'.join(errors))]
-    return []
 
 
 def _CheckForPrintfDebugging(input_api, output_api):

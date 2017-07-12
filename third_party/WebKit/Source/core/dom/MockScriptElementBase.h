@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef MockScriptElementBase_h
+#define MockScriptElementBase_h
+
 #include "bindings/core/v8/HTMLScriptElementOrSVGScriptElement.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptElementBase.h"
@@ -16,7 +19,7 @@ class MockScriptElementBase
 
  public:
   static MockScriptElementBase* Create() {
-    return new testing::StrictMock<MockScriptElementBase>();
+    return new ::testing::StrictMock<MockScriptElementBase>();
   }
   virtual ~MockScriptElementBase() {}
 
@@ -35,7 +38,6 @@ class MockScriptElementBase
   MOCK_CONST_METHOD0(TypeAttributeValue, String());
 
   MOCK_METHOD0(TextFromChildren, String());
-  MOCK_CONST_METHOD0(TextContent, String());
   MOCK_CONST_METHOD0(HasSourceAttribute, bool());
   MOCK_CONST_METHOD0(IsConnected, bool());
   MOCK_CONST_METHOD0(HasChildren, bool());
@@ -54,3 +56,5 @@ class MockScriptElementBase
 };
 
 }  // namespace blink
+
+#endif  // MockScriptElementBase_h

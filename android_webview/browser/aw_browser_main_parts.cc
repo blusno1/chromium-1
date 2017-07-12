@@ -7,8 +7,8 @@
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_browser_terminator.h"
 #include "android_webview/browser/aw_content_browser_client.h"
+#include "android_webview/browser/aw_metrics_service_client.h"
 #include "android_webview/browser/aw_result_codes.h"
-#include "android_webview/browser/aw_safe_browsing_config_helper.h"
 #include "android_webview/browser/deferred_gpu_command_service.h"
 #include "android_webview/browser/net/aw_network_change_notifier_factory.h"
 #include "android_webview/common/aw_descriptors.h"
@@ -134,13 +134,15 @@ int AwBrowserMainParts::PreCreateThreads() {
     }
   }
 
-  if (AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabled()) {
-    base::FilePath safe_browsing_dir;
-    if (PathService::Get(android_webview::DIR_SAFE_BROWSING,
-                         &safe_browsing_dir)) {
-      if (!base::PathExists(safe_browsing_dir))
-        base::CreateDirectory(safe_browsing_dir);
-    }
+  // We need to create the safe browsing specific directory even if the
+  // AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabled() is false
+  // initially, because safe browsing can be enabled later at runtime
+  // on a per-webview basis.
+  base::FilePath safe_browsing_dir;
+  if (PathService::Get(android_webview::DIR_SAFE_BROWSING,
+                       &safe_browsing_dir)) {
+    if (!base::PathExists(safe_browsing_dir))
+      base::CreateDirectory(safe_browsing_dir);
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -148,6 +150,11 @@ int AwBrowserMainParts::PreCreateThreads() {
     // Create the renderers crash manager on the UI thread.
     breakpad::CrashDumpObserver::GetInstance()->RegisterClient(
         base::MakeUnique<AwBrowserTerminator>());
+  }
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableWebViewFinch)) {
+    AwMetricsServiceClient::GetOrCreateGUID();
   }
 
   return content::RESULT_CODE_NORMAL_EXIT;

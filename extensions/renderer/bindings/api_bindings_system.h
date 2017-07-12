@@ -18,6 +18,7 @@
 #include "extensions/renderer/bindings/api_request_handler.h"
 #include "extensions/renderer/bindings/api_type_reference_map.h"
 #include "extensions/renderer/bindings/binding_access_checker.h"
+#include "extensions/renderer/bindings/exception_handler.h"
 
 namespace base {
 class DictionaryValue;
@@ -51,6 +52,8 @@ class APIBindingsSystem {
       const APIRequestHandler::SendRequestMethod& send_request,
       const APIEventHandler::EventListenersChangedMethod&
           event_listeners_changed,
+      const APIBinding::OnSilentRequest& on_silent_request,
+      const binding::AddConsoleError& add_console_error,
       APILastError last_error);
   ~APIBindingsSystem();
 
@@ -94,6 +97,7 @@ class APIBindingsSystem {
   APIRequestHandler* request_handler() { return &request_handler_; }
   APIEventHandler* event_handler() { return &event_handler_; }
   APITypeReferenceMap* type_reference_map() { return &type_reference_map_; }
+  ExceptionHandler* exception_handler() { return &exception_handler_; }
 
  private:
   // Creates a new APIBinding for the given |api_name|.
@@ -112,6 +116,9 @@ class APIBindingsSystem {
 
   // The map of cached API reference types.
   APITypeReferenceMap type_reference_map_;
+
+  // The exception handler for the system.
+  ExceptionHandler exception_handler_;
 
   // The request handler associated with the system.
   APIRequestHandler request_handler_;
@@ -140,6 +147,10 @@ class APIBindingsSystem {
   // The method to retrieve the DictionaryValue describing a given extension
   // API. Curried in for testing purposes so we can use fake APIs.
   GetAPISchemaMethod get_api_schema_;
+
+  // The method to call when the system silently handles an API request without
+  // notifying the browser.
+  APIBinding::OnSilentRequest on_silent_request_;
 
   DISALLOW_COPY_AND_ASSIGN(APIBindingsSystem);
 };

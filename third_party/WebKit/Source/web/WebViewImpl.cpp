@@ -31,6 +31,8 @@
 #include "web/WebViewImpl.h"
 
 #include <memory>
+
+#include "build/build_config.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
 #include "core/animation/CompositorMutatorImpl.h"
@@ -103,8 +105,6 @@
 #include "core/paint/PaintLayer.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
-#include "modules/compositorworker/AnimationWorkletProxyClientImpl.h"
-#include "modules/compositorworker/CompositorWorkerProxyClientImpl.h"
 #include "modules/credentialmanager/CredentialManagerClient.h"
 #include "modules/encryptedmedia/MediaKeysController.h"
 #include "modules/quota/StorageQuotaClient.h"
@@ -174,7 +174,7 @@
 #include "public/web/WebWindowFeatures.h"
 #include "web/WebDevToolsAgentImpl.h"
 
-#if USE(DEFAULT_RENDER_THEME)
+#if defined(WTF_USE_DEFAULT_RENDER_THEME)
 #include "core/layout/LayoutThemeDefault.h"
 #endif
 
@@ -415,6 +415,10 @@ WebViewImpl::~WebViewImpl() {
   DCHECK(link_highlights_.IsEmpty());
 }
 
+ValidationMessageClient* WebViewImpl::GetValidationMessageClient() const {
+  return page_ ? &page_->GetValidationMessageClient() : nullptr;
+}
+
 WebDevToolsAgentImpl* WebViewImpl::MainFrameDevToolsAgentImpl() {
   WebLocalFrameBase* main_frame = MainFrameImpl();
   return main_frame ? main_frame->DevToolsAgentImpl() : nullptr;
@@ -490,7 +494,7 @@ void WebViewImpl::HandleMouseDown(LocalFrame& main_frame,
 
   // Dispatch the contextmenu event regardless of if the click was swallowed.
   if (!GetPage()->GetSettings().GetShowContextMenuOnMouseUp()) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
     if (event.button == WebMouseEvent::Button::kRight ||
         (event.button == WebMouseEvent::Button::kLeft &&
          event.GetModifiers() & WebMouseEvent::kControlKey))
@@ -599,6 +603,7 @@ bool WebViewImpl::ScrollBy(const WebFloatSize& delta,
     synthetic_wheel.wheel_ticks_x = delta.width / kTickDivisor;
     synthetic_wheel.wheel_ticks_y = delta.height / kTickDivisor;
     synthetic_wheel.has_precise_scrolling_deltas = true;
+    synthetic_wheel.phase = WebMouseWheelEvent::kPhaseChanged;
     synthetic_wheel.SetPositionInWidget(position_on_fling_start_.x,
                                         position_on_fling_start_.y);
     synthetic_wheel.SetPositionInScreen(global_position_on_fling_start_.x,
@@ -1172,9 +1177,9 @@ WebInputEventResult WebViewImpl::HandleKeyEvent(const WebKeyboardEvent& event) {
     return result;
   }
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
   const WebInputEvent::Type kContextMenuKeyTriggeringEventType =
-#if OS(WIN)
+#if defined(OS_WIN)
       WebInputEvent::kKeyUp;
 #else
       WebInputEvent::kRawKeyDown;
@@ -1194,7 +1199,7 @@ WebInputEventResult WebViewImpl::HandleKeyEvent(const WebKeyboardEvent& event) {
     SendContextMenuEvent(event);
     return WebInputEventResult::kHandledSystem;
   }
-#endif  // !OS(MACOSX)
+#endif  // !defined(OS_MACOSX)
 
   return WebInputEventResult::kNotHandled;
 }
@@ -1616,7 +1621,7 @@ bool WebViewImpl::HasTouchEventHandlersAt(const WebPoint& point) {
   return true;
 }
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
 // Mac has no way to open a context menu based on a keyboard event.
 WebInputEventResult WebViewImpl::SendContextMenuEvent(
     const WebKeyboardEvent& event) {
@@ -2004,6 +2009,8 @@ void WebViewImpl::BeginFrame(double last_frame_time_monotonic) {
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       MainFrameImpl()->GetFrame()->GetDocument()->Lifecycle());
   PageWidgetDelegate::Animate(*page_, last_frame_time_monotonic);
+  if (auto* client = GetValidationMessageClient())
+    client->LayoutOverlay();
 }
 
 void WebViewImpl::UpdateAllLifecyclePhases() {
@@ -2018,6 +2025,8 @@ void WebViewImpl::UpdateAllLifecyclePhases() {
                                                *MainFrameImpl()->GetFrame());
   UpdateLayerTreeBackgroundColor();
 
+  if (auto* client = GetValidationMessageClient())
+    client->PaintOverlay();
   if (WebDevToolsAgentImpl* devtools = MainFrameDevToolsAgentImpl())
     devtools->PaintOverlay();
   if (page_color_overlay_)
@@ -2074,7 +2083,7 @@ void WebViewImpl::Paint(WebCanvas* canvas, const WebRect& rect) {
   software_paint_rate_histogram.Count(pixels_per_sec / 1000000);
 }
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 void WebViewImpl::PaintIgnoringCompositing(WebCanvas* canvas,
                                            const WebRect& rect) {
   // This is called on a composited WebViewImpl, but we will ignore it,
@@ -3587,7 +3596,7 @@ void WebViewImpl::SetSelectionColors(unsigned active_background_color,
                                      unsigned active_foreground_color,
                                      unsigned inactive_background_color,
                                      unsigned inactive_foreground_color) {
-#if USE(DEFAULT_RENDER_THEME)
+#if defined(WTF_USE_DEFAULT_RENDER_THEME)
   LayoutThemeDefault::SetSelectionColors(
       active_background_color, active_foreground_color,
       inactive_background_color, inactive_foreground_color);
@@ -3819,13 +3828,20 @@ void WebViewImpl::RegisterViewportLayersWithCompositor() {
   // the mehtod.
   visual_viewport.SetScrollLayerOnScrollbars(layout_viewport_scroll_web_layer);
 
-  layer_tree_view_->RegisterViewportLayers(
-      visual_viewport.OverscrollElasticityLayer()->PlatformLayer(),
-      visual_viewport.PageScaleLayer()->PlatformLayer(),
-      visual_viewport.ContainerLayer()->PlatformLayer(),
-      layout_viewport_container_web_layer,
-      visual_viewport.ScrollLayer()->PlatformLayer(),
-      layout_viewport_scroll_web_layer);
+  WebLayerTreeView::ViewportLayers viewport_layers;
+  viewport_layers.overscroll_elasticity =
+      visual_viewport.OverscrollElasticityLayer()->PlatformLayer();
+  viewport_layers.page_scale =
+      visual_viewport.PageScaleLayer()->PlatformLayer();
+  viewport_layers.inner_viewport_container =
+      visual_viewport.ContainerLayer()->PlatformLayer();
+  viewport_layers.outer_viewport_container =
+      layout_viewport_container_web_layer;
+  viewport_layers.inner_viewport_scroll =
+      visual_viewport.ScrollLayer()->PlatformLayer();
+  viewport_layers.outer_viewport_scroll = layout_viewport_scroll_web_layer;
+
+  layer_tree_view_->RegisterViewportLayers(viewport_layers);
 }
 
 void WebViewImpl::SetRootGraphicsLayer(GraphicsLayer* graphics_layer) {
@@ -4088,6 +4104,10 @@ void WebViewImpl::ForceNextDrawingBufferCreationToFail() {
 }
 
 CompositorMutatorImpl& WebViewImpl::Mutator() {
+  return *CompositorMutator();
+}
+
+CompositorMutatorImpl* WebViewImpl::CompositorMutator() {
   if (!mutator_) {
     std::unique_ptr<CompositorMutatorClient> mutator_client =
         CompositorMutatorImpl::CreateClient();
@@ -4095,20 +4115,14 @@ CompositorMutatorImpl& WebViewImpl::Mutator() {
     layer_tree_view_->SetMutatorClient(std::move(mutator_client));
   }
 
-  return *mutator_;
-}
-
-CompositorWorkerProxyClient* WebViewImpl::CreateCompositorWorkerProxyClient() {
-  return new CompositorWorkerProxyClientImpl(&Mutator());
-}
-
-AnimationWorkletProxyClient* WebViewImpl::CreateAnimationWorkletProxyClient() {
-  return new AnimationWorkletProxyClientImpl(&Mutator());
+  return mutator_;
 }
 
 void WebViewImpl::UpdatePageOverlays() {
   if (page_color_overlay_)
     page_color_overlay_->Update();
+  if (auto* client = GetValidationMessageClient())
+    client->LayoutOverlay();
   if (WebDevToolsAgentImpl* devtools = MainFrameDevToolsAgentImpl())
     devtools->LayoutOverlay();
 }

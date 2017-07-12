@@ -122,6 +122,7 @@ Main.Main = class {
     Runtime.experiments.register('liveSASS', 'Live SASS');
     Runtime.experiments.register('networkGroupingRequests', 'Network request groups support', true);
     Runtime.experiments.register('objectPreviews', 'Object previews', true);
+    Runtime.experiments.register('networkInWorkers', 'Network in workers', true);
     Runtime.experiments.register('persistence2', 'Persistence 2.0');
     Runtime.experiments.register('sourceDiff', 'Source diff');
     Runtime.experiments.register('terminalInDrawer', 'Terminal in drawer', true);
@@ -310,8 +311,10 @@ Main.Main = class {
   }
 
   _registerForwardedShortcuts() {
-    /** @const */ var forwardedActions =
-        ['main.toggle-dock', 'debugger.toggle-breakpoints-active', 'debugger.toggle-pause', 'commandMenu.show'];
+    /** @const */ var forwardedActions = [
+      'main.toggle-dock', 'debugger.toggle-breakpoints-active', 'debugger.toggle-pause', 'commandMenu.show',
+      'console.show'
+    ];
     var actionKeys =
         UI.shortcutRegistry.keysForActions(forwardedActions).map(UI.KeyboardShortcut.keyCodeAndModifiersFromKey);
     InspectorFrontendHost.setWhitelistedShortcuts(JSON.stringify(actionKeys));

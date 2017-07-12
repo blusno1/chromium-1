@@ -21,6 +21,7 @@ class ListValue;
 }
 
 namespace extensions {
+class ExceptionHandler;
 
 // A wrapper around a map for extension API calls. Contains all pending requests
 // and the associated context and callback. Designed to be used on a single
@@ -54,7 +55,8 @@ class APIRequestHandler {
 
   APIRequestHandler(const SendRequestMethod& send_request,
                     const CallJSFunction& call_js,
-                    APILastError last_error);
+                    APILastError last_error,
+                    ExceptionHandler* exception_handler);
   ~APIRequestHandler();
 
   // Begins the process of processing the request. Returns the identifier of the
@@ -85,6 +87,7 @@ class APIRequestHandler {
   void InvalidateContext(v8::Local<v8::Context> context);
 
   APILastError* last_error() { return &last_error_; }
+  int last_sent_request_id() const { return last_sent_request_id_; }
 
   std::set<int> GetPendingRequestIdsForTesting() const;
 
@@ -108,6 +111,11 @@ class APIRequestHandler {
   // The next available request identifier.
   int next_request_id_ = 0;
 
+  // The id of the last request we sent to the browser. This can be used as a
+  // flag for whether or not a request was sent (if the last_sent_request_id_
+  // changes).
+  int last_sent_request_id_ = -1;
+
   // A map of all pending requests.
   std::map<int, PendingRequest> pending_requests_;
 
@@ -120,6 +128,10 @@ class APIRequestHandler {
   CallJSFunction call_js_;
 
   APILastError last_error_;
+
+  // The exception handler for the bindings system; guaranteed to be valid
+  // during this object's lifetime.
+  ExceptionHandler* const exception_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(APIRequestHandler);
 };

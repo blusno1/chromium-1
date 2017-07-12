@@ -28,6 +28,7 @@
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/service_worker_modes.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/http/http_byte_range.h"
 #include "net/url_request/url_request.h"
@@ -49,7 +50,7 @@ class BlobStorageContext;
 namespace content {
 
 class ResourceContext;
-class ResourceRequestBodyImpl;
+class ResourceRequestBody;
 class ServiceWorkerBlobReader;
 class ServiceWorkerDataPipeReader;
 class ServiceWorkerFetchDispatcher;
@@ -71,7 +72,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
-      scoped_refptr<ResourceRequestBodyImpl> body,
+      scoped_refptr<ResourceRequestBody> body,
       ServiceWorkerFetchType fetch_type,
       const base::Optional<base::TimeDelta>& timeout,
       Delegate* delegate);
@@ -306,7 +307,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   bool fall_back_required_;
   // ResourceRequestBody has a collection of BlobDataHandles attached to it
   // using the userdata mechanism. So we have to keep it not to free the blobs.
-  scoped_refptr<ResourceRequestBodyImpl> body_;
+  scoped_refptr<ResourceRequestBody> body_;
   std::unique_ptr<storage::BlobDataHandle> request_body_blob_data_handle_;
   ServiceWorkerFetchType fetch_type_;
   base::Optional<base::TimeDelta> timeout_;

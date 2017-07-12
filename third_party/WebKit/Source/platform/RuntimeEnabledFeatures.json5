@@ -80,6 +80,10 @@
       status: "stable",
     },
     {
+      name: "AsyncClipboard",
+      status: "experimental",
+    },
+    {
       name: "AudioOutputDevices",
       status: "stable",
     },
@@ -154,6 +158,9 @@
     {
       name: "ClientHints",
       status: "stable",
+    },
+    {
+      name: "ClientPlaceholdersForServerLoFi",
     },
     {
       name: "CoalescedEvents",
@@ -388,6 +395,10 @@
       status: "stable",
     },
     {
+      name: "EncryptedMediaHdcpPolicyCheck",
+      status: "test",
+    },
+    {
       name: "ExecCommandInJavaScript",
       status: "test",
     },
@@ -418,7 +429,7 @@
       name: "FeaturePolicyExperimentalFeatures",
     },
     {
-      name:"FetchRequestCache",
+      name: "FetchRequestCache",
       status: "experimental",
     },
     {
@@ -461,6 +472,10 @@
       status: "experimental",
     },
     {
+      name: "FramesTimingFunction",
+      status: "experimental",
+    },
+    {
       name: "FrameTimingSupport",
       status: "experimental",
     },
@@ -493,6 +508,11 @@
     },
     {
       name: "HideNonceContentAttribute",
+      status: "stable",
+    },
+    // https://crbug.com/523952 for testing disabling the feature.
+    {
+      name: "HTMLImportsStyleApplication",
       status: "stable",
     },
     {
@@ -566,9 +586,6 @@
     },
     {
       name: "LoadingWithMojo",
-    },
-    {
-      name: "LocationHardReload",
     },
     {
       name: "LongTaskObserver",
@@ -655,7 +672,7 @@
     },
     {
       name: "ModuleScripts",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "MojoBlobs",
@@ -875,6 +892,10 @@
       status: "experimental",
     },
     {
+      name: "ResourceLoadScheduler",
+      status: "experimental",
+    },
+    {
       name: "RestrictCanRequestURLCharacterSet",
       status: "stable",
     },
@@ -927,6 +948,9 @@
       status: "stable",
     },
     {
+      name: "ServiceWorkerScriptStreaming",
+    },
+    {
       name: "SetRootScroller",
       status: "experimental",
     },
@@ -949,11 +973,6 @@
     {
       name: "SkipCompositingSmallScrollers",
       status: "test",
-    },
-    {
-      name: "SlimmingPaintInvalidation",
-      implied_by: ["SlimmingPaintV2"],
-      status: "stable",
     },
     {
       name: "SlimmingPaintStrictCullRectClipping",
@@ -1029,6 +1048,10 @@
     },
     {
       name: "V8IdleTasks",
+    },
+    {
+      name: "ValidationBubbleInRenderer",
+      status: "experimental",
     },
     {
       name: "VibrateRequiresUserGesture",

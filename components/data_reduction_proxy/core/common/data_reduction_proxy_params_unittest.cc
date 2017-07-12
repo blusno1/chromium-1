@@ -31,14 +31,9 @@
 namespace data_reduction_proxy {
 class DataReductionProxyParamsTest : public testing::Test {
  public:
-  void CheckParams(const TestDataReductionProxyParams& params,
-                   bool expected_init_result) {
-    EXPECT_EQ(expected_init_result, params.init_result());
-  }
   void CheckValues(const TestDataReductionProxyParams& params,
                    const std::string& expected_origin,
-                   const std::string& expected_fallback_origin,
-                   const std::string& expected_secure_proxy_check_url) {
+                   const std::string& expected_fallback_origin) {
     std::vector<net::ProxyServer> expected_proxies;
     if (!expected_origin.empty()) {
       expected_proxies.push_back(net::ProxyServer::FromURI(
@@ -53,67 +48,33 @@ class DataReductionProxyParamsTest : public testing::Test {
     EXPECT_EQ(expected_proxies,
               DataReductionProxyServer::ConvertToNetProxyServers(
                   params.proxies_for_http()));
-    EXPECT_EQ(GURL(expected_secure_proxy_check_url),
-              params.secure_proxy_check_url());
   }
 };
 
 TEST_F(DataReductionProxyParamsTest, EverythingDefined) {
   TestDataReductionProxyParams params;
-  CheckParams(params, true);
   std::vector<DataReductionProxyServer> expected_proxies;
 
   // Both the origin and fallback proxy must have type CORE.
   expected_proxies.push_back(DataReductionProxyServer(
-      net::ProxyServer::FromURI(TestDataReductionProxyParams::DefaultOrigin(),
+      net::ProxyServer::FromURI("https://proxy.googlezip.net:443",
                                 net::ProxyServer::SCHEME_HTTP),
       ProxyServer::CORE));
   expected_proxies.push_back(DataReductionProxyServer(
-      net::ProxyServer::FromURI(
-          TestDataReductionProxyParams::DefaultFallbackOrigin(),
-          net::ProxyServer::SCHEME_HTTP),
+      net::ProxyServer::FromURI("compress.googlezip.net:80",
+                                net::ProxyServer::SCHEME_HTTP),
       ProxyServer::CORE));
 
   EXPECT_EQ(expected_proxies, params.proxies_for_http());
-  EXPECT_EQ(GURL(TestDataReductionProxyParams::DefaultSecureProxyCheckURL()),
-            params.secure_proxy_check_url());
 }
 
 TEST_F(DataReductionProxyParamsTest, Flags) {
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kDataReductionProxy,
-      TestDataReductionProxyParams::FlagOrigin());
+      switches::kDataReductionProxy, "http://ovveride-1.com/");
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kDataReductionProxyFallback,
-      TestDataReductionProxyParams::FlagFallbackOrigin());
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kDataReductionProxySecureProxyCheckURL,
-      TestDataReductionProxyParams::FlagSecureProxyCheckURL());
+      switches::kDataReductionProxyFallback, "http://ovveride-2.com/");
   TestDataReductionProxyParams params;
-  CheckParams(params, true);
-  CheckValues(params, TestDataReductionProxyParams::FlagOrigin(),
-              TestDataReductionProxyParams::FlagFallbackOrigin(),
-              TestDataReductionProxyParams::FlagSecureProxyCheckURL());
-}
-
-TEST_F(DataReductionProxyParamsTest, CarrierTestFlag) {
-  static const char kCarrierTestOrigin[] =
-      "http://o-o.preferred.nttdocomodcp-hnd1.proxy-dev.googlezip.net:80";
-  static const char kDefaultFallbackOrigin[] = "compress.googlezip.net:80";
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, nullptr);
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kEnableDataReductionProxyCarrierTest, kCarrierTestOrigin);
-  DataReductionProxyParams params;
-  std::vector<DataReductionProxyServer> proxies_for_http;
-  proxies_for_http.push_back(DataReductionProxyServer(
-      net::ProxyServer::FromURI(kCarrierTestOrigin,
-                                net::ProxyServer::SCHEME_HTTP),
-      ProxyServer::CORE));
-  proxies_for_http.push_back(DataReductionProxyServer(
-      net::ProxyServer::FromURI(kDefaultFallbackOrigin,
-                                net::ProxyServer::SCHEME_HTTP),
-      ProxyServer::CORE));
-  EXPECT_EQ(params.proxies_for_http(), proxies_for_http);
+  CheckValues(params, "http://ovveride-1.com/", "http://ovveride-2.com/");
 }
 
 TEST_F(DataReductionProxyParamsTest, AndroidOnePromoFieldTrial) {
@@ -601,6 +562,33 @@ TEST_F(DataReductionProxyParamsTest, GetConfigServiceURL) {
           switches::kDataReductionProxyConfigURL, test.flag_value);
     }
     EXPECT_EQ(test.expected, params::GetConfigServiceURL()) << test.test_case;
+  }
+}
+
+TEST_F(DataReductionProxyParamsTest, SecureProxyURL) {
+  const struct {
+    std::string test_case;
+    std::string flag_value;
+    GURL expected;
+  } tests[] = {
+      {
+          "Nothing set", "", GURL("http://check.googlezip.net/connect"),
+      },
+      {
+          "Only command line set", "http://example.com/flag",
+          GURL("http://example.com/flag"),
+      },
+  };
+
+  for (const auto& test : tests) {
+    // Reset all flags.
+    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
+    if (!test.flag_value.empty()) {
+      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+          switches::kDataReductionProxySecureProxyCheckURL, test.flag_value);
+    }
+    EXPECT_EQ(test.expected, params::GetSecureProxyCheckURL())
+        << test.test_case;
   }
 }
 

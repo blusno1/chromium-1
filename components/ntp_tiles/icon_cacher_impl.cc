@@ -210,9 +210,13 @@ void IconCacherImpl::OnGetLargeIconOrFallbackStyleFinished(
     const GURL& page_url,
     const favicon_base::LargeIconResult& result) {
   if (!HasResultDefaultBackgroundColor(result)) {
-    // We should only fetch for default "gray" tiles so that we never overrite
-    // any favicon of any size.
+    // There is already an icon, there is nothing to do. (We should only fetch
+    // for default "gray" tiles so that we never overwrite any favicon of any
+    // size.)
     FinishRequestAndNotifyIconAvailable(page_url, /*newly_available=*/false);
+    // Update the time when the icon was last requested - postpone thus the
+    // automatic eviction of the favicon from the favicon database.
+    large_icon_service_->TouchIconFromGoogleServer(result.bitmap.icon_url);
     return;
   }
 
@@ -249,10 +253,15 @@ void IconCacherImpl::OnGetLargeIconOrFallbackStyleFinished(
                      weak_ptr_factory_.GetWeakPtr(), page_url));
 }
 
-void IconCacherImpl::OnMostLikelyFaviconDownloaded(const GURL& request_url,
-                                                   bool success) {
-  UMA_HISTOGRAM_BOOLEAN("NewTabPage.TileFaviconFetchSuccess.Server", success);
-  FinishRequestAndNotifyIconAvailable(request_url, success);
+void IconCacherImpl::OnMostLikelyFaviconDownloaded(
+    const GURL& request_url,
+    favicon_base::GoogleFaviconServerRequestStatus status) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "NewTabPage.TileFaviconFetchStatus.Server", status,
+      favicon_base::GoogleFaviconServerRequestStatus::COUNT);
+  FinishRequestAndNotifyIconAvailable(
+      request_url,
+      status == favicon_base::GoogleFaviconServerRequestStatus::SUCCESS);
 }
 
 bool IconCacherImpl::StartRequest(const GURL& request_url,

@@ -19,7 +19,7 @@
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/VoidCallbackFunction.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/custom/V0CustomElementProcessingStack.h"
+#include "core/html/custom/V0CustomElementProcessingStack.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
@@ -28,7 +28,7 @@ namespace blink {
 
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -45,7 +45,7 @@ const WrapperTypeInfo V8TestCallbackFunctions::wrapperTypeInfo = {
     WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
     WrapperTypeInfo::kIndependent,
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 

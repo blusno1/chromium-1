@@ -222,6 +222,20 @@ void GpuService::RecordLogMessage(int severity,
   (*gpu_host_)->RecordLogMessage(severity, header, message);
 }
 
+void GpuService::CreateJpegDecodeAccelerator(
+    media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) {
+  DCHECK(io_runner_->BelongsToCurrentThread());
+  // TODO(c.padhi): Implement this, see https://crbug.com/699255.
+  NOTIMPLEMENTED();
+}
+
+void GpuService::CreateVideoEncodeAccelerator(
+    media::mojom::VideoEncodeAcceleratorRequest vea_request) {
+  DCHECK(io_runner_->BelongsToCurrentThread());
+  // TODO(mcasas): Create a mojom::VideoEncodeAccelerator implementation,
+  // https://crbug.com/736517.
+}
+
 void GpuService::CreateGpuMemoryBuffer(
     gfx::GpuMemoryBufferId id,
     const gfx::Size& size,

@@ -35,9 +35,9 @@
 #include "content/common/renderer.mojom.h"
 #include "content/common/renderer_host.mojom.h"
 #include "content/common/storage_partition_service.mojom.h"
-#include "content/common/url_loader_factory.mojom.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/service_manager_connection.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_platform_file.h"
 #include "media/media_features.h"
@@ -650,6 +650,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // Must be accessed on UI thread.
   std::vector<int> aec_dump_consumers_;
+  base::Optional<bool> override_aec3_;
 
   WebRtcStopRtpDumpCallback stop_rtp_dump_callback_;
 

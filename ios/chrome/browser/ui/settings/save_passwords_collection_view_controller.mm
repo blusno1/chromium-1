@@ -4,9 +4,6 @@
 
 #import "ios/chrome/browser/ui/settings/save_passwords_collection_view_controller.h"
 
-#include <memory>
-#include <vector>
-
 #include "base/ios/ios_util.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
@@ -38,6 +35,7 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/settings/password_details_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/password_details_collection_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/settings/reauthentication_module.h"
 #import "ios/chrome/browser/ui/settings/settings_utils.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
@@ -67,26 +65,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeBlacklisted,    // This is a repeated item type.
 };
 
-// TODO(crbug.com/669538): This function should be removed after original
-// version of GetHumanReadableOrigin will be moved to affiliation_utils.
-std::string GetHumanReadableOriginCopy(
-    const autofill::PasswordForm& password_form) {
-  password_manager::FacetURI facet_uri =
-      password_manager::FacetURI::FromPotentiallyInvalidSpec(
-          password_form.signon_realm);
-  if (facet_uri.IsValidAndroidFacetURI())
-    return facet_uri.scheme() + "://" + facet_uri.android_package_name();
-  return base::UTF16ToUTF8(url_formatter::FormatUrl(password_form.origin));
-}
-
 }  // namespace
-
-@interface SavePasswordsCollectionViewController (UsedBySavePasswordsConsumer)
-// Callback called when the async request launched from
-// |getLoginsFromPasswordStore| finishes.
-- (void)onGetPasswordStoreResults:
-    (const std::vector<std::unique_ptr<autofill::PasswordForm>>&)result;
-@end
 
 namespace password_manager {
 // A bridge C++ class passing notification about finished password store
@@ -283,7 +262,7 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
   SavedFormContentItem* passwordItem =
       [[SavedFormContentItem alloc] initWithType:ItemTypeSavedPassword];
   passwordItem.text =
-      base::SysUTF8ToNSString(GetHumanReadableOriginCopy(*form));
+      base::SysUTF8ToNSString(password_manager::GetHumanReadableOrigin(*form));
   passwordItem.detailText = base::SysUTF16ToNSString(form->username_value);
   if (experimental_flags::IsViewCopyPasswordsEnabled()) {
     passwordItem.accessibilityTraits |= UIAccessibilityTraitButton;
@@ -298,7 +277,12 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
   BlacklistedFormContentItem* passwordItem =
       [[BlacklistedFormContentItem alloc] initWithType:ItemTypeBlacklisted];
   passwordItem.text =
-      base::SysUTF8ToNSString(GetHumanReadableOriginCopy(*form));
+      base::SysUTF8ToNSString(password_manager::GetHumanReadableOrigin(*form));
+  if (experimental_flags::IsViewCopyPasswordsEnabled()) {
+    passwordItem.accessibilityTraits |= UIAccessibilityTraitButton;
+    passwordItem.accessoryType =
+        MDCCollectionViewCellAccessoryDisclosureIndicator;
+  }
   return passwordItem;
 }
 
@@ -451,36 +435,49 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
 
 #pragma mark UICollectionViewDelegate
 
+- (void)openDetailedViewForForm:(const autofill::PasswordForm&)form {
+  if (!experimental_flags::IsViewCopyPasswordsEnabled())
+    return;
+
+  UIViewController* controller =
+      [[PasswordDetailsCollectionViewController alloc]
+            initWithPasswordForm:form
+                        delegate:self
+          reauthenticationModule:reauthenticationModule_];
+  [self.navigationController pushViewController:controller animated:YES];
+}
+
 - (void)collectionView:(UICollectionView*)collectionView
     didSelectItemAtIndexPath:(NSIndexPath*)indexPath {
   [super collectionView:collectionView didSelectItemAtIndexPath:indexPath];
 
   // Actions should only take effect when not in editing mode.
-  if (self.editing) {
+  if ([self.editor isEditing]) {
     return;
   }
 
   CollectionViewModel* model = self.collectionViewModel;
-  if ([model itemTypeForIndexPath:indexPath] == ItemTypeSavedPassword) {
-    DCHECK_EQ([model sectionIdentifierForSection:indexPath.section],
-              SectionIdentifierSavedPasswords);
-    if (experimental_flags::IsViewCopyPasswordsEnabled()) {
+  NSInteger itemType = [model itemTypeForIndexPath:indexPath];
+  switch (itemType) {
+    case ItemTypeManageAccount:
+    case ItemTypeHeader:
+    case ItemTypeSavePasswordsSwitch:
+      break;
+    case ItemTypeSavedPassword:
+      DCHECK_EQ(SectionIdentifierSavedPasswords,
+                [model sectionIdentifierForSection:indexPath.section]);
       DCHECK_LT(base::checked_cast<size_t>(indexPath.item), savedForms_.size());
-      autofill::PasswordForm* form = savedForms_[indexPath.item].get();
-      NSString* username = base::SysUTF16ToNSString(form->username_value);
-      NSString* password = base::SysUTF16ToNSString(form->password_value);
-      NSString* origin =
-          base::SysUTF8ToNSString(GetHumanReadableOriginCopy(*form));
-      UIViewController* controller =
-          [[PasswordDetailsCollectionViewController alloc]
-                initWithPasswordForm:*form
-                            delegate:self
-              reauthenticationModule:reauthenticationModule_
-                            username:username
-                            password:password
-                              origin:origin];
-      [self.navigationController pushViewController:controller animated:YES];
-    }
+      [self openDetailedViewForForm:*savedForms_[indexPath.item]];
+      break;
+    case ItemTypeBlacklisted:
+      DCHECK_EQ(SectionIdentifierBlacklist,
+                [model sectionIdentifierForSection:indexPath.section]);
+      DCHECK_LT(base::checked_cast<size_t>(indexPath.item),
+                blacklistedForms_.size());
+      [self openDetailedViewForForm:*blacklistedForms_[indexPath.item]];
+      break;
+    default:
+      NOTREACHED();
   }
 }
 
@@ -578,9 +575,10 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
   for (auto it = savedForms_.begin(); it != savedForms_.end(); ++it) {
     if (**it == form) {
       savedForms_.erase(it);
-      return;
+      break;
     }
   }
+  [self reloadData];
   [self.navigationController popViewControllerAnimated:YES];
 }
 

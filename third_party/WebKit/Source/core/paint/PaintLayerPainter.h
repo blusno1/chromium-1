@@ -14,6 +14,7 @@
 namespace blink {
 
 class ClipRect;
+class DisplayItemClient;
 class PaintLayer;
 class GraphicsContext;
 class LayoutPoint;
@@ -136,10 +137,13 @@ class CORE_EXPORT PaintLayerPainter {
                                           const PaintLayerPaintingInfo&,
                                           PaintLayerFlags);
 
-  void FillMaskingFragment(GraphicsContext&, const ClipRect&);
+  void FillMaskingFragment(GraphicsContext&,
+                           const ClipRect&,
+                           const DisplayItemClient&);
 
   static bool NeedsToClip(const PaintLayerPaintingInfo& local_painting_info,
-                          const ClipRect&);
+                          const ClipRect&,
+                          const PaintLayerFlags&);
 
   // Returns whether this layer should be painted during sofware painting (i.e.,
   // not via calls from CompositedLayerMapping to draw into composited layers).

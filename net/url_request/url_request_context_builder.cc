@@ -258,6 +258,11 @@ void URLRequestContextBuilder::set_ct_verifier(
   ct_verifier_ = std::move(ct_verifier);
 }
 
+void URLRequestContextBuilder::set_ct_policy_enforcer(
+    std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer) {
+  ct_policy_enforcer_ = std::move(ct_policy_enforcer);
+}
+
 void URLRequestContextBuilder::SetCertVerifier(
     std::unique_ptr<CertVerifier> cert_verifier) {
   cert_verifier_ = std::move(cert_verifier);
@@ -286,9 +291,9 @@ void URLRequestContextBuilder::SetCookieAndChannelIdStores(
   channel_id_service_ = std::move(channel_id_service);
 }
 
-void URLRequestContextBuilder::SetFileTaskRunner(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
-  file_task_runner_ = task_runner;
+void URLRequestContextBuilder::SetCacheThreadTaskRunner(
+    scoped_refptr<base::SingleThreadTaskRunner> cache_thread_task_runner) {
+  cache_thread_task_runner_ = std::move(cache_thread_task_runner);
 }
 
 void URLRequestContextBuilder::SetProtocolHandler(
@@ -378,7 +383,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     // user-visible. Block shutdown to ensure it does get persisted to disk,
     // since it contains security-relevant information.
     scoped_refptr<base::SequencedTaskRunner> task_runner(
-        GetFileSequencedTaskRunner(
+        base::CreateSequencedTaskRunnerWithTraits(
             {base::MayBlock(), base::TaskPriority::BACKGROUND,
              base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
 
@@ -410,7 +415,11 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     ct_verifier->AddLogs(ct::CreateLogVerifiersForKnownLogs());
     storage->set_cert_transparency_verifier(std::move(ct_verifier));
   }
-  storage->set_ct_policy_enforcer(base::MakeUnique<CTPolicyEnforcer>());
+  if (ct_policy_enforcer_) {
+    storage->set_ct_policy_enforcer(std::move(ct_policy_enforcer_));
+  } else {
+    storage->set_ct_policy_enforcer(base::MakeUnique<CTPolicyEnforcer>());
+  }
 
   if (throttling_enabled_) {
     storage->set_throttler_manager(
@@ -450,16 +459,19 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   if (http_cache_enabled_) {
     std::unique_ptr<HttpCache::BackendFactory> http_cache_backend;
     if (http_cache_params_.type != HttpCacheParams::IN_MEMORY) {
+      if (!cache_thread_task_runner_) {
+        cache_thread_task_runner_ =
+            base::CreateSingleThreadTaskRunnerWithTraits(
+                {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
+                 base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+      }
       BackendType backend_type =
           http_cache_params_.type == HttpCacheParams::DISK
               ? CACHE_BACKEND_DEFAULT
               : CACHE_BACKEND_SIMPLE;
       http_cache_backend.reset(new HttpCache::DefaultBackend(
           DISK_CACHE, backend_type, http_cache_params_.path,
-          http_cache_params_.max_size,
-          GetFileSingleThreadTaskRunner(
-              {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
-               base::TaskShutdownBehavior::BLOCK_SHUTDOWN})));
+          http_cache_params_.max_size, cache_thread_task_runner_));
     } else {
       http_cache_backend =
           HttpCache::DefaultBackend::InMemory(http_cache_params_.max_size);
@@ -490,7 +502,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   if (file_enabled_) {
     job_factory->SetProtocolHandler(
         url::kFileScheme,
-        base::MakeUnique<FileProtocolHandler>(GetFileTaskRunner(
+        base::MakeUnique<FileProtocolHandler>(base::CreateTaskRunnerWithTraits(
             {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
   }
@@ -534,29 +546,6 @@ std::unique_ptr<ProxyService> URLRequestContextBuilder::CreateProxyService(
     NetLog* net_log) {
   return ProxyService::CreateUsingSystemProxyResolver(
       std::move(proxy_config_service), net_log);
-}
-
-scoped_refptr<base::TaskRunner> URLRequestContextBuilder::GetFileTaskRunner(
-    const base::TaskTraits& traits) {
-  if (file_task_runner_)
-    return file_task_runner_;
-  return base::CreateTaskRunnerWithTraits(traits);
-}
-
-scoped_refptr<base::SequencedTaskRunner>
-URLRequestContextBuilder::GetFileSequencedTaskRunner(
-    const base::TaskTraits& traits) {
-  if (file_task_runner_)
-    return file_task_runner_;
-  return base::CreateSequencedTaskRunnerWithTraits(traits);
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-URLRequestContextBuilder::GetFileSingleThreadTaskRunner(
-    const base::TaskTraits& traits) {
-  if (file_task_runner_)
-    return file_task_runner_;
-  return base::CreateSingleThreadTaskRunnerWithTraits(traits);
 }
 
 }  // namespace net

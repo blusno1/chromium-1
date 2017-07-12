@@ -336,16 +336,6 @@ class TestSkiaTextRenderer : public internal::SkiaTextRenderer {
     SkColor color;
   };
 
-  struct DecorationLog {
-    DecorationLog(int x, int y, int width, bool underline, bool strike)
-        : x(x), y(y), width(width), underline(underline), strike(strike) {}
-    int x;
-    int y;
-    int width;
-    bool underline;
-    bool strike;
-  };
-
   explicit TestSkiaTextRenderer(Canvas* canvas)
       : internal::SkiaTextRenderer(canvas) {}
   ~TestSkiaTextRenderer() override {}
@@ -353,11 +343,6 @@ class TestSkiaTextRenderer : public internal::SkiaTextRenderer {
   void GetTextLogAndReset(std::vector<TextLog>* text_log) {
     text_log_.swap(*text_log);
     text_log_.clear();
-  }
-
-  void GetDecorationLogAndReset(std::vector<DecorationLog>* decoration_log) {
-    decoration_log_.swap(*decoration_log);
-    decoration_log_.clear();
   }
 
  private:
@@ -381,17 +366,7 @@ class TestSkiaTextRenderer : public internal::SkiaTextRenderer {
     internal::SkiaTextRenderer::DrawPosText(pos, glyphs, glyph_count);
   }
 
-  void DrawDecorations(int x,
-                       int y,
-                       int width,
-                       bool underline,
-                       bool strike) override {
-    decoration_log_.push_back(DecorationLog(x, y, width, underline, strike));
-    internal::SkiaTextRenderer::DrawDecorations(x, y, width, underline, strike);
-  }
-
   std::vector<TextLog> text_log_;
-  std::vector<DecorationLog> decoration_log_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSkiaTextRenderer);
 };
@@ -1794,12 +1769,6 @@ TEST_P(RenderTextHarfBuzzTest, GraphemePositions) {
     { kText3, 50, 6, 6 },
   };
 
-#if defined(OS_WIN)
-  // TODO(msw): XP fails due to lack of font support: http://crbug.com/106450
-  if (base::win::GetVersion() < base::win::VERSION_VISTA)
-    return;
-#endif
-
   RenderText* render_text = GetRenderText();
   for (size_t i = 0; i < arraysize(cases); i++) {
     SCOPED_TRACE(base::StringPrintf("Testing cases[%" PRIuS "]", i));
@@ -1819,12 +1788,6 @@ TEST_P(RenderTextHarfBuzzTest, GraphemePositions) {
 
 // TODO(asvitkine): RenderTextMac cursor movements. http://crbug.com/131618
 TEST_P(RenderTextHarfBuzzTest, MidGraphemeSelectionBounds) {
-#if defined(OS_WIN)
-  // TODO(msw): XP fails due to lack of font support: http://crbug.com/106450
-  if (base::win::GetVersion() < base::win::VERSION_VISTA)
-    return;
-#endif
-
   // Test that selection bounds may be set amid multi-character graphemes.
   const base::string16 kHindi = WideToUTF16(L"\x0915\x093f");
   const base::string16 kThai = WideToUTF16(L"\x0e08\x0e33");
@@ -1975,12 +1938,6 @@ TEST_P(RenderTextTest, EdgeSelectionModels) {
     { kRTLGrapheme, base::i18n::RIGHT_TO_LEFT },
     { kHebrewLatin, base::i18n::RIGHT_TO_LEFT },
   };
-
-#if defined(OS_WIN)
-  // TODO(msw): XP fails due to lack of font support: http://crbug.com/106450
-  if (base::win::GetVersion() < base::win::VERSION_VISTA)
-    return;
-#endif
 
   RenderText* render_text = GetRenderText();
   for (size_t i = 0; i < arraysize(cases); i++) {

@@ -19,11 +19,17 @@ const base::Feature* kAllFeatures[] = {
     &kIPHDataSaverPreviewFeature,
     &kIPHDownloadHomeFeature,
     &kIPHDownloadPageFeature,
+    &kIPHDownloadPageScreenshotFeature,
 #endif  // defined(OS_ANDROID)
 #if defined(OS_WIN) || defined(OS_LINUX)
     &kIPHIncognitoWindowFeature,
     &kIPHNewTabFeature,
 #endif  // defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_IOS)
+    &kIPHNewTabTipFeature,
+    &kIPHNewIncognitoTabTipFeature,
+    &kIPHBadgedReadingListFeature,
+#endif  // defined(OS_IOS)
 };
 }  // namespace
 

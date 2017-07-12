@@ -46,8 +46,11 @@ class ScriptResource;
 class Modulator;
 class ModulePendingScriptTreeClient;
 
-class CORE_EXPORT ScriptLoader : public PendingScriptClient,
+class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
+                                 public PendingScriptClient,
                                  public TraceWrapperBase {
+  USING_GARBAGE_COLLECTED_MIXIN(ScriptLoader);
+
  public:
   static ScriptLoader* Create(ScriptElementBase* element,
                               bool created_by_parser,
@@ -78,19 +81,23 @@ class CORE_EXPORT ScriptLoader : public PendingScriptClient,
                          TextPosition::MinimumPosition(),
                      LegacyTypeSupport = kDisallowLegacyTypeInTypeAttribute);
 
-  String ScriptContent() const;
+  // https://html.spec.whatwg.org/#execute-the-script-block
+  // The single entry point of script execution.
+  // PendingScript::Dispose() is called in ExecuteScriptBlock().
+  //
+  // TODO(hiroshige): Replace ExecuteScript() calls with ExecuteScriptBlock().
+  //
+  // TODO(hiroshige): Currently this returns bool (true if success) only to
+  // preserve existing code structure around PrepareScript(). Clean up this.
+  bool ExecuteScriptBlock(PendingScript*, const KURL&);
 
   // Creates a PendingScript for external script whose fetch is started in
   // FetchClassicScript()/FetchModuleScriptTree().
   PendingScript* CreatePendingScript();
 
-  // Returns false if and only if execution was blocked.
-  bool ExecuteScript(const Script*);
+  // The entry point only for ScriptRunner that wraps ExecuteScriptBlock().
   virtual void Execute();
 
-  // XML parser calls these
-  void DispatchLoadEvent();
-  void DispatchErrorEvent();
   bool IsScriptTypeSupported(LegacyTypeSupport,
                              ScriptType& out_script_type) const;
 
@@ -163,7 +170,15 @@ class CORE_EXPORT ScriptLoader : public PendingScriptClient,
                              ParserDisposition,
                              WebURLRequest::FetchCredentialsMode);
 
-  bool DoExecuteScript(const Script*);
+  enum class ExecuteScriptResult {
+    kShouldFireErrorEvent,
+    kShouldFireLoadEvent,
+    kShouldFireNone
+  };
+  WARN_UNUSED_RESULT ExecuteScriptResult ExecuteScript(const Script*);
+  ExecuteScriptResult DoExecuteScript(const Script*);
+  void DispatchLoadEvent();
+  void DispatchErrorEvent();
 
   // Clears the connection to the PendingScript.
   void DetachPendingScript();

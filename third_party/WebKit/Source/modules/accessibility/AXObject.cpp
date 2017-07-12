@@ -392,6 +392,25 @@ Element* AXObject::GetAOMPropertyOrARIAAttribute(
   return target ? target->element() : nullptr;
 }
 
+bool AXObject::HasAOMProperty(AOMRelationListProperty property,
+                              HeapVector<Member<Element>>& result) const {
+  Element* element = this->GetElement();
+  if (!element)
+    return false;
+
+  return AccessibleNode::GetProperty(element, property, result);
+}
+
+bool AXObject::HasAOMPropertyOrARIAAttribute(
+    AOMRelationListProperty property,
+    HeapVector<Member<Element>>& result) const {
+  Element* element = this->GetElement();
+  if (!element)
+    return false;
+
+  return AccessibleNode::GetPropertyOrARIAAttribute(element, property, result);
+}
+
 bool AXObject::HasAOMPropertyOrARIAAttribute(AOMBooleanProperty property,
                                              bool& result) const {
   Element* element = this->GetElement();
@@ -520,7 +539,12 @@ AccessibilityCheckedState AXObject::CheckedState() const {
     if (!node)
       return kCheckedStateUndefined;
 
-    if (IsNativeInputInMixedState(node))
+    // Expose native checkbox mixed state as accessibility mixed state. However,
+    // do not expose native radio mixed state as accessibility mixed state.
+    // This would confuse the JAWS screen reader, which reports a mixed radio as
+    // both checked and partially checked, but a native mixed native radio
+    // button sinply means no radio buttons have been checked in the group yet.
+    if (IsNativeCheckboxInMixedState(node))
       return kCheckedStateMixed;
 
     if (isHTMLInputElement(*node) &&
@@ -532,14 +556,13 @@ AccessibilityCheckedState AXObject::CheckedState() const {
   return kCheckedStateFalse;
 }
 
-bool AXObject::IsNativeInputInMixedState(const Node* node) {
+bool AXObject::IsNativeCheckboxInMixedState(const Node* node) {
   if (!isHTMLInputElement(node))
     return false;
 
   const HTMLInputElement* input = toHTMLInputElement(node);
   const auto inputType = input->type();
-  if (inputType != InputTypeNames::checkbox &&
-      inputType != InputTypeNames::radio)
+  if (inputType != InputTypeNames::checkbox)
     return false;
   return input->ShouldAppearIndeterminate();
 }
@@ -977,26 +1000,23 @@ String AXObject::AriaTextAlternative(bool recursive,
   // Step 2B from: http://www.w3.org/TR/accname-aam-1.1
   // If you change this logic, update AXNodeObject::nameFromLabelElement, too.
   if (!in_aria_labelled_by_traversal && !already_visited) {
-    const QualifiedName& attr =
-        HasAttribute(aria_labeledbyAttr) && !HasAttribute(aria_labelledbyAttr)
-            ? aria_labeledbyAttr
-            : aria_labelledbyAttr;
     name_from = kAXNameFromRelatedElement;
-    if (name_sources) {
-      name_sources->push_back(NameSource(*found_text_alternative, attr));
-      name_sources->back().type = name_from;
-    }
 
-    const AtomicString& aria_labelledby = GetAttribute(attr);
-    if (!aria_labelledby.IsNull()) {
-      if (name_sources)
-        name_sources->back().attribute_value = aria_labelledby;
+    // Check AOM property first.
+    HeapVector<Member<Element>> elements;
+    if (HasAOMProperty(AOMRelationListProperty::kLabeledBy, elements)) {
+      if (name_sources) {
+        name_sources->push_back(
+            NameSource(*found_text_alternative, aria_labelledbyAttr));
+        name_sources->back().type = name_from;
+      }
 
       // Operate on a copy of |visited| so that if |nameSources| is not null,
       // the set of visited objects is preserved unmodified for future
       // calculations.
       AXObjectSet visited_copy = visited;
-      text_alternative = TextFromAriaLabelledby(visited_copy, related_objects);
+      text_alternative =
+          TextFromElements(true, visited_copy, elements, related_objects);
       if (!text_alternative.IsNull()) {
         if (name_sources) {
           NameSource& source = name_sources->back();
@@ -1010,6 +1030,44 @@ String AXObject::AriaTextAlternative(bool recursive,
         }
       } else if (name_sources) {
         name_sources->back().invalid = true;
+      }
+    } else {
+      // Now check ARIA attribute
+      const QualifiedName& attr =
+          HasAttribute(aria_labeledbyAttr) && !HasAttribute(aria_labelledbyAttr)
+              ? aria_labeledbyAttr
+              : aria_labelledbyAttr;
+
+      if (name_sources) {
+        name_sources->push_back(NameSource(*found_text_alternative, attr));
+        name_sources->back().type = name_from;
+      }
+
+      const AtomicString& aria_labelledby = GetAttribute(attr);
+      if (!aria_labelledby.IsNull()) {
+        if (name_sources)
+          name_sources->back().attribute_value = aria_labelledby;
+
+        // Operate on a copy of |visited| so that if |nameSources| is not null,
+        // the set of visited objects is preserved unmodified for future
+        // calculations.
+        AXObjectSet visited_copy = visited;
+        text_alternative =
+            TextFromAriaLabelledby(visited_copy, related_objects);
+        if (!text_alternative.IsNull()) {
+          if (name_sources) {
+            NameSource& source = name_sources->back();
+            source.type = name_from;
+            source.related_objects = *related_objects;
+            source.text = text_alternative;
+            *found_text_alternative = true;
+          } else {
+            *found_text_alternative = true;
+            return text_alternative;
+          }
+        } else if (name_sources) {
+          name_sources->back().invalid = true;
+        }
       }
     }
   }
@@ -1162,24 +1220,6 @@ AXDefaultActionVerb AXObject::Action() const {
       return AXDefaultActionVerb::kClick;
   }
 }
-
-bool AXObject::IsMultiline() const {
-  Node* node = this->GetNode();
-  if (!node)
-    return false;
-
-  if (isHTMLTextAreaElement(*node))
-    return true;
-
-  if (HasEditableStyle(*node))
-    return true;
-
-  if (!IsNativeTextControl() && !IsNonNativeTextControl())
-    return false;
-
-  return AOMPropertyOrARIAAttributeIsTrue(AOMBooleanProperty::kMultiline);
-}
-
 bool AXObject::AriaPressedIsPresent() const {
   return !GetAttribute(aria_pressedAttr).IsEmpty();
 }
@@ -1527,8 +1567,7 @@ void AXObject::GetRelativeBounds(AXObject** out_container,
   LayoutObject* container_layout_object = nullptr;
   while (container) {
     container_layout_object = container->GetLayoutObject();
-    if (container_layout_object &&
-        container_layout_object->IsBoxModelObject() &&
+    if (container_layout_object && container_layout_object->IsBox() &&
         layout_object->IsDescendantOf(container_layout_object)) {
       if (container->IsScrollableContainer() ||
           container_layout_object->HasLayer())
@@ -1993,7 +2032,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     case kOutlineRole:
     case kProgressIndicatorRole:
     case kRadioGroupRole:
-    case kRegionRole:
     case kRootWebAreaRole:
     case kScrollBarRole:
     case kSearchRole:
@@ -2054,6 +2092,7 @@ bool AXObject::NameFromContents(bool recursive) const {
     case kParagraphRole:
     case kPreRole:
     case kPresentationalRole:
+    case kRegionRole:
     // Spec says we should always expose the name on rows,
     // but for performance reasons we only do it
     // if the row might receive focus

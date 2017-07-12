@@ -16,7 +16,7 @@
 #include "remoting/signaling/signal_strategy.h"
 #include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
 #include "third_party/libjingle_xmpp/xmpp/constants.h"
-#include "third_party/webrtc/base/socketaddress.h"
+#include "third_party/webrtc/rtc_base/socketaddress.h"
 
 using buzz::QName;
 
@@ -87,7 +87,7 @@ bool JingleSessionManager::OnSignalStrategyIncomingStanza(
             signal_strategy_->GetLocalAddress().id(), message->from.id());
 
     JingleSession* session = new JingleSession(this);
-    session->InitializeIncomingConnection(*message,
+    session->InitializeIncomingConnection(stanza->Attr(buzz::QN_ID), *message,
                                           std::move(authenticator));
     sessions_[session->session_id_] = session;
 

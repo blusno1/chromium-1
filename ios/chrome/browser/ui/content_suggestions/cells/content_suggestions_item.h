@@ -22,7 +22,6 @@ class GURL;
 // to the full article. |type| is the type of the item.
 - (instancetype)initWithType:(NSInteger)type
                        title:(NSString*)title
-                    subtitle:(NSString*)subtitle
                          url:(const GURL&)url NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithType:(NSInteger)type NS_UNAVAILABLE;
@@ -35,6 +34,10 @@ class GURL;
 @property(nonatomic, assign) BOOL hasImage;
 // Whether the suggestion is available offline. If YES, an icon is displayed.
 @property(nonatomic, assign) BOOL availableOffline;
+// Attributes for favicon.
+@property(nonatomic, strong) FaviconAttributes* attributes;
+// URL for the favicon, if different of |URL|.
+@property(nonatomic, assign) GURL faviconURL;
 
 @end
 

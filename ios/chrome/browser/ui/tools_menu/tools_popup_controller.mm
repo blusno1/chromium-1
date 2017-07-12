@@ -12,6 +12,7 @@
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_view.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
@@ -46,11 +47,17 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
 @implementation ToolsPopupController
 @synthesize isCurrentPageBookmarked = _isCurrentPageBookmarked;
 
-- (instancetype)initWithConfiguration:(ToolsMenuConfiguration*)configuration {
+- (instancetype)initWithConfiguration:(ToolsMenuConfiguration*)configuration
+                           dispatcher:(id<ApplicationCommands, BrowserCommands>)
+                                          dispatcher {
   DCHECK(configuration.displayView);
   self = [super initWithParentView:configuration.displayView];
   if (self) {
+    // Set superclass dispatcher property.
+    self.dispatcher = dispatcher;
     _toolsMenuViewController = [[ToolsMenuViewController alloc] init];
+    _toolsMenuViewController.dispatcher = self.dispatcher;
+
     _toolsTableViewContainer = [_toolsMenuViewController view];
     [_toolsTableViewContainer layer].cornerRadius = 2;
     [_toolsTableViewContainer layer].masksToBounds = YES;
@@ -157,10 +164,10 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
 - (void)commandWasSelected:(int)commandID {
   // Record the corresponding metric.
   switch (commandID) {
-    case IDC_TEMP_EDIT_BOOKMARK:
+    case TOOLS_BOOKMARK_EDIT:
       base::RecordAction(UserMetricsAction("MobileMenuEditBookmark"));
       break;
-    case IDC_BOOKMARK_PAGE:
+    case TOOLS_BOOKMARK_ITEM:
       base::RecordAction(UserMetricsAction("MobileMenuAddToBookmarks"));
       break;
     case IDC_CLOSE_ALL_TABS:
@@ -181,13 +188,13 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case IDC_NEW_TAB:
       base::RecordAction(UserMetricsAction("MobileMenuNewTab"));
       break;
-    case IDC_OPTIONS:
+    case TOOLS_SETTINGS_ITEM:
       base::RecordAction(UserMetricsAction("MobileMenuSettings"));
       break;
-    case IDC_RELOAD:
+    case TOOLS_RELOAD_ITEM:
       base::RecordAction(UserMetricsAction("MobileMenuReload"));
       break;
-    case IDC_SHARE_PAGE:
+    case TOOLS_SHARE_ITEM:
       base::RecordAction(UserMetricsAction("MobileMenuShare"));
       break;
     case IDC_REQUEST_DESKTOP_SITE:
@@ -208,7 +215,7 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case IDC_SHOW_OTHER_DEVICES:
       base::RecordAction(UserMetricsAction("MobileMenuRecentTabs"));
       break;
-    case IDC_STOP:
+    case TOOLS_STOP_ITEM:
       base::RecordAction(UserMetricsAction("MobileMenuStop"));
       break;
     case IDC_PRINT:
@@ -221,7 +228,7 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case IDC_VIEW_SOURCE:
       // Debug only; no metric.
       break;
-    case IDC_SHOW_TOOLS_MENU:
+    case TOOLS_MENU_ITEM:
       // Do nothing when tapping the tools menu a second time.
       break;
     case IDC_SHOW_READING_LIST:

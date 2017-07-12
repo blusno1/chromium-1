@@ -14,10 +14,12 @@
 #include "chrome/browser/chromeos/lock_screen_apps/app_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_observer.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chromeos/dbus/power_manager_client.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/api/app_runtime.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "ui/events/devices/input_device_event_observer.h"
 
 namespace content {
 class BrowserContext;
@@ -33,6 +35,10 @@ namespace session_manager {
 class SessionManager;
 }
 
+namespace ui {
+class InputDeviceManager;
+}
+
 namespace lock_screen_apps {
 
 class StateObserver;
@@ -42,7 +48,9 @@ class StateObserver;
 // Currently assumes single supported action - NEW_NOTE.
 class StateController : public ash::mojom::TrayActionClient,
                         public session_manager::SessionManagerObserver,
-                        public extensions::AppWindowRegistry::Observer {
+                        public extensions::AppWindowRegistry::Observer,
+                        public ui::InputDeviceEventObserver,
+                        public chromeos::PowerManagerClient::Observer {
  public:
   // Returns whether the StateController is enabled - it is currently guarded by
   // a feature flag. If not enabled, |StateController| instance is not allowed
@@ -75,6 +83,17 @@ class StateController : public ash::mojom::TrayActionClient,
   void Initialize();
   void SetPrimaryProfile(Profile* profile);
 
+  // Shuts down the state controller, reseting all dependencies on profiles.
+  // Should be called on global instance before profile destruction starts.
+  // TODO(tbarzic): Consider removing this after lock screen implementation
+  //     moves to ash - the main reason the method is needed is to enable
+  //     SigninScreenHandler to safely remove itself as an observer on its
+  //     destruction (which might happen after state controller has to be
+  //     shutdown). When this is not the case anymore StateController::Shutdown
+  //     usage can be replaced with destructing the StateController instance.
+  //     https://crbug.com/741145
+  void Shutdown();
+
   void AddObserver(StateObserver* observer);
   void RemoveObserver(StateObserver* observer);
 
@@ -89,6 +108,13 @@ class StateController : public ash::mojom::TrayActionClient,
 
   // extensions::AppWindowRegistry::Observer:
   void OnAppWindowRemoved(extensions::AppWindow* app_window) override;
+
+  // ui::InputDeviceEventObserver:
+  void OnStylusStateChanged(ui::StylusState state) override;
+
+  // chromeos::PowerManagerClient::Observer
+  void BrightnessChanged(int level, bool user_initiated) override;
+  void SuspendImminent() override;
 
   // Creates and registers an app window as action handler for the action on
   // Chrome OS lock screen. The ownership of the returned app window is passed
@@ -156,6 +182,11 @@ class StateController : public ash::mojom::TrayActionClient,
   ScopedObserver<session_manager::SessionManager,
                  session_manager::SessionManagerObserver>
       session_observer_;
+  ScopedObserver<ui::InputDeviceManager, ui::InputDeviceEventObserver>
+      input_devices_observer_;
+  ScopedObserver<chromeos::PowerManagerClient,
+                 chromeos::PowerManagerClient::Observer>
+      power_manager_client_observer_;
 
   // If set, this callback will be run when the state controller is fully
   // initialized. It can be used to throttle tests until state controller

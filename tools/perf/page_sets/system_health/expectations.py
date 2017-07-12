@@ -21,18 +21,8 @@ class SystemHealthDesktopCommonExpectations(expectations.StoryExpectations):
                       'crbug.com/649392')
     self.DisableStory('play:media:pandora', [expectations.ALL],
                       'crbug.com/64939')
-    self.DisableStory('browse:tech:discourse_infinite_scroll',
-                      [expectations.ALL_WIN, expectations.ALL_LINUX],
-                      'crbug.com/728152')
-    self.DisableStory('browse:social:facebook_infinite_scroll',
-                      [expectations.ALL_WIN], 'crbug.com/728152')
     self.DisableStory('browse:news:cnn',
                       [expectations.ALL_MAC], 'crbug.com/728576')
-    self.DisableStory('browse:social:twitter_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728464')
-    self.DisableStory('browse:media:flickr_infinite_scroll',
-                      [expectations.ALL],
-                      'crbug.com/728785')
 
 
 class SystemHealthDesktopMemoryExpectations(expectations.StoryExpectations):
@@ -54,18 +44,10 @@ class SystemHealthDesktopMemoryExpectations(expectations.StoryExpectations):
                       'crbug.com/649392')
     self.DisableStory('play:media:pandora', [expectations.ALL],
                       'crbug.com/64939')
-    self.DisableStory('browse:tech:discourse_infinite_scroll',
-                      [expectations.ALL_WIN, expectations.ALL_LINUX],
-                      'crbug.com/728152')
-    self.DisableStory('browse:social:facebook_infinite_scroll',
-                      [expectations.ALL_WIN], 'crbug.com/728152')
     self.DisableStory('browse:news:cnn',
                       [expectations.ALL_MAC], 'crbug.com/728576')
     self.DisableStory('browse:social:twitter_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728464')
-    self.DisableStory('browse:media:flickr_infinite_scroll',
-                      [expectations.ALL],
-                      'crbug.com/728785')
+                      [expectations.ALL_WIN], 'crbug.com/728464')
 
 
 class SystemHealthMobileCommonExpectations(expectations.StoryExpectations):
@@ -84,10 +66,10 @@ class SystemHealthMobileCommonExpectations(expectations.StoryExpectations):
                       [expectations.ALL_ANDROID], 'crbug.com/726301')
     self.DisableStory('browse:news:toi', [expectations.ALL_ANDROID],
                       'crbug.com/728081')
-    self.DisableStory('browse:social:facebook_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728152')
-    self.DisableStory('browse:media:flickr_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728785')
+    self.DisableStory(
+        'load:tools:drive',
+        [expectations.ANDROID_NEXUS5X, expectations.ANDROID_WEBVIEW],
+        'crbug.com/738854')
     # TODO(rnephew): This disabling should move to CanRunOnBrowser.
     self.DisableStory('browse:chrome:omnibox',
                       [expectations.ANDROID_WEBVIEW],
@@ -120,10 +102,10 @@ class SystemHealthMobileMemoryExpectations(expectations.StoryExpectations):
                       [expectations.ALL_ANDROID], 'crbug.com/726301')
     self.DisableStory('browse:news:toi', [expectations.ALL_ANDROID],
                       'crbug.com/728081')
-    self.DisableStory('browse:social:facebook_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728152')
-    self.DisableStory('browse:media:flickr_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728785')
+    self.DisableStory(
+        'load:tools:drive',
+        [expectations.ANDROID_NEXUS5X, expectations.ANDROID_WEBVIEW],
+        'crbug.com/738854')
     # TODO(rnephew): This disabling should move to CanRunOnBrowser.
     self.DisableStory('browse:chrome:omnibox',
                       [expectations.ANDROID_WEBVIEW],
@@ -152,16 +134,8 @@ class V8BrowsingDesktopExpecations(expectations.StoryExpectations):
                       'crbug.com/712694')
     self.DisableStory('browse:tools:earth', [expectations.ALL],
                       'crbug.com/708590')
-    self.DisableStory('browse:tech:discourse_infinite_scroll',
-                      [expectations.ALL_WIN, expectations.ALL_LINUX],
-                      'crbug.com/728152')
     self.DisableStory('browse:news:cnn',
                       [expectations.ALL_MAC], 'crbug.com/728576')
-    self.DisableStory('browse:social:twitter_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728464')
-    self.DisableStory('browse:media:flickr_infinite_scroll',
-                      [expectations.ALL, expectations.ALL_WIN],
-                      'crbug.com/728785')
 
 # Should only include browse:*:* stories.
 class V8BrowsingMobileExpecations(expectations.StoryExpectations):
@@ -172,10 +146,6 @@ class V8BrowsingMobileExpecations(expectations.StoryExpectations):
                       'crbug.com/714650')
     self.DisableStory('browse:news:toi', [expectations.ALL_ANDROID],
                       'crbug.com/728081')
-    self.DisableStory('browse:social:facebook_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728152')
-    self.DisableStory('browse:media:flickr_infinite_scroll',
-                      [expectations.ALL], 'crbug.com/728785')
     # TODO(rnephew): This disabling should move to CanRunOnBrowser.
     self.DisableStory('browse:chrome:omnibox',
                       [expectations.ANDROID_WEBVIEW],

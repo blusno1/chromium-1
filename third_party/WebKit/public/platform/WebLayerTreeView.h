@@ -35,7 +35,7 @@
 #include "WebImageLayer.h"
 #include "WebSize.h"
 #include "base/callback.h"
-#include "cc/surfaces/frame_sink_id.h"
+#include "components/viz/common/frame_sink_id.h"
 
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -139,14 +139,17 @@ class WebLayerTreeView {
   // Prevents updates to layer tree from becoming visible.
   virtual void SetDeferCommits(bool defer_commits) {}
 
+  struct ViewportLayers {
+    const WebLayer* overscroll_elasticity = nullptr;
+    const WebLayer* page_scale = nullptr;
+    const WebLayer* inner_viewport_container = nullptr;
+    const WebLayer* outer_viewport_container = nullptr;
+    const WebLayer* inner_viewport_scroll = nullptr;
+    const WebLayer* outer_viewport_scroll = nullptr;
+  };
+
   // Identify key viewport layers to the compositor.
-  virtual void RegisterViewportLayers(
-      const WebLayer* overscroll_elasticity_layer,
-      const WebLayer* page_scale_layer,
-      const WebLayer* inner_viewport_container_layer,
-      const WebLayer* outer_viewport_container_layer,
-      const WebLayer* inner_viewport_scroll_layer,
-      const WebLayer* outer_viewport_scroll_layer) {}
+  virtual void RegisterViewportLayers(const ViewportLayers& viewport_layers) {}
   virtual void ClearViewportLayers() {}
 
   // Used to update the active selection bounds.
@@ -167,7 +170,7 @@ class WebLayerTreeView {
   virtual void SetHaveScrollEventHandlers(bool) {}
 
   // Returns the FrameSinkId of the widget associated with this layer tree view.
-  virtual cc::FrameSinkId GetFrameSinkId() { return cc::FrameSinkId(); }
+  virtual viz::FrameSinkId GetFrameSinkId() { return viz::FrameSinkId(); }
 
   // Debugging / dangerous ---------------------------------------------
 

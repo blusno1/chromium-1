@@ -277,10 +277,6 @@ class SessionRestoreImpl : public content::NotificationObserver {
 
   Profile* profile() { return profile_; }
 
-  void AddURLsToOpen(const std::vector<GURL>& urls) {
-    urls_to_open_.insert(urls_to_open_.end(), urls.begin(), urls.end());
-  }
-
  private:
   // Invoked when done with creating all the tabs/browsers.
   //
@@ -850,18 +846,6 @@ SessionRestore::CallbackSubscription
     SessionRestore::RegisterOnSessionRestoredCallback(
         const base::Callback<void(int)>& callback) {
   return on_session_restored_callbacks()->Add(callback);
-}
-
-// static
-void SessionRestore::AddURLsToOpen(const Profile* profile,
-                                   const std::vector<GURL>& urls) {
-  for (auto* session_restorer : *active_session_restorers) {
-    if (session_restorer->profile() == profile) {
-      session_restorer->AddURLsToOpen(urls);
-      return;
-    }
-  }
-  NOTREACHED() << "Failed to add urls to open for session restore";
 }
 
 // static

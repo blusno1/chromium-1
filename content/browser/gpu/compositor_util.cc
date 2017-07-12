@@ -19,7 +19,6 @@
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "cc/base/switches.h"
-#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/public/browser/gpu_utils.h"
 #include "content/public/common/content_features.h"
@@ -400,6 +399,22 @@ std::unique_ptr<base::ListValue> GetProblems() {
 
 std::vector<std::string> GetDriverBugWorkarounds() {
   return GpuDataManagerImpl::GetInstance()->GetDriverBugWorkarounds();
+}
+
+viz::BufferToTextureTargetMap CreateBufferToTextureTargetMap() {
+  viz::BufferToTextureTargetMap image_targets;
+  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
+       ++usage_idx) {
+    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
+    for (int format_idx = 0;
+         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
+         ++format_idx) {
+      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
+      uint32_t target = gpu::GetImageTextureTarget(format, usage);
+      image_targets[std::make_pair(usage, format)] = target;
+    }
+  }
+  return image_targets;
 }
 
 }  // namespace content

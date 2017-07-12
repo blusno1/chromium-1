@@ -39,7 +39,6 @@
 #include "platform/graphics/TouchAction.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
-#include "platform/text/TextDirection.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Optional.h"
 #include "platform/wtf/Vector.h"
@@ -55,7 +54,6 @@ namespace blink {
 
 class ColorChooser;
 class ColorChooserClient;
-class CompositorWorkerProxyClient;
 class CompositorAnimationTimeline;
 class DateTimeChooser;
 class DateTimeChooserClient;
@@ -220,12 +218,12 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
                                          const Color&) = 0;
 
   // This function is used for:
-  //  - Mandatory date/time choosers if !ENABLE(INPUT_MULTIPLE_FIELDS_UI)
+  //  - Mandatory date/time choosers if InputMultipleFieldsUI flag is not set
   //  - Date/time choosers for types for which
-  //    LayoutTheme::supportsCalendarPicker returns true, if
-  //    ENABLE(INPUT_MULTIPLE_FIELDS_UI)
+  //    LayoutTheme::SupportsCalendarPicker returns true, if
+  //    InputMultipleFieldsUI flag is set
   //  - <datalist> UI for date/time input types regardless of
-  //    ENABLE(INPUT_MULTIPLE_FIELDS_UI)
+  //    InputMultipleFieldsUI flag
   virtual DateTimeChooser* OpenDateTimeChooser(
       DateTimeChooserClient*,
       const DateTimeChooserParameters&) = 0;
@@ -283,6 +281,8 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void ClosePagePopup(PagePopup*) = 0;
   virtual DOMWindow* PagePopupWindowForTesting() const = 0;
 
+  virtual void SetBrowserControlsState(float height, bool shrinks_layout){};
+
   virtual String AcceptLanguages() = 0;
 
   enum DialogType {
@@ -331,11 +331,6 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void RegisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void UnregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void NotifyPopupOpeningObservers() const = 0;
-
-  virtual CompositorWorkerProxyClient* CreateCompositorWorkerProxyClient(
-      LocalFrame*) = 0;
-  virtual AnimationWorkletProxyClient* CreateAnimationWorkletProxyClient(
-      LocalFrame*) = 0;
 
   virtual FloatSize ElasticOverscroll() const { return FloatSize(); }
 

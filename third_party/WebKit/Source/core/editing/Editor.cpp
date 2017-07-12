@@ -57,6 +57,7 @@
 #include "core/editing/commands/TypingCommand.h"
 #include "core/editing/commands/UndoStack.h"
 #include "core/editing/iterators/SearchBuffer.h"
+#include "core/editing/markers/DocumentMarker.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
@@ -376,7 +377,7 @@ bool Editor::SmartInsertDeleteEnabled() const {
 
 bool Editor::CanSmartCopyOrDelete() const {
   return SmartInsertDeleteEnabled() &&
-         GetFrame().Selection().Granularity() == kWordGranularity;
+         GetFrame().Selection().Granularity() == TextGranularity::kWord;
 }
 
 bool Editor::IsSelectTrailingWhitespaceEnabled() const {
@@ -1507,10 +1508,7 @@ void Editor::ChangeSelectionAfterCommand(
   // sequence, but we want to do these things (matches AppKit).
   if (selection_did_not_change_dom_position) {
     Client().RespondToChangedSelection(
-        frame_, GetFrame()
-                    .Selection()
-                    .GetSelectionInDOMTree()
-                    .SelectionTypeWithLegacyGranularity());
+        frame_, GetFrame().Selection().GetSelectionInDOMTree().Type());
   }
 }
 
@@ -1759,11 +1757,8 @@ void Editor::RespondToChangedSelection(
     const Position& old_selection_start,
     FrameSelection::SetSelectionOptions options) {
   GetSpellChecker().RespondToChangedSelection(old_selection_start, options);
-  Client().RespondToChangedSelection(&GetFrame(),
-                                     GetFrame()
-                                         .Selection()
-                                         .GetSelectionInDOMTree()
-                                         .SelectionTypeWithLegacyGranularity());
+  Client().RespondToChangedSelection(
+      &GetFrame(), GetFrame().Selection().GetSelectionInDOMTree().Type());
   SetStartNewKillRingSequence(true);
 }
 

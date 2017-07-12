@@ -29,13 +29,13 @@
 #include "cc/quads/stream_video_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/resources/resource_provider.h"
-#include "cc/resources/texture_mailbox.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/fake_resource_provider.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_web_graphics_context_3d.h"
+#include "components/viz/common/quads/texture_mailbox.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -263,9 +263,9 @@ std::unique_ptr<RenderPass> CreateRenderPassWithTransform(
 ResourceId CreateResource(ResourceProvider* resource_provider,
                           const gfx::Size& size,
                           bool is_overlay_candidate) {
-  TextureMailbox mailbox =
-      TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_2D,
-                     size, is_overlay_candidate, false);
+  viz::TextureMailbox mailbox =
+      viz::TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(),
+                          GL_TEXTURE_2D, size, is_overlay_candidate, false);
   std::unique_ptr<SingleReleaseCallbackImpl> release_callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&MailboxReleased));
 
@@ -448,7 +448,7 @@ class OverlayTest : public testing::Test {
   scoped_refptr<TestContextProvider> provider_;
   std::unique_ptr<OutputSurfaceType> output_surface_;
   FakeOutputSurfaceClient client_;
-  std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
+  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider_;
   std::unique_ptr<OverlayProcessor> overlay_processor_;
   gfx::Rect damage_rect_;
@@ -479,7 +479,7 @@ TEST(OverlayTest, OverlaysProcessorHasStrategy) {
   output_surface.BindToClient(&client);
   output_surface.SetOverlayCandidateValidator(new SingleOverlayValidator);
 
-  std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
+  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager(
       new TestSharedBitmapManager());
   std::unique_ptr<ResourceProvider> resource_provider =
       FakeResourceProvider::Create(provider.get(), shared_bitmap_manager.get());
@@ -492,6 +492,7 @@ TEST(OverlayTest, OverlaysProcessorHasStrategy) {
 
 TEST_F(FullscreenOverlayTest, SuccessfulOverlay) {
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
+  gfx::Rect output_rect = pass->output_rect;
   TextureDrawQuad* original_quad = CreateFullscreenCandidateQuad(
       resource_provider_.get(), pass->shared_quad_state_list.back(),
       pass.get());
@@ -518,6 +519,9 @@ TEST_F(FullscreenOverlayTest, SuccessfulOverlay) {
   EXPECT_EQ(1U, candidate_list.size());
   // Check that the right resource id got extracted.
   EXPECT_EQ(original_resource_id, candidate_list.front().resource_id);
+  gfx::Rect overlay_damage_rect =
+      overlay_processor_->GetAndResetOverlayDamage();
+  EXPECT_EQ(output_rect, overlay_damage_rect);
 }
 
 TEST_F(FullscreenOverlayTest, AlphaFail) {
@@ -857,6 +861,9 @@ TEST_F(SingleOverlayOnTopTest, AcceptBlending) {
       &damage_rect_, &content_bounds_);
   EXPECT_EQ(1U, candidate_list.size());
   EXPECT_FALSE(damage_rect_.IsEmpty());
+  gfx::Rect overlay_damage_rect =
+      overlay_processor_->GetAndResetOverlayDamage();
+  EXPECT_FALSE(overlay_damage_rect.IsEmpty());
 }
 
 TEST_F(SingleOverlayOnTopTest, RejectBackgroundColor) {

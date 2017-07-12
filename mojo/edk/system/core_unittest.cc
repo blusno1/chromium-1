@@ -209,7 +209,9 @@ TEST_F(CoreTest, MessagePipe) {
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(h[0], &message, MOJO_READ_MESSAGE_FLAG_NONE));
   uintptr_t context;
-  ASSERT_EQ(MOJO_RESULT_OK, core()->ReleaseMessageContext(message, &context));
+  ASSERT_EQ(MOJO_RESULT_OK,
+            core()->GetMessageContext(message, &context,
+                                      MOJO_GET_MESSAGE_CONTEXT_FLAG_RELEASE));
   ASSERT_EQ(kTestMessageContext, context);
   ASSERT_EQ(MOJO_RESULT_OK, core()->DestroyMessage(message));
 
@@ -290,7 +292,8 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing1) {
                                                 MOJO_READ_MESSAGE_FLAG_NONE));
   uintptr_t context;
   ASSERT_EQ(MOJO_RESULT_OK,
-            core()->ReleaseMessageContext(message_handle, &context));
+            core()->GetMessageContext(message_handle, &context,
+                                      MOJO_GET_MESSAGE_CONTEXT_FLAG_RELEASE));
   ASSERT_EQ(kTestMessageContext, context);
   ASSERT_EQ(MOJO_RESULT_OK, MojoDestroyMessage(message_handle));
 
@@ -435,11 +438,16 @@ TEST_F(CoreTest, DataPipe) {
             core()->BeginReadData(ch, &read_ptr, &num_bytes,
                                   MOJO_READ_DATA_FLAG_PEEK));
 
-  // Read the remaining two characters, in two-phase mode (all-or-none).
-  num_bytes = 3;
-  ASSERT_EQ(MOJO_RESULT_OK,
+  // Try a two-phase read of the remaining two bytes with all-or-none. Should
+  // fail.
+  ASSERT_EQ(MOJO_RESULT_INVALID_ARGUMENT,
             core()->BeginReadData(ch, &read_ptr, &num_bytes,
                                   MOJO_READ_DATA_FLAG_ALL_OR_NONE));
+
+  // Read the remaining three characters, in two-phase mode.
+  num_bytes = 3;
+  ASSERT_EQ(MOJO_RESULT_OK, core()->BeginReadData(ch, &read_ptr, &num_bytes,
+                                                  MOJO_READ_DATA_FLAG_NONE));
   // Note: Count on still being able to do the contiguous read here.
   ASSERT_EQ(3u, num_bytes);
 

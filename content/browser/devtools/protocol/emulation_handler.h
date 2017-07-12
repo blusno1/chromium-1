@@ -41,7 +41,7 @@ class EmulationHandler : public DevToolsDomainHandler,
       int height,
       double device_scale_factor,
       bool mobile,
-      bool fit_window,
+      Maybe<bool> fit_window,
       Maybe<double> scale,
       Maybe<double> offset_x,
       Maybe<double> offset_y,
@@ -54,6 +54,11 @@ class EmulationHandler : public DevToolsDomainHandler,
 
   Response SetVisibleSize(int width, int height) override;
 
+  blink::WebDeviceEmulationParams GetDeviceEmulationParams();
+  void SetDeviceEmulationParams(const blink::WebDeviceEmulationParams& params);
+
+  bool device_emulation_enabled() { return device_emulation_enabled_; }
+
  private:
   WebContentsImpl* GetWebContents();
   void UpdateTouchEventEmulationState();
@@ -63,6 +68,7 @@ class EmulationHandler : public DevToolsDomainHandler,
   std::string touch_emulation_configuration_;
 
   bool device_emulation_enabled_;
+  gfx::Size original_view_size_;
   blink::WebDeviceEmulationParams device_emulation_params_;
 
   RenderFrameHostImpl* host_;

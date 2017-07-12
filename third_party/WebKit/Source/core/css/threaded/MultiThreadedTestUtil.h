@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef MultiThreadedTestUtil_h
+#define MultiThreadedTestUtil_h
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 #include "platform/CrossThreadFunctional.h"
@@ -21,7 +24,7 @@ namespace blink {
 // instead of the normal gtest macros for MultiThreadedTests.
 // It guarantees that those tests are only run on Thread Sanitizer enabled
 // builds.
-// Also, TSAN_TEST subclasses MultiThreadTest instead of testing::Test.
+// Also, TSAN_TEST subclasses MultiThreadTest instead of ::testing::Test.
 #if defined(THREAD_SANITIZER)
 
 #define TSAN_TEST(test_case_name, test_name)                         \
@@ -42,7 +45,7 @@ namespace blink {
 
 #endif
 
-class MultiThreadedTest : public testing::Test {
+class MultiThreadedTest : public ::testing::Test {
  public:
   // RunOnThreads run a closure num_threads * callbacks_per_thread times.
   // The default for this is 10*100 = 1000 times.
@@ -92,3 +95,5 @@ class MultiThreadedTest : public testing::Test {
 };
 
 }  // namespace blink
+
+#endif  // MultiThreadedTestUtil_h

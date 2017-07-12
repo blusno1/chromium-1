@@ -11,7 +11,6 @@
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/status.h"
 #include "components/ntp_tiles/ntp_tile.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/suggested_content.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestions_section_information.h"
 
 namespace ntp_snippets {
@@ -20,6 +19,7 @@ class Category;
 
 @class CollectionViewItem;
 @class ContentSuggestionsCategoryWrapper;
+@class ContentSuggestionsItem;
 @class ContentSuggestionsMostVisitedItem;
 
 // TODO(crbug.com/701275): Once base::BindBlock supports the move semantics,
@@ -37,7 +37,7 @@ ContentSuggestionsSectionID SectionIDForCategory(
     ntp_snippets::Category category);
 
 // Converts a ntp_snippets::ContentSuggestion to a CollectionViewItem.
-CollectionViewItem<SuggestedContent>* ConvertSuggestion(
+ContentSuggestionsItem* ConvertSuggestion(
     const ntp_snippets::ContentSuggestion& contentSuggestion,
     ContentSuggestionsSectionInformation* sectionInfo,
     ntp_snippets::Category category);
@@ -60,9 +60,6 @@ ContentSuggestionsSectionInformation* LogoSectionInformation();
 
 // Creates and returns a SectionInfo for the Most Visited section.
 ContentSuggestionsSectionInformation* MostVisitedSectionInformation();
-
-// Records the impression of the NTP and of all |mostVisited| tiles.
-void RecordImpression(const std::vector<ntp_tiles::NTPTile>& mostVisited);
 
 // Converts a ntp_tiles::NTPTile |tile| to a ContentSuggestionsMostVisitedItem
 // with a |sectionInfo|.

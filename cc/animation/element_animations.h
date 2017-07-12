@@ -20,6 +20,7 @@
 
 namespace gfx {
 class BoxF;
+class SizeF;
 }
 
 namespace cc {
@@ -27,6 +28,7 @@ namespace cc {
 class AnimationHost;
 class AnimationPlayer;
 class FilterOperations;
+class TransformOperations;
 enum class ElementListType;
 struct AnimationEvent;
 
@@ -148,15 +150,20 @@ class CC_ANIMATION_EXPORT ElementAnimations
   void NotifyClientOpacityAnimated(float opacity,
                                    bool notify_active_elements,
                                    bool notify_pending_elements);
-  void NotifyClientTransformAnimated(const gfx::Transform& transform,
-                                     bool notify_active_elements,
-                                     bool notify_pending_elements);
+  void NotifyClientTransformOperationsAnimated(
+      const TransformOperations& operations,
+      bool notify_active_elements,
+      bool notify_pending_elements);
   void NotifyClientFilterAnimated(const FilterOperations& filter,
                                   bool notify_active_elements,
                                   bool notify_pending_elements);
   void NotifyClientScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset,
                                         bool notify_active_elements,
                                         bool notify_pending_elements);
+  void NotifyClientBoundsAnimated(const gfx::SizeF& size,
+                                  bool notify_active_elements,
+                                  bool notify_pending_elements);
+
   gfx::ScrollOffset ScrollOffsetForAnimation() const;
 
  private:

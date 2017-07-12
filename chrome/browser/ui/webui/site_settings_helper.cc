@@ -14,6 +14,7 @@
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/extension_registry.h"
 
@@ -25,6 +26,7 @@ const char kSetting[] = "setting";
 const char kOrigin[] = "origin";
 const char kDisplayName[] = "displayName";
 const char kOriginForFavicon[] = "originForFavicon";
+const char kExtensionProviderId[] = "extension";
 const char kPolicyProviderId[] = "policy";
 const char kSource[] = "source";
 const char kIncognito[] = "incognito";
@@ -202,7 +204,7 @@ void GetExceptionsFromHostContentSettingsMap(
       continue;
 
     all_patterns_settings[std::make_pair(i->primary_pattern, i->source)]
-        [i->secondary_pattern] = i->setting;
+                         [i->secondary_pattern] = i->GetContentSetting();
   }
 
   // Keep the exceptions sorted by provider so they will be displayed in

@@ -13,6 +13,7 @@
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/FilePathConversion.h"
 #include "public/platform/InterfaceProvider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -167,8 +168,8 @@ struct ExpectedElement {
                               uint64_t offset,
                               uint64_t length,
                               WTF::Time time) {
-    return ExpectedElement{
-        DataElement::NewFile(DataElementFile::New(path, offset, length, time))};
+    return ExpectedElement{DataElement::NewFile(
+        DataElementFile::New(WebStringToFilePath(path), offset, length, time))};
   }
 
   static ExpectedElement FileFilesystem(const KURL& url,
@@ -190,7 +191,7 @@ struct ExpectedElement {
 
 }  // namespace
 
-class BlobDataHandleTest : public testing::Test {
+class BlobDataHandleTest : public ::testing::Test {
  public:
   BlobDataHandleTest()
       : enable_mojo_blobs_(true), testing_platform_(&mock_blob_registry_) {}
@@ -375,7 +376,7 @@ TEST_F(BlobDataHandleTest, CreateFromEmptyElements) {
   data->AppendBytes(small_test_data_.data(), 0);
   data->AppendBlob(empty_blob_, 0, 0);
   data->AppendFile("path", 0, 0, 0.0);
-  data->AppendFileSystemURL(KURL(), 0, 0, 0.0);
+  data->AppendFileSystemURL(NullURL(), 0, 0, 0.0);
 
   TestCreateBlob(std::move(data), {});
 }
@@ -451,7 +452,7 @@ TEST_F(BlobDataHandleTest, CreateFromMergedSmallAndLargeBytes) {
 TEST_F(BlobDataHandleTest, CreateFromFileAndFileSystemURL) {
   double timestamp1 = CurrentTime();
   double timestamp2 = timestamp1 + 1;
-  KURL url(KURL(), "http://example.com/");
+  KURL url(NullURL(), "http://example.com/");
   std::unique_ptr<BlobData> data = BlobData::Create();
   data->AppendFile("path", 4, 32, timestamp1);
   data->AppendFileSystemURL(url, 15, 876, timestamp2);
@@ -476,7 +477,7 @@ TEST_F(BlobDataHandleTest, CreateFromFileWithUnknownSize) {
 
 TEST_F(BlobDataHandleTest, CreateFromFilesystemFileWithUnknownSize) {
   double timestamp = CurrentTime();
-  KURL url(KURL(), "http://example.com/");
+  KURL url(NullURL(), "http://example.com/");
   Vector<ExpectedElement> expected_elements;
   expected_elements.push_back(ExpectedElement::FileFilesystem(
       url, 0, uint64_t(-1), WTF::Time::FromDoubleT(timestamp)));

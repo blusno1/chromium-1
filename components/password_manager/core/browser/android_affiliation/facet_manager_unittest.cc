@@ -6,12 +6,14 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/rand_util.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -91,6 +93,10 @@ class MockFacetManagerHost : public FacetManagerHost {
     expected_facet_uri_ = facet_uri;
   }
 
+  // Returns the facet URI that will be expected to appear in calls coming from
+  // the FacetManager under test.
+  const FacetURI& expected_facet_uri() const { return expected_facet_uri_; }
+
   // Sets up fake |database_content| as the canned response to be returned to
   // the FacetManager every time it calls ReadAffiliationsFromDatabase().
   void set_fake_database_content(
@@ -149,11 +155,11 @@ const char kTestFacetURI2[] = "https://two.example.com";
 const char kTestFacetURI3[] = "https://three.example.com";
 
 AffiliatedFacets GetTestEquivalenceClass() {
-  AffiliatedFacets affiliated_facets;
-  affiliated_facets.push_back(FacetURI::FromCanonicalSpec(kTestFacetURI1));
-  affiliated_facets.push_back(FacetURI::FromCanonicalSpec(kTestFacetURI2));
-  affiliated_facets.push_back(FacetURI::FromCanonicalSpec(kTestFacetURI3));
-  return affiliated_facets;
+  return {
+      {FacetURI::FromCanonicalSpec(kTestFacetURI1)},
+      {FacetURI::FromCanonicalSpec(kTestFacetURI2)},
+      {FacetURI::FromCanonicalSpec(kTestFacetURI3)},
+  };
 }
 
 AffiliatedFacetsWithUpdateTime GetTestEquivalenceClassWithUpdateTime(
@@ -233,9 +239,9 @@ class FacetManagerTest : public testing::Test {
     // The order is important: FacetManager will read the DB in its constructor.
     facet_manager_host_.set_expected_facet_uri(
         FacetURI::FromCanonicalSpec(kTestFacetURI1));
-    facet_manager_.reset(
-        new FacetManager(FacetURI::FromCanonicalSpec(kTestFacetURI1),
-                         fake_facet_manager_host(), main_clock_.get()));
+    facet_manager_ = base::MakeUnique<FacetManager>(
+        FacetURI::FromCanonicalSpec(kTestFacetURI1), fake_facet_manager_host(),
+        main_clock_.get());
     facet_manager_notifier_.set_facet_manager(facet_manager_.get());
     facet_manager_creation_ = Now();
   }
@@ -351,7 +357,13 @@ class FacetManagerTest : public testing::Test {
   }
 
   void ExpectConsumerSuccessCallback() {
-    mock_consumer()->ExpectSuccessWithResult(GetTestEquivalenceClass());
+    const auto equivalence_class(GetTestEquivalenceClass());
+    mock_consumer()->ExpectSuccessWithResult(equivalence_class);
+    EXPECT_THAT(
+        equivalence_class,
+        testing::Contains(testing::Field(
+            &Facet::uri, fake_facet_manager_host()->expected_facet_uri())));
+
     consumer_task_runner()->RunUntilIdle();
     testing::Mock::VerifyAndClearExpectations(mock_consumer());
   }

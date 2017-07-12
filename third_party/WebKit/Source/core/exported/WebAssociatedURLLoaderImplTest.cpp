@@ -31,6 +31,8 @@
 #include "public/web/WebAssociatedURLLoader.h"
 
 #include <memory>
+
+#include "build/build_config.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/WebLocalFrameBase.h"
 #include "platform/testing/URLTestHelpers.h"
@@ -68,7 +70,7 @@ class WebAssociatedURLLoaderTest : public ::testing::Test,
         did_finish_loading_(false),
         did_fail_(false) {
     // Reuse one of the test files from WebFrameTest.
-    frame_file_path_ = testing::WebTestDataPath("iframes_test.html");
+    frame_file_path_ = testing::CoreTestDataPath("iframes_test.html");
   }
 
   KURL RegisterMockedUrl(const std::string& url_root,
@@ -77,7 +79,7 @@ class WebAssociatedURLLoaderTest : public ::testing::Test,
     response.SetMIMEType("text/html");
     KURL url = ToKURL(url_root + filename.Utf8().data());
     Platform::Current()->GetURLLoaderMockFactory()->RegisterURL(
-        url, response, testing::WebTestDataPath(filename.Utf8().data()));
+        url, response, testing::CoreTestDataPath(filename.Utf8().data()));
     return url;
   }
 
@@ -589,7 +591,7 @@ TEST_F(WebAssociatedURLLoaderTest, UntrustedCheckMethods) {
 }
 
 // This test is flaky on Windows and Android. See <http://crbug.com/471645>.
-#if OS(WIN) || OS(ANDROID)
+#if defined(OS_WIN) || defined(OS_ANDROID)
 #define MAYBE_UntrustedCheckHeaders DISABLED_UntrustedCheckHeaders
 #else
 #define MAYBE_UntrustedCheckHeaders UntrustedCheckHeaders

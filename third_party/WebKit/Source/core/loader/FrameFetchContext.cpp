@@ -84,6 +84,7 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebApplicationCacheHost.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
@@ -252,10 +253,27 @@ RefPtr<WebTaskRunner> FrameFetchContext::GetTaskRunner() const {
   return GetFrame()->FrameScheduler()->LoadingTaskRunner();
 }
 
+WebFrameScheduler* FrameFetchContext::GetFrameScheduler() {
+  if (IsDetached())
+    return nullptr;
+  return GetFrame()->FrameScheduler();
+}
+
+KURL FrameFetchContext::GetFirstPartyForCookies() const {
+  if (IsDetached())
+    return frozen_state_->first_party_for_cookies;
+
+  // Use document_ for subresource or nested frame cases,
+  // GetFrame()->GetDocument() otherwise.
+  Document* document = document_ ? document_.Get() : GetFrame()->GetDocument();
+  return document->FirstPartyForCookies();
+}
+
 LocalFrame* FrameFetchContext::GetFrame() const {
   if (!document_loader_)
     return FrameOfImportsController();
 
+  DCHECK(!IsDetached());
   LocalFrame* frame = document_loader_->GetFrame();
   DCHECK(frame);
   return frame;
@@ -280,8 +298,7 @@ void FrameFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request,
   if (IsReloadLoadType(MasterDocumentLoader()->LoadType()))
     request.ClearHTTPHeaderField("Save-Data");
 
-  if (GetFrame()->GetSettings() &&
-      GetFrame()->GetSettings()->GetDataSaverEnabled())
+  if (GetSettings() && GetSettings()->GetDataSaverEnabled())
     request.SetHTTPHeaderField("Save-Data", "on");
 
   if (GetLocalFrameClient()->IsClientLoFiActiveForFrame()) {
@@ -398,8 +415,9 @@ void FrameFetchContext::DispatchWillSendRequest(
     GetFrame()->Loader().Progress().WillStartLoading(identifier,
                                                      request.Priority());
   }
-  probe::willSendRequest(GetFrame(), identifier, MasterDocumentLoader(),
-                         request, redirect_response, initiator_info);
+  probe::willSendRequest(GetFrame()->GetDocument(), identifier,
+                         MasterDocumentLoader(), request, redirect_response,
+                         initiator_info);
   if (GetFrame()->FrameScheduler())
     GetFrame()->FrameScheduler()->DidStartLoading(identifier);
 }
@@ -451,23 +469,11 @@ void FrameFetchContext::DispatchDidReceiveResponse(
   GetFrame()->Loader().Progress().IncrementProgress(identifier, response);
   GetLocalFrameClient()->DispatchDidReceiveResponse(response);
   DocumentLoader* document_loader = MasterDocumentLoader();
-  probe::didReceiveResourceResponse(GetFrame(), identifier, document_loader,
-                                    response, resource);
+  probe::didReceiveResourceResponse(GetFrame()->GetDocument(), identifier,
+                                    document_loader, response, resource);
   // It is essential that inspector gets resource response BEFORE console.
   GetFrame()->Console().ReportResourceResponseReceived(document_loader,
                                                        identifier, response);
-
-  // MainResource responses were already added, skip them here.
-  if (RuntimeEnabledFeatures::ServerTimingEnabled() &&
-      resource->GetType() != Resource::kMainResource &&
-      GetFrame()->GetDocument() && GetFrame()->GetDocument()->domWindow()) {
-    LocalDOMWindow* localDOMWindow = GetFrame()->GetDocument()->domWindow();
-    DOMWindowPerformance::performance(*localDOMWindow)
-        ->AddServerTiming(response,
-                          localDOMWindow->HasLoadEventFired()
-                              ? PerformanceBase::ShouldAddToBuffer::Never
-                              : PerformanceBase::ShouldAddToBuffer::Always);
-  }
 }
 
 void FrameFetchContext::DispatchDidReceiveData(unsigned long identifier,
@@ -477,15 +483,15 @@ void FrameFetchContext::DispatchDidReceiveData(unsigned long identifier,
     return;
 
   GetFrame()->Loader().Progress().IncrementProgress(identifier, data_length);
-  probe::didReceiveData(GetFrame(), identifier, data, data_length);
+  probe::didReceiveData(GetFrame()->GetDocument(), identifier,
+                        MasterDocumentLoader(), data, data_length);
 }
 
 void FrameFetchContext::DispatchDidReceiveEncodedData(unsigned long identifier,
                                                       int encoded_data_length) {
   if (IsDetached())
     return;
-
-  probe::didReceiveEncodedDataLength(GetFrame(), identifier,
+  probe::didReceiveEncodedDataLength(GetFrame()->GetDocument(), identifier,
                                      encoded_data_length);
 }
 
@@ -496,8 +502,9 @@ void FrameFetchContext::DispatchDidDownloadData(unsigned long identifier,
     return;
 
   GetFrame()->Loader().Progress().IncrementProgress(identifier, data_length);
-  probe::didReceiveData(GetFrame(), identifier, 0, data_length);
-  probe::didReceiveEncodedDataLength(GetFrame(), identifier,
+  probe::didReceiveData(GetFrame()->GetDocument(), identifier,
+                        MasterDocumentLoader(), 0, data_length);
+  probe::didReceiveEncodedDataLength(GetFrame()->GetDocument(), identifier,
                                      encoded_data_length);
 }
 
@@ -509,7 +516,8 @@ void FrameFetchContext::DispatchDidFinishLoading(unsigned long identifier,
     return;
 
   GetFrame()->Loader().Progress().CompleteProgress(identifier);
-  probe::didFinishLoading(GetFrame(), identifier, finish_time,
+  probe::didFinishLoading(GetFrame()->GetDocument(), identifier,
+                          MasterDocumentLoader(), finish_time,
                           encoded_data_length, decoded_body_length);
   if (GetFrame()->FrameScheduler())
     GetFrame()->FrameScheduler()->DidStopLoading(identifier);
@@ -523,7 +531,7 @@ void FrameFetchContext::DispatchDidFail(unsigned long identifier,
     return;
 
   GetFrame()->Loader().Progress().CompleteProgress(identifier);
-  probe::didFailLoading(GetFrame(), identifier, error);
+  probe::didFailLoading(GetFrame()->GetDocument(), identifier, error);
   // Notification to FrameConsole should come AFTER InspectorInstrumentation
   // call, DevTools front-end relies on this.
   if (!is_internal_request)
@@ -658,6 +666,12 @@ int64_t FrameFetchContext::ServiceWorkerID() const {
              : -1;
 }
 
+int FrameFetchContext::ApplicationCacheHostID() const {
+  if (!document_loader_)
+    return WebApplicationCacheHost::kAppCacheNoHostId;
+  return document_loader_->GetApplicationCacheHost()->GetHostID();
+}
+
 bool FrameFetchContext::IsMainFrame() const {
   if (IsDetached())
     return frozen_state_->is_main_frame;
@@ -772,19 +786,7 @@ void FrameFetchContext::AddClientHintsIfNecessary(
   if (!RuntimeEnabledFeatures::ClientHintsEnabled())
     return;
 
-  bool should_send_device_ram =
-      GetClientHintsPreferences().ShouldSendDeviceRAM() ||
-      hints_preferences.ShouldSendDeviceRAM();
-  bool should_send_dpr = GetClientHintsPreferences().ShouldSendDPR() ||
-                         hints_preferences.ShouldSendDPR();
-  bool should_send_resource_width =
-      GetClientHintsPreferences().ShouldSendResourceWidth() ||
-      hints_preferences.ShouldSendResourceWidth();
-  bool should_send_viewport_width =
-      GetClientHintsPreferences().ShouldSendViewportWidth() ||
-      hints_preferences.ShouldSendViewportWidth();
-
-  if (should_send_device_ram) {
+  if (ShouldSendClientHint(kWebClientHintsTypeDeviceRam, hints_preferences)) {
     int64_t physical_memory = MemoryCoordinator::GetPhysicalMemoryMB();
     request.AddHTTPHeaderField(
         "device-ram",
@@ -792,11 +794,11 @@ void FrameFetchContext::AddClientHintsIfNecessary(
   }
 
   float dpr = GetDevicePixelRatio();
-  if (should_send_dpr) {
+  if (ShouldSendClientHint(kWebClientHintsTypeDpr, hints_preferences))
     request.AddHTTPHeaderField("DPR", AtomicString(String::Number(dpr)));
-  }
 
-  if (should_send_resource_width) {
+  if (ShouldSendClientHint(kWebClientHintsTypeResourceWidth,
+                           hints_preferences)) {
     if (resource_width.is_set) {
       float physical_width = resource_width.width * dpr;
       request.AddHTTPHeaderField(
@@ -804,7 +806,9 @@ void FrameFetchContext::AddClientHintsIfNecessary(
     }
   }
 
-  if (should_send_viewport_width && !IsDetached() && GetFrame()->View()) {
+  if (ShouldSendClientHint(kWebClientHintsTypeViewportWidth,
+                           hints_preferences) &&
+      !IsDetached() && GetFrame()->View()) {
     request.AddHTTPHeaderField(
         "Viewport-Width",
         AtomicString(String::Number(GetFrame()->View()->ViewportWidth())));
@@ -874,17 +878,15 @@ MHTMLArchive* FrameFetchContext::Archive() const {
       ->Archive();
 }
 
-ContentSettingsClient* FrameFetchContext::GetContentSettingsClient() const {
-  if (IsDetached())
-    return nullptr;
-  return GetFrame()->GetContentSettingsClient();
-}
-
-Settings* FrameFetchContext::GetSettings() const {
-  if (IsDetached())
-    return nullptr;
-  DCHECK(GetFrame());
-  return GetFrame()->GetSettings();
+bool FrameFetchContext::AllowScriptFromSource(const KURL& url) const {
+  ContentSettingsClient* settings_client = GetContentSettingsClient();
+  Settings* settings = GetSettings();
+  if (settings_client && !settings_client->AllowScriptFromSource(
+                             !settings || settings->GetScriptEnabled(), url)) {
+    settings_client->DidNotAllowScript();
+    return false;
+  }
+  return true;
 }
 
 SubresourceFilter* FrameFetchContext::GetSubresourceFilter() const {
@@ -899,7 +901,7 @@ bool FrameFetchContext::ShouldBlockRequestByInspector(
   if (IsDetached())
     return false;
   bool should_block_request = false;
-  probe::shouldBlockRequest(GetFrame(), resource_request,
+  probe::shouldBlockRequest(GetFrame()->GetDocument(), resource_request,
                             &should_block_request);
   return should_block_request;
 }
@@ -910,8 +912,9 @@ void FrameFetchContext::DispatchDidBlockRequest(
     ResourceRequestBlockedReason blocked_reason) const {
   if (IsDetached())
     return;
-  probe::didBlockRequest(GetFrame(), resource_request, MasterDocumentLoader(),
-                         fetch_initiator_info, blocked_reason);
+  probe::didBlockRequest(GetFrame()->GetDocument(), resource_request,
+                         MasterDocumentLoader(), fetch_initiator_info,
+                         blocked_reason);
 }
 
 bool FrameFetchContext::ShouldBypassMainWorldCSP() const {
@@ -1023,20 +1026,23 @@ void FrameFetchContext::AddConsoleMessage(ConsoleMessage* message) const {
     document_->AddConsoleMessage(message);
 }
 
+ContentSettingsClient* FrameFetchContext::GetContentSettingsClient() const {
+  if (IsDetached())
+    return nullptr;
+  return GetFrame()->GetContentSettingsClient();
+}
+
+Settings* FrameFetchContext::GetSettings() const {
+  if (IsDetached())
+    return nullptr;
+  DCHECK(GetFrame());
+  return GetFrame()->GetSettings();
+}
+
 String FrameFetchContext::GetUserAgent() const {
   if (IsDetached())
     return frozen_state_->user_agent;
   return GetFrame()->Loader().UserAgent();
-}
-
-KURL FrameFetchContext::GetFirstPartyForCookies() const {
-  if (IsDetached())
-    return frozen_state_->first_party_for_cookies;
-
-  // Use document_ for subresource or nested frame cases,
-  // GetFrame()->GetDocument() otherwise.
-  Document* document = document_ ? document_.Get() : GetFrame()->GetDocument();
-  return document->FirstPartyForCookies();
 }
 
 RefPtr<SecurityOrigin> FrameFetchContext::GetRequestorOrigin() {
@@ -1079,6 +1085,13 @@ float FrameFetchContext::GetDevicePixelRatio() const {
   return document_->DevicePixelRatio();
 }
 
+bool FrameFetchContext::ShouldSendClientHint(
+    WebClientHintsType type,
+    const ClientHintsPreferences& hints_preferences) const {
+  return GetClientHintsPreferences().ShouldSend(type) ||
+         hints_preferences.ShouldSend(type);
+}
+
 std::unique_ptr<WebURLLoader> FrameFetchContext::CreateURLLoader(
     const ResourceRequest& request) {
   DCHECK(!IsDetached());
@@ -1092,6 +1105,17 @@ std::unique_ptr<WebURLLoader> FrameFetchContext::CreateURLLoader(
   } else {
     task_runner = GetTaskRunner();
   }
+
+  if (MasterDocumentLoader()->GetServiceWorkerNetworkProvider()) {
+    WrappedResourceRequest webreq(request);
+    auto loader =
+        MasterDocumentLoader()
+            ->GetServiceWorkerNetworkProvider()
+            ->CreateURLLoader(webreq, task_runner->ToSingleThreadTaskRunner());
+    if (loader)
+      return loader;
+  }
+
   return GetFrame()->CreateURLLoader(request, task_runner.Get());
 }
 
@@ -1110,7 +1134,7 @@ FetchContext* FrameFetchContext::Detach() {
   } else {
     // Some getters are unavailable in this case.
     frozen_state_ = new FrozenState(
-        kReferrerPolicyDefault, String(), KURL(), GetSecurityOrigin(),
+        kReferrerPolicyDefault, String(), NullURL(), GetSecurityOrigin(),
         GetParentSecurityOrigin(), GetAddressSpace(),
         GetContentSecurityPolicy(), GetFirstPartyForCookies(),
         SecurityOrigin::CreateUnique(), SecurityOrigin::CreateUnique(),

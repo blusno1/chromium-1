@@ -20,6 +20,8 @@ source_set("common_source_set") {
     "app_view_controller.h",
     "client_connection_view_controller.h",
     "client_connection_view_controller.mm",
+    "help_and_feedback.h",
+    "help_and_feedback.mm",
     "host_collection_header_view.h",
     "host_collection_header_view.mm",
     "host_collection_view_cell.h",
@@ -44,6 +46,12 @@ source_set("common_source_set") {
     "remoting_theme.mm",
     "remoting_view_controller.h",
     "remoting_view_controller.mm",
+    "session_reconnect_view.h",
+    "session_reconnect_view.mm",
+    "side_menu_items.h",
+    "side_menu_items.mm",
+    "user_status_presenter.h",
+    "user_status_presenter.mm",
   ]
 
   deps = [
@@ -53,7 +61,9 @@ source_set("common_source_set") {
     "//remoting/client",
     "//remoting/client/input",
     "//remoting/ios:ios_core",
+    "//remoting/ios/app/resources:assets",
     "//remoting/ios/app/settings",
+    "//remoting/ios/display",
     "//remoting/ios/mdc",
     "//remoting/protocol",
     "//ui/base",
@@ -77,13 +87,18 @@ source_set("main") {
   ]
   deps = [
     ":common_source_set",
-    "//remoting/ios/app/resources:system_icons",
+    "//base",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 ios_remoting_app_tmpl("ios_remoting_app") {
   output_name = "chromoting"
+  info_plist_path = "resources/Info.plist"
   entitlements_path = "resources/Remoting.entitlements"
-  remoting_source_set = ":main"
+  deps = [
+    ":main",
+    "//remoting/ios/app/resources:launchscreen_assets",
+    "//remoting/ios/app/resources:remoting_icons",
+  ]
 }

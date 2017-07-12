@@ -4,6 +4,8 @@
 
 #include "platform/graphics/paint/PaintController.h"
 
+#include <memory>
+#include "build/build_config.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/ClipPathDisplayItem.h"
@@ -18,11 +20,10 @@
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 using blink::testing::CreateOpacityOnlyEffect;
 using blink::testing::DefaultPaintChunkProperties;
-using testing::UnorderedElementsAre;
+using ::testing::UnorderedElementsAre;
 
 namespace blink {
 
@@ -1118,6 +1119,10 @@ TEST_P(PaintControllerTest, CachedSubsequenceForcePaintChunk) {
     DrawRect(context, container, kForegroundDrawingType,
              FloatRect(100, 100, 100, 100));
   }
+
+  DrawRect(context, root, kForegroundDrawingType,
+           FloatRect(100, 100, 100, 100));
+
   GetPaintController().CommitNewDisplayItems();
 
   root_properties.backface_hidden = true;
@@ -1127,15 +1132,19 @@ TEST_P(PaintControllerTest, CachedSubsequenceForcePaintChunk) {
   DrawRect(context, root, kBackgroundDrawingType,
            FloatRect(100, 100, 100, 100));
   EXPECT_TRUE(GetPaintController().UseCachedSubsequenceIfPossible(container));
+  DrawRect(context, root, kForegroundDrawingType,
+           FloatRect(100, 100, 100, 100));
   GetPaintController().CommitNewDisplayItems();
 
   // Even though the paint properties match, |container| should receive its
   // own PaintChunk because it is a cached subsequence.
-  EXPECT_EQ(2u, GetPaintController().GetPaintArtifact().PaintChunks().size());
+  EXPECT_EQ(3u, GetPaintController().GetPaintArtifact().PaintChunks().size());
   EXPECT_EQ(root,
             GetPaintController().GetPaintArtifact().PaintChunks()[0].id.client);
   EXPECT_EQ(container,
             GetPaintController().GetPaintArtifact().PaintChunks()[1].id.client);
+  EXPECT_EQ(root,
+            GetPaintController().GetPaintArtifact().PaintChunks()[2].id.client);
 }
 
 TEST_P(PaintControllerTest, CachedSubsequenceSwapOrder) {
@@ -1203,12 +1212,12 @@ TEST_P(PaintControllerTest, CachedSubsequenceSwapOrder) {
       GetPaintController().GetSubsequenceMarkers(container1);
   CHECK(markers);
   EXPECT_EQ(0u, markers->start);
-  EXPECT_EQ(3u, markers->end);
+  EXPECT_EQ(4u, markers->end);
 
   markers = GetPaintController().GetSubsequenceMarkers(container2);
   CHECK(markers);
   EXPECT_EQ(4u, markers->start);
-  EXPECT_EQ(7u, markers->end);
+  EXPECT_EQ(8u, markers->end);
 
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(2u, GetPaintController().PaintChunks().size());
@@ -1297,12 +1306,12 @@ TEST_P(PaintControllerTest, CachedSubsequenceSwapOrder) {
   markers = GetPaintController().GetSubsequenceMarkers(container2);
   CHECK(markers);
   EXPECT_EQ(0u, markers->start);
-  EXPECT_EQ(3u, markers->end);
+  EXPECT_EQ(4u, markers->end);
 
   markers = GetPaintController().GetSubsequenceMarkers(container1);
   CHECK(markers);
   EXPECT_EQ(4u, markers->start);
-  EXPECT_EQ(7u, markers->end);
+  EXPECT_EQ(8u, markers->end);
 
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(2u, GetPaintController().PaintChunks().size());
@@ -1557,22 +1566,22 @@ TEST_P(PaintControllerTest, CachedNestedSubsequenceUpdate) {
       GetPaintController().GetSubsequenceMarkers(container1);
   CHECK(markers);
   EXPECT_EQ(0u, markers->start);
-  EXPECT_EQ(3u, markers->end);
+  EXPECT_EQ(4u, markers->end);
 
   markers = GetPaintController().GetSubsequenceMarkers(content1);
   CHECK(markers);
   EXPECT_EQ(1u, markers->start);
-  EXPECT_EQ(2u, markers->end);
+  EXPECT_EQ(3u, markers->end);
 
   markers = GetPaintController().GetSubsequenceMarkers(container2);
   CHECK(markers);
   EXPECT_EQ(4u, markers->start);
-  EXPECT_EQ(5u, markers->end);
+  EXPECT_EQ(6u, markers->end);
 
   markers = GetPaintController().GetSubsequenceMarkers(content2);
   CHECK(markers);
   EXPECT_EQ(5u, markers->start);
-  EXPECT_EQ(5u, markers->end);
+  EXPECT_EQ(6u, markers->end);
 
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(5u, GetPaintController().PaintChunks().size());
@@ -1681,17 +1690,17 @@ TEST_P(PaintControllerTest, CachedNestedSubsequenceUpdate) {
   markers = GetPaintController().GetSubsequenceMarkers(content2);
   CHECK(markers);
   EXPECT_EQ(0u, markers->start);
-  EXPECT_EQ(0u, markers->end);
+  EXPECT_EQ(1u, markers->end);
 
   markers = GetPaintController().GetSubsequenceMarkers(container1);
   CHECK(markers);
   EXPECT_EQ(1u, markers->start);
-  EXPECT_EQ(3u, markers->end);
+  EXPECT_EQ(4u, markers->end);
 
   markers = GetPaintController().GetSubsequenceMarkers(content1);
   CHECK(markers);
   EXPECT_EQ(1u, markers->start);
-  EXPECT_EQ(2u, markers->end);
+  EXPECT_EQ(3u, markers->end);
 
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(3u, GetPaintController().PaintChunks().size());
@@ -2057,7 +2066,7 @@ TEST_F(PaintControllerTestBase, BeginAndEndFrame) {
 }
 
 // Death tests don't work properly on Android.
-#if defined(GTEST_HAS_DEATH_TEST) && !OS(ANDROID)
+#if defined(GTEST_HAS_DEATH_TEST) && !defined(OS_ANDROID)
 
 class PaintControllerUnderInvalidationTest
     : public PaintControllerTestBase,
@@ -2314,6 +2323,6 @@ TEST_F(PaintControllerUnderInvalidationTest, InvalidationInSubsequence) {
   TestInvalidationInSubsequence();
 }
 
-#endif  // defined(GTEST_HAS_DEATH_TEST) && !OS(ANDROID)
+#endif  // defined(GTEST_HAS_DEATH_TEST) && !defined(OS_ANDROID)
 
 }  // namespace blink

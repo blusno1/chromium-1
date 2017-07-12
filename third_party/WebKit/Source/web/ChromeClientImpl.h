@@ -183,6 +183,8 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void ClosePagePopup(PagePopup*) override;
   DOMWindow* PagePopupWindowForTesting() const override;
 
+  void SetBrowserControlsState(float height, bool shrinks_layout) override;
+
   bool ShouldOpenModalDialogDuringPageDismissal(
       LocalFrame&,
       DialogType,
@@ -209,11 +211,6 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void ShowUnhandledTapUIIfNeeded(IntPoint, Node*, bool) override;
   void OnMouseDown(Node&) override;
   void DidUpdateBrowserControls() const override;
-
-  CompositorWorkerProxyClient* CreateCompositorWorkerProxyClient(
-      LocalFrame*) override;
-  AnimationWorkletProxyClient* CreateAnimationWorkletProxyClient(
-      LocalFrame*) override;
 
   FloatSize ElasticOverscroll() const override;
 

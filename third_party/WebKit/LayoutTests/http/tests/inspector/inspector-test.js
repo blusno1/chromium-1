@@ -856,7 +856,6 @@ InspectorTest.MockSetting.prototype = {
  * @constructor
  * @param {!string} dirPath
  * @param {!string} name
- * @param {!function(?Bindings.TempFile)} callback
  */
 InspectorTest.TempFileMock = function(dirPath, name)
 {
@@ -905,9 +904,10 @@ InspectorTest.TempFileMock.prototype = {
 
     /**
      * @param {!Common.OutputStream} outputStream
-     * @param {!Bindings.OutputStreamDelegate} delegate
+     * @param {function(*)=} progress
+     * @return {!Promise<boolean>}
      */
-    copyToOutputStream: function(outputStream, delegate)
+    copyToOutputStream: function(outputStream, progress)
     {
         var name = this._name;
         var text = this._chunks.join("");
@@ -929,11 +929,11 @@ InspectorTest.TempFileMock.prototype = {
 
             cancel: function() { }
         }
-        delegate.onTransferStarted(chunkedReaderMock);
         outputStream.write(text);
-        delegate.onChunkTransferred(chunkedReaderMock);
+        if (progress)
+          progress(chunkedReaderMock);
         outputStream.close();
-        delegate.onTransferFinished(chunkedReaderMock);
+        return Promise.resolve(true);
     },
 
     remove: function() { }
@@ -945,22 +945,27 @@ InspectorTest.TempFileMock.create = function(dirPath, name)
     return Promise.resolve(tempFile);
 }
 
-InspectorTest.dumpLoadedModules = function(next)
+InspectorTest.loadedModules = function()
 {
+    return self.runtime._modules.filter(module => module._loadedForTest);
+}
+
+InspectorTest.dumpLoadedModules = function(relativeTo)
+{
+    var previous = new Set(relativeTo || []);
     function moduleSorter(left, right)
     {
         return String.naturalOrderComparator(left._descriptor.name, right._descriptor.name);
     }
 
     InspectorTest.addResult("Loaded modules:");
-    var modules = self.runtime._modules;
-    modules.sort(moduleSorter);
-    for (var i = 0; i < modules.length; ++i) {
-        if (modules[i]._loadedForTest)
-            InspectorTest.addResult("    " + modules[i]._descriptor.name);
+    var loadedModules = InspectorTest.loadedModules().sort(moduleSorter);
+    for (var module of loadedModules) {
+        if (previous.has(module))
+            continue;
+        InspectorTest.addResult("    " + module._descriptor.name);
     }
-    if (next)
-        next();
+    return loadedModules;
 }
 
 InspectorTest.TimeoutMock = function()
@@ -1055,7 +1060,7 @@ InspectorTest.preloadModule = function(moduleName)
 
 InspectorTest.isDedicatedWorker = function(target)
 {
-    return target && !target.hasBrowserCapability() && target.hasJSCapability() && !target.hasNetworkCapability() && !target.hasTargetCapability();
+    return target && !target.hasBrowserCapability() && target.hasJSCapability() && !target.hasTargetCapability();
 }
 
 InspectorTest.isServiceWorker = function(target)

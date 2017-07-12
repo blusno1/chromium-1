@@ -10,6 +10,7 @@
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shutdown_controller.h"
+#include "ash/shutdown_reason.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/night_light/night_light_toggle_button.h"
@@ -125,8 +126,7 @@ void TilesDefaultView::ButtonPressed(views::Button* sender,
   } else if (NightLightController::IsFeatureEnabled() &&
              sender == night_light_button_) {
     Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_NIGHT_LIGHT);
-    Shell::Get()->night_light_controller()->Toggle();
-    night_light_button_->Update();
+    night_light_button_->Toggle();
   } else if (sender == lock_button_) {
     Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_LOCK_SCREEN);
     chromeos::DBusThreadManager::Get()
@@ -134,7 +134,8 @@ void TilesDefaultView::ButtonPressed(views::Button* sender,
         ->RequestLockScreen();
   } else if (sender == power_button_) {
     Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_SHUT_DOWN);
-    Shell::Get()->lock_state_controller()->RequestShutdown();
+    Shell::Get()->lock_state_controller()->RequestShutdown(
+        ShutdownReason::TRAY_SHUT_DOWN_BUTTON);
   }
 }
 

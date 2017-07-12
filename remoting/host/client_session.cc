@@ -356,11 +356,16 @@ void ClientSession::OnConnectionClosed(protocol::ErrorCode error) {
   event_handler_->OnSessionClosed(this);
 }
 
-void ClientSession::OnRouteChange(
-    const std::string& channel_name,
-    const protocol::TransportRoute& route) {
+void ClientSession::OnRouteChange(const std::string& channel_name,
+                                  const protocol::TransportRoute& route) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   event_handler_->OnSessionRouteChange(this, channel_name, route);
+}
+
+void ClientSession::OnIncomingDataChannel(
+    const std::string& channel_name,
+    std::unique_ptr<protocol::MessagePipe> pipe) {
+  data_channel_manager_.OnIncomingDataChannel(channel_name, std::move(pipe));
 }
 
 const std::string& ClientSession::client_jid() const {
@@ -402,6 +407,13 @@ uint32_t ClientSession::desktop_session_id() const {
 ClientSessionControl* ClientSession::session_control() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return this;
+}
+
+void ClientSession::RegisterCreateHandlerCallbackForTesting(
+    const std::string& prefix,
+    protocol::DataChannelManager::CreateHandlerCallback constructor) {
+  data_channel_manager_.RegisterCreateHandlerCallback(
+      prefix, std::move(constructor));
 }
 
 void ClientSession::SetEventTimestampsSourceForTests(

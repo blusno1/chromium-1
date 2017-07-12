@@ -24,7 +24,7 @@
 #include "ui/base/ui_base_switches.h"
 
 #if !defined(MEDIA_DISABLE_FFMPEG)
-#include "media/base/media_file_checker.h"
+#include "media/filters/media_file_checker.h"
 #endif
 
 #if defined(OS_WIN)
@@ -234,7 +234,7 @@ void ExtensionsHandler::OnParseITunesPrefXml(
       itunes::FindLibraryLocationInPrefXml(itunes_xml_data));
   content::UtilityThread::Get()->Send(
       new ChromeUtilityHostMsg_GotITunesDirectory(library_path));
-  content::UtilityThread::Get()->ReleaseProcessIfNeeded();
+  content::UtilityThread::Get()->ReleaseProcess();
 }
 #endif  // defined(OS_WIN)
 
@@ -246,7 +246,7 @@ void ExtensionsHandler::OnParseITunesLibraryXmlFile(
   bool result = parser.Parse(iapps::ReadFileAsString(std::move(file)));
   content::UtilityThread::Get()->Send(
       new ChromeUtilityHostMsg_GotITunesLibrary(result, parser.library()));
-  content::UtilityThread::Get()->ReleaseProcessIfNeeded();
+  content::UtilityThread::Get()->ReleaseProcess();
 }
 
 void ExtensionsHandler::OnParsePicasaPMPDatabase(
@@ -272,7 +272,7 @@ void ExtensionsHandler::OnParsePicasaPMPDatabase(
   content::UtilityThread::Get()->Send(
       new ChromeUtilityHostMsg_ParsePicasaPMPDatabase_Finished(
           parse_success, reader.albums(), reader.folders()));
-  content::UtilityThread::Get()->ReleaseProcessIfNeeded();
+  content::UtilityThread::Get()->ReleaseProcess();
 }
 
 void ExtensionsHandler::OnIndexPicasaAlbumsContents(
@@ -283,7 +283,7 @@ void ExtensionsHandler::OnIndexPicasaAlbumsContents(
   content::UtilityThread::Get()->Send(
       new ChromeUtilityHostMsg_IndexPicasaAlbumsContents_Finished(
           indexer.albums_images()));
-  content::UtilityThread::Get()->ReleaseProcessIfNeeded();
+  content::UtilityThread::Get()->ReleaseProcess();
 }
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 

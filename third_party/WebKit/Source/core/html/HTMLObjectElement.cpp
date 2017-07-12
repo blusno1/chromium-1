@@ -30,6 +30,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ShadowRoot.h"
+#include "core/dom/SyncReattachContext.h"
 #include "core/dom/TagCollection.h"
 #include "core/dom/Text.h"
 #include "core/frame/LocalFrame.h"
@@ -287,7 +288,7 @@ void HTMLObjectElement::UpdatePluginInternal() {
 
   // Overwrites the URL and MIME type of a Flash embed to use an HTML5 embed.
   KURL overriden_url =
-      GetDocument().GetFrame()->Loader().Client()->OverrideFlashEmbedWithHTML(
+      GetDocument().GetFrame()->Client()->OverrideFlashEmbedWithHTML(
           GetDocument().CompleteURL(url_));
   if (!overriden_url.IsEmpty()) {
     url_ = overriden_url.GetString();
@@ -347,12 +348,13 @@ const AtomicString HTMLObjectElement::ImageSourceURL() const {
 
 // TODO(schenney): crbug.com/572908 Remove this hack.
 void HTMLObjectElement::ReattachFallbackContent() {
-  // This can happen inside of attachLayoutTree() in the middle of a recalcStyle
-  // so we need to reattach synchronously here.
-  if (GetDocument().InStyleRecalc())
-    ReattachLayoutTree();
-  else
+  if (GetDocument().InStyleRecalc()) {
+    // This can happen inside of AttachLayoutTree() in the middle of a
+    // RebuildLayoutTree, so we need to reattach synchronously here.
+    ReattachLayoutTree(SyncReattachContext::CurrentAttachContext());
+  } else {
     LazyReattachIfAttached();
+  }
 }
 
 void HTMLObjectElement::RenderFallbackContent() {
@@ -441,6 +443,28 @@ bool HTMLObjectElement::WillUseFallbackContentAtLayout() const {
 
 void HTMLObjectElement::AssociateWith(HTMLFormElement* form) {
   AssociateByParser(form);
-};
+}
+
+void HTMLObjectElement::AttachLayoutTree(AttachContext& context) {
+  SyncReattachContext reattach_context(context);
+  HTMLPlugInElement::AttachLayoutTree(context);
+}
+
+const HTMLObjectElement* ToHTMLObjectElementFromListedElement(
+    const ListedElement* element) {
+  SECURITY_DCHECK(!element || !element->IsFormControlElement());
+  const HTMLObjectElement* object_element =
+      static_cast<const HTMLObjectElement*>(element);
+  // We need to assert after the cast because ListedElement doesn't
+  // have hasTagName.
+  SECURITY_DCHECK(!object_element ||
+                  object_element->HasTagName(HTMLNames::objectTag));
+  return object_element;
+}
+
+const HTMLObjectElement& ToHTMLObjectElementFromListedElement(
+    const ListedElement& element) {
+  return *ToHTMLObjectElementFromListedElement(&element);
+}
 
 }  // namespace blink
