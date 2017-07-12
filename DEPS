@@ -40,11 +40,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'c4176a2fa5aab30e5886f05bbe20de225dbe997b',
+  'skia_revision': '1c8bb8a4c63c327fb856a41e1b0b19775eac0ac1',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '4f2d1dc53fd3aa46c4f5020ac387499f3980fd18',
+  'v8_revision': '8b00387af39d3b35326c4510f1f7e213fbd56a5d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -56,7 +56,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '3d2d34dde457f07ca410d1c06f4f3b9063c28643',
+  'buildtools_revision': '1dcd1bdbe93467531a50b60dbd18860803ca7be1',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling SwiftShader
   # and whatever else without interference from each other.
@@ -96,7 +96,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '08d8c9f0860202115b653dc31a06d366a5978623',
+  'catapult_revision': '6c40c273a7fe857803a56575644cfa81880673ad',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.

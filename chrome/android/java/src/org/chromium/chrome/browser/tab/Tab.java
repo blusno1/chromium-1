@@ -832,18 +832,18 @@ public class Tab
      *
      * @return Whether the printing process is started successfully.
      **/
-    public boolean print() {
+    public boolean print(int renderProcessId, int renderFrameId) {
         assert mNativeTabAndroid != 0;
-        return nativePrint(mNativeTabAndroid);
+        return nativePrint(mNativeTabAndroid, renderProcessId, renderFrameId);
     }
 
     @CalledByNative
-    public void setPendingPrint() {
+    public void setPendingPrint(int renderProcessId, int renderFrameId) {
         PrintingController printingController = PrintingControllerImpl.getInstance();
         if (printingController == null) return;
 
         printingController.setPendingPrint(new TabPrinter(this),
-                new PrintManagerDelegateImpl(getActivity()));
+                new PrintManagerDelegateImpl(getActivity()), renderProcessId, renderFrameId);
     }
 
     /**
@@ -1778,7 +1778,8 @@ public class Tab
                 @Override
                 public void run() {
                     if (showSendFeedbackView) {
-                        getActivity().startHelpAndFeedback(Tab.this, "MobileSadTabFeedback");
+                        getActivity().startHelpAndFeedback(
+                                getUrl(), "MobileSadTabFeedback", getProfile());
                     } else {
                         reload();
                     }
@@ -2509,6 +2510,11 @@ public class Tab
             mFullscreenManager.setPersistentFullscreenMode(enableFullscreen);
         }
 
+        // When going into fullscreen, we want to remove any cached thumbnail of the Tab.
+        if (enableFullscreen && mNativeTabAndroid != 0) {
+            nativeClearThumbnailPlaceholder(mNativeTabAndroid);
+        }
+
         RewindableIterator<TabObserver> observers = getTabObservers();
         while (observers.hasNext()) {
             observers.next().onToggleFullscreenMode(this, enableFullscreen);
@@ -3121,7 +3127,8 @@ public class Tab
             long intentReceivedTimestamp, boolean hasUserGesture);
     private native void nativeSetActiveNavigationEntryTitleForUrl(long nativeTabAndroid, String url,
             String title);
-    private native boolean nativePrint(long nativeTabAndroid);
+    private native boolean nativePrint(
+            long nativeTabAndroid, int renderProcessId, int renderFrameId);
     private native Bitmap nativeGetFavicon(long nativeTabAndroid);
     private native void nativeCreateHistoricalTab(long nativeTabAndroid);
     private native void nativeUpdateBrowserControlsState(
@@ -3132,6 +3139,7 @@ public class Tab
             InterceptNavigationDelegate delegate);
     private native void nativeAttachToTabContentManager(long nativeTabAndroid,
             TabContentManager tabContentManager);
+    private native void nativeClearThumbnailPlaceholder(long nativeTabAndroid);
     private native boolean nativeHasPrerenderedUrl(long nativeTabAndroid, String url);
     private native void nativeSetWebappManifestScope(long nativeTabAndroid, String scope);
     private native void nativeEnableEmbeddedMediaExperience(long nativeTabAndroid, boolean enabled);
