@@ -9,6 +9,7 @@
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "build/build_config.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -155,7 +156,7 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
   ExecutionContext* context = ExecutionContext::From(script_state);
 
 // Remind developers when they are using Web Bluetooth on unsupported platforms.
-#if !OS(CHROMEOS) && !OS(ANDROID) && !OS(MACOSX)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
   context->AddConsoleMessage(ConsoleMessage::Create(
       kJSMessageSource, kInfoMessageLevel,
       "Web Bluetooth is experimental on this platform. See "
