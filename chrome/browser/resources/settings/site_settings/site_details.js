@@ -23,12 +23,29 @@ Polymer({
     },
 
     /**
+     * Use the string representing the origin or extension name as the page
+     * title of the settings-subpage parent.
+     */
+    pageTitle: {
+      type: String,
+      notify: true,
+    },
+
+    /**
      * The amount of data stored for the origin.
      * @private
      */
     storedData_: {
       type: String,
       value: '',
+    },
+
+    /** @private */
+    enableSiteSettings_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableSiteSettings');
+      },
     },
 
     /**
@@ -64,10 +81,11 @@ Polymer({
    * @private
    */
   onOriginChanged_: function() {
-    this.$.usageApi.fetchUsageTotal(this.toUrl(this.origin).hostname);
+    if (this.enableSiteSettings_)
+      this.$.usageApi.fetchUsageTotal(this.toUrl(this.origin).hostname);
 
     var siteDetailsPermissions =
-        /** @type{!NodeList<!SiteDetailsPermissionElement>} */
+        /** @type {!NodeList<!SiteDetailsPermissionElement>} */
         (this.root.querySelectorAll('site-details-permission'));
 
     this.browserProxy.getOriginPermissions(this.origin, this.getCategoryList_())
@@ -75,9 +93,12 @@ Polymer({
           exceptionList.forEach((exception, i) => {
             // |exceptionList| should be in the same order as the category list,
             // which is in the same order as |siteDetailsPermissions|.
-            siteDetailsPermissions[i].site =
-                /** @type {!RawSiteException} */ (exception);
+            siteDetailsPermissions[i].site = exception;
           });
+
+          // The displayName won't change, so just use the first exception.
+          assert(exceptionList.length > 0);
+          this.pageTitle = exceptionList[0].displayName;
         });
   },
 
@@ -101,7 +122,11 @@ Polymer({
    * @private
    */
   onClearStorage_: function() {
-    this.$.usageApi.clearUsage(this.toUrl(this.origin).href, this.storageType_);
+    // Since usage is only shown when "Site Settings" is enabled, don't clear it
+    // when it's not shown.
+    if (this.enableSiteSettings_)
+      this.$.usageApi.clearUsage(
+          this.toUrl(this.origin).href, this.storageType_);
   },
 
   /**
@@ -125,7 +150,7 @@ Polymer({
     if (this.storedData_ != '')
       this.onClearStorage_();
 
-    this.$.confirmDeleteDialog.close();
+    this.onCloseDialog_();
   },
 
   /**
@@ -139,4 +164,24 @@ Polymer({
           return element.category;
         });
   },
+
+  /**
+   * Checks whether the permission list is standalone or has a heading.
+   * @return {string} CSS class applied when the permission list has no heading.
+   * @private
+   */
+  permissionListClass_: function(hasHeading) {
+    return hasHeading ? '' : 'without-heading';
+  },
+
+  /**
+   * Checks whether this site has any usage information to show.
+   * @return {boolean} Whether there is any usage information to show (e.g.
+   *     disk or battery).
+   * @private
+   */
+  hasUsage_: function(storage) {
+    return storage != '';
+  },
+
 });

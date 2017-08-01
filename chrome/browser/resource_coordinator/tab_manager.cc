@@ -76,9 +76,8 @@ namespace resource_coordinator {
 namespace {
 
 // The timeout time after which the next background tab gets loaded if the
-// previous tab has not finished loading yet.
-// TODO(zhenw): Ignore this when under memory pressure. Or possibly make this
-// a dynamic threshold under different scenarios.
+// previous tab has not finished loading yet. This is ignored in kPaused loading
+// mode.
 const TimeDelta kBackgroundTabLoadTimeout = TimeDelta::FromSeconds(10);
 
 // The number of loading slots for background tabs. TabManager will start to
@@ -217,6 +216,7 @@ TabManager::TabManager()
       browser_tab_strip_tracker_(this, nullptr, this),
       test_tick_clock_(nullptr),
       is_session_restore_loading_tabs_(false),
+      background_tab_loading_mode_(BackgroundTabLoadingMode::kStaggered),
       force_load_timer_(base::MakeUnique<base::OneShotTimer>()),
       loading_slots_(kNumOfLoadingSlots),
       weak_ptr_factory_(this) {
@@ -236,6 +236,8 @@ TabManager::~TabManager() {
 }
 
 void TabManager::Start() {
+  background_tab_loading_mode_ = BackgroundTabLoadingMode::kStaggered;
+
 #if defined(OS_WIN) || defined(OS_MACOSX)
   // Note that discarding is now enabled by default. This check is kept as a
   // kill switch.
@@ -899,10 +901,20 @@ void TabManager::OnMemoryPressure(
   if (g_browser_process->IsShuttingDown())
     return;
 
-  // Under critical pressure try to discard a tab.
-  if (memory_pressure_level ==
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
-    LogMemoryAndDiscardTab(kUrgentShutdown);
+  switch (memory_pressure_level) {
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
+      background_tab_loading_mode_ = BackgroundTabLoadingMode::kStaggered;
+      LoadNextBackgroundTabIfNeeded();
+      break;
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
+      background_tab_loading_mode_ = BackgroundTabLoadingMode::kPaused;
+      break;
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
+      background_tab_loading_mode_ = BackgroundTabLoadingMode::kPaused;
+      LogMemoryAndDiscardTab(kUrgentShutdown);
+      break;
+    default:
+      NOTREACHED();
   }
   // TODO(skuhne): If more memory pressure levels are introduced, consider
   // calling PurgeBrowserMemory() before CRITICAL is reached.
@@ -1118,6 +1130,8 @@ TabManager::MaybeThrottleNavigation(BackgroundTabNavigationThrottle* throttle) {
   GetWebContentsData(navigation_handle->GetWebContents())
       ->SetTabLoadingState(TAB_IS_NOT_LOADING);
   pending_navigations_.push_back(throttle);
+  std::stable_sort(pending_navigations_.begin(), pending_navigations_.end(),
+                   ComparePendingNavigations);
 
   StartForceLoadTimer();
   return content::NavigationThrottle::DEFER;
@@ -1165,6 +1179,9 @@ void TabManager::StartForceLoadTimer() {
 }
 
 void TabManager::LoadNextBackgroundTabIfNeeded() {
+  if (background_tab_loading_mode_ != BackgroundTabLoadingMode::kStaggered)
+    return;
+
   // Do not load more background tabs until TabManager can load the next tab.
   // Ignore this constraint if the timer fires to force loading the next
   // background tab.
@@ -1209,6 +1226,21 @@ BackgroundTabNavigationThrottle* TabManager::RemovePendingNavigationIfNeeded(
     it++;
   }
   return nullptr;
+}
+
+// static
+bool TabManager::ComparePendingNavigations(
+    const BackgroundTabNavigationThrottle* first,
+    const BackgroundTabNavigationThrottle* second) {
+  bool first_is_internal_page =
+      IsInternalPage(first->navigation_handle()->GetURL());
+  bool second_is_internal_page =
+      IsInternalPage(second->navigation_handle()->GetURL());
+
+  if (first_is_internal_page != second_is_internal_page)
+    return !first_is_internal_page;
+
+  return false;
 }
 
 bool TabManager::IsTabLoadingForTest(content::WebContents* contents) const {

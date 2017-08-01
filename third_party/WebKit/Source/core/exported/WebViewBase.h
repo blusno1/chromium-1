@@ -37,7 +37,7 @@ class WebInputEvent;
 class WebInputMethodController;
 class WebKeyboardEvent;
 class WebLayer;
-class WebLocalFrameBase;
+class WebLocalFrameImpl;
 class WebLayerTreeView;
 class WebPagePopupImpl;
 class WebSettingsImpl;
@@ -71,7 +71,7 @@ class WebViewBase : public WebView, public RefCounted<WebViewBase> {
 
   // Returns the main frame associated with this view. This may be null when
   // the page is shutting down, but will be valid at all other times.
-  virtual WebLocalFrameBase* MainFrameImpl() const = 0;
+  virtual WebLocalFrameImpl* MainFrameImpl() const = 0;
 
   virtual float DefaultMinimumPageScaleFactor() const = 0;
   virtual float DefaultMaximumPageScaleFactor() const = 0;
@@ -123,9 +123,8 @@ class WebViewBase : public WebView, public RefCounted<WebViewBase> {
 
   virtual WebSettingsImpl* SettingsImpl() = 0;
 
-  virtual void RequestDecode(
-      const PaintImage&,
-      std::unique_ptr<WTF::Function<void(bool)>> callback) = 0;
+  virtual void RequestDecode(const PaintImage&,
+                             WTF::Function<void(bool)> callback) = 0;
 
   using WebWidget::GetPagePopup;
   virtual PagePopup* OpenPagePopup(PagePopupClient*) = 0;

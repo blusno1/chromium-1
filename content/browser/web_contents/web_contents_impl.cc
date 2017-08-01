@@ -33,7 +33,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "components/mime_util/mime_util.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
@@ -131,6 +130,7 @@
 #include "ppapi/features/features.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/WebKit/common/mime_util/mime_util.h"
 #include "third_party/WebKit/public/platform/WebSecurityStyle.h"
 #include "third_party/WebKit/public/web/WebSandboxFlags.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -1025,7 +1025,7 @@ SkColor WebContentsImpl::GetThemeColor() const {
   return theme_color_;
 }
 
-void WebContentsImpl::SetAccessibilityMode(AccessibilityMode mode) {
+void WebContentsImpl::SetAccessibilityMode(ui::AXMode mode) {
   if (mode == accessibility_mode_)
     return;
 
@@ -1045,8 +1045,8 @@ void WebContentsImpl::SetAccessibilityMode(AccessibilityMode mode) {
   }
 }
 
-void WebContentsImpl::AddAccessibilityMode(AccessibilityMode mode) {
-  AccessibilityMode new_mode(accessibility_mode_);
+void WebContentsImpl::AddAccessibilityMode(ui::AXMode mode) {
+  ui::AXMode new_mode(accessibility_mode_);
   new_mode |= mode;
   SetAccessibilityMode(new_mode);
 }
@@ -1204,16 +1204,16 @@ void WebContentsImpl::EnableWebContentsOnlyAccessibilityMode() {
     for (RenderFrameHost* rfh : GetAllFrames())
       ResetAccessibility(rfh);
   } else {
-    AddAccessibilityMode(kAccessibilityModeWebContentsOnly);
+    AddAccessibilityMode(ui::kAXModeWebContentsOnly);
   }
 }
 
 bool WebContentsImpl::IsWebContentsOnlyAccessibilityModeForTesting() const {
-  return accessibility_mode_ == kAccessibilityModeWebContentsOnly;
+  return accessibility_mode_ == ui::kAXModeWebContentsOnly;
 }
 
 bool WebContentsImpl::IsFullAccessibilityModeForTesting() const {
-  return accessibility_mode_ == kAccessibilityModeComplete;
+  return accessibility_mode_ == ui::kAXModeComplete;
 }
 
 const PageImportanceSignals& WebContentsImpl::GetPageImportanceSignals() const {
@@ -2622,7 +2622,7 @@ bool WebContentsImpl::ShouldIgnoreUnresponsiveRenderer() {
   return DevToolsAgentHost::IsDebuggerAttached(this);
 }
 
-AccessibilityMode WebContentsImpl::GetAccessibilityMode() const {
+ui::AXMode WebContentsImpl::GetAccessibilityMode() const {
   return accessibility_mode_;
 }
 
@@ -3196,7 +3196,7 @@ bool WebContentsImpl::IsSavable() {
          contents_mime_type_ == "application/xhtml+xml" ||
          contents_mime_type_ == "text/plain" ||
          contents_mime_type_ == "text/css" ||
-         mime_util::IsSupportedJavascriptMimeType(contents_mime_type_);
+         blink::IsSupportedJavascriptMimeType(contents_mime_type_);
 }
 
 void WebContentsImpl::OnSavePage() {
@@ -3686,11 +3686,9 @@ void WebContentsImpl::DidFailLoadWithError(
     RenderFrameHostImpl* render_frame_host,
     const GURL& url,
     int error_code,
-    const base::string16& error_description,
-    bool was_ignored_by_handler) {
+    const base::string16& error_description) {
   for (auto& observer : observers_) {
-    observer.DidFailLoad(render_frame_host, url, error_code, error_description,
-                         was_ignored_by_handler);
+    observer.DidFailLoad(render_frame_host, url, error_code, error_description);
   }
 }
 

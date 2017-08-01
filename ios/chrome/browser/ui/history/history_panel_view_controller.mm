@@ -9,7 +9,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/constraints_ui_util.h"
 #import "ios/chrome/browser/ui/history/clear_browsing_bar.h"
 #import "ios/chrome/browser/ui/history/history_collection_view_controller.h"
 #import "ios/chrome/browser/ui/history/history_search_view_controller.h"
@@ -20,6 +19,7 @@
 #import "ios/chrome/browser/ui/show_privacy_settings_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/AppBar/src/MaterialAppBar.h"
 #import "ios/third_party/material_components_ios/src/components/NavigationBar/src/MaterialNavigationBar.h"
@@ -47,7 +47,7 @@ CGFloat kShadowOpacity = 0.2f;
   // View controller for the search bar.
   HistorySearchViewController* _searchViewController;
   // Container view for history collection and clear browsing button to enable
-  // use of autolayout in conjuction with Material App Bar.
+  // use of autolayout in conjunction with Material App Bar.
   UIView* _containerView;
   // The header view.
   MDCAppBar* _appBar;

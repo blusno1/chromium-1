@@ -120,7 +120,6 @@
 #import "ios/chrome/browser/ui/find_bar/find_bar_controller_ios.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
 #import "ios/chrome/browser/ui/fullscreen_controller.h"
-#import "ios/chrome/browser/ui/history/tab_history_cell.h"
 #import "ios/chrome/browser/ui/key_commands_provider.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_panel_view_controller.h"
@@ -147,6 +146,7 @@
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_model_delegate_ios.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_model_ios.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_item.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -172,7 +172,6 @@
 #include "ios/public/provider/chrome/browser/voice/voice_search_controller_delegate.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
 #import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #include "ios/web/public/active_state_manager.h"
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
@@ -622,7 +621,7 @@ NSString* const kNativeControllerTemporaryKey = @"NativeControllerTemporaryKey";
 // Updates view-related functionality with the given tab model and browser
 // state. The view must have been loaded.  Uses |_browserState| and |_model|.
 - (void)addUIFunctionalityForModelAndBrowserState;
-// Sets the correct frame and heirarchy for subviews and helper views.
+// Sets the correct frame and hierarchy for subviews and helper views.
 - (void)setUpViewLayout;
 // Sets the correct frame for the tab strip based on the given maximum width.
 - (void)layoutTabStripForWidth:(CGFloat)maxWidth;
@@ -695,12 +694,6 @@ NSString* const kNativeControllerTemporaryKey = @"NativeControllerTemporaryKey";
 - (void)showPageInfoPopupForView:(UIView*)sourceView;
 // Hide the Page Security Info.
 - (void)hidePageInfoPopupForView:(UIView*)sourceView;
-// Shows the tab history popup containing the tab's backward history.
-- (void)showTabHistoryPopupForBackwardHistory;
-// Shows the tab history popup containing the tab's forward history.
-- (void)showTabHistoryPopupForForwardHistory;
-// Navigate back/forward to the selected entry in the tab's history.
-- (void)navigateToSelectedEntry:(id)sender;
 // The infobar state (typically height) has changed.
 - (void)infoBarContainerStateChanged:(bool)is_animating;
 // Adds a CardView on top of the contentArea either taking the size of the full
@@ -3487,44 +3480,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   [self hidePageInfoPopupForView:nil];
 }
 
-- (void)showTabHistoryPopupForBackwardHistory {
-  DCHECK(self.visible || self.dismissingModal);
-
-  // Dismiss the omnibox (if open).
-  [_toolbarController cancelOmniboxEdit];
-  // Dismiss the soft keyboard (if open).
-  Tab* tab = [_model currentTab];
-  [tab.webController dismissKeyboard];
-  web::NavigationItemList backwardItems =
-      [tab navigationManager]->GetBackwardItems();
-  [_toolbarController showTabHistoryPopupInView:[self view]
-                                      withItems:backwardItems
-                                 forBackHistory:YES];
-}
-
-- (void)showTabHistoryPopupForForwardHistory {
-  DCHECK(self.visible || self.dismissingModal);
-
-  // Dismiss the omnibox (if open).
-  [_toolbarController cancelOmniboxEdit];
-  // Dismiss the soft keyboard (if open).
-  Tab* tab = [_model currentTab];
-  [tab.webController dismissKeyboard];
-
-  web::NavigationItemList forwardItems =
-      [tab navigationManager]->GetForwardItems();
-  [_toolbarController showTabHistoryPopupInView:[self view]
-                                      withItems:forwardItems
-                                 forBackHistory:NO];
-}
-
-- (void)navigateToSelectedEntry:(id)sender {
-  DCHECK([sender isKindOfClass:[TabHistoryCell class]]);
-  TabHistoryCell* selectedCell = (TabHistoryCell*)sender;
-  [[_model currentTab] goToItem:selectedCell.item];
-  [_toolbarController dismissTabHistoryPopup];
-}
-
 - (void)addToReadingListURL:(const GURL&)URL title:(NSString*)title {
   base::RecordAction(UserMetricsAction("MobileReadingListAdd"));
 
@@ -3750,8 +3705,8 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
 - (void)loadJavaScriptFromLocationBar:(NSString*)script {
   [_preloadController cancelPrerender];
   DCHECK([_model currentTab]);
-  [[_model currentTab].webController executeUserJavaScript:script
-                                         completionHandler:nil];
+  if ([self currentWebState])
+    [self currentWebState]->ExecuteUserJavaScript(script);
 }
 
 - (web::WebState*)currentWebState {
@@ -4110,6 +4065,55 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
                    completion:nil];
 }
 
+- (void)showTabHistoryPopupForBackwardHistory {
+  DCHECK(self.visible || self.dismissingModal);
+
+  // Dismiss the omnibox (if open).
+  [_toolbarController cancelOmniboxEdit];
+  // Dismiss the soft keyboard (if open).
+  Tab* tab = [_model currentTab];
+  [tab.webController dismissKeyboard];
+  web::NavigationItemList backwardItems =
+      [tab navigationManager]->GetBackwardItems();
+  [_toolbarController showTabHistoryPopupInView:[self view]
+                                      withItems:backwardItems
+                                 forBackHistory:YES];
+}
+
+- (void)showTabHistoryPopupForForwardHistory {
+  DCHECK(self.visible || self.dismissingModal);
+
+  // Dismiss the omnibox (if open).
+  [_toolbarController cancelOmniboxEdit];
+  // Dismiss the soft keyboard (if open).
+  Tab* tab = [_model currentTab];
+  [tab.webController dismissKeyboard];
+
+  web::NavigationItemList forwardItems =
+      [tab navigationManager]->GetForwardItems();
+  [_toolbarController showTabHistoryPopupInView:[self view]
+                                      withItems:forwardItems
+                                 forBackHistory:NO];
+}
+
+- (void)navigateToHistoryItem:(const web::NavigationItem*)item {
+  [[_model currentTab] goToItem:item];
+  [_toolbarController dismissTabHistoryPopup];
+}
+
+- (void)showReadingList {
+  _readingListCoordinator = [[ReadingListCoordinator alloc]
+      initWithBaseViewController:self
+                    browserState:self.browserState
+                          loader:self];
+
+  [_readingListCoordinator start];
+}
+
+- (void)switchToReaderMode {
+  [[_model currentTab] switchToReaderMode];
+}
+
 #pragma mark - Command Handling
 
 - (IBAction)chromeExecuteCommand:(id)sender {
@@ -4159,9 +4163,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
     case IDC_SHOW_MAIL_COMPOSER:
       [self showMailComposer:sender];
       break;
-    case IDC_READER_MODE:
-      [[_model currentTab] switchToReaderMode];
-      break;
     case IDC_REQUEST_DESKTOP_SITE:
       [[_model currentTab] reloadWithUserAgentType:web::UserAgentType::DESKTOP];
       break;
@@ -4208,21 +4209,8 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
     case IDC_SHOW_SECURITY_HELP:
       [self showSecurityHelpPage];
       break;
-    case IDC_SHOW_BACK_HISTORY:
-      [self showTabHistoryPopupForBackwardHistory];
-      break;
-    case IDC_SHOW_FORWARD_HISTORY:
-      [self showTabHistoryPopupForForwardHistory];
-      break;
-    case IDC_BACK_FORWARD_IN_TAB_HISTORY:
-      DCHECK([sender isKindOfClass:[TabHistoryCell class]]);
-      [self navigateToSelectedEntry:sender];
-      break;
     case IDC_RATE_THIS_APP:
       [self showRateThisAppDialog];
-      break;
-    case IDC_SHOW_READING_LIST:
-      [self showReadingList];
       break;
     case IDC_VOICE_SEARCH: {
       // If the voice search command is coming from a UIView sender, store it
@@ -4449,15 +4437,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   web::NavigationManager::WebLoadParams params(URL);
   params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
   [tab navigationManager]->LoadURLWithParams(params);
-}
-
-- (void)showReadingList {
-  _readingListCoordinator = [[ReadingListCoordinator alloc]
-      initWithBaseViewController:self
-                    browserState:self.browserState
-                          loader:self];
-
-  [_readingListCoordinator start];
 }
 
 - (void)showNTPPanel:(NewTabPage::PanelIdentifier)panel {

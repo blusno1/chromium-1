@@ -87,7 +87,7 @@ fast/harness/test-expectations.html [ WontFix ]
 [ Linux Win Android ] fast/text/aat-morx.html [ WontFix ]
 
 # Linux layout tests do not have a Myanmar fallback font.
-[ Linux ] inspector-protocol/layout-fonts/fallback-myanmar.html [ WontFix ]
+[ Linux ] inspector-protocol/layout-fonts/fallback-myanmar.js [ WontFix ]
 
 # Tests in media/stable are only supposed to be run as virtual test (see virtual/stable/media).
 media/stable [ WontFix ]
@@ -651,6 +651,7 @@ external/wpt/css/css-writing-modes-3/page-flow-direction-003.xht [ WontFix ]
 external/wpt/css/css-writing-modes-3/page-flow-direction-slr-005.xht [ WontFix ]
 external/wpt/css/css-writing-modes-3/page-flow-direction-srl-004.xht [ WontFix ]
 external/wpt/FileAPI/url/url_createobjecturl_file_img-manual.html [ WontFix ]
+virtual/mojo-blobs/external/wpt/FileAPI/url/url_createobjecturl_file_img-manual.html [ WontFix ]
 external/wpt/geolocation-API/getCurrentPosition_permission_allow-manual.html [ WontFix ]
 external/wpt/geolocation-API/getCurrentPosition_permission_deny-manual.html [ WontFix ]
 external/wpt/geolocation-API/getCurrentPosition_permission-manual.html [ WontFix ]

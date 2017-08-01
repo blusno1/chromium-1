@@ -19,6 +19,7 @@
 #import "components/translate/ios/browser/js_translate_manager.h"
 #import "components/translate/ios/browser/language_detection_controller.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/translate/before_translate_infobar_controller.h"
 #include "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
@@ -601,11 +602,9 @@ using translate::LanguageDetectionController;
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
                                    kFrench)] performAction:grey_tap()];
 
-  // The language picker uses the system accessibility labels (thus no
-  // IDS_CANCEL here).
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
-                                   @"Cancel")] assertWithMatcher:grey_notNil()];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kLanguagePickerCancelButtonId)]
+      assertWithMatcher:grey_notNil()];
 
   // Change the language using the picker.
   NSString* const kPickedLanguage = @"Finnish";
@@ -614,9 +613,10 @@ using translate::LanguageDetectionController;
       grey_sufficientlyVisible(), nil);
   [[EarlGrey selectElementWithMatcher:languageMatcher]
       performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
-                                   @"Done")] performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kLanguagePickerDoneButtonId)]
+      performAction:grey_tap()];
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
                                    kPickedLanguage)]

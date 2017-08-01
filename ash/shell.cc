@@ -80,6 +80,7 @@
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/video_activity_notifier.h"
 #include "ash/system/screen_layout_observer.h"
+#include "ash/system/session/logout_button_tray.h"
 #include "ash/system/session/logout_confirmation_controller.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/toast/toast_manager.h"
@@ -327,8 +328,9 @@ bool Shell::ShouldUseIMEService() {
 }
 
 // static
-void Shell::RegisterPrefs(PrefRegistrySimple* registry) {
-  NightLightController::RegisterPrefs(registry);
+void Shell::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  LogoutButtonTray::RegisterProfilePrefs(registry);
+  NightLightController::RegisterProfilePrefs(registry);
 }
 
 views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
@@ -413,13 +415,6 @@ void Shell::UpdateShelfVisibility() {
     Shelf::ForWindow(root)->UpdateVisibilityState();
 }
 
-PrefService* Shell::GetActiveUserPrefService() const {
-  if (shell_port_->GetAshConfig() == Config::MASH)
-    return pref_service_.get();
-
-  return shell_delegate_->GetActiveUserPrefService();
-}
-
 PrefService* Shell::GetLocalStatePrefService() const {
   if (shell_port_->GetAshConfig() == Config::MASH)
     return local_state_.get();
@@ -493,8 +488,11 @@ void Shell::ShowAppList() {
                       .id());
 }
 
-void Shell::SetAppListYPosition(int y_position_in_screen) {
-  app_list_->SetYPosition(y_position_in_screen);
+void Shell::UpdateAppListYPositionAndOpacity(int y_position_in_screen,
+                                             float app_list_background_opacity,
+                                             bool is_end_gesture) {
+  app_list_->UpdateYPositionAndOpacity(
+      y_position_in_screen, app_list_background_opacity, is_end_gesture);
 }
 
 void Shell::DismissAppList() {
@@ -827,7 +825,7 @@ Shell::~Shell() {
   // NightLightController depeneds on the PrefService and must be destructed
   // before it. crbug.com/724231.
   night_light_controller_ = nullptr;
-  pref_service_ = nullptr;
+  profile_pref_service_ = nullptr;
   shell_delegate_.reset();
 
   for (auto& observer : shell_observers_)
@@ -840,23 +838,17 @@ Shell::~Shell() {
 void Shell::Init(const ShellInitParams& init_params) {
   const Config config = shell_port_->GetAshConfig();
 
-  if (NightLightController::IsFeatureEnabled()) {
-    night_light_controller_ =
-        base::MakeUnique<NightLightController>(session_controller_.get());
-  }
+  if (NightLightController::IsFeatureEnabled())
+    night_light_controller_ = base::MakeUnique<NightLightController>();
 
   wallpaper_delegate_ = shell_delegate_->CreateWallpaperDelegate();
 
-  // Can be null in tests.
+  // Connector can be null in tests.
   if (config == Config::MASH && shell_delegate_->GetShellConnector()) {
+    // Connect to local state prefs now, but wait for an active user before
+    // connecting to the profile pref service. The login screen has a temporary
+    // user profile that is not associated with a real user.
     auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
-    Shell::RegisterPrefs(pref_registry.get());
-    prefs::ConnectToPrefService(shell_delegate_->GetShellConnector(),
-                                std::move(pref_registry),
-                                base::Bind(&Shell::OnPrefServiceInitialized,
-                                           weak_factory_.GetWeakPtr()),
-                                prefs::mojom::kForwarderServiceName);
-    pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
     prefs::ConnectToPrefService(
         shell_delegate_->GetShellConnector(), std::move(pref_registry),
         base::Bind(&Shell::OnLocalStatePrefServiceInitialized,
@@ -1240,6 +1232,34 @@ void Shell::OnWindowActivated(
     root_window_for_new_windows_ = gained_active->GetRootWindow();
 }
 
+void Shell::OnActiveUserSessionChanged(const AccountId& account_id) {
+  if (GetAshConfig() == Config::MASH && shell_delegate_->GetShellConnector()) {
+    // Profile pref service is null while connecting after profile switch.
+    if (profile_pref_service_) {
+      for (auto& observer : shell_observers_)
+        observer.OnActiveUserPrefServiceChanged(nullptr);
+      // Reset after notification so clients can unregister pref observers on
+      // the old PrefService.
+      profile_pref_service_.reset();
+    }
+
+    auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
+    RegisterProfilePrefs(pref_registry.get());
+    prefs::ConnectToPrefService(
+        shell_delegate_->GetShellConnector(), pref_registry,
+        base::Bind(&Shell::OnProfilePrefServiceInitialized,
+                   weak_factory_.GetWeakPtr()),
+        prefs::mojom::kForwarderServiceName);
+    return;
+  }
+
+  // On classic ash user profile prefs are available immediately after login.
+  // The login screen temporary profile is never available.
+  PrefService* profile_prefs = shell_delegate_->GetActiveUserPrefService();
+  for (auto& observer : shell_observers_)
+    observer.OnActiveUserPrefServiceChanged(profile_prefs);
+}
+
 void Shell::OnSessionStateChanged(session_manager::SessionState state) {
   // Initialize the shelf when a session becomes active. It's safe to do this
   // multiple times (e.g. initial login vs. multiprofile add session).
@@ -1293,16 +1313,20 @@ void Shell::InitializeShelf() {
     root->InitializeShelf();
 }
 
-void Shell::OnPrefServiceInitialized(
+void Shell::OnProfilePrefServiceInitialized(
     std::unique_ptr<::PrefService> pref_service) {
-  // |pref_service_| is null if can't connect to Chrome (as happens when
+  // |pref_service| can be null if can't connect to Chrome (as happens when
   // running mash outside of chrome --mash and chrome isn't built).
-  pref_service_ = std::move(pref_service);
+  for (auto& observer : shell_observers_)
+    observer.OnActiveUserPrefServiceChanged(pref_service.get());
+  // Reset after notifying clients so they can unregister pref observers on the
+  // old PrefService.
+  profile_pref_service_ = std::move(pref_service);
 }
 
 void Shell::OnLocalStatePrefServiceInitialized(
     std::unique_ptr<::PrefService> pref_service) {
-  // |pref_service_| is null if can't connect to Chrome (as happens when
+  // |pref_service| is null if can't connect to Chrome (as happens when
   // running mash outside of chrome --mash and chrome isn't built).
   local_state_ = std::move(pref_service);
 }

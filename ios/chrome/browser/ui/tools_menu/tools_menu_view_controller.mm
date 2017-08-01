@@ -18,10 +18,10 @@
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
-#import "ios/chrome/browser/ui/constraints_ui_util.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notification_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
 #import "ios/chrome/browser/ui/tools_menu/reading_list_menu_view_item.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_model.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_item.h"
@@ -29,11 +29,11 @@
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
-#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/third_party/material_components_ios/src/components/Ink/src/MaterialInk.h"
 #include "ios/web/public/user_agent.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -197,7 +197,7 @@ NS_INLINE void AnimateInViews(NSArray* views,
 }
 
 - (void)setCanUseReaderMode:(BOOL)enabled {
-  [self setItemEnabled:enabled withTag:IDC_READER_MODE];
+  [self setItemEnabled:enabled withTag:TOOLS_READER_MODE];
 }
 
 - (void)setCanShowFindBar:(BOOL)enabled {

@@ -28,7 +28,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
-#include "content/common/accessibility_mode.h"
 #include "content/common/associated_interface_registry_impl.h"
 #include "content/common/download/mhtml_save_status.h"
 #include "content/common/features.h"
@@ -72,7 +71,7 @@
 #include "third_party/WebKit/public/platform/media_engagement.mojom.h"
 #include "third_party/WebKit/public/platform/site_engagement.mojom.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
+#include "third_party/WebKit/public/web/WebDocumentLoader.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebFrameLoadType.h"
 #include "third_party/WebKit/public/web/WebFrameSerializerClient.h"
@@ -81,6 +80,7 @@
 #include "third_party/WebKit/public/web/WebMeaningfulLayout.h"
 #include "third_party/WebKit/public/web/WebScriptExecutionCallback.h"
 #include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
+#include "ui/accessibility/ax_modes.h"
 #include "ui/gfx/range/range.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -295,9 +295,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void DidStopLoading() override;
   void DidChangeLoadProgress(double load_progress) override;
 
-  AccessibilityMode accessibility_mode() {
-    return accessibility_mode_;
-  }
+  ui::AXMode accessibility_mode() { return accessibility_mode_; }
 
   RenderAccessibilityImpl* render_accessibility() {
     return render_accessibility_;
@@ -564,9 +562,10 @@ class CONTENT_EXPORT RenderFrameImpl
       const NavigationPolicyInfo& info) override;
   void WillSendSubmitEvent(const blink::WebFormElement& form) override;
   void WillSubmitForm(const blink::WebFormElement& form) override;
-  void DidCreateDataSource(blink::WebLocalFrame* frame,
-                           blink::WebDataSource* datasource) override;
-  void DidStartProvisionalLoad(blink::WebDataSource* data_source,
+  void DidCreateDocumentLoader(
+      blink::WebLocalFrame* frame,
+      blink::WebDocumentLoader* document_loader) override;
+  void DidStartProvisionalLoad(blink::WebDocumentLoader* document_loader,
                                blink::WebURLRequest& request) override;
   void DidReceiveServerRedirectForProvisionalLoad() override;
   void DidFailProvisionalLoad(const blink::WebURLError& error,
@@ -692,7 +691,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // WebFrameSerializerClient implementation:
   void DidSerializeDataForFrame(
-      const blink::WebCString& data,
+      const blink::WebVector<char>& data,
       blink::WebFrameSerializerClient::FrameSerializationStatus status)
       override;
 
@@ -946,7 +945,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnReload(bool bypass_cache);
   void OnReloadLoFiImages();
   void OnTextSurroundingSelectionRequest(uint32_t max_length);
-  void OnSetAccessibilityMode(AccessibilityMode new_mode);
+  void OnSetAccessibilityMode(ui::AXMode new_mode);
   void OnSnapshotAccessibilityTree(int callback_id);
   void OnExtractSmartClipData(uint32_t callback_id, const gfx::Rect& rect);
   void OnUpdateOpener(int opener_routing_id);
@@ -1235,7 +1234,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Temporarily holds state pertaining to a navigation that has been initiated
   // until the NavigationState corresponding to the new navigation is created in
-  // didCreateDataSource().
+  // DidCreateDocumentLoader().
   std::unique_ptr<NavigationParams> pending_navigation_params_;
 
   // Keeps track of which future subframes the browser process has history items
@@ -1343,9 +1342,9 @@ class CONTENT_EXPORT RenderFrameImpl
   ManifestManager* manifest_manager_;
 
   // The current accessibility mode.
-  AccessibilityMode accessibility_mode_;
+  ui::AXMode accessibility_mode_;
 
-  // Only valid if |accessibility_mode_| has |AccessibilityMode::kWebContents|
+  // Only valid if |accessibility_mode_| has |ui::AXMode::kWebContents|
   // flag set.
   RenderAccessibilityImpl* render_accessibility_;
 

@@ -236,10 +236,6 @@
       status: "experimental",
     },
     {
-      name: "CSSContainment",
-      status: "stable",
-    },
-    {
       name: "CSSDisplayContents",
       status: "experimental",
     },
@@ -620,7 +616,7 @@
     },
     {
       name: "MediaCaptureFromVideo",
-      status: "experimental",
+      status: "stable",
     },
     // Set to reflect the MediaCastOverlayButton feature.
     {
@@ -993,7 +989,6 @@
     },
     {
       name: "SkipCompositingSmallScrollers",
-      status: "test",
     },
     {
       name: "SlimmingPaintStrictCullRectClipping",

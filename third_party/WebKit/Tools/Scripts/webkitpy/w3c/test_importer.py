@@ -97,9 +97,9 @@ class TestImporter(object):
 
         self.run(['git', 'add', '--all', 'external/wpt'])
 
-        self._delete_orphaned_baselines()
-
         self._generate_manifest()
+
+        self._delete_orphaned_baselines()
 
         # TODO(qyearsley): Consider running the imported tests with
         # `run-webkit-tests --reset-results external/wpt` to get some baselines
@@ -143,12 +143,6 @@ class TestImporter(object):
         """
         _log.info('Triggering try jobs for updating expectations.')
         self.git_cl.trigger_try_jobs()
-
-        # If we also trigger a CQ dry run at this point and there are no
-        # new baselines or expectation lines required, then this will save
-        # us from having to wait for the CQ later on.
-        self.git_cl.run(['try'])
-
         try_results = self.git_cl.wait_for_try_jobs(
             poll_delay_seconds=POLL_DELAY_SECONDS,
             timeout_seconds=TIMEOUT_SECONDS)
@@ -169,9 +163,6 @@ class TestImporter(object):
 
     def run_commit_queue_for_cl(self):
         """Triggers CQ and either commits or aborts; returns True on success."""
-        # If a CQ dry was was previously done and no new patch was uploaded
-        # for test expectations, it's still OK to run `git cl try` again; no
-        # new unnecessary try jobs should be started.
         _log.info('Triggering CQ try jobs.')
         self.git_cl.run(['try'])
         try_results = self.git_cl.wait_for_try_jobs(
@@ -318,17 +309,35 @@ class TestImporter(object):
 
     def _delete_orphaned_baselines(self):
         _log.info('Deleting any orphaned baselines.')
-        is_baseline_filter = lambda fs, dirname, basename: self.is_baseline(basename)
-        previous_baselines = self.fs.files_under(
-            self.dest_path, file_filter=is_baseline_filter)
-        for sub_path in previous_baselines:
-            full_baseline_path = self.fs.join(self.dest_path, sub_path)
-            if not self._has_corresponding_test(full_baseline_path):
-                self.fs.remove(full_baseline_path)
 
-    def _has_corresponding_test(self, full_baseline_path):
-        base = full_baseline_path.replace('-expected.txt', '')
-        return any(self.fs.exists(base + ext) for ext in Port.supported_file_extensions)
+        is_baseline_filter = lambda fs, dirname, basename: self.is_baseline(basename)
+
+        baselines = self.fs.files_under(self.dest_path, file_filter=is_baseline_filter)
+
+        # TODO(qyearsley): Factor out the manifest path to a common location.
+        # TODO(qyearsley): Factor out the manifest reading from here and Port
+        # to WPTManifest.
+        manifest_path = self.finder.path_from_layout_tests('external', 'wpt', 'MANIFEST.json')
+        manifest = WPTManifest(self.fs.read_text_file(manifest_path))
+        wpt_urls = manifest.all_urls()
+
+        # Currently baselines for tests with query strings are merged,
+        # so that the tests foo.html?r=1 and foo.html?r=2 both have the same
+        # baseline, foo-expected.txt.
+        # TODO(qyearsley): Remove this when this behavior is fixed.
+        wpt_urls = [url.split('?')[0] for url in wpt_urls]
+
+        wpt_dir = self.finder.path_from_layout_tests('external', 'wpt')
+        for full_path in baselines:
+            rel_path = self.fs.relpath(full_path, wpt_dir)
+            if not self._has_corresponding_test(rel_path, wpt_urls):
+                self.fs.remove(full_path)
+
+    def _has_corresponding_test(self, rel_path, wpt_urls):
+        # TODO(qyearsley): Ensure that this works with platform baselines and
+        # virtual baselines, and add unit tests.
+        base = '/' + rel_path.replace('-expected.txt', '')
+        return any((base + ext) in wpt_urls for ext in Port.supported_file_extensions)
 
     @staticmethod
     def is_baseline(basename):

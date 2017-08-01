@@ -39,6 +39,7 @@
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSFontFamilyValue.h"
 #include "core/css/CSSFontFeatureValue.h"
+#include "core/css/CSSFontStyleRangeValue.h"
 #include "core/css/CSSFontVariationValue.h"
 #include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSGridLineNamesValue.h"
@@ -756,14 +757,53 @@ static CSSPrimitiveValue* ValueForFontSize(const ComputedStyle& style) {
                                 style);
 }
 
-static CSSIdentifierValue* ValueForFontStretch(const ComputedStyle& style) {
-  return CSSIdentifierValue::Create(
-      FontSelectionValueStretch(style.GetFontDescription().Stretch()));
+static CSSPrimitiveValue* ValueForFontStretch(const ComputedStyle& style) {
+  return CSSPrimitiveValue::Create(style.GetFontDescription().Stretch(),
+                                   CSSPrimitiveValue::UnitType::kPercentage);
+}
+
+static CSSIdentifierValue* ValueForFontStretchAsKeyword(
+    const ComputedStyle& style) {
+  FontSelectionValue stretch_value = style.GetFontDescription().Stretch();
+  CSSValueID value_id = CSSValueInvalid;
+  if (stretch_value == UltraCondensedWidthValue())
+    value_id = CSSValueUltraCondensed;
+  if (stretch_value == UltraCondensedWidthValue())
+    value_id = CSSValueUltraCondensed;
+  if (stretch_value == ExtraCondensedWidthValue())
+    value_id = CSSValueExtraCondensed;
+  if (stretch_value == CondensedWidthValue())
+    value_id = CSSValueCondensed;
+  if (stretch_value == SemiCondensedWidthValue())
+    value_id = CSSValueSemiCondensed;
+  if (stretch_value == NormalWidthValue())
+    value_id = CSSValueNormal;
+  if (stretch_value == SemiExpandedWidthValue())
+    value_id = CSSValueSemiExpanded;
+  if (stretch_value == ExpandedWidthValue())
+    value_id = CSSValueExpanded;
+  if (stretch_value == ExtraExpandedWidthValue())
+    value_id = CSSValueExtraExpanded;
+  if (stretch_value == UltraExpandedWidthValue())
+    value_id = CSSValueUltraExpanded;
+
+  if (value_id != CSSValueInvalid)
+    return CSSIdentifierValue::Create(value_id);
+  return nullptr;
 }
 
 static CSSIdentifierValue* ValueForFontStyle(const ComputedStyle& style) {
-  return CSSIdentifierValue::Create(
-      FontSelectionValueStyle(style.GetFontDescription().Style()));
+  FontSelectionValue angle = style.GetFontDescription().Style();
+  if (angle == NormalSlopeValue()) {
+    return CSSIdentifierValue::Create(CSSValueNormal);
+  }
+
+  if (angle == ItalicSlopeValue()) {
+    return CSSIdentifierValue::Create(CSSValueItalic);
+  }
+
+  NOTREACHED();
+  return CSSIdentifierValue::Create(CSSValueNormal);
 }
 
 static CSSPrimitiveValue* ValueForFontWeight(const ComputedStyle& style) {
@@ -1978,6 +2018,9 @@ CSSValue* ComputedStyleCSSValueMapping::ValueForFont(
           static_cast<CSSValue*>(CSSIdentifierValue::Create(CSSValueNormal))))
     return nullptr;
 
+  if (!ValueForFontStretchAsKeyword(style))
+    return nullptr;
+
   CSSIdentifierValue* caps_value = ValueForFontVariantCaps(style);
   if (caps_value->GetValueID() != CSSValueNormal &&
       caps_value->GetValueID() != CSSValueSmallCaps)
@@ -1985,7 +2028,7 @@ CSSValue* ComputedStyleCSSValueMapping::ValueForFont(
   list->Append(*caps_value);
 
   list->Append(*ValueForFontWeight(style));
-  list->Append(*ValueForFontStretch(style));
+  list->Append(*ValueForFontStretchAsKeyword(style));
   list->Append(*size_and_line_height);
   list->Append(*ValueForFontFamily(style));
 

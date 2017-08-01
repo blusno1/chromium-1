@@ -276,8 +276,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   IntSize MaximumScrollOffsetInt() const override;
   IntRect VisibleContentRect(
       IncludeScrollbarsInRect = kExcludeScrollbars) const override;
-  int VisibleHeight() const override;
-  int VisibleWidth() const override;
   IntSize ContentsSize() const override;
   void ContentsResized() override;
   bool IsScrollable() const override;
@@ -296,6 +294,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   ScrollBehavior ScrollBehaviorStyle() const override;
   CompositorAnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
+  void GetTickmarks(Vector<IntRect>&) const override;
 
   // These are temporary convenience methods.  They delegate to Box() methods,
   // which will be up-to-date when UpdateAfterLayout runs.  By contrast,
@@ -413,9 +412,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // Rectangle encompassing the scroll corner and resizer rect.
   IntRect ScrollCornerAndResizerRect() const final;
 
-  enum LCDTextMode { kConsiderLCDText, kIgnoreLCDText };
-
-  void UpdateNeedsCompositedScrolling(LCDTextMode = kConsiderLCDText);
+  void UpdateNeedsCompositedScrolling(bool layer_has_been_composited = false);
   bool NeedsCompositedScrolling() const { return needs_composited_scrolling_; }
 
   // These are used during compositing updates to determine if the overflow
@@ -558,7 +555,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
     return *rare_data_.get();
   }
 
-  bool ComputeNeedsCompositedScrolling(const LCDTextMode, const PaintLayer*);
+  bool ComputeNeedsCompositedScrolling(const bool, const PaintLayer*);
   PaintLayer& layer_;
 
   PaintLayer* next_topmost_scroll_child_;

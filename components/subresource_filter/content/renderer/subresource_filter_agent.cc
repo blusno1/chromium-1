@@ -25,8 +25,8 @@
 #include "content/public/renderer/render_frame.h"
 #include "ipc/ipc_message.h"
 #include "third_party/WebKit/public/platform/WebWorkerFetchContext.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/WebKit/public/web/WebDocumentLoader.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "url/url_constants.h"
 
@@ -50,7 +50,7 @@ GURL SubresourceFilterAgent::GetDocumentURL() {
 void SubresourceFilterAgent::SetSubresourceFilterForCommittedLoad(
     std::unique_ptr<blink::WebDocumentSubresourceFilter> filter) {
   blink::WebLocalFrame* web_frame = render_frame()->GetWebFrame();
-  web_frame->DataSource()->SetSubresourceFilter(filter.release());
+  web_frame->GetDocumentLoader()->SetSubresourceFilter(filter.release());
 }
 
 void SubresourceFilterAgent::
@@ -80,15 +80,15 @@ ActivationState SubresourceFilterAgent::GetParentActivationState(
 }
 
 void SubresourceFilterAgent::OnActivateForNextCommittedLoad(
-    ActivationState activation_state) {
+    const ActivationState& activation_state) {
   activation_state_for_next_commit_ = activation_state;
 }
 
-void SubresourceFilterAgent::RecordHistogramsOnLoadCommitted() {
+void SubresourceFilterAgent::RecordHistogramsOnLoadCommitted(
+    const ActivationState& activation_state) {
   // Note: ActivationLevel used to be called ActivationState, the legacy name is
   // kept for the histogram.
-  ActivationLevel activation_level =
-      activation_state_for_next_commit_.activation_level;
+  ActivationLevel activation_level = activation_state.activation_level;
   UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.DocumentLoad.ActivationState",
                             static_cast<int>(activation_level),
                             static_cast<int>(ActivationLevel::LAST) + 1);
@@ -164,37 +164,36 @@ void SubresourceFilterAgent::DidCommitProvisionalLoad(
   const GURL& url = GetDocumentURL();
 
   bool use_parent_activation = ShouldUseParentActivation(url);
-  if (use_parent_activation) {
-    activation_state_for_next_commit_ =
-        GetParentActivationState(render_frame());
-  }
-
-  if (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsFile() ||
-      use_parent_activation) {
-    RecordHistogramsOnLoadCommitted();
-    if (activation_state_for_next_commit_.activation_level !=
-            ActivationLevel::DISABLED &&
-        ruleset_dealer_->IsRulesetFileAvailable()) {
-      base::OnceClosure first_disallowed_load_callback(
-          base::BindOnce(&SubresourceFilterAgent::
-                             SignalFirstSubresourceDisallowedForCommittedLoad,
-                         AsWeakPtr()));
-
-      auto ruleset = ruleset_dealer_->GetRuleset();
-      // TODO(csharrison): Replace with DCHECK when crbug.com/734102 is
-      // resolved.
-      CHECK(ruleset);
-      CHECK(ruleset->data());
-      auto filter = base::MakeUnique<WebDocumentSubresourceFilterImpl>(
-          url::Origin(url), activation_state_for_next_commit_,
-          std::move(ruleset), std::move(first_disallowed_load_callback));
-
-      filter_for_last_committed_load_ = filter->AsWeakPtr();
-      SetSubresourceFilterForCommittedLoad(std::move(filter));
-    }
-  }
-
+  const ActivationState activation_state =
+      use_parent_activation ? GetParentActivationState(render_frame())
+                            : activation_state_for_next_commit_;
   ResetActivatonStateForNextCommit();
+  if (!url.SchemeIsHTTPOrHTTPS() && !url.SchemeIsFile() &&
+      !use_parent_activation)
+    return;
+
+  RecordHistogramsOnLoadCommitted(activation_state);
+  if (activation_state.activation_level == ActivationLevel::DISABLED ||
+      !ruleset_dealer_->IsRulesetFileAvailable())
+    return;
+
+  scoped_refptr<const MemoryMappedRuleset> ruleset =
+      ruleset_dealer_->GetRuleset();
+  DCHECK(ruleset);
+  // Data can be null even if the original file is valid, if there is a
+  // memory mapping issue.
+  if (!ruleset->data())
+    return;
+
+  base::OnceClosure first_disallowed_load_callback(base::BindOnce(
+      &SubresourceFilterAgent::SignalFirstSubresourceDisallowedForCommittedLoad,
+      AsWeakPtr()));
+  auto filter = base::MakeUnique<WebDocumentSubresourceFilterImpl>(
+      url::Origin(url), activation_state, std::move(ruleset),
+      std::move(first_disallowed_load_callback));
+
+  filter_for_last_committed_load_ = filter->AsWeakPtr();
+  SetSubresourceFilterForCommittedLoad(std::move(filter));
 }
 
 void SubresourceFilterAgent::DidFailProvisionalLoad(

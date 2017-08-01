@@ -237,9 +237,14 @@ void DocumentThreadableLoader::Start(const ResourceRequest& request) {
                                                                  client_);
     ThreadableLoaderClient* client = client_;
     Clear();
-    client->DidFail(ResourceError(ResourceError::Domain::kBlinkInternal, 0,
-                                  request.Url(),
-                                  "Cross origin requests are not supported."));
+    ResourceError error = ResourceError::CancelledDueToAccessCheckError(
+        request.Url(), ResourceRequestBlockedReason::kOther,
+        "Cross origin requests are not supported.");
+    const String message = "Failed to load " + error.FailingURL() + ": " +
+                           error.LocalizedDescription();
+    loading_context_->GetExecutionContext()->AddConsoleMessage(
+        ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel, message));
+    client->DidFail(error);
     return;
   }
 
@@ -619,29 +624,30 @@ bool DocumentThreadableLoader::RedirectReceived(
         redirect_response, resource);
   }
 
-  String access_control_error_description;
-
   CrossOriginAccessControl::RedirectStatus redirect_status =
       CrossOriginAccessControl::CheckRedirectLocation(new_url);
-  bool allow_redirect =
-      redirect_status == CrossOriginAccessControl::kRedirectSuccess;
-  if (!allow_redirect) {
+  if (redirect_status != CrossOriginAccessControl::kRedirectSuccess) {
     StringBuilder builder;
     builder.Append("Redirect from '");
     builder.Append(original_url.GetString());
     builder.Append("' has been blocked by CORS policy: ");
     CrossOriginAccessControl::RedirectErrorString(builder, redirect_status,
                                                   new_url);
-    access_control_error_description = builder.ToString();
-  } else if (cors_flag_) {
+    DispatchDidFailAccessControlCheck(
+        ResourceError::CancelledDueToAccessCheckError(
+            original_url, ResourceRequestBlockedReason::kOther,
+            builder.ToString()));
+    return false;
+  }
+
+  if (cors_flag_) {
     // The redirect response must pass the access control check if the CORS
     // flag is set.
     CrossOriginAccessControl::AccessStatus cors_status =
         CrossOriginAccessControl::CheckAccess(
             redirect_response, new_request.GetFetchCredentialsMode(),
             GetSecurityOrigin());
-    allow_redirect = cors_status == CrossOriginAccessControl::kAccessAllowed;
-    if (!allow_redirect) {
+    if (cors_status != CrossOriginAccessControl::kAccessAllowed) {
       StringBuilder builder;
       builder.Append("Redirect from '");
       builder.Append(original_url.GetString());
@@ -651,16 +657,12 @@ bool DocumentThreadableLoader::RedirectReceived(
       CrossOriginAccessControl::AccessControlErrorString(
           builder, cors_status, redirect_response, GetSecurityOrigin(),
           request_context_);
-      access_control_error_description = builder.ToString();
+      DispatchDidFailAccessControlCheck(
+          ResourceError::CancelledDueToAccessCheckError(
+              original_url, ResourceRequestBlockedReason::kOther,
+              builder.ToString()));
+      return false;
     }
-  }
-
-  if (!allow_redirect) {
-    DispatchDidFailAccessControlCheck(
-        ResourceError::CancelledDueToAccessCheckError(
-            original_url, ResourceRequestBlockedReason::kOther,
-            access_control_error_description));
-    return false;
   }
 
   client_->DidReceiveRedirectTo(new_url);
@@ -1106,8 +1108,11 @@ void DocumentThreadableLoader::LoadRequestAsync(
     // notified and |client| is null.
     if (!client)
       return;
-    client->DidFail(ResourceError(ResourceError::Domain::kBlinkInternal, 0,
-                                  request.Url(), "Failed to start loading."));
+    String message =
+        String("Failed to start loading ") + request.Url().GetString();
+    loading_context_->GetExecutionContext()->AddConsoleMessage(
+        ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel, message));
+    client->DidFail(ResourceError::CancelledError(request.Url()));
     return;
   }
 

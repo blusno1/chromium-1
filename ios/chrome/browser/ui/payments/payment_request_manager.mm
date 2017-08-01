@@ -13,6 +13,7 @@
 #include "base/ios/block_types.h"
 #include "base/ios/ios_util.h"
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/memory/ptr_util.h"
@@ -37,6 +38,7 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/payments/ios_can_make_payment_query_factory.h"
 #include "ios/chrome/browser/payments/ios_payment_request_cache_factory.h"
+#include "ios/chrome/browser/payments/origin_security_checker.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_cache.h"
 #import "ios/chrome/browser/payments/payment_response_helper.h"
@@ -62,6 +64,7 @@
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 #include "third_party/libaddressinput/chromium/chrome_storage_impl.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -112,10 +115,6 @@ struct PendingPaymentResponse {
   // up).
   BOOL _activeWebStateEnabled;
 
-  // True when close has been called and the PaymentRequest coordinator has
-  // been destroyed.
-  BOOL _closed;
-
   // Coordinator used to create and present the PaymentRequest view controller.
   PaymentRequestCoordinator* _paymentRequestCoordinator;
 
@@ -147,10 +146,7 @@ struct PendingPaymentResponse {
 // The payments::PaymentRequest instance currently showing, if any.
 @property(nonatomic, assign) payments::PaymentRequest* pendingPaymentRequest;
 
-// Synchronous method executed by -asynchronouslyEnablePaymentRequest:
-- (void)doEnablePaymentRequest:(BOOL)enabled;
-
-// Terminates the pending request with an error message and dismisses the UI.
+// Terminates the pending request with |errorMessage| and dismisses the UI.
 // Invokes the callback once the request has been terminated.
 - (void)terminatePendingRequestWithErrorMessage:(NSString*)errorMessage
                                        callback:
@@ -253,20 +249,21 @@ struct PendingPaymentResponse {
 }
 
 - (void)setActiveWebState:(web::WebState*)webState {
-  // First cancel any pending request.
   [self cancelRequest];
-  [self disconnectActiveWebState];
-  if (webState) {
+  [self disableActiveWebState];
+
+  _paymentRequestJsManager = nil;
+  _activeWebStateObserver.reset();
+  _activeWebState = webState;
+  [self enableActiveWebState];
+
+  if (_activeWebState) {
     _paymentRequestJsManager =
         base::mac::ObjCCastStrict<JSPaymentRequestManager>(
-            [webState->GetJSInjectionReceiver()
+            [_activeWebState->GetJSInjectionReceiver()
                 instanceOfClass:[JSPaymentRequestManager class]]);
-    _activeWebState = webState;
     _activeWebStateObserver =
-        base::MakeUnique<web::WebStateObserverBridge>(webState, self);
-    [self enableActiveWebState];
-  } else {
-    _activeWebState = nullptr;
+        base::MakeUnique<web::WebStateObserverBridge>(_activeWebState, self);
   }
 }
 
@@ -278,22 +275,14 @@ struct PendingPaymentResponse {
 }
 
 - (void)enablePaymentRequest:(BOOL)enabled {
-  // Asynchronously enables PaymentRequest, so that some preferences
-  // (UIAccessibilityIsVoiceOverRunning(), for example) have time to synchronize
-  // with their own notifications.
-  __weak PaymentRequestManager* weakSelf = self;
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [weakSelf doEnablePaymentRequest:enabled];
-  });
-}
+  if (_enabled == enabled)
+    return;
 
-- (void)doEnablePaymentRequest:(BOOL)enabled {
-  BOOL changing = _enabled != enabled;
-  if (changing) {
-    if (!enabled) {
-      [self dismissUI];
-    }
-    _enabled = enabled;
+  _enabled = enabled;
+  if (!enabled) {
+    [self cancelRequest];
+    [self disableActiveWebState];
+  } else {
     [self enableActiveWebState];
   }
 }
@@ -318,35 +307,20 @@ struct PendingPaymentResponse {
 }
 
 - (void)close {
-  if (_closed)
-    return;
-
-  _closed = YES;
-  [self disableActiveWebState];
-  [self setActiveWebState:nil];
-  [self dismissUI];
+  [self setActiveWebState:nullptr];
 }
 
 - (void)enableActiveWebState {
-  if (!_activeWebState) {
-    return;
-  }
-
-  if (_enabled) {
-    if (!_activeWebStateEnabled) {
-      __weak PaymentRequestManager* weakSelf = self;
-      auto callback = base::BindBlockArc(
-          ^bool(const base::DictionaryValue& JSON, const GURL& originURL,
-                bool userIsInteracting) {
-            // |originURL| and |userIsInteracting| aren't used.
-            return [weakSelf handleScriptCommand:JSON];
-          });
-      _activeWebState->AddScriptCommandCallback(callback, kCommandPrefix);
-
-      _activeWebStateEnabled = YES;
-    }
-  } else {
-    [self disableActiveWebState];
+  if (_activeWebState && !_activeWebStateEnabled) {
+    __weak PaymentRequestManager* weakSelf = self;
+    auto callback = base::BindBlockArc(^bool(const base::DictionaryValue& JSON,
+                                             const GURL& originURL,
+                                             bool userIsInteracting) {
+      // |originURL| and |userIsInteracting| aren't used.
+      return [weakSelf handleScriptCommand:JSON];
+    });
+    _activeWebState->AddScriptCommandCallback(callback, kCommandPrefix);
+    _activeWebStateEnabled = YES;
   }
 }
 
@@ -354,14 +328,6 @@ struct PendingPaymentResponse {
   if (_activeWebState && _activeWebStateEnabled) {
     _activeWebState->RemoveScriptCommandCallback(kCommandPrefix);
     _activeWebStateEnabled = NO;
-  }
-}
-
-- (void)disconnectActiveWebState {
-  if (_activeWebState) {
-    _paymentRequestJsManager = nil;
-    _activeWebStateObserver.reset();
-    [self disableActiveWebState];
   }
 }
 
@@ -579,8 +545,10 @@ struct PendingPaymentResponse {
       IOSCanMakePaymentQueryFactory::GetInstance()->GetForBrowserState(
           _browserState);
   DCHECK(canMakePaymentQuery);
+  // iOS PaymentRequest does not support iframes.
   if (canMakePaymentQuery->CanQuery(
-          _activeWebState->GetLastCommittedURL().GetOrigin(),
+          url::Origin(_activeWebState->GetLastCommittedURL().GetOrigin()),
+          url::Origin(_activeWebState->GetLastCommittedURL().GetOrigin()),
           paymentRequest->stringified_method_data())) {
     [_paymentRequestJsManager
         resolveCanMakePaymentPromiseWithValue:canMakePayment
@@ -723,27 +691,31 @@ struct PendingPaymentResponse {
     return NO;
   }
 
-  // Checks if the current page is a web view with HTML and that the
-  // origin is localhost, file://, or cryptographic.
-  if (!web::IsOriginSecure(_activeWebState->GetLastCommittedURL()) ||
-      !_activeWebState->ContentIsHTML()) {
+  if (!_activeWebState->ContentIsHTML()) {
+    DLOG(ERROR) << "Not a web view with HTML.";
     return NO;
   }
 
-  if (!_activeWebState->GetLastCommittedURL().SchemeIsCryptographic()) {
-    // The URL has a secure origin, but is not https, so it must be local.
-    // Return YES at this point, because localhost and filesystem URLS are
-    // considered secure regardless of scheme.
-    return YES;
+  const GURL lastCommittedURL = _activeWebState->GetLastCommittedURL();
+
+  if (!payments::OriginSecurityChecker::IsOriginSecure(lastCommittedURL)) {
+    DLOG(ERROR) << "Not in a secure origin.";
+    return NO;
   }
 
-  // The following security level checks ensure that if the scheme is
-  // cryptographic then the SSL certificate is valid.
-  security_state::SecurityLevel securityLevel =
-      _toolbarModel->GetToolbarModel()->GetSecurityLevel(true);
-  return securityLevel == security_state::EV_SECURE ||
-         securityLevel == security_state::SECURE ||
-         securityLevel == security_state::SECURE_WITH_POLICY_INSTALLED_CERT;
+  if (!payments::OriginSecurityChecker::IsSchemeCryptographic(
+          lastCommittedURL) &&
+      !payments::OriginSecurityChecker::IsOriginLocalhostOrFile(
+          lastCommittedURL)) {
+    DLOG(ERROR) << "Not localhost, or with file or cryptographic scheme.";
+    return NO;
+  }
+
+  // If the scheme is cryptographic, the SSL certificate must also be valid.
+  return !payments::OriginSecurityChecker::IsSchemeCryptographic(
+             lastCommittedURL) ||
+         payments::OriginSecurityChecker::IsSSLCertificateValid(
+             _toolbarModel->GetToolbarModel()->GetSecurityLevel(true));
 }
 
 #pragma mark - PaymentRequestUIDelegate

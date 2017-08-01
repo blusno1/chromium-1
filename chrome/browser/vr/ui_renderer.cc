@@ -35,10 +35,8 @@ static constexpr float kReticleHeight = 0.025f;
 }  // namespace
 
 UiRenderer::UiRenderer(UiScene* scene,
-                       int content_texture_id,
                        VrShellRenderer* vr_shell_renderer)
     : scene_(scene),
-      content_texture_id_(content_texture_id),
       vr_shell_renderer_(vr_shell_renderer) {}
 
 UiRenderer::~UiRenderer() = default;
@@ -138,6 +136,8 @@ void UiRenderer::DrawElements(const gfx::Transform& view_proj_matrix,
   if (elements.empty()) {
     return;
   }
+  vr_shell_renderer_->set_surface_texture_size(
+      render_info.surface_texture_size);
   bool drawn_reticle = false;
   for (const auto* element : elements) {
     // If we have no element to draw the reticle on, draw it after the
@@ -149,7 +149,7 @@ void UiRenderer::DrawElements(const gfx::Transform& view_proj_matrix,
       drawn_reticle = true;
     }
 
-    DrawElement(view_proj_matrix, *element, render_info.content_texture_size);
+    DrawElement(view_proj_matrix, *element);
 
     if (draw_reticle && (controller_info.reticle_render_target == element)) {
       DrawReticle(view_proj_matrix, render_info, controller_info);
@@ -159,11 +159,9 @@ void UiRenderer::DrawElements(const gfx::Transform& view_proj_matrix,
 }
 
 void UiRenderer::DrawElement(const gfx::Transform& view_proj_matrix,
-                             const UiElement& element,
-                             const gfx::Size& content_texture_size) {
+                             const UiElement& element) {
   DCHECK_GE(element.draw_phase(), 0);
-  gfx::Transform transform =
-      view_proj_matrix * element.screen_space_transform();
+  gfx::Transform transform = view_proj_matrix * element.world_space_transform();
 
   switch (element.fill()) {
     case Fill::OPAQUE_GRADIENT: {
@@ -177,13 +175,6 @@ void UiRenderer::DrawElement(const gfx::Transform& view_proj_matrix,
           transform, element.edge_color(), element.center_color(),
           element.grid_color(), element.gridline_count(),
           element.computed_opacity());
-      break;
-    }
-    case Fill::CONTENT: {
-      vr_shell_renderer_->GetExternalTexturedQuadRenderer()->Draw(
-          content_texture_id_, transform, content_texture_size,
-          gfx::SizeF(element.size().width(), element.size().height()),
-          element.computed_opacity(), element.corner_radius());
       break;
     }
     case Fill::SELF: {
@@ -211,8 +202,8 @@ std::vector<const UiElement*> UiRenderer::GetElementsInDrawOrder(
               if (first->draw_phase() != second->draw_phase()) {
                 return first->draw_phase() < second->draw_phase();
               } else {
-                return first->screen_space_transform().matrix().get(2, 3) <
-                       second->screen_space_transform().matrix().get(2, 3);
+                return first->world_space_transform().matrix().get(2, 3) <
+                       second->world_space_transform().matrix().get(2, 3);
               }
             });
 

@@ -15,7 +15,6 @@
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace base {
-class ListValue;
 class TimeTicks;
 }  // namespace base
 
@@ -60,10 +59,6 @@ class UiScene {
   // frame lifecycle. After this function, no element should be dirtied.
   void PrepareToDraw();
 
-  // Handle a batch of commands passed from the UI HTML.
-  void HandleCommands(std::unique_ptr<base::ListValue> commands,
-                      const base::TimeTicks& current_time);
-
   const std::vector<std::unique_ptr<UiElement>>& GetUiElements() const;
 
   UiElement* GetUiElementById(int element_id) const;
@@ -94,14 +89,13 @@ class UiScene {
     first_foreground_draw_phase_ = phase;
   }
 
-  void OnGLInitialized();
+  void OnGlInitialized();
 
  private:
   void Animate(const base::TimeTicks& current_time);
   void ApplyRecursiveTransforms(UiElement* element);
 
   std::vector<std::unique_ptr<UiElement>> ui_elements_;
-  UiElement* content_element_ = nullptr;
   ColorScheme::Mode mode_ = ColorScheme::kModeNormal;
 
   float background_distance_ = 10.0f;

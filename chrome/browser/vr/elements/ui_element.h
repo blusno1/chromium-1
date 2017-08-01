@@ -48,19 +48,20 @@ enum YAnchoring {
   YBOTTOM,
 };
 
+// TODO(vollick): Make every UiElement draw itself (i.e., encapsulate rendering
+// logic in the elements). This will let us remove this enumeration and the
+// UiRender can then just iterate over elements and tell them to render
+// themselves in turn. NB: this includes the reticle and controller, which are
+// not yet represented as UiElements.
 enum Fill {
   NONE = 0,
-  // The element is filled with the content web site. Only one content element
-  // may be added to the
-  // scene.
-  CONTENT = 1,
   // The element is filled with a radial gradient as specified by the edge and
   // center color.
-  OPAQUE_GRADIENT = 2,
+  OPAQUE_GRADIENT = 1,
   // Same as OPAQUE_GRADIENT but the element is drawn as a grid.
-  GRID_GRADIENT = 3,
+  GRID_GRADIENT = 2,
   // The element draws itself.
-  SELF = 4,
+  SELF = 3,
 };
 
 class UiElement : public cc::AnimationTarget {
@@ -85,7 +86,7 @@ class UiElement : public cc::AnimationTarget {
   bool IsHitTestable() const;
 
   virtual void Render(UiElementRenderer* renderer,
-                      gfx::Transform view_proj_matrix) const;
+                      const gfx::Transform& view_proj_matrix) const;
 
   virtual void Initialize();
 
@@ -234,11 +235,11 @@ class UiElement : public cc::AnimationTarget {
   void SetMode(ColorScheme::Mode mode);
   ColorScheme::Mode mode() const { return mode_; }
 
-  const gfx::Transform& screen_space_transform() const {
-    return screen_space_transform_;
+  const gfx::Transform& world_space_transform() const {
+    return world_space_transform_;
   }
-  void set_screen_space_transform(const gfx::Transform& transform) {
-    screen_space_transform_ = transform;
+  void set_world_space_transform(const gfx::Transform& transform) {
+    world_space_transform_ = transform;
   }
 
   // Transformations are applied relative to the parent element, rather than
@@ -368,9 +369,9 @@ class UiElement : public cc::AnimationTarget {
   // This is set by the parent and is combined into LocalTransform()
   cc::TransformOperations layout_offset_;
 
-  // This is the combined, local to screen transform. It includes
+  // This is the combined, local to world transform. It includes
   // |inheritable_transform_|, |transform_|, and anchoring adjustments.
-  gfx::Transform screen_space_transform_;
+  gfx::Transform world_space_transform_;
 
   ColorScheme::Mode mode_ = ColorScheme::kModeNormal;
 

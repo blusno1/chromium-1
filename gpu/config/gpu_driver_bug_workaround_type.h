@@ -73,8 +73,6 @@
          disable_gl_rgb_format)                              \
   GPU_OP(DISABLE_LARGER_THAN_SCREEN_OVERLAYS,                \
          disable_larger_than_screen_overlays)                \
-  GPU_OP(DISABLE_MULTIMONITOR_MULTISAMPLING,                 \
-         disable_multimonitor_multisampling)                 \
   GPU_OP(DISABLE_NON_EMPTY_POST_SUB_BUFFERS_FOR_ONSCREEN_SURFACES, \
          disable_non_empty_post_sub_buffers_for_onscreen_surfaces) \
   GPU_OP(DISABLE_NV12_DXGI_VIDEO,                            \
@@ -103,6 +101,8 @@
          disable_webgl_rgb_multisampling_usage)              \
   GPU_OP(DISALLOW_LARGE_INSTANCED_DRAW,                      \
          disallow_large_instanced_draw)                      \
+  GPU_OP(DONT_DISABLE_WEBGL_WHEN_COMPOSITOR_CONTEXT_LOST,    \
+         dont_disable_webgl_when_compositor_context_lost)    \
   GPU_OP(DONT_REMOVE_INVARIANT_FOR_FRAGMENT_INPUT,           \
          dont_remove_invariant_for_fragment_input)           \
   GPU_OP(ETC1_POWER_OF_TWO_ONLY,                             \

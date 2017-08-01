@@ -6,6 +6,7 @@
 
 #include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
 #include "chrome/common/url_constants.h"
@@ -15,15 +16,20 @@
 #include "net/base/escape.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "url/third_party/mozilla/url_parse.h"
 
 namespace {
 
+// URL parameter specifying frame index.
+const char kFrameIndex[] = "frame";
+
 // Parses the user image URL, which looks like
 // "chrome://userimage/serialized-user-id?key1=value1&...&key_n=value_n",
-// to user email.
-void ParseRequest(const GURL& url, std::string* email) {
+// to user email and frame.
+void ParseRequest(const GURL& url, std::string* email, int* frame) {
   DCHECK(url.is_valid());
   const std::string serialized_account_id = net::UnescapeURLComponent(
       url.path().substr(1),
@@ -40,36 +46,81 @@ void ParseRequest(const GURL& url, std::string* email) {
         serialized_account_id, std::string() /* id */, AccountType::UNKNOWN);
   }
   *email = account_id.GetUserEmail();
+  *frame = -1;
+  base::StringPairs parameters;
+  base::SplitStringIntoKeyValuePairs(url.query(), '=', '&', &parameters);
+  for (base::StringPairs::const_iterator iter = parameters.begin();
+       iter != parameters.end(); ++iter) {
+    if (iter->first == kFrameIndex) {
+      unsigned value = 0;
+      if (!base::StringToUint(iter->second, &value)) {
+        LOG(WARNING) << "Invalid frame format: " << iter->second;
+        continue;
+      }
+      *frame = static_cast<int>(value);
+      break;
+    }
+  }
+}
+
+scoped_refptr<base::RefCountedMemory> LoadUserImageFrameForScaleFactor(
+    int resource_id,
+    int frame,
+    ui::ScaleFactor scale_factor) {
+  // Load all frames.
+  if (frame == -1) {
+    return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
+        resource_id, scale_factor);
+  }
+  // TODO(reveman): Add support frames beyond 0 (crbug.com/750064).
+  if (frame) {
+    NOTIMPLEMENTED() << "Unsupported frame: " << frame;
+    return nullptr;
+  }
+  gfx::ImageSkia* image =
+      ResourceBundle::GetSharedInstance().GetImageSkiaNamed(resource_id);
+  float scale = ui::GetScaleForScaleFactor(scale_factor);
+  scoped_refptr<base::RefCountedBytes> data(new base::RefCountedBytes);
+  gfx::PNGCodec::EncodeBGRASkBitmap(image->GetRepresentation(scale).sk_bitmap(),
+                                    false /* discard transparency */,
+                                    &data->data());
+  return data;
 }
 
 scoped_refptr<base::RefCountedMemory> GetUserImageInternal(
-    const AccountId& account_id) {
+    const AccountId& account_id,
+    int frame) {
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(account_id);
 
-  // Always use the 100% scaling. These source images are 256x256, and are
-  // downscaled to ~64x64 for use in WebUI pages. Therefore, they are big enough
-  // for device scale factors up to 4. We do not use SCALE_FACTOR_NONE, as we
-  // specifically want 100% scale images to not transmit more data than needed.
+  ui::ScaleFactor scale_factor = ui::SCALE_FACTOR_100P;
+  // Use the scaling that matches primary display. These source images are
+  // 96x96 and often used at that size in WebUI pages.
+  display::Screen* screen = display::Screen::GetScreen();
+  if (screen) {
+    scale_factor = ui::GetSupportedScaleFactor(
+        screen->GetPrimaryDisplay().device_scale_factor());
+  }
+
   if (user) {
     if (user->has_image_bytes())
       return user->image_bytes();
     if (user->image_is_stub()) {
-      return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
-          IDR_LOGIN_DEFAULT_USER, ui::SCALE_FACTOR_100P);
+      return LoadUserImageFrameForScaleFactor(IDR_LOGIN_DEFAULT_USER, frame,
+                                              scale_factor);
     }
     if (user->HasDefaultImage()) {
-      return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
+      return LoadUserImageFrameForScaleFactor(
           chromeos::default_user_image::kDefaultImageResourceIDs
               [user->image_index()],
-          ui::SCALE_FACTOR_100P);
+          frame, scale_factor);
     }
     NOTREACHED() << "User with custom image missing data bytes";
   } else {
     LOG(ERROR) << "User not found: " << account_id.GetUserEmail();
   }
-  return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
-      IDR_LOGIN_DEFAULT_USER, ui::SCALE_FACTOR_100P);
+  return LoadUserImageFrameForScaleFactor(IDR_LOGIN_DEFAULT_USER, frame,
+                                          scale_factor);
 }
 
 }  // namespace
@@ -79,7 +130,7 @@ namespace chromeos {
 // Static.
 scoped_refptr<base::RefCountedMemory> UserImageSource::GetUserImage(
     const AccountId& account_id) {
-  return GetUserImageInternal(account_id);
+  return GetUserImageInternal(account_id, -1);
 }
 
 UserImageSource::UserImageSource() {}
@@ -95,10 +146,11 @@ void UserImageSource::StartDataRequest(
     const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   std::string email;
+  int frame = -1;
   GURL url(chrome::kChromeUIUserImageURL + path);
-  ParseRequest(url, &email);
+  ParseRequest(url, &email, &frame);
   const AccountId account_id(AccountId::FromUserEmail(email));
-  callback.Run(GetUserImageInternal(account_id));
+  callback.Run(GetUserImageInternal(account_id, frame));
 }
 
 std::string UserImageSource::GetMimeType(const std::string& path) const {

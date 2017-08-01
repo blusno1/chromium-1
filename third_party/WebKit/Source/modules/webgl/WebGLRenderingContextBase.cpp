@@ -743,7 +743,7 @@ ScriptPromise WebGLRenderingContextBase::commit(
       script_state, exception_state);
 }
 
-PassRefPtr<StaticBitmapImage> WebGLRenderingContextBase::GetImage(
+RefPtr<StaticBitmapImage> WebGLRenderingContextBase::GetImage(
     AccelerationHint hint,
     SnapshotReason reason) const {
   if (!GetDrawingBuffer())
@@ -1285,8 +1285,8 @@ void WebGLRenderingContextBase::DestroyContext() {
 
   extensions_util_.reset();
 
-  std::unique_ptr<WTF::Closure> null_closure;
-  std::unique_ptr<WTF::Function<void(const char*, int32_t)>> null_function;
+  WTF::Closure null_closure;
+  WTF::Function<void(const char*, int32_t)> null_function;
   GetDrawingBuffer()->ContextProvider()->SetLostContextCallback(
       ConvertToBaseCallback(std::move(null_closure)));
   GetDrawingBuffer()->ContextProvider()->SetErrorMessageCallback(
@@ -5160,13 +5160,18 @@ void WebGLRenderingContextBase::texImage2D(ExecutionContext* execution_context,
 
 PassRefPtr<Image> WebGLRenderingContextBase::VideoFrameToImage(
     HTMLVideoElement* video) {
-  IntSize size(video->videoWidth(), video->videoHeight());
-  ImageBuffer* buf = generated_image_cache_.GetImageBuffer(size);
+  const IntSize& visible_size = video->videoVisibleSize();
+  if (visible_size.IsEmpty()) {
+    SynthesizeGLError(GL_INVALID_VALUE, "tex(Sub)Image2D",
+                      "video visible size is empty");
+    return nullptr;
+  }
+  ImageBuffer* buf = generated_image_cache_.GetImageBuffer(visible_size);
   if (!buf) {
     SynthesizeGLError(GL_OUT_OF_MEMORY, "texImage2D", "out of memory");
     return nullptr;
   }
-  IntRect dest_rect(0, 0, size.Width(), size.Height());
+  IntRect dest_rect(0, 0, visible_size.Width(), visible_size.Height());
   video->PaintCurrentFrame(buf->Canvas(), dest_rect, nullptr);
   return buf->NewImageSnapshot();
 }

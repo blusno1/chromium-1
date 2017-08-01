@@ -120,7 +120,6 @@
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -161,8 +160,8 @@
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
-#include "chrome/renderer/printing/chrome_print_web_view_helper_delegate.h"
-#include "components/printing/renderer/print_web_view_helper.h"
+#include "chrome/renderer/printing/chrome_print_render_frame_helper_delegate.h"
+#include "components/printing/renderer/print_render_frame_helper.h"
 #include "printing/print_settings.h"
 #endif
 
@@ -191,7 +190,6 @@ using base::UserMetricsAction;
 using blink::WebCache;
 using blink::WebCachePolicy;
 using blink::WebConsoleMessage;
-using blink::WebDataSource;
 using blink::WebDocument;
 using blink::WebFrame;
 using blink::WebLocalFrame;
@@ -550,8 +548,8 @@ void ChromeContentRendererClient::RenderFrameCreated(
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
-  new printing::PrintWebViewHelper(
-      render_frame, base::MakeUnique<ChromePrintWebViewHelperDelegate>());
+  new printing::PrintRenderFrameHelper(
+      render_frame, base::MakeUnique<ChromePrintRenderFrameHelperDelegate>());
 #endif
 
 #if defined(OS_ANDROID)
@@ -1158,8 +1156,7 @@ bool ChromeContentRendererClient::RunIdleHandlerWhenWidgetsHidden() {
 #endif
 }
 
-bool ChromeContentRendererClient::
-    AllowTimerSuspensionWhenProcessBackgrounded() {
+bool ChromeContentRendererClient::AllowStoppingTimersWhenProcessBackgrounded() {
 #if defined(OS_ANDROID)
   return true;
 #else

@@ -328,6 +328,13 @@ const char kEnableIdleTimeSpellCheckingDescription[] =
     "Make spell-checking code run only when the browser is idle, so that input "
     "latency is reduced, especially when editing long articles, emails, etc.";
 
+const char kEnableManualFallbacksFillingName[] =
+    "Manual fallbacks for password manager forms filling";
+const char kEnableManualFallbacksFillingDescription[] =
+    "If enabled, then if user clicks on the password field on a form, popup "
+    "might contain generation fallbacks or 'Show all saved passwords' "
+    "fallback.";
+
 const char kEnableMaterialDesignBookmarksName[] =
     "Enable Material Design bookmarks";
 const char kEnableMaterialDesignBookmarksDescription[] =
@@ -969,6 +976,10 @@ const char kProtectSyncCredentialOnReauthDescription[] =
     "How the password manager handles autofill for the sync credential only "
     "for transactional reauth pages.";
 
+const char kPullToRefreshName[] = "Pull-to-refresh gesture";
+const char kPullToRefreshDescription[] =
+    "Pull-to-refresh gesture in response to vertical overscroll.";
+
 const char kPushApiBackgroundModeName[] = "Enable Push API background mode";
 const char kPushApiBackgroundModeDescription[] =
     "Enable background mode for the Push API. This allows Chrome to continue "
@@ -1019,10 +1030,6 @@ const char kSavePageAsMhtmlName[] = "Save Page as MHTML";
 const char kSavePageAsMhtmlDescription[] =
     "Enables saving pages as MHTML: a single text file containing HTML and all "
     "sub-resources.";
-
-const char kScrollEndEffectName[] = "Scroll end effect";
-const char kScrollEndEffectDescription[] =
-    "Experimental scroll end effect in response to vertical overscroll.";
 
 const char kScrollPredictionName[] = "Scroll prediction";
 const char kScrollPredictionDescription[] =

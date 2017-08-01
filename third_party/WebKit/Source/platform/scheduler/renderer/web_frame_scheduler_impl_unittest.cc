@@ -89,9 +89,8 @@ class MockThrottlingObserver : public WebFrameScheduler::Observer {
 
 void RunRepeatingTask(RefPtr<WebTaskRunner> task_runner, int* run_count);
 
-std::unique_ptr<WTF::Closure> MakeRepeatingTask(
-    RefPtr<blink::WebTaskRunner> task_runner,
-    int* run_count) {
+WTF::Closure MakeRepeatingTask(RefPtr<blink::WebTaskRunner> task_runner,
+                               int* run_count) {
   return WTF::Bind(&RunRepeatingTask, WTF::Passed(std::move(task_runner)),
                    WTF::Unretained(run_count));
 }
@@ -212,7 +211,7 @@ TEST_F(WebFrameSchedulerImplTest,
   EXPECT_EQ(1000, run_count);
 }
 
-TEST_F(WebFrameSchedulerImplTest, SuspendAndResume) {
+TEST_F(WebFrameSchedulerImplTest, PauseAndResume) {
   int counter = 0;
   web_frame_scheduler_->LoadingTaskRunner()->PostTask(
       BLINK_FROM_HERE, WTF::Bind(&IncrementCounter, WTF::Unretained(&counter)));
@@ -225,13 +224,13 @@ TEST_F(WebFrameSchedulerImplTest, SuspendAndResume) {
   web_frame_scheduler_->UnthrottledButBlockableTaskRunner()->PostTask(
       BLINK_FROM_HERE, WTF::Bind(&IncrementCounter, WTF::Unretained(&counter)));
 
-  web_frame_scheduler_->SetSuspended(true);
+  web_frame_scheduler_->SetPaused(true);
 
   EXPECT_EQ(0, counter);
   mock_task_runner_->RunUntilIdle();
   EXPECT_EQ(2, counter);
 
-  web_frame_scheduler_->SetSuspended(false);
+  web_frame_scheduler_->SetPaused(false);
 
   EXPECT_EQ(2, counter);
   mock_task_runner_->RunUntilIdle();

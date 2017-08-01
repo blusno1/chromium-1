@@ -5,9 +5,8 @@ include_rules = [
   "+gpu/ipc",
   "+gpu/ipc/common",
   "+gpu/ipc/service",
-  "+media/gpu",
-  "+media/mojo/services",
   "-services/ui/common",
+  "+services/viz/gl/privileged/interfaces",
 ]
 
 specific_include_rules = {

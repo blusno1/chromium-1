@@ -9,6 +9,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -29,7 +30,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
-#include "components/mime_util/mime_util.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
@@ -43,11 +43,17 @@
 #include "content/public/common/webplugininfo.h"
 #include "ipc/ipc_message.h"
 #include "net/base/filename_util.h"
+#include "third_party/WebKit/common/mime_util/mime_util.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 #include "url/origin.h"
+
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
+#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
+#endif
 
 using base::UserMetricsAction;
 using content::WebContents;
@@ -357,6 +363,11 @@ bool BrowserTabStripController::IsCompatibleWith(TabStrip* other) const {
 }
 
 void BrowserTabStripController::CreateNewTab() {
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+  feature_engagement::NewTabTrackerFactory::GetInstance()
+      ->GetForProfile(browser_view_->browser()->profile())
+      ->OnNewTabOpened();
+#endif
   model_->delegate()->AddTabAt(GURL(), -1, true);
 }
 
@@ -575,7 +586,7 @@ void BrowserTabStripController::OnFindURLMimeTypeCompleted(
   content::WebPluginInfo plugin;
   tabstrip_->FileSupported(
       url,
-      mime_type.empty() || mime_util::IsSupportedMimeType(mime_type) ||
+      mime_type.empty() || blink::IsSupportedMimeType(mime_type) ||
           content::PluginService::GetInstance()->GetPluginInfo(
               -1,                // process ID
               MSG_ROUTING_NONE,  // routing ID

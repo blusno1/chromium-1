@@ -20,6 +20,9 @@
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/rappor/public/rappor_parameters.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/subresource_filter/content/browser/content_ruleset_service.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
@@ -54,7 +57,7 @@ scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> GetDatabaseManager() {
 
 ChromeSubresourceFilterClient::ChromeSubresourceFilterClient(
     content::WebContents* web_contents)
-    : web_contents_(web_contents), did_show_ui_for_navigation_(false) {
+    : web_contents_(web_contents) {
   DCHECK(web_contents);
   SubresourceFilterProfileContext* context =
       SubresourceFilterProfileContextFactory::GetForProfile(
@@ -104,6 +107,12 @@ void ChromeSubresourceFilterClient::OnReloadRequested() {
 
 void ChromeSubresourceFilterClient::ToggleNotificationVisibility(
     bool visibility) {
+  // Do not show the UI if we're forcing activation due to a devtools toggle.
+  // This complicates the meaning of our persistent storage (e.g. our metadata
+  // that assumes showing UI implies site is blacklisted).
+  if (activated_via_devtools_)
+    return;
+
   if (did_show_ui_for_navigation_ && visibility)
     return;
   did_show_ui_for_navigation_ = false;
@@ -125,6 +134,13 @@ void ChromeSubresourceFilterClient::ToggleNotificationVisibility(
     content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_ADS);
 
     LogAction(kActionUIShown);
+
+    if (rappor::RapporService* rappor_service =
+            g_browser_process->rappor_service()) {
+      rappor_service->RecordSampleString(
+          "SubresourceFilter.UIShown", rappor::UMA_RAPPOR_TYPE,
+          rappor::GetDomainAndRegistrySampleFromGURL(top_level_url));
+    }
     did_show_ui_for_navigation_ = true;
     settings_manager_->OnDidShowUI(top_level_url);
   } else {
@@ -138,10 +154,16 @@ bool ChromeSubresourceFilterClient::OnPageActivationComputed(
   const GURL& url(navigation_handle->GetURL());
   DCHECK(navigation_handle->IsInMainFrame());
 
-  if (url.SchemeIsHTTPOrHTTPS())
-    settings_manager_->ResetSiteMetadataBasedOnActivation(url, activated);
+  if (url.SchemeIsHTTPOrHTTPS()) {
+    // With respect to persistent metadata, do not consider the site activated
+    // if it is forced via devtools.
+    settings_manager_->ResetSiteMetadataBasedOnActivation(
+        url, activated && !activated_via_devtools_);
+  }
 
   // Return whether the activation should be whitelisted.
+  // Note: Could consider skipping this if forcing activation, but it isn't
+  // critical.
   return whitelisted_hosts_.count(url.host()) ||
          settings_manager_->GetSitePermission(url) == CONTENT_SETTING_ALLOW;
   // TODO(csharrison): Consider setting the metadata to an empty dict here if
@@ -154,10 +176,21 @@ void ChromeSubresourceFilterClient::WhitelistByContentSettings(
   settings_manager_->WhitelistSite(top_level_url);
 }
 
+bool ChromeSubresourceFilterClient::ForceActivationInCurrentWebContents() {
+  return activated_via_devtools_;
+}
+
 void ChromeSubresourceFilterClient::WhitelistInCurrentWebContents(
     const GURL& url) {
   if (url.SchemeIsHTTPOrHTTPS())
     whitelisted_hosts_.insert(url.host());
+}
+
+void ChromeSubresourceFilterClient::ToggleForceActivationInCurrentWebContents(
+    bool force_activation) {
+  if (!activated_via_devtools_ && force_activation)
+    LogAction(kActionForcedActivationEnabled);
+  activated_via_devtools_ = force_activation;
 }
 
 // static

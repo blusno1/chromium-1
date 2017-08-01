@@ -667,7 +667,7 @@ crbug.com/520188 [ Win ] virtual/mojo-loading/http/tests/local/fileapi/file-last
 crbug.com/520611 [ Debug ] fast/filesystem/workers/file-writer-events-shared-worker.html [ Failure Pass ]
 crbug.com/520194 http/tests/xmlhttprequest/timeout/xmlhttprequest-timeout-worker-overridesexpires.html [ Failure Pass ]
 
-crbug.com/749251 [ Mac10.11 ] http/tests/inspector/application-panel/resources-panel-websql.html [ Failure Pass ]
+crbug.com/749251 [ Mac10.9 Mac10.11 ] http/tests/inspector/application-panel/resources-panel-websql.html [ Failure Pass ]
 
 crbug.com/233303 [ Win7 Debug ] inspector/sources/debugger-breakpoints/dom-breakpoints.html [ Pass Failure Timeout ]
 
@@ -681,7 +681,7 @@ crbug.com/410974 fast/scroll-behavior/scroll-customization/touch-scroll-customiz
 crbug.com/707865 fast/scroll-behavior/wheel-and-touch-scroll-use-count.html [ Skip ]
 
 # These tests will pass once the --enable-features=TouchpadAndWheelScrollLatching flag is enabled by default.
-crbug.com/526463 fast/events/wheel/mouse-wheel-scroll-latching.html [ Failure Pass ]
+crbug.com/526463 fast/events/wheel/mouse-wheel-scroll-latching.html [ Failure ]
 crbug.com/526463 fast/events/wheel/wheel-scroll-latching-on-scrollbar.html [ Failure Timeout ]
 crbug.com/526463 fast/events/wheel/mainthread-touchpad-fling-latching.html [ Failure Timeout ]
 
@@ -698,9 +698,6 @@ crbug.com/518989 [ Mac ] external/wpt/css/css-writing-modes-3/writing-mode-verti
 
 # These performance-sensitive user-timing tests are flaky in debug on all platforms, and flaky on all configurations of windows.
 # See: crbug.com/567965, crbug.com/518992, and crbug.com/518993
-
-crbug.com/636053 [ Mac Win ] printing/thead-repeats-at-top-of-each-page-multiple-tables.html [ NeedsManualRebaseline ]
-crbug.com/636053 [ Mac Win ] virtual/threaded/printing/thead-repeats-at-top-of-each-page-multiple-tables.html [ NeedsManualRebaseline ]
 
 crbug.com/432129 html/marquee/marquee-scroll.html [ Failure Pass ]
 crbug.com/326139 crbug.com/390125 media/video-frame-accurate-seek.html [ Failure Pass ]
@@ -783,6 +780,9 @@ crbug.com/699347 virtual/mojo-loading/http/tests/security/setDomainRelaxationFor
 # expectation files. The following tests with [ Failure ] don't have failure
 # expectation files because they contain local path names.
 # Use crbug.com/490511 for untriaged failures.
+crbug.com/749492 external/wpt/html/browsers/browsing-the-web/navigating-across-documents/008.html [ Skip ]
+crbug.com/749492 external/wpt/html/browsers/browsing-the-web/navigating-across-documents/009.html [ Skip ]
+crbug.com/749492 external/wpt/html/browsers/browsing-the-web/navigating-across-documents/010.html [ Skip ]
 crbug.com/490511 external/wpt/html/browsers/offline/application-cache-api/api_update.html [ Failure Pass ]
 crbug.com/490511 [ Linux Win ] external/wpt/html/rendering/bindings/the-input-element-as-a-text-entry-widget/unrecognized-type-should-fallback-as-text-type.html [ Failure ]
 crbug.com/108417 external/wpt/html/rendering/non-replaced-elements/tables/table-border-1.html [ Failure ]
@@ -1180,7 +1180,8 @@ crbug.com/528062 [ Win ] virtual/mojo-loading/http/tests/security/xssAuditor/chu
 
 crbug.com/392706 virtual/threaded/animations/play-state-initially-paused.html [ Failure ]
 
-crbug.com/743009 [ Win ] virtual/threaded/animations/responsive/zoom-responsive-transform-animation.html [ Pass Timeout ]
+# Added Linux in crbug.com/750549
+crbug.com/743009 [ Linux Win ] virtual/threaded/animations/responsive/zoom-responsive-transform-animation.html [ Pass Timeout ]
 
 # Part of a larger issue referenced in the bug. This specific issue will be fixed shortly.
 crbug.com/408159 accessibility/is-ignored-change-sends-notification.html [ Timeout ]
@@ -1193,9 +1194,6 @@ crbug.com/504706 [ Linux ] inspector/profiler/heap-snapshot-containment-sorting.
 # This means that CoreGraphics may draw outside the reported glyph bounds, and in this case does.
 # By about a quarter or less of a pixel.
 crbug.com/421412 [ Mac ] fast/text/international/bdo-bidi-width.html [ Failure ]
-
-crbug.com/417782 virtual/rootlayerscrolls/fast/scrolling/scrollbar-tickmarks-styled.html [ Failure ]
-crbug.com/417782 virtual/rootlayerscrolls/fast/scrolling/scrollbar-tickmarks-styled-after-onload.html [ Failure ]
 
 crbug.com/574283 [ Mac ] fast/scroll-behavior/smooth-scroll/ongoing-smooth-scroll-anchors.html [ Skip ]
 crbug.com/574283 [ Mac ] virtual/scroll_customization/fast/scroll-behavior/smooth-scroll/ongoing-smooth-scroll-anchors.html [ Skip ]
@@ -2730,9 +2728,7 @@ crbug.com/745345 virtual/mojo-loading/http/tests/inspector-protocol/network/disa
 
 crbug.com/657748 external/wpt/css/css-display-3/display-contents-before-after-002.html [ Failure ]
 crbug.com/657748 external/wpt/css/css-display-3/display-contents-dynamic-flex-002-inline.html [ Failure ]
-crbug.com/657748 external/wpt/css/css-display-3/display-contents-dynamic-flex-002-none.html [ Failure ]
 crbug.com/657748 external/wpt/css/css-display-3/display-contents-dynamic-table-001-inline.html [ Failure ]
-crbug.com/657748 external/wpt/css/css-display-3/display-contents-flex-002.html [ Failure ]
 
 # ====== End of display: contents tests ======
 
@@ -2830,9 +2826,6 @@ crbug.com/708499 crbug.com/724817 fast/compositor-wheel-scroll-latching/touchpad
 crbug.com/708499 crbug.com/724817 virtual/wheelscrolllatching/fast/compositor-wheel-scroll-latching/touchpad-scroll-impl-to-main.html [ Pass Timeout Crash ]
 
 crbug.com/706091 virtual/wheelscrolllatching/fast/events/wheel/wheel-scroll-latching-on-scrollbar.html [ Failure Pass ]
-
-# Sheriff failures 2017-04-24
-crbug.com/714862 [ Android ] tables/mozilla/collapsing_borders/bug41262-3.html [ Failure ]
 
 # Sheriff failure 2017-05-05
 crbug.com/703533 [ Mac ] shapedetection/detection-security-test.html  [ Crash Pass Timeout ]
@@ -3055,9 +3048,6 @@ crbug.com/745776 virtual/gpu/fast/canvas/canvas-text-alignment.html [ NeedsManua
 crbug.com/745776 virtual/gpu/fast/canvas/fillrect_gradient.html [ NeedsManualRebaseline ]
 crbug.com/745776 virtual/gpu/fast/canvas/gradient-add-second-start-end-stop.html [ NeedsManualRebaseline ]
 
-crbug.com/702845 http/tests/preload/memcache_reuse_of_non_cacheable_preload.html [ Failure ]
-crbug.com/702845 virtual/mojo-loading/http/tests/preload/memcache_reuse_of_non_cacheable_preload.html [ Failure ]
-
 # Sheriff failures 2017-07-03
 crbug.com/708994 http/tests/security/cross-frame-mouse-source-capabilities.html [ Timeout Pass ]
 crbug.com/708994 virtual/mojo-loading/http/tests/security/cross-frame-mouse-source-capabilities.html [ Timeout Pass ]
@@ -3068,7 +3058,6 @@ crbug.com/745887 [ Mac Win ] fast/frames/sandboxed-iframe-plugins.html [ Failure
 crbug.com/745899 [ Linux ] vr/getFrameData_samewithinframe.html [ Failure Pass ]
 
 crbug.com/626703 [ Win7 ] external/wpt/domxpath/xml_xpath_runner.html [ Timeout Pass ]
-crbug.com/626703 [ Win7 ] external/wpt/html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/parsing.html [ Failure Pass ]
 crbug.com/626703 [ Win7 Linux Debug ] external/wpt/html/syntax/parsing/html5lib_tests16.html?run_type=uri [ Timeout Pass ]
 
 crbug.com/746128 [ Win7 Debug ] media/controls/video-enter-exit-fullscreen-without-hovering-doesnt-show-controls.html [ Failure ]
@@ -3091,3 +3080,4 @@ crbug.com/749738 [ Win7 Debug ] virtual/mojo-loading/http/tests/devtools/console
 crbug.com/749738 [ Win7 Debug ] http/tests/devtools/console/console-format-es6-2.js [ Timeout ]
 crbug.com/749738 [ Win7 Debug ] virtual/mojo-loading/http/tests/devtools/console/console-format-es6-2.js [ Timeout ]
 crbug.com/749965 [ Win7 Debug ] media/controls/controls-video-keynav.html [ Failure ]
+crbug.com/750310 [ Win7 Debug ] virtual/off-main-thread-fetch/http/tests/inspector/network/network-blocked-reason.html [ Timeout ]

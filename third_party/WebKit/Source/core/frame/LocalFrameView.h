@@ -182,10 +182,6 @@ class CORE_EXPORT LocalFrameView final
   void SetNeedsUpdateGeometries() { needs_update_geometries_ = true; }
   void UpdateGeometry() override;
 
-  // Marks this frame, and ancestor frames, as needing one intersection
-  // observervation. This overrides throttling for one frame.
-  void SetNeedsIntersectionObservation();
-
   // Methods for getting/setting the size Blink should use to layout the
   // contents.
   // NOTE: Scrollbar exclusion is based on the LocalFrameView's scrollbars. To
@@ -704,8 +700,7 @@ class CORE_EXPORT LocalFrameView final
   void BeginLifecycleUpdates();
 
   // Paint properties for SPv2 Only.
-  void SetPreTranslation(
-      PassRefPtr<TransformPaintPropertyNode> pre_translation) {
+  void SetPreTranslation(RefPtr<TransformPaintPropertyNode> pre_translation) {
     pre_translation_ = std::move(pre_translation);
   }
   TransformPaintPropertyNode* PreTranslation() const {
@@ -713,14 +708,14 @@ class CORE_EXPORT LocalFrameView final
   }
 
   void SetScrollTranslation(
-      PassRefPtr<TransformPaintPropertyNode> scroll_translation) {
+      RefPtr<TransformPaintPropertyNode> scroll_translation) {
     scroll_translation_ = std::move(scroll_translation);
   }
   TransformPaintPropertyNode* ScrollTranslation() const {
     return scroll_translation_.Get();
   }
 
-  void SetContentClip(PassRefPtr<ClipPaintPropertyNode> content_clip) {
+  void SetContentClip(RefPtr<ClipPaintPropertyNode> content_clip) {
     content_clip_ = std::move(content_clip);
   }
   ClipPaintPropertyNode* ContentClip() const { return content_clip_.Get(); }
@@ -1193,7 +1188,6 @@ class CORE_EXPORT LocalFrameView final
   bool suppress_adjust_view_size_;
   bool allows_layout_invalidation_after_layout_clean_;
   bool forcing_layout_parent_view_;
-  bool needs_intersection_observation_;
 
   Member<ElementVisibilityObserver> visibility_observer_;
 

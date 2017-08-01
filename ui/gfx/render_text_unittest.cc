@@ -428,6 +428,14 @@ class RenderTextTest : public testing::Test,
         renderer_(canvas()) {}
 
  protected:
+  bool IsWin8Plus() const {
+#if defined(OS_WIN)
+    return base::win::GetVersion() >= base::win::VERSION_WIN8;
+#else
+    return false;
+#endif
+  }
+
   std::unique_ptr<RenderText> CreateRenderTextInstance() const {
     switch (GetParam()) {
       case RENDER_TEXT_HARFBUZZ:
@@ -3019,8 +3027,11 @@ TEST_P(RenderTextHarfBuzzTest, Multiline_NormalWidth) {
       {L"abc defg hijkl", Range(0, 9), Range(9, 14), {3, 1, 4, 1, 5}, 4, true},
       {L"qwertyzxcvbn", Range(0, 10), Range(10, 12), {10, 2}, 1, true},
       // RTL: should render left-to-right as "<space>43210 \n cba9876".
+      // Note this used to say "Arabic language", in Arabic, but the last
+      // character in the string (\x0629) got fancy in an updated Mac font, so
+      // now the penultimate character repeats. (See "NOTE" below).
       {L"\x0627\x0644\x0644\x063A\x0629 "
-       L"\x0627\x0644\x0639\x0631\x0628\x064A\x0629",
+       L"\x0627\x0644\x0639\x0631\x0628\x064A\x064A",
        Range(0, 6),
        Range(6, 13),
        {1 /* space first */, 5, 7},
@@ -3184,24 +3195,27 @@ TEST_P(RenderTextHarfBuzzTest, Multiline_NewlineCharacterReplacement) {
 
 // Ensure horizontal alignment works in multiline mode.
 TEST_P(RenderTextHarfBuzzTest, Multiline_HorizontalAlignment) {
-  const struct {
+  constexpr struct {
     const wchar_t* const text;
     const HorizontalAlignment alignment;
+    const base::i18n::TextDirection display_text_direction;
   } kTestStrings[] = {
-    { L"abcdefghij\nhijkl", ALIGN_LEFT },
-    { L"nhijkl\nabcdefghij", ALIGN_LEFT },
-    // hebrew, 2nd line shorter
-    { L"\x5d0\x5d1\x5d2\x5d3\x5d4\x5d5\x5d6\x5d7\n\x5d0\x5d1\x5d2\x5d3",
-      ALIGN_RIGHT },
-    // hebrew, 2nd line longer
-    { L"\x5d0\x5d1\x5d2\x5d3\n\x5d0\x5d1\x5d2\x5d3\x5d4\x5d5\x5d6\x5d7",
-      ALIGN_RIGHT },
-    // arabic, 2nd line shorter
-    { L"\x62a\x62b\x62c\x62d\x62e\x62f\x630\n\x660\x661\x662\x663\x664",
-      ALIGN_RIGHT },
-    // arabic, 2nd line longer
-    { L"\x660\x661\x662\x663\x664\n\x62a\x62b\x62c\x62d\x62e\x62f\x630",
-      ALIGN_RIGHT },
+      {L"abcdefghi\nhijk", ALIGN_LEFT, base::i18n::LEFT_TO_RIGHT},
+      {L"nhij\nabcdefghi", ALIGN_LEFT, base::i18n::LEFT_TO_RIGHT},
+      // Hebrew, 2nd line shorter
+      {L"\x5d0\x5d1\x5d2\x5d3\x5d4\x5d5\x5d6\x5d7\n\x5d0\x5d1\x5d2\x5d3",
+       ALIGN_RIGHT, base::i18n::RIGHT_TO_LEFT},
+      // Hebrew, 2nd line longer
+      {L"\x5d0\x5d1\x5d2\x5d3\n\x5d0\x5d1\x5d2\x5d3\x5d4\x5d5\x5d6\x5d7",
+       ALIGN_RIGHT, base::i18n::RIGHT_TO_LEFT},
+      // Arabic, 2nd line shorter.
+      {L"\x0627\x0627\x0627\x0627\x0627\x0627\x0627\x0627\n\x0627\x0644\x0644"
+       L"\x063A",
+       ALIGN_RIGHT, base::i18n::RIGHT_TO_LEFT},
+      // Arabic, 2nd line longer.
+      {L"\x0627\x0644\x0644\x063A\n\x0627\x0627\x0627\x0627\x0627\x0627\x0627"
+       L"\x0627",
+       ALIGN_RIGHT, base::i18n::RIGHT_TO_LEFT},
   };
   const int kGlyphSize = 5;
   RenderTextHarfBuzz* render_text = GetRenderTextHarfBuzz();
@@ -3211,9 +3225,11 @@ TEST_P(RenderTextHarfBuzzTest, Multiline_HorizontalAlignment) {
   render_text->SetMultiline(true);
 
   for (size_t i = 0; i < arraysize(kTestStrings); ++i) {
-    SCOPED_TRACE(base::StringPrintf("kTestStrings[%" PRIuS "] %ls", i,
-                                    kTestStrings[i].text));
+    SCOPED_TRACE(testing::Message("kTestStrings[")
+                 << i << "] = " << kTestStrings[i].text);
     render_text->SetText(WideToUTF16(kTestStrings[i].text));
+    EXPECT_EQ(kTestStrings[i].display_text_direction,
+              render_text->GetDisplayTextDirection());
     render_text->Draw(canvas());
     ASSERT_LE(2u, test_api()->lines().size());
     if (kTestStrings[i].alignment == ALIGN_LEFT) {
@@ -3224,6 +3240,16 @@ TEST_P(RenderTextHarfBuzzTest, Multiline_HorizontalAlignment) {
           base::WideToUTF16(kTestStrings[i].text),
           base::string16(1, '\n'), base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       ASSERT_EQ(2u, lines.size());
+
+      // Sanity check the input string lengths match the glyph lengths.
+      EXPECT_EQ(4u, std::min(lines[0].length(), lines[1].length()));
+      EXPECT_EQ(8u, std::max(lines[0].length(), lines[1].length()));
+      const internal::TextRunList* run_list = GetHarfBuzzRunList();
+      ASSERT_EQ(3U, run_list->runs().size());
+      EXPECT_EQ(lines[0].length(), run_list->runs()[0]->glyph_count);
+      EXPECT_EQ(1u, run_list->runs()[1]->glyph_count);  // \n.
+      EXPECT_EQ(lines[1].length(), run_list->runs()[2]->glyph_count);
+
       int difference = (lines[0].length() - lines[1].length()) * kGlyphSize;
       EXPECT_EQ(test_api()->GetAlignmentOffset(0).x() + difference,
                 test_api()->GetAlignmentOffset(1).x());
@@ -3921,11 +3947,11 @@ TEST_P(RenderTextTest, TextDoesntClip) {
     {
 #if !defined(OS_CHROMEOS)
       int top_test_height = kTestSize;
-#if defined(OS_WIN)
-      // Windows 8+ draws 1 pixel above the display rect.
-      if (base::win::GetVersion() >= base::win::VERSION_WIN8)
+      // Windows 8+ and RenderTextMac (since 10.13) draw 1 pixel above the
+      // display rect.
+      if (IsWin8Plus() || GetParam() == RENDER_TEXT_MAC)
         top_test_height = kTestSize - 1;
-#endif // OS_WIN
+
       // TODO(dschuyler): On ChromeOS text draws above the GetStringSize rect.
       SCOPED_TRACE("TextDoesntClip Top Side");
       rect_buffer.EnsureSolidRect(SK_ColorWHITE, 0, 0, kCanvasSize.width(),
@@ -3935,13 +3961,11 @@ TEST_P(RenderTextTest, TextDoesntClip) {
     {
       int bottom_test_y = kTestSize + string_size.height();
       int bottom_test_height = kTestSize;
-#if defined(OS_WIN)
       // Windows 8+ draws 1 pixel below the display rect.
-      if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
+      if (IsWin8Plus()) {
         bottom_test_y = kTestSize + string_size.height() + 1;
         bottom_test_height = kTestSize - 1;
       }
-#endif // OS_WIN
       SCOPED_TRACE("TextDoesntClip Bottom Side");
       rect_buffer.EnsureSolidRect(SK_ColorWHITE, 0, bottom_test_y,
                                   kCanvasSize.width(), bottom_test_height);

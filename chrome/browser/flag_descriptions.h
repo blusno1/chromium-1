@@ -227,6 +227,9 @@ extern const char kEnableHttpFormWarningDescription[];
 extern const char kEnableIdleTimeSpellCheckingName[];
 extern const char kEnableIdleTimeSpellCheckingDescription[];
 
+extern const char kEnableManualFallbacksFillingName[];
+extern const char kEnableManualFallbacksFillingDescription[];
+
 extern const char kEnableMaterialDesignBookmarksName[];
 extern const char kEnableMaterialDesignBookmarksDescription[];
 
@@ -609,6 +612,9 @@ extern const char kProtectSyncCredentialDescription[];
 extern const char kProtectSyncCredentialOnReauthName[];
 extern const char kProtectSyncCredentialOnReauthDescription[];
 
+extern const char kPullToRefreshName[];
+extern const char kPullToRefreshDescription[];
+
 extern const char kPushApiBackgroundModeName[];
 extern const char kPushApiBackgroundModeDescription[];
 
@@ -635,9 +641,6 @@ extern const char kSaveasMenuLabelExperimentDescription[];
 
 extern const char kSavePageAsMhtmlName[];
 extern const char kSavePageAsMhtmlDescription[];
-
-extern const char kScrollEndEffectName[];
-extern const char kScrollEndEffectDescription[];
 
 extern const char kScrollPredictionName[];
 extern const char kScrollPredictionDescription[];

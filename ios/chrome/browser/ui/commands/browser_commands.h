@@ -9,6 +9,9 @@
 
 @class OpenNewTabCommand;
 @class ReadingListAddCommand;
+namespace web {
+class NavigationItem;
+}
 
 // Protocol for commands that will generally be handled by the "current tab",
 // which in practice is the BrowserViewController instance displaying the tab.
@@ -49,6 +52,22 @@
 
 // Shows the QR scanner UI.
 - (void)showQRScanner;
+
+// Shows the tab history popup containing the tab's backward history.
+- (void)showTabHistoryPopupForBackwardHistory;
+
+// Shows the tab history popup containing the tab's forward history.
+- (void)showTabHistoryPopupForForwardHistory;
+
+// Navigate back/forward to the selected entry in the tab's history.
+- (void)navigateToHistoryItem:(const web::NavigationItem*)item;
+
+// Shows the Reading List UI.
+- (void)showReadingList;
+
+// Asks the active tab to enter into reader mode, presenting a streamlined view
+// of the current content.
+- (void)switchToReaderMode;
 
 @end
 

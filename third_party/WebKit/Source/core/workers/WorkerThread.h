@@ -42,7 +42,7 @@
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/Optional.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebThread.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "v8/include/v8.h"
@@ -133,7 +133,7 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
     return worker_reporting_proxy_;
   }
 
-  void AppendDebuggerTask(std::unique_ptr<CrossThreadClosure>);
+  void AppendDebuggerTask(CrossThreadClosure);
 
   // Runs only debugger tasks while paused in debugger.
   void StartRunningDebuggerTasksOnPauseOnWorkerThread();
@@ -243,9 +243,8 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   void PrepareForShutdownOnWorkerThread();
   void PerformShutdownOnWorkerThread();
   template <WTF::FunctionThreadAffinity threadAffinity>
-  void PerformTaskOnWorkerThread(
-      std::unique_ptr<Function<void(), threadAffinity>> task);
-  void PerformDebuggerTaskOnWorkerThread(std::unique_ptr<CrossThreadClosure>);
+  void PerformTaskOnWorkerThread(Function<void(), threadAffinity> task);
+  void PerformDebuggerTaskOnWorkerThread(CrossThreadClosure);
   void PerformDebuggerTaskDontWaitOnWorkerThread();
 
   // These must be called with |m_threadStateMutex| acquired.

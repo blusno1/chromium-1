@@ -12,10 +12,10 @@
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_view.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -203,7 +203,7 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case IDC_REQUEST_MOBILE_SITE:
       base::RecordAction(UserMetricsAction("MobileMenuRequestMobileSite"));
       break;
-    case IDC_READER_MODE:
+    case TOOLS_READER_MODE:
       base::RecordAction(UserMetricsAction("MobileMenuRequestReaderMode"));
       break;
     case IDC_SHOW_BOOKMARK_MANAGER:
@@ -228,7 +228,7 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case TOOLS_MENU_ITEM:
       // Do nothing when tapping the tools menu a second time.
       break;
-    case IDC_SHOW_READING_LIST:
+    case TOOLS_READING_LIST:
       base::RecordAction(UserMetricsAction("MobileMenuReadingList"));
       break;
     default:

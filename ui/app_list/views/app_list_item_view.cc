@@ -50,6 +50,12 @@ constexpr int kLeftRightPaddingChars = 1;
 // Delay in milliseconds of when the dragging UI should be shown for mouse drag.
 constexpr int kMouseDragUIDelayInMs = 200;
 
+// Delay in milliseconds of when the dragging UI should be shown for touch drag.
+// Note: For better user experience, this is made shorter than
+// ET_GESTURE_LONG_PRESS delay, which is too long for this case, e.g., about
+// 650ms.
+constexpr int kTouchLongpressDelayInMs = 300;
+
 gfx::FontList GetFontList() {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   return rb.GetFontList(kItemTextFontStyle);
@@ -70,10 +76,13 @@ AppListItemView::AppListItemView(AppsGridView* apps_grid_view,
       icon_(new views::ImageView),
       title_(new views::Label),
       progress_bar_(new views::ProgressBar),
-      shadow_animator_(this),
       is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
-  shadow_animator_.animation()->SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
-  shadow_animator_.SetStartAndEndShadows(IconStartShadows(), IconEndShadows());
+  if (!is_fullscreen_app_list_enabled_) {
+    shadow_animator_.reset(new ImageShadowAnimator(this));
+    shadow_animator_->animation()->SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
+    shadow_animator_->SetStartAndEndShadows(IconStartShadows(),
+                                            IconEndShadows());
+  }
 
   icon_->set_can_process_events_within_subtree(false);
   icon_->SetVerticalAlignment(views::ImageView::LEADING);
@@ -129,7 +138,10 @@ void AppListItemView::SetIcon(const gfx::ImageSkia& icon) {
       icon,
       skia::ImageOperations::RESIZE_BEST,
       gfx::Size(kGridIconDimension, kGridIconDimension)));
-  shadow_animator_.SetOriginalImage(resized);
+  if (shadow_animator_)
+    shadow_animator_->SetOriginalImage(resized);
+  else
+    icon_->SetImage(resized);
 }
 
 void AppListItemView::SetUIState(UIState ui_state) {
@@ -158,7 +170,6 @@ void AppListItemView::SetUIState(UIState ui_state) {
 void AppListItemView::SetTouchDragging(bool touch_dragging) {
   if (touch_dragging_ == touch_dragging)
     return;
-
   touch_dragging_ = touch_dragging;
   SetState(STATE_NORMAL);
   SetUIState(touch_dragging_ ? UI_STATE_DRAGGING : UI_STATE_NORMAL);
@@ -166,7 +177,14 @@ void AppListItemView::SetTouchDragging(bool touch_dragging) {
 
 void AppListItemView::OnMouseDragTimer() {
   DCHECK(apps_grid_view_->IsDraggedView(this));
+  apps_grid_view_->StartDragAndDropHostDragAfterLongPress(AppsGridView::MOUSE);
   SetUIState(UI_STATE_DRAGGING);
+}
+
+void AppListItemView::OnTouchDragTimer() {
+  DCHECK(apps_grid_view_->IsDraggedView(this));
+  apps_grid_view_->StartDragAndDropHostDragAfterLongPress(AppsGridView::TOUCH);
+  SetTouchDragging(true);
 }
 
 void AppListItemView::CancelContextMenu() {
@@ -180,6 +198,7 @@ gfx::ImageSkia AppListItemView::GetDragImage() {
 
 void AppListItemView::OnDragEnded() {
   mouse_drag_timer_.Stop();
+  touch_drag_timer_.Stop();
   SetUIState(UI_STATE_NORMAL);
 }
 
@@ -253,13 +272,15 @@ void AppListItemView::ShowContextMenuForView(views::View* source,
 
 void AppListItemView::StateChanged(ButtonState old_state) {
   if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
-    shadow_animator_.animation()->Show();
+    if (shadow_animator_)
+      shadow_animator_->animation()->Show();
     // Show the hover/tap highlight: for tap, lighter highlight replaces darker
     // keyboard selection; for mouse hover, keyboard selection takes precedence.
     if (!apps_grid_view_->IsSelectedView(this) || state() == STATE_PRESSED)
       SetItemIsHighlighted(true);
   } else {
-    shadow_animator_.animation()->Hide();
+    if (shadow_animator_)
+      shadow_animator_->animation()->Hide();
     SetItemIsHighlighted(false);
     if (item_weak_)
       item_weak_->set_highlighted(false);
@@ -424,10 +445,8 @@ bool AppListItemView::OnMouseDragged(const ui::MouseEvent& event) {
 void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::ET_GESTURE_SCROLL_BEGIN:
-      if (touch_dragging_) {
-        apps_grid_view_->InitiateDrag(this, AppsGridView::TOUCH, *event);
-        event->SetHandled();
-      }
+    case ui::ET_GESTURE_LONG_PRESS:
+      event->SetHandled();
       break;
     case ui::ET_GESTURE_SCROLL_UPDATE:
       if (touch_dragging_ && apps_grid_view_->IsDraggedView(this)) {
@@ -446,6 +465,13 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
     case ui::ET_GESTURE_TAP_DOWN:
       if (state() != STATE_DISABLED) {
         SetState(STATE_PRESSED);
+        apps_grid_view_->InitiateDrag(this, AppsGridView::TOUCH, *event);
+        if (apps_grid_view_->has_dragged_view()) {
+          touch_drag_timer_.Start(
+              FROM_HERE,
+              base::TimeDelta::FromMilliseconds(kTouchLongpressDelayInMs), this,
+              &AppListItemView::OnTouchDragTimer);
+        }
         event->SetHandled();
       }
       break;
@@ -454,15 +480,10 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
       if (state() != STATE_DISABLED)
         SetState(STATE_NORMAL);
       break;
-    case ui::ET_GESTURE_LONG_PRESS:
-      if (!apps_grid_view_->has_dragged_view())
-        SetTouchDragging(true);
-      event->SetHandled();
-      break;
     case ui::ET_GESTURE_LONG_TAP:
     case ui::ET_GESTURE_END:
-      if (touch_dragging_)
-        SetTouchDragging(false);
+      SetTouchDragging(false);
+      apps_grid_view_->EndDrag(false);
       break;
     default:
       break;

@@ -35,10 +35,9 @@
 #include "core/dom/Document.h"
 #include "core/dom/SecurityContext.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/exported/WebDataSourceImpl.h"
-#include "core/exported/WebFactory.h"
-#include "core/exported/WebViewBase.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/exported/WebDocumentLoaderImpl.h"
+#include "core/exported/WebViewImpl.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoadRequest.h"
@@ -94,11 +93,6 @@ std::unique_ptr<WebEmbeddedWorker> WebEmbeddedWorker::Create(
       std::move(content_settings_client));
 }
 
-static HashSet<WebEmbeddedWorkerImpl*>& RunningWorkerInstances() {
-  DEFINE_STATIC_LOCAL(HashSet<WebEmbeddedWorkerImpl*>, set, ());
-  return set;
-}
-
 WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(
     std::unique_ptr<WebServiceWorkerContextClient> client,
     std::unique_ptr<WebServiceWorkerInstalledScriptsManager>
@@ -113,8 +107,6 @@ WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(
       asked_to_terminate_(false),
       pause_after_download_state_(kDontPauseAfterDownload),
       waiting_for_debugger_state_(kNotWaitingForDebugger) {
-  RunningWorkerInstances().insert(this);
-
   if (RuntimeEnabledFeatures::ServiceWorkerScriptStreamingEnabled() &&
       installed_scripts_manager) {
     installed_scripts_manager_ =
@@ -130,8 +122,6 @@ WebEmbeddedWorkerImpl::~WebEmbeddedWorkerImpl() {
   // TerminateWorkerContext() must be called before the destructor.
   DCHECK(asked_to_terminate_);
 
-  DCHECK(RunningWorkerInstances().Contains(this));
-  RunningWorkerInstances().erase(this);
   DCHECK(web_view_);
 
   // Detach the client before closing the view to avoid getting called back.
@@ -303,8 +293,7 @@ void WebEmbeddedWorkerImpl::PrepareShadowPageForLoader() {
   // This code, and probably most of the code in this class should be shared
   // with SharedWorker.
   DCHECK(!web_view_);
-  web_view_ = WebFactory::GetInstance().CreateWebViewBase(
-      nullptr, kWebPageVisibilityStateVisible);
+  web_view_ = WebViewImpl::Create(nullptr, kWebPageVisibilityStateVisible);
   WebSettings* settings = web_view_->GetSettings();
   // FIXME: http://crbug.com/363843. This needs to find a better way to
   // not create graphics layers.
@@ -315,8 +304,8 @@ void WebEmbeddedWorkerImpl::PrepareShadowPageForLoader() {
   settings->SetStrictMixedContentChecking(true);
   settings->SetAllowRunningOfInsecureContent(false);
   settings->SetDataSaverEnabled(worker_start_data_.data_saver_enabled);
-  main_frame_ = WebFactory::GetInstance().CreateMainWebLocalFrameBase(
-      web_view_, this, nullptr);
+  main_frame_ = WebLocalFrameImpl::CreateMainFrame(
+      web_view_, this, nullptr, nullptr, g_empty_atom, WebSandboxFlags::kNone);
   main_frame_->SetDevToolsAgentClient(this);
 
   // If we were asked to wait for debugger then it is the good time to do that.
@@ -356,7 +345,7 @@ void WebEmbeddedWorkerImpl::DidFinishDocumentLoad() {
   DCHECK(loading_shadow_page_);
   DCHECK(!asked_to_terminate_);
   loading_shadow_page_ = false;
-  main_frame_->DataSource()->SetServiceWorkerNetworkProvider(
+  main_frame_->GetDocumentLoader()->SetServiceWorkerNetworkProvider(
       worker_context_client_->CreateServiceWorkerNetworkProvider());
 
   // Kickstart the worker before loading the script when the script has been
@@ -376,7 +365,7 @@ void WebEmbeddedWorkerImpl::DidFinishDocumentLoad() {
       WebURLRequest::kRequestContextServiceWorker,
       WebURLRequest::kFetchRequestModeSameOrigin,
       WebURLRequest::kFetchCredentialsModeSameOrigin,
-      worker_start_data_.address_space, nullptr,
+      worker_start_data_.address_space, WTF::Closure(),
       Bind(&WebEmbeddedWorkerImpl::OnScriptLoaderFinished,
            WTF::Unretained(this)));
   // Do nothing here since onScriptLoaderFinished() might have been already

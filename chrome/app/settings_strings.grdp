@@ -2248,8 +2248,17 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_USAGE" desc="The Usage header, used to group disk and battery usage information on the Site Details page.">
     Usage
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_USAGE_NONE" desc="The text shown under the 'Usage' header when there is no disk and battery usage data available on the Site Details page.">
+    No usage data
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS" desc="The Permissions header, used to group together permissions, such as Geolocation, on the Site Details page.">
     Permissions
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_KILL_SWITCH" desc="A label shown when a permission on the Site Details page is temporarily blocked for the user's safety.">
+    Temporarily blocked to protect your security
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_INSECURE_ORIGIN" desc="A label shown when a permission on the Site Details page is blocked because the site is insecure.">
+    Blocked to protect your privacy
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_RESET_BUTTON" desc="The Reset button, used to clear all permissions for a given site.">
     Reset site settings
@@ -2331,9 +2340,6 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_NO_ZOOMED_SITES" desc="A label explaining that no sites have a configured zoom in/out value.">
     No sites have been zoomed in or out
-  </message>
-  <message name="IDS_SETTINGS_SITE_DETAILS" desc="A title for the site settings details subpage.">
-    Site details
   </message>
   <message name="IDS_SETTINGS_SITE_NO_SITES_ADDED" desc="Explanation for not showing a list of site exceptions">
     No sites added

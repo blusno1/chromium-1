@@ -105,22 +105,26 @@ do_package() {
   # link-time code rewriting, but it might leave the symbol dependency in
   # place -- there are no guarantees.
   BAD_DIFF=0
-  diff -u "$SCRIPTDIR/expected_deps_$ARCHITECTURE" \
-      <(echo "${DETECTED_DEPENDS}" | \
-        LANG=C sort | \
-        grep -v '^ld-linux.*\(GLIBC_2\.3\)') \
-      || BAD_DIFF=1
+  if [ -r "$SCRIPTDIR/expected_deps_$ARCHITECTURE" ]; then
+    diff -u "$SCRIPTDIR/expected_deps_$ARCHITECTURE" \
+        <(echo "${DETECTED_DEPENDS}" | \
+          LANG=C sort | \
+          grep -v '^ld-linux.*\(GLIBC_2\.3\)') \
+        || BAD_DIFF=1
+  fi
   if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
     echo
     echo "ERROR: Shared library dependencies changed!"
     echo "If this is intentional, please update:"
-    echo "chrome/installer/linux/rpm/expected_deps_i386"
     echo "chrome/installer/linux/rpm/expected_deps_x86_64"
     echo
     exit $BAD_DIFF
   fi
 
-  # lsb implies many dependencies.
+  # lsb implies many dependencies and on Fedora or RHEL some of these are not
+  # needed at all (the most obvious one is qt3) and Chrome is usually the one
+  # who pulls them to the system by requiring the whole lsb. Require only
+  # lsb_release from the lsb as that's the only thing that we are using.
   #
   # nss (bundled) is optional in LSB 4.0. Also specify a more recent version
   # for security and stability updates. While we depend on libnss3.so and not
@@ -144,7 +148,7 @@ do_package() {
   # for Fedora. https://bugzilla.redhat.com/show_bug.cgi?id=1252564
   # TODO(thestig): Use the liberation-fonts package once its available on all
   # supported distros.
-  DEPENDS="lsb >= 4.0, \
+  DEPENDS="/usr/bin/lsb_release, \
   libnss3.so(NSS_3.22)${PKG_ARCH}, \
   libssl3.so(NSS_3.28)${PKG_ARCH}, \
   wget, \

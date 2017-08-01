@@ -12,6 +12,7 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -26,7 +27,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
-#include "components/wallpaper/wallpaper_info.h"
+#include "components/wallpaper/wallpaper_layout.h"
 #include "extensions/browser/event_router.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
@@ -154,12 +155,6 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
       wallpaper::kThumbnailWallpaperSubDir, wallpaper_files_id_,
       params_->details.filename);
 
-  scoped_refptr<base::SequencedTaskRunner> task_runner =
-      BrowserThread::GetBlockingPool()
-          ->GetSequencedTaskRunnerWithShutdownBehavior(
-              BrowserThread::GetBlockingPool()->GetNamedSequenceToken(
-                  wallpaper::kWallpaperSequenceTokenName),
-              base::SequencedWorkerPool::BLOCK_SHUTDOWN);
   wallpaper::WallpaperLayout layout = wallpaper_api_util::GetLayoutEnum(
       extensions::api::wallpaper::ToString(params_->details.layout));
   wallpaper_api_util::RecordCustomWallpaperLayout(layout);
@@ -195,7 +190,7 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
   std::unique_ptr<gfx::ImageSkia> deep_copy(image.DeepCopy());
   // Generates thumbnail before call api function callback. We can then
   // request thumbnail in the javascript callback.
-  task_runner->PostTask(
+  GetBlockingTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&WallpaperSetWallpaperFunction::GenerateThumbnail, this,
                      thumbnail_path, std::move(deep_copy)));
@@ -204,7 +199,7 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
 void WallpaperSetWallpaperFunction::GenerateThumbnail(
     const base::FilePath& thumbnail_path,
     std::unique_ptr<gfx::ImageSkia> image) {
-  wallpaper::AssertCalledOnWallpaperSequence();
+  wallpaper::AssertCalledOnWallpaperSequence(GetBlockingTaskRunner());
   if (!base::PathExists(thumbnail_path.DirName()))
     base::CreateDirectory(thumbnail_path.DirName());
 

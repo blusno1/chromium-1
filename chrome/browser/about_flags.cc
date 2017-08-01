@@ -53,6 +53,7 @@
 #include "components/flags_ui/flags_storage.h"
 #include "components/flags_ui/flags_ui_switches.h"
 #include "components/nacl/common/nacl_switches.h"
+#include "components/network_session_configurator/common/network_features.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/ntp_snippets_constants.h"
@@ -1512,11 +1513,9 @@ const FeatureEntry kFeatureEntries[] = {
      kOsMac | kOsWin | kOsCrOS | kOsAndroid,
      FEATURE_VALUE_TYPE(features::kMojoVideoEncodeAccelerator)},
 #if defined(OS_WIN)
-    {
-        "enable-hdr", flag_descriptions::kEnableHDRName,
-        flag_descriptions::kEnableHDRDescription, kOsWin,
-        SINGLE_VALUE_TYPE(switches::kEnableHDR),
-    },
+    {"enable-hdr", flag_descriptions::kEnableHDRName,
+     flag_descriptions::kEnableHDRDescription, kOsWin,
+     FEATURE_VALUE_TYPE(features::kHighDynamicRange)},
 #endif  // OS_WIN
 #if defined(USE_ASH)
     {
@@ -1604,13 +1603,13 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kOverscrollStartThresholdName,
      flag_descriptions::kOverscrollStartThresholdDescription, kOsAura,
      MULTI_VALUE_TYPE(kOverscrollStartThresholdChoices)},
-#endif  // USE_AURA
-    {"scroll-end-effect", flag_descriptions::kScrollEndEffectName,
-     flag_descriptions::kScrollEndEffectDescription, kOsCrOS,
-     ENABLE_DISABLE_VALUE_TYPE_AND_VALUE(switches::kScrollEndEffect,
+    {"pull-to-refresh", flag_descriptions::kPullToRefreshName,
+     flag_descriptions::kPullToRefreshDescription, kOsAura,
+     ENABLE_DISABLE_VALUE_TYPE_AND_VALUE(switches::kPullToRefresh,
                                          "1",
-                                         switches::kScrollEndEffect,
+                                         switches::kPullToRefresh,
                                          "0")},
+#endif  // USE_AURA
     {"enable-touch-drag-drop", flag_descriptions::kTouchDragDropName,
      flag_descriptions::kTouchDragDropDescription, kOsWin | kOsCrOS,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableTouchDragDrop,
@@ -3282,6 +3281,12 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAndroidViewPasswordsDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(password_manager::features::kViewPasswords)},
 #endif  // OS_ANDROID
+
+    {"enable-manual-fallbacks-filling",
+     flag_descriptions::kEnableManualFallbacksFillingName,
+     flag_descriptions::kEnableManualFallbacksFillingDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(
+         password_manager::features::kEnableManualFallbacksFilling)},
 
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms/enums.xml. See note in

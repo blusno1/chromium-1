@@ -36,10 +36,9 @@
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MessageEvent.h"
-#include "core/exported/WebDataSourceImpl.h"
-#include "core/exported/WebFactory.h"
-#include "core/exported/WebViewBase.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/exported/WebDocumentLoaderImpl.h"
+#include "core/exported/WebViewImpl.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
@@ -48,6 +47,7 @@
 #include "core/probe/CoreProbes.h"
 #include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/ParentFrameTaskRunners.h"
+#include "core/workers/SharedWorkerContentSettingsProxy.h"
 #include "core/workers/SharedWorkerGlobalScope.h"
 #include "core/workers/SharedWorkerThread.h"
 #include "core/workers/WorkerContentSettingsClient.h"
@@ -76,6 +76,7 @@
 #include "public/web/WebFrame.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebView.h"
+#include "public/web/shared_worker_content_settings_proxy.mojom-blink.h"
 
 namespace blink {
 
@@ -131,8 +132,7 @@ void WebSharedWorkerImpl::InitializeLoader(bool data_saver_enabled) {
   // loading requests from the worker context to the rest of WebKit and Chromium
   // infrastructure.
   DCHECK(!web_view_);
-  web_view_ = WebFactory::GetInstance().CreateWebViewBase(
-      nullptr, kWebPageVisibilityStateVisible);
+  web_view_ = WebViewImpl::Create(nullptr, kWebPageVisibilityStateVisible);
   // FIXME: http://crbug.com/363843. This needs to find a better way to
   // not create graphics layers.
   web_view_->GetSettings()->SetAcceleratedCompositingEnabled(false);
@@ -140,8 +140,8 @@ void WebSharedWorkerImpl::InitializeLoader(bool data_saver_enabled) {
   // FIXME: Settings information should be passed to the Worker process from
   // Browser process when the worker is created (similar to
   // RenderThread::OnCreateNewView).
-  main_frame_ = WebFactory::GetInstance().CreateMainWebLocalFrameBase(
-      web_view_, this, nullptr);
+  main_frame_ = WebLocalFrameImpl::CreateMainFrame(
+      web_view_, this, nullptr, nullptr, g_empty_atom, WebSandboxFlags::kNone);
   main_frame_->SetDevToolsAgentClient(this);
 
   // If we were asked to pause worker context on start and wait for debugger
@@ -185,7 +185,7 @@ void WebSharedWorkerImpl::DidFinishDocumentLoad() {
   DCHECK(IsMainThread());
   DCHECK(!loading_document_);
   DCHECK(!main_script_loader_);
-  main_frame_->DataSource()->SetServiceWorkerNetworkProvider(
+  main_frame_->GetDocumentLoader()->SetServiceWorkerNetworkProvider(
       client_->CreateServiceWorkerNetworkProvider());
   main_script_loader_ = WorkerScriptLoader::Create();
   loading_document_ = main_frame_->GetFrame()->GetDocument();
@@ -295,11 +295,16 @@ void WebSharedWorkerImpl::StartWorkerContext(
     const WebString& content_security_policy,
     WebContentSecurityPolicyType policy_type,
     WebAddressSpace creation_address_space,
-    bool data_saver_enabled) {
+    bool data_saver_enabled,
+    mojo::ScopedMessagePipeHandle content_settings_handle) {
   DCHECK(IsMainThread());
   url_ = url;
   name_ = name;
   creation_address_space_ = creation_address_space;
+  // Chrome doesn't use interface versioning.
+  content_settings_info_ =
+      mojom::blink::SharedWorkerContentSettingsProxyPtrInfo(
+          std::move(content_settings_handle), 0u);
   InitializeLoader(data_saver_enabled);
 }
 
@@ -337,16 +342,15 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
   CoreInitializer::GetInstance().ProvideIndexedDBClientToWorker(
       *worker_clients);
 
-  WebSecurityOrigin web_security_origin(loading_document_->GetSecurityOrigin());
   ProvideContentSettingsClientToWorker(
-      worker_clients,
-      client_->CreateWorkerContentSettingsClient(web_security_origin));
+      worker_clients, WTF::MakeUnique<SharedWorkerContentSettingsProxy>(
+                          starter_origin, std::move(content_settings_info_)));
 
   if (RuntimeEnabledFeatures::OffMainThreadFetchEnabled()) {
     std::unique_ptr<WebWorkerFetchContext> web_worker_fetch_context =
         client_->CreateWorkerFetchContext(
             WebLocalFrameBase::FromFrame(main_frame_->GetFrame())
-                ->DataSource()
+                ->GetDocumentLoader()
                 ->GetServiceWorkerNetworkProvider());
     DCHECK(web_worker_fetch_context);
     web_worker_fetch_context->SetApplicationCacheHostID(

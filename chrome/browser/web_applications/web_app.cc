@@ -100,7 +100,7 @@ void UpdateAllShortcutsForShortcutInfo(
 
 void OnImageLoaded(std::unique_ptr<web_app::ShortcutInfo> shortcut_info,
                    web_app::ShortcutInfoCallback callback,
-                   const gfx::ImageFamily& image_family) {
+                   gfx::ImageFamily image_family) {
   // If the image failed to load (e.g. if the resource being loaded was empty)
   // use the standard application icon.
   if (image_family.empty()) {
@@ -116,7 +116,7 @@ void OnImageLoaded(std::unique_ptr<web_app::ShortcutInfo> shortcut_info,
     image_skia.MakeThreadSafe();
     shortcut_info->favicon.Add(gfx::Image(image_skia));
   } else {
-    shortcut_info->favicon = image_family;
+    shortcut_info->favicon = std::move(image_family);
   }
 
   callback.Run(std::move(shortcut_info));

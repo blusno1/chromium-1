@@ -182,7 +182,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
     blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
     WebMediaPlayerDelegate* delegate,
     std::unique_ptr<RendererFactorySelector> renderer_factory_selector,
-    linked_ptr<UrlIndex> url_index,
+    UrlIndex* url_index,
     std::unique_ptr<WebMediaPlayerParams> params)
     : frame_(frame),
       delegate_state_(DelegateState::GONE),
@@ -788,6 +788,16 @@ blink::WebSize WebMediaPlayerImpl::NaturalSize() const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
   return blink::WebSize(pipeline_metadata_.natural_size);
+}
+
+blink::WebSize WebMediaPlayerImpl::VisibleRect() const {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  scoped_refptr<VideoFrame> video_frame = GetCurrentFrameFromCompositor();
+  if (!video_frame)
+    return blink::WebSize();
+
+  const gfx::Rect& visible_rect = video_frame->visible_rect();
+  return blink::WebSize(visible_rect.width(), visible_rect.height());
 }
 
 bool WebMediaPlayerImpl::Paused() const {
@@ -2063,7 +2073,8 @@ static void GetCurrentFrameAndSignal(VideoFrameCompositor* compositor,
   event->Signal();
 }
 
-scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrameFromCompositor() {
+scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrameFromCompositor()
+    const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl::GetCurrentFrameFromCompositor");
 

@@ -27,6 +27,7 @@ namespace app_list {
 // Possible locations for partial keyboard focus (but note that the search
 // box always handles typing).
 enum SearchBoxFocus {
+  FOCUS_NONE,           // No focus
   FOCUS_BACK_BUTTON,    // Back button, only responds to ENTER
   FOCUS_SEARCH_BOX,     // Nothing else has partial focus
   FOCUS_MIC_BUTTON,     // Mic button, only responds to ENTER
@@ -128,6 +129,9 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   // Returns background color for the given state.
   SkColor GetBackgroundColorForState(AppListModel::State state) const;
 
+  // Updates the opacity of the searchbox.
+  void UpdateOpacity(float work_area_bottom, bool is_end_gesture);
+
   // Used only in the tests to get the current search icon.
   views::ImageView* get_search_icon_for_test() { return search_icon_; }
 
@@ -184,6 +188,11 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   void OnSpeechRecognitionStateChanged(
       SpeechRecognitionState new_state) override;
 
+  void SetDefaultBorder();
+
+  bool selected() { return selected_; }
+  void SetSelected(bool selected);
+
   SearchBoxViewDelegate* delegate_;     // Not owned.
   AppListViewDelegate* view_delegate_;  // Not owned.
   AppListModel* model_ = nullptr;       // Owned by the profile-keyed service.
@@ -198,10 +207,11 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   views::View* contents_view_ = nullptr;
   app_list::AppListView* app_list_view_;
 
-  SearchBoxFocus focused_view_;  // Which element has TAB'd focus.
-
   // Whether the fullscreen app list feature is enabled.
   const bool is_fullscreen_app_list_enabled_;
+
+  SearchBoxFocus focused_view_;  // Which element has TAB'd focus.
+
   // Whether the search box is active.
   bool is_search_box_active_ = false;
   // Whether tablet mode is active.
@@ -210,6 +220,9 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   SkColor background_color_ = kSearchBoxBackgroundDefault;
   // The current search box color.
   SkColor search_box_color_ = kDefaultSearchboxColor;
+
+  // Whether the search box is selected.
+  bool selected_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SearchBoxView);
 };

@@ -25,7 +25,7 @@ class UiInputManagerTest : public UiSceneManagerTest {
     UiSceneManagerTest::SetUp();
     MakeManager(kNotInCct, kNotInWebVr);
     input_manager_ = base::MakeUnique<UiInputManager>(scene_.get());
-    scene_->OnBeginFrame(UsToTicks(1));
+    scene_->OnBeginFrame(MicrosecondsToTicks(1));
   }
 
  protected:
@@ -39,7 +39,7 @@ TEST_F(UiInputManagerTest, NoMouseMovesDuringClick) {
   UiElement* content_quad =
       scene_->GetUiElementByDebugId(UiElementDebugId::kContentQuad);
   gfx::Point3F content_quad_center;
-  content_quad->screen_space_transform().TransformPoint(&content_quad_center);
+  content_quad->world_space_transform().TransformPoint(&content_quad_center);
   gfx::Point3F origin;
   GestureList gesture_list;
   gfx::Point3F out_target_point;

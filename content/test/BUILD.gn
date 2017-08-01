@@ -90,6 +90,8 @@ static_library("test_support") {
     "../public/test/mock_render_thread.h",
     "../public/test/mock_resource_context.cc",
     "../public/test/mock_resource_context.h",
+    "../public/test/mock_service_worker_context.cc",
+    "../public/test/mock_service_worker_context.h",
     "../public/test/navigation_handle_observer.cc",
     "../public/test/navigation_handle_observer.h",
     "../public/test/navigation_simulator.cc",
@@ -130,6 +132,8 @@ static_library("test_support") {
     "../public/test/test_service.h",
     "../public/test/test_service_manager_context.cc",
     "../public/test/test_service_manager_context.h",
+    "../public/test/test_storage_partition.cc",
+    "../public/test/test_storage_partition.h",
     "../public/test/test_synchronous_compositor_android.cc",
     "../public/test/test_synchronous_compositor_android.h",
     "../public/test/test_url_loader_client.cc",
@@ -482,9 +486,6 @@ mojom("web_ui_test_mojo_bindings") {
   sources = [
     "data/web_ui_test_mojo_bindings.mojom",
   ]
-
-  # TODO(crbug.com/699569): Convert to use the new JS bindings.
-  use_new_js_bindings = false
 }
 
 mojom("mojo_layouttest_bindings") {
@@ -1235,6 +1236,7 @@ test("content_unittests") {
     "../browser/memory/memory_coordinator_impl_unittest.cc",
     "../browser/memory/memory_monitor_android_unittest.cc",
     "../browser/memory/memory_monitor_win_unittest.cc",
+    "../browser/memory/swap_metrics_driver_impl_unittest.cc",
     "../browser/memory/test_memory_monitor.cc",
     "../browser/memory/test_memory_monitor.h",
     "../browser/net/quota_policy_cookie_store_unittest.cc",
@@ -1333,6 +1335,7 @@ test("content_unittests") {
     "../browser/service_worker/service_worker_registration_unittest.cc",
     "../browser/service_worker/service_worker_request_handler_unittest.cc",
     "../browser/service_worker/service_worker_storage_unittest.cc",
+    "../browser/service_worker/service_worker_url_loader_job_unittest.cc",
     "../browser/service_worker/service_worker_url_request_job_unittest.cc",
     "../browser/service_worker/service_worker_version_unittest.cc",
     "../browser/service_worker/service_worker_write_to_cache_job_unittest.cc",
@@ -1433,6 +1436,7 @@ test("content_unittests") {
     "../common/service_worker/service_worker_utils_unittest.cc",
     "../common/throttling_url_loader_unittest.cc",
     "../common/webplugininfo_unittest.cc",
+    "../network/network_context_unittest.cc",
     "../network/network_service_unittest.cc",
     "../network/url_loader_unittest.cc",
     "../public/test/referrer_unittest.cc",

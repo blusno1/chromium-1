@@ -44,7 +44,6 @@
 #include "chrome/browser/ui/webui/chromeos/ui_account_tweaks.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_util.h"
-#include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/display/display_switches.h"
 #else
@@ -60,7 +59,7 @@ namespace {
 
 // Note that settings.html contains a <script> tag which imports a script of
 // the following name. These names must be kept in sync.
-const char kLocalizedStringsFile[] = "strings.js";
+constexpr char kLocalizedStringsFile[] = "strings.js";
 
 struct LocalizedString {
   const char* name;
@@ -1946,7 +1945,25 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsActionSessionOnly",
      IDS_SETTINGS_SITE_SETTINGS_SESSION_ONLY_MENU},
     {"siteSettingsUsage", IDS_SETTINGS_SITE_SETTINGS_USAGE},
+    {"siteSettingsUsageNone", IDS_SETTINGS_SITE_SETTINGS_USAGE_NONE},
     {"siteSettingsPermissions", IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS},
+    {"siteSettingsSourceExtensionAllow",
+     IDS_PAGE_INFO_PERMISSION_ALLOWED_BY_EXTENSION},
+    {"siteSettingsSourceExtensionBlock",
+     IDS_PAGE_INFO_PERMISSION_BLOCKED_BY_EXTENSION},
+    {"siteSettingsSourceExtensionAsk",
+     IDS_PAGE_INFO_PERMISSION_ASK_BY_EXTENSION},
+    {"siteSettingsSourcePolicyAllow",
+     IDS_PAGE_INFO_PERMISSION_ALLOWED_BY_POLICY},
+    {"siteSettingsSourcePolicyBlock",
+     IDS_PAGE_INFO_PERMISSION_BLOCKED_BY_POLICY},
+    {"siteSettingsSourcePolicyAsk", IDS_PAGE_INFO_PERMISSION_ASK_BY_POLICY},
+    {"siteSettingsSourceEmbargo",
+     IDS_PAGE_INFO_PERMISSION_AUTOMATICALLY_BLOCKED},
+    {"siteSettingsSourceInsecureOrigin",
+     IDS_SETTINGS_SITE_SETTINGS_SOURCE_INSECURE_ORIGIN},
+    {"siteSettingsSourceKillSwitch",
+     IDS_SETTINGS_SITE_SETTINGS_SOURCE_KILL_SWITCH},
     {"siteSettingsReset", IDS_SETTINGS_SITE_SETTINGS_RESET_BUTTON},
     {"siteSettingsCookieHeader", IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER},
     {"siteSettingsCookieRemove", IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE},
@@ -1983,7 +2000,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"incognitoSite", IDS_SETTINGS_SITE_SETTINGS_INCOGNITO},
     {"incognitoSiteOnly", IDS_SETTINGS_SITE_SETTINGS_INCOGNITO_ONLY},
     {"embeddedIncognitoSite", IDS_SETTINGS_SITE_SETTINGS_INCOGNITO_EMBEDDED},
-    {"siteSettingsSiteDetails", IDS_SETTINGS_SITE_DETAILS},
     {"noSitesAdded", IDS_SETTINGS_SITE_NO_SITES_ADDED},
     {"siteSettingsAds", IDS_SETTINGS_SITE_SETTINGS_ADS},
     {"siteSettingsAdsBlock", IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK},

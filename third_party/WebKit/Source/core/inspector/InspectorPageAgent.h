@@ -95,7 +95,7 @@ class CORE_EXPORT InspectorPageAgent final
   static bool CachedResourceContent(Resource*,
                                     String* result,
                                     bool* base64_encoded);
-  static bool SharedBufferContent(PassRefPtr<const SharedBuffer>,
+  static bool SharedBufferContent(RefPtr<const SharedBuffer>,
                                   const String& mime_type,
                                   const String& text_encoding_name,
                                   String* result,
@@ -126,6 +126,7 @@ class CORE_EXPORT InspectorPageAgent final
                               Maybe<String> transitionType,
                               String* frame_id) override;
   protocol::Response stopLoading() override;
+  protocol::Response setAdBlockingEnabled(bool) override;
   protocol::Response getResourceTree(
       std::unique_ptr<protocol::Page::FrameResourceTree>* frame_tree) override;
   void getResourceContent(const String& frame_id,

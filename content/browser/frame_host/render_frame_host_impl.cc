@@ -1298,6 +1298,17 @@ void RenderFrameHostImpl::SetLastCommittedOrigin(const url::Origin& origin) {
   CSPContext::SetSelf(origin);
 }
 
+void RenderFrameHostImpl::SetLastCommittedUrl(const GURL& url) {
+  last_committed_url_ = url;
+  resource_coordinator::ResourceCoordinatorInterface* coordinator =
+      GetFrameResourceCoordinator();
+  if (coordinator) {
+    coordinator->SetProperty(
+        resource_coordinator::mojom::PropertyType::kURL,
+        base::MakeUnique<base::Value>(last_committed_url_.spec()));
+  }
+}
+
 void RenderFrameHostImpl::OnDetach() {
   frame_tree_->RemoveFrame(frame_tree_node_);
 }
@@ -1416,8 +1427,7 @@ void RenderFrameHostImpl::OnDidFailProvisionalLoadWithError(
 void RenderFrameHostImpl::OnDidFailLoadWithError(
     const GURL& url,
     int error_code,
-    const base::string16& error_description,
-    bool was_ignored_by_handler) {
+    const base::string16& error_description) {
   TRACE_EVENT2("navigation",
                "RenderFrameHostImpl::OnDidFailProvisionalLoadWithError",
                "frame_tree_node", frame_tree_node_->frame_tree_node_id(),
@@ -1427,8 +1437,7 @@ void RenderFrameHostImpl::OnDidFailLoadWithError(
   GetProcess()->FilterURL(false, &validated_url);
 
   frame_tree_node_->navigator()->DidFailLoadWithError(
-      this, validated_url, error_code, error_description,
-      was_ignored_by_handler);
+      this, validated_url, error_code, error_description);
 }
 
 // Called when the renderer navigates.  For every frame loaded, we'll get this
@@ -2360,9 +2369,9 @@ void RenderFrameHostImpl::OnAccessibilityEvents(
   accessibility_reset_token_ = 0;
 
   RenderWidgetHostViewBase* view = GetViewForAccessibility();
-  AccessibilityMode accessibility_mode = delegate_->GetAccessibilityMode();
+  ui::AXMode accessibility_mode = delegate_->GetAccessibilityMode();
   if (!accessibility_mode.is_mode_off() && view && is_active()) {
-    if (accessibility_mode.has_mode(AccessibilityMode::kNativeAPIs))
+    if (accessibility_mode.has_mode(ui::AXMode::kNativeAPIs))
       GetOrCreateBrowserAccessibilityManager();
 
     std::vector<AXEventNotificationDetails> details;
@@ -2389,7 +2398,7 @@ void RenderFrameHostImpl::OnAccessibilityEvents(
       details.push_back(detail);
     }
 
-    if (accessibility_mode.has_mode(AccessibilityMode::kNativeAPIs)) {
+    if (accessibility_mode.has_mode(ui::AXMode::kNativeAPIs)) {
       if (browser_accessibility_manager_)
         browser_accessibility_manager_->OnAccessibilityEvents(details);
     }
@@ -2433,8 +2442,8 @@ void RenderFrameHostImpl::OnAccessibilityLocationChanges(
   RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
       render_view_host_->GetWidget()->GetView());
   if (view && is_active()) {
-    AccessibilityMode accessibility_mode = delegate_->GetAccessibilityMode();
-    if (accessibility_mode.has_mode(AccessibilityMode::kNativeAPIs)) {
+    ui::AXMode accessibility_mode = delegate_->GetAccessibilityMode();
+    if (accessibility_mode.has_mode(ui::AXMode::kNativeAPIs)) {
       BrowserAccessibilityManager* manager =
           GetOrCreateBrowserAccessibilityManager();
       if (manager)
@@ -2458,8 +2467,8 @@ void RenderFrameHostImpl::OnAccessibilityLocationChanges(
 
 void RenderFrameHostImpl::OnAccessibilityFindInPageResult(
     const AccessibilityHostMsg_FindInPageResultParams& params) {
-  AccessibilityMode accessibility_mode = delegate_->GetAccessibilityMode();
-  if (accessibility_mode.has_mode(AccessibilityMode::kNativeAPIs)) {
+  ui::AXMode accessibility_mode = delegate_->GetAccessibilityMode();
+  if (accessibility_mode.has_mode(ui::AXMode::kNativeAPIs)) {
     BrowserAccessibilityManager* manager =
         GetOrCreateBrowserAccessibilityManager();
     if (manager) {
@@ -3495,13 +3504,19 @@ RenderFrameHostImpl::GetMojoImageDownloader() {
 resource_coordinator::ResourceCoordinatorInterface*
 RenderFrameHostImpl::GetFrameResourceCoordinator() {
   if (!frame_resource_coordinator_) {
-    frame_resource_coordinator_ =
-        base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
-            ServiceManagerConnection::GetForProcess()->GetConnector(),
+    if (resource_coordinator::IsResourceCoordinatorEnabled()) {
+      ServiceManagerConnection* connection =
+          ServiceManagerConnection::GetForProcess();
+      if (connection) {
+        frame_resource_coordinator_ = base::MakeUnique<
+            resource_coordinator::ResourceCoordinatorInterface>(
+            connection->GetConnector(),
             resource_coordinator::CoordinationUnitType::kFrame);
-    if (parent_) {
-      parent_->GetFrameResourceCoordinator()->AddChild(
-          *frame_resource_coordinator_);
+        if (parent_) {
+          parent_->GetFrameResourceCoordinator()->AddChild(
+              *frame_resource_coordinator_);
+        }
+      }
     }
   }
   return frame_resource_coordinator_.get();
@@ -3565,7 +3580,7 @@ void RenderFrameHostImpl::SetAccessibilityCallbackForTesting(
 }
 
 void RenderFrameHostImpl::UpdateAXTreeData() {
-  AccessibilityMode accessibility_mode = delegate_->GetAccessibilityMode();
+  ui::AXMode accessibility_mode = delegate_->GetAccessibilityMode();
   if (accessibility_mode.is_mode_off() || !is_active()) {
     return;
   }
@@ -3609,8 +3624,8 @@ BrowserAccessibilityManager*
 
 void RenderFrameHostImpl::ActivateFindInPageResultForAccessibility(
     int request_id) {
-  AccessibilityMode accessibility_mode = delegate_->GetAccessibilityMode();
-  if (accessibility_mode.has_mode(AccessibilityMode::kNativeAPIs)) {
+  ui::AXMode accessibility_mode = delegate_->GetAccessibilityMode();
+  if (accessibility_mode.has_mode(ui::AXMode::kNativeAPIs)) {
     BrowserAccessibilityManager* manager =
         GetOrCreateBrowserAccessibilityManager();
     if (manager)

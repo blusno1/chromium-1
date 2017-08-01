@@ -1346,9 +1346,6 @@ const char kGCMProductCategoryForSubtypes[] =
 // Whether a user is allowed to use Easy Unlock.
 const char kEasyUnlockAllowed[] = "easy_unlock.allowed";
 
-// Whether Easy Unlock is enabled.
-const char kEasyUnlockEnabled[] = "easy_unlock.enabled";
-
 // Preference storing Easy Unlock pairing data.
 const char kEasyUnlockPairing[] = "easy_unlock.pairing";
 
@@ -2157,7 +2154,7 @@ const char kMediaGalleriesRememberedGalleries[] =
     "media_galleries.remembered_galleries";
 #endif  // !defined(OS_ANDROID)
 
-#if defined(USE_AURA)
+#if defined(OS_CHROMEOS)
 // |kShelfAlignment| and |kShelfAutoHideBehavior| have a local variant. The
 // local variant is not synced and is used if set. If the local variant is not
 // set its value is set from the synced value (once prefs have been
@@ -2183,16 +2180,9 @@ const char kShelfChromeIconIndex[] = "shelf_chrome_icon_index";
 // kShelfAutoHideBehavior.
 const char kShelfPreferences[] = "shelf_preferences";
 
-// Integer value in milliseconds indicating the length of time for which a
-// confirmation dialog should be shown when the user presses the logout button.
-// A value of 0 indicates that logout should happen immediately, without showing
-// a confirmation dialog.
-const char kLogoutDialogDurationMs[] = "logout_dialog_duration_ms";
 const char kPinnedLauncherApps[] = "pinned_launcher_apps";
 const char kPolicyPinnedLauncherApps[] = "policy_pinned_launcher_apps";
-// Boolean value indicating whether to show a logout button in the ash tray.
-const char kShowLogoutButtonInTray[] = "show_logout_button_in_tray";
-#endif
+#endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
 // Counts how many more times the 'profile on a network share' warning should be

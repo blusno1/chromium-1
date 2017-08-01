@@ -30,7 +30,6 @@
 #include "content/browser/loader/global_routing_id.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_impl.h"
-#include "content/common/accessibility_mode.h"
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
 #include "content/common/content_security_policy/csp_context.h"
@@ -58,6 +57,7 @@
 #include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
+#include "ui/accessibility/ax_modes.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/mojo/window_open_disposition.mojom.h"
 #include "ui/base/page_transition_types.h"
@@ -283,9 +283,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Allows FrameTreeNode::SetCurrentURL to update this frame's last committed
   // URL.  Do not call this directly, since we rely on SetCurrentURL to track
   // whether a real load has committed or not.
-  void set_last_committed_url(const GURL& url) {
-    last_committed_url_ = url;
-  }
+  void SetLastCommittedUrl(const GURL& url);
 
   // The most recent non-net-error URL to commit in this frame.  In almost all
   // cases, use GetLastCommittedURL instead.
@@ -590,7 +588,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Returns the Mojo ImageDownloader service.
   const content::mojom::ImageDownloaderPtr& GetMojoImageDownloader();
 
-  // Returns the interface to the Global Resource Coordinator
+  // Returns the interface to the Global Resource Coordinator.
   resource_coordinator::ResourceCoordinatorInterface*
   GetFrameResourceCoordinator() override;
 
@@ -721,11 +719,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const base::TimeTicks& navigation_start);
   void OnDidFailProvisionalLoadWithError(
       const FrameHostMsg_DidFailProvisionalLoadWithError_Params& params);
-  void OnDidFailLoadWithError(
-      const GURL& url,
-      int error_code,
-      const base::string16& error_description,
-      bool was_ignored_by_handler);
+  void OnDidFailLoadWithError(const GURL& url,
+                              int error_code,
+                              const base::string16& error_description);
   void OnDidCommitProvisionalLoad(const IPC::Message& msg);
   void OnUpdateState(const PageState& state);
   void OnBeforeUnloadACK(

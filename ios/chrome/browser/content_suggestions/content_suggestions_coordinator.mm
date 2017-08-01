@@ -10,6 +10,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
+#include "components/ntp_snippets/ntp_snippets_constants.h"
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler.h"
 #include "components/ntp_tiles/metrics.h"
 #include "components/ntp_tiles/most_visited_sites.h"
@@ -68,6 +69,7 @@ const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=new_tab";
     ContentSuggestionsAlertCommands,
     ContentSuggestionsCommands,
     ContentSuggestionsHeaderViewControllerCommandHandler,
+    ContentSuggestionsHeaderViewControllerDelegate,
     ContentSuggestionsViewControllerAudience,
     ContentSuggestionsViewControllerDelegate,
     OverscrollActionsControllerDelegate>
@@ -120,6 +122,7 @@ const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=new_tab";
 
   self.headerController = [[ContentSuggestionsHeaderViewController alloc] init];
   self.headerController.dispatcher = self.dispatcher;
+  self.headerController.delegate = self;
   self.headerController.readingListModel =
       ReadingListModelFactory::GetForBrowserState(self.browserState);
   self.googleLandingMediator =
@@ -181,9 +184,7 @@ const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=new_tab";
 #pragma mark - ContentSuggestionsCommands
 
 - (void)openReadingList {
-  [self.suggestionsViewController
-      chromeExecuteCommand:[GenericChromeCommand
-                               commandWithTag:IDC_SHOW_READING_LIST]];
+  [self.dispatcher showReadingList];
 }
 
 - (void)openPageForItem:(CollectionViewItem*)item {
@@ -192,8 +193,13 @@ const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=new_tab";
   ContentSuggestionsItem* suggestionItem =
       base::mac::ObjCCastStrict<ContentSuggestionsItem>(item);
 
+  // Use a referrer with a specific URL to mark this entry as coming from
+  // ContentSuggestions.
+  web::Referrer referrer;
+  referrer.url = GURL(ntp_snippets::kContentSuggestionsApiScope);
+
   [self.URLLoader loadURL:suggestionItem.URL
-                 referrer:web::Referrer()
+                 referrer:referrer
                transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
         rendererInitiated:NO];
 }
@@ -314,6 +320,16 @@ const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=new_tab";
   base::RecordAction(base::UserMetricsAction("MostVisited_UrlBlacklisted"));
   [self.contentSuggestionsMediator blacklistMostVisitedURL:mostVisitedItem.URL];
   [self showMostVisitedUndoForURL:mostVisitedItem.URL];
+}
+
+#pragma mark - ContentSuggestionsHeaderViewControllerDelegate
+
+- (BOOL)isContextMenuVisible {
+  return self.alertCoordinator.isVisible;
+}
+
+- (BOOL)isScrolledToTop {
+  return self.suggestionsViewController.scrolledToTop;
 }
 
 #pragma mark - ContentSuggestionsViewControllerDelegate

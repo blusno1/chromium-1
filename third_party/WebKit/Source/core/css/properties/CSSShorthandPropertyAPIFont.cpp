@@ -27,7 +27,7 @@ bool ConsumeSystemFont(bool important,
   if (!range.AtEnd())
     return false;
 
-  FontSelectionValueStyle font_style = NormalSlopeValue();
+  FontSelectionValue font_style = NormalSlopeValue();
   FontSelectionValue font_weight = NormalWeightValue();
   float font_size = 0;
   AtomicString font_family;
@@ -94,15 +94,15 @@ bool ConsumeFont(bool important,
       return false;
   }
   // Optional font-style, font-variant, font-stretch and font-weight.
-  CSSIdentifierValue* font_style = nullptr;
+  CSSValue* font_style = nullptr;
   CSSIdentifierValue* font_variant_caps = nullptr;
   CSSValue* font_weight = nullptr;
-  CSSIdentifierValue* font_stretch = nullptr;
+  CSSValue* font_stretch = nullptr;
   while (!range.AtEnd()) {
     CSSValueID id = range.Peek().Id();
-    if (!font_style && CSSParserFastPaths::IsValidKeywordPropertyAndValue(
-                           CSSPropertyFontStyle, id, context.Mode())) {
-      font_style = CSSPropertyParserHelpers::ConsumeIdent(range);
+    if (!font_style && (id == CSSValueNormal || id == CSSValueItalic ||
+                        id == CSSValueOblique)) {
+      font_style = CSSPropertyFontUtils::ConsumeFontStyle(range);
       continue;
     }
     if (!font_variant_caps &&
@@ -119,10 +119,16 @@ bool ConsumeFont(bool important,
       if (font_weight)
         continue;
     }
-    if (!font_stretch && CSSParserFastPaths::IsValidKeywordPropertyAndValue(
-                             CSSPropertyFontStretch, id, context.Mode()))
-      font_stretch = CSSPropertyParserHelpers::ConsumeIdent(range);
-    else
+    // Stretch in the font shorthand can only take the CSS Fonts Level 3
+    // keywords, not arbitrary values, compare
+    // https://drafts.csswg.org/css-fonts-4/#font-prop
+    // Bail out if the last possible property of the set in this loop could not
+    // be parsed, this closes the first block of optional values of the font
+    // shorthand, compare: [ [ <‘font-style’> || <font-variant-css21> ||
+    // <‘font-weight’> || <font-stretch-css3> ]?
+    if (font_stretch ||
+        !(font_stretch =
+              CSSPropertyFontUtils::ConsumeFontStretchKeywordOnly(range)))
       break;
   }
 

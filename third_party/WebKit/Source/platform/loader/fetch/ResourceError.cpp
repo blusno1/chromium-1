@@ -78,18 +78,13 @@ ResourceError ResourceError::Copy() const {
   error_copy.error_code_ = error_code_;
   error_copy.failing_url_ = failing_url_.Copy();
   error_copy.localized_description_ = localized_description_.IsolatedCopy();
-  error_copy.is_null_ = is_null_;
   error_copy.is_access_check_ = is_access_check_;
-  error_copy.was_ignored_by_handler_ = was_ignored_by_handler_;
   return error_copy;
 }
 
 bool ResourceError::Compare(const ResourceError& a, const ResourceError& b) {
   if (a.IsNull() && b.IsNull())
     return true;
-
-  if (a.IsNull() || b.IsNull())
-    return false;
 
   if (a.GetDomain() != b.GetDomain())
     return false;
@@ -107,9 +102,6 @@ bool ResourceError::Compare(const ResourceError& a, const ResourceError& b) {
     return false;
 
   if (a.StaleCopyInCache() != b.StaleCopyInCache())
-    return false;
-
-  if (a.WasIgnoredByHandler() != b.WasIgnoredByHandler())
     return false;
 
   return true;

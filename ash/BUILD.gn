@@ -13,6 +13,11 @@ assert(is_chromeos)
 assert(use_aura)
 assert(enable_hidpi)
 
+# X11 CrOS is deprecated and will be deleted soon, see https://crbug.com/671355.
+# Make sure no one is building that configuration anymore.
+# TODO(kylechar): Remove this comment when X11 CrOS code has been removed.
+assert(use_ozone)
+
 component("ash") {
   sources = [
     "accelerators/accelerator_commands.cc",
@@ -481,7 +486,6 @@ component("ash") {
     "system/screen_security/screen_tray_item.cc",
     "system/screen_security/screen_tray_item.h",
     "system/session/last_window_closed_observer.h",
-    "system/session/logout_button_observer.h",
     "system/session/logout_button_tray.cc",
     "system/session/logout_button_tray.h",
     "system/session/logout_confirmation_controller.cc",
@@ -1176,6 +1180,7 @@ source_set("common_unittests") {
     "frame/caption_buttons/frame_size_button_unittest.cc",
     "frame/custom_frame_view_ash_unittest.cc",
     "frame/default_header_painter_unittest.cc",
+    "highlighter/highlighter_controller_unittest.cc",
     "highlighter/highlighter_gesture_util_unittest.cc",
     "ime/ime_controller_unittest.cc",
     "laser/laser_pointer_controller_unittest.cc",
@@ -1253,6 +1258,7 @@ source_set("common_unittests") {
     "system/power/tray_power_unittest.cc",
     "system/power/video_activity_notifier_unittest.cc",
     "system/screen_security/screen_tray_item_unittest.cc",
+    "system/session/logout_button_tray_unittest.cc",
     "system/session/logout_confirmation_controller_unittest.cc",
     "system/session/tray_session_length_limit_unittest.cc",
     "system/status_area_widget_unittest.cc",
@@ -1646,6 +1652,8 @@ static_library("test_support_common") {
     "display/mirror_window_test_api.h",
     "display/screen_orientation_controller_test_api.cc",
     "display/screen_orientation_controller_test_api.h",
+    "highlighter/highlighter_controller_test_api.cc",
+    "highlighter/highlighter_controller_test_api.h",
     "keyboard/test_keyboard_ui.cc",
     "keyboard/test_keyboard_ui.h",
     "laser/laser_pointer_controller_test_api.cc",

@@ -302,7 +302,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void EnqueueDocumentEvent(Event*);
   void EnqueuePageshowEvent(PageshowEventPersistence);
   void EnqueueHashchangeEvent(const String& old_url, const String& new_url);
-  void EnqueuePopstateEvent(PassRefPtr<SerializedScriptValue>);
+  void EnqueuePopstateEvent(RefPtr<SerializedScriptValue>);
   void DispatchWindowLoadEvent();
   void DocumentWasClosed();
   void StatePopped(PassRefPtr<SerializedScriptValue>);
@@ -324,7 +324,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   // Protected DOMWindow overrides.
   void SchedulePostMessage(MessageEvent*,
-                           PassRefPtr<SecurityOrigin> target,
+                           RefPtr<SecurityOrigin> target,
                            Document* source) override;
 
  private:
@@ -340,7 +340,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void DispatchLoadEvent();
   void ClearDocument();
 
-  Member<Document> document_;
+  TraceWrapperMember<Document> document_;
   Member<DOMVisualViewport> visualViewport_;
   TaskRunnerTimer<LocalDOMWindow> unused_preloads_timer_;
 

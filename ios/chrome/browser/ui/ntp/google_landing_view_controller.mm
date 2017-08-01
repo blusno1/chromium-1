@@ -17,7 +17,6 @@
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
-#import "ios/chrome/browser/ui/constraints_ui_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_data_source.h"
@@ -31,6 +30,7 @@
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
@@ -911,7 +911,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
         indexPathForCell:static_cast<UICollectionViewCell*>(sender.view)];
     const NSUInteger index = indexPath.row;
 
-    // A long press occured on one of the most visited button. Popup a context
+    // A long press occurred on one of the most visited button. Popup a context
     // menu.
     DCHECK(index < [self numberOfItems]);
 

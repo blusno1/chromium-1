@@ -37,7 +37,6 @@
 #include "cc/layers/video_layer_impl.h"
 #include "cc/layers/viewport.h"
 #include "cc/output/compositor_frame_metadata.h"
-#include "cc/output/gl_renderer.h"
 #include "cc/output/latency_info_swap_promise.h"
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/solid_color_draw_quad.h"
@@ -70,6 +69,7 @@
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/quads/copy_output_request.h"
 #include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/service/display/gl_renderer.h"
 #include "components/viz/test/begin_frame_args_test.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "media/base/media.h"
@@ -948,14 +948,14 @@ TEST_F(LayerTreeHostImplTest, GPUMemoryForSmallLayerHistogramTest) {
 
 TEST_F(LayerTreeHostImplTest, GPUMemoryForLargeLayerHistogramTest) {
   base::HistogramTester histogram_tester;
-  SetClientNameForMetrics("Browser");
+  SetClientNameForMetrics("Renderer");
   // With default tile size being set to 256 * 256, the following layer needs
   // 4 tiles which cost 256 * 256 * 4 * 4 / 1024 = 1024KB memory.
   TestGPUMemoryForTilings(gfx::Size(500, 500));
   histogram_tester.ExpectBucketCount(
-      "Compositing.Browser.GPUMemoryForTilingsInKb", 1024, 1);
+      "Compositing.Renderer.GPUMemoryForTilingsInKb", 1024, 1);
   histogram_tester.ExpectTotalCount(
-      "Compositing.Browser.GPUMemoryForTilingsInKb", 1);
+      "Compositing.Renderer.GPUMemoryForTilingsInKb", 1);
 }
 
 TEST_F(LayerTreeHostImplTest, ScrollRootCallsCommitAndRedraw) {
@@ -4944,10 +4944,12 @@ TEST_F(LayerTreeHostImplBrowserControlsTest,
   child->SetDrawsContent(true);
   child->test_properties()->is_container_for_fixed_position_layers = true;
 
-  // scroll child to limit
-  SetScrollOffsetDelta(child.get(), gfx::Vector2dF(0, 100.f));
+  LayerImpl* child_ptr = child.get();
   outer_viewport_scroll_layer->test_properties()->AddChild(std::move(child));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
+
+  // Scroll child to the limit.
+  SetScrollOffsetDelta(child_ptr, gfx::Vector2dF(0, 100.f));
 
   // Scroll 25px to hide browser controls
   gfx::Vector2dF scroll_delta(0.f, 25.f);
@@ -8533,9 +8535,9 @@ TEST_F(LayerTreeHostImplTestDrawAndTestDamage, FrameIncludesDamageRect) {
   DrawFrameAndTestDamage(no_damage);
 }
 
-class GLRendererWithSetupQuadForAntialiasing : public GLRenderer {
+class GLRendererWithSetupQuadForAntialiasing : public viz::GLRenderer {
  public:
-  using GLRenderer::ShouldAntialiasQuad;
+  using viz::GLRenderer::ShouldAntialiasQuad;
 };
 
 TEST_F(LayerTreeHostImplTest, FarAwayQuadsDontNeedAA) {

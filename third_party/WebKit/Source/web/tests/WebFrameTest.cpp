@@ -70,7 +70,7 @@
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLFormElement.h"
@@ -141,9 +141,9 @@
 #include "public/platform/WebURLResponse.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebContextMenuData.h"
-#include "public/web/WebDataSource.h"
 #include "public/web/WebDeviceEmulationParams.h"
 #include "public/web/WebDocument.h"
+#include "public/web/WebDocumentLoader.h"
 #include "public/web/WebFindOptions.h"
 #include "public/web/WebFormElement.h"
 #include "public/web/WebFrameClient.h"
@@ -287,7 +287,7 @@ class WebFrameTest : public ::testing::Test {
     return DataTransfer::NodeImage(*frame, *element);
   }
 
-  void RemoveElementById(WebLocalFrameBase* frame, const AtomicString& id) {
+  void RemoveElementById(WebLocalFrameImpl* frame, const AtomicString& id) {
     Element* element = frame->GetFrame()->GetDocument()->getElementById(id);
     DCHECK(element);
     element->remove();
@@ -408,13 +408,14 @@ class ScriptExecutionCallbackHelper : public WebScriptExecutionCallback {
  public:
   explicit ScriptExecutionCallbackHelper(v8::Local<v8::Context> context)
       : did_complete_(false), bool_value_(false), context_(context) {}
-  ~ScriptExecutionCallbackHelper() {}
+  ~ScriptExecutionCallbackHelper() override {}
 
   bool DidComplete() const { return did_complete_; }
   const String& StringValue() const { return string_value_; }
   bool BoolValue() { return bool_value_; }
 
  private:
+  // WebScriptExecutionCallback:
   void Completed(const WebVector<v8::Local<v8::Value>>& values) override {
     did_complete_ = true;
     if (!values.IsEmpty()) {
@@ -525,7 +526,7 @@ TEST_P(ParameterizedWebFrameTest, RequestExecuteV8FunctionWhileSuspended) {
       web_view_helper.LocalMainFrame()->MainWorldScriptContext();
 
   // Suspend scheduled tasks so the script doesn't run.
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   main_frame->GetFrame()->GetDocument()->SuspendScheduledTasks();
 
   ScriptExecutionCallbackHelper callback_helper(context);
@@ -556,7 +557,7 @@ TEST_P(ParameterizedWebFrameTest,
   };
 
   // Suspend scheduled tasks so the script doesn't run.
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   Document* document = main_frame->GetFrame()->GetDocument();
   document->SuspendScheduledTasks();
 
@@ -711,7 +712,9 @@ class EvaluateOnLoadWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   EvaluateOnLoadWebFrameClient() : executing_(false), was_executed_(false) {}
+  ~EvaluateOnLoadWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void DidClearWindowObject() override {
     EXPECT_FALSE(executing_);
     was_executed_ = true;
@@ -736,6 +739,9 @@ TEST_P(ParameterizedWebFrameTest, DidClearWindowObjectIsNotRecursive) {
 class CSSCallbackWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
   CSSCallbackWebFrameClient() : update_count_(0) {}
+  ~CSSCallbackWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
   void DidMatchCSS(
       const WebVector<WebString>& newly_matching_selectors,
       const WebVector<WebString>& stopped_matching_selectors) override;
@@ -1064,6 +1070,10 @@ namespace {
 class FixedLayoutTestWebViewClient
     : public FrameTestHelpers::TestWebViewClient {
  public:
+  FixedLayoutTestWebViewClient() {}
+  ~FixedLayoutTestWebViewClient() override {}
+
+  // FrameTestHelpers::TestWebViewClient:
   WebScreenInfo GetScreenInfo() override { return screen_info_; }
 
   WebScreenInfo screen_info_;
@@ -1099,7 +1109,7 @@ bool CheckTextAutosizingMultiplier(Document* document, float multiplier) {
   return multiplier_checked;
 }
 
-}  // anonymous namespace
+}  // namespace
 
 TEST_P(ParameterizedWebFrameTest,
        ChangeInFixedLayoutResetsTextAutosizingMultipliers) {
@@ -1957,7 +1967,7 @@ TEST_P(ParameterizedWebFrameTest,
 
   IntPoint hit_point = IntPoint(30, 30);  // button size is 100x100
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   Document* document = frame->GetFrame()->GetDocument();
   Element* element = document->getElementById("tap_button");
 
@@ -1987,7 +1997,7 @@ TEST_P(ParameterizedWebFrameTest, FrameOwnerPropertiesMargin) {
   WebFrameOwnerProperties properties;
   properties.margin_width = 11;
   properties.margin_height = 22;
-  WebLocalFrameBase* local_frame = FrameTestHelpers::CreateLocalChild(
+  WebLocalFrameImpl* local_frame = FrameTestHelpers::CreateLocalChild(
       *helper.RemoteMainFrame(), "frameName", properties);
 
   RegisterMockedHttpURLLoad("frame_owner_properties.html");
@@ -2020,7 +2030,7 @@ TEST_P(ParameterizedWebFrameTest, FrameOwnerPropertiesScrolling) {
   // Turn off scrolling in the subframe.
   properties.scrolling_mode =
       WebFrameOwnerProperties::ScrollingMode::kAlwaysOff;
-  WebLocalFrameBase* local_frame = FrameTestHelpers::CreateLocalChild(
+  WebLocalFrameImpl* local_frame = FrameTestHelpers::CreateLocalChild(
       *helper.RemoteMainFrame(), "frameName", properties);
 
   RegisterMockedHttpURLLoad("frame_owner_properties.html");
@@ -2034,7 +2044,7 @@ TEST_P(ParameterizedWebFrameTest, FrameOwnerPropertiesScrolling) {
                    HTMLNames::marginheightAttr));
 
   LocalFrameView* frame_view =
-      static_cast<WebLocalFrameBase*>(local_frame)->GetFrameView();
+      static_cast<WebLocalFrameImpl*>(local_frame)->GetFrameView();
   EXPECT_EQ(nullptr, frame_view->HorizontalScrollbar());
   EXPECT_EQ(nullptr, frame_view->VerticalScrollbar());
 }
@@ -4175,6 +4185,10 @@ TEST_P(ParameterizedWebFrameTest, FirstRectForCharacterRangeWithPinchZoom) {
 class TestReloadDoesntRedirectWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
+  TestReloadDoesntRedirectWebFrameClient() {}
+  ~TestReloadDoesntRedirectWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
   WebNavigationPolicy DecidePolicyForNavigation(
       const NavigationPolicyInfo& info) override {
     EXPECT_FALSE(info.extra_data);
@@ -4201,6 +4215,10 @@ TEST_P(ParameterizedWebFrameTest, ReloadDoesntSetRedirect) {
 class ClearScrollStateOnCommitWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
+  ClearScrollStateOnCommitWebFrameClient() {}
+  ~ClearScrollStateOnCommitWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
   void DidCommitProvisionalLoad(const WebHistoryItem&,
                                 WebHistoryCommitType) override {
     Frame()->View()->ResetScrollAndScaleState();
@@ -4268,10 +4286,11 @@ TEST_P(ParameterizedWebFrameTest, ReloadWhileProvisional) {
   FrameTestHelpers::ReloadFrameBypassingCache(
       web_view_helper.WebView()->MainFrameImpl());
 
-  WebDataSource* data_source = web_view_helper.LocalMainFrame()->DataSource();
-  ASSERT_TRUE(data_source);
+  WebDocumentLoader* document_loader =
+      web_view_helper.LocalMainFrame()->GetDocumentLoader();
+  ASSERT_TRUE(document_loader);
   EXPECT_EQ(ToKURL(base_url_ + "fixed_layout.html"),
-            KURL(data_source->GetRequest().Url()));
+            KURL(document_loader->GetRequest().Url()));
 }
 
 TEST_P(ParameterizedWebFrameTest, AppendRedirects) {
@@ -4281,12 +4300,13 @@ TEST_P(ParameterizedWebFrameTest, AppendRedirects) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(first_url);
 
-  WebDataSource* data_source = web_view_helper.LocalMainFrame()->DataSource();
-  ASSERT_TRUE(data_source);
-  data_source->AppendRedirect(ToKURL(second_url));
+  WebDocumentLoader* document_loader =
+      web_view_helper.LocalMainFrame()->GetDocumentLoader();
+  ASSERT_TRUE(document_loader);
+  document_loader->AppendRedirect(ToKURL(second_url));
 
   WebVector<WebURL> redirects;
-  data_source->RedirectChain(redirects);
+  document_loader->RedirectChain(redirects);
   ASSERT_EQ(2U, redirects.size());
   EXPECT_EQ(ToKURL(first_url), KURL(redirects[0]));
   EXPECT_EQ(ToKURL(second_url), KURL(redirects[1]));
@@ -4306,10 +4326,11 @@ TEST_P(ParameterizedWebFrameTest, IframeRedirect) {
   WebFrame* iframe = web_view_helper.LocalMainFrame()->FindFrameByName(
       WebString::FromUTF8("ifr"));
   ASSERT_TRUE(iframe && iframe->IsWebLocalFrame());
-  WebDataSource* iframe_data_source = iframe->ToWebLocalFrame()->DataSource();
-  ASSERT_TRUE(iframe_data_source);
+  WebDocumentLoader* iframe_document_loader =
+      iframe->ToWebLocalFrame()->GetDocumentLoader();
+  ASSERT_TRUE(iframe_document_loader);
   WebVector<WebURL> redirects;
-  iframe_data_source->RedirectChain(redirects);
+  iframe_document_loader->RedirectChain(redirects);
   ASSERT_EQ(2U, redirects.size());
   EXPECT_EQ(ToKURL("about:blank"), KURL(redirects[0]));
   EXPECT_EQ(ToKURL("http://internal.test/visible_iframe.html"),
@@ -4417,13 +4438,14 @@ class ContextLifetimeTestWebFrameClient
       Vector<std::unique_ptr<Notification>>& release_notifications)
       : create_notifications_(create_notifications),
         release_notifications_(release_notifications) {}
+  ~ContextLifetimeTestWebFrameClient() override {}
 
   void Reset() {
     create_notifications_.clear();
     release_notifications_.clear();
   }
 
-  // WebFrameClient overrides:
+  // WebFrameClient:
   WebLocalFrame* CreateChildFrame(
       WebLocalFrame* parent,
       WebTreeScopeType scope,
@@ -4472,7 +4494,7 @@ TEST_P(ParameterizedWebFrameTest, ContextNotificationsLoadUnload) {
   web_view_helper.InitializeAndLoad(
       base_url_ + "context_notifications_test.html", &web_frame_client);
 
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   WebFrame* child_frame = main_frame->FirstChild();
 
   ASSERT_EQ(2u, create_notifications.size());
@@ -4536,7 +4558,7 @@ TEST_P(ParameterizedWebFrameTest, ContextNotificationsReload) {
 
   // The last two create notifications should be for the current frames and
   // context.
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   WebFrame* child_frame = main_frame->FirstChild();
   auto& first_refresh_notification = create_notifications[2];
   auto& second_refresh_notification = create_notifications[3];
@@ -4755,6 +4777,10 @@ TEST_P(ParameterizedWebFrameTest, GetFullHtmlOfPage) {
 class TestExecuteScriptDuringDidCreateScriptContext
     : public FrameTestHelpers::TestWebFrameClient {
  public:
+  TestExecuteScriptDuringDidCreateScriptContext() {}
+  ~TestExecuteScriptDuringDidCreateScriptContext() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
   void DidCreateScriptContext(v8::Local<v8::Context> context,
                               int world_id) override {
     Frame()->ExecuteScript(WebScriptSource("window.history = 'replaced';"));
@@ -4776,7 +4802,9 @@ class FindUpdateWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
   FindUpdateWebFrameClient()
       : find_results_are_ready_(false), count_(-1), active_index_(-1) {}
+  ~FindUpdateWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void ReportFindInPageMatchCount(int, int count, bool final_update) override {
     count_ = count;
     if (final_update)
@@ -4820,13 +4848,13 @@ TEST_P(ParameterizedWebFrameTest, FindInPageMatchRects) {
 
   WebFindOptions options;
   WebString search_text = WebString::FromUTF8(kFindString);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   EXPECT_TRUE(main_frame->Find(kFindIdentifier, search_text, options, false));
 
   main_frame->EnsureTextFinder().ResetMatchCount();
 
-  for (WebLocalFrameBase* frame = main_frame; frame;
-       frame = static_cast<WebLocalFrameBase*>(frame->TraverseNext())) {
+  for (WebLocalFrameImpl* frame = main_frame; frame;
+       frame = static_cast<WebLocalFrameImpl*>(frame->TraverseNext())) {
     frame->EnsureTextFinder().StartScopingStringMatches(kFindIdentifier,
                                                         search_text, options);
   }
@@ -4886,12 +4914,12 @@ TEST_P(ParameterizedWebFrameTest, FindInPageActiveIndex) {
 
   WebFindOptions options;
   WebString search_text = WebString::FromUTF8(kFindString);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   EXPECT_TRUE(main_frame->Find(kFindIdentifier, search_text, options, false));
   main_frame->EnsureTextFinder().ResetMatchCount();
 
-  for (WebLocalFrameBase* frame = main_frame; frame;
-       frame = static_cast<WebLocalFrameBase*>(frame->TraverseNext())) {
+  for (WebLocalFrameImpl* frame = main_frame; frame;
+       frame = static_cast<WebLocalFrameImpl*>(frame->TraverseNext())) {
     frame->EnsureTextFinder().StartScopingStringMatches(kFindIdentifier,
                                                         search_text, options);
   }
@@ -4900,8 +4928,8 @@ TEST_P(ParameterizedWebFrameTest, FindInPageActiveIndex) {
   EXPECT_TRUE(main_frame->Find(kFindIdentifier, search_text, options, false));
   main_frame->StopFinding(WebLocalFrame::kStopFindActionClearSelection);
 
-  for (WebLocalFrameBase* frame = main_frame; frame;
-       frame = static_cast<WebLocalFrameBase*>(frame->TraverseNext())) {
+  for (WebLocalFrameImpl* frame = main_frame; frame;
+       frame = static_cast<WebLocalFrameImpl*>(frame->TraverseNext())) {
     frame->EnsureTextFinder().StartScopingStringMatches(kFindIdentifier,
                                                         search_text, options);
   }
@@ -4917,8 +4945,8 @@ TEST_P(ParameterizedWebFrameTest, FindInPageActiveIndex) {
       main_frame->Find(kFindIdentifier, search_text_new, options, false));
   main_frame->EnsureTextFinder().ResetMatchCount();
 
-  for (WebLocalFrameBase* frame = main_frame; frame;
-       frame = static_cast<WebLocalFrameBase*>(frame->TraverseNext())) {
+  for (WebLocalFrameImpl* frame = main_frame; frame;
+       frame = static_cast<WebLocalFrameImpl*>(frame->TraverseNext())) {
     frame->EnsureTextFinder().StartScopingStringMatches(
         kFindIdentifier, search_text_new, options);
   }
@@ -4943,9 +4971,9 @@ TEST_P(ParameterizedWebFrameTest, FindOnDetachedFrame) {
 
   WebFindOptions options;
   WebString search_text = WebString::FromUTF8(kFindString);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
-  WebLocalFrameBase* second_frame =
-      ToWebLocalFrameBase(main_frame->TraverseNext());
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* second_frame =
+      ToWebLocalFrameImpl(main_frame->TraverseNext());
 
   // Detach the frame before finding.
   RemoveElementById(main_frame, "frame");
@@ -4959,8 +4987,8 @@ TEST_P(ParameterizedWebFrameTest, FindOnDetachedFrame) {
 
   main_frame->EnsureTextFinder().ResetMatchCount();
 
-  for (WebLocalFrameBase* frame = main_frame; frame;
-       frame = static_cast<WebLocalFrameBase*>(frame->TraverseNext())) {
+  for (WebLocalFrameImpl* frame = main_frame; frame;
+       frame = static_cast<WebLocalFrameImpl*>(frame->TraverseNext())) {
     frame->EnsureTextFinder().StartScopingStringMatches(kFindIdentifier,
                                                         search_text, options);
   }
@@ -4984,7 +5012,7 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameBeforeScopeStrings) {
 
   WebFindOptions options;
   WebString search_text = WebString::FromUTF8(kFindString);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
 
   for (WebFrame* frame = main_frame; frame; frame = frame->TraverseNext())
     EXPECT_TRUE(frame->ToWebLocalFrame()->Find(kFindIdentifier, search_text,
@@ -4998,8 +5026,8 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameBeforeScopeStrings) {
 
   main_frame->EnsureTextFinder().ResetMatchCount();
 
-  for (WebLocalFrameBase* frame = main_frame; frame;
-       frame = static_cast<WebLocalFrameBase*>(frame->TraverseNext())) {
+  for (WebLocalFrameImpl* frame = main_frame; frame;
+       frame = static_cast<WebLocalFrameImpl*>(frame->TraverseNext())) {
     frame->EnsureTextFinder().StartScopingStringMatches(kFindIdentifier,
                                                         search_text, options);
   }
@@ -5023,7 +5051,7 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameWhileScopingStrings) {
 
   WebFindOptions options;
   WebString search_text = WebString::FromUTF8(kFindString);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
 
   for (WebFrame* frame = main_frame; frame; frame = frame->TraverseNext())
     EXPECT_TRUE(frame->ToWebLocalFrame()->Find(kFindIdentifier, search_text,
@@ -5034,8 +5062,8 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameWhileScopingStrings) {
 
   main_frame->EnsureTextFinder().ResetMatchCount();
 
-  for (WebLocalFrameBase* frame = main_frame; frame;
-       frame = static_cast<WebLocalFrameBase*>(frame->TraverseNext())) {
+  for (WebLocalFrameImpl* frame = main_frame; frame;
+       frame = static_cast<WebLocalFrameImpl*>(frame->TraverseNext())) {
     frame->EnsureTextFinder().StartScopingStringMatches(kFindIdentifier,
                                                         search_text, options);
   }
@@ -5063,7 +5091,7 @@ TEST_P(ParameterizedWebFrameTest, ResetMatchCount) {
 
   WebFindOptions options;
   WebString search_text = WebString::FromUTF8(kFindString);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
 
   // Check that child frame exists.
   EXPECT_TRUE(!!main_frame->TraverseNext());
@@ -5092,7 +5120,7 @@ TEST_P(ParameterizedWebFrameTest, SetTickmarks) {
 
   WebFindOptions options;
   WebString search_text = WebString::FromUTF8(kFindString);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   EXPECT_TRUE(main_frame->Find(kFindIdentifier, search_text, options, false));
 
   main_frame->EnsureTextFinder().ResetMatchCount();
@@ -5140,7 +5168,7 @@ TEST_P(ParameterizedWebFrameTest, FindInPageJavaScriptUpdatesDOM) {
   web_view_helper.Resize(WebSize(640, 480));
   RunPendingTasks();
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   const int kFindIdentifier = 12345;
   static const char* kFindString = "foo";
   WebString search_text = WebString::FromUTF8(kFindString);
@@ -5213,7 +5241,7 @@ TEST_P(ParameterizedWebFrameTest, FindInPageJavaScriptUpdatesDOMProperOrdinal) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   web_view_helper.Initialize(&client);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   FrameTestHelpers::LoadHTMLString(frame, html,
                                    URLTestHelpers::ToKURL(base_url_));
   web_view_helper.Resize(WebSize(640, 480));
@@ -5354,7 +5382,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeDefaultHandleVisibility) {
   InitializeTextSelectionWebView(base_url_ + "select_range_basic.html",
                                  &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   frame->SelectRange(WebRange(0, 5));
   EXPECT_FALSE(frame->SelectionRange().IsNull());
 
@@ -5369,7 +5397,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeHideHandle) {
   InitializeTextSelectionWebView(base_url_ + "select_range_basic.html",
                                  &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   frame->SelectRange(WebRange(0, 5), WebLocalFrame::kHideSelectionHandle);
 
   EXPECT_FALSE(frame->GetFrame()->Selection().IsHandleVisible())
@@ -5383,7 +5411,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeShowHandle) {
   InitializeTextSelectionWebView(base_url_ + "select_range_basic.html",
                                  &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   frame->SelectRange(WebRange(0, 5), WebLocalFrame::kShowSelectionHandle);
 
   EXPECT_TRUE(frame->GetFrame()->Selection().IsHandleVisible())
@@ -5397,7 +5425,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangePreserveHandleVisibility) {
   InitializeTextSelectionWebView(base_url_ + "select_range_basic.html",
                                  &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   frame->SelectRange(WebRange(0, 5), WebLocalFrame::kHideSelectionHandle);
   frame->SelectRange(WebRange(0, 6), WebLocalFrame::kPreserveHandleVisibility);
 
@@ -5630,7 +5658,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeCanMoveSelectionEnd) {
 }
 
 TEST_P(ParameterizedWebFrameTest, MoveRangeSelectionExtent) {
-  WebLocalFrameBase* frame;
+  WebLocalFrameImpl* frame;
   WebRect start_web_rect;
   WebRect end_web_rect;
 
@@ -5667,7 +5695,7 @@ TEST_P(ParameterizedWebFrameTest, MoveRangeSelectionExtent) {
 }
 
 TEST_P(ParameterizedWebFrameTest, MoveRangeSelectionExtentCannotCollapse) {
-  WebLocalFrameBase* frame;
+  WebLocalFrameImpl* frame;
   WebRect start_web_rect;
   WebRect end_web_rect;
 
@@ -5693,7 +5721,7 @@ TEST_P(ParameterizedWebFrameTest, MoveRangeSelectionExtentCannotCollapse) {
 }
 
 TEST_P(ParameterizedWebFrameTest, MoveRangeSelectionExtentScollsInputField) {
-  WebLocalFrameBase* frame;
+  WebLocalFrameImpl* frame;
   WebRect start_web_rect;
   WebRect end_web_rect;
 
@@ -5737,7 +5765,7 @@ TEST_P(ParameterizedWebFrameTest, DISABLED_PositionForPointTest) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "select_range_span_editable.html",
                                  &web_view_helper);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   LayoutObject* layout_object =
       main_frame->GetFrame()
           ->Selection()
@@ -5768,7 +5796,7 @@ TEST_P(ParameterizedWebFrameTest,
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "move_caret.html",
                                  &web_view_helper);
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
 
   WebRect initial_start_rect;
   WebRect initial_end_rect;
@@ -5808,13 +5836,13 @@ TEST_P(ParameterizedWebFrameTest,
 }
 
 TEST_P(ParameterizedWebFrameTest, MoveCaretStaysHorizontallyAlignedWhenMoved) {
-  WebLocalFrameBase* frame;
+  WebLocalFrameImpl* frame;
   RegisterMockedHttpURLLoad("move_caret.html");
 
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "move_caret.html",
                                  &web_view_helper);
-  frame = (WebLocalFrameBase*)web_view_helper.WebView()->MainFrame();
+  frame = (WebLocalFrameImpl*)web_view_helper.WebView()->MainFrame();
 
   WebRect initial_start_rect;
   WebRect initial_end_rect;
@@ -5845,10 +5873,10 @@ class CompositedSelectionBoundsTestLayerTreeView : public WebLayerTreeView {
   CompositedSelectionBoundsTestLayerTreeView() : selection_cleared_(false) {}
   ~CompositedSelectionBoundsTestLayerTreeView() override {}
 
+  // WebLayerTreeView:
   void RegisterSelection(const WebSelection& selection) override {
     selection_ = WTF::MakeUnique<WebSelection>(selection);
   }
-
   void ClearSelection() override {
     selection_cleared_ = true;
     selection_.reset();
@@ -6118,6 +6146,10 @@ TEST_P(CompositedSelectionBoundsTest, EditableDiv) {
 class DisambiguationPopupTestWebViewClient
     : public FrameTestHelpers::TestWebViewClient {
  public:
+  DisambiguationPopupTestWebViewClient() {}
+  ~DisambiguationPopupTestWebViewClient() override {}
+
+  // FrameTestHelpers::TestWebViewClient:
   bool DidTapMultipleTargets(const WebSize&,
                              const WebRect&,
                              const WebVector<WebRect>& target_rects) override {
@@ -6422,17 +6454,18 @@ class TestSubstituteDataWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   TestSubstituteDataWebFrameClient() : commit_called_(false) {}
+  ~TestSubstituteDataWebFrameClient() override {}
 
-  virtual void DidFailProvisionalLoad(const WebURLError& error,
-                                      WebHistoryCommitType) {
+  // FrameTestHelpers::TestWebFrameClient:
+  void DidFailProvisionalLoad(const WebURLError& error,
+                              WebHistoryCommitType) override {
     Frame()->LoadHTMLString("This should appear",
                             ToKURL("data:text/html,chromewebdata"),
                             error.unreachable_url, true);
   }
-
-  virtual void DidCommitProvisionalLoad(const WebHistoryItem&,
-                                        WebHistoryCommitType) {
-    if (Frame()->DataSource()->GetResponse().Url() !=
+  void DidCommitProvisionalLoad(const WebHistoryItem&,
+                                WebHistoryCommitType) override {
+    if (Frame()->GetDocumentLoader()->GetResponse().Url() !=
         WebURL(URLTestHelpers::ToKURL("about:blank")))
       commit_called_ = true;
   }
@@ -6483,17 +6516,17 @@ class TestWillInsertBodyWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   TestWillInsertBodyWebFrameClient() : num_bodies_(0), did_load_(false) {}
+  ~TestWillInsertBodyWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void DidCommitProvisionalLoad(const WebHistoryItem&,
                                 WebHistoryCommitType) override {
     num_bodies_ = 0;
     did_load_ = true;
   }
-
   void DidCreateDocumentElement(WebLocalFrame*) override {
     EXPECT_EQ(0, num_bodies_);
   }
-
   void WillInsertBody(WebLocalFrame*) override { num_bodies_++; }
 
   int num_bodies_;
@@ -6537,7 +6570,9 @@ TEST_P(ParameterizedWebFrameTest,
 class TextCheckClient : public WebTextCheckClient {
  public:
   TextCheckClient() : number_of_times_checked_(0) {}
-  virtual ~TextCheckClient() {}
+  ~TextCheckClient() override {}
+
+  // WebTextCheckClient:
   void RequestCheckingOfText(const WebString&,
                              WebTextCheckingCompletion* completion) override {
     ++number_of_times_checked_;
@@ -6549,6 +6584,7 @@ class TextCheckClient : public WebTextCheckClient {
         kMisspellingLength, WebVector<WebString>()));
     completion->DidFinishCheckingText(results);
   }
+
   int NumberOfTimesChecked() const { return number_of_times_checked_; }
 
  private:
@@ -6560,7 +6596,7 @@ TEST_P(ParameterizedWebFrameTest, ReplaceMisspelledRange) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "spell.html", &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   TextCheckClient textcheck;
   frame->SetTextCheckClient(&textcheck);
 
@@ -6607,7 +6643,7 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkers) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "spell.html", &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   TextCheckClient textcheck;
   frame->SetTextCheckClient(&textcheck);
 
@@ -6658,7 +6694,7 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkersUnderWords) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "spell.html", &web_view_helper);
 
-  WebLocalFrameBase* web_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* web_frame = web_view_helper.LocalMainFrame();
   TextCheckClient textcheck;
   web_frame->SetTextCheckClient(&textcheck);
 
@@ -6695,13 +6731,13 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkersUnderWords) {
 class StubbornTextCheckClient : public WebTextCheckClient {
  public:
   StubbornTextCheckClient() : completion_(0) {}
-  virtual ~StubbornTextCheckClient() {}
+  ~StubbornTextCheckClient() override {}
 
+  // WebTextCheckClient:
   void RequestCheckingOfText(const WebString&,
                              WebTextCheckingCompletion* completion) override {
     completion_ = completion;
   }
-
   void CancelAllPendingRequests() override {
     if (!completion_)
       return;
@@ -6737,7 +6773,7 @@ TEST_P(ParameterizedWebFrameTest, SlowSpellcheckMarkerPosition) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "spell.html", &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   StubbornTextCheckClient textcheck;
   frame->SetTextCheckClient(&textcheck);
 
@@ -6779,7 +6815,7 @@ TEST_P(ParameterizedWebFrameTest, CancelSpellingRequestCrash) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "spell.html");
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   frame->SetTextCheckClient(0);
 
   Document* document = frame->GetFrame()->GetDocument();
@@ -6799,7 +6835,7 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultErasesMarkers) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "spell.html", &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   StubbornTextCheckClient textcheck;
   frame->SetTextCheckClient(&textcheck);
 
@@ -6837,7 +6873,7 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultsSavedInDocument) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   InitializeTextSelectionWebView(base_url_ + "spell.html", &web_view_helper);
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   StubbornTextCheckClient textcheck;
   frame->SetTextCheckClient(&textcheck);
 
@@ -6885,7 +6921,11 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultsSavedInDocument) {
 class TestAccessInitialDocumentWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
-  virtual void DidAccessInitialDocument() { ++did_access_initial_document_; }
+  TestAccessInitialDocumentWebFrameClient() {}
+  ~TestAccessInitialDocumentWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
+  void DidAccessInitialDocument() override { ++did_access_initial_document_; }
 
   // !!!!!!!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!!!!!
   // If the actual counts in the tests below increase, this could be an
@@ -7053,6 +7093,8 @@ TEST_P(ParameterizedWebFrameTest, DidWriteToInitialDocumentBeforeModalDialog)
 class TestScrolledFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
   TestScrolledFrameClient() { Reset(); }
+  ~TestScrolledFrameClient() override {}
+
   void Reset() { did_scroll_frame_ = false; }
   bool WasFrameScrolled() const { return did_scroll_frame_; }
 
@@ -7061,7 +7103,7 @@ class TestScrolledFrameClient : public FrameTestHelpers::TestWebFrameClient {
     if (Frame()->Parent())
       return;
     EXPECT_FALSE(did_scroll_frame_);
-    LocalFrameView* view = ToWebLocalFrameBase(Frame())->GetFrameView();
+    LocalFrameView* view = ToWebLocalFrameImpl(Frame())->GetFrameView();
     // LocalFrameView can be scrolled in
     // LocalFrameView::SetFixedVisibleContentRect which is called from
     // LocalFrame::CreateView (before the frame is associated with the the
@@ -7084,7 +7126,7 @@ TEST_P(ParameterizedWebFrameTest, CompositorScrollIsUserScrollLongPage) {
   web_view_helper.InitializeAndLoad(base_url_ + "long_scroll.html", &client);
   web_view_helper.Resize(WebSize(1000, 1000));
 
-  WebLocalFrameBase* frame_impl = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame_impl = web_view_helper.LocalMainFrame();
   DocumentLoader::InitialScrollState& initial_scroll_state =
       frame_impl->GetFrame()
           ->Loader()
@@ -7175,6 +7217,10 @@ TEST_P(ParameterizedWebFrameTest, FirstPartyForCookiesForRedirect) {
 class TestNavigationPolicyWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
+  TestNavigationPolicyWebFrameClient() {}
+  ~TestNavigationPolicyWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
   void DidNavigateWithinPage(const WebHistoryItem&,
                              WebHistoryCommitType,
                              bool) override {
@@ -7210,6 +7256,10 @@ TEST_P(ParameterizedWebFrameTest, SimulateFragmentAnchorMiddleClick) {
 
 class TestNewWindowWebViewClient : public FrameTestHelpers::TestWebViewClient {
  public:
+  TestNewWindowWebViewClient() {}
+  ~TestNewWindowWebViewClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
   WebView* CreateView(WebLocalFrame*,
                       const WebURLRequest&,
                       const WebWindowFeatures&,
@@ -7226,7 +7276,9 @@ class TestNewWindowWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   TestNewWindowWebFrameClient() : decide_policy_call_count_(0) {}
+  ~TestNewWindowWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   WebNavigationPolicy DecidePolicyForNavigation(
       const NavigationPolicyInfo& info) override {
     decide_policy_call_count_++;
@@ -7299,14 +7351,14 @@ TEST_P(ParameterizedWebFrameTest, BackToReload) {
 
   FrameTestHelpers::ReloadFrame(frame);
   EXPECT_EQ(WebCachePolicy::kValidatingCacheData,
-            frame->DataSource()->GetRequest().GetCachePolicy());
+            frame->GetDocumentLoader()->GetRequest().GetCachePolicy());
 }
 
 TEST_P(ParameterizedWebFrameTest, BackDuringChildFrameReload) {
   RegisterMockedHttpURLLoad("page_with_blank_iframe.html");
   FrameTestHelpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "page_with_blank_iframe.html");
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
   const FrameLoader& main_frame_loader = main_frame->GetFrame()->Loader();
   WebLocalFrame* child_frame = main_frame->FirstChild()->ToWebLocalFrame();
   ASSERT_TRUE(child_frame);
@@ -7345,13 +7397,13 @@ TEST_P(ParameterizedWebFrameTest, ReloadPost) {
   FrameTestHelpers::PumpPendingRequestsForFrameToLoad(
       web_view_helper.WebView()->MainFrame());
   EXPECT_EQ(WebString::FromUTF8("POST"),
-            frame->DataSource()->GetRequest().HttpMethod());
+            frame->GetDocumentLoader()->GetRequest().HttpMethod());
 
   FrameTestHelpers::ReloadFrame(frame);
   EXPECT_EQ(WebCachePolicy::kValidatingCacheData,
-            frame->DataSource()->GetRequest().GetCachePolicy());
+            frame->GetDocumentLoader()->GetRequest().GetCachePolicy());
   EXPECT_EQ(kWebNavigationTypeFormResubmitted,
-            frame->DataSource()->GetNavigationType());
+            frame->GetDocumentLoader()->GetNavigationType());
 }
 
 TEST_P(ParameterizedWebFrameTest, LoadHistoryItemReload) {
@@ -7377,7 +7429,7 @@ TEST_P(ParameterizedWebFrameTest, LoadHistoryItemReload) {
   EXPECT_EQ(first_item.Get(),
             main_frame_loader.GetDocumentLoader()->GetHistoryItem());
   EXPECT_EQ(WebCachePolicy::kValidatingCacheData,
-            frame->DataSource()->GetRequest().GetCachePolicy());
+            frame->GetDocumentLoader()->GetRequest().GetCachePolicy());
 }
 
 class TestCachePolicyWebFrameClient
@@ -7386,14 +7438,16 @@ class TestCachePolicyWebFrameClient
   TestCachePolicyWebFrameClient()
       : policy_(WebCachePolicy::kUseProtocolCachePolicy),
         will_send_request_call_count_(0) {}
+  ~TestCachePolicyWebFrameClient() override {}
 
   WebCachePolicy GetCachePolicy() const { return policy_; }
   int WillSendRequestCallCount() const { return will_send_request_call_count_; }
   TestCachePolicyWebFrameClient& ChildClient(size_t i) {
-    return child_clients_[i];
+    return *child_clients_[i].get();
   }
-  int ChildFrameCreationCount() const { return child_clients_.size(); }
+  size_t ChildFrameCreationCount() const { return child_clients_.size(); }
 
+  // FrameTestHelpers::TestWebFrameClient:
   WebLocalFrame* CreateChildFrame(
       WebLocalFrame* parent,
       WebTreeScopeType scope,
@@ -7402,10 +7456,11 @@ class TestCachePolicyWebFrameClient
       WebSandboxFlags,
       const WebParsedFeaturePolicy&,
       const WebFrameOwnerProperties& frame_owner_properties) override {
-    child_clients_.emplace_back();
-    return CreateLocalChild(*parent, scope, &child_clients_.back());
+    auto child = WTF::MakeUnique<TestCachePolicyWebFrameClient>();
+    auto* child_ptr = child.get();
+    child_clients_.push_back(std::move(child));
+    return CreateLocalChild(*parent, scope, child_ptr);
   }
-
   void WillSendRequest(WebURLRequest& request) override {
     policy_ = request.GetCachePolicy();
     will_send_request_call_count_++;
@@ -7413,7 +7468,7 @@ class TestCachePolicyWebFrameClient
 
  private:
   WebCachePolicy policy_;
-  Vector<TestCachePolicyWebFrameClient> child_clients_;
+  Vector<std::unique_ptr<TestCachePolicyWebFrameClient>> child_clients_;
   int will_send_request_call_count_;
 };
 
@@ -7425,13 +7480,13 @@ TEST_P(ParameterizedWebFrameTest, ReloadIframe) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "iframe_reload.html",
                                     &main_frame_client);
-  WebLocalFrameBase* main_frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
 
-  ASSERT_EQ(1, main_frame_client.ChildFrameCreationCount());
+  ASSERT_EQ(1U, main_frame_client.ChildFrameCreationCount());
   TestCachePolicyWebFrameClient* child_client =
       &main_frame_client.ChildClient(0);
-  WebLocalFrameBase* child_frame =
-      ToWebLocalFrameBase(main_frame->FirstChild());
+  WebLocalFrameImpl* child_frame =
+      ToWebLocalFrameImpl(main_frame->FirstChild());
   EXPECT_EQ(child_client, child_frame->Client());
   EXPECT_EQ(1u, main_frame->GetFrame()->Tree().ScopedChildCount());
   EXPECT_EQ(1, child_client->WillSendRequestCallCount());
@@ -7441,11 +7496,11 @@ TEST_P(ParameterizedWebFrameTest, ReloadIframe) {
   FrameTestHelpers::ReloadFrame(main_frame);
 
   // A new child WebLocalFrame should have been created with a new client.
-  ASSERT_EQ(2, main_frame_client.ChildFrameCreationCount());
+  ASSERT_EQ(2U, main_frame_client.ChildFrameCreationCount());
   TestCachePolicyWebFrameClient* new_child_client =
       &main_frame_client.ChildClient(1);
-  WebLocalFrameBase* new_child_frame =
-      ToWebLocalFrameBase(main_frame->FirstChild());
+  WebLocalFrameImpl* new_child_frame =
+      ToWebLocalFrameImpl(main_frame->FirstChild());
   EXPECT_EQ(new_child_client, new_child_frame->Client());
   ASSERT_NE(child_client, new_child_client);
   ASSERT_NE(child_frame, new_child_frame);
@@ -7464,11 +7519,13 @@ class TestSameDocumentWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   TestSameDocumentWebFrameClient() : frame_load_type_reload_seen_(false) {}
+  ~TestSameDocumentWebFrameClient() override {}
 
-  virtual void WillSendRequest(WebURLRequest&) {
+  // FrameTestHelpers::TestWebFrameClient:
+  void WillSendRequest(WebURLRequest&) override {
     FrameLoader& frame_loader =
-        ToWebLocalFrameBase(Frame())->GetFrame()->Loader();
-    if (frame_loader.ProvisionalDocumentLoader()->LoadType() ==
+        ToWebLocalFrameImpl(Frame())->GetFrame()->Loader();
+    if (frame_loader.GetProvisionalDocumentLoader()->LoadType() ==
         kFrameLoadTypeReload)
       frame_load_type_reload_seen_ = true;
   }
@@ -7505,8 +7562,10 @@ class TestSameDocumentWithImageWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   TestSameDocumentWithImageWebFrameClient() : num_of_image_requests_(0) {}
+  ~TestSameDocumentWithImageWebFrameClient() override {}
 
-  virtual void WillSendRequest(WebURLRequest& request) {
+  // FrameTestHelpers::TestWebFrameClient:
+  void WillSendRequest(WebURLRequest& request) override {
     if (request.GetRequestContext() == WebURLRequest::kRequestContextImage) {
       num_of_image_requests_++;
       EXPECT_EQ(WebCachePolicy::kUseProtocolCachePolicy,
@@ -7572,14 +7631,15 @@ class TestStartStopCallbackWebFrameClient
       : start_loading_count_(0),
         stop_loading_count_(0),
         different_document_start_count_(0) {}
+  ~TestStartStopCallbackWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void DidStartLoading(bool to_different_document) override {
     TestWebFrameClient::DidStartLoading(to_different_document);
     start_loading_count_++;
     if (to_different_document)
       different_document_start_count_++;
   }
-
   void DidStopLoading() override {
     TestWebFrameClient::DidStopLoading();
     stop_loading_count_++;
@@ -7613,7 +7673,9 @@ class TestDidNavigateCommitTypeWebFrameClient
  public:
   TestDidNavigateCommitTypeWebFrameClient()
       : last_commit_type_(kWebHistoryInertCommit) {}
+  ~TestDidNavigateCommitTypeWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void DidNavigateWithinPage(const WebHistoryItem&,
                              WebHistoryCommitType type,
                              bool) override {
@@ -7651,9 +7713,14 @@ TEST_P(ParameterizedWebFrameTest, SameDocumentHistoryNavigationCommitType) {
 class TestHistoryChildWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
-  void DidStartProvisionalLoad(WebDataSource* data_source,
-                               WebURLRequest& request) {
-    replaces_current_history_item_ = data_source->ReplacesCurrentHistoryItem();
+  TestHistoryChildWebFrameClient() {}
+  ~TestHistoryChildWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
+  void DidStartProvisionalLoad(WebDocumentLoader* document_loader,
+                               WebURLRequest& request) override {
+    replaces_current_history_item_ =
+        document_loader->ReplacesCurrentHistoryItem();
   }
 
   bool ReplacesCurrentHistoryItem() { return replaces_current_history_item_; }
@@ -7664,13 +7731,17 @@ class TestHistoryChildWebFrameClient
 
 class TestHistoryWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
+  TestHistoryWebFrameClient() {}
+  ~TestHistoryWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
   WebLocalFrame* CreateChildFrame(WebLocalFrame* parent,
                                   WebTreeScopeType scope,
                                   const WebString& name,
                                   const WebString& fallback_name,
                                   WebSandboxFlags,
                                   const WebParsedFeaturePolicy&,
-                                  const WebFrameOwnerProperties&) {
+                                  const WebFrameOwnerProperties&) override {
     return CreateLocalChild(*parent, scope, &child_client_);
   }
 
@@ -7695,7 +7766,7 @@ TEST_P(ParameterizedWebFrameTest, FirstBlankSubframeNavigation) {
   frame->ExecuteScript(WebScriptSource(WebString::FromUTF8(
       "document.body.appendChild(document.createElement('iframe'))")));
 
-  WebLocalFrameBase* iframe = ToWebLocalFrameBase(frame->FirstChild());
+  WebLocalFrameImpl* iframe = ToWebLocalFrameImpl(frame->FirstChild());
   ASSERT_EQ(&client.ChildClient(), iframe->Client());
 
   std::string url1 = base_url_ + "history.html";
@@ -7764,7 +7835,7 @@ TEST_P(ParameterizedWebFrameTest, overflowHiddenRewrite) {
   ASSERT_FALSE(web_scroll_layer->UserScrollableVertical());
 
   // Call javascript to make the layer scrollable, and verify it.
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   frame->ExecuteScript(WebScriptSource("allowScroll();"));
   web_view_helper.WebView()->UpdateAllLifecyclePhases();
 
@@ -7802,7 +7873,9 @@ TEST_P(ParameterizedWebFrameTest, CurrentHistoryItem) {
 class FailCreateChildFrame : public FrameTestHelpers::TestWebFrameClient {
  public:
   FailCreateChildFrame() : call_count_(0) {}
+  ~FailCreateChildFrame() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   WebLocalFrame* CreateChildFrame(
       WebLocalFrame* parent,
       WebTreeScopeType scope,
@@ -8137,7 +8210,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenSubframe) {
   web_view_impl->UpdateAllLifecyclePhases();
 
   Document* document =
-      ToWebLocalFrameBase(web_view_helper.WebView()->MainFrame()->FirstChild())
+      ToWebLocalFrameImpl(web_view_helper.WebView()->MainFrame()->FirstChild())
           ->GetFrame()
           ->GetDocument();
   UserGestureIndicator gesture(UserGestureToken::Create(document));
@@ -8439,6 +8512,10 @@ namespace {
 
 class TestFullscreenWebLayerTreeView : public WebLayerTreeView {
  public:
+  TestFullscreenWebLayerTreeView() {}
+  ~TestFullscreenWebLayerTreeView() override {}
+
+  // WebLayerTreeView:
   void SetBackgroundColor(blink::WebColor color) override {
     has_transparent_background = SkColorGetA(color) < SK_AlphaOPAQUE;
   }
@@ -8447,13 +8524,17 @@ class TestFullscreenWebLayerTreeView : public WebLayerTreeView {
 
 class TestFullscreenWebViewClient : public FrameTestHelpers::TestWebViewClient {
  public:
+  TestFullscreenWebViewClient() {}
+  ~TestFullscreenWebViewClient() override {}
+
+  // FrameTestHelpers::TestWebViewClient:
   WebLayerTreeView* InitializeLayerTreeView() override {
     return &test_fullscreen_layer_tree_view;
   }
   TestFullscreenWebLayerTreeView test_fullscreen_layer_tree_view;
 };
 
-}  // anonymous namespace
+}  // namespace
 
 TEST_P(ParameterizedWebFrameTest, OverlayFullscreenVideo) {
   RuntimeEnabledFeatures::SetForceOverlayFullscreenVideoEnabled(true);
@@ -8551,6 +8632,9 @@ class ManifestChangeWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   ManifestChangeWebFrameClient() : manifest_change_count_(0) {}
+  ~ManifestChangeWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
   void DidChangeManifest() override { ++manifest_change_count_; }
 
   int ManifestChangeCount() { return manifest_change_count_; }
@@ -8650,7 +8734,7 @@ TEST_P(ParameterizedWebFrameTest, ReloadBypassingCache) {
   WebLocalFrame* frame = web_view_helper.LocalMainFrame();
   FrameTestHelpers::ReloadFrameBypassingCache(frame);
   EXPECT_EQ(WebCachePolicy::kBypassingCache,
-            frame->DataSource()->GetRequest().GetCachePolicy());
+            frame->GetDocumentLoader()->GetRequest().GetCachePolicy());
 }
 
 static void NodeImageTestValidation(const IntSize& reference_bitmap_size,
@@ -8739,13 +8823,15 @@ class ThemeColorTestWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   ThemeColorTestWebFrameClient() : did_notify_(false) {}
+  ~ThemeColorTestWebFrameClient() override {}
 
   void Reset() { did_notify_ = false; }
 
   bool DidNotify() const { return did_notify_; }
 
  private:
-  virtual void DidChangeThemeColor() { did_notify_ = true; }
+  // FrameTestHelpers::TestWebFrameClient:
+  void DidChangeThemeColor() override { did_notify_ = true; }
 
   bool did_notify_;
 };
@@ -8757,7 +8843,7 @@ TEST_P(ParameterizedWebFrameTest, ThemeColor) {
   web_view_helper.InitializeAndLoad(base_url_ + "theme_color_test.html",
                                     &client);
   EXPECT_TRUE(client.DidNotify());
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   EXPECT_EQ(0xff0000ff, frame->GetDocument().ThemeColor());
   // Change color by rgb.
   client.Reset();
@@ -8863,14 +8949,16 @@ class SwapMainFrameWhenTitleChangesWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   SwapMainFrameWhenTitleChangesWebFrameClient() {}
+  ~SwapMainFrameWhenTitleChangesWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void DidReceiveTitle(const WebString&, WebTextDirection) override {
     if (!Frame()->Parent())
       Frame()->Swap(FrameTestHelpers::CreateRemote());
   }
 };
 
-}  // anonymous namespace
+}  // namespace
 
 TEST_P(ParameterizedWebFrameTest, SwapMainFrameWhileLoading) {
   SwapMainFrameWhenTitleChangesWebFrameClient frame_client;
@@ -8989,7 +9077,7 @@ TEST_P(WebFrameSwapTest, DetachProvisionalFrame) {
   SwapAndVerifyMiddleChildConsistency("local->remote", MainFrame(),
                                       remote_frame);
 
-  WebLocalFrameBase* provisional_frame =
+  WebLocalFrameImpl* provisional_frame =
       FrameTestHelpers::CreateProvisional(*remote_frame);
 
   // The provisional frame should have a local frame owner.
@@ -9248,7 +9336,9 @@ class RemoteToLocalSwapWebFrameClient
   explicit RemoteToLocalSwapWebFrameClient(WebRemoteFrame* remote_frame)
       : history_commit_type_(kWebHistoryInertCommit),
         remote_frame_(remote_frame) {}
+  ~RemoteToLocalSwapWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void DidCommitProvisionalLoad(
       const WebHistoryItem&,
       WebHistoryCommitType history_commit_type) override {
@@ -9313,6 +9403,10 @@ TEST_P(WebFrameSwapTest, HistoryCommitTypeAfterExistingRemoteToLocalSwap) {
 class RemoteNavigationClient
     : public FrameTestHelpers::TestWebRemoteFrameClient {
  public:
+  RemoteNavigationClient() {}
+  ~RemoteNavigationClient() override {}
+
+  // FrameTestHelpers::TestWebRemoteFrameClient:
   void Navigate(const WebURLRequest& request,
                 bool should_replace_current_entry) override {
     last_request_ = request;
@@ -9354,7 +9448,7 @@ TEST_P(WebFrameSwapTest, WindowOpenOnRemoteFrame) {
 
   ASSERT_TRUE(MainFrame()->FirstChild()->IsWebRemoteFrame());
   LocalDOMWindow* main_window =
-      ToWebLocalFrameBase(MainFrame())->GetFrame()->DomWindow();
+      ToWebLocalFrameImpl(MainFrame())->GetFrame()->DomWindow();
 
   KURL destination = ToKURL("data:text/html:destination");
   NonThrowableExceptionState exception_state;
@@ -9376,7 +9470,9 @@ TEST_P(WebFrameSwapTest, WindowOpenOnRemoteFrame) {
 class RemoteWindowCloseClient : public FrameTestHelpers::TestWebViewClient {
  public:
   RemoteWindowCloseClient() : closed_(false) {}
+  ~RemoteWindowCloseClient() override {}
 
+  // FrameTestHelpers::TestWebViewClient:
   void CloseWidgetSoon() override { closed_ = true; }
 
   bool Closed() const { return closed_; }
@@ -9453,7 +9549,9 @@ TEST_P(ParameterizedWebFrameTest, SwapWithOpenerCycle) {
 class CommitTypeWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
   CommitTypeWebFrameClient() : history_commit_type_(kWebHistoryInertCommit) {}
+  ~CommitTypeWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void DidCommitProvisionalLoad(
       const WebHistoryItem&,
       WebHistoryCommitType history_commit_type) override {
@@ -9491,6 +9589,9 @@ class GestureEventTestWebWidgetClient
     : public FrameTestHelpers::TestWebWidgetClient {
  public:
   GestureEventTestWebWidgetClient() : did_handle_gesture_event_(false) {}
+  ~GestureEventTestWebWidgetClient() override {}
+
+  // FrameTestHelpers::TestWebWidgetClient:
   void DidHandleGestureEvent(const WebGestureEvent& event,
                              bool event_cancelled) override {
     did_handle_gesture_event_ = true;
@@ -9527,6 +9628,9 @@ class MockDocumentThreadableLoaderClient
     : public DocumentThreadableLoaderClient {
  public:
   MockDocumentThreadableLoaderClient() : failed_(false) {}
+  ~MockDocumentThreadableLoaderClient() override {}
+
+  // DocumentThreadableLoaderClient:
   void DidFail(const ResourceError&) override { failed_ = true; }
 
   void Reset() { failed_ = false; }
@@ -9583,10 +9687,14 @@ TEST_P(ParameterizedWebFrameTest, DetachRemoteFrame) {
 class TestConsoleMessageWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
-  virtual void DidAddMessageToConsole(const WebConsoleMessage& message,
-                                      const WebString& source_name,
-                                      unsigned source_line,
-                                      const WebString& stack_trace) {
+  TestConsoleMessageWebFrameClient() {}
+  ~TestConsoleMessageWebFrameClient() override {}
+
+  // FrameTestHelpers::TestWebFrameClient:
+  void DidAddMessageToConsole(const WebConsoleMessage& message,
+                              const WebString& source_name,
+                              unsigned source_line,
+                              const WebString& stack_trace) override {
     messages.push_back(message);
   }
 
@@ -9846,30 +9954,30 @@ TEST_P(ParameterizedWebFrameTest, SuspendedPageLoadWithRemoteMainFrame) {
   // Check that ScopedPageSuspender properly triggers deferred loading for
   // the current Page.
   Page* page = remote_root->GetFrame()->GetPage();
-  EXPECT_FALSE(page->Suspended());
+  EXPECT_FALSE(page->Paused());
   {
     ScopedPageSuspender suspender;
-    EXPECT_TRUE(page->Suspended());
+    EXPECT_TRUE(page->Paused());
   }
-  EXPECT_FALSE(page->Suspended());
+  EXPECT_FALSE(page->Paused());
 
   // Repeat this for a page with a local child frame, and ensure that the
   // child frame's loads are also suspended.
-  WebLocalFrameBase* web_local_child =
+  WebLocalFrameImpl* web_local_child =
       FrameTestHelpers::CreateLocalChild(*remote_root);
   RegisterMockedHttpURLLoad("foo.html");
   FrameTestHelpers::LoadFrame(web_local_child, base_url_ + "foo.html");
   LocalFrame* local_child = web_local_child->GetFrame();
-  EXPECT_FALSE(page->Suspended());
+  EXPECT_FALSE(page->Paused());
   EXPECT_FALSE(
       local_child->GetDocument()->Fetcher()->Context().DefersLoading());
   {
     ScopedPageSuspender suspender;
-    EXPECT_TRUE(page->Suspended());
+    EXPECT_TRUE(page->Paused());
     EXPECT_TRUE(
         local_child->GetDocument()->Fetcher()->Context().DefersLoading());
   }
-  EXPECT_FALSE(page->Suspended());
+  EXPECT_FALSE(page->Paused());
   EXPECT_FALSE(
       local_child->GetDocument()->Fetcher()->Context().DefersLoading());
 }
@@ -10251,13 +10359,15 @@ class CallbackOrderingWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   CallbackOrderingWebFrameClient() : callback_count_(0) {}
+  ~CallbackOrderingWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void DidStartLoading(bool to_different_document) override {
     EXPECT_EQ(0, callback_count_++);
     FrameTestHelpers::TestWebFrameClient::DidStartLoading(
         to_different_document);
   }
-  void DidStartProvisionalLoad(WebDataSource*, WebURLRequest&) override {
+  void DidStartProvisionalLoad(WebDocumentLoader*, WebURLRequest&) override {
     EXPECT_EQ(1, callback_count_++);
   }
   void DidCommitProvisionalLoad(const WebHistoryItem&,
@@ -10287,6 +10397,9 @@ class TestWebRemoteFrameClientForVisibility
     : public FrameTestHelpers::TestWebRemoteFrameClient {
  public:
   TestWebRemoteFrameClientForVisibility() : visible_(true) {}
+  ~TestWebRemoteFrameClientForVisibility() override {}
+
+  // FrameTestHelpers::TestWebRemoteFrameClient:
   void VisibilityChanged(bool visible) override { visible_ = visible; }
 
   bool IsVisible() const { return visible_; }
@@ -10436,7 +10549,10 @@ TEST(WebFrameGlobalReuseTest, ReuseForMainFrameIfEnabled) {
 class SaveImageFromDataURLWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
-  // WebFrameClient methods
+  SaveImageFromDataURLWebFrameClient() {}
+  ~SaveImageFromDataURLWebFrameClient() override {}
+
+  // WebFrameClient:
   void SaveImageFromDataURL(const WebString& data_url) override {
     data_url_ = data_url;
   }
@@ -10637,7 +10753,9 @@ class TestResourcePriorityWebFrameClient
   };
 
   TestResourcePriorityWebFrameClient() {}
+  ~TestResourcePriorityWebFrameClient() override {}
 
+  // FrameTestHelpers::TestWebFrameClient:
   void WillSendRequest(WebURLRequest& request) override {
     ExpectedRequest* expected_request = expected_requests_.at(request.Url());
     DCHECK(expected_request);
@@ -10681,7 +10799,7 @@ TEST_P(ParameterizedWebFrameTest, ChangeResourcePriority) {
       base_url_ + "promote_img_in_viewport_priority.html");
 
   // Ensure the image in the viewport got promoted after the request was sent.
-  Resource* image = ToWebLocalFrameBase(helper.WebView()->MainFrame())
+  Resource* image = ToWebLocalFrameImpl(helper.WebView()->MainFrame())
                         ->GetFrame()
                         ->GetDocument()
                         ->Fetcher()
@@ -10730,6 +10848,10 @@ TEST_P(ParameterizedWebFrameTest, ScriptPriority) {
 
 class MultipleDataChunkDelegate : public WebURLLoaderTestDelegate {
  public:
+  MultipleDataChunkDelegate() {}
+  ~MultipleDataChunkDelegate() override {}
+
+  // WebURLLoaderTestDelegate:
   void DidReceiveData(WebURLLoaderClient* original_client,
                       const char* data,
                       int data_length) override {
@@ -11593,7 +11715,7 @@ TEST_P(ParameterizedWebFrameTest,
                                    base_url);
   web_view_impl->UpdateAllLifecyclePhases();
 
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   Document* document =
       ToLocalFrame(web_view_impl->GetPage()->MainFrame())->GetDocument();
   Element* container = document->getElementById("container");
@@ -11760,6 +11882,10 @@ TEST_P(ParameterizedWebFrameTest, NoLoadingCompletionCallbacksInDetach) {
   class LoadingObserverFrameClient
       : public FrameTestHelpers::TestWebFrameClient {
    public:
+    LoadingObserverFrameClient() {}
+    ~LoadingObserverFrameClient() override {}
+
+    // FrameTestHelpers::TestWebFrameClient:
     void FrameDetached(WebLocalFrame* frame, DetachType type) override {
       did_call_frame_detached_ = true;
       TestWebFrameClient::FrameDetached(frame, type);
@@ -11812,6 +11938,10 @@ TEST_P(ParameterizedWebFrameTest, NoLoadingCompletionCallbacksInDetach) {
 
   class MainFrameClient : public FrameTestHelpers::TestWebFrameClient {
    public:
+    MainFrameClient() {}
+    ~MainFrameClient() override {}
+
+    // FrameTestHelpers::TestWebFrameClient:
     WebLocalFrame* CreateChildFrame(
         WebLocalFrame* parent,
         WebTreeScopeType scope,
@@ -11863,7 +11993,9 @@ class ShowVirtualKeyboardObserverWidgetClient
  public:
   ShowVirtualKeyboardObserverWidgetClient()
       : did_show_virtual_keyboard_(false) {}
+  ~ShowVirtualKeyboardObserverWidgetClient() override {}
 
+  // FrameTestHelpers::TestWebWidgetClient:
   void ShowVirtualKeyboardOnElementFocus() override {
     did_show_virtual_keyboard_ = true;
   }
@@ -11879,7 +12011,7 @@ TEST_P(ParameterizedWebFrameTest, ShowVirtualKeyboardOnElementFocus) {
   web_view_helper.InitializeRemote();
 
   ShowVirtualKeyboardObserverWidgetClient web_widget_client;
-  WebLocalFrameBase* local_frame = FrameTestHelpers::CreateLocalChild(
+  WebLocalFrameImpl* local_frame = FrameTestHelpers::CreateLocalChild(
       *web_view_helper.RemoteMainFrame(), "child", WebFrameOwnerProperties(),
       nullptr, nullptr, &web_widget_client);
 
@@ -11903,7 +12035,9 @@ TEST_P(ParameterizedWebFrameTest, ShowVirtualKeyboardOnElementFocus) {
 class ContextMenuWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
   ContextMenuWebFrameClient() {}
-  // WebFrameClient methods
+  ~ContextMenuWebFrameClient() override {}
+
+  // WebFrameClient:
   void ShowContextMenu(const WebContextMenuData& data) override {
     menu_data_ = data;
   }
@@ -11982,7 +12116,7 @@ TEST_P(ParameterizedWebFrameTest, LocalFrameWithRemoteParentIsTransparent) {
   FrameTestHelpers::WebViewHelper helper;
   helper.InitializeRemote();
 
-  WebLocalFrameBase* local_frame =
+  WebLocalFrameImpl* local_frame =
       FrameTestHelpers::CreateLocalChild(*helper.RemoteMainFrame());
   FrameTestHelpers::LoadFrame(local_frame, "data:text/html,some page");
 
@@ -11994,11 +12128,13 @@ TEST_P(ParameterizedWebFrameTest, LocalFrameWithRemoteParentIsTransparent) {
 class TestFallbackWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
   TestFallbackWebFrameClient() : child_client_(nullptr) {}
+  ~TestFallbackWebFrameClient() override {}
 
   void SetChildWebFrameClient(TestFallbackWebFrameClient* client) {
     child_client_ = client;
   }
 
+  // FrameTestHelpers::TestWebFrameClient:
   WebLocalFrame* CreateChildFrame(
       WebLocalFrame* parent,
       WebTreeScopeType scope,
@@ -12010,7 +12146,6 @@ class TestFallbackWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
     DCHECK(child_client_);
     return CreateLocalChild(*parent, scope, child_client_);
   }
-
   WebNavigationPolicy DecidePolicyForNavigation(
       const NavigationPolicyInfo& info) override {
     if (child_client_ || KURL(info.url_request.Url()) == BlankURL())
@@ -12031,7 +12166,7 @@ TEST_P(ParameterizedWebFrameTest, FallbackForNonexistentProvisionalNavigation) {
   FrameTestHelpers::WebViewHelper web_view_helper_;
   web_view_helper_.Initialize(&main_client);
 
-  WebLocalFrameBase* main_frame = web_view_helper_.LocalMainFrame();
+  WebLocalFrameImpl* main_frame = web_view_helper_.LocalMainFrame();
   WebURLRequest request(ToKURL(base_url_ + "fallback.html"));
   main_frame->LoadRequest(request);
 
@@ -12056,7 +12191,7 @@ TEST_P(ParameterizedWebFrameTest, AltTextOnAboutBlankPage) {
   FrameTestHelpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad("about:blank");
   web_view_helper.Resize(WebSize(640, 480));
-  WebLocalFrameBase* frame = web_view_helper.LocalMainFrame();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
 
   const char kSource[] =
       "<img id='foo' src='foo' alt='foo alt' width='200' height='200'>";

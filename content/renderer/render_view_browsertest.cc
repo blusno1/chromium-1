@@ -24,7 +24,6 @@
 #include "cc/trees/layer_tree_host.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/service_worker/service_worker_network_provider.h"
-#include "content/common/accessibility_mode.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
@@ -71,8 +70,8 @@
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
+#include "third_party/WebKit/public/web/WebDocumentLoader.h"
 #include "third_party/WebKit/public/web/WebFrameContentDumper.h"
 #include "third_party/WebKit/public/web/WebHistoryCommitType.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
@@ -83,6 +82,7 @@
 #include "third_party/WebKit/public/web/WebSettings.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/WebKit/public/web/WebWindowFeatures.h"
+#include "ui/accessibility/ax_modes.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -1967,11 +1967,12 @@ TEST_F(RenderViewImplTest, ServiceWorkerNetworkProviderSetup) {
   // Make sure each new document has a new provider and
   // that the main request is tagged with the provider's id.
   LoadHTML("<b>A Document</b>");
-  ASSERT_TRUE(GetMainFrame()->DataSource());
-  webprovider = GetMainFrame()->DataSource()->GetServiceWorkerNetworkProvider();
+  ASSERT_TRUE(GetMainFrame()->GetDocumentLoader());
+  webprovider =
+      GetMainFrame()->GetDocumentLoader()->GetServiceWorkerNetworkProvider();
   ASSERT_TRUE(webprovider);
   extra_data = static_cast<RequestExtraData*>(
-      GetMainFrame()->DataSource()->GetRequest().GetExtraData());
+      GetMainFrame()->GetDocumentLoader()->GetRequest().GetExtraData());
   ASSERT_TRUE(extra_data);
   provider = ServiceWorkerNetworkProvider::FromWebServiceWorkerNetworkProvider(
       webprovider);
@@ -1980,15 +1981,16 @@ TEST_F(RenderViewImplTest, ServiceWorkerNetworkProviderSetup) {
   int provider1_id = provider->provider_id();
 
   LoadHTML("<b>New Document B Goes Here</b>");
-  ASSERT_TRUE(GetMainFrame()->DataSource());
-  webprovider = GetMainFrame()->DataSource()->GetServiceWorkerNetworkProvider();
+  ASSERT_TRUE(GetMainFrame()->GetDocumentLoader());
+  webprovider =
+      GetMainFrame()->GetDocumentLoader()->GetServiceWorkerNetworkProvider();
   ASSERT_TRUE(provider);
   provider = ServiceWorkerNetworkProvider::FromWebServiceWorkerNetworkProvider(
       webprovider);
   ASSERT_TRUE(provider);
   EXPECT_NE(provider1_id, provider->provider_id());
   extra_data = static_cast<RequestExtraData*>(
-      GetMainFrame()->DataSource()->GetRequest().GetExtraData());
+      GetMainFrame()->GetDocumentLoader()->GetRequest().GetExtraData());
   ASSERT_TRUE(extra_data);
   EXPECT_EQ(extra_data->service_worker_provider_id(), provider->provider_id());
 
@@ -2007,17 +2009,16 @@ TEST_F(RenderViewImplTest, OnSetAccessibilityMode) {
   ASSERT_TRUE(frame()->accessibility_mode().is_mode_off());
   ASSERT_FALSE(frame()->render_accessibility());
 
-  frame()->SetAccessibilityMode(kAccessibilityModeWebContentsOnly);
-  ASSERT_TRUE(frame()->accessibility_mode() ==
-              kAccessibilityModeWebContentsOnly);
+  frame()->SetAccessibilityMode(ui::kAXModeWebContentsOnly);
+  ASSERT_TRUE(frame()->accessibility_mode() == ui::kAXModeWebContentsOnly);
   ASSERT_TRUE(frame()->render_accessibility());
 
-  frame()->SetAccessibilityMode(AccessibilityMode());
+  frame()->SetAccessibilityMode(ui::AXMode());
   ASSERT_TRUE(frame()->accessibility_mode().is_mode_off());
   ASSERT_FALSE(frame()->render_accessibility());
 
-  frame()->SetAccessibilityMode(kAccessibilityModeComplete);
-  ASSERT_TRUE(frame()->accessibility_mode() == kAccessibilityModeComplete);
+  frame()->SetAccessibilityMode(ui::kAXModeComplete);
+  ASSERT_TRUE(frame()->accessibility_mode() == ui::kAXModeComplete);
   ASSERT_TRUE(frame()->render_accessibility());
 }
 

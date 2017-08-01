@@ -51,8 +51,6 @@ struct WebURLError {
     // net/base/net_error_list.h.
     kNet,
 
-    kBlinkInternal,
-
     // |reason| is an HTTP status code.
     kHttp,
 
@@ -71,10 +69,6 @@ struct WebURLError {
   // A flag showing whether or not "unreachableURL" has a copy in the
   // cache that was too stale to return for this request.
   bool stale_copy_in_cache = false;
-
-  // A flag showing whether this error is the result of a request being
-  // ignored (e.g. through shouldOverrideUrlLoading).
-  bool was_ignored_by_handler = false;
 
   // True if this error is created for a web security violation.
   bool is_web_security_violation = false;

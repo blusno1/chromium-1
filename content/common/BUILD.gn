@@ -35,7 +35,6 @@ source_set("common") {
 
   sources = [
     "accessibility_messages.h",
-    "accessibility_mode.h",
     "all_messages.h",
     "android/gin_java_bridge_errors.cc",
     "android/gin_java_bridge_errors.h",
@@ -607,6 +606,7 @@ mojom("mojo_bindings") {
     "media/media_stream.mojom",
     "media/renderer_audio_output_stream_factory.mojom",
     "memory_coordinator.mojom",
+    "message_port.mojom",
     "native_types.mojom",
     "push_messaging.mojom",
     "render_frame_message_filter.mojom",

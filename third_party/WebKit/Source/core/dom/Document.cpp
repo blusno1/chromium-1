@@ -2418,7 +2418,7 @@ void Document::UpdateStyleAndLayoutIgnorePendingStylesheets(
   ++force_layout_count_;
 }
 
-PassRefPtr<ComputedStyle> Document::StyleForElementIgnoringPendingStylesheets(
+RefPtr<ComputedStyle> Document::StyleForElementIgnoringPendingStylesheets(
     Element* element) {
   DCHECK_EQ(element->GetDocument(), this);
   StyleEngine::IgnoringPendingStylesheet ignoring(GetStyleEngine());
@@ -2438,7 +2438,7 @@ PassRefPtr<ComputedStyle> Document::StyleForElementIgnoringPendingStylesheets(
                                                layout_parent_style);
 }
 
-PassRefPtr<ComputedStyle> Document::StyleForPage(int page_index) {
+RefPtr<ComputedStyle> Document::StyleForPage(int page_index) {
   UpdateDistribution();
   return EnsureStyleResolver().StyleForPage(page_index);
 }
@@ -3314,7 +3314,7 @@ void Document::DispatchUnloadEvents() {
         return;
 
       DocumentLoader* document_loader =
-          frame_->Loader().ProvisionalDocumentLoader();
+          frame_->Loader().GetProvisionalDocumentLoader();
       load_event_progress_ = kUnloadEventInProgress;
       Event* unload_event(Event::Create(EventTypeNames::unload));
       if (document_loader && !document_loader->GetTiming().UnloadEventStart() &&
@@ -3337,9 +3337,9 @@ void Document::DispatchUnloadEvents() {
   // Don't remove event listeners from a transitional empty document (see
   // https://bugs.webkit.org/show_bug.cgi?id=28716 for more information).
   bool keep_event_listeners =
-      frame_->Loader().ProvisionalDocumentLoader() &&
+      frame_->Loader().GetProvisionalDocumentLoader() &&
       frame_->ShouldReuseDefaultView(
-          frame_->Loader().ProvisionalDocumentLoader()->Url());
+          frame_->Loader().GetProvisionalDocumentLoader()->Url());
   if (!keep_event_listeners)
     RemoveAllEventListenersRecursively();
 }
@@ -3645,10 +3645,8 @@ void Document::ProcessBaseElement() {
   KURL base_element_url;
   if (href) {
     String stripped_href = StripLeadingAndTrailingHTMLSpaces(*href);
-    if (!stripped_href.IsEmpty()) {
-      // TODO(tkent): Use FallbackBaseURL(). crbug.com/739504.
-      base_element_url = KURL(Url(), stripped_href);
-    }
+    if (!stripped_href.IsEmpty())
+      base_element_url = KURL(FallbackBaseURL(), stripped_href);
   }
 
   if (!base_element_url.IsEmpty()) {
@@ -4677,7 +4675,7 @@ EventQueue* Document::GetEventQueue() const {
   return dom_window_->GetEventQueue();
 }
 
-void Document::EnqueueAnimationFrameTask(std::unique_ptr<WTF::Closure> task) {
+void Document::EnqueueAnimationFrameTask(WTF::Closure task) {
   EnsureScriptedAnimationController().EnqueueTask(std::move(task));
 }
 
@@ -6029,7 +6027,7 @@ void Document::EnforceSandboxFlags(SandboxFlags mask) {
   }
 }
 
-void Document::UpdateSecurityOrigin(PassRefPtr<SecurityOrigin> origin) {
+void Document::UpdateSecurityOrigin(RefPtr<SecurityOrigin> origin) {
   SetSecurityOrigin(std::move(origin));
   DidUpdateSecurityOrigin();
 }
@@ -6188,7 +6186,7 @@ void Document::TasksWereResumed() {
 
 bool Document::TasksNeedSuspension() {
   Page* page = this->GetPage();
-  return page && page->Suspended();
+  return page && page->Paused();
 }
 
 void Document::AddToTopLayer(Element* element, const Element* before) {

@@ -2117,7 +2117,8 @@ RenderProcessHostImpl::GetProcessResourceCoordinator() {
     process_resource_coordinator_ =
         base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
             ServiceManagerConnection::GetForProcess()->GetConnector(),
-            resource_coordinator::CoordinationUnitType::kProcess);
+            resource_coordinator::CoordinationUnitType::kProcess,
+            base::GetProcId(GetHandle()));
   }
   return process_resource_coordinator_.get();
 }
@@ -2497,7 +2498,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnableDistanceFieldText,
     switches::kEnableExperimentalCanvasFeatures,
     switches::kEnableExperimentalWebPlatformFeatures,
-    switches::kEnableHDR,
     switches::kEnableHeapProfiling,
     switches::kEnableGPUClientLogging,
     switches::kEnableGpuClientTracing,
@@ -2598,6 +2598,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     cc::switches::kSlowDownRasterScaleFactor,
     cc::switches::kBrowserControlsHideThreshold,
     cc::switches::kBrowserControlsShowThreshold,
+    cc::switches::kRunAllCompositorStagesBeforeDraw,
     switches::kEnableSurfaceReferences,
     switches::kEnableSurfaceSynchronization,
 

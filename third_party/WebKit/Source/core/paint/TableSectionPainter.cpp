@@ -10,6 +10,7 @@
 #include "core/layout/LayoutTableRow.h"
 #include "core/paint/BoxClipper.h"
 #include "core/paint/BoxPainter.h"
+#include "core/paint/BoxPainterBase.h"
 #include "core/paint/CollapsedBorderPainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
@@ -27,6 +28,9 @@ void TableSectionPainter::PaintRepeatingHeaderGroup(
     return;
 
   LayoutTable* table = layout_table_section_.Table();
+  if (!table->IsPageLogicalHeightKnown())
+    return;
+
   LayoutPoint pagination_offset = paint_offset;
   LayoutUnit page_height = table->PageLogicalHeightForOffset(LayoutUnit());
 
@@ -305,8 +309,8 @@ void TableSectionPainter::PaintBoxDecorationBackground(
   LayoutRect paint_rect(paint_offset, layout_table_section_.Size());
 
   if (has_box_shadow) {
-    BoxPainter::PaintNormalBoxShadow(paint_info, paint_rect,
-                                     layout_table_section_.StyleRef());
+    BoxPainterBase::PaintNormalBoxShadow(paint_info, paint_rect,
+                                         layout_table_section_.StyleRef());
   }
 
   if (may_have_background) {
@@ -323,8 +327,8 @@ void TableSectionPainter::PaintBoxDecorationBackground(
   if (has_box_shadow) {
     // TODO(wangxianzhu): Calculate the inset shadow bounds by insetting
     // paintRect by half widths of collapsed borders.
-    BoxPainter::PaintInsetBoxShadow(paint_info, paint_rect,
-                                    layout_table_section_.StyleRef());
+    BoxPainterBase::PaintInsetBoxShadow(paint_info, paint_rect,
+                                        layout_table_section_.StyleRef());
   }
 }
 

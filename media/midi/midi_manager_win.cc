@@ -391,9 +391,9 @@ class MidiManagerWin::InPort final : public Port {
   }
 
   void NotifyPortStateSet(MidiManagerWin* manager) {
-    manager->PostReplyTask(base::Bind(&MidiManagerWin::SetInputPortState,
-                                      base::Unretained(manager), index_,
-                                      info_.state));
+    manager->PostReplyTask(base::Bind(
+        &MidiManagerWin::SetInputPortState, base::Unretained(manager),
+        static_cast<uint32_t>(index_), info_.state));
   }
 
   void NotifyPortAdded(MidiManagerWin* manager) {
@@ -489,9 +489,9 @@ class MidiManagerWin::OutPort final : public Port {
   }
 
   void NotifyPortStateSet(MidiManagerWin* manager) {
-    manager->PostReplyTask(base::Bind(&MidiManagerWin::SetOutputPortState,
-                                      base::Unretained(manager), index_,
-                                      info_.state));
+    manager->PostReplyTask(base::Bind(
+        &MidiManagerWin::SetOutputPortState, base::Unretained(manager),
+        static_cast<uint32_t>(index_), info_.state));
   }
 
   void NotifyPortAdded(MidiManagerWin* manager) {
@@ -647,8 +647,9 @@ MidiManagerWin::PortManager::HandleMidiInCallback(HMIDIIN hmi,
     std::vector<uint8_t> data;
     data.assign(kData, kData + len);
     manager->PostReplyTask(base::Bind(
-        &MidiManagerWin::ReceiveMidiData, base::Unretained(manager), index,
-        data, manager->port_manager()->CalculateInEventTime(index, param2)));
+        &MidiManagerWin::ReceiveMidiData, base::Unretained(manager),
+        static_cast<uint32_t>(index), data,
+        manager->port_manager()->CalculateInEventTime(index, param2)));
   } else {
     DCHECK_EQ(static_cast<UINT>(MIM_LONGDATA), msg);
     LPMIDIHDR hdr = reinterpret_cast<LPMIDIHDR>(param1);
@@ -657,8 +658,9 @@ MidiManagerWin::PortManager::HandleMidiInCallback(HMIDIIN hmi,
       std::vector<uint8_t> data;
       data.assign(src, src + hdr->dwBytesRecorded);
       manager->PostReplyTask(base::Bind(
-          &MidiManagerWin::ReceiveMidiData, base::Unretained(manager), index,
-          data, manager->port_manager()->CalculateInEventTime(index, param2)));
+          &MidiManagerWin::ReceiveMidiData, base::Unretained(manager),
+          static_cast<uint32_t>(index), data,
+          manager->port_manager()->CalculateInEventTime(index, param2)));
     }
     manager->port_manager()->RestoreInBuffer(index);
   }

@@ -16,6 +16,9 @@ import("//third_party/WebKit/Source/core/core.gni")
 import("//third_party/WebKit/Source/build/scripts/scripts.gni")
 import("//third_party/WebKit/Source/modules/modules_idl_files.gni")
 import("//third_party/WebKit/Source/platform/platform_generated.gni")
+if (is_win) {
+  import("//build/config/win/visual_studio_version.gni")
+}
 
 visibility = [
   "//third_party/WebKit/Source/*",
@@ -214,14 +217,15 @@ component("core") {
   ]
 
   if (is_win && is_debug && is_component_build &&
-      (current_cpu == "x64" || is_clang)) {
-    # Incremental linking fails when the .ilk file gets too large.
-    # 64-bit debug builds and Clang builds with full symbols trigger this
-    # problem, so we turn off incremental linking in those configurations.
+      visual_studio_version == "2015" && current_cpu == "x64") {
+    # Incremental linking fails in MSVC2015 when the .ilk file gets too large.
+    # 64-bit debug builds with full symbols trigger this problem, so we turn
+    # off incremental linking in that configuration.
     # For fastest builds, use component release builds without debug
     # information.
     # VC++ bug filed for 64-bit debug incremental link failures:
     # https://connect.microsoft.com/VisualStudio/feedback/details/2846790
+    # This is fixed in MSVC2017.
     configs -= [ "//build/config/win:default_incremental_linking" ]
     configs += [ "//build/config/win:no_incremental_linking" ]
   }
@@ -514,6 +518,7 @@ code_generator("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontFeatureSettings.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontSize.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontSizeAdjust.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIFontStretch.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontVariantCaps.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontVariantLigatures.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontVariantNumeric.h",
@@ -732,11 +737,14 @@ code_generator("make_core_generated_cssom_types") {
   ]
 }
 
-css_properties("make_core_generated_css_property_metadata") {
-  script = "../build/scripts/make_css_property_metadata.py"
-  other_inputs = [ "../build/scripts/templates/CSSPropertyMetadata.cpp.tmpl" ]
+code_generator("make_core_generated_css_property_metadata") {
+  script = "../build/scripts/core/css/make_css_property_metadata.py"
+  json_inputs = [ "css/CSSProperties.json5" ]
+  templates =
+      [ "../build/scripts/core/css/templates/CSSPropertyMetadata.cpp.tmpl" ]
+  other_inputs = [ "../build/scripts/core/css/css_properties.py" ]
   outputs = [
-    "$blink_core_output_dir/CSSPropertyMetadata.cpp",
+    "$blink_core_output_dir/css/CSSPropertyMetadata.cpp",
   ]
 }
 

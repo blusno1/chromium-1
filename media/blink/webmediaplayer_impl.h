@@ -14,7 +14,6 @@
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -101,7 +100,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
       blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
       WebMediaPlayerDelegate* delegate,
       std::unique_ptr<RendererFactorySelector> renderer_factory_selector,
-      linked_ptr<UrlIndex> url_index,
+      UrlIndex* url_index,
       std::unique_ptr<WebMediaPlayerParams> params);
   ~WebMediaPlayerImpl() override;
 
@@ -146,6 +145,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Dimensions of the video.
   blink::WebSize NaturalSize() const override;
+
+  blink::WebSize VisibleRect() const override;
 
   // Getters of playback state.
   bool Paused() const override;
@@ -336,7 +337,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Returns the current video frame from |compositor_|. Blocks until the
   // compositor can return the frame.
-  scoped_refptr<VideoFrame> GetCurrentFrameFromCompositor();
+  scoped_refptr<VideoFrame> GetCurrentFrameFromCompositor() const;
 
   // Called when the demuxer encounters encrypted streams.
   void OnEncryptedMediaInitData(EmeInitDataType init_data_type,
@@ -622,7 +623,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   std::unique_ptr<base::TickClock> tick_clock_;
 
   BufferedDataSourceHostImpl buffered_data_source_host_;
-  linked_ptr<UrlIndex> url_index_;
+  UrlIndex* url_index_;
 
   // Video rendering members.
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
@@ -765,8 +766,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Whether the use of a surface layer instead of a video layer is enabled.
   bool surface_layer_for_video_enabled_ = false;
 
-  gfx::Size last_uploaded_frame_size_;
-  base::TimeDelta last_uploaded_frame_timestamp_;
+  mutable gfx::Size last_uploaded_frame_size_;
+  mutable base::TimeDelta last_uploaded_frame_timestamp_;
 
   base::CancelableCallback<void(base::TimeTicks)> frame_time_report_cb_;
 

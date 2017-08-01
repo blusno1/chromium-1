@@ -241,8 +241,26 @@ FrameFetchContext::~FrameFetchContext() {
 
 LocalFrame* FrameFetchContext::FrameOfImportsController() const {
   DCHECK(document_);
+  DCHECK(!IsDetached());
+
+  // It's guaranteed that imports_controller is not nullptr since:
+  // - only ClearImportsController() clears it
+  // - ClearImportsController() also calls ClearContext() on this
+  //   FrameFetchContext() making IsDetached() return false
   HTMLImportsController* imports_controller = document_->ImportsController();
   DCHECK(imports_controller);
+
+  // It's guaranteed that Master() is not yet Shutdown()-ed since when Master()
+  // is Shutdown()-ed:
+  // - Master()'s HTMLImportsController is disposed.
+  // - All the HTMLImportLoader instances of the HTMLImportsController are
+  //   disposed.
+  // - ClearImportsController() is called on the Document of the
+  //   HTMLImportLoader to detach this context which makes IsDetached() return
+  //   true.
+  // HTMLImportsController is created only when the master Document's
+  // GetFrame() doesn't return nullptr, this is guaranteed to be not nullptr
+  // here.
   LocalFrame* frame = imports_controller->Master()->GetFrame();
   DCHECK(frame);
   return frame;
@@ -269,10 +287,11 @@ KURL FrameFetchContext::GetFirstPartyForCookies() const {
 }
 
 LocalFrame* FrameFetchContext::GetFrame() const {
+  DCHECK(!IsDetached());
+
   if (!document_loader_)
     return FrameOfImportsController();
 
-  DCHECK(!IsDetached());
   LocalFrame* frame = document_loader_->GetFrame();
   DCHECK(frame);
   return frame;
@@ -351,14 +370,18 @@ WebCachePolicy FrameFetchContext::ResourceRequestCachePolicy(
   return cache_policy;
 }
 
-// The |m_documentLoader| is null in the FrameFetchContext of an imported
-// document.
-// FIXME(http://crbug.com/274173): This means Inspector, which uses
-// DocumentLoader as a grouping entity, cannot see imported documents.
 inline DocumentLoader* FrameFetchContext::MasterDocumentLoader() const {
+  DCHECK(!IsDetached());
+
   if (document_loader_)
     return document_loader_.Get();
 
+  // GetDocumentLoader() here always returns a non-nullptr value that is the
+  // DocumentLoader for |document_| because:
+  // - A Document is created with a LocalFrame only after the
+  //   DocumentLoader is committed
+  // - When another DocumentLoader is committed, the FrameLoader
+  //   Shutdown()-s |document_| making IsDetached() return false
   return FrameOfImportsController()->Loader().GetDocumentLoader();
 }
 
@@ -447,8 +470,9 @@ void FrameFetchContext::DispatchDidReceiveResponse(
           ? LinkLoader::kDoNotLoadResources
           : LinkLoader::kLoadResourcesAndPreconnect;
   if (document_loader_ &&
-      document_loader_ ==
-          document_loader_->GetFrame()->Loader().ProvisionalDocumentLoader()) {
+      document_loader_ == document_loader_->GetFrame()
+                              ->Loader()
+                              .GetProvisionalDocumentLoader()) {
     FrameClientHintsPreferencesContext hints_context(GetFrame());
     document_loader_->GetClientHintsPreferences()
         .UpdateFromAcceptClientHintsHeader(
@@ -561,7 +585,7 @@ bool FrameFetchContext::ShouldLoadNewResource(Resource::Type type) const {
 
   FrameLoader& loader = document_loader_->GetFrame()->Loader();
   if (type == Resource::kMainResource)
-    return document_loader_ == loader.ProvisionalDocumentLoader();
+    return document_loader_ == loader.GetProvisionalDocumentLoader();
   return document_loader_ == loader.GetDocumentLoader();
 }
 
@@ -679,7 +703,7 @@ bool FrameFetchContext::IsMainFrame() const {
 }
 
 bool FrameFetchContext::DefersLoading() const {
-  return IsDetached() ? false : GetFrame()->GetPage()->Suspended();
+  return IsDetached() ? false : GetFrame()->GetPage()->Paused();
 }
 
 bool FrameFetchContext::IsLoadComplete() const {
@@ -718,24 +742,6 @@ void FrameFetchContext::SendImagePing(const KURL& url) {
   if (IsDetached())
     return;
   PingLoader::LoadImage(GetFrame(), url);
-}
-
-void FrameFetchContext::AddConsoleMessage(const String& message,
-                                          LogMessageType message_type) const {
-  if (IsDetached())
-    return;
-
-  MessageLevel level = message_type == kLogWarningMessage ? kWarningMessageLevel
-                                                          : kErrorMessageLevel;
-  ConsoleMessage* console_message =
-      ConsoleMessage::Create(kJSMessageSource, level, message);
-  // Route the console message through Document if it's attached, so
-  // that script line numbers can be included. Otherwise, route directly to the
-  // FrameConsole, to ensure we never drop a message.
-  if (document_ && document_->GetFrame())
-    document_->AddConsoleMessage(console_message);
-  else
-    GetFrame()->Console().AddMessage(console_message);
 }
 
 SecurityOrigin* FrameFetchContext::GetSecurityOrigin() const {
@@ -1013,8 +1019,16 @@ const ContentSecurityPolicy* FrameFetchContext::GetContentSecurityPolicy()
 }
 
 void FrameFetchContext::AddConsoleMessage(ConsoleMessage* message) const {
-  if (document_)
+  if (IsDetached())
+    return;
+
+  // Route the console message through Document if it's attached, so
+  // that script line numbers can be included. Otherwise, route directly to the
+  // FrameConsole, to ensure we never drop a message.
+  if (document_ && document_->GetFrame())
     document_->AddConsoleMessage(message);
+  else
+    GetFrame()->Console().AddMessage(message);
 }
 
 ContentSettingsClient* FrameFetchContext::GetContentSettingsClient() const {

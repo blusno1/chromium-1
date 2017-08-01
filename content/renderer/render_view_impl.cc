@@ -206,7 +206,6 @@ using blink::WebApplicationCacheHostClient;
 using blink::WebColor;
 using blink::WebConsoleMessage;
 using blink::WebData;
-using blink::WebDataSource;
 using blink::WebDocument;
 using blink::WebDragOperation;
 using blink::WebElement;
@@ -1136,9 +1135,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
   // swapped out state.
   if (is_swapped_out_ &&
       IPC_MESSAGE_ID_CLASS(message.type()) == InputMsgStart) {
-    // TODO(dtapuska): Remove this histogram once we have seen that it actually
-    // produces results true. See crbug.com/615090
-    UMA_HISTOGRAM_BOOLEAN("Event.RenderView.DiscardInput", true);
     IPC_BEGIN_MESSAGE_MAP(RenderViewImpl, message)
       IPC_MESSAGE_HANDLER(InputMsg_HandleInputEvent, OnDiscardInputEvent)
     IPC_END_MESSAGE_MAP()
@@ -2326,9 +2322,8 @@ bool RenderViewImpl::DidTapMultipleTargets(
     const WebVector<WebRect>& target_rects) {
   // Never show a disambiguation popup when accessibility is enabled,
   // as this interferes with "touch exploration".
-  AccessibilityMode accessibility_mode =
-      GetMainRenderFrame()->accessibility_mode();
-  if (accessibility_mode == kAccessibilityModeComplete)
+  ui::AXMode accessibility_mode = GetMainRenderFrame()->accessibility_mode();
+  if (accessibility_mode == ui::kAXModeComplete)
     return false;
 
   // The touch_rect, target_rects and zoom_rect are in the outer viewport

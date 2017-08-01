@@ -413,11 +413,14 @@ cr.define('login', function() {
       UserPodCustomIcon.ICONS.forEach(function(icon) {
         validIcon = validIcon || this.iconId_ == icon.id;
       }, this);
-      this.hidden = validIcon ? false : true;
       // Update password container width based on the visibility of the
       // custom icon container.
-      document.querySelector('.password-container')
-          .classList.toggle('custom-icon-shown', !this.hidden);
+      var parentPod = this.getParentPod_();
+      if (parentPod) {
+        parentPod.passwordEntryContainerElement.classList.toggle(
+            'custom-icon-shown', validIcon);
+      }
+      this.hidden = validIcon ? false : true;
     },
 
     /**
@@ -969,6 +972,14 @@ cr.define('login', function() {
     },
 
     /**
+     * Gets animated image element.
+     * @type {!HTMLImageElement}
+     */
+    get animatedImageElement() {
+      return this.querySelector('.user-image.animated-image');
+    },
+
+    /**
      * Gets name element.
      * @type {!HTMLDivElement}
      */
@@ -1233,9 +1244,11 @@ cr.define('login', function() {
      * Updates the user pod element.
      */
     update: function() {
-      var imageSrc = 'chrome://userimage/' + this.user.username +
+      var animatedImageSrc = 'chrome://userimage/' + this.user.username +
           '?id=' + UserPod.userImageSalt_[this.user.username];
+      var imageSrc = animatedImageSrc + '&frame=0';
       this.imageElement.src = imageSrc;
+      this.animatedImageElement.src = animatedImageSrc;
       this.smallPodImageElement.src = imageSrc;
 
       this.nameElement.textContent = this.user_.displayName;
@@ -1538,8 +1551,27 @@ cr.define('login', function() {
 
     /**
      * Focuses on input element.
+     * @param {boolean?} opt_ensureFocus If true, keep trying to focus until a
+     * focus change event is raised.
      */
-    focusInput: function() {
+    focusInput: function(opt_ensureFocus) {
+      // If |opt_ensureFocus| is set, keep setting the focus until we get a
+      // global focus change event. Sometimes focus requests are ignored while
+      // loading the page. See crbug.com/725622.
+      if (opt_ensureFocus) {
+        var INTERVAL_REPEAT_MS = 10
+        var input = this.mainInput;
+        var intervalId = setInterval(function() {
+          input.focus();
+        }, INTERVAL_REPEAT_MS);
+        window.addEventListener('focus', function refocus() {
+          if (document.activeElement != input)
+            return;
+          window.removeEventListener('focus', refocus);
+          window.clearInterval(intervalId);
+        }, true);
+      }
+
       // Move tabIndex from the whole pod to the main input.
       // Note: the |mainInput| can be the pod itself.
       this.tabIndex = -1;
@@ -1637,8 +1669,10 @@ cr.define('login', function() {
       this.updateInput_();
       this.classList.toggle('signing-in', false);
       if (takeFocus) {
-        if (!this.multiProfilesPolicyApplied)
-          this.focusInput();  // This will set a custom tab order.
+        if (!this.multiProfilesPolicyApplied) {
+          // This will set a custom tab order.
+          this.focusInput(true /*opt_ensureFocus*/);
+        }
       }
       else
         this.resetTabOrder();
@@ -3922,9 +3956,8 @@ cr.define('login', function() {
 
         // Update password container width based on the visibility of the
         // custom icon container.
-        pod.querySelector('.password-container')
-            .classList.toggle(
-                'custom-icon-shown', !pod.customIconElement.hidden);
+        pod.passwordEntryContainerElement.classList.toggle(
+            'custom-icon-shown', !pod.customIconElement.hidden);
         // Add ripple animation.
         var actionBoxRippleEffect =
             pod.querySelector('.action-box-button.ripple-circle');
@@ -4408,11 +4441,7 @@ cr.define('login', function() {
       if (this.alwaysFocusSinglePod && !pod) {
         if ($('login-header-bar').contains(e.target))
           return;
-        // If the click is outside the single pod, still focus on that pod
-        // but do not focus on input box any more. This makes virtual keyboard
-        // (if present) disappear.
-        this.focusPod(
-            this.focusedPod_, true /* force */, true /* opt_skipInputFocus */);
+        this.focusPod(this.focusedPod_, true /* force */);
         this.focusedPod_.userTypeBubbleElement.classList.remove('bubble-shown');
         this.focusedPod_.isActionBoxMenuHovered = false;
         // If the click is outside the public session pod, still focus on it
@@ -4567,41 +4596,39 @@ cr.define('login', function() {
             this.focusPod();
           break;
       }
-      if (this.canStartPassword(e.key)) {
+      if (this.isValidInPassword(e.key)) {
         if (!this.focusedPod_ && this.mainPod_) {
-          // If no pod is being focused, and a valid password beginning key is
-          // entered, move focus to the input field of the main pod. The key
-          // will be treated as the first character of the password.
-          // Please note: when the focus is on the header bar (excluding the
-          // status tray area), this will also move focus to the main pod. This
-          // should be fine because entering a valid password character often
-          // indicates that the user wants to log in.
+          // If no pod is being focused, and a valid password key is entered,
+          // move focus to the input field of the main pod. The key will be
+          // treated as the first character of the password. Please note: when
+          // the focus is on the header bar (excluding the status tray area),
+          // this will also move focus to the main pod.
           this.focusPod(this.mainPod_);
         } else if (this.focusedPod_) {
           // If there's a focused pod but its input field is not focused (e.g.
-          // when dropdown menu is shown), move focus to the input field which
-          // will process the key as the password start. This is a no-op for
-          // small pods, or if the input field is already focused.
+          // when dropdown menu is shown, or crbug.com/725622), move focus to
+          // the input field which will treat the key as password. This is a
+          // no-op for small pods, or if the input field is already focused.
           this.focusedPod_.focusInput();
         }
       }
     },
 
     /**
-     * Returns true if the key can be the first character of a valid password.
+     * Returns true if the key can be used in a valid password.
      * @param {string} key The character to check.
      * @return {boolean}
      */
-    canStartPassword: function(key) {
-      // Any ASCII characters except the whitespace can be the beginning of a
-      // password per the guideline: https://support.google.com/a/answer/33386.
-      // However we'll limit to only alphanumeric and some special characters
-      // that we are sure won't conflict with other keyboard events.
+    isValidInPassword: function(key) {
+      // Passwords can consist of any ASCII characters per the guideline:
+      // https://support.google.com/a/answer/33386. However we'll limit to
+      // only alphanumeric and some special characters that we are sure won't
+      // conflict with other keyboard events.
       // TODO(wzang): This should ideally be kept in sync with the requirements
       // set by the backend.
       if (key.length != 1)
         return false;
-      return key.charCodeAt(0) > 32 && key.charCodeAt(0) < 127;
+      return key.charCodeAt(0) > 31 && key.charCodeAt(0) < 127;
     },
 
     /**

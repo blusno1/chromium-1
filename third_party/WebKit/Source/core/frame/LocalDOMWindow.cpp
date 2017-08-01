@@ -108,7 +108,7 @@ class PostMessageTimer final
  public:
   PostMessageTimer(LocalDOMWindow& window,
                    MessageEvent* event,
-                   PassRefPtr<SecurityOrigin> target_origin,
+                   RefPtr<SecurityOrigin> target_origin,
                    std::unique_ptr<SourceLocation> location,
                    UserGestureToken* user_gesture_token)
       : SuspendableTimer(window.document(), TaskType::kPostedMessage),
@@ -249,6 +249,7 @@ static void UntrackAllBeforeUnloadEventListeners(LocalDOMWindow* dom_window) {
 
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
     : DOMWindow(frame),
+      document_(this, nullptr),
       visualViewport_(DOMVisualViewport::Create(this)),
       unused_preloads_timer_(
           TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &frame),
@@ -410,7 +411,7 @@ void LocalDOMWindow::EnqueueHashchangeEvent(const String& old_url,
 }
 
 void LocalDOMWindow::EnqueuePopstateEvent(
-    PassRefPtr<SerializedScriptValue> state_object) {
+    RefPtr<SerializedScriptValue> state_object) {
   // FIXME: https://bugs.webkit.org/show_bug.cgi?id=36202 Popstate event needs
   // to fire asynchronously
   DispatchEvent(PopStateEvent::Create(std::move(state_object), history()));
@@ -606,7 +607,7 @@ Navigator* LocalDOMWindow::navigator() const {
 }
 
 void LocalDOMWindow::SchedulePostMessage(MessageEvent* event,
-                                         PassRefPtr<SecurityOrigin> target,
+                                         RefPtr<SecurityOrigin> target,
                                          Document* source) {
   // Allowing unbounded amounts of messages to build up for a suspended context
   // is problematic; consider imposing a limit or other restriction if this
@@ -1646,6 +1647,7 @@ DEFINE_TRACE(LocalDOMWindow) {
 
 DEFINE_TRACE_WRAPPERS(LocalDOMWindow) {
   visitor->TraceWrappers(custom_elements_);
+  visitor->TraceWrappers(document_);
   visitor->TraceWrappers(modulator_);
   DOMWindow::TraceWrappers(visitor);
 }
