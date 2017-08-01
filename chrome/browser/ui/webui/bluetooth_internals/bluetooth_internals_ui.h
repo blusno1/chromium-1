@@ -8,13 +8,20 @@
 #include "base/macros.h"
 #include "content/public/browser/web_ui_controller.h"
 
+class BluetoothInternalsHandler;
+
 // The WebUI for chrome://bluetooth-internals
-class BluetoothInternalsUI : public content::WebUIController {
+class BluetoothInternalsUI : public MojoWebUIController<mojom::BluetoothInternalsHandler> {
  public:
   explicit BluetoothInternalsUI(content::WebUI* web_ui);
   ~BluetoothInternalsUI() override;
 
  private:
+   // MojoWebUIController overrides:
+  void BindUIHandler(mojom::BluetoothInternalsHandler request) override;
+
+  std::unique_ptr<UsbInternalsPageHandler> page_handler_;
+
   DISALLOW_COPY_AND_ASSIGN(BluetoothInternalsUI);
 };
 
