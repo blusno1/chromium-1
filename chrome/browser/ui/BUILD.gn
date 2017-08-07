@@ -210,6 +210,8 @@ split_static_library("ui") {
     "web_contents_sizer.h",
     "webui/about_ui.cc",
     "webui/about_ui.h",
+    "webui/bluetooth_internals/bluetooth_internals_handler.cc",
+    "webui/bluetooth_internals/bluetooth_internals_handler.h",
     "webui/bluetooth_internals/bluetooth_internals_ui.cc",
     "webui/bluetooth_internals/bluetooth_internals_ui.h",
     "webui/chrome_web_ui_controller_factory.cc",
