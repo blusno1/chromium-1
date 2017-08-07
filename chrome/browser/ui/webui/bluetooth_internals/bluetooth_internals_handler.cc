@@ -19,4 +19,3 @@ void BluetoothInternalsHandler::GetBluetoothAdapter(
     GetBluetoothAdapterCallback callback) {
   std::move(callback).Run();
 }
-
