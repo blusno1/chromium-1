@@ -15,6 +15,11 @@ BluetoothInternalsHandler::BluetoothInternalsHandler(
 
 BluetoothInternalsHandler::~BluetoothInternalsHandler() {}
 
+void BluetoothInternalsHandler::GetBluetoothAdapter(
+    GetBluetoothAdapterCallback& callback) {
+  callback.Run(false, "BLUETOOTH service unavailable.");
+}
+
 /*
 
 void BluetoothInternalsHandler::AddDeviceForTesting(
@@ -22,10 +27,9 @@ void BluetoothInternalsHandler::AddDeviceForTesting(
     const std::string& serial_number,
     const std::string& landing_page,
     const AddDeviceForTestingCallback& callback) {
-  device::BluetoothService* service = device::DeviceClient::Get()->GetBluetoothService();
-  if (service) {
-    GURL landing_page_url(landing_page);
-    if (!landing_page_url.is_valid()) {
+  device::BluetoothService* service =
+device::DeviceClient::Get()->GetBluetoothService(); if (service) { GURL
+landing_page_url(landing_page); if (!landing_page_url.is_valid()) {
       callback.Run(false, "Landing page URL is invalid.");
       return;
     }
@@ -41,8 +45,8 @@ void BluetoothInternalsHandler::AddDeviceForTesting(
 void BluetoothInternalsHandler::RemoveDeviceForTesting(
     const std::string& guid,
     const RemoveDeviceForTestingCallback& callback) {
-  device::BluetoothService* service = device::DeviceClient::Get()->GetBluetoothService();
-  if (service)
+  device::BluetoothService* service =
+device::DeviceClient::Get()->GetBluetoothService(); if (service)
     service->RemoveDeviceForTesting(guid);
   callback.Run();
 }
@@ -50,8 +54,8 @@ void BluetoothInternalsHandler::RemoveDeviceForTesting(
 void BluetoothInternalsHandler::GetTestDevices(
     const GetTestDevicesCallback& callback) {
   std::vector<scoped_refptr<device::BluetoothDevice>> devices;
-  device::BluetoothService* service = device::DeviceClient::Get()->GetBluetoothService();
-  if (service)
+  device::BluetoothService* service =
+device::DeviceClient::Get()->GetBluetoothService(); if (service)
     service->GetTestDevices(&devices);
   std::vector<mojom::TestDeviceInfoPtr> result;
   result.reserve(devices.size());
@@ -66,4 +70,3 @@ void BluetoothInternalsHandler::GetTestDevices(
   callback.Run(std::move(result));
 }
 */
-

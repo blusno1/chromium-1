@@ -9,5 +9,6 @@ import "url/mojo/url.mojom";
 
 interface BluetoothInternalsHandler {
   // Retrieves the Bluetooth Adapter
-  GetBluetoothAdapter() => (array<TestDeviceInfo> devices);
+//  GetBluetoothAdapter() => (array<TestDeviceInfo> devices);
+  GetBluetoothAdapter() => ();
 };

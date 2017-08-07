@@ -1,0 +1,24 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojo_bindings") {
+  sources = [
+    "bluetooth_internals.mojom",
+  ]
+
+  # TODO(scheib) public_ ?
+  # TODO(scheib) public_ ?
+  # TODO(scheib) public_ ?
+  # TODO(scheib) public_ ?
+  public_deps = [
+    "//device/bluetooth/public/interfaces:experimental_interfaces",
+  ]
+
+  # TODO(scheib) ?
+  # TODO(scheib) ?
+  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
+  #use_once_callback = false
+}

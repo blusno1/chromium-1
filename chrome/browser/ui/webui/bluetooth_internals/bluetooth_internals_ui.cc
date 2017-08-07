@@ -71,9 +71,8 @@ BluetoothInternalsUI::BluetoothInternalsUI(content::WebUI* web_ui)
 
 BluetoothInternalsUI::~BluetoothInternalsUI() {}
 
-void UsbInternalsUI::BindUIHandler(
-    mojom::BluetoothInternalsHandler request) {
+void BluetoothInternalsUI::BindUIHandler(
+    // mojo::InterfaceRequest<mojom::BluetoothInternalsHandler> request) {
+    mojom::BluetoothInternalsHandlerRequest request) {
   page_handler_.reset(new BluetoothInternalsHandler(std::move(request)));
 }
-                                                                                
-

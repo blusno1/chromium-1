@@ -39,8 +39,14 @@ mojom("experimental_interfaces") {
   ]
 
   visibility = [
+    # TODO(scheib) Before Landing, why are these public?
+    # TODO(scheib) Before Landing, why are these public?
+    # TODO(scheib) Before Landing, why are these public?
     "//device/bluetooth:mojo",
     "//chrome/browser:*",
+    "//chrome/browser/ui/webui/bluetooth_internals:*",
+
+    # TODO(scheib) Before Landing, is this needed?
     "//chrome/browser/ui:*",
   ]
 
