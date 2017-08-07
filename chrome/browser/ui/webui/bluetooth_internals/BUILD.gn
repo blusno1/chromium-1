@@ -13,7 +13,8 @@ mojom("mojo_bindings") {
   # TODO(scheib) public_ ?
   # TODO(scheib) public_ ?
   # TODO(scheib) public_ ?
-  public_deps = [
+  #public_
+  deps = [
     "//device/bluetooth/public/interfaces:experimental_interfaces",
   ]
 }

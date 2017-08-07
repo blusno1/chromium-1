@@ -595,7 +595,7 @@ split_static_library("ui") {
     "//device/base",
 
     # TODO(scheib) before landing:  Is this needed still?
-    "//device/bluetooth/public/interfaces:experimental_interfaces",
+    #"//device/bluetooth/public/interfaces:experimental_interfaces",
     "//device/usb",
     "//extensions/features",
     "//media",

@@ -34,7 +34,8 @@ source_set("mojo") {
     "discovery_session.h",
   ]
 
-  public_deps = [
+  #public_
+  deps = [
     ":bluetooth",
 
     # TODO(scheib) Before Landing, why are these public?

@@ -43,11 +43,11 @@ mojom("experimental_interfaces") {
     # TODO(scheib) Before Landing, why are these public?
     # TODO(scheib) Before Landing, why are these public?
     "//device/bluetooth:mojo",
-    "//chrome/browser:*",
+    #"//chrome/browser:*",
     "//chrome/browser/ui/webui/bluetooth_internals:*",
 
     # TODO(scheib) Before Landing, is this needed?
-    "//chrome/browser/ui:*",
+    #"//chrome/browser/ui:*",
   ]
 
   # TODO(crbug.com/699569): Convert to use the new JS bindings.
