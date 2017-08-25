@@ -4,11 +4,9 @@
 
 module mojom;
 
-import "url/mojo/origin.mojom";
-import "url/mojo/url.mojom";
+import "device/bluetooth/public/interfaces/adapter.mojom";
 
 interface BluetoothInternalsHandler {
-  // Retrieves the Bluetooth Adapter
-//  GetBluetoothAdapter() => (array<TestDeviceInfo> devices);
-  GetBluetoothAdapter() => ();
+  // Gets an Adapter interface. Returns null if Bluetooth is not supported.
+  GetAdapter() => (Adapter? adapter);
 };
