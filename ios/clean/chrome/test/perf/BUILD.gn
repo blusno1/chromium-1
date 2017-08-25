@@ -47,6 +47,7 @@ ios_eg_test("ios_clean_skeleton_perf_egtests") {
   ]
 
   deps = [
+    "//ios/chrome/app:tests_fake_hook",
     "//ios/clean/chrome/app:main",
     "//ios/testing/perf:startup",
   ]
@@ -58,12 +59,13 @@ ios_eg_test("ios_clean_skeleton_perf_egtests") {
   _eg_main_application_delegate = "MainApplicationDelegate"
 
   extra_substitutions = [
+    "CONTENT_WIDGET_EXTENSION_BUNDLE_ID=$chromium_bundle_id.ContentTodayExtension",
     "CHROMIUM_HANDOFF_ID=$chromium_handoff_id",
     "CHROMIUM_SHORT_NAME=$target_name",
     "CHROMIUM_URL_SCHEME_1=$url_unsecure_scheme",
     "CHROMIUM_URL_SCHEME_2=$url_secure_scheme",
     "CHROMIUM_URL_SCHEME_3=$url_x_callback_scheme",
-    "CHROMIUM_URL_SCHEME_4=$url_channel_scheme",
+    "CHROMIUM_URL_CHANNEL_SCHEME=$url_channel_scheme",
     "EG_MAIN_APPLICATION_DELEGATE=$_eg_main_application_delegate",
     "SSOAUTH_URL_SCHEME=$url_ssoauth_scheme",
   ]

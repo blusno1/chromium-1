@@ -21,6 +21,7 @@
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
+#include "chrome/browser/chromeos/policy/device_off_hours_controller.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_cache.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
@@ -100,6 +101,7 @@ const char* const kKnownSettings[] = {
     kVariationsRestrictParameter,
     kDeviceLoginScreenLocales,
     kDeviceLoginScreenInputMethods,
+    kDeviceOffHours,
 };
 
 void DecodeLoginPolicies(
@@ -191,49 +193,46 @@ void DecodeLoginPolicies(
         new base::DictionaryValue());
     if (entry->has_type()) {
       if (entry->has_account_id()) {
-        entry_dict->SetStringWithoutPathExpansion(
-            kAccountsPrefDeviceLocalAccountsKeyId, entry->account_id());
+        entry_dict->SetKey(kAccountsPrefDeviceLocalAccountsKeyId,
+                           base::Value(entry->account_id()));
       }
-      entry_dict->SetIntegerWithoutPathExpansion(
-          kAccountsPrefDeviceLocalAccountsKeyType, entry->type());
+      entry_dict->SetKey(kAccountsPrefDeviceLocalAccountsKeyType,
+                         base::Value(entry->type()));
       if (entry->kiosk_app().has_app_id()) {
-        entry_dict->SetStringWithoutPathExpansion(
-            kAccountsPrefDeviceLocalAccountsKeyKioskAppId,
-            entry->kiosk_app().app_id());
+        entry_dict->SetKey(kAccountsPrefDeviceLocalAccountsKeyKioskAppId,
+                           base::Value(entry->kiosk_app().app_id()));
       }
       if (entry->kiosk_app().has_update_url()) {
-        entry_dict->SetStringWithoutPathExpansion(
-            kAccountsPrefDeviceLocalAccountsKeyKioskAppUpdateURL,
-            entry->kiosk_app().update_url());
+        entry_dict->SetKey(kAccountsPrefDeviceLocalAccountsKeyKioskAppUpdateURL,
+                           base::Value(entry->kiosk_app().update_url()));
       }
       if (entry->android_kiosk_app().has_package_name()) {
-        entry_dict->SetStringWithoutPathExpansion(
+        entry_dict->SetKey(
             chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskPackage,
-            entry->android_kiosk_app().package_name());
+            base::Value(entry->android_kiosk_app().package_name()));
       }
       if (entry->android_kiosk_app().has_class_name()) {
-        entry_dict->SetStringWithoutPathExpansion(
+        entry_dict->SetKey(
             chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskClass,
-            entry->android_kiosk_app().class_name());
+            base::Value(entry->android_kiosk_app().class_name()));
       }
       if (entry->android_kiosk_app().has_action()) {
-        entry_dict->SetStringWithoutPathExpansion(
+        entry_dict->SetKey(
             chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskAction,
-            entry->android_kiosk_app().action());
+            base::Value(entry->android_kiosk_app().action()));
       }
       if (entry->android_kiosk_app().has_display_name()) {
-        entry_dict->SetStringWithoutPathExpansion(
+        entry_dict->SetKey(
             chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskDisplayName,
-            entry->android_kiosk_app().display_name());
+            base::Value(entry->android_kiosk_app().display_name()));
       }
     } else if (entry->has_deprecated_public_session_id()) {
       // Deprecated public session specification.
-      entry_dict->SetStringWithoutPathExpansion(
-          kAccountsPrefDeviceLocalAccountsKeyId,
-          entry->deprecated_public_session_id());
-      entry_dict->SetIntegerWithoutPathExpansion(
+      entry_dict->SetKey(kAccountsPrefDeviceLocalAccountsKeyId,
+                         base::Value(entry->deprecated_public_session_id()));
+      entry_dict->SetKey(
           kAccountsPrefDeviceLocalAccountsKeyType,
-          policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION);
+          base::Value(policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION));
     }
     account_list->Append(std::move(entry_dict));
   }
@@ -567,6 +566,13 @@ void DecodeGenericPolicies(
         base::DictionaryValue::From(base::JSONReader::Read(
             policy.device_wallpaper_image().device_wallpaper_image()));
     new_values_cache->SetValue(kDeviceWallpaperImage, std::move(dict_val));
+  }
+
+  if (policy.has_device_off_hours()) {
+    auto off_hours_policy =
+        policy::off_hours::ConvertPolicyProtoToValue(policy.device_off_hours());
+    if (off_hours_policy)
+      new_values_cache->SetValue(kDeviceOffHours, std::move(off_hours_policy));
   }
 }
 

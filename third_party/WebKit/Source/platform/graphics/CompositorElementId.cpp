@@ -29,8 +29,7 @@ CompositorElementId PLATFORM_EXPORT CompositorElementIdFromLayoutObjectId(
   DCHECK(namespace_id == CompositorElementIdNamespace::kPrimary ||
          namespace_id == CompositorElementIdNamespace::kScroll ||
          namespace_id == CompositorElementIdNamespace::kEffectFilter ||
-         namespace_id == CompositorElementIdNamespace::kEffectMask ||
-         namespace_id == CompositorElementIdNamespace::kScrollTranslation);
+         namespace_id == CompositorElementIdNamespace::kEffectMask);
   return CreateCompositorElementId(id, namespace_id);
 }
 
@@ -56,10 +55,16 @@ CompositorElementId CompositorElementIdFromRootEffectId(uint64_t id) {
                                    CompositorElementIdNamespace::kEffectRoot);
 }
 
+CompositorElementId CompositorElementIdFromSyntheticEffectId(
+    SyntheticEffectId id) {
+  return CreateCompositorElementId(
+      id, CompositorElementIdNamespace::kSyntheticEffect);
+}
+
 CompositorElementIdNamespace NamespaceFromCompositorElementId(
     CompositorElementId element_id) {
   return static_cast<CompositorElementIdNamespace>(
-      element_id.id_ %
+      element_id.ToInternalValue() %
       static_cast<uint64_t>(
           CompositorElementIdNamespace::kMaxRepresentableNamespaceId));
 }

@@ -4,14 +4,14 @@
 
 module viz.mojom;
 
-import "cc/ipc/begin_frame_args.mojom";
-import "cc/ipc/compositor_frame.mojom";
 import "cc/ipc/copy_output_request.mojom";
 import "cc/ipc/frame_sink_id.mojom";
 import "cc/ipc/local_surface_id.mojom";
 import "cc/ipc/surface_id.mojom";
-import "cc/ipc/returned_resource.mojom";
-import "cc/ipc/surface_sequence.mojom";
+import "services/viz/public/interfaces/compositing/begin_frame_args.mojom";
+import "services/viz/public/interfaces/compositing/compositor_frame.mojom";
+import "services/viz/public/interfaces/compositing/returned_resource.mojom";
+import "services/viz/public/interfaces/hit_test/hit_test_region_list.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // A CompositorFrameSink is an interface for receiving CompositorFrame
@@ -28,16 +28,22 @@ interface CompositorFrameSink {
   // to screen the next time frames from all CompositorFrameSinks are aggregated
   // to produce a display CompositorFrame. If a client wishes to allocate a new
   // surface (e.g. during resize), then it can simply allocate a new
-  // |local_surface_id|.
+  // |local_surface_id|. Submit time is set to when this function is called to
+  // used for tracing how much time is spend between a CompositorFrame is sent
+  // and received.
+  // TODO(weiliangc): Submit time is recorded in microseconds right now and
+  // should be changed to use TimeTicks when Blink can send base types directly.
   // For successful swaps, the implementation must call
   // DidReceiveCompositorFrameAck() asynchronously when the frame has been
   // processed in order to unthrottle the next frame.
   SubmitCompositorFrame(cc.mojom.LocalSurfaceId local_surface_id,
-                        cc.mojom.CompositorFrame frame);
+                        CompositorFrame frame,
+                        HitTestRegionList? hit_test_region_list,
+                        uint64 submit_time);
 
   // Notifies the frame sink that a BeginFrame was completed, but that no
   // CompositorFrame was produced as a result of it.
-  DidNotProduceFrame(cc.mojom.BeginFrameAck ack);
+  DidNotProduceFrame(BeginFrameAck ack);
 };
 
 interface CompositorFrameSinkClient {
@@ -48,14 +54,14 @@ interface CompositorFrameSinkClient {
   // TODO(fsamuel): This method ought not be necessary with unified BeginFrame.
   // However, there's a fair amount of cleanup and refactoring necessary to get
   // rid of it.
-  DidReceiveCompositorFrameAck(array<cc.mojom.ReturnedResource> resources);
+  DidReceiveCompositorFrameAck(array<ReturnedResource> resources);
 
   // Notification for the client to generate a CompositorFrame.
-  OnBeginFrame(cc.mojom.BeginFrameArgs args);
+  OnBeginFrame(BeginFrameArgs args);
 
   // Inform the client that OnBeginFrame may not be called for some time.
   OnBeginFramePausedChanged(bool paused);
 
   // Returns resources sent to SubmitCompositorFrame to be reused or freed.
-  ReclaimResources(array<cc.mojom.ReturnedResource> resources);
+  ReclaimResources(array<ReturnedResource> resources);
 };

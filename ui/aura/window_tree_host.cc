@@ -20,6 +20,7 @@
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/base/layout.h"
 #include "ui/base/view_prop.h"
+#include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
@@ -91,6 +92,20 @@ void WindowTreeHost::SetRootTransform(const gfx::Transform& transform) {
 gfx::Transform WindowTreeHost::GetInverseRootTransform() const {
   gfx::Transform invert;
   gfx::Transform transform = GetRootTransform();
+  if (!transform.GetInverse(&invert))
+    return transform;
+  return invert;
+}
+
+gfx::Transform WindowTreeHost::GetRootTransformForLocalEventCoordinates()
+    const {
+  return GetRootTransform();
+}
+
+gfx::Transform WindowTreeHost::GetInverseRootTransformForLocalEventCoordinates()
+    const {
+  gfx::Transform invert;
+  gfx::Transform transform = GetRootTransformForLocalEventCoordinates();
   if (!transform.GetInverse(&invert))
     return transform;
   return invert;
@@ -255,7 +270,8 @@ void WindowTreeHost::DestroyDispatcher() {
   //window()->RemoveOrDestroyChildren();
 }
 
-void WindowTreeHost::CreateCompositor(const viz::FrameSinkId& frame_sink_id) {
+void WindowTreeHost::CreateCompositor(const viz::FrameSinkId& frame_sink_id,
+                                      bool force_software_compositor) {
   DCHECK(Env::GetInstance());
   ui::ContextFactory* context_factory = Env::GetInstance()->context_factory();
   DCHECK(context_factory);
@@ -270,7 +286,8 @@ void WindowTreeHost::CreateCompositor(const viz::FrameSinkId& frame_sink_id) {
           ? frame_sink_id
           : context_factory_private->AllocateFrameSinkId(),
       context_factory, context_factory_private,
-      base::ThreadTaskRunnerHandle::Get(), enable_surface_synchronization));
+      base::ThreadTaskRunnerHandle::Get(), enable_surface_synchronization,
+      ui::IsPixelCanvasRecordingEnabled(), false, force_software_compositor));
   if (!dispatcher()) {
     window()->Init(ui::LAYER_NOT_DRAWN);
     window()->set_host(this);
@@ -280,10 +297,12 @@ void WindowTreeHost::CreateCompositor(const viz::FrameSinkId& frame_sink_id) {
 }
 
 void WindowTreeHost::InitCompositor() {
+  DCHECK(!compositor_->root_layer());
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestWindow(window());
   compositor_->SetScaleAndSize(display.device_scale_factor(),
-                               GetBoundsInPixels().size());
+                               GetBoundsInPixels().size(),
+                               window()->GetLocalSurfaceId());
   compositor_->SetRootLayer(window()->layer());
   compositor_->SetDisplayColorSpace(display.color_space());
 }
@@ -308,10 +327,11 @@ void WindowTreeHost::OnHostResizedInPixels(
   gfx::Size adjusted_size(new_size_in_pixels);
   adjusted_size.Enlarge(output_surface_padding_in_pixels_.width(),
                         output_surface_padding_in_pixels_.height());
+
   // The compositor should have the same size as the native root window host.
   // Get the latest scale from display because it might have been changed.
   compositor_->SetScaleAndSize(ui::GetScaleFactorForNativeView(window()),
-                               adjusted_size);
+                               adjusted_size, window()->GetLocalSurfaceId());
 
   gfx::Size layer_size = GetBoundsInPixels().size();
   // The layer, and the observers should be notified of the
@@ -354,7 +374,7 @@ void WindowTreeHost::OnDisplayMetricsChanged(const display::Display& display,
   if (metrics & DisplayObserver::DISPLAY_METRIC_COLOR_SPACE) {
     display::Screen* screen = display::Screen::GetScreen();
     if (compositor_ &&
-        display.id() != screen->GetDisplayNearestView(window()).id()) {
+        display.id() == screen->GetDisplayNearestView(window()).id()) {
       compositor_->SetDisplayColorSpace(display.color_space());
     }
   }

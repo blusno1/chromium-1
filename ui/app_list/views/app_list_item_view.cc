@@ -68,7 +68,7 @@ const char AppListItemView::kViewClassName[] = "ui/app_list/AppListItemView";
 
 AppListItemView::AppListItemView(AppsGridView* apps_grid_view,
                                  AppListItem* item)
-    : CustomButton(apps_grid_view),
+    : Button(apps_grid_view),
       is_folder_(item->GetItemType() == AppListFolderItem::kItemType),
       is_in_folder_(item->IsInFolder()),
       item_weak_(item),
@@ -181,8 +181,12 @@ void AppListItemView::OnMouseDragTimer() {
   SetUIState(UI_STATE_DRAGGING);
 }
 
-void AppListItemView::OnTouchDragTimer() {
+void AppListItemView::OnTouchDragTimer(
+    const gfx::Point& tap_down_location,
+    const gfx::Point& tap_down_root_location) {
   DCHECK(apps_grid_view_->IsDraggedView(this));
+  apps_grid_view_->InitiateDrag(this, AppsGridView::TOUCH, tap_down_location,
+                                tap_down_root_location);
   apps_grid_view_->StartDragAndDropHostDragAfterLongPress(AppsGridView::TOUCH);
   SetTouchDragging(true);
 }
@@ -294,7 +298,7 @@ bool AppListItemView::ShouldEnterPushedState(const ui::Event& event) {
   if (event.type() == ui::ET_GESTURE_TAP_DOWN)
     return false;
 
-  return views::CustomButton::ShouldEnterPushedState(event);
+  return views::Button::ShouldEnterPushedState(event);
 }
 
 void AppListItemView::PaintButtonContents(gfx::Canvas* canvas) {
@@ -325,18 +329,19 @@ void AppListItemView::PaintButtonContents(gfx::Canvas* canvas) {
     cc::PaintFlags flags;
     flags.setStyle(cc::PaintFlags::kFill_Style);
     flags.setAntiAlias(true);
-    flags.setColor(kFolderBubbleColor);
+    flags.setColor(FolderImage::GetFolderBubbleSkColor());
     canvas->DrawCircle(center, kFolderPreviewRadius, flags);
   }
 }
 
 bool AppListItemView::OnMousePressed(const ui::MouseEvent& event) {
-  CustomButton::OnMousePressed(event);
+  Button::OnMousePressed(event);
 
   if (!ShouldEnterPushedState(event))
     return true;
 
-  apps_grid_view_->InitiateDrag(this, AppsGridView::MOUSE, event);
+  apps_grid_view_->InitiateDrag(this, AppsGridView::MOUSE, event.location(),
+                                event.root_location());
 
   if (apps_grid_view_->IsDraggedView(this)) {
     mouse_drag_timer_.Start(FROM_HERE,
@@ -410,16 +415,16 @@ bool AppListItemView::OnKeyPressed(const ui::KeyEvent& event) {
   if (event.key_code() == ui::VKEY_SPACE)
     return false;
 
-  return CustomButton::OnKeyPressed(event);
+  return Button::OnKeyPressed(event);
 }
 
 void AppListItemView::OnMouseReleased(const ui::MouseEvent& event) {
-  CustomButton::OnMouseReleased(event);
+  Button::OnMouseReleased(event);
   apps_grid_view_->EndDrag(false);
 }
 
 bool AppListItemView::OnMouseDragged(const ui::MouseEvent& event) {
-  CustomButton::OnMouseDragged(event);
+  Button::OnMouseDragged(event);
   if (apps_grid_view_->IsDraggedView(this)) {
     // If the drag is no longer happening, it could be because this item
     // got removed, in which case this item has been destroyed. So, bail out
@@ -445,6 +450,11 @@ bool AppListItemView::OnMouseDragged(const ui::MouseEvent& event) {
 void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::ET_GESTURE_SCROLL_BEGIN:
+      if (touch_dragging_)
+        event->SetHandled();
+      else
+        touch_drag_timer_.Stop();
+      break;
     case ui::ET_GESTURE_LONG_PRESS:
       event->SetHandled();
       break;
@@ -465,13 +475,12 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
     case ui::ET_GESTURE_TAP_DOWN:
       if (state() != STATE_DISABLED) {
         SetState(STATE_PRESSED);
-        apps_grid_view_->InitiateDrag(this, AppsGridView::TOUCH, *event);
-        if (apps_grid_view_->has_dragged_view()) {
-          touch_drag_timer_.Start(
-              FROM_HERE,
-              base::TimeDelta::FromMilliseconds(kTouchLongpressDelayInMs), this,
-              &AppListItemView::OnTouchDragTimer);
-        }
+        touch_drag_timer_.Start(
+            FROM_HERE,
+            base::TimeDelta::FromMilliseconds(kTouchLongpressDelayInMs),
+            base::Bind(&AppListItemView::OnTouchDragTimer,
+                       base::Unretained(this), event->location(),
+                       event->root_location()));
         event->SetHandled();
       }
       break;
@@ -482,6 +491,7 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
       break;
     case ui::ET_GESTURE_LONG_TAP:
     case ui::ET_GESTURE_END:
+      touch_drag_timer_.Stop();
       SetTouchDragging(false);
       apps_grid_view_->EndDrag(false);
       break;
@@ -489,7 +499,7 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
       break;
   }
   if (!event->handled())
-    CustomButton::OnGestureEvent(event);
+    Button::OnGestureEvent(event);
 }
 
 bool AppListItemView::GetTooltipText(const gfx::Point& p,

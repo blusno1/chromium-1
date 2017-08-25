@@ -290,8 +290,7 @@ bool BrowserAccessibilityAndroid::IsRangeType() const {
 }
 
 bool BrowserAccessibilityAndroid::IsScrollable() const {
-  return (HasIntAttribute(ui::AX_ATTR_SCROLL_X_MAX) &&
-          GetRole() != ui::AX_ROLE_SCROLL_AREA);
+  return HasIntAttribute(ui::AX_ATTR_SCROLL_X_MAX);
 }
 
 bool BrowserAccessibilityAndroid::IsSelected() const {
@@ -346,6 +345,23 @@ const BrowserAccessibilityAndroid*
   }
 
   return sole_interesting_node;
+}
+
+bool BrowserAccessibilityAndroid::AreInlineTextBoxesLoaded() const {
+  if (GetRole() == ui::AX_ROLE_STATIC_TEXT)
+    return InternalChildCount() > 0;
+
+  // Return false if any descendant needs to load inline text boxes.
+  for (uint32_t i = 0; i < InternalChildCount(); ++i) {
+    BrowserAccessibilityAndroid* child =
+        static_cast<BrowserAccessibilityAndroid*>(InternalGetChild(i));
+    if (!child->AreInlineTextBoxesLoaded())
+      return false;
+  }
+
+  // Otherwise return true - either they're all loaded, or there aren't
+  // any descendants that need to load inline text boxes.
+  return true;
 }
 
 bool BrowserAccessibilityAndroid::CanOpenPopup() const {
@@ -480,9 +496,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ui::AX_ROLE_BLOCKQUOTE:
       message_id = IDS_AX_ROLE_BLOCKQUOTE;
       break;
-    case ui::AX_ROLE_BUSY_INDICATOR:
-      message_id = IDS_AX_ROLE_BUSY_INDICATOR;
-      break;
     case ui::AX_ROLE_BUTTON:
       message_id = IDS_AX_ROLE_BUTTON;
       break;
@@ -602,9 +615,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ui::AX_ROLE_IGNORED:
       // No role description.
       break;
-    case ui::AX_ROLE_IMAGE_MAP_LINK:
-      message_id = IDS_AX_ROLE_LINK;
-      break;
     case ui::AX_ROLE_IMAGE_MAP:
       message_id = IDS_AX_ROLE_GRAPHIC;
       break;
@@ -695,9 +705,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ui::AX_ROLE_NOTE:
       message_id = IDS_AX_ROLE_NOTE;
       break;
-    case ui::AX_ROLE_OUTLINE:
-      message_id = IDS_AX_ROLE_OUTLINE;
-      break;
     case ui::AX_ROLE_PANE:
       // No role description.
       break;
@@ -737,20 +744,11 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ui::AX_ROLE_RUBY:
       // No role description.
       break;
-    case ui::AX_ROLE_RULER:
-      message_id = IDS_AX_ROLE_RULER;
-      break;
     case ui::AX_ROLE_SVG_ROOT:
       message_id = IDS_AX_ROLE_GRAPHIC;
       break;
-    case ui::AX_ROLE_SCROLL_AREA:
-      // No role description.
-      break;
     case ui::AX_ROLE_SCROLL_BAR:
       message_id = IDS_AX_ROLE_SCROLL_BAR;
-      break;
-    case ui::AX_ROLE_SEAMLESS_WEB_AREA:
-      // No role description.
       break;
     case ui::AX_ROLE_SEARCH:
       message_id = IDS_AX_ROLE_SEARCH;
@@ -781,9 +779,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
       break;
     case ui::AX_ROLE_SWITCH:
       message_id = IDS_AX_ROLE_SWITCH;
-      break;
-    case ui::AX_ROLE_TAB_GROUP:
-      // No role description.
       break;
     case ui::AX_ROLE_TAB_LIST:
       message_id = IDS_AX_ROLE_TAB_LIST;
@@ -1088,6 +1083,9 @@ size_t BrowserAccessibilityAndroid::CommonSuffixLength(
   return i;
 }
 
+// TODO(nektar): Merge this function with
+// |BrowserAccessibilityCocoa::computeTextEdit|.
+//
 // static
 size_t BrowserAccessibilityAndroid::CommonEndLengths(
     const base::string16 a,

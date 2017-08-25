@@ -22,6 +22,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "components/viz/service/display_embedder/shared_bitmap_allocation_notifier_impl.h"
+#include "content/browser/child_process_importance.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/renderer_host/frame_sink_provider_impl.h"
@@ -32,6 +33,7 @@
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_export.h"
 #include "content/common/indexed_db/indexed_db.mojom.h"
+#include "content/common/media/media_stream.mojom.h"
 #include "content/common/media/renderer_audio_output_stream_factory.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/renderer_host.mojom.h"
@@ -70,6 +72,7 @@ class IndexedDBDispatcherHost;
 class InProcessChildThreadParams;
 class NotificationMessageFilter;
 #if BUILDFLAG(ENABLE_WEBRTC)
+class MediaStreamDispatcherHost;
 class P2PSocketDispatcherHost;
 #endif
 class PermissionServiceContext;
@@ -112,9 +115,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
     : public RenderProcessHost,
       public ChildProcessLauncher::Client,
       public ui::GpuSwitchingObserver,
-      public NON_EXPORTED_BASE(mojom::RouteProvider),
-      public NON_EXPORTED_BASE(mojom::AssociatedInterfaceProvider),
-      public NON_EXPORTED_BASE(mojom::RendererHost) {
+      public mojom::RouteProvider,
+      public mojom::AssociatedInterfaceProvider,
+      public mojom::RendererHost {
  public:
   // Use the spare RenderProcessHost if it exists, or create a new one. This
   // should be the usual way to get a new RenderProcessHost.
@@ -171,6 +174,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void RemovePendingView() override;
   void AddWidget(RenderWidgetHost* widget) override;
   void RemoveWidget(RenderWidgetHost* widget) override;
+  void UpdateWidgetImportance(ChildProcessImportance old_value,
+                              ChildProcessImportance new_value) override;
   void SetSuddenTerminationAllowed(bool enabled) override;
   bool SuddenTerminationAllowed() const override;
   IPC::ChannelProxy* GetChannel() override;
@@ -200,13 +205,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
       override;
   const base::TimeTicks& GetInitTimeForNavigationMetrics() const override;
   bool IsProcessBackgrounded() const override;
-  size_t GetWorkerRefCount() const override;
-  void IncrementServiceWorkerRefCount() override;
-  void DecrementServiceWorkerRefCount() override;
-  void IncrementSharedWorkerRefCount() override;
-  void DecrementSharedWorkerRefCount() override;
-  void ForceReleaseWorkerRefCounts() override;
-  bool IsWorkerRefCountDisabled() override;
+  void IncrementKeepAliveRefCount() override;
+  void DecrementKeepAliveRefCount() override;
+  void DisableKeepAliveRefCount() override;
+  bool IsKeepAliveRefCountDisabled() override;
   void PurgeAndSuspend() override;
   void Resume() override;
   mojom::Renderer* GetRendererInterface() override;
@@ -306,6 +308,15 @@ class CONTENT_EXPORT RenderProcessHostImpl
   static void RegisterRendererMainThreadFactory(
       RendererMainThreadFactoryFunction create);
 
+  // Allows external code to supply a function which creates a
+  // StoragePartitionService. Used for supplying test versions of the
+  // service.
+  using CreateStoragePartitionServiceFunction =
+      void (*)(RenderProcessHostImpl* rph,
+               mojom::StoragePartitionServiceRequest request);
+  static void SetCreateStoragePartitionServiceFunction(
+      CreateStoragePartitionServiceFunction function);
+
   RenderFrameMessageFilter* render_frame_message_filter_for_testing() const {
     return render_frame_message_filter_.get();
   }
@@ -334,11 +345,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
   RendererAudioOutputStreamFactoryContext*
   GetRendererAudioOutputStreamFactoryContext() override;
 
-  // Called when an audio stream is added or removed and used to determine if
-  // the process should be backgrounded or not.
-  void OnAudioStreamAdded() override;
-  void OnAudioStreamRemoved() override;
-  int get_audio_stream_count_for_testing() const { return audio_stream_count_; }
+  // Called when a video capture stream or an audio stream is added or removed
+  // and used to determine if the process should be backgrounded or not.
+  void OnMediaStreamAdded() override;
+  void OnMediaStreamRemoved() override;
+  int get_media_stream_count_for_testing() const { return media_stream_count_; }
 
   // Sets the global factory used to create new RenderProcessHosts.  It may be
   // nullptr, in which case the default RenderProcessHost will be created (this
@@ -373,6 +384,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // globally-used spare RenderProcessHost at any time.
   static RenderProcessHost* GetSpareRenderProcessHostForTesting();
 
+  // Test-only method to get the importance of this process.
+  ChildProcessImportance GetWidgetImportanceForTesting();
+
  protected:
   // A proxy for our IPC::Channel that lives on the IO thread.
   std::unique_ptr<IPC::ChannelProxy> channel_;
@@ -396,6 +410,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
  private:
   friend class ChildProcessLauncherBrowserTest_ChildSpawnFail_Test;
   friend class VisitRelayingRenderProcessHost;
+  friend class StoragePartitonInterceptor;
   class ConnectionFilterController;
   class ConnectionFilterImpl;
 
@@ -439,7 +454,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
       blink::mojom::OffscreenCanvasProviderRequest request);
   void BindFrameSinkProvider(mojom::FrameSinkProviderRequest request);
   void BindSharedBitmapAllocationNotifier(
-      cc::mojom::SharedBitmapAllocationNotifierRequest request);
+      viz::mojom::SharedBitmapAllocationNotifierRequest request);
   void CreateStoragePartitionService(
       mojom::StoragePartitionServiceRequest request);
   void CreateRendererHost(mojom::RendererHostRequest request);
@@ -467,6 +482,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // change.
   void UpdateProcessPriority();
 
+  // Helper method to compute importance from |widget_importance_counts_|.
+  ChildProcessImportance ComputeEffectiveImportance();
+
   // Creates a PersistentMemoryAllocator and shares it with the renderer
   // process for it to store histograms from that process. The allocator is
   // available for extraction by a SubprocesMetricsProvider in order to
@@ -492,6 +510,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
       const GURL& site_url);
 
 #if BUILDFLAG(ENABLE_WEBRTC)
+  void CreateMediaStreamDispatcherHost(
+      const std::string& salt,
+      MediaStreamManager* media_stream_manager,
+      mojom::MediaStreamDispatcherHostRequest request);
   void OnRegisterAecDumpConsumer(int id);
   void OnUnregisterAecDumpConsumer(int id);
   void RegisterAecDumpConsumerOnUIThread(int id);
@@ -547,16 +569,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
   scoped_refptr<ConnectionFilterController> connection_filter_controller_;
   service_manager::mojom::ServicePtr test_service_;
 
-  // The number of service workers running in this process.
-  size_t service_worker_ref_count_;
-  // See comments for IncrementSharedWorkerRefCount() and
-  // DecrementSharedWorkerRefCount(). This is more like a boolean flag and not
-  // actually the number of shared workers running in this process.
-  size_t shared_worker_ref_count_;
+  size_t keep_alive_ref_count_;
 
-  // Set in ForceReleaseWorkerRefCounts. When true, worker ref counts must no
-  // longer be modified.
-  bool is_worker_ref_count_disabled_;
+  // Set in DisableKeepAliveRefCount(). When true, |keep_alive_ref_count_| must
+  // no longer be modified.
+  bool is_keep_alive_ref_count_disabled_;
 
   // Whether this host is never suitable for reuse as determined in the
   // MayReuseHost() function.
@@ -564,7 +581,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // The registered IPC listener objects. When this list is empty, we should
   // delete ourselves.
-  IDMap<IPC::Listener*> listeners_;
+  base::IDMap<IPC::Listener*> listeners_;
 
   // Mojo interfaces provided to the child process are registered here if they
   // need consistent delivery ordering with legacy IPC, and are process-wide in
@@ -579,6 +596,16 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // for multiple widgets, it uses this count to determine when it should be
   // backgrounded.
   int32_t visible_widgets_;
+
+  // Track count of number of widgets with each possible ChildProcessImportance
+  // value.
+  int32_t widget_importance_counts_[static_cast<size_t>(
+      ChildProcessImportance::COUNT)] = {0};
+
+  // Highest importance of any widget in the process. Note this is the
+  // importance last passed to |child_process_launcher_|, which means this may
+  // be out of date in comparison to |widget_importance_counts_|.
+  ChildProcessImportance effective_importance_ = ChildProcessImportance::NORMAL;
 
   // The set of widgets in this RenderProcessHostImpl.
   std::set<RenderWidgetHostImpl*> widgets_;
@@ -694,6 +721,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   scoped_refptr<base::SequencedTaskRunner>
       audio_debug_recordings_file_task_runner_;
+
+  std::unique_ptr<MediaStreamDispatcherHost, BrowserThread::DeleteOnIOThread>
+      media_stream_dispatcher_host_;
 #endif
 
   // Forwards messages between WebRTCInternals in the browser process
@@ -703,7 +733,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   scoped_refptr<PeerConnectionTrackerHost> peer_connection_tracker_host_;
 
   // Records the time when the process starts surviving for workers for UMA.
-  base::TimeTicks survive_for_worker_start_time_;
+  base::TimeTicks keep_alive_start_time_;
 
   // Context shared for each mojom::PermissionService instance created for this
   // RPH.
@@ -738,9 +768,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
   mojom::RendererAssociatedPtr renderer_interface_;
   mojo::Binding<mojom::RendererHost> renderer_host_binding_;
 
-  // Tracks active audio streams within the render process; used to determine if
-  // if a process should be backgrounded.
-  int audio_stream_count_ = 0;
+  // Tracks active audio and video streams within the render process; used to
+  // determine if if a process should be backgrounded.
+  int media_stream_count_ = 0;
 
   std::unique_ptr<resource_coordinator::ResourceCoordinatorInterface>
       process_resource_coordinator_;

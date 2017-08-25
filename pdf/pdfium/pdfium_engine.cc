@@ -26,6 +26,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "gin/array_buffer.h"
 #include "gin/public/gin_embedders.h"
 #include "gin/public/isolate_holder.h"
@@ -33,7 +34,6 @@
 #include "pdf/pdfium/pdfium_api_string_buffer_adapter.h"
 #include "pdf/pdfium/pdfium_mem_buffer_file_read.h"
 #include "pdf/pdfium/pdfium_mem_buffer_file_write.h"
-#include "pdf/url_loader_wrapper_impl.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/pp_input_event.h"
 #include "ppapi/c/ppb_core.h"
@@ -518,6 +518,19 @@ void FormatStringForOS(base::string16* text) {
 #endif
 }
 
+// For double clicks, look for work breaks.
+// For triple clicks, look for line breaks.
+// The actual algorithm used in Blink is much more complicated, so do a simple
+// approximation.
+bool FindMultipleClickBoundary(bool is_double_click, base::char16 cur) {
+  if (!is_double_click)
+    return cur == '\n';
+
+  if (base::IsAsciiAlpha(cur) || base::IsAsciiDigit(cur) || cur == '_')
+    return false;
+  return cur < 128;
+};
+
 // Returns a VarDictionary (representing a bookmark), which in turn contains
 // child VarDictionaries (representing the child bookmarks).
 // If nullptr is passed in as the bookmark then we traverse from the "root".
@@ -625,6 +638,16 @@ std::string WideStringToString(FPDF_WIDESTRING wide_string) {
   return base::UTF16ToUTF8(reinterpret_cast<const base::char16*>(wide_string));
 }
 
+// Returns true if the given |area| and |form_type| combination from
+// PDFiumEngine::GetCharIndex() indicates it is a form text area.
+bool IsFormTextArea(PDFiumPage::Area area, int form_type) {
+  if (form_type == FPDF_FORMFIELD_UNKNOWN)
+    return false;
+
+  DCHECK_EQ(area, PDFiumPage::FormTypeToArea(form_type));
+  return area == PDFiumPage::FORM_TEXT_AREA;
+}
+
 // Checks whether or not focus is in an editable form text area given the
 // form field annotation flags and form type.
 bool CheckIfEditableFormTextArea(int flags, int form_type) {
@@ -637,6 +660,30 @@ bool CheckIfEditableFormTextArea(int flags, int form_type) {
     return true;
   }
   return false;
+}
+
+bool IsLinkArea(PDFiumPage::Area area) {
+  return area == PDFiumPage::WEBLINK_AREA || area == PDFiumPage::DOCLINK_AREA;
+}
+
+// Normalize a MouseInputEvent. For Mac, this means transforming ctrl + left
+// button down events into a right button down events.
+pp::MouseInputEvent NormalizeMouseEvent(pp::Instance* instance,
+                                        const pp::MouseInputEvent& event) {
+  pp::MouseInputEvent normalized_event = event;
+#if defined(OS_MACOSX)
+  uint32_t modifiers = event.GetModifiers();
+  if ((modifiers & PP_INPUTEVENT_MODIFIER_CONTROLKEY) &&
+      event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT &&
+      event.GetType() == PP_INPUTEVENT_TYPE_MOUSEDOWN) {
+    uint32_t new_modifiers = modifiers & ~PP_INPUTEVENT_MODIFIER_CONTROLKEY;
+    normalized_event = pp::MouseInputEvent(
+        instance, PP_INPUTEVENT_TYPE_MOUSEDOWN, event.GetTimeStamp(),
+        new_modifiers, PP_INPUTEVENT_MOUSEBUTTON_RIGHT, event.GetPosition(), 1,
+        event.GetMovement());
+  }
+#endif
+  return normalized_event;
 }
 
 }  // namespace
@@ -690,6 +737,7 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
     : client_(client),
       current_zoom_(1.0),
       current_rotation_(0),
+      doc_loader_(this),
       password_tries_remaining_(0),
       doc_(nullptr),
       form_(nullptr),
@@ -720,15 +768,15 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
 
   file_access_.m_FileLen = 0;
   file_access_.m_GetBlock = &GetBlock;
-  file_access_.m_Param = this;
+  file_access_.m_Param = &doc_loader_;
 
   file_availability_.version = 1;
   file_availability_.IsDataAvail = &IsDataAvail;
-  file_availability_.engine = this;
+  file_availability_.loader = &doc_loader_;
 
   download_hints_.version = 1;
   download_hints_.AddSegment = &AddSegment;
-  download_hints_.engine = this;
+  download_hints_.loader = &doc_loader_;
 
   // Initialize FPDF_FORMFILLINFO member variables.  Deriving from this struct
   // allows the static callbacks to be able to cast the FPDF_FORMFILLINFO in
@@ -974,8 +1022,8 @@ int PDFiumEngine::GetBlock(void* param,
                            unsigned long position,
                            unsigned char* buffer,
                            unsigned long size) {
-  PDFiumEngine* engine = static_cast<PDFiumEngine*>(param);
-  return engine->doc_loader_->GetBlock(position, size, buffer);
+  DocumentLoader* loader = static_cast<DocumentLoader*>(param);
+  return loader->GetBlock(position, size, buffer);
 }
 
 FPDF_BOOL PDFiumEngine::IsDataAvail(FX_FILEAVAIL* param,
@@ -983,7 +1031,7 @@ FPDF_BOOL PDFiumEngine::IsDataAvail(FX_FILEAVAIL* param,
                                     size_t size) {
   PDFiumEngine::FileAvail* file_avail =
       static_cast<PDFiumEngine::FileAvail*>(param);
-  return file_avail->engine->doc_loader_->IsDataAvailable(offset, size);
+  return file_avail->loader->IsDataAvailable(offset, size);
 }
 
 void PDFiumEngine::AddSegment(FX_DOWNLOADHINTS* param,
@@ -991,7 +1039,7 @@ void PDFiumEngine::AddSegment(FX_DOWNLOADHINTS* param,
                               size_t size) {
   PDFiumEngine::DownloadHints* download_hints =
       static_cast<PDFiumEngine::DownloadHints*>(param);
-  return download_hints->engine->doc_loader_->RequestData(offset, size);
+  return download_hints->loader->RequestData(offset, size);
 }
 
 bool PDFiumEngine::New(const char* url, const char* headers) {
@@ -1124,27 +1172,15 @@ void PDFiumEngine::PostPaint() {
 
 bool PDFiumEngine::HandleDocumentLoad(const pp::URLLoader& loader) {
   password_tries_remaining_ = kMaxPasswordTries;
-  process_when_pending_request_complete_ = true;
-  auto loader_wrapper =
-      base::MakeUnique<URLLoaderWrapperImpl>(GetPluginInstance(), loader);
-  loader_wrapper->SetResponseHeaders(headers_);
-
-  doc_loader_ = base::MakeUnique<DocumentLoader>(this);
-  if (doc_loader_->Init(std::move(loader_wrapper), url_)) {
-    // request initial data.
-    doc_loader_->RequestData(0, 1);
-    return true;
-  }
-  return false;
+  return doc_loader_.Init(loader, url_, headers_);
 }
 
 pp::Instance* PDFiumEngine::GetPluginInstance() {
   return client_->GetPluginInstance();
 }
 
-std::unique_ptr<URLLoaderWrapper> PDFiumEngine::CreateURLLoader() {
-  return base::MakeUnique<URLLoaderWrapperImpl>(GetPluginInstance(),
-                                                client_->CreateURLLoader());
+pp::URLLoader PDFiumEngine::CreateURLLoader() {
+  return client_->CreateURLLoader();
 }
 
 void PDFiumEngine::AppendPage(PDFEngine* engine, int index) {
@@ -1166,38 +1202,36 @@ void PDFiumEngine::SetScrollPosition(const pp::Point& position) {
 }
 #endif
 
+bool PDFiumEngine::IsProgressiveLoad() {
+  return doc_loader_.is_partial_document();
+}
+
 std::string PDFiumEngine::GetMetadata(const std::string& key) {
   return GetDocumentMetadata(doc(), key);
 }
 
-void PDFiumEngine::OnPendingRequestComplete() {
-  if (!process_when_pending_request_complete_)
-    return;
+void PDFiumEngine::OnPartialDocumentLoaded() {
+  file_access_.m_FileLen = doc_loader_.document_size();
   if (!fpdf_availability_) {
-    file_access_.m_FileLen = doc_loader_->GetDocumentSize();
     fpdf_availability_ = FPDFAvail_Create(&file_availability_, &file_access_);
     DCHECK(fpdf_availability_);
-    // Currently engine does not deal efficiently with some non-linearized
-    // files.
-    // See http://code.google.com/p/chromium/issues/detail?id=59400
-    // To improve user experience we download entire file for non-linearized
-    // PDF.
-    if (FPDFAvail_IsLinearized(fpdf_availability_) != PDF_LINEARIZED) {
-      // Wait complete document.
-      process_when_pending_request_complete_ = false;
-      FPDFAvail_Destroy(fpdf_availability_);
-      fpdf_availability_ = nullptr;
-      return;
-    }
   }
 
-  if (!doc_) {
-    LoadDocument();
+  // Currently engine does not deal efficiently with some non-linearized files.
+  // See http://code.google.com/p/chromium/issues/detail?id=59400
+  // To improve user experience we download entire file for non-linearized PDF.
+  if (!FPDFAvail_IsLinearized(fpdf_availability_)) {
+    doc_loader_.RequestData(0, doc_loader_.document_size());
     return;
   }
 
-  if (pages_.empty()) {
-    LoadBody();
+  LoadDocument();
+}
+
+void PDFiumEngine::OnPendingRequestComplete() {
+  if (!doc_ || !form_) {
+    DCHECK(fpdf_availability_);
+    LoadDocument();
     return;
   }
 
@@ -1218,44 +1252,30 @@ void PDFiumEngine::OnPendingRequestComplete() {
 }
 
 void PDFiumEngine::OnNewDataAvailable() {
-  if (!doc_loader_->GetDocumentSize()) {
-    client_->DocumentLoadProgress(doc_loader_->count_of_bytes_received(), 0);
-    return;
-  }
+  client_->DocumentLoadProgress(doc_loader_.GetAvailableData(),
+                                doc_loader_.document_size());
+}
 
-  const float progress = doc_loader_->GetProgress();
-  DCHECK_GE(progress, 0.0);
-  DCHECK_LE(progress, 1.0);
-  client_->DocumentLoadProgress(progress * 10000, 10000);
+void PDFiumEngine::OnDocumentFailed() {
+  client_->DocumentLoadFailed();
 }
 
 void PDFiumEngine::OnDocumentComplete() {
-  if (doc_) {
-    return FinishLoadingDocument();
+  if (!doc_ || !form_) {
+    file_access_.m_FileLen = doc_loader_.document_size();
+    if (!fpdf_availability_) {
+      fpdf_availability_ = FPDFAvail_Create(&file_availability_, &file_access_);
+      DCHECK(fpdf_availability_);
+    }
+    LoadDocument();
+    return;
   }
-  file_access_.m_FileLen = doc_loader_->GetDocumentSize();
-  if (!fpdf_availability_) {
-    fpdf_availability_ = FPDFAvail_Create(&file_availability_, &file_access_);
-    DCHECK(fpdf_availability_);
-  }
-  LoadDocument();
-}
 
-void PDFiumEngine::OnDocumentCanceled() {
-  if (visible_pages_.empty())
-    client_->DocumentLoadFailed();
-  else
-    OnDocumentComplete();
-}
-
-void PDFiumEngine::CancelBrowserDownload() {
-  client_->CancelBrowserDownload();
+  FinishLoadingDocument();
 }
 
 void PDFiumEngine::FinishLoadingDocument() {
-  DCHECK(doc_loader_->IsDocumentComplete() && doc_);
-
-  LoadBody();
+  DCHECK(doc_loader_.IsDocumentComplete() && doc_);
 
   bool need_update = false;
   for (size_t i = 0; i < pages_.size(); ++i) {
@@ -1506,7 +1526,7 @@ pp::Buffer_Dev PDFiumEngine::PrintPagesAsRasterPDF(
     return pp::Buffer_Dev();
 
   // If document is not downloaded yet, disable printing.
-  if (doc_ && !doc_loader_->IsDocumentComplete())
+  if (doc_ && !doc_loader_.IsDocumentComplete())
     return pp::Buffer_Dev();
 
   FPDF_DOCUMENT output_doc = FPDF_CreateNewDocument();
@@ -1707,16 +1727,6 @@ void PDFiumEngine::PrintEnd() {
   FORM_DoDocumentAAction(form_, FPDFDOC_AACTION_DP);
 }
 
-PDFiumPage::Area PDFiumEngine::GetCharIndex(const pp::MouseInputEvent& event,
-                                            int* page_index,
-                                            int* char_index,
-                                            int* form_type,
-                                            PDFiumPage::LinkTarget* target) {
-  // First figure out which page this is in.
-  pp::Point mouse_point = event.GetPosition();
-  return GetCharIndex(mouse_point, page_index, char_index, form_type, target);
-}
-
 PDFiumPage::Area PDFiumEngine::GetCharIndex(const pp::Point& point,
                                             int* page_index,
                                             int* char_index,
@@ -1743,110 +1753,23 @@ PDFiumPage::Area PDFiumEngine::GetCharIndex(const pp::Point& point,
   }
 
   *page_index = page;
-  return pages_[page]->GetCharIndex(point_in_page, current_rotation_,
-                                    char_index, form_type, target);
+  PDFiumPage::Area result = pages_[page]->GetCharIndex(
+      point_in_page, current_rotation_, char_index, form_type, target);
+  return (client_->IsPrintPreview() && result == PDFiumPage::WEBLINK_AREA)
+             ? PDFiumPage::NONSELECTABLE_AREA
+             : result;
 }
 
 bool PDFiumEngine::OnMouseDown(const pp::MouseInputEvent& event) {
-  if (event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_RIGHT) {
-    if (selection_.empty())
-      return false;
-    std::vector<pp::Rect> selection_rect_vector;
-    GetAllScreenRectsUnion(&selection_, GetVisibleRect().point(),
-                           &selection_rect_vector);
-    pp::Point point = event.GetPosition();
-    for (const auto& rect : selection_rect_vector) {
-      if (rect.Contains(point.x(), point.y()))
-        return false;
-    }
-    SelectionChangeInvalidator selection_invalidator(this);
-    selection_.clear();
-    return true;
-  }
-
-  if (event.GetButton() != PP_INPUTEVENT_MOUSEBUTTON_LEFT &&
-      event.GetButton() != PP_INPUTEVENT_MOUSEBUTTON_MIDDLE) {
-    return false;
-  }
-
-  SetMouseLeftButtonDown(event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT);
-
-  auto selection_invalidator =
-      base::MakeUnique<SelectionChangeInvalidator>(this);
-  selection_.clear();
-
-  int page_index = -1;
-  int char_index = -1;
-  int form_type = FPDF_FORMFIELD_UNKNOWN;
-  PDFiumPage::LinkTarget target;
-  PDFiumPage::Area area =
-      GetCharIndex(event, &page_index, &char_index, &form_type, &target);
-  mouse_down_state_.Set(area, target);
-
-  // Decide whether to open link or not based on user action in mouse up and
-  // mouse move events.
-  if (area == PDFiumPage::WEBLINK_AREA || area == PDFiumPage::DOCLINK_AREA)
-    return true;
-
-  // Prevent middle mouse button from selecting texts.
-  if (event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_MIDDLE)
-    return false;
-
-  if (page_index != -1) {
-    last_page_mouse_down_ = page_index;
-    double page_x, page_y;
-    pp::Point point = event.GetPosition();
-    DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
-
-    FORM_OnLButtonDown(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
-    if (form_type > FPDF_FORMFIELD_UNKNOWN) {  // returns -1 sometimes...
-      mouse_down_state_.Set(PDFiumPage::FormTypeToArea(form_type), target);
-
-      // Destroy SelectionChangeInvalidator object before SetInFormTextArea()
-      // changes plugin's focus to be in form text area. This way, regular text
-      // selection can be cleared when a user clicks into a form text area
-      // because the pp::PDF::SetSelectedText() call in
-      // ~SelectionChangeInvalidator() still goes to the Mimehandler
-      // (not the Renderer).
-      selection_invalidator.reset();
-
-      bool is_valid_control = (form_type == FPDF_FORMFIELD_TEXTFIELD ||
-                               form_type == FPDF_FORMFIELD_COMBOBOX);
-
-// TODO(bug_62400): figure out selection and copying
-// for XFA fields
-#if defined(PDF_ENABLE_XFA)
-      is_valid_control |= (form_type == FPDF_FORMFIELD_XFA);
-#endif
-      SetInFormTextArea(is_valid_control);
-      if (is_valid_control) {
-        FPDF_ANNOTATION annot = FPDFAnnot_GetFormFieldAtPoint(
-            form_, pages_[last_page_mouse_down_]->GetPage(), page_x, page_y);
-        if (annot) {
-          int flags = FPDFAnnot_GetFormFieldFlags(
-              pages_[last_page_mouse_down_]->GetPage(), annot);
-
-          editable_form_text_area_ =
-              CheckIfEditableFormTextArea(flags, form_type);
-
-          FPDFPage_CloseAnnot(annot);
-        }
-      }
-      return true;  // Return now before we get into the selection code.
-    }
-  }
-  SetInFormTextArea(false);
-
-  if (area != PDFiumPage::TEXT_AREA)
-    return true;  // Return true so WebKit doesn't do its own highlighting.
-
-  if (event.GetClickCount() == 1) {
-    OnSingleClick(page_index, char_index);
-  } else if (event.GetClickCount() == 2 || event.GetClickCount() == 3) {
-    OnMultipleClick(event.GetClickCount(), page_index, char_index);
-  }
-
-  return true;
+  pp::MouseInputEvent normalized_event =
+      NormalizeMouseEvent(client_->GetPluginInstance(), event);
+  if (normalized_event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT)
+    return OnLeftMouseDown(normalized_event);
+  if (normalized_event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_MIDDLE)
+    return OnMiddleMouseDown(normalized_event);
+  if (normalized_event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_RIGHT)
+    return OnRightMouseDown(normalized_event);
+  return false;
 }
 
 void PDFiumEngine::OnSingleClick(int page_index, int char_index) {
@@ -1857,14 +1780,15 @@ void PDFiumEngine::OnSingleClick(int page_index, int char_index) {
 void PDFiumEngine::OnMultipleClick(int click_count,
                                    int page_index,
                                    int char_index) {
+  DCHECK_GE(click_count, 2);
+  bool is_double_click = click_count == 2;
+
   // It would be more efficient if the SDK could support finding a space, but
   // now it doesn't.
   int start_index = char_index;
   do {
     base::char16 cur = pages_[page_index]->GetCharAtIndex(start_index);
-    // For double click, we want to select one word so we look for whitespace
-    // boundaries.  For triple click, we want the whole line.
-    if (cur == '\n' || (click_count == 2 && (cur == ' ' || cur == '\t')))
+    if (FindMultipleClickBoundary(is_double_click, cur))
       break;
   } while (--start_index >= 0);
   if (start_index)
@@ -1874,12 +1798,173 @@ void PDFiumEngine::OnMultipleClick(int click_count,
   int total = pages_[page_index]->GetCharCount();
   while (end_index++ <= total) {
     base::char16 cur = pages_[page_index]->GetCharAtIndex(end_index);
-    if (cur == '\n' || (click_count == 2 && (cur == ' ' || cur == '\t')))
+    if (FindMultipleClickBoundary(is_double_click, cur))
       break;
   }
 
   selection_.push_back(PDFiumRange(pages_[page_index].get(), start_index,
                                    end_index - start_index));
+}
+
+bool PDFiumEngine::OnLeftMouseDown(const pp::MouseInputEvent& event) {
+  SetMouseLeftButtonDown(true);
+
+  auto selection_invalidator =
+      base::MakeUnique<SelectionChangeInvalidator>(this);
+  selection_.clear();
+
+  int page_index = -1;
+  int char_index = -1;
+  int form_type = FPDF_FORMFIELD_UNKNOWN;
+  PDFiumPage::LinkTarget target;
+  pp::Point point = event.GetPosition();
+  PDFiumPage::Area area =
+      GetCharIndex(point, &page_index, &char_index, &form_type, &target);
+  DCHECK_GE(form_type, FPDF_FORMFIELD_UNKNOWN);
+  mouse_down_state_.Set(area, target);
+
+  // Decide whether to open link or not based on user action in mouse up and
+  // mouse move events.
+  if (IsLinkArea(area))
+    return true;
+
+  if (page_index != -1) {
+    last_page_mouse_down_ = page_index;
+    double page_x;
+    double page_y;
+    DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
+
+    bool is_form_text_area = IsFormTextArea(area, form_type);
+    FPDF_PAGE page = pages_[page_index]->GetPage();
+    bool is_editable_form_text_area =
+        is_form_text_area &&
+        IsPointInEditableFormTextArea(page, page_x, page_y, form_type);
+
+    FORM_OnLButtonDown(form_, page, 0, page_x, page_y);
+    if (form_type != FPDF_FORMFIELD_UNKNOWN) {
+      // Destroy SelectionChangeInvalidator object before SetInFormTextArea()
+      // changes plugin's focus to be in form text area. This way, regular text
+      // selection can be cleared when a user clicks into a form text area
+      // because the pp::PDF::SetSelectedText() call in
+      // ~SelectionChangeInvalidator() still goes to the Mimehandler
+      // (not the Renderer).
+      selection_invalidator.reset();
+
+      SetInFormTextArea(is_form_text_area);
+      editable_form_text_area_ = is_editable_form_text_area;
+      return true;  // Return now before we get into the selection code.
+    }
+  }
+  SetInFormTextArea(false);
+
+  if (area != PDFiumPage::TEXT_AREA)
+    return true;  // Return true so WebKit doesn't do its own highlighting.
+
+  if (event.GetClickCount() == 1)
+    OnSingleClick(page_index, char_index);
+  else if (event.GetClickCount() == 2 || event.GetClickCount() == 3)
+    OnMultipleClick(event.GetClickCount(), page_index, char_index);
+
+  return true;
+}
+
+bool PDFiumEngine::OnMiddleMouseDown(const pp::MouseInputEvent& event) {
+  SetMouseLeftButtonDown(false);
+
+  SelectionChangeInvalidator selection_invalidator(this);
+  selection_.clear();
+
+  int unused_page_index = -1;
+  int unused_char_index = -1;
+  int unused_form_type = FPDF_FORMFIELD_UNKNOWN;
+  PDFiumPage::LinkTarget target;
+  PDFiumPage::Area area =
+      GetCharIndex(event.GetPosition(), &unused_page_index, &unused_char_index,
+                   &unused_form_type, &target);
+  mouse_down_state_.Set(area, target);
+
+  // Decide whether to open link or not based on user action in mouse up and
+  // mouse move events.
+  if (IsLinkArea(area))
+    return true;
+
+  // Prevent middle mouse button from selecting texts.
+  return false;
+}
+
+bool PDFiumEngine::OnRightMouseDown(const pp::MouseInputEvent& event) {
+  DCHECK_EQ(PP_INPUTEVENT_MOUSEBUTTON_RIGHT, event.GetButton());
+
+  pp::Point point = event.GetPosition();
+  int page_index = -1;
+  int char_index = -1;
+  int form_type = FPDF_FORMFIELD_UNKNOWN;
+  PDFiumPage::LinkTarget target;
+  PDFiumPage::Area area =
+      GetCharIndex(point, &page_index, &char_index, &form_type, &target);
+  DCHECK_GE(form_type, FPDF_FORMFIELD_UNKNOWN);
+
+  bool is_form_text_area = IsFormTextArea(area, form_type);
+  bool is_editable_form_text_area = false;
+  if (is_form_text_area) {
+    DCHECK_NE(page_index, -1);
+
+    double page_x;
+    double page_y;
+    DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
+
+    FPDF_PAGE page = pages_[page_index]->GetPage();
+    is_editable_form_text_area =
+        IsPointInEditableFormTextArea(page, page_x, page_y, form_type);
+  }
+
+  // Handle the case when focus starts inside a form text area.
+  if (in_form_text_area_) {
+    if (is_form_text_area) {
+      // TODO(bug_754594): Right now this is a no-op, but what needs to happen
+      // here is a check to see if this right click occurred in the same text
+      // area as the currently focused text area. If they are not the same,
+      // refocus. This requires more state tracking, and a new PDFium API to
+      // set focus.
+      return true;
+    }
+
+    // Transition out of a form text area.
+    FORM_ForceToKillFocus(form_);
+    SetInFormTextArea(false);
+    return true;
+  }
+
+  // Handle the case when focus starts outside a form text area and transitions
+  // into a form text area.
+  if (is_form_text_area) {
+    {
+      SelectionChangeInvalidator selection_invalidator(this);
+      selection_.clear();
+    }
+
+    // TODO(bug_754594): This does not actually set focus inside the form area.
+    // To do so requires a new PDFium API.
+    SetInFormTextArea(true);
+    editable_form_text_area_ = is_editable_form_text_area;
+    return true;
+  }
+
+  // Handle the case when focus starts outside a form text area and stays
+  // outside.
+  if (selection_.empty())
+    return false;
+
+  std::vector<pp::Rect> selection_rect_vector;
+  GetAllScreenRectsUnion(&selection_, GetVisibleRect().point(),
+                         &selection_rect_vector);
+  for (const auto& rect : selection_rect_vector) {
+    if (rect.Contains(point.x(), point.y()))
+      return false;
+  }
+  SelectionChangeInvalidator selection_invalidator(this);
+  selection_.clear();
+  return true;
 }
 
 bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
@@ -1895,8 +1980,9 @@ bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
   int char_index = -1;
   int form_type = FPDF_FORMFIELD_UNKNOWN;
   PDFiumPage::LinkTarget target;
+  pp::Point point = event.GetPosition();
   PDFiumPage::Area area =
-      GetCharIndex(event, &page_index, &char_index, &form_type, &target);
+      GetCharIndex(point, &page_index, &char_index, &form_type, &target);
 
   // Open link on mouse up for same link for which mouse down happened earlier.
   if (mouse_down_state_.Matches(area, target)) {
@@ -1928,8 +2014,8 @@ bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
     return false;
 
   if (page_index != -1) {
-    double page_x, page_y;
-    pp::Point point = event.GetPosition();
+    double page_x;
+    double page_y;
     DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
     FORM_OnLButtonUp(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
   }
@@ -1946,8 +2032,9 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
   int char_index = -1;
   int form_type = FPDF_FORMFIELD_UNKNOWN;
   PDFiumPage::LinkTarget target;
+  pp::Point point = event.GetPosition();
   PDFiumPage::Area area =
-      GetCharIndex(event, &page_index, &char_index, &form_type, &target);
+      GetCharIndex(point, &page_index, &char_index, &form_type, &target);
 
   // Clear |mouse_down_state_| if mouse moves away from where the mouse down
   // happened.
@@ -1986,8 +2073,8 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
     }
 
     if (page_index != -1) {
-      double page_x, page_y;
-      pp::Point point = event.GetPosition();
+      double page_x;
+      double page_y;
       DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
       FORM_OnMouseMove(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
     }
@@ -2013,10 +2100,8 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
 
   // We're selecting but right now we're not over text, so don't change the
   // current selection.
-  if (area != PDFiumPage::TEXT_AREA && area != PDFiumPage::WEBLINK_AREA &&
-      area != PDFiumPage::DOCLINK_AREA) {
+  if (area != PDFiumPage::TEXT_AREA && !IsLinkArea(area))
     return false;
-  }
 
   SelectionChangeInvalidator selection_invalidator(this);
   return ExtendSelection(page_index, char_index);
@@ -2090,10 +2175,9 @@ bool PDFiumEngine::OnKeyDown(const pp::KeyboardInputEvent& event) {
 
   if (event.GetKeyCode() == ui::VKEY_BACK ||
       event.GetKeyCode() == ui::VKEY_ESCAPE) {
-    // Chrome doesn't send char events for backspace or escape keys, see
-    // PlatformKeyboardEventBuilder::isCharacterKey() and
-    // http://chrome-corpsvn.mtv.corp.google.com/viewvc?view=rev&root=chrome&revision=31805
-    // for more information.  So just fake one since PDFium uses it.
+    // Blink does not send char events for backspace or escape keys, see
+    // WebKeyboardEvent::IsCharacterKey() and b/961192 for more information.
+    // So just fake one since PDFium uses it.
     std::string str;
     str.push_back(event.GetKeyCode());
     pp::KeyboardInputEvent synthesized(pp::KeyboardInputEvent(
@@ -2110,12 +2194,11 @@ bool PDFiumEngine::OnKeyUp(const pp::KeyboardInputEvent& event) {
     return false;
 
   // Check if form text selection needs to be updated.
-  if (in_form_text_area_) {
-    SetFormSelectedText(form_, pages_[last_page_mouse_down_]->GetPage());
-  }
+  FPDF_PAGE page = pages_[last_page_mouse_down_]->GetPage();
+  if (in_form_text_area_)
+    SetFormSelectedText(form_, page);
 
-  return !!FORM_OnKeyUp(form_, pages_[last_page_mouse_down_]->GetPage(),
-                        event.GetKeyCode(), event.GetModifiers());
+  return !!FORM_OnKeyUp(form_, page, event.GetKeyCode(), event.GetModifiers());
 }
 
 bool PDFiumEngine::OnChar(const pp::KeyboardInputEvent& event) {
@@ -2463,6 +2546,18 @@ bool PDFiumEngine::CanEditText() {
   return editable_form_text_area_;
 }
 
+void PDFiumEngine::ReplaceSelection(const std::string& text) {
+  DCHECK(CanEditText());
+  if (last_page_mouse_down_ != -1) {
+    base::string16 text_wide = base::UTF8ToUTF16(text);
+    FPDF_WIDESTRING text_pdf_wide =
+        reinterpret_cast<FPDF_WIDESTRING>(text_wide.c_str());
+
+    FORM_ReplaceSelection(form_, pages_[last_page_mouse_down_]->GetPage(),
+                          text_pdf_wide);
+  }
+}
+
 std::string PDFiumEngine::GetLinkAtPosition(const pp::Point& point) {
   std::string url;
   int temp;
@@ -2726,7 +2821,7 @@ void PDFiumEngine::AppendBlankPages(int num_pages) {
 void PDFiumEngine::LoadDocument() {
   // Check if the document is ready for loading. If it isn't just bail for now,
   // we will call LoadDocument() again later.
-  if (!doc_ && !doc_loader_->IsDocumentComplete() &&
+  if (!doc_ && !doc_loader_.IsDocumentComplete() &&
       !FPDFAvail_IsDocAvail(fpdf_availability_, &download_hints_)) {
     return;
   }
@@ -2765,12 +2860,13 @@ bool PDFiumEngine::TryLoadingDoc(const std::string& password,
     password_cstr = password.c_str();
     password_tries_remaining_--;
   }
-  if (doc_loader_->IsDocumentComplete() &&
+  if (doc_loader_.IsDocumentComplete() &&
       !FPDFAvail_IsLinearized(fpdf_availability_)) {
     doc_ = FPDF_LoadCustomDocument(&file_access_, password_cstr);
   } else {
     doc_ = FPDFAvail_GetDocument(fpdf_availability_, password_cstr);
   }
+
   if (!doc_) {
     if (FPDF_GetLastError() == FPDF_ERR_PASSWORD)
       *needs_password = true;
@@ -2811,7 +2907,6 @@ void PDFiumEngine::ContinueLoadingDocument(const std::string& password) {
     GetPasswordAndLoad();
     return;
   }
-
   if (!doc_) {
     client_->DocumentLoadFailed();
     return;
@@ -2823,23 +2918,45 @@ void PDFiumEngine::ContinueLoadingDocument(const std::string& password) {
   permissions_ = FPDF_GetDocPermissions(doc_);
   permissions_handler_revision_ = FPDF_GetSecurityHandlerRevision(doc_);
 
-  LoadBody();
+  if (!form_) {
+    int form_status =
+        FPDFAvail_IsFormAvail(fpdf_availability_, &download_hints_);
+    bool doc_complete = doc_loader_.IsDocumentComplete();
+    // Try again if the data is not available and the document hasn't finished
+    // downloading.
+    if (form_status == PDF_FORM_NOTAVAIL && !doc_complete)
+      return;
 
-  if (doc_loader_->IsDocumentComplete())
+    form_ = FPDFDOC_InitFormFillEnvironment(
+        doc_, static_cast<FPDF_FORMFILLINFO*>(this));
+#if defined(PDF_ENABLE_XFA)
+    FPDF_LoadXFA(doc_);
+#endif
+
+    FPDF_SetFormFieldHighlightColor(form_, 0, kFormHighlightColor);
+    FPDF_SetFormFieldHighlightAlpha(form_, kFormHighlightAlpha);
+  }
+
+  if (!doc_loader_.IsDocumentComplete()) {
+    // Check if the first page is available.  In a linearized PDF, that is not
+    // always page 0.  Doing this gives us the default page size, since when the
+    // document is available, the first page is available as well.
+    CheckPageAvailable(FPDFAvail_GetFirstPageNum(doc_), &pending_pages_);
+  }
+
+  LoadPageInfo(false);
+
+  if (doc_loader_.IsDocumentComplete())
     FinishLoadingDocument();
 }
 
 void PDFiumEngine::LoadPageInfo(bool reload) {
-  if (!doc_loader_)
-    return;
-  if (pages_.empty() && reload)
-    return;
   pending_pages_.clear();
   pp::Size old_document_size = document_size_;
   document_size_ = pp::Size();
   std::vector<pp::Rect> page_rects;
   int page_count = FPDF_GetPageCount(doc_);
-  bool doc_complete = doc_loader_->IsDocumentComplete();
+  bool doc_complete = doc_loader_.IsDocumentComplete();
   bool is_linear = FPDFAvail_IsLinearized(fpdf_availability_) == PDF_LINEARIZED;
   for (int i = 0; i < page_count; ++i) {
     if (i != 0) {
@@ -2895,59 +3012,11 @@ void PDFiumEngine::LoadPageInfo(bool reload) {
     client_->DocumentSizeUpdated(document_size_);
 }
 
-void PDFiumEngine::LoadBody() {
-  DCHECK(doc_);
-  DCHECK(fpdf_availability_);
-  if (doc_loader_->IsDocumentComplete()) {
-    LoadForm();
-  } else if (FPDFAvail_IsLinearized(fpdf_availability_) == PDF_LINEARIZED &&
-             FPDF_GetPageCount(doc_) == 1) {
-    // If we have only one page we should load form first, bacause it is may be
-    // XFA document. And after loading form the page count and its contents may
-    // be changed.
-    LoadForm();
-    if (form_status_ == PDF_FORM_NOTAVAIL)
-      return;
-  }
-  LoadPages();
-}
-
-void PDFiumEngine::LoadPages() {
-  if (pages_.empty()) {
-    if (!doc_loader_->IsDocumentComplete()) {
-      // Check if the first page is available.  In a linearized PDF, that is not
-      // always page 0.  Doing this gives us the default page size, since when
-      // the document is available, the first page is available as well.
-      CheckPageAvailable(FPDFAvail_GetFirstPageNum(doc_), &pending_pages_);
-    }
-    LoadPageInfo(false);
-  }
-}
-
-void PDFiumEngine::LoadForm() {
-  if (form_)
-    return;
-  DCHECK(doc_);
-  form_status_ = FPDFAvail_IsFormAvail(fpdf_availability_, &download_hints_);
-  if (form_status_ != PDF_FORM_NOTAVAIL || doc_loader_->IsDocumentComplete()) {
-    form_ = FPDFDOC_InitFormFillEnvironment(
-        doc_, static_cast<FPDF_FORMFILLINFO*>(this));
-#if defined(PDF_ENABLE_XFA)
-    FPDF_LoadXFA(doc_);
-#endif
-
-    FPDF_SetFormFieldHighlightColor(form_, 0, kFormHighlightColor);
-    FPDF_SetFormFieldHighlightAlpha(form_, kFormHighlightAlpha);
-  }
-}  // namespace chrome_pdf
-
 void PDFiumEngine::CalculateVisiblePages() {
-  if (!doc_loader_)
-    return;
   // Clear pending requests queue, since it may contain requests to the pages
   // that are already invisible (after scrolling for example).
   pending_pages_.clear();
-  doc_loader_->ClearPendingRequests();
+  doc_loader_.ClearPendingRequests();
 
   visible_pages_.clear();
   pp::Rect visible_rect(plugin_size_);
@@ -3008,7 +3077,7 @@ void PDFiumEngine::ScrollToPage(int page) {
 }
 
 bool PDFiumEngine::CheckPageAvailable(int index, std::vector<int>* pending) {
-  if (!doc_)
+  if (!doc_ || !form_)
     return false;
 
   const int num_pages = static_cast<int>(pages_.size());
@@ -3649,9 +3718,10 @@ void PDFiumEngine::DrawPageShadow(const pp::Rect& page_rc,
   depth = static_cast<uint32_t>(depth * 1.5) + 1;
 
   // We need to check depth only to verify our copy of shadow matrix is correct.
-  if (!page_shadow_.get() || page_shadow_->depth() != depth)
-    page_shadow_.reset(
-        new ShadowMatrix(depth, factor, client_->GetBackgroundColor()));
+  if (!page_shadow_.get() || page_shadow_->depth() != depth) {
+    page_shadow_ = base::MakeUnique<ShadowMatrix>(
+        depth, factor, client_->GetBackgroundColor());
+  }
 
   DCHECK(!image_data->is_null());
   DrawShadow(image_data, shadow_rect, page_rect, clip_rect, *page_shadow_);
@@ -3766,6 +3836,21 @@ void PDFiumEngine::SetInFormTextArea(bool in_form_text_area) {
 
 void PDFiumEngine::SetMouseLeftButtonDown(bool is_mouse_left_button_down) {
   mouse_left_button_down_ = is_mouse_left_button_down;
+}
+
+bool PDFiumEngine::IsPointInEditableFormTextArea(FPDF_PAGE page,
+                                                 double page_x,
+                                                 double page_y,
+                                                 int form_type) {
+  FPDF_ANNOTATION annot =
+      FPDFAnnot_GetFormFieldAtPoint(form_, page, page_x, page_y);
+  DCHECK(annot);
+
+  int flags = FPDFAnnot_GetFormFieldFlags(page, annot);
+  bool is_editable_form_text_area =
+      CheckIfEditableFormTextArea(flags, form_type);
+  FPDFPage_CloseAnnot(annot);
+  return is_editable_form_text_area;
 }
 
 void PDFiumEngine::ScheduleTouchTimer(const pp::TouchInputEvent& evt) {

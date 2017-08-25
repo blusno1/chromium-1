@@ -17,13 +17,11 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using testing::_;
+using testing::Contains;
 using testing::HasSubstr;
-using testing::DoAll;
-using testing::SaveArg;
+using testing::Not;
 
 namespace offline_pages {
-const int kStoreFailure = PrefetchStoreTestUtil::kStoreCommandFailed;
 
 // All tests cases here only validate the request data and check for general
 // http response. The tests for the Operation proto data returned in the http
@@ -48,49 +46,53 @@ TEST_F(GeneratePageBundleTaskTest, EmptyTask) {
   task.Run();
   RunUntilIdle();
 
-  EXPECT_EQ(nullptr,
-            prefetch_request_factory()->CurrentGeneratePageBundleRequest());
+  EXPECT_FALSE(prefetch_request_factory()->HasOutstandingRequests());
+  auto requested_urls = prefetch_request_factory()->GetAllUrlsRequested();
+  EXPECT_TRUE(requested_urls->empty());
 }
 
 TEST_F(GeneratePageBundleTaskTest, TaskMakesNetworkRequest) {
   base::MockCallback<PrefetchRequestFinishedCallback> request_callback;
 
-  // TODO(dimich): Replace this with GeneratePrefetchItem once it lands.
-  PrefetchItem item;
-  item.state = PrefetchItemState::NEW_REQUEST;
-  item.offline_id = PrefetchStoreUtils::GenerateOfflineId();
-  item.url = GURL("http://www.example.com/");
-  int64_t id1 = store_util()->InsertPrefetchItem(item);
-  item.offline_id = PrefetchStoreUtils::GenerateOfflineId();
-  int64_t id2 = store_util()->InsertPrefetchItem(item);
+  PrefetchItem item1 =
+      item_generator()->CreateItem(PrefetchItemState::NEW_REQUEST);
+  EXPECT_TRUE(store_util()->InsertPrefetchItem(item1));
+  PrefetchItem item2 =
+      item_generator()->CreateItem(PrefetchItemState::NEW_REQUEST);
+  EXPECT_TRUE(store_util()->InsertPrefetchItem(item2));
+  EXPECT_NE(item1.offline_id, item2.offline_id);
 
-  EXPECT_NE(kStoreFailure, id1);
-  EXPECT_NE(kStoreFailure, id2);
-  EXPECT_NE(id1, id2);
-  EXPECT_EQ(2, store_util()->CountPrefetchItems());
+  // This item should be unaffected by the task.
+  PrefetchItem item3 =
+      item_generator()->CreateItem(PrefetchItemState::FINISHED);
+  EXPECT_TRUE(store_util()->InsertPrefetchItem(item3));
+
+  EXPECT_EQ(3, store_util()->CountPrefetchItems());
 
   GeneratePageBundleTask task(store(), gcm_handler(),
                               prefetch_request_factory(),
                               request_callback.Get());
   ExpectTaskCompletes(&task);
-
   task.Run();
   RunUntilIdle();
 
-  EXPECT_NE(nullptr,
-            prefetch_request_factory()->CurrentGeneratePageBundleRequest());
+  auto requested_urls = prefetch_request_factory()->GetAllUrlsRequested();
+  EXPECT_THAT(*requested_urls, Contains(item1.url.spec()));
+  EXPECT_THAT(*requested_urls, Contains(item2.url.spec()));
+  EXPECT_THAT(*requested_urls, Not(Contains(item3.url.spec())));
+
   std::string upload_data =
       url_fetcher_factory()->GetFetcherByID(0)->upload_data();
-  EXPECT_THAT(upload_data, HasSubstr("example.com"));
+  EXPECT_THAT(upload_data, HasSubstr(MockPrefetchItemGenerator::kUrlPrefix));
 
-  EXPECT_EQ(2, store_util()->CountPrefetchItems());
+  EXPECT_EQ(3, store_util()->CountPrefetchItems());
 
-  EXPECT_TRUE(store_util()->GetPrefetchItem(id1));
-  EXPECT_TRUE(store_util()->GetPrefetchItem(id2));
+  ASSERT_TRUE(store_util()->GetPrefetchItem(item1.offline_id));
+  ASSERT_TRUE(store_util()->GetPrefetchItem(item2.offline_id));
 
-  EXPECT_EQ(store_util()->GetPrefetchItem(id1)->state,
+  EXPECT_EQ(store_util()->GetPrefetchItem(item1.offline_id)->state,
             PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE);
-  EXPECT_EQ(store_util()->GetPrefetchItem(id2)->state,
+  EXPECT_EQ(store_util()->GetPrefetchItem(item2.offline_id)->state,
             PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE);
 }
 

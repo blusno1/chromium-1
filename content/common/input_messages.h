@@ -169,9 +169,9 @@ IPC_MESSAGE_ROUTED1(InputMsg_CursorVisibilityChange,
 // Sets the text composition to be between the given start and end offsets in
 // the currently focused editable field.
 IPC_MESSAGE_ROUTED3(InputMsg_SetCompositionFromExistingText,
-    int /* start */,
-    int /* end */,
-    std::vector<blink::WebCompositionUnderline> /* underlines */)
+                    int /* start */,
+                    int /* end */,
+                    std::vector<blink::WebImeTextSpan> /* ime_text_spans */)
 
 // Deletes the current selection plus the specified number of characters before
 // and after the selection or caret.
@@ -201,22 +201,20 @@ IPC_MESSAGE_ROUTED2(InputMsg_SetEditableSelectionOffsets,
                     int /* end */)
 
 // This message sends a string being composed with an input method.
-IPC_MESSAGE_ROUTED5(
-    InputMsg_ImeSetComposition,
-    base::string16, /* text */
-    std::vector<blink::WebCompositionUnderline>, /* underlines */
-    gfx::Range /* replacement_range */,
-    int, /* selectiont_start */
-    int /* selection_end */)
+IPC_MESSAGE_ROUTED5(InputMsg_ImeSetComposition,
+                    base::string16,                     /* text */
+                    std::vector<blink::WebImeTextSpan>, /* ime_text_spans */
+                    gfx::Range /* replacement_range */,
+                    int, /* selectiont_start */
+                    int /* selection_end */)
 
 // This message deletes the current composition, inserts specified text, and
 // moves the cursor.
-IPC_MESSAGE_ROUTED4(
-    InputMsg_ImeCommitText,
-    base::string16 /* text */,
-    std::vector<blink::WebCompositionUnderline>, /* underlines */
-    gfx::Range /* replacement_range */,
-    int /* relative_cursor_pos */)
+IPC_MESSAGE_ROUTED4(InputMsg_ImeCommitText,
+                    base::string16 /* text */,
+                    std::vector<blink::WebImeTextSpan>, /* ime_text_spans */
+                    gfx::Range /* replacement_range */,
+                    int /* relative_cursor_pos */)
 
 // This message inserts the ongoing composition.
 IPC_MESSAGE_ROUTED1(InputMsg_ImeFinishComposingText, bool /* keep_selection */)
@@ -330,10 +328,13 @@ IPC_MESSAGE_ROUTED1(InputHostMsg_SetTouchAction,
 // The whitelisted touch action and the associated unique touch event id
 // for a new touch point sent by the compositor. The unique touch event id is
 // only needed to verify that the whitelisted touch action is being associated
-// with the correct touch event.
-IPC_MESSAGE_ROUTED2(InputHostMsg_SetWhiteListedTouchAction,
+// with the correct touch event. The input event ack state is needed when
+// the touchstart message was not sent to the renderer and the touch
+// actions need to be reset and the touch ack timeout needs to be started.
+IPC_MESSAGE_ROUTED3(InputHostMsg_SetWhiteListedTouchAction,
                     cc::TouchAction /* white_listed_touch_action */,
-                    uint32_t /* unique_touch_event_id */)
+                    uint32_t /* unique_touch_event_id */,
+                    content::InputEventAckState /* ack_result */)
 
 // Sent by the compositor when input scroll events are dropped due to bounds
 // restrictions on the root scroll offset.

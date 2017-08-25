@@ -64,10 +64,10 @@ class APP_LIST_EXPORT SearchResult {
     // Similar to ACMatchClassification::Style, the style values are not
     // mutually exclusive.
     enum Style {
-      NONE  = 0,
-      URL   = 1 << 0,
+      NONE = 0,
+      URL = 1 << 0,
       MATCH = 1 << 1,
-      DIM   = 1 << 2,
+      DIM = 1 << 2,
     };
 
     Tag(int styles, size_t start, size_t end)
@@ -132,9 +132,6 @@ class APP_LIST_EXPORT SearchResult {
   views::View* view() const { return view_; }
   void set_view(views::View* view) { view_ = view; }
 
-  bool is_mouse_in_view() const { return mouse_is_in_view_; }
-  void SetIsMouseInView(bool mouse_is_inside);
-
   const std::string& id() const { return id_; }
   const std::string& comparable_id() const { return comparable_id_; }
 
@@ -154,9 +151,7 @@ class APP_LIST_EXPORT SearchResult {
     distance_from_origin_ = distance;
   }
 
-  const Actions& actions() const {
-    return actions_;
-  }
+  const Actions& actions() const { return actions_; }
   void SetActions(const Actions& sets);
 
   // Whether the result can be automatically selected by a voice query.
@@ -169,6 +164,11 @@ class APP_LIST_EXPORT SearchResult {
 
   int percent_downloaded() const { return percent_downloaded_; }
   void SetPercentDownloaded(int percent_downloaded);
+
+  bool is_omnibox_search() const { return is_omnibox_search_; }
+  void set_is_omnibox_search(bool is_omnibox_search) {
+    is_omnibox_search_ = is_omnibox_search;
+  }
 
   // Returns the dimension at which this result's icon should be displayed.
   int GetPreferredIconDimension() const;
@@ -233,9 +233,6 @@ class APP_LIST_EXPORT SearchResult {
   // SearchProvider to set this property and own this view.
   views::View* view_ = nullptr;
 
-  // If view_ isn't null, indicates whether the mouse cursor is inside view_.
-  bool mouse_is_in_view_ = false;
-
   std::string id_;
   // ID that can be compared across results from different providers to remove
   // duplicates. May be empty, in which case |id_| will be used for comparison.
@@ -254,6 +251,10 @@ class APP_LIST_EXPORT SearchResult {
 
   bool is_installing_ = false;
   int percent_downloaded_ = 0;
+
+  // Indicates whether result is an omnibox non-url search result. Set by
+  // OmniboxResult subclass.
+  bool is_omnibox_search_ = false;
 
   base::ObserverList<SearchResultObserver> observers_;
 

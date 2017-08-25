@@ -435,11 +435,20 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STYLUS_TOOLS_METALAYER_MODE" desc="Title of the metalayer mode in the stylus tools. Clicking this button opens up the voice interaction overlay. The overlay remains active until the user completes the interaction.">
         Assistant
       </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_METALAYER_MODE_LOADING" desc="Title of the metalayer mode in the stylus tools, displayed while the Assistant is still loading.">
+        Assistant (loading...)
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_METALAYER_TOAST_LOADING" desc="Message content on the toast that appears when the user presses the stylus button to activate the Assistant but it is still loading.">
+        Assistant is loading...
+      </message>
       <message name="IDS_ASH_STYLUS_TOOLS_TITLE" desc="The title of the stylus tools dialog in the ash shelf.">
         Stylus tools
       </message>
       <message name="IDS_ASH_PALETTE_SETTINGS" desc="The label on the setting button used to open palette setting page.">
         Stylus settings
+      </message>
+      <message name="IDS_ASH_VOICE_INTERACTION_LOCALE_UNSUPPORTED_TOAST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the locale is unsupported.">
+        The Google Assistant doesn’t speak this language.
       </message>
 
       <message name="IDS_ASH_TOAST_DISMISS_BUTTON" desc="The text button shown in toasts to close the toast immediately without waiting timeout.">
@@ -468,23 +477,6 @@ This file contains the strings for ash.
       <!-- Overview Mode -->
       <message name="IDS_ASH_OVERVIEW_BUTTON_ACCESSIBLE_NAME" desc="The accessible name for the Overview button in the system tray.">
         Toggle window overview
-      </message>
-
-      <!-- Device types -->
-      <message name="IDS_ASH_CHROMEBASE" desc="The device name for a Chromebase (versus say Chromebox)">
-        Chromebase
-      </message>
-      <message name="IDS_ASH_CHROMEBIT" desc="The device name for a Chromebit (versus say Chromebox)">
-        Chromebit
-      </message>
-      <message name="IDS_ASH_CHROMEBOOK" desc="The device name for a Chromebook (versus say Chromebox)">
-        Chromebook
-      </message>
-      <message name="IDS_ASH_CHROMEBOX" desc="The device name for a Chromebox (versus say Chromebook)">
-        Chromebox
-      </message>
-      <message name="IDS_ASH_CHROMEDEVICE" desc="The device name for a generic Chrome device">
-        Chrome device
       </message>
 
       <!-- Status tray charging strings. -->
@@ -892,6 +884,15 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_NO_MOBILE_NETWORKS" desc="The message to display in the network list when no mobile networks are available.">
         No mobile network available
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_NO_MOBILE_DEVICES_FOUND" desc="The message to display in the network list when no mobile devices which can provide a tether hotspot have been discovered nearby.">
+        No mobile devices found.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_ENABLING_MOBILE_ENABLES_BLUETOOTH" desc="The message to display in the mobile section of the network list when Bluetooth is off. If Bluetooth is off and mobile data is turned on, Bluetooth will also be turned on for the user to support this feature.">
+        Enabling mobile data will enable Bluetooth.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_MOBILE_DISABLED" desc="The message to display in the network list when mobile data is turned off.">
+        Mobile data is turned off.
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_ENABLE_BLUETOOTH" desc="The message to display in the network list when Tether is enabled but Bluetooth is disabled.">
         Turn on Bluetooth to discover nearby devices
       </message>
@@ -950,6 +951,12 @@ This file contains the strings for ash.
       <message name="IDS_ASH_LOW_PERIPHERAL_BATTERY_NOTIFICATION_TEXT" desc="The text of the notification when a peripheral device is in low battery condition.">
         Battery low (<ph name="percentage">$1<ex>56</ex></ph>%)
       </message>
+     <message name="IDS_ASH_LOW_STYLUS_BATTERY_NOTIFICATION_TITLE" desc="The title of the notification which notifies user of the battery level of a stylus.">
+       Stylus battery is low
+     </message>
+     <message name="IDS_ASH_LOW_STYLUS_BATTERY_NOTIFICATION_BODY" desc="The message of the notification which notifies user of the battery level of a stylus.">
+       Please charge or replace the batteries.
+     </message>
       <message name="IDS_ASH_SCREENSHOT_NOTIFICATION_TITLE_SUCCESS" desc="The title of the notification when a screenshot was taken.">
         Screenshot taken
       </message>

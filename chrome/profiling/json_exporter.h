@@ -6,17 +6,20 @@
 #define CHROME_PROFILING_JSON_EXPORTER_H_
 
 #include <iosfwd>
+#include <vector>
 
+#include "base/values.h"
 #include "chrome/profiling/allocation_event.h"
+#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
 
 namespace profiling {
 
-class BacktraceStorage;
-
-void ExportAllocationEventSetToJSON(int pid,
-                                    const BacktraceStorage* backtrace_storage,
-                                    const AllocationEventSet& set,
-                                    std::ostream& out);
+void ExportAllocationEventSetToJSON(
+    int pid,
+    const AllocationEventSet& set,
+    const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
+    std::ostream& out,
+    std::unique_ptr<base::DictionaryValue> metadata);
 
 }  // namespace profiling
 

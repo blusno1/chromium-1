@@ -10,16 +10,7 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
 #include "cc/base/math_util.h"
-#include "cc/debug/traced_value.h"
-#include "cc/quads/debug_border_draw_quad.h"
-#include "cc/quads/picture_draw_quad.h"
-#include "cc/quads/render_pass_draw_quad.h"
-#include "cc/quads/solid_color_draw_quad.h"
-#include "cc/quads/stream_video_draw_quad.h"
-#include "cc/quads/surface_draw_quad.h"
-#include "cc/quads/texture_draw_quad.h"
-#include "cc/quads/tile_draw_quad.h"
-#include "cc/quads/yuv_video_draw_quad.h"
+#include "components/viz/common/traced_value.h"
 #include "ui/gfx/geometry/quad_f.h"
 
 namespace cc {
@@ -30,7 +21,7 @@ DrawQuad::DrawQuad()
 
 DrawQuad::DrawQuad(const DrawQuad& other) = default;
 
-void DrawQuad::SetAll(const SharedQuadState* shared_quad_state,
+void DrawQuad::SetAll(const viz::SharedQuadState* shared_quad_state,
                       Material material,
                       const gfx::Rect& rect,
                       const gfx::Rect& opaque_rect,
@@ -47,7 +38,7 @@ void DrawQuad::SetAll(const SharedQuadState* shared_quad_state,
   this->rect = rect;
   this->opaque_rect = opaque_rect;
   this->visible_rect = visible_rect;
-  this->needs_blending = needs_blending;
+  this->needs_blending = needs_blending || !opaque_rect.Contains(visible_rect);
   this->shared_quad_state = shared_quad_state;
 
   DCHECK(shared_quad_state);
@@ -59,7 +50,7 @@ DrawQuad::~DrawQuad() {
 
 void DrawQuad::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetInteger("material", material);
-  TracedValue::SetIDRef(shared_quad_state, value, "shared_state");
+  viz::TracedValue::SetIDRef(shared_quad_state, value, "shared_state");
 
   MathUtil::AddToTracedValue("content_space_rect", rect, value);
 

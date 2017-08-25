@@ -26,6 +26,7 @@
 #include "net/ssl/client_cert_identity.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/shell_dialogs/select_file_policy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -46,6 +47,8 @@ void ContentBrowserClient::PostAfterStartupTask(
 bool ContentBrowserClient::IsBrowserStartupComplete() {
   return true;
 }
+
+void ContentBrowserClient::SetBrowserStartupIsCompleteForTesting() {}
 
 WebContentsViewDelegate* ContentBrowserClient::GetWebContentsViewDelegate(
     WebContents* web_contents) {
@@ -370,9 +373,9 @@ std::unique_ptr<VpnServiceProxy> ContentBrowserClient::GetVpnServiceProxy(
   return nullptr;
 }
 
-ui::SelectFilePolicy* ContentBrowserClient::CreateSelectFilePolicy(
-    WebContents* web_contents) {
-  return nullptr;
+std::unique_ptr<ui::SelectFilePolicy>
+ContentBrowserClient::CreateSelectFilePolicy(WebContents* web_contents) {
+  return std::unique_ptr<ui::SelectFilePolicy>();
 }
 
 DevToolsManagerDelegate* ContentBrowserClient::GetDevToolsManagerDelegate() {
@@ -491,7 +494,8 @@ mojom::NetworkContextPtr ContentBrowserClient::CreateNetworkContext(
     BrowserContext* context,
     bool in_memory,
     const base::FilePath& relative_partition_path) {
-  DCHECK(base::FeatureList::IsEnabled(features::kNetworkService));
+  if (!base::FeatureList::IsEnabled(features::kNetworkService))
+    return nullptr;
 
   mojom::NetworkContextPtr network_context;
   mojom::NetworkContextParamsPtr context_params =

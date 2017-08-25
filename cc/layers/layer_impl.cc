@@ -21,7 +21,6 @@
 #include "cc/benchmarks/micro_benchmark_impl.h"
 #include "cc/debug/debug_colors.h"
 #include "cc/debug/layer_tree_debug_state.h"
-#include "cc/debug/traced_value.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_state.h"
 #include "cc/layers/layer.h"
@@ -40,6 +39,7 @@
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
 #include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/traced_value.h"
 #include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/quad_f.h"
@@ -56,7 +56,8 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
           MainThreadScrollingReason::kNotScrollingOnMain),
       scrollable_(false),
       should_flatten_transform_from_property_tree_(false),
-      layer_property_changed_(false),
+      layer_property_changed_not_from_property_trees_(false),
+      layer_property_changed_from_property_trees_(false),
       may_contain_video_(false),
       masks_to_bounds_(false),
       contents_opaque_(false),
@@ -65,6 +66,7 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       draws_content_(false),
       contributes_to_drawn_render_surface_(false),
       should_hit_test_(false),
+      is_resized_by_browser_controls_(false),
       viewport_layer_type_(NOT_VIEWPORT_LAYER),
       background_color_(0),
       safe_opaque_background_color_(0),
@@ -145,7 +147,7 @@ void LayerImpl::SetScrollTreeIndex(int index) {
   scroll_tree_index_ = index;
 }
 
-void LayerImpl::PopulateSharedQuadState(SharedQuadState* state) const {
+void LayerImpl::PopulateSharedQuadState(viz::SharedQuadState* state) const {
   state->SetAll(draw_properties_.target_space_transform, gfx::Rect(bounds()),
                 draw_properties_.visible_layer_rect, draw_properties_.clip_rect,
                 draw_properties_.is_clipped, draw_properties_.opacity,
@@ -153,7 +155,7 @@ void LayerImpl::PopulateSharedQuadState(SharedQuadState* state) const {
 }
 
 void LayerImpl::PopulateScaledSharedQuadState(
-    SharedQuadState* state,
+    viz::SharedQuadState* state,
     float layer_to_content_scale_x,
     float layer_to_content_scale_y) const {
   gfx::Transform scaled_draw_transform =
@@ -213,7 +215,7 @@ void LayerImpl::GetDebugBorderProperties(SkColor* color, float* width) const {
 void LayerImpl::AppendDebugBorderQuad(
     RenderPass* render_pass,
     const gfx::Size& bounds,
-    const SharedQuadState* shared_quad_state,
+    const viz::SharedQuadState* shared_quad_state,
     AppendQuadsData* append_quads_data) const {
   SkColor color;
   float width;
@@ -222,12 +224,13 @@ void LayerImpl::AppendDebugBorderQuad(
                         append_quads_data, color, width);
 }
 
-void LayerImpl::AppendDebugBorderQuad(RenderPass* render_pass,
-                                      const gfx::Size& bounds,
-                                      const SharedQuadState* shared_quad_state,
-                                      AppendQuadsData* append_quads_data,
-                                      SkColor color,
-                                      float width) const {
+void LayerImpl::AppendDebugBorderQuad(
+    RenderPass* render_pass,
+    const gfx::Size& bounds,
+    const viz::SharedQuadState* shared_quad_state,
+    AppendQuadsData* append_quads_data,
+    SkColor color,
+    float width) const {
   if (!ShowDebugBorders(DebugBorderType::LAYER))
     return;
 
@@ -330,10 +333,13 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   if (needs_show_scrollbars_)
     layer->needs_show_scrollbars_ = needs_show_scrollbars_;
 
-  if (layer_property_changed_) {
+  if (layer_property_changed_not_from_property_trees_ ||
+      layer_property_changed_from_property_trees_)
     layer->layer_tree_impl()->set_needs_update_draw_properties();
-    layer->layer_property_changed_ = true;
-  }
+  if (layer_property_changed_not_from_property_trees_)
+    layer->layer_property_changed_not_from_property_trees_ = true;
+  if (layer_property_changed_from_property_trees_)
+    layer->layer_property_changed_from_property_trees_ = true;
 
   layer->SetBounds(bounds_);
   if (scrollable_)
@@ -352,7 +358,8 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
 
   // Reset any state that should be cleared for the next update.
   needs_show_scrollbars_ = false;
-  layer_property_changed_ = false;
+  layer_property_changed_not_from_property_trees_ = false;
+  layer_property_changed_from_property_trees_ = false;
   needs_push_properties_ = false;
   update_rect_ = gfx::Rect();
   layer_tree_impl()->RemoveLayerShouldPushProperties(this);
@@ -362,6 +369,14 @@ bool LayerImpl::IsAffectedByPageScale() const {
   TransformTree& transform_tree = GetTransformTree();
   return transform_tree.Node(transform_tree_index())
       ->in_subtree_of_page_scale_layer;
+}
+
+bool LayerImpl::IsResizedByBrowserControls() const {
+  return is_resized_by_browser_controls_;
+}
+
+void LayerImpl::SetIsResizedByBrowserControls(bool resized) {
+  is_resized_by_browser_controls_ = resized;
 }
 
 std::unique_ptr<base::DictionaryValue> LayerImpl::LayerTreeAsJson() {
@@ -410,7 +425,13 @@ std::unique_ptr<base::DictionaryValue> LayerImpl::LayerTreeAsJson() {
 }
 
 bool LayerImpl::LayerPropertyChanged() const {
-  if (layer_property_changed_ || GetPropertyTrees()->full_tree_damaged)
+  return layer_property_changed_not_from_property_trees_ ||
+         LayerPropertyChangedFromPropertyTrees();
+}
+
+bool LayerImpl::LayerPropertyChangedFromPropertyTrees() const {
+  if (layer_property_changed_from_property_trees_ ||
+      GetPropertyTrees()->full_tree_damaged)
     return true;
   if (transform_tree_index() == TransformTree::kInvalidNodeId)
     return false;
@@ -427,11 +448,17 @@ bool LayerImpl::LayerPropertyChanged() const {
 }
 
 bool LayerImpl::LayerPropertyChangedNotFromPropertyTrees() const {
-  return layer_property_changed_;
+  return layer_property_changed_not_from_property_trees_;
 }
 
 void LayerImpl::NoteLayerPropertyChanged() {
-  layer_property_changed_ = true;
+  layer_property_changed_not_from_property_trees_ = true;
+  layer_tree_impl()->set_needs_update_draw_properties();
+  SetNeedsPushProperties();
+}
+
+void LayerImpl::NoteLayerPropertyChangedFromPropertyTrees() {
+  layer_property_changed_from_property_trees_ = true;
   layer_tree_impl()->set_needs_update_draw_properties();
   SetNeedsPushProperties();
 }
@@ -450,7 +477,8 @@ const char* LayerImpl::LayerTypeAsString() const {
 }
 
 void LayerImpl::ResetChangeTracking() {
-  layer_property_changed_ = false;
+  layer_property_changed_not_from_property_trees_ = false;
+  layer_property_changed_from_property_trees_ = false;
   needs_push_properties_ = false;
 
   update_rect_.SetRect(0, 0, 0, 0);
@@ -459,23 +487,6 @@ void LayerImpl::ResetChangeTracking() {
 
 bool LayerImpl::has_copy_requests_in_target_subtree() {
   return GetEffectTree().Node(effect_tree_index())->subtree_has_copy_request;
-}
-
-void LayerImpl::UpdatePropertyTreeForAnimationIfNeeded() {
-  if (HasAnyAnimationTargetingProperty(TargetProperty::TRANSFORM)) {
-    if (TransformNode* node =
-            GetTransformTree().FindNodeFromElementId(element_id())) {
-      bool has_potential_animation = HasPotentiallyRunningTransformAnimation();
-      if (node->has_potential_animation != has_potential_animation) {
-        node->has_potential_animation = has_potential_animation;
-        node->has_only_translation_animations =
-            GetMutatorHost()->HasOnlyTranslationTransforms(
-                element_id(), GetElementTypeForAnimation());
-        GetTransformTree().set_needs_update(true);
-        layer_tree_impl()->set_needs_update_draw_properties();
-      }
-    }
-  }
 }
 
 gfx::ScrollOffset LayerImpl::ScrollOffsetForAnimation() const {
@@ -609,11 +620,6 @@ SkColor LayerImpl::SafeOpaqueBackgroundColor() const {
   return color;
 }
 
-bool LayerImpl::HasPotentiallyRunningFilterAnimation() const {
-  return GetMutatorHost()->HasPotentiallyRunningFilterAnimation(
-      element_id(), GetElementTypeForAnimation());
-}
-
 void LayerImpl::SetMasksToBounds(bool masks_to_bounds) {
   masks_to_bounds_ = masks_to_bounds;
 }
@@ -662,37 +668,6 @@ void LayerImpl::SetMutableProperties(uint32_t properties) {
 
 void LayerImpl::SetPosition(const gfx::PointF& position) {
   position_ = position;
-}
-
-bool LayerImpl::HasPotentiallyRunningTransformAnimation() const {
-  return GetMutatorHost()->HasPotentiallyRunningTransformAnimation(
-      element_id(), GetElementTypeForAnimation());
-}
-
-bool LayerImpl::HasAnyAnimationTargetingProperty(
-    TargetProperty::Type property) const {
-  return GetMutatorHost()->HasAnyAnimationTargetingProperty(element_id(),
-                                                            property);
-}
-
-bool LayerImpl::HasFilterAnimationThatInflatesBounds() const {
-  return GetMutatorHost()->HasFilterAnimationThatInflatesBounds(element_id());
-}
-
-bool LayerImpl::HasAnimationThatInflatesBounds() const {
-  return GetMutatorHost()->HasAnimationThatInflatesBounds(element_id());
-}
-
-bool LayerImpl::FilterAnimationBoundsForBox(const gfx::BoxF& box,
-                                            gfx::BoxF* bounds) const {
-  return GetMutatorHost()->FilterAnimationBoundsForBox(element_id(), box,
-                                                       bounds);
-}
-
-bool LayerImpl::TransformAnimationBoundsForBox(const gfx::BoxF& box,
-                                               gfx::BoxF* bounds) const {
-  return GetMutatorHost()->TransformAnimationBoundsForBox(element_id(), box,
-                                                          bounds);
 }
 
 void LayerImpl::SetUpdateRect(const gfx::Rect& update_rect) {
@@ -761,12 +736,9 @@ void LayerImpl::GetAllPrioritizedTilesForTracing(
 }
 
 void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
-  TracedValue::MakeDictIntoImplicitSnapshotWithCategory(
-      TRACE_DISABLED_BY_DEFAULT("cc.debug"),
-      state,
-      "cc::LayerImpl",
-      LayerTypeAsString(),
-      this);
+  viz::TracedValue::MakeDictIntoImplicitSnapshotWithCategory(
+      TRACE_DISABLED_BY_DEFAULT("cc.debug"), state, "cc::LayerImpl",
+      LayerTypeAsString(), this);
   state->SetInteger("layer_id", id());
   MathUtil::AddToTracedValue("bounds", bounds_, state);
 
@@ -808,8 +780,6 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
 
   state->SetBoolean("can_use_lcd_text", CanUseLCDText());
   state->SetBoolean("contents_opaque", contents_opaque());
-
-  state->SetBoolean("has_animation_bounds", HasAnimationThatInflatesBounds());
 
   state->SetBoolean("has_will_change_transform_hint",
                     has_will_change_transform_hint());
@@ -932,9 +902,30 @@ float LayerImpl::GetIdealContentsScale() const {
   const auto& transform = ScreenSpaceTransform();
   if (transform.HasPerspective()) {
     float scale = MathUtil::ComputeApproximateMaxScale(transform);
+
+    const int kMaxTilesToCoverLayerDimension = 5;
+    // Cap the scale in a way that it should be covered by at most
+    // |kMaxTilesToCoverLayerDimension|^2 default tile sizes. If this is left
+    // uncapped, then we can fairly easily use too much memory (or too many
+    // tiles). See crbug.com/752382 for an example of such a page. Note that
+    // because this is an approximation anyway, it's fine to use a smaller scale
+    // that desired. On top of this, the layer has a perspective transform so
+    // technically it could all be within the viewport, so it's important for us
+    // to have a reasonable scale here. The scale we use would also be at least
+    // |default_scale|, as checked below.
+    float scale_cap = std::min(
+        (layer_tree_impl()->settings().default_tile_size.width() - 2) *
+            kMaxTilesToCoverLayerDimension /
+            static_cast<float>(bounds().width()),
+        (layer_tree_impl()->settings().default_tile_size.height() - 2) *
+            kMaxTilesToCoverLayerDimension /
+            static_cast<float>(bounds().height()));
+    scale = std::min(scale, scale_cap);
+
     // Since we're approximating the scale anyway, round it to the nearest
     // integer to prevent jitter when animating the transform.
     scale = std::round(scale);
+
     // Don't let the scale fall below the default scale.
     return std::max(scale, default_scale);
   }

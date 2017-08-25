@@ -353,13 +353,13 @@ TEST_F(DownloadRequestLimiterTest, RendererInitiated) {
   content::RenderFrameHostTester* rfh_tester =
       content::RenderFrameHostTester::For(web_contents()->GetMainFrame());
   content::RenderFrameHost* subframe = rfh_tester->AppendChild("subframe");
-  content::RenderFrameHostTester* subframe_tester =
-      content::RenderFrameHostTester::For(subframe);
-  subframe_tester->SimulateNavigationCommit(GURL("http://foo.com"));
+  subframe = content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://foo.com"), subframe);
   ASSERT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
-  subframe_tester->SimulateNavigationCommit(GURL("http://foobargoo.com"));
+  subframe = content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://foobargoo.com"), subframe);
   ASSERT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
@@ -373,7 +373,7 @@ TEST_F(DownloadRequestLimiterTest, RendererInitiated) {
   // The state should not be reset on a renderer-initiated load to either the
   // same host or a different host, in either the main frame or the subframe.
   content::NavigationSimulator::NavigateAndCommitFromDocument(
-      GURL("http://fooeybar.com/bar"), web_contents()->GetMainFrame());
+      GURL("http://fooey.com/bar2"), web_contents()->GetMainFrame());
   LoadCompleted();
   ASSERT_EQ(DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED,
             download_request_limiter_->GetDownloadStatus(web_contents()));
@@ -387,12 +387,13 @@ TEST_F(DownloadRequestLimiterTest, RendererInitiated) {
   rfh_tester =
       content::RenderFrameHostTester::For(web_contents()->GetMainFrame());
   subframe = rfh_tester->AppendChild("subframe");
-  subframe_tester = content::RenderFrameHostTester::For(subframe);
-  subframe_tester->SimulateNavigationCommit(GURL("http://foo.com"));
+  subframe = content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://foo.com"), subframe);
   ASSERT_EQ(DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
-  subframe_tester->SimulateNavigationCommit(GURL("http://foobarfoo.com"));
+  subframe = content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://foobarfoo.com"), subframe);
   ASSERT_EQ(DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
@@ -427,12 +428,13 @@ TEST_F(DownloadRequestLimiterTest, RendererInitiated) {
   rfh_tester =
       content::RenderFrameHostTester::For(web_contents()->GetMainFrame());
   subframe = rfh_tester->AppendChild("subframe");
-  subframe_tester = content::RenderFrameHostTester::For(subframe);
-  subframe_tester->SimulateNavigationCommit(GURL("http://foobar.com/bar"));
+  subframe = content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://foobar.com/bar"), subframe);
   ASSERT_EQ(DownloadRequestLimiter::ALLOW_ALL_DOWNLOADS,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
-  subframe_tester->SimulateNavigationCommit(GURL("http://foobarfoo.com/"));
+  subframe = content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://foobarfoo.com/"), subframe);
   ASSERT_EQ(DownloadRequestLimiter::ALLOW_ALL_DOWNLOADS,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 

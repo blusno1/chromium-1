@@ -4,10 +4,13 @@
 
 #include "ash/highlighter/highlighter_result_view.h"
 
+#include "ash/highlighter/highlighter_gesture_util.h"
+#include "ash/highlighter/highlighter_view.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -37,12 +40,12 @@ const SkColor kCornerCircleColorRT = SkColorSetRGB(0xEA, 0x43, 0x35);
 const SkColor kCornerCircleColorLB = SkColorSetRGB(0x34, 0xA8, 0x53);
 const SkColor kCornerCircleColorRB = SkColorSetRGB(0xFB, 0xBC, 0x05);
 
-constexpr int kResultFadeinDelayMs = 600;
+constexpr int kResultFadeinDelayMs = 200;
 constexpr int kResultFadeinDurationMs = 400;
 constexpr int kResultFadeoutDelayMs = 500;
 constexpr int kResultFadeoutDurationMs = 200;
 
-constexpr int kResultInPlaceFadeinDelayMs = 500;
+constexpr int kResultInPlaceFadeinDelayMs = 100;
 constexpr int kResultInPlaceFadeinDurationMs = 500;
 
 constexpr float kInitialScale = 1.2;
@@ -182,57 +185,57 @@ HighlighterResultView::HighlighterResultView(aura::Window* root_window) {
 
 HighlighterResultView::~HighlighterResultView() {}
 
-void HighlighterResultView::AnimateInPlace(const gfx::Rect& bounds,
-                                           SkColor color) {
+void HighlighterResultView::Animate(const gfx::RectF& bounds,
+                                    HighlighterGestureType gesture_type,
+                                    const base::Closure& done) {
   ui::Layer* layer = widget_->GetLayer();
 
-  // A solid transparent rectangle.
-  result_layer_ = base::MakeUnique<ui::Layer>(ui::LAYER_SOLID_COLOR);
-  result_layer_->set_name("HighlighterResultView:SOLID_LAYER");
-  result_layer_->SetBounds(bounds);
-  result_layer_->SetFillsBoundsOpaquely(false);
-  result_layer_->SetMasksToBounds(false);
-  result_layer_->SetColor(color);
+  base::TimeDelta delay;
+  base::TimeDelta duration;
 
-  layer->Add(result_layer_.get());
+  if (gesture_type == HighlighterGestureType::kHorizontalStroke) {
+    // The original stroke is fading out in place.
+    // Fade in a solid transparent rectangle.
+    result_layer_ = base::MakeUnique<ui::Layer>(ui::LAYER_SOLID_COLOR);
+    result_layer_->set_name("HighlighterResultView:SOLID_LAYER");
+    result_layer_->SetBounds(gfx::ToEnclosingRect(bounds));
+    result_layer_->SetFillsBoundsOpaquely(false);
+    result_layer_->SetMasksToBounds(false);
+    result_layer_->SetColor(HighlighterView::kPenColor);
 
-  ScheduleFadeIn(
-      base::TimeDelta::FromMilliseconds(kResultInPlaceFadeinDelayMs),
-      base::TimeDelta::FromMilliseconds(kResultInPlaceFadeinDurationMs));
-}
+    layer->Add(result_layer_.get());
 
-void HighlighterResultView::AnimateDeflate(const gfx::Rect& bounds) {
-  ui::Layer* layer = widget_->GetLayer();
+    delay = base::TimeDelta::FromMilliseconds(kResultInPlaceFadeinDelayMs);
+    duration =
+        base::TimeDelta::FromMilliseconds(kResultInPlaceFadeinDurationMs);
+  } else {
+    DCHECK(gesture_type == HighlighterGestureType::kClosedShape);
+    // The original stroke is fading out and inflating.
+    // Fade in the deflating lens overlay.
+    result_layer_ = base::MakeUnique<ResultLayer>(gfx::ToEnclosingRect(bounds));
+    layer->Add(result_layer_.get());
 
-  result_layer_ = base::MakeUnique<ResultLayer>(bounds);
-  layer->Add(result_layer_.get());
+    gfx::Transform transform;
+    const gfx::PointF pivot = bounds.CenterPoint();
+    transform.Translate(pivot.x() * (1 - kInitialScale),
+                        pivot.y() * (1 - kInitialScale));
+    transform.Scale(kInitialScale, kInitialScale);
+    layer->SetTransform(transform);
 
-  gfx::Transform transform;
-  const gfx::Point pivot = bounds.CenterPoint();
-  transform.Translate(pivot.x() * (1 - kInitialScale),
-                      pivot.y() * (1 - kInitialScale));
-  transform.Scale(kInitialScale, kInitialScale);
-  layer->SetTransform(transform);
-
-  ScheduleFadeIn(base::TimeDelta::FromMilliseconds(kResultFadeinDelayMs),
-                 base::TimeDelta::FromMilliseconds(kResultFadeinDurationMs));
-}
-
-void HighlighterResultView::ScheduleFadeIn(const base::TimeDelta& delay,
-                                           const base::TimeDelta& duration) {
-  ui::Layer* layer = widget_->GetLayer();
+    delay = base::TimeDelta::FromMilliseconds(kResultFadeinDelayMs);
+    duration = base::TimeDelta::FromMilliseconds(kResultFadeinDurationMs);
+  }
 
   layer->SetOpacity(0);
 
-  animation_timer_.reset(
-      new base::Timer(FROM_HERE, delay,
-                      base::Bind(&HighlighterResultView::FadeIn,
-                                 base::Unretained(this), duration),
-                      false));
-  animation_timer_->Reset();
+  animation_timer_ = base::MakeUnique<base::OneShotTimer>();
+  animation_timer_->Start(FROM_HERE, delay,
+                          base::Bind(&HighlighterResultView::FadeIn,
+                                     base::Unretained(this), duration, done));
 }
 
-void HighlighterResultView::FadeIn(const base::TimeDelta& duration) {
+void HighlighterResultView::FadeIn(const base::TimeDelta& duration,
+                                   const base::Closure& done) {
   ui::Layer* layer = widget_->GetLayer();
 
   {
@@ -247,23 +250,27 @@ void HighlighterResultView::FadeIn(const base::TimeDelta& duration) {
     layer->SetTransform(transform);
   }
 
-  animation_timer_.reset(new base::Timer(
+  animation_timer_ = base::MakeUnique<base::OneShotTimer>();
+  animation_timer_->Start(
       FROM_HERE,
-      base::TimeDelta::FromMilliseconds(kResultFadeinDurationMs +
-                                        kResultFadeoutDelayMs),
-      base::Bind(&HighlighterResultView::FadeOut, base::Unretained(this)),
-      false));
-  animation_timer_->Reset();
+      duration + base::TimeDelta::FromMilliseconds(kResultFadeoutDelayMs),
+      base::Bind(&HighlighterResultView::FadeOut, base::Unretained(this),
+                 done));
 }
 
-void HighlighterResultView::FadeOut() {
+void HighlighterResultView::FadeOut(const base::Closure& done) {
   ui::Layer* layer = widget_->GetLayer();
 
+  base::TimeDelta duration =
+      base::TimeDelta::FromMilliseconds(kResultFadeoutDurationMs);
+
   ui::ScopedLayerAnimationSettings settings(layer->GetAnimator());
-  settings.SetTransitionDuration(
-      base::TimeDelta::FromMilliseconds(kResultFadeoutDurationMs));
+  settings.SetTransitionDuration(duration);
   settings.SetTweenType(gfx::Tween::LINEAR_OUT_SLOW_IN);
   layer->SetOpacity(0);
+
+  animation_timer_ = base::MakeUnique<base::OneShotTimer>();
+  animation_timer_->Start(FROM_HERE, duration, done);
 }
 
 }  // namespace ash

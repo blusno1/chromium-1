@@ -8,12 +8,10 @@
 
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/sessions/core/tab_restore_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "components/sync_sessions/synced_session.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
-#include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -59,10 +57,12 @@
 @synthesize delegate = _delegate;
 
 - (instancetype)initWithLoader:(id<UrlLoader>)loader
-                  browserState:(ios::ChromeBrowserState*)browserState {
+                  browserState:(ios::ChromeBrowserState*)browserState
+                    dispatcher:(id<ApplicationCommands>)dispatcher {
   return [self initWithController:[[RecentTabsTableViewController alloc]
                                       initWithBrowserState:browserState
-                                                    loader:loader]
+                                                    loader:loader
+                                                dispatcher:dispatcher]
                      browserState:browserState];
 }
 
@@ -187,9 +187,7 @@
 #pragma mark - Private
 
 - (BOOL)isSignedIn {
-  SigninManager* signin_manager =
-      ios::SigninManagerFactory::GetForBrowserState(_browserState);
-  return signin_manager->IsAuthenticated();
+  return _syncedSessionsObserver->IsSignedIn();
 }
 
 - (BOOL)isSyncTabsEnabled {

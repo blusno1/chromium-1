@@ -246,6 +246,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // only a helper.
   GraphicsLayer* LayerForScrolling() const override;
 
+  void DidScroll(const gfx::ScrollOffset&) override;
+
   // GraphicsLayers for the scrolling components.
   //
   // Any function can return nullptr if they are not accelerated.
@@ -295,16 +297,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   CompositorAnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
   void GetTickmarks(Vector<IntRect>&) const override;
-
-  // These are temporary convenience methods.  They delegate to Box() methods,
-  // which will be up-to-date when UpdateAfterLayout runs.  By contrast,
-  // VisibleContentRect() is based on layer_.Size(), which isn't updated
-  // until later, when UpdateLayerPosition runs.  A future patch will cause
-  // layer_.Size() to be updated effectively simultaneously with Box()
-  // sizing.  When that lands, these methods should be removed in favor of
-  // using VisibleContentRect() and/or layer_.Size() everywhere.
-  LayoutSize ClientSize() const;
-  IntSize PixelSnappedClientSize() const;
 
   void VisibleSizeChanged();
 
@@ -610,9 +602,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // MainThreadScrollingReason due to the properties of the LayoutObject
   uint32_t non_composited_main_thread_scrolling_reasons_;
 
-#if DCHECK_IS_ON()
   bool has_been_disposed_;
-#endif
 };
 
 DEFINE_TYPE_CASTS(PaintLayerScrollableArea,

@@ -20,6 +20,7 @@
 #include "base/process/process.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "content/browser/child_process_importance.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigation_controller_delegate.h"
@@ -119,15 +120,14 @@ WebContentsView* CreateWebContentsView(
     WebContentsViewDelegate* delegate,
     RenderViewHostDelegateView** render_view_host_delegate_view);
 
-class CONTENT_EXPORT WebContentsImpl
-    : public NON_EXPORTED_BASE(WebContents),
-      public NON_EXPORTED_BASE(RenderFrameHostDelegate),
-      public RenderViewHostDelegate,
-      public RenderWidgetHostDelegate,
-      public RenderFrameHostManager::Delegate,
-      public NotificationObserver,
-      public NON_EXPORTED_BASE(NavigationControllerDelegate),
-      public NON_EXPORTED_BASE(NavigatorDelegate) {
+class CONTENT_EXPORT WebContentsImpl : public WebContents,
+                                       public RenderFrameHostDelegate,
+                                       public RenderViewHostDelegate,
+                                       public RenderWidgetHostDelegate,
+                                       public RenderFrameHostManager::Delegate,
+                                       public NotificationObserver,
+                                       public NavigationControllerDelegate,
+                                       public NavigatorDelegate {
  public:
   class FriendWrapper;
 
@@ -296,6 +296,13 @@ class CONTENT_EXPORT WebContentsImpl
 
   void NotifyManifestUrlChanged(const base::Optional<GURL>& manifest_url);
 
+  // Set importance of WebContents that's independent from visibility.
+  //
+  // Note this is only used by and implemented on Android which exposes this API
+  // through public java code. If this is useful on other platforms, then this
+  // can be moved to the public class.
+  void SetImportance(ChildProcessImportance importance);
+
   // WebContents ------------------------------------------------------
   WebContentsDelegate* GetDelegate() override;
   void SetDelegate(WebContentsDelegate* delegate) override;
@@ -352,6 +359,7 @@ class CONTENT_EXPORT WebContentsImpl
   int GetCapturerCount() const override;
   bool IsAudioMuted() const override;
   void SetAudioMuted(bool mute) override;
+  bool IsCurrentlyAudible() override;
   bool IsConnectedToBluetoothDevice() const override;
   bool IsCrashed() const override;
   void SetIsCrashed(base::TerminationStatus status, int error_code) override;
@@ -788,6 +796,9 @@ class CONTENT_EXPORT WebContentsImpl
   WebContents* GetWebContents() override;
   void NotifyNavigationEntryCommitted(
       const LoadCommittedDetails& load_details) override;
+  void NotifyNavigationEntryChanged(
+      const EntryChangedDetails& change_details) override;
+  void NotifyNavigationListPruned(const PrunedDetails& pruned_details) override;
 
   // Invoked before a form repost warning is shown.
   void NotifyBeforeFormRepostWarningShow() override;
@@ -848,7 +859,7 @@ class CONTENT_EXPORT WebContentsImpl
                     const WebContentsObserver::MediaPlayerId& id);
 
   int GetCurrentlyPlayingVideoCount() override;
-  const VideoSizeMap& GetCurrentlyPlayingVideoSizes() override;
+  base::Optional<gfx::Size> GetFullscreenVideoSize() override;
   bool IsFullscreen() override;
 
   MediaWebContentsObserver* media_web_contents_observer() {
@@ -937,6 +948,9 @@ class CONTENT_EXPORT WebContentsImpl
                            IframeBeforeUnloadParentHang);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
                            BeforeUnloadDialogRequiresGesture);
+  FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, JavaScriptDialogNotifications);
+  FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, JavaScriptDialogInterop);
+  FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, BeforeUnloadDialog);
 
   // So |find_request_manager_| can be accessed for testing.
   friend class FindRequestManagerTest;
@@ -1037,7 +1051,7 @@ class CONTENT_EXPORT WebContentsImpl
                           const std::vector<SkBitmap>& images,
                           const std::vector<gfx::Size>& original_image_sizes);
 
-  // Callback function when showing JavaScript dialogs.  Takes in a routing ID
+  // Callback function when showing JavaScript dialogs. Takes in a routing ID
   // pair to identify the RenderFrameHost that opened the dialog, because it's
   // possible for the RenderFrameHost to be deleted by the time this is called.
   void OnDialogClosed(int render_process_id,
@@ -1161,9 +1175,9 @@ class CONTENT_EXPORT WebContentsImpl
                                const gfx::Rect& anchor_in_root_view);
 
   // Called by derived classes to indicate that we're no longer waiting for a
-  // response. This won't actually update the throbber, but it will get picked
-  // up at the next animation step if the throbber is going.
-  void SetNotWaitingForResponse() { waiting_for_response_ = false; }
+  // response. Will inform |delegate_| of the change in status so that it may,
+  // for example, update the throbber.
+  void SetNotWaitingForResponse();
 
   // Inner WebContents Helpers -------------------------------------------------
   //
@@ -1305,6 +1319,10 @@ class CONTENT_EXPORT WebContentsImpl
   // "<key1>: <value1>\r\n<key2>: <value2>".
   static DownloadUrlParameters::RequestHeadersType ParseDownloadHeaders(
       const std::string& headers);
+
+  // Sets the visibility of immediate child views, i.e. views whose parent view
+  // is that of the main frame.
+  void SetVisibilityForChildViews(bool visible);
 
   // Data for core operation ---------------------------------------------------
 

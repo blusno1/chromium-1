@@ -15,7 +15,7 @@
 namespace views {
 class MenuRunner;
 class Label;
-}
+}  // namespace views
 
 namespace app_list {
 
@@ -29,8 +29,11 @@ class APP_LIST_EXPORT SearchResultTileItemView
       public views::ContextMenuController,
       public SearchResultObserver {
  public:
-  explicit SearchResultTileItemView(SearchResultContainerView* result_container,
-                                    AppListViewDelegate* view_delegate);
+  SearchResultTileItemView(SearchResultContainerView* result_container,
+                           AppListViewDelegate* view_delegate,
+                           bool is_suggested_app,
+                           bool is_fullscreen_app_list_enabled,
+                           bool is_play_store_search_enabled);
   ~SearchResultTileItemView() override;
 
   SearchResult* result() { return item_; }
@@ -60,24 +63,30 @@ class APP_LIST_EXPORT SearchResultTileItemView
   // Shows price if |price| is not empty. Otherwise, hides the price label.
   void SetPrice(const base::string16& price);
 
+  // Records an app being launched.
+  void LogAppLaunch() const;
+
   // Overridden from views::View:
   void Layout() override;
   gfx::Size CalculatePreferredSize() const override;
+
+  // Whether the tile item view is a suggested app, used in StartPageView.
+  const bool is_suggested_app_;
 
   SearchResultContainerView* result_container_;  // Parent view
 
   // Owned by the model provided by the AppListViewDelegate.
   SearchResult* item_ = nullptr;
 
-  views::Label* rating_ = nullptr;  // Owned by views hierarchy.
-  views::Label* price_ = nullptr;   // Owned by views hierarchy.
+  views::Label* rating_ = nullptr;           // Owned by views hierarchy.
+  views::Label* price_ = nullptr;            // Owned by views hierarchy.
   views::ImageView* rating_star_ = nullptr;  // Owned by views hierarchy.
 
   AppListViewDelegate* view_delegate_;
 
-  const bool is_fullscreen_app_list_enabled_;
-
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
+
+  const bool is_fullscreen_app_list_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultTileItemView);
 };

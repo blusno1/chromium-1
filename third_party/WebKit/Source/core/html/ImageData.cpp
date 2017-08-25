@@ -36,6 +36,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/ColorBehavior.h"
 #include "third_party/skia/include/core/SkColorSpaceXform.h"
+#include "v8/include/v8.h"
 
 namespace blink {
 
@@ -79,10 +80,17 @@ bool ImageData::ValidateConstructorArguments(
     }
     data_size *= width;
     data_size *= height;
-    if (!data_size.IsValid())
+    if (!data_size.IsValid()) {
       return RaiseDOMExceptionAndReturnFalse(
           exception_state, kIndexSizeError,
           "The requested image size exceeds the supported range.");
+    }
+
+    if (data_size.ValueOrDie() > v8::TypedArray::kMaxLength) {
+      return RaiseDOMExceptionAndReturnFalse(
+          exception_state, kV8RangeError,
+          "Out of memory at ImageData creation.");
+    }
   }
 
   unsigned data_length = 0;
@@ -128,7 +136,8 @@ bool ImageData::ValidateConstructorArguments(
     CheckedNumeric<unsigned> data_size = 4;
     data_size *= size->Width();
     data_size *= size->Height();
-    if (!data_size.IsValid())
+    if (!data_size.IsValid() ||
+        data_size.ValueOrDie() > v8::TypedArray::kMaxLength)
       return false;
     if (param_flags & kParamData) {
       if (data_size.ValueOrDie() > data_length)
@@ -310,13 +319,21 @@ ImageData* ImageData::Create(NotShared<DOMUint8ClampedArray> data,
   return new ImageData(IntSize(width, height), data.View());
 }
 
+bool ColorManagementEnabled(const ImageDataColorSettings& color_settings) {
+  if (CanvasColorParams::ColorCorrectRenderingInAnyColorSpace())
+    return true;
+  if (CanvasColorParams::ColorCorrectRenderingInSRGBOnly() &&
+      color_settings.colorSpace() == kSRGBCanvasColorSpaceName)
+    return true;
+  return false;
+}
+
 ImageData* ImageData::CreateImageData(
     unsigned width,
     unsigned height,
     const ImageDataColorSettings& color_settings,
     ExceptionState& exception_state) {
-  if (!RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled() &&
-      !RuntimeEnabledFeatures::ColorCorrectRenderingEnabled())
+  if (!ColorManagementEnabled(color_settings))
     return nullptr;
 
   if (!ImageData::ValidateConstructorArguments(
@@ -340,7 +357,7 @@ ImageData* ImageData::CreateImageData(ImageDataArray& data,
                                       unsigned height,
                                       ImageDataColorSettings& color_settings,
                                       ExceptionState& exception_state) {
-  if (!RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled())
+  if (!ColorManagementEnabled(color_settings))
     return nullptr;
 
   DOMArrayBufferView* buffer_view = nullptr;
@@ -380,7 +397,8 @@ ImageData* ImageData::CreateForTest(const IntSize& size) {
   CheckedNumeric<unsigned> data_size = 4;
   data_size *= size.Width();
   data_size *= size.Height();
-  if (!data_size.IsValid())
+  if (!data_size.IsValid() ||
+      data_size.ValueOrDie() > v8::TypedArray::kMaxLength)
     return nullptr;
 
   DOMUint8ClampedArray* byte_array =
@@ -423,7 +441,7 @@ ImageData* ImageData::CropRect(const IntRect& crop_rect, bool flip_y) {
   } else {
     unsigned data_type_size =
         ImageData::StorageFormatDataSize(color_settings_.storageFormat());
-    int src_index = (dst_rect.X() * src_rect.Width() + dst_rect.Y()) * 4;
+    int src_index = (dst_rect.X() + dst_rect.Y() * src_rect.Width()) * 4;
     int dst_index = 0;
     if (flip_y)
       dst_index = (dst_rect.Height() - 1) * dst_rect.Width() * 4;
@@ -691,7 +709,7 @@ DOMArrayBufferBase* ImageData::BufferBase() const {
 }
 
 CanvasColorParams ImageData::GetCanvasColorParams() {
-  if (!RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled())
+  if (!ColorManagementEnabled(color_settings_))
     return CanvasColorParams();
   CanvasColorSpace color_space =
       ImageData::GetCanvasColorSpace(color_settings_.colorSpace());

@@ -63,6 +63,7 @@
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRuleImport.h"
 #include "core/css/StyleSheetContents.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "core/css/resolver/AnimatedStyleBuilder.h"
 #include "core/css/resolver/CSSVariableResolver.h"
 #include "core/css/resolver/MatchResult.h"
@@ -245,7 +246,7 @@ static void MatchSlottedRules(const Element& element,
   }
   for (auto it = resolvers.rbegin(); it != resolvers.rend(); ++it) {
     collector.ClearMatchedRules();
-    (*it)->CollectMatchingTreeBoundaryCrossingRules(collector);
+    (*it)->CollectMatchingSlottedRules(collector);
     collector.SortAndTransferMatchedRules();
     collector.FinishAddingAuthorRulesForTreeScope();
   }
@@ -603,7 +604,7 @@ RefPtr<ComputedStyle> StyleResolver::StyleForElement(
       style_not_yet_available_ = ComputedStyle::Create().LeakRef();
       style_not_yet_available_->SetDisplay(EDisplay::kNone);
       style_not_yet_available_->GetFont().Update(
-          GetDocument().GetStyleEngine().FontSelector());
+          GetDocument().GetStyleEngine().GetFontSelector());
     }
 
     GetDocument().SetHasNodesWithPlaceholderStyle();
@@ -766,7 +767,7 @@ RefPtr<AnimatableValue> StyleResolver::CreateAnimatableValueSnapshot(
   if (value) {
     StyleBuilder::ApplyProperty(property, state, *value);
     state.GetFontBuilder().CreateFont(
-        state.GetDocument().GetStyleEngine().FontSelector(),
+        state.GetDocument().GetStyleEngine().GetFontSelector(),
         state.MutableStyleRef());
   }
   return CSSAnimatableValueFactory::Create(property, *state.Style());
@@ -1026,7 +1027,8 @@ RefPtr<ComputedStyle> StyleResolver::StyleForText(Text* text_node) {
 
 void StyleResolver::UpdateFont(StyleResolverState& state) {
   state.GetFontBuilder().CreateFont(
-      GetDocument().GetStyleEngine().FontSelector(), state.MutableStyleRef());
+      GetDocument().GetStyleEngine().GetFontSelector(),
+      state.MutableStyleRef());
   state.SetConversionFontSizes(CSSToLengthConversionData::FontSizes(
       state.Style(), state.RootElementStyle()));
   state.SetConversionZoom(state.Style()->EffectiveZoom());
@@ -1512,8 +1514,7 @@ void StyleResolver::ApplyAllProperty(
 
     // When hitting matched properties' cache, only inherited properties will be
     // applied.
-    if (inherited_only &&
-        !CSSPropertyMetadata::IsInheritedProperty(property_id))
+    if (inherited_only && !CSSPropertyAPI::Get(property_id).IsInherited())
       continue;
 
     StyleBuilder::ApplyProperty(property_id, state, all_value);

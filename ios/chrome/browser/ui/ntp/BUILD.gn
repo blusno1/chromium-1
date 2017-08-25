@@ -4,22 +4,24 @@
 
 source_set("ntp") {
   sources = [
+    "new_tab_page_header_constants.h",
+    "new_tab_page_header_constants.mm",
     "new_tab_page_panel_protocol.h",
   ]
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("ntp_header") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "google_landing_data_source.h",
-    "new_tab_page_header_constants.h",
-    "new_tab_page_header_constants.mm",
     "new_tab_page_header_view.h",
     "new_tab_page_header_view.mm",
     "new_tab_page_toolbar_controller.h",
     "new_tab_page_toolbar_controller.mm",
   ]
   deps = [
+    ":ntp",
     "//base",
     "//components/ntp_tiles",
     "//components/strings",
@@ -181,7 +183,6 @@ source_set("ntp_internal") {
     "//ios/public/provider/chrome/browser/images",
     "//ios/public/provider/chrome/browser/ui",
     "//ios/public/provider/chrome/browser/voice",
-    "//ios/shared/chrome/browser/ui/commands",
     "//ios/third_party/material_components_ios",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",
@@ -265,6 +266,7 @@ source_set("eg_tests") {
     ":ntp_internal",
     "//components/strings",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/bookmarks:features",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/test/app:test_support",

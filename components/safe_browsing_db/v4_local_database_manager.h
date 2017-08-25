@@ -12,7 +12,7 @@
 #include <unordered_set>
 
 #include "base/memory/weak_ptr.h"
-#include "components/safe_browsing/web_ui/webui.pb.h"
+#include "components/safe_browsing/proto/webui.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/hit_report.h"
 #include "components/safe_browsing_db/v4_database.h"
@@ -36,7 +36,10 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
       ExtendedReportingLevelCallback extended_reporting_level_callback);
 
   // Populates the protobuf with the database data.
-  void CollectDatabaseManagerInfo(DatabaseManagerInfo* v4_database_info) const;
+  void CollectDatabaseManagerInfo(
+      DatabaseManagerInfo* v4_database_info,
+      FullHashCacheInfo* full_hash_cache_info) const;
+
   // Return an instance of the V4LocalDatabaseManager object
   static const V4LocalDatabaseManager* current_local_database_manager() {
     return current_local_database_manager_;
@@ -88,14 +91,10 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   // Must be initialized by calling StartOnIOThread() before using.
   V4LocalDatabaseManager(
       const base::FilePath& base_path,
-      ExtendedReportingLevelCallback extended_reporting_level_callback);
+      ExtendedReportingLevelCallback extended_reporting_level_callback,
+      scoped_refptr<base::SequencedTaskRunner> task_runner_for_tests);
 
   ~V4LocalDatabaseManager() override;
-
-  void SetTaskRunnerForTest(
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
-    task_runner_ = task_runner;
-  }
 
   enum class ClientCallbackType {
     // This represents the case when we're trying to determine if a URL is

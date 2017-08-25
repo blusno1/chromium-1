@@ -27,16 +27,13 @@ namespace media {
 // to talk to the concrete implementation for persistent data management.
 class MediaDrmStorageBridge {
  public:
-  static bool RegisterMediaDrmStorageBridge(JNIEnv* env);
-
   MediaDrmStorageBridge();
   ~MediaDrmStorageBridge();
 
-  // Bind origin to |this|. Once storage is initialized, |on_init| will be
-  // called and it will have a random generated origin id for later usage. If
-  // this function isn't called, all the other functions will fail.
-  void Initialize(const url::Origin& origin,
-                  const CreateStorageCB& create_storage_cb,
+  // Once storage is initialized, |init_cb| will be called and it will have a
+  // random generated origin id for later usage. If this function isn't called,
+  // all the other functions will fail.
+  void Initialize(const CreateStorageCB& create_storage_cb,
                   base::OnceClosure init_cb);
 
   std::string origin_id() const { return origin_id_; }
@@ -76,6 +73,8 @@ class MediaDrmStorageBridge {
 
  private:
   void RunAndroidBoolCallback(JavaObjectPtr j_callback, bool success);
+  void OnInitialized(base::OnceClosure init_cb,
+                     const base::UnguessableToken& origin_id);
   void OnSessionDataLoaded(
       JavaObjectPtr j_callback,
       const std::string& session_id,

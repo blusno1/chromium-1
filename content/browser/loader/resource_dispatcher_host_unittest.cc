@@ -163,7 +163,7 @@ static ResourceRequest CreateResourceRequest(const char* method,
   ResourceRequest request;
   request.method = std::string(method);
   request.url = url;
-  request.first_party_for_cookies = url;  // bypass third-party cookie blocking
+  request.site_for_cookies = url;  // bypass third-party cookie blocking
   request.request_initiator = url::Origin(url);  // ensure initiator is set
   request.referrer_policy = blink::kWebReferrerPolicyDefault;
   request.load_flags = 0;
@@ -1042,10 +1042,10 @@ class ResourceDispatcherHostTest : public testing::Test, public IPC::Sender {
         new ResourceHostMsg_DataReceived_ACK(request_id));
 
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&GenerateIPCMessage, scoped_refptr<ResourceRequesterInfo>(
-                                            filter_->requester_info_for_test()),
-                   base::Passed(&ack)));
+        FROM_HERE, base::BindOnce(&GenerateIPCMessage,
+                                  scoped_refptr<ResourceRequesterInfo>(
+                                      filter_->requester_info_for_test()),
+                                  base::Passed(&ack)));
   }
 
   void WaitForRequestComplete() {
@@ -1122,6 +1122,14 @@ class ResourceDispatcherHostTest : public testing::Test, public IPC::Sender {
   ResourceRequesterInfo* GetResourceRequesterInfo(
       ResourceMessageFilter* filter) {
     return filter->requester_info_for_test();
+  }
+
+  bool IsDetached(net::URLRequest* request) {
+    auto* request_info = ResourceRequestInfoImpl::ForRequest(request);
+    if (!request_info)
+      return false;
+    return request_info->detachable_handler() &&
+           request_info->detachable_handler()->is_detached();
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
@@ -1854,6 +1862,52 @@ TEST_F(ResourceDispatcherHostTest, CancelInDelegate) {
   ASSERT_EQ(1U, msgs[0].size());
 
   CheckRequestCompleteErrorCode(msgs[0][0], net::ERR_ACCESS_DENIED);
+}
+
+TEST_F(ResourceDispatcherHostTest, CancelRequestsForRoute) {
+  job_factory_->SetDelayedStartJobGeneration(true);
+  MakeTestRequestWithRenderFrame(0, 11, 1, net::URLRequestTestJob::test_url_1(),
+                                 RESOURCE_TYPE_XHR);
+  EXPECT_EQ(1, host_.pending_requests());
+
+  MakeTestRequestWithRenderFrame(0, 12, 2, net::URLRequestTestJob::test_url_2(),
+                                 RESOURCE_TYPE_XHR);
+  EXPECT_EQ(2, host_.pending_requests());
+
+  MakeTestRequestWithRenderFrame(0, 11, 3, net::URLRequestTestJob::test_url_3(),
+                                 RESOURCE_TYPE_PING);
+  EXPECT_EQ(3, host_.pending_requests());
+
+  MakeTestRequestWithRenderFrame(0, 12, 4, net::URLRequestTestJob::test_url_4(),
+                                 RESOURCE_TYPE_PING);
+  EXPECT_EQ(4, host_.pending_requests());
+
+  EXPECT_TRUE(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 1)));
+  EXPECT_TRUE(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 2)));
+  EXPECT_TRUE(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 3)));
+  EXPECT_TRUE(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 4)));
+
+  host_.CancelRequestsForRoute(GlobalFrameRoutingId(filter_->child_id(), 11));
+
+  EXPECT_FALSE(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 1)));
+  EXPECT_TRUE(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 2)));
+  ASSERT_TRUE(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 3)));
+  ASSERT_TRUE(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 4)));
+
+  EXPECT_TRUE(
+      IsDetached(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 3))));
+  EXPECT_FALSE(
+      IsDetached(host_.GetURLRequest(GlobalRequestID(filter_->child_id(), 4))));
+
+  CompleteStartRequest(2);
+  CompleteStartRequest(3);
+  CompleteStartRequest(4);
+
+  while (host_.pending_requests() > 0) {
+    while (net::URLRequestTestJob::ProcessOnePendingMessage()) {
+    }
+    content::RunAllBlockingPoolTasksUntilIdle();
+  }
 }
 
 // Tests CancelRequestsForProcess
@@ -3784,72 +3838,6 @@ TEST_F(ResourceDispatcherHostTest, ThrottleMustProcessResponseBeforeRead) {
   while (net::URLRequestTestJob::ProcessOnePendingMessage()) {
   }
   content::RunAllBlockingPoolTasksUntilIdle();
-}
-
-namespace {
-
-void StoreSyncLoadResult(bool* called,
-                         bool* was_null,
-                         SyncLoadResult* result_out,
-                         const SyncLoadResult* result) {
-  *called = true;
-  *was_null = !result;
-
-  if (result)
-    *result_out = *result;
-}
-
-} // namespace
-
-TEST_F(ResourceDispatcherHostTest, SyncLoadWithMojoSuccess) {
-  ResourceRequest request = CreateResourceRequest(
-      "GET", RESOURCE_TYPE_XHR, net::URLRequestTestJob::test_url_1());
-  request.priority = net::MAXIMUM_PRIORITY;
-
-  bool called = false;
-  bool was_null = false;
-  SyncLoadResult result;
-  host_.OnSyncLoadWithMojo(
-      GetResourceRequesterInfo(filter_.get()), 0, 1, request,
-      base::Bind(&StoreSyncLoadResult, &called, &was_null, &result));
-  content::RunAllBlockingPoolTasksUntilIdle();
-  EXPECT_TRUE(called);
-  EXPECT_FALSE(was_null);
-  EXPECT_EQ(net::OK, result.error_code);
-}
-
-TEST_F(ResourceDispatcherHostTest, SyncLoadWithMojoError) {
-  ResourceRequest request = CreateResourceRequest(
-      "GET", RESOURCE_TYPE_XHR, net::URLRequestTestJob::test_url_error());
-  request.priority = net::MAXIMUM_PRIORITY;
-
-  bool called = false;
-  bool was_null = false;
-  SyncLoadResult result;
-  host_.OnSyncLoadWithMojo(
-      GetResourceRequesterInfo(filter_.get()), 0, 1, request,
-      base::Bind(&StoreSyncLoadResult, &called, &was_null, &result));
-  content::RunAllBlockingPoolTasksUntilIdle();
-  EXPECT_TRUE(called);
-  EXPECT_FALSE(was_null);
-  EXPECT_EQ(net::ERR_INVALID_URL, result.error_code);
-}
-
-TEST_F(ResourceDispatcherHostTest, SyncLoadWithMojoCancel) {
-  ResourceRequest request = CreateResourceRequest(
-      "GET", RESOURCE_TYPE_XHR, net::URLRequestTestJob::test_url_error());
-  request.priority = net::MAXIMUM_PRIORITY;
-
-  bool called = false;
-  bool was_null = false;
-  SyncLoadResult result;
-  host_.OnSyncLoadWithMojo(
-      GetResourceRequesterInfo(filter_.get()), 0, 1, request,
-      base::Bind(&StoreSyncLoadResult, &called, &was_null, &result));
-  host_.CancelRequestsForProcess(filter_->child_id());
-  content::RunAllBlockingPoolTasksUntilIdle();
-  EXPECT_TRUE(called);
-  EXPECT_TRUE(was_null);
 }
 
 // A URLRequestTestJob that sets a test certificate on the |ssl_info|

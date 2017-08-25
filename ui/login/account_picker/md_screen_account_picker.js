@@ -14,13 +14,6 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
    */
   var MAX_LOGIN_ATTEMPTS_IN_POD = 3;
 
-  /**
-   * Distance between error bubble and user POD.
-   * @type {number}
-   * @const
-   */
-   var BUBBLE_POD_OFFSET = 4;
-
   return {
     EXTERNAL_API: [
       'loadUsers',
@@ -39,7 +32,7 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
       'removeUserPodFingerprintIcon',
       'setPinEnabledForUser',
       'setAuthType',
-      'setTouchViewState',
+      'setTabletModeState',
       'setPublicSessionDisplayName',
       'setPublicSessionLocales',
       'setPublicSessionKeyboardLayouts',
@@ -87,10 +80,9 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
       * wallpaper.
       * @param {string} maskColor Color for the gradient mask.
       * @param {string} scrollColor Color for the small pods container.
-      * @param {string} backgroundColor Color for the whole background.
       */
-     setOverlayColors: function(maskColor, scrollColor, backgroundColor) {
-      $('pod-row').setOverlayColors(maskColor, scrollColor, backgroundColor);
+     setOverlayColors: function(maskColor, scrollColor) {
+      $('pod-row').setOverlayColors(maskColor, scrollColor);
      },
 
     /**
@@ -134,8 +126,6 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
 
       chrome.send('loginUIStateChanged', ['account-picker', true]);
       $('login-header-bar').signinUIState = SIGNIN_UI_STATE.ACCOUNT_PICKER;
-      // Header bar should be always visible on Account Picker screen.
-      Oobe.getInstance().headerHidden = false;
       chrome.send('hideCaptivePortal');
       var podRow = $('pod-row');
       podRow.handleBeforeShow();
@@ -156,7 +146,7 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
         // again already. If that happens, ignore the onShow() call.
         return;
       }
-      chrome.send('getTouchViewState');
+      chrome.send('getTabletModeState');
       if (!this.firstShown_) return;
       this.firstShown_ = false;
 
@@ -181,7 +171,7 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
     /**
      * Shows sign-in error bubble.
      * @param {number} loginAttempts Number of login attemps tried.
-     * @param {HTMLElement} content Content to show in bubble.
+     * @param {HTMLElement} error Error to show in bubble.
      */
     showErrorBubble: function(loginAttempts, error) {
       var activatedPod = $('pod-row').activatedPod;
@@ -204,77 +194,7 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
         }
         // Update the pod row display if incorrect password.
         $('pod-row').setFocusedPodErrorDisplay(true);
-
-        /** @const */ var BUBBLE_OFFSET = 25;
-        // -8 = 4(BUBBLE_POD_OFFSET) - 2(bubble margin)
-        //      - 10(internal bubble adjustment)
-        var bubblePositioningPadding = -8;
-
-        var bubbleAnchor;
-        var attachment;
-        // Anchor the bubble to the input field.
-        bubbleAnchor =
-            activatedPod.getElementsByClassName('auth-container')[0];
-        if (!bubbleAnchor) {
-          console.error('auth-container not found!');
-          bubbleAnchor = activatedPod.mainInput;
-        }
-        if (activatedPod.pinContainer &&
-            activatedPod.pinContainer.style.visibility == 'visible')
-          attachment = cr.ui.Bubble.Attachment.RIGHT;
-        else
-          attachment = cr.ui.Bubble.Attachment.BOTTOM;
-
-        var bubble = $('bubble');
-
-        // Cannot use cr.ui.LoginUITools.get* on bubble until it is attached to
-        // the element. getMaxHeight/Width rely on the correct up/left element
-        // side positioning that doesn't happen until bubble is attached.
-        var maxHeight =
-            cr.ui.LoginUITools.getMaxHeightBeforeShelfOverlapping(bubbleAnchor)
-          - bubbleAnchor.offsetHeight - BUBBLE_POD_OFFSET;
-        var maxWidth = cr.ui.LoginUITools.getMaxWidthToFit(bubbleAnchor)
-          - bubbleAnchor.offsetWidth - BUBBLE_POD_OFFSET;
-
-        // Change bubble visibility temporary to calculate height.
-        var bubbleVisibility = bubble.style.visibility;
-        bubble.style.visibility = 'hidden';
-        bubble.hidden = false;
-        // Now we need the bubble to have the new content before calculating
-        // size. Undefined |error| == reuse old content.
-        if (error !== undefined)
-          bubble.replaceContent(error);
-
-        // Get bubble size.
-        var bubbleOffsetHeight = parseInt(bubble.offsetHeight);
-        var bubbleOffsetWidth = parseInt(bubble.offsetWidth);
-        // Restore attributes.
-        bubble.style.visibility = bubbleVisibility;
-        bubble.hidden = true;
-
-        if (attachment == cr.ui.Bubble.Attachment.BOTTOM) {
-          // Move error bubble if it overlaps the shelf.
-          if (maxHeight < bubbleOffsetHeight)
-            attachment = cr.ui.Bubble.Attachment.TOP;
-        } else {
-          // Move error bubble if it doesn't fit screen.
-          if (maxWidth < bubbleOffsetWidth) {
-            bubblePositioningPadding = 2;
-            attachment = cr.ui.Bubble.Attachment.LEFT;
-          }
-        }
-        var showBubbleCallback = function() {
-          activatedPod.removeEventListener("transitionend",
-              showBubbleCallback);
-          $('bubble').showContentForElement(bubbleAnchor,
-                                            attachment,
-                                            error,
-                                            BUBBLE_OFFSET,
-                                            bubblePositioningPadding, true);
-        };
-        activatedPod.addEventListener("transitionend",
-                                      showBubbleCallback);
-        ensureTransitionEndEvent(activatedPod);
+        activatedPod.showBubble(error);
       }
     },
 
@@ -428,11 +348,11 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
     },
 
     /**
-     * Sets the state of touch view mode.
-     * @param {boolean} isTouchViewEnabled true if the mode is on.
+     * Sets the state of tablet mode.
+     * @param {boolean} isTabletModeEnabled true if the mode is on.
      */
-    setTouchViewState: function(isTouchViewEnabled) {
-      $('pod-row').setTouchViewState(isTouchViewEnabled);
+    setTabletModeState: function(isTabletModeEnabled) {
+      $('pod-row').setTabletModeState(isTabletModeEnabled);
     },
 
     /**
@@ -494,14 +414,27 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
         return;
       }
 
+      var wasForeground =
+          this.lockScreenAppsState_ === LOCK_SCREEN_APPS_STATE.FOREGROUND;
       this.lockScreenAppsState_ = state;
+
       $('login-header-bar').lockScreenAppsState = state;
       $('top-header-bar').lockScreenAppsState = state;
 
       // Reset the focused pod if app window is being shown on top of the user
       // pods. Main goal is to clear any credentials the user might have input.
-      if (state === LOCK_SCREEN_APPS_STATE.FOREGROUND)
+      if (state === LOCK_SCREEN_APPS_STATE.FOREGROUND) {
         $('pod-row').clearFocusedPod();
+        $('pod-row').disabled = true;
+      } else {
+        $('pod-row').disabled = false;
+        if (wasForeground) {
+          // If the app window was moved to background, ensure the active pod is
+          // focused.
+          $('pod-row').maybePreselectPod();
+          $('pod-row').refocusCurrentPod();
+        }
+      }
     },
 
     /**

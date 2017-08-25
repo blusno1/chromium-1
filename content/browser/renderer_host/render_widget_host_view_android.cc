@@ -41,6 +41,7 @@
 #include "content/browser/android/content_view_core.h"
 #include "content/browser/android/ime_adapter_android.h"
 #include "content/browser/android/overscroll_controller_android.h"
+#include "content/browser/android/popup_zoomer.h"
 #include "content/browser/android/selection_popup_controller.h"
 #include "content/browser/android/synchronous_compositor_host.h"
 #include "content/browser/android/text_suggestion_host_android.h"
@@ -617,10 +618,10 @@ void RenderWidgetHostViewAndroid::LostFocus() {
 }
 
 void RenderWidgetHostViewAndroid::Focus() {
-  // TODO(boliu): Make sure rwhva/rwh focus state stays in sync with CVC, and
-  // ideally properly implements "request focus". See crbug.com/746099.
-  host_->Focus();
-  OnFocusInternal();
+  if (view_.HasFocus())
+    GotFocus();
+  else
+    view_.RequestFocus();
 }
 
 void RenderWidgetHostViewAndroid::OnFocusInternal() {
@@ -634,10 +635,7 @@ void RenderWidgetHostViewAndroid::LostFocusInternal() {
 }
 
 bool RenderWidgetHostViewAndroid::HasFocus() const {
-  if (!content_view_core_)
-    return false;  // ContentViewCore not created yet.
-
-  return content_view_core_->HasFocus();
+  return view_.HasFocus();
 }
 
 bool RenderWidgetHostViewAndroid::IsSurfaceAvailableForCopy() const {
@@ -746,7 +744,10 @@ float RenderWidgetHostViewAndroid::GetBottomControlsHeight() const {
 }
 
 void RenderWidgetHostViewAndroid::UpdateCursor(const WebCursor& cursor) {
-  // There are no cursors on Android.
+  CursorInfo cursor_info;
+  cursor.GetCursorInfo(&cursor_info);
+  view_.OnCursorChanged(cursor_info.type, cursor_info.custom_image,
+                        cursor_info.hotspot);
 }
 
 void RenderWidgetHostViewAndroid::SetIsLoading(bool is_loading) {
@@ -995,8 +996,7 @@ bool RenderWidgetHostViewAndroid::OnTouchEvent(
       event, result.moved_beyond_slop_region);
   ui::LatencyInfo latency_info(ui::SourceEventType::TOUCH);
   latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
-  if (host_->delegate()->GetInputEventRouter() &&
-      SiteIsolationPolicy::AreCrossProcessFramesPossible()) {
+  if (host_->delegate()->GetInputEventRouter()) {
     host_->delegate()->GetInputEventRouter()->RouteTouchEvent(this, &web_event,
                                                               latency_info);
   } else {
@@ -1043,8 +1043,7 @@ void RenderWidgetHostViewAndroid::ResetGestureDetection() {
     latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
     blink::WebTouchEvent web_event =
         ui::CreateWebTouchEventFromMotionEvent(*cancel_event, causes_scrolling);
-    if (SiteIsolationPolicy::AreCrossProcessFramesPossible() &&
-        host_->delegate()->GetInputEventRouter()) {
+    if (host_->delegate()->GetInputEventRouter()) {
       host_->delegate()->GetInputEventRouter()->RouteTouchEvent(
           this, &web_event, latency_info);
     } else {
@@ -1165,17 +1164,16 @@ void RenderWidgetHostViewAndroid::CopyFromSurface(
 
 void RenderWidgetHostViewAndroid::ShowDisambiguationPopup(
     const gfx::Rect& rect_pixels, const SkBitmap& zoomed_bitmap) {
-  if (!content_view_core_)
+  if (!popup_zoomer_)
     return;
 
-  content_view_core_->ShowDisambiguationPopup(rect_pixels, zoomed_bitmap);
+  popup_zoomer_->ShowPopup(rect_pixels, zoomed_bitmap);
 }
 
 std::unique_ptr<SyntheticGestureTarget>
 RenderWidgetHostViewAndroid::CreateSyntheticGestureTarget() {
   return std::unique_ptr<SyntheticGestureTarget>(
-      new SyntheticGestureTargetAndroid(
-          host_, content_view_core_->CreateMotionEventSynthesizer()));
+      new SyntheticGestureTargetAndroid(host_, &view_));
 }
 
 void RenderWidgetHostViewAndroid::SendReclaimCompositorResources(
@@ -1799,6 +1797,14 @@ InputEventAckState RenderWidgetHostViewAndroid::FilterInputEvent(
   return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
+InputEventAckState RenderWidgetHostViewAndroid::FilterChildGestureEvent(
+    const blink::WebGestureEvent& gesture_event) {
+  if (overscroll_controller_ &&
+      overscroll_controller_->WillHandleGestureEvent(gesture_event))
+    return INPUT_EVENT_ACK_STATE_CONSUMED;
+  return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+}
+
 BrowserAccessibilityManager*
     RenderWidgetHostViewAndroid::CreateBrowserAccessibilityManager(
         BrowserAccessibilityDelegate* delegate, bool for_root_frame) {
@@ -1876,8 +1882,7 @@ void RenderWidgetHostViewAndroid::SendMouseEvent(
   if (!host_ || !host_->delegate())
     return;
 
-  if (SiteIsolationPolicy::AreCrossProcessFramesPossible() &&
-      host_->delegate()->GetInputEventRouter()) {
+  if (host_->delegate()->GetInputEventRouter()) {
     host_->delegate()->GetInputEventRouter()->RouteMouseEvent(
         this, &mouse_event, ui::LatencyInfo());
   } else {
@@ -1917,9 +1922,7 @@ void RenderWidgetHostViewAndroid::SendMouseWheelEvent(
   ui::LatencyInfo latency_info(ui::SourceEventType::WHEEL);
   latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
   blink::WebMouseWheelEvent wheel_event(event);
-  bool should_route_event =
-      SiteIsolationPolicy::AreCrossProcessFramesPossible() &&
-      host_->delegate()->GetInputEventRouter();
+  bool should_route_event = !!host_->delegate()->GetInputEventRouter();
   if (wheel_scroll_latching_enabled()) {
     mouse_wheel_phase_handler_.AddPhaseIfNeededAndScheduleEndEvent(
         wheel_event, should_route_event);
@@ -1993,9 +1996,7 @@ void RenderWidgetHostViewAndroid::SendGestureEvent(
       mouse_wheel_phase_handler_.IgnorePendingWheelEndEvent();
     }
   }
-  bool should_route_event =
-      SiteIsolationPolicy::AreCrossProcessFramesPossible() &&
-      host_->delegate()->GetInputEventRouter();
+  bool should_route_event = !!host_->delegate()->GetInputEventRouter();
   if (should_route_event) {
     blink::WebGestureEvent gesture_event(event);
     host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
@@ -2416,6 +2417,13 @@ void RenderWidgetHostViewAndroid::CreateOverscrollControllerIfPossible() {
 
   overscroll_controller_ = base::MakeUnique<OverscrollControllerAndroid>(
       overscroll_refresh_handler, compositor, view_.GetDipScale());
+}
+
+void RenderWidgetHostViewAndroid::SetOverscrollControllerForTesting(
+    ui::OverscrollRefreshHandler* overscroll_refresh_handler) {
+  overscroll_controller_ = base::MakeUnique<OverscrollControllerAndroid>(
+      overscroll_refresh_handler, view_.GetWindowAndroid()->GetCompositor(),
+      view_.GetDipScale());
 }
 
 }  // namespace content

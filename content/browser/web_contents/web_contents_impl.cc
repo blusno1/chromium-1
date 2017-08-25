@@ -40,6 +40,7 @@
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/devtools/protocol/page_handler.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
@@ -55,7 +56,6 @@
 #include "content/browser/frame_host/navigator_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
-#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/loader/loader_io_thread_notifier.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/manifest/manifest_manager_host.h"
@@ -70,6 +70,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/screen_orientation/screen_orientation_provider.h"
 #include "content/browser/site_instance_impl.h"
@@ -277,6 +278,30 @@ FrameTreeNode* FindOpener(const WebContents::CreateParams& params) {
   }
   return opener_node;
 }
+
+// Ensures that OnDialogClosed is only called once.
+class CloseDialogCallbackWrapper
+    : public base::RefCountedThreadSafe<CloseDialogCallbackWrapper> {
+ public:
+  CloseDialogCallbackWrapper(
+      const base::Callback<void(bool, bool, const base::string16&)> callback)
+      : callback_(callback) {}
+
+  void Run(bool dialog_was_suppressed,
+           bool success,
+           const base::string16& user_input) {
+    if (already_fired_)
+      return;
+    already_fired_ = true;
+    callback_.Run(dialog_was_suppressed, success, user_input);
+  }
+
+ private:
+  friend class base::RefCountedThreadSafe<CloseDialogCallbackWrapper>;
+  ~CloseDialogCallbackWrapper() {}
+  bool already_fired_ = false;
+  base::Callback<void(bool, bool, const base::string16&)> callback_;
+};
 
 }  // namespace
 
@@ -1384,7 +1409,12 @@ void WebContentsImpl::SetAudioMuted(bool mute) {
   for (auto& observer : observers_)
     observer.DidUpdateAudioMutingState(mute);
 
-  OnAudioStateChanged(!mute && audio_stream_monitor_.IsCurrentlyAudible());
+  // Notification for UI updates in response to the changed muting state.
+  NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+}
+
+bool WebContentsImpl::IsCurrentlyAudible() {
+  return audio_stream_monitor()->IsCurrentlyAudible();
 }
 
 bool WebContentsImpl::IsConnectedToBluetoothDevice() const {
@@ -1448,6 +1478,9 @@ void WebContentsImpl::OnAudioStateChanged(bool is_audible) {
 
   // Notification for UI updates in response to the changed audio state.
   NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+
+  if (delegate_)
+    delegate_->OnAudioStateChanged(is_audible);
 }
 
 base::TimeTicks WebContentsImpl::GetLastActiveTime() const {
@@ -1465,12 +1498,15 @@ base::TimeTicks WebContentsImpl::GetLastHiddenTime() const {
 void WebContentsImpl::WasShown() {
   controller_.SetActive(true);
 
-  for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree()) {
+  if (auto* view = GetRenderWidgetHostView()) {
     view->Show();
 #if defined(OS_MACOSX)
     view->SetActive(true);
 #endif
   }
+
+  if (!ShowingInterstitialPage())
+    SetVisibilityForChildViews(true);
 
   SendPageMessage(new PageMsg_WasShown(MSG_ROUTING_NONE));
 
@@ -1492,8 +1528,11 @@ void WebContentsImpl::WasHidden() {
     // removes the |GetRenderViewHost()|; then when we actually destroy the
     // window, OnWindowPosChanged() notices and calls WasHidden() (which
     // calls us).
-    for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree())
+    if (auto* view = GetRenderWidgetHostView())
       view->Hide();
+
+    if (!ShowingInterstitialPage())
+      SetVisibilityForChildViews(true);
 
     SendPageMessage(new PageMsg_WasHidden(MSG_ROUTING_NONE));
   }
@@ -1504,6 +1543,25 @@ void WebContentsImpl::WasHidden() {
     observer.WasHidden();
 
   should_normally_be_visible_ = false;
+}
+
+void WebContentsImpl::SetImportance(ChildProcessImportance importance) {
+  // Not calling GetRenderWidgetHostView since importance should be set on both
+  // the interstitial and underlying page.
+  std::set<RenderWidgetHostImpl*> set;
+  if (ShowingInterstitialPage()) {
+    set.insert(
+        static_cast<RenderFrameHostImpl*>(interstitial_page_->GetMainFrame())
+            ->GetRenderWidgetHost());
+  }
+  for (RenderFrameHost* rfh : GetAllFrames())
+    set.insert(static_cast<RenderFrameHostImpl*>(rfh)->GetRenderWidgetHost());
+  for (RenderWidgetHostImpl* host : set) {
+    DCHECK(host);
+    host->SetImportance(importance);
+  }
+  // TODO(boliu): If this is ever used on platforms other than Android, make
+  // sure to also update inner WebContents.
 }
 
 bool WebContentsImpl::IsVisible() const {
@@ -1688,10 +1746,9 @@ void WebContentsImpl::Init(const WebContents::CreateParams& params) {
         site_instance->GetProcess()->GetNextRoutingID();
   }
 
-  GetRenderManager()->Init(site_instance.get(), view_routing_id,
-                           params.main_frame_routing_id,
-                           main_frame_widget_routing_id,
-                           params.renderer_initiated_creation);
+  GetRenderManager()->Init(
+      site_instance.get(), view_routing_id, params.main_frame_routing_id,
+      main_frame_widget_routing_id, params.renderer_initiated_creation);
 
   // blink::FrameTree::setName always keeps |unique_name| empty in case of a
   // main frame - let's do the same thing here.
@@ -1977,9 +2034,6 @@ void WebContentsImpl::ReplicatePageFocus(bool is_focused) {
 
 RenderWidgetHostImpl* WebContentsImpl::GetFocusedRenderWidgetHost(
     RenderWidgetHostImpl* receiving_widget) {
-  if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
-    return receiving_widget;
-
   // Events for widgets other than the main frame (e.g., popup menus) should be
   // forwarded directly to the widget they arrived on.
   if (receiving_widget != GetMainFrame()->GetRenderWidgetHost())
@@ -2396,8 +2450,8 @@ void WebContentsImpl::CreateNewWidget(int32_t render_process_id,
     return;
   }
 
-  RenderWidgetHostImpl* widget_host =
-      new RenderWidgetHostImpl(this, process, route_id, IsHidden());
+  RenderWidgetHostImpl* widget_host = new RenderWidgetHostImpl(
+      this, process, route_id, std::move(widget), IsHidden());
 
   RenderWidgetHostViewBase* widget_view =
       static_cast<RenderWidgetHostViewBase*>(
@@ -2714,6 +2768,15 @@ void WebContentsImpl::OnMoveValidationMessage(
     delegate_->MoveValidationMessage(this, anchor_in_root_view);
 }
 
+void WebContentsImpl::SetNotWaitingForResponse() {
+  if (waiting_for_response_ == false)
+    return;
+
+  waiting_for_response_ = false;
+  if (delegate_)
+    delegate_->LoadingStateChanged(this, is_load_to_different_document_);
+}
+
 void WebContentsImpl::SendScreenRects() {
   for (FrameTreeNode* node : frame_tree_.Nodes()) {
     if (node->current_frame_host()->is_local_root())
@@ -2916,6 +2979,11 @@ void WebContentsImpl::AttachInterstitialPage(
       GetRenderManager()->SetRWHViewForInnerContents(view);
     }
   }
+
+  // Update importance of the interstitial.
+  static_cast<RenderFrameHostImpl*>(interstitial_page_->GetMainFrame())
+      ->GetRenderWidgetHost()
+      ->SetImportance(GetMainFrame()->GetRenderWidgetHost()->importance());
 }
 
 void WebContentsImpl::DidProceedOnInterstitial() {
@@ -3362,6 +3430,7 @@ void WebContentsImpl::LoadStateChanged(
 
 void WebContentsImpl::DidGetResourceResponseStart(
   const ResourceRequestDetails& details) {
+  SetNotWaitingForResponse();
   controller_.ssl_manager()->DidStartResourceResponse(
       details.url, details.has_certificate, details.ssl_cert_status);
 
@@ -4404,6 +4473,17 @@ void WebContentsImpl::NotifyViewSwapped(RenderViewHost* old_host,
 
 void WebContentsImpl::NotifyFrameSwapped(RenderFrameHost* old_host,
                                          RenderFrameHost* new_host) {
+  // Try to copy importance from either |old_host| or parent of |new_host|.
+  // If both are null, then this is the very first frame host created from Init.
+  // There is no need to pass importance in this case because there is no chance
+  // for anything to call SetImportance yet.
+  RenderFrameHostImpl* importance_host = static_cast<RenderFrameHostImpl*>(
+      old_host ? old_host : new_host->GetParent());
+  if (importance_host) {
+    static_cast<RenderFrameHostImpl*>(new_host)
+        ->GetRenderWidgetHost()
+        ->SetImportance(importance_host->GetRenderWidgetHost()->importance());
+  }
   for (auto& observer : observers_)
     observer.RenderFrameHostChanged(old_host, new_host);
 }
@@ -4425,6 +4505,18 @@ void WebContentsImpl::NotifyNavigationEntryCommitted(
     const LoadCommittedDetails& load_details) {
   for (auto& observer : observers_)
     observer.NavigationEntryCommitted(load_details);
+}
+
+void WebContentsImpl::NotifyNavigationEntryChanged(
+    const EntryChangedDetails& change_details) {
+  for (auto& observer : observers_)
+    observer.NavigationEntryChanged(change_details);
+}
+
+void WebContentsImpl::NotifyNavigationListPruned(
+    const PrunedDetails& pruned_details) {
+  for (auto& observer : observers_)
+    observer.NavigationListPruned(pruned_details);
 }
 
 void WebContentsImpl::OnAssociatedInterfaceRequest(
@@ -4505,31 +4597,48 @@ void WebContentsImpl::RunJavaScriptDialog(RenderFrameHost* render_frame_host,
   if (IsFullscreenForCurrentTab())
     ExitFullscreen(true);
 
+  base::Callback<void(bool, bool, const base::string16&)> callback =
+      base::Bind(&WebContentsImpl::OnDialogClosed, base::Unretained(this),
+                 render_frame_host->GetProcess()->GetID(),
+                 render_frame_host->GetRoutingID(), reply_msg);
+
   // Suppress JavaScript dialogs when requested. Also suppress messages when
   // showing an interstitial as it's shown over the previous page and we don't
   // want the hidden page's dialogs to interfere with the interstitial.
-  bool suppress_this_message =
-      ShowingInterstitialPage() || !delegate_ ||
-      delegate_->ShouldSuppressDialogs(this) ||
-      !delegate_->GetJavaScriptDialogManager(this);
-
-  if (!suppress_this_message) {
-    is_showing_javascript_dialog_ = true;
+  bool suppress_this_message = ShowingInterstitialPage() || !delegate_ ||
+                               delegate_->ShouldSuppressDialogs(this);
+  if (delegate_)
     dialog_manager_ = delegate_->GetJavaScriptDialogManager(this);
+
+  std::vector<protocol::PageHandler*> page_handlers =
+      protocol::PageHandler::EnabledForWebContents(this);
+
+  if (suppress_this_message || (!dialog_manager_ && !page_handlers.size())) {
+    callback.Run(true, false, base::string16());
+    return;
+  }
+
+  scoped_refptr<CloseDialogCallbackWrapper> wrapper =
+      new CloseDialogCallbackWrapper(callback);
+  callback = base::Bind(&CloseDialogCallbackWrapper::Run, wrapper);
+
+  is_showing_javascript_dialog_ = true;
+
+  for (auto* handler : page_handlers) {
+    handler->DidRunJavaScriptDialog(frame_url, message, default_prompt,
+                                    dialog_type, base::Bind(callback, false));
+  }
+
+  if (dialog_manager_) {
     dialog_manager_->RunJavaScriptDialog(
         this, frame_url, dialog_type, message, default_prompt,
-        base::Bind(&WebContentsImpl::OnDialogClosed, base::Unretained(this),
-                   render_frame_host->GetProcess()->GetID(),
-                   render_frame_host->GetRoutingID(), reply_msg, false),
-        &suppress_this_message);
+        base::Bind(callback, false), &suppress_this_message);
   }
 
   if (suppress_this_message) {
     // If we are suppressing messages, just reply as if the user immediately
     // pressed "Cancel", passing true to |dialog_was_suppressed|.
-    OnDialogClosed(render_frame_host->GetProcess()->GetID(),
-                   render_frame_host->GetRoutingID(), reply_msg,
-                   true, false, base::string16());
+    callback.Run(true, false, base::string16());
   }
 }
 
@@ -4547,24 +4656,40 @@ void WebContentsImpl::RunBeforeUnloadConfirm(
   if (delegate_)
     delegate_->WillRunBeforeUnloadConfirm();
 
-  bool suppress_this_message =
-      !rfhi->is_active() ||
-      ShowingInterstitialPage() || !delegate_ ||
-      delegate_->ShouldSuppressDialogs(this) ||
-      !delegate_->GetJavaScriptDialogManager(this);
-  if (suppress_this_message) {
-    rfhi->JavaScriptDialogClosed(reply_msg, true, base::string16());
+  base::Callback<void(bool, bool, const base::string16&)> callback =
+      base::Bind(&WebContentsImpl::OnDialogClosed, base::Unretained(this),
+                 render_frame_host->GetProcess()->GetID(),
+                 render_frame_host->GetRoutingID(), reply_msg);
+
+  bool suppress_this_message = !rfhi->is_active() ||
+                               ShowingInterstitialPage() || !delegate_ ||
+                               delegate_->ShouldSuppressDialogs(this);
+  if (delegate_)
+    dialog_manager_ = delegate_->GetJavaScriptDialogManager(this);
+
+  std::vector<protocol::PageHandler*> page_handlers =
+      protocol::PageHandler::EnabledForWebContents(this);
+
+  if (suppress_this_message || (!dialog_manager_ && !page_handlers.size())) {
+    callback.Run(false, true, base::string16());
     return;
   }
 
   is_showing_before_unload_dialog_ = true;
-  dialog_manager_ = delegate_->GetJavaScriptDialogManager(this);
-  dialog_manager_->RunBeforeUnloadDialog(
-      this, is_reload,
-      base::Bind(&WebContentsImpl::OnDialogClosed, base::Unretained(this),
-                 render_frame_host->GetProcess()->GetID(),
-                 render_frame_host->GetRoutingID(), reply_msg,
-                 false));
+
+  scoped_refptr<CloseDialogCallbackWrapper> wrapper =
+      new CloseDialogCallbackWrapper(callback);
+  callback = base::Bind(&CloseDialogCallbackWrapper::Run, wrapper);
+
+  GURL frame_url = rfhi->GetLastCommittedURL();
+  for (auto* handler : page_handlers) {
+    handler->DidRunBeforeUnloadConfirm(frame_url, base::Bind(callback, false));
+  }
+
+  if (dialog_manager_) {
+    dialog_manager_->RunBeforeUnloadDialog(this, is_reload,
+                                           base::Bind(callback, false));
+  }
 }
 
 void WebContentsImpl::RunFileChooser(RenderFrameHost* render_frame_host,
@@ -5511,6 +5636,12 @@ void WebContentsImpl::OnDialogClosed(int render_process_id,
 
   if (rfh) {
     rfh->JavaScriptDialogClosed(reply_msg, success, user_input);
+
+    std::vector<protocol::PageHandler*> page_handlers =
+        protocol::PageHandler::EnabledForWebContents(this);
+    for (auto* handler : page_handlers)
+      handler->DidCloseJavaScriptDialog(success, user_input);
+
   } else {
     // Don't leak the sync IPC reply if the RFH or process is gone.
     delete reply_msg;
@@ -5735,9 +5866,12 @@ void WebContentsImpl::MediaResized(
     observer.MediaResized(size, id);
 }
 
-const WebContents::VideoSizeMap&
-WebContentsImpl::GetCurrentlyPlayingVideoSizes() {
-  return cached_video_sizes_;
+base::Optional<gfx::Size> WebContentsImpl::GetFullscreenVideoSize() {
+  base::Optional<WebContentsObserver::MediaPlayerId> id =
+      media_web_contents_observer_->GetFullscreenVideoMediaPlayerId();
+  if (id && cached_video_sizes_.count(id.value()))
+    return base::Optional<gfx::Size>(cached_video_sizes_[id.value()]);
+  return base::Optional<gfx::Size>();
 }
 
 int WebContentsImpl::GetCurrentlyPlayingVideoCount() {
@@ -5898,6 +6032,10 @@ void WebContentsImpl::MediaMutedStatusChanged(
     bool muted) {
   for (auto& observer : observers_)
     observer.MediaMutedStatusChanged(id, muted);
+}
+
+void WebContentsImpl::SetVisibilityForChildViews(bool visible) {
+  GetMainFrame()->SetVisibilityForChildViews(visible);
 }
 
 }  // namespace content

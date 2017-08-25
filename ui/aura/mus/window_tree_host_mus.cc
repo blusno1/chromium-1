@@ -151,6 +151,12 @@ void WindowTreeHostMus::CancelWindowMove() {
   delegate_->OnWindowTreeHostCancelWindowMove(this);
 }
 
+void WindowTreeHostMus::ConfineCursorToBounds(
+    const gfx::Rect& bounds_in_pixels) {
+  delegate_->OnWindowTreeHostConfineCursorToBounds(bounds_in_pixels,
+                                                   display_id_);
+}
+
 display::Display WindowTreeHostMus::GetDisplay() const {
   display::Display display;
   display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_, &display);
@@ -202,6 +208,20 @@ void WindowTreeHostMus::MoveCursorToScreenLocationInPixels(
       screen_location_in_pixels, display_id_);
 
   Env::GetInstance()->set_last_mouse_location(location_in_pixels);
+}
+
+gfx::Transform WindowTreeHostMus::GetRootTransformForLocalEventCoordinates()
+    const {
+  if (WindowMus::Get(window())->window_mus_type() !=
+      WindowMusType::DISPLAY_MANUALLY_CREATED) {
+    return WindowTreeHost::GetRootTransformForLocalEventCoordinates();
+  }
+  // Local events already have the transform set on the window applied, so
+  // don't apply it again.
+  gfx::Transform transform;
+  const float scale = window()->layer()->device_scale_factor();
+  transform.Scale(scale, scale);
+  return transform;
 }
 
 }  // namespace aura

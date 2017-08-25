@@ -56,8 +56,10 @@ void ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
 
   options->environ = delegate_->GetEnvironment();
 
+  bool no_sandbox = command_line_->HasSwitch(switches::kNoSandbox);
+
   if (base::FeatureList::IsEnabled(features::kMacV2Sandbox) &&
-      GetProcessType() == switches::kRendererProcess) {
+      GetProcessType() == switches::kRendererProcess && !no_sandbox) {
     seatbelt_exec_client_ = base::MakeUnique<sandbox::SeatbeltExecClient>();
     base::StringPiece renderer_sb = GetContentClient()->GetDataResource(
         IDR_RENDERER_SANDBOX_V2_PROFILE, ui::SCALE_FACTOR_NONE);
@@ -172,7 +174,8 @@ void ChildProcessLauncherHelper::ForceNormalProcessTerminationSync(
 void ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread(
     base::Process process,
     bool background,
-    bool boost_for_pending_views) {
+    bool boost_for_pending_views,
+    ChildProcessImportance importance) {
   if (process.CanBackgroundProcesses())
     process.SetProcessBackgrounded(MachBroker::GetInstance(), background);
 }

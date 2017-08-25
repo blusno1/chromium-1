@@ -39,10 +39,10 @@
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/plugins/PluginView.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimationHost.h"
@@ -302,6 +302,12 @@ void ScrollingCoordinator::UpdateLayerPositionConstraint(PaintLayer* layer) {
 
 void ScrollingCoordinator::WillDestroyScrollableArea(
     ScrollableArea* scrollable_area) {
+  {
+    // Remove any callback from |scroll_layer| to this object.
+    DisableCompositingQueryAsserts disabler;
+    if (GraphicsLayer* scroll_layer = scrollable_area->LayerForScrolling())
+      scroll_layer->SetScrollableArea(nullptr, false);
+  }
   RemoveWebScrollbarLayer(scrollable_area, kHorizontalScrollbar);
   RemoveWebScrollbarLayer(scrollable_area, kVerticalScrollbar);
 }
@@ -779,10 +785,12 @@ void ScrollingCoordinator::SetTouchEventTargetRects(
   layers_with_touch_rects_.clear();
   for (const auto& layer_rect : layer_rects) {
     if (!layer_rect.value.IsEmpty()) {
+      DCHECK(layer_rect.key->IsRootLayer() || layer_rect.key->Parent());
       const PaintLayer* composited_layer =
           layer_rect.key
               ->EnclosingLayerForPaintInvalidationCrossingFrameBoundaries();
-      DCHECK(composited_layer);
+      if (!composited_layer)
+        continue;
       layers_with_touch_rects_.insert(composited_layer);
       GraphicsLayer* main_graphics_layer =
           composited_layer->GraphicsLayerBacking(

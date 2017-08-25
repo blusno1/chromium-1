@@ -40,14 +40,15 @@ InputHandlerWrapper::~InputHandlerWrapper() {
 void InputHandlerWrapper::NeedsMainFrame() {
   main_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&RenderWidget::SetNeedsMainFrame, render_widget_));
+      base::BindOnce(&RenderWidget::SetNeedsMainFrame, render_widget_));
 }
 
 void InputHandlerWrapper::TransferActiveWheelFlingAnimation(
     const blink::WebActiveWheelFlingParameters& params) {
   main_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&RenderWidget::TransferActiveWheelFlingAnimation,
-                            render_widget_, params));
+      FROM_HERE,
+      base::BindOnce(&RenderWidget::TransferActiveWheelFlingAnimation,
+                     render_widget_, params));
 }
 
 void InputHandlerWrapper::DispatchNonBlockingEventToMainThread(
@@ -111,9 +112,10 @@ void InputHandlerWrapper::GenerateScrollBeginAndSendToMainThread(
 
 void InputHandlerWrapper::SetWhiteListedTouchAction(
     cc::TouchAction touch_action,
-    uint32_t unique_touch_event_id) {
-  input_handler_manager_->SetWhiteListedTouchAction(routing_id_, touch_action,
-                                                    unique_touch_event_id);
+    uint32_t unique_touch_event_id,
+    ui::InputHandlerProxy::EventDisposition event_disposition) {
+  input_handler_manager_->SetWhiteListedTouchAction(
+      routing_id_, touch_action, unique_touch_event_id, event_disposition);
 }
 
 }  // namespace content

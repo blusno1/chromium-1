@@ -104,13 +104,12 @@ class Internals final : public GarbageCollected<Internals>,
   int getResourcePriority(const String& url, Document*);
   String getResourceHeader(const String& url, const String& header, Document*);
 
-  bool isSharingStyle(Element*, Element*) const;
-
   CSSStyleDeclaration* computedStyleIncludingVisitedInfo(Node*) const;
 
   void setBrowserControlsState(float top_height,
                                float bottom_height,
                                bool shrinks_layout);
+  void setBrowserControlsShownRatio(float);
 
   ShadowRoot* createUserAgentShadowRoot(Element* host);
 

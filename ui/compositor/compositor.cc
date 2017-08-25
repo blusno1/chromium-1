@@ -33,12 +33,13 @@
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/context_provider.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_settings.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/compositor_vsync_manager.h"
@@ -60,22 +61,26 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
                        ui::ContextFactoryPrivate* context_factory_private,
                        scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                        bool enable_surface_synchronization,
-                       bool external_begin_frames_enabled)
+                       bool enable_pixel_canvas,
+                       bool external_begin_frames_enabled,
+                       bool force_software_compositor)
     : context_factory_(context_factory),
       context_factory_private_(context_factory_private),
       frame_sink_id_(frame_sink_id),
       task_runner_(task_runner),
       vsync_manager_(new CompositorVSyncManager()),
       external_begin_frames_enabled_(external_begin_frames_enabled),
+      force_software_compositor_(force_software_compositor),
       layer_animator_collection_(this),
       scheduled_timeout_(base::TimeTicks()),
       allow_locks_to_extend_timeout_(false),
+      is_pixel_canvas_(enable_pixel_canvas),
       weak_ptr_factory_(this),
       lock_timeout_weak_ptr_factory_(this) {
   if (context_factory_private) {
-    context_factory_private->GetFrameSinkManager()
-        ->surface_manager()
-        ->RegisterFrameSinkId(frame_sink_id_);
+    auto* host_frame_sink_manager =
+        context_factory_private_->GetHostFrameSinkManager();
+    host_frame_sink_manager->RegisterFrameSinkId(frame_sink_id_, this);
   }
   root_web_layer_ = cc::Layer::Create();
 
@@ -166,7 +171,7 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
       gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
 
   settings.disallow_non_exact_resource_reuse =
-      command_line->HasSwitch(cc::switches::kDisallowNonExactResourceReuse);
+      command_line->HasSwitch(switches::kDisallowNonExactResourceReuse);
 
   settings.wait_for_all_pipeline_stages_before_draw =
       command_line->HasSwitch(cc::switches::kRunAllCompositorStagesBeforeDraw);
@@ -227,9 +232,7 @@ Compositor::~Compositor() {
       host_frame_sink_manager->UnregisterFrameSinkHierarchy(frame_sink_id_,
                                                             client);
     }
-    context_factory_private_->GetFrameSinkManager()
-        ->surface_manager()
-        ->InvalidateFrameSinkId(frame_sink_id_);
+    host_frame_sink_manager->InvalidateFrameSinkId(frame_sink_id_);
   }
 }
 
@@ -323,11 +326,13 @@ void Compositor::SetLatencyInfo(const ui::LatencyInfo& latency_info) {
   host_->QueueSwapPromise(std::move(swap_promise));
 }
 
-void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
+void Compositor::SetScaleAndSize(float scale,
+                                 const gfx::Size& size_in_pixel,
+                                 const viz::LocalSurfaceId& local_surface_id) {
   DCHECK_GT(scale, 0);
   if (!size_in_pixel.IsEmpty()) {
     size_ = size_in_pixel;
-    host_->SetViewportSize(size_in_pixel);
+    host_->SetViewportSize(size_in_pixel, local_surface_id);
     root_web_layer_->SetBounds(size_in_pixel);
     // TODO(fsamuel): Get rid of ContextFactoryPrivate.
     if (context_factory_private_)
@@ -336,19 +341,17 @@ void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
   if (device_scale_factor_ != scale) {
     device_scale_factor_ = scale;
     host_->SetDeviceScaleFactor(scale);
+    if (is_pixel_canvas())
+      host_->SetRecordingScaleFactor(scale);
     if (root_layer_)
       root_layer_->OnDeviceScaleFactorChanged(scale);
   }
 }
 
 void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space) {
-  blending_color_space_ = color_space;
-  output_color_space_ = blending_color_space_;
-  if (base::FeatureList::IsEnabled(features::kHighDynamicRange)) {
-    blending_color_space_ = gfx::ColorSpace::CreateExtendedSRGB();
-    output_color_space_ = gfx::ColorSpace::CreateSCRGBLinear();
-  }
-  host_->SetRasterColorSpace(color_space.GetParametricApproximation());
+  output_color_space_ = color_space;
+  blending_color_space_ = output_color_space_.GetBlendingColorSpace();
+  host_->SetRasterColorSpace(output_color_space_.GetRasterColorSpace());
   // Color space is reset when the output surface is lost, so this must also be
   // updated then.
   // TODO(fsamuel): Get rid of this.
@@ -556,6 +559,12 @@ void Compositor::DidSubmitCompositorFrame() {
     observer.OnCompositingStarted(this, start_time);
 }
 
+void Compositor::OnFirstSurfaceActivation(
+    const viz::SurfaceInfo& surface_info) {
+  // TODO(fsamuel): Once surface synchronization is turned on, the fallback
+  // surface should be set here.
+}
+
 void Compositor::SetOutputIsSecure(bool output_is_secure) {
   if (context_factory_private_)
     context_factory_private_->SetOutputIsSecure(this, output_is_secure);
@@ -581,10 +590,9 @@ std::unique_ptr<CompositorLock> Compositor::GetCompositorLock(
   active_locks_.push_back(lock.get());
 
   bool should_extend_timeout = false;
-  if ((scheduled_timeout_.is_null() || allow_locks_to_extend_timeout_) &&
-      !timeout.is_zero()) {
+  if ((was_empty || allow_locks_to_extend_timeout_) && !timeout.is_zero()) {
     const base::TimeTicks time_to_timeout = base::TimeTicks::Now() + timeout;
-    // For the first lock, scheduled_timeout_.is_null is true,
+    // For the first lock, scheduled_timeout.is_null is true,
     // |time_to_timeout| will always larger than |scheduled_timeout_|. And it
     // is ok to invalidate the weakptr of |lock_timeout_weak_ptr_factory_|.
     if (time_to_timeout > scheduled_timeout_) {

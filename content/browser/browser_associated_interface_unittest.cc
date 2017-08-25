@@ -95,7 +95,7 @@ class TestDriverMessageFilter
   void OnFilterRemoved() override {
     // Check that the bindings are cleared by
     // BrowserAssociatedInterface::ClearBindings() callbacks.
-    EXPECT_FALSE(internal_state_->bindings_.get());
+    EXPECT_FALSE(internal_state_->bindings_.has_value());
   }
 
   // mojom::BrowserAssociatedInterfaceTestDriver:
@@ -119,7 +119,7 @@ class TestClientRunner {
       : client_thread_("Test client") {
     client_thread_.Start();
     client_thread_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&RunTestClient, base::Passed(&pipe)));
+        FROM_HERE, base::BindOnce(&RunTestClient, base::Passed(&pipe)));
   }
 
   ~TestClientRunner() {

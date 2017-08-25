@@ -4,54 +4,48 @@
 <script src="../../../http/tests/inspector/elements-test.js"></script>
 <script>
 
-function test()
-{
-    var testSuite = [];
+function test() {
+  var testSuite = [];
 
-    function testSetUp(next)
-    {
-        InspectorTest.addResult("Setting up");
-        InspectorTest.expandElementsTree(callback);
+  function testSetUp(next) {
+    TestRunner.addResult('Setting up');
+    ElementsTestRunner.expandElementsTree(callback);
 
-        function callback()
-        {
-            InspectorTest.expandElementsTree(next);
-        }
+    function callback() {
+      ElementsTestRunner.expandElementsTree(next);
     }
-    testSuite.push(testSetUp);
+  }
+  testSuite.push(testSetUp);
 
 
-    function testRemove(callback)
-    {
-        var node = InspectorTest.expandedNodeWithId("node-to-remove"); 
-        node.removeNode(callback);
-    }
-    testSuite.push(InspectorTest.generateUndoTest(testRemove));
+  function testRemove(callback) {
+    var node = ElementsTestRunner.expandedNodeWithId('node-to-remove');
+    node.removeNode(callback);
+  }
+  testSuite.push(ElementsTestRunner.generateUndoTest(testRemove));
 
 
-    function testSetNodeName(callback)
-    {
-        var node = InspectorTest.expandedNodeWithId("node-to-set-name"); 
-        node.setNodeName("span", callback);
-    }
-    testSuite.push(InspectorTest.generateUndoTest(testSetNodeName));
+  function testSetNodeName(callback) {
+    var node = ElementsTestRunner.expandedNodeWithId('node-to-set-name');
+    node.setNodeName('span', callback);
+  }
+  testSuite.push(ElementsTestRunner.generateUndoTest(testSetNodeName));
 
 
-    function testSetNodeValue(callback)
-    {
-        var node = InspectorTest.expandedNodeWithId("node-to-set-value"); 
-        node.firstChild.setNodeValue("New Text", callback);
-    }
-    testSuite.push(InspectorTest.generateUndoTest(testSetNodeValue));
+  function testSetNodeValue(callback) {
+    var node = ElementsTestRunner.expandedNodeWithId('node-to-set-value');
+    node.firstChild.setNodeValue('New Text', callback);
+  }
+  testSuite.push(ElementsTestRunner.generateUndoTest(testSetNodeValue));
 
-    function testEditAsHTML(callback)
-    {
-        var node = InspectorTest.expandedNodeWithId("node-to-edit-as-html"); 
-        node.setOuterHTML("<div id=\"node-to-edit-as-html\"><div id=\"span2\">Text2</div></div><span>Second node</span>", callback);
-    }
-    testSuite.push(InspectorTest.generateUndoTest(testEditAsHTML));
+  function testEditAsHTML(callback) {
+    var node = ElementsTestRunner.expandedNodeWithId('node-to-edit-as-html');
+    node.setOuterHTML(
+        '<div id="node-to-edit-as-html"><div id="span2">Text2</div></div><span>Second node</span>', callback);
+  }
+  testSuite.push(ElementsTestRunner.generateUndoTest(testEditAsHTML));
 
-    InspectorTest.runTestSuite(testSuite);
+  TestRunner.runTestSuite(testSuite);
 }
 
 </script>

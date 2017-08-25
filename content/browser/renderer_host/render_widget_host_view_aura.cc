@@ -61,7 +61,7 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/web/WebCompositionUnderline.h"
+#include "third_party/WebKit/public/web/WebImeTextSpan.h"
 #include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -773,6 +773,8 @@ void RenderWidgetHostViewAura::FocusedNodeTouched(
       ui::OnScreenKeyboardDisplayManager::GetInstance();
   DCHECK(osk_display_manager);
   if (editable && host_->GetView() && host_->delegate()) {
+    if (keyboard_observer_)
+      osk_display_manager->RemoveObserver(keyboard_observer_.get());
     keyboard_observer_.reset(new WinScreenKeyboardObserver(
         this, location_dips_screen, device_scale_factor_, window_));
     virtual_keyboard_requested_ =
@@ -1191,7 +1193,7 @@ void RenderWidgetHostViewAura::SetCompositionText(
   // TODO(suzhe): due to a bug of webkit, we can't use selection range with
   // composition string. See: https://bugs.webkit.org/show_bug.cgi?id=37788
   text_input_manager_->GetActiveWidget()->ImeSetComposition(
-      composition.text, composition.underlines, gfx::Range::InvalidRange(),
+      composition.text, composition.ime_text_spans, gfx::Range::InvalidRange(),
       composition.selection.end(), composition.selection.end());
 
   has_composition_text_ = !composition.text.empty();
@@ -1218,8 +1220,7 @@ void RenderWidgetHostViewAura::InsertText(const base::string16& text) {
   if (text_input_manager_ && text_input_manager_->GetActiveWidget()) {
     if (text.length())
       text_input_manager_->GetActiveWidget()->ImeCommitText(
-          text, std::vector<ui::CompositionUnderline>(),
-          gfx::Range::InvalidRange(), 0);
+          text, std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(), 0);
     else if (has_composition_text_)
       text_input_manager_->GetActiveWidget()->ImeFinishComposingText(false);
   }
@@ -1839,7 +1840,7 @@ void RenderWidgetHostViewAura::OnWindowFocused(aura::Window* gained_focus,
 // RenderWidgetHostViewAura, aura::WindowTreeHostObserver implementation:
 
 void RenderWidgetHostViewAura::OnHostMovedInPixels(
-    const aura::WindowTreeHost* host,
+    aura::WindowTreeHost* host,
     const gfx::Point& new_origin_in_pixels) {
   TRACE_EVENT1("ui", "RenderWidgetHostViewAura::OnHostMovedInPixels",
                "new_origin_in_pixels", new_origin_in_pixels.ToString());
@@ -2150,8 +2151,6 @@ void RenderWidgetHostViewAura::InternalSetBounds(const gfx::Rect& rect) {
   // a Window::SetBoundsInternal call.
   if (!in_bounds_changed_)
     window_->SetBounds(rect);
-  if (IsMus())
-    local_surface_id_ = aura::WindowMus::Get(window_)->GetLocalSurfaceId();
   host_->WasResized();
   if (delegated_frame_host_)
     delegated_frame_host_->WasResized();
@@ -2313,7 +2312,7 @@ viz::FrameSinkId RenderWidgetHostViewAura::GetFrameSinkId() {
 }
 
 viz::LocalSurfaceId RenderWidgetHostViewAura::GetLocalSurfaceId() const {
-  return local_surface_id_;
+  return window_->GetLocalSurfaceId();
 }
 
 viz::SurfaceId RenderWidgetHostViewAura::SurfaceIdForTesting() const {

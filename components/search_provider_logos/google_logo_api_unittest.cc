@@ -7,14 +7,31 @@
 #include <memory>
 #include <string>
 
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
+#include "base/path_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-using testing::Eq;
-
 namespace search_provider_logos {
+
+TEST(GoogleNewLogoApiTest, AppendsQueryParams) {
+  const GURL logo_url("https://base.doo/target");
+
+  EXPECT_EQ(
+      GURL("https://base.doo/target?async=ntp:1"),
+      GoogleNewAppendQueryparamsToLogoURL(false, logo_url, std::string()));
+  EXPECT_EQ(GURL("https://base.doo/target?async=ntp:1,graybg:1"),
+            GoogleNewAppendQueryparamsToLogoURL(true, logo_url, std::string()));
+  EXPECT_EQ(
+      GURL("https://base.doo/target?async=ntp:1,es_dfp:fingerprint"),
+      GoogleNewAppendQueryparamsToLogoURL(false, logo_url, "fingerprint"));
+  EXPECT_EQ(
+      GURL("https://base.doo/target?async=ntp:1,graybg:1,es_dfp:fingerprint"),
+      GoogleNewAppendQueryparamsToLogoURL(true, logo_url, "fingerprint"));
+}
 
 TEST(GoogleNewLogoApiTest, ResolvesRelativeUrl) {
   const GURL base_url("https://base.doo/");
@@ -96,6 +113,54 @@ TEST(GoogleNewLogoApiTest, ParsesAnimatedImage) {
   EXPECT_EQ(GURL("https://www.doodle.com/image.gif"),
             logo->metadata.animated_url);
   EXPECT_EQ("abc", logo->encoded_image->data());
+}
+
+TEST(GoogleNewLogoApiTest, ParsesCapturedApiResult) {
+  const GURL base_url("https://base.doo/");
+
+  base::FilePath test_data_dir;
+  ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
+  test_data_dir = test_data_dir.AppendASCII("components")
+                      .AppendASCII("test")
+                      .AppendASCII("data")
+                      .AppendASCII("search_provider_logos");
+
+  const struct TestCase {
+    const char* file;
+    bool has_image_data;
+  } test_cases[] = {
+      {"ddljson_android0.json", true}, {"ddljson_android0_fp.json", false},
+      {"ddljson_android1.json", true}, {"ddljson_android1_fp.json", false},
+      {"ddljson_android2.json", true}, {"ddljson_android2_fp.json", false},
+      {"ddljson_android3.json", true}, {"ddljson_android3_fp.json", false},
+      {"ddljson_android4.json", true}, {"ddljson_android4_fp.json", false},
+      {"ddljson_desktop0.json", true}, {"ddljson_desktop0_fp.json", false},
+      {"ddljson_desktop1.json", true}, {"ddljson_desktop1_fp.json", false},
+      {"ddljson_desktop2.json", true}, {"ddljson_desktop2_fp.json", false},
+      {"ddljson_desktop3.json", true}, {"ddljson_desktop3_fp.json", false},
+      {"ddljson_desktop4.json", true}, {"ddljson_desktop4_fp.json", false},
+      {"ddljson_ios0.json", true},     {"ddljson_ios0_fp.json", false},
+      {"ddljson_ios1.json", true},     {"ddljson_ios1_fp.json", false},
+      {"ddljson_ios2.json", true},     {"ddljson_ios2_fp.json", false},
+      {"ddljson_ios3.json", true},     {"ddljson_ios3_fp.json", false},
+      {"ddljson_ios4.json", true},     {"ddljson_ios4_fp.json", false},
+  };
+
+  for (const TestCase& test_case : test_cases) {
+    std::string json;
+    ASSERT_TRUE(base::ReadFileToString(
+        test_data_dir.AppendASCII(test_case.file), &json))
+        << test_case.file;
+
+    bool failed = false;
+    std::unique_ptr<EncodedLogo> logo = GoogleNewParseLogoResponse(
+        base_url, base::MakeUnique<std::string>(json), base::Time(), &failed);
+
+    EXPECT_FALSE(failed) << test_case.file;
+    EXPECT_TRUE(logo) << test_case.file;
+    bool has_image_data = logo && logo->encoded_image.get();
+    EXPECT_EQ(has_image_data, test_case.has_image_data) << test_case.file;
+  }
 }
 
 }  // namespace search_provider_logos

@@ -108,6 +108,7 @@ class RendererFactoryImpl final : public PipelineTestRendererFactory {
 PipelineIntegrationTestBase::PipelineIntegrationTestBase()
     : hashing_enabled_(false),
       clockless_playback_(false),
+      webaudio_attached_(false),
       pipeline_(
           new PipelineImpl(scoped_task_environment_.GetMainThreadTaskRunner(),
                            &media_log_)),
@@ -140,6 +141,10 @@ void PipelineIntegrationTestBase::OnSeeked(base::TimeDelta seek_time,
 
 void PipelineIntegrationTestBase::OnStatusCallback(PipelineStatus status) {
   pipeline_status_ = status;
+
+  if (pipeline_status_ != PIPELINE_OK && pipeline_->IsRunning())
+    pipeline_->Stop();
+
   scoped_task_environment_.GetMainThreadTaskRunner()->PostTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
@@ -191,6 +196,7 @@ PipelineStatus PipelineIntegrationTestBase::WaitUntilEndedOrError() {
 void PipelineIntegrationTestBase::OnError(PipelineStatus status) {
   DCHECK_NE(status, PIPELINE_OK);
   pipeline_status_ = status;
+  pipeline_->Stop();
   scoped_task_environment_.GetMainThreadTaskRunner()->PostTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
@@ -202,7 +208,8 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
     CreateVideoDecodersCB prepend_video_decoders_cb,
     CreateAudioDecodersCB prepend_audio_decoders_cb) {
   hashing_enabled_ = test_type & kHashed;
-  clockless_playback_ = test_type & kClockless;
+  clockless_playback_ = !(test_type & kNoClockless);
+  webaudio_attached_ = test_type & kWebAudio;
 
   EXPECT_CALL(*this, OnMetadata(_))
       .Times(AtMost(1))
@@ -437,6 +444,10 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
             ? AudioParameters()
             : AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
                               CHANNEL_LAYOUT_STEREO, 44100, 16, 512)));
+    if (webaudio_attached_) {
+      clockless_audio_sink_->SetIsOptimizedForHardwareParametersForTesting(
+          false);
+    }
   }
 
   std::unique_ptr<AudioRenderer> audio_renderer(new AudioRendererImpl(
@@ -454,6 +465,9 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
     else
       audio_sink_->StartAudioHashForTesting();
   }
+
+  static_cast<AudioRendererImpl*>(audio_renderer.get())
+      ->SetPlayDelayCBForTesting(std::move(audio_play_delay_cb_));
 
   std::unique_ptr<RendererImpl> renderer_impl(
       new RendererImpl(scoped_task_environment_.GetMainThreadTaskRunner(),
@@ -535,7 +549,7 @@ PipelineStatus PipelineIntegrationTestBase::StartPipelineWithMediaSource(
     uint8_t test_type,
     FakeEncryptedMedia* encrypted_media) {
   hashing_enabled_ = test_type & kHashed;
-  clockless_playback_ = test_type & kClockless;
+  clockless_playback_ = !(test_type & kNoClockless);
 
   if (!(test_type & kExpectDemuxerFailure))
     EXPECT_CALL(*source, InitSegmentReceivedMock(_)).Times(AtLeast(1));

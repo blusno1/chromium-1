@@ -27,14 +27,18 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT TracingObserver
   void OnTraceLogEnabled() override;
   void OnTraceLogDisabled() override;
 
-  bool AddDumpToTraceIfEnabled(const base::trace_event::MemoryDumpRequestArgs&,
-                               const base::ProcessId,
-                               const base::trace_event::ProcessMemoryDump*);
+  bool AddChromeDumpToTraceIfEnabled(
+      const base::trace_event::MemoryDumpRequestArgs&,
+      const base::trace_event::ProcessMemoryDump*);
   bool AddOsDumpToTraceIfEnabled(
       const base::trace_event::MemoryDumpRequestArgs&,
       const base::ProcessId,
       const mojom::OSMemDump*,
       const std::vector<mojom::VmRegionPtr>*);
+
+  static void MemoryMapsAsValueInto(
+      const std::vector<mojom::VmRegionPtr>& memory_maps,
+      base::trace_event::TracedValue* value);
 
  private:
   // Returns true if the dump mode is allowed for current tracing session.

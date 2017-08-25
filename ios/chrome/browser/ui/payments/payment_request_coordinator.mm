@@ -63,6 +63,7 @@ const NSTimeInterval kUpdatePaymentSummaryItemIntervalSeconds = 10.0;
 @synthesize pageHost = _pageHost;
 @synthesize connectionSecure = _connectionSecure;
 @synthesize pending = _pending;
+@synthesize cancellable = _cancellable;
 @synthesize delegate = _delegate;
 
 - (void)start {
@@ -74,6 +75,8 @@ const NSTimeInterval kUpdatePaymentSummaryItemIntervalSeconds = 10.0;
   [_viewController setPageTitle:_pageTitle];
   [_viewController setPageHost:_pageHost];
   [_viewController setConnectionSecure:_connectionSecure];
+  [_viewController setPending:!_paymentRequest->payment_instruments_ready()];
+  [_viewController setCancellable:YES];
   [_viewController setDelegate:self];
   [_viewController setDataSource:_mediator];
   [_viewController loadModel];
@@ -92,11 +95,15 @@ const NSTimeInterval kUpdatePaymentSummaryItemIntervalSeconds = 10.0;
 }
 
 - (void)stop {
+  [self stopWithCallback:nil];
+}
+
+- (void)stopWithCallback:(ProceduralBlock)callback {
   [_updatePaymentSummaryItemTimer invalidate];
 
   [[_navigationController presentingViewController]
       dismissViewControllerAnimated:YES
-                         completion:nil];
+                         completion:callback];
   [_addressEditCoordinator stop];
   _addressEditCoordinator = nil;
   [_creditCardEditCoordinator stop];
@@ -123,13 +130,17 @@ const NSTimeInterval kUpdatePaymentSummaryItemIntervalSeconds = 10.0;
 
 - (void)setPending:(BOOL)pending {
   _pending = pending;
-  _viewController.view.userInteractionEnabled = !pending;
   [_viewController setPending:pending];
   [_viewController loadModel];
   [[_viewController collectionView] reloadData];
 }
 
-#pragma mark - Public methods
+- (void)setCancellable:(BOOL)cancellable {
+  _cancellable = cancellable;
+  [_viewController setCancellable:cancellable];
+}
+
+#pragma mark - Public Methods
 
 - (void)
 requestFullCreditCard:(const autofill::CreditCard&)card
@@ -147,7 +158,9 @@ requestFullCreditCard:(const autofill::CreditCard&)card
   BOOL totalValueChanged =
       (_paymentRequest->payment_details().total != paymentDetails.total);
   [_mediator setTotalValueChanged:totalValueChanged];
-  // Update the payment summary item.
+
+  _paymentRequest->UpdatePaymentDetails(paymentDetails);
+
   [_viewController updatePaymentSummaryItem];
 
   if (totalValueChanged) {
@@ -160,8 +173,6 @@ requestFullCreditCard:(const autofill::CreditCard&)card
                               userInfo:nil
                                repeats:NO];
   }
-
-  _paymentRequest->UpdatePaymentDetails(paymentDetails);
 
   // If a shipping address has been selected and there are available shipping
   // options, set it as the selected shipping address.
@@ -331,6 +342,8 @@ requestFullCreditCard:(const autofill::CreditCard&)card
 - (void)paymentItemsDisplayCoordinatorDidConfirm:
     (PaymentItemsDisplayCoordinator*)coordinator {
   [_delegate paymentRequestCoordinatorDidConfirm:self];
+  [_itemsDisplayCoordinator stop];
+  _itemsDisplayCoordinator = nil;
 }
 
 #pragma mark - ContactInfoSelectionCoordinatorDelegate

@@ -57,6 +57,7 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
+#include "v8/include/v8.h"
 
 namespace blink {
 
@@ -81,13 +82,19 @@ PassRefPtr<DrawingBuffer> DrawingBuffer::Create(
     WebGLVersion webgl_version,
     ChromiumImageUsage chromium_image_usage,
     const CanvasColorParams& color_params) {
-  DCHECK(context_provider);
-
   if (g_should_fail_drawing_buffer_creation_for_testing) {
     g_should_fail_drawing_buffer_creation_for_testing = false;
     return nullptr;
   }
 
+  CheckedNumeric<int> data_size = color_params.BytesPerPixel();
+  data_size *= size.Width();
+  data_size *= size.Height();
+  if (!data_size.IsValid() ||
+      data_size.ValueOrDie() > v8::TypedArray::kMaxLength)
+    return nullptr;
+
+  DCHECK(context_provider);
   std::unique_ptr<Extensions3DUtil> extensions_util =
       Extensions3DUtil::Create(context_provider->ContextGL());
   if (!extensions_util->IsValid()) {
@@ -580,9 +587,11 @@ DrawingBuffer::CreateOrRecycleColorBuffer() {
 }
 
 DrawingBuffer::ScopedRGBEmulationForBlitFramebuffer::
-    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer* drawing_buffer)
+    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer* drawing_buffer,
+                                         bool is_user_draw_framebuffer_bound)
     : drawing_buffer_(drawing_buffer) {
-  doing_work_ = drawing_buffer->SetupRGBEmulationForBlitFramebuffer();
+  doing_work_ = drawing_buffer->SetupRGBEmulationForBlitFramebuffer(
+      is_user_draw_framebuffer_bound);
 }
 
 DrawingBuffer::ScopedRGBEmulationForBlitFramebuffer::
@@ -1295,14 +1304,21 @@ GLenum DrawingBuffer::GetMultisampledRenderbufferFormat() {
   return GL_RGB8_OES;
 }
 
-bool DrawingBuffer::SetupRGBEmulationForBlitFramebuffer() {
+bool DrawingBuffer::SetupRGBEmulationForBlitFramebuffer(
+    bool is_user_draw_framebuffer_bound) {
   // We only need to do this work if:
+  //  - We are blitting to the default framebuffer
   //  - The user has selected alpha:false and antialias:false
   //  - We are using CHROMIUM_image with RGB emulation
   // macOS is the only platform on which this is necessary.
 
-  if (want_alpha_channel_ || anti_aliasing_mode_ != kNone)
+  if (is_user_draw_framebuffer_bound) {
     return false;
+  }
+
+  if (want_alpha_channel_ || anti_aliasing_mode_ != kNone) {
+    return false;
+  }
 
   if (!(ShouldUseChromiumImage() &&
         ContextProvider()->GetCapabilities().chromium_image_rgb_emulation))

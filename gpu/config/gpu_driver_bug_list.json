@@ -1,6 +1,6 @@
 {
   "name": "gpu driver bug list",
-  "version": "10.22",
+  "version": "10.26",
   "entries": [
     {
       "id": 1,
@@ -824,9 +824,13 @@
     {
       "id": 100,
       "description": "Disable Direct3D11 on systems with AMD switchable graphics",
-      "cr_bugs": [451420],
+      "cr_bugs": [451420, 755722],
       "os": {
         "type": "win"
+      },
+      "driver_date": {
+        "op": "<",
+        "value": "2016.6"
       },
       "multi_gpu_style": "amd_switchable",
       "features": [
@@ -2443,6 +2447,7 @@
       "vendor_id": "0x8086",
       "device_id": ["0x0412", "0x0d26", "0x0a2e", "0x0a26", "0x0d22", "0x161e",
                     "0x1626", "0x162b", "0x1622"],
+      "multi_gpu_category": "any",
       "features": [
         "avoid_stencil_buffers"
       ]
@@ -2571,6 +2576,35 @@
       },
       "features": [
         "dont_disable_webgl_when_compositor_context_lost"
+      ]
+    },
+    {
+      "id": 238,
+      "description": "On Intel GPUs MSAA performance is not acceptable for GPU rasterization",
+      "cr_bugs": [527565, 751919],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "multi_gpu_category": "any",
+      "features": [
+        "msaa_is_slow"
+      ]
+    },
+    {
+      "id": 239,
+      "description": "Reset TexImage2D base level to 0 on Intel Mac 10.12.4",
+      "cr_bugs": [705865],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": ">=",
+          "value": "10.12.4"
+        }
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "reset_teximage2d_base_level"
       ]
     }
   ],

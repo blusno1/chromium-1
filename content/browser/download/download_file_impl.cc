@@ -67,7 +67,9 @@ DownloadFileImpl::SourceStream::SourceStream(
       bytes_written_(0),
       finished_(false),
       index_(0u),
-      stream_reader_(std::move(stream_reader)) {}
+      stream_reader_(std::move(stream_reader)),
+      completion_status_(DOWNLOAD_INTERRUPT_REASON_NONE),
+      is_response_completed_(false) {}
 
 DownloadFileImpl::SourceStream::SourceStream(
     int64_t offset,
@@ -78,12 +80,25 @@ DownloadFileImpl::SourceStream::SourceStream(
       bytes_written_(0),
       finished_(false),
       index_(0u),
+      completion_status_(DOWNLOAD_INTERRUPT_REASON_NONE),
+      is_response_completed_(false),
       consumer_handle_(std::move(consumer_handle)),
       handle_watcher_(base::MakeUnique<mojo::SimpleWatcher>(
           FROM_HERE,
           mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC)) {}
 
 DownloadFileImpl::SourceStream::~SourceStream() = default;
+
+void DownloadFileImpl::SourceStream::OnResponseCompleted(
+    DownloadInterruptReason status) {
+  // This can be called before or after data pipe is completely drained. So we
+  // need to pass the |completion_status_| to DownloadFileImpl if the data pipe
+  // is already drained.
+  is_response_completed_ = true;
+  completion_status_ = status;
+  if (completion_callback_)
+    std::move(completion_callback_).Run(this);
+}
 
 void DownloadFileImpl::SourceStream::OnWriteBytesToDisk(int64_t bytes_write) {
   bytes_written_ += bytes_write;
@@ -127,23 +142,25 @@ void DownloadFileImpl::SourceStream::ClearDataReadyCallback() {
     stream_reader_->RegisterCallback(base::Closure());
 }
 
-DownloadInterruptReason DownloadFileImpl::SourceStream::GetStatus() {
+DownloadInterruptReason DownloadFileImpl::SourceStream::GetCompletionStatus() {
   if (stream_reader_)
     return static_cast<DownloadInterruptReason>(stream_reader_->GetStatus());
-  // TODO(qinmin): figure out how to pass the complete status when data pipe is
-  // used.
-  return DOWNLOAD_INTERRUPT_REASON_NONE;
+  return completion_status_;
 }
 
-DownloadFileImpl::SourceStream::ReadResult DownloadFileImpl::SourceStream::Read(
-    scoped_refptr<net::IOBuffer>* data,
-    size_t* length) {
+void DownloadFileImpl::SourceStream::RegisterCompletionCallback(
+    DownloadFileImpl::SourceStream::CompletionCallback callback) {
+  completion_callback_ = std::move(callback);
+}
+
+DownloadFileImpl::SourceStream::StreamState
+DownloadFileImpl::SourceStream::Read(scoped_refptr<net::IOBuffer>* data,
+                                     size_t* length) {
   if (handle_watcher_) {
     *length = kBytesToRead;
     *data = new net::IOBuffer(kBytesToRead);
-    MojoResult mojo_result =
-        mojo::ReadDataRaw(consumer_handle_.get(), (*data)->data(),
-                          (uint32_t*)length, MOJO_READ_DATA_FLAG_NONE);
+    MojoResult mojo_result = consumer_handle_->ReadData(
+        (*data)->data(), (uint32_t*)length, MOJO_READ_DATA_FLAG_NONE);
     // TODO(qinmin): figure out when COMPLETE should be returned.
     switch (mojo_result) {
       case MOJO_RESULT_OK:
@@ -151,7 +168,11 @@ DownloadFileImpl::SourceStream::ReadResult DownloadFileImpl::SourceStream::Read(
       case MOJO_RESULT_SHOULD_WAIT:
         return EMPTY;
       case MOJO_RESULT_FAILED_PRECONDITION:
-        return COMPLETE;
+        if (is_response_completed_)
+          return COMPLETE;
+        consumer_handle_.reset();
+        ClearDataReadyCallback();
+        return WAIT_FOR_COMPLETION;
       case MOJO_RESULT_INVALID_ARGUMENT:
       case MOJO_RESULT_OUT_OF_RANGE:
       case MOJO_RESULT_BUSY:
@@ -260,7 +281,7 @@ void DownloadFileImpl::Initialize(
       IsSparseFile());
   if (result != DOWNLOAD_INTERRUPT_REASON_NONE) {
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(initialize_callback, result));
+                            base::BindOnce(initialize_callback, result));
     return;
   }
 
@@ -273,7 +294,7 @@ void DownloadFileImpl::Initialize(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(initialize_callback, DOWNLOAD_INTERRUPT_REASON_NONE));
+      base::BindOnce(initialize_callback, DOWNLOAD_INTERRUPT_REASON_NONE));
 
   // Initial pull from the straw from all source streams.
   for (auto& source_stream : source_streams_)
@@ -300,6 +321,13 @@ void DownloadFileImpl::AddDataPipeConsumerHandle(
   source_streams_[offset] = base::MakeUnique<SourceStream>(
       offset, length, std::move(consumer_handle));
   OnSourceStreamAdded(source_streams_[offset].get());
+}
+
+void DownloadFileImpl::OnResponseCompleted(int64_t offset,
+                         DownloadInterruptReason status) {
+  auto iter = source_streams_.find(offset);
+  if (iter != source_streams_.end())
+    iter->second->OnResponseCompleted(status);
 }
 
 void DownloadFileImpl::OnSourceStreamAdded(SourceStream* source_stream) {
@@ -424,9 +452,9 @@ void DownloadFileImpl::RenameWithRetryInternal(
       parameters->time_of_first_failure = base::TimeTicks::Now();
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&DownloadFileImpl::RenameWithRetryInternal,
-                   weak_factory_.GetWeakPtr(),
-                   base::Passed(std::move(parameters))),
+        base::BindOnce(&DownloadFileImpl::RenameWithRetryInternal,
+                       weak_factory_.GetWeakPtr(),
+                       base::Passed(std::move(parameters))),
         GetRetryDelayForFailedRename(attempt_number));
     return;
   }
@@ -463,9 +491,8 @@ void DownloadFileImpl::RenameWithRetryInternal(
   }
 
   BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(parameters->completion_callback, reason, new_path));
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(parameters->completion_callback, reason, new_path));
 }
 
 void DownloadFileImpl::Detach() {
@@ -517,7 +544,7 @@ void DownloadFileImpl::StreamActive(SourceStream* source_stream,
   size_t num_buffers = 0;
   size_t bytes_to_write = 0;
   bool should_terminate = false;
-  SourceStream::ReadResult state(SourceStream::EMPTY);
+  SourceStream::StreamState state(SourceStream::EMPTY);
   DownloadInterruptReason reason = DOWNLOAD_INTERRUPT_REASON_NONE;
   base::TimeDelta delta(
       base::TimeDelta::FromMilliseconds(kMaxTimeBlockingFileThreadMs));
@@ -558,21 +585,11 @@ void DownloadFileImpl::StreamActive(SourceStream* source_stream,
           }
         }
       } break;
-      case SourceStream::COMPLETE: {
-        reason = source_stream->GetStatus();
-        if (source_stream->length() == DownloadSaveInfo::kLengthFullContent &&
-            !received_slices_.empty() &&
-            (source_stream->offset() ==
-             received_slices_.back().offset +
-                 received_slices_.back().received_bytes) &&
-            reason == DownloadInterruptReason::
-                          DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE) {
-          // We are probably reaching the end of the stream, don't treat this
-          // as an error.
-          reason = DOWNLOAD_INTERRUPT_REASON_NONE;
-        }
-        SendUpdate();
-        }
+      case SourceStream::WAIT_FOR_COMPLETION:
+        source_stream->RegisterCompletionCallback(base::BindOnce(
+            &DownloadFileImpl::OnStreamCompleted, weak_factory_.GetWeakPtr()));
+        break;
+      case SourceStream::COMPLETE:
         break;
       default:
         NOTREACHED();
@@ -587,9 +604,9 @@ void DownloadFileImpl::StreamActive(SourceStream* source_stream,
   if (state == SourceStream::HAS_DATA && now - start > delta &&
       !should_terminate) {
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&DownloadFileImpl::StreamActive, weak_factory_.GetWeakPtr(),
-                   source_stream, MOJO_RESULT_OK));
+        FROM_HERE, base::BindOnce(&DownloadFileImpl::StreamActive,
+                                  weak_factory_.GetWeakPtr(), source_stream,
+                                  MOJO_RESULT_OK));
   }
 
   if (total_incoming_data_size)
@@ -597,10 +614,42 @@ void DownloadFileImpl::StreamActive(SourceStream* source_stream,
 
   RecordContiguousWriteTime(now - start);
 
-  // Take care of communication with our observer.
+  if (state == SourceStream::COMPLETE)
+    OnStreamCompleted(source_stream);
+  else
+    NotifyObserver(source_stream, reason, state, should_terminate);
+
+  if (net_log_.IsCapturing()) {
+    net_log_.AddEvent(net::NetLogEventType::DOWNLOAD_STREAM_DRAINED,
+                      base::Bind(&FileStreamDrainedNetLogCallback,
+                                 total_incoming_data_size, num_buffers));
+  }
+}
+
+void DownloadFileImpl::OnStreamCompleted(SourceStream* source_stream) {
+  DownloadInterruptReason reason = source_stream->GetCompletionStatus();
+  if (source_stream->length() == DownloadSaveInfo::kLengthFullContent &&
+      !received_slices_.empty() &&
+      (source_stream->offset() == received_slices_.back().offset +
+                                      received_slices_.back().received_bytes) &&
+      reason ==
+          DownloadInterruptReason::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE) {
+    // We are probably reaching the end of the stream, don't treat this
+    // as an error.
+    reason = DOWNLOAD_INTERRUPT_REASON_NONE;
+  }
+  SendUpdate();
+
+  NotifyObserver(source_stream, reason, SourceStream::COMPLETE, false);
+}
+
+void DownloadFileImpl::NotifyObserver(SourceStream* source_stream,
+                                      DownloadInterruptReason reason,
+                                      SourceStream::StreamState stream_state,
+                                      bool should_terminate) {
   if (reason != DOWNLOAD_INTERRUPT_REASON_NONE) {
     HandleStreamError(source_stream, reason);
-  } else if (state == SourceStream::COMPLETE || should_terminate) {
+  } else if (stream_state == SourceStream::COMPLETE || should_terminate) {
     // Signal successful completion or termination of the current stream.
     source_stream->ClearDataReadyCallback();
     source_stream->set_finished(true);
@@ -631,15 +680,10 @@ void DownloadFileImpl::StreamActive(SourceStream* source_stream,
       update_timer_.reset();
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
-          base::Bind(&DownloadDestinationObserver::DestinationCompleted,
-                     observer_, TotalBytesReceived(),
-                     base::Passed(&hash_state)));
+          base::BindOnce(&DownloadDestinationObserver::DestinationCompleted,
+                         observer_, TotalBytesReceived(),
+                         base::Passed(&hash_state)));
     }
-  }
-  if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(net::NetLogEventType::DOWNLOAD_STREAM_DRAINED,
-                            base::Bind(&FileStreamDrainedNetLogCallback,
-                                       total_incoming_data_size, num_buffers));
   }
 }
 
@@ -667,9 +711,9 @@ void DownloadFileImpl::SendUpdate() {
   // far along with received_slices_.
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&DownloadDestinationObserver::DestinationUpdate, observer_,
-                 TotalBytesReceived(), rate_estimator_.GetCountPerSecond(),
-                 received_slices_));
+      base::BindOnce(&DownloadDestinationObserver::DestinationUpdate, observer_,
+                     TotalBytesReceived(), rate_estimator_.GetCountPerSecond(),
+                     received_slices_));
 }
 
 void DownloadFileImpl::WillWriteToDisk(size_t data_len) {
@@ -794,8 +838,9 @@ void DownloadFileImpl::HandleStreamError(SourceStream* source_stream,
     std::unique_ptr<crypto::SecureHash> hash_state = file_.Finish();
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&DownloadDestinationObserver::DestinationError, observer_,
-                   reason, TotalBytesReceived(), base::Passed(&hash_state)));
+        base::BindOnce(&DownloadDestinationObserver::DestinationError,
+                       observer_, reason, TotalBytesReceived(),
+                       base::Passed(&hash_state)));
   }
 }
 
@@ -820,7 +865,7 @@ DownloadFileImpl::SourceStream* DownloadFileImpl::FindPrecedingNeighbor(
 void DownloadFileImpl::CancelRequest(int64_t offset) {
   if (!cancel_request_callback_.is_null()) {
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(cancel_request_callback_, offset));
+                            base::BindOnce(cancel_request_callback_, offset));
   }
 }
 

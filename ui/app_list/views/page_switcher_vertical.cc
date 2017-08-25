@@ -8,6 +8,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/pagination_model.h"
@@ -20,7 +21,7 @@
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/animation/ink_drop_painted_layer_delegates.h"
-#include "ui/views/controls/button/custom_button.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/layout/box_layout.h"
 
 namespace app_list {
@@ -45,10 +46,10 @@ constexpr SkColor kInkDropHighlightColor = SkColorSetA(kInkDropBaseColor, 15);
 
 constexpr SkScalar kStrokeWidth = SkIntToScalar(1);
 
-class PageSwitcherButton : public views::CustomButton {
+class PageSwitcherButton : public views::Button {
  public:
   explicit PageSwitcherButton(views::ButtonListener* listener)
-      : views::CustomButton(listener) {
+      : views::Button(listener) {
     SetInkDropMode(InkDropMode::ON);
   }
 
@@ -72,14 +73,9 @@ class PageSwitcherButton : public views::CustomButton {
   }
 
  protected:
-  bool IsTriggerableEvent(const ui::Event& event) override {
-    return event.IsMouseEvent() &&
-           (triggerable_event_flags() & event.flags()) != 0;
-  }
-
   std::unique_ptr<views::InkDrop> CreateInkDrop() override {
     std::unique_ptr<views::InkDropImpl> ink_drop =
-        CustomButton::CreateDefaultInkDropImpl();
+        Button::CreateDefaultInkDropImpl();
     ink_drop->SetShowHighlightOnHover(false);
     ink_drop->SetAutoHighlightMode(
         views::InkDropImpl::AutoHighlightMode::SHOW_ON_RIPPLE);
@@ -110,7 +106,7 @@ class PageSwitcherButton : public views::CustomButton {
   }
 
   void NotifyClick(const ui::Event& event) override {
-    CustomButton::NotifyClick(event);
+    Button::NotifyClick(event);
     GetInkDrop()->AnimateToState(views::InkDropState::ACTION_TRIGGERED);
   }
 
@@ -208,14 +204,14 @@ void PageSwitcherVertical::UpdateUIForDragPoint(const gfx::Point& point) {
   if (page >= 0 && page < button_count) {
     PageSwitcherButton* button =
         static_cast<PageSwitcherButton*>(buttons_->child_at(page));
-    button->SetState(views::CustomButton::STATE_HOVERED);
+    button->SetState(views::Button::STATE_HOVERED);
     return;
   }
 
   for (int i = 0; i < button_count; ++i) {
     PageSwitcherButton* button =
         static_cast<PageSwitcherButton*>(buttons_->child_at(i));
-    button->SetState(views::CustomButton::STATE_NORMAL);
+    button->SetState(views::Button::STATE_NORMAL);
   }
 }
 
@@ -245,6 +241,12 @@ void PageSwitcherVertical::ButtonPressed(views::Button* sender,
                                          const ui::Event& event) {
   for (int i = 0; i < buttons_->child_count(); ++i) {
     if (sender == static_cast<views::Button*>(buttons_->child_at(i))) {
+      if (model_->selected_page() == i)
+        break;
+      UMA_HISTOGRAM_ENUMERATION(
+          kAppListPageSwitcherSourceHistogram,
+          event.IsGestureEvent() ? kTouchPageIndicator : kClickPageIndicator,
+          kMaxAppListPageSwitcherSource);
       model_->SelectPage(i, true /* animate */);
       break;
     }

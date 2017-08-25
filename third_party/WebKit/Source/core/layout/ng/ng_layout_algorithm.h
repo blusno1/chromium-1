@@ -7,7 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/MinMaxSize.h"
-#include "core/layout/ng/ng_floats_utils.h"
+#include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_fragment_builder.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Optional.h"
@@ -15,7 +15,6 @@
 namespace blink {
 
 class ComputedStyle;
-class NGConstraintSpace;
 class NGLayoutResult;
 
 // Base class for all LayoutNG algorithms.
@@ -24,12 +23,23 @@ class CORE_EXPORT NGLayoutAlgorithm {
   STACK_ALLOCATED();
  public:
   NGLayoutAlgorithm(NGInputNodeType node,
-                    NGConstraintSpace* space,
+                    RefPtr<const ComputedStyle> style,
+                    const NGConstraintSpace& space,
+                    TextDirection direction,
                     NGBreakTokenType* break_token)
       : node_(node),
         constraint_space_(space),
         break_token_(break_token),
-        container_builder_(NGPhysicalFragment::kFragmentBox, node) {}
+        container_builder_(node, style, space.WritingMode(), direction) {}
+
+  NGLayoutAlgorithm(NGInputNodeType node,
+                    const NGConstraintSpace& space,
+                    NGBreakTokenType* break_token)
+      : NGLayoutAlgorithm(node,
+                          &node.Style(),
+                          space,
+                          space.Direction(),
+                          break_token) {}
 
   virtual ~NGLayoutAlgorithm() {}
 
@@ -49,15 +59,11 @@ class CORE_EXPORT NGLayoutAlgorithm {
   }
 
  protected:
-  const NGConstraintSpace& ConstraintSpace() const {
-    DCHECK(constraint_space_);
-    return *constraint_space_;
-  }
-  NGConstraintSpace* MutableConstraintSpace() { return constraint_space_; }
+  const NGConstraintSpace& ConstraintSpace() const { return constraint_space_; }
 
   const ComputedStyle& Style() const { return node_.Style(); }
 
-  NGLogicalOffset ContainerBfcOffset() const {
+  NGBfcOffset ContainerBfcOffset() const {
     DCHECK(container_builder_.BfcOffset().has_value());
     return container_builder_.BfcOffset().value();
   }
@@ -67,7 +73,7 @@ class CORE_EXPORT NGLayoutAlgorithm {
   NGBreakTokenType* BreakToken() const { return break_token_; }
 
   NGInputNodeType node_;
-  NGConstraintSpace* constraint_space_;
+  const NGConstraintSpace& constraint_space_;
 
   // The break token from which we are currently resuming layout.
   NGBreakTokenType* break_token_;

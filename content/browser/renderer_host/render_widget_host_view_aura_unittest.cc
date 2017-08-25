@@ -44,6 +44,7 @@
 #include "content/browser/renderer_host/delegated_frame_host_client_aura.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
+#include "content/browser/renderer_host/mock_widget_impl.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/overscroll_controller_delegate.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
@@ -553,13 +554,7 @@ class MockWindowObserver : public aura::WindowObserver {
 
 class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
  public:
-  MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
-                           RenderProcessHost* process,
-                           int32_t routing_id)
-      : RenderWidgetHostImpl(delegate, process, routing_id, false) {
-    set_renderer_initialized(true);
-    lastWheelOrTouchEventLatencyInfo = ui::LatencyInfo();
-  }
+  ~MockRenderWidgetHostImpl() override {}
 
   // Extracts |latency_info| for wheel event, and stores it in
   // |lastWheelOrTouchEventLatencyInfo|.
@@ -581,7 +576,35 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
     lastWheelOrTouchEventLatencyInfo = ui::LatencyInfo(ui_latency);
   }
 
+  static MockRenderWidgetHostImpl* Create(RenderWidgetHostDelegate* delegate,
+                                          RenderProcessHost* process,
+                                          int32_t routing_id) {
+    mojom::WidgetPtr widget;
+    std::unique_ptr<MockWidgetImpl> widget_impl =
+        base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+
+    return new MockRenderWidgetHostImpl(delegate, process, routing_id,
+                                        std::move(widget_impl),
+                                        std::move(widget));
+  }
   ui::LatencyInfo lastWheelOrTouchEventLatencyInfo;
+
+ private:
+  MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
+                           RenderProcessHost* process,
+                           int32_t routing_id,
+                           std::unique_ptr<MockWidgetImpl> widget_impl,
+                           mojom::WidgetPtr widget)
+      : RenderWidgetHostImpl(delegate,
+                             process,
+                             routing_id,
+                             std::move(widget),
+                             false),
+        widget_impl_(std::move(widget_impl)) {
+    lastWheelOrTouchEventLatencyInfo = ui::LatencyInfo();
+  }
+
+  std::unique_ptr<MockWidgetImpl> widget_impl_;
 };
 
 const WebInputEvent* GetInputEventFromMessage(const IPC::Message& message) {
@@ -632,8 +655,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
     int32_t routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    parent_host_ = new RenderWidgetHostImpl(delegates_.back().get(),
-                                            process_host_, routing_id, false);
+    parent_host_ = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
+                                                    process_host_, routing_id);
     delegates_.back()->set_widget_host(parent_host_);
     parent_view_ =
         new RenderWidgetHostViewAura(parent_host_, is_guest_view_hack_);
@@ -644,8 +667,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
     routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    widget_host_ = new MockRenderWidgetHostImpl(delegates_.back().get(),
-                                                process_host_, routing_id);
+    widget_host_ = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
+                                                    process_host_, routing_id);
     delegates_.back()->set_widget_host(widget_host_);
     widget_host_->Init();
     view_ = new FakeRenderWidgetHostViewAura(widget_host_, is_guest_view_hack_);
@@ -758,7 +781,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
   void EnableWheelScrollLatching() {
     feature_list_.InitFromCommandLine(
-        features::kTouchpadAndWheelScrollLatching.name, "");
+        features::kTouchpadAndWheelScrollLatching.name,
+        features::kMojoInputMessages.name);
   }
 
   void DisableWheelScrollLatching() {
@@ -1625,14 +1649,15 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCompositionText) {
   composition_text.text = base::ASCIIToUTF16("|a|b");
 
   // Focused segment
-  composition_text.underlines.push_back(
-      ui::CompositionUnderline(0, 3, 0xff000000, true, 0x78563412));
+  composition_text.ime_text_spans.push_back(ui::ImeTextSpan(
+      ui::ImeTextSpan::Type::kComposition, 0, 3, 0xff000000, true, 0x78563412));
 
   // Non-focused segment, with different background color.
-  composition_text.underlines.push_back(
-      ui::CompositionUnderline(3, 4, 0xff000000, false, 0xefcdab90));
+  composition_text.ime_text_spans.push_back(
+      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 3, 4, 0xff000000,
+                      false, 0xefcdab90));
 
-  const ui::CompositionUnderlines& underlines = composition_text.underlines;
+  const ui::ImeTextSpans& ime_text_spans = composition_text.ime_text_spans;
 
   // Caret is at the end. (This emulates Japanese MSIME 2007 and later)
   composition_text.selection = gfx::Range(4);
@@ -1649,15 +1674,17 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCompositionText) {
     InputMsg_ImeSetComposition::Read(msg, &params);
     // composition text
     EXPECT_EQ(composition_text.text, std::get<0>(params));
-    // underlines
-    ASSERT_EQ(underlines.size(), std::get<1>(params).size());
-    for (size_t i = 0; i < underlines.size(); ++i) {
-      EXPECT_EQ(underlines[i].start_offset,
+    // ime spans
+    ASSERT_EQ(ime_text_spans.size(), std::get<1>(params).size());
+    for (size_t i = 0; i < ime_text_spans.size(); ++i) {
+      EXPECT_EQ(ime_text_spans[i].start_offset,
                 std::get<1>(params)[i].start_offset);
-      EXPECT_EQ(underlines[i].end_offset, std::get<1>(params)[i].end_offset);
-      EXPECT_EQ(underlines[i].color, std::get<1>(params)[i].color);
-      EXPECT_EQ(underlines[i].thick, std::get<1>(params)[i].thick);
-      EXPECT_EQ(underlines[i].background_color,
+      EXPECT_EQ(ime_text_spans[i].end_offset,
+                std::get<1>(params)[i].end_offset);
+      EXPECT_EQ(ime_text_spans[i].underline_color,
+                std::get<1>(params)[i].underline_color);
+      EXPECT_EQ(ime_text_spans[i].thick, std::get<1>(params)[i].thick);
+      EXPECT_EQ(ime_text_spans[i].background_color,
                 std::get<1>(params)[i].background_color);
     }
     EXPECT_EQ(gfx::Range::InvalidRange(), std::get<2>(params));
@@ -1681,12 +1708,13 @@ TEST_F(RenderWidgetHostViewAuraTest, FinishCompositionByMouse) {
   composition_text.text = base::ASCIIToUTF16("|a|b");
 
   // Focused segment
-  composition_text.underlines.push_back(
-      ui::CompositionUnderline(0, 3, 0xff000000, true, 0x78563412));
+  composition_text.ime_text_spans.push_back(ui::ImeTextSpan(
+      ui::ImeTextSpan::Type::kComposition, 0, 3, 0xff000000, true, 0x78563412));
 
   // Non-focused segment, with different background color.
-  composition_text.underlines.push_back(
-      ui::CompositionUnderline(3, 4, 0xff000000, false, 0xefcdab90));
+  composition_text.ime_text_spans.push_back(
+      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 3, 4, 0xff000000,
+                      false, 0xefcdab90));
 
   // Caret is at the end. (This emulates Japanese MSIME 2007 and later)
   composition_text.selection = gfx::Range(4);
@@ -2576,43 +2604,6 @@ TEST_F(RenderWidgetHostViewAuraTest, SwapNotifiesWindow) {
   view_->window_->RemoveObserver(&observer);
 }
 
-// Mirroring the layers for a window should cause Surface destruction to
-// depend on both layers.
-TEST_F(RenderWidgetHostViewAuraTest, MirrorLayers) {
-  gfx::Size view_size(100, 100);
-  gfx::Rect view_rect(view_size);
-  aura::Window* const root = parent_view_->GetNativeView()->GetRootWindow();
-
-  view_->InitAsChild(nullptr);
-  aura::client::ParentWindowWithContext(
-      view_->GetNativeView(), root, gfx::Rect());
-  view_->SetSize(view_size);
-  view_->Show();
-
-  view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId,
-                               MakeDelegatedFrame(1.f, view_size, view_rect));
-  std::unique_ptr<ui::LayerTreeOwner> mirror(wm::MirrorLayers(
-      view_->GetNativeView(), false /* sync_bounds */));
-
-  viz::SurfaceId id = view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
-  if (id.is_valid()) {
-    ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-    viz::SurfaceManager* manager = factory->GetContextFactoryPrivate()
-                                       ->GetFrameSinkManager()
-                                       ->surface_manager();
-    viz::Surface* surface = manager->GetSurfaceForId(id);
-    EXPECT_TRUE(surface);
-
-    // An orphaned mirror should not be a destruction dependency.
-    EXPECT_EQ(1u, surface->GetDestructionDependencyCount());
-
-    // Both layers should be destruction dependencies.
-    root->layer()->Add(mirror->root());
-    EXPECT_EQ(2u, surface->GetDestructionDependencyCount());
-    root->layer()->Remove(mirror->root());
-  }
-}
-
 // If the view size is larger than the compositor frame then extra layers
 // should be created to fill the gap.
 TEST_F(RenderWidgetHostViewAuraTest, DelegatedFrameGutter) {
@@ -2623,7 +2614,6 @@ TEST_F(RenderWidgetHostViewAuraTest, DelegatedFrameGutter) {
   viz::LocalSurfaceId medium_id = local_surface_id_allocator_.GenerateId();
 
   // Prevent the DelegatedFrameHost from skipping frames.
-  // XXX
   view_->DisableResizeLock();
 
   view_->InitAsChild(nullptr);
@@ -3108,8 +3098,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   for (size_t i = 0; i < renderer_count; ++i) {
     int32_t routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    hosts[i] = new RenderWidgetHostImpl(delegates_.back().get(), process_host_,
-                                        routing_id, false);
+    hosts[i] = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
+                                                process_host_, routing_id);
     delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
@@ -3282,8 +3272,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
   for (size_t i = 0; i < renderer_count; ++i) {
     int32_t routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    hosts[i] = new RenderWidgetHostImpl(delegates_.back().get(), process_host_,
-                                        routing_id, false);
+    hosts[i] = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
+                                                process_host_, routing_id);
     delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
@@ -3354,9 +3344,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
   // Create a bunch of renderers.
   for (size_t i = 0; i < renderer_count; ++i) {
     int32_t routing_id = process_host_->GetNextRoutingID();
+
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    hosts[i] = new RenderWidgetHostImpl(delegates_.back().get(), process_host_,
-                                        routing_id, false);
+    hosts[i] = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
+                                                process_host_, routing_id);
     delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
@@ -4137,7 +4128,8 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollOverscrollToggle() {
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Continue to scroll in the reverse direction enough to initiate overscroll
-  // in that direction.
+  // in that direction. However, overscroll should not be initiated as the
+  // overscroll mode is locked to east mode.
   SimulateWheelEventPossiblyIncludingPhase(-55, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
   if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
@@ -4164,11 +4156,11 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollOverscrollToggle() {
     ExpectGestureScrollEndForWheelScrolling(true);
   }
 
-  EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
-  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
-  EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(-75.f, overscroll_delta_x());
-  EXPECT_EQ(-25.f, overscroll_delegate()->delta_x());
+  EXPECT_EQ(0.f, overscroll_delegate()->delta_x());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollTest, WheelScrollOverscrollToggle) {
@@ -4443,7 +4435,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, GestureScrollOverscrolls) {
   EXPECT_EQ(55.f, overscroll_delta_x());
   EXPECT_EQ(-5.f, overscroll_delta_y());
   EXPECT_EQ(5.f, overscroll_delegate()->delta_x());
-  EXPECT_EQ(-5.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
   EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
 
   // Send another gesture update event. This event should be consumed by the
@@ -4456,7 +4448,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, GestureScrollOverscrolls) {
   EXPECT_EQ(65.f, overscroll_delta_x());
   EXPECT_EQ(-10.f, overscroll_delta_y());
   EXPECT_EQ(15.f, overscroll_delegate()->delta_x());
-  EXPECT_EQ(-10.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
   EXPECT_EQ(0U, sink_->message_count());
 
   // Now send a scroll end. This should cancel the overscroll gesture, and send
@@ -4495,7 +4487,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollDeltaCap) {
   EXPECT_EQ(55.f, overscroll_delta_x());
   EXPECT_EQ(-5.f, overscroll_delta_y());
   EXPECT_EQ(5.f, overscroll_delegate()->delta_x());
-  EXPECT_EQ(-5.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
   EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
 
   // Scroll beyond overscroll cap. Overscroll delta should not surpass the cap.
@@ -4506,7 +4498,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollDeltaCap) {
   EXPECT_EQ(100.f, overscroll_delta_x());
   EXPECT_EQ(-10.f, overscroll_delta_y());
   EXPECT_EQ(50.f, overscroll_delegate()->delta_x());
-  EXPECT_EQ(-10.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
   EXPECT_EQ(0U, sink_->message_count());
 
   // Scroll back a bit. Since the extra scroll after cap in previous step is
@@ -4518,7 +4510,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollDeltaCap) {
   EXPECT_EQ(90.f, overscroll_delta_x());
   EXPECT_EQ(-15.f, overscroll_delta_y());
   EXPECT_EQ(40.f, overscroll_delegate()->delta_x());
-  EXPECT_EQ(-15.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
   EXPECT_EQ(0U, sink_->message_count());
 
   // End overscrolling.
@@ -4819,7 +4811,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(55.f, overscroll_delta_x());
   EXPECT_EQ(5.f, overscroll_delegate()->delta_x());
-  EXPECT_EQ(-5.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
 
   // Send end event.
   SimulateGestureEvent(blink::WebInputEvent::kGestureScrollEnd,
@@ -4859,7 +4851,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(235.f, overscroll_delta_x());
   EXPECT_EQ(185.f, overscroll_delegate()->delta_x());
-  EXPECT_EQ(-5.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
 
   // Send end event.
   SimulateGestureEvent(blink::WebInputEvent::kGestureScrollEnd,
@@ -4955,31 +4947,37 @@ void RenderWidgetHostViewAuraOverscrollTest::
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
-  // Since it was unhandled; the overscroll should now be west
-  EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
-  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
-  EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
+  // ScrollUpdate is not consumed, however, overscroll controller will not
+  // initiate west overscroll as it is now locked in east mode.
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   SimulateWheelEventPossiblyIncludingPhase(-20, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
-    SendInputEventACK(WebInputEvent::kMouseWheel,
-                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  }
-
-  // wheel event ack generates gesture scroll update; which gets consumed
-  // solely by the overflow controller.
-  if (!wheel_scroll_latching_enabled_) {
-    // No ScrollUpdates, only ScrollBegin and ScrollEnd will be queued events.
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    // MouseWheel and ScrollUpdate will be queued events.
     EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
   } else {
-    EXPECT_EQ(0U, GetSentMessageCountAndResetSink());
+    // MouseWheel will be queued event.
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
+    // Wheel event ack generates gesture scroll update; which is not consumed by
+    // the overscroll controller.
+    if (wheel_scroll_latching_enabled_) {
+      // ScrollUpdate will be queued event.
+      EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    } else {
+      // ScrollBegin and ScrollUpdate will be queued events.
+      EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
+    }
   }
 
-  EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
-  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
-  EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        OverscrollDirectionChangeMouseWheel) {
@@ -5544,6 +5542,13 @@ void RenderWidgetHostViewAuraOverscrollTest::ScrollDeltasResetOnEnd() {
   EXPECT_EQ(0.f, overscroll_delta_x());
   EXPECT_EQ(0.f, overscroll_delta_y());
 
+  // A wheel event with phase ended is sent before a GSB with touchscreen
+  // device.
+  SimulateWheelEventPossiblyIncludingPhase(0, 0, 0, true,
+                                           WebMouseWheelEvent::kPhaseEnded);
+  SendInputEventACK(WebInputEvent::kMouseWheel,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
   // Scroll gesture.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
@@ -5560,15 +5565,16 @@ void RenderWidgetHostViewAuraOverscrollTest::ScrollDeltasResetOnEnd() {
   EXPECT_EQ(0.f, overscroll_delta_x());
   EXPECT_EQ(0.f, overscroll_delta_y());
 
-  // Wheel event scroll ending with a fling.
+  // Wheel event scroll ending with a fling. This is the first wheel event after
+  // touchscreen scrolling ends so it will have phase = kPhaseBegan.
   SimulateWheelEventPossiblyIncludingPhase(5, 0, 0, true,
-                                           WebMouseWheelEvent::kPhaseChanged);
-  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
-    SendInputEventACK(WebInputEvent::kMouseWheel,
-                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  }
+                                           WebMouseWheelEvent::kPhaseBegan);
+  SendInputEventACK(WebInputEvent::kMouseWheel,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
   SimulateWheelEventPossiblyIncludingPhase(10, -5, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
   if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
@@ -5581,9 +5587,6 @@ void RenderWidgetHostViewAuraOverscrollTest::ScrollDeltasResetOnEnd() {
   EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(15.f, overscroll_delta_x());
   EXPECT_EQ(-5.f, overscroll_delta_y());
-  SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
-                       blink::kWebGestureDeviceTouchscreen);
-  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureFlingStartEvent(0.f, 0.1f, blink::kWebGestureDeviceTouchpad);
   EXPECT_EQ(0.f, overscroll_delta_x());
   EXPECT_EQ(0.f, overscroll_delta_y());
@@ -5888,10 +5891,11 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
     return process_host;
   }
 
-  RenderWidgetHostImpl* CreateRenderWidgetHostForProcess(
+  MockRenderWidgetHostImpl* CreateRenderWidgetHostForProcess(
       MockRenderProcessHost* process_host) {
-    return new RenderWidgetHostImpl(render_widget_host_delegate(), process_host,
-                                    process_host->GetNextRoutingID(), false);
+    return MockRenderWidgetHostImpl::Create(render_widget_host_delegate(),
+                                            process_host,
+                                            process_host->GetNextRoutingID());
   }
 
   TestRenderWidgetHostView* CreateViewForProcess(

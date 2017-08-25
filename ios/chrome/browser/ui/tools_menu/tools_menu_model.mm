@@ -44,11 +44,13 @@ const MenuItemInfo itemInfoList[kToolsMenuNumberOfItems] = {
     TOOLS_NEW_INCOGNITO_TAB_ITEM, nullptr,ToolbarTypeAll,
     0,                                    [NewIncognitoTabMenuViewItem class] },
   { IDS_IOS_TOOLS_MENU_CLOSE_ALL_TABS,    kToolsMenuCloseAllTabsId,
-    IDC_CLOSE_ALL_TABS, nullptr,          ToolbarTypeSwitcheriPhone,
+    TOOLS_CLOSE_ALL_TABS,
+    @selector(closeAllTabs), ToolbarTypeSwitcheriPhone,
     kVisibleNotIncognitoOnly,             nil },
   { IDS_IOS_TOOLS_MENU_CLOSE_ALL_INCOGNITO_TABS,
     kToolsMenuCloseAllIncognitoTabsId,
-    IDC_CLOSE_ALL_INCOGNITO_TABS, nullptr, ToolbarTypeSwitcheriPhone,
+    TOOLS_CLOSE_ALL_INCOGNITO_TABS,
+    @selector(closeAllIncognitoTabs), ToolbarTypeSwitcheriPhone,
     kVisibleIncognitoOnly,                nil },
   { IDS_IOS_TOOLS_MENU_BOOKMARKS,         kToolsMenuBookmarksId,
     IDC_SHOW_BOOKMARK_MANAGER, nullptr,   ToolbarTypeWebAll,
@@ -61,7 +63,8 @@ const MenuItemInfo itemInfoList[kToolsMenuNumberOfItems] = {
     IDC_SHOW_OTHER_DEVICES, nullptr,      ToolbarTypeWebAll,
     kVisibleNotIncognitoOnly,             nil },
   { IDS_HISTORY_SHOW_HISTORY,             kToolsMenuHistoryId,
-    IDC_SHOW_HISTORY, nullptr,            ToolbarTypeWebAll,
+    TOOLS_SHOW_HISTORY,
+    @selector(showHistory),               ToolbarTypeWebAll,
     0,                                    nil },
   { IDS_IOS_OPTIONS_REPORT_AN_ISSUE,      kToolsMenuReportAnIssueId,
     IDC_REPORT_AN_ISSUE, nullptr,         ToolbarTypeAll,
@@ -76,10 +79,6 @@ const MenuItemInfo itemInfoList[kToolsMenuNumberOfItems] = {
   { IDS_IOS_TOOLS_MENU_REQUEST_MOBILE_SITE,
     kToolsMenuRequestMobileId,
     IDC_REQUEST_MOBILE_SITE, nullptr,     ToolbarTypeWebAll,
-    0,                                    nil },
-  { IDS_IOS_TOOLS_MENU_READER_MODE,       kToolsMenuReaderMode,
-    TOOLS_READER_MODE,
-    @selector(switchToReaderMode),        ToolbarTypeWebAll,
     0,                                    nil },
   { IDS_IOS_TOOLS_MENU_SETTINGS,          kToolsMenuSettingsId,
     TOOLS_SETTINGS_ITEM,
@@ -106,22 +105,14 @@ bool ToolsMenuItemShouldBeVisible(const MenuItemInfo& item,
   switch (item.title_id) {
     case IDS_IOS_TOOLBAR_SHOW_TABS:
       return IsIPadIdiom();
-    case IDS_IOS_TOOLS_MENU_READER_MODE:
-      return experimental_flags::IsReaderModeEnabled();
     case IDS_IOS_OPTIONS_REPORT_AN_ISSUE:
       return ios::GetChromeBrowserProvider()
           ->GetUserFeedbackProvider()
           ->IsUserFeedbackEnabled();
     case IDS_IOS_TOOLS_MENU_REQUEST_DESKTOP_SITE:
-      if (experimental_flags::IsRequestMobileSiteEnabled())
-        return (configuration.userAgentType != web::UserAgentType::DESKTOP);
-      else
-        return true;
+      return (configuration.userAgentType != web::UserAgentType::DESKTOP);
     case IDS_IOS_TOOLS_MENU_REQUEST_MOBILE_SITE:
-      if (experimental_flags::IsRequestMobileSiteEnabled())
-        return (configuration.userAgentType == web::UserAgentType::DESKTOP);
-      else
-        return false;
+      return (configuration.userAgentType == web::UserAgentType::DESKTOP);
     default:
       return true;
   }

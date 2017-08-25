@@ -20,6 +20,10 @@ PaletteToolManager::PaletteToolManager(Delegate* delegate)
 
 PaletteToolManager::~PaletteToolManager() {}
 
+bool PaletteToolManager::HasTool(PaletteToolId tool_id) {
+  return FindToolById(tool_id);
+}
+
 void PaletteToolManager::AddTool(std::unique_ptr<PaletteTool> tool) {
   // The same PaletteToolId cannot be registered twice.
   DCHECK_EQ(0, std::count_if(tools_.begin(), tools_.end(),
@@ -132,8 +136,10 @@ aura::Window* PaletteToolManager::GetWindow() {
   return delegate_->GetWindow();
 }
 
-void PaletteToolManager::RecordPaletteOptionsUsage(PaletteTrayOptions option) {
-  return delegate_->RecordPaletteOptionsUsage(option);
+void PaletteToolManager::RecordPaletteOptionsUsage(
+    PaletteTrayOptions option,
+    PaletteInvocationMethod method) {
+  return delegate_->RecordPaletteOptionsUsage(option, method);
 }
 
 void PaletteToolManager::RecordPaletteModeCancellation(

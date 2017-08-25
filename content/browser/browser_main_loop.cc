@@ -49,7 +49,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
-#include "components/tracing/common/process_metrics_memory_dump_provider.h"
 #include "components/tracing/common/trace_config_file.h"
 #include "components/tracing/common/trace_to_console.h"
 #include "components/tracing/common/tracing_switches.h"
@@ -231,7 +230,16 @@
 namespace content {
 namespace {
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
+bool IsUsingMus() {
+#if defined(USE_AURA)
+  return aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS;
+#else
+  return false;
+#endif
+}
+
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
+    !defined(OS_FUCHSIA)
 void SetupSandbox(const base::CommandLine& parsed_command_line) {
   TRACE_EVENT0("startup", "SetupSandbox");
   // RenderSandboxHostLinux needs to be initialized even if the sandbox and
@@ -253,7 +261,8 @@ void SetupSandbox(const base::CommandLine& parsed_command_line) {
   ZygoteHostImpl::GetInstance()->SetRendererSandboxStatus(
       generic_zygote->GetSandboxStatus());
 }
-#endif
+#endif  // defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
+        // !defined(OS_FUCHSIA)
 
 #if defined(USE_GLIB)
 static void GLibLogHandler(const gchar* log_domain,
@@ -443,9 +452,11 @@ GetDefaultTaskSchedulerInitParams() {
 #endif
 }
 
+#if !defined(OS_FUCHSIA)
 // Time between updating and recording swap rates.
 constexpr base::TimeDelta kSwapMetricsInterval =
     base::TimeDelta::FromSeconds(60);
+#endif  // !defined(OS_FUCHSIA)
 
 }  // namespace
 
@@ -540,7 +551,8 @@ void BrowserMainLoop::Init() {
 void BrowserMainLoop::EarlyInitialization() {
   TRACE_EVENT0("startup", "BrowserMainLoop::EarlyInitialization");
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
+    !defined(OS_FUCHSIA)
   // No thread should be created before this call, as SetupSandbox()
   // will end-up using fork().
   SetupSandbox(parsed_command_line_);
@@ -686,9 +698,7 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
         BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));
   }
 
-  // Only use discardable_memory::DiscardableSharedMemoryManager when Chrome is
-  // not running in mus+ash.
-  if (!service_manager::ServiceManagerIsRemote()) {
+  if (parameters_.create_discardable_memory) {
     discardable_shared_memory_manager_ =
         base::MakeUnique<discardable_memory::DiscardableSharedMemoryManager>();
     // TODO(boliu): kSingleProcess check is a temporary workaround for
@@ -775,8 +785,6 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
 
   // Enable memory-infra dump providers.
   InitSkiaEventTracer();
-  tracing::ProcessMetricsMemoryDumpProvider::RegisterForProcess(
-      base::kNullProcessId);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       viz::ServerSharedBitmapManager::current(),
       "viz::ServerSharedBitmapManager", nullptr);
@@ -1182,8 +1190,8 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   base::ThreadRestrictions::SetIOAllowed(true);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(base::IgnoreResult(&base::ThreadRestrictions::SetIOAllowed),
-                 true));
+      base::BindOnce(
+          base::IgnoreResult(&base::ThreadRestrictions::SetIOAllowed), true));
 
 #if defined(OS_ANDROID)
   g_browser_main_loop_shutting_down = true;
@@ -1425,7 +1433,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   memory_instrumentation::ClientProcessImpl::CreateInstance(config);
 
 #if defined(USE_AURA)
-  if (service_manager::ServiceManagerIsRemote()) {
+  if (IsUsingMus()) {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kIsRunningInMash);
   }
@@ -1448,8 +1456,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   // BrowserGpuChannelHostFactory below, since that depends on an initialized
   // ShaderCacheFactory.
   InitShaderCacheFactorySingleton(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 
   bool always_uses_gpu = true;
   bool established_gpu_channel = false;
@@ -1462,7 +1469,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   established_gpu_channel = true;
   if (!GpuDataManagerImpl::GetInstance()->CanUseGpuBrowserCompositor() ||
       parsed_command_line_.HasSwitch(switches::kDisableGpuEarlyInit) ||
-      service_manager::ServiceManagerIsRemote()) {
+      IsUsingMus()) {
     established_gpu_channel = always_uses_gpu = false;
   }
   gpu::GpuChannelEstablishFactory* factory =
@@ -1472,16 +1479,16 @@ int BrowserMainLoop::BrowserThreadsStarted() {
     factory = BrowserGpuChannelHostFactory::instance();
   }
 #if !defined(OS_ANDROID)
-  if (!service_manager::ServiceManagerIsRemote()) {
+  if (!IsUsingMus()) {
     // TODO(kylechar): Remove flag along with surface sequences.
     // See https://crbug.com/676384.
     auto surface_lifetime_type =
         base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableSurfaceReferences)
-            ? viz::SurfaceManager::LifetimeType::REFERENCES
-            : viz::SurfaceManager::LifetimeType::SEQUENCES;
-    frame_sink_manager_impl_ = base::MakeUnique<viz::FrameSinkManagerImpl>(
-        nullptr /* display_provider */, surface_lifetime_type);
+            switches::kDisableSurfaceReferences)
+            ? viz::SurfaceManager::LifetimeType::SEQUENCES
+            : viz::SurfaceManager::LifetimeType::REFERENCES;
+    frame_sink_manager_impl_ =
+        std::make_unique<viz::FrameSinkManagerImpl>(surface_lifetime_type);
 
     host_frame_sink_manager_ = base::MakeUnique<viz::HostFrameSinkManager>();
 
@@ -1594,14 +1601,14 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   // ChildProcess instance which is created by the renderer thread.
   if (GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(NULL) &&
       !established_gpu_channel && always_uses_gpu && !UsingInProcessGpu() &&
-      !service_manager::ServiceManagerIsRemote()) {
+      !IsUsingMus()) {
     TRACE_EVENT_INSTANT0("gpu", "Post task to launch GPU process",
                          TRACE_EVENT_SCOPE_THREAD);
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(base::IgnoreResult(&GpuProcessHost::Get),
-                   GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-                   true /* force_create */));
+        base::BindOnce(base::IgnoreResult(&GpuProcessHost::Get),
+                       GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
+                       true /* force_create */));
   }
 
 #if defined(OS_MACOSX)
@@ -1644,10 +1651,13 @@ void BrowserMainLoop::InitializeMemoryManagementComponent() {
   std::unique_ptr<SwapMetricsDriver::Delegate> delegate(
       base::WrapUnique<SwapMetricsDriver::Delegate>(
           new SwapMetricsDelegateUma()));
+
+#if !defined(OS_FUCHSIA)
   swap_metrics_driver_ =
       SwapMetricsDriver::Create(std::move(delegate), kSwapMetricsInterval);
   if (swap_metrics_driver_)
     swap_metrics_driver_->Start();
+#endif  // !defined(OS_FUCHSIA)
 }
 
 bool BrowserMainLoop::InitializeToolkit() {
@@ -1724,6 +1734,8 @@ void BrowserMainLoop::InitializeMojo() {
 #if defined(OS_MACOSX)
   mojo::edk::SetMachPortProvider(MachBroker::GetInstance());
 #endif  // defined(OS_MACOSX)
+  GetContentClient()->OnServiceManagerConnected(
+      ServiceManagerConnection::GetForProcess());
   if (parts_) {
     parts_->ServiceManagerConnectionStarted(
         ServiceManagerConnection::GetForProcess());

@@ -86,7 +86,7 @@ class Traversal {
   }
 
   /**
-   * @param {!DOMSelection} selection
+   * @param {!Selection} selection
    * @return !SampleSelection
    */
   fromDOMSelection(selection) {
@@ -109,7 +109,7 @@ class DOMTreeTraversal extends Traversal {
   firstChildOf(node) { return node.firstChild; }
 
   /**
-   * @param {!DOMSelection} selection
+   * @param {!Selection} selection
    * @return !SampleSelection
    */
   fromDOMSelection(selection) {
@@ -129,10 +129,10 @@ class FlatTreeTraversal extends Traversal {
    * @param {!Node} node
    * @return {Node}
    */
-  firstChildOf(node) { return internals.firstChildInFlatTree(node); }
+  firstChildOf(node) { return window.internals.firstChildInFlatTree(node); }
 
   /**
-   * @param {!DOMSelection} selection
+   * @param {!Selection} selection
    * @return !SampleSelection
    */
   fromDOMSelection(selection) {
@@ -145,7 +145,7 @@ class FlatTreeTraversal extends Traversal {
    * @param {!Node} node
    * @return {Node}
    */
-  nextSiblingOf(node) { return internals.nextSiblingInFlatTree(node); }
+  nextSiblingOf(node) { return window.internals.nextSiblingInFlatTree(node); }
 }
 
 /**
@@ -478,7 +478,7 @@ class Serializer {
   constructor(selection, traversal) {
     /** @type {!SampleSelection} */
     this.selection_ = selection;
-    /** @type {!Array<strings>} */
+    /** @type {!Array<string>} */
     this.strings_ = [];
     /** @type {!Traversal} */
     this.traversal_ = traversal;
@@ -593,7 +593,7 @@ class Serializer {
 
   /**
    * @private
-   * @param {!HTMLTextArea}
+   * @param {!HTMLTextAreaElement} textArea
    */
   handleTextArea(textArea) {
     /** @type {string} */
@@ -690,7 +690,7 @@ function computeTop(element) {
 }
 
 /**
- * @this {!DOMSelection}
+ * @this {!Selection}
  * @param {string} html
  * @param {string=} opt_text
  */
@@ -721,7 +721,7 @@ class Sample {
    * @param {string} sampleText
    */
   constructor(sampleText) {
-    /** @const @type {!HTMLIFame} */
+    /** @const @type {!HTMLIFrameElement} */
     this.iframe_ = document.createElement('iframe');
     if (!document.body)
         document.body = document.createElement("body");
@@ -893,14 +893,14 @@ function commonPrefixOf(str1, str2) {
 }
 
 /**
- * @param {string} inputText
- * @param {function(!Selection)|string}
+ * @param {string} passedInputText
+ * @param {function(!Selection)|string} tester
  * @param {string} expectedText
  * @param {Object=} opt_options
  * @return {!Sample}
  */
 function assertSelection(
-    inputText, tester, expectedText, opt_options = {}) {
+    passedInputText, tester, passedExpectedText, opt_options = {}) {
   const kDescription = 'description';
   const kDumpAs = 'dumpAs';
   const kRemoveSampleIfSucceeded = 'removeSampleIfSucceeded';
@@ -918,6 +918,22 @@ function assertSelection(
   const dumpAs = options[kDumpAs] || DumpAs.DOM_TREE;
   /** @type {boolean} */
   const dumpFromRoot = options[kDumpFromRoot] || false;
+
+  const inputText = (() => {
+    if (typeof(passedInputText) === 'string')
+      return passedInputText;
+    if (Array.isArray(passedInputText))
+      return passedInputText.join("");
+    throw new Error('InputText must be a string or an array of strings.');
+  })();
+
+  const expectedText = (() => {
+    if (typeof(passedExpectedText) === 'string')
+      return passedExpectedText;
+    if (Array.isArray(passedExpectedText))
+      return passedExpectedText.join("");
+    throw new Error('ExpectedText must be a string or an array of strings.');
+  })();
 
   checkExpectedText(expectedText);
   const sample = new Sample(inputText);

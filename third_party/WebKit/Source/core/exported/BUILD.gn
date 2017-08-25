@@ -89,10 +89,11 @@ blink_core_sources("exported") {
     "WebTextCheckingResult.cpp",
     "WebUserGestureIndicator.cpp",
     "WebUserGestureToken.cpp",
-    "WebViewBase.cpp",
-    "WebViewBase.h",
+    "WebV8ContextSnapshot.cpp",
     "WebViewImpl.cpp",
     "WebViewImpl.h",
+    "WorkerShadowPage.cpp",
+    "WorkerShadowPage.h",
   ]
 
   jumbo_excluded_sources = [

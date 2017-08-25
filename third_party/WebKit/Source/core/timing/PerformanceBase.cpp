@@ -397,18 +397,26 @@ bool PerformanceBase::IsResourceTimingBufferFull() {
   return resource_timing_buffer_.size() >= resource_timing_buffer_size_;
 }
 
-void PerformanceBase::AddLongTaskTiming(double start_time,
-                                        double end_time,
-                                        const String& name,
-                                        const String& frame_src,
-                                        const String& frame_id,
-                                        const String& frame_name) {
+void PerformanceBase::AddLongTaskTiming(
+    double start_time,
+    double end_time,
+    const String& name,
+    const String& frame_src,
+    const String& frame_id,
+    const String& frame_name,
+    const SubTaskAttribution::EntriesVector& sub_task_attributions) {
   if (!HasObserverFor(PerformanceEntry::kLongTask))
     return;
+
+  for (auto&& it : sub_task_attributions) {
+    it->setHighResStartTime(
+        MonotonicTimeToDOMHighResTimeStamp(it->startTime()));
+    it->setHighResDuration(ConvertSecondsToDOMHighResTimeStamp(it->duration()));
+  }
   PerformanceEntry* entry = PerformanceLongTaskTiming::Create(
       MonotonicTimeToDOMHighResTimeStamp(start_time),
       MonotonicTimeToDOMHighResTimeStamp(end_time), name, frame_src, frame_id,
-      frame_name);
+      frame_name, sub_task_attributions);
   NotifyObserversOfEntry(*entry);
 }
 
@@ -452,13 +460,6 @@ void PerformanceBase::RegisterPerformanceObserver(
 
 void PerformanceBase::UnregisterPerformanceObserver(
     PerformanceObserver& old_observer) {
-  DCHECK(IsMainThread());
-  // Deliver any pending observations on this observer before unregistering.
-  if (active_observers_.Contains(&old_observer) &&
-      !old_observer.ShouldBeSuspended()) {
-    old_observer.Deliver();
-    active_observers_.erase(&old_observer);
-  }
   observers_.erase(&old_observer);
   UpdatePerformanceObserverFilterOptions();
   UpdateLongTaskInstrumentation();
@@ -472,7 +473,7 @@ void PerformanceBase::UpdatePerformanceObserverFilterOptions() {
   UpdateLongTaskInstrumentation();
 }
 
-void PerformanceBase::NotifyObserversOfEntry(PerformanceEntry& entry) {
+void PerformanceBase::NotifyObserversOfEntry(PerformanceEntry& entry) const {
   for (auto& observer : observers_) {
     if (observer->FilterOptions() & entry.EntryTypeEnum())
       observer->EnqueuePerformanceEntry(entry);
@@ -499,7 +500,6 @@ void PerformanceBase::ActivateObserver(PerformanceObserver& observer) {
 }
 
 void PerformanceBase::ResumeSuspendedObservers() {
-  DCHECK(IsMainThread());
   if (suspended_observers_.IsEmpty())
     return;
 
@@ -514,7 +514,6 @@ void PerformanceBase::ResumeSuspendedObservers() {
 }
 
 void PerformanceBase::DeliverObservationsTimerFired(TimerBase*) {
-  DCHECK(IsMainThread());
   PerformanceObservers observers;
   active_observers_.Swap(observers);
   for (const auto& observer : observers) {

@@ -45,9 +45,7 @@ UiElement::~UiElement() {
 }
 
 void UiElement::Render(UiElementRenderer* renderer,
-                       const gfx::Transform& view_proj_matrix) const {
-  NOTREACHED();
-}
+                       const gfx::Transform& view_proj_matrix) const {}
 
 void UiElement::Initialize() {}
 
@@ -274,6 +272,8 @@ void UiElement::LayOutChildren() {
     child->SetLayoutOffset(x_offset, y_offset);
   }
 }
+
+void UiElement::AdjustRotationForHeadPose(const gfx::Vector3dF& look_at) {}
 
 gfx::Transform UiElement::LocalTransform() const {
   return layout_offset_.Apply() * transform_operations_.Apply();

@@ -344,7 +344,7 @@ cr.define('print_preview', function() {
           'print-preset-options',
           this.onPrintPresetOptionsFromDocument_.bind(this));
       this.listenerTracker.add(
-          'preview-page-count', this.onPageCountReady_.bind(this));
+          'page-count-ready', this.onPageCountReady_.bind(this));
       this.listenerTracker.add(
           'enable-manipulate-settings-for-test',
           this.onEnableManipulateSettingsForTest_.bind(this));
@@ -1281,7 +1281,7 @@ cr.define('print_preview', function() {
       this.appState_.persistIsGcpPromoDismissed(true);
       window.open(
           this.cloudPrintInterface_.baseUrl +
-          '?user=' + this.userInfo_.activeUser + '#printers');
+          '?authuser=' + this.userInfo_.activeUser + '#printers');
       this.close_(false);
     }
   };

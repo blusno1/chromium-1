@@ -25,7 +25,6 @@
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
 #include "ui/gl/gl_switches.h"
-#include "ui/gl/gpu_switching_manager.h"
 
 namespace gpu {
 
@@ -174,18 +173,6 @@ void ParseSecondaryGpuDevicesFromCommandLine(
   }
 }
 
-void InitializeDualGpusIfSupported(
-    const std::set<int>& driver_bug_workarounds) {
-  ui::GpuSwitchingManager* switching_manager =
-      ui::GpuSwitchingManager::GetInstance();
-  if (!switching_manager->SupportsDualGpus())
-    return;
-  if (driver_bug_workarounds.count(gpu::FORCE_DISCRETE_GPU) == 1)
-    ui::GpuSwitchingManager::GetInstance()->ForceUseOfDiscreteGpu();
-  else if (driver_bug_workarounds.count(gpu::FORCE_INTEGRATED_GPU) == 1)
-    ui::GpuSwitchingManager::GetInstance()->ForceUseOfIntegratedGpu();
-}
-
 GpuFeatureInfo GetGpuFeatureInfo(const GPUInfo& gpu_info,
                                  const base::CommandLine& command_line) {
   GpuFeatureInfo gpu_feature_info;
@@ -218,6 +205,8 @@ GpuFeatureInfo GetGpuFeatureInfo(const GPUInfo& gpu_info,
     std::unique_ptr<gpu::GpuDriverBugList> list(GpuDriverBugList::Create());
     enabled_driver_bug_workarounds =
         list->MakeDecision(GpuControlList::kOsAny, std::string(), gpu_info);
+    gpu_feature_info.applied_gpu_driver_bug_list_entries =
+        list->GetActiveEntries();
 
     driver_bug_disabled_extensions = list->GetDisabledExtensions();
     all_disabled_extensions.insert(driver_bug_disabled_extensions.begin(),

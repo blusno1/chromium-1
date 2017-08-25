@@ -1210,21 +1210,6 @@ class ComputedStyle : public ComputedStyleBase,
            !ColumnRuleColorInternal().Alpha();
   }
   bool ColumnRuleEquivalent(const ComputedStyle& other_style) const;
-  void InheritColumnPropertiesFrom(const ComputedStyle& parent) {
-    SetColumnGapInternal(parent.ColumnGap());
-    SetColumnWidthInternal(parent.ColumnWidth());
-    SetVisitedLinkColumnRuleColorInternal(
-        parent.VisitedLinkColumnRuleColorInternal());
-    SetColumnRuleColorInternal(parent.ColumnRuleColorInternal());
-    SetColumnCountInternal(parent.ColumnCount());
-    SetColumnRuleStyle(parent.ColumnRuleStyle());
-    SetColumnAutoCountInternal(parent.ColumnAutoCountInternal());
-    SetColumnAutoWidthInternal(parent.ColumnAutoWidthInternal());
-    SetColumnFill(parent.GetColumnFill());
-    SetColumnNormalGapInternal(parent.ColumnNormalGapInternal());
-    SetColumnRuleColorIsCurrentColor(parent.ColumnRuleColorIsCurrentColor());
-    SetColumnSpan(parent.GetColumnSpan());
-  }
 
   // Flex utility functions.
   bool IsColumnFlexDirection() const {
@@ -1756,6 +1741,11 @@ class ComputedStyle : public ComputedStyleBase,
     return BorderImage().Outset() == o.BorderImage().Outset();
   }
 
+  bool BackgroundVisuallyEqual(const ComputedStyle& o) const {
+    return BackgroundColorInternal() == o.BackgroundColorInternal() &&
+           BackgroundInternal().VisuallyEqual(o.BackgroundInternal());
+  }
+
   void ResetBorder() {
     ResetBorderImage();
     ResetBorderTop();
@@ -1815,8 +1805,8 @@ class ComputedStyle : public ComputedStyleBase,
   FloatRoundedRect GetRoundedInnerBorderFor(
       const LayoutRect& border_rect,
       const LayoutRectOutsets& insets,
-      bool include_logical_left_edge,
-      bool include_logical_right_edge) const;
+      bool include_logical_left_edge = true,
+      bool include_logical_right_edge = true) const;
 
   bool CanRenderBorderImage() const;
 
@@ -2014,6 +2004,11 @@ class ComputedStyle : public ComputedStyleBase,
 
   // Animation utility functions.
   bool ShouldCompositeForCurrentAnimations() const {
+    if (RuntimeEnabledFeatures::
+            TurnOff2DAndOpacityCompositorAnimationsEnabled()) {
+      return (HasCurrentTransformAnimation() && Has3DTransform()) ||
+             HasCurrentFilterAnimation() || HasCurrentBackdropFilterAnimation();
+    }
     return HasCurrentOpacityAnimation() || HasCurrentTransformAnimation() ||
            HasCurrentFilterAnimation() || HasCurrentBackdropFilterAnimation();
   }

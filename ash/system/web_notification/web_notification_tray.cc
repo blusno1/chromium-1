@@ -14,12 +14,12 @@
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/tray/tray_utils.h"
 #include "ash/system/web_notification/ash_popup_alignment_delegate.h"
+#include "ash/system/web_notification/message_center_bubble.h"
 #include "base/auto_reset.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
@@ -29,10 +29,9 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/message_center_tray_delegate.h"
-#include "ui/message_center/views/message_bubble_base.h"
-#include "ui/message_center/views/message_center_bubble.h"
 #include "ui/message_center/views/message_popup_collection.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/bubble/tray_bubble_view.h"
@@ -40,16 +39,6 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/layout/fill_layout.h"
-
-namespace message_center {
-
-MessageCenterTrayDelegate* CreateMessageCenterTray() {
-  // On non-CrOS, the Tray will not be hosted in ash::Shell.
-  NOTREACHED();
-  return nullptr;
-}
-
-}  // namespace message_center
 
 namespace ash {
 namespace {
@@ -81,7 +70,7 @@ class WebNotificationBubbleWrapper {
   // Takes ownership of |bubble| and creates |bubble_wrapper_|.
   WebNotificationBubbleWrapper(WebNotificationTray* tray,
                                TrayBackgroundView* anchor_tray,
-                               message_center::MessageBubbleBase* bubble) {
+                               MessageCenterBubble* bubble) {
     bubble_.reset(bubble);
     views::TrayBubbleView::InitParams init_params;
     init_params.delegate = tray;
@@ -101,13 +90,13 @@ class WebNotificationBubbleWrapper {
     bubble->InitializeContents(bubble_view);
   }
 
-  message_center::MessageBubbleBase* bubble() const { return bubble_.get(); }
+  MessageCenterBubble* bubble() const { return bubble_.get(); }
 
   // Convenience accessors.
   views::TrayBubbleView* bubble_view() const { return bubble_->bubble_view(); }
 
  private:
-  std::unique_ptr<message_center::MessageBubbleBase> bubble_;
+  std::unique_ptr<MessageCenterBubble> bubble_;
   std::unique_ptr<TrayBubbleWrapper> bubble_wrapper_;
 
   DISALLOW_COPY_AND_ASSIGN(WebNotificationBubbleWrapper);
@@ -328,9 +317,8 @@ bool WebNotificationTray::ShowMessageCenterInternal(bool show_settings) {
   if (!ShouldShowMessageCenter())
     return false;
 
-  message_center::MessageCenterBubble* message_center_bubble =
-      new message_center::MessageCenterBubble(message_center(),
-                                              message_center_tray_.get());
+  MessageCenterBubble* message_center_bubble =
+      new MessageCenterBubble(message_center(), message_center_tray_.get());
 
   // In the horizontal case, message center starts from the top of the shelf.
   // In the vertical case, it starts from the bottom of WebNotificationTray.
@@ -471,8 +459,7 @@ void WebNotificationTray::HideBubble(const views::TrayBubbleView* bubble_view) {
 
 bool WebNotificationTray::ShowNotifierSettings() {
   if (message_center_bubble()) {
-    static_cast<message_center::MessageCenterBubble*>(
-        message_center_bubble()->bubble())
+    static_cast<MessageCenterBubble*>(message_center_bubble()->bubble())
         ->SetSettingsVisible();
     return true;
   }
@@ -533,7 +520,7 @@ void WebNotificationTray::UpdateTrayContent() {
       message_center_tray_->message_center();
   size_t visible_small_icon_count = 0;
   for (const auto* notification : message_center->GetVisibleNotifications()) {
-    gfx::Image image = notification->small_image();
+    gfx::Image image = notification->GenerateMaskedSmallIcon(kTrayIconColor);
     if (image.IsEmpty())
       continue;
 
@@ -624,12 +611,10 @@ bool WebNotificationTray::IsPopupVisible() const {
   return message_center_tray_->popups_visible();
 }
 
-message_center::MessageCenterBubble*
-WebNotificationTray::GetMessageCenterBubbleForTest() {
+MessageCenterBubble* WebNotificationTray::GetMessageCenterBubbleForTest() {
   if (!message_center_bubble())
     return nullptr;
-  return static_cast<message_center::MessageCenterBubble*>(
-      message_center_bubble()->bubble());
+  return static_cast<MessageCenterBubble*>(message_center_bubble()->bubble());
 }
 
 }  // namespace ash

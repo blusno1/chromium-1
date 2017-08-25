@@ -5,20 +5,35 @@
 #include "services/device/generic_sensor/platform_sensor_fusion_algorithm.h"
 
 #include <cmath>
+#include "base/stl_util.h"
 
 namespace device {
 
-PlatformSensorFusionAlgorithm::PlatformSensorFusionAlgorithm() {}
+PlatformSensorFusionAlgorithm::PlatformSensorFusionAlgorithm(
+    mojom::SensorType fused_type,
+    const std::vector<mojom::SensorType>& source_types)
+    : fused_type_(fused_type), source_types_(source_types) {
+  DCHECK(!source_types_.empty());
+}
 
 PlatformSensorFusionAlgorithm::~PlatformSensorFusionAlgorithm() = default;
 
 bool PlatformSensorFusionAlgorithm::IsReadingSignificantlyDifferent(
     const SensorReading& reading1,
     const SensorReading& reading2) {
-  return (std::fabs(reading1.values[0] - reading2.values[0]) >= threshold_) ||
-         (std::fabs(reading1.values[1] - reading2.values[1]) >= threshold_) ||
-         (std::fabs(reading1.values[2] - reading2.values[2]) >= threshold_) ||
-         (std::fabs(reading1.values[3] - reading2.values[3]) >= threshold_);
+  for (size_t i = 0; i < SensorReadingRaw::kValuesCount; ++i) {
+    if (std::fabs(reading1.raw.values[i] - reading2.raw.values[i]) >=
+        threshold_)
+      return true;
+  }
+  return false;
+}
+
+bool PlatformSensorFusionAlgorithm::GetFusedData(
+    mojom::SensorType which_sensor_changed,
+    SensorReading* fused_reading) {
+  DCHECK(base::ContainsValue(source_types_, which_sensor_changed));
+  return GetFusedDataInternal(which_sensor_changed, fused_reading);
 }
 
 void PlatformSensorFusionAlgorithm::Reset() {}

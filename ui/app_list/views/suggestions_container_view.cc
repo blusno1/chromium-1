@@ -29,6 +29,9 @@ SuggestionsContainerView::SuggestionsContainerView(
     : contents_view_(contents_view),
       all_apps_button_(all_apps_button),
       is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
+
   DCHECK(contents_view);
   view_delegate_ = contents_view_->app_list_main_view()->view_delegate();
   SetBackground(views::CreateSolidBackground(kLabelBackgroundColor));
@@ -122,6 +125,12 @@ int SuggestionsContainerView::GetYSize() {
   return 0;
 }
 
+views::View* SuggestionsContainerView::GetSelectedView() const {
+  return IsValidSelectionIndex(selected_index())
+             ? search_result_tile_views_[selected_index()]
+             : nullptr;
+}
+
 void SuggestionsContainerView::CreateAppsGrid(int apps_num) {
   DCHECK(search_result_tile_views_.empty());
   views::GridLayout* tiles_layout_manager = new views::GridLayout(this);
@@ -140,9 +149,14 @@ void SuggestionsContainerView::CreateAppsGrid(int apps_num) {
   // Add SearchResultTileItemViews to the container.
   int i = 0;
   search_result_tile_views_.reserve(apps_num);
+  const bool is_fullscreen_app_list_enabled =
+      features::IsFullscreenAppListEnabled();
+  const bool is_play_store_app_search_enabled =
+      features::IsPlayStoreAppSearchEnabled();
   for (; i < apps_num; ++i) {
-    SearchResultTileItemView* tile_item =
-        new SearchResultTileItemView(this, view_delegate_);
+    SearchResultTileItemView* tile_item = new SearchResultTileItemView(
+        this, view_delegate_, true, is_fullscreen_app_list_enabled,
+        is_play_store_app_search_enabled);
     if (i % kNumTilesCols == 0)
       tiles_layout_manager->StartRow(0, 0);
     tiles_layout_manager->AddView(tile_item);

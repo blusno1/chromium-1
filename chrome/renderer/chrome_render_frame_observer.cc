@@ -28,8 +28,11 @@
 #include "chrome/renderer/web_apps.h"
 #include "components/translate/content/renderer/translate_helper.h"
 #include "content/public/common/associated_interface_provider.h"
+#include "content/public/common/associated_interface_registry.h"
+#include "content/public/common/bindings_policy.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
+#include "content/public/renderer/window_features_converter.h"
 #include "extensions/common/constants.h"
 #include "printing/features/features.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -43,6 +46,7 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebNode.h"
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
+#include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -132,7 +136,9 @@ ChromeRenderFrameObserver::ChromeRenderFrameObserver(
   // Don't do anything else for subframes.
   if (!render_frame->IsMainFrame())
     return;
-
+  render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
+      base::Bind(&ChromeRenderFrameObserver::OnRenderFrameObserverRequest,
+                 base::Unretained(this)));
 #if defined(SAFE_BROWSING_CSD)
   registry_.AddInterface(
       base::Bind(&ChromeRenderFrameObserver::OnPhishingDetectorRequest,
@@ -141,6 +147,11 @@ ChromeRenderFrameObserver::ChromeRenderFrameObserver(
       *base::CommandLine::ForCurrentProcess();
   if (!command_line.HasSwitch(switches::kDisableClientSidePhishingDetection))
     SetClientSidePhishingDetection(true);
+#endif
+#if !defined(OS_ANDROID)
+  render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
+      base::Bind(&ChromeRenderFrameObserver::OnWebUITesterRequest,
+                 base::Unretained(this)));
 #endif
   translate_helper_ = new translate::TranslateHelper(
       render_frame, chrome::ISOLATED_WORLD_ID_TRANSLATE,
@@ -313,6 +324,13 @@ void ChromeRenderFrameObserver::SetClientSidePhishingDetection(
 }
 #endif
 
+#if !defined(OS_ANDROID)
+void ChromeRenderFrameObserver::ExecuteWebUIJavaScript(
+    const base::string16& javascript) {
+  webui_javascript_.push_back(javascript);
+}
+#endif
+
 void ChromeRenderFrameObserver::DidFinishLoad() {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
   // Don't do anything for subframes.
@@ -352,6 +370,15 @@ void ChromeRenderFrameObserver::DidCommitProvisionalLoad(
   base::debug::SetCrashKeyValue(
       crash_keys::kViewCount,
       base::SizeTToString(content::RenderView::GetRenderViewCount()));
+
+#if !defined(OS_ANDROID)
+  if ((render_frame()->GetEnabledBindings() &
+       content::BINDINGS_POLICY_WEB_UI)) {
+    for (const auto& script : webui_javascript_)
+      render_frame()->ExecuteJavaScript(script);
+    webui_javascript_.clear();
+  }
+#endif
 }
 
 void ChromeRenderFrameObserver::CapturePageText(TextCaptureType capture_type) {
@@ -439,7 +466,25 @@ void ChromeRenderFrameObserver::OnPhishingDetectorRequest(
 }
 #endif
 
+#if !defined(OS_ANDROID)
+void ChromeRenderFrameObserver::OnWebUITesterRequest(
+    chrome::mojom::WebUITesterAssociatedRequest request) {
+  web_ui_tester_bindings_.AddBinding(this, std::move(request));
+}
+#endif
+
 void ChromeRenderFrameObserver::OnThumbnailCapturerRequest(
     chrome::mojom::ThumbnailCapturerRequest request) {
   thumbnail_capturer_bindings_.AddBinding(this, std::move(request));
+}
+
+void ChromeRenderFrameObserver::OnRenderFrameObserverRequest(
+    chrome::mojom::ChromeRenderFrameAssociatedRequest request) {
+  window_features_client_bindings_.AddBinding(this, std::move(request));
+}
+
+void ChromeRenderFrameObserver::SetWindowFeatures(
+    blink::mojom::WindowFeaturesPtr window_features) {
+  render_frame()->GetRenderView()->GetWebView()->SetWindowFeatures(
+      content::ConvertMojoWindowFeaturesToWebWindowFeatures(*window_features));
 }

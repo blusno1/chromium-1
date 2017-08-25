@@ -88,6 +88,10 @@ def CheckEnumsMatch(input_api, output_api):
   repo_root = input_api.change.RepositoryRoot()
   ax_enums = GetEnumsFromFile(os.path.join(repo_root, AX_IDL))
   automation_enums = GetEnumsFromFile(os.path.join(repo_root, AUTOMATION_IDL))
+
+  # Focused state only exists in automation.
+  automation_enums['StateType'].remove('focused')
+
   errs = []
   CheckMatchingEnum(ax_enums, 'AXRole', automation_enums, 'RoleType', errs,
                     output_api)
@@ -172,20 +176,24 @@ def CheckModesMatch(input_api, output_api):
 
 def CheckChangeOnUpload(input_api, output_api):
   errs = []
-  if AX_IDL in input_api.LocalPaths():
-    errs.extend(CheckEnumsMatch(input_api, output_api))
+  for path in input_api.LocalPaths():
+    path = path.replace('\\', '/')
+    if AX_IDL == path:
+      errs.extend(CheckEnumsMatch(input_api, output_api))
 
-  if AX_MODE_HEADER in input_api.LocalPaths():
-    errs.extend(CheckModesMatch(input_api, output_api))
+    if AX_MODE_HEADER == path:
+      errs.extend(CheckModesMatch(input_api, output_api))
 
   return errs
 
 def CheckChangeOnCommit(input_api, output_api):
   errs = []
-  if AX_IDL in input_api.LocalPaths():
-    errs.extend(CheckEnumsMatch(input_api, output_api))
+  for path in input_api.LocalPaths():
+    path = path.replace('\\', '/')
+    if AX_IDL == path:
+      errs.extend(CheckEnumsMatch(input_api, output_api))
 
-  if AX_MODE_HEADER in input_api.LocalPaths():
-    errs.extend(CheckModesMatch(input_api, output_api))
+    if AX_MODE_HEADER == path:
+      errs.extend(CheckModesMatch(input_api, output_api))
 
   return errs

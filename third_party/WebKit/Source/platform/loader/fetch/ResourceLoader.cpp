@@ -32,7 +32,6 @@
 #include "platform/SharedBuffer.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceError.h"
@@ -44,11 +43,13 @@
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebCORS.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebData.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -114,9 +115,6 @@ void ResourceLoader::StartWith(const ResourceRequest& request) {
 
   loader_->SetDefersLoading(Context().DefersLoading());
 
-  if (request.GetKeepalive())
-    keepalive_ = this;
-
   if (is_cache_aware_loading_activated_) {
     // Override cache policy for cache-aware loading. If this request fails, a
     // reload with original request will be triggered in DidFail().
@@ -143,7 +141,6 @@ void ResourceLoader::Release(ResourceLoadScheduler::ReleaseOption option) {
 void ResourceLoader::Restart(const ResourceRequest& request) {
   CHECK_EQ(resource_->Options().synchronous_policy, kRequestAsynchronously);
 
-  keepalive_.Clear();
   loader_ = Context().CreateURLLoader(request);
   StartWith(request);
 }
@@ -186,7 +183,7 @@ static bool IsManualRedirectFetchRequest(const ResourceRequest& request) {
 
 bool ResourceLoader::WillFollowRedirect(
     const WebURL& new_url,
-    const WebURL& new_first_party_for_cookies,
+    const WebURL& new_site_for_cookies,
     const WebString& new_referrer,
     WebReferrerPolicy new_referrer_policy,
     const WebString& new_method,
@@ -203,7 +200,7 @@ bool ResourceLoader::WillFollowRedirect(
 
   const ResourceRequest& last_request = resource_->LastResourceRequest();
   ResourceRequest new_request(new_url);
-  new_request.SetFirstPartyForCookies(new_first_party_for_cookies);
+  new_request.SetSiteForCookies(new_site_for_cookies);
   new_request.SetDownloadToFile(last_request.DownloadToFile());
   new_request.SetUseStreamOnResponse(last_request.UseStreamOnResponse());
   new_request.SetRequestContext(last_request.GetRequestContext());
@@ -276,12 +273,14 @@ bool ResourceLoader::WillFollowRedirect(
       RefPtr<SecurityOrigin> source_origin = options.security_origin;
       if (!source_origin.Get())
         source_origin = Context().GetSecurityOrigin();
-
-      String cors_error_msg;
-      if (!CrossOriginAccessControl::HandleRedirect(
-              source_origin, new_request, redirect_response,
-              fetch_credentials_mode, resource_->MutableOptions(),
-              cors_error_msg)) {
+      WebSecurityOrigin source_web_origin(source_origin.Get());
+      WrappedResourceRequest new_request_wrapper(new_request);
+      WebString cors_error_msg;
+      if (!WebCORS::HandleRedirect(
+              source_web_origin, new_request_wrapper, redirect_response.Url(),
+              redirect_response.HttpStatusCode(),
+              redirect_response.HttpHeaderFields(), fetch_credentials_mode,
+              resource_->MutableOptions(), cors_error_msg)) {
         resource_->SetCORSStatus(CORSStatus::kFailed);
 
         if (!unused_preload) {
@@ -293,6 +292,8 @@ bool ResourceLoader::WillFollowRedirect(
                                           ResourceRequestBlockedReason::kOther);
         return false;
       }
+
+      source_origin = source_web_origin;
     }
     if (resource_type == Resource::kImage &&
         fetcher_->ShouldDeferImageLoad(new_url)) {
@@ -341,8 +342,7 @@ bool ResourceLoader::WillFollowRedirect(
   // First-party cookie logic moved from DocumentLoader in Blink to
   // net::URLRequest in the browser. Assert that Blink didn't try to change it
   // to something else.
-  DCHECK(KURL(new_first_party_for_cookies) ==
-         new_request.FirstPartyForCookies());
+  DCHECK(KURL(new_site_for_cookies) == new_request.SiteForCookies());
 
   // The following parameters never change during the lifetime of a request.
   DCHECK_EQ(new_request.GetRequestContext(), request_context);
@@ -385,13 +385,13 @@ CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
   // Service workers handle CORS separately.
   if (response.WasFetchedViaServiceWorker()) {
     switch (response.ResponseTypeViaServiceWorker()) {
-      case mojom::FetchResponseType::kBasic:
-      case mojom::FetchResponseType::kCORS:
-      case mojom::FetchResponseType::kDefault:
-      case mojom::FetchResponseType::kError:
+      case network::mojom::FetchResponseType::kBasic:
+      case network::mojom::FetchResponseType::kCORS:
+      case network::mojom::FetchResponseType::kDefault:
+      case network::mojom::FetchResponseType::kError:
         return CORSStatus::kServiceWorkerSuccessful;
-      case mojom::FetchResponseType::kOpaque:
-      case mojom::FetchResponseType::kOpaqueRedirect:
+      case network::mojom::FetchResponseType::kOpaque:
+      case network::mojom::FetchResponseType::kOpaqueRedirect:
         return CORSStatus::kServiceWorkerOpaque;
     }
     NOTREACHED();
@@ -427,12 +427,14 @@ CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
           ? resource_->GetResponse()
           : response;
 
-  CrossOriginAccessControl::AccessStatus cors_status =
-      CrossOriginAccessControl::CheckAccess(
-          response_for_access_control,
-          initial_request.GetFetchCredentialsMode(), source_origin);
+  WebCORS::AccessStatus cors_status =
+      WebCORS::CheckAccess(response_for_access_control.Url(),
+                           response_for_access_control.HttpStatusCode(),
+                           response_for_access_control.HttpHeaderFields(),
+                           initial_request.GetFetchCredentialsMode(),
+                           WebSecurityOrigin(source_origin));
 
-  if (cors_status == CrossOriginAccessControl::AccessStatus::kAccessAllowed)
+  if (cors_status == WebCORS::AccessStatus::kAccessAllowed)
     return CORSStatus::kSuccessful;
 
   String resource_type = Resource::ResourceTypeToString(
@@ -444,10 +446,10 @@ CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
   error_msg.Append("' from origin '");
   error_msg.Append(source_origin->ToString());
   error_msg.Append("' has been blocked by CORS policy: ");
-
-  CrossOriginAccessControl::AccessControlErrorString(
-      error_msg, cors_status, response_for_access_control, source_origin,
-      initial_request.GetRequestContext());
+  error_msg.Append(WebCORS::AccessControlErrorString(
+      cors_status, response_for_access_control.HttpStatusCode(),
+      response_for_access_control.HttpHeaderFields(),
+      WebSecurityOrigin(source_origin), initial_request.GetRequestContext()));
 
   return CORSStatus::kFailed;
 }
@@ -528,32 +530,14 @@ void ResourceLoader::DidReceiveResponse(
   } else if (options.cors_handling_by_resource_fetcher ==
                  kEnableCORSHandlingByResourceFetcher &&
              fetch_request_mode == WebURLRequest::kFetchRequestModeCORS) {
-    bool unused_preload = resource_->IsUnusedPreload();
-
-    // Redirects can change the response URL different from one of request.
-    const KURL& response_url = response.Url();
-
-    ResourceRequestBlockedReason blocked_reason = Context().CanRequest(
-        resource_type, initial_request, response_url, options,
-        /* Don't send security violation reports for unused preloads */
-        (unused_preload ? SecurityViolationReportingPolicy::kSuppressReporting
-                        : SecurityViolationReportingPolicy::kReport),
-        FetchParameters::kUseDefaultOriginRestrictionForType,
-        initial_request.GetRedirectStatus());
-    if (blocked_reason != ResourceRequestBlockedReason::kNone) {
-      HandleError(ResourceError::CancelledDueToAccessCheckError(
-          response_url, blocked_reason));
-      return;
-    }
-
     if (!resource_->IsSameOriginOrCORSSuccessful()) {
-      if (!unused_preload) {
+      if (!resource_->IsUnusedPreload())
         Context().AddErrorConsoleMessage(cors_error_msg.ToString(),
                                          FetchContext::kJSSource);
-      }
 
+      // Redirects can change the response URL different from one of request.
       HandleError(ResourceError::CancelledDueToAccessCheckError(
-          response_url, ResourceRequestBlockedReason::kOther));
+          response.Url(), ResourceRequestBlockedReason::kOther));
       return;
     }
   }
@@ -613,7 +597,6 @@ void ResourceLoader::DidFinishLoading(double finish_time,
   resource_->SetEncodedBodyLength(encoded_body_length);
   resource_->SetDecodedBodyLength(decoded_body_length);
 
-  keepalive_.Clear();
   Release(ResourceLoadScheduler::ReleaseOption::kReleaseAndSchedule);
   loader_.reset();
 
@@ -644,7 +627,6 @@ void ResourceLoader::HandleError(const ResourceError& error) {
     return;
   }
 
-  keepalive_.Clear();
   Release(ResourceLoadScheduler::ReleaseOption::kReleaseAndSchedule);
   loader_.reset();
 

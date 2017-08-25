@@ -9,18 +9,21 @@
 #include "base/android/jni_string.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/common/chrome_switches.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/util.h"
+#include "components/search_provider_logos/features.h"
+#include "components/search_provider_logos/switches.h"
 #include "jni/TemplateUrlService_jni.h"
 #include "net/base/url_util.h"
 
@@ -124,7 +127,7 @@ jboolean TemplateUrlServiceAndroid::DoesDefaultSearchEngineHaveLogo(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSearchProviderLogoURL)) {
+          search_provider_logos::switches::kSearchProviderLogoURL)) {
     return true;
   }
 
@@ -133,8 +136,28 @@ jboolean TemplateUrlServiceAndroid::DoesDefaultSearchEngineHaveLogo(
 
   const TemplateURL* default_search_provider =
       template_url_service_->GetDefaultSearchProvider();
+
+  if (base::FeatureList::IsEnabled(
+          search_provider_logos::features::kThirdPartyDoodles)) {
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            search_provider_logos::switches::kThirdPartyDoodleURL)) {
+      return true;
+    }
+    if (!base::GetFieldTrialParamValueByFeature(
+             search_provider_logos::features::kThirdPartyDoodles,
+             search_provider_logos::features::
+                 kThirdPartyDoodlesOverrideUrlParam)
+             .empty()) {
+      return true;
+    }
+    if (default_search_provider &&
+        default_search_provider->doodle_url().is_valid()) {
+      return true;
+    }
+  }
+
   return default_search_provider &&
-         !default_search_provider->logo_url().is_empty();
+         default_search_provider->logo_url().is_valid();
 }
 
 jboolean
@@ -195,19 +218,25 @@ void TemplateUrlServiceAndroid::LoadTemplateURLs() {
   constexpr size_t kMaxRecentUrls = 3;
   const size_t recent_url_num = template_urls_.end() - it;
   auto end = it + std::min(recent_url_num, kMaxRecentUrls);
+  // If filtering is disabled, include all custom search engines.
+  if (filtering_disabled_)
+    end = it + recent_url_num;
+
   std::partial_sort(it, end, template_urls_.end(),
                     [](const TemplateURL* lhs, const TemplateURL* rhs) {
                       return lhs->last_visited() > rhs->last_visited();
                     });
 
-  // Limit to those three engines which must also have been visited in the last
-  // two days.
-  constexpr base::TimeDelta kMaxVisitAge = base::TimeDelta::FromDays(2);
-  const base::Time cutoff = base::Time::Now() - kMaxVisitAge;
-  const auto too_old = [cutoff](const TemplateURL* t_url) {
-    return t_url->last_visited() < cutoff;
-  };
-  template_urls_.erase(std::find_if(it, end, too_old), template_urls_.end());
+  if (!filtering_disabled_) {
+    // Limit to those three engines which must also have been visited in the
+    // last two days.
+    constexpr base::TimeDelta kMaxVisitAge = base::TimeDelta::FromDays(2);
+    const base::Time cutoff = base::Time::Now() - kMaxVisitAge;
+    const auto too_old = [cutoff](const TemplateURL* t_url) {
+      return t_url->last_visited() < cutoff;
+    };
+    template_urls_.erase(std::find_if(it, end, too_old), template_urls_.end());
+  }
 }
 
 void TemplateUrlServiceAndroid::OnTemplateURLServiceChanged() {
@@ -338,6 +367,17 @@ TemplateUrlServiceAndroid::GetSearchEngineUrlFromTemplateUrl(
   return base::android::ConvertUTF8ToJavaString(env, url);
 }
 
+void TemplateUrlServiceAndroid::SetFilteringDisabled(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jboolean filtering_disabled) {
+  if (filtering_disabled == filtering_disabled_)
+    return;
+
+  filtering_disabled_ = filtering_disabled;
+  OnTemplateURLServiceChanged();
+}
+
 base::android::ScopedJavaLocalRef<jstring>
 TemplateUrlServiceAndroid::AddSearchEngineForTesting(
     JNIEnv* env,
@@ -349,7 +389,7 @@ TemplateUrlServiceAndroid::AddSearchEngineForTesting(
       base::android::ConvertJavaStringToUTF16(env, jkeyword);
   data.SetShortName(keyword);
   data.SetKeyword(keyword);
-  data.SetURL("http://testurl");
+  data.SetURL("https://testurl.com/?searchstuff={searchTerms}");
   data.favicon_url = GURL("http://favicon.url");
   data.safe_for_autoreplace = true;
   data.input_encodings.push_back("UTF-8");
@@ -362,6 +402,7 @@ TemplateUrlServiceAndroid::AddSearchEngineForTesting(
       base::Time::Now() - base::TimeDelta::FromDays((int) age_in_days);
   TemplateURL* t_url =
       template_url_service_->Add(base::MakeUnique<TemplateURL>(data));
+  CHECK(t_url) << "Failed adding template url for: " << keyword;
   return base::android::ConvertUTF16ToJavaString(env, t_url->data().keyword());
 }
 

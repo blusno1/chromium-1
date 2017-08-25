@@ -37,10 +37,12 @@
 #include "build/build_config.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
+#include "core/css/CSSFontSelector.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/StyleEngine.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/fileapi/File.h"
 #include "core/frame/LocalFrame.h"
@@ -61,14 +63,13 @@
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/layout/LayoutHTMLCanvas.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintTiming.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/graphics/Canvas2DImageBufferSurface.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/CanvasMetrics.h"
 #include "platform/graphics/ImageBuffer.h"
@@ -135,7 +136,6 @@ inline HTMLCanvasElement::HTMLCanvasElement(Document& document)
       ContextLifecycleObserver(&document),
       PageVisibilityObserver(document.GetPage()),
       size_(kDefaultWidth, kDefaultHeight),
-      context_(this, nullptr),
       ignore_reset_(false),
       externally_allocated_memory_(0),
       origin_clean_(true),
@@ -189,10 +189,22 @@ Node::InsertionNotificationRequest HTMLCanvasElement::InsertedInto(
 }
 
 void HTMLCanvasElement::setHeight(int value, ExceptionState& exception_state) {
+  if (IsPlaceholderRegistered()) {
+    exception_state.ThrowDOMException(
+        kInvalidStateError,
+        "Cannot resize canvas after call to transferControlToOffscreen().");
+    return;
+  }
   SetIntegralAttribute(heightAttr, value);
 }
 
 void HTMLCanvasElement::setWidth(int value, ExceptionState& exception_state) {
+  if (IsPlaceholderRegistered()) {
+    exception_state.ThrowDOMException(
+        kInvalidStateError,
+        "Cannot resize canvas after call to transferControlToOffscreen().");
+    return;
+  }
   SetIntegralAttribute(widthAttr, value);
 }
 
@@ -930,7 +942,7 @@ HTMLCanvasElement::CreateAcceleratedImageBufferSurface(OpacityMode opacity_mode,
   if (context_provider_wrapper->ContextProvider()->IsSoftwareRendering())
     return nullptr;  // Don't use accelerated canvas with swiftshader.
 
-  auto surface = WTF::MakeUnique<Canvas2DImageBufferSurface>(
+  auto surface = WTF::MakeUnique<Canvas2DLayerBridge>(
       Size(), *msaa_sample_count, opacity_mode,
       Canvas2DLayerBridge::kEnableAcceleration, GetCanvasColorParams());
   if (!surface->IsValid()) {
@@ -963,8 +975,9 @@ HTMLCanvasElement::CreateUnacceleratedImageBufferSurface(
     // here.
   }
 
-  auto surface = WTF::MakeUnique<UnacceleratedImageBufferSurface>(
-      Size(), opacity_mode, kInitializeImagePixels, GetCanvasColorParams());
+  auto surface = WTF::MakeUnique<Canvas2DLayerBridge>(
+      Size(), 0, opacity_mode, Canvas2DLayerBridge::kDisableAcceleration,
+      GetCanvasColorParams());
   if (surface->IsValid()) {
     CanvasMetrics::CountCanvasContextUsage(
         CanvasMetrics::kUnaccelerated2DCanvasImageBufferCreated);
@@ -1072,9 +1085,9 @@ void HTMLCanvasElement::UpdateExternallyAllocatedMemory() const {
   if (copied_image_)
     buffer_count++;
 
-  // Four bytes per pixel per buffer.
+  // Multiplying number of buffers by bytes per pixel
   CheckedNumeric<intptr_t> checked_externally_allocated_memory =
-      4 * buffer_count;
+      buffer_count * GetCanvasColorParams().BytesPerPixel();
   if (Is3d()) {
     checked_externally_allocated_memory +=
         context_->ExternallyAllocatedBytesPerPixel();
@@ -1358,6 +1371,8 @@ void HTMLCanvasElement::SetPlaceholderFrame(
   OffscreenCanvasPlaceholder::SetPlaceholderFrame(
       std::move(image), std::move(dispatcher), std::move(task_runner),
       resource_id);
+  IntSize new_size(PlaceholderFrame()->width(), PlaceholderFrame()->height());
+  SetSize(new_size);
   NotifyListenersCanvasChanged();
 }
 
@@ -1464,6 +1479,10 @@ void HTMLCanvasElement::CreateLayer() {
 
 void HTMLCanvasElement::OnWebLayerReplaced() {
   SetNeedsCompositingUpdate();
+}
+
+FontSelector* HTMLCanvasElement::GetFontSelector() {
+  return GetDocument().GetStyleEngine().GetFontSelector();
 }
 
 }  // namespace blink

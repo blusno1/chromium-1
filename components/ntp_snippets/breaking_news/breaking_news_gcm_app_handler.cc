@@ -6,15 +6,22 @@
 
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
+#include "base/task_scheduler/post_task.h"
+#include "build/build_config.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/gcm_driver/instance_id/instance_id.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
+#include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/pref_names.h"
+#include "components/ntp_snippets/time_serialization.h"
+#include "components/variations/variations_associated_data.h"
 
 using instance_id::InstanceID;
 
 namespace ntp_snippets {
+
+namespace {
 
 const char kBreakingNewsGCMAppID[] = "com.google.breakingnews.gcm";
 
@@ -29,49 +36,111 @@ const char kGCMScope[] = "GCM";
 // Key of the news json in the data in the pushed breaking news.
 const char kPushedNewsKey[] = "payload";
 
+// Lower bound time between two token validations when listening.
+const int kTokenValidationPeriodHours = 24;
+
+base::TimeDelta GetTokenValidationPeriod() {
+  return base::TimeDelta::FromHours(kTokenValidationPeriodHours);
+}
+
+const bool kEnableTokenValidationDefault = true;
+const char kEnableTokenValidationParamName[] = "enable_token_validation";
+
+bool IsTokenValidationEnabled() {
+  return variations::GetVariationParamByFeatureAsBool(
+      kBreakingNewsPushFeature, kEnableTokenValidationParamName,
+      kEnableTokenValidationDefault);
+}
+
+// Lower bound time between two forced subscriptions when listening. A
+// forced subscription is a normal subscription to the content
+// suggestions server, which cannot be omitted.
+const int kForcedSubscriptionPeriodHours = 7 * 24;
+
+base::TimeDelta GetForcedSubscriptionPeriod() {
+  return base::TimeDelta::FromHours(kForcedSubscriptionPeriodHours);
+}
+
+const bool kEnableForcedSubscriptionDefault = true;
+const char kEnableForcedSubscriptionParamName[] = "enable_forced_subscription";
+
+bool IsForcedSubscriptionEnabled() {
+  return variations::GetVariationParamByFeatureAsBool(
+      kBreakingNewsPushFeature, kEnableForcedSubscriptionParamName,
+      kEnableForcedSubscriptionDefault);
+}
+
+}  // namespace
+
 BreakingNewsGCMAppHandler::BreakingNewsGCMAppHandler(
     gcm::GCMDriver* gcm_driver,
     instance_id::InstanceIDDriver* instance_id_driver,
     PrefService* pref_service,
     std::unique_ptr<SubscriptionManager> subscription_manager,
-    const ParseJSONCallback& parse_json_callback)
+    const ParseJSONCallback& parse_json_callback,
+    std::unique_ptr<base::Clock> clock,
+    std::unique_ptr<base::OneShotTimer> token_validation_timer,
+    std::unique_ptr<base::OneShotTimer> forced_subscription_timer)
     : gcm_driver_(gcm_driver),
       instance_id_driver_(instance_id_driver),
       pref_service_(pref_service),
       subscription_manager_(std::move(subscription_manager)),
       parse_json_callback_(parse_json_callback),
-      weak_ptr_factory_(this) {}
+      clock_(std::move(clock)),
+      token_validation_timer_(std::move(token_validation_timer)),
+      forced_subscription_timer_(std::move(forced_subscription_timer)),
+      weak_ptr_factory_(this) {
+#if !defined(OS_ANDROID)
+#error The BreakingNewsGCMAppHandler should only be used on Android.
+#endif  // !OS_ANDROID
+  DCHECK(token_validation_timer_);
+  DCHECK(!token_validation_timer_->IsRunning());
+}
 
 BreakingNewsGCMAppHandler::~BreakingNewsGCMAppHandler() {
-  StopListening();
+  if (IsListening()) {
+    StopListening();
+  }
 }
 
 void BreakingNewsGCMAppHandler::StartListening(
     OnNewRemoteSuggestionCallback on_new_remote_suggestion_callback) {
-#if !defined(OS_ANDROID)
-  NOTREACHED()
-      << "The BreakingNewsGCMAppHandler should only be used on Android.";
-#endif
-  Subscribe();
+  DCHECK(!IsListening());
+  DCHECK(!on_new_remote_suggestion_callback.is_null());
   on_new_remote_suggestion_callback_ =
       std::move(on_new_remote_suggestion_callback);
+  Subscribe(/*force_token_retrieval=*/false);
   gcm_driver_->AddAppHandler(kBreakingNewsGCMAppID, this);
+  if (IsTokenValidationEnabled()) {
+    ScheduleNextTokenValidation();
+  }
+  if (IsForcedSubscriptionEnabled()) {
+    ScheduleNextForcedSubscription();
+  }
 }
 
 void BreakingNewsGCMAppHandler::StopListening() {
+  DCHECK(IsListening());
+  token_validation_timer_->Stop();
+  forced_subscription_timer_->Stop();
   DCHECK_EQ(gcm_driver_->GetAppHandler(kBreakingNewsGCMAppID), this);
   gcm_driver_->RemoveAppHandler(kBreakingNewsGCMAppID);
   on_new_remote_suggestion_callback_ = OnNewRemoteSuggestionCallback();
   subscription_manager_->Unsubscribe();
 }
 
-void BreakingNewsGCMAppHandler::Subscribe() {
-  // TODO(mamir): This logic should be moved to the SubscriptionManager.
+bool BreakingNewsGCMAppHandler::IsListening() const {
+  return !on_new_remote_suggestion_callback_.is_null();
+}
+
+void BreakingNewsGCMAppHandler::Subscribe(bool force_token_retrieval) {
+  // TODO(mamir): "Whether to subscribe to content suggestions server" logic
+  // should be moved to the SubscriptionManager.
   std::string token =
       pref_service_->GetString(prefs::kBreakingNewsGCMSubscriptionTokenCache);
   // If a token has been already obtained, subscribe directly at the content
   // suggestions server. Otherwise, obtain a GCM token first.
-  if (!token.empty()) {
+  if (!token.empty() && !force_token_retrieval) {
     if (!subscription_manager_->IsSubscribed() ||
         subscription_manager_->NeedsToResubscribe()) {
       subscription_manager_->Subscribe(token);
@@ -82,15 +151,22 @@ void BreakingNewsGCMAppHandler::Subscribe() {
   instance_id_driver_->GetInstanceID(kBreakingNewsGCMAppID)
       ->GetToken(kBreakingNewsGCMSenderId, kGCMScope,
                  /*options=*/std::map<std::string, std::string>(),
-                 base::Bind(&BreakingNewsGCMAppHandler::DidSubscribe,
+                 base::Bind(&BreakingNewsGCMAppHandler::DidRetrieveToken,
                             weak_ptr_factory_.GetWeakPtr()));
 }
 
-void BreakingNewsGCMAppHandler::DidSubscribe(
+void BreakingNewsGCMAppHandler::DidRetrieveToken(
     const std::string& subscription_token,
     InstanceID::Result result) {
   switch (result) {
     case InstanceID::SUCCESS:
+      // The received token is assumed to be valid, therefore, we reschedule
+      // validation.
+      pref_service_->SetInt64(prefs::kBreakingNewsGCMLastTokenValidationTime,
+                              SerializeTime(clock_->Now()));
+      if (IsTokenValidationEnabled()) {
+        ScheduleNextTokenValidation();
+      }
       pref_service_->SetString(prefs::kBreakingNewsGCMSubscriptionTokenCache,
                                subscription_token);
       subscription_manager_->Subscribe(subscription_token);
@@ -107,6 +183,91 @@ void BreakingNewsGCMAppHandler::DidSubscribe(
     case InstanceID::NETWORK_ERROR:
       break;
   }
+}
+
+void BreakingNewsGCMAppHandler::ResubscribeIfInvalidToken() {
+  DCHECK(IsListening());
+  DCHECK(IsTokenValidationEnabled());
+
+  // InstanceIDAndroid::ValidateToken just returns |true| on Android. Instead it
+  // is ok to retrieve a token, because it is cached.
+  instance_id_driver_->GetInstanceID(kBreakingNewsGCMAppID)
+      ->GetToken(
+          kBreakingNewsGCMSenderId, kGCMScope,
+          /*options=*/std::map<std::string, std::string>(),
+          base::Bind(&BreakingNewsGCMAppHandler::DidReceiveTokenForValidation,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void BreakingNewsGCMAppHandler::DidReceiveTokenForValidation(
+    const std::string& new_token,
+    InstanceID::Result result) {
+  // TODO(crbug.com/744557): Add a metric to record time from last validation.
+
+  // We intentionally reschedule as normal even if we don't get a token.
+  // TODO(crbug.com/744557): Add a metric to record number of failed token
+  // retrievals. Consider rescheduling next validation sooner.
+  pref_service_->SetInt64(prefs::kBreakingNewsGCMLastTokenValidationTime,
+                          SerializeTime(clock_->Now()));
+  ScheduleNextTokenValidation();
+
+  if (result != InstanceID::SUCCESS) {
+    return;
+  }
+  const std::string old_token =
+      pref_service_->GetString(prefs::kBreakingNewsGCMSubscriptionTokenCache);
+  if (old_token != new_token) {
+    // TODO(crbug.com/744557): Add a metric to record time since last validation
+    // when the token was valid.
+    subscription_manager_->Resubscribe(new_token);
+  }
+}
+
+void BreakingNewsGCMAppHandler::ScheduleNextTokenValidation() {
+  DCHECK(IsListening());
+  DCHECK(IsTokenValidationEnabled());
+
+  const base::Time last_validation_time = DeserializeTime(
+      pref_service_->GetInt64(prefs::kBreakingNewsGCMLastTokenValidationTime));
+  // Timer runs the task immediately if delay is <= 0.
+  token_validation_timer_->Start(
+      FROM_HERE,
+      /*delay=*/last_validation_time + GetTokenValidationPeriod() -
+          clock_->Now(),
+      base::Bind(&BreakingNewsGCMAppHandler::ResubscribeIfInvalidToken,
+                 weak_ptr_factory_.GetWeakPtr()));
+}
+
+void BreakingNewsGCMAppHandler::ForceSubscribe() {
+  DCHECK(IsForcedSubscriptionEnabled());
+
+  // We intentionally reschedule as normal even if there is no token or
+  // subscription fails.
+  pref_service_->SetInt64(prefs::kBreakingNewsGCMLastForcedSubscriptionTime,
+                          SerializeTime(clock_->Now()));
+  ScheduleNextForcedSubscription();
+
+  const std::string token =
+      pref_service_->GetString(prefs::kBreakingNewsGCMSubscriptionTokenCache);
+  if (!token.empty()) {
+    subscription_manager_->Subscribe(token);
+  }
+}
+
+void BreakingNewsGCMAppHandler::ScheduleNextForcedSubscription() {
+  DCHECK(IsListening());
+  DCHECK(IsForcedSubscriptionEnabled());
+
+  const base::Time last_forced_subscription_time =
+      DeserializeTime(pref_service_->GetInt64(
+          prefs::kBreakingNewsGCMLastForcedSubscriptionTime));
+  // Timer runs the task immediately if delay is <= 0.
+  forced_subscription_timer_->Start(
+      FROM_HERE,
+      /*delay=*/last_forced_subscription_time + GetForcedSubscriptionPeriod() -
+          clock_->Now(),
+      base::Bind(&BreakingNewsGCMAppHandler::ForceSubscribe,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void BreakingNewsGCMAppHandler::ShutdownHandler() {}
@@ -156,10 +317,23 @@ void BreakingNewsGCMAppHandler::OnSendAcknowledged(
   NOTREACHED() << "BreakingNewsGCMAppHandler doesn't send GCM messages.";
 }
 
+// static
 void BreakingNewsGCMAppHandler::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kBreakingNewsGCMSubscriptionTokenCache,
-                               std::string());
+                               /*default_value=*/std::string());
+  registry->RegisterInt64Pref(prefs::kBreakingNewsGCMLastTokenValidationTime,
+                              /*default_value=*/0);
+  registry->RegisterInt64Pref(prefs::kBreakingNewsGCMLastForcedSubscriptionTime,
+                              /*default_value=*/0);
+}
+
+// TODO(vitaliii): Add a test to ensure that this clears everything.
+// static
+void BreakingNewsGCMAppHandler::ClearProfilePrefs(PrefService* pref_service) {
+  pref_service->ClearPref(prefs::kBreakingNewsGCMSubscriptionTokenCache);
+  pref_service->ClearPref(prefs::kBreakingNewsGCMLastTokenValidationTime);
+  pref_service->ClearPref(prefs::kBreakingNewsGCMSubscriptionTokenCache);
 }
 
 void BreakingNewsGCMAppHandler::OnJsonSuccess(
@@ -170,11 +344,23 @@ void BreakingNewsGCMAppHandler::OnJsonSuccess(
                         /*fetch_time=*/base::Time::Now())) {
     std::string content_json;
     base::JSONWriter::Write(*content, &content_json);
-    LOG(WARNING) << "Received invalid breaking news: " << content_json;
+    LOG(WARNING)
+        << "Received invalid breaking news: can't interpret value, json is "
+        << content_json;
     return;
   }
-  DCHECK_EQ(1u, fetched_categories.size());
-  DCHECK_EQ(1u, fetched_categories[0].suggestions.size());
+  if (fetched_categories.size() != 1) {
+    LOG(WARNING)
+        << "Received invalid breaking news: expected 1 category, but got "
+        << fetched_categories.size();
+    return;
+  }
+  if (fetched_categories[0].suggestions.size() != 1) {
+    LOG(WARNING)
+        << "Received invalid breaking news: expected 1 suggestion, but got "
+        << fetched_categories[0].suggestions.size();
+    return;
+  }
 
   on_new_remote_suggestion_callback_.Run(
       std::move(fetched_categories[0].suggestions[0]));

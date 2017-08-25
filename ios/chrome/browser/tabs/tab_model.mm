@@ -23,7 +23,7 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/chrome_url_util.h"
 #import "ios/chrome/browser/metrics/tab_usage_recorder.h"
-#import "ios/chrome/browser/metrics/tab_usage_recorder_web_state_list_observer.h"
+#import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
@@ -36,12 +36,14 @@
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model_closing_web_state_observer.h"
 #import "ios/chrome/browser/tabs/tab_model_list.h"
+#import "ios/chrome/browser/tabs/tab_model_notification_observer.h"
 #import "ios/chrome/browser/tabs/tab_model_observers.h"
 #import "ios/chrome/browser/tabs/tab_model_observers_bridge.h"
 #import "ios/chrome/browser/tabs/tab_model_selected_tab_observer.h"
 #import "ios/chrome/browser/tabs/tab_model_synced_window_delegate.h"
 #import "ios/chrome/browser/tabs/tab_model_web_state_list_delegate.h"
 #import "ios/chrome/browser/tabs/tab_parenting_observer.h"
+#import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_fast_enumeration_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_metrics_observer.h"
@@ -120,19 +122,6 @@ void CleanCertificatePolicyCache(
                  base::Unretained(web_state_list)));
 }
 
-// Factory of WebState for DeserializeWebStateList that wraps the method
-// web::WebState::CreateWithStorageSession and sets the WebState usage
-// enabled flag from |web_usage_enabled|.
-std::unique_ptr<web::WebState> CreateWebState(
-    BOOL web_usage_enabled,
-    web::WebState::CreateParams create_params,
-    CRWSessionStorage* session_storage) {
-  std::unique_ptr<web::WebState> web_state =
-      web::WebState::CreateWithStorageSession(create_params, session_storage);
-  web_state->SetWebUsageEnabled(web_usage_enabled);
-  return web_state;
-}
-
 }  // anonymous namespace
 
 @interface TabModelWebStateProxyFactory : NSObject<WebStateProxyFactory>
@@ -146,7 +135,7 @@ std::unique_ptr<web::WebState> CreateWebState(
 
 @end
 
-@interface TabModel ()<TabUsageRecorderDelegate> {
+@interface TabModel () {
   // Delegate for the WebStateList.
   std::unique_ptr<WebStateListDelegate> _webStateListDelegate;
 
@@ -270,7 +259,9 @@ std::unique_ptr<web::WebState> CreateWebState(
     // important to the backend code to always have a sync window delegate.
     if (!_browserState->IsOffTheRecord()) {
       // Set up the usage recorder before tabs are created.
-      _tabUsageRecorder = base::MakeUnique<TabUsageRecorder>(self);
+      _tabUsageRecorder = base::MakeUnique<TabUsageRecorder>(
+          _webStateList.get(),
+          PrerenderServiceFactory::GetForBrowserState(browserState));
     }
     _syncedWindowDelegate = base::MakeUnique<TabModelSyncedWindowDelegate>(
         _webStateList.get(), _sessionID);
@@ -300,11 +291,6 @@ std::unique_ptr<web::WebState> CreateWebState(
           base::MakeUnique<SnapshotCacheWebStateListObserver>(snapshotCache));
     }
 
-    if (_tabUsageRecorder) {
-      _webStateListObservers.push_back(
-          base::MakeUnique<TabUsageRecorderWebStateListObserver>(
-              _tabUsageRecorder.get()));
-    }
     _webStateListObservers.push_back(base::MakeUnique<TabParentingObserver>());
 
     TabModelSelectedTabObserver* tabModelSelectedTabObserver =
@@ -325,6 +311,9 @@ std::unique_ptr<web::WebState> CreateWebState(
         base::MakeUnique<WebStateListMetricsObserver>();
     _webStateListMetricsObserver = webStateListMetricsObserver.get();
     _webStateListObservers.push_back(std::move(webStateListMetricsObserver));
+
+    _webStateListObservers.push_back(
+        base::MakeUnique<TabModelNotificationObserver>(self));
 
     for (const auto& webStateListObserver : _webStateListObservers)
       _webStateList->AddObserver(webStateListObserver.get());
@@ -349,12 +338,6 @@ std::unique_ptr<web::WebState> CreateWebState(
         addObserver:self
            selector:@selector(applicationDidEnterBackground:)
                name:UIApplicationDidEnterBackgroundNotification
-             object:nil];
-    // Register for foregrounding notification.
-    [[NSNotificationCenter defaultCenter]
-        addObserver:self
-           selector:@selector(applicationWillEnterForeground:)
-               name:UIApplicationWillEnterForegroundNotification
              object:nil];
 
     // Associate with ios::ChromeBrowserState.
@@ -403,37 +386,6 @@ std::unique_ptr<web::WebState> CreateWebState(
   return static_cast<NSUInteger>(index);
 }
 
-- (Tab*)nextTabWithOpener:(Tab*)tab afterTab:(Tab*)afterTab {
-  int startIndex = WebStateList::kInvalidIndex;
-  if (afterTab)
-    startIndex = _webStateList->GetIndexOfWebState(afterTab.webState);
-
-  if (startIndex == WebStateList::kInvalidIndex)
-    startIndex = _webStateList->GetIndexOfWebState(tab.webState);
-
-  const int index = _webStateList->GetIndexOfNextWebStateOpenedBy(
-      tab.webState, startIndex, false);
-  if (index == WebStateList::kInvalidIndex)
-    return nil;
-
-  DCHECK_GE(index, 0);
-  return [self tabAtIndex:static_cast<NSUInteger>(index)];
-}
-
-- (Tab*)lastTabWithOpener:(Tab*)tab {
-  int startIndex = _webStateList->GetIndexOfWebState(tab.webState);
-  if (startIndex == WebStateList::kInvalidIndex)
-    return nil;
-
-  const int index = _webStateList->GetIndexOfLastWebStateOpenedBy(
-      tab.webState, startIndex, true);
-  if (index == WebStateList::kInvalidIndex)
-    return nil;
-
-  DCHECK_GE(index, 0);
-  return [self tabAtIndex:static_cast<NSUInteger>(index)];
-}
-
 - (Tab*)openerOfTab:(Tab*)tab {
   int index = _webStateList->GetIndexOfWebState(tab.webState);
   if (index == WebStateList::kInvalidIndex)
@@ -469,53 +421,34 @@ std::unique_ptr<web::WebState> CreateWebState(
                    inBackground:(BOOL)inBackground {
   DCHECK(_browserState);
 
-  web::WebState::CreateParams createParams(self.browserState);
-  createParams.created_with_opener = openedByDOM;
-  std::unique_ptr<web::WebState> webState = web::WebState::Create(createParams);
-
-  web::WebState* webStatePtr = webState.get();
-  if (index == TabModelConstants::kTabPositionAutomatically) {
-    _webStateList->AppendWebState(loadParams.transition_type,
-                                  std::move(webState),
-                                  WebStateOpener(parentTab.webState));
-  } else {
+  int insertionIndex = WebStateList::kInvalidIndex;
+  int insertionFlags = WebStateList::INSERT_NO_FLAGS;
+  if (index != TabModelConstants::kTabPositionAutomatically) {
     DCHECK_LE(index, static_cast<NSUInteger>(INT_MAX));
-    const int insertion_index = static_cast<int>(index);
-    _webStateList->InsertWebState(insertion_index, std::move(webState));
-    if (parentTab.webState) {
-      _webStateList->SetOpenerOfWebStateAt(insertion_index,
-                                           WebStateOpener(parentTab.webState));
-    }
+    insertionIndex = static_cast<int>(index);
+    insertionFlags |= WebStateList::INSERT_FORCE_INDEX;
+  } else if (!ui::PageTransitionCoreTypeIs(loadParams.transition_type,
+                                           ui::PAGE_TRANSITION_LINK)) {
+    insertionIndex = _webStateList->count();
+    insertionFlags |= WebStateList::INSERT_FORCE_INDEX;
   }
 
-  Tab* tab = LegacyTabHelper::GetTabForWebState(webStatePtr);
-  DCHECK(tab);
+  if (!inBackground) {
+    insertionFlags |= WebStateList::INSERT_ACTIVATE;
+  }
 
-  webStatePtr->SetWebUsageEnabled(_webUsageEnabled ? true : false);
+  web::WebState::CreateParams createParams(self.browserState);
+  createParams.created_with_opener = openedByDOM;
 
-  if (!inBackground && _tabUsageRecorder)
-    _tabUsageRecorder->TabCreatedForSelection(tab);
+  std::unique_ptr<web::WebState> webState = web::WebState::Create(createParams);
+  webState->GetNavigationManager()->LoadURLWithParams(loadParams);
 
-  webStatePtr->GetNavigationManager()->LoadURLWithParams(loadParams);
+  insertionIndex = _webStateList->InsertWebState(
+      insertionIndex, std::move(webState), insertionFlags,
+      WebStateOpener(parentTab.webState));
 
-  // Force the page to start loading even if it's in the background.
-  // TODO(crbug.com/705819): Remove this call.
-  if (_webUsageEnabled)
-    webStatePtr->GetView();
-
-  NSDictionary* userInfo = @{
-    kTabModelTabKey : tab,
-    kTabModelOpenInBackgroundKey : @(inBackground),
-  };
-  [[NSNotificationCenter defaultCenter]
-      postNotificationName:kTabModelNewTabWillOpenNotification
-                    object:self
-                  userInfo:userInfo];
-
-  if (!inBackground)
-    [self setCurrentTab:tab];
-
-  return tab;
+  return LegacyTabHelper::GetTabForWebState(
+      _webStateList->GetWebStateAt(insertionIndex));
 }
 
 - (void)moveTab:(Tab*)tab toIndex:(NSUInteger)toIndex {
@@ -573,12 +506,6 @@ std::unique_ptr<web::WebState> CreateWebState(
   [_observers tabModel:self didChangeTabSnapshot:tab withImage:image];
 }
 
-- (void)resetAllWebViews {
-  for (Tab* tab in self) {
-    [tab.webController reinitializeWebViewAndReload:(tab == self.currentTab)];
-  }
-}
-
 - (void)setWebUsageEnabled:(BOOL)webUsageEnabled {
   if (_webUsageEnabled == webUsageEnabled)
     return;
@@ -590,8 +517,10 @@ std::unique_ptr<web::WebState> CreateWebState(
 }
 
 - (void)setPrimary:(BOOL)primary {
-  if (_tabUsageRecorder)
-    _tabUsageRecorder->RecordPrimaryTabModelChange(primary, self.currentTab);
+  if (_tabUsageRecorder) {
+    _tabUsageRecorder->RecordPrimaryTabModelChange(primary,
+                                                   self.currentTab.webState);
+  }
 }
 
 - (NSSet*)currentlyReferencedExternalFiles {
@@ -660,6 +589,7 @@ std::unique_ptr<web::WebState> CreateWebState(
   _retainedWebStateListObservers = nil;
 
   _clearPoliciesTaskTracker.TryCancelAll();
+  _tabUsageRecorder.reset();
 }
 
 - (void)navigationCommittedInTab:(Tab*)tab
@@ -697,17 +627,6 @@ std::unique_ptr<web::WebState> CreateWebState(
                             count:count];
 }
 
-#pragma mark - TabUsageRecorderDelegate
-
-- (NSUInteger)liveTabsCount {
-  NSUInteger count = 0;
-  for (Tab* tab in self) {
-    if ([tab.webController isViewAlive])
-      count++;
-  }
-  return count;
-}
-
 #pragma mark - Private methods
 
 - (SessionIOS*)sessionForSaving {
@@ -733,7 +652,8 @@ std::unique_ptr<web::WebState> CreateWebState(
   web::WebState::CreateParams createParams(_browserState);
   DeserializeWebStateList(
       _webStateList.get(), window,
-      base::BindRepeating(&CreateWebState, _webUsageEnabled, createParams));
+      base::BindRepeating(&web::WebState::CreateWithStorageSession,
+                          createParams));
 
   DCHECK_GT(_webStateList->count(), oldCount);
   int restoredCount = _webStateList->count() - oldCount;
@@ -742,20 +662,21 @@ std::unique_ptr<web::WebState> CreateWebState(
   scoped_refptr<web::CertificatePolicyCache> policyCache =
       web::BrowserState::GetCertificatePolicyCache(_browserState);
 
-  NSMutableArray<Tab*>* restoredTabs =
-      [[NSMutableArray alloc] initWithCapacity:window.sessions.count];
+  std::vector<web::WebState*> restoredWebStates;
+  if (_tabUsageRecorder)
+    restoredWebStates.reserve(window.sessions.count);
 
   for (int index = oldCount; index < _webStateList->count(); ++index) {
     web::WebState* webState = _webStateList->GetWebStateAt(index);
-    Tab* tab = LegacyTabHelper::GetTabForWebState(webState);
-
-    webState->SetWebUsageEnabled(_webUsageEnabled ? true : false);
-    tab.webController.usePlaceholderOverlay = YES;
+    PagePlaceholderTabHelper::FromWebState(webState)
+        ->AddPlaceholderForNextNavigation();
 
     // Restore the CertificatePolicyCache (note that webState is invalid after
     // passing it via move semantic to -initWithWebState:model:).
-    UpdateCertificatePolicyCacheFromWebState(policyCache, [tab webState]);
-    [restoredTabs addObject:tab];
+    UpdateCertificatePolicyCacheFromWebState(policyCache, webState);
+
+    if (_tabUsageRecorder)
+      restoredWebStates.push_back(webState);
   }
 
   // If there was only one tab and it was the new tab page, clobber it.
@@ -770,8 +691,10 @@ std::unique_ptr<web::WebState> CreateWebState(
       oldCount = 0;
     }
   }
-  if (_tabUsageRecorder)
-    _tabUsageRecorder->InitialRestoredTabs(self.currentTab, restoredTabs);
+  if (_tabUsageRecorder) {
+    _tabUsageRecorder->InitialRestoredTabs(self.currentTab.webState,
+                                           restoredWebStates);
+  }
   return closedNTPTab;
 }
 
@@ -798,9 +721,6 @@ std::unique_ptr<web::WebState> CreateWebState(
       web::BrowserState::GetCertificatePolicyCache(_browserState),
       _webStateList.get());
 
-  if (_tabUsageRecorder)
-    _tabUsageRecorder->AppDidEnterBackground();
-
   // Normally, the session is saved after some timer expires but since the app
   // is about to enter the background send YES to save the session immediately.
   [self saveSessionImmediately:YES];
@@ -809,13 +729,6 @@ std::unique_ptr<web::WebState> CreateWebState(
   if (_webUsageEnabled && self.currentTab) {
     [SnapshotCacheFactory::GetForBrowserState(_browserState)
         saveGreyInBackgroundForSessionID:self.currentTab.tabId];
-  }
-}
-
-// Called when UIApplicationWillEnterForegroundNotification is received.
-- (void)applicationWillEnterForeground:(NSNotification*)notify {
-  if (_tabUsageRecorder) {
-    _tabUsageRecorder->AppWillEnterForeground();
   }
 }
 

@@ -13,8 +13,7 @@
 #include "content/common/content_export.h"
 #include "content/common/media/media_stream.mojom.h"
 #include "content/common/media/media_stream_options.h"
-#include "content/public/browser/browser_associated_interface.h"
-#include "content/public/browser/browser_message_filter.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 
 namespace url {
 class Origin;
@@ -28,14 +27,15 @@ class MediaStreamManager;
 // MediaStreamImpl.  There is one MediaStreamDispatcherHost per
 // RenderProcessHost, the former owned by the latter.
 class CONTENT_EXPORT MediaStreamDispatcherHost
-    : public BrowserMessageFilter,
-      public BrowserAssociatedInterface<mojom::MediaStreamDispatcherHost>,
-      public mojom::MediaStreamDispatcherHost,
+    : public mojom::MediaStreamDispatcherHost,
       public MediaStreamRequester {
  public:
   MediaStreamDispatcherHost(int render_process_id,
                             const std::string& salt,
                             MediaStreamManager* media_stream_manager);
+  ~MediaStreamDispatcherHost() override;
+
+  void BindRequest(mojom::MediaStreamDispatcherHostRequest request);
 
   // MediaStreamRequester implementation.
   void StreamGenerated(int render_frame_id,
@@ -54,21 +54,19 @@ class CONTENT_EXPORT MediaStreamDispatcherHost
                     const std::string& label,
                     const StreamDeviceInfo& video_device) override;
 
-  // BrowserMessageFilter implementation.
-  bool OnMessageReceived(const IPC::Message& message) override;
-  void OnChannelClosing() override;
-
   void SetMediaStreamDispatcherForTesting(
       int render_frame_id,
       mojom::MediaStreamDispatcherPtr dispatcher) {
     dispatchers_[render_frame_id] = std::move(dispatcher);
   }
 
- protected:
-  ~MediaStreamDispatcherHost() override;
-
  private:
   friend class MockMediaStreamDispatcherHost;
+
+  mojom::MediaStreamDispatcher* GetMediaStreamDispatcherForFrame(
+      int render_frame_id);
+  void CancelAllRequests();
+  void DeviceOpenFailed(int render_frame_id, int page_request_id);
 
   // mojom::MediaStreamDispatcherHost implementation
   void GenerateStream(int32_t render_frame_id,
@@ -91,17 +89,11 @@ class CONTENT_EXPORT MediaStreamDispatcherHost
                                bool is_secure) override;
   void StreamStarted(const std::string& label) override;
 
-  void OnStreamGenerationFailed(
-      int render_frame_id,
-      int page_request_id,
-      MediaStreamRequestResult result,
-      mojom::MediaStreamDispatcherPtrInfo dispatcher_info);
-
-  std::map<int, mojom::MediaStreamDispatcherPtr> dispatchers_;
-
-  int render_process_id_;
+  const int render_process_id_;
   std::string salt_;
   MediaStreamManager* media_stream_manager_;
+  std::map<int, mojom::MediaStreamDispatcherPtr> dispatchers_;
+  mojo::BindingSet<mojom::MediaStreamDispatcherHost> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamDispatcherHost);
 };

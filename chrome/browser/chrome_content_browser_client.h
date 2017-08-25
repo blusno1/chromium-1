@@ -76,6 +76,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                             const scoped_refptr<base::TaskRunner>& task_runner,
                             base::OnceClosure task) override;
   bool IsBrowserStartupComplete() override;
+  void SetBrowserStartupIsCompleteForTesting() override;
   std::string GetStoragePartitionIdForSite(
       content::BrowserContext* browser_context,
       const GURL& site) override;
@@ -240,7 +241,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                                      const GURL& url) override;
   std::unique_ptr<content::VpnServiceProxy> GetVpnServiceProxy(
       content::BrowserContext* browser_context) override;
-  ui::SelectFilePolicy* CreateSelectFilePolicy(
+  std::unique_ptr<ui::SelectFilePolicy> CreateSelectFilePolicy(
       content::WebContents* web_contents) override;
   void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_schemes) override;

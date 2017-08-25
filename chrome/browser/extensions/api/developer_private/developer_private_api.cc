@@ -69,7 +69,7 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/path_util.h"
 #include "extensions/browser/warning_service.h"
-#include "extensions/common/constants.h"
+#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/install_warning.h"
@@ -77,6 +77,7 @@
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_operation.h"
@@ -156,7 +157,7 @@ void PerformVerificationCheck(content::BrowserContext* context) {
   for (const scoped_refptr<const Extension>& extension : *extensions) {
     if (ui_util::ShouldDisplayInExtensionSettings(extension.get(), context) &&
         prefs->HasDisableReason(extension->id(),
-                                Extension::DISABLE_NOT_VERIFIED)) {
+                                disable_reason::DISABLE_NOT_VERIFIED)) {
       should_do_verification_check = true;
       break;
     }
@@ -902,6 +903,7 @@ void DeveloperPrivatePackDirectoryFunction::OnPackSuccess(
       PackExtensionJob::StandardSuccessMessage(crx_file, pem_file));
   response.status = developer::PACK_STATUS_SUCCESS;
   Respond(OneArgument(response.ToValue()));
+  pack_job_.reset();
   Release();  // Balanced in Run().
 }
 
@@ -919,6 +921,7 @@ void DeveloperPrivatePackDirectoryFunction::OnPackFailure(
     response.status = developer::PACK_STATUS_ERROR;
   }
   Respond(OneArgument(response.ToValue()));
+  pack_job_.reset();
   Release();  // Balanced in Run().
 }
 
@@ -958,8 +961,8 @@ ExtensionFunction::ResponseAction DeveloperPrivatePackDirectoryFunction::Run() {
 
   AddRef();  // Balanced in OnPackSuccess / OnPackFailure.
 
-  // TODO(devlin): Why is PackExtensionJob ref-counted?
-  pack_job_ = new PackExtensionJob(this, root_directory, key_file, flags);
+  pack_job_ =
+      base::MakeUnique<PackExtensionJob>(this, root_directory, key_file, flags);
   pack_job_->Start();
   return RespondLater();
 }
@@ -1161,7 +1164,7 @@ void DeveloperPrivateLoadDirectoryFunction::SnapshotFileCallback(
     base::File::Error result,
     const base::File::Info& file_info,
     const base::FilePath& src_path,
-    const scoped_refptr<storage::ShareableFileReference>& file_ref) {
+    scoped_refptr<storage::ShareableFileReference> file_ref) {
   if (result != base::File::FILE_OK) {
     SetError("Error in copying files from sync filesystem.");
     success_ = false;
@@ -1452,7 +1455,8 @@ DeveloperPrivateRepairExtensionFunction::Run() {
     return RespondNow(Error(kNoSuchExtensionError));
 
   if (!ExtensionPrefs::Get(browser_context())
-           ->HasDisableReason(extension->id(), Extension::DISABLE_CORRUPTED)) {
+           ->HasDisableReason(extension->id(),
+                              disable_reason::DISABLE_CORRUPTED)) {
     return RespondNow(Error(kCannotRepairHealthyExtension));
   }
 

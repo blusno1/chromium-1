@@ -117,6 +117,7 @@ if (!is_android && !is_mac) {
   group("chrome") {
     public_deps = [
       ":chrome_initial",
+      "//tools/v8_context_snapshot:v8_context_snapshot",
     ]
     data_deps = [
       ":chrome_initial",
@@ -547,7 +548,7 @@ if (is_win) {
   }
   copy("copy_first_run") {
     sources = [
-      "app/firstRun",
+      "app/FirstRun",
     ]
     outputs = [
       "$root_out_dir/First Run",
@@ -862,6 +863,7 @@ if (is_win) {
   bundle_data("chrome_framework_resources") {
     sources = [
       "$root_out_dir/app_mode_loader.app",
+      "$root_out_dir/v8_context_snapshot.bin",
 
       # This image is used to badge the lock icon in the
       # authentication dialogs, such as those used for installation
@@ -881,6 +883,7 @@ if (is_win) {
     public_deps = [
       ":packed_resources",
       "//chrome/app_shim:app_mode_loader",
+      "//tools/v8_context_snapshot:v8_context_snapshot",
     ]
 
     if (is_chrome_branded) {
@@ -1551,7 +1554,6 @@ group("extra_resources") {
     "//chrome/browser/resources:invalidations_resources",
     "//chrome/browser/resources:net_internals_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
-    "//chrome/browser/resources:policy_resources",
     "//chrome/browser/resources:quota_internals_resources",
     "//chrome/browser/resources:task_scheduler_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
@@ -1567,7 +1569,6 @@ group("extra_resources") {
 
   if (is_chromeos) {
     public_deps += [
-      "//chrome/browser/resources:options_resources",
       "//chrome/browser/resources/chromeos/chromevox",
       "//chrome/browser/resources/chromeos/select_to_speak",
       "//chrome/browser/resources/chromeos/switch_access",
@@ -1755,7 +1756,7 @@ if (is_android) {
       "//chrome/profiling",
       "//chrome/renderer",
       "//chrome/utility",
-      "//components/safe_browsing_db:safe_browsing_db_mobile",
+      "//components/safe_browsing/db:safe_browsing_mobile",
       "//content/public/app:both",
       "//content/public/common:service_names",
       "//services/service_manager/embedder",

@@ -14,7 +14,6 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/base/devtools_instrumentation.h"
-#include "cc/debug/traced_value.h"
 #include "cc/scheduler/compositor_timing_history.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 
@@ -380,8 +379,18 @@ void Scheduler::BeginImplFrameWithDeadline(const viz::BeginFrameArgs& args) {
       bmf_start_to_activate +
       compositor_timing_history_->BeginMainFrameQueueDurationCriticalEstimate();
 
+  // TODO(khushalsagar): We need to consider the deadline fudge factor here to
+  // match the deadline used in BEGIN_IMPL_FRAME_DEADLINE_MODE_REGULAR mode
+  // (used in the case where the impl thread needs to redraw). In the case where
+  // main_frame_to_active is fast, we should consider using
+  // BEGIN_IMPL_FRAME_DEADLINE_MODE_LATE instead to avoid putting the main
+  // thread in high latency mode. See crbug.com/753146.
+  base::TimeDelta bmf_to_activate_threshold =
+      adjusted_args.interval -
+      compositor_timing_history_->DrawDurationEstimate() - kDeadlineFudgeFactor;
+
   state_machine_.SetCriticalBeginMainFrameToActivateIsFast(
-      bmf_to_activate_estimate_critical < adjusted_args.interval);
+      bmf_to_activate_estimate_critical < bmf_to_activate_threshold);
 
   // Update the BeginMainFrame args now that we know whether the main
   // thread will be on the critical path or not.

@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/net/tether_notification_presenter.h"
 #include "chrome/browser/chromeos/tether/tether_service_factory.h"
@@ -26,6 +27,13 @@
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "ui/message_center/message_center.h"
 
+namespace {
+
+constexpr int64_t kMinAdvertisingIntervalMilliseconds = 100;
+constexpr int64_t kMaxAdvertisingIntervalMilliseconds = 100;
+
+}  // namespace
+
 // static
 TetherService* TetherService::Get(Profile* profile) {
   if (IsFeatureFlagEnabled())
@@ -38,6 +46,22 @@ TetherService* TetherService::Get(Profile* profile) {
 void TetherService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kInstantTetheringAllowed, true);
   registry->RegisterBooleanPref(prefs::kInstantTetheringEnabled, true);
+
+  // If we initially assume that BLE advertising is not supported, it will
+  // result in Tether's Settings and Quick Settings sections not being visible
+  // when the user logs in with Bluetooth disabled (because the TechnologyState
+  // will be UNAVAILABLE, instead of the desired UNINITIALIZED).
+  //
+  // Initially assuming that BLE advertising *is* supported works well for most
+  // devices, but if a user first logs into a device without BLE advertising
+  // support and with Bluetooth disabled, Tether will be visible in Settings and
+  // Quick Settings, but disappear upon enabling Bluetooth. This is an
+  // acceptable edge case, and likely rare because Bluetooth is enabled by
+  // default on new logins. Additionally, through this pref, we will record if
+  // BLE advertising is not supported and remember that for future logins.
+  registry->RegisterBooleanPref(prefs::kInstantTetheringBleAdvertisingSupported,
+                                true);
+
   chromeos::tether::Initializer::RegisterProfilePrefs(registry);
 }
 
@@ -55,12 +79,13 @@ void TetherService::InitializerDelegate::InitializeTether(
     chromeos::ManagedNetworkConfigurationHandler*
         managed_network_configuration_handler,
     chromeos::NetworkConnect* network_connect,
-    chromeos::NetworkConnectionHandler* network_connection_handler) {
+    chromeos::NetworkConnectionHandler* network_connection_handler,
+    scoped_refptr<device::BluetoothAdapter> adapter) {
   chromeos::tether::Initializer::Init(
       cryptauth_service, std::move(notification_presenter), pref_service,
       token_service, network_state_handler,
       managed_network_configuration_handler, network_connect,
-      network_connection_handler);
+      network_connection_handler, adapter);
 }
 
 void TetherService::InitializerDelegate::ShutdownTether() {
@@ -121,7 +146,7 @@ void TetherService::StartTetherIfPossible() {
       network_state_handler_,
       chromeos::NetworkHandler::Get()->managed_network_configuration_handler(),
       chromeos::NetworkConnect::Get(),
-      chromeos::NetworkHandler::Get()->network_connection_handler());
+      chromeos::NetworkHandler::Get()->network_connection_handler(), adapter_);
 }
 
 void TetherService::StopTetherIfNecessary() {
@@ -131,6 +156,11 @@ void TetherService::StopTetherIfNecessary() {
 void TetherService::Shutdown() {
   if (shut_down_)
     return;
+
+  // Record to UMA Tether's last feature state before it is shutdown.
+  // Tether's feature state at the end of its life is the most likely to
+  // accurately represent how it has been used by the user.
+  RecordTetherFeatureState();
 
   shut_down_ = true;
 
@@ -143,12 +173,13 @@ void TetherService::Shutdown() {
   if (adapter_)
     adapter_->RemoveObserver(this);
   registrar_.RemoveAll();
-  notification_presenter_.reset();
 
   // Shut down the feature. Note that this does not change Tether's technology
   // state in NetworkStateHandler because doing so could cause visual jank just
   // as the user logs out.
   StopTetherIfNecessary();
+
+  notification_presenter_.reset();
 }
 
 void TetherService::SuspendImminent() {
@@ -183,10 +214,21 @@ void TetherService::OnSyncFinished(
 
 void TetherService::AdapterPoweredChanged(device::BluetoothAdapter* adapter,
                                           bool powered) {
-  UpdateTetherTechnologyState();
+  // Once the BLE advertising interval has been set (regardless of if BLE
+  // advertising is supported), simply update the TechnologyState.
+  if (has_attempted_to_set_ble_advertising_interval_) {
+    UpdateTetherTechnologyState();
+    return;
+  }
+
+  // If the BluetoothAdapter was not powered when first fetched (see
+  // OnBluetoothAdapterFetched()), now attempt to set the BLE advertising
+  // interval.
+  if (powered)
+    SetBleAdvertisingInterval();
 }
 
-void TetherService::DefaultNetworkChanged(
+void TetherService::NetworkConnectionStateChanged(
     const chromeos::NetworkState* network) {
   if (CanEnableBluetoothNotificationBeShown()) {
     // If the device has just been disconnected from the Internet, the user may
@@ -238,6 +280,9 @@ bool TetherService::HasSyncedTetherHosts() const {
 }
 
 void TetherService::UpdateTetherTechnologyState() {
+  if (!adapter_)
+    return;
+
   chromeos::NetworkStateHandler::TechnologyState new_tether_technology_state =
       GetTetherTechnologyState();
 
@@ -265,28 +310,35 @@ void TetherService::UpdateTetherTechnologyState() {
 
 chromeos::NetworkStateHandler::TechnologyState
 TetherService::GetTetherTechnologyState() {
-  if (shut_down_ || suspended_ || session_manager_client_->IsScreenLocked() ||
-      !HasSyncedTetherHosts() || IsCellularAvailableButNotEnabled()) {
-    // If Cellular technology is available, then Tether technology is treated
-    // as a subset of Cellular, and it should only be enabled when Cellular
-    // technology is enabled.
-    return chromeos::NetworkStateHandler::TechnologyState::
-        TECHNOLOGY_UNAVAILABLE;
-  } else if (!IsAllowedByPolicy()) {
-    return chromeos::NetworkStateHandler::TechnologyState::
-        TECHNOLOGY_PROHIBITED;
-  } else if (!IsBluetoothAvailable()) {
-    // TODO (hansberry): When !IsBluetoothAvailable(), this results in a weird
-    // UI state for Settings where the toggle is clickable but immediately
-    // becomes disabled after enabling it.  Possible solution: grey out the
-    // toggle and tell the user to turn Bluetooth on?
-    return chromeos::NetworkStateHandler::TechnologyState::
-        TECHNOLOGY_UNINITIALIZED;
-  } else if (!IsEnabledbyPreference()) {
-    return chromeos::NetworkStateHandler::TechnologyState::TECHNOLOGY_AVAILABLE;
-  }
+  switch (GetTetherFeatureState()) {
+    case OTHER_OR_UNKNOWN:
+    case BLE_NOT_PRESENT:
+    case BLE_ADVERTISING_NOT_SUPPORTED:
+    case SCREEN_LOCKED:
+    case NO_AVAILABLE_HOSTS:
+    case CELLULAR_DISABLED:
+      return chromeos::NetworkStateHandler::TechnologyState::
+          TECHNOLOGY_UNAVAILABLE;
 
-  return chromeos::NetworkStateHandler::TechnologyState::TECHNOLOGY_ENABLED;
+    case PROHIBITED:
+      return chromeos::NetworkStateHandler::TechnologyState::
+          TECHNOLOGY_PROHIBITED;
+
+    case BLUETOOTH_DISABLED:
+      return chromeos::NetworkStateHandler::TechnologyState::
+          TECHNOLOGY_UNINITIALIZED;
+
+    case USER_PREFERENCE_DISABLED:
+      return chromeos::NetworkStateHandler::TechnologyState::
+          TECHNOLOGY_AVAILABLE;
+
+    case ENABLED:
+      return chromeos::NetworkStateHandler::TechnologyState::TECHNOLOGY_ENABLED;
+
+    default:
+      return chromeos::NetworkStateHandler::TechnologyState::
+          TECHNOLOGY_UNAVAILABLE;
+  }
 }
 
 void TetherService::OnBluetoothAdapterFetched(
@@ -297,7 +349,14 @@ void TetherService::OnBluetoothAdapterFetched(
   adapter_ = adapter;
   adapter_->AddObserver(this);
 
+  // Update TechnologyState in case Tether is otherwise available but Bluetooth
+  // is off.
   UpdateTetherTechnologyState();
+
+  // If |adapter_| is not powered, wait until it is to call
+  // SetBleAdvertisingInterval(). See AdapterPoweredChanged().
+  if (IsBluetoothPowered())
+    SetBleAdvertisingInterval();
 
   // The user has just logged in; display the "enable Bluetooth" notification if
   // applicable.
@@ -305,8 +364,50 @@ void TetherService::OnBluetoothAdapterFetched(
     notification_presenter_->NotifyEnableBluetooth();
 }
 
-bool TetherService::IsBluetoothAvailable() const {
-  return adapter_.get() && adapter_->IsPresent() && adapter_->IsPowered();
+void TetherService::OnBluetoothAdapterAdvertisingIntervalSet() {
+  has_attempted_to_set_ble_advertising_interval_ = true;
+  SetIsBleAdvertisingSupportedPref(true);
+
+  UpdateTetherTechnologyState();
+}
+
+void TetherService::OnBluetoothAdapterAdvertisingIntervalError(
+    device::BluetoothAdvertisement::ErrorCode status) {
+  has_attempted_to_set_ble_advertising_interval_ = true;
+  SetIsBleAdvertisingSupportedPref(false);
+
+  UpdateTetherTechnologyState();
+}
+
+void TetherService::SetBleAdvertisingInterval() {
+  DCHECK(IsBluetoothPowered());
+  adapter_->SetAdvertisingInterval(
+      base::TimeDelta::FromMilliseconds(kMinAdvertisingIntervalMilliseconds),
+      base::TimeDelta::FromMilliseconds(kMaxAdvertisingIntervalMilliseconds),
+      base::Bind(&TetherService::OnBluetoothAdapterAdvertisingIntervalSet,
+                 weak_ptr_factory_.GetWeakPtr()),
+      base::Bind(&TetherService::OnBluetoothAdapterAdvertisingIntervalError,
+                 weak_ptr_factory_.GetWeakPtr()));
+}
+
+bool TetherService::GetIsBleAdvertisingSupportedPref() {
+  return profile_->GetPrefs()->GetBoolean(
+      prefs::kInstantTetheringBleAdvertisingSupported);
+}
+
+void TetherService::SetIsBleAdvertisingSupportedPref(
+    bool is_ble_advertising_supported) {
+  profile_->GetPrefs()->SetBoolean(
+      prefs::kInstantTetheringBleAdvertisingSupported,
+      is_ble_advertising_supported);
+}
+
+bool TetherService::IsBluetoothPresent() const {
+  return adapter_.get() && adapter_->IsPresent();
+}
+
+bool TetherService::IsBluetoothPowered() const {
+  return IsBluetoothPresent() && adapter_->IsPowered();
 }
 
 bool TetherService::IsCellularAvailableButNotEnabled() const {
@@ -325,7 +426,7 @@ bool TetherService::IsEnabledbyPreference() const {
 }
 
 bool TetherService::CanEnableBluetoothNotificationBeShown() {
-  if (!IsEnabledbyPreference() || IsBluetoothAvailable() ||
+  if (!IsEnabledbyPreference() || IsBluetoothPowered() ||
       GetTetherTechnologyState() !=
           chromeos::NetworkStateHandler::TechnologyState::
               TECHNOLOGY_UNINITIALIZED) {
@@ -333,8 +434,11 @@ bool TetherService::CanEnableBluetoothNotificationBeShown() {
     return false;
   }
 
+  // If a network is currently connecting or connected, it will be listed in the
+  // list first.
   const chromeos::NetworkState* network =
-      network_state_handler_->DefaultNetwork();
+      network_state_handler_->FirstNetworkByType(
+          chromeos::NetworkTypePattern::Default());
   if (network &&
       (network->IsConnectingState() || network->IsConnectedState())) {
     // If an Internet connection is available, there is no need to show a
@@ -343,6 +447,51 @@ bool TetherService::CanEnableBluetoothNotificationBeShown() {
   }
 
   return true;
+}
+
+TetherService::TetherFeatureState TetherService::GetTetherFeatureState() {
+  if (shut_down_ || suspended_)
+    return OTHER_OR_UNKNOWN;
+
+  if (!IsBluetoothPresent())
+    return BLE_NOT_PRESENT;
+
+  if (!GetIsBleAdvertisingSupportedPref())
+    return BLE_ADVERTISING_NOT_SUPPORTED;
+
+  if (session_manager_client_->IsScreenLocked())
+    return SCREEN_LOCKED;
+
+  if (!HasSyncedTetherHosts())
+    return NO_AVAILABLE_HOSTS;
+
+  // If Cellular technology is available, then Tether technology is treated
+  // as a subset of Cellular, and it should only be enabled when Cellular
+  // technology is enabled.
+  if (IsCellularAvailableButNotEnabled())
+    return CELLULAR_DISABLED;
+
+  if (!IsAllowedByPolicy())
+    return PROHIBITED;
+
+  // TODO (hansberry): When !IsBluetoothPowered(), this results in a weird
+  // UI state for Settings where the toggle is clickable but immediately
+  // becomes disabled after enabling it. See crbug.com/753195.
+  if (!IsBluetoothPowered())
+    return BLUETOOTH_DISABLED;
+
+  if (!IsEnabledbyPreference())
+    return USER_PREFERENCE_DISABLED;
+
+  return ENABLED;
+}
+
+void TetherService::RecordTetherFeatureState() {
+  TetherFeatureState tether_feature_state = GetTetherFeatureState();
+  DCHECK(tether_feature_state != TetherFeatureState::TETHER_FEATURE_STATE_MAX);
+  UMA_HISTOGRAM_ENUMERATION("InstantTethering.FinalFeatureState",
+                            tether_feature_state,
+                            TetherFeatureState::TETHER_FEATURE_STATE_MAX);
 }
 
 void TetherService::SetInitializerDelegateForTest(

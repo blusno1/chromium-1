@@ -411,29 +411,48 @@ void WorkerThread::InitializeOnWorkerThread(
 
   String source_code;
   std::unique_ptr<Vector<char>> cached_meta_data;
+  bool should_terminate = false;
   if (RuntimeEnabledFeatures::ServiceWorkerScriptStreamingEnabled() &&
       GetInstalledScriptsManager() &&
       GetInstalledScriptsManager()->IsScriptInstalled(script_url)) {
     // GetScriptData blocks until the script is received from the browser.
-    auto script_data = GetInstalledScriptsManager()->GetScriptData(script_url);
-    DCHECK(script_data);
-    DCHECK(source_code.IsEmpty());
-    DCHECK(!cached_meta_data);
-    source_code = script_data->TakeSourceText();
-    cached_meta_data = script_data->TakeMetaData();
+    InstalledScriptsManager::ScriptData script_data;
+    InstalledScriptsManager::ScriptStatus status =
+        GetInstalledScriptsManager()->GetScriptData(script_url, &script_data);
 
-    String referrer_policy = script_data->GetReferrerPolicy();
-    ContentSecurityPolicyResponseHeaders
-        content_security_policy_response_headers =
-            script_data->GetContentSecurityPolicyResponseHeaders();
-    worker_reporting_proxy_.DidLoadInstalledScript(
-        content_security_policy_response_headers, referrer_policy);
+    // If an error occurred in the browser process while trying to read the
+    // installed script, the worker thread will terminate after initialization
+    // of the global scope since PrepareForShutdownOnWorkerThread() assumes the
+    // global scope has already been initialized.
+    switch (status) {
+      case InstalledScriptsManager::ScriptStatus::kTaken:
+        // InstalledScriptsManager::ScriptStatus::kTaken should not be returned
+        // since requesting the main script should be the first and no script
+        // has been taken until here.
+        NOTREACHED();
+      case InstalledScriptsManager::ScriptStatus::kFailed:
+        should_terminate = true;
+        break;
+      case InstalledScriptsManager::ScriptStatus::kSuccess:
+        DCHECK(source_code.IsEmpty());
+        DCHECK(!cached_meta_data);
+        source_code = script_data.TakeSourceText();
+        cached_meta_data = script_data.TakeMetaData();
 
-    global_scope_creation_params->content_security_policy_raw_headers =
-        std::move(content_security_policy_response_headers);
-    global_scope_creation_params->referrer_policy = referrer_policy;
-    global_scope_creation_params->origin_trial_tokens =
-        script_data->CreateOriginTrialTokens();
+        global_scope_creation_params->content_security_policy_raw_headers =
+            script_data.GetContentSecurityPolicyResponseHeaders();
+        global_scope_creation_params->referrer_policy =
+            script_data.GetReferrerPolicy();
+        global_scope_creation_params->origin_trial_tokens =
+            script_data.CreateOriginTrialTokens();
+        // This may block until CSP and referrer policy are set on the main
+        // thread.
+        worker_reporting_proxy_.DidLoadInstalledScript(
+            global_scope_creation_params->content_security_policy_raw_headers
+                .value(),
+            global_scope_creation_params->referrer_policy);
+        break;
+    }
   } else {
     source_code = std::move(global_scope_creation_params->source_code);
     cached_meta_data =
@@ -473,29 +492,20 @@ void WorkerThread::InitializeOnWorkerThread(
   if (start_mode == kPauseWorkerGlobalScopeOnStart)
     StartRunningDebuggerTasksOnPauseOnWorkerThread();
 
-  if (CheckRequestedToTerminateOnWorkerThread()) {
+  if (CheckRequestedToTerminateOnWorkerThread() || should_terminate) {
     // Stop further worker tasks from running after this point. WorkerThread
     // was requested to terminate before initialization or during running
-    // debugger tasks. performShutdownOnWorkerThread() will be called soon.
+    // debugger tasks, or loading the installed main script
+    // failed. PerformShutdownOnWorkerThread() will be called soon.
     PrepareForShutdownOnWorkerThread();
     return;
   }
 
-  if (!GlobalScope()->IsWorkerGlobalScope())
-    return;
-  DCHECK(!source_code.IsNull());
-
-  WorkerGlobalScope* worker_global_scope = ToWorkerGlobalScope(GlobalScope());
-  CachedMetadataHandler* handler =
-      worker_global_scope->CreateWorkerScriptCachedMetadataHandler(
-          script_url, cached_meta_data.get());
-  worker_reporting_proxy_.WillEvaluateWorkerScript(
-      source_code.length(),
-      cached_meta_data.get() ? cached_meta_data->size() : 0);
-  bool success = worker_global_scope->ScriptController()->Evaluate(
-      ScriptSourceCode(source_code, script_url), nullptr, handler,
-      v8_cache_options);
-  worker_reporting_proxy_.DidEvaluateWorkerScript(success);
+  // TODO(nhiroki): Start module loading for workers here.
+  // (https://crbug.com/680046)
+  GlobalScope()->EvaluateClassicScript(script_url, std::move(source_code),
+                                       std::move(cached_meta_data),
+                                       v8_cache_options);
 }
 
 void WorkerThread::PrepareForShutdownOnWorkerThread() {

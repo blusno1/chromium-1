@@ -42,10 +42,6 @@ namespace metrics {
 namespace {
 
 const char kClientId[] = "bogus client ID";
-const int64_t kInstallDate = 1373051956;
-const int64_t kInstallDateExpected = 1373050800;  // Computed from kInstallDate.
-const int64_t kEnabledDate = 1373001211;
-const int64_t kEnabledDateExpected = 1373000400;  // Computed from kEnabledDate.
 const int kSessionId = 127;
 
 class TestMetricsLog : public MetricsLog {
@@ -53,12 +49,8 @@ class TestMetricsLog : public MetricsLog {
   TestMetricsLog(const std::string& client_id,
                  int session_id,
                  LogType log_type,
-                 MetricsServiceClient* client,
-                 TestingPrefServiceSimple* prefs)
-      : MetricsLog(client_id, session_id, log_type, client, prefs),
-        prefs_(prefs) {
-    InitPrefs();
-  }
+                 MetricsServiceClient* client)
+      : MetricsLog(client_id, session_id, log_type, client) {}
 
   ~TestMetricsLog() override {}
 
@@ -75,14 +67,6 @@ class TestMetricsLog : public MetricsLog {
   }
 
  private:
-  void InitPrefs() {
-    prefs_->SetString(prefs::kMetricsReportingEnabledTimestamp,
-                      base::Int64ToString(kEnabledDate));
-  }
-
-  // Weak pointer to the PrefsService used by this log.
-  TestingPrefServiceSimple* prefs_;
-
   DISALLOW_COPY_AND_ASSIGN(TestMetricsLog);
 };
 
@@ -90,20 +74,13 @@ class TestMetricsLog : public MetricsLog {
 
 class MetricsLogTest : public testing::Test {
  public:
-  MetricsLogTest() {
-    EnvironmentRecorder::RegisterPrefs(prefs_.registry());
-    MetricsStateManager::RegisterPrefs(prefs_.registry());
-  }
-
+  MetricsLogTest() {}
   ~MetricsLogTest() override {}
 
  protected:
   // Check that the values in |system_values| correspond to the test data
   // defined at the top of this file.
   void CheckSystemProfile(const SystemProfileProto& system_profile) {
-    EXPECT_EQ(kInstallDateExpected, system_profile.install_date());
-    EXPECT_EQ(kEnabledDateExpected, system_profile.uma_enabled_date());
-
     EXPECT_EQ(TestMetricsServiceClient::kBrandForTesting,
               system_profile.brand_code());
 
@@ -119,9 +96,6 @@ class MetricsLogTest : public testing::Test {
     // of this call.
   }
 
- protected:
-  TestingPrefServiceSimple prefs_;
-
  private:
   DISALLOW_COPY_AND_ASSIGN(MetricsLogTest);
 };
@@ -130,10 +104,10 @@ TEST_F(MetricsLogTest, LogType) {
   TestMetricsServiceClient client;
   TestingPrefServiceSimple prefs;
 
-  MetricsLog log1("id", 0, MetricsLog::ONGOING_LOG, &client, &prefs);
+  MetricsLog log1("id", 0, MetricsLog::ONGOING_LOG, &client);
   EXPECT_EQ(MetricsLog::ONGOING_LOG, log1.log_type());
 
-  MetricsLog log2("id", 0, MetricsLog::INITIAL_STABILITY_LOG, &client, &prefs);
+  MetricsLog log2("id", 0, MetricsLog::INITIAL_STABILITY_LOG, &client);
   EXPECT_EQ(MetricsLog::INITIAL_STABILITY_LOG, log2.log_type());
 }
 
@@ -142,7 +116,7 @@ TEST_F(MetricsLogTest, BasicRecord) {
   client.set_version_string("bogus version");
   TestingPrefServiceSimple prefs;
   MetricsLog log("totally bogus client ID", 137, MetricsLog::ONGOING_LOG,
-                 &client, &prefs);
+                 &client);
   log.CloseLog();
 
   std::string encoded;
@@ -212,8 +186,7 @@ TEST_F(MetricsLogTest, HistogramBucketFields) {
 
   TestMetricsServiceClient client;
   TestingPrefServiceSimple prefs;
-  TestMetricsLog log(
-      kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client, &prefs_);
+  TestMetricsLog log(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client);
   log.RecordHistogramDelta("Test", samples);
 
   const ChromeUserMetricsExtension& uma_proto = log.uma_proto();
@@ -253,54 +226,43 @@ TEST_F(MetricsLogTest, HistogramBucketFields) {
 
 TEST_F(MetricsLogTest, RecordEnvironment) {
   TestMetricsServiceClient client;
-  TestMetricsLog log(
-      kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client, &prefs_);
+  TestMetricsLog log(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client);
 
   DelegatingProvider delegating_provider;
-  log.RecordEnvironment(&delegating_provider, kInstallDate, kEnabledDate);
+  log.RecordEnvironment(&delegating_provider);
   // Check that the system profile on the log has the correct values set.
   CheckSystemProfile(log.system_profile());
-
-  // Check that the system profile has also been written to prefs.
-  SystemProfileProto decoded_system_profile;
-  EnvironmentRecorder recorder(&prefs_);
-  EXPECT_TRUE(recorder.LoadEnvironmentFromPrefs(&decoded_system_profile));
-  CheckSystemProfile(decoded_system_profile);
 }
 
 TEST_F(MetricsLogTest, RecordEnvironmentEnableDefault) {
   TestMetricsServiceClient client;
   TestMetricsLog log_unknown(kClientId, kSessionId, MetricsLog::ONGOING_LOG,
-                             &client, &prefs_);
+                             &client);
 
   DelegatingProvider delegating_provider;
-  log_unknown.RecordEnvironment(&delegating_provider, kInstallDate,
-                                kEnabledDate);
+  log_unknown.RecordEnvironment(&delegating_provider);
   EXPECT_FALSE(log_unknown.system_profile().has_uma_default_state());
 
   client.set_enable_default(EnableMetricsDefault::OPT_IN);
   TestMetricsLog log_opt_in(kClientId, kSessionId, MetricsLog::ONGOING_LOG,
-                            &client, &prefs_);
-  log_opt_in.RecordEnvironment(&delegating_provider, kInstallDate,
-                               kEnabledDate);
+                            &client);
+  log_opt_in.RecordEnvironment(&delegating_provider);
   EXPECT_TRUE(log_opt_in.system_profile().has_uma_default_state());
   EXPECT_EQ(SystemProfileProto_UmaDefaultState_OPT_IN,
             log_opt_in.system_profile().uma_default_state());
 
   client.set_enable_default(EnableMetricsDefault::OPT_OUT);
   TestMetricsLog log_opt_out(kClientId, kSessionId, MetricsLog::ONGOING_LOG,
-                             &client, &prefs_);
-  log_opt_out.RecordEnvironment(&delegating_provider, kInstallDate,
-                                kEnabledDate);
+                             &client);
+  log_opt_out.RecordEnvironment(&delegating_provider);
   EXPECT_TRUE(log_opt_out.system_profile().has_uma_default_state());
   EXPECT_EQ(SystemProfileProto_UmaDefaultState_OPT_OUT,
             log_opt_out.system_profile().uma_default_state());
 
   client.set_reporting_is_managed(true);
   TestMetricsLog log_managed(kClientId, kSessionId, MetricsLog::ONGOING_LOG,
-                             &client, &prefs_);
-  log_managed.RecordEnvironment(&delegating_provider, kInstallDate,
-                                kEnabledDate);
+                             &client);
+  log_managed.RecordEnvironment(&delegating_provider);
   EXPECT_TRUE(log_managed.system_profile().has_uma_default_state());
   EXPECT_EQ(SystemProfileProto_UmaDefaultState_POLICY_FORCED_ENABLED,
             log_managed.system_profile().uma_default_state());
@@ -308,16 +270,13 @@ TEST_F(MetricsLogTest, RecordEnvironmentEnableDefault) {
 
 TEST_F(MetricsLogTest, InitialLogStabilityMetrics) {
   TestMetricsServiceClient client;
-  TestMetricsLog log(kClientId,
-                     kSessionId,
-                     MetricsLog::INITIAL_STABILITY_LOG,
-                     &client,
-                     &prefs_);
+  TestMetricsLog log(kClientId, kSessionId, MetricsLog::INITIAL_STABILITY_LOG,
+                     &client);
   TestMetricsProvider* test_provider = new TestMetricsProvider();
   DelegatingProvider delegating_provider;
   delegating_provider.RegisterMetricsProvider(
       base::WrapUnique<MetricsProvider>(test_provider));
-  log.RecordEnvironment(&delegating_provider, kInstallDate, kEnabledDate);
+  log.RecordEnvironment(&delegating_provider);
   log.RecordPreviousSessionData(&delegating_provider);
 
   // The test provider should have been called upon to provide initial
@@ -328,13 +287,12 @@ TEST_F(MetricsLogTest, InitialLogStabilityMetrics) {
 
 TEST_F(MetricsLogTest, OngoingLogStabilityMetrics) {
   TestMetricsServiceClient client;
-  TestMetricsLog log(
-      kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client, &prefs_);
+  TestMetricsLog log(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client);
   TestMetricsProvider* test_provider = new TestMetricsProvider();
   DelegatingProvider delegating_provider;
   delegating_provider.RegisterMetricsProvider(
       base::WrapUnique<MetricsProvider>(test_provider));
-  log.RecordEnvironment(&delegating_provider, kInstallDate, kEnabledDate);
+  log.RecordEnvironment(&delegating_provider);
   log.RecordCurrentSessionData(&delegating_provider, base::TimeDelta(),
                                base::TimeDelta());
 
@@ -346,16 +304,14 @@ TEST_F(MetricsLogTest, OngoingLogStabilityMetrics) {
 
 TEST_F(MetricsLogTest, ChromeChannelWrittenToProtobuf) {
   TestMetricsServiceClient client;
-  TestMetricsLog log(
-      kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client, &prefs_);
+  TestMetricsLog log(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client);
   EXPECT_TRUE(log.uma_proto().system_profile().has_channel());
 }
 
 TEST_F(MetricsLogTest, ProductNotSetIfDefault) {
   TestMetricsServiceClient client;
   EXPECT_EQ(ChromeUserMetricsExtension::CHROME, client.GetProduct());
-  TestMetricsLog log(
-      kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client, &prefs_);
+  TestMetricsLog log(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client);
   // Check that the product isn't set, since it's default and also verify the
   // default value is indeed equal to Chrome.
   EXPECT_FALSE(log.uma_proto().has_product());
@@ -368,8 +324,7 @@ TEST_F(MetricsLogTest, ProductSetIfNotDefault) {
 
   TestMetricsServiceClient client;
   client.set_product(kTestProduct);
-  TestMetricsLog log(
-      kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client, &prefs_);
+  TestMetricsLog log(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client);
   // Check that the product is set to |kTestProduct|.
   EXPECT_TRUE(log.uma_proto().has_product());
   EXPECT_EQ(kTestProduct, log.uma_proto().product());
@@ -377,8 +332,7 @@ TEST_F(MetricsLogTest, ProductSetIfNotDefault) {
 
 TEST_F(MetricsLogTest, TruncateEvents) {
   TestMetricsServiceClient client;
-  TestMetricsLog log(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client,
-                     &prefs_);
+  TestMetricsLog log(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client);
 
   for (int i = 0; i < internal::kUserActionEventLimit * 2; ++i) {
     log.RecordUserAction("BasicAction");

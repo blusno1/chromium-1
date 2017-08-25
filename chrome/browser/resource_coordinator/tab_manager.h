@@ -218,7 +218,22 @@ class TabManager : public TabStripModelObserver,
     return is_session_restore_loading_tabs_;
   }
 
+  // Returns true if the tab was created by session restore and has not finished
+  // the first navigation.
+  bool IsTabInSessionRestore(content::WebContents* web_contents) const;
+
+  // Returns true if the tab was created by session restore and initially in
+  // foreground.
+  bool IsTabRestoredInForeground(content::WebContents* web_contents) const;
+
+  // Returns whether the tab manager is currently loading background tabs. This
+  // always returns false during an ongoing session restore, even if background
+  // tabs are being loaded, in order to separate the two activities.
+  bool IsLoadingBackgroundTabs() const;
+
  private:
+  friend class TabManagerStatsCollectorTest;
+
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, PurgeBackgroundRenderer);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ActivateTabResetPurgeState);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ShouldPurgeAtDefaultTime);
@@ -249,8 +264,9 @@ class TabManager : public TabStripModelObserver,
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, BackgroundTabLoadingMode);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, BackgroundTabLoadingSlots);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, BackgroundTabsLoadingOrdering);
-  FRIEND_TEST_ALL_PREFIXES(TabManagerStatsCollectorTest,
-                           HistogramsSessionRestoreSwitchToTab);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, IsLoadingBackgroundTabs);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerWithExperimentDisabledTest,
+                           IsLoadingBackgroundTabs);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest,
                            ProactiveFastShutdownSingleTabProcess);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, UrgentFastShutdownSingleTabProcess);
@@ -264,6 +280,7 @@ class TabManager : public TabStripModelObserver,
                            ProactiveFastShutdownWithBeforeunloadHandler);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest,
                            UrgentFastShutdownWithBeforeunloadHandler);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, IsTabRestoredInForeground);
 
   // The time of the first purging after a renderer is backgrounded.
   // The initial value was chosen because most of users activate backgrounded
@@ -374,9 +391,6 @@ class TabManager : public TabStripModelObserver,
                      content::WebContents* contents,
                      int index,
                      bool foreground) override;
-  void TabClosingAt(TabStripModel* tab_strip_model,
-                    content::WebContents* contents,
-                    int index) override;
 
   // BrowserListObserver overrides.
   void OnBrowserSetLastActive(Browser* browser) override;
@@ -412,6 +426,7 @@ class TabManager : public TabStripModelObserver,
 
   void OnSessionRestoreStartedLoadingTabs();
   void OnSessionRestoreFinishedLoadingTabs();
+  void OnWillRestoreTab(content::WebContents* web_contents);
 
   // Returns true if TabManager can start loading next tab.
   bool CanLoadNextTab() const;
@@ -551,9 +566,6 @@ class TabManager : public TabStripModelObserver,
   // The number of loading slots that TabManager can use to load background tabs
   // in parallel.
   size_t loading_slots_;
-
-  // GRC tab signal observer, receives tab scoped signal from GRC.
-  std::unique_ptr<GRCTabSignalObserver> grc_tab_signal_observer_;
 
   // Records UMAs for tab and system-related events and properties during
   // session restore.

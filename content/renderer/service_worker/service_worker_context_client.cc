@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "content/child/background_sync/background_sync_type_converters.h"
+#include "content/child/child_url_loader_factory_getter.h"
 #include "content/child/notifications/notification_data_conversions.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/service_worker/service_worker_dispatcher.h"
@@ -39,10 +40,10 @@
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/common/worker_url_loader_factory_provider.mojom.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/push_event_payload.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/document_state.h"
 #include "content/renderer/devtools/devtools_agent.h"
@@ -57,8 +58,14 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "storage/common/blob_storage/blob_handle.h"
+#include "storage/public/interfaces/blobs.mojom.h"
 #include "third_party/WebKit/public/platform/InterfaceProvider.h"
+#include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebBlobRegistry.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
@@ -120,7 +127,7 @@ class WebServiceWorkerNetworkProviderImpl
     return nullptr;
   }
 
-  int GetProviderID() const override { return provider_->provider_id(); }
+  int ProviderID() const override { return provider_->provider_id(); }
 
  private:
   static bool IsScriptRequest(const WebURLRequest& request) {
@@ -214,8 +221,13 @@ void ToWebServiceWorkerRequest(const ServiceWorkerFetchRequest& request,
                            blink::WebString::FromUTF8(pair.second));
   }
   if (!request.blob_uuid.empty()) {
+    DCHECK_EQ(request.blob != nullptr,
+              base::FeatureList::IsEnabled(features::kMojoBlobs));
+    mojo::ScopedMessagePipeHandle blob_pipe;
+    if (request.blob)
+      blob_pipe = request.blob->Clone().PassInterface().PassHandle();
     web_request->SetBlob(blink::WebString::FromASCII(request.blob_uuid),
-                         request.blob_size);
+                         request.blob_size, std::move(blob_pipe));
   }
   web_request->SetReferrer(
       blink::WebString::FromUTF8(request.referrer.url.spec()),
@@ -253,8 +265,13 @@ void ToWebServiceWorkerResponse(const ServiceWorkerResponse& response,
                             blink::WebString::FromUTF8(pair.second));
   }
   if (!response.blob_uuid.empty()) {
+    DCHECK_EQ(response.blob != nullptr,
+              base::FeatureList::IsEnabled(features::kMojoBlobs));
+    mojo::ScopedMessagePipeHandle blob_pipe;
+    if (response.blob)
+      blob_pipe = response.blob->Clone().PassInterface().PassHandle();
     web_response->SetBlob(blink::WebString::FromASCII(response.blob_uuid),
-                          response.blob_size);
+                          response.blob_size, std::move(blob_pipe));
   }
   web_response->SetError(response.error);
   web_response->SetResponseTime(response.response_time);
@@ -287,6 +304,11 @@ void AbortPendingEventCallbacks(std::map<Key, Callback>& callbacks) {
     std::move(item.second).Run(SERVICE_WORKER_ERROR_ABORT, base::Time::Now());
 }
 
+void GetBlobRegistry(storage::mojom::BlobRegistryRequest request) {
+  ChildThreadImpl::current()->GetConnector()->BindInterface(
+      mojom::kBrowserServiceName, std::move(request));
+}
+
 }  // namespace
 
 // Holding data that needs to be bound to the worker context on the
@@ -295,35 +317,35 @@ struct ServiceWorkerContextClient::WorkerContextData {
   using SimpleEventCallback =
       base::OnceCallback<void(ServiceWorkerStatusCode, base::Time)>;
   using ClientsCallbacksMap =
-      IDMap<std::unique_ptr<blink::WebServiceWorkerClientsCallbacks>>;
-  using ClaimClientsCallbacksMap =
-      IDMap<std::unique_ptr<blink::WebServiceWorkerClientsClaimCallbacks>>;
+      base::IDMap<std::unique_ptr<blink::WebServiceWorkerClientsCallbacks>>;
+  using ClaimClientsCallbacksMap = base::IDMap<
+      std::unique_ptr<blink::WebServiceWorkerClientsClaimCallbacks>>;
   using ClientCallbacksMap =
-      IDMap<std::unique_ptr<blink::WebServiceWorkerClientCallbacks>>;
+      base::IDMap<std::unique_ptr<blink::WebServiceWorkerClientCallbacks>>;
   using SkipWaitingCallbacksMap =
-      IDMap<std::unique_ptr<blink::WebServiceWorkerSkipWaitingCallbacks>>;
+      base::IDMap<std::unique_ptr<blink::WebServiceWorkerSkipWaitingCallbacks>>;
   using InstallEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchInstallEventCallback>>;
+      base::IDMap<std::unique_ptr<DispatchInstallEventCallback>>;
   using ActivateEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchActivateEventCallback>>;
+      base::IDMap<std::unique_ptr<DispatchActivateEventCallback>>;
   using BackgroundFetchAbortEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchBackgroundFetchAbortEventCallback>>;
+      base::IDMap<std::unique_ptr<DispatchBackgroundFetchAbortEventCallback>>;
   using BackgroundFetchClickEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchBackgroundFetchClickEventCallback>>;
+      base::IDMap<std::unique_ptr<DispatchBackgroundFetchClickEventCallback>>;
   using BackgroundFetchFailEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchBackgroundFetchFailEventCallback>>;
+      base::IDMap<std::unique_ptr<DispatchBackgroundFetchFailEventCallback>>;
   using BackgroundFetchedEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchBackgroundFetchedEventCallback>>;
-  using SyncEventCallbacksMap = IDMap<std::unique_ptr<SyncCallback>>;
+      base::IDMap<std::unique_ptr<DispatchBackgroundFetchedEventCallback>>;
+  using SyncEventCallbacksMap = base::IDMap<std::unique_ptr<SyncCallback>>;
   using NotificationClickEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchNotificationClickEventCallback>>;
+      base::IDMap<std::unique_ptr<DispatchNotificationClickEventCallback>>;
   using NotificationCloseEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchNotificationCloseEventCallback>>;
+      base::IDMap<std::unique_ptr<DispatchNotificationCloseEventCallback>>;
   using PushEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchPushEventCallback>>;
+      base::IDMap<std::unique_ptr<DispatchPushEventCallback>>;
   using ExtendableMessageEventCallbacksMap =
-      IDMap<std::unique_ptr<DispatchExtendableMessageEventCallback>>;
-  using NavigationPreloadRequestsMap = IDMap<
+      base::IDMap<std::unique_ptr<DispatchExtendableMessageEventCallback>>;
+  using NavigationPreloadRequestsMap = base::IDMap<
       std::unique_ptr<ServiceWorkerContextClient::NavigationPreloadRequest>>;
   using InstallEventMethodsMap =
       std::map<int, mojom::ServiceWorkerInstallEventMethodsAssociatedPtr>;
@@ -371,6 +393,26 @@ struct ServiceWorkerContextClient::WorkerContextData {
 
   // Pending callbacks for Background Sync Events.
   SyncEventCallbacksMap sync_event_callbacks;
+
+  // Pending callbacks for result of AbortPayment.
+  std::map<int /* abort_payment_event_id */,
+           payments::mojom::PaymentHandlerResponseCallbackPtr>
+      abort_payment_result_callbacks;
+
+  // Pending callbacks for AbortPayment Events.
+  std::map<int /* abort_payment_event_id */,
+           DispatchCanMakePaymentEventCallback>
+      abort_payment_event_callbacks;
+
+  // Pending callbacks for result of CanMakePayment.
+  std::map<int /* can_make_payment_event_id */,
+           payments::mojom::PaymentHandlerResponseCallbackPtr>
+      can_make_payment_result_callbacks;
+
+  // Pending callbacks for CanMakePayment Events.
+  std::map<int /* can_make_payment_event_id */,
+           DispatchCanMakePaymentEventCallback>
+      can_make_payment_event_callbacks;
 
   // Pending callbacks for Payment App Response.
   std::map<int /* payment_request_id */,
@@ -583,7 +625,6 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
       service_worker_version_id_(service_worker_version_id),
       service_worker_scope_(service_worker_scope),
       script_url_(script_url),
-      is_script_streaming_(is_script_streaming),
       sender_(ChildThreadImpl::current()->thread_safe_sender()),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       proxy_(nullptr),
@@ -592,22 +633,19 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
   instance_host_ =
       mojom::ThreadSafeEmbeddedWorkerInstanceHostAssociatedPtr::Create(
           std::move(instance_host), main_thread_task_runner_);
+
   // Create a content::ServiceWorkerNetworkProvider for this data source so
   // we can observe its requests.
-  pending_network_provider_ =
-      base::MakeUnique<ServiceWorkerNetworkProvider>(std::move(provider_info));
+  pending_network_provider_ = ServiceWorkerNetworkProvider::CreateForController(
+      std::move(provider_info));
   provider_context_ = pending_network_provider_->context();
 
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("ServiceWorker",
                                     "ServiceWorkerContextClient", this,
                                     "script_url", script_url_.spec());
-  if (is_script_streaming_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ServiceWorker", "START_WORKER_THREAD",
-                                      this);
-  } else {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("ServiceWorker", "LOAD_SCRIPT", this,
-                                      "Type", "ResourceLoader");
-  }
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
+      "ServiceWorker", "LOAD_SCRIPT", this, "Source",
+      (is_script_streaming ? "InstalledScriptsManager" : "ResourceLoader"));
 }
 
 ServiceWorkerContextClient::~ServiceWorkerContextClient() {}
@@ -713,16 +751,8 @@ void ServiceWorkerContextClient::WorkerContextFailedToStart() {
 void ServiceWorkerContextClient::WorkerScriptLoaded() {
   (*instance_host_)->OnScriptLoaded();
   TRACE_EVENT_NESTABLE_ASYNC_END0("ServiceWorker", "LOAD_SCRIPT", this);
-  if (is_script_streaming_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ServiceWorker", "EVALUATE_SCRIPT", this);
-  } else {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ServiceWorker", "START_WORKER_THREAD",
-                                      this);
-  }
-}
-
-bool ServiceWorkerContextClient::HasAssociatedRegistration() {
-  return provider_context_ && provider_context_->HasAssociatedRegistration();
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ServiceWorker", "START_WORKER_CONTEXT",
+                                    this);
 }
 
 void ServiceWorkerContextClient::WorkerContextStarted(
@@ -744,8 +774,7 @@ void ServiceWorkerContextClient::WorkerContextStarted(
 
   ServiceWorkerRegistrationObjectInfo registration_info;
   ServiceWorkerVersionAttributes version_attrs;
-  provider_context_->GetAssociatedRegistration(&registration_info,
-                                               &version_attrs);
+  provider_context_->GetRegistration(&registration_info, &version_attrs);
   DCHECK_NE(registration_info.registration_id,
             kInvalidServiceWorkerRegistrationId);
 
@@ -758,13 +787,9 @@ void ServiceWorkerContextClient::WorkerContextStarted(
 
   (*instance_host_)->OnThreadStarted(WorkerThread::GetCurrentId());
 
-  TRACE_EVENT_NESTABLE_ASYNC_END0("ServiceWorker", "START_WORKER_THREAD", this);
-  if (is_script_streaming_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("ServiceWorker", "LOAD_SCRIPT", this,
-                                      "Type", "InstalledScriptsManager");
-  } else {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ServiceWorker", "EVALUATE_SCRIPT", this);
-  }
+  TRACE_EVENT_NESTABLE_ASYNC_END0("ServiceWorker", "START_WORKER_CONTEXT",
+                                  this);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ServiceWorker", "EVALUATE_SCRIPT", this);
 }
 
 void ServiceWorkerContextClient::DidEvaluateWorkerScript(bool success) {
@@ -775,8 +800,8 @@ void ServiceWorkerContextClient::DidEvaluateWorkerScript(bool success) {
   // so that at the time we send it we can be sure that the
   // worker run loop has been started.
   worker_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&ServiceWorkerContextClient::SendWorkerStarted,
-                            GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&ServiceWorkerContextClient::SendWorkerStarted,
+                                GetWeakPtr()));
 
   TRACE_EVENT_NESTABLE_ASYNC_END1("ServiceWorker", "EVALUATE_SCRIPT", this,
                                   "Status", success ? "Success" : "Failure");
@@ -797,6 +822,8 @@ void ServiceWorkerContextClient::WillDestroyWorkerContext(
   // worker_task_runner_->RunsTasksInCurrentSequence() returns false
   // (while we're still on the worker thread).
   proxy_ = NULL;
+
+  blob_registry_.reset();
 
   // Aborts all the pending events callbacks.
   AbortPendingEventCallbacks(context_->install_event_callbacks,
@@ -846,8 +873,8 @@ void ServiceWorkerContextClient::WorkerContextDestroyed() {
   DCHECK(embedded_worker_client_);
   main_thread_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&EmbeddedWorkerInstanceClientImpl::WorkerContextDestroyed,
-                 base::Passed(&embedded_worker_client_)));
+      base::BindOnce(&EmbeddedWorkerInstanceClientImpl::WorkerContextDestroyed,
+                     base::Passed(&embedded_worker_client_)));
   return;
 }
 
@@ -1005,14 +1032,38 @@ void ServiceWorkerContextClient::RespondToFetchEvent(
       GetServiceWorkerResponseFromWebResponse(web_response));
   const mojom::ServiceWorkerFetchResponseCallbackPtr& response_callback =
       context_->fetch_response_callbacks[fetch_event_id];
+
   if (response.blob_uuid.size()) {
-    // Send the legacy IPC due to the ordering issue between respondWith and
-    // blob.
-    // TODO(shimazu): mojofy this IPC after blob starts using sync IPC for
-    // creation or is mojofied: https://crbug.com/611935.
-    Send(new ServiceWorkerHostMsg_FetchEventResponse(
-        GetRoutingID(), fetch_event_id, response,
-        base::Time::FromDoubleT(event_dispatch_time)));
+    // TODO(kinuko): Remove this hack once kMojoBlobs is enabled by default
+    // and crbug.com/755523 is resolved.
+    storage::mojom::BlobPtr blob_ptr;
+    if (response.blob) {
+      blob_ptr = response.blob->TakeBlobPtr();
+      response.blob = nullptr;
+    } else {
+      if (!blob_registry_) {
+        // TODO(kinuko): We should use per-frame / per-worker InterfaceProvider
+        // instead (crbug.com/734210).
+        main_thread_task_runner_->PostTask(
+            FROM_HERE,
+            base::BindOnce(&GetBlobRegistry, MakeRequest(&blob_registry_)));
+      }
+      blob_registry_->GetBlobFromUUID(MakeRequest(&blob_ptr),
+                                      response.blob_uuid);
+    }
+    if (ServiceWorkerUtils::IsServicificationEnabled()) {
+      // Blob's lifetime is guaranteed via mojom::BlobPtr, but
+      // we need to retain a reference in the BlobDispatcherHost
+      // to register a public URL in the controllee side as it
+      // still goes through the legacy IPC path.
+      // TODO(kinuko): Remove this code before this hits production
+      // code, there's a risk to leak a blob. (crbug.com/756743)
+      blink::Platform::Current()->GetBlobRegistry()->AddBlobDataRef(
+          blink::WebString::FromASCII(response.blob_uuid));
+    }
+    response_callback->OnResponseBlob(
+        response, std::move(blob_ptr),
+        base::Time::FromDoubleT(event_dispatch_time));
   } else {
     response_callback->OnResponse(response,
                                   base::Time::FromDoubleT(event_dispatch_time));
@@ -1110,6 +1161,50 @@ void ServiceWorkerContextClient::DidHandleSyncEvent(
   context_->sync_event_callbacks.Remove(request_id);
 }
 
+void ServiceWorkerContextClient::RespondToAbortPaymentEvent(
+    int event_id,
+    bool payment_aborted,
+    double dispatch_event_time) {
+  const payments::mojom::PaymentHandlerResponseCallbackPtr& result_callback =
+      context_->abort_payment_result_callbacks[event_id];
+  result_callback->OnResponseForAbortPayment(
+      payment_aborted, base::Time::FromDoubleT(dispatch_event_time));
+  context_->abort_payment_result_callbacks.erase(event_id);
+}
+
+void ServiceWorkerContextClient::DidHandleAbortPaymentEvent(
+    int event_id,
+    blink::WebServiceWorkerEventResult result,
+    double dispatch_event_time) {
+  DispatchAbortPaymentEventCallback callback =
+      std::move(context_->abort_payment_event_callbacks[event_id]);
+  std::move(callback).Run(EventResultToStatus(result),
+                          base::Time::FromDoubleT(dispatch_event_time));
+  context_->abort_payment_event_callbacks.erase(event_id);
+}
+
+void ServiceWorkerContextClient::RespondToCanMakePaymentEvent(
+    int event_id,
+    bool can_make_payment,
+    double dispatch_event_time) {
+  const payments::mojom::PaymentHandlerResponseCallbackPtr& result_callback =
+      context_->can_make_payment_result_callbacks[event_id];
+  result_callback->OnResponseForCanMakePayment(
+      can_make_payment, base::Time::FromDoubleT(dispatch_event_time));
+  context_->can_make_payment_result_callbacks.erase(event_id);
+}
+
+void ServiceWorkerContextClient::DidHandleCanMakePaymentEvent(
+    int event_id,
+    blink::WebServiceWorkerEventResult result,
+    double dispatch_event_time) {
+  DispatchCanMakePaymentEventCallback callback =
+      std::move(context_->can_make_payment_event_callbacks[event_id]);
+  std::move(callback).Run(EventResultToStatus(result),
+                          base::Time::FromDoubleT(dispatch_event_time));
+  context_->can_make_payment_event_callbacks.erase(event_id);
+}
+
 void ServiceWorkerContextClient::RespondToPaymentRequestEvent(
     int payment_request_id,
     const blink::WebPaymentHandlerResponse& web_response,
@@ -1120,7 +1215,7 @@ void ServiceWorkerContextClient::RespondToPaymentRequestEvent(
       payments::mojom::PaymentHandlerResponse::New();
   response->method_name = web_response.method_name.Utf8();
   response->stringified_details = web_response.stringified_details.Utf8();
-  response_callback->OnPaymentHandlerResponse(
+  response_callback->OnResponseForPaymentRequest(
       std::move(response), base::Time::FromDoubleT(dispatch_event_time));
   context_->payment_response_callbacks.erase(payment_request_id);
 }
@@ -1148,15 +1243,15 @@ std::unique_ptr<blink::WebWorkerFetchContext>
 ServiceWorkerContextClient::CreateServiceWorkerFetchContext() {
   DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
-  mojom::WorkerURLLoaderFactoryProviderPtr worker_url_loader_factory_provider;
-  RenderThreadImpl::current()
-      ->blink_platform_impl()
-      ->GetInterfaceProvider()
-      ->GetInterface(mojo::MakeRequest(&worker_url_loader_factory_provider));
 
+  scoped_refptr<ChildURLLoaderFactoryGetter> url_loader_factory_getter =
+      RenderThreadImpl::current()
+          ->blink_platform_impl()
+          ->CreateDefaultURLLoaderFactoryGetter();
+  DCHECK(url_loader_factory_getter);
   // Blink is responsible for deleting the returned object.
   return base::MakeUnique<ServiceWorkerFetchContextImpl>(
-      script_url_, worker_url_loader_factory_provider.PassInterface(),
+      script_url_, url_loader_factory_getter->GetClonedInfo(),
       provider_context_->provider_id());
 }
 
@@ -1240,6 +1335,36 @@ void ServiceWorkerContextClient::DispatchSyncEvent(
   // https://crrev.com/1768063002/ lands.
   proxy_->DispatchSyncEvent(request_id, blink::WebString::FromUTF8(tag),
                             web_last_chance);
+}
+
+void ServiceWorkerContextClient::DispatchAbortPaymentEvent(
+    int event_id,
+    payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+    DispatchAbortPaymentEventCallback callback) {
+  TRACE_EVENT0("ServiceWorker",
+               "ServiceWorkerContextClient::DispatchAbortPaymentEvent");
+  context_->abort_payment_result_callbacks.insert(
+      std::make_pair(event_id, std::move(response_callback)));
+  context_->abort_payment_event_callbacks.insert(
+      std::make_pair(event_id, std::move(callback)));
+  proxy_->DispatchAbortPaymentEvent(event_id);
+}
+
+void ServiceWorkerContextClient::DispatchCanMakePaymentEvent(
+    int event_id,
+    payments::mojom::CanMakePaymentEventDataPtr eventData,
+    payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+    DispatchCanMakePaymentEventCallback callback) {
+  TRACE_EVENT0("ServiceWorker",
+               "ServiceWorkerContextClient::DispatchCanMakePaymentEvent");
+  context_->can_make_payment_result_callbacks.insert(
+      std::make_pair(event_id, std::move(response_callback)));
+  context_->can_make_payment_event_callbacks.insert(
+      std::make_pair(event_id, std::move(callback)));
+
+  blink::WebCanMakePaymentEventData webEventData =
+      mojo::ConvertTo<blink::WebCanMakePaymentEventData>(std::move(eventData));
+  proxy_->DispatchCanMakePaymentEvent(event_id, webEventData);
 }
 
 void ServiceWorkerContextClient::DispatchPaymentRequestEvent(

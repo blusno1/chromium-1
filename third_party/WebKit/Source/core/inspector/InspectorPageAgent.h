@@ -51,7 +51,6 @@ class Document;
 class DocumentLoader;
 class InspectedFrames;
 class InspectorResourceContentLoader;
-class KURL;
 class LocalFrame;
 class ScheduledNavigation;
 class SharedBuffer;
@@ -101,7 +100,6 @@ class CORE_EXPORT InspectorPageAgent final
                                   String* result,
                                   bool* base64_encoded);
 
-  static Resource* CachedResource(LocalFrame*, const KURL&);
   static String ResourceTypeJson(ResourceType);
   static ResourceType CachedResourceType(const Resource&);
   static String CachedResourceTypeJson(const Resource&);
@@ -166,10 +164,12 @@ class CORE_EXPORT InspectorPageAgent final
   void FrameStoppedLoading(LocalFrame*);
   void FrameScheduledNavigation(LocalFrame*, ScheduledNavigation*);
   void FrameClearedScheduledNavigation(LocalFrame*);
-  void WillRunJavaScriptDialog(const String& message, ChromeClient::DialogType);
-  void DidRunJavaScriptDialog(bool result);
+  void WillRunJavaScriptDialog();
+  void DidRunJavaScriptDialog();
   void DidResizeMainFrame();
   void DidChangeViewport();
+  void LifecycleEvent(const char* name, double timestamp);
+  void PaintTiming(Document*, const char* name, double timestamp);
   void Will(const probe::UpdateLayout&);
   void Did(const probe::UpdateLayout&);
   void Will(const probe::RecalculateStyle&);

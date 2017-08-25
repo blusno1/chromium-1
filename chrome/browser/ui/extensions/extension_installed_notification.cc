@@ -12,17 +12,18 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/message_center/message_center_style.h"
 
 namespace {
 const char* kNotifierId = "app.downloaded-notification";
-const char* kNotificationId = "EXTENSION_INSTALLED_NOTIFICATION";
 }  // anonymous namespace
 
 using content::BrowserThread;
@@ -46,13 +47,15 @@ ExtensionInstalledNotification::ExtensionInstalledNotification(
       message_center::NOTIFICATION_TYPE_SIMPLE,
       base::UTF8ToUTF16(extension->name()),
       l10n_util::GetStringUTF16(IDS_EXTENSION_NOTIFICATION_INSTALLED),
-      ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-          IDR_NOTIFICATION_EXTENSION_INSTALLED),
-      message_center::NotifierId(
-          message_center::NotifierId::SYSTEM_COMPONENT, kNotifierId),
-      base::string16() /* display_source */,
+      gfx::Image(gfx::CreateVectorIcon(vector_icons::kCheckCircleIcon, 40,
+                                       gfx::kGoogleGreen700)),
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 kNotifierId),
+      l10n_util::GetStringUTF16(IDS_EXTENSION_NOTIFICATION_DISPLAY_SOURCE),
       GURL(extension_urls::kChromeWebstoreBaseURL) /* origin_url */,
-      kNotificationId, optional_field, this));
+      extension_id_, optional_field, this));
+  notification->set_accent_color(
+      message_center::kSystemNotificationColorNormal);
   g_browser_process->notification_ui_manager()->Add(*notification, profile_);
 }
 
@@ -75,5 +78,5 @@ void ExtensionInstalledNotification::Click() {
 }
 
 std::string ExtensionInstalledNotification::id() const {
-  return kNotificationId;
+  return extension_id_;
 }

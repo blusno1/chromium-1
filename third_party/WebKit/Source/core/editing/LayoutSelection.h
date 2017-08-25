@@ -60,7 +60,6 @@ class SelectionPaintRange {
 
    private:
     LayoutObject* current_;
-    const LayoutObject* included_end_;
     const LayoutObject* stop_;
   };
   Iterator begin() const { return Iterator(this); };
@@ -118,6 +117,11 @@ class LayoutSelection final : public GarbageCollected<LayoutSelection> {
 
   SelectionPaintRange paint_range_;
 };
+
+void CORE_EXPORT PrintLayoutObjectForSelection(std::ostream&, LayoutObject*);
+#ifndef NDEBUG
+void ShowLayoutObjectForSelection(LayoutObject*);
+#endif
 
 }  // namespace blink
 

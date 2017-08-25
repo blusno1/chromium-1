@@ -143,7 +143,7 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
   if (!EndingVisibleSelection().IsNonOrphanedCaretOrRange())
     return;
 
-  if (!EndingVisibleSelection().RootEditableElement())
+  if (!RootEditableElementOf(EndingSelection().Base()))
     return;
 
   VisiblePosition visible_end = EndingVisibleSelection().VisibleEnd();
@@ -161,17 +161,17 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
     const VisiblePosition& new_end =
         PreviousPositionOf(visible_end, kCannotCrossEditingBoundary);
     SelectionInDOMTree::Builder builder;
-    builder.SetIsDirectional(EndingVisibleSelection().IsDirectional());
+    builder.SetIsDirectional(EndingSelection().IsDirectional());
     builder.Collapse(visible_start.ToPositionWithAffinity());
     if (new_end.IsNotNull())
       builder.Extend(new_end.DeepEquivalent());
-    SetEndingSelection(builder.Build());
-    if (!EndingVisibleSelection().RootEditableElement())
+    SetEndingSelection(SelectionForUndoStep::From(builder.Build()));
+    if (!RootEditableElementOf(EndingSelection().Base()))
       return;
   }
 
   const HTMLQualifiedName& list_tag = (type_ == kOrderedList) ? olTag : ulTag;
-  if (EndingVisibleSelection().IsRange()) {
+  if (EndingSelection().IsRange()) {
     bool force_list_creation = false;
     VisibleSelection selection =
         SelectionForParagraphIteration(EndingVisibleSelection());
@@ -222,10 +222,10 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
         // and use it as the end of the new selection.
         if (!start_of_last_paragraph.IsConnected())
           return;
-        SetEndingSelection(
+        SetEndingSelection(SelectionForUndoStep::From(
             SelectionInDOMTree::Builder()
                 .Collapse(start_of_current_paragraph.DeepEquivalent())
-                .Build());
+                .Build()));
 
         // Save and restore visibleEndOfSelection and startOfLastParagraph when
         // necessary since moveParagraph and movePragraphWithClones can remove
@@ -250,7 +250,7 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
           // exit early immediately because we've lost the loop invariant.
           DCHECK(visible_end_of_selection.IsNotNull());
           if (visible_end_of_selection.IsNull() ||
-              !RootEditableElementOf(visible_end_of_selection))
+              !RootEditableElementOf(visible_end_of_selection.DeepEquivalent()))
             return;
           start_of_last_paragraph =
               StartOfParagraph(visible_end_of_selection,
@@ -263,10 +263,10 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
         start_of_current_paragraph =
             StartOfNextParagraph(EndingVisibleSelection().VisibleStart());
       }
-      SetEndingSelection(
+      SetEndingSelection(SelectionForUndoStep::From(
           SelectionInDOMTree::Builder()
               .Collapse(visible_end_of_selection.DeepEquivalent())
-              .Build());
+              .Build()));
     }
     DoApplyForSingleParagraph(force_list_creation, list_tag, *current_selection,
                               editing_state);
@@ -294,14 +294,14 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
       visible_start_of_selection = CreateVisiblePosition(start_of_selection);
     }
 
-    SetEndingSelection(
+    SetEndingSelection(SelectionForUndoStep::From(
         SelectionInDOMTree::Builder()
             .SetAffinity(visible_start_of_selection.Affinity())
             .SetBaseAndExtentDeprecated(
                 visible_start_of_selection.DeepEquivalent(),
                 visible_end_of_selection.DeepEquivalent())
-            .SetIsDirectional(EndingVisibleSelection().IsDirectional())
-            .Build());
+            .SetIsDirectional(EndingSelection().IsDirectional())
+            .Build()));
     return;
   }
 
@@ -428,9 +428,10 @@ bool InsertListCommand::DoApplyForSingleParagraph(
                                  IGNORE_EXCEPTION_FOR_TESTING);
       }
 
-      SetEndingSelection(SelectionInDOMTree::Builder()
-                             .Collapse(Position::FirstPositionInNode(*new_list))
-                             .Build());
+      SetEndingSelection(SelectionForUndoStep::From(
+          SelectionInDOMTree::Builder()
+              .Collapse(Position::FirstPositionInNode(*new_list))
+              .Build()));
 
       return true;
     }
@@ -666,7 +667,8 @@ void InsertListCommand::ListifyParagraph(const VisiblePosition& original_start,
   MergeWithNeighboringLists(list_element, editing_state);
 }
 
-// TODO(xiaochengh): Stop storing VisiblePositions through mutations.
+// TODO(editing-dev): Stop storing VisiblePositions through mutations.
+// See crbug.com/648949 for details.
 void InsertListCommand::MoveParagraphOverPositionIntoEmptyListItem(
     const VisiblePosition& pos,
     HTMLLIElement* list_item_element,

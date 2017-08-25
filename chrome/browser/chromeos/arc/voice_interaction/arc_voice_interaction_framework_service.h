@@ -13,6 +13,7 @@
 #include "components/arc/common/voice_interaction_framework.mojom.h"
 #include "components/arc/instance_holder.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/session_manager/core/session_manager_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 class KeyedServiceBaseFactory;
@@ -36,7 +37,8 @@ class ArcVoiceInteractionFrameworkService
     : public KeyedService,
       public mojom::VoiceInteractionFrameworkHost,
       public InstanceHolder<mojom::VoiceInteractionFrameworkInstance>::Observer,
-      public ArcSessionManager::Observer {
+      public ArcSessionManager::Observer,
+      public session_manager::SessionManagerObserver {
  public:
   // Returns singleton instance for the given BrowserContext,
   // or nullptr if the browser |context| is not allowed to use ARC.
@@ -62,13 +64,16 @@ class ArcVoiceInteractionFrameworkService
   void OnMetalayerClosed() override;
   void SetMetalayerEnabled(bool enabled) override;
   void SetVoiceInteractionRunning(bool running) override;
+  void SetVoiceInteractionState(ash::VoiceInteractionState state) override;
 
-  bool IsMetalayerSupported();
-  void ShowMetalayer(const base::Closure& closed);
+  void ShowMetalayer();
   void HideMetalayer();
 
   // ArcSessionManager::Observer overrides.
   void OnArcPlayStoreEnabledChanged(bool enabled) override;
+
+  // session_manager::SessionManagerObserver overrides.
+  void OnSessionStateChanged() override;
 
   // Starts a voice interaction session after user-initiated interaction.
   // Records a timestamp and sets number of allowed requests to 2 since by
@@ -79,6 +84,10 @@ class ArcVoiceInteractionFrameworkService
   // If |region| is empty,
   // VoiceInteractionFrameworkInstance::StartVoiceInteraction() is called.
   void StartSessionFromUserInteraction(const gfx::Rect& region);
+
+  // Similar to StartSessionFromUserInteraction but stops voice interaction
+  // seesion if it is already running.
+  void ToggleSessionFromUserInteraction();
 
   // Turn on / off voice interaction in ARC.
   // TODO(muyuanli): We should also check on Chrome side once CrOS side settings
@@ -104,18 +113,22 @@ class ArcVoiceInteractionFrameworkService
   static const char kArcServiceName[];
 
  private:
-  void CallAndResetMetalayerCallback();
+  void NotifyMetalayerStatusChanged(bool visible);
 
   bool InitiateUserInteraction();
 
   content::BrowserContext* context_;
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager
   mojo::Binding<mojom::VoiceInteractionFrameworkHost> binding_;
-  base::Closure metalayer_closed_callback_;
-  bool metalayer_enabled_ = false;
 
   // Whether there is a pending request to start voice interaction.
   bool is_request_pending_ = false;
+
+  // The current state voice interaction service is. There is usually a long
+  // delay after boot before the service is ready. We wait for the container
+  // to tell us if it is ready to quickly serve voice interaction requests.
+  // We also give user proper feedback based on the state.
+  ash::VoiceInteractionState state_ = ash::VoiceInteractionState::NOT_READY;
 
   // The time when a user initated an interaction.
   base::TimeTicks user_interaction_start_time_;

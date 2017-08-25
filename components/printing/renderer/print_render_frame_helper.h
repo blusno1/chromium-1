@@ -56,7 +56,10 @@ class PrepareFrameAndViewForPrint;
 
 // Stores reference to frame using WebVew and unique name.
 // Workaround to modal dialog issue on Linux. crbug.com/236147.
-// If WebFrame someday supports WeakPtr, we should use it here.
+// TODO(dcheng): Try to get rid of this class. However, it's a bit tricky due to
+// PrepareFrameAndViewForPrint sometimes pointing to a WebLocalFrame associated
+// with a RenderFrame and sometimes pointing to an internally allocated
+// WebLocalFrame...
 class FrameReference {
  public:
   explicit FrameReference(blink::WebLocalFrame* frame);
@@ -350,8 +353,11 @@ class PrintRenderFrameHelper
       const PrintMsg_PrintPages_Params& params,
       int page_count);
 
-  // Given the |canvas| to draw on, prints the appropriate headers and footers
-  // to |canvas| using information from the remaining parameters.
+  // Helper function to find document type.
+  static SkiaDocumentType GetDocType(const PrintMsg_Print_Params& params);
+
+  // Given the |device| and |canvas| to draw on, prints the appropriate headers
+  // and footers using strings from |header_footer_info| on to the canvas.
   static void PrintHeaderAndFooter(blink::WebCanvas* canvas,
                                    int page_number,
                                    int total_pages,
@@ -430,7 +436,8 @@ class PrintRenderFrameHelper
     // Create the print preview document. |pages| is empty to print all pages.
     // Takes ownership of |prepared_frame|.
     bool CreatePreviewDocument(PrepareFrameAndViewForPrint* prepared_frame,
-                               const std::vector<int>& pages);
+                               const std::vector<int>& pages,
+                               SkiaDocumentType doc_type);
 
     // Called after a page gets rendered. |page_time| is how long the
     // rendering took.

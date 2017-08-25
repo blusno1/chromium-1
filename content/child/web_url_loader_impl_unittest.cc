@@ -82,12 +82,15 @@ class TestResourceDispatcher : public ResourceDispatcher {
       int routing_id,
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
       const url::Origin& frame_origin,
+      bool is_sync,
       std::unique_ptr<RequestPeer> peer,
       blink::WebURLRequest::LoadingIPCType ipc_type,
       mojom::URLLoaderFactory* url_loader_factory,
       std::vector<std::unique_ptr<URLLoaderThrottle>> throttles,
       mojo::ScopedDataPipeConsumerHandle consumer_handle) override {
     EXPECT_FALSE(peer_);
+    if (sync_load_response_.encoded_body_length != -1)
+      EXPECT_TRUE(is_sync);
     peer_ = std::move(peer);
     url_ = request->url;
     stream_url_ = request->resource_body_stream_url;
@@ -145,7 +148,7 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
 
   // blink::WebURLLoaderClient implementation:
   bool WillFollowRedirect(const blink::WebURL& new_url,
-                          const blink::WebURL& new_first_party_for_cookies,
+                          const blink::WebURL& new_site_for_cookies,
                           const blink::WebString& new_referrer,
                           blink::WebReferrerPolicy new_referrer_policy,
                           const blink::WebString& new_method,
@@ -288,7 +291,7 @@ class WebURLLoaderImplTest : public testing::Test {
     redirect_info.status_code = 302;
     redirect_info.new_method = "GET";
     redirect_info.new_url = GURL(kTestURL);
-    redirect_info.new_first_party_for_cookies = GURL(kTestURL);
+    redirect_info.new_site_for_cookies = GURL(kTestURL);
     peer()->OnReceivedRedirect(redirect_info,
                                content::ResourceResponseInfo());
     EXPECT_TRUE(client()->did_receive_redirect());
@@ -300,7 +303,7 @@ class WebURLLoaderImplTest : public testing::Test {
     redirect_info.status_code = 302;
     redirect_info.new_method = "GET";
     redirect_info.new_url = GURL(kTestHTTPSURL);
-    redirect_info.new_first_party_for_cookies = GURL(kTestHTTPSURL);
+    redirect_info.new_site_for_cookies = GURL(kTestHTTPSURL);
     peer()->OnReceivedRedirect(redirect_info,
                                content::ResourceResponseInfo());
     EXPECT_TRUE(client()->did_receive_redirect());
@@ -323,7 +326,7 @@ class WebURLLoaderImplTest : public testing::Test {
 
   void DoCompleteRequest() {
     EXPECT_FALSE(client()->did_finish());
-    peer()->OnCompletedRequest(net::OK, false, false, base::TimeTicks(),
+    peer()->OnCompletedRequest(net::OK, false, base::TimeTicks(),
                                strlen(kTestData), strlen(kTestData),
                                strlen(kTestData));
     EXPECT_TRUE(client()->did_finish());
@@ -334,7 +337,7 @@ class WebURLLoaderImplTest : public testing::Test {
 
   void DoFailRequest() {
     EXPECT_FALSE(client()->did_finish());
-    peer()->OnCompletedRequest(net::ERR_FAILED, false, false, base::TimeTicks(),
+    peer()->OnCompletedRequest(net::ERR_FAILED, false, base::TimeTicks(),
                                strlen(kTestData), strlen(kTestData),
                                strlen(kTestData));
     EXPECT_FALSE(client()->did_finish());
@@ -562,7 +565,7 @@ TEST_F(WebURLLoaderImplTest, FtpDeleteOnReceiveMoreData) {
   // Directory listings are only parsed once the request completes, so this will
   // cancel in DoReceiveDataFtp, before the request finishes.
   client()->set_delete_on_receive_data();
-  peer()->OnCompletedRequest(net::OK, false, false, base::TimeTicks(),
+  peer()->OnCompletedRequest(net::OK, false, base::TimeTicks(),
                              strlen(kTestData), strlen(kTestData),
                              strlen(kTestData));
   EXPECT_FALSE(client()->did_finish());

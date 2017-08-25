@@ -72,10 +72,6 @@
 namespace aura {
 namespace {
 
-// This serves to document the places that rely on bounds changes to the
-// root window being ignored.
-constexpr bool kRootWindowBoundsChangesAreIgnored = true;
-
 Id MakeTransportId(ClientSpecificId client_id, ClientSpecificId local_id) {
   return (client_id << 16) | local_id;
 }
@@ -135,7 +131,7 @@ WindowTreeHostMus* GetWindowTreeHostMus(WindowMus* window) {
 }
 
 bool IsInternalProperty(const void* key) {
-  return key == client::kModalKey;
+  return key == client::kModalKey || key == client::kChildModalParentKey;
 }
 
 void SetWindowTypeFromProperties(
@@ -198,6 +194,10 @@ void DispatchEventToTarget(ui::Event* event, WindowMus* target) {
 // a crash is triggered.
 void OnAckMustSucceed(bool success) {
   CHECK(success);
+}
+
+Id GetServerIdForWindow(Window* window) {
+  return window ? WindowMus::Get(window)->server_id() : kInvalidServerId;
 }
 
 }  // namespace
@@ -567,15 +567,27 @@ void WindowTreeClient::OnConnectionLost() {
 bool WindowTreeClient::HandleInternalPropertyChanged(WindowMus* window,
                                                      const void* key,
                                                      int64_t old_value) {
-  if (key != client::kModalKey)
-    return false;
-
-  const uint32_t change_id =
-      ScheduleInFlightChange(base::MakeUnique<InFlightSetModalTypeChange>(
-          window, static_cast<ui::ModalType>(old_value)));
-  tree_->SetModalType(change_id, window->server_id(),
-                      window->GetWindow()->GetProperty(client::kModalKey));
-  return true;
+  if (key == client::kModalKey) {
+    const uint32_t change_id =
+        ScheduleInFlightChange(base::MakeUnique<InFlightSetModalTypeChange>(
+            window, static_cast<ui::ModalType>(old_value)));
+    tree_->SetModalType(change_id, window->server_id(),
+                        window->GetWindow()->GetProperty(client::kModalKey));
+    return true;
+  }
+  if (key == client::kChildModalParentKey) {
+    const uint32_t change_id =
+        ScheduleInFlightChange(base::MakeUnique<CrashInFlightChange>(
+            window, ChangeType::CHILD_MODAL_PARENT));
+    Window* child_modal_parent =
+        window->GetWindow()->GetProperty(client::kChildModalParentKey);
+    tree_->SetChildModalParent(
+        change_id, window->server_id(),
+        child_modal_parent ? WindowMus::Get(child_modal_parent)->server_id()
+                           : kInvalidServerId);
+    return true;
+  }
+  return false;
 }
 
 void WindowTreeClient::OnEmbedImpl(
@@ -610,6 +622,8 @@ void WindowTreeClient::OnSetDisplayRootDone(
   if (!window)
     return;  // Display was already deleted.
 
+  // TODO(sky): figure out why this has to be here rather than in
+  // WindowTreeHostMus's constructor.
   ui::Compositor* compositor = window->GetWindow()->GetHost()->compositor();
   compositor->SetLocalSurfaceId(*local_surface_id);
 }
@@ -760,7 +774,6 @@ void WindowTreeClient::OnWindowMusCreated(WindowMus* window) {
     // bounds changes are routed through OnWindowTreeHostBoundsWillChange()).
     // But the display is created with an initial bounds, and we need to push
     // that to the server.
-    DCHECK(kRootWindowBoundsChangesAreIgnored);
     ScheduleInFlightBoundsChange(
         window, gfx::Rect(),
         gfx::Rect(
@@ -821,7 +834,21 @@ void WindowTreeClient::OnWindowMusBoundsChanged(WindowMus* window,
   // OnWindowTreeHostBoundsWillChange(). Any bounds that happen here are a side
   // effect of those and can be ignored.
   if (IsRoot(window)) {
-    DCHECK(kRootWindowBoundsChangesAreIgnored);
+    // NOTE: this has to happen to here as during the call to
+    // OnWindowTreeHostBoundsWillChange() the compositor hasn't been updated
+    // yet.
+    if (window->window_mus_type() == WindowMusType::DISPLAY_MANUALLY_CREATED) {
+      WindowTreeHost* window_tree_host = window->GetWindow()->GetHost();
+      // |window_tree_host| may be null if this is called during creation of
+      // the window associated with the WindowTreeHostMus.
+      if (window_tree_host) {
+        viz::LocalSurfaceId local_surface_id =
+            window->GetOrAllocateLocalSurfaceId(
+                window_tree_host->GetBoundsInPixels().size());
+        DCHECK(local_surface_id.is_valid());
+        window_tree_host->compositor()->SetLocalSurfaceId(local_surface_id);
+      }
+    }
     return;
   }
 
@@ -1528,6 +1555,29 @@ void WindowTreeClient::OnChangeCompleted(uint32_t change_id, bool success) {
   }
 }
 
+void WindowTreeClient::SetBlockingContainers(
+    const std::vector<BlockingContainers>& all_blocking_containers) {
+  std::vector<ui::mojom::BlockingContainersPtr>
+      transport_all_blocking_containers;
+  for (const BlockingContainers& blocking_containers :
+       all_blocking_containers) {
+    ui::mojom::BlockingContainersPtr transport_blocking_containers =
+        ui::mojom::BlockingContainers::New();
+    // The |system_modal_container| must be specified, |min_container| may be
+    // null.
+    DCHECK(blocking_containers.system_modal_container);
+    transport_blocking_containers->system_modal_container_id =
+        GetServerIdForWindow(blocking_containers.system_modal_container);
+    transport_blocking_containers->min_container_id =
+        GetServerIdForWindow(blocking_containers.min_container);
+    transport_all_blocking_containers.push_back(
+        std::move(transport_blocking_containers));
+  }
+  window_manager_client_->SetBlockingContainers(
+      std::move(transport_all_blocking_containers),
+      base::Bind(&OnAckMustSucceed));
+}
+
 void WindowTreeClient::GetWindowManager(
     mojo::AssociatedInterfaceRequest<WindowManager> internal) {
   window_manager_internal_.reset(
@@ -1844,6 +1894,15 @@ void WindowTreeClient::OnCursorTouchVisibleChanged(bool enabled) {
     window_manager_delegate_->OnCursorTouchVisibleChanged(enabled);
 }
 
+void WindowTreeClient::OnEventBlockedByModalWindow(Id window_id) {
+  if (!window_manager_delegate_)
+    return;
+
+  WindowMus* window = GetWindowByServerId(window_id);
+  if (window)
+    window_manager_delegate_->OnEventBlockedByModalWindow(window->GetWindow());
+}
+
 void WindowTreeClient::SetFrameDecorationValues(
     ui::mojom::FrameDecorationValuesPtr values) {
   if (window_manager_client_) {
@@ -2111,6 +2170,16 @@ void WindowTreeClient::OnWindowTreeHostMoveCursorToDisplayLocation(
   if (window_manager_client_) {
     window_manager_client_->WmMoveCursorToDisplayLocation(location_in_pixels,
                                                           display_id);
+  }
+}
+
+void WindowTreeClient::OnWindowTreeHostConfineCursorToBounds(
+    const gfx::Rect& bounds_in_pixels,
+    int64_t display_id) {
+  DCHECK(window_manager_client_);
+  if (window_manager_client_) {
+    window_manager_client_->WmConfineCursorToBounds(bounds_in_pixels,
+                                                    display_id);
   }
 }
 

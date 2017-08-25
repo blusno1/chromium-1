@@ -172,6 +172,15 @@ class ChannelAssociatedGroupController
     if (!mojo::IsValidInterfaceId(id))
       return mojo::ScopedInterfaceEndpointHandle();
 
+    // Unless it is the master ID, |id| is from the remote side and therefore
+    // its namespace bit is supposed to be different than the value that this
+    // router would use.
+    if (!mojo::IsMasterInterfaceId(id) &&
+        set_interface_id_namespace_bit_ ==
+            mojo::HasInterfaceIdNamespaceBitSet(id)) {
+      return mojo::ScopedInterfaceEndpointHandle();
+    }
+
     base::AutoLock locker(lock_);
     bool inserted = false;
     Endpoint* endpoint = FindOrInsertEndpoint(id, &inserted);
@@ -820,8 +829,6 @@ class ChannelAssociatedGroupController
       mojo::InterfaceId id,
       const base::Optional<mojo::DisconnectReason>& reason) override {
     DCHECK(thread_checker_.CalledOnValidThread());
-
-    DCHECK(!mojo::IsMasterInterfaceId(id) || reason);
 
     scoped_refptr<ChannelAssociatedGroupController> keepalive(this);
     base::AutoLock locker(lock_);

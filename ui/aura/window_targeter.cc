@@ -32,7 +32,7 @@ bool WindowTargeter::GetHitTestRects(Window* window,
                                      gfx::Rect* hit_test_rect_touch) const {
   DCHECK(hit_test_rect_mouse);
   DCHECK(hit_test_rect_touch);
-  *hit_test_rect_mouse = *hit_test_rect_touch = gfx::Rect(window->bounds());
+  *hit_test_rect_mouse = *hit_test_rect_touch = window->bounds();
 
   if (ShouldUseExtendedBounds(window)) {
     hit_test_rect_mouse->Inset(mouse_extend_);
@@ -40,6 +40,11 @@ bool WindowTargeter::GetHitTestRects(Window* window,
   }
 
   return true;
+}
+
+std::unique_ptr<WindowTargeter::HitTestRects>
+WindowTargeter::GetExtraHitTestShapeRects(Window* target) const {
+  return nullptr;
 }
 
 Window* WindowTargeter::FindTargetInRootWindow(Window* root_window,
@@ -99,8 +104,10 @@ ui::EventTarget* WindowTargeter::FindTargetForEvent(ui::EventTarget* root,
       // applying the host's transform.
       ui::LocatedEvent* located_event = static_cast<ui::LocatedEvent*>(event);
       located_event->ConvertLocationToTarget(target, new_root);
+      WindowTreeHost* window_tree_host = new_root->GetHost();
       located_event->UpdateForRootTransform(
-          new_root->GetHost()->GetRootTransform());
+          window_tree_host->GetRootTransform(),
+          window_tree_host->GetRootTransformForLocalEventCoordinates());
     }
     ignore_result(new_root->GetHost()->event_sink()->OnEventFromSource(event));
 
@@ -166,10 +173,23 @@ bool WindowTargeter::EventLocationInsideBounds(
   if (window->parent())
     Window::ConvertPointToTarget(window->parent(), window, &point);
 
-  if (event.IsTouchEvent() || event.IsGestureEvent())
-    return touch_rect.Contains(point);
+  const bool point_in_rect = event.IsTouchEvent() || event.IsGestureEvent()
+                                 ? touch_rect.Contains(point)
+                                 : mouse_rect.Contains(point);
+  if (!point_in_rect)
+    return false;
 
-  return mouse_rect.Contains(point);
+  auto shape_rects = GetExtraHitTestShapeRects(window);
+  if (!shape_rects)
+    return true;
+
+  for (const gfx::Rect& shape_rect : *shape_rects) {
+    if (shape_rect.Contains(point)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool WindowTargeter::ShouldUseExtendedBounds(const aura::Window* window) const {

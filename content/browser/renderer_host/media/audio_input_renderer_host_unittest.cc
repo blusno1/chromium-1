@@ -116,7 +116,6 @@ class AudioInputRendererHostWithInterception : public AudioInputRendererHost {
 
  private:
   bool Send(IPC::Message* message) override {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
     bool handled = true;
 
     IPC_BEGIN_MESSAGE_MAP(AudioInputRendererHostWithInterception, *message)
@@ -552,8 +551,8 @@ TEST_F(AudioInputRendererHostTest, TabCaptureStream) {
   controls.audio.stream_source = kMediaStreamSourceTab;
   std::string request_label = media_stream_manager_->MakeMediaAccessRequest(
       kRenderProcessId, kRenderFrameId, 0, controls, SecurityOrigin(),
-      base::Bind([](const MediaStreamDevices& devices,
-                    std::unique_ptr<MediaStreamUIProxy>) {}));
+      base::BindOnce([](const MediaStreamDevices& devices,
+                        std::unique_ptr<MediaStreamUIProxy>) {}));
   base::RunLoop().RunUntilIdle();
   int session_id = Open("Tab capture", controls.audio.device_id);
 

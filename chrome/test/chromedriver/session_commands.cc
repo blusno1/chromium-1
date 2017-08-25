@@ -281,7 +281,15 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
   session->detach = capabilities.detach;
   session->force_devtools_screenshot = capabilities.force_devtools_screenshot;
   session->capabilities = CreateCapabilities(session, capabilities);
-  value->reset(session->capabilities->DeepCopy());
+
+  if (w3c_capability) {
+    base::DictionaryValue body;
+    body.SetDictionary("capabilities", std::move(session->capabilities));
+    body.SetString("sessionId", session->id);
+    value->reset(body.DeepCopy());
+  } else {
+    value->reset(session->capabilities->DeepCopy());
+  }
   return CheckSessionCreated(session);
 }
 
@@ -551,6 +559,18 @@ Status ExecuteSetTimeout(Session* session,
   } else {
     return Status(kUnknownError, "unknown type of timeout:" + type);
   }
+  return Status(kOk);
+}
+
+Status ExecuteGetTimeouts(Session* session,
+                          const base::DictionaryValue& params,
+                          std::unique_ptr<base::Value>* value) {
+  base::DictionaryValue timeouts;
+  timeouts.SetInteger("script", session->script_timeout.InMilliseconds());
+  timeouts.SetInteger("pageLoad", session->page_load_timeout.InMilliseconds());
+  timeouts.SetInteger("implicit", session->implicit_wait.InMilliseconds());
+
+  value->reset(timeouts.DeepCopy());
   return Status(kOk);
 }
 
@@ -858,6 +878,25 @@ Status ExecuteMaximizeWindow(Session* session,
     return status;
 
   return extension->MaximizeWindow();
+}
+
+Status ExecuteFullScreenWindow(Session* session,
+                               const base::DictionaryValue& params,
+                               std::unique_ptr<base::Value>* value) {
+  ChromeDesktopImpl* desktop = NULL;
+  Status status = session->chrome->GetAsDesktop(&desktop);
+  if (status.IsError())
+    return status;
+
+  if (desktop->GetBrowserInfo()->build_no >= kBrowserWindowDevtoolsBuildNo)
+    return desktop->FullScreenWindow(session->window);
+
+  AutomationExtension* extension = NULL;
+  status = desktop->GetAutomationExtension(&extension, session->w3c_compliant);
+  if (status.IsError())
+    return status;
+
+  return extension->FullScreenWindow();
 }
 
 Status ExecuteGetAvailableLogTypes(Session* session,

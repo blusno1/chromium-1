@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_model.h"
+#include "ui/app_list/app_list_view_delegate_observer.h"
 #include "ui/app_list/search_box_model_observer.h"
 #include "ui/app_list/speech_ui_model_observer.h"
 #include "ui/gfx/shadow_value.h"
@@ -18,6 +19,7 @@
 #include "ui/views/view.h"
 
 namespace views {
+class BoxLayout;
 class ImageView;
 class Textfield;
 }  // namespace views
@@ -50,7 +52,8 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
                                       public views::TextfieldController,
                                       public views::ButtonListener,
                                       public SearchBoxModelObserver,
-                                      public SpeechUIModelObserver {
+                                      public SpeechUIModelObserver,
+                                      public AppListViewDelegateObserver {
  public:
   SearchBoxView(SearchBoxViewDelegate* delegate,
                 AppListViewDelegate* view_delegate,
@@ -76,6 +79,9 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   void set_contents_view(views::View* contents_view) {
     contents_view_ = contents_view;
   }
+
+  // Moves focus in response to arrow key.
+  bool MoveArrowFocus(const ui::KeyEvent& event);
 
   // Moves focus forward/backwards in response to TAB.
   bool MoveTabFocus(bool move_backwards);
@@ -115,10 +121,16 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // Updates the search box's background corner radius and color.
+  // Updates the search box's background corner radius and color based on the
+  // state of AppListModel.
   void UpdateBackground(double progress,
                         AppListModel::State current_state,
                         AppListModel::State target_state);
+
+  // Updates the search box's layout based on the state of AppListModel.
+  void UpdateLayout(double progress,
+                    AppListModel::State current_state,
+                    AppListModel::State target_state);
 
   // Called when tablet mode starts and ends.
   void OnTabletModeChanged(bool started);
@@ -130,7 +142,7 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   SkColor GetBackgroundColorForState(AppListModel::State state) const;
 
   // Updates the opacity of the searchbox.
-  void UpdateOpacity(float work_area_bottom, bool is_end_gesture);
+  void UpdateOpacity();
 
   // Used only in the tests to get the current search icon.
   views::ImageView* get_search_icon_for_test() { return search_icon_; }
@@ -140,6 +152,13 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
 
   // Whether the search box is active.
   bool is_search_box_active() const { return is_search_box_active_; }
+
+  // Whether the key event is an arrow up/down/left/right.
+  // TODO(weidongg): move this function to utility class.
+  static bool IsArrowKey(const ui::KeyEvent& event);
+
+  // Returns selected view in contents view.
+  views::View* GetSelectedViewInContentsView() const;
 
  private:
   // Updates model text and selection model with current Textfield info.
@@ -151,8 +170,8 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   // Updates the search icon.
   void UpdateSearchIcon();
 
-  // Gets the wallpaper prominent colors, returning empty if there aren't any.
-  const std::vector<SkColor>& GetWallpaperProminentColors() const;
+  // Gets the wallpaper prominent colors.
+  void GetWallpaperProminentColors(std::vector<SkColor>* colors);
 
   // Sets the background color.
   void SetBackgroundColor(SkColor light_vibrant);
@@ -163,8 +182,14 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   // Updates the search box's background color.
   void UpdateBackgroundColor(SkColor color);
 
+  // Updates the visibility of close button.
+  void UpdateCloseButtonVisisbility();
+
   // Gets the search box background.
   SearchBoxBackground* GetSearchBoxBackground() const;
+
+  // Whether the trimmed query in the search box is empty.
+  bool IsSearchBoxTrimmedQueryEmpty() const;
 
   // Overridden from views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
@@ -182,11 +207,13 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   void HintTextChanged() override;
   void SelectionModelChanged() override;
   void Update() override;
-  void WallpaperProminentColorsChanged() override;
 
   // Overridden from SpeechUIModelObserver:
   void OnSpeechRecognitionStateChanged(
       SpeechRecognitionState new_state) override;
+
+  // Overridden from AppListViewDelegateObserver:
+  void OnWallpaperColorsChanged() override;
 
   void SetDefaultBorder();
 
@@ -204,8 +231,12 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   SearchBoxImageButton* speech_button_ = nullptr;
   SearchBoxImageButton* close_button_ = nullptr;
   views::Textfield* search_box_;
+  views::View* search_box_right_space_ = nullptr;
   views::View* contents_view_ = nullptr;
   app_list::AppListView* app_list_view_;
+
+  // Owned by |content_container_|. It is deleted when the view is deleted.
+  views::BoxLayout* box_layout_ = nullptr;
 
   // Whether the fullscreen app list feature is enabled.
   const bool is_fullscreen_app_list_enabled_;

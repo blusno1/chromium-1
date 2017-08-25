@@ -41,7 +41,7 @@
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/WebInputEventConversion.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
@@ -1236,6 +1236,8 @@ Response InspectorOverlayAgent::HighlightConfigFromInspectorObject(
       InspectorDOMAgent::ParseColor(config->getShapeColor(nullptr));
   highlight_config->shape_margin =
       InspectorDOMAgent::ParseColor(config->getShapeMarginColor(nullptr));
+  highlight_config->css_grid =
+      InspectorDOMAgent::ParseColor(config->getCssGridColor(nullptr));
   highlight_config->selector_list = config->getSelectorList("");
 
   *out_config = std::move(highlight_config);

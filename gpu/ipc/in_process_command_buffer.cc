@@ -11,6 +11,7 @@
 #include <set>
 #include <utility>
 
+#include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -24,6 +25,7 @@
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/client/gpu_control_client.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
@@ -65,6 +67,7 @@ namespace gpu {
 namespace {
 
 base::AtomicSequenceNumber g_next_command_buffer_id;
+base::AtomicSequenceNumber g_next_image_id;
 
 template <typename T>
 static void RunTaskWithResult(base::Callback<T(void)> task,
@@ -206,7 +209,6 @@ InProcessCommandBuffer::InProcessCommandBuffer(
       client_thread_weak_ptr_factory_(this),
       gpu_thread_weak_ptr_factory_(this) {
   DCHECK(service_.get());
-  next_image_id_.GetNext();
 }
 
 InProcessCommandBuffer::~InProcessCommandBuffer() {
@@ -722,7 +724,7 @@ int32_t InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
       reinterpret_cast<gfx::GpuMemoryBuffer*>(buffer);
   DCHECK(gpu_memory_buffer);
 
-  int32_t new_id = next_image_id_.GetNext();
+  int32_t new_id = g_next_image_id.GetNext() + 1;
 
   DCHECK(gpu::IsImageFromGpuMemoryBufferFormatSupported(
       gpu_memory_buffer->GetFormat(), capabilities_));

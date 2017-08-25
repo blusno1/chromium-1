@@ -27,8 +27,9 @@ public class BookmarkFolderRow extends BookmarkRow {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mIconImageView.setImageDrawable(
+        mIconView.setImageDrawable(
                 TintedDrawable.constructTintedDrawable(getResources(), R.drawable.bookmark_folder));
+        onIconDrawableChanged();
     }
 
     // BookmarkRow implementation.
@@ -42,6 +43,11 @@ public class BookmarkFolderRow extends BookmarkRow {
     BookmarkItem setBookmarkId(BookmarkId bookmarkId) {
         BookmarkItem item = super.setBookmarkId(bookmarkId);
         mTitleView.setText(item.getTitle());
+        int childCount = mDelegate.getModel().getChildCount(bookmarkId);
+        mDescriptionView.setText((childCount > 0)
+                        ? getResources().getQuantityString(
+                                  R.plurals.bookmarks_count, childCount, childCount)
+                        : getResources().getString(R.string.no_bookmarks));
         return item;
     }
 }

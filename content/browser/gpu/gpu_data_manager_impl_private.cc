@@ -42,6 +42,7 @@
 #include "gpu/config/gpu_util.h"
 #include "gpu/config/software_rendering_list_autogen.h"
 #include "gpu/ipc/common/memory_stats.h"
+#include "gpu/ipc/host/shader_disk_cache.h"
 #include "gpu/ipc/service/switches.h"
 #include "media/media_features.h"
 #include "ui/base/ui_base_switches.h"
@@ -155,12 +156,15 @@ void UpdateStats(const gpu::GPUInfo& gpu_info,
                              max_entry_id + 1);
 
   if (blacklisted_features.size() != 0) {
-    std::vector<uint32_t> flag_entries;
-    blacklist->GetDecisionEntries(&flag_entries);
-    DCHECK_GT(flag_entries.size(), 0u);
-    for (size_t i = 0; i < flag_entries.size(); ++i) {
-      UMA_HISTOGRAM_EXACT_LINEAR("GPU.BlacklistTestResultsPerEntry",
-                                 flag_entries[i], max_entry_id + 1);
+    const std::vector<uint32_t>& entry_indices = blacklist->GetActiveEntries();
+    DCHECK_GT(entry_indices.size(), 0u);
+    std::vector<uint32_t> entry_ids =
+        blacklist->GetEntryIDsFromIndices(entry_indices);
+    DCHECK_EQ(entry_indices.size(), entry_ids.size());
+    for (auto id : entry_ids) {
+      DCHECK_GE(max_entry_id, id);
+      UMA_HISTOGRAM_EXACT_LINEAR("GPU.BlacklistTestResultsPerEntry", id,
+                                 max_entry_id + 1);
     }
   }
 
@@ -217,9 +221,8 @@ void UpdateStats(const gpu::GPUInfo& gpu_info,
 }
 
 void UpdateDriverBugListStats(const gpu::GpuDriverBugList* bug_list,
-                              const std::set<int>& workarounds) {
-  uint32_t max_entry_id = bug_list->max_entry_id();
-  if (max_entry_id == 0) {
+                              const gpu::GpuFeatureInfo& gpu_feature_info) {
+  if (!bug_list || bug_list->max_entry_id() == 0) {
     // Driver bug list was not loaded.  No need to go further.
     return;
   }
@@ -229,13 +232,15 @@ void UpdateDriverBugListStats(const gpu::GpuDriverBugList* bug_list,
   // driver bug list percentages for the rest of the entries.
   UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.DriverBugTestResultsPerEntry", 0);
 
-  if (workarounds.size() != 0) {
-    std::vector<uint32_t> flag_entries;
-    bug_list->GetDecisionEntries(&flag_entries);
-    DCHECK_GT(flag_entries.size(), 0u);
-    for (size_t i = 0; i < flag_entries.size(); ++i) {
-      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.DriverBugTestResultsPerEntry",
-                                  flag_entries[i]);
+  if (gpu_feature_info.enabled_gpu_driver_bug_workarounds.size() > 0) {
+    DCHECK_GT(gpu_feature_info.applied_gpu_driver_bug_list_entries.size(), 0u);
+    std::vector<uint32_t> entry_ids = bug_list->GetEntryIDsFromIndices(
+        gpu_feature_info.applied_gpu_driver_bug_list_entries);
+    DCHECK_EQ(gpu_feature_info.applied_gpu_driver_bug_list_entries.size(),
+              entry_ids.size());
+    for (auto id : entry_ids) {
+      DCHECK_GE(bug_list->max_entry_id(), id);
+      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.DriverBugTestResultsPerEntry", id);
     }
   }
 }
@@ -288,7 +293,7 @@ void OnVideoMemoryUsageStats(
         callback,
     const gpu::VideoMemoryUsageStats& stats) {
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(callback, stats));
+                          base::BindOnce(callback, stats));
 }
 
 void RequestVideoMemoryUsageStats(
@@ -298,7 +303,7 @@ void RequestVideoMemoryUsageStats(
   if (!host)
     return;
   host->gpu_service()->GetVideoMemoryUsageStats(
-      base::Bind(&OnVideoMemoryUsageStats, callback));
+      base::BindOnce(&OnVideoMemoryUsageStats, callback));
 }
 
 void UpdateGpuInfoOnIO(const gpu::GPUInfo& gpu_info) {
@@ -307,7 +312,7 @@ void UpdateGpuInfoOnIO(const gpu::GPUInfo& gpu_info) {
   // expect to run in the UI thread, e.g. ContentClient::SetGpuInfo()).
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           [](const gpu::GPUInfo& gpu_info) {
             TRACE_EVENT0("test_gpu", "OnGraphicsInfoCollected");
             GpuDataManagerImpl::GetInstance()->UpdateGpuInfo(gpu_info);
@@ -458,7 +463,7 @@ void GpuDataManagerImplPrivate::RequestCompleteGpuInfoIfNeeded() {
         if (!host)
           return;
         host->gpu_service()->RequestCompleteGpuInfo(
-            base::Bind(&UpdateGpuInfoOnIO));
+            base::BindOnce(&UpdateGpuInfoOnIO));
       }));
 }
 
@@ -548,7 +553,6 @@ void GpuDataManagerImplPrivate::SetGLStrings(const std::string& gl_vendor,
   gpu::CollectDriverInfoGL(&gpu_info);
 
   UpdateGpuInfo(gpu_info);
-  UpdateGpuSwitchingManager(gpu_info);
   UpdatePreliminaryBlacklistedFeatures();
 }
 
@@ -681,37 +685,10 @@ void GpuDataManagerImplPrivate::UpdateGpuInfoHelper() {
     UpdateBlacklistedFeatures(features);
   }
 
-  std::string command_line_disable_gl_extensions;
-  std::vector<std::string> disabled_driver_bug_exts;
-  // Holds references to strings in the above two variables.
-  std::set<base::StringPiece> disabled_ext_set;
-
-  // Merge disabled extensions from the command line with gpu driver bug list.
-  if (command_line) {
-    command_line_disable_gl_extensions =
-        command_line->GetSwitchValueASCII(switches::kDisableGLExtensions);
-    std::vector<base::StringPiece> disabled_command_line_exts =
-        base::SplitStringPiece(command_line_disable_gl_extensions, ", ;",
-                               base::KEEP_WHITESPACE,
-                               base::SPLIT_WANT_NONEMPTY);
-    disabled_ext_set.insert(disabled_command_line_exts.begin(),
-                            disabled_command_line_exts.end());
-  }
-
   if (gpu_driver_bug_list_) {
     gpu_driver_bugs_ = gpu_driver_bug_list_->MakeDecision(
         gpu::GpuControlList::kOsAny, os_version, gpu_info_);
-
-    disabled_driver_bug_exts = gpu_driver_bug_list_->GetDisabledExtensions();
-    disabled_ext_set.insert(disabled_driver_bug_exts.begin(),
-                            disabled_driver_bug_exts.end());
-    UpdateDriverBugListStats(gpu_driver_bug_list_.get(), gpu_driver_bugs_);
   }
-  disabled_extensions_ =
-      base::JoinString(std::vector<base::StringPiece>(disabled_ext_set.begin(),
-                                                      disabled_ext_set.end()),
-                       " ");
-
   gpu::GpuDriverBugList::AppendWorkaroundsFromCommandLine(
       &gpu_driver_bugs_, *base::CommandLine::ForCurrentProcess());
 
@@ -740,6 +717,8 @@ void GpuDataManagerImplPrivate::UpdateGpuFeatureInfo(
     const gpu::GpuFeatureInfo& gpu_feature_info) {
   if (!use_swiftshader_) {
     gpu_feature_info_ = gpu_feature_info;
+    UpdateDriverBugListStats(gpu_driver_bug_list_.get(), gpu_feature_info);
+    NotifyGpuInfoUpdate();
   }
 }
 
@@ -790,19 +769,10 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
   } else if (!use_gl.empty()) {
     command_line->AppendSwitchASCII(switches::kUseGL, use_gl);
   }
-  if (ui::GpuSwitchingManager::GetInstance()->SupportsDualGpus())
-    command_line->AppendSwitchASCII(switches::kSupportsDualGpus, "true");
-  else
-    command_line->AppendSwitchASCII(switches::kSupportsDualGpus, "false");
 
   if (!gpu_driver_bugs_.empty()) {
     command_line->AppendSwitchASCII(switches::kGpuDriverBugWorkarounds,
                                     gpu::IntSetToString(gpu_driver_bugs_, ','));
-  }
-
-  if (!disabled_extensions_.empty()) {
-    command_line->AppendSwitchASCII(switches::kDisableGLExtensions,
-                                    disabled_extensions_);
   }
 
   if (ShouldDisableAcceleratedVideoDecode(command_line)) {
@@ -903,9 +873,6 @@ void GpuDataManagerImplPrivate::UpdateRendererWebPrefs(
       !command_line->HasSwitch(switches::kDisableAcceleratedVideoDecode)) {
     prefs->pepper_accelerated_video_decode_enabled = true;
   }
-  prefs->disable_2d_canvas_copy_on_write =
-      IsDriverBugWorkaroundActive(gpu::BROKEN_EGL_IMAGE_REF_COUNTING) &&
-      command_line->HasSwitch(switches::kEnableThreadedTextureMailboxes);
 }
 
 void GpuDataManagerImplPrivate::UpdateGpuPreferences(
@@ -925,6 +892,9 @@ void GpuDataManagerImplPrivate::UpdateGpuPreferences(
       (command_line->HasSwitch(switches::kEnableES3APIs) ||
        !IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL2)) &&
       !command_line->HasSwitch(switches::kDisableES3APIs);
+
+  gpu_preferences->gpu_program_cache_size =
+      gpu::ShaderDiskCache::CacheSizeBytes();
 }
 
 void GpuDataManagerImplPrivate::DisableHardwareAcceleration() {
@@ -966,8 +936,11 @@ void GpuDataManagerImplPrivate::GetBlacklistReasons(
     base::ListValue* reasons) const {
   if (gpu_blacklist_)
     gpu_blacklist_->GetReasons(reasons, "disabledFeatures");
-  if (gpu_driver_bug_list_)
-    gpu_driver_bug_list_->GetReasons(reasons, "workarounds");
+  if (gpu_driver_bug_list_) {
+    gpu_driver_bug_list_->GetReasons(
+        reasons, "workarounds",
+        gpu_feature_info_.applied_gpu_driver_bug_list_entries);
+  }
 }
 
 std::vector<std::string>
@@ -993,11 +966,9 @@ void GpuDataManagerImplPrivate::ProcessCrashed(
     // Unretained is ok, because it's posted to UI thread, the thread
     // where the singleton GpuDataManagerImpl lives until the end.
     BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&GpuDataManagerImpl::ProcessCrashed,
-                   base::Unretained(owner_),
-                   exit_code));
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&GpuDataManagerImpl::ProcessCrashed,
+                       base::Unretained(owner_), exit_code));
     return;
   }
   {
@@ -1111,7 +1082,7 @@ bool GpuDataManagerImplPrivate::ShouldDisableAcceleratedVideoDecode(
 void GpuDataManagerImplPrivate::GetDisabledExtensions(
     std::string* disabled_extensions) const {
   DCHECK(disabled_extensions);
-  *disabled_extensions = disabled_extensions_;
+  *disabled_extensions = gpu_feature_info_.disabled_extensions;
 }
 
 void GpuDataManagerImplPrivate::BlockDomainFrom3DAPIs(
@@ -1130,9 +1101,9 @@ bool GpuDataManagerImplPrivate::Are3DAPIsBlocked(const GURL& top_origin_url,
     // where the singleton GpuDataManagerImpl lives until the end.
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&GpuDataManagerImpl::Notify3DAPIBlocked,
-                   base::Unretained(owner_), top_origin_url, render_process_id,
-                   render_frame_id, requester));
+        base::BindOnce(&GpuDataManagerImpl::Notify3DAPIBlocked,
+                       base::Unretained(owner_), top_origin_url,
+                       render_process_id, render_frame_id, requester));
   }
 
   return blocked;
@@ -1210,7 +1181,6 @@ void GpuDataManagerImplPrivate::InitializeImpl(
 
   gpu_info_ = gpu_info;
   UpdateGpuInfo(gpu_info);
-  UpdateGpuSwitchingManager(gpu_info);
   UpdatePreliminaryBlacklistedFeatures();
 
   RunPostInitTasks();
@@ -1243,19 +1213,6 @@ void GpuDataManagerImplPrivate::UpdateBlacklistedFeatures(
 void GpuDataManagerImplPrivate::UpdatePreliminaryBlacklistedFeatures() {
   preliminary_blacklisted_features_ = blacklisted_features_;
   preliminary_blacklisted_features_initialized_ = true;
-}
-
-void GpuDataManagerImplPrivate::UpdateGpuSwitchingManager(
-    const gpu::GPUInfo& gpu_info) {
-  // The vendor IDs might be 0 on non-PCI devices (like Android), but
-  // the length of the vector is all we care about in most cases.
-  std::vector<uint32_t> vendor_ids;
-  vendor_ids.push_back(gpu_info.gpu.vendor_id);
-  for (const auto& device : gpu_info.secondary_gpus) {
-    vendor_ids.push_back(device.vendor_id);
-  }
-  ui::GpuSwitchingManager::GetInstance()->SetGpuVendorIds(vendor_ids);
-  gpu::InitializeDualGpusIfSupported(gpu_driver_bugs_);
 }
 
 void GpuDataManagerImplPrivate::NotifyGpuInfoUpdate() {

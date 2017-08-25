@@ -180,7 +180,6 @@ public class ShortcutHelper {
                         backgroundColor, iconUrl.isEmpty());
                 shortcutIntent.putExtra(EXTRA_MAC, getEncodedMac(context, url));
                 shortcutIntent.putExtra(EXTRA_SOURCE, source);
-                shortcutIntent.setPackage(context.getPackageName());
                 return shortcutIntent;
             }
             @Override
@@ -191,12 +190,9 @@ public class ShortcutHelper {
                 // process is complete, call back to native code to start the splash image
                 // download.
                 WebappRegistry.getInstance().register(
-                        id, new WebappRegistry.FetchWebappDataStorageCallback() {
-                            @Override
-                            public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
-                                storage.updateFromShortcutIntent(resultIntent);
-                                nativeOnWebappDataStored(callbackPointer);
-                            }
+                        id, storage -> {
+                            storage.updateFromShortcutIntent(resultIntent);
+                            nativeOnWebappDataStored(callbackPointer);
                         });
                 if (shouldShowToastWhenAddingShortcut()) {
                     showAddedToHomescreenToast(userTitle);
@@ -363,7 +359,8 @@ public class ShortcutHelper {
             boolean isIconGenerated) {
         // Create an intent as a launcher icon for a full-screen Activity.
         Intent shortcutIntent = new Intent();
-        shortcutIntent.setAction(action)
+        shortcutIntent.setPackage(ContextUtils.getApplicationContext().getPackageName())
+                .setAction(action)
                 .putExtra(EXTRA_ID, id)
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_SCOPE, scope)

@@ -152,7 +152,8 @@ TEST_F(AppStartupParametersTest, ParseURLWithFileParsedURL) {
 TEST_F(AppStartupParametersTest, ParseURLWithAppGroupVoiceSearch) {
   ChromeAppStartupParameters* params = [ChromeAppStartupParameters
       newAppStartupParametersForCommand:@"voicesearch"
-                          withParameter:nil
+                        withExternalURL:nil
+                              withIndex:0
                                 withURL:nil
                   fromSourceApplication:nil
             fromSecureSourceApplication:nil];
@@ -161,13 +162,46 @@ TEST_F(AppStartupParametersTest, ParseURLWithAppGroupVoiceSearch) {
       base::StringPrintf("%s://%s/", kChromeUIScheme, kChromeUINewTabHost);
 
   EXPECT_EQ(expectedUrlString, [params externalURL].spec());
-  EXPECT_TRUE([params launchVoiceSearch]);
+  EXPECT_EQ([params postOpeningAction], START_VOICE_SEARCH);
+}
+
+TEST_F(AppStartupParametersTest, ParseURLWithAppGroupQRCode) {
+  ChromeAppStartupParameters* params =
+      [ChromeAppStartupParameters newAppStartupParametersForCommand:@"qrscanner"
+                                                    withExternalURL:nil
+                                                          withIndex:0
+                                                            withURL:nil
+                                              fromSourceApplication:nil
+                                        fromSecureSourceApplication:nil];
+
+  std::string expectedUrlString =
+      base::StringPrintf("%s://%s/", kChromeUIScheme, kChromeUINewTabHost);
+
+  EXPECT_EQ(expectedUrlString, [params externalURL].spec());
+  EXPECT_EQ([params postOpeningAction], START_QR_CODE_SCANNER);
+}
+
+TEST_F(AppStartupParametersTest, ParseURLWithAppGroupFocusOmbnibox) {
+  ChromeAppStartupParameters* params = [ChromeAppStartupParameters
+      newAppStartupParametersForCommand:@"focusomnibox"
+                        withExternalURL:nil
+                              withIndex:0
+                                withURL:nil
+                  fromSourceApplication:nil
+            fromSecureSourceApplication:nil];
+
+  std::string expectedUrlString =
+      base::StringPrintf("%s://%s/", kChromeUIScheme, kChromeUINewTabHost);
+
+  EXPECT_EQ(expectedUrlString, [params externalURL].spec());
+  EXPECT_EQ([params postOpeningAction], FOCUS_OMNIBOX);
 }
 
 TEST_F(AppStartupParametersTest, ParseURLWithAppGroupNewTab) {
   ChromeAppStartupParameters* params =
       [ChromeAppStartupParameters newAppStartupParametersForCommand:@"newtab"
-                                                      withParameter:nil
+                                                    withExternalURL:nil
+                                                          withIndex:0
                                                             withURL:nil
                                               fromSourceApplication:nil
                                         fromSecureSourceApplication:nil];
@@ -175,13 +209,15 @@ TEST_F(AppStartupParametersTest, ParseURLWithAppGroupNewTab) {
       base::StringPrintf("%s://%s/", kChromeUIScheme, kChromeUINewTabHost);
 
   EXPECT_EQ(expectedUrlString, [params externalURL].spec());
-  EXPECT_FALSE([params launchVoiceSearch]);
+  EXPECT_EQ([params postOpeningAction], NO_ACTION);
 }
 
 TEST_F(AppStartupParametersTest, ParseURLWithAppGroupOpenURL) {
   ChromeAppStartupParameters* params = [ChromeAppStartupParameters
       newAppStartupParametersForCommand:@"openurl"
-                          withParameter:@"http://foo/bar"
+                        withExternalURL:@"http://foo/bar"
+
+                              withIndex:0
                                 withURL:nil
                   fromSourceApplication:nil
             fromSecureSourceApplication:nil];
@@ -192,7 +228,8 @@ TEST_F(AppStartupParametersTest, ParseURLWithAppGroupOpenURL) {
 TEST_F(AppStartupParametersTest, ParseURLWithAppGroupGarbage) {
   ChromeAppStartupParameters* params =
       [ChromeAppStartupParameters newAppStartupParametersForCommand:@"garbage"
-                                                      withParameter:nil
+                                                    withExternalURL:nil
+                                                          withIndex:0
                                                             withURL:nil
                                               fromSourceApplication:nil
                                         fromSecureSourceApplication:nil];

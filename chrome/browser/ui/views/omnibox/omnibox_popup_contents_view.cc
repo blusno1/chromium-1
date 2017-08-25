@@ -29,7 +29,6 @@
 #include "ui/gfx/shadow_value.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/image_view.h"
-#include "ui/views/view_targeter.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
 
@@ -116,9 +115,6 @@ OmniboxPopupContentsView::OmniboxPopupContentsView(
     g_bottom_shadow.Get() =
         gfx::ImageSkiaOperations::CreateHorizontalShadow(shadows, true);
   }
-
-  SetEventTargeter(
-      std::unique_ptr<views::ViewTargeter>(new views::ViewTargeter(this)));
 }
 
 void OmniboxPopupContentsView::Init() {
@@ -210,10 +206,12 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     return;
   }
 
+  // Fix-up any matches due to tail suggestions, before display below.
+  model_->autocomplete_controller()->InlineTailPrefixes();
+
   // Update the match cached by each row, in the process of doing so make sure
   // we have enough row views.
   const size_t result_size = model_->result().size();
-  max_match_contents_width_ = 0;
   for (size_t i = 0; i < result_size; ++i) {
     OmniboxResultView* view = result_view_at(i);
     const AutocompleteMatch& match = GetMatchAtIndex(i);
@@ -222,10 +220,6 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     if (match.answer && !model_->answer_bitmap().isNull()) {
       view->SetAnswerImage(
           gfx::ImageSkia::CreateFrom1xBitmap(model_->answer_bitmap()));
-    }
-    if (match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL) {
-      max_match_contents_width_ = std::max(
-          max_match_contents_width_, view->GetMatchContentsWidth());
     }
   }
 
@@ -344,10 +338,6 @@ bool OmniboxPopupContentsView::IsSelectedIndex(size_t index) const {
   return index == model_->selected_line();
 }
 
-bool OmniboxPopupContentsView::IsHoveredIndex(size_t index) const {
-  return index == model_->hovered_line();
-}
-
 gfx::Image OmniboxPopupContentsView::GetIconIfExtensionMatch(
     size_t index) const {
   if (!HasMatchAt(index))
@@ -387,23 +377,20 @@ views::View* OmniboxPopupContentsView::GetTooltipHandlerForPoint(
   return nullptr;
 }
 
-bool OmniboxPopupContentsView::OnMousePressed(
-    const ui::MouseEvent& event) {
+bool OmniboxPopupContentsView::OnMousePressed(const ui::MouseEvent& event) {
   ignore_mouse_drag_ = false;  // See comment on |ignore_mouse_drag_| in header.
-  if (event.IsLeftMouseButton() || event.IsMiddleMouseButton())
-    UpdateLineEvent(event, event.IsLeftMouseButton());
+  if (event.IsLeftMouseButton())
+    SetSelectedLine(event);
   return true;
 }
 
-bool OmniboxPopupContentsView::OnMouseDragged(
-    const ui::MouseEvent& event) {
-  if (event.IsLeftMouseButton() || event.IsMiddleMouseButton())
-    UpdateLineEvent(event, !ignore_mouse_drag_ && event.IsLeftMouseButton());
+bool OmniboxPopupContentsView::OnMouseDragged(const ui::MouseEvent& event) {
+  if (event.IsLeftMouseButton() && !ignore_mouse_drag_)
+    SetSelectedLine(event);
   return true;
 }
 
-void OmniboxPopupContentsView::OnMouseReleased(
-    const ui::MouseEvent& event) {
+void OmniboxPopupContentsView::OnMouseReleased(const ui::MouseEvent& event) {
   if (ignore_mouse_drag_) {
     OnMouseCaptureLost();
     return;
@@ -420,27 +407,12 @@ void OmniboxPopupContentsView::OnMouseCaptureLost() {
   ignore_mouse_drag_ = false;
 }
 
-void OmniboxPopupContentsView::OnMouseMoved(
-    const ui::MouseEvent& event) {
-  model_->SetHoveredLine(GetIndexForPoint(event.location()));
-}
-
-void OmniboxPopupContentsView::OnMouseEntered(
-    const ui::MouseEvent& event) {
-  model_->SetHoveredLine(GetIndexForPoint(event.location()));
-}
-
-void OmniboxPopupContentsView::OnMouseExited(
-    const ui::MouseEvent& event) {
-  model_->SetHoveredLine(OmniboxPopupModel::kNoMatch);
-}
-
 void OmniboxPopupContentsView::OnGestureEvent(ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::ET_GESTURE_TAP_DOWN:
     case ui::ET_GESTURE_SCROLL_BEGIN:
     case ui::ET_GESTURE_SCROLL_UPDATE:
-      UpdateLineEvent(*event, true);
+      SetSelectedLine(*event);
       break;
     case ui::ET_GESTURE_TAP:
     case ui::ET_GESTURE_SCROLL_END:
@@ -494,9 +466,10 @@ void OmniboxPopupContentsView::OnPaint(gfx::Canvas* canvas) {
                        g_bottom_shadow.Get().height());
 }
 
-void OmniboxPopupContentsView::PaintChildren(const ui::PaintContext& context) {
+void OmniboxPopupContentsView::PaintChildren(
+    const views::PaintInfo& paint_info) {
   if (base::FeatureList::IsEnabled(omnibox::kUIExperimentNarrowDropdown)) {
-    View::PaintChildren(context);
+    View::PaintChildren(paint_info);
     return;
   }
 
@@ -504,25 +477,21 @@ void OmniboxPopupContentsView::PaintChildren(const ui::PaintContext& context) {
   contents_bounds.Inset(0, g_top_shadow.Get().height(), 0,
                         g_bottom_shadow.Get().height());
 
-  ui::ClipRecorder clip_recorder(context);
-  clip_recorder.ClipRect(contents_bounds);
+  ui::ClipRecorder clip_recorder(paint_info.context());
+  clip_recorder.ClipRect(gfx::ScaleToRoundedRect(
+      contents_bounds, paint_info.paint_recording_scale_x(),
+      paint_info.paint_recording_scale_y()));
   {
-    ui::PaintRecorder recorder(context, size());
+    ui::PaintRecorder recorder(paint_info.context(), size());
     SkColor background_color = result_view_at(0)->GetColor(
         OmniboxResultView::NORMAL, OmniboxResultView::BACKGROUND);
     recorder.canvas()->DrawColor(background_color);
   }
-  View::PaintChildren(context);
+  View::PaintChildren(paint_info);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // OmniboxPopupContentsView, private:
-
-views::View* OmniboxPopupContentsView::TargetForRect(views::View* root,
-                                                     const gfx::Rect& rect) {
-  CHECK_EQ(root, this);
-  return this;
-}
 
 bool OmniboxPopupContentsView::HasMatchAt(size_t index) const {
   return index < model_->result().size();
@@ -550,12 +519,9 @@ size_t OmniboxPopupContentsView::GetIndexForPoint(
   return OmniboxPopupModel::kNoMatch;
 }
 
-void OmniboxPopupContentsView::UpdateLineEvent(
-    const ui::LocatedEvent& event,
-    bool should_set_selected_line) {
+void OmniboxPopupContentsView::SetSelectedLine(const ui::LocatedEvent& event) {
   size_t index = GetIndexForPoint(event.location());
-  model_->SetHoveredLine(index);
-  if (HasMatchAt(index) && should_set_selected_line)
+  if (HasMatchAt(index))
     model_->SetSelectedLine(index, false, false);
 }
 

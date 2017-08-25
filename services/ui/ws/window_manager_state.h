@@ -24,6 +24,10 @@
 #include "services/ui/ws/user_id.h"
 #include "services/ui/ws/window_server.h"
 
+namespace viz {
+class HitTestQuery;
+}
+
 namespace ui {
 namespace ws {
 
@@ -67,7 +71,6 @@ class WindowManagerState : public EventDispatcherDelegate,
     return event_dispatcher_.capture_window();
   }
 
-  void ReleaseCaptureBlockedByModalWindow(const ServerWindow* modal_window);
   void ReleaseCaptureBlockedByAnyModalWindow();
 
   // Sets the location of the cursor to a location on display |display_id|.
@@ -285,7 +288,14 @@ class WindowManagerState : public EventDispatcherDelegate,
                                           bool in_nonclient_area) override;
   ServerWindow* GetRootWindowContaining(gfx::Point* location_in_display,
                                         int64_t* display_id) override;
+  ServerWindow* GetRootWindowForEventDispatch(ServerWindow* window) override;
   void OnEventTargetNotFound(const Event& event, int64_t display_id) override;
+  ServerWindow* GetFallbackTargetForEventBlockedByModal(
+      ServerWindow* window) override;
+  void OnEventOccurredOutsideOfModalWindow(ServerWindow* modal_window) override;
+  viz::HitTestQuery* GetHitTestQueryForDisplay(int64_t display_id) override;
+  ServerWindow* GetWindowFromFrameSinkId(
+      const viz::FrameSinkId& frame_sink_id) override;
 
   // ServerWindowObserver:
   void OnWindowEmbeddedAppDisconnected(ServerWindow* window) override;

@@ -83,7 +83,7 @@ void AudioWorkletGlobalScope::registerProcessor(
 
   v8::Local<v8::Value> prototype_value_local;
   bool prototype_extracted =
-      class_definition_local->Get(context, V8String(isolate, "prototype"))
+      class_definition_local->Get(context, V8AtomicString(isolate, "prototype"))
           .ToLocal(&prototype_value_local);
   DCHECK(prototype_extracted);
 
@@ -92,7 +92,7 @@ void AudioWorkletGlobalScope::registerProcessor(
 
   v8::Local<v8::Value> process_value_local;
   bool process_extracted =
-      prototype_object_local->Get(context, V8String(isolate, "process"))
+      prototype_object_local->Get(context, V8AtomicString(isolate, "process"))
           .ToLocal(&process_value_local);
   DCHECK(process_extracted);
 
@@ -121,8 +121,8 @@ void AudioWorkletGlobalScope::registerProcessor(
 
   v8::Local<v8::Value> parameter_descriptors_value_local;
   bool did_get_parameter_descriptor =
-      class_definition_local->Get(context,
-                                  V8String(isolate, "parameterDescriptors"))
+      class_definition_local
+          ->Get(context, V8AtomicString(isolate, "parameterDescriptors"))
           .ToLocal(&parameter_descriptors_value_local);
 
   // If parameterDescriptor() is parsed and has a valid value, create a vector
@@ -139,9 +139,7 @@ void AudioWorkletGlobalScope::registerProcessor(
     definition->SetAudioParamDescriptors(audio_param_descriptors);
   }
 
-  processor_definition_map_.Set(
-      name,
-      TraceWrapperMember<AudioWorkletProcessorDefinition>(this, definition));
+  processor_definition_map_.Set(name, definition);
 }
 
 AudioWorkletProcessor* AudioWorkletGlobalScope::CreateInstance(
@@ -166,8 +164,7 @@ AudioWorkletProcessor* AudioWorkletGlobalScope::CreateInstance(
   DCHECK(processor);
 
   processor->SetInstance(isolate, instance_local);
-  processor_instances_.push_back(
-      TraceWrapperMember<AudioWorkletProcessor>(this, processor));
+  processor_instances_.push_back(processor);
 
   return processor;
 }

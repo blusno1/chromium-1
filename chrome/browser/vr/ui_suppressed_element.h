@@ -15,6 +15,11 @@ enum class UiSuppressedElement : int {
   kBluetoothChooser,
   kJavascriptDialog,
   kMediaPermission,
+  kPermissionRequest,
+  kQuotaPermission,
+  kHttpAuth,
+  kDownloadPermission,
+  kFileAccessPermission,
 
   // This must be last.
   kCount,

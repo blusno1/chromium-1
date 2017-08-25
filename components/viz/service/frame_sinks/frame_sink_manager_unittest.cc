@@ -65,7 +65,6 @@ class FakeFrameSinkManagerClient : public FrameSinkManagerClient {
 class FrameSinkManagerTest : public testing::Test {
  public:
   FrameSinkManagerTest() = default;
-
   ~FrameSinkManagerTest() override = default;
 
  protected:

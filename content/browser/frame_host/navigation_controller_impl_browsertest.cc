@@ -709,11 +709,11 @@ class LoadCommittedCapturer : public WebContentsObserver {
     RenderFrameHostImpl* rfh =
         static_cast<RenderFrameHostImpl*>(render_frame_host);
 
-    // Don't pay attention to swapped out RenderFrameHosts in the main frame.
-    // TODO(nasko): Remove once swappedout:// is gone.
-    // See https://crbug.com/357747.
+    // Don't pay attention to pending delete RenderFrameHosts in the main frame,
+    // which might happen in a race if a cross-process navigation happens
+    // quickly.
     if (!rfh->is_active()) {
-      DLOG(INFO) << "Skipping swapped out RFH: "
+      DLOG(INFO) << "Skipping pending delete RFH: "
                  << rfh->GetSiteInstance()->GetSiteURL();
       return;
     }
@@ -913,8 +913,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationController& controller = shell()->web_contents()->GetController();
   GURL error_url(
       net::URLRequestFailedJob::GetMockHttpUrl(net::ERR_CONNECTION_RESET));
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&net::URLRequestFailedJob::AddUrlHandler));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&net::URLRequestFailedJob::AddUrlHandler));
 
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
   EXPECT_EQ(1, controller.GetEntryCount());
@@ -4308,9 +4309,6 @@ class NavigationControllerOopifBrowserTest
 // create out-of-process iframes unless the current SiteIsolationPolicy says to.
 IN_PROC_BROWSER_TEST_F(NavigationControllerOopifBrowserTest,
                        RestoreWithoutExtraOopifs) {
-  // This test requires OOPIFs to be possible.
-  EXPECT_TRUE(SiteIsolationPolicy::AreCrossProcessFramesPossible());
-
   // 1. Start on a page with a data URL iframe.
   GURL main_url_a(embedded_test_server()->GetURL(
       "a.com", "/navigation_controller/page_with_data_iframe.html"));
@@ -6143,7 +6141,7 @@ class GoBackAndCommitFilter : public BrowserMessageFilter {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigateBackAndCommit, message, web_contents_));
+        base::BindOnce(&NavigateBackAndCommit, message, web_contents_));
     return true;
   }
 
@@ -6584,7 +6582,7 @@ class RequestMonitoringNavigationBrowserTest : public ContentBrowserTest {
       const net::test_server::HttpRequest& request) {
     postback_task_runner->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &RequestMonitoringNavigationBrowserTest::MonitorRequestOnMainThread,
             weak_this, request));
   }

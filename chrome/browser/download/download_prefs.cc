@@ -79,6 +79,7 @@ bool DownloadPathIsDangerous(const base::FilePath& download_path) {
 class DefaultDownloadDirectory {
  public:
   const base::FilePath& path() const { return path_; }
+  const base::FilePath& temp_path() const { return temp_path_; }
 
  private:
   friend struct base::LazyInstanceTraitsBase<DefaultDownloadDirectory>;
@@ -87,6 +88,11 @@ class DefaultDownloadDirectory {
     if (!PathService::Get(chrome::DIR_DEFAULT_DOWNLOADS, &path_)) {
       NOTREACHED();
     }
+
+    if (!base::GetTempDir(&temp_path_)) {
+      NOTREACHED();
+    }
+
     if (DownloadPathIsDangerous(path_)) {
       // This is only useful on platforms that support
       // DIR_DEFAULT_DOWNLOADS_SAFE.
@@ -97,6 +103,7 @@ class DefaultDownloadDirectory {
   }
 
   base::FilePath path_;
+  base::FilePath temp_path_;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultDownloadDirectory);
 };
@@ -238,6 +245,11 @@ const base::FilePath& DownloadPrefs::GetDefaultDownloadDirectory() {
 }
 
 // static
+const base::FilePath& DownloadPrefs::GetTempDownloadDirectory() {
+  return g_default_download_directory.Get().temp_path();
+}
+
+// static
 DownloadPrefs* DownloadPrefs::FromDownloadManager(
     DownloadManager* download_manager) {
   ChromeDownloadManagerDelegate* delegate =
@@ -317,7 +329,9 @@ bool DownloadPrefs::IsAutoOpenEnabledBasedOnExtension(
   DCHECK(extension[0] == base::FilePath::kExtensionSeparator);
   extension.erase(0, 1);
 #if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
-  if (extension == FILE_PATH_LITERAL("pdf") && ShouldOpenPdfInSystemReader())
+  if (base::FilePath::CompareEqualIgnoreCase(extension,
+                                             FILE_PATH_LITERAL("pdf")) &&
+      ShouldOpenPdfInSystemReader())
     return true;
 #endif
 

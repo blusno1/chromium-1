@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/app_launch_controller.h"
 
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
@@ -14,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/syslog_logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -29,6 +31,7 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -39,6 +42,7 @@
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/features/feature_session_type.h"
 #include "net/base/network_change_notifier.h"
+#include "ui/keyboard/keyboard_util.h"
 
 namespace chromeos {
 
@@ -160,7 +164,7 @@ AppLaunchController::~AppLaunchController() {
 }
 
 void AppLaunchController::StartAppLaunch(bool is_auto_launch) {
-  DVLOG(1) << "Starting kiosk mode...";
+  SYSLOG(INFO) << "Starting kiosk mode...";
 
   RecordKioskLaunchUMA(is_auto_launch);
 
@@ -304,11 +308,20 @@ void AppLaunchController::OnNetworkStateChanged(bool online) {
 }
 
 void AppLaunchController::OnProfileLoaded(Profile* profile) {
-  DVLOG(1) << "Profile loaded... Starting app launch.";
+  SYSLOG(INFO) << "Profile loaded... Starting app launch.";
   profile_ = profile;
 
   // This is needed to trigger input method extensions being loaded.
   profile_->InitChromeOSPreferences();
+
+  // Reset virtual keyboard to use IME engines in app profile early.
+  if (!ash_util::IsRunningInMash()) {
+    if (keyboard::IsKeyboardEnabled())
+      ash::Shell::Get()->CreateKeyboard();
+  } else {
+    // TODO(xiyuan): Update with mash VK work http://crbug.com/648733
+    NOTIMPLEMENTED();
+  }
 
   kiosk_profile_loader_.reset();
   startup_app_launcher_.reset(
@@ -341,8 +354,8 @@ void AppLaunchController::CleanUp() {
 
 void AppLaunchController::OnNetworkWaitTimedout() {
   DCHECK(waiting_for_network_);
-  LOG(WARNING) << "OnNetworkWaitTimedout... connection = "
-               <<  net::NetworkChangeNotifier::GetConnectionType();
+  SYSLOG(WARNING) << "OnNetworkWaitTimedout... connection = "
+                  << net::NetworkChangeNotifier::GetConnectionType();
   network_wait_timedout_ = true;
 
   MaybeShowNetworkConfigureUI();
@@ -352,7 +365,7 @@ void AppLaunchController::OnNetworkWaitTimedout() {
 }
 
 void AppLaunchController::OnAppWindowCreated() {
-  DVLOG(1) << "App window created, closing splash screen.";
+  SYSLOG(INFO) << "App window created, closing splash screen.";
   CleanUp();
 }
 
@@ -368,9 +381,8 @@ bool AppLaunchController::CanConfigureNetwork() {
       return should_prompt;
     }
 
-    // Network configuration has to be explicitly allowed by the policy.
-    // Default to false if the policy is missing.
-    return false;
+    // Default to true to allow network configuration if the policy is missing.
+    return true;
   }
 
   return user_manager::UserManager::Get()->GetOwnerAccountId().is_valid();
@@ -497,7 +509,7 @@ void AppLaunchController::OnReadyToLaunch() {
 }
 
 void AppLaunchController::OnLaunchSucceeded() {
-  DVLOG(1) << "Kiosk launch succeeded, wait for app window.";
+  SYSLOG(INFO) << "Kiosk launch succeeded, wait for app window.";
   app_launch_splash_screen_view_->UpdateAppLaunchState(
       AppLaunchSplashScreenView::APP_LAUNCH_STATE_WAITING_APP_WINDOW);
 
@@ -507,7 +519,7 @@ void AppLaunchController::OnLaunchSucceeded() {
 
 void AppLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
   DCHECK_NE(KioskAppLaunchError::NONE, error);
-  LOG(ERROR) << "Kiosk launch failed, error=" << error;
+  SYSLOG(ERROR) << "Kiosk launch failed, error=" << error;
 
   // Reboot on the recoverable cryptohome errors.
   if (error == KioskAppLaunchError::CRYPTOHOMED_NOT_RUNNING ||

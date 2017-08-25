@@ -8,14 +8,13 @@
 <link rel="stylesheet" type="text/css" href="resources/highlight-in-source.css">
 
 <script>
-async function test()
-{
-    InspectorTest.startCoverage();
-    await InspectorTest.evaluateInPagePromise("performActions()");
-    await InspectorTest.stopCoverage();
+async function test() {
+  CoverageTestRunner.startCoverage();
+  await TestRunner.evaluateInPagePromise('performActions()');
+  await CoverageTestRunner.stopCoverage();
 
-    InspectorTest.dumpCoverageListView();
-    InspectorTest.completeTest();
+  CoverageTestRunner.dumpCoverageListView();
+  TestRunner.completeTest();
 }
 
 </script>

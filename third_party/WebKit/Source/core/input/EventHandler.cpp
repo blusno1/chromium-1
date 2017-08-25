@@ -414,6 +414,9 @@ OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
   if (scroll_manager_->MiddleClickAutoscrollInProgress())
     return kNoCursorChange;
 
+  if (result.GetScrollbar())
+    return PointerCursor();
+
   Node* node = result.InnerPossiblyPseudoNode();
   if (!node)
     return SelectAutoCursor(result, node, IBeamCursor());
@@ -550,9 +553,6 @@ OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
 OptionalCursor EventHandler::SelectAutoCursor(const HitTestResult& result,
                                               Node* node,
                                               const Cursor& i_beam) {
-  if (result.GetScrollbar())
-    return PointerCursor();
-
   const bool is_over_link =
       !GetSelectionController().MouseDownMayStartSelect() &&
       result.IsOverLink();
@@ -624,8 +624,8 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
     return result;
   }
 
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Create(frame_->GetDocument()));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(frame_);
   frame_->LocalFrameRoot()
       .GetEventHandler()
       .last_mouse_down_user_gesture_token_ =
@@ -1007,8 +1007,7 @@ WebInputEventResult EventHandler::HandleMouseReleaseEvent(
                       .GetEventHandler()
                       .last_mouse_down_user_gesture_token_)));
   } else {
-    gesture_indicator = WTF::WrapUnique(new UserGestureIndicator(
-        UserGestureToken::Create(frame_->GetDocument())));
+    gesture_indicator = LocalFrame::CreateUserGesture(frame_);
   }
 
   WebInputEventResult event_result = UpdatePointerTargetAndDispatchEvents(
@@ -1782,8 +1781,12 @@ WebInputEventResult EventHandler::SendContextMenuEvent(
 }
 
 static bool ShouldShowContextMenuAtSelection(const FrameSelection& selection) {
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  selection.GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+
   const VisibleSelection& visible_selection =
-      selection.ComputeVisibleSelectionInDOMTreeDeprecated();
+      selection.ComputeVisibleSelectionInDOMTree();
   if (!visible_selection.IsRange() && !visible_selection.RootEditableElement())
     return false;
   return selection.SelectionHasFocus();
@@ -1815,9 +1818,7 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
   VisualViewport& visual_viewport = frame_->GetPage()->GetVisualViewport();
 
   if (!override_target_element && ShouldShowContextMenuAtSelection(selection)) {
-    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
-    // needs to be audited.  See http://crbug.com/590369 for more details.
-    doc->UpdateStyleAndLayoutIgnorePendingStylesheets();
+    DCHECK(!doc->NeedsLayoutTreeUpdate());
 
     IntRect first_rect = frame_->GetEditor().FirstRectForRange(
         selection.ComputeVisibleSelectionInDOMTree()
@@ -1825,8 +1826,8 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
 
     int x = right_aligned ? first_rect.MaxX() : first_rect.X();
     // In a multiline edit, firstRect.maxY() would end up on the next line, so
-    // -1.
-    int y = first_rect.MaxY() ? first_rect.MaxY() - 1 : 0;
+    // take the midpoint.
+    int y = (first_rect.MaxY() + first_rect.Y()) / 2;
     location_in_root_frame = view->ContentsToRootFrame(IntPoint(x, y));
   } else if (focused_element) {
     IntRect clipped_rect = focused_element->BoundsInViewport();

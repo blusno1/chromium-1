@@ -52,7 +52,7 @@ CSSSelectorList CSSParser::ParsePageSelector(
     StyleSheetContents* style_sheet_contents,
     const String& selector) {
   CSSTokenizer tokenizer(selector);
-  return CSSParserImpl::ParsePageSelector(context, tokenizer.TokenRange(),
+  return CSSParserImpl::ParsePageSelector(tokenizer.TokenRange(),
                                           style_sheet_contents);
 }
 

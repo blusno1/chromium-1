@@ -31,7 +31,7 @@ class KeyboardController;
 namespace ui {
 class ImplicitAnimationObserver;
 class MouseEvent;
-}
+}  // namespace ui
 
 namespace ash {
 
@@ -57,6 +57,10 @@ class ASH_EXPORT ShelfLayoutManager
       public wm::WmSnapToPixelLayoutManager,
       public SessionObserver {
  public:
+  // The snapping threshold for dragging app list from shelf in tablet mode. App
+  // list should snap to fullscreen if the drag amount exceeds this value.
+  static constexpr int kAppListDragDistanceThreshold = 320;
+
   ShelfLayoutManager(ShelfWidget* shelf_widget, Shelf* shelf);
   ~ShelfLayoutManager() override;
 
@@ -109,6 +113,8 @@ class ASH_EXPORT ShelfLayoutManager
     return state_.visibility_state;
   }
   ShelfAutoHideState auto_hide_state() const { return state_.auto_hide_state; }
+
+  int chromevox_panel_height() const { return chromevox_panel_height_; }
 
   ShelfWidget* shelf_widget() { return shelf_widget_; }
 
@@ -326,7 +332,7 @@ class ASH_EXPORT ShelfLayoutManager
   // Do any windows overlap the shelf? This is maintained by WorkspaceManager.
   bool window_overlaps_shelf_;
 
-  // Is the AppList visible? This is maintained by
+  // Whether the app list is visible. This is maintained by
   // OnAppListVisibilityChanged.
   bool is_app_list_visible_ = false;
 
@@ -376,6 +382,9 @@ class ASH_EXPORT ShelfLayoutManager
 
   // The show hide animation duration override or 0 for default.
   int duration_override_in_ms_;
+
+  // Whether background blur is enabled.
+  const bool is_background_blur_enabled_;
 
   // The current shelf background. Should not be assigned to directly, use
   // MaybeUpdateShelfBackground() instead.

@@ -17,6 +17,7 @@
 
 namespace viz {
 
+class HitTestDataProvider;
 class LocalSurfaceIdProvider;
 class SharedBitmapManager;
 
@@ -32,20 +33,25 @@ class ClientLayerTreeFrameSink : public cc::LayerTreeFrameSink,
       std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
       mojom::CompositorFrameSinkPtrInfo compositor_frame_sink_info,
       mojom::CompositorFrameSinkClientRequest client_request,
+      std::unique_ptr<HitTestDataProvider> hit_test_data_provider,
       std::unique_ptr<LocalSurfaceIdProvider> local_surface_id_provider,
       bool enable_surface_synchronization);
 
   ClientLayerTreeFrameSink(
-      scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+      scoped_refptr<VulkanContextProvider> vulkan_context_provider,
       std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
       mojom::CompositorFrameSinkPtrInfo compositor_frame_sink_info,
       mojom::CompositorFrameSinkClientRequest client_request,
+      std::unique_ptr<HitTestDataProvider> hit_test_data_provider,
       std::unique_ptr<LocalSurfaceIdProvider> local_surface_id_provider,
       bool enable_surface_synchronization);
 
   ~ClientLayerTreeFrameSink() override;
 
   base::WeakPtr<ClientLayerTreeFrameSink> GetWeakPtr();
+  const HitTestDataProvider* hit_test_data_provider() const {
+    return hit_test_data_provider_.get();
+  }
 
   // cc::LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override;
@@ -71,6 +77,7 @@ class ClientLayerTreeFrameSink : public cc::LayerTreeFrameSink,
 
   bool begin_frames_paused_ = false;
   LocalSurfaceId local_surface_id_;
+  std::unique_ptr<HitTestDataProvider> hit_test_data_provider_;
   std::unique_ptr<LocalSurfaceIdProvider> local_surface_id_provider_;
   std::unique_ptr<ExternalBeginFrameSource> begin_frame_source_;
   std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source_;

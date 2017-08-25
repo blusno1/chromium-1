@@ -7,7 +7,6 @@
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
-#include "content/common/media/media_stream_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -17,20 +16,17 @@ namespace content {
 
 namespace {
 
-mojom::MediaStreamDispatcherPtrInfo GetMediaStreamDispatcherPtrInfo(
+void BindMediaStreamDispatcherRequest(
     int render_process_id,
-    int render_frame_id) {
+    int render_frame_id,
+    mojom::MediaStreamDispatcherRequest request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   RenderFrameHost* render_frame_host =
       RenderFrameHost::FromID(render_process_id, render_frame_id);
-  if (!render_frame_host)
-    return mojom::MediaStreamDispatcherPtrInfo();
-
-  mojom::MediaStreamDispatcherPtr dispatcher;
-  render_frame_host->GetRemoteInterfaces()->GetInterface(&dispatcher);
-  return dispatcher.PassInterface();
-};
+  if (render_frame_host)
+    render_frame_host->GetRemoteInterfaces()->GetInterface(std::move(request));
+}
 
 }  // namespace
 
@@ -38,11 +34,28 @@ MediaStreamDispatcherHost::MediaStreamDispatcherHost(
     int render_process_id,
     const std::string& salt,
     MediaStreamManager* media_stream_manager)
-    : BrowserMessageFilter(MediaStreamMsgStart),
-      BrowserAssociatedInterface<mojom::MediaStreamDispatcherHost>(this, this),
-      render_process_id_(render_process_id),
+    : render_process_id_(render_process_id),
       salt_(salt),
-      media_stream_manager_(media_stream_manager) {}
+      media_stream_manager_(media_stream_manager) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  bindings_.set_connection_error_handler(base::Bind(
+      &MediaStreamDispatcherHost::CancelAllRequests, base::Unretained(this)));
+}
+
+MediaStreamDispatcherHost::~MediaStreamDispatcherHost() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  bindings_.CloseAllBindings();
+  CancelAllRequests();
+}
+
+void MediaStreamDispatcherHost::BindRequest(
+    mojom::MediaStreamDispatcherHostRequest request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  bindings_.AddBinding(this, std::move(request));
+}
 
 void MediaStreamDispatcherHost::StreamGenerated(
     int render_frame_id,
@@ -53,8 +66,8 @@ void MediaStreamDispatcherHost::StreamGenerated(
   DVLOG(1) << __func__ << " label= " << label;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  Send(new MediaStreamMsg_StreamGenerated(
-      render_frame_id, page_request_id, label, audio_devices, video_devices));
+  GetMediaStreamDispatcherForFrame(render_frame_id)
+      ->OnStreamGenerated(page_request_id, label, audio_devices, video_devices);
 }
 
 void MediaStreamDispatcherHost::StreamGenerationFailed(
@@ -65,21 +78,8 @@ void MediaStreamDispatcherHost::StreamGenerationFailed(
            << " result=" << result;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  auto it = dispatchers_.find(render_frame_id);
-  if (it != dispatchers_.end()) {
-    it->second->OnStreamGenerationFailed(page_request_id, result);
-    return;
-  }
-
-  // TODO(c.padhi): Avoid this hop between threads if possible, see
-  // https://crbug.com/742682.
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&GetMediaStreamDispatcherPtrInfo, render_process_id_,
-                 render_frame_id),
-      base::Bind(&MediaStreamDispatcherHost::OnStreamGenerationFailed,
-                 base::Unretained(this), render_frame_id, page_request_id,
-                 result));
+  GetMediaStreamDispatcherForFrame(render_frame_id)
+      ->OnStreamGenerationFailed(page_request_id, result);
 }
 
 void MediaStreamDispatcherHost::DeviceStopped(int render_frame_id,
@@ -89,7 +89,8 @@ void MediaStreamDispatcherHost::DeviceStopped(int render_frame_id,
            << " device_id=" << device.device.id;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  Send(new MediaStreamMsg_DeviceStopped(render_frame_id, label, device));
+  GetMediaStreamDispatcherForFrame(render_frame_id)
+      ->OnDeviceStopped(label, device);
 }
 
 void MediaStreamDispatcherHost::DeviceOpened(
@@ -100,23 +101,42 @@ void MediaStreamDispatcherHost::DeviceOpened(
   DVLOG(1) << __func__ << " page_request_id=" << page_request_id;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  Send(new MediaStreamMsg_DeviceOpened(
-      render_frame_id, page_request_id, label, video_device));
+  GetMediaStreamDispatcherForFrame(render_frame_id)
+      ->OnDeviceOpened(page_request_id, label, video_device);
 }
 
-bool MediaStreamDispatcherHost::OnMessageReceived(const IPC::Message& message) {
-  NOTREACHED();
-  return true;
+mojom::MediaStreamDispatcher*
+MediaStreamDispatcherHost::GetMediaStreamDispatcherForFrame(
+    int render_frame_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  auto it = dispatchers_.find(render_frame_id);
+  if (it != dispatchers_.end())
+    return it->second.get();
+
+  mojom::MediaStreamDispatcherPtr dispatcher;
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&BindMediaStreamDispatcherRequest, render_process_id_,
+                     render_frame_id, mojo::MakeRequest(&dispatcher)));
+  dispatchers_[render_frame_id] = std::move(dispatcher);
+  return dispatchers_[render_frame_id].get();
 }
 
-void MediaStreamDispatcherHost::OnChannelClosing() {
-  DVLOG(1) << __func__;
+void MediaStreamDispatcherHost::CancelAllRequests() {
+  if (!bindings_.empty())
+    return;
 
-  // Since the IPC sender is gone, close all requesting/requested streams.
   media_stream_manager_->CancelAllRequests(render_process_id_);
 }
 
-MediaStreamDispatcherHost::~MediaStreamDispatcherHost() {
+void MediaStreamDispatcherHost::DeviceOpenFailed(int render_frame_id,
+                                                 int page_request_id) {
+  DVLOG(1) << __func__ << " page_request_id=" << page_request_id;
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  GetMediaStreamDispatcherForFrame(render_frame_id)
+      ->OnDeviceOpenFailed(page_request_id);
 }
 
 void MediaStreamDispatcherHost::GenerateStream(
@@ -133,10 +153,12 @@ void MediaStreamDispatcherHost::GenerateStream(
            << " user_gesture=" << user_gesture;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  // TODO(c.padhi): Report GenerateStream failure to renderer, see
-  // https://crbug.com/742682.
-  if (!MediaStreamManager::IsOriginAllowed(render_process_id_, security_origin))
+  if (!MediaStreamManager::IsOriginAllowed(render_process_id_,
+                                           security_origin)) {
+    StreamGenerationFailed(render_frame_id, page_request_id,
+                           MEDIA_DEVICE_INVALID_SECURITY_ORIGIN_DEPRECATED);
     return;
+  }
 
   media_stream_manager_->GenerateStream(
       this, render_process_id_, render_frame_id, salt_, page_request_id,
@@ -174,10 +196,11 @@ void MediaStreamDispatcherHost::OpenDevice(int32_t render_frame_id,
            << " security_origin=" << security_origin;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  // TODO(c.padhi): Report OpenDevice failure to renderer, see
-  // https://crbug.com/742682.
-  if (!MediaStreamManager::IsOriginAllowed(render_process_id_, security_origin))
+  if (!MediaStreamManager::IsOriginAllowed(render_process_id_,
+                                           security_origin)) {
+    DeviceOpenFailed(render_frame_id, page_request_id);
     return;
+  }
 
   media_stream_manager_->OpenDevice(this, render_process_id_, render_frame_id,
                                     salt_, page_request_id, device_id, type,
@@ -207,20 +230,6 @@ void MediaStreamDispatcherHost::StreamStarted(const std::string& label) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   media_stream_manager_->OnStreamStarted(label);
-}
-
-void MediaStreamDispatcherHost::OnStreamGenerationFailed(
-    int render_frame_id,
-    int page_request_id,
-    MediaStreamRequestResult result,
-    mojom::MediaStreamDispatcherPtrInfo dispatcher_info) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  mojom::MediaStreamDispatcherPtr dispatcher =
-      mojo::MakeProxy(std::move(dispatcher_info));
-  DCHECK(dispatcher.is_bound());
-  dispatcher->OnStreamGenerationFailed(page_request_id, result);
-  dispatchers_[render_frame_id] = std::move(dispatcher);
 }
 
 }  // namespace content

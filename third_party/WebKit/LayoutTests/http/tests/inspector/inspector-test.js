@@ -116,12 +116,7 @@ InspectorTest.evaluateFunctionInOverlay = function(func, callback)
 {
     var expression = "testRunner.evaluateInWebInspectorOverlay(\"(\" + " + func + " + \")()\")";
     var mainContext = InspectorTest.runtimeModel.executionContexts()[0];
-    mainContext.evaluate(expression, "", false, false, true, false, false, wrapCallback);
-
-    function wrapCallback(result, exceptionDetails)
-    {
-        callback(result.value)
-    }
+    mainContext.evaluate({expression: expression, returnByValue:true}).then(result => callback(result.object.value));
 }
 
 InspectorTest.check = function(passCondition, failureText)
@@ -445,21 +440,21 @@ InspectorTest.dumpNavigatorViewInMode = function(view, mode)
 }
 
 /**
- * @param {symbol} event
+ * @param {symbol} eventName
  * @param {!Common.Object} obj
  * @param {function(?):boolean=} condition
  * @return {!Promise}
  */
-InspectorTest.waitForEvent = function(event, obj, condition)
+InspectorTest.waitForEvent = function(eventName, obj, condition)
 {
-    condition = condition || function() { return true;};
+    condition = condition || function() { return true; };
     return new Promise(resolve => {
-        obj.addEventListener(event, onEventFired);
+        obj.addEventListener(eventName, onEventFired);
 
         function onEventFired(event) {
             if (!condition(event.data))
                 return;
-            obj.removeEventListener(event, onEventFired);
+            obj.removeEventListener(eventName, onEventFired);
             resolve(event.data);
         }
     });
@@ -1061,6 +1056,25 @@ function runTest(pixelTest, enableWatchDogWhileDebugging)
         }
 
         InspectorTest = {};
+
+        self.AccessibilityTestRunner = InspectorTest;
+        self.ApplicationTestRunner = InspectorTest;
+        self.AuditsTestRunner = InspectorTest;
+        self.BindingsTestRunner = InspectorTest;
+        self.ConsoleTestRunner = InspectorTest;
+        self.CoverageTestRunner = InspectorTest;
+        self.DataGridTestRunner = InspectorTest;
+        self.DeviceModeTestRunner = InspectorTest;
+        self.ElementsTestRunner = InspectorTest;
+        self.ExtensionsTestRunner = InspectorTest;
+        self.LayersTestRunner = InspectorTest;
+        self.NetworkTestRunner = InspectorTest;
+        self.PerformanceTestRunner = InspectorTest;
+        self.ProfilerTestRunner = InspectorTest;
+        self.SASSTestRunner = InspectorTest;
+        self.SecurityTestRunner = InspectorTest;
+        self.SourcesTestRunner = InspectorTest;
+        self.TestRunner = InspectorTest;
 
         for (var i = 0; i < initializationFunctions.length; ++i) {
             try {

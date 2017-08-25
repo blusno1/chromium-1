@@ -31,6 +31,9 @@
 #define Document_h
 
 #include <memory>
+#include <string>
+#include <utility>
+
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/CoreExport.h"
@@ -75,14 +78,12 @@ enum class EngagementLevel : int32_t;
 }
 
 class AnimationClock;
-class DocumentTimeline;
 class AXObjectCache;
 class Attr;
 class CDATASection;
 class CSSStyleSheet;
 class CanvasFontCache;
 class ChromeClient;
-class CompositorPendingAnimations;
 class Comment;
 class ComputedStyle;
 class ConsoleMessage;
@@ -95,8 +96,10 @@ class DocumentFragment;
 class DocumentLoader;
 class DocumentMarkerController;
 class DocumentNameCollection;
+class DocumentOutliveTimeReporter;
 class DocumentParser;
 class DocumentState;
+class DocumentTimeline;
 class DocumentType;
 class Element;
 class ElementDataCache;
@@ -141,6 +144,7 @@ class NodeIterator;
 class NthIndexCache;
 class OriginAccessEntry;
 class Page;
+class PendingAnimations;
 class ProcessingInstruction;
 class PropertyRegistry;
 class QualifiedName;
@@ -305,6 +309,7 @@ class CORE_EXPORT Document : public ContainerNode,
   DEFINE_ATTRIBUTE_EVENT_LISTENER(securitypolicyviolation);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectionchange);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectstart);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(visibilitychange);
 
   bool ShouldMergeWithLegacyDescription(ViewportDescription::Type) const;
   bool ShouldOverrideLegacyDescription(ViewportDescription::Type) const;
@@ -575,6 +580,9 @@ class CORE_EXPORT Document : public ContainerNode,
   void open(Document* entered_document, ExceptionState&);
   // This is used internally and does not handle exceptions.
   void open();
+  void OpenForNavigation(ParserSynchronizationPolicy,
+                         const AtomicString& mime_type,
+                         const AtomicString& encoding);
   DocumentParser* ImplicitOpen(ParserSynchronizationPolicy);
 
   // This is the DOM API document.close()
@@ -690,7 +698,7 @@ class CORE_EXPORT Document : public ContainerNode,
   enum DocumentReadyState { kLoading, kInteractive, kComplete };
 
   void SetReadyState(DocumentReadyState);
-  bool IsLoadCompleted();
+  bool IsLoadCompleted() const;
 
   enum ParsingState { kParsing, kInDOMContentLoaded, kFinishedParsing };
   void SetParsingState(ParsingState);
@@ -882,7 +890,7 @@ class CORE_EXPORT Document : public ContainerNode,
   const KURL& CookieURL() const { return cookie_url_; }
   void SetCookieURL(const KURL& url) { cookie_url_ = url; }
 
-  const KURL FirstPartyForCookies() const;
+  const KURL SiteForCookies() const;
 
   // The following implements the rule from HTML 4 for what valid names are.
   // To get this right for all the XML cases, we probably have to improve this
@@ -1034,7 +1042,13 @@ class CORE_EXPORT Document : public ContainerNode,
   const SVGDocumentExtensions* SvgExtensions();
   SVGDocumentExtensions& AccessSVGExtensions();
 
-  void InitContentSecurityPolicy(ContentSecurityPolicy* = nullptr);
+  // the first parameter specifies a policy to use as the document csp meaning
+  // the document will take ownership of the policy
+  // the second parameter specifies a policy to inherit meaning the document
+  // will attempt to copy over the policy
+  void InitContentSecurityPolicy(
+      ContentSecurityPolicy* = nullptr,
+      const ContentSecurityPolicy* policy_to_inherit = nullptr);
 
   bool IsSecureTransitionTo(const KURL&) const;
 
@@ -1167,7 +1181,7 @@ class CORE_EXPORT Document : public ContainerNode,
   V0CustomElementMicrotaskRunQueue* CustomElementMicrotaskRunQueue();
 
   void ClearImportsController();
-  void CreateImportsController();
+  HTMLImportsController* EnsureImportsController();
   HTMLImportsController* ImportsController() const {
     return imports_controller_;
   }
@@ -1176,8 +1190,9 @@ class CORE_EXPORT Document : public ContainerNode,
   void DidLoadAllImports();
 
   void AdjustFloatQuadsForScrollAndAbsoluteZoom(Vector<FloatQuad>&,
-                                                LayoutObject&);
-  void AdjustFloatRectForScrollAndAbsoluteZoom(FloatRect&, LayoutObject&);
+                                                const LayoutObject&) const;
+  void AdjustFloatRectForScrollAndAbsoluteZoom(FloatRect&,
+                                               const LayoutObject&) const;
 
   void SetContextFeatures(ContextFeatures&);
   ContextFeatures& GetContextFeatures() const { return *context_features_; }
@@ -1198,9 +1213,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   AnimationClock& GetAnimationClock();
   DocumentTimeline& Timeline() const { return *timeline_; }
-  CompositorPendingAnimations& GetCompositorPendingAnimations() {
-    return *compositor_pending_animations_;
-  }
+  PendingAnimations& GetPendingAnimations() { return *pending_animations_; }
 
   void AddToTopLayer(Element*, const Element* before = nullptr);
   void RemoveFromTopLayer(Element*);
@@ -1326,9 +1339,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   // Document maintains a counter of visible non-secure password
   // fields in the page. Used to notify the embedder when all visible
-  // non-secure passwords fields are no longer visible.
+  // non-secure password fields are no longer visible.
   void IncrementPasswordCount();
   void DecrementPasswordCount();
+  // Used to notify the embedder when the user edits the value of a
+  // text field in a non-secure context.
+  void MaybeQueueSendDidEditFieldInInsecureContext();
 
   CoreProbeSink* GetProbeSink() final;
 
@@ -1379,7 +1395,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool NeedsFullLayoutTreeUpdate() const;
 
-  void InheritHtmlAndBodyElementStyles(StyleRecalcChange);
+  void PropagateStyleToViewport(StyleRecalcChange);
 
   void UpdateUseShadowTreesIfNeeded();
   void EvaluateMediaQueryListIfNeeded();
@@ -1452,6 +1468,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void SendSensitiveInputVisibility();
   void SendSensitiveInputVisibilityInternal();
+  void SendDidEditFieldInInsecureContext();
 
   bool HaveImportsLoaded() const;
   void ViewportDefiningElementDidChange();
@@ -1572,7 +1589,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   double start_time_;
 
-  Member<ScriptRunner> script_runner_;
+  TraceWrapperMember<ScriptRunner> script_runner_;
 
   HeapVector<Member<ScriptElementBase>> current_script_stack_;
 
@@ -1662,7 +1679,7 @@ class CORE_EXPORT Document : public ContainerNode,
   LocaleIdentifierToLocaleMap locale_cache_;
 
   Member<DocumentTimeline> timeline_;
-  Member<CompositorPendingAnimations> compositor_pending_animations_;
+  Member<PendingAnimations> pending_animations_;
 
   Member<Document> template_document_;
   Member<Document> template_document_host_;
@@ -1698,13 +1715,19 @@ class CORE_EXPORT Document : public ContainerNode,
 
   unsigned password_count_;
 
+  bool logged_field_edit_;
+
   TaskHandle sensitive_input_visibility_task_;
+
+  TaskHandle sensitive_input_edited_task_;
 
   mojom::EngagementLevel engagement_level_;
 
   Member<NetworkStateObserver> network_state_observer_;
 
   bool has_high_media_engagement_;
+
+  std::unique_ptr<DocumentOutliveTimeReporter> document_outlive_time_reporter_;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Document>;

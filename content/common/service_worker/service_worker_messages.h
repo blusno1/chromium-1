@@ -19,6 +19,7 @@
 #include "content/public/common/push_event_payload.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_param_traits.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "url/gurl.h"
@@ -44,8 +45,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerResponseError,
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerClientType,
                           blink::kWebServiceWorkerClientTypeLast)
 
-IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::FetchResponseType,
-                          blink::mojom::FetchResponseType::kLast)
+IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::FetchResponseType,
+                          network::mojom::FetchResponseType::kLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::ServiceWorkerProviderType,
                           content::SERVICE_WORKER_PROVIDER_TYPE_LAST)
@@ -73,6 +74,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerFetchRequest)
   IPC_STRUCT_TRAITS_MEMBER(headers)
   IPC_STRUCT_TRAITS_MEMBER(blob_uuid)
   IPC_STRUCT_TRAITS_MEMBER(blob_size)
+  IPC_STRUCT_TRAITS_MEMBER(blob)
   IPC_STRUCT_TRAITS_MEMBER(referrer)
   IPC_STRUCT_TRAITS_MEMBER(credentials_mode)
   IPC_STRUCT_TRAITS_MEMBER(redirect_mode)
@@ -93,6 +95,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerResponse)
   IPC_STRUCT_TRAITS_MEMBER(headers)
   IPC_STRUCT_TRAITS_MEMBER(blob_uuid)
   IPC_STRUCT_TRAITS_MEMBER(blob_size)
+  IPC_STRUCT_TRAITS_MEMBER(blob)
   IPC_STRUCT_TRAITS_MEMBER(error)
   IPC_STRUCT_TRAITS_MEMBER(response_time)
   IPC_STRUCT_TRAITS_MEMBER(is_in_cache_storage)
@@ -149,6 +152,20 @@ IPC_STRUCT_TRAITS_BEGIN(content::PushEventPayload)
   IPC_STRUCT_TRAITS_MEMBER(data)
   IPC_STRUCT_TRAITS_MEMBER(is_null)
 IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_BEGIN(ServiceWorkerMsg_SetControllerServiceWorker_Params)
+  IPC_STRUCT_MEMBER(int, thread_id)
+  IPC_STRUCT_MEMBER(int, provider_id)
+  IPC_STRUCT_MEMBER(content::ServiceWorkerObjectInfo, object_info)
+  IPC_STRUCT_MEMBER(bool, should_notify_controllerchange)
+
+  // |used_features| is the set of features that the worker has used.
+  // The values must be from blink::UseCounter::Feature enum.
+  IPC_STRUCT_MEMBER(std::set<uint32_t>, used_features)
+
+  // Mojo endpoint to dispatch events to the controller.
+  IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, controller_event_dispatcher)
+IPC_STRUCT_END()
 
 //---------------------------------------------------------------------------
 // Messages sent from the child process to the browser.
@@ -241,14 +258,6 @@ IPC_MESSAGE_CONTROL1(ServiceWorkerHostMsg_DecrementRegistrationRefCount,
 IPC_MESSAGE_CONTROL1(ServiceWorkerHostMsg_TerminateWorker,
                      int /* handle_id */)
 
-// Returns the response as the result of fetch event. This is used only for blob
-// to keep the IPC ordering. Mojo IPC is used when the response body is a stream
-// or is empty, and for the fallback-to-network response.
-IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_FetchEventResponse,
-                    int /* fetch_event_id */,
-                    content::ServiceWorkerResponse,
-                    base::Time /* dispatch_event_time */)
-
 // Asks the browser to retrieve client of the sender ServiceWorker.
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_GetClient,
                     int /* request_id */,
@@ -313,17 +322,6 @@ IPC_MESSAGE_ROUTED1(ServiceWorkerHostMsg_ClaimClients,
 // a thread_id as their first field so that ServiceWorkerMessageFilter can
 // extract it and dispatch the message to the correct ServiceWorkerDispatcher
 // on the correct thread.
-
-// Informs the child process that the given provider gets associated or
-// disassociated with the registration.
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_AssociateRegistration,
-                     int /* thread_id */,
-                     int /* provider_id */,
-                     content::ServiceWorkerRegistrationObjectInfo,
-                     content::ServiceWorkerVersionAttributes)
-IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_DisassociateRegistration,
-                     int /* thread_id */,
-                     int /* provider_id */)
 
 // Response to ServiceWorkerHostMsg_RegisterServiceWorker.
 IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_ServiceWorkerRegistered,
@@ -424,14 +422,9 @@ IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_UpdateFound,
                      int /* registration_handle_id */)
 
 // Tells the child process to set the controller ServiceWorker for the given
-// provider. |used_features| is the set of features that the worker has used.
-// The values must be from blink::UseCounter::Feature enum.
-IPC_MESSAGE_CONTROL5(ServiceWorkerMsg_SetControllerServiceWorker,
-                     int /* thread_id */,
-                     int /* provider_id */,
-                     content::ServiceWorkerObjectInfo,
-                     bool /* should_notify_controllerchange */,
-                     std::set<uint32_t> /* used_features */)
+// provider.
+IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_SetControllerServiceWorker,
+                     ServiceWorkerMsg_SetControllerServiceWorker_Params)
 
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_DidEnableNavigationPreload,
                      int /* thread_id */,

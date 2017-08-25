@@ -73,6 +73,7 @@ class PermissionsBubbleDialogDelegateView
 
   // BubbleDialogDelegateView:
   ui::AXRole GetAccessibleWindowRole() const override;
+  base::string16 GetAccessibleWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
   base::string16 GetWindowTitle() const override;
   void AddedToWidget() override;
@@ -130,7 +131,7 @@ PermissionsBubbleDialogDelegateView::PermissionsBubbleDialogDelegateView(
         provider->GetDistanceMetric(DISTANCE_SUBSECTION_HORIZONTAL_INDENT);
     label_container->SetLayoutManager(new views::BoxLayout(
         views::BoxLayout::kHorizontal, gfx::Insets(0, indent),
-        provider->GetDistanceMetric(DISTANCE_RELATED_LABEL_HORIZONTAL)));
+        provider->GetDistanceMetric(views::DISTANCE_RELATED_LABEL_HORIZONTAL)));
     views::ImageView* icon = new views::ImageView();
     const gfx::VectorIcon& vector_id = requests[index]->GetIconId();
     icon->SetImage(
@@ -171,6 +172,12 @@ void PermissionsBubbleDialogDelegateView::CloseBubble() {
 ui::AXRole PermissionsBubbleDialogDelegateView::GetAccessibleWindowRole()
     const {
   return ui::AX_ROLE_ALERT_DIALOG;
+}
+
+base::string16 PermissionsBubbleDialogDelegateView::GetAccessibleWindowTitle()
+    const {
+  return l10n_util::GetStringFUTF16(IDS_PERMISSIONS_BUBBLE_ACCESSIBLE_TITLE,
+                                    display_origin_);
 }
 
 bool PermissionsBubbleDialogDelegateView::ShouldShowCloseButton() const {

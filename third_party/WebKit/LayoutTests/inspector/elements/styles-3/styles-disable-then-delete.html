@@ -4,47 +4,41 @@
 <script src="../../../http/tests/inspector/elements-test.js"></script>
 <script>
 
-function test()
-{
-    InspectorTest.selectNodeAndWaitForStyles("container", step1);
+function test() {
+  ElementsTestRunner.selectNodeAndWaitForStyles('container', step1);
 
-    function step1()
-    {
-        // Disable property
-        InspectorTest.addResult("Before disable");
-        InspectorTest.dumpSelectedElementStyles(true, true);
-        InspectorTest.toggleStyleProperty("font-weight", false);
-        InspectorTest.waitForStyleApplied(step2);
-    }
+  function step1() {
+    // Disable property
+    TestRunner.addResult('Before disable');
+    ElementsTestRunner.dumpSelectedElementStyles(true, true);
+    ElementsTestRunner.toggleStyleProperty('font-weight', false);
+    ElementsTestRunner.waitForStyleApplied(step2);
+  }
 
-    function step2()
-    {
-        // Delete style
-        InspectorTest.addResult("After disable");
-        InspectorTest.dumpSelectedElementStyles(true, true);
+  function step2() {
+    // Delete style
+    TestRunner.addResult('After disable');
+    ElementsTestRunner.dumpSelectedElementStyles(true, true);
 
-        var treeItem = InspectorTest.getElementStylePropertyTreeItem("font-weight");
-        treeItem.applyStyleText("", false);
+    var treeItem = ElementsTestRunner.getElementStylePropertyTreeItem('font-weight');
+    treeItem.applyStyleText('', false);
 
-        InspectorTest.waitForStyleApplied(step3);
-    }
+    ElementsTestRunner.waitForStyleApplied(step3);
+  }
 
-    function step3()
-    {
-        InspectorTest.selectNodeWithId("other", step4);
-    }
+  function step3() {
+    ElementsTestRunner.selectNodeWithId('other', step4);
+  }
 
-    function step4()
-    {
-        InspectorTest.selectNodeAndWaitForStyles("container", step5);
-    }
+  function step4() {
+    ElementsTestRunner.selectNodeAndWaitForStyles('container', step5);
+  }
 
-    function step5(node)
-    {
-        InspectorTest.addResult("After delete");
-        InspectorTest.dumpSelectedElementStyles(true, true);
-        InspectorTest.completeTest();
-    }
+  function step5(node) {
+    TestRunner.addResult('After delete');
+    ElementsTestRunner.dumpSelectedElementStyles(true, true);
+    TestRunner.completeTest();
+  }
 }
 </script>
 </head>

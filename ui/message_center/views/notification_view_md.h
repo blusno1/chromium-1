@@ -12,6 +12,7 @@
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/label_button.h"
 #include "ui/views/view_targeter_delegate.h"
 
 namespace views {
@@ -29,7 +30,29 @@ class ProportionalImageView;
 namespace {
 class CompactTitleMessageView;
 class ItemView;
+class LargeImageContainerView;
 }
+
+// This class is needed in addition to LabelButton mainly becuase we want to set
+// visible_opacity of InkDropHighlight.
+// This button capitalizes the given label string.
+class NotificationButtonMD : public views::LabelButton {
+ public:
+  NotificationButtonMD(views::ButtonListener* listener,
+                       const base::string16& text);
+  ~NotificationButtonMD() override;
+
+  void SetText(const base::string16& text) override;
+  const char* GetClassName() const override;
+
+  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
+      const override;
+
+  SkColor enabled_color_for_testing() { return label()->enabled_color(); }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NotificationButtonMD);
+};
 
 // View that displays all current types of notification (web, basic, image, and
 // list) except the custom notification. Future notification types may be
@@ -49,7 +72,6 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   void OnFocus() override;
   void ScrollRectToVisible(const gfx::Rect& rect) override;
   gfx::NativeCursor GetCursor(const ui::MouseEvent& event) override;
-  void OnMouseMoved(const ui::MouseEvent& event) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
 
@@ -70,8 +92,13 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, UpdateButtonsStateTest);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, UpdateButtonCountTest);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, ExpandLongMessage);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, TestAccentColor);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, UseImageAsIcon);
 
   friend class NotificationViewMDTest;
+
+  void UpdateControlButtonsVisibilityWithNotification(
+      const Notification& notification);
 
   void CreateOrUpdateViews(const Notification& notification);
 
@@ -86,15 +113,19 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   void CreateOrUpdateSmallIconView(const Notification& notification);
   void CreateOrUpdateImageView(const Notification& notification);
   void CreateOrUpdateActionButtonViews(const Notification& notification);
-  void CreateOrUpdateCloseButtonView(const Notification& notification);
-  void CreateOrUpdateSettingsButtonView(const Notification& notification);
 
   bool IsExpandable();
   void ToggleExpanded();
   void UpdateViewForExpandedState(bool expanded);
 
+  // View containing close and settings buttons
+  std::unique_ptr<NotificationControlButtonsView> control_buttons_view_;
+
   // Whether this notification is expanded or not.
   bool expanded_ = false;
+
+  // Whether hiding icon on the right side when expanded.
+  bool hide_icon_on_expanded_ = false;
 
   // Number of total list items in the given Notification class.
   int list_items_count_ = 0;
@@ -116,9 +147,8 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   BoundedLabel* message_view_ = nullptr;
   views::Label* status_view_ = nullptr;
   ProportionalImageView* icon_view_ = nullptr;
-  views::View* image_container_ = nullptr;
-  ProportionalImageView* image_view_ = nullptr;
-  std::vector<views::LabelButton*> action_buttons_;
+  LargeImageContainerView* image_container_view_ = nullptr;
+  std::vector<NotificationButtonMD*> action_buttons_;
   std::vector<ItemView*> item_views_;
   views::ProgressBar* progress_bar_view_ = nullptr;
   CompactTitleMessageView* compact_title_message_view_ = nullptr;

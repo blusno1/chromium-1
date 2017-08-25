@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "chrome/installer/zucchini/disassembler.h"
 
 namespace zucchini {
 
@@ -67,8 +66,8 @@ void OrderedLabelManager::InsertOffsets(const std::vector<offset_t>& offsets) {
   SortAndUniquify(&labels_);
 }
 
-void OrderedLabelManager::InsertTargets(ReferenceReader* reader) {
-  for (auto ref = reader->GetNext(); ref.has_value(); ref = reader->GetNext())
+void OrderedLabelManager::InsertTargets(ReferenceReader&& reader) {
+  for (auto ref = reader.GetNext(); ref.has_value(); ref = reader.GetNext())
     labels_.push_back(ref->target);
   SortAndUniquify(&labels_);
 }
@@ -119,17 +118,16 @@ void UnorderedLabelManager::Init(std::vector<offset_t>&& labels) {
 void UnorderedLabelManager::InsertNewOffset(offset_t offset) {
   DCHECK(labels_map_.find(offset) == labels_map_.end());
   // Look for unused entry in |labels_|.
-  while (gap_idx_ < labels_.size() && labels_[gap_idx_] != kUnusedIndex)
-    ++gap_idx_;
+  auto pos = std::find(labels_.begin() + gap_idx_, labels_.end(), kUnusedIndex);
   // Either replace the unused entry, or insert at end.
-  if (gap_idx_ < labels_.size()) {
-    labels_map_[offset] = static_cast<offset_t>(gap_idx_);
-    labels_[gap_idx_] = offset;
+  if (pos != labels_.end()) {
+    gap_idx_ = pos - labels_.begin();
+    *pos = offset;
   } else {
-    labels_map_[offset] = static_cast<offset_t>(labels_.size());
+    gap_idx_ = labels_.size();
     labels_.push_back(offset);
   }
-  ++gap_idx_;
+  labels_map_[offset] = static_cast<offset_t>(gap_idx_);
 }
 
 }  // namespace zucchini

@@ -37,6 +37,7 @@ class NotificationUIManager;
 class PrefService;
 class ProfileManager;
 class StatusTray;
+class SystemNetworkContextManager;
 class WatchDogThread;
 #if BUILDFLAG(ENABLE_WEBRTC)
 class WebRtcLogUploader;
@@ -185,6 +186,12 @@ class BrowserProcess {
   // BrowserThread::PostTask (or other variants).
   virtual IOThread* io_thread() = 0;
 
+  // Replacement for IOThread (And ChromeNetLog). It owns and manages the
+  // NetworkContext which will use the network service when the network service
+  // is enabled. When the network service is not enabled, its NetworkContext is
+  // backed by the IOThread's URLRequestContext.
+  virtual SystemNetworkContextManager* system_network_context_manager() = 0;
+
   // Returns the thread that is used for health check of all browser threads.
   virtual WatchDogThread* watchdog_thread() = 0;
 
@@ -275,8 +282,6 @@ class BrowserProcess {
   supervised_user_whitelist_installer() = 0;
 
   virtual MediaFileSystemRegistry* media_file_system_registry() = 0;
-
-  virtual bool created_local_state() const = 0;
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   virtual WebRtcLogUploader* webrtc_log_uploader() = 0;

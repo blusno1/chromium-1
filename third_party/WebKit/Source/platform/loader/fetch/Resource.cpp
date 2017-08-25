@@ -38,7 +38,6 @@
 #include "platform/WebTaskRunner.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/CachedMetadata.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
@@ -59,6 +58,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebSecurityOrigin.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -324,9 +324,44 @@ void Resource::SetLoader(ResourceLoader* loader) {
   status_ = ResourceStatus::kPending;
 }
 
-void Resource::CheckNotify() {
-  if (IsLoading())
+void Resource::CheckResourceIntegrity() {
+  // Loading error occurred? Then result is uncheckable.
+  integrity_report_info_.Clear();
+  if (ErrorOccurred()) {
+    CHECK(!Data());
+    integrity_disposition_ = ResourceIntegrityDisposition::kFailed;
     return;
+  }
+
+  // No integrity attributes to check? Then we're passing.
+  if (IntegrityMetadata().IsEmpty()) {
+    integrity_disposition_ = ResourceIntegrityDisposition::kPassed;
+    return;
+  }
+
+  const char* data = nullptr;
+  size_t data_length = 0;
+
+  // Edge case: If a resource actually has zero bytes then it will not
+  // typically have a resource buffer, but we still need to check integrity
+  // because people might want to assert a zero-length resource.
+  CHECK(DecodedSize() == 0 || Data());
+  if (Data()) {
+    data = Data()->Data();
+    data_length = Data()->size();
+  }
+
+  if (SubresourceIntegrity::CheckSubresourceIntegrity(IntegrityMetadata(), data,
+                                                      data_length, Url(), *this,
+                                                      integrity_report_info_))
+    integrity_disposition_ = ResourceIntegrityDisposition::kPassed;
+  else
+    integrity_disposition_ = ResourceIntegrityDisposition::kFailed;
+  DCHECK_NE(IntegrityDisposition(), ResourceIntegrityDisposition::kNotChecked);
+}
+
+void Resource::NotifyFinished() {
+  DCHECK(IsLoaded());
 
   TriggerNotificationForFinishObservers();
 
@@ -408,7 +443,8 @@ void Resource::FinishAsError(const ResourceError& error) {
   DCHECK(ErrorOccurred());
   ClearData();
   loader_ = nullptr;
-  CheckNotify();
+  CheckResourceIntegrity();
+  NotifyFinished();
 }
 
 void Resource::Finish(double load_finish_time) {
@@ -417,18 +453,12 @@ void Resource::Finish(double load_finish_time) {
   if (!ErrorOccurred())
     status_ = ResourceStatus::kCached;
   loader_ = nullptr;
-  CheckNotify();
+  CheckResourceIntegrity();
+  NotifyFinished();
 }
 
 AtomicString Resource::HttpContentType() const {
   return GetResponse().HttpContentType();
-}
-
-void Resource::SetIntegrityDisposition(
-    ResourceIntegrityDisposition disposition) {
-  DCHECK_NE(disposition, ResourceIntegrityDisposition::kNotChecked);
-  DCHECK(type_ == Resource::kScript || type_ == Resource::kCSSStyleSheet);
-  integrity_disposition_ = disposition;
 }
 
 bool Resource::MustRefetchDueToIntegrityMetadata(
@@ -815,7 +845,7 @@ bool Resource::CanReuse(const FetchParameters& params) const {
   // TODO(yhirano): Remove this.
   if (GetResponse().WasFetchedViaServiceWorker() &&
       GetResponse().ResponseTypeViaServiceWorker() ==
-          mojom::FetchResponseType::kOpaque &&
+          network::mojom::FetchResponseType::kOpaque &&
       new_request.GetFetchRequestMode() !=
           WebURLRequest::kFetchRequestModeNoCORS) {
     return false;

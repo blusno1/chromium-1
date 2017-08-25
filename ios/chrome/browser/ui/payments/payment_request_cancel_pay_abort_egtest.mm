@@ -4,16 +4,13 @@
 
 #include <vector>
 
-#include "base/strings/utf_string_conversions.h"
+#include "base/ios/ios_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
-#include "components/autofill/core/browser/field_types.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_bridge.h"
 #import "ios/chrome/browser/ui/payments/payment_request_egtest_base.h"
-#import "ios/chrome/browser/ui/payments/payment_request_error_view_controller.h"
-#import "ios/chrome/browser/ui/payments/payment_request_view_controller.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -56,15 +53,13 @@ const char kNoShippingPage[] =
   [ChromeEarlGrey tapWebViewElementWithID:@"buy"];
 
   // Confirm that the Payment Request UI is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_notNil()];
 
   [ChromeEarlGrey loadURL:web::test::HttpServer::MakeUrl(kNoShippingPage)];
 
   // Confirm that the Payment Request UI is not showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_nil()];
 }
 
@@ -75,15 +70,13 @@ const char kNoShippingPage[] =
   [ChromeEarlGrey tapWebViewElementWithID:@"buy"];
 
   // Confirm that the Payment Request UI is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_notNil()];
 
   [ChromeEarlGrey reload];
 
   // Confirm that the Payment Request UI is not showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_nil()];
 }
 
@@ -94,27 +87,31 @@ const char kNoShippingPage[] =
   [ChromeEarlGrey tapWebViewElementWithID:@"buy"];
 
   // Confirm that the Payment Request UI is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_notNil()];
 
   [ChromeEarlGrey goBack];
 
   // Confirm that the Payment Request UI is not showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_nil()];
 }
 
-// Tests that tapping the cancel button closes the Payment Request UI.
+// Tests that tapping the cancel button closes the Payment Request UI and
+// rejects the Promise returned by request.show() with the appropriate error.
 - (void)testOpenAndCancel {
+  if (!base::ios::IsRunningOnOrLater(10, 3, 0)) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Disabled on iOS versions below 10.3 because DOMException is not "
+        @"available.");
+  }
+
   [ChromeEarlGrey loadURL:web::test::HttpServer::MakeUrl(kAbortPage)];
 
   [ChromeEarlGrey tapWebViewElementWithID:@"buy"];
 
   // Confirm that the Payment Request UI is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_notNil()];
 
   // Tap the cancel button.
@@ -123,24 +120,28 @@ const char kNoShippingPage[] =
       performAction:grey_tap()];
 
   // Confirm that the Payment Request UI is not showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_nil()];
 
-  // TODO(crbug.com/602666): Check whether the Promise returned by
-  // request.show() gets rejected with the appropriate error message.
+  [self waitForWebViewContainingTexts:{"AbortError", "Request cancelled"}];
 }
 
-// Tests that tapping the link to Chrome Settings closes the Payment Request UI
+// Tests that tapping the link to Chrome Settings closes the Payment Request UI,
+// rejects the Promise returned by request.show() with the appropriate error,
 // and displays the Autofill Settings UI.
 - (void)testOpenAndNavigateToSettings {
+  if (!base::ios::IsRunningOnOrLater(10, 3, 0)) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Disabled on iOS versions below 10.3 because DOMException is not "
+        @"available.");
+  }
+
   [ChromeEarlGrey loadURL:web::test::HttpServer::MakeUrl(kAbortPage)];
 
   [ChromeEarlGrey tapWebViewElementWithID:@"buy"];
 
   // Confirm that the Payment Request UI is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_notNil()];
 
   // Tap the settings link.
@@ -148,8 +149,7 @@ const char kNoShippingPage[] =
       performAction:grey_tap()];
 
   // Confirm that the Payment Request UI is not showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_nil()];
 
   // Confirm that the Autofill Settings UI is showing.
@@ -157,8 +157,7 @@ const char kNoShippingPage[] =
                                           @"kAutofillCollectionViewId")]
       assertWithMatcher:grey_notNil()];
 
-  // TODO(crbug.com/602666): Check whether the Promise returned by
-  // request.show() gets rejected with the appropriate error message.
+  [self waitForWebViewContainingTexts:{"AbortError", "Request cancelled"}];
 }
 
 // Tests that tapping the pay button closes the Payment Request UI, accepts the
@@ -176,8 +175,7 @@ const char kNoShippingPage[] =
   [ChromeEarlGrey tapWebViewElementWithID:@"buy"];
 
   // Confirm that the Payment Request UI is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_notNil()];
 
   // Tap the Buy button.
@@ -193,40 +191,17 @@ const char kNoShippingPage[] =
 
   // Type in the CVC.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"CVC_textField")]
-      performAction:grey_typeText(@"111")];
+      performAction:grey_replaceText(@"111")];
 
   // Tap the Confirm button.
   [[EarlGrey
-      selectElementWithMatcher:ButtonWithAccessibilityLabelId(IDS_ACCNAME_OK)]
+      selectElementWithMatcher:ButtonWithAccessibilityLabelId(
+                                   IDS_AUTOFILL_CARD_UNMASK_CONFIRM_BUTTON)]
       performAction:grey_tap()];
 
   // Confirm that the Payment Request UI is not showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_nil()];
-
-  // Confirm that the appropriate response message was sent. Note that this does
-  // not test the structure of the response.
-  [self
-      waitForWebViewContainingTexts:
-          {base::UTF16ToUTF8(card.GetRawInfo(autofill::CREDIT_CARD_NUMBER)),
-           base::UTF16ToUTF8(card.GetRawInfo(autofill::CREDIT_CARD_NAME_FULL)),
-           base::UTF16ToUTF8(card.GetRawInfo(autofill::CREDIT_CARD_EXP_MONTH)),
-           base::UTF16ToUTF8(
-               card.GetRawInfo(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR)),
-           "111"}];
-  [self
-      waitForWebViewContainingTexts:
-          {base::UTF16ToUTF8(profile.GetRawInfo(autofill::NAME_FIRST)),
-           base::UTF16ToUTF8(profile.GetRawInfo(autofill::NAME_LAST)),
-           base::UTF16ToUTF8(profile.GetRawInfo(autofill::ADDRESS_HOME_LINE1)),
-           base::UTF16ToUTF8(profile.GetRawInfo(autofill::ADDRESS_HOME_LINE2)),
-           base::UTF16ToUTF8(
-               profile.GetRawInfo(autofill::ADDRESS_HOME_COUNTRY)),
-           base::UTF16ToUTF8(profile.GetRawInfo(autofill::ADDRESS_HOME_ZIP)),
-           base::UTF16ToUTF8(profile.GetRawInfo(autofill::ADDRESS_HOME_CITY)),
-           base::UTF16ToUTF8(
-               profile.GetRawInfo(autofill::ADDRESS_HOME_STATE))}];
 }
 
 // Tests that calling request.abort() successfully aborts the Payment Request.
@@ -236,15 +211,14 @@ const char kNoShippingPage[] =
   [ChromeEarlGrey tapWebViewElementWithID:@"buy"];
 
   // Confirm that the Payment Request UI is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_notNil()];
 
   [ChromeEarlGrey tapWebViewElementWithID:@"abort"];
 
   // Confirm that the error confirmation UI is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestErrorCollectionViewID)]
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::PaymentRequestErrorView()]
       assertWithMatcher:grey_notNil()];
 
   // Confirm the error.
@@ -253,8 +227,7 @@ const char kNoShippingPage[] =
       performAction:grey_tap()];
 
   // Confirm that the Payment Request UI is not showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kPaymentRequestCollectionViewID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::PaymentRequestView()]
       assertWithMatcher:grey_nil()];
 
   [self waitForWebViewContainingTexts:{"Aborted"}];

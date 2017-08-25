@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/strings/string_util.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -39,6 +40,7 @@
 #include "content/public/common/appcache_info.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_request_body.h"
@@ -155,13 +157,8 @@ void AddAdditionalRequestHeaders(net::HttpRequestHeaders* headers,
                                   : user_agent_override);
 
   // Check whether DevTools wants to override user agent for this request
-  // after setting the default user agent.
-  std::string devtools_user_agent =
-      RenderFrameDevToolsAgentHost::UserAgentOverride(frame_tree_node);
-  if (!devtools_user_agent.empty()) {
-    headers->SetHeader(net::HttpRequestHeaders::kUserAgent,
-                       devtools_user_agent);
-  }
+  // after setting the default user agent, or append throttling control header.
+  RenderFrameDevToolsAgentHost::AppendDevToolsHeaders(frame_tree_node, headers);
 
   // Tack an 'Upgrade-Insecure-Requests' header to outgoing navigational
   // requests, as described in
@@ -208,12 +205,17 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
   // renderer-initiated form submission that took the OpenURL path or a
   // back/forward/reload navigation the does a form resubmission.
   scoped_refptr<ResourceRequestBody> request_body;
+  std::string post_content_type;
   if (post_body) {
     // Standard form submission from the renderer.
     request_body = post_body;
   } else if (frame_entry.method() == "POST") {
     // Form resubmission during a back/forward/reload navigation.
-    request_body = frame_entry.GetPostData();
+    request_body = frame_entry.GetPostData(&post_content_type);
+    // Might have a LF at end.
+    post_content_type =
+        base::TrimWhitespaceASCII(post_content_type, base::TRIM_ALL)
+            .as_string();
   }
   // TODO(arthursonzogni): Form submission with the "GET" method is possible.
   // This is not currently handled here.
@@ -233,14 +235,7 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
       frame_entry, request_body, dest_url, dest_referrer, navigation_type,
       previews_state, navigation_start);
 
-  std::unique_ptr<NavigationRequest> navigation_request(new NavigationRequest(
-      frame_tree_node, common_params,
-      BeginNavigationParams(entry.extra_headers(), net::LOAD_NORMAL,
-                            false,  // has_user_gestures
-                            false,  // skip_service_worker
-                            REQUEST_CONTEXT_TYPE_LOCATION,
-                            blink::WebMixedContentContextType::kBlockable,
-                            is_form_submission, initiator),
+  RequestNavigationParams request_params =
       entry.ConstructRequestNavigationParams(
           frame_entry, common_params.url, common_params.method,
           is_history_navigation_in_new_child,
@@ -249,8 +244,18 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
           controller->GetPendingEntryIndex() == -1,
           controller->GetIndexOfEntry(&entry),
           controller->GetLastCommittedEntryIndex(),
-          controller->GetEntryCount()),
-      browser_initiated,
+          controller->GetEntryCount());
+  request_params.post_content_type = post_content_type;
+
+  std::unique_ptr<NavigationRequest> navigation_request(new NavigationRequest(
+      frame_tree_node, common_params,
+      BeginNavigationParams(entry.extra_headers(), net::LOAD_NORMAL,
+                            false,  // has_user_gestures
+                            false,  // skip_service_worker
+                            REQUEST_CONTEXT_TYPE_LOCATION,
+                            blink::WebMixedContentContextType::kBlockable,
+                            is_form_submission, initiator),
+      request_params, browser_initiated,
       true,  // may_transfer
       &frame_entry, &entry));
   return navigation_request;
@@ -374,6 +379,21 @@ NavigationRequest::NavigationRequest(
       &headers, common_params_.url, common_params_.navigation_type,
       frame_tree_node_->navigator()->GetController()->GetBrowserContext(),
       common_params.method, user_agent_override, frame_tree_node);
+
+  if (begin_params.is_form_submission) {
+    if (browser_initiated && !request_params.post_content_type.empty()) {
+      // This is a form resubmit, so make sure to set the Content-Type header.
+      headers.SetHeaderIfMissing(net::HttpRequestHeaders::kContentType,
+                                 request_params.post_content_type);
+    } else if (!browser_initiated) {
+      // Save the Content-Type in case the form is resubmitted. This will get
+      // sent back to the renderer in the CommitNavigation IPC. The renderer
+      // will then send it back with the post body so that we can access it
+      // along with the body in FrameNavigationEntry::page_state_.
+      headers.GetHeader(net::HttpRequestHeaders::kContentType,
+                        &request_params_.post_content_type);
+    }
+  }
   begin_params_.headers = headers.ToString();
 }
 
@@ -399,6 +419,18 @@ void NavigationRequest::BeginNavigation() {
     // it by OnRequestFailed().
     CreateNavigationHandle();
     OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT);
+
+    // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
+    // destroyed the NavigationRequest.
+    return;
+  }
+
+  if (CheckCredentialedSubresource() ==
+      CredentialedSubresourceCheckResult::BLOCK_REQUEST) {
+    // Create a navigation handle so that the correct error code can be set on
+    // it by OnRequestFailed().
+    CreateNavigationHandle();
+    OnRequestFailed(false, net::ERR_ABORTED);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -558,6 +590,18 @@ void NavigationRequest::OnRequestRedirected(
   if (CheckContentSecurityPolicyFrameSrc(true /* is redirect */) ==
       CONTENT_SECURITY_POLICY_CHECK_FAILED) {
     OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT);
+
+    // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
+    // destroyed the NavigationRequest.
+    return;
+  }
+
+  if (CheckCredentialedSubresource() ==
+      CredentialedSubresourceCheckResult::BLOCK_REQUEST) {
+    // Create a navigation handle so that the correct error code can be set on
+    // it by OnRequestFailed().
+    CreateNavigationHandle();
+    OnRequestFailed(false, net::ERR_ABORTED);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -789,8 +833,8 @@ void NavigationRequest::OnStartChecksComplete(
     // PostTask to avoid that.
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigationRequest::OnRequestFailed,
-                   weak_factory_.GetWeakPtr(), false, error_code));
+        base::BindOnce(&NavigationRequest::OnRequestFailed,
+                       weak_factory_.GetWeakPtr(), false, error_code));
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -844,7 +888,7 @@ void NavigationRequest::OnStartChecksComplete(
   // 'Document::firstPartyForCookies()' in Blink, which walks the ancestor tree
   // and verifies that all origins are PSL-matches (and special-cases extension
   // URLs).
-  const GURL& first_party_for_cookies =
+  const GURL& site_for_cookies =
       frame_tree_node_->IsMainFrame()
           ? common_params_.url
           : frame_tree_node_->frame_tree()->root()->current_url();
@@ -866,7 +910,7 @@ void NavigationRequest::OnStartChecksComplete(
   loader_ = NavigationURLLoader::Create(
       browser_context->GetResourceContext(), partition,
       base::MakeUnique<NavigationRequestInfo>(
-          common_params_, begin_params_, first_party_for_cookies,
+          common_params_, begin_params_, site_for_cookies,
           frame_tree_node_->IsMainFrame(), parent_is_main_frame,
           IsSecureFrame(frame_tree_node_->parent()),
           frame_tree_node_->frame_tree_node_id(), is_for_guests_only,
@@ -1023,6 +1067,44 @@ NavigationRequest::CheckContentSecurityPolicyFrameSrc(bool is_redirect) {
   }
 
   return CONTENT_SECURITY_POLICY_CHECK_FAILED;
+}
+
+NavigationRequest::CredentialedSubresourceCheckResult
+NavigationRequest::CheckCredentialedSubresource() const {
+  // It only applies to subframes.
+  if (frame_tree_node_->IsMainFrame())
+    return CredentialedSubresourceCheckResult::ALLOW_REQUEST;
+
+  // URLs with no embedded credentials should load correctly.
+  if (!common_params_.url.has_username() && !common_params_.url.has_password())
+    return CredentialedSubresourceCheckResult::ALLOW_REQUEST;
+
+  // Relative URLs on top-level pages that were loaded with embedded credentials
+  // should load correctly.
+  FrameTreeNode* parent_ftn = frame_tree_node_->parent();
+  DCHECK(parent_ftn);
+  const GURL& parent_url = parent_ftn->current_url();
+  if (url::Origin(parent_url)
+          .IsSameOriginWith(url::Origin(common_params_.url)) &&
+      parent_url.username() == common_params_.url.username() &&
+      parent_url.password() == common_params_.url.password()) {
+    return CredentialedSubresourceCheckResult::ALLOW_REQUEST;
+  }
+
+  // Warn the user about the request being blocked.
+  RenderFrameHostImpl* parent = parent_ftn->current_frame_host();
+  DCHECK(parent);
+  const char* console_message =
+      "Subresource requests whose URLs contain embedded credentials (e.g. "
+      "`https://user:pass@host/`) are blocked. See "
+      "https://www.chromestatus.com/feature/5669008342777856 for more "
+      "details. ";
+  parent->AddMessageToConsole(CONSOLE_MESSAGE_LEVEL_INFO, console_message);
+
+  if (!base::FeatureList::IsEnabled(features::kBlockCredentialedSubresources))
+    return CredentialedSubresourceCheckResult::ALLOW_REQUEST;
+
+  return CredentialedSubresourceCheckResult::BLOCK_REQUEST;
 }
 
 }  // namespace content

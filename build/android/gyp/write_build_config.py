@@ -222,7 +222,9 @@ def _ExtractSharedLibsFromRuntimeDeps(runtime_deps_files):
         line = line.rstrip()
         if not line.endswith('.so'):
           continue
-        ret.append(os.path.normpath(line))
+        # Only unstripped .so files are listed in runtime deps.
+        # Convert to the stripped .so by going up one directory.
+        ret.append(os.path.normpath(line.replace('lib.unstripped/', '')))
   ret.reverse()
   return ret
 
@@ -312,9 +314,9 @@ def main(argv):
   parser.add_option('--apk-path', help='Path to the target\'s apk output.')
   parser.add_option('--incremental-apk-path',
                     help="Path to the target's incremental apk output.")
-  parser.add_option('--incremental-install-script-path',
+  parser.add_option('--incremental-install-json-path',
                     help="Path to the target's generated incremental install "
-                    "script.")
+                    "json.")
 
   parser.add_option('--tested-apk-config',
       help='Path to the build config of the tested apk (for an instrumentation '
@@ -472,8 +474,8 @@ def main(argv):
     if options.type == 'android_apk':
       deps_info['apk_path'] = options.apk_path
       deps_info['incremental_apk_path'] = options.incremental_apk_path
-      deps_info['incremental_install_script_path'] = (
-          options.incremental_install_script_path)
+      deps_info['incremental_install_json_path'] = (
+          options.incremental_install_json_path)
       deps_info['enable_relocation_packing'] = options.enable_relocation_packing
 
   if options.type in ('java_binary', 'java_library', 'android_apk', 'dist_jar'):
@@ -653,10 +655,14 @@ def main(argv):
 
   if options.type in ('java_binary', 'java_library', 'android_apk', 'dist_jar'):
     config['javac']['classpath'] = javac_classpath
-    config['javac']['interface_classpath'] = [
-        _AsInterfaceJar(p) for p in javac_classpath]
+    javac_interface_classpath = [
+        _AsInterfaceJar(p) for p in javac_classpath
+        if p not in deps_info.get('extra_classpath_jars', [])]
+    javac_interface_classpath += deps_info.get('extra_classpath_jars', [])
+    config['javac']['interface_classpath'] = javac_interface_classpath
+
     deps_info['java'] = {
-      'full_classpath': java_full_classpath
+      'full_classpath': java_full_classpath,
     }
 
   if options.type in ('android_apk', 'dist_jar'):
@@ -671,7 +677,6 @@ def main(argv):
     }
 
   if options.type == 'android_apk':
-    dependency_jars = [c['jar_path'] for c in all_library_deps]
     manifest = AndroidManifest(options.android_manifest)
     deps_info['package_name'] = manifest.GetPackageName()
     if not options.tested_apk_config and manifest.GetInstrumentationElements():

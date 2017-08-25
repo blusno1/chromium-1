@@ -12,6 +12,7 @@
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_popup_delegate.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 
 namespace gfx {
 class RectF;
@@ -65,6 +66,11 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   void OnShowNotSecureWarning(base::i18n::TextDirection text_direction,
                               const gfx::RectF& bounds);
 
+  // Handles a request from the renderer to show a popup with an option to check
+  // user's saved passwords, used when a password field is not autofilled.
+  void OnShowManualFallbackSuggestion(base::i18n::TextDirection text_direction,
+                                      const gfx::RectF& bounds);
+
   // Called when main frame navigates. Not called for in-page navigations.
   void DidNavigateMainFrame();
 
@@ -104,6 +110,10 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   // Finds login information for a |node| that was previously filled.
   bool FindLoginInfo(int key, autofill::PasswordFormFillData* found_password);
 
+  // Creates suggestion and records the metrics for the "Form not secure
+  // warning".
+  autofill::Suggestion CreateFormNotSecureWarning();
+
   // The logins we have filled so far with their associated info.
   LoginToPasswordInfoMap login_to_password_info_;
 
@@ -117,6 +127,11 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   // True if the Form-Not-Secure warning has been shown on the current
   // navigation. Used for metrics.
   bool did_show_form_not_secure_warning_ = false;
+
+  // Context in which the "Show all saved passwords" fallback was shown.
+  metrics_util::ShowAllSavedPasswordsContext
+      show_all_saved_passwords_shown_context_ =
+          metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_NONE;
 
   autofill::AutofillClient* autofill_client_;  // weak
 

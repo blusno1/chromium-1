@@ -61,10 +61,11 @@ class VIZ_SERVICE_EXPORT BufferQueue {
                const gfx::ColorSpace& color_space,
                bool use_stencil);
   void RecreateBuffers();
-  uint32_t GetCurrentTextureId();
+  uint32_t GetCurrentTextureId() const;
 
   uint32_t fbo() const { return fbo_; }
   uint32_t internal_format() const { return internal_format_; }
+  gfx::BufferFormat buffer_format() const { return format_; }
 
  private:
   friend class BufferQueueTest;

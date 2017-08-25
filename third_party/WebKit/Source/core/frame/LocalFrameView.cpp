@@ -31,7 +31,7 @@
 #include "core/HTMLNames.h"
 #include "core/MediaTypeNames.h"
 #include "core/animation/DocumentAnimations.h"
-#include "core/css/FontFaceSet.h"
+#include "core/css/FontFaceSetDocument.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/ElementVisibilityObserver.h"
@@ -76,10 +76,6 @@
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LayoutItem.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
-#include "core/layout/compositing/CompositedSelection.h"
-#include "core/layout/compositing/CompositingInputsUpdater.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
@@ -97,6 +93,10 @@
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintTiming.h"
 #include "core/paint/PrePaintTreeWalk.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/paint/compositing/CompositedSelection.h"
+#include "core/paint/compositing/CompositingInputsUpdater.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/plugins/PluginView.h"
 #include "core/probe/CoreProbes.h"
 #include "core/resize_observer/ResizeObserverController.h"
@@ -208,13 +208,17 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, IntRect frame_rect)
       needs_paint_property_update_(true),
       current_update_lifecycle_phases_target_state_(
           DocumentLifecycle::kUninitialized),
+      past_layout_lifecycle_update_(false),
       scroll_anchor_(this),
+      in_perform_scroll_anchoring_adjustments_(false),
       scrollbar_manager_(*this),
       needs_scrollbars_update_(false),
       suppress_adjust_view_size_(false),
       allows_layout_invalidation_after_layout_clean_(true),
       forcing_layout_parent_view_(false),
-      main_thread_scrolling_reasons_(0) {
+      needs_intersection_observation_(false),
+      main_thread_scrolling_reasons_(0),
+      paint_frame_count_(0) {
   Init();
 }
 
@@ -747,9 +751,11 @@ void LocalFrameView::AdjustViewSize() {
   const IntRect rect = layout_view_item.DocumentRect();
   const IntSize& size = rect.Size();
 
-  const IntPoint origin(-rect.X(), -rect.Y());
-  if (ScrollOrigin() != origin)
-    SetScrollOrigin(origin);
+  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+    const IntPoint origin(-rect.X(), -rect.Y());
+    if (ScrollOrigin() != origin)
+      SetScrollOrigin(origin);
+  }
 
   SetContentsSize(size);
 }
@@ -1012,9 +1018,9 @@ std::unique_ptr<TracedValue> LocalFrameView::AnalyzerCounters() {
   value->SetInteger("contentsHeightAfterLayout",
                     GetLayoutViewItem().DocumentRect().Height());
   value->SetInteger("visibleHeight", VisibleHeight());
-  value->SetInteger(
-      "approximateBlankCharacterCount",
-      FontFaceSet::ApproximateBlankCharacterCount(*frame_->GetDocument()));
+  value->SetInteger("approximateBlankCharacterCount",
+                    FontFaceSetDocument::ApproximateBlankCharacterCount(
+                        *frame_->GetDocument()));
   return value;
 }
 
@@ -2025,9 +2031,10 @@ void LocalFrameView::UpdateLayersAndCompositingAfterScrollIfNeeded() {
     if (!layer->AncestorOverflowLayer())
       continue;
 
-    StickyConstraintsMap constraints_map = layer->AncestorOverflowLayer()
-                                               ->GetScrollableArea()
-                                               ->GetStickyConstraintsMap();
+    const StickyConstraintsMap& constraints_map =
+        layer->AncestorOverflowLayer()
+            ->GetScrollableArea()
+            ->GetStickyConstraintsMap();
     if (constraints_map.Contains(layer) &&
         !constraints_map.at(layer).HasAncestorStickyElement()) {
       // TODO(skobes): Resolve circular dependency between scroll offset and
@@ -2068,12 +2075,14 @@ bool LocalFrameView::ComputeCompositedSelection(
   VisiblePosition visible_start(visible_selection.VisibleStart());
   RenderedPosition rendered_start(visible_start);
   rendered_start.PositionInGraphicsLayerBacking(selection.start, true);
+  selection.start.hidden = !rendered_start.IsVisible(true);
   if (!selection.start.layer)
     return false;
 
   VisiblePosition visible_end(visible_selection.VisibleEnd());
   RenderedPosition rendered_end(visible_end);
   rendered_end.PositionInGraphicsLayerBacking(selection.end, false);
+  selection.end.hidden = !rendered_end.IsVisible(false);
   if (!selection.end.layer)
     return false;
 
@@ -2566,7 +2575,7 @@ void LocalFrameView::PerformPostLayoutTasks() {
 
   DCHECK(frame_->GetDocument());
 
-  FontFaceSet::DidLayout(*frame_->GetDocument());
+  FontFaceSetDocument::DidLayout(*frame_->GetDocument());
   // Cursor update scheduling is done by the local root, which is the main frame
   // if there are no RemoteFrame ancestors in the frame tree. Use of
   // localFrameRoot() is discouraged but will change when cursor update
@@ -2812,6 +2821,16 @@ void LocalFrameView::NotifyPageThatContentAreaWillPaint() const {
   }
 }
 
+CompositorElementId LocalFrameView::GetCompositorElementId() const {
+  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+    return CompositorElementIdFromDOMNodeId(
+        DOMNodeIds::IdForNode(&GetLayoutView()->GetDocument()),
+        CompositorElementIdNamespace::kRootScroll);
+  } else {
+    return PaintInvalidationCapableScrollableArea::GetCompositorElementId();
+  }
+}
+
 bool LocalFrameView::ScrollAnimatorEnabled() const {
   return frame_->GetSettings() &&
          frame_->GetSettings()->GetScrollAnimatorEnabled();
@@ -2911,6 +2930,11 @@ Color LocalFrameView::DocumentBackgroundColor() const {
         document_layout_object.ResolveColor(CSSPropertyBackgroundColor));
   }
   return result;
+}
+
+void LocalFrameView::WillBeRemovedFromFrame() {
+  if (paint_artifact_compositor_)
+    paint_artifact_compositor_->WillBeRemovedFromFrame();
 }
 
 LocalFrameView* LocalFrameView::ParentFrameView() const {
@@ -3129,6 +3153,9 @@ void LocalFrameView::UpdateLifecyclePhasesInternal(
     return;
   }
 
+  AutoReset<bool> past_layout_lifecycle_update(&past_layout_lifecycle_update_,
+                                               true);
+
   ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
     frame_view.PerformScrollAnchoringAdjustments();
   });
@@ -3196,6 +3223,7 @@ void LocalFrameView::UpdateLifecyclePhasesInternal(
         Optional<CompositorElementIdSet> composited_element_ids =
             CompositorElementIdSet();
         PushPaintArtifactToCompositor(composited_element_ids.value());
+        // TODO(wkorman): Add a call to UpdateCompositorScrollAnimations here.
         DocumentAnimations::UpdateAnimations(GetLayoutView()->GetDocument(),
                                              DocumentLifecycle::kPaintClean,
                                              composited_element_ids);
@@ -3222,6 +3250,11 @@ void LocalFrameView::EnqueueScrollAnchoringAdjustment(
 }
 
 void LocalFrameView::PerformScrollAnchoringAdjustments() {
+  // TODO(bokan): Temporary to get more information about crash in
+  // crbug.com/745686.
+  CHECK(!in_perform_scroll_anchoring_adjustments_);
+  in_perform_scroll_anchoring_adjustments_ = true;
+
   for (WeakMember<ScrollableArea>& scroller : anchoring_adjustment_queue_) {
     if (scroller) {
       DCHECK(scroller->GetScrollAnchor());
@@ -3229,6 +3262,8 @@ void LocalFrameView::PerformScrollAnchoringAdjustments() {
     }
   }
   anchoring_adjustment_queue_.clear();
+
+  in_perform_scroll_anchoring_adjustments_ = false;
 }
 
 void LocalFrameView::PrePaint() {
@@ -3269,6 +3304,7 @@ void LocalFrameView::PaintTree() {
 
   LayoutViewItem view = GetLayoutViewItem();
   DCHECK(!view.IsNull());
+  paint_frame_count_++;
   ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
     frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kInPaint);
   });
@@ -4632,7 +4668,7 @@ LayoutRect LocalFrameView::ScrollIntoView(const LayoutRect& rect_in_content,
                         : target_offset;
 
     if (is_for_scroll_sequence) {
-      DCHECK(scroll_type == kProgrammaticScroll || scroll_type == kUserScroll);
+      DCHECK(scroll_type == kProgrammaticScroll);
       ScrollBehavior behavior =
           is_smooth ? kScrollBehaviorSmooth : kScrollBehaviorInstant;
       GetSmoothScrollSequencer()->QueueAnimation(this, target_offset, behavior);
@@ -4961,6 +4997,7 @@ void LocalFrameView::UpdateViewportIntersectionsForSubtree(
        child = child->Tree().NextSibling()) {
     child->View()->UpdateViewportIntersectionsForSubtree(target_state);
   }
+  needs_intersection_observation_ = false;
 }
 
 void LocalFrameView::UpdateRenderThrottlingStatusForTesting() {
@@ -5121,9 +5158,23 @@ void LocalFrameView::RecordDeferredLoadingStats() {
                                    total_screens_away));
 }
 
+void LocalFrameView::SetNeedsIntersectionObservation() {
+  needs_intersection_observation_ = true;
+  if (LocalFrameView* parent = ParentFrameView())
+    parent->SetNeedsIntersectionObservation();
+}
+
 bool LocalFrameView::ShouldThrottleRendering() const {
-  return CanThrottleRendering() && frame_->GetDocument() &&
-         Lifecycle().ThrottlingAllowed();
+  bool throttled_for_global_reasons = CanThrottleRendering() &&
+                                      frame_->GetDocument() &&
+                                      Lifecycle().ThrottlingAllowed();
+  if (!throttled_for_global_reasons)
+    return false;
+
+  // Only lifecycle phases up to layout are needed to generate an
+  // intersection observation.
+  return !needs_intersection_observation_ ||
+         GetFrame().LocalFrameRoot().View()->past_layout_lifecycle_update_;
 }
 
 bool LocalFrameView::CanThrottleRendering() const {

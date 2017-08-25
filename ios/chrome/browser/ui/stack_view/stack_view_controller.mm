@@ -32,10 +32,8 @@
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/background_generator.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_toolbar_controller.h"
@@ -58,7 +56,6 @@
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
 #include "ios/chrome/grit/ios_strings.h"
-#import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #include "ios/web/public/referrer.h"
 #import "net/base/mac/url_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -2730,28 +2727,17 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
                         transition:ui::PAGE_TRANSITION_TYPED];
 }
 
-- (IBAction)chromeExecuteCommand:(id)sender {
-  int command = [sender tag];
+// Closing all while the main set is active closes everything, but closing
+// all while incognito is active only closes incognito tabs.
+- (void)closeAllTabs {
+  DCHECK(![self isCurrentSetIncognito]);
+  [self removeAllCardsFromSet:_mainCardSet];
+  [self removeAllCardsFromSet:_otrCardSet];
+}
 
-  switch (command) {
-    // Closing all while the main set is active closes everything, but closing
-    // all while incognito is active only closes incognito tabs.
-    case IDC_CLOSE_ALL_TABS:
-      DCHECK(![self isCurrentSetIncognito]);
-      [self removeAllCardsFromSet:_mainCardSet];
-      [self removeAllCardsFromSet:_otrCardSet];
-      break;
-    case IDC_CLOSE_ALL_INCOGNITO_TABS:
-      DCHECK([self isCurrentSetIncognito]);
-      [self removeAllCardsFromSet:_activeCardSet];
-      break;
-    case IDC_TOGGLE_TAB_SWITCHER:
-      [self dismissWithSelectedTabAnimation];
-      break;
-    default:
-      [super chromeExecuteCommand:sender];
-      break;
-  }
+- (void)closeAllIncognitoTabs {
+  DCHECK([self isCurrentSetIncognito]);
+  [self removeAllCardsFromSet:_activeCardSet];
 }
 
 #pragma mark Notification Handlers

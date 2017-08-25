@@ -8,9 +8,9 @@
 <script>
 
 function test() {
-  InspectorTest.startDebuggerTest(testStarted);
+  SourcesTestRunner.startDebuggerTest(testStarted);
   function testStarted() {
-    InspectorTest.showScriptSource('edit-me.js', didShowScriptSource);
+    SourcesTestRunner.showScriptSource('edit-me.js', didShowScriptSource);
   }
 
   function didShowScriptSource(sourceFrame) {
@@ -18,27 +18,27 @@ function test() {
   }
 
   function didEditScriptSource() {
-    UI.panels.sources.sourcesView().currentUISourceCode().requestOriginalContent().then(gotOriginalContent)
+    UI.panels.sources.sourcesView().currentUISourceCode().requestOriginalContent().then(gotOriginalContent);
   }
 
   function gotOriginalContent(originalContent) {
-    InspectorTest.addResult('==== Original Content ====');
-    InspectorTest.addResult(originalContent);
-    UI.panels.sources.sourcesView().currentUISourceCode().requestContent().then(gotContent)
+    TestRunner.addResult('==== Original Content ====');
+    TestRunner.addResult(originalContent);
+    UI.panels.sources.sourcesView().currentUISourceCode().requestContent().then(gotContent);
   }
 
   function gotContent(content) {
-    InspectorTest.addResult('');
-    InspectorTest.addResult('');
-    InspectorTest.addResult('==== Current Content ====');
-    InspectorTest.addResult(content);
-    InspectorTest.completeDebuggerTest();
+    TestRunner.addResult('');
+    TestRunner.addResult('');
+    TestRunner.addResult('==== Current Content ====');
+    TestRunner.addResult(content);
+    SourcesTestRunner.completeDebuggerTest();
   }
 
   function replaceInSource(sourceFrame, string, replacement, callback) {
-    InspectorTest.addSniffer(InspectorTest.debuggerModel, '_didEditScriptSource', callback);
-    InspectorTest.replaceInSource(sourceFrame, string, replacement);
-    InspectorTest.commitSource(sourceFrame);
+    TestRunner.addSniffer(TestRunner.debuggerModel, '_didEditScriptSource', callback);
+    SourcesTestRunner.replaceInSource(sourceFrame, string, replacement);
+    SourcesTestRunner.commitSource(sourceFrame);
   }
 }
 

@@ -25,6 +25,7 @@
 #include "media/base/test_helpers.h"
 #include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_params.h"
+#include "media/mojo/services/watch_time_recorder.h"
 #include "media/renderers/default_renderer_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -109,6 +110,10 @@ class DummyWebMediaPlayerClient : public blink::WebMediaPlayerClient {
   blink::WebMediaPlayer::DisplayType DisplayType() const override {
     return blink::WebMediaPlayer::DisplayType::kInline;
   }
+  void ActivateViewportIntersectionMonitoring(bool activate) override {}
+  void MediaRemotingStarted(
+      const blink::WebString& remote_device_friendly_name) override {}
+  void MediaRemotingStopped() override {}
 
   void set_is_autoplaying_muted(bool value) { is_autoplaying_muted_ = value; }
 
@@ -234,6 +239,9 @@ class WebMediaPlayerImplTest : public testing::Test {
     factory_selector->SetBaseFactoryType(
         RendererFactorySelector::FactoryType::DEFAULT);
 
+    WatchTimeRecorder::CreateWatchTimeRecorderProvider(
+        mojo::MakeRequest(&provider_));
+
     wmpi_ = base::MakeUnique<WebMediaPlayerImpl>(
         web_local_frame_, &client_, nullptr, &delegate_,
         std::move(factory_selector), url_index_.get(),
@@ -245,7 +253,8 @@ class WebMediaPlayerImplTest : public testing::Test {
             base::Bind(&OnAdjustAllocatedMemory), nullptr, nullptr,
             RequestRoutingTokenCallback(), nullptr,
             kMaxKeyframeDistanceToDisableBackgroundVideo,
-            kMaxKeyframeDistanceToDisableBackgroundVideoMSE, false, false));
+            kMaxKeyframeDistanceToDisableBackgroundVideoMSE, false, false,
+            provider_.get()));
   }
 
   ~WebMediaPlayerImplTest() override {
@@ -261,8 +270,19 @@ class WebMediaPlayerImplTest : public testing::Test {
   }
 
  protected:
+  void SetNetworkState(blink::WebMediaPlayer::NetworkState state) {
+    wmpi_->SetNetworkState(state);
+  }
   void SetReadyState(blink::WebMediaPlayer::ReadyState state) {
     wmpi_->SetReadyState(state);
+  }
+
+  void SetDuration(base::TimeDelta value) {
+    wmpi_->SetPipelineMediaDurationForTest(value);
+  }
+
+  base::TimeDelta GetCurrentTimeInternal() {
+    return wmpi_->GetCurrentTimeInternal();
   }
 
   void SetPaused(bool is_paused) { wmpi_->paused_ = is_paused; }
@@ -367,6 +387,12 @@ class WebMediaPlayerImplTest : public testing::Test {
     wmpi_->load_type_ = load_type;
   }
 
+  bool IsVideoTrackDisabled() const { return wmpi_->video_track_disabled_; }
+
+  bool IsDisableVideoTrackPending() const {
+    return !wmpi_->update_background_status_cb_.IsCancelled();
+  }
+
   // "Renderer" thread.
   base::MessageLoop message_loop_;
 
@@ -390,6 +416,8 @@ class WebMediaPlayerImplTest : public testing::Test {
 
   testing::NiceMock<MockWebMediaPlayerDelegate> delegate_;
 
+  mojom::WatchTimeRecorderProviderPtr provider_;
+
   // The WebMediaPlayerImpl instance under test.
   std::unique_ptr<WebMediaPlayerImpl> wmpi_;
 
@@ -402,11 +430,9 @@ TEST_F(WebMediaPlayerImplTest, ConstructAndDestroy) {
   EXPECT_FALSE(IsSuspended());
 }
 
-TEST_F(WebMediaPlayerImplTest, IdleSuspendIsEnabledBeforeLoadingBegins) {
+TEST_F(WebMediaPlayerImplTest, IdleSuspendBeforeLoadingBegins) {
   InitializeWebMediaPlayerImpl();
-  EXPECT_TRUE(delegate_.ExpireForTesting());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(IsSuspended());
+  EXPECT_FALSE(delegate_.ExpireForTesting());
 }
 
 TEST_F(WebMediaPlayerImplTest,
@@ -426,6 +452,7 @@ TEST_F(WebMediaPlayerImplTest,
 
 TEST_F(WebMediaPlayerImplTest, IdleSuspendIsEnabledIfLoadingHasStalled) {
   InitializeWebMediaPlayerImpl();
+  SetNetworkState(blink::WebMediaPlayer::kNetworkStateLoading);
   base::SimpleTestTickClock* clock = new base::SimpleTestTickClock();
   clock->Advance(base::TimeDelta::FromSeconds(1));
   SetTickClock(clock);
@@ -441,6 +468,7 @@ TEST_F(WebMediaPlayerImplTest, IdleSuspendIsEnabledIfLoadingHasStalled) {
 TEST_F(WebMediaPlayerImplTest, DidLoadingProgressTriggersResume) {
   // Same setup as IdleSuspendIsEnabledBeforeLoadingBegins.
   InitializeWebMediaPlayerImpl();
+  SetNetworkState(blink::WebMediaPlayer::kNetworkStateLoading);
   EXPECT_TRUE(delegate_.ExpireForTesting());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(IsSuspended());
@@ -829,6 +857,32 @@ TEST_F(WebMediaPlayerImplTest, BackgroundIdlePauseTimerDependsOnAudio) {
   EXPECT_TRUE(IsIdlePauseTimerRunning());
 }
 
+// Verifies that an infinite duration doesn't muck up GetCurrentTimeInternal.
+TEST_F(WebMediaPlayerImplTest, InfiniteDuration) {
+  InitializeWebMediaPlayerImpl();
+  SetDuration(kInfiniteDuration);
+
+  // Send metadata so we have a watch time reporter created.
+  PipelineMetadata metadata;
+  metadata.has_video = true;
+  metadata.has_audio = true;
+  metadata.natural_size = gfx::Size(400, 400);
+  OnMetadata(metadata);
+
+  EXPECT_EQ(std::numeric_limits<double>::infinity(), wmpi_->Duration());
+  EXPECT_EQ(0, wmpi_->CurrentTime());
+  EXPECT_EQ(base::TimeDelta(), GetCurrentTimeInternal());
+
+  SetEnded(true);
+  EXPECT_EQ(std::numeric_limits<double>::infinity(), wmpi_->CurrentTime());
+  EXPECT_EQ(base::TimeDelta(), GetCurrentTimeInternal());
+
+  // Pause should not pick up infinity for the current time.
+  wmpi_->Pause();
+  EXPECT_EQ(std::numeric_limits<double>::infinity(), wmpi_->CurrentTime());
+  EXPECT_EQ(base::TimeDelta(), GetCurrentTimeInternal());
+}
+
 class WebMediaPlayerImplBackgroundBehaviorTest
     : public WebMediaPlayerImplTest,
       public ::testing::WithParamInterface<
@@ -886,10 +940,6 @@ class WebMediaPlayerImplBackgroundBehaviorTest
         base::TimeDelta::FromSeconds(GetAverageKeyframeDistanceSec()));
     SetDuration(base::TimeDelta::FromSeconds(GetDurationSec()));
     BackgroundPlayer();
-  }
-
-  void SetDuration(base::TimeDelta value) {
-    wmpi_->SetPipelineMediaDurationForTest(value);
   }
 
   void SetVideoKeyframeDistanceAverage(base::TimeDelta value) {
@@ -997,6 +1047,24 @@ TEST_P(WebMediaPlayerImplBackgroundBehaviorTest, AudioVideo) {
   // videos is on. Both are on by default on Android and off on desktop.
   EXPECT_EQ(IsMediaSuspendOn() && IsResumeBackgroundVideoEnabled(),
             ShouldPauseVideoWhenHidden());
+
+  if (!IsBackgroundOptimizationOn() || !matches_requirements ||
+      !ShouldDisableVideoWhenHidden() || IsMediaSuspendOn()) {
+    return;
+  }
+
+  // These tests start in background mode prior to having metadata, so put the
+  // test back into a normal state.
+  EXPECT_TRUE(IsDisableVideoTrackPending());
+
+  ForegroundPlayer();
+  EXPECT_FALSE(IsVideoTrackDisabled());
+  EXPECT_FALSE(IsDisableVideoTrackPending());
+
+  // Should start background disable timer, but not disable immediately.
+  BackgroundPlayer();
+  EXPECT_FALSE(IsVideoTrackDisabled());
+  EXPECT_TRUE(IsDisableVideoTrackPending());
 }
 
 INSTANTIATE_TEST_CASE_P(BackgroundBehaviorTestInstances,

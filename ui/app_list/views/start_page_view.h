@@ -20,7 +20,6 @@ class AppListView;
 class AppListViewDelegate;
 class CustomLauncherPageBackgroundView;
 class ExpandArrowView;
-class IndicatorChipView;
 class SearchResultTileItemView;
 class SuggestionsContainerView;
 class TileItemView;
@@ -63,6 +62,9 @@ class APP_LIST_EXPORT StartPageView : public AppListPage {
   // the selected index in suggestions container view.
   int GetSelectedIndexForTest() const;
 
+  // Updates the opacity of the items in start page during dragging.
+  void UpdateOpacity(float work_area_bottom, bool is_end_gesture);
+
  private:
   void InitInstantContainer();
 
@@ -70,7 +72,13 @@ class APP_LIST_EXPORT StartPageView : public AppListPage {
 
   void SetCustomLauncherPageSelected(bool selected);
 
+  // Updates opacity of |view_item| in the start page based on |centroid_y|.
+  void UpdateOpacityOfItem(views::View* view_item, float centroid_y);
+
   TileItemView* GetTileItemView(size_t index);
+
+  // Handles key events in fullscreen app list.
+  bool HandleKeyPressedFullscreen(const ui::KeyEvent& event);
 
   AppListView* app_list_view_;
 
@@ -87,12 +95,19 @@ class APP_LIST_EXPORT StartPageView : public AppListPage {
   views::View* instant_container_;  // Owned by views hierarchy.
   CustomLauncherPageBackgroundView*
       custom_launcher_page_background_;     // Owned by views hierarchy.
-  IndicatorChipView* indicator_ = nullptr;  // Owned by views hierarchy.
   SuggestionsContainerView*
       suggestions_container_;  // Owned by views hierarchy.
   ExpandArrowView* expand_arrow_view_ = nullptr;  // Owned by views hierarchy.
 
+  // TODO(minch|weidong): Remove fullscreen related code in StartPageView and
+  // corresponding tests. http://crbug.com/757704.
   const bool is_fullscreen_app_list_enabled_;
+
+  // The bottom of work area.
+  float work_area_bottom_ = 0.f;
+
+  // True if it is the end gesture of dragging.
+  bool is_end_gesture_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(StartPageView);
 };

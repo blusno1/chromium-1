@@ -15,11 +15,16 @@
 #include "media/media_features.h"
 #include "media/mojo/features.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
+#include "media/mojo/interfaces/watch_time_recorder.mojom.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_MOJO_MEDIA)
+#include "media/mojo/interfaces/interface_factory.mojom.h"  // nogncheck
+#endif
 
 namespace blink {
 class WebContentDecryptionModule;
@@ -56,7 +61,7 @@ class InterfaceProvider;
 namespace content {
 
 class RenderFrameImpl;
-class MediaInterfaceProvider;
+class MediaInterfaceFactory;
 class MediaStreamRendererFactory;
 
 #if defined(OS_ANDROID)
@@ -133,10 +138,10 @@ class MediaFactory {
   media::CdmFactory* GetCdmFactory();
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA)
-  service_manager::mojom::InterfaceProvider* GetMediaInterfaceProvider();
+  media::mojom::InterfaceFactory* GetMediaInterfaceFactory();
 
   // The media interface provider attached to this frame, lazily initialized.
-  std::unique_ptr<MediaInterfaceProvider> media_interface_provider_;
+  std::unique_ptr<MediaInterfaceFactory> media_interface_factory_;
 #endif
 
   // The render frame we're helping. RenderFrameImpl owns this factory, so the
@@ -174,11 +179,14 @@ class MediaFactory {
   std::unique_ptr<media::CdmFactory> cdm_factory_;
 
   // Media resource cache, lazily initialized.
+  std::unique_ptr<media::ResourceFetchContext> fetch_context_;
   std::unique_ptr<media::UrlIndex> url_index_;
 
   // EncryptedMediaClient attached to this frame; lazily initialized.
   std::unique_ptr<media::WebEncryptedMediaClientImpl>
       web_encrypted_media_client_;
+
+  media::mojom::WatchTimeRecorderProviderPtr watch_time_recorder_provider_;
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
   // Lazy-bound pointer to the RemoterFactory service in the browser

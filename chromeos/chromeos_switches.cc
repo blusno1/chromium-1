@@ -250,6 +250,9 @@ const char kEnableArc[] = "enable-arc";
 // Enables ARC OptIn flow in OOBE.
 const char kEnableArcOOBEOptIn[] = "enable-arc-oobe-optin";
 
+// Enables the Cast Receiver.
+const char kEnableCastReceiver[] = "enable-cast-receiver";
+
 // Enables native ChromeVox support for Arc.
 const char kEnableChromeVoxArcSupport[] = "enable-chromevox-arc-support";
 
@@ -278,7 +281,7 @@ const char kEnableFileManagerTouchMode[] = "enable-file-manager-touch-mode";
 const char kEnableFirstRunUITransitions[] = "enable-first-run-ui-transitions";
 
 // Enables action handler apps (e.g. creating new notes) on lock screen.
-const char kEnableLockScreenApps[] = "enable-lock-screen-apps";
+const char kDisableLockScreenApps[] = "disable-lock-screen-apps";
 
 // Overrides Tether with stub service. Provide integer arguments for the number
 // of fake networks desired, e.g. 'tether-stub=2'.
@@ -286,6 +289,9 @@ const char kTetherStub[] = "tether-stub";
 
 // Disables material design OOBE UI.
 const char kDisableMdOobe[] = "disable-md-oobe";
+
+// Disables material design Error screen.
+const char kDisableMdErrorScreen[] = "disable-md-error-screen";
 
 // Enables notifications about captive portals in session.
 const char kEnableNetworkPortalNotification[] =
@@ -310,10 +316,6 @@ const char kEnableTouchCalibrationSetting[] =
 // Enables touchpad three-finger-click as middle button.
 const char kEnableTouchpadThreeFingerClick[] =
     "enable-touchpad-three-finger-click";
-
-// Enables touch support for screen magnifier.
-const char kEnableTouchSupportForScreenMagnifier[] =
-    "enable-touch-support-for-screen-magnifier";
 
 // Enables the chromecast support for video player app.
 const char kEnableVideoPlayerChromecastSupport[] =
@@ -515,6 +517,16 @@ const char kCrosGaiaApiV1[] = "cros-gaia-api-v1";
 // List of locales supported by voice interaction.
 const char kVoiceInteractionLocales[] = "voice-interaction-supported-locales";
 
+// Enables license type selection by user during enrollment.
+const char kEnterpriseEnableLicenseTypeSelection[] =
+    "enterprise-enable-license-type-selection";
+
+// Disables per-user timezone.
+const char kDisablePerUserTimezone[] = "disable-per-user-timezone";
+
+// Enables a rename action for external drive such as USB and SD.
+const char kEnableExternalDriveRename[] = "enable-external-drive-rename";
+
 bool WakeOnWifiEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableWakeOnWifi);
 }
@@ -574,23 +586,31 @@ bool IsCellularFirstDevice() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kCellularFirst);
 }
 
-bool IsVoiceInteractionEnabled() {
+bool IsVoiceInteractionLocalesSupported() {
   // TODO(updowndota): Add DCHECK here to make sure the value never changes
   // after all the use case for this method has been moved into user session.
 
   // Disable voice interaction for non-supported locales.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  std::string locale = icu::Locale::getDefault().getName();
-  if (locale != ULOC_US &&
-      command_line
+  std::string kLocale = icu::Locale::getDefault().getName();
+  if (kLocale != ULOC_US && kLocale != ULOC_UK && kLocale != ULOC_CANADA &&
+      base::CommandLine::ForCurrentProcess()
               ->GetSwitchValueASCII(
                   chromeos::switches::kVoiceInteractionLocales)
-              .find(locale) == std::string::npos) {
+              .find(kLocale) == std::string::npos) {
     return false;
   }
+  return true;
+}
 
+bool IsVoiceInteractionFlagsEnabled() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   return command_line->HasSwitch(kEnableVoiceInteraction) ||
          base::FeatureList::IsEnabled(kVoiceInteractionFeature);
+}
+
+bool IsVoiceInteractionEnabled() {
+  return IsVoiceInteractionLocalesSupported() &&
+         IsVoiceInteractionFlagsEnabled();
 }
 
 }  // namespace switches

@@ -78,7 +78,7 @@
 #include "core/dom/WhitespaceAttacher.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/SetSelectionData.h"
+#include "core/editing/SetSelectionOptions.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/EventDispatcher.h"
@@ -1150,8 +1150,17 @@ IntRect Element::BoundsInViewport() const {
     return IntRect();
 
   Vector<FloatQuad> quads;
-  if (IsSVGElement() && GetLayoutObject()) {
+
+  // TODO(pdr): Unify the quad/bounds code with Element::ClientQuads.
+
+  // Foreign objects need to convert between SVG and HTML coordinate spaces and
+  // cannot use LocalToAbsoluteQuad directly with ObjectBoundingBox which is
+  // SVG coordinates and not HTML coordinates. Instead, use the AbsoluteQuads
+  // codepath below.
+  if (IsSVGElement() && GetLayoutObject() &&
+      !GetLayoutObject()->IsSVGForeignObject()) {
     // Get the bounding rectangle from the SVG model.
+    // TODO(pdr): This should include stroke.
     if (ToSVGElement(this)->IsSVGGraphicsElement())
       quads.push_back(GetLayoutObject()->LocalToAbsoluteQuad(
           GetLayoutObject()->ObjectBoundingBox()));
@@ -1192,8 +1201,16 @@ void Element::ClientQuads(Vector<FloatQuad>& quads) {
   if (!element_layout_object)
     return;
 
-  if (IsSVGElement() && !element_layout_object->IsSVGRoot()) {
+  // Foreign objects need to convert between SVG and HTML coordinate spaces and
+  // cannot use LocalToAbsoluteQuad directly with ObjectBoundingBox which is
+  // SVG coordinates and not HTML coordinates. Instead, use the AbsoluteQuads
+  // codepath below.
+  if (IsSVGElement() && !element_layout_object->IsSVGRoot() &&
+      !element_layout_object->IsSVGForeignObject()) {
     // Get the bounding rectangle from the SVG model.
+    // TODO(pdr): ObjectBoundingBox does not include stroke and the spec is not
+    // clear (see: https://github.com/w3c/svgwg/issues/339, crbug.com/529734).
+    // If stroke is desired, we can update this to use AbsoluteQuads, below.
     if (ToSVGElement(this)->IsSVGGraphicsElement())
       quads.push_back(element_layout_object->LocalToAbsoluteQuad(
           element_layout_object->ObjectBoundingBox()));
@@ -1915,9 +1932,13 @@ RefPtr<ComputedStyle> Element::StyleForLayoutObject() {
   }
 
   if (style->HasTransform()) {
-    if (const StylePropertySet* inline_style = this->InlineStyle())
+    if (const StylePropertySet* inline_style = this->InlineStyle()) {
       style->SetHasInlineTransform(
-          inline_style->HasProperty(CSSPropertyTransform));
+          inline_style->HasProperty(CSSPropertyTransform) ||
+          inline_style->HasProperty(CSSPropertyTranslate) ||
+          inline_style->HasProperty(CSSPropertyRotate) ||
+          inline_style->HasProperty(CSSPropertyScale));
+    }
   }
 
   style->UpdateIsStackingContext(this == GetDocument().documentElement(),
@@ -2066,6 +2087,17 @@ StyleRecalcChange Element::RecalcOwnStyle(StyleRecalcChange change) {
   } else {
     INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
                                   styles_changed, 1);
+    if (this == GetDocument().documentElement()) {
+      if (GetDocument().GetStyleEngine().UpdateRemUnits(old_style.Get(),
+                                                        new_style.Get())) {
+        // Trigger a full document recalc on rem unit changes. We could keep
+        // track of which elements depend on rem units like we do for viewport
+        // styles, but we assume root font size changes are rare and just
+        // recalculate everything.
+        if (local_change < kForce)
+          local_change = kForce;
+      }
+    }
   }
 
   if (local_change == kReattach) {
@@ -2405,7 +2437,7 @@ ShadowRoot* Element::GetShadowRoot() const {
   return &element_shadow->YoungestShadowRoot();
 }
 
-ShadowRoot* Element::openShadowRoot() const {
+ShadowRoot* Element::OpenShadowRoot() const {
   ShadowRoot* root = GetShadowRoot();
   if (!root)
     return nullptr;
@@ -2823,7 +2855,7 @@ void Element::UpdateFocusAppearance(
         SelectionInDOMTree::Builder()
             .Collapse(FirstPositionInOrBeforeNode(this))
             .Build(),
-        SetSelectionData::Builder()
+        SetSelectionOptions::Builder()
             .SetShouldCloseTyping(true)
             .SetShouldClearTypingStyle(true)
             .SetDoNotSetFocus(true)
@@ -3056,14 +3088,14 @@ ElementIntersectionObserverData& Element::EnsureIntersectionObserverData() {
   return EnsureElementRareData().EnsureIntersectionObserverData();
 }
 
-HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>*
+HeapHashMap<TraceWrapperMember<ResizeObserver>, Member<ResizeObservation>>*
 Element::ResizeObserverData() const {
   if (HasRareData())
     return GetElementRareData()->ResizeObserverData();
   return nullptr;
 }
 
-HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>&
+HeapHashMap<TraceWrapperMember<ResizeObserver>, Member<ResizeObservation>>&
 Element::EnsureResizeObserverData() {
   return EnsureElementRareData().EnsureResizeObserverData();
 }
@@ -3394,8 +3426,7 @@ void Element::UpdatePseudoElement(PseudoId pseudo_id,
       MutableComputedStyle()->RemoveCachedPseudoStyle(pseudo_id);
 
     // PseudoElement styles hang off their parent element's style so if we
-    // needed a style recalc we should Force one on the pseudo.  FIXME: We
-    // should figure out the right text sibling to pass.
+    // needed a style recalc we should Force one on the pseudo.
     element->RecalcStyle(change == kUpdatePseudoElements ? kForce : change);
 
     // Wait until our parent is not displayed or
@@ -3649,7 +3680,11 @@ void Element::SetFloatingPointAttribute(const QualifiedName& attribute_name,
 
 void Element::SetContainsFullScreenElement(bool flag) {
   SetElementFlag(kContainsFullScreenElement, flag);
-  GetDocument().GetStyleEngine().EnsureUAStyleForFullscreen();
+  // When exiting fullscreen, the element's document may not be active.
+  if (flag) {
+    DCHECK(GetDocument().IsActive());
+    GetDocument().GetStyleEngine().EnsureUAStyleForFullscreen();
+  }
   PseudoStateChanged(CSSSelector::kPseudoFullScreenAncestor);
 }
 
@@ -3776,8 +3811,9 @@ inline void Element::UpdateName(const AtomicString& old_name,
   if (old_name == new_name)
     return;
 
-  if (ShouldRegisterAsNamedItem())
-    UpdateNamedItemRegistration(old_name, new_name);
+  NamedItemType type = GetNamedItemType();
+  if (type != NamedItemType::kNone)
+    UpdateNamedItemRegistration(type, old_name, new_name);
 }
 
 inline void Element::UpdateId(const AtomicString& old_id,
@@ -3802,8 +3838,10 @@ inline void Element::UpdateId(TreeScope& scope,
   if (!new_id.IsEmpty())
     scope.AddElementById(new_id, this);
 
-  if (ShouldRegisterAsExtraNamedItem())
-    UpdateExtraNamedItemRegistration(old_id, new_id);
+  NamedItemType type = GetNamedItemType();
+  if (type == NamedItemType::kNameOrId ||
+      type == NamedItemType::kNameOrIdWithName)
+    UpdateIdNamedItemRegistration(type, old_id, new_id);
 }
 
 void Element::WillModifyAttribute(const QualifiedName& name,
@@ -3917,28 +3955,44 @@ void Element::DidMoveToNewDocument(Document& old_document) {
     ReResolveURLsInInlineStyle(GetDocument(), EnsureMutableInlineStyle());
 }
 
-void Element::UpdateNamedItemRegistration(const AtomicString& old_name,
+void Element::UpdateNamedItemRegistration(NamedItemType type,
+                                          const AtomicString& old_name,
                                           const AtomicString& new_name) {
   if (!GetDocument().IsHTMLDocument())
     return;
+  HTMLDocument& doc = ToHTMLDocument(GetDocument());
 
   if (!old_name.IsEmpty())
-    ToHTMLDocument(GetDocument()).RemoveNamedItem(old_name);
+    doc.RemoveNamedItem(old_name);
 
   if (!new_name.IsEmpty())
-    ToHTMLDocument(GetDocument()).AddNamedItem(new_name);
+    doc.AddNamedItem(new_name);
+
+  if (type == NamedItemType::kNameOrIdWithName) {
+    const AtomicString id = GetIdAttribute();
+    if (!id.IsEmpty()) {
+      if (!old_name.IsEmpty() && new_name.IsEmpty())
+        doc.RemoveNamedItem(id);
+      else if (old_name.IsEmpty() && !new_name.IsEmpty())
+        doc.AddNamedItem(id);
+    }
+  }
 }
 
-void Element::UpdateExtraNamedItemRegistration(const AtomicString& old_id,
-                                               const AtomicString& new_id) {
+void Element::UpdateIdNamedItemRegistration(NamedItemType type,
+                                            const AtomicString& old_id,
+                                            const AtomicString& new_id) {
   if (!GetDocument().IsHTMLDocument())
     return;
 
+  if (type == NamedItemType::kNameOrIdWithName && GetNameAttribute().IsEmpty())
+    return;
+
   if (!old_id.IsEmpty())
-    ToHTMLDocument(GetDocument()).RemoveExtraNamedItem(old_id);
+    ToHTMLDocument(GetDocument()).RemoveNamedItem(old_id);
 
   if (!new_id.IsEmpty())
-    ToHTMLDocument(GetDocument()).AddExtraNamedItem(new_id);
+    ToHTMLDocument(GetDocument()).AddNamedItem(new_id);
 }
 
 ScrollOffset Element::SavedLayerScrollOffset() const {

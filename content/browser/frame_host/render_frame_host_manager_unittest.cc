@@ -46,6 +46,7 @@
 #include "content/public/common/url_utils.h"
 #include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_notification_tracker.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/test_content_browser_client.h"
@@ -3115,7 +3116,9 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
   // should be pending delete.
   RenderFrameHostManager* manager =
       main_test_rfh()->frame_tree_node()->render_manager();
-  contents()->StartNavigation(kUrl2);
+  auto navigation_to_kUrl2 =
+      NavigationSimulator::CreateBrowserInitiated(kUrl2, contents());
+  navigation_to_kUrl2->ReadyToCommit();
   static_cast<TestRenderFrameHost*>(manager->speculative_frame_host())
       ->SimulateNavigationCommit(kUrl2);
   EXPECT_NE(initial_rfh, main_test_rfh());
@@ -3124,7 +3127,9 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
 
   // The initial RFH receives a BeginNavigation IPC. The navigation should not
   // start.
-  initial_rfh->SendRendererInitiatedNavigationRequest(kUrl3, true);
+  auto navigation_to_kUrl3 =
+      NavigationSimulator::CreateRendererInitiated(kUrl3, initial_rfh);
+  navigation_to_kUrl3->Start();
   EXPECT_FALSE(main_test_rfh()->frame_tree_node()->navigation_request());
 }
 
@@ -3153,7 +3158,9 @@ TEST_F(RenderFrameHostManagerTest,
   // should be pending delete.
   RenderFrameHostManager* manager =
       main_test_rfh()->frame_tree_node()->render_manager();
-  contents()->StartNavigation(kUrl2);
+  auto navigation =
+      NavigationSimulator::CreateBrowserInitiated(kUrl2, contents());
+  navigation->ReadyToCommit();
   static_cast<TestRenderFrameHost*>(manager->pending_frame_host())
       ->SimulateNavigationCommit(kUrl2);
   EXPECT_NE(initial_rfh, main_test_rfh());

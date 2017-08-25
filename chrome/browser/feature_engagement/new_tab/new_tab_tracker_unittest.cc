@@ -11,8 +11,14 @@
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/feature_engagement/feature_tracker.h"
+#include "chrome/browser/feature_engagement/session_duration_updater.h"
+#include "chrome/browser/feature_engagement/session_duration_updater_factory.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_tracker.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "chrome/test/base/testing_profile_manager.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
@@ -29,10 +35,11 @@ namespace {
 
 const char kGroupName[] = "Enabled";
 const char kNewTabTrialName[] = "NewTabTrial";
+const char kTestProfileName[] = "test-profile";
 
-class MockFeatureEngagementTracker : public Tracker {
+class MockTracker : public Tracker {
  public:
-  MockFeatureEngagementTracker() = default;
+  MockTracker() = default;
   MOCK_METHOD1(NotifyEvent, void(const std::string& event));
   MOCK_METHOD1(ShouldTriggerHelpUI, bool(const base::Feature& feature));
   MOCK_METHOD1(GetTriggerState,
@@ -44,17 +51,20 @@ class MockFeatureEngagementTracker : public Tracker {
 
 class FakeNewTabTracker : public NewTabTracker {
  public:
-  explicit FakeNewTabTracker(Tracker* feature_tracker)
-      : feature_tracker_(feature_tracker),
+  FakeNewTabTracker(Tracker* feature_tracker, Profile* profile)
+      : NewTabTracker(
+            feature_engagement::SessionDurationUpdaterFactory::GetInstance()
+                ->GetForProfile(profile)),
+        feature_tracker_(feature_tracker),
         pref_service_(
             base::MakeUnique<sync_preferences::TestingPrefServiceSyncable>()) {
-    NewTabTracker::RegisterProfilePrefs(pref_service_->registry());
+    SessionDurationUpdater::RegisterProfilePrefs(pref_service_->registry());
   }
 
-  // feature_engagement::NewTabTracker::
-  Tracker* GetFeatureTracker() override { return feature_tracker_; }
+  PrefService* GetPrefs() { return pref_service_.get(); }
 
-  PrefService* GetPrefs() override { return pref_service_.get(); }
+  // feature_engagement::NewTabTracker:
+  Tracker* GetTracker() const override { return feature_tracker_; }
 
  private:
   Tracker* const feature_tracker_;
@@ -71,20 +81,25 @@ class NewTabTrackerEventTest : public testing::Test {
   void SetUp() override {
     // Start the DesktopSessionDurationTracker to track active session time.
     metrics::DesktopSessionDurationTracker::Initialize();
-    mock_feature_tracker_ =
-        base::MakeUnique<testing::StrictMock<MockFeatureEngagementTracker>>();
-    new_tab_tracker_ =
-        base::MakeUnique<FakeNewTabTracker>(mock_feature_tracker_.get());
+    testing_profile_manager_ = base::MakeUnique<TestingProfileManager>(
+        TestingBrowserProcess::GetGlobal());
+    ASSERT_TRUE(testing_profile_manager_->SetUp());
+    mock_tracker_ = base::MakeUnique<testing::StrictMock<MockTracker>>();
+    new_tab_tracker_ = base::MakeUnique<FakeNewTabTracker>(
+        mock_tracker_.get(),
+        testing_profile_manager_->CreateTestingProfile(kTestProfileName));
   }
 
   void TearDown() override {
-    new_tab_tracker_->RemoveDurationTrackerObserver();
+    new_tab_tracker_->RemoveSessionDurationObserver();
     metrics::DesktopSessionDurationTracker::CleanupForTesting();
+    testing_profile_manager_.reset();
   }
 
  protected:
+  std::unique_ptr<TestingProfileManager> testing_profile_manager_;
+  std::unique_ptr<MockTracker> mock_tracker_;
   std::unique_ptr<FakeNewTabTracker> new_tab_tracker_;
-  std::unique_ptr<MockFeatureEngagementTracker> mock_feature_tracker_;
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
@@ -99,30 +114,30 @@ class NewTabTrackerEventTest : public testing::Test {
 // If OnNewTabOpened() is called, the feature_engagement::Tracker
 // receives the kNewTabOpenedEvent.
 TEST_F(NewTabTrackerEventTest, TestOnNewTabOpened) {
-  EXPECT_CALL(*mock_feature_tracker_, NotifyEvent(events::kNewTabOpened));
+  EXPECT_CALL(*mock_tracker_, NotifyEvent(events::kNewTabOpened));
   new_tab_tracker_->OnNewTabOpened();
 }
 
 // If OnOmniboxNavigation() is called, the feature_engagement::Tracker
 // receives the kOmniboxInteraction event.
 TEST_F(NewTabTrackerEventTest, TestOnOmniboxNavigation) {
-  EXPECT_CALL(*mock_feature_tracker_, NotifyEvent(events::kOmniboxInteraction));
+  EXPECT_CALL(*mock_tracker_, NotifyEvent(events::kOmniboxInteraction));
   new_tab_tracker_->OnOmniboxNavigation();
 }
 
 // If OnSessionTimeMet() is called, the feature_engagement::Tracker
 // receives the kSessionTime event.
 TEST_F(NewTabTrackerEventTest, TestOnSessionTimeMet) {
-  EXPECT_CALL(*mock_feature_tracker_, NotifyEvent(events::kSessionTime));
+  EXPECT_CALL(*mock_tracker_, NotifyEvent(events::kNewTabSessionTimeMet));
   new_tab_tracker_->OnSessionTimeMet();
 }
 
 namespace {
 
-class NewTabTrackerFeatureEngagementTest : public testing::Test {
+class NewTabTrackerTest : public testing::Test {
  public:
-  NewTabTrackerFeatureEngagementTest() = default;
-  ~NewTabTrackerFeatureEngagementTest() override = default;
+  NewTabTrackerTest() = default;
+  ~NewTabTrackerTest() override = default;
 
   // testing::Test:
   void SetUp() override {
@@ -146,8 +161,8 @@ class NewTabTrackerFeatureEngagementTest : public testing::Test {
         "name:new_tab_opened;comparator:==0;window:3650;storage:3650";
     new_tab_params["event_omnibox_used"] =
         "name:omnibox_used;comparator:>=1;window:3650;storage:3650";
-    new_tab_params["event_session_time"] =
-        "name:session_time;comparator:>=1;window:3650;storage:3650";
+    new_tab_params["event_new_tab_session_time_met"] =
+        "name:new_tab_session_time_met;comparator:>=1;window:3650;storage:3650";
     new_tab_params["event_trigger"] =
         "name:new_tab_trigger;comparator:any;window:3650;storage:3650";
     new_tab_params["event_used"] =
@@ -160,10 +175,15 @@ class NewTabTrackerFeatureEngagementTest : public testing::Test {
     // Start the DesktopSessionDurationTracker to track active session time.
     metrics::DesktopSessionDurationTracker::Initialize();
 
+    testing_profile_manager_ = base::MakeUnique<TestingProfileManager>(
+        TestingBrowserProcess::GetGlobal());
+    ASSERT_TRUE(testing_profile_manager_->SetUp());
+
     feature_engagement_tracker_ = CreateTestTracker();
 
-    new_tab_tracker_ =
-        base::MakeUnique<FakeNewTabTracker>(feature_engagement_tracker_.get());
+    new_tab_tracker_ = base::MakeUnique<FakeNewTabTracker>(
+        feature_engagement_tracker_.get(),
+        testing_profile_manager_->CreateTestingProfile(kTestProfileName));
 
     // The feature engagement tracker does async initialization.
     base::RunLoop().RunUntilIdle();
@@ -171,7 +191,8 @@ class NewTabTrackerFeatureEngagementTest : public testing::Test {
   }
 
   void TearDown() override {
-    new_tab_tracker_->RemoveDurationTrackerObserver();
+    new_tab_tracker_->RemoveSessionDurationObserver();
+    testing_profile_manager_->DeleteTestingProfile(kTestProfileName);
     metrics::DesktopSessionDurationTracker::CleanupForTesting();
 
     // This is required to ensure each test can define its own params.
@@ -196,20 +217,21 @@ class NewTabTrackerFeatureEngagementTest : public testing::Test {
   variations::testing::VariationParamsManager params_manager_;
 
  private:
+  std::unique_ptr<TestingProfileManager> testing_profile_manager_;
   base::test::ScopedFeatureList scoped_feature_list_;
   content::TestBrowserThreadBundle thread_bundle_;
   std::map<std::string, base::FieldTrial*> trials_;
 
-  DISALLOW_COPY_AND_ASSIGN(NewTabTrackerFeatureEngagementTest);
+  DISALLOW_COPY_AND_ASSIGN(NewTabTrackerTest);
 };
 
 }  // namespace
 
-// Tests to verify NewTabFeatureEngagementTracker functional expectations:
+// Tests to verify NewTabTracker functional expectations:
 
 // Test that a promo is not shown if the user uses a New Tab.
 // If OnNewTabOpened() is called, the ShouldShowPromo() should return false.
-TEST_F(NewTabTrackerFeatureEngagementTest, TestShouldNotShowPromo) {
+TEST_F(NewTabTrackerTest, TestShouldNotShowPromo) {
   EXPECT_FALSE(new_tab_tracker_->ShouldShowPromo());
 
   new_tab_tracker_->OnSessionTimeMet();
@@ -225,44 +247,13 @@ TEST_F(NewTabTrackerFeatureEngagementTest, TestShouldNotShowPromo) {
 // Test that a promo is shown if the session time is met and an omnibox
 // navigation occurs. If OnSessionTimeMet() and OnOmniboxNavigation()
 // are called, ShouldShowPromo() should return true.
-TEST_F(NewTabTrackerFeatureEngagementTest, TestShouldShowPromo) {
+TEST_F(NewTabTrackerTest, TestShouldShowPromo) {
   EXPECT_FALSE(new_tab_tracker_->ShouldShowPromo());
 
   new_tab_tracker_->OnSessionTimeMet();
   new_tab_tracker_->OnOmniboxNavigation();
 
   EXPECT_TRUE(new_tab_tracker_->ShouldShowPromo());
-}
-
-// Test that the prefs for session time is being correctly set.
-TEST_F(NewTabTrackerFeatureEngagementTest, TestPrefs) {
-  EXPECT_FALSE(
-      new_tab_tracker_->GetPrefs()->GetBoolean(prefs::kNewTabInProductHelp));
-
-  new_tab_tracker_->OnSessionTimeMet();
-  new_tab_tracker_->OnOmniboxNavigation();
-  new_tab_tracker_->OnOmniboxFocused();
-
-  EXPECT_TRUE(
-      new_tab_tracker_->GetPrefs()->GetBoolean(prefs::kNewTabInProductHelp));
-}
-
-// Test that the correct duration of session is being recorded.
-TEST_F(NewTabTrackerFeatureEngagementTest, TestOnSessionEnded) {
-  metrics::DesktopSessionDurationTracker::Observer* observer =
-      dynamic_cast<FakeNewTabTracker*>(new_tab_tracker_.get());
-
-  // Simulate passing 30 active minutes.
-  observer->OnSessionEnded(base::TimeDelta::FromMinutes(30));
-
-  EXPECT_EQ(30,
-            new_tab_tracker_->GetPrefs()->GetInteger(prefs::kSessionTimeTotal));
-
-  // Simulate passing 50 minutes.
-  observer->OnSessionEnded(base::TimeDelta::FromMinutes(50));
-
-  EXPECT_EQ(80,
-            new_tab_tracker_->GetPrefs()->GetInteger(prefs::kSessionTimeTotal));
 }
 
 }  // namespace feature_engagement

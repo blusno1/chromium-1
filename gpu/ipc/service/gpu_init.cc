@@ -10,10 +10,12 @@
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
+#include "gpu/config/gpu_switching.h"
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "gpu/ipc/service/switches.h"
@@ -87,8 +89,12 @@ void GetGpuInfoFromCommandLine(gpu::GPUInfo& gpu_info,
 
 #if !defined(OS_MACOSX)
 void CollectGraphicsInfo(gpu::GPUInfo& gpu_info) {
+#if defined(OS_FUCHSIA)
+  // TODO(crbug.com/707031): Implement this.
+  NOTIMPLEMENTED();
+  return;
+#else
   TRACE_EVENT0("gpu,startup", "Collect Graphics Info");
-
   gpu::CollectInfoResult result = gpu::CollectContextGraphicsInfo(&gpu_info);
   switch (result) {
     case gpu::kCollectInfoFatalFailure:
@@ -114,6 +120,7 @@ void CollectGraphicsInfo(gpu::GPUInfo& gpu_info) {
     gpu_info.hdr = true;
   }
 #endif  // defined(OS_WIN)
+#endif  // defined(OS_FUCHSIA)
 }
 #endif  // defined(OS_MACOSX)
 
@@ -133,14 +140,33 @@ bool CanAccessNvidiaDeviceFile() {
 
 GpuInit::GpuInit() {}
 
-GpuInit::~GpuInit() {}
+GpuInit::~GpuInit() {
+  gpu::StopForceDiscreteGPU();
+}
 
-bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
-  if (command_line.HasSwitch(switches::kSupportsDualGpus)) {
-    std::set<int> workarounds;
-    gpu::GpuDriverBugList::AppendWorkaroundsFromCommandLine(&workarounds,
-                                                            command_line);
-    gpu::InitializeDualGpusIfSupported(workarounds);
+bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line,
+                                        bool in_process_gpu) {
+  // Get vendor_id, device_id, driver_version from browser process through
+  // commandline switches.
+  // TODO(zmo): Collect basic GPU info (without a context) here instead of
+  // passing from browser process.
+  GetGpuInfoFromCommandLine(gpu_info_, command_line);
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  if (gpu_info_.gpu.vendor_id == 0x10de &&  // NVIDIA
+      gpu_info_.driver_vendor == "NVIDIA" && !CanAccessNvidiaDeviceFile())
+    return false;
+#endif
+  gpu_info_.in_process_gpu = in_process_gpu;
+
+  gpu_info_.passthrough_cmd_decoder =
+      gl::UsePassthroughCommandDecoder(&command_line);
+
+  // Compute blacklist and driver bug workaround decisions based on basic GPU
+  // info.
+  gpu_feature_info_ = gpu::GetGpuFeatureInfo(gpu_info_, command_line);
+  if (gpu::SwitchableGPUsSupported(gpu_info_, command_line)) {
+    gpu::InitializeSwitchableGPUs(
+        gpu_feature_info_.enabled_gpu_driver_bug_workarounds);
   }
 
   // In addition to disabling the watchdog if the command line switch is
@@ -184,19 +210,6 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
 #endif  // OS_WIN
   }
 
-  // Get vendor_id, device_id, driver_version from browser process through
-  // commandline switches.
-  GetGpuInfoFromCommandLine(gpu_info_, command_line);
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  if (gpu_info_.gpu.vendor_id == 0x10de &&  // NVIDIA
-      gpu_info_.driver_vendor == "NVIDIA" && !CanAccessNvidiaDeviceFile())
-    return false;
-#endif
-  gpu_info_.in_process_gpu = false;
-
-  gpu_info_.passthrough_cmd_decoder =
-      gl::UsePassthroughCommandDecoder(&command_line);
-
   sandbox_helper_->PreSandboxStartup();
 
   bool attempted_startsandbox = false;
@@ -218,7 +231,7 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   // Initialize Ozone GPU after the watchdog in case it hangs. The sandbox
   // may also have started at this point.
   ui::OzonePlatform::InitParams params;
-  params.single_process = false;
+  params.single_process = in_process_gpu;
   ui::OzonePlatform::InitializeForGPU(params);
 #endif
 
@@ -227,10 +240,10 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   // browser process, for example.
   bool gl_initialized = gl::GetGLImplementation() != gl::kGLImplementationNone;
   if (!gl_initialized)
-    gl_initialized = gl::init::InitializeGLOneOff();
+    gl_initialized = gl::init::InitializeGLNoExtensionsOneOff();
 
   if (!gl_initialized) {
-    VLOG(1) << "gl::init::InitializeGLOneOff failed";
+    VLOG(1) << "gl::init::InitializeGLNoExtensionsOneOff failed";
     return false;
   }
 
@@ -251,9 +264,6 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   UMA_HISTOGRAM_TIMES("GPU.CollectContextGraphicsInfo", collect_context_time);
 
   gpu_feature_info_ = gpu::GetGpuFeatureInfo(gpu_info_, command_line);
-  // TODO(zmo): Apply disabled extensions to GL bindings. Even though the GL
-  // bindings have already been initialized, we can still set the disabled
-  // extensions, so the next GetString call will return desired value.
   if (!gpu_feature_info_.enabled_gpu_driver_bug_workarounds.empty()) {
     // TODO(zmo): Remove this block of code. They are only for existing tests.
     std::set<int> workarounds;
@@ -263,6 +273,15 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
     base::CommandLine* cmd_line = const_cast<base::CommandLine*>(&command_line);
     cmd_line->AppendSwitchASCII(switches::kGpuDriverBugWorkarounds,
                                 gpu::IntSetToString(workarounds, ','));
+  }
+  if (!gpu_feature_info_.disabled_extensions.empty()) {
+    gl::init::SetDisabledExtensionsPlatform(
+        gpu_feature_info_.disabled_extensions);
+  }
+  gl_initialized = gl::init::InitializeExtensionSettingsOneOffPlatform();
+  if (!gl_initialized) {
+    VLOG(1) << "gl::init::InitializeExtensionSettingsOneOffPlatform failed";
+    return false;
   }
 
   base::TimeDelta initialize_one_off_time =

@@ -21,6 +21,7 @@ IntegrationTestRunner._setupTestHelpers = function(target) {
   TestRunner.HeapProfilerAgent = target.heapProfilerAgent();
   TestRunner.InspectorAgent = target.inspectorAgent();
   TestRunner.NetworkAgent = target.networkAgent();
+  TestRunner.OverlayAgent = target.overlayAgent();
   TestRunner.PageAgent = target.pageAgent();
   TestRunner.ProfilerAgent = target.profilerAgent();
   TestRunner.RuntimeAgent = target.runtimeAgent();
@@ -35,6 +36,7 @@ IntegrationTestRunner._setupTestHelpers = function(target) {
   TestRunner.domDebuggerModel = target.model(SDK.DOMDebuggerModel);
   TestRunner.cssModel = target.model(SDK.CSSModel);
   TestRunner.cpuProfilerModel = target.model(SDK.CPUProfilerModel);
+  TestRunner.overlayModel = target.model(SDK.OverlayModel);
   TestRunner.serviceWorkerManager = target.model(SDK.ServiceWorkerManager);
   TestRunner.tracingManager = target.model(SDK.TracingManager);
   TestRunner.mainTarget = target;
@@ -110,7 +112,18 @@ TestRunner.evaluateInPageWithTimeout = function(code) {
 TestRunner.evaluateFunctionInOverlay = function(func, callback) {
   var expression = 'testRunner.evaluateInWebInspectorOverlay("(" + ' + func + ' + ")()")';
   var mainContext = TestRunner.runtimeModel.executionContexts()[0];
-  mainContext.evaluate(expression, '', false, false, true, false, false, result => void callback(result.value));
+  mainContext
+      .evaluate(
+          {
+            expression: expression,
+            objectGroup: '',
+            includeCommandLineAPI: false,
+            silent: false,
+            returnByValue: true,
+            generatePreview: false
+          },
+          /* userGesture */ false, /* awaitPromise*/ false)
+      .then(result => void callback(result.object.value));
 };
 
 /**
@@ -156,6 +169,60 @@ TestRunner.addScriptTag = function(path) {
     })();
   `);
 };
+
+/**
+ * @param {string} path
+ * @return {!Promise<!SDK.RemoteObject|undefined>}
+ */
+TestRunner.addStylesheetTag = function(path) {
+  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
+  var resolvedPath = testScriptURL + '/../' + path;
+
+  return TestRunner.evaluateInPageAsync(`
+    (function(){
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.type = 'text/css';
+      link.href = '${resolvedPath}';
+      link.onload = onload;
+      document.head.append(link);
+      var resolve;
+      var promise = new Promise(r => resolve = r);
+      function onload() {
+        // Force style recalc
+        window.getComputedStyle(document.body).color;
+        resolve();
+      }
+      return promise;
+    })();
+  `);
+};
+
+/**
+ * @param {string} path
+ * @return {!Promise<!SDK.RemoteObject|undefined>}
+ */
+TestRunner.addIframe = function(path) {
+  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
+  var resolvedPath = testScriptURL + '/../' + path;
+
+  return TestRunner.evaluateInPageAsync(`
+    (function(){
+      var iframe = document.createElement('iframe');
+      iframe.src = '${resolvedPath}';
+      iframe.onload = onload;
+      document.body.appendChild(iframe);
+
+      var resolve;
+      var promise = new Promise(r => resolve = r);
+      function onload() {
+        resolve();
+      }
+      return promise;
+    })();
+  `);
+};
+
 
 /**
  * @param {string} title
@@ -518,6 +585,244 @@ TestRunner.runWhenPageLoads = function(callback) {
   TestRunner._pageLoadedCallback = TestRunner.safeWrap(chainedCallback);
 };
 
+/**
+ * @param {!Array<function(function():void)>} testSuite
+ */
+TestRunner.runTestSuite = async function(testSuite) {
+  for (var test of testSuite) {
+    TestRunner.addResult('');
+    TestRunner.addResult(
+        'Running: ' +
+        /function\s([^(]*)/.exec(test)[1]);
+    await new Promise(fulfill => TestRunner.safeWrap(test)(fulfill));
+  }
+  TestRunner.completeTest();
+};
+
+/**
+ * @param {*} expected
+ * @param {*} found
+ * @param {string} message
+ */
+TestRunner.assertEquals = function(expected, found, message) {
+  if (expected === found)
+    return;
+
+  var error;
+  if (message)
+    error = 'Failure (' + message + '):';
+  else
+    error = 'Failure:';
+  throw new Error(error + ' expected <' + expected + '> found <' + found + '>');
+};
+
+/**
+ * @param {*} found
+ * @param {string} message
+ */
+TestRunner.assertTrue = function(found, message) {
+  TestRunner.assertEquals(true, !!found, message);
+};
+
+/**
+ * @param {!Object} receiver
+ * @param {string} methodName
+ * @param {!Function} override
+ * @param {boolean=} opt_sticky
+ * @return {!Function}
+ */
+TestRunner.override = function(receiver, methodName, override, opt_sticky) {
+  override = TestRunner.safeWrap(override);
+
+  var original = receiver[methodName];
+  if (typeof original !== 'function')
+    throw new Error('Cannot find method to override: ' + methodName);
+
+  receiver[methodName] = function(var_args) {
+    try {
+      return override.apply(this, arguments);
+    } catch (e) {
+      throw new Error('Exception in overriden method \'' + methodName + '\': ' + e);
+    } finally {
+      if (!opt_sticky)
+        receiver[methodName] = original;
+    }
+  };
+
+  return original;
+};
+
+/**
+ * @param {string} text
+ * @return {string}
+ */
+TestRunner.clearSpecificInfoFromStackFrames = function(text) {
+  var buffer = text.replace(/\(file:\/\/\/(?:[^)]+\)|[\w\/:-]+)/g, '(...)');
+  buffer = buffer.replace(/\(<anonymous>:[^)]+\)/g, '(...)');
+  buffer = buffer.replace(/VM\d+/g, 'VM');
+  return buffer.replace(/\s*at[^()]+\(native\)/g, '');
+};
+
+TestRunner.hideInspectorView = function() {
+  UI.inspectorView.element.setAttribute('style', 'display:none !important');
+};
+
+/**
+ * @return {?SDK.ResourceTreeFrame}
+ */
+TestRunner.mainFrame = function() {
+  return TestRunner.resourceTreeModel.mainFrame;
+};
+
+
+TestRunner.StringOutputStream = class {
+  /**
+   * @param {function(string):void} callback
+   */
+  constructor(callback) {
+    this._callback = callback;
+    this._buffer = '';
+  }
+
+  /**
+   * @param {string} fileName
+   * @return {!Promise<boolean>}
+   */
+  async open(fileName) {
+    return true;
+  }
+
+  /**
+   * @param {string} chunk
+   */
+  async write(chunk) {
+    this._buffer += chunk;
+  }
+
+  async close() {
+    this._callback(this._buffer);
+  }
+};
+
+/**
+ * @template V
+ */
+TestRunner.MockSetting = class {
+  /**
+   * @param {V} value
+   */
+  constructor(value) {
+    this._value = value;
+  }
+
+  /**
+   * @return {V}
+   */
+  get() {
+    return this._value;
+  }
+
+  /**
+   * @param {V} value
+   */
+  set(value) {
+    this._value = value;
+  }
+};
+
+/**
+ * @return {!Array<!Runtime.Module>}
+ */
+TestRunner.loadedModules = function() {
+  return self.runtime._modules.filter(module => module._loadedForTest);
+};
+
+/**
+ * @param {!Array<!Runtime.Module>} relativeTo
+ * @return {!Array<!Runtime.Module>}
+ */
+TestRunner.dumpLoadedModules = function(relativeTo) {
+  var previous = new Set(relativeTo || []);
+  function moduleSorter(left, right) {
+    return String.naturalOrderComparator(left._descriptor.name, right._descriptor.name);
+  }
+
+  TestRunner.addResult('Loaded modules:');
+  var loadedModules = TestRunner.loadedModules().sort(moduleSorter);
+  for (var module of loadedModules) {
+    if (previous.has(module))
+      continue;
+    TestRunner.addResult('    ' + module._descriptor.name);
+  }
+  return loadedModules;
+};
+
+/**
+ * @param {!SDK.Target} target
+ * @return {boolean}
+ */
+TestRunner.isDedicatedWorker = function(target) {
+  return target && !target.hasBrowserCapability() && target.hasJSCapability() && !target.hasTargetCapability();
+};
+
+/**
+ * @param {!SDK.Target} target
+ * @return {boolean}
+ */
+TestRunner.isServiceWorker = function(target) {
+  return target && !target.hasBrowserCapability() && !target.hasJSCapability() && target.hasNetworkCapability() &&
+      target.hasTargetCapability();
+};
+
+/**
+ * @param {!SDK.Target} target
+ * @return {string}
+ */
+TestRunner.describeTargetType = function(target) {
+  if (TestRunner.isDedicatedWorker(target))
+    return 'worker';
+  if (TestRunner.isServiceWorker(target))
+    return 'service-worker';
+  if (!target.parentTarget())
+    return 'page';
+  return 'frame';
+};
+
+/**
+ * @param {string} urlSuffix
+ * @param {!Workspace.projectTypes=} projectType
+ * @return {!Promise}
+ */
+TestRunner.waitForUISourceCode = function(urlSuffix, projectType) {
+  /**
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @return {boolean}
+   */
+  function matches(uiSourceCode) {
+    if (projectType && uiSourceCode.project().type() !== projectType)
+      return false;
+    if (!projectType && uiSourceCode.project().type() === Workspace.projectTypes.Service)
+      return false;
+    if (urlSuffix && !uiSourceCode.url().endsWith(urlSuffix))
+      return false;
+    return true;
+  }
+
+  for (var uiSourceCode of Workspace.workspace.uiSourceCodes()) {
+    if (urlSuffix && matches(uiSourceCode))
+      return Promise.resolve(uiSourceCode);
+  }
+
+  return TestRunner.waitForEvent(Workspace.Workspace.Events.UISourceCodeAdded, Workspace.workspace, matches);
+};
+
+/**
+ * @param {!Function} callback
+ */
+TestRunner.waitForUISourceCodeRemoved = function(callback) {
+  Workspace.workspace.once(Workspace.Workspace.Events.UISourceCodeRemoved).then(callback);
+};
+
 /** @type {boolean} */
 IntegrationTestRunner._startedTest = false;
 
@@ -534,7 +839,7 @@ IntegrationTestRunner.TestObserver = class {
       return;
     IntegrationTestRunner._startedTest = true;
     IntegrationTestRunner._setupTestHelpers(target);
-    TestRunner.executeTestScript();
+    IntegrationTestRunner.runTest();
   }
 
   /**
@@ -543,6 +848,17 @@ IntegrationTestRunner.TestObserver = class {
    */
   targetRemoved(target) {
   }
+};
+
+IntegrationTestRunner.runTest = async function() {
+  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
+  var basePath = testScriptURL + '/../';
+  await TestRunner.evaluateInPagePromise(`
+    function relativeToTest(relativePath) {
+      return '${basePath}' + relativePath;
+    }
+  `);
+  TestRunner.executeTestScript();
 };
 
 SDK.targetManager.observeTargets(new IntegrationTestRunner.TestObserver());

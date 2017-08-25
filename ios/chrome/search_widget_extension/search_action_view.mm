@@ -4,6 +4,8 @@
 
 #import "ios/chrome/search_widget_extension/search_action_view.h"
 
+#import <NotificationCenter/NotificationCenter.h>
+
 #include "base/ios/ios_util.h"
 #import "ios/chrome/search_widget_extension/ui_util.h"
 
@@ -22,14 +24,22 @@ const CGFloat kIconSize = 35;
 
 - (instancetype)initWithActionTarget:(id)target
                       actionSelector:(SEL)actionSelector
-                       primaryEffect:(UIVisualEffect*)primaryEffect
-                     secondaryEffect:(UIVisualEffect*)secondaryEffect
                                title:(NSString*)title
                            imageName:(NSString*)imageName {
   DCHECK(target);
   self = [super initWithFrame:CGRectZero];
   if (self) {
     self.translatesAutoresizingMaskIntoConstraints = NO;
+
+    UIVibrancyEffect* primaryEffect;
+    UIVibrancyEffect* secondaryEffect;
+    if (base::ios::IsRunningOnIOS10OrLater()) {
+      primaryEffect = [UIVibrancyEffect widgetPrimaryVibrancyEffect];
+      secondaryEffect = [UIVibrancyEffect widgetSecondaryVibrancyEffect];
+    } else {
+      primaryEffect = [UIVibrancyEffect notificationCenterVibrancyEffect];
+      secondaryEffect = [UIVibrancyEffect notificationCenterVibrancyEffect];
+    }
 
     UIVisualEffectView* primaryEffectView =
         [[UIVisualEffectView alloc] initWithEffect:primaryEffect];
@@ -53,7 +63,7 @@ const CGFloat kIconSize = 35;
     labelView.text = title;
     labelView.numberOfLines = 0;
     labelView.textAlignment = NSTextAlignmentCenter;
-    labelView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    labelView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
     labelView.isAccessibilityElement = NO;
     [labelView
         setContentCompressionResistancePriority:UILayoutPriorityRequired
@@ -83,6 +93,8 @@ const CGFloat kIconSize = 35;
                                                 actionButton, stack)];
 
     UIImage* iconImage = [UIImage imageNamed:imageName];
+    iconImage =
+        [iconImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     UIImageView* icon = [[UIImageView alloc] initWithImage:iconImage];
     icon.translatesAutoresizingMaskIntoConstraints = NO;
     if (base::ios::IsRunningOnIOS10OrLater()) {

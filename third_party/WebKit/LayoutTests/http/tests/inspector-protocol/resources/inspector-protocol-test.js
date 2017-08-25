@@ -19,32 +19,13 @@ var TestRunner = class {
     this._completeTest.call(null);
   }
 
-  log(text) {
-    this._log.call(null, text);
+  log(item, title, stabilizeNames) {
+    if (typeof item === 'object')
+      return this._logObject(item, title, stabilizeNames);
+    this._log.call(null, item);
   }
 
-  logMessage(originalMessage, title) {
-    var message = JSON.parse(JSON.stringify(originalMessage));
-    if (message.id)
-      message.id = '<messageId>';
-    const nonStableFields = new Set(['nodeId', 'objectId', 'scriptId', 'timestamp', 'backendNodeId', 'parentId', 'frameId', 'baseURL', 'documentURL']);
-    var objects = [message];
-    while (objects.length) {
-      var object = objects.shift();
-      for (var key in object) {
-        if (nonStableFields.has(key))
-          object[key] = `<${key}>`;
-        else if (typeof object[key] === 'string' && object[key].match(/\d+:\d+:\d+:debug/))
-          object[key] = object[key].replace(/\d+/, '<scriptId>');
-        else if (typeof object[key] === 'object')
-          objects.push(object[key]);
-      }
-    }
-    this.logObject(message, title);
-    return originalMessage;
-  }
-
-  logObject(object, title) {
+  _logObject(object, title, stabilizeNames = ['id', 'nodeId', 'objectId', 'scriptId', 'timestamp', 'backendNodeId', 'parentId', 'frameId', 'baseURL', 'documentURL']) {
     var lines = [];
 
     function dumpValue(value, prefix, prefixWithName) {
@@ -70,7 +51,10 @@ var TestRunner = class {
         if (!object.hasOwnProperty(name))
           continue;
         var prefixWithName = '    ' + prefix + name + ' : ';
-        dumpValue(object[name], '    ' + prefix, prefixWithName);
+        var value = object[name];
+        if (stabilizeNames && stabilizeNames.includes(name))
+          value = `<${typeof value}>`;
+        dumpValue(value, '    ' + prefix, prefixWithName);
       }
       lines.push(prefix + '}');
     }
@@ -85,7 +69,7 @@ var TestRunner = class {
     }
 
     dumpValue(object, '', title || '');
-    this.log(lines.join('\n'));
+    this._log.call(null, lines.join('\n'));
   }
 
   url(relative) {

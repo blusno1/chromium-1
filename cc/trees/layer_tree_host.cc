@@ -394,6 +394,10 @@ void LayerTreeHost::UpdateDeferCommitsInternal() {
                            !local_surface_id_.is_valid()));
 }
 
+bool LayerTreeHost::IsUsingLayerLists() const {
+  return settings_.use_layer_lists;
+}
+
 void LayerTreeHost::CommitComplete() {
   source_frame_number_++;
   client_->DidCommit();
@@ -690,7 +694,7 @@ bool LayerTreeHost::DoUpdateLayers(Layer* root_layer) {
                                                   device_scale_factor_);
     // The HUD layer is managed outside the layer list sent to LayerTreeHost
     // and needs to have its property tree state set.
-    if (settings_.use_layer_lists && root_layer_.get()) {
+    if (IsUsingLayerLists() && root_layer_.get()) {
       hud_layer_->SetTransformTreeIndex(root_layer_->transform_tree_index());
       hud_layer_->SetEffectTreeIndex(root_layer_->effect_tree_index());
       hud_layer_->SetClipTreeIndex(root_layer_->clip_tree_index());
@@ -712,9 +716,9 @@ bool LayerTreeHost::DoUpdateLayers(Layer* root_layer) {
         TRACE_DISABLED_BY_DEFAULT("cc.debug.cdp-perf"),
         "LayerTreeHostInProcessCommon::ComputeVisibleRectsWithPropertyTrees");
     PropertyTrees* property_trees = &property_trees_;
-    if (!settings_.use_layer_lists) {
-      // If use_layer_lists is set, then the property trees should have been
-      // built by the client already.
+    if (!IsUsingLayerLists()) {
+      // In SPv2 the property trees should have been built by the
+      // client already.
       PropertyTreeBuilder::BuildPropertyTrees(
           root_layer, page_scale_layer, inner_viewport_scroll_layer(),
           outer_viewport_scroll_layer(), overscroll_elasticity_layer(),
@@ -967,7 +971,11 @@ void LayerTreeHost::SetEventListenerProperties(
   SetNeedsCommit();
 }
 
-void LayerTreeHost::SetViewportSize(const gfx::Size& device_viewport_size) {
+void LayerTreeHost::SetViewportSize(
+    const gfx::Size& device_viewport_size,
+    const viz::LocalSurfaceId& local_surface_id) {
+  if (settings_.enable_surface_synchronization)
+    SetLocalSurfaceId(local_surface_id);
   if (device_viewport_size_ == device_viewport_size)
     return;
 
@@ -1037,6 +1045,12 @@ void LayerTreeHost::SetDeviceScaleFactor(float device_scale_factor) {
   SetNeedsCommit();
 }
 
+void LayerTreeHost::SetRecordingScaleFactor(float recording_scale_factor) {
+  if (recording_scale_factor_ == recording_scale_factor)
+    return;
+  recording_scale_factor_ = recording_scale_factor;
+}
+
 void LayerTreeHost::SetPaintedDeviceScaleFactor(
     float painted_device_scale_factor) {
   if (painted_device_scale_factor_ == painted_device_scale_factor)
@@ -1075,7 +1089,7 @@ void LayerTreeHost::RegisterLayer(Layer* layer) {
   DCHECK(!LayerById(layer->id()));
   DCHECK(!in_paint_layer_contents_);
   layer_id_map_[layer->id()] = layer;
-  if (layer->element_id()) {
+  if (!IsUsingLayerLists() && layer->element_id()) {
     mutator_host_->RegisterElement(layer->element_id(),
                                    ElementListType::ACTIVE);
   }
@@ -1084,7 +1098,7 @@ void LayerTreeHost::RegisterLayer(Layer* layer) {
 void LayerTreeHost::UnregisterLayer(Layer* layer) {
   DCHECK(LayerById(layer->id()));
   DCHECK(!in_paint_layer_contents_);
-  if (layer->element_id()) {
+  if (!IsUsingLayerLists() && layer->element_id()) {
     mutator_host_->UnregisterElement(layer->element_id(),
                                      ElementListType::ACTIVE);
   }
@@ -1246,7 +1260,7 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
   tree_impl->set_top_controls_height(top_controls_height_);
   tree_impl->set_bottom_controls_height(bottom_controls_height_);
   tree_impl->PushBrowserControlsFromMainThread(top_controls_shown_ratio_);
-  tree_impl->elastic_overscroll()->PushFromMainThread(elastic_overscroll_);
+  tree_impl->elastic_overscroll()->PushMainToPending(elastic_overscroll_);
   if (tree_impl->IsActiveTree())
     tree_impl->elastic_overscroll()->PushPendingToActive();
 
@@ -1296,21 +1310,14 @@ Layer* LayerTreeHost::LayerByElementId(ElementId element_id) const {
 void LayerTreeHost::RegisterElement(ElementId element_id,
                                     ElementListType list_type,
                                     Layer* layer) {
-  if (layer->element_id()) {
-    element_layers_map_[layer->element_id()] = layer;
-  }
-
+  element_layers_map_[element_id] = layer;
   mutator_host_->RegisterElement(element_id, list_type);
 }
 
 void LayerTreeHost::UnregisterElement(ElementId element_id,
-                                      ElementListType list_type,
-                                      Layer* layer) {
+                                      ElementListType list_type) {
   mutator_host_->UnregisterElement(element_id, list_type);
-
-  if (layer->element_id()) {
-    element_layers_map_.erase(layer->element_id());
-  }
+  element_layers_map_.erase(element_id);
 }
 
 static void SetElementIdForTesting(Layer* layer) {
@@ -1346,7 +1353,7 @@ void LayerTreeHost::SetMutatorsNeedRebuildPropertyTrees() {
 void LayerTreeHost::SetElementFilterMutated(ElementId element_id,
                                             ElementListType list_type,
                                             const FilterOperations& filters) {
-  if (settings_.use_layer_lists) {
+  if (IsUsingLayerLists()) {
     // In SPv2 we always have property trees and can set the filter
     // directly on the effect node.
     property_trees_.effect_tree.OnFilterAnimated(element_id, filters);
@@ -1364,7 +1371,7 @@ void LayerTreeHost::SetElementOpacityMutated(ElementId element_id,
   DCHECK_GE(opacity, 0.f);
   DCHECK_LE(opacity, 1.f);
 
-  if (settings_.use_layer_lists) {
+  if (IsUsingLayerLists()) {
     property_trees_.effect_tree.OnOpacityAnimated(element_id, opacity);
     return;
   }
@@ -1390,7 +1397,7 @@ void LayerTreeHost::SetElementTransformMutated(
     ElementId element_id,
     ElementListType list_type,
     const gfx::Transform& transform) {
-  if (settings_.use_layer_lists) {
+  if (IsUsingLayerLists()) {
     property_trees_.transform_tree.OnTransformAnimated(element_id, transform);
     return;
   }

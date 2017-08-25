@@ -13,6 +13,22 @@
 #include "base/logging.h"
 
 namespace zucchini {
+
+// Describes a region within a buffer, with starting offset and size.
+struct BufferRegion {
+  // size_t is used to match BufferViewBase::size_type, which is used when
+  // indexing in a buffer view.
+  size_t offset;
+  size_t size;
+
+  friend bool operator==(const BufferRegion& a, const BufferRegion& b) {
+    return a.offset == b.offset && a.size == b.size;
+  }
+  friend bool operator!=(const BufferRegion& a, const BufferRegion& b) {
+    return !(a == b);
+  }
+};
+
 namespace internal {
 
 // BufferViewBase should not be used directly; it is an implementation used for
@@ -42,6 +58,9 @@ class BufferViewBase {
       : first_(first), last_(first_ + size) {
     DCHECK_GE(last_, first_);
   }
+  template <class U>
+  explicit BufferViewBase(const BufferViewBase<U>& that)
+      : first_(that.begin()), last_(that.end()) {}
 
   BufferViewBase(const BufferViewBase&) = default;
   BufferViewBase& operator=(const BufferViewBase&) = default;
@@ -62,6 +81,13 @@ class BufferViewBase {
     return first_[pos];
   }
 
+  // Returns a sub-buffer described by |region|.
+  BufferViewBase operator[](BufferRegion region) const {
+    DCHECK_LE(region.offset, size());
+    DCHECK_LE(region.size, size() - region.offset);
+    return {begin() + region.offset, region.size};
+  }
+
   template <class U>
   const U& read(size_type pos) const {
     CHECK_LE(pos + sizeof(U), size());
@@ -79,6 +105,14 @@ class BufferViewBase {
   bool empty() const { return first_ == last_; }
   size_type size() const { return last_ - first_; }
 
+  // Returns a BufferRegion describing the full view.
+  BufferRegion region() const { return BufferRegion{0, size()}; }
+
+  // Returns true iff the object is large enough to entirely cover |region|.
+  bool covers(const BufferRegion& region) const {
+    return region.offset < size() && size() - region.offset >= region.size;
+  }
+
   // Modifiers
 
   void shrink(size_type new_size) {
@@ -90,6 +124,13 @@ class BufferViewBase {
   void remove_prefix(size_type n) {
     DCHECK_LE(n, size());
     first_ += n;
+  }
+
+  // Moves the start of the view to |pos| which is in range [begin(), end()).
+  void seek(iterator pos) {
+    DCHECK_GE(pos, begin());
+    DCHECK_LE(pos, end());
+    first_ = pos;
   }
 
  private:

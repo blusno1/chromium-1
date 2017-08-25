@@ -104,6 +104,19 @@ crbug.com/451577 [ Mac ] inspector/network/network-domain-filter.html [ Slow ]
 
 crbug.com/237245 [ Debug Win7 ] editing/selection/programmatic-selection-on-mac-is-directionless.html [ Slow ]
 
+#############################################################
+# Marking migrated DevTools tests slow based on existing bugs
+# See crbug.com/667560 for details
+
+# Most DevTools tests are slow in Debug.
+webkit.org/b/90488 [ Debug ] http/tests/devtools/ [ Slow ]
+webkit.org/b/90488 [ Debug ] virtual/mojo-loading/http/tests/devtools/ [ Slow ]
+crbug.com/451577 http/tests/devtools/console [ Slow ]
+crbug.com/450493 http/tests/devtools/sources/ [ Slow ]
+crbug.com/450493 virtual/mojo-loading/http/tests/devtools/sources/ [ Slow ]
+
+#############################################################
+
 # Most inspector tests are slow in Debug.
 webkit.org/b/90488 [ Debug ] inspector/ [ Slow ]
 webkit.org/b/90488 [ Debug ] http/tests/inspector/ [ Slow ]
@@ -111,10 +124,8 @@ webkit.org/b/90488 [ Debug ] virtual/mojo-loading/http/tests/inspector/ [ Slow ]
 webkit.org/b/90488 [ Debug ] http/tests/inspector-enabled/ [ Slow ]
 webkit.org/b/90488 [ Debug ] virtual/mojo-loading/http/tests/inspector-enabled/ [ Slow ]
 webkit.org/b/90488 [ Debug ] inspector-protocol/ [ Slow ]
-crbug.com/451577 inspector/console [ Slow ]
 crbug.com/679833 http/tests/inspector/network/network-datareceived.html [ Slow ]
 crbug.com/679833 virtual/mojo-loading/http/tests/inspector/network/network-datareceived.html [ Slow ]
-crbug.com/679833 virtual/off-main-thread-fetch/http/tests/inspector/network/network-datareceived.html [ Slow ]
 
 # Debugger and profiler tests are slow in Release as well.
 crbug.com/450493 inspector/sources/ [ Slow ]
@@ -247,7 +258,7 @@ crbug.com/522646 http/tests/media/encrypted-media/encrypted-media-encrypted-even
 crbug.com/522646 virtual/mojo-loading/http/tests/media/encrypted-media/encrypted-media-encrypted-event-different-origin.html [ Slow ]
 crbug.com/411164 [ Win ] http/tests/security/powerfulFeatureRestrictions/serviceworker-on-insecure-origin.html [ Slow ]
 crbug.com/411164 [ Win ] virtual/mojo-loading/http/tests/security/powerfulFeatureRestrictions/serviceworker-on-insecure-origin.html [ Slow ]
-crbug.com/510337 inspector/console/console-format.html [ Slow ]
+crbug.com/510337 http/tests/devtools/console/console-format.html [ Slow ]
 crbug.com/357427 http/tests/workers/terminate-during-sync-operation-file.html [ Slow ]
 crbug.com/357427 virtual/mojo-loading/http/tests/workers/terminate-during-sync-operation-file.html [ Slow ]
 crbug.com/357427 http/tests/workers/terminate-during-sync-operation-filesystem.html [ Slow ]
@@ -353,7 +364,6 @@ crbug.com/606649 fast/dom/gc-dom-tree-lifetime.html [ Slow ]
 # Slow on Win Debug in part due to incremental linking.
 crbug.com/647192 [ Win Debug ] fast/css3-text/css3-word-break/word-break-all-ascii.html [ Slow ]
 crbug.com/647192 [ Win Debug ] virtual/mojo-loading/webexposed/global-interface-listing.html [ Slow ]
-crbug.com/647192 [ Win Debug ] virtual/service-worker-navigation-preload-disabled/webexposed/global-interface-listing.html [ Slow ]
 crbug.com/647192 [ Win Debug ] virtual/stable/webexposed/global-interface-listing.html [ Slow ]
 crbug.com/647192 [ Win Debug ] webexposed/global-interface-listing.html [ Slow ]
 
@@ -361,6 +371,73 @@ crbug.com/647192 [ Win Debug ] webexposed/global-interface-listing.html [ Slow ]
 # bots running tests on real hardware or maybe when using SwiftShader.
 crbug.com/646528 compositing/lots-of-img-layers.html [ Slow ]
 crbug.com/646528 compositing/lots-of-img-layers-with-opacity.html [ Slow ]
+
+# SwiftShader slow tests
+crbug.com/726075 [ Win ] animations/svg/animated-filter-svg-element.html [ Slow ]
+crbug.com/726075 [ Win ] compositing/masks/mask-with-added-filters.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-all-on-background-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-blur-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-brightness-clamping-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-combined-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-drop-shadow-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-reference-colorspace-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-reference-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-reference-ordering-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-reference-subregion-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/effect-reference-zoom-hw.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/filter-change-repaint.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/filter-repaint-composited-fallback-crash.html [ Slow ]
+crbug.com/726075 [ Win ] css3/filters/filter-repaint-composited-fallback.html [ Slow ]
+crbug.com/726075 [ Win ] images/color-profile-layer-filter.html [ Slow ]
+crbug.com/726075 [ Win ] paint/invalidation/filter-repaint-accelerated-on-accelerated-filter.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/exotic-color-space/images/color-profile-layer-filter.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu-rasterization/images/color-profile-image-filter-all.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu-rasterization/images/color-profile-mask-image-svg.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/OffscreenCanvas-filter-in-worker.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/OffscreenCanvas-filter.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-blending-color-over-pattern.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-blending-gradient-over-image.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-blending-gradient-over-pattern.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-blending-gradient-over-gradient.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-blending-pattern-over-gradient.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-blending-pattern-over-image.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-blending-pattern-over-pattern.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-composite-shadow.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-composite-video-shadow.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-fillPath-alpha-shadow.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-fillPath-gradient-shadow.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-fillPath-pattern-shadow.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-filter-origin-clean.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-filter-removed.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-scale-strokePath-shadow.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-shadow-source-in.html [ Slow ]
+crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/canvas-strokePath-alpha-shadow.html [ Slow ]
+
+crbug.com/726075 [ Win Debug ] compositing/culling/filter-occlusion-blur.html [ Slow ]
+crbug.com/726075 [ Win Debug ] css3/blending/mix-blend-mode-with-filters.html [ Slow ]
+crbug.com/726075 [ Win Debug ] paint/invalidation/filter-repaint-accelerated-child-with-filter-child.html [ Slow ]
+crbug.com/726075 [ Win Debug ] paint/invalidation/filter-repaint-on-accelerated-layer.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-clipping.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-color-over-color.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-color-over-gradient.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-color-over-image.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-fill-style.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-global-alpha.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-gradient-over-color.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-image-over-color.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-image-over-gradient.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-image-over-image.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-image-over-pattern.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-pattern-over-color.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-shadow.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-text.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-blending-transforms.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-composite-transformclip.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-filter-modified-save-restore.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-filter-modified.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-scale-drawImage-shadow.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/threaded/animations/interpolation/svg-d-interpolation.html [ Slow ]
+crbug.com/726075 [ Win Debug ] virtual/threaded/animations/svg/animated-filter-svg-element.html [ Slow ]
 
 # IDB Observer tests require multiple browsing contexts/workers interacting with
 # IndexedDB, which can be slow.
@@ -410,3 +487,22 @@ crbug.com/748418 virtual/mojo-loading/http/tests/streams/chromium/simple-queue-f
 crbug.com/748418 virtual/mojo-loading/http/tests/streams/chromium/simple-queue-full-node-shift.html [ Slow ]
 crbug.com/748418 virtual/mojo-loading/http/tests/streams/chromium/simple-queue-many-foreach.html [ Slow ]
 crbug.com/748418 virtual/mojo-loading/http/tests/streams/chromium/simple-queue-push-shift-peek.html [ Slow ]
+
+crbug.com/626703 [ Debug ] external/wpt/html/nemantics/tabular-data/processing-model-1/span-limits.html [ Slow ]
+
+# This test continues to fail as timeout on Win7(dbg)
+crbug.com/757292 [ Win Debug ] external/wpt/encoding/legacy-mb-korean/euc-kr/euckr-encode-form-errors-han.html [ Slow ]
+
+# These tests create and destroys too many workers, and on debug build, V8 snapshot serializer takes long time to make an index book for external reference
+crbug.com/v8/6448 [ Debug ] external/wpt/service-workers/service-worker/register-link-element.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] external/wpt/service-workers/service-worker/registration-updateviacache.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] external/wpt/service-workers/service-worker/registration.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] fast/workers/worker-exception-during-navigation.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] virtual/mojo-blobs/external/wpt/service-workers/service-worker/register-link-element.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] virtual/mojo-blobs/external/wpt/service-workers/service-worker/registration-updateviacache.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] virtual/mojo-blobs/external/wpt/service-workers/service-worker/registration.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] virtual/service-worker-script-streaming/external/wpt/service-workers/service-worker/foreign-fetch-cors.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] virtual/service-worker-script-streaming/external/wpt/service-workers/service-worker/register-link-element.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] virtual/service-worker-script-streaming/external/wpt/service-workers/service-worker/registration-updateviacache.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] virtual/service-worker-script-streaming/external/wpt/service-workers/service-worker/registration.https.html [ Slow ]
+crbug.com/v8/6448 [ Debug ] virtual/service-worker-script-streaming/http/tests/serviceworker/chromium/register-different-script-many-times.html [ Slow ]

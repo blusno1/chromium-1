@@ -5,7 +5,6 @@
 #include "ios/chrome/browser/payments/ios_payment_instrument.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -16,6 +15,8 @@ namespace payments {
 // URL payment method identifiers for iOS payment apps.
 const char kBobpayPaymentMethodIdentifier[] =
     "https://emerald-eon.appspot.com/bobpay";
+const char kAlicepayPaymentMethodIdentifier[] =
+    "https://emerald-eon.appspot.com/alicepay";
 
 // Scheme names for iOS payment apps.
 const char kBobpaySchemeName[] = "bobpay://";
@@ -24,13 +25,13 @@ const std::map<std::string, std::string>& GetMethodNameToSchemeName() {
   static const std::map<std::string, std::string> kMethodToScheme =
       std::map<std::string, std::string>{
           {kBobpayPaymentMethodIdentifier, kBobpaySchemeName},
-      };
+          {kAlicepayPaymentMethodIdentifier, kBobpaySchemeName}};
   return kMethodToScheme;
 }
 
 IOSPaymentInstrument::IOSPaymentInstrument(
     const std::string& method_name,
-    const std::string& universal_link,
+    const GURL& universal_link,
     const std::string& app_name,
     UIImage* icon_image,
     id<PaymentRequestUIDelegate> payment_request_ui_delegate)
@@ -47,8 +48,9 @@ IOSPaymentInstrument::~IOSPaymentInstrument() {}
 void IOSPaymentInstrument::InvokePaymentApp(
     PaymentInstrument::Delegate* delegate) {
   DCHECK(delegate);
-  [payment_request_ui_delegate_ launchAppWithUniversalLink:universal_link_
-                                        instrumentDelegate:delegate];
+  [payment_request_ui_delegate_ paymentInstrument:this
+                       launchAppWithUniversalLink:universal_link_
+                               instrumentDelegate:delegate];
 }
 
 bool IOSPaymentInstrument::IsCompleteForPayment() const {
@@ -90,8 +92,9 @@ base::string16 IOSPaymentInstrument::GetSublabel() const {
 
 bool IOSPaymentInstrument::IsValidForModifier(
     const std::vector<std::string>& supported_methods,
+    const std::vector<std::string>& supported_networks,
     const std::set<autofill::CreditCard::CardType>& supported_types,
-    const std::vector<std::string>& supported_networks) const {
+    bool supported_types_specified) const {
   // This instrument only matches url-based payment method identifiers that
   // are equal to the instrument's method name.
   if (std::find(supported_methods.begin(), supported_methods.end(),

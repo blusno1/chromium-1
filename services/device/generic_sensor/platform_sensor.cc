@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/device/generic_sensor/platform_sensor_provider.h"
@@ -24,7 +25,8 @@ PlatformSensor::PlatformSensor(mojom::SensorType type,
       weak_factory_(this) {}
 
 PlatformSensor::~PlatformSensor() {
-  provider_->RemoveSensor(GetType());
+  if (provider_)
+    provider_->RemoveSensor(GetType());
 }
 
 mojom::SensorType PlatformSensor::GetType() const {
@@ -103,8 +105,7 @@ bool PlatformSensor::GetLatestReading(SensorReading* result) {
   return shared_buffer_reader_->GetReading(result);
 }
 
-void PlatformSensor::UpdateSensorReading(const SensorReading& reading,
-                                         bool notify_clients) {
+void PlatformSensor::UpdateSensorReading(const SensorReading& reading) {
   ReadingBuffer* buffer =
       static_cast<ReadingBuffer*>(shared_buffer_mapping_.get());
   auto& seqlock = buffer->seqlock.value();
@@ -112,16 +113,15 @@ void PlatformSensor::UpdateSensorReading(const SensorReading& reading,
   buffer->reading = reading;
   seqlock.WriteEnd();
 
-  if (notify_clients)
-    task_runner_->PostTask(
-        FROM_HERE, base::Bind(&PlatformSensor::NotifySensorReadingChanged,
-                              weak_factory_.GetWeakPtr()));
+  task_runner_->PostTask(FROM_HERE,
+                         base::Bind(&PlatformSensor::NotifySensorReadingChanged,
+                                    weak_factory_.GetWeakPtr()));
 }
 
 void PlatformSensor::NotifySensorReadingChanged() {
   for (auto& client : clients_) {
     if (!client.IsSuspended())
-      client.OnSensorReadingChanged();
+      client.OnSensorReadingChanged(type_);
   }
 }
 

@@ -334,11 +334,9 @@ class MODULES_EXPORT BaseAudioContext
   void MaybeRecordStartAttempt();
 
  protected:
-  explicit BaseAudioContext(Document*);
-  BaseAudioContext(Document*,
-                   unsigned number_of_channels,
-                   size_t number_of_frames,
-                   float sample_rate);
+  enum ContextType { kRealtimeContext, kOfflineContext };
+
+  explicit BaseAudioContext(Document*, enum ContextType);
 
   void Initialize();
   void Uninitialize();
@@ -379,6 +377,7 @@ class MODULES_EXPORT BaseAudioContext
 
  private:
   friend class BaseAudioContextAutoplayTest;
+  friend class DISABLED_BaseAudioContextAutoplayTest;
 
   // Do not change the order of this enum, it is used for metrics.
   enum AutoplayStatus {

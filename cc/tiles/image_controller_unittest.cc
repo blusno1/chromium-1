@@ -12,6 +12,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_checker_impl.h"
+#include "cc/paint/paint_image_builder.h"
 #include "cc/test/skia_common.h"
 #include "cc/tiles/image_decode_cache.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -101,8 +102,9 @@ class TestableCache : public ImageDecodeCache {
                              scoped_refptr<TileTask>* task) override {
     // Return false for large images to mimic "won't fit in memory"
     // behavior.
-    if (image.image() &&
-        image.image()->width() * image.image()->height() >= 1000 * 1000) {
+    if (image.paint_image() &&
+        image.paint_image().width() * image.paint_image().height() >=
+            1000 * 1000) {
       return false;
     }
 
@@ -236,10 +238,9 @@ class BlockingTask : public TileTask {
 int kDefaultTimeoutSeconds = 10;
 
 DrawImage CreateDiscardableDrawImage(gfx::Size size) {
-  return DrawImage(
-      PaintImage(PaintImage::kUnknownStableId, CreateDiscardableImage(size)),
-      SkIRect::MakeWH(size.width(), size.height()), kNone_SkFilterQuality,
-      SkMatrix::I(), gfx::ColorSpace());
+  return DrawImage(CreateDiscardablePaintImage(size),
+                   SkIRect::MakeWH(size.width(), size.height()),
+                   kNone_SkFilterQuality, SkMatrix::I(), gfx::ColorSpace());
 }
 
 class ImageControllerTest : public testing::Test {
@@ -310,7 +311,7 @@ TEST_F(ImageControllerTest, NullControllerUnrefsImages) {
 TEST_F(ImageControllerTest, QueueImageDecode) {
   base::RunLoop run_loop;
   DecodeClient decode_client;
-  EXPECT_EQ(image().image()->bounds().width(), 1);
+  EXPECT_EQ(image().paint_image().width(), 1);
   ImageController::ImageDecodeRequestId expected_id =
       controller()->QueueImageDecode(
           image(),
@@ -328,10 +329,12 @@ TEST_F(ImageControllerTest, QueueImageDecodeNonLazy) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(1, 1);
-  DrawImage image = DrawImage(
-      PaintImage(PaintImage::kUnknownStableId, SkImage::MakeFromBitmap(bitmap)),
-      SkIRect::MakeWH(1, 1), kNone_SkFilterQuality, SkMatrix::I(),
-      gfx::ColorSpace());
+  DrawImage image = DrawImage(PaintImageBuilder()
+                                  .set_id(PaintImage::GetNextId())
+                                  .set_image(SkImage::MakeFromBitmap(bitmap))
+                                  .TakePaintImage(),
+                              SkIRect::MakeWH(1, 1), kNone_SkFilterQuality,
+                              SkMatrix::I(), gfx::ColorSpace());
 
   ImageController::ImageDecodeRequestId expected_id =
       controller()->QueueImageDecode(

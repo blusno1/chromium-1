@@ -89,13 +89,11 @@ UserCloudPolicyManagerChromeOS::UserCloudPolicyManagerChromeOS(
     const base::FilePath& component_policy_cache_path,
     base::TimeDelta initial_policy_fetch_timeout,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
-    const scoped_refptr<base::SequencedTaskRunner>& file_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& io_task_runner)
     : CloudPolicyManager(dm_protocol::kChromeUserPolicyType,
                          std::string(),
                          store.get(),
                          task_runner,
-                         file_task_runner,
                          io_task_runner),
       store_(std::move(store)),
       external_data_manager_(std::move(external_data_manager)),
@@ -413,8 +411,8 @@ void UserCloudPolicyManagerChromeOS::OnOAuth2PolicyTokenFetched(
     // OnClientError() will be called back.
     client()->Register(em::DeviceRegisterRequest::USER,
                        em::DeviceRegisterRequest::FLAVOR_USER_REGISTRATION,
-                       policy_token, std::string(), std::string(),
-                       std::string());
+                       em::LicenseType::UNDEFINED, policy_token, std::string(),
+                       std::string(), std::string());
   } else {
     UMA_HISTOGRAM_ENUMERATION(kUMAInitialFetchOAuth2Error,
                               error.state(),

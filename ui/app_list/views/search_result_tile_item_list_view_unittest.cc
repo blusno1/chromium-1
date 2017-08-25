@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_model.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
@@ -25,8 +26,6 @@
 namespace app_list {
 
 namespace {
-constexpr int kNumSearchResultTiles = 8;
-// Constants when the Play Store app search feature is enabled.
 constexpr int kMaxNumSearchResultTiles = 6;
 constexpr int kInstalledApps = 4;
 constexpr int kPlayStoreApps = 2;
@@ -36,20 +35,24 @@ class SearchResultTileItemListViewTest
     : public views::ViewsTestBase,
       public ::testing::WithParamInterface<bool> {
  public:
-  SearchResultTileItemListViewTest() {}
-  ~SearchResultTileItemListViewTest() override {}
+  SearchResultTileItemListViewTest() = default;
+  ~SearchResultTileItemListViewTest() override = default;
 
  protected:
   void CreateSearchResultTileItemListView() {
-    // Switches on/off the Play Store app search feature.
+    // Enable fullscreen app list for parameterized Play Store app search
+    // feature.
     if (IsPlayStoreAppSearchEnabled()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          app_list::features::kEnablePlayStoreAppSearch);
+      scoped_feature_list_.InitWithFeatures(
+          {features::kEnableFullscreenAppList,
+           features::kEnablePlayStoreAppSearch},
+          {});
     } else {
-      scoped_feature_list_.InitAndDisableFeature(
-          app_list::features::kEnablePlayStoreAppSearch);
+      scoped_feature_list_.InitWithFeatures(
+          {features::kEnableFullscreenAppList},
+          {features::kEnablePlayStoreAppSearch});
     }
-    EXPECT_EQ(IsPlayStoreAppSearchEnabled(),
+    ASSERT_EQ(IsPlayStoreAppSearchEnabled(),
               features::IsPlayStoreAppSearchEnabled());
 
     // Sets up the views.
@@ -90,6 +93,9 @@ class SearchResultTileItemListViewTest
         result->set_result_type(SearchResult::RESULT_PLAYSTORE_APP);
         result->set_title(
             base::UTF8ToUTF16(base::StringPrintf("PlayStoreApp %d", i)));
+        result->SetRating(1 + i);
+        result->SetFormattedPrice(
+            base::UTF8ToUTF16(base::StringPrintf("Price %d", i)));
         results->Add(std::move(result));
       }
     }
@@ -142,8 +148,34 @@ TEST_P(SearchResultTileItemListViewTest, Basic) {
   // we added a separator for result type grouping.
   const int expected_child_count = IsPlayStoreAppSearchEnabled()
                                        ? kMaxNumSearchResultTiles * 2
-                                       : kNumSearchResultTiles;
+                                       : kMaxNumSearchResultTiles;
   EXPECT_EQ(expected_child_count, view()->child_count());
+
+  /// Test accessibility descriptions of tile views.
+  const int first_child = IsPlayStoreAppSearchEnabled() ? 1 : 0;
+  const int child_step = IsPlayStoreAppSearchEnabled() ? 2 : 1;
+
+  for (int i = 0; i < kInstalledApps; ++i) {
+    ui::AXNodeData node_data;
+    view()
+        ->child_at(first_child + i * child_step)
+        ->GetAccessibleNodeData(&node_data);
+    EXPECT_EQ(ui::AX_ROLE_BUTTON, node_data.role);
+    EXPECT_EQ(base::StringPrintf("InstalledApp %d", i),
+              node_data.GetStringAttribute(ui::AX_ATTR_NAME));
+  }
+
+  for (int i = kInstalledApps; i < expected_results; ++i) {
+    ui::AXNodeData node_data;
+    view()
+        ->child_at(first_child + i * child_step)
+        ->GetAccessibleNodeData(&node_data);
+    EXPECT_EQ(ui::AX_ROLE_BUTTON, node_data.role);
+    EXPECT_EQ(base::StringPrintf("PlayStoreApp %d, %d.0, Price %d",
+                                 i - kInstalledApps, i + 1 - kInstalledApps,
+                                 i - kInstalledApps),
+              node_data.GetStringAttribute(ui::AX_ATTR_NAME));
+  }
 
   // Tests item indexing by pressing TAB.
   for (int i = 1; i < results; ++i) {

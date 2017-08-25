@@ -376,16 +376,16 @@ message DeviceLocalAccountsProto {
   optional bool enable_auto_login_bailout = 4 [default = true];
 
   // Whether network configuration should be offered or not when the device
-  // does not have access to the Internet. If the policy is set to true, the
-  // network configuration will be offered. Otherwise (policy is omitted or set
-  // to false), only an error message is displayed.
-  // Note: If enable_auto_login_bailout policy above is set to false and this
-  // policy is omitted or set to false, there are chances that the device might
-  // become totally unusable when there is no Internet access and has to go
-  // through the recovery process.
+  // does not have access to the Internet. If the policy is omitted or set to
+  // true, the network configuration will be offered. Otherwise, only an error
+  // message is displayed.
+  // Note: If both this policy and enable_auto_login_bailout policy above is
+  // set to false, there are chances that the device might become totally
+  // unusable when there is no Internet access and has to go through the
+  // recovery process.
   // If the device is offline at startup then the network configuration screen
   // is always shown, before auto-login kicks in.
-  optional bool prompt_for_network_when_offline = 5 [default = false];
+  optional bool prompt_for_network_when_offline = 5 [default = true];
 }
 
 message AllowRedeemChromeOsRegistrationOffersProto {
@@ -813,6 +813,53 @@ message DeviceSecondFactorAuthenticationProto {
   optional U2fMode mode = 1;
 }
 
+message CastReceiverNameProto {
+  // The name advertised as a Google Cast destination by the device,
+  // up to 24 characters. If the name is empty, the device name will
+  // be used.
+  optional string name = 1;
+}
+
+// Day of the week and time settings for DeviceOffHoursIntervalProto.
+message WeeklyTimeProto {
+  enum Weekday {
+    DAY_OF_WEEK_UNSPECIFIED = 0;
+    MONDAY = 1;
+    TUESDAY = 2;
+    WEDNESDAY = 3;
+    THURSDAY = 4;
+    FRIDAY = 5;
+    SATURDAY = 6;
+    SUNDAY = 7;
+  }
+  // Day of week.
+  optional Weekday weekday = 1;
+  // Time of day in milliseconds from beginning of the day
+  // in timezone that is defined in DeviceOffHoursProto.
+  optional int32 time = 2;
+}
+
+// Start and end interval settings for DeviceOffHoursProto.
+message DeviceOffHoursIntervalProto {
+  optional WeeklyTimeProto start = 1;
+  optional WeeklyTimeProto end = 2;
+}
+
+// Allow less restricted using of Chromebooks that are managed by school,
+// while the device is not at school ("OffHours").
+message DeviceOffHoursProto {
+  // List of intervals when ignored policies are not applied.
+  repeated DeviceOffHoursIntervalProto interval = 1;
+  // Timezone in the same format as SystemTimezoneProto.timezone.
+  // If timezone isn't set then "GMT" will be used
+  optional string timezone = 2;
+  // List of policies which settings are ignored during OffHours mode.
+  // List contains policy names from ChromeDeviceSettingsProto
+  // (i.e. "device_policy_refresh_rate")
+  // During OffHoursMode default settings of ignored policies are used.
+  repeated string ignored_policy = 3;
+}
+
 message ChromeDeviceSettingsProto {
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
   optional UserWhitelistProto user_whitelist = 2;
@@ -875,4 +922,6 @@ message ChromeDeviceSettingsProto {
       device_ecryptfs_migration_strategy = 51;
   optional DeviceSecondFactorAuthenticationProto
       device_second_factor_authentication = 52;
+  optional CastReceiverNameProto cast_receiver_name = 53;
+  optional DeviceOffHoursProto device_off_hours = 54;
 }

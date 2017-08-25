@@ -123,6 +123,8 @@ Polymer({
           loadTimeData.getString('networkListItemConnecting'),
       networkListItemConnectingTo:
           loadTimeData.getString('networkListItemConnectingTo'),
+      networkListItemInitializing:
+          loadTimeData.getString('networkListItemInitializing'),
       networkListItemNotConnected:
           loadTimeData.getString('networkListItemNotConnected'),
       vpnNameTemplate: loadTimeData.getString('vpnNameTemplate'),
@@ -134,6 +136,7 @@ Polymer({
       proxySettingsMenuName: loadTimeData.getString('proxySettingsMenuName'),
     };
 
+    this.$.welcomeScreen.i18nUpdateLocale();
     this.i18nUpdateLocale();
   },
 
@@ -231,7 +234,7 @@ Polymer({
         polymerIcon: 'oobe-welcome-20:add-cellular',
         customData: {
           onTap: function() {
-            self.OpenAddWiFiNetworkDialog_();
+            self.OpenAddMobileNetworkDialog_();
           },
         },
       },
@@ -362,6 +365,7 @@ Polymer({
     if (this.networkLastSelectedGuid_ == '' &&
         state.ConnectionState == CrOnc.ConnectionState.CONNECTED) {
       this.onSelectedNetworkConnected_();
+      return;
     }
 
     // If user has previously selected another network, there

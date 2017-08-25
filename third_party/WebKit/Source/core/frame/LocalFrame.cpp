@@ -63,7 +63,6 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/NavigationScheduler.h"
@@ -72,6 +71,7 @@
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/TransformRecorder.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/plugins/PluginView.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGDocumentExtensions.h"
@@ -85,6 +85,7 @@
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
+#include "platform/instrumentation/resource_coordinator/BlinkResourceCoordinatorBase.h"
 #include "platform/instrumentation/resource_coordinator/FrameResourceCoordinator.h"
 #include "platform/json/JSONValues.h"
 #include "platform/loader/fetch/FetchParameters.h"
@@ -123,6 +124,7 @@ inline float ParentTextZoomFactor(LocalFrame* frame) {
 
 template class CORE_TEMPLATE_EXPORT Supplement<LocalFrame>;
 
+// static
 LocalFrame* LocalFrame::Create(LocalFrameClient* client,
                                Page& page,
                                FrameOwner* owner,
@@ -144,6 +146,8 @@ void LocalFrame::Init() {
 void LocalFrame::SetView(LocalFrameView* view) {
   DCHECK(!view_ || view_ != view);
   DCHECK(!GetDocument() || !GetDocument()->IsActive());
+  if (view_)
+    view_->WillBeRemovedFromFrame();
   view_ = view;
 }
 
@@ -222,7 +226,6 @@ DEFINE_TRACE(LocalFrame) {
   visitor->Trace(event_handler_);
   visitor->Trace(console_);
   visitor->Trace(input_method_controller_);
-  visitor->Trace(frame_resource_coordinator_);
   visitor->Trace(text_suggestion_controller_);
   Frame::Trace(visitor);
   Supplementable<LocalFrame>::Trace(visitor);
@@ -998,16 +1001,16 @@ ContentSettingsClient* LocalFrame::GetContentSettingsClient() {
 }
 
 FrameResourceCoordinator* LocalFrame::GetFrameResourceCoordinator() {
-  if (!FrameResourceCoordinator::IsEnabled())
+  if (!BlinkResourceCoordinatorBase::IsEnabled())
     return nullptr;
   if (!frame_resource_coordinator_) {
     auto local_frame_client = Client();
     if (!local_frame_client)
       return nullptr;
-    frame_resource_coordinator_ = FrameResourceCoordinator::Create(
-        local_frame_client->GetInterfaceProvider());
+    frame_resource_coordinator_.reset(FrameResourceCoordinator::Create(
+        local_frame_client->GetInterfaceProvider()));
   }
-  return frame_resource_coordinator_;
+  return frame_resource_coordinator_.get();
 }
 
 PluginData* LocalFrame::GetPluginData() const {
@@ -1104,6 +1107,22 @@ void LocalFrame::SetViewportIntersectionFromParent(
     if (View())
       View()->ScheduleAnimation();
   }
+}
+
+void LocalFrame::NotifyUserActivation() {
+  bool had_gesture = HasReceivedUserGesture();
+  if (!had_gesture)
+    UpdateUserActivationInFrameTree();
+  Client()->SetHasReceivedUserGesture(had_gesture);
+}
+
+// static
+std::unique_ptr<UserGestureIndicator> LocalFrame::CreateUserGesture(
+    LocalFrame* frame,
+    UserGestureToken::Status status) {
+  if (frame)
+    frame->NotifyUserActivation();
+  return WTF::MakeUnique<UserGestureIndicator>(status);
 }
 
 }  // namespace blink

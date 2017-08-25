@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef SERVICES_DEVICE_RELATIVE_ORIENTATION_EULER_ANGLES_FUSION_ALGORITHM_USING_ACCELEROMETER_H_
-#define SERVICES_DEVICE_RELATIVE_ORIENTATION_EULER_ANGLES_FUSION_ALGORITHM_USING_ACCELEROMETER_H_
+#ifndef SERVICES_DEVICE_GENERIC_SENSOR_RELATIVE_ORIENTATION_EULER_ANGLES_FUSION_ALGORITHM_USING_ACCELEROMETER_H_
+#define SERVICES_DEVICE_GENERIC_SENSOR_RELATIVE_ORIENTATION_EULER_ANGLES_FUSION_ALGORITHM_USING_ACCELEROMETER_H_
 
 #include "base/macros.h"
 #include "services/device/generic_sensor/platform_sensor_fusion_algorithm.h"
@@ -18,8 +18,9 @@ class RelativeOrientationEulerAnglesFusionAlgorithmUsingAccelerometer
   RelativeOrientationEulerAnglesFusionAlgorithmUsingAccelerometer();
   ~RelativeOrientationEulerAnglesFusionAlgorithmUsingAccelerometer() override;
 
-  void GetFusedData(const std::vector<SensorReading>& readings,
-                    SensorReading* fused_reading) override;
+ protected:
+  bool GetFusedDataInternal(mojom::SensorType which_sensor_changed,
+                            SensorReading* fused_reading) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(
@@ -28,4 +29,4 @@ class RelativeOrientationEulerAnglesFusionAlgorithmUsingAccelerometer
 
 }  // namespace device
 
-#endif  // SERVICES_DEVICE_RELATIVE_ORIENTATION_EULER_ANGLES_FUSION_ALGORITHM_USING_ACCELEROMETER_H_
+#endif  // SERVICES_DEVICE_GENERIC_SENSOR_RELATIVE_ORIENTATION_EULER_ANGLES_FUSION_ALGORITHM_USING_ACCELEROMETER_H_

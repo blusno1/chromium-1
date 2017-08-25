@@ -28,8 +28,8 @@ service_test("services_unittests") {
       "//services/preferences:tests",
       "//services/resource_coordinator:tests",
       "//services/shape_detection:tests",
-      "//services/viz/compositing/privileged/interfaces:tests",
-      "//services/viz/public/interfaces/compositing:tests",
+      "//services/viz/privileged/interfaces:unit_tests",
+      "//services/viz/public/cpp/compositing:tests",
     ]
   }
 
@@ -67,7 +67,7 @@ service_test("services_unittests") {
     deps += [ "//services/video_capture:tests" ]
   }
 
-  if (use_ozone && is_chromeos) {
+  if (is_chromeos) {
     deps += [ "//services/ui/display:tests" ]
   }
 
@@ -155,6 +155,7 @@ if (is_android) {
       "//services/shape_detection/public/interfaces:interfaces_java",
       "//skia/public/interfaces:interfaces_java",
       "//third_party/android_support_test_runner:runner_java",
+      "//third_party/junit",
       "//ui/gfx/geometry/mojo:mojo_java",
     ]
     data = [

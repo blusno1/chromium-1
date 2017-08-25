@@ -42,6 +42,7 @@ class Font;
 class FontDescription;
 class HTMLInputElement;
 class LayoutObject;
+class LengthSize;
 class Locale;
 class PlatformChromeClient;
 class Theme;
@@ -63,6 +64,11 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual void DidChangeThemeEngine() {}
 
   static void SetSizeIfAuto(ComputedStyle&, const IntSize&);
+  // Sets the minimum size to |part_size| or |min_part_size| as appropriate
+  // according to the given style, if they are specified.
+  static void SetMinimumSize(ComputedStyle&,
+                             const LengthSize* part_size,
+                             const LengthSize* min_part_size = nullptr);
   // SetMinimumSizeIfAuto must be called before SetSizeIfAuto, because we
   // will not set a minimum size if an explicit size is set, and SetSizeIfAuto
   // sets an explicit size.
@@ -200,11 +206,6 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual double AnimationRepeatIntervalForProgressBar() const;
   // Returns the duration of the animation for the progress bar.
   virtual double AnimationDurationForProgressBar() const;
-
-  // Media controls
-  String FormatMediaControlsTime(float time) const;
-  String FormatMediaControlsCurrentTime(float current_time,
-                                        float duration) const;
 
   // Returns size of one slider tick mark for a horizontal track.
   // For vertical tracks we rotate it and use it. i.e. Width is always length

@@ -330,11 +330,14 @@ void ArcSessionImpl::SendStartArcInstanceDBusMessage(
     const chromeos::SessionManagerClient::StartArcInstanceCallback& cb) {
   chromeos::SessionManagerClient* session_manager_client =
       chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
+  const bool native_bridge_experiment =
+      base::FeatureList::IsEnabled(arc::kNativeBridgeExperimentFeature);
   if (instance_is_for_login_screen) {
     session_manager_client->StartArcInstance(
         chromeos::SessionManagerClient::ArcStartupMode::LOGIN_SCREEN,
         // All variables below except |cb| will be ignored.
-        cryptohome::Identification(), false, false, cb);
+        cryptohome::Identification(), false, false,
+        native_bridge_experiment, cb);
     return;
   }
 
@@ -353,7 +356,8 @@ void ArcSessionImpl::SendStartArcInstanceDBusMessage(
 
   session_manager_client->StartArcInstance(
       chromeos::SessionManagerClient::ArcStartupMode::FULL, cryptohome_id,
-      skip_boot_completed_broadcast, scan_vendor_priv_app, cb);
+      skip_boot_completed_broadcast, scan_vendor_priv_app,
+      native_bridge_experiment, cb);
 }
 
 void ArcSessionImpl::OnInstanceStarted(bool instance_is_for_login_screen,
@@ -362,7 +366,6 @@ void ArcSessionImpl::OnInstanceStarted(bool instance_is_for_login_screen,
                                        base::ScopedFD socket_fd) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_EQ(state_, State::STARTING_INSTANCE);
-  DCHECK(socket_fd.is_valid());  // either a socket or a dummy fd.
 
   bool resumed = false;
   if (!container_instance_id_.empty()) {
@@ -422,6 +425,9 @@ void ArcSessionImpl::OnInstanceStarted(bool instance_is_for_login_screen,
     return;
   }
 
+  // For production, |socket_fd| passed from session_manager is either a valid
+  // socket or a valid file descriptor (/dev/null). For testing, |socket_fd|
+  // might be invalid.
   mojo::edk::PlatformHandle raw_handle(socket_fd.release());
   raw_handle.needs_connection = true;
 

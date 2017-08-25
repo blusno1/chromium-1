@@ -143,8 +143,8 @@ public class InstalledAppProviderImpl implements InstalledAppProvider {
             // installed on the user's device).
             if (app.platform.equals(RELATED_APP_PLATFORM_ANDROID) && app.id != null) {
                 if (isInstantAppId(app.id)) {
-                    if (mInstantAppsHandler.isInstantAppAvailable(
-                                frameUrl.toString(), app.id == INSTANT_APP_HOLDBACK_ID_STRING)) {
+                    if (mInstantAppsHandler.isInstantAppAvailable(frameUrl.toString(),
+                                INSTANT_APP_HOLDBACK_ID_STRING.equals(app.id))) {
                         installedApps.add(app);
                     }
                     continue;
@@ -194,8 +194,10 @@ public class InstalledAppProviderImpl implements InstalledAppProvider {
      * @param frameUrl Returns false if the Android package does not declare association with the
      *                origin of this URL. Can be null.
      */
-    private boolean isAppInstalledAndAssociatedWithOrigin(
+    public static boolean isAppInstalledAndAssociatedWithOrigin(
             String packageName, URI frameUrl, PackageManager pm) {
+        // TODO(yusufo): Move this to a better/shared location before crbug.com/749876 is closed.
+
         ThreadUtils.assertOnBackgroundThread();
 
         if (frameUrl == null) return false;

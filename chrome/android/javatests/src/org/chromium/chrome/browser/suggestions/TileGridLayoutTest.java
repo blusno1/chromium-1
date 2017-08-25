@@ -4,17 +4,9 @@
 
 package org.chromium.chrome.browser.suggestions;
 
-import android.app.Activity;
-import android.content.pm.ActivityInfo;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
-import android.util.DisplayMetrics;
-import android.util.TypedValue;
-import android.view.View;
-import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -22,8 +14,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -37,14 +27,15 @@ import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
+import org.chromium.chrome.test.util.RenderTestRule;
 import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
+import org.chromium.chrome.test.util.browser.suggestions.FakeMostVisitedSites;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServerRule;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Instrumentation tests for the {@link TileGridLayout} on the New Tab Page.
@@ -65,6 +56,10 @@ public class TileGridLayoutTest {
     @Rule
     public EmbeddedTestServerRule mTestServerRule = new EmbeddedTestServerRule();
 
+    @Rule
+    public RenderTestRule mRenderTestRule =
+            new RenderTestRule("chrome/test/data/android/render_tests");
+
     private static final String HOME_PAGE_URL = "http://ho.me/";
 
     private static final String[] FAKE_MOST_VISITED_URLS = new String[] {
@@ -79,35 +74,77 @@ public class TileGridLayoutTest {
             "/chrome/test/data/android/navigate/nine.html",
     };
 
+    private static final String[] FAKE_MOST_VISITED_TITLES =
+            new String[] {"ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE"};
+
     private NewTabPage mNtp;
-    private String[] mSiteSuggestionUrls;
-    private FakeMostVisitedSites mMostVisitedSites;
 
     @Before
     public void setUp() throws Exception {
-        mSiteSuggestionUrls = mTestServerRule.getServer().getURLs(FAKE_MOST_VISITED_URLS);
-        String[] tmpSiteSuggestionUrls = new String[mSiteSuggestionUrls.length + 1];
-        System.arraycopy(
-                mSiteSuggestionUrls, 0, tmpSiteSuggestionUrls, 0, mSiteSuggestionUrls.length);
-        tmpSiteSuggestionUrls[tmpSiteSuggestionUrls.length - 1] = HOME_PAGE_URL;
-        mSiteSuggestionUrls = tmpSiteSuggestionUrls;
+        mActivityTestRule.startMainActivityOnBlankPage();
+    }
 
-        mMostVisitedSites = new FakeMostVisitedSites();
+    @Test
+    @SmallTest
+    @Feature({"NewTabPage"})
+    public void testHomePageIsMovedToFirstRowWhenNotThereInitially() throws Exception {
+        setUpFakeDataToShow(7);
+
+        TileView homePageTileView = (TileView) getTileGridLayout().getChildAt(7);
+
+        // This is assuming that the rows on the first row are less than 6.
+        TileView tileOnSecondRow = (TileView) getTileGridLayout().getChildAt(6);
+
+        Assert.assertNotNull(homePageTileView);
+        Assert.assertNotNull(tileOnSecondRow);
+        Assert.assertTrue(isTileViewOnFirstRow(homePageTileView));
+        Assert.assertFalse(isTileViewOnFirstRow(tileOnSecondRow));
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"NewTabPage"})
+    public void testHomePageStaysAtFirstRowWhenThereInitially() throws Exception {
+        setUpFakeDataToShow(2);
+
+        TileView homePageTileView = (TileView) getTileGridLayout().getChildAt(2);
+
+        Assert.assertNotNull(homePageTileView);
+        Assert.assertTrue(isTileViewOnFirstRow(homePageTileView));
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"NewTabPage", "RenderTest"})
+    @RetryOnFailure
+    public void testTileGridAppearance() throws Exception {
+        setUpFakeDataToShow(2);
+        mRenderTestRule.render(getTileGridLayout(), "ntp_tile_grid_layout");
+    }
+    private void setUpFakeDataToShow(int homePagePosition) throws InterruptedException {
+        List<SiteSuggestion> siteSuggestions = new ArrayList<>();
+
+        assert FAKE_MOST_VISITED_URLS.length == FAKE_MOST_VISITED_TITLES.length;
+
+        for (int i = 0; i < FAKE_MOST_VISITED_URLS.length; i++) {
+            String url = FAKE_MOST_VISITED_URLS[i];
+            String title = FAKE_MOST_VISITED_TITLES[i];
+            siteSuggestions.add(FakeMostVisitedSites.createSiteSuggestion(
+                    title, mTestServerRule.getServer().getURL(url)));
+        }
+
+        siteSuggestions.add(homePagePosition,
+                new SiteSuggestion("HOMEPAGE", HOME_PAGE_URL, "", TileSource.HOMEPAGE,
+                        TileSectionType.PERSONALIZED));
+
+        FakeMostVisitedSites mMostVisitedSites = new FakeMostVisitedSites();
+        mMostVisitedSites.setTileSuggestions(siteSuggestions);
         mSuggestionsDeps.getFactory().mostVisitedSites = mMostVisitedSites;
-
-        String[] whitelistIconPaths = new String[mSiteSuggestionUrls.length];
-        Arrays.fill(whitelistIconPaths, "");
-
-        int[] sources = new int[mSiteSuggestionUrls.length];
-        Arrays.fill(sources, TileSource.TOP_SITES);
-        sources[mSiteSuggestionUrls.length - 1] = TileSource.HOMEPAGE;
-
-        mMostVisitedSites.setTileSuggestions(
-                mSiteSuggestionUrls, mSiteSuggestionUrls.clone(), whitelistIconPaths, sources);
 
         mSuggestionsDeps.getFactory().suggestionsSource = new FakeSuggestionsSource();
 
-        mActivityTestRule.startMainActivityWithURL(UrlConstants.NTP_URL);
+        mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
+
         Tab mTab = mActivityTestRule.getActivity().getActivityTab();
         NewTabPageTestUtils.waitForNtpLoaded(mTab);
 
@@ -117,111 +154,21 @@ public class TileGridLayoutTest {
         RecyclerViewTestUtils.waitForStableRecyclerView(getRecyclerView());
     }
 
-    /**
-     * Verifies that the assumed constants in {@link TileGridLayout#calculateNumColumns()}
-     * are correct.
-     */
-    @Test
-    @SmallTest
-    @Feature({"NewTabPage"})
-    public void testNumColumnsPaddingAndMarginSizes() {
-        TileGridLayout tileGridLayout = getTileGridLayout();
-        Assert.assertEquals(TileGridLayout.PADDING_START_PX,
-                ApiCompatibilityUtils.getPaddingStart(tileGridLayout));
-        Assert.assertEquals(
-                TileGridLayout.PADDING_END_PX, ApiCompatibilityUtils.getPaddingEnd(tileGridLayout));
-
-        DisplayMetrics metrics = tileGridLayout.getResources().getDisplayMetrics();
-        LinearLayout.LayoutParams layoutParams =
-                (LinearLayout.LayoutParams) tileGridLayout.getLayoutParams();
-        Assert.assertEquals(convertToPx(TileGridLayout.MARGIN_START_DP, metrics),
-                ApiCompatibilityUtils.getMarginStart(layoutParams));
-        Assert.assertEquals(convertToPx(TileGridLayout.MARGIN_END_DP, metrics),
-                ApiCompatibilityUtils.getMarginEnd(layoutParams));
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"NewTabPage"})
-    public void testNumColumnsCalculatedEqualToMeasurement() {
-        final int maxColumns = 6;
-        final TileGridLayout layout = getTileGridLayout();
-        layout.setMaxRows(1);
-        layout.setMaxColumns(maxColumns);
-
-        reMeasureLayout(layout);
-        int calculatedNumColumns = Math.min(maxColumns, TileGridLayout.calculateNumColumns());
-
-        final Activity activity = mActivityTestRule.getActivity();
-        activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        int portraitVisibleTiles = countVisibleTiles(layout, calculatedNumColumns);
-        activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        int landscapeVisibleTiles = countVisibleTiles(layout, calculatedNumColumns);
-        Assert.assertEquals("The calculated number of columns should be equal to the minimum number"
-                        + " of columns across screen orientations.",
-                Math.min(portraitVisibleTiles, landscapeVisibleTiles), calculatedNumColumns);
-    }
-
-    private int convertToPx(int dp, DisplayMetrics metrics) {
-        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, metrics));
-    }
-
-    private void reMeasureLayout(final ViewGroup group) {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                group.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
-            }
-        });
-
-        // Wait until the view is updated. TODO(oskopek): Is there a better criterion to check for?
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                boolean hasHiddenTile = false;
-                for (int i = 0; i < group.getChildCount(); i++) {
-                    if (!hasHiddenTile) {
-                        hasHiddenTile = group.getChildAt(i).getVisibility() == View.GONE;
-                    }
-                }
-
-                return hasHiddenTile;
-            }
-        });
-    }
-
-    private int countVisibleTiles(ViewGroup group, int calculatedNumColumns) {
-        reMeasureLayout(group);
-        int visibleTileViews = 0;
-        boolean hasHomePage = false;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            TileView tileView = (TileView) group.getChildAt(i);
-            if (tileView.getVisibility() == View.VISIBLE) {
-                visibleTileViews++;
-                if (HOME_PAGE_URL.equals(tileView.getUrl())) {
-                    hasHomePage = true;
-                }
-            }
-        }
-
-        Assert.assertTrue("The calculated number of columns should be less than or equal to"
-                        + "the measured one.",
-                calculatedNumColumns <= visibleTileViews);
-        Assert.assertTrue("Visible tiles should contain the home page tile.", hasHomePage);
-
-        return visibleTileViews;
-    }
-
     private NewTabPageRecyclerView getRecyclerView() {
         return mNtp.getNewTabPageView().getRecyclerView();
     }
 
     private TileGridLayout getTileGridLayout() {
         TileGridLayout tileGridLayout =
-                (TileGridLayout) mNtp.getNewTabPageView().findViewById(R.id.tile_grid_layout);
+                mNtp.getNewTabPageView().findViewById(R.id.tile_grid_layout);
         Assert.assertNotNull("Unable to retrieve the TileGridLayout.", tileGridLayout);
         return tileGridLayout;
+    }
+
+    /** {@link TileView}s on the first row have a top margin equal to 0. */
+    public boolean isTileViewOnFirstRow(TileView tileView) {
+        ViewGroup.MarginLayoutParams marginLayoutParams =
+                (ViewGroup.MarginLayoutParams) tileView.getLayoutParams();
+        return marginLayoutParams.topMargin == 0;
     }
 }

@@ -25,7 +25,7 @@
 #include "gpu/ipc/service/x_util.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/ui/gpu/interfaces/gpu_host.mojom.h"
-#include "services/viz/gl/privileged/interfaces/gpu_service.mojom.h"
+#include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace gpu {
@@ -44,9 +44,8 @@ namespace viz {
 // This runs in the GPU process, and communicates with the gpu host (which is
 // the window server) over the mojom APIs. This is responsible for setting up
 // the connection to clients, allocating/free'ing gpu memory etc.
-class VIZ_SERVICE_EXPORT GpuServiceImpl
-    : NON_EXPORTED_BASE(public gpu::GpuChannelManagerDelegate),
-      NON_EXPORTED_BASE(public mojom::GpuService) {
+class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
+                                          public mojom::GpuService {
  public:
   GpuServiceImpl(const gpu::GPUInfo& gpu_info,
                  std::unique_ptr<gpu::GpuWatchdogThread> watchdog,
@@ -127,43 +126,39 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   void SetActiveURL(const GURL& url) override;
 
   // mojom::GpuService:
-  void EstablishGpuChannel(
-      int32_t client_id,
-      uint64_t client_tracing_id,
-      bool is_gpu_host,
-      const EstablishGpuChannelCallback& callback) override;
+  void EstablishGpuChannel(int32_t client_id,
+                           uint64_t client_tracing_id,
+                           bool is_gpu_host,
+                           EstablishGpuChannelCallback callback) override;
   void CloseChannel(int32_t client_id) override;
   void CreateJpegDecodeAccelerator(
       media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) override;
   void CreateVideoEncodeAcceleratorProvider(
       media::mojom::VideoEncodeAcceleratorProviderRequest vea_provider_request)
       override;
-  void CreateGpuMemoryBuffer(
-      gfx::GpuMemoryBufferId id,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      gfx::BufferUsage usage,
-      int client_id,
-      gpu::SurfaceHandle surface_handle,
-      const CreateGpuMemoryBufferCallback& callback) override;
+  void CreateGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
+                             const gfx::Size& size,
+                             gfx::BufferFormat format,
+                             gfx::BufferUsage usage,
+                             int client_id,
+                             gpu::SurfaceHandle surface_handle,
+                             CreateGpuMemoryBufferCallback callback) override;
   void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                               int client_id,
                               const gpu::SyncToken& sync_token) override;
   void GetVideoMemoryUsageStats(
-      const GetVideoMemoryUsageStatsCallback& callback) override;
-  void RequestCompleteGpuInfo(
-      const RequestCompleteGpuInfoCallback& callback) override;
+      GetVideoMemoryUsageStatsCallback callback) override;
+  void RequestCompleteGpuInfo(RequestCompleteGpuInfoCallback callback) override;
   void LoadedShader(const std::string& key, const std::string& data) override;
-  void DestroyingVideoSurface(
-      int32_t surface_id,
-      const DestroyingVideoSurfaceCallback& callback) override;
+  void DestroyingVideoSurface(int32_t surface_id,
+                              DestroyingVideoSurfaceCallback callback) override;
   void WakeUpGpu() override;
   void GpuSwitched() override;
   void DestroyAllChannels() override;
   void Crash() override;
   void Hang() override;
   void ThrowJavaException() override;
-  void Stop(const StopCallback& callback) override;
+  void Stop(StopCallback callback) override;
 
   scoped_refptr<base::SingleThreadTaskRunner> main_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> io_runner_;

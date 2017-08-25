@@ -28,9 +28,10 @@
 #include "components/viz/common/quads/shared_bitmap.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/service/display_embedder/shared_bitmap_allocation_notifier_impl.h"
+#include "content/browser/child_process_importance.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/input/input_disposition_handler.h"
-#include "content/browser/renderer_host/input/input_router_client.h"
+#include "content/browser/renderer_host/input/input_router_impl.h"
 #include "content/browser/renderer_host/input/legacy_ipc_widget_input_handler.h"
 #include "content/browser/renderer_host/input/render_widget_host_latency_tracker.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
@@ -44,6 +45,7 @@
 #include "content/common/input/synthetic_gesture_packet.h"
 #include "content/common/render_widget_surface_properties.h"
 #include "content/common/view_message_enums.h"
+#include "content/common/widget.mojom.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
@@ -54,7 +56,6 @@
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ui_base_types.h"
-#include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/latency/latency_info.h"
 
@@ -101,12 +102,12 @@ struct TextInputState;
 // embedders of content, and adds things only visible to content.
 class CONTENT_EXPORT RenderWidgetHostImpl
     : public RenderWidgetHost,
-      public InputRouterClient,
+      public InputRouterImplClient,
       public InputDispositionHandler,
       public TouchEmulatorClient,
-      public NON_EXPORTED_BASE(SyntheticGestureController::Delegate),
-      public NON_EXPORTED_BASE(viz::mojom::CompositorFrameSink),
-      public NON_EXPORTED_BASE(viz::SharedBitmapAllocationObserver),
+      public SyntheticGestureController::Delegate,
+      public viz::mojom::CompositorFrameSink,
+      public viz::SharedBitmapAllocationObserver,
       public IPC::Listener {
  public:
   // |routing_id| must not be MSG_ROUTING_NONE.
@@ -115,7 +116,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
                        RenderProcessHost* process,
                        int32_t routing_id,
+                       mojom::WidgetPtr widget_interface,
                        bool hidden);
+
   ~RenderWidgetHostImpl() override;
 
   // Similar to RenderWidgetHost::FromID, but returning the Impl object.
@@ -212,7 +215,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void DragSourceSystemDragEnded() override;
   void FilterDropData(DropData* drop_data) override;
   void SetCursor(const CursorInfo& cursor_info) override;
-  mojom::WidgetInputHandler* GetWidgetInputHandler();
 
   // Notification that the screen info has changed.
   void NotifyScreenInfoChanged();
@@ -271,6 +273,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // having been hidden.
   void WasHidden();
   void WasShown(const ui::LatencyInfo& latency_info);
+
+  // Set the importance of widget. The importance is passed onto
+  // RenderProcessHost which aggregates importance of all of its widgets.
+  void SetImportance(ChildProcessImportance importance);
+  ChildProcessImportance importance() const { return importance_; }
 
   // Returns true if the RenderWidget is hidden.
   bool is_hidden() const { return is_hidden_; }
@@ -376,9 +383,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       const blink::WebMouseWheelEvent& wheel_event,
       const ui::LatencyInfo& latency);  // Virtual for testing.
 
-  // Enables/disables touch emulation using mouse event. See TouchEmulator.
-  void SetTouchEventEmulationEnabled(
-      bool enabled, ui::GestureProviderConfigType config_type);
+  // Returns an emulator for this widget. See TouchEmulator for more details.
+  TouchEmulator* GetTouchEmulator();
 
   // TouchEmulatorClient implementation.
   void ForwardEmulatedGestureEvent(
@@ -412,12 +418,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   //   (on Windows);
   // * when it receives a "preedit_changed" signal of GtkIMContext (on Linux);
   // * when markedText of NSTextInput is called (on Mac).
-  void ImeSetComposition(
-      const base::string16& text,
-      const std::vector<ui::CompositionUnderline>& underlines,
-      const gfx::Range& replacement_range,
-      int selection_start,
-      int selection_end);
+  void ImeSetComposition(const base::string16& text,
+                         const std::vector<ui::ImeTextSpan>& ime_text_spans,
+                         const gfx::Range& replacement_range,
+                         int selection_start,
+                         int selection_end);
 
   // Deletes the ongoing composition if any, inserts the specified text, and
   // moves the cursor.
@@ -427,7 +432,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // * when it receives a "commit" signal of GtkIMContext (on Linux);
   // * when insertText of NSTextInput is called (on Mac).
   void ImeCommitText(const base::string16& text,
-                     const std::vector<ui::CompositionUnderline>& underlines,
+                     const std::vector<ui::ImeTextSpan>& ime_text_spans,
                      const gfx::Range& replacement_range,
                      int relative_cursor_pos);
 
@@ -502,6 +507,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   static void DisableResizeAckCheckForTesting();
 
   InputRouter* input_router() { return input_router_.get(); }
+
+  void SetForceEnableZoom(bool);
 
   // Get the BrowserAccessibilityManager for the root of the frame tree,
   BrowserAccessibilityManager* GetRootBrowserAccessibilityManager();
@@ -579,13 +586,25 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // viz::mojom::CompositorFrameSink implementation.
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
-  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
-                             cc::CompositorFrame frame) override;
+  void SubmitCompositorFrame(
+      const viz::LocalSurfaceId& local_surface_id,
+      cc::CompositorFrame frame,
+      viz::mojom::HitTestRegionListPtr hit_test_region_list,
+      uint64_t submit_time) override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
 
   // Signals that a frame with token |frame_token| was finished processing. If
   // there are any queued messages belonging to it, they will be processed.
   void DidProcessFrame(uint32_t frame_token);
+
+  // An associated WidgetInputHandler should be set if the RWHI is associated
+  // with a RenderFrameHost. Using an associated channel will allow the
+  // interface calls processed on the FrameInputHandler to be processed in order
+  // with the interface calls processed on the WidgetInputHandler.
+  void SetWidgetInputHandler(
+      mojom::WidgetInputHandlerAssociatedPtr widget_input_handler);
+  mojom::WidgetInputHandler* GetWidgetInputHandler() override;
+  void SetWidget(mojom::WidgetPtr widget);
 
  protected:
   // ---------------------------------------------------------------------------
@@ -759,6 +778,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // viz::SharedBitmapAllocationObserver implementation.
   void DidAllocateSharedBitmap(
       uint32_t last_shared_bitmap_sequence_number) override;
+  void SetupInputRouter();
 
 #if defined(OS_MACOSX)
   device::mojom::WakeLock* GetWakeLock();
@@ -792,6 +812,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Indicates whether a page is hidden or not. It has to stay in sync with the
   // most recent call to process_->WidgetRestored() / WidgetHidden().
   bool is_hidden_;
+
+  // Tracks the current importance of widget, so the old value can be passed to
+  // RenderProcessHost on changes.
+  ChildProcessImportance importance_ = ChildProcessImportance::NORMAL;
 
   // Set if we are waiting for a repaint ack for the view.
   bool repaint_ack_pending_;
@@ -994,9 +1018,17 @@ class CONTENT_EXPORT RenderWidgetHostImpl
     viz::LocalSurfaceId local_surface_id;
     cc::CompositorFrame frame;
     uint32_t max_shared_bitmap_sequence_number = 0;
+    viz::mojom::HitTestRegionListPtr hit_test_region_list;
   } saved_frame_;
 
-  std::unique_ptr<LegacyIPCWidgetInputHandler> legacy_widget_input_handler_;
+  // If the |associated_widget_input_handler_| is set it should always be
+  // used to ensure in order delivery of related messages that may occur
+  // at the frame input level; see FrameInputHandler. Note that when the
+  // RWHI wraps a WebPagePopup widget it will only have a
+  // a |widget_input_handler_|.
+  mojom::WidgetInputHandlerAssociatedPtr associated_widget_input_handler_;
+  mojom::WidgetInputHandlerPtr widget_input_handler_;
+  std::unique_ptr<mojom::WidgetInputHandler> legacy_widget_input_handler_;
 
   base::WeakPtrFactory<RenderWidgetHostImpl> weak_factory_;
 

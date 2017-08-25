@@ -114,10 +114,6 @@ Document& FrameSelection::GetDocument() const {
   return *LifecycleContext();
 }
 
-bool FrameSelection::IsHandleVisible() const {
-  return GetSelectionInDOMTree().IsHandleVisible();
-}
-
 const VisibleSelection& FrameSelection::ComputeVisibleSelectionInDOMTree()
     const {
   return selection_editor_->ComputeVisibleSelectionInDOMTree();
@@ -175,24 +171,24 @@ void FrameSelection::MoveCaretSelection(const IntPoint& point) {
       VisiblePositionForContentsPoint(point, GetFrame());
   SelectionInDOMTree::Builder builder;
   builder.SetIsDirectional(GetSelectionInDOMTree().IsDirectional());
-  builder.SetIsHandleVisible(true);
   if (position.IsNotNull())
     builder.Collapse(position.ToPositionWithAffinity());
-  SetSelection(builder.Build(), SetSelectionData::Builder()
+  SetSelection(builder.Build(), SetSelectionOptions::Builder()
                                     .SetShouldCloseTyping(true)
                                     .SetShouldClearTypingStyle(true)
                                     .SetSetSelectionBy(SetSelectionBy::kUser)
+                                    .SetShouldShowHandle(true)
                                     .Build());
 }
 
 void FrameSelection::SetSelection(const SelectionInDOMTree& selection,
-                                  const SetSelectionData& data) {
+                                  const SetSelectionOptions& data) {
   if (SetSelectionDeprecated(selection, data))
     DidSetSelectionDeprecated(data);
 }
 
 void FrameSelection::SetSelection(const SelectionInDOMTree& selection) {
-  SetSelection(selection, SetSelectionData::Builder()
+  SetSelection(selection, SetSelectionOptions::Builder()
                               .SetShouldCloseTyping(true)
                               .SetShouldClearTypingStyle(true)
                               .Build());
@@ -200,7 +196,7 @@ void FrameSelection::SetSelection(const SelectionInDOMTree& selection) {
 
 bool FrameSelection::SetSelectionDeprecated(
     const SelectionInDOMTree& passed_selection,
-    const SetSelectionData& options) {
+    const SetSelectionOptions& options) {
   DCHECK(IsAvailable());
   passed_selection.AssertValidFor(GetDocument());
 
@@ -222,9 +218,13 @@ bool FrameSelection::SetSelectionDeprecated(
 
   const SelectionInDOMTree old_selection_in_dom_tree =
       selection_editor_->GetSelectionInDOMTree();
-  if (old_selection_in_dom_tree == new_selection)
+  const bool is_changed = old_selection_in_dom_tree != new_selection;
+  const bool should_show_handle = options.ShouldShowHandle();
+  if (!is_changed && is_handle_visible_ == should_show_handle)
     return false;
-  selection_editor_->SetSelection(new_selection);
+  if (is_changed)
+    selection_editor_->SetSelection(new_selection);
+  is_handle_visible_ = should_show_handle;
   ScheduleVisualUpdateForPaintInvalidationIfNeeded();
 
   const Document& current_document = GetDocument();
@@ -241,7 +241,7 @@ bool FrameSelection::SetSelectionDeprecated(
 }
 
 void FrameSelection::DidSetSelectionDeprecated(
-    const SetSelectionData& options) {
+    const SetSelectionOptions& options) {
   const Document& current_document = GetDocument();
   if (!GetSelectionInDOMTree().IsNone() && !options.DoNotSetFocus()) {
     SetFocusedNodeIfNeeded();
@@ -373,7 +373,7 @@ bool FrameSelection::Modify(SelectionModifyAlteration alter,
   }
 
   SetSelection(selection_modifier.Selection().AsSelection(),
-               SetSelectionData::Builder()
+               SetSelectionOptions::Builder()
                    .SetShouldCloseTyping(true)
                    .SetShouldClearTypingStyle(true)
                    .SetSetSelectionBy(set_selection_by)
@@ -397,6 +397,7 @@ void FrameSelection::Clear() {
   if (granularity_strategy_)
     granularity_strategy_->Clear();
   SetSelection(SelectionInDOMTree());
+  is_handle_visible_ = false;
 }
 
 bool FrameSelection::SelectionHasFocus() const {
@@ -692,9 +693,11 @@ void FrameSelection::SelectAll(SetSelectionBy set_selection_by) {
   }
 
   // TODO(editing-dev): Should we pass in set_selection_by?
-  SetSelection(SelectionInDOMTree::Builder()
-                   .SelectAllChildren(*root)
-                   .SetIsHandleVisible(IsHandleVisible())
+  SetSelection(SelectionInDOMTree::Builder().SelectAllChildren(*root).Build(),
+               SetSelectionOptions::Builder()
+                   .SetShouldCloseTyping(true)
+                   .SetShouldClearTypingStyle(true)
+                   .SetShouldShowHandle(IsHandleVisible())
                    .Build());
   SelectFrameElementInParentIfFullySelected();
   // TODO(editing-dev): Should we pass in set_selection_by?
@@ -1049,7 +1052,7 @@ bool FrameSelection::SelectWordAroundPosition(const VisiblePosition& position) {
                        .Collapse(start.ToPositionWithAffinity())
                        .Extend(end.DeepEquivalent())
                        .Build(),
-                   SetSelectionData::Builder()
+                   SetSelectionOptions::Builder()
                        .SetShouldCloseTyping(true)
                        .SetShouldClearTypingStyle(true)
                        .SetGranularity(TextGranularity::kWord)
@@ -1089,13 +1092,13 @@ void FrameSelection::MoveRangeSelectionExtent(const IntPoint& contents_point) {
   SetSelection(
       SelectionInDOMTree::Builder(
           GetGranularityStrategy()->UpdateExtent(contents_point, frame_))
-          .SetIsHandleVisible(true)
           .Build(),
-      SetSelectionData::Builder()
+      SetSelectionOptions::Builder()
           .SetShouldCloseTyping(true)
           .SetShouldClearTypingStyle(true)
           .SetDoNotClearStrategy(true)
           .SetSetSelectionBy(SetSelectionBy::kUser)
+          .SetShouldShowHandle(true)
           .Build());
 }
 
@@ -1110,7 +1113,6 @@ void FrameSelection::MoveRangeSelection(const VisiblePosition& base_position,
           .SetBaseAndExtentDeprecated(base_position.DeepEquivalent(),
                                       extent_position.DeepEquivalent())
           .SetAffinity(base_position.Affinity())
-          .SetIsHandleVisible(IsHandleVisible())
           .Build();
 
   if (new_selection.IsNone())
@@ -1130,11 +1132,11 @@ void FrameSelection::MoveRangeSelection(const VisiblePosition& base_position,
                              visible_selection.Start());
   }
   builder.SetAffinity(visible_selection.Affinity());
-  builder.SetIsHandleVisible(IsHandleVisible());
-  SetSelection(builder.Build(), SetSelectionData::Builder()
+  SetSelection(builder.Build(), SetSelectionOptions::Builder()
                                     .SetShouldCloseTyping(true)
                                     .SetShouldClearTypingStyle(true)
                                     .SetGranularity(granularity)
+                                    .SetShouldShowHandle(IsHandleVisible())
                                     .Build());
 }
 

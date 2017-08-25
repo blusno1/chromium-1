@@ -100,6 +100,9 @@ class SynchronousLayerTreeFrameSink::SoftwareOutputSurface
   }
   bool IsDisplayedAsOverlayPlane() const override { return false; }
   unsigned GetOverlayTextureId() const override { return 0; }
+  gfx::BufferFormat GetOverlayBufferFormat() const override {
+    return gfx::BufferFormat::RGBX_8888;
+  }
   bool SurfaceIsSuspendForRecycle() const override { return false; }
   bool HasExternalStencilTest() const override { return false; }
   void ApplyExternalStencil() override {}
@@ -163,7 +166,8 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
   if (!cc::LayerTreeFrameSink::BindToClient(sink_client))
     return false;
 
-  frame_sink_manager_ = base::MakeUnique<viz::FrameSinkManagerImpl>();
+  frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>(
+      viz::SurfaceManager::LifetimeType::SEQUENCES);
 
   DCHECK(begin_frame_source_);
   client_->SetBeginFrameSource(begin_frame_source_.get());
@@ -175,14 +179,13 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
 
   constexpr bool root_support_is_root = true;
   constexpr bool child_support_is_root = false;
-  constexpr bool handles_frame_sink_id_invalidation = true;
   constexpr bool needs_sync_points = true;
   root_support_ = viz::CompositorFrameSinkSupport::Create(
       this, frame_sink_manager_.get(), kRootFrameSinkId, root_support_is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+      needs_sync_points);
   child_support_ = viz::CompositorFrameSinkSupport::Create(
       this, frame_sink_manager_.get(), kChildFrameSinkId, child_support_is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+      needs_sync_points);
 
   viz::RendererSettings software_renderer_settings;
 

@@ -158,10 +158,6 @@ const char kDebugEnableFrameToggle[]        = "debug-enable-frame-toggle";
 // apps.
 const char kDebugPackedApps[]               = "debug-packed-apps";
 
-// Delay the toolbar icon switching between reload and stop when page load state
-// changes.
-const char kDelayReloadStopButtonChange[] = "delay-reload-stop-button-change";
-
 // Passes command line parameters to the DevTools front-end.
 const char kDevToolsFlags[]                 = "devtools-flags";
 
@@ -340,9 +336,6 @@ const char kEnableFastUnload[] = "enable-fast-unload";
 // Enables the Material Design feedback form.
 const char kEnableMaterialDesignFeedback[] = "enable-md-feedback";
 
-// Enables the Material Design policy page at chrome://md-policy.
-const char kEnableMaterialDesignPolicyPage[]  = "enable-md-policy-page";
-
 // Runs the Native Client inside the renderer process and enables GPU plugin
 // (internally adds lEnableGpuPlugin to the command line).
 const char kEnableNaCl[]                    = "enable-nacl";
@@ -507,6 +500,11 @@ const char kMakeDefaultBrowser[]            = "make-default-browser";
 // Forces the maximum disk space to be used by the media cache, in bytes.
 const char kMediaCacheSize[]                = "media-cache-size";
 
+// Enables the out-of-process memory logging.
+const char kMemlog[] = "memlog";
+const char kMemlogModeAll[] = "all";
+const char kMemlogModeBrowser[] = "browser";
+
 // Allows setting a different destination ID for connection-monitoring GCM
 // messages. Useful when running against a non-prod management server.
 const char kMonitoringDestinationID[]       = "monitoring-destination-id";
@@ -604,19 +602,6 @@ const char kPpapiFlashPath[]                = "ppapi-flash-path";
 // numbers separated by '.'s (e.g., "12.3.456.78"). If not specified, it
 // defaults to "10.2.999.999".
 const char kPpapiFlashVersion[]             = "ppapi-flash-version";
-
-// Triggers prerendering of pages from suggestions in the omnibox. Only has an
-// effect when Instant is either disabled or restricted to search, and when
-// prerender is enabled.
-const char kPrerenderFromOmnibox[]          = "prerender-from-omnibox";
-
-// These are the values the kPrerenderFromOmnibox switch may have, as in
-// "--prerender-from-omnibox=auto". auto: Allow field trial selection.
-const char kPrerenderFromOmniboxSwitchValueAuto[] = "auto";
-//   disabled: No prerendering.
-const char kPrerenderFromOmniboxSwitchValueDisabled[] = "disabled";
-//   enabled: Guaranteed prerendering.
-const char kPrerenderFromOmniboxSwitchValueEnabled[] = "enabled";
 
 // Use IPv6 only for privet HTTP.
 const char kPrivetIPv6Only[]                   = "privet-ipv6-only";
@@ -721,6 +706,11 @@ const char kSupervisedUserSyncToken[]       = "managed-user-sync-token";
 // testing purposes.
 const char kSystemLogUploadFrequency[] = "system-log-upload-frequency";
 
+// Sets the task manager to track extra renderer processes that might not
+// normally be displayed in the task manager.
+const char kTaskManagerShowExtraRenderers[] =
+    "task-manager-show-extra-renderers";
+
 // Passes the name of the current running automated test to Chrome.
 const char kTestName[]                      = "test-name";
 
@@ -737,10 +727,10 @@ const char kTryChromeAgain[]                = "try-chrome-again";
 const char kUnlimitedStorage[]              = "unlimited-storage";
 
 // Treat given (insecure) origins as secure origins. Multiple origins can be
-// supplied. Has no effect unless --user-data-dir is also supplied.
+// supplied as a comma-separated list.
+//
 // Example:
 // --unsafely-treat-insecure-origin-as-secure=http://a.test,http://b.test
-// --user-data-dir=/test/only/profile/dir
 const char kUnsafelyTreatInsecureOriginAsSecure[] =
     "unsafely-treat-insecure-origin-as-secure";
 
@@ -755,9 +745,6 @@ const char kUserAgent[]                     = "user-agent";
 // Specifies the user data directory, which is where the browser will look for
 // all of its state.
 const char kUserDataDir[]                   = "user-data-dir";
-
-// Uses experimental simple cache backend if possible.
-const char kUseSimpleCacheBackend[]         = "use-simple-cache-backend";
 
 // Examines a .crx for validity and prints the result.
 const char kValidateCrx[]                   = "validate-crx";
@@ -827,14 +814,8 @@ const char kForceShowUpdateMenuItemCustomSummary[] = "custom_summary";
 // Sets the market URL for Chrome for use in testing.
 const char kMarketUrlForTesting[] = "market-url-for-testing";
 
-// Switch to an existing tab for a suggestion opened from the New Tab Page.
-const char kNtpSwitchToExistingTab[] = "ntp-switch-to-existing-tab";
-
 // Specifies Android phone page loading progress bar animation.
 const char kProgressBarAnimation[]          = "progress-bar-animation";
-
-// Use a static URL for the logo of the default search engine.
-const char kSearchProviderLogoURL[] = "search-provider-logo-url";
 
 // Specifies a particular tab management experiment to enable.
 const char kTabManagementExperimentTypeDisabled[] =
@@ -1052,8 +1033,7 @@ extern const char kDisableInputImeAPI[] = "disable-input-ime-api";
 extern const char kEnableInputImeAPI[] = "enable-input-ime-api";
 #endif
 
-#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_MACOSX) || \
-    defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
 extern const char kEnableNewAppMenuIcon[] = "enable-new-app-menu-icon";
 #endif
 
@@ -1061,17 +1041,6 @@ extern const char kEnableNewAppMenuIcon[] = "enable-new-app-menu-icon";
 // Uses the system default printer as the initially selected destination in
 // print preview, instead of the most recently used destination.
 const char kUseSystemDefaultPrinter[] = "use-system-default-printer";
-#endif
-
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-// Enables the out-of-process memory logging.
-const char kMemlog[] = "memlog";
-
-// Communicates the pipe name for out-of-process memory logging.
-const char kMemlogPipe[] = "memlog-pipe";
-
-// Value passed to kProcessType switch that indicates the profiling process.
-const char kProfiling[] = "profiling";
 #endif
 
 bool ExtensionsDisabled(const base::CommandLine& command_line) {
@@ -1086,11 +1055,6 @@ bool ExtensionsDisabled() {
 bool MdFeedbackEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnableMaterialDesignFeedback);
-}
-
-bool MdPolicyPageEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ::switches::kEnableMaterialDesignPolicyPage);
 }
 
 #if defined(OS_CHROMEOS)

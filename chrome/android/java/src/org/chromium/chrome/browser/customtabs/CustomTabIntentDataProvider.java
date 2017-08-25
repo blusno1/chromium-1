@@ -34,7 +34,6 @@ import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.widget.TintedDrawable;
-import org.chromium.ui.widget.Toast;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -53,7 +52,7 @@ public class CustomTabIntentDataProvider {
     @IntDef({
             CUSTOM_TABS_UI_TYPE_DEFAULT, CUSTOM_TABS_UI_TYPE_MEDIA_VIEWER,
             CUSTOM_TABS_UI_TYPE_PAYMENT_REQUEST, CUSTOM_TABS_UI_TYPE_INFO_PAGE,
-            CUSTOM_TABS_UI_TYPE_READER_MODE,
+            CUSTOM_TABS_UI_TYPE_READER_MODE, CUSTOM_TABS_UI_TYPE_MINIMAL_UI_WEBAPP,
     })
     public @interface CustomTabsUiType {}
     public static final int CUSTOM_TABS_UI_TYPE_DEFAULT = 0;
@@ -61,6 +60,7 @@ public class CustomTabIntentDataProvider {
     public static final int CUSTOM_TABS_UI_TYPE_PAYMENT_REQUEST = 2;
     public static final int CUSTOM_TABS_UI_TYPE_INFO_PAGE = 3;
     public static final int CUSTOM_TABS_UI_TYPE_READER_MODE = 4;
+    public static final int CUSTOM_TABS_UI_TYPE_MINIMAL_UI_WEBAPP = 5;
 
     /**
      * Extra used to keep the caller alive. Its value is an Intent.
@@ -246,10 +246,7 @@ public class CustomTabIntentDataProvider {
      */
     private int verifiedUiType(int requestedUiType, Context context) {
         if (!mIsTrustedIntent) {
-            if (ChromeVersionInfo.isLocalBuild()) {
-                Toast.makeText(context, FIRST_PARTY_PITFALL_MSG, Toast.LENGTH_LONG).show();
-                Log.w(TAG, FIRST_PARTY_PITFALL_MSG);
-            }
+            if (ChromeVersionInfo.isLocalBuild()) Log.w(TAG, FIRST_PARTY_PITFALL_MSG);
             return CUSTOM_TABS_UI_TYPE_DEFAULT;
         }
 

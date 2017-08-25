@@ -86,9 +86,9 @@ class WebMediaPlayerDelegate;
 // Pipeline. Handles normal resource loading, Media Source, and
 // Encrypted Media.
 class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
-    : public NON_EXPORTED_BASE(blink::WebMediaPlayer),
-      public NON_EXPORTED_BASE(WebMediaPlayerDelegate::Observer),
-      public NON_EXPORTED_BASE(Pipeline::Client),
+    : public blink::WebMediaPlayer,
+      public WebMediaPlayerDelegate::Observer,
+      public Pipeline::Client,
       public MediaObserverClient,
       public base::SupportsWeakPtr<WebMediaPlayerImpl> {
  public:
@@ -229,7 +229,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 #endif
 
   // MediaObserverClient implementation.
-  void SwitchRenderer(bool is_rendered_remotely) override;
+  void SwitchToRemoteRenderer(
+      const std::string& remote_device_friendly_name) override;
+  void SwitchToLocalRenderer() override;
   void ActivateViewportIntersectionMonitoring(bool activate) override;
   void UpdateRemotePlaybackCompatibility(bool is_compatible) override;
 
@@ -482,7 +484,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // handling a src= or MSE based playback.
   void RecordUnderflowDuration(base::TimeDelta duration);
 
-  // Called by the data source when loading progresses.
+  // Called by the data source (for src=) or demuxer (for mse) when loading
+  // progresses.
   // Can be called quite often.
   void OnProgress();
 
@@ -495,6 +498,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Takes ownership of |tick_clock|
   void SetTickClockForTest(base::TickClock* tick_clock);
+
+  // Returns the current time without clamping to Duration() as required by
+  // HTMLMediaElement for handling ended. This method will never return a
+  // negative or kInfiniteDuration value. See http://crbug.com/409280,
+  // http://crbug.com/645998, and http://crbug.com/751823 for reasons why.
+  base::TimeDelta GetCurrentTimeInternal() const;
 
   blink::WebLocalFrame* frame_;
 
@@ -798,6 +807,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   OverlayInfo::RoutingToken overlay_routing_token_;
 
   OverlayInfo overlay_info_;
+
+  base::CancelableClosure update_background_status_cb_;
+
+  mojom::WatchTimeRecorderProvider* watch_time_recorder_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImpl);
 };

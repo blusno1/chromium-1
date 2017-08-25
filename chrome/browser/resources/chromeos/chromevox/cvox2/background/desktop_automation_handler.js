@@ -265,9 +265,6 @@ DesktopAutomationHandler.prototype = {
     if (!this.shouldOutput_(evt))
       return;
 
-    if (evt.target.state.richlyEditable)
-      return;
-
     var curRange = ChromeVoxState.instance.currentRange;
 
     // Always refresh the braille contents.
@@ -517,6 +514,11 @@ DesktopAutomationHandler.prototype = {
    */
   createTextEditHandlerIfNeeded_: function(node) {
     if (!node.state.editable)
+      return false;
+
+    if (!ChromeVoxState.instance.currentRange ||
+        !ChromeVoxState.instance.currentRange.start ||
+        !ChromeVoxState.instance.currentRange.start.node)
       return false;
 
     var topRoot = AutomationUtil.getTopLevelRoot(node);

@@ -17,7 +17,6 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "base/process/process_handle.h"
-#include "base/trace_event/process_memory_totals.h"
 
 namespace base {
 namespace trace_event {
@@ -33,7 +32,9 @@ enum class MemoryDumpType {
   EXPLICITLY_TRIGGERED,  // Non maskable dump request.
   PEAK_MEMORY_USAGE,     // Dumping memory at detected peak total memory usage.
   SUMMARY_ONLY,          // Calculate just the summary & don't add to the trace.
-  LAST = SUMMARY_ONLY
+  VM_REGIONS_ONLY,       // Retrieve only memory maps & don't add to the trace.
+                         // Used only for the heap profiler.
+  LAST = VM_REGIONS_ONLY
 };
 
 // Tells the MemoryDumpProvider(s) how much detailed their dumps should be.
@@ -80,17 +81,8 @@ struct MemoryDumpArgs {
   MemoryDumpLevelOfDetail level_of_detail;
 };
 
-using GlobalMemoryDumpCallback =
-    Callback<void(bool success, uint64_t dump_guid)>;
-
-// TODO(ssid): This should just sent a single PMD once the support for multi
-// process dumps are removed from MemoryDumpManager.
-using ProcessMemoryDumpsMap =
-    std::map<ProcessId, std::unique_ptr<ProcessMemoryDump>>;
-using ProcessMemoryDumpCallback =
-    Callback<void(bool success,
-                  uint64_t dump_guid,
-                  const ProcessMemoryDumpsMap& process_dumps)>;
+using ProcessMemoryDumpCallback = Callback<
+    void(bool success, uint64_t dump_guid, std::unique_ptr<ProcessMemoryDump>)>;
 
 BASE_EXPORT const char* MemoryDumpTypeToString(const MemoryDumpType& dump_type);
 

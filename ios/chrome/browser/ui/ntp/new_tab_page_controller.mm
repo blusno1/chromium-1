@@ -414,6 +414,14 @@ enum {
   }
 }
 
+- (CGPoint)scrollOffset {
+  if (_currentController == self.homePanel) {
+    return self.contentSuggestionsCoordinator.viewController.collectionView
+        .contentOffset;
+  }
+  return CGPointZero;
+}
+
 #pragma mark -
 
 - (void)setSwipeRecognizerProvider:(id<CRWSwipeRecognizerProvider>)provider {
@@ -560,8 +568,7 @@ enum {
           [[BookmarkControllerFactory alloc] init];
       _bookmarkController =
           [factory bookmarkPanelControllerForBrowserState:_browserState
-                                                   loader:_loader
-                                               colorCache:_dominantColorCache];
+                                                   loader:_loader];
     }
     panelController = _bookmarkController;
     view = [_bookmarkController view];
@@ -605,7 +612,8 @@ enum {
     if (!_openTabsController)
       _openTabsController =
           [[RecentTabsPanelController alloc] initWithLoader:_loader
-                                               browserState:_browserState];
+                                               browserState:_browserState
+                                                 dispatcher:self.dispatcher];
     // TODO(crbug.com/708319): Also set panelController for opentabs here.
     view = [_openTabsController view];
     [_openTabsController setDelegate:self];

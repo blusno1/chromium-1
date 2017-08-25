@@ -42,6 +42,9 @@ class ASH_EXPORT WallpaperWidgetController : public views::WidgetObserver,
   // necessary this as |layer_| doesn't have access to the root window).
   void StartAnimating(RootWindowController* root_window_controller);
 
+  // Blur pixels of the wallpaper layer by 3 * the given amount.
+  void SetWallpaperBlur(float blur_sigma);
+
   views::Widget* widget() { return widget_; }
 
  private:
@@ -56,6 +59,9 @@ class ASH_EXPORT WallpaperWidgetController : public views::WidgetObserver,
 
   // Parent of |widget_|.
   aura::Window* widget_parent_;
+
+  // True when we request cache on blurring layer.
+  bool has_blur_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(WallpaperWidgetController);
 };

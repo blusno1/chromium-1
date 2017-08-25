@@ -25,15 +25,13 @@ div {
 
 <script>
 
-function test()
-{
-    InspectorTest.selectNodeAndWaitForStyles("inspect", step2);
+function test() {
+  ElementsTestRunner.selectNodeAndWaitForStyles('inspect', step2);
 
-    function step2()
-    {
-        InspectorTest.dumpSelectedElementStyles(true, false, false);
-        InspectorTest.completeTest();
-    }
+  function step2() {
+    ElementsTestRunner.dumpSelectedElementStyles(true, false, false);
+    TestRunner.completeTest();
+  }
 }
 
 </script>

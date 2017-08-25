@@ -94,6 +94,7 @@
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/ui/low_disk_notification.h"
 #include "chrome/browser/chromeos/upgrade_detector_chromeos.h"
+#include "chrome/browser/component_updater/cros_component_installer.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
@@ -107,6 +108,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/logging_chrome.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chromeos/audio/audio_devices_pref_handler_impl.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/cert_loader.h"
@@ -169,20 +171,15 @@
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_util.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/chromeos/events/event_rewriter_chromeos.h"
 #include "ui/chromeos/events/pref_names.h"
 #include "ui/events/event_utils.h"
+#include "ui/message_center/message_center.h"
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"
-#endif
-
-// Exclude X11 dependents for ozone
-#if defined(USE_X11)
-#include "chrome/browser/chromeos/device_uma.h"
-#include "chrome/browser/chromeos/events/system_key_event_listener.h"
-#include "chrome/browser/chromeos/events/xinput_hierarchy_changed_event_listener.h"
 #endif
 
 namespace chromeos {
@@ -287,16 +284,8 @@ class DBusServices {
 
     if (GetAshConfig() == ash::Config::CLASSIC) {
       // TODO(lannm): This will eventually be served by mus-ws.
-
-      // TODO(lannm): Remove this provider once all callers are using
-      // |display_service_| instead: http://crbug.com/644319
-      service_providers.push_back(base::MakeUnique<DisplayPowerServiceProvider>(
-          kLibCrosServiceInterface,
-          base::MakeUnique<ChromeDisplayPowerServiceProviderDelegate>()));
-
       display_service_providers.push_back(
           base::MakeUnique<DisplayPowerServiceProvider>(
-              kDisplayServiceInterface,
               base::MakeUnique<ChromeDisplayPowerServiceProviderDelegate>()));
     }
     // TODO(teravest): Remove this provider once all callers are using
@@ -305,14 +294,9 @@ class DBusServices {
         base::MakeUnique<LivenessServiceProvider>(kLibCrosServiceInterface));
     service_providers.push_back(base::MakeUnique<ScreenLockServiceProvider>());
 
-    // TODO(lannm): Remove this provider once all callers are using
-    // |display_service_| instead: http://crbug.com/644319
-    service_providers.push_back(base::MakeUnique<ConsoleServiceProvider>(
-        kLibCrosServiceInterface, &console_service_provider_delegate_));
-
     display_service_providers.push_back(
         base::MakeUnique<ConsoleServiceProvider>(
-            kDisplayServiceInterface, &console_service_provider_delegate_));
+            &console_service_provider_delegate_));
 
     // TODO(teravest): Remove this provider once all callers are using
     // |kiosk_info_service_| instead: http://crbug.com/703229
@@ -787,6 +771,17 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
     VLOG(1) << "Relaunching browser for user: " << account_id.Serialize()
             << " with hash: " << user_id_hash;
   }
+
+  // Set product name ("Chrome OS" or "Chromium OS") to be used in context
+  // header of new-style notification.
+  message_center::MessageCenter::Get()->SetProductOSName(
+      l10n_util::GetStringUTF16(IDS_PRODUCT_OS_NAME));
+
+  // Register all installed components for regular update.
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(component_updater::CrOSComponent::GetInstalledComponents),
+      base::BindOnce(component_updater::CrOSComponent::RegisterComponents));
 }
 
 class GuestLanguageSetCallbackData {
@@ -943,27 +938,6 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
   external_metrics_ = new chromeos::ExternalMetrics;
   external_metrics_->Start();
 
-#if defined(USE_X11)
-  // Listen for system key events so that the user will be able to adjust the
-  // volume on the login screen, if Chrome is running on Chrome OS
-  // (i.e. not Linux desktop), and in non-test mode.
-  // Note: SystemKeyEventListener depends on the DBus thread.
-  if (base::SysInfo::IsRunningOnChromeOS() &&
-      !parameters().ui_task) {  // ui_task is non-NULL when running tests.
-    SystemKeyEventListener::Initialize();
-  }
-
-  if (!ash_util::IsRunningInMash()) {
-    // Listen for XI_HierarchyChanged events. Note: if this is moved to
-    // PreMainMessageLoopRun() then desktopui_PageCyclerTests fail for unknown
-    // reasons, see http://crosbug.com/24833.
-    XInputHierarchyChangedEventListener::GetInstance();
-
-    // Start the CrOS input device UMA watcher
-    DeviceUMA::GetInstance();
-  }
-#endif
-
   // -- This used to be in ChromeBrowserMainParts::PreMainMessageLoopRun()
   // -- immediately after ChildProcess::WaitForDebugger().
 
@@ -1067,19 +1041,6 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   ScreenLocker::ShutDownClass();
   keyboard_event_rewriters_.reset();
   low_disk_notification_.reset();
-#if defined(USE_X11)
-  if (!ash_util::IsRunningInMash()) {
-    // The XInput2 event listener needs to be shut down earlier than when
-    // Singletons are finally destroyed in AtExitManager.
-    XInputHierarchyChangedEventListener::GetInstance()->Stop();
-
-    DeviceUMA::GetInstance()->Stop();
-  }
-
-  // SystemKeyEventListener::Shutdown() is always safe to call,
-  // even if Initialize() wasn't called.
-  SystemKeyEventListener::Shutdown();
-#endif
 
   // Detach D-Bus clients before DBusThreadManager is shut down.
   idle_action_warning_observer_.reset();

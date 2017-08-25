@@ -18,6 +18,7 @@
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "ash/system/web_notification/ash_popup_alignment_delegate.h"
+#include "ash/system/web_notification/message_center_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
 #include "base/memory/ptr_util.h"
@@ -29,11 +30,11 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/message_center_tray.h"
 #include "ui/message_center/notification_list.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/views/message_center_bubble.h"
 #include "ui/message_center/views/message_popup_collection.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
@@ -213,8 +214,7 @@ TEST_F(WebNotificationTrayTest, WebNotificationPopupBubble) {
 
 using message_center::NotificationList;
 
-// Flakily fails. http://crbug.com/229791
-TEST_F(WebNotificationTrayTest, DISABLED_ManyMessageCenterNotifications) {
+TEST_F(WebNotificationTrayTest, ManyMessageCenterNotifications) {
   // Add the max visible notifications +1, ensure the correct visible number.
   size_t notifications_to_add =
       message_center::kMaxVisibleMessageCenterNotifications + 1;
@@ -232,8 +232,7 @@ TEST_F(WebNotificationTrayTest, DISABLED_ManyMessageCenterNotifications) {
       GetTray()->GetMessageCenterBubbleForTest()->NumMessageViewsForTest());
 }
 
-// Flakily times out. http://crbug.com/229792
-TEST_F(WebNotificationTrayTest, DISABLED_ManyPopupNotifications) {
+TEST_F(WebNotificationTrayTest, ManyPopupNotifications) {
   // Add the max visible popup notifications +1, ensure the correct num visible.
   size_t notifications_to_add =
       message_center::kMaxVisiblePopupNotifications + 1;

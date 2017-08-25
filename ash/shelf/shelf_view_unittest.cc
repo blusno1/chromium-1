@@ -9,10 +9,12 @@
 #include <utility>
 #include <vector>
 
+#include "ash/app_list/test_app_list_presenter_impl.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/app_list_button.h"
 #include "ash/shelf/overflow_bubble.h"
@@ -52,7 +54,6 @@
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -78,11 +79,6 @@ namespace {
 int64_t GetPrimaryDisplayId() {
   return display::Screen::GetScreen()->GetPrimaryDisplay().id();
 }
-
-}  // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-// ShelfObserver::OnShelfIconPositionsChanged tests.
 
 class TestShelfObserver : public ShelfObserver {
  public:
@@ -117,6 +113,11 @@ class TestShelfObserver : public ShelfObserver {
 
   DISALLOW_COPY_AND_ASSIGN(TestShelfObserver);
 };
+
+}  // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+// ShelfObserver::OnShelfIconPositionsChanged tests.
 
 class ShelfObserverIconTest : public AshTestBase {
  public:
@@ -166,7 +167,7 @@ class ShelfItemSelectionTracker : public ShelfItemDelegate {
     item_selected_count_++;
     std::move(callback).Run(item_selected_action_, base::nullopt);
   }
-  void ExecuteCommand(uint32_t command_id, int32_t event_flags) override {}
+  void ExecuteCommand(bool, int64_t, int32_t, int64_t) override {}
   void Close() override {}
 
  private:
@@ -1492,12 +1493,10 @@ TEST_F(ShelfViewTest, ShouldHideTooltipTest) {
       gfx::Point(all_area.x(), all_area.bottom())));
 }
 
+// Test that shelf button tooltips show (except app list) with an open app list.
 TEST_F(ShelfViewTest, ShouldHideTooltipWithAppListWindowTest) {
-  // Trigger mock notifications that the app list was shown.
-  Shell::Get()->app_list()->OnTargetVisibilityChanged(true);
-  Shell::Get()->app_list()->OnVisibilityChanged(true, GetPrimaryDisplayId());
-  AppListButton* app_list_button = shelf_view_->GetAppListButton();
-  app_list_button->OnAppListShown();
+  TestAppListPresenterImpl app_list_presenter_impl;
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplay().id());
 
   // The tooltip shouldn't hide if the mouse is on normal buttons.
   for (int i = 1; i < test_api_->GetButtonCount(); i++) {
@@ -1511,6 +1510,7 @@ TEST_F(ShelfViewTest, ShouldHideTooltipWithAppListWindowTest) {
   }
 
   // The tooltip should hide on the app list button if the app list is visible.
+  AppListButton* app_list_button = shelf_view_->GetAppListButton();
   EXPECT_TRUE(shelf_view_->ShouldHideTooltip(
       app_list_button->GetMirroredBounds().CenterPoint()));
 }
@@ -2003,6 +2003,39 @@ TEST_F(ShelfViewTest, TestShelfItemsAnimations) {
   EXPECT_EQ(animation_duration, observer.icon_positions_animation_duration());
 }
 
+// Tests that the blank shelf view area shows a context menu on right click.
+TEST_F(ShelfViewTest, ShelfViewShowsContextMenu) {
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  generator.MoveMouseTo(shelf_view_->GetBoundsInScreen().CenterPoint());
+  generator.PressRightButton();
+  EXPECT_TRUE(test_api_->CloseMenu());
+}
+
+// Tests that the app list button shows a context menu on right click.
+TEST_F(ShelfViewTest, AppListButtonShowsContextMenu) {
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  AppListButton* app_list_button = shelf_view_->GetAppListButton();
+  generator.MoveMouseTo(app_list_button->GetBoundsInScreen().CenterPoint());
+  generator.PressRightButton();
+  EXPECT_TRUE(test_api_->CloseMenu());
+}
+
+// Tests that ShelfWindowWatcher buttons show a context menu on right click.
+TEST_F(ShelfViewTest, ShelfWindowWatcherButtonShowsContextMenu) {
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  widget->Show();
+  aura::Window* window = widget->GetNativeWindow();
+  ShelfID shelf_id(std::to_string(123));
+  window->SetProperty(kShelfIDKey, new std::string(shelf_id.Serialize()));
+  window->SetProperty(kShelfItemTypeKey, static_cast<int32_t>(TYPE_DIALOG));
+  ShelfButton* button = GetButtonByID(shelf_id);
+  ASSERT_TRUE(button);
+  generator.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
+  generator.PressRightButton();
+  EXPECT_TRUE(test_api_->CloseMenu());
+}
+
 class ShelfViewVisibleBoundsTest : public ShelfViewTest,
                                    public testing::WithParamInterface<bool> {
  public:
@@ -2128,7 +2161,7 @@ class ListMenuShelfItemDelegate : public ShelfItemDelegate {
     items.push_back(mojom::MenuItem::New());
     std::move(callback).Run(SHELF_ACTION_NONE, std::move(items));
   }
-  void ExecuteCommand(uint32_t command_id, int32_t event_flags) override {}
+  void ExecuteCommand(bool, int64_t, int32_t, int64_t) override {}
   void Close() override {}
 
   DISALLOW_COPY_AND_ASSIGN(ListMenuShelfItemDelegate);
@@ -2143,19 +2176,11 @@ class ShelfViewInkDropTest : public ShelfViewTest {
   ~ShelfViewInkDropTest() override {}
 
   void SetUp() override {
-    ash_test_helper()->set_test_shell_delegate(CreateTestShellDelegate());
-
+    ash_test_helper()->set_test_shell_delegate(new TestShellDelegate());
     ShelfViewTest::SetUp();
   }
 
  protected:
-  // Gives subclasses a chance to return a custom test shell delegate to install
-  // before calling base class's SetUp(). Shell will take ownership of the
-  // returned object.
-  virtual TestShellDelegate* CreateTestShellDelegate() {
-    return new TestShellDelegate;
-  }
-
   void InitAppListButtonInkDrop() {
     app_list_button_ = shelf_view_->GetAppListButton();
 
@@ -2178,18 +2203,6 @@ class ShelfViewInkDropTest : public ShelfViewTest {
         .SetInkDrop(std::move(browser_button_ink_drop));
   }
 
-  void ShowAppList() {
-    // Trigger a mock notification that the app list was shown.
-    Shell::Get()->app_list()->OnTargetVisibilityChanged(true);
-    app_list_button_->OnAppListShown();
-  }
-
-  void DismissAppList() {
-    // Trigger a mock notification that the app list was dismissed.
-    Shell::Get()->app_list()->OnTargetVisibilityChanged(false);
-    app_list_button_->OnAppListDismissed();
-  }
-
   void FinishAppListVisibilityChange() {
     // Trigger a mock notification that the app list finished animating.
     app_list::AppList* app_list = Shell::Get()->app_list();
@@ -2209,21 +2222,16 @@ class ShelfViewInkDropTest : public ShelfViewTest {
 // Tests that changing visibility of the app list transitions app list button's
 // ink drop states correctly.
 TEST_F(ShelfViewInkDropTest, AppListButtonWhenVisibilityChanges) {
-  // TODO: investigate failure in mash, http://crbug.com/695751.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   InitAppListButtonInkDrop();
 
-  ShowAppList();
-  FinishAppListVisibilityChange();
+  TestAppListPresenterImpl app_list_presenter_impl;
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplay().id());
   EXPECT_EQ(views::InkDropState::ACTIVATED,
             app_list_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
               ElementsAre(views::InkDropState::ACTIVATED));
 
-  DismissAppList();
-  FinishAppListVisibilityChange();
+  app_list_presenter_impl.DismissAndRunLoop();
   EXPECT_EQ(views::InkDropState::HIDDEN,
             app_list_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
@@ -2266,27 +2274,21 @@ TEST_F(ShelfViewInkDropTest, AppListButtonMouseEventsWhenHidden) {
 // which dismisses the app list, transitions ink drop states correctly. Also,
 // tests that mouse drag and mouse release does not affect the ink drop state.
 TEST_F(ShelfViewInkDropTest, AppListButtonMouseEventsWhenVisible) {
-  // TODO: investigate failure in mash, http://crbug.com/695751.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   InitAppListButtonInkDrop();
 
-  ShowAppList();
-  FinishAppListVisibilityChange();
+  TestAppListPresenterImpl app_list_presenter_impl;
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplay().id());
   EXPECT_EQ(views::InkDropState::ACTIVATED,
             app_list_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
               ElementsAre(views::InkDropState::ACTIVATED));
 
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  generator.MoveMouseTo(app_list_button_->GetBoundsInScreen().CenterPoint());
-
   // Mouse press on the button, which dismisses the app list, should end up in
   // the hidden state.
-  DismissAppList();
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  generator.MoveMouseTo(app_list_button_->GetBoundsInScreen().CenterPoint());
   generator.PressLeftButton();
-  FinishAppListVisibilityChange();
+  RunAllPendingInMessageLoop();
   EXPECT_EQ(views::InkDropState::HIDDEN,
             app_list_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
@@ -2333,38 +2335,26 @@ TEST_F(ShelfViewInkDropTest, AppListButtonGestureTapWhenHidden) {
 // Tests that when the app list is visible, tapping on the app list button
 // transitions ink drop states correctly.
 TEST_F(ShelfViewInkDropTest, AppListButtonGestureTapWhenVisible) {
-  // TODO: investigate failure in mash, http://crbug.com/695751.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   InitAppListButtonInkDrop();
 
-  ShowAppList();
-  FinishAppListVisibilityChange();
+  TestAppListPresenterImpl app_list_presenter_impl;
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplay().id());
   EXPECT_EQ(views::InkDropState::ACTIVATED,
             app_list_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
               ElementsAre(views::InkDropState::ACTIVATED));
 
+  // Touch press and release on the button, which dismisses the app list, should
+  // end up in the hidden state.
   ui::test::EventGenerator& generator = GetEventGenerator();
   generator.MoveMouseTo(app_list_button_->GetBoundsInScreen().CenterPoint());
-
-  // Touch press on the button, which dismisses the app list, should end up in
-  // the hidden state.
-  DismissAppList();
   generator.PressTouch();
+  generator.ReleaseTouch();
+  RunAllPendingInMessageLoop();
   EXPECT_EQ(views::InkDropState::HIDDEN,
             app_list_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
               ElementsAre(views::InkDropState::DEACTIVATED));
-
-  // Touch release on the button should not change the ink drop state.
-  generator.ReleaseTouch();
-  FinishAppListVisibilityChange();
-  EXPECT_EQ(views::InkDropState::HIDDEN,
-            app_list_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
-              IsEmpty());
 }
 
 // Tests that when the app list is hidden, tapping down on the app list button
@@ -2403,39 +2393,20 @@ TEST_F(ShelfViewInkDropTest, AppListButtonGestureTapDragWhenHidden) {
 // Tests that when the app list is visible, tapping down on the app list button
 // and dragging the touch point transitions ink drop states correctly.
 TEST_F(ShelfViewInkDropTest, AppListButtonGestureTapDragWhenVisible) {
-  // TODO: investigate failure in mash, http://crbug.com/695751.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   InitAppListButtonInkDrop();
 
-  ShowAppList();
-  FinishAppListVisibilityChange();
+  TestAppListPresenterImpl app_list_presenter_impl;
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplay().id());
   EXPECT_EQ(views::InkDropState::ACTIVATED,
             app_list_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
               ElementsAre(views::InkDropState::ACTIVATED));
 
+  // Touch press on the button, dragging the touch point, and releasing, which
+  // dismisses the app list, should end up in the hidden state.
   ui::test::EventGenerator& generator = GetEventGenerator();
-  gfx::Point touch_location =
-      app_list_button_->GetBoundsInScreen().CenterPoint();
-  generator.MoveMouseTo(touch_location);
-
-  // Touch press on the button, which dismisses the app list, should end up in
-  // the hidden state.
-  DismissAppList();
-  generator.PressTouch();
-  EXPECT_EQ(views::InkDropState::HIDDEN,
-            app_list_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::DEACTIVATED));
-
-  // Dragging the touch point and releasing should not change the ink drop
-  // state.
-  touch_location.Offset(app_list_button_->width(), 0);
-  generator.MoveTouch(touch_location);
-  generator.ReleaseTouch();
-  FinishAppListVisibilityChange();
+  generator.MoveMouseTo(app_list_button_->GetBoundsInScreen().CenterPoint());
+  generator.PressMoveAndReleaseTouchBy(app_list_button_->width(), 0);
   EXPECT_EQ(views::InkDropState::HIDDEN,
             app_list_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
@@ -2447,7 +2418,7 @@ TEST_F(ShelfViewInkDropTest, AppListButtonGestureTapDragWhenVisible) {
 TEST_F(ShelfViewInkDropTest, ShelfButtonWithoutMenuPressRelease) {
   InitBrowserButtonInkDrop();
 
-  views::CustomButton* button = browser_button_;
+  views::Button* button = browser_button_;
   gfx::Point mouse_location = button->GetLocalBounds().CenterPoint();
 
   ui::MouseEvent press_event(ui::ET_MOUSE_PRESSED, mouse_location,
@@ -2474,7 +2445,7 @@ TEST_F(ShelfViewInkDropTest, ShelfButtonWithoutMenuPressRelease) {
 TEST_F(ShelfViewInkDropTest, ShelfButtonWithoutMenuPressDragReleaseOutside) {
   InitBrowserButtonInkDrop();
 
-  views::CustomButton* button = browser_button_;
+  views::Button* button = browser_button_;
   gfx::Point mouse_location = button->GetLocalBounds().CenterPoint();
 
   ui::MouseEvent press_event(ui::ET_MOUSE_PRESSED, mouse_location,
@@ -2521,7 +2492,7 @@ TEST_F(ShelfViewInkDropTest, ShelfButtonWithoutMenuPressDragReleaseOutside) {
 TEST_F(ShelfViewInkDropTest, ShelfButtonWithoutMenuPressDragReleaseInside) {
   InitBrowserButtonInkDrop();
 
-  views::CustomButton* button = browser_button_;
+  views::Button* button = browser_button_;
   gfx::Point mouse_location = button->GetLocalBounds().CenterPoint();
 
   ui::MouseEvent press_event(ui::ET_MOUSE_PRESSED, mouse_location,
@@ -2572,7 +2543,7 @@ TEST_F(ShelfViewInkDropTest, ShelfButtonWithMenuPressRelease) {
   model_->SetShelfItemDelegate(model_->items()[1].id,
                                base::MakeUnique<ListMenuShelfItemDelegate>());
 
-  views::CustomButton* button = browser_button_;
+  views::Button* button = browser_button_;
   gfx::Point mouse_location = button->GetLocalBounds().CenterPoint();
 
   ui::MouseEvent press_event(ui::ET_MOUSE_PRESSED, mouse_location,
@@ -2645,10 +2616,6 @@ const ui::EventPointerType kPointerTypes[] = {
 // Tests that clicking/tapping on the app list button in tablet mode (when
 // it has two functionalities), transitions the ink drop state correctly.
 TEST_P(AppListButtonInkDropTest, AppListButtonInTabletMode) {
-  // TODO: investigate failure in mash, http://crbug.com/695751.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   InitAppListButtonInkDrop();
   // Finish all setup tasks. In particular we want to finish the GetSwitchStates
   // post task in (Fake)PowerManagerClient which is triggered by
@@ -2713,8 +2680,7 @@ TEST_P(AppListButtonInkDropTest, AppListButtonInTabletMode) {
   EXPECT_THAT(app_list_button_ink_drop_->GetAndResetRequestedStates(),
               ElementsAre(views::InkDropState::ACTION_TRIGGERED));
 
-  // Verify when we leave tablet mode, the bounds should return to be the same
-  // as they were before we entered tablet mode.
+  // Verify that the bounds after leaving tablet mode match the original bounds.
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   test_api_->RunMessageLoopUntilAnimationsDone();
   new_bounds = app_list_button_->GetBoundsInScreen();
@@ -2727,40 +2693,6 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::ValuesIn(kPointerTypes));
 
 namespace {
-
-// An empty menu model for shell context menu just to have a menu.
-class TestShellMenuModel : public ui::SimpleMenuModel,
-                           public ui::SimpleMenuModel::Delegate {
- public:
-  TestShellMenuModel() : ui::SimpleMenuModel(this) {}
-  ~TestShellMenuModel() override {}
-
- private:
-  // ui::SimpleMenuModel::Delegate:
-  bool IsCommandIdChecked(int command_id) const override { return false; }
-  bool IsCommandIdEnabled(int command_id) const override { return true; }
-  void ExecuteCommand(int command_id, int event_flags) override {}
-
-  DISALLOW_COPY_AND_ASSIGN(TestShellMenuModel);
-};
-
-// A test ShellDelegate implementation for overflow button tests that returns a
-// TestShelfMenuModel for the shell context menu.
-class TestOverflowButtonShellDelegate : public TestShellDelegate {
- public:
-  TestOverflowButtonShellDelegate() {}
-  ~TestOverflowButtonShellDelegate() override {}
-
-  // TestShellDelegate:
-  ui::MenuModel* CreateContextMenu(Shelf* shelf,
-                                   const ShelfItem* item) override {
-    // Caller takes ownership of the returned object.
-    return new TestShellMenuModel;
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestOverflowButtonShellDelegate);
-};
 
 std::string ToString(ShelfAlignment shelf_alignment) {
   switch (shelf_alignment) {
@@ -2809,11 +2741,6 @@ class OverflowButtonInkDropTest : public ShelfViewInkDropTest {
     gfx::Point point = GetScreenPointInsideOverflowButton();
     point.Offset(overflow_button_->width(), 0);
     return point;
-  }
-
-  // Overridden from ShelfViewInkDropTest:
-  TestShellDelegate* CreateTestShellDelegate() override {
-    return new TestOverflowButtonShellDelegate;
   }
 
   OverflowButton* overflow_button_ = nullptr;

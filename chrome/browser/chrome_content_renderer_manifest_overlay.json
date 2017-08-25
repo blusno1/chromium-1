@@ -5,8 +5,13 @@
       "provides": {
         "browser": [
           "chrome::mojom::ResourceUsageReporter",
-          "spellcheck::mojom::SpellChecker"
+          "chrome::mojom::SearchBouncer",
+          "spellcheck::mojom::SpellChecker",
+          "profiling::mojom::MemlogClient"
         ]
+      },
+      "requires": {
+        "chrome": [ "renderer" ]
       }
     },
     "navigation:frame": {
@@ -20,6 +25,8 @@
           "chrome::mojom::InsecureContentRenderer",
           "chrome::mojom::PhishingDetector",
           "chrome::mojom::ThumbnailCapturer",
+          "chrome::mojom::WebUITester",
+          "chrome::mojom::ChromeRenderFrame",
           "contextual_search::mojom::OverlayPageNotifierService",
           "dom_distiller::mojom::DistillerPageNotifierService",
           "spellcheck::mojom::SpellCheckPanel"

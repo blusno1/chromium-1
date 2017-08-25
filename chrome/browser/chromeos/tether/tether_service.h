@@ -78,7 +78,8 @@ class TetherService : public KeyedService,
         chromeos::ManagedNetworkConfigurationHandler*
             managed_network_configuration_handler,
         chromeos::NetworkConnect* network_connect,
-        chromeos::NetworkConnectionHandler* network_connection_handler);
+        chromeos::NetworkConnectionHandler* network_connection_handler,
+        scoped_refptr<device::BluetoothAdapter> adapter);
     virtual void ShutdownTether();
   };
 
@@ -104,7 +105,8 @@ class TetherService : public KeyedService,
                              bool powered) override;
 
   // chromeos::NetworkStateHandlerObserver:
-  void DefaultNetworkChanged(const chromeos::NetworkState* network) override;
+  void NetworkConnectionStateChanged(
+      const chromeos::NetworkState* network) override;
   void DeviceListChanged() override;
 
   // Callback when the controlling pref changes.
@@ -126,13 +128,61 @@ class TetherService : public KeyedService,
 
  private:
   friend class TetherServiceTest;
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestSuspend);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBleAdvertisingNotSupported);
+  FRIEND_TEST_ALL_PREFIXES(
+      TetherServiceTest,
+      TestBleAdvertisingNotSupported_BluetoothIsInitiallyNotPowered);
+  FRIEND_TEST_ALL_PREFIXES(
+      TetherServiceTest,
+      TestBleAdvertisingNotSupportedAndRecorded_BluetoothIsInitiallyNotPowered);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestBleAdvertisingSupportedButIncorrectlyRecorded);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestScreenLock);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestFeatureFlagEnabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestNoTetherHosts);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestProhibitedByPolicy);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestIsBluetoothPowered);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestCellularIsUnavailable);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestCellularIsAvailable);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestDisabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestEnabled);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBluetoothNotification);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBluetoothNotPresent);
+
+  // Reflects InstantTethering_TechnologyStateAndReason enum in enums.xml. Do
+  // not rearrange.
+  enum TetherFeatureState {
+    OTHER_OR_UNKNOWN = 0,
+    BLE_ADVERTISING_NOT_SUPPORTED = 1,
+    SCREEN_LOCKED = 2,
+    NO_AVAILABLE_HOSTS = 3,
+    CELLULAR_DISABLED = 4,
+    PROHIBITED = 5,
+    BLUETOOTH_DISABLED = 6,
+    USER_PREFERENCE_DISABLED = 7,
+    ENABLED = 8,
+    BLE_NOT_PRESENT = 9,
+    TETHER_FEATURE_STATE_MAX
+  };
 
   void OnBluetoothAdapterFetched(
       scoped_refptr<device::BluetoothAdapter> adapter);
+  void OnBluetoothAdapterAdvertisingIntervalSet();
+  void OnBluetoothAdapterAdvertisingIntervalError(
+      device::BluetoothAdvertisement::ErrorCode status);
 
-  bool IsBluetoothAvailable() const;
+  void SetBleAdvertisingInterval();
+
+  // Whether BLE advertising is supported on this device. This should only
+  // return true if a call to BluetoothAdapter::SetAdvertisingInterval() during
+  // TetherService construction succeeds. That method will fail in cases like
+  // those captured in crbug.com/738222.
+  bool GetIsBleAdvertisingSupportedPref();
+  void SetIsBleAdvertisingSupportedPref(bool is_ble_advertising_supported);
+
+  bool IsBluetoothPresent() const;
+  bool IsBluetoothPowered() const;
 
   bool IsCellularAvailableButNotEnabled() const;
 
@@ -148,6 +198,11 @@ class TetherService : public KeyedService,
   // current conditions.
   bool CanEnableBluetoothNotificationBeShown();
 
+  TetherFeatureState GetTetherFeatureState();
+
+  // Record to UMA Tether's current feature state.
+  void RecordTetherFeatureState();
+
   void SetInitializerDelegateForTest(
       std::unique_ptr<InitializerDelegate> initializer_delegate);
   void SetNotificationPresenterForTest(
@@ -160,6 +215,8 @@ class TetherService : public KeyedService,
   // Whether the device and service have been suspended (e.g. the laptop lid
   // was closed).
   bool suspended_ = false;
+
+  bool has_attempted_to_set_ble_advertising_interval_ = false;
 
   Profile* profile_;
   chromeos::PowerManagerClient* power_manager_client_;

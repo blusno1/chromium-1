@@ -192,17 +192,13 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
 
   // To be meaningful enough to indicate user intention, a keyboard event needs
   // - not to be a modifier event
-  // - not to be a browser shortcut
   // https://crbug.com/709765
   bool is_modifier =
       Platform::Current()->IsDomKeyForModifier(initial_key_event.dom_key);
-  bool is_browser_shortcut = initial_key_event.is_browser_shortcut;
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator;
-  if (!is_modifier && !is_browser_shortcut) {
-    gesture_indicator.reset(new UserGestureIndicator(
-        UserGestureToken::Create(frame_->GetDocument())));
-  }
+  if (!is_modifier)
+    gesture_indicator = LocalFrame::CreateUserGesture(frame_);
 
   // In IE, access keys are special, they are handled after default keydown
   // processing, but cannot be canceled - this is hard to match.  On Mac OS X,

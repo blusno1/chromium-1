@@ -233,7 +233,7 @@ class BackgroundColorHoverButton : public views::LabelButton {
     UpdateColors();
   }
 
-  // views::CustomButton:
+  // views::Button:
   void StateChanged(ButtonState old_state) override {
     LabelButton::StateChanged(old_state);
 
@@ -349,10 +349,10 @@ class EditableProfilePhoto : public views::LabelButton {
     SetEnabled(false);
   }
 
-  void PaintChildren(const ui::PaintContext& context) override {
+  void PaintChildren(const views::PaintInfo& paint_info) override {
     {
       // Display any children (the "change photo" overlay) as a circle.
-      ui::ClipRecorder clip_recorder(context);
+      ui::ClipRecorder clip_recorder(paint_info.context());
       gfx::Rect clip_bounds = image()->GetMirroredBounds();
       gfx::Path clip_mask;
       clip_mask.addCircle(
@@ -360,11 +360,11 @@ class EditableProfilePhoto : public views::LabelButton {
           clip_bounds.y() + clip_bounds.height() / 2,
           clip_bounds.width() / 2);
       clip_recorder.ClipPathWithAntiAliasing(clip_mask);
-      View::PaintChildren(context);
+      View::PaintChildren(paint_info);
     }
 
     ui::PaintRecorder paint_recorder(
-        context, gfx::Size(kProfileBadgeSize, kProfileBadgeSize));
+        paint_info.context(), gfx::Size(kProfileBadgeSize, kProfileBadgeSize));
     gfx::Canvas* canvas = paint_recorder.canvas();
     if (profile_->IsSupervised()) {
       gfx::Rect bounds(0, 0, kProfileBadgeSize, kProfileBadgeSize);
@@ -396,7 +396,7 @@ class EditableProfilePhoto : public views::LabelButton {
   }
 
  private:
-  // views::CustomButton:
+  // views::Button:
   void StateChanged(ButtonState old_state) override {
     if (photo_overlay_) {
       photo_overlay_->SetVisible(
@@ -456,8 +456,8 @@ class TitleCard : public views::View {
     titled_view->SetLayoutManager(layout);
 
     ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
-    gfx::Insets dialog_insets =
-        provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS);
+    const gfx::Insets dialog_insets =
+        provider->GetInsetsMetric(views::INSETS_DIALOG);
     // Column set 0 is a single column layout with horizontal padding at left
     // and right, and column set 1 is a single column layout with no padding.
     views::ColumnSet* columns = layout->AddColumnSet(0);
@@ -1255,38 +1255,6 @@ views::View* ProfileChooserView::CreateGuestProfileView() {
   return CreateCurrentProfileView(guest_avatar_item, true);
 }
 
-views::View* ProfileChooserView::CreateOtherProfilesView(
-    const Indexes& avatars_to_show) {
-  views::View* view = new views::View();
-  views::GridLayout* layout = CreateSingleColumnLayout(view, kFixedMenuWidth);
-
-  for (size_t index : avatars_to_show) {
-    const AvatarMenu::Item& item = avatar_menu_->GetItemAt(index);
-    const int kSmallImageSide = 32;
-
-    // Use the low-res, small default avatars in the fast user switcher, like
-    // we do in the menu bar.
-    gfx::Image item_icon;
-    AvatarMenu::GetImageForMenuButton(item.profile_path, &item_icon);
-
-    gfx::Image image = profiles::GetSizedAvatarIcon(
-        item_icon, true, kSmallImageSide, kSmallImageSide);
-
-    views::LabelButton* button = new BackgroundColorHoverButton(
-        this,
-        profiles::GetProfileSwitcherTextForItem(item),
-        *image.ToImageSkia());
-    open_other_profile_indexes_map_[button] = index;
-
-    layout->StartRow(1, 0);
-    layout->AddView(new views::Separator());
-    layout->StartRow(1, 0);
-    layout->AddView(button);
-  }
-
-  return view;
-}
-
 views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
                                                    AvatarMenu* avatar_menu) {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
@@ -1431,8 +1399,7 @@ views::View* ProfileChooserView::CreateCurrentProfileAccountsView(
     add_account_link_ = CreateLink(l10n_util::GetStringFUTF16(
         IDS_PROFILES_PROFILE_ADD_ACCOUNT_BUTTON, avatar_item.name), this);
     add_account_link_->SetBorder(views::CreateEmptyBorder(
-        0,
-        provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS).left(),
+        0, provider->GetInsetsMetric(views::INSETS_DIALOG).left(),
         vertical_spacing, 0));
     layout->StartRow(1, 0);
     layout->AddView(add_account_link_);
@@ -1464,8 +1431,8 @@ void ProfileChooserView::CreateAccountButton(views::GridLayout* layout,
         provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
   }
 
-  gfx::Insets dialog_insets =
-      provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS);
+  const gfx::Insets dialog_insets =
+      provider->GetInsetsMetric(views::INSETS_DIALOG);
 
   int available_width = width - dialog_insets.width() -
       kDeleteButtonWidth - warning_button_width;
@@ -1493,9 +1460,8 @@ void ProfileChooserView::CreateAccountButton(views::GridLayout* layout,
     delete_button->SetImage(views::ImageButton::STATE_PRESSED,
                             rb->GetImageSkiaNamed(IDR_CLOSE_1_P));
     delete_button->SetBounds(
-        width -
-        provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS).right() -
-        kDeleteButtonWidth,
+        width - provider->GetInsetsMetric(views::INSETS_DIALOG).right() -
+            kDeleteButtonWidth,
         0, kDeleteButtonWidth, kButtonHeight);
 
     email_button->set_notify_enter_exit_on_child(true);
@@ -1509,8 +1475,8 @@ void ProfileChooserView::CreateAccountButton(views::GridLayout* layout,
 views::View* ProfileChooserView::CreateAccountRemovalView() {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
-  gfx::Insets dialog_insets = provider->GetInsetsMetric(
-      views::INSETS_DIALOG_CONTENTS);
+  const gfx::Insets dialog_insets =
+      provider->GetInsetsMetric(views::INSETS_DIALOG);
 
   views::View* view = new views::View();
   views::GridLayout* layout = CreateSingleColumnLayout(
@@ -1583,8 +1549,8 @@ views::View* ProfileChooserView::CreateSwitchUserView() {
   views::GridLayout* layout = CreateSingleColumnLayout(
       view, kFixedSwitchUserViewWidth);
   views::ColumnSet* columns = layout->AddColumnSet(1);
-  gfx::Insets dialog_insets = provider->GetInsetsMetric(
-      views::INSETS_DIALOG_CONTENTS);
+  const gfx::Insets dialog_insets =
+      provider->GetInsetsMetric(views::INSETS_DIALOG);
   columns->AddPaddingColumn(0, dialog_insets.left());
   int label_width = kFixedSwitchUserViewWidth - dialog_insets.width();
   columns->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 0,

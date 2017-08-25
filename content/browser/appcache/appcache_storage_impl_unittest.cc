@@ -290,8 +290,8 @@ class AppCacheStorageImplTest : public testing::Test {
       EXPECT_EQ(storage::kStorageTypeTemporary, type);
       if (async_) {
         base::SequencedTaskRunnerHandle::Get()->PostTask(
-            FROM_HERE, base::Bind(&MockQuotaManager::CallCallback,
-                                  base::Unretained(this), callback));
+            FROM_HERE, base::BindOnce(&MockQuotaManager::CallCallback,
+                                      base::Unretained(this), callback));
         return;
       }
       CallCallback(callback);
@@ -379,8 +379,8 @@ class AppCacheStorageImplTest : public testing::Test {
     // on the IO thread prior to running the test. Its guaranteed to be
     // queued by this time.
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&AppCacheStorageImplTest::RunMethod<Method>,
-                              base::Unretained(this), method));
+        FROM_HERE, base::BindOnce(&AppCacheStorageImplTest::RunMethod<Method>,
+                                  base::Unretained(this), method));
   }
 
   static void SetUpTestCase() {
@@ -411,15 +411,16 @@ class AppCacheStorageImplTest : public testing::Test {
         base::WaitableEvent::ResetPolicy::AUTOMATIC,
         base::WaitableEvent::InitialState::NOT_SIGNALED));
     io_thread->task_runner()->PostTask(
-        FROM_HERE, base::Bind(&AppCacheStorageImplTest::MethodWrapper<Method>,
-                              base::Unretained(this), method));
+        FROM_HERE,
+        base::BindOnce(&AppCacheStorageImplTest::MethodWrapper<Method>,
+                       base::Unretained(this), method));
     test_finished_event_->Wait();
   }
 
   void SetUpTest() {
     DCHECK(io_thread->task_runner()->BelongsToCurrentThread());
     service_.reset(new AppCacheServiceImpl(nullptr));
-    service_->Initialize(base::FilePath(), background_thread->task_runner());
+    service_->Initialize(base::FilePath());
     mock_quota_manager_proxy_ = new MockQuotaManagerProxy();
     service_->quota_manager_proxy_ = mock_quota_manager_proxy_;
     delegate_.reset(new MockStorageDelegate(this));
@@ -446,8 +447,8 @@ class AppCacheStorageImplTest : public testing::Test {
     // based objects get deleted.
     DCHECK(io_thread->task_runner()->BelongsToCurrentThread());
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&AppCacheStorageImplTest::TestFinishedUnwound,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&AppCacheStorageImplTest::TestFinishedUnwound,
+                                  base::Unretained(this)));
   }
 
   void TestFinishedUnwound() {
@@ -484,8 +485,9 @@ class AppCacheStorageImplTest : public testing::Test {
     // scheduled on that thread have been performed prior to return.
     base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                               base::WaitableEvent::InitialState::NOT_SIGNALED);
-    runner->PostTask(FROM_HERE,
-                     base::Bind(&AppCacheStorageImplTest::SignalEvent, &event));
+    runner->PostTask(
+        FROM_HERE,
+        base::BindOnce(&AppCacheStorageImplTest::SignalEvent, &event));
     event.Wait();
   }
 
@@ -1739,8 +1741,7 @@ class AppCacheStorageImplTest : public testing::Test {
     // Recreate the service to point at the db and corruption on disk.
     service_.reset(new AppCacheServiceImpl(NULL));
     service_->set_request_context(io_thread->request_context());
-    service_->Initialize(temp_directory_.GetPath(),
-                         background_thread->task_runner());
+    service_->Initialize(temp_directory_.GetPath());
     mock_quota_manager_proxy_ = new MockQuotaManagerProxy();
     service_->quota_manager_proxy_ = mock_quota_manager_proxy_;
     delegate_.reset(new MockStorageDelegate(this));
@@ -1753,8 +1754,9 @@ class AppCacheStorageImplTest : public testing::Test {
     // on the current thread.
     FlushAllTasks();
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&AppCacheStorageImplTest::Continue_Reinitialize,
-                              base::Unretained(this), test_case));
+        FROM_HERE,
+        base::BindOnce(&AppCacheStorageImplTest::Continue_Reinitialize,
+                       base::Unretained(this), test_case));
   }
 
   void Continue_Reinitialize(ReinitTestCase test_case) {

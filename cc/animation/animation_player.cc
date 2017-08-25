@@ -4,9 +4,11 @@
 
 #include "cc/animation/animation_player.h"
 
+#include <inttypes.h>
 #include <algorithm>
 
 #include "base/stl_util.h"
+#include "base/strings/stringprintf.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_events.h"
 #include "cc/animation/animation_host.h"
@@ -832,20 +834,6 @@ void AnimationPlayer::ActivateAnimations() {
   UpdateTickingState(UpdateTickingType::NORMAL);
 }
 
-bool AnimationPlayer::HasFilterAnimationThatInflatesBounds() const {
-  for (size_t i = 0; i < animations_.size(); ++i) {
-    if (!animations_[i]->is_finished() &&
-        animations_[i]->target_property_id() == TargetProperty::FILTER &&
-        animations_[i]
-            ->curve()
-            ->ToFilterAnimationCurve()
-            ->HasFilterThatMovesPixels())
-      return true;
-  }
-
-  return false;
-}
-
 bool AnimationPlayer::HasTransformAnimationThatInflatesBounds() const {
   return IsCurrentlyAnimatingProperty(TargetProperty::TRANSFORM,
                                       ElementListType::ACTIVE) ||
@@ -1200,6 +1188,22 @@ void AnimationPlayer::PushPropertiesToImplThread(
   animation_player_impl->scroll_offset_animation_was_interrupted_ =
       scroll_offset_animation_was_interrupted_;
   scroll_offset_animation_was_interrupted_ = false;
+}
+
+std::string AnimationPlayer::ToString() const {
+  return base::StringPrintf(
+      "AnimationPlayer{id=%d, element_id=%s, animations=[%s]}", id_,
+      element_id_.ToString().c_str(), AnimationsToString().c_str());
+}
+
+std::string AnimationPlayer::AnimationsToString() const {
+  std::string str;
+  for (size_t i = 0; i < animations_.size(); i++) {
+    if (i > 0)
+      str.append(", ");
+    str.append(animations_[i]->ToString());
+  }
+  return str;
 }
 
 }  // namespace cc

@@ -274,6 +274,12 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeAndTrackStackingOrderChange) {
       host_->active_tree()->LayerById(child1_id)->LayerPropertyChanged());
   EXPECT_TRUE(
       host_->active_tree()->LayerById(child2_id)->LayerPropertyChanged());
+  EXPECT_FALSE(host_->active_tree()
+                   ->LayerById(child2_id)
+                   ->LayerPropertyChangedFromPropertyTrees());
+  EXPECT_TRUE(host_->active_tree()
+                  ->LayerById(child2_id)
+                  ->LayerPropertyChangedNotFromPropertyTrees());
   host_->active_tree()->DetachLayers();
 }
 
@@ -572,7 +578,7 @@ TEST_F(TreeSynchronizerTest, SynchronizeScrollTreeScrollOffsetMap) {
   // the pending base and active base must be the same at this stage.
   scoped_refptr<SyncedScrollOffset> scroll_layer_offset =
       new SyncedScrollOffset;
-  scroll_layer_offset->PushFromMainThread(scroll_layer->scroll_offset());
+  scroll_layer_offset->PushMainToPending(scroll_layer->scroll_offset());
   scroll_layer_offset->PushPendingToActive();
   EXPECT_TRUE(AreScrollOffsetsEqual(
       scroll_layer_offset.get(),
@@ -582,7 +588,7 @@ TEST_F(TreeSynchronizerTest, SynchronizeScrollTreeScrollOffsetMap) {
 
   scoped_refptr<SyncedScrollOffset> transient_scroll_layer_offset =
       new SyncedScrollOffset;
-  transient_scroll_layer_offset->PushFromMainThread(
+  transient_scroll_layer_offset->PushMainToPending(
       transient_scroll_layer->scroll_offset());
   transient_scroll_layer_offset->PushPendingToActive();
   EXPECT_TRUE(
@@ -628,7 +634,7 @@ TEST_F(TreeSynchronizerTest, SynchronizeScrollTreeScrollOffsetMap) {
   scroll_layer_offset->SetCurrent(gfx::ScrollOffset(20, 30));
   scroll_layer_offset->PullDeltaForMainThread();
   scroll_layer_offset->SetCurrent(gfx::ScrollOffset(40, 50));
-  scroll_layer_offset->PushFromMainThread(gfx::ScrollOffset(100, 100));
+  scroll_layer_offset->PushMainToPending(gfx::ScrollOffset(100, 100));
   scroll_layer_offset->PushPendingToActive();
   EXPECT_TRUE(AreScrollOffsetsEqual(
       scroll_layer_offset.get(),

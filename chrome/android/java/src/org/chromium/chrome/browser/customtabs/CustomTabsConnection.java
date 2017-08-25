@@ -35,6 +35,7 @@ import org.chromium.base.TimeUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
@@ -54,6 +55,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.content.browser.BrowserStartupController;
 import org.chromium.content.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
@@ -195,7 +197,7 @@ public class CustomTabsConnection {
     private long mNativeTickOffsetUs;
     private boolean mNativeTickOffsetUsComputed;
 
-    private ChainedTasks mWarmupTasks;
+    private volatile ChainedTasks mWarmupTasks;
 
     /**
      * <strong>DO NOT CALL</strong>
@@ -282,13 +284,10 @@ public class CustomTabsConnection {
     }
 
     public boolean warmup(long flags) {
-        try {
-            TraceEvent.begin("CustomTabsConnection.warmup");
+        try (TraceEvent e = TraceEvent.scoped("CustomTabsConnection.warmup")) {
             boolean success = warmupInternal(true);
             logCall("warmup()", success);
             return success;
-        } finally {
-            TraceEvent.end("CustomTabsConnection.warmup");
         }
     }
 
@@ -312,7 +311,7 @@ public class CustomTabsConnection {
         final boolean initialized = !mWarmupHasBeenCalled.compareAndSet(false, true);
 
         // The call is non-blocking and this must execute on the UI thread, post chained tasks.
-        mWarmupTasks = new ChainedTasks();
+        ChainedTasks tasks = new ChainedTasks();
 
         // Ordering of actions here:
         // 1. Initializing the browser needs to be done once, and first.
@@ -325,62 +324,64 @@ public class CustomTabsConnection {
 
         // (1)
         if (!initialized) {
-            mWarmupTasks.add(new Runnable() {
+            tasks.add(new Runnable() {
                 @Override
                 public void run() {
-                    TraceEvent.begin("CustomTabsConnection.initializeBrowser()");
-                    initializeBrowser(mContext);
-                    ChromeBrowserInitializer.initNetworkChangeNotifier(mContext);
-                    mWarmupHasBeenFinished.set(true);
-                    TraceEvent.end("CustomTabsConnection.initializeBrowser()");
+                    try (TraceEvent e =
+                                    TraceEvent.scoped("CustomTabsConnection.initializeBrowser()")) {
+                        initializeBrowser(mContext);
+                        ChromeBrowserInitializer.initNetworkChangeNotifier(mContext);
+                        mWarmupHasBeenFinished.set(true);
+                    }
                 }
             });
         }
 
         // (2)
         if (mayCreateSpareWebContents && mSpeculation == null) {
-            mWarmupTasks.add(new Runnable() {
+            tasks.add(new Runnable() {
                 @Override
                 public void run() {
-                    TraceEvent.begin("CreateSpareWebContents");
-                    WarmupManager.getInstance().createSpareWebContents();
-                    TraceEvent.end("CreateSpareWebContents");
+                    try (TraceEvent e = TraceEvent.scoped("CreateSpareWebContents")) {
+                        WarmupManager.getInstance().createSpareWebContents();
+                    }
                 }
             });
         }
 
         // (3)
-        mWarmupTasks.add(new Runnable() {
+        tasks.add(new Runnable() {
             @Override
             public void run() {
-                TraceEvent.begin("InitializeViewHierarchy");
-                WarmupManager.getInstance().initializeViewHierarchy(mContext,
-                        R.layout.custom_tabs_control_container, R.layout.custom_tabs_toolbar);
-                TraceEvent.end("InitializeViewHierarchy");
+                try (TraceEvent e = TraceEvent.scoped("InitializeViewHierarchy")) {
+                    WarmupManager.getInstance().initializeViewHierarchy(mContext,
+                            R.layout.custom_tabs_control_container, R.layout.custom_tabs_toolbar);
+                }
             }
         });
 
         if (!initialized) {
-            mWarmupTasks.add(new Runnable() {
+            tasks.add(new Runnable() {
                 @Override
                 public void run() {
-                    TraceEvent.begin("WarmupInternalFinishInitialization");
-                    // (4)
-                    Profile profile = Profile.getLastUsedProfile();
-                    new LoadingPredictor(profile).startInitialization();
+                    try (TraceEvent e = TraceEvent.scoped("WarmupInternalFinishInitialization")) {
+                        // (4)
+                        Profile profile = Profile.getLastUsedProfile();
+                        new LoadingPredictor(profile).startInitialization();
 
-                    // (5)
-                    // The throttling database uses shared preferences, that can cause a
-                    // StrictMode violation on the first access. Make sure that this access is
-                    // not in mayLauchUrl.
-                    RequestThrottler.loadInBackground(mContext);
-                    TraceEvent.end("WarmupInternalFinishInitialization");
+                        // (5)
+                        // The throttling database uses shared preferences, that can cause a
+                        // StrictMode violation on the first access. Make sure that this access is
+                        // not in mayLauchUrl.
+                        RequestThrottler.loadInBackground(mContext);
+                    }
                 }
             });
         }
-        if (mWarmupFinishedCallback != null) mWarmupTasks.add(mWarmupFinishedCallback);
+        if (mWarmupFinishedCallback != null) tasks.add(mWarmupFinishedCallback);
 
-        mWarmupTasks.start(false);
+        tasks.start(false);
+        mWarmupTasks = tasks;
         return true;
     }
 
@@ -459,17 +460,14 @@ public class CustomTabsConnection {
 
     public boolean mayLaunchUrl(CustomTabsSessionToken session, Uri url, Bundle extras,
             List<Bundle> otherLikelyBundles) {
-        try {
-            TraceEvent.begin("CustomTabsConnection.mayLaunchUrl");
+        try (TraceEvent e = TraceEvent.scoped("CustomTabsConnection.mayLaunchUrl")) {
             boolean success = mayLaunchUrlInternal(session, url, extras, otherLikelyBundles);
             logCall("mayLaunchUrl(" + url + ")", success);
             return success;
-        } finally {
-            TraceEvent.end("CustomTabsConnection.mayLaunchUrl");
         }
     }
 
-    private boolean mayLaunchUrlInternal(final CustomTabsSessionToken session, Uri url,
+    private boolean mayLaunchUrlInternal(final CustomTabsSessionToken session, final Uri url,
             final Bundle extras, final List<Bundle> otherLikelyBundles) {
         final boolean lowConfidence =
                 (url == null || TextUtils.isEmpty(url.toString())) && otherLikelyBundles != null;
@@ -488,23 +486,41 @@ public class CustomTabsConnection {
                     session, uid, urlString, otherLikelyBundles != null)) {
             return false;
         }
-        ThreadUtils.postOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    TraceEvent.begin("CustomTabsConnection.mayLaunchUrlInternal");
-                    if (lowConfidence) {
-                        lowConfidenceMayLaunchUrl(otherLikelyBundles);
-                    } else {
-                        highConfidenceMayLaunchUrl(
-                                session, uid, urlString, extras, otherLikelyBundles);
-                    }
-                } finally {
-                    TraceEvent.end("CustomTabsConnection.mayLaunchUrlInternal");
-                }
-            }
+
+        ThreadUtils.postOnUiThread(() -> {
+            doMayLaunchUrlOnUiThread(
+                    lowConfidence, session, uid, urlString, extras, otherLikelyBundles, true);
         });
         return true;
+    }
+
+    private void doMayLaunchUrlOnUiThread(final boolean lowConfidence,
+            final CustomTabsSessionToken session, final int uid, final String urlString,
+            final Bundle extras, final List<Bundle> otherLikelyBundles, boolean retryIfNotLoaded) {
+        ThreadUtils.assertOnUiThread();
+        try (TraceEvent e = TraceEvent.scoped("CustomTabsConnection.mayLaunchUrlOnUiThread")) {
+            // doMayLaunchUrlInternal() is always called once the native level initialization is
+            // done, at least the initial profile load. However, at that stage the startup callback
+            // may not have run, which causes Profile.getLastUsedProfile() to throw an
+            // exception. But the tasks have been posted by then, so reschedule ourselves, only
+            // once.
+            if (!BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
+                            .isStartupSuccessfullyCompleted()) {
+                if (retryIfNotLoaded) {
+                    ThreadUtils.postOnUiThread(() -> {
+                        doMayLaunchUrlOnUiThread(lowConfidence, session, uid, urlString, extras,
+                                otherLikelyBundles, false);
+                    });
+                }
+                return;
+            }
+
+            if (lowConfidence) {
+                lowConfidenceMayLaunchUrl(otherLikelyBundles);
+            } else {
+                highConfidenceMayLaunchUrl(session, uid, urlString, extras, otherLikelyBundles);
+            }
+        }
     }
 
     public Bundle extraCommand(String commandName, Bundle args) {
@@ -587,7 +603,7 @@ public class CustomTabsConnection {
                 Uri verifiedOrigin = verifyOriginForSession(session, uid, postMessageOrigin);
                 if (verifiedOrigin == null) {
                     mClientManager.verifyAndInitializeWithPostMessageOriginForSession(
-                            session, postMessageOrigin);
+                            session, postMessageOrigin, CustomTabsService.RELATION_USE_AS_ORIGIN);
                 } else {
                     mClientManager.initializeWithPostMessageOriginForSession(
                             session, verifiedOrigin);
@@ -738,8 +754,7 @@ public class CustomTabsConnection {
      * @return The hidden tab, or null.
      */
     Tab takeHiddenTab(CustomTabsSessionToken session, String url, String referrer) {
-        try {
-            TraceEvent.begin("CustomTabsConnection.takeHiddenTab");
+        try (TraceEvent e = TraceEvent.scoped("CustomTabsConnection.takeHiddenTab")) {
             if (mSpeculation == null || session == null) return null;
             if (session.equals(mSpeculation.session) && mSpeculation.tab != null) {
                 Tab tab = mSpeculation.tab;
@@ -762,8 +777,6 @@ public class CustomTabsConnection {
                     tab.destroy();
                 }
             }
-        } finally {
-            TraceEvent.end("CustomTabsConnection.takeHiddenTab");
         }
         return null;
     }

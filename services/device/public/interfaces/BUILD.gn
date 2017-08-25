@@ -12,6 +12,7 @@ mojom("interfaces") {
     "nfc.mojom",
     "nfc_provider.mojom",
     "power_monitor.mojom",
+    "serial.mojom",
     "time_zone_monitor.mojom",
     "vibration_manager.mojom",
     "wake_lock.mojom",

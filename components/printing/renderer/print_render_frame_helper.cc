@@ -537,6 +537,12 @@ FrameReference::~FrameReference() {}
 void FrameReference::Reset(blink::WebLocalFrame* frame) {
   if (frame) {
     view_ = frame->View();
+    // Make sure this isn't called too early in the |frame| lifecycle... i.e.
+    // calling this in WebFrameClient::BindToFrame() doesn't work.
+    // TODO(dcheng): It's a bit awkward that lifetime details like this leak out
+    // of Blink. Fixing https://crbug.com/727166 should allow this to be
+    // addressed.
+    DCHECK(view_);
     frame_ = frame;
   } else {
     view_ = NULL;
@@ -587,16 +593,19 @@ void PrintRenderFrameHelper::PrintHeaderAndFooter(
       mojo::MakeRequest(&provider);
       interface_provider_.Bind(std::move(provider));
     }
-    void FrameDetached(blink::WebLocalFrame* frame,
-                       DetachType detach_type) override {
-      frame->FrameWidget()->Close();
-      frame->Close();
+    // WebFrameClient:
+    void BindToFrame(blink::WebLocalFrame* frame) override { frame_ = frame; }
+    void FrameDetached(DetachType detach_type) override {
+      frame_->FrameWidget()->Close();
+      frame_->Close();
+      frame_ = nullptr;
     }
     service_manager::InterfaceProvider* GetInterfaceProvider() override {
       return &interface_provider_;
     }
 
    private:
+    blink::WebLocalFrame* frame_;
     service_manager::InterfaceProvider interface_provider_;
   };
   HeaderAndFooterClient frame_client;
@@ -697,8 +706,7 @@ class PrepareFrameAndViewForPrint : public blink::WebViewClient,
       blink::WebSandboxFlags sandbox_flags,
       const blink::WebParsedFeaturePolicy& container_policy,
       const blink::WebFrameOwnerProperties& frame_owner_properties) override;
-  void FrameDetached(blink::WebLocalFrame* frame,
-                     DetachType detach_type) override;
+  void FrameDetached(DetachType detach_type) override;
   std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
       const blink::WebURLRequest& request,
       base::SingleThreadTaskRunner* task_runner) override;
@@ -782,6 +790,11 @@ void PrepareFrameAndViewForPrint::ResizeForPrinting() {
   if (!frame())
     return;
 
+  // Plugins do not need to be resized. Resizing the PDF plugin causes a
+  // flicker in the top left corner behind the preview. See crbug.com/739973.
+  if (PrintingNodeOrPdfFrame(frame(), node_to_print_))
+    return;
+
   // Backup size and offset if it's a local frame.
   blink::WebView* web_view = frame_.view();
   if (blink::WebFrame* web_frame = web_view->MainFrame()) {
@@ -791,7 +804,6 @@ void PrepareFrameAndViewForPrint::ResizeForPrinting() {
       prev_scroll_offset_ = web_frame->ToWebLocalFrame()->GetScrollOffset();
   }
   prev_view_size_ = web_view->Size();
-
   web_view->Resize(print_layout_size);
 }
 
@@ -835,8 +847,8 @@ void PrepareFrameAndViewForPrint::CopySelection(
   content::RenderView::ApplyWebPreferences(prefs, web_view);
   blink::WebLocalFrame* main_frame =
       blink::WebLocalFrame::CreateMainFrame(web_view, this, nullptr, nullptr);
+  frame_.Reset(main_frame);
   blink::WebFrameWidget::Create(this, main_frame);
-  frame_.Reset(web_view->MainFrame()->ToWebLocalFrame());
   node_to_print_.Reset();
 
   // When loading is done this will call didStopLoading() and that will do the
@@ -873,10 +885,12 @@ blink::WebLocalFrame* PrepareFrameAndViewForPrint::CreateChildFrame(
   return nullptr;
 }
 
-void PrepareFrameAndViewForPrint::FrameDetached(blink::WebLocalFrame* frame,
-                                                DetachType detach_type) {
+void PrepareFrameAndViewForPrint::FrameDetached(DetachType detach_type) {
+  blink::WebLocalFrame* frame = frame_.GetFrame();
+  DCHECK(frame);
   frame->FrameWidget()->Close();
   frame->Close();
+  frame_.Reset(nullptr);
 }
 
 std::unique_ptr<blink::WebURLLoader>
@@ -898,6 +912,10 @@ void PrepareFrameAndViewForPrint::CallOnReady() {
 
 void PrepareFrameAndViewForPrint::RestoreSize() {
   if (!frame())
+    return;
+
+  // Do not restore plugins, since they are not resized.
+  if (PrintingNodeOrPdfFrame(frame(), node_to_print_))
     return;
 
   blink::WebView* web_view = frame_.GetFrame()->View();
@@ -1281,8 +1299,8 @@ bool PrintRenderFrameHelper::CreatePreviewDocument() {
   const PrintMsg_Print_Params& print_params = print_pages_params_->params;
   const std::vector<int>& pages = print_pages_params_->pages;
 
-  if (!print_preview_context_.CreatePreviewDocument(prep_frame_view_.release(),
-                                                    pages)) {
+  if (!print_preview_context_.CreatePreviewDocument(
+          prep_frame_view_.release(), pages, print_params.printed_doc_type)) {
     return false;
   }
 
@@ -1388,7 +1406,8 @@ bool PrintRenderFrameHelper::RenderPreviewPage(
   std::unique_ptr<PdfMetafileSkia> draft_metafile;
   PdfMetafileSkia* initial_render_metafile = print_preview_context_.metafile();
   if (print_preview_context_.IsModifiable() && is_print_ready_metafile_sent_) {
-    draft_metafile = base::MakeUnique<PdfMetafileSkia>(PDF_SKIA_DOCUMENT_TYPE);
+    draft_metafile =
+        base::MakeUnique<PdfMetafileSkia>(print_params.printed_doc_type);
     initial_render_metafile = draft_metafile.get();
   }
 
@@ -1406,7 +1425,7 @@ bool PrintRenderFrameHelper::RenderPreviewPage(
     DCHECK(!draft_metafile.get());
     draft_metafile =
         print_preview_context_.metafile()->GetMetafileForCurrentPage(
-            PDF_SKIA_DOCUMENT_TYPE);
+            print_params.printed_doc_type);
   }
   return PreviewPageRendered(page_number, draft_metafile.get());
 }
@@ -1419,9 +1438,8 @@ bool PrintRenderFrameHelper::FinalizePrintReadyDocument() {
   PdfMetafileSkia* metafile = print_preview_context_.metafile();
   PrintHostMsg_DidPreviewDocument_Params preview_params;
 
-  // Ask the browser to create the shared memory for us.
   if (!CopyMetafileDataToSharedMem(*metafile,
-                                   &(preview_params.metafile_data_handle))) {
+                                   &preview_params.metafile_data_handle)) {
     LOG(ERROR) << "CopyMetafileDataToSharedMem failed";
     print_preview_context_.set_error(PREVIEW_ERROR_METAFILE_COPY_FAILED);
     return false;
@@ -2121,13 +2139,13 @@ bool PrintRenderFrameHelper::PreviewPageRendered(int page_number,
   }
 
   PrintHostMsg_DidPreviewPage_Params preview_page_params;
-  // Get the size of the resulting metafile.
-  if (!CopyMetafileDataToSharedMem(
-          *metafile, &(preview_page_params.metafile_data_handle))) {
+  if (!CopyMetafileDataToSharedMem(*metafile,
+                                   &preview_page_params.metafile_data_handle)) {
     LOG(ERROR) << "CopyMetafileDataToSharedMem failed";
     print_preview_context_.set_error(PREVIEW_ERROR_METAFILE_COPY_FAILED);
     return false;
   }
+
   preview_page_params.data_size = metafile->GetDataSize();
   preview_page_params.page_number = page_number;
   preview_page_params.preview_request_id =
@@ -2177,7 +2195,8 @@ void PrintRenderFrameHelper::PrintPreviewContext::OnPrintPreview() {
 
 bool PrintRenderFrameHelper::PrintPreviewContext::CreatePreviewDocument(
     PrepareFrameAndViewForPrint* prepared_frame,
-    const std::vector<int>& pages) {
+    const std::vector<int>& pages,
+    SkiaDocumentType doc_type) {
   DCHECK_EQ(INITIALIZED, state_);
   state_ = RENDERING;
 
@@ -2192,7 +2211,7 @@ bool PrintRenderFrameHelper::PrintPreviewContext::CreatePreviewDocument(
     return false;
   }
 
-  metafile_ = base::MakeUnique<PdfMetafileSkia>(PDF_SKIA_DOCUMENT_TYPE);
+  metafile_ = base::MakeUnique<PdfMetafileSkia>(doc_type);
   CHECK(metafile_->Init());
 
   current_page_index_ = 0;

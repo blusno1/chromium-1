@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
@@ -28,6 +28,7 @@
 #include "content/public/common/service_worker_modes.h"
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "storage/public/interfaces/blobs.mojom.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
 #include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
@@ -135,7 +136,6 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void ClearCachedMetadata(const blink::WebURL&) override;
   void WorkerReadyForInspection() override;
   void WorkerContextFailedToStart() override;
-  bool HasAssociatedRegistration() override;
   void WorkerScriptLoaded() override;
   void WorkerContextStarted(
       blink::WebServiceWorkerContextProxy* proxy) override;
@@ -208,6 +208,18 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void DidHandleSyncEvent(int request_id,
                           blink::WebServiceWorkerEventResult result,
                           double dispatch_event_time) override;
+  void RespondToAbortPaymentEvent(int event_id,
+                                  bool payment_aborted,
+                                  double dispatch_event_time) override;
+  void DidHandleAbortPaymentEvent(int event_id,
+                                  blink::WebServiceWorkerEventResult result,
+                                  double dispatch_event_time) override;
+  void RespondToCanMakePaymentEvent(int event_id,
+                                    bool can_make_payment,
+                                    double dispatch_event_time) override;
+  void DidHandleCanMakePaymentEvent(int event_id,
+                                    blink::WebServiceWorkerEventResult result,
+                                    double dispatch_event_time) override;
   void RespondToPaymentRequestEvent(
       int payment_request_id,
       const blink::WebPaymentHandlerResponse& response,
@@ -298,6 +310,15 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       const std::string& tag,
       blink::mojom::BackgroundSyncEventLastChance last_chance,
       DispatchSyncEventCallback callback) override;
+  void DispatchAbortPaymentEvent(
+      int payment_request_id,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+      DispatchAbortPaymentEventCallback callback) override;
+  void DispatchCanMakePaymentEvent(
+      int payment_request_id,
+      payments::mojom::CanMakePaymentEventDataPtr event_data,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+      DispatchCanMakePaymentEventCallback callback) override;
   void DispatchPaymentRequestEvent(
       int payment_request_id,
       payments::mojom::PaymentRequestEventDataPtr event_data,
@@ -358,10 +379,6 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   const GURL service_worker_scope_;
   const GURL script_url_;
 
-  // True if the scripts for the worker are installed and its scripts are
-  // streamed from the browser process instead of ResourceLoader.
-  const bool is_script_streaming_;
-
   scoped_refptr<ThreadSafeSender> sender_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   scoped_refptr<base::TaskRunner> worker_task_runner_;
@@ -385,6 +402,8 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   // Renderer-side object corresponding to WebEmbeddedWorkerInstance.
   // This is valid from the ctor to workerContextDestroyed.
   std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client_;
+
+  storage::mojom::BlobRegistryPtr blob_registry_;
 
   // Initialized on the worker thread in workerContextStarted and
   // destructed on the worker thread in willDestroyWorkerContext.

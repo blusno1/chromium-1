@@ -5,8 +5,11 @@
 #include "core/offscreencanvas/OffscreenCanvas.h"
 
 #include <memory>
+#include "core/css/CSSFontSelector.h"
+#include "core/css/OffscreenFontSelector.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/StyleEngine.h"
 #include "core/fileapi/Blob.h"
 #include "core/html/ImageData.h"
 #include "core/html/canvas/CanvasAsyncBlobCreator.h"
@@ -14,6 +17,7 @@
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
 #include "core/imagebitmap/ImageBitmap.h"
+#include "core/workers/WorkerGlobalScope.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/OffscreenCanvasFrameDispatcherImpl.h"
@@ -76,6 +80,7 @@ void OffscreenCanvas::SetSize(const IntSize& size) {
   if (frame_dispatcher_) {
     frame_dispatcher_->Reshape(size_.Width(), size_.Height());
   }
+  current_frame_damage_rect_ = SkIRect::MakeWH(size_.Width(), size_.Height());
 }
 
 void OffscreenCanvas::SetNeutered() {
@@ -265,7 +270,7 @@ ImageBuffer* OffscreenCanvas::GetOrCreateImageBuffer() {
 
     image_buffer_ = ImageBuffer::Create(std::move(surface));
 
-    if (needs_matrix_clip_restore_) {
+    if (image_buffer_ && needs_matrix_clip_restore_) {
       needs_matrix_clip_restore_ = false;
       context_->RestoreCanvasMatrixClipStack(image_buffer_->Canvas());
     }
@@ -406,6 +411,13 @@ ScriptPromise OffscreenCanvas::convertToBlob(ScriptState* script_state,
   async_creator->ScheduleAsyncBlobCreation(options.quality());
 
   return resolver->Promise();
+}
+
+FontSelector* OffscreenCanvas::GetFontSelector() {
+  if (GetExecutionContext()->IsDocument()) {
+    return ToDocument(execution_context_)->GetStyleEngine().GetFontSelector();
+  }
+  return ToWorkerGlobalScope(execution_context_)->GetFontSelector();
 }
 
 DEFINE_TRACE(OffscreenCanvas) {

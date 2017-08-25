@@ -26,15 +26,7 @@ TestNativeDisplayDelegate::TestNativeDisplayDelegate(ActionLogger* log)
 TestNativeDisplayDelegate::~TestNativeDisplayDelegate() {}
 
 void TestNativeDisplayDelegate::Initialize() {
-  log_->AppendAction(kInitXRandR);
-}
-
-void TestNativeDisplayDelegate::GrabServer() {
-  log_->AppendAction(kGrab);
-}
-
-void TestNativeDisplayDelegate::UngrabServer() {
-  log_->AppendAction(kUngrab);
+  log_->AppendAction(kInit);
 }
 
 void TestNativeDisplayDelegate::TakeDisplayControl(
@@ -47,18 +39,6 @@ void TestNativeDisplayDelegate::RelinquishDisplayControl(
     const DisplayControlCallback& callback) {
   log_->AppendAction(kRelinquishDisplayControl);
   callback.Run(true);
-}
-
-void TestNativeDisplayDelegate::SyncWithServer() {
-  log_->AppendAction(kSync);
-}
-
-void TestNativeDisplayDelegate::SetBackgroundColor(uint32_t color_argb) {
-  log_->AppendAction(GetBackgroundAction(color_argb));
-}
-
-void TestNativeDisplayDelegate::ForceDPMSOn() {
-  log_->AppendAction(kForceDPMS);
 }
 
 void TestNativeDisplayDelegate::GetDisplays(
@@ -125,18 +105,6 @@ void TestNativeDisplayDelegate::SetHDCPState(
     const SetHDCPStateCallback& callback) {
   log_->AppendAction(GetSetHDCPStateAction(output, state));
   callback.Run(set_hdcp_expectation_);
-}
-
-std::vector<ColorCalibrationProfile>
-TestNativeDisplayDelegate::GetAvailableColorCalibrationProfiles(
-    const DisplaySnapshot& output) {
-  return std::vector<ColorCalibrationProfile>();
-}
-
-bool TestNativeDisplayDelegate::SetColorCalibrationProfile(
-    const DisplaySnapshot& output,
-    ColorCalibrationProfile new_profile) {
-  return false;
 }
 
 bool TestNativeDisplayDelegate::SetColorCorrection(

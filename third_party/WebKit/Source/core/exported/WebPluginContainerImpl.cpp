@@ -52,11 +52,11 @@
 #include "core/events/WebInputEventConversion.h"
 #include "core/events/WheelEvent.h"
 #include "core/exported/WebDocumentLoaderImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLFormElement.h"
@@ -112,9 +112,9 @@ namespace blink {
 namespace {
 
 #if defined(OS_MACOSX)
-WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kMetaKey;
+const WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kMetaKey;
 #else
-WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kControlKey;
+const WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kControlKey;
 #endif
 
 }  // namespace
@@ -401,6 +401,12 @@ bool WebPluginContainerImpl::ExecuteEditCommand(const WebString& name,
   return web_plugin_->ExecuteEditCommand(name, value);
 }
 
+// static
+bool WebPluginContainerImpl::SupportsCommand(const WebString& name) {
+  return name == "Copy" || name == "Cut" || name == "Paste" ||
+         name == "PasteAndMatchStyle";
+}
+
 WebElement WebPluginContainerImpl::GetElement() {
   return WebElement(element_);
 }
@@ -499,10 +505,12 @@ WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
     return WebString();
   }
 
-  UserGestureIndicator gesture_indicator(
-      popups_allowed ? UserGestureToken::Create(frame->GetDocument(),
-                                                UserGestureToken::kNewGesture)
-                     : nullptr);
+  std::unique_ptr<UserGestureIndicator> gesture_indicator;
+  if (popups_allowed) {
+    gesture_indicator =
+        LocalFrame::CreateUserGesture(frame, UserGestureToken::kNewGesture);
+  }
+
   v8::HandleScope handle_scope(ToIsolate(frame));
   v8::Local<v8::Value> result =
       frame->GetScriptController().ExecuteScriptInMainWorldAndReturnValue(
@@ -831,33 +839,68 @@ void WebPluginContainerImpl::HandleKeyboardEvent(KeyboardEvent* event) {
   if (web_event.GetType() == WebInputEvent::kUndefined)
     return;
 
-  if (web_event.GetType() == WebInputEvent::kRawKeyDown ||
-      web_event.GetType() == WebInputEvent::kKeyDown) {
-    if ((web_event.GetModifiers() & WebInputEvent::kInputModifiers) ==
-            kEditingModifier &&
-        (web_event.windows_key_code == VKEY_C ||
-         web_event.windows_key_code == VKEY_INSERT)
-        // Only copy if there's a selection, so that we only ever do this
-        // for Pepper plugins that support copying.  Windowless NPAPI
-        // plugins will get the event as before.
-        && web_plugin_->HasSelection()) {
-      Copy();
-      event->SetDefaultHandled();
-      return;
-    }
+  if (HandleCutCopyPasteKeyboardEvent(web_event)) {
+    event->SetDefaultHandled();
+    return;
   }
 
   // Give the client a chance to issue edit comamnds.
-  WebLocalFrameBase* web_frame =
-      WebLocalFrameBase::FromFrame(element_->GetDocument().GetFrame());
+  WebLocalFrameImpl* web_frame =
+      WebLocalFrameImpl::FromFrame(element_->GetDocument().GetFrame());
   if (web_plugin_->SupportsEditCommands())
     web_frame->Client()->HandleCurrentKeyboardEvent();
 
   WebCursorInfo cursor_info;
   if (web_plugin_->HandleInputEvent(WebCoalescedInputEvent(web_event),
                                     cursor_info) !=
-      WebInputEventResult::kNotHandled)
+      WebInputEventResult::kNotHandled) {
     event->SetDefaultHandled();
+  }
+}
+
+bool WebPluginContainerImpl::HandleCutCopyPasteKeyboardEvent(
+    const WebKeyboardEvent& event) {
+  if (event.GetType() != WebInputEvent::kRawKeyDown &&
+      event.GetType() != WebInputEvent::kKeyDown) {
+    return false;
+  }
+
+  int input_modifiers = event.GetModifiers() & WebInputEvent::kInputModifiers;
+  if (input_modifiers == kEditingModifier) {
+    // Only copy/cut if there's a selection, so that we only ever do
+    // this for Pepper plugins that support copying/cutting.
+    if (web_plugin_->HasSelection()) {
+      if (event.windows_key_code == VKEY_C ||
+          event.windows_key_code == VKEY_INSERT) {
+        Copy();
+        return true;
+      }
+      if (event.windows_key_code == VKEY_X)
+        return ExecuteEditCommand("Cut", "");
+    }
+    // Ask the plugin if it can edit text before executing "Paste".
+    if (event.windows_key_code == VKEY_V && web_plugin_->CanEditText())
+      return ExecuteEditCommand("Paste", "");
+    return false;
+  }
+
+  if (input_modifiers == WebInputEvent::kShiftKey) {
+    // Alternate shortcuts for "Cut" and "Paste" are Shift + Delete and Shift +
+    // Insert, respectively.
+    if (event.windows_key_code == VKEY_DELETE && web_plugin_->HasSelection())
+      return ExecuteEditCommand("Cut", "");
+    if (event.windows_key_code == VKEY_INSERT && web_plugin_->CanEditText())
+      return ExecuteEditCommand("Paste", "");
+    return false;
+  }
+
+  // Invoke "PasteAndMatchStyle" using Ctrl + Shift + V to paste as plain
+  // text.
+  if (input_modifiers == (kEditingModifier | WebInputEvent::kShiftKey) &&
+      event.windows_key_code == VKEY_V && web_plugin_->CanEditText()) {
+    return ExecuteEditCommand("PasteAndMatchStyle", "");
+  }
+  return false;
 }
 
 WebTouchEvent WebPluginContainerImpl::TransformTouchEvent(

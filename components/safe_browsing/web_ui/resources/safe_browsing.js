@@ -15,9 +15,12 @@ cr.define('safe_browsing', function() {
         addExperiments(experiments));
     cr.sendWithPromise('getPrefs', []).then((prefs) => addPrefs(prefs));
     cr.sendWithPromise('getDatabaseManagerInfo', []).then(
-        (databaseState) => addDatabaseInfo(databaseState));
-  }
-
+      function(databaseState) {
+        var fullHashCacheState = databaseState.splice(-1,1);
+        addDatabaseManagerInfo(databaseState);
+        addFullHashCacheInfo(fullHashCacheState);
+  });
+}
   function addExperiments(result) {
     var resLength = result.length;
     var experimentsListFormatted = "";
@@ -26,7 +29,6 @@ cr.define('safe_browsing', function() {
       experimentsListFormatted += "<div><b>" + result[i + 1] +
           "</b>: " + result[i] + "</div>";
       }
-
       $('experiments-list').innerHTML = experimentsListFormatted;
   }
 
@@ -41,8 +43,7 @@ cr.define('safe_browsing', function() {
       $('preferences-list').innerHTML = preferencesListFormatted;
   }
 
-
-  function addDatabaseInfo(result) {
+  function addDatabaseManagerInfo(result) {
       var resLength = result.length;
       var preferencesListFormatted = "";
 
@@ -51,6 +52,10 @@ cr.define('safe_browsing', function() {
             result[i+1] + "</div>";
       }
       $('database-info-list').innerHTML = preferencesListFormatted;
+  }
+
+  function addFullHashCacheInfo(result) {
+      $('full-hash-cache-info').innerHTML = result;
   }
 
   return {

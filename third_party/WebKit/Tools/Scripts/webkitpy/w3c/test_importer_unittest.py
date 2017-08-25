@@ -147,7 +147,7 @@ class TestImporterTest(LoggingTestCase):
         commit = MockChromiumCommit(host, subject='My fake commit')
         importer.exportable_but_not_exported_commits = lambda _: [commit]
         local_wpt = LocalWPT(host)
-        local_wpt.apply_patch = lambda _: None  # Failure to apply patch.
+        local_wpt.apply_patch = lambda _: 'Failed'  # Failure to apply patch.
         applied = importer.apply_exportable_commits_locally(local_wpt)
         self.assertIsNone(applied)
 

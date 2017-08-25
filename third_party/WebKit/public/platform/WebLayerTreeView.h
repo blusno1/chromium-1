@@ -35,6 +35,7 @@
 #include "WebImageLayer.h"
 #include "WebSize.h"
 #include "base/callback.h"
+#include "cc/output/swap_promise.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 
 #include "third_party/skia/include/core/SkImage.h"
@@ -53,9 +54,22 @@ struct WebPoint;
 class WebSelection;
 
 class WebLayerTreeView {
-  using ReportTimeCallback = base::Callback<void(bool, double)>;
-
  public:
+  // SwapResult mirrors the values of cc::SwapPromise::DidNotSwapReason, and
+  // should be kept consistent with it. SwapResult additionally adds a success
+  // value (kDidSwap).
+  // These values are written to logs. New enum values can be added, but
+  // existing enums must never be renumbered, deleted or reused.
+  enum SwapResult {
+    kDidSwap = 0,
+    kDidNotSwapSwapFails = 1,
+    kDidNotSwapCommitFails = 2,
+    kDidNotSwapCommitNoUpdate = 3,
+    kDidNotSwapActivationFails = 4,
+    kSwapResultMax,
+  };
+  using ReportTimeCallback = base::Callback<void(SwapResult, double)>;
+
   virtual ~WebLayerTreeView() {}
 
   // Initialization and lifecycle --------------------------------------
@@ -70,7 +84,6 @@ class WebLayerTreeView {
   // View properties ---------------------------------------------------
 
   // Viewport size is given in physical pixels.
-  virtual void SetViewportSize(const WebSize& device_viewport_size) {}
   virtual WebSize GetViewportSize() const { return WebSize(); }
 
   virtual void SetDeviceScaleFactor(float) {}
@@ -79,7 +92,7 @@ class WebLayerTreeView {
   virtual void SetBackgroundColor(WebColor) {}
 
   // Sets whether this view is visible. In threaded mode, a view that is not
-  // visible will not composite or trigger updateAnimations() or layout() calls
+  // visible will not composite or trigger UpdateAnimations() or Layout() calls
   // until it becomes visible.
   virtual void SetVisible(bool) {}
 
@@ -113,9 +126,9 @@ class WebLayerTreeView {
                                           WebBrowserControlsState current,
                                           bool animate) {}
 
-  // Set browser controls height. If |shrinkViewport| is set to true, then Blink
-  // shrunk the viewport clip layers by the top and bottom browser controls
-  // height. Top controls will translate the web page down and do not
+  // Set browser controls height. If |shrink_viewport| is set to true, then
+  // Blink shrunk the viewport clip layers by the top and bottom browser
+  // controls height. Top controls will translate the web page down and do not
   // immediately scroll when hiding. The bottom controls scroll immediately and
   // never translate the content (only clip it).
   virtual void SetBrowserControlsHeight(float top_height,

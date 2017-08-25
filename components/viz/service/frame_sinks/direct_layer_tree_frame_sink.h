@@ -28,9 +28,9 @@ class Display;
 // client's frame being the root surface of the Display.
 class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
     : public cc::LayerTreeFrameSink,
-      public NON_EXPORTED_BASE(CompositorFrameSinkSupportClient),
+      public CompositorFrameSinkSupportClient,
       public ExternalBeginFrameSourceClient,
-      public NON_EXPORTED_BASE(DisplayClient) {
+      public DisplayClient {
  public:
   // The underlying Display, FrameSinkManagerImpl, and LocalSurfaceIdAllocator
   // must outlive this class.
@@ -48,7 +48,7 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
       CompositorFrameSinkSupportManager* support_manager,
       FrameSinkManagerImpl* frame_sink_manager,
       Display* display,
-      scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider);
+      scoped_refptr<VulkanContextProvider> vulkan_context_provider);
   ~DirectLayerTreeFrameSink() override;
 
   // LayerTreeFrameSink implementation.

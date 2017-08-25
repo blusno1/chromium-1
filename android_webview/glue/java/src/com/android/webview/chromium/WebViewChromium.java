@@ -1245,7 +1245,7 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
         mContentsClientAdapter.setWebViewClient(client);
     }
 
-    // TODO(ntfschr): add @Override once the next Android is released (http://crbug.com/627248)
+    @Override
     public WebViewClient getWebViewClient() {
         return mContentsClientAdapter.getWebViewClient();
     }
@@ -1261,7 +1261,7 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
         mContentsClientAdapter.setWebChromeClient(client);
     }
 
-    // TODO(ntfschr): add @Override once the next Android is released (http://crbug.com/627248)
+    @Override
     public WebChromeClient getWebChromeClient() {
         return mContentsClientAdapter.getWebChromeClient();
     }
@@ -1482,6 +1482,24 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
     public View findHierarchyView(String className, int hashCode) {
         // Intentional no-op
         return null;
+    }
+
+    @Override
+    public void setRendererPriorityPolicy(
+            int rendererRequestedPriority, boolean waivedWhenNotVisible) {
+        // TODO(paulmiller): Unfork O APIs
+    }
+
+    @Override
+    public int getRendererRequestedPriority() {
+        // TODO(paulmiller): Unfork O APIs
+        return 0;
+    }
+
+    @Override
+    public boolean getRendererPriorityWaivedWhenNotVisible() {
+        // TODO(paulmiller): Unfork O APIs
+        return false;
     }
 
     // WebViewProvider glue methods ---------------------------------------------------------------

@@ -23,10 +23,10 @@
 #include "components/toolbar/toolbar_model.h"
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/prerender/preload_provider.h"
 #include "ios/chrome/browser/ui/omnibox/chrome_omnibox_client_ios.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_popup_view_ios.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
-#include "ios/chrome/browser/ui/omnibox/preload_provider.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #include "ios/shared/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
@@ -170,7 +170,6 @@ OmniboxViewIOS::OmniboxViewIOS(OmniboxTextFieldIOS* field,
       browser_state_(browser_state),
       field_(field),
       controller_(controller),
-      preloader_(preloader),
       ignore_popup_updates_(false),
       attributing_display_string_(nil) {
   DCHECK(field_);
@@ -394,10 +393,6 @@ void OmniboxViewIOS::OnDidEndEditing() {
   // OnKillFocus() must come after exiting pre-edit.
   controller_->OnKillFocus();
 
-  // Cancel any outstanding preload requests.
-  [preloader_ cancelPrerender];
-  [preloader_ cancelPrefetch];
-
   // Blow away any in-progress edits.
   RevertAll();
   DCHECK(![field_ hasAutocompleteText]);
@@ -493,7 +488,7 @@ void OmniboxViewIOS::OnDidChange(bool processing_user_event) {
     base::string16 pastedText = base::SysNSStringToUTF16([field_ text]);
     base::string16 newText = OmniboxView::SanitizeTextForPaste(pastedText);
     if (pastedText != newText) {
-      [field_ setText:SysUTF16ToNSString(newText)];
+      [field_ setText:base::SysUTF16ToNSString(newText)];
     }
   }
 
@@ -645,7 +640,6 @@ void OmniboxViewIOS::UpdateSchemeStyle(const gfx::Range& range) {
     return;
   }
 
-  DCHECK_NE(security_state::SECURITY_WARNING, security_level);
   DCHECK_NE(security_state::SECURE_WITH_POLICY_INSTALLED_CERT, security_level);
 
   if (security_level == security_state::DANGEROUS) {
@@ -658,11 +652,24 @@ void OmniboxViewIOS::UpdateSchemeStyle(const gfx::Range& range) {
                  range:NSMakeRange(0, [attributing_display_string_ length])];
     }
 
+    NSRange strikethroughRange = range.ToNSRange();
+    // TODO(crbug.com/751801): remove this workaround.
+    // In iOS 11, UITextField has a bug: when the first character has
+    // strikethrough attribute, typing and setting text without strikethrough
+    // attribute will still result in strikethrough. The following is a
+    // workaround that prevents crossing out the first character.
+    if (base::ios::IsRunningOnOrLater(11, 0, 0)) {
+      if (strikethroughRange.location == 0 && strikethroughRange.length > 0) {
+        strikethroughRange.location += 1;
+        strikethroughRange.length -= 1;
+      }
+    }
+
     // Add a strikethrough through the scheme.
     [attributing_display_string_
         addAttribute:NSStrikethroughStyleAttributeName
                value:[NSNumber numberWithInteger:NSUnderlineStyleSingle]
-               range:range.ToNSRange()];
+               range:strikethroughRange];
   }
 
   UIColor* color = GetSecureTextColor(security_level, [field_ incognito]);
@@ -834,37 +841,14 @@ void OmniboxViewIOS::OnTopmostSuggestionImageChanged(int imageId) {
 }
 
 void OmniboxViewIOS::OnResultsChanged(const AutocompleteResult& result) {
-  if (!ignore_popup_updates_ && !result.empty()) {
-    const AutocompleteMatch& match = result.match_at(0);
-    bool is_inline_autocomplete = !match.inline_autocompletion.empty();
-
-    // TODO(rohitrao): When prerendering the result of a paste operation, we
-    // should change the transition to LINK instead of TYPED.  b/6143631.
-
-    // Only prerender HISTORY_URL matches, which come from the history DB.  Do
-    // not prerender other types of matches, including matches from the search
-    // provider.
-    if (is_inline_autocomplete &&
-        match.type == AutocompleteMatchType::HISTORY_URL) {
-      ui::PageTransition transition = ui::PageTransitionFromInt(
-          match.transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
-      [preloader_ prerenderURL:match.destination_url
-                      referrer:web::Referrer()
-                    transition:transition
-                   immediately:is_inline_autocomplete];
-    } else {
-      [preloader_ cancelPrerender];
-    }
-
-    // If the first autocomplete result is a search suggestion, prefetch the
-    // corresponding search result page.
-    if (match.type == AutocompleteMatchType::SEARCH_SUGGEST) {
-      ui::PageTransition transition = ui::PageTransitionFromInt(
-          match.transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
-      [preloader_ prefetchURL:match.destination_url transition:transition];
-    } else {
-      [preloader_ cancelPrefetch];
-    }
+  if (ignore_popup_updates_) {
+    // Please contact rohitrao@ if the following DCHECK ever fires.  If
+    // |ignore_popup_updates_| is true but |result| is not empty, then the new
+    // prerender code in ChromeOmniboxClientIOS will incorrectly discard its
+    // prerender.
+    // TODO(crbug.com/754050): Remove this whole method once we are reasonably
+    // confident that we are not throwing away prerenders.
+    DCHECK(result.empty());
   }
 }
 

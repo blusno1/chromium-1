@@ -6,6 +6,7 @@
 #import <XCTest/XCTest.h>
 
 #include "components/strings/grit/components_strings.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
@@ -115,8 +116,7 @@ const CGFloat kScrollDisplacement = 50.0;
 - (void)selectToolsMenuItem:(id<GREYMatcher>)toolsMenuItem {
   [ChromeEarlGreyUI openToolsMenu];
 
-  id<GREYMatcher> toolsMenuTableView =
-      grey_accessibilityID(kToolsMenuTableViewId);
+  id<GREYMatcher> toolsMenuTableView = chrome_test_util::ToolsMenuView();
   [[[EarlGrey selectElementWithMatcher:toolsMenuItem]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
                                                   kScrollDisplacement)
@@ -177,6 +177,10 @@ const CGFloat kScrollDisplacement = 50.0;
 // Tests that keyboard commands are not registered when the Bookmarks UI is
 // shown on iPhone and registered on iPad.
 - (void)testKeyboardCommandsNotRegistered_BookmarksPresented {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old Bookmarks UI.");
+  }
   // Open Bookmarks
   [self selectToolsMenuItem:grey_accessibilityID(kToolsMenuBookmarksId)];
 

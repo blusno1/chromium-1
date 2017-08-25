@@ -37,11 +37,12 @@
 #include "components/offline_pages/core/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
 #include "jni/OfflinePageEvaluationBridge_jni.h"
-#include "jni/SavePageRequest_jni.h"
 
 using base::android::ConvertJavaStringToUTF8;
+using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -54,7 +55,7 @@ const base::FilePath::CharType kTestRequestQueueDirname[] =
     FILE_PATH_LITERAL("Offline Pages/test_request_queue");
 
 void ToJavaOfflinePageList(JNIEnv* env,
-                           jobject j_result_obj,
+                           const JavaRef<jobject>& j_result_obj,
                            const std::vector<OfflinePageItem>& offline_pages) {
   for (const OfflinePageItem& offline_page : offline_pages) {
     Java_OfflinePageEvaluationBridge_createOfflinePageAndAddToList(
@@ -63,16 +64,18 @@ void ToJavaOfflinePageList(JNIEnv* env,
         offline_page.offline_id,
         ConvertUTF8ToJavaString(env, offline_page.client_id.name_space),
         ConvertUTF8ToJavaString(env, offline_page.client_id.id),
+        ConvertUTF16ToJavaString(env, offline_page.title),
         ConvertUTF8ToJavaString(env, offline_page.file_path.value()),
         offline_page.file_size, offline_page.creation_time.ToJavaTime(),
-        offline_page.access_count, offline_page.last_access_time.ToJavaTime());
+        offline_page.access_count, offline_page.last_access_time.ToJavaTime(),
+        ConvertUTF8ToJavaString(env, offline_page.request_origin));
   }
 }
 
 ScopedJavaLocalRef<jobject> ToJavaSavePageRequest(
     JNIEnv* env,
     const SavePageRequest& request) {
-  return Java_SavePageRequest_create(
+  return Java_OfflinePageEvaluationBridge_createSavePageRequest(
       env, static_cast<int>(request.request_state()), request.request_id(),
       ConvertUTF8ToJavaString(env, request.url().spec()),
       ConvertUTF8ToJavaString(env, request.client_id().name_space),
@@ -103,7 +106,7 @@ void GetAllPagesCallback(
     const ScopedJavaGlobalRef<jobject>& j_callback_obj,
     const OfflinePageModel::MultipleOfflinePageItemResult& result) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  ToJavaOfflinePageList(env, j_result_obj.obj(), result);
+  ToJavaOfflinePageList(env, j_result_obj, result);
   base::android::RunCallbackAndroid(j_callback_obj, j_result_obj);
 }
 

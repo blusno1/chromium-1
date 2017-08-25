@@ -31,6 +31,7 @@
 
 #include <memory>
 #include "core/CoreExport.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/frame/Frame.h"
 #include "core/frame/LocalFrameView.h"
@@ -269,6 +270,15 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void SetViewportIntersectionFromParent(const IntRect&);
   IntRect RemoteViewportIntersection() { return remote_viewport_intersection_; }
 
+  void NotifyUserActivation();
+
+  // Creates a UserGestureIndicator that contains a UserGestureToken with the
+  // given status. Also if a non-null LocalFrame* is provided, associates the
+  // token with the frame tree.
+  static std::unique_ptr<UserGestureIndicator> CreateUserGesture(
+      LocalFrame*,
+      UserGestureToken::Status = UserGestureToken::kPossiblyExistingGesture);
+
  private:
   friend class FrameNavigationDisabler;
 
@@ -322,7 +332,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   InterfaceRegistry* const interface_registry_;
 
   IntRect remote_viewport_intersection_;
-  Member<FrameResourceCoordinator> frame_resource_coordinator_;
+  std::unique_ptr<FrameResourceCoordinator> frame_resource_coordinator_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {

@@ -35,7 +35,7 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/SetSelectionData.h"
+#include "core/editing/SetSelectionOptions.h"
 #include "core/editing/iterators/CharacterIterator.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/serializers/Serialization.h"
@@ -270,7 +270,7 @@ void TextControlElement::setRangeText(const String& replacement,
                              String::Number(end) + ").");
     return;
   }
-  if (openShadowRoot())
+  if (OpenShadowRoot())
     return;
 
   String text = InnerEditorValue();
@@ -398,7 +398,7 @@ bool TextControlElement::SetSelectionRange(
     unsigned start,
     unsigned end,
     TextFieldSelectionDirection direction) {
-  if (openShadowRoot() || !IsTextControl())
+  if (OpenShadowRoot() || !IsTextControl())
     return false;
   const unsigned editor_value_length = InnerEditorValue().length();
   end = std::min(end, editor_value_length);
@@ -440,7 +440,7 @@ bool TextControlElement::SetSelectionRange(
                                                               : end_position)
           .SetIsDirectional(direction != kSelectionHasNoDirection)
           .Build(),
-      SetSelectionData::Builder()
+      SetSelectionOptions::Builder()
           .SetShouldCloseTyping(true)
           .SetShouldClearTypingStyle(true)
           .SetDoNotSetFocus(true)
@@ -797,8 +797,8 @@ void TextControlElement::AddPlaceholderBreakElementIfNecessary() {
 }
 
 void TextControlElement::SetInnerEditorValue(const String& value) {
-  DCHECK(!openShadowRoot());
-  if (!IsTextControl() || openShadowRoot())
+  DCHECK(!OpenShadowRoot());
+  if (!IsTextControl() || OpenShadowRoot())
     return;
 
   bool text_is_changed = value != InnerEditorValue();
@@ -828,7 +828,7 @@ void TextControlElement::SetInnerEditorValue(const String& value) {
 }
 
 String TextControlElement::InnerEditorValue() const {
-  DCHECK(!openShadowRoot());
+  DCHECK(!OpenShadowRoot());
   HTMLElement* inner_editor = InnerEditorElement();
   if (!inner_editor || !IsTextControl())
     return g_empty_string;

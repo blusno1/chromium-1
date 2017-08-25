@@ -30,6 +30,7 @@ extern const base::Feature kViewsTaskManager;
 #endif  // defined(OS_MACOSX)
 
 #if !defined(OS_ANDROID)
+extern const base::Feature kAnimatedAppMenuIcon;
 extern const base::Feature kAppBanners;
 #endif  // !defined(OS_ANDROID)
 
@@ -58,6 +59,7 @@ extern const base::Feature kBrowserHangFixesExperiment;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kBrowserTouchBar;
+extern const base::Feature kDialogTouchBar;
 extern const base::Feature kTabStripKeyboardFocus;
 #endif  // defined(OS_MACOSX)
 
@@ -75,6 +77,10 @@ extern const base::Feature kClickToOpenPDFPlaceholder;
 extern const base::Feature kConsistentOmniboxGeolocation;
 #endif
 
+#if defined(OS_MACOSX)
+extern const base::Feature kContentFullscreen;
+#endif
+
 #if defined(OS_ANDROID)
 extern const base::Feature kCopylessPaste;
 #endif
@@ -87,10 +93,18 @@ extern const base::Feature kDesktopPWAWindowing;
 
 extern const base::Feature kDisplayPersistenceToggleInPermissionPrompts;
 
+#if !defined(OS_ANDROID)
+extern const base::Feature kDoodlesOnLocalNtp;
+#endif
+
 extern const base::Feature kExpectCTReporting;
 
 extern const base::Feature kExperimentalAppBanners;
 extern const base::Feature kExperimentalKeyboardLockUI;
+
+#if defined(OS_MACOSX)
+extern const base::Feature kFullscreenToolbarReveal;
+#endif
 
 #if defined(OS_WIN)
 extern const base::Feature kGdiTextPrinting;
@@ -143,6 +157,10 @@ extern const base::Feature kMultidevice;
 extern const base::Feature kNativeNotifications;
 #endif
 
+#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
+extern const base::Feature kNativeWindowNavButtons;
+#endif
+
 extern const base::Feature kNetworkPrediction;
 
 extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
@@ -171,6 +189,8 @@ extern const base::Feature kPrintPdfAsImage;
 
 extern const base::Feature kPushMessagingBackgroundMode;
 
+extern const base::Feature kPwaMinimalUi;
+
 #if defined(OS_CHROMEOS)
 extern const base::Feature kRuntimeMemoryLeakDetector;
 #endif  // defined(OS_CHROMEOS)
@@ -185,8 +205,11 @@ extern const base::Feature kSiteDetails;
 extern const base::Feature kSiteNotificationChannels;
 #endif
 
+extern const base::Feature kSoundContentSetting;
+
 #if !defined(OS_ANDROID)
 extern const base::Feature kStaggeredBackgroundTabOpen;
+extern const base::Feature kStaggeredBackgroundTabOpenExperiment;
 #endif
 
 extern const base::Feature kSupervisedUserCreation;
@@ -202,6 +225,10 @@ extern const base::Feature kUseGoogleLocalNtp;
 extern const base::Feature kUseGroupedPermissionInfobars;
 
 extern const base::Feature kUsePermissionManagerForMediaRequests;
+
+#if !defined(OS_ANDROID)
+extern const base::Feature kVoiceSearchOnLocalNtp;
+#endif
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kOptInImeMenu;

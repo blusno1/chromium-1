@@ -27,7 +27,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
-#include "components/wallpaper/wallpaper_layout.h"
+#include "components/wallpaper/wallpaper_info.h"
 #include "extensions/browser/event_router.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
@@ -164,7 +164,7 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
       user_manager::UserManager::Get()->GetActiveUser()->GetAccountId();
   wallpaper_manager->SetCustomWallpaper(
       account_id_, wallpaper_files_id_, params_->details.filename, layout,
-      user_manager::User::CUSTOMIZED, image, update_wallpaper);
+      wallpaper::CUSTOMIZED, image, update_wallpaper);
   unsafe_wallpaper_decoder_ = NULL;
 
   // Save current extension name. It will be displayed in the component

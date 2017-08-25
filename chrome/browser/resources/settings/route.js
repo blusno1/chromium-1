@@ -22,7 +22,6 @@
  *   CHANGE_PICTURE: (undefined|!settings.Route),
  *   CLEAR_BROWSER_DATA: (undefined|!settings.Route),
  *   CLOUD_PRINTERS: (undefined|!settings.Route),
- *   CUPS_PRINTER_DETAIL: (undefined|!settings.Route),
  *   CUPS_PRINTERS: (undefined|!settings.Route),
  *   DATETIME: (undefined|!settings.Route),
  *   DEFAULT_BROWSER: (undefined|!settings.Route),
@@ -72,6 +71,7 @@
  *   SITE_SETTINGS_HANDLERS: (undefined|!settings.Route),
  *   SITE_SETTINGS_IMAGES: (undefined|!settings.Route),
  *   SITE_SETTINGS_JAVASCRIPT: (undefined|!settings.Route),
+ *   SITE_SETTINGS_SOUND: (undefined|!settings.Route),
  *   SITE_SETTINGS_LOCATION: (undefined|!settings.Route),
  *   SITE_SETTINGS_MICROPHONE: (undefined|!settings.Route),
  *   SITE_SETTINGS_MIDI_DEVICES: (undefined|!settings.Route),
@@ -303,6 +303,7 @@ cr.define('settings', function() {
           r.SITE_SETTINGS_COOKIES.createChild('/cookies/detail');
       r.SITE_SETTINGS_IMAGES = r.SITE_SETTINGS.createChild('images');
       r.SITE_SETTINGS_JAVASCRIPT = r.SITE_SETTINGS.createChild('javascript');
+      r.SITE_SETTINGS_SOUND = r.SITE_SETTINGS.createChild('sound');
       r.SITE_SETTINGS_LOCATION = r.SITE_SETTINGS.createChild('location');
       r.SITE_SETTINGS_MICROPHONE = r.SITE_SETTINGS.createChild('microphone');
       r.SITE_SETTINGS_NOTIFICATIONS =
@@ -348,8 +349,6 @@ cr.define('settings', function() {
       r.CLOUD_PRINTERS = r.PRINTING.createChild('/cloudPrinters');
       // <if expr="chromeos">
       r.CUPS_PRINTERS = r.PRINTING.createChild('/cupsPrinters');
-      r.CUPS_PRINTER_DETAIL =
-          r.CUPS_PRINTERS.createChild('/cupsPrinterDetails');
 
       r.MULTIDEVICE = r.ADVANCED.createSection('/multidevice', 'multidevice');
       // </if>
@@ -433,7 +432,7 @@ cr.define('settings', function() {
       this.currentRoute = route;
       this.currentQueryParameters_ = queryParameters;
       this.wasLastRouteChangePopstate_ = isPopstate;
-      routeObservers.forEach(observer => {
+      new Set(routeObservers).forEach((observer) => {
         observer.currentRouteChanged(this.currentRoute, oldRoute);
       });
     }
@@ -466,7 +465,7 @@ cr.define('settings', function() {
       // TODO(tommycli): Use Object.values once Closure compilation supports it.
       var matchingKey =
           Object.keys(this.routes_)
-              .find(key => this.routes_[key].path == canonicalPath);
+              .find((key) => this.routes_[key].path == canonicalPath);
 
       return !!matchingKey ? this.routes_[matchingKey] : null;
     }
@@ -572,7 +571,6 @@ cr.define('settings', function() {
     /**
      * @param {!settings.Route|undefined} opt_newRoute
      * @param {!settings.Route|undefined} opt_oldRoute
-     * @abstract
      */
     currentRouteChanged: function(opt_newRoute, opt_oldRoute) {
       assertNotReached();

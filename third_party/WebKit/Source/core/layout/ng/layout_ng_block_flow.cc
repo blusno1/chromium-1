@@ -5,10 +5,12 @@
 #include "core/layout/ng/layout_ng_block_flow.h"
 
 #include "core/layout/LayoutAnalyzer.h"
+#include "core/layout/ng/inline/ng_inline_node_data.h"
 #include "core/layout/ng/ng_constraint_space.h"
-#include "core/layout/ng/ng_fragment.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_length_utils.h"
+#include "core/paint/ng/ng_block_flow_painter.h"
+#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -59,8 +61,7 @@ void LayoutNGBlockFlow::UpdateBlockLayout(bool relayout_children) {
       NGConstraintSpace::CreateFromLayoutObject(*this, override_logical_width,
                                                 override_logical_height);
 
-  RefPtr<NGLayoutResult> result =
-      NGBlockNode(this).Layout(constraint_space.Get());
+  RefPtr<NGLayoutResult> result = NGBlockNode(this).Layout(*constraint_space);
 
   if (IsOutOfFlowPositioned()) {
     // In legacy layout, abspos differs from regular blocks in that abspos
@@ -88,6 +89,25 @@ void LayoutNGBlockFlow::UpdateBlockLayout(bool relayout_children) {
   for (NGOutOfFlowPositionedDescendant descendant :
        result->OutOfFlowPositionedDescendants())
     descendant.node.UseOldOutOfFlowPositioning();
+
+  NGPhysicalBoxFragment* fragment =
+      ToNGPhysicalBoxFragment(result->PhysicalFragment().Get());
+
+  // This object has already been positioned in legacy layout by our containing
+  // block. Copy the position and place the fragment.
+  const LayoutBlock* containing_block = ContainingBlock();
+  NGPhysicalOffset physical_offset;
+  if (containing_block) {
+    NGPhysicalSize containing_block_size(containing_block->Size().Width(),
+                                         containing_block->Size().Height());
+    NGLogicalOffset logical_offset(LogicalLeft(), LogicalTop());
+    physical_offset = logical_offset.ConvertToPhysical(
+        constraint_space->WritingMode(), constraint_space->Direction(),
+        containing_block_size, fragment->Size());
+  }
+  fragment->SetOffset(physical_offset);
+
+  physical_root_fragment_ = fragment;
 }
 
 void LayoutNGBlockFlow::UpdateMargins(
@@ -101,9 +121,9 @@ void LayoutNGBlockFlow::UpdateMargins(
   SetMarginEnd(margins.inline_end);
 }
 
-NGInlineNodeData& LayoutNGBlockFlow::GetNGInlineNodeData() const {
+NGInlineNodeData* LayoutNGBlockFlow::GetNGInlineNodeData() const {
   DCHECK(ng_inline_node_data_);
-  return *ng_inline_node_data_.get();
+  return ng_inline_node_data_.get();
 }
 
 void LayoutNGBlockFlow::ResetNGInlineNodeData() {
@@ -124,30 +144,40 @@ LayoutUnit LayoutNGBlockFlow::InlineBlockBaseline(
 }
 
 RefPtr<NGLayoutResult> LayoutNGBlockFlow::CachedLayoutResult(
-    NGConstraintSpace* constraint_space,
+    const NGConstraintSpace& constraint_space,
     NGBreakToken* break_token) const {
   if (!cached_result_ || break_token || NeedsLayout())
     return nullptr;
-  if (*constraint_space != *cached_constraint_space_)
+  if (constraint_space != *cached_constraint_space_)
     return nullptr;
   return cached_result_->CloneWithoutOffset();
 }
 
 void LayoutNGBlockFlow::SetCachedLayoutResult(
-    NGConstraintSpace* constraint_space,
+    const NGConstraintSpace& constraint_space,
     NGBreakToken* break_token,
     RefPtr<NGLayoutResult> layout_result) {
   if (!RuntimeEnabledFeatures::LayoutNGFragmentCachingEnabled())
     return;
-  if (break_token || constraint_space->UnpositionedFloats().size() ||
+  if (break_token || constraint_space.UnpositionedFloats().size() ||
       layout_result->UnpositionedFloats().size() ||
       layout_result->Status() != NGLayoutResult::kSuccess) {
     // We can't cache these yet
     return;
   }
 
-  cached_constraint_space_ = constraint_space;
+  cached_constraint_space_ = &constraint_space;
   cached_result_ = layout_result;
+}
+
+void LayoutNGBlockFlow::PaintObject(const PaintInfo& paint_info,
+                                    const LayoutPoint& paint_offset) const {
+  // TODO(eae): This logic should go in Paint instead and it should drive the
+  // full paint logic for LayoutNGBlockFlow.
+  if (RuntimeEnabledFeatures::LayoutNGPaintFragmentsEnabled())
+    NGBlockFlowPainter(*this).PaintContents(paint_info, paint_offset);
+  else
+    LayoutBlockFlow::PaintObject(paint_info, paint_offset);
 }
 
 }  // namespace blink

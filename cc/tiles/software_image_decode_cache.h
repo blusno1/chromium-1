@@ -23,7 +23,6 @@
 #include "cc/cc_export.h"
 #include "cc/paint/draw_image.h"
 #include "cc/tiles/image_decode_cache.h"
-#include "components/viz/common/quads/resource_format.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -36,7 +35,7 @@ namespace cc {
 class CC_EXPORT ImageDecodeCacheKey {
  public:
   static ImageDecodeCacheKey FromDrawImage(const DrawImage& image,
-                                           viz::ResourceFormat format);
+                                           SkColorType color_type);
 
   ImageDecodeCacheKey(const ImageDecodeCacheKey& other);
 
@@ -120,7 +119,7 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   enum class DecodeTaskType { USE_IN_RASTER_TASKS, USE_OUT_OF_RASTER_TASKS };
 
-  SoftwareImageDecodeCache(viz::ResourceFormat format,
+  SoftwareImageDecodeCache(SkColorType color_type,
                            size_t locked_memory_limit_bytes);
   ~SoftwareImageDecodeCache() override;
 
@@ -253,17 +252,17 @@ class CC_EXPORT SoftwareImageDecodeCache
   DecodedDrawImage GetDecodedImageForDrawInternal(const ImageKey& key,
                                                   const DrawImage& draw_image);
 
-  // GetOriginalSizeImageDecode is called by DecodeImageInternal when the
+  // GetExactSizeImageDecode is called by DecodeImageInternal when the
   // quality does not scale the image. Like DecodeImageInternal, it should be
   // called with no lock acquired and it returns nullptr if the decoding failed.
-  std::unique_ptr<DecodedImage> GetOriginalSizeImageDecode(
+  std::unique_ptr<DecodedImage> GetExactSizeImageDecode(
       const ImageKey& key,
-      sk_sp<const SkImage> image);
+      const PaintImage& image);
 
-  // GetSubrectImageDecode is similar to GetOriginalSizeImageDecode in that no
-  // scale is performed on the image. However, we extract a subrect (copy it
+  // GetSubrectImageDecode is similar to GetExactSizeImageDecode in that the
+  // image is decoded to exact scale. However, we extract a subrect (copy it
   // out) and only return this subrect in order to cache a smaller amount of
-  // memory. Note that this uses GetOriginalSizeImageDecode to get the initial
+  // memory. Note that this uses GetExactSizeImageDecode to get the initial
   // data, which ensures that we cache an unlocked version of the original image
   // in case we need to extract multiple subrects (as would be the case in an
   // atlas).
@@ -332,7 +331,7 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   MemoryBudget locked_images_budget_;
 
-  viz::ResourceFormat format_;
+  SkColorType color_type_;
   size_t max_items_in_cache_;
 
   // Used to uniquely identify DecodedImages for memory traces.

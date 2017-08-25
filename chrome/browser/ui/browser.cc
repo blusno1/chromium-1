@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/optional.h"
 #include "base/process/process_info.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
@@ -120,6 +121,7 @@
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
+#include "chrome/browser/ui/first_run_bubble_presenter.h"
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
@@ -276,6 +278,19 @@ const extensions::Extension* GetExtensionForOrigin(
   return nullptr;
 #endif
 }
+
+// Stores a pointer to the Browser in the WebContents.
+struct BrowserLink : public base::SupportsUserData::Data {
+  static const char kKey[];
+
+  explicit BrowserLink(Browser* browser) : browser(browser) {}
+  ~BrowserLink() override = default;
+
+  Browser* browser;
+};
+
+// static
+const char BrowserLink::kKey[] = "BrowserLink";
 
 }  // namespace
 
@@ -563,6 +578,13 @@ Browser::~Browser() {
   // away so they don't try and call back to us.
   if (select_file_dialog_.get())
     select_file_dialog_->ListenerDestroyed();
+}
+
+// static
+Browser* Browser::FromWebContents(content::WebContents* web_contents) {
+  const BrowserLink* link =
+      static_cast<BrowserLink*>(web_contents->GetUserData(&BrowserLink::kKey));
+  return link ? link->browser : nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -870,8 +892,8 @@ bool Browser::CanSupportWindowFeature(WindowFeature feature) const {
 void Browser::OpenFile() {
   base::RecordAction(UserMetricsAction("OpenFile"));
   select_file_dialog_ = ui::SelectFileDialog::Create(
-      this, new ChromeSelectFilePolicy(
-          tab_strip_model_->GetActiveWebContents()));
+      this, std::make_unique<ChromeSelectFilePolicy>(
+                tab_strip_model_->GetActiveWebContents()));
 
   const base::FilePath directory = profile_->last_selected_directory();
 
@@ -963,8 +985,10 @@ void Browser::TabInsertedAt(TabStripModel* tab_strip_model,
   SyncHistoryWithTabs(index);
 
   // Make sure the loading state is updated correctly, otherwise the throbber
-  // won't start if the page is loading.
-  LoadingStateChanged(contents, true);
+  // won't start if the page is loading. Note that we don't want to
+  // ScheduleUIUpdate() because the tab may not have been inserted in the UI
+  // yet if this function is called before TabStripModel::TabInsertedAt().
+  UpdateWindowForLoadingStateChanged(contents, true);
 
   interstitial_observers_.push_back(new InterstitialObserver(this, contents));
 
@@ -1334,15 +1358,6 @@ blink::WebSecurityStyle Browser::GetSecurityStyle(
                                           security_style_explanations);
 }
 
-void Browser::ShowCertificateViewerInDevTools(
-    content::WebContents* web_contents,
-    scoped_refptr<net::X509Certificate> certificate) {
-  DevToolsWindow* devtools_window =
-      DevToolsWindow::GetInstanceForInspectedWebContents(web_contents);
-  if (devtools_window)
-    devtools_window->ShowCertificateViewer(certificate);
-}
-
 std::unique_ptr<content::BluetoothChooser> Browser::RunBluetoothChooser(
     content::RenderFrameHost* frame,
     const content::BluetoothChooser::EventHandler& event_handler) {
@@ -1431,7 +1446,7 @@ void Browser::OnWindowDidShow() {
 }
 
 void Browser::ShowFirstRunBubble() {
-  window()->GetLocationBar()->ShowFirstRunBubble();
+  FirstRunBubblePresenter::PresentWhenReady(this);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1452,20 +1467,14 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
   if (params.user_gesture)
     nav_params.window_action = chrome::NavigateParams::SHOW_WINDOW;
   nav_params.user_gesture = params.user_gesture;
-
-  PopupBlockerTabHelper* popup_blocker_helper =
-      source ? PopupBlockerTabHelper::FromWebContents(source) : nullptr;
   if ((params.disposition == WindowOpenDisposition::NEW_POPUP ||
        params.disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
        params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
        params.disposition == WindowOpenDisposition::NEW_WINDOW) &&
-      popup_blocker_helper &&
-      PopupBlockerTabHelper::ConsiderForPopupBlocking(
-          source, params.user_gesture, &params)) {
-    if (popup_blocker_helper->MaybeBlockPopup(nav_params,
-                                              blink::mojom::WindowFeatures())) {
-      return nullptr;
-    }
+      PopupBlockerTabHelper::MaybeBlockPopup(source, base::Optional<GURL>(),
+                                             nav_params, &params,
+                                             blink::mojom::WindowFeatures())) {
+    return nullptr;
   }
 
   chrome::Navigate(&nav_params);
@@ -1531,19 +1540,9 @@ void Browser::ActivateContents(WebContents* contents) {
 }
 
 void Browser::LoadingStateChanged(WebContents* source,
-    bool to_different_document) {
-  window_->UpdateLoadingAnimations(tab_strip_model_->TabsAreLoading());
-  window_->UpdateTitleBar();
-
-  WebContents* selected_contents = tab_strip_model_->GetActiveWebContents();
-  if (source == selected_contents) {
-    bool is_loading = source->IsLoading() && to_different_document;
-    command_controller_->LoadingStateChanged(is_loading, false);
-    if (GetStatusBubble()) {
-      GetStatusBubble()->SetStatus(CoreTabHelper::FromWebContents(
-          tab_strip_model_->GetActiveWebContents())->GetStatusText());
-    }
-  }
+                                  bool to_different_document) {
+  ScheduleUIUpdate(source, content::INVALIDATE_TYPE_LOAD);
+  UpdateWindowForLoadingStateChanged(source, to_different_document);
 }
 
 void Browser::CloseContents(WebContents* source) {
@@ -2373,7 +2372,8 @@ bool Browser::CanCloseWithInProgressDownloads() {
 // Browser, Assorted utility functions (private):
 
 void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
-  Browser* delegate = set_delegate ? this : NULL;
+  Browser* delegate = set_delegate ? this : nullptr;
+
   // WebContents...
   web_contents->SetDelegate(delegate);
 
@@ -2390,6 +2390,14 @@ void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
   } else {
     zoom::ZoomController::FromWebContents(web_contents)->RemoveObserver(this);
     content_translate_driver.RemoveObserver(this);
+  }
+
+  // Update the back-link from the WebContents to Browser.
+  if (set_delegate) {
+    web_contents->SetUserData(BrowserLink::kKey,
+                              base::MakeUnique<BrowserLink>(this));
+  } else {
+    web_contents->RemoveUserData(BrowserLink::kKey);
   }
 }
 
@@ -2432,6 +2440,23 @@ void Browser::TabDetachedAtImpl(content::WebContents* contents,
     delete interstitial_observers_[i];
     interstitial_observers_.erase(interstitial_observers_.begin() + i);
     return;
+  }
+}
+
+void Browser::UpdateWindowForLoadingStateChanged(content::WebContents* source,
+                                                 bool to_different_document) {
+  window_->UpdateLoadingAnimations(tab_strip_model_->TabsAreLoading());
+  window_->UpdateTitleBar();
+
+  WebContents* selected_contents = tab_strip_model_->GetActiveWebContents();
+  if (source == selected_contents) {
+    bool is_loading = source->IsLoading() && to_different_document;
+    command_controller_->LoadingStateChanged(is_loading, false);
+    if (GetStatusBubble()) {
+      GetStatusBubble()->SetStatus(CoreTabHelper::FromWebContents(
+                                       tab_strip_model_->GetActiveWebContents())
+                                       ->GetStatusText());
+    }
   }
 }
 

@@ -42,6 +42,7 @@ namespace content {
 
 class EmbeddedWorkerRegistry;
 struct EmbeddedWorkerStartParams;
+class ServiceWorkerContentSettingsProxyImpl;
 class ServiceWorkerContextCore;
 
 // This gives an interface to control one EmbeddedWorker instance, which
@@ -50,7 +51,7 @@ class ServiceWorkerContextCore;
 //
 // Owned by ServiceWorkerVersion. Lives on the IO thread.
 class CONTENT_EXPORT EmbeddedWorkerInstance
-    : NON_EXPORTED_BASE(public mojom::EmbeddedWorkerInstanceHost) {
+    : public mojom::EmbeddedWorkerInstanceHost {
  public:
   class DevToolsProxy;
   typedef base::Callback<void(ServiceWorkerStatusCode)> StatusCallback;
@@ -294,11 +295,8 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   std::unique_ptr<EmbeddedWorkerInstance::WorkerProcessHandle> process_handle_;
   int thread_id_;
 
-  // |client_| is used to send messages to the renderer process. The browser
-  // process should not disconnect the pipe because other associated interfaces
-  // may be using it. The renderer process will disconnect the pipe when
-  // appropriate.
-  mojom::EmbeddedWorkerInstanceClientPtr client_;
+  // |client_| is used to send messages to the renderer process.
+  mojom::EmbeddedWorkerInstanceClientAssociatedPtr client_;
 
   // Binding for EmbeddedWorkerInstanceHost, runs on IO thread.
   mojo::AssociatedBinding<EmbeddedWorkerInstanceHost> instance_host_binding_;
@@ -335,6 +333,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Used for UMA. The start time of the current start sequence step.
   base::TimeTicks step_time_;
 
+  std::unique_ptr<ServiceWorkerContentSettingsProxyImpl> content_settings_;
   base::WeakPtrFactory<EmbeddedWorkerInstance> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(EmbeddedWorkerInstance);

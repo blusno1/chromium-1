@@ -364,16 +364,13 @@ TEST_P(HttpServerPropertiesManagerTest,
   auto quic_servers_dict = base::MakeUnique<base::DictionaryValue>();
   auto quic_server_pref_dict1 = base::MakeUnique<base::DictionaryValue>();
   std::string quic_server_info1("quic_server_info1");
-  quic_server_pref_dict1->SetStringWithoutPathExpansion("server_info",
-                                                        quic_server_info1);
+  quic_server_pref_dict1->SetKey("server_info", base::Value(quic_server_info1));
   auto quic_server_pref_dict2 = base::MakeUnique<base::DictionaryValue>();
   std::string quic_server_info2("quic_server_info2");
-  quic_server_pref_dict2->SetStringWithoutPathExpansion("server_info",
-                                                        quic_server_info2);
+  quic_server_pref_dict2->SetKey("server_info", base::Value(quic_server_info2));
   auto quic_server_pref_dict3 = base::MakeUnique<base::DictionaryValue>();
   std::string quic_server_info3("quic_server_info3");
-  quic_server_pref_dict3->SetStringWithoutPathExpansion("server_info",
-                                                        quic_server_info3);
+  quic_server_pref_dict3->SetKey("server_info", base::Value(quic_server_info3));
   // Set the quic_server_info1 for https://www.google.com.
   QuicServerId google_quic_server_id("www.google.com", 443);
   quic_servers_dict->SetWithoutPathExpansion(google_quic_server_id.ToString(),
@@ -517,8 +514,8 @@ TEST_P(HttpServerPropertiesManagerTest, BadCachedHostPortPair) {
   // Set quic_server_info for www.google.com:65536.
   auto quic_servers_dict = base::MakeUnique<base::DictionaryValue>();
   auto quic_server_pref_dict1 = base::MakeUnique<base::DictionaryValue>();
-  quic_server_pref_dict1->SetStringWithoutPathExpansion("server_info",
-                                                        "quic_server_info1");
+  quic_server_pref_dict1->SetKey("server_info",
+                                 base::Value("quic_server_info1"));
   quic_servers_dict->SetWithoutPathExpansion("http://mail.google.com:65536",
                                              std::move(quic_server_pref_dict1));
 
@@ -980,15 +977,26 @@ TEST_P(HttpServerPropertiesManagerTest, Clear) {
   const IPAddress actual_address(127, 0, 0, 1);
   const QuicServerId mail_quic_server_id("mail.google.com", 80);
   const std::string quic_server_info1("quic_server_info1");
-
+  const AlternativeService alternative_service(kProtoHTTP2, "mail.google.com",
+                                               1234);
+  const AlternativeService broken_alternative_service(
+      kProtoHTTP2, "broken.google.com", 1234);
   {
     TestMockTimeTaskRunner::ScopedContext scoped_context(net_test_task_runner_);
 
+    AlternativeServiceInfoVector alt_svc_info_vector;
+    alt_svc_info_vector.push_back(
+        AlternativeServiceInfo::CreateHttp2AlternativeServiceInfo(
+            alternative_service, one_day_from_now_));
+    alt_svc_info_vector.push_back(
+        AlternativeServiceInfo::CreateHttp2AlternativeServiceInfo(
+            broken_alternative_service, one_day_from_now_));
+    http_server_props_manager_->SetAlternativeServices(spdy_server,
+                                                       alt_svc_info_vector);
+
+    http_server_props_manager_->MarkAlternativeServiceBroken(
+        broken_alternative_service);
     http_server_props_manager_->SetSupportsSpdy(spdy_server, true);
-    AlternativeService alternative_service(kProtoHTTP2, "mail.google.com",
-                                           1234);
-    http_server_props_manager_->SetHttp2AlternativeService(
-        spdy_server, alternative_service, one_day_from_now_);
     http_server_props_manager_->SetSupportsQuic(true, actual_address);
     ServerNetworkStats stats;
     stats.srtt = base::TimeDelta::FromMicroseconds(10);
@@ -998,12 +1006,16 @@ TEST_P(HttpServerPropertiesManagerTest, Clear) {
                                                   quic_server_info1);
   }
 
-  // Run the task.
+  // Advance time by just enough so that the prefs update task is executed but
+  // not the task to expire the brokenness of |broken_alternative_service|.
   EXPECT_FALSE(pref_test_task_runner_->HasPendingTask());
   EXPECT_TRUE(net_test_task_runner_->HasPendingTask());
-  net_test_task_runner_->FastForwardUntilNoTasksRemain();
-  EXPECT_FALSE(net_test_task_runner_->HasPendingTask());
+  net_test_task_runner_->FastForwardBy(
+      HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
+  EXPECT_TRUE(net_test_task_runner_->HasPendingTask());
 
+  EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
+      broken_alternative_service));
   EXPECT_TRUE(http_server_props_manager_->SupportsRequestPriority(spdy_server));
   EXPECT_TRUE(HasAlternativeService(spdy_server));
   IPAddress address;
@@ -1027,8 +1039,9 @@ TEST_P(HttpServerPropertiesManagerTest, Clear) {
   EXPECT_TRUE(pref_test_task_runner_->HasPendingTask());
   pref_test_task_runner_->RunUntilIdle();
   EXPECT_FALSE(pref_test_task_runner_->HasPendingTask());
-  EXPECT_FALSE(net_test_task_runner_->HasPendingTask());
 
+  EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
+      broken_alternative_service));
   EXPECT_FALSE(
       http_server_props_manager_->SupportsRequestPriority(spdy_server));
   EXPECT_FALSE(HasAlternativeService(spdy_server));
@@ -1235,7 +1248,7 @@ TEST_P(HttpServerPropertiesManagerTest, UpdatePrefsWithCache) {
   // A copy of |pref_delegate_|'s server dict will be created, and the broken
   // alternative service's "broken_until" field is removed and verified
   // separately. The rest of the server dict copy is verified afterwards.
-  base::Value server_value_copy(pref_delegate_->GetServerProperties());
+  base::Value server_value_copy = pref_delegate_->GetServerProperties().Clone();
 
   // Extract and remove the "broken_until" string for "www.google.com:1234".
   base::DictionaryValue* server_dict;

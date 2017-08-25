@@ -55,12 +55,12 @@ ApplyBlockElementCommand::ApplyBlockElementCommand(
     : CompositeEditCommand(document), tag_name_(tag_name) {}
 
 void ApplyBlockElementCommand::DoApply(EditingState* editing_state) {
-  if (!EndingVisibleSelection().RootEditableElement())
-    return;
-
   // ApplyBlockElementCommands are only created directly by editor commands'
   // execution, which updates layout before entering doApply().
   DCHECK(!GetDocument().NeedsLayoutTreeUpdate());
+
+  if (!RootEditableElementOf(EndingSelection().Base()))
+    return;
 
   VisiblePosition visible_end = EndingVisibleSelection().VisibleEnd();
   VisiblePosition visible_start = EndingVisibleSelection().VisibleStart();
@@ -85,11 +85,11 @@ void ApplyBlockElementCommand::DoApply(EditingState* editing_state) {
     builder.Collapse(visible_start.ToPositionWithAffinity());
     if (new_end.IsNotNull())
       builder.Extend(new_end);
-    builder.SetIsDirectional(EndingVisibleSelection().IsDirectional());
+    builder.SetIsDirectional(EndingSelection().IsDirectional());
     const SelectionInDOMTree& new_selection = builder.Build();
     if (new_selection.IsNone())
       return;
-    SetEndingSelection(new_selection);
+    SetEndingSelection(SelectionForUndoStep::From(new_selection));
   }
 
   VisibleSelection selection =
@@ -117,12 +117,12 @@ void ApplyBlockElementCommand::DoApply(EditingState* editing_state) {
     VisiblePosition start(VisiblePositionForIndex(start_index, start_scope));
     VisiblePosition end(VisiblePositionForIndex(end_index, end_scope));
     if (start.IsNotNull() && end.IsNotNull()) {
-      SetEndingSelection(
+      SetEndingSelection(SelectionForUndoStep::From(
           SelectionInDOMTree::Builder()
               .Collapse(start.ToPositionWithAffinity())
               .Extend(end.DeepEquivalent())
-              .SetIsDirectional(EndingVisibleSelection().IsDirectional())
-              .Build());
+              .SetIsDirectional(EndingSelection().IsDirectional())
+              .Build()));
     }
   }
 }
@@ -150,11 +150,11 @@ void ApplyBlockElementCommand::FormatSelection(
     AppendNode(placeholder, blockquote, editing_state);
     if (editing_state->IsAborted())
       return;
-    SetEndingSelection(
+    SetEndingSelection(SelectionForUndoStep::From(
         SelectionInDOMTree::Builder()
             .Collapse(Position::BeforeNode(*placeholder))
-            .SetIsDirectional(EndingVisibleSelection().IsDirectional())
-            .Build());
+            .SetIsDirectional(EndingSelection().IsDirectional())
+            .Build()));
     return;
   }
 

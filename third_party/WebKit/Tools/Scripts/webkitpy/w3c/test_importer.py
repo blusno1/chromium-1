@@ -17,9 +17,11 @@ import logging
 from webkitpy.common.net.buildbot import current_build_link
 from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.path_finder import PathFinder
+from webkitpy.common.system.log_utils import configure_logging
 from webkitpy.layout_tests.models.test_expectations import TestExpectations, TestExpectationParser
 from webkitpy.layout_tests.port.base import Port
-from webkitpy.w3c.common import read_credentials, exportable_commits_over_last_n_commits
+from webkitpy.w3c.chromium_exportable_commits import exportable_commits_over_last_n_commits
+from webkitpy.w3c.common import read_credentials
 from webkitpy.w3c.directory_owners_extractor import DirectoryOwnersExtractor
 from webkitpy.w3c.local_wpt import LocalWPT
 from webkitpy.w3c.test_copier import TestCopier
@@ -51,7 +53,7 @@ class TestImporter(object):
 
         self.verbose = options.verbose
         log_level = logging.DEBUG if self.verbose else logging.INFO
-        logging.basicConfig(level=log_level, format='%(message)s')
+        configure_logging(logging_level=log_level, include_time=True)
 
         if not self.checkout_is_okay():
             return 1
@@ -65,8 +67,8 @@ class TestImporter(object):
 
         _log.debug('Noting the current Chromium commit.')
         # TODO(qyearsley): Use Git (self.host.git) to run git commands.
-        _, show_ref_output = self.run(['git', 'show-ref', 'HEAD'])
-        chromium_commit = show_ref_output.split()[0]
+        _, show_ref_output = self.run(['git', 'show-ref', '--verify', '--head', '--hash', 'HEAD'])
+        chromium_commit = show_ref_output.strip()
 
         local_wpt.fetch()
 
@@ -74,9 +76,11 @@ class TestImporter(object):
             _log.info('Checking out %s', options.revision)
             self.run(['git', 'checkout', options.revision], cwd=local_wpt.path)
 
-        _log.info('Noting the revision we are importing.')
+        _log.debug('Noting the revision we are importing.')
         _, show_ref_output = self.run(['git', 'show-ref', 'origin/master'], cwd=local_wpt.path)
         import_commit = 'wpt@%s' % show_ref_output.split()[0]
+
+        _log.info('Importing %s to Chromium %s', import_commit, chromium_commit)
 
         commit_message = self._commit_message(chromium_commit, import_commit)
 
@@ -251,8 +255,10 @@ class TestImporter(object):
                 _log.info('PR: https://github.com/w3c/web-platform-tests/pull/%d', pull_request.number)
             else:
                 _log.warning('No pull request found.')
-            applied = local_wpt.apply_patch(commit.format_patch())
-            if not applied:
+            error = local_wpt.apply_patch(commit.format_patch())
+            if error:
+                _log.error('Commit cannot be applied cleanly:')
+                _log.error(error)
                 return None
             self.run(
                 ['git', 'commit', '--all', '-F', '-'],
@@ -261,8 +267,17 @@ class TestImporter(object):
         return commits
 
     def exportable_but_not_exported_commits(self, local_wpt):
-        """Returns a list of commits that would be clobbered by importer."""
-        return exportable_commits_over_last_n_commits(self.host, local_wpt, self.wpt_github)
+        """Returns a list of commits that would be clobbered by importer.
+
+        The list contains all exportable but not exported commits, not filtered
+        by whether they can apply cleanly.
+        """
+        # The errors returned by exportable_commits_over_last_n_commits are
+        # irrelevant and ignored here, because it tests patches *individually*
+        # while the importer tries to reapply these patches *cumulatively*.
+        commits, _ = exportable_commits_over_last_n_commits(
+            self.host, local_wpt, self.wpt_github, require_clean=False)
+        return commits
 
     def _generate_manifest(self):
         """Generates MANIFEST.json for imported tests.
@@ -494,8 +509,8 @@ class TestImporter(object):
         """List of layout tests that have been deleted."""
         out = self.check_run(['git', 'diff', 'origin/master', '-M100%', '--diff-filter=D', '--name-only'])
         deleted_tests = []
-        for line in out.splitlines():
-            test = self.finder.layout_test_name(line)
+        for path in out.splitlines():
+            test = self._relative_to_layout_test_dir(path)
             if test:
                 deleted_tests.append(test)
         return deleted_tests
@@ -509,8 +524,15 @@ class TestImporter(object):
         renamed_tests = {}
         for line in out.splitlines():
             _, source_path, dest_path = line.split()
-            source_test = self.finder.layout_test_name(source_path)
-            dest_test = self.finder.layout_test_name(dest_path)
+            source_test = self._relative_to_layout_test_dir(source_path)
+            dest_test = self._relative_to_layout_test_dir(dest_path)
             if source_test and dest_test:
                 renamed_tests[source_test] = dest_test
         return renamed_tests
+
+    def _relative_to_layout_test_dir(self, path_relative_to_repo_root):
+        """Returns a path that's relative to the layout tests directory."""
+        abs_path = self.finder.path_from_chromium_base(path_relative_to_repo_root)
+        if not abs_path.startswith(self.finder.layout_tests_dir()):
+            return None
+        return self.fs.relpath(abs_path, self.finder.layout_tests_dir())

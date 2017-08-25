@@ -13,16 +13,14 @@
       <div slot="title">[[dialogTitle_]]</div>
       <div slot="body">
         <paper-input always-float-label id="url" label="$i18n{onStartupSiteUrl}"
-            value="{{url_}}" on-input="validate_" autofocus>
+            value="{{url_}}" on-input="validate_" spellcheck="false" autofocus>
         </paper-input>
       </div>
       <div slot="button-container">
-        <div class="action-buttons">
-          <paper-button class="cancel-button" on-tap="onCancelTap_"
-              id="cancel">$i18n{cancel}</paper-button>
-          <paper-button id="actionButton" class="action-button"
-              on-tap="onActionButtonTap_">[[actionButtonText_]]</paper-button>
-        </div>
+        <paper-button class="cancel-button" on-tap="onCancelTap_"
+            id="cancel">$i18n{cancel}</paper-button>
+        <paper-button id="actionButton" class="action-button"
+            on-tap="onActionButtonTap_">[[actionButtonText_]]</paper-button>
       </div>
     </dialog>
   </template>

@@ -49,6 +49,11 @@ class IOSChromePasswordManagerClient
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<password_manager::PasswordFormManager> form_to_save,
       bool update_password) override;
+  void ShowManualFallbackForSaving(
+      std::unique_ptr<password_manager::PasswordFormManager> form_to_save,
+      bool has_generated_password,
+      bool is_update) override;
+  void HideManualFallbackForSaving() override;
   bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const GURL& origin,
@@ -81,7 +86,7 @@ class IOSChromePasswordManagerClient
   id<PasswordManagerClientDelegate> delegate_;  // (weak)
 
   // The preference associated with
-  // password_manager::prefs::kPasswordManagerSavingEnabled.
+  // password_manager::prefs::kCredentialsEnableService.
   BooleanPrefMember saving_passwords_enabled_;
 
   const password_manager::SyncCredentialsFilter credentials_filter_;

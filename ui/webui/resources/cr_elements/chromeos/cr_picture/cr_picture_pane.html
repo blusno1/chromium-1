@@ -13,40 +13,64 @@
       }
 
       cr-camera {
-        --cr-camera-image-size: var(--cr-picture-image-size, 228px);
+        --cr-camera-image-size: 288px;
+      }
+
+      #preview {
+        height: 288px;
       }
 
       img {
+        border-top-left-radius: 2px;
+        border-top-right-radius: 2px;
         display: block;
+        width: 288px;
+      }
+
+      img:not([data-show-discard]) {
+        background-color: rgba(0, 0, 0, 0.08);
+        border-radius: 2px;
+        bottom: 0;
+        height: var(--cr-picture-image-size, 228px);
+        left: 0;
         margin: auto;
+        padding: 2px;
+        position: absolute;
+        right: 0;
+        top: 0;
         width: var(--cr-picture-image-size, 228px);
       }
 
       #discard {
         align-items: center;
+        background-clip: content-box;
         background-color: var(--google-blue-500);
         border-bottom-left-radius: 2px;
         border-bottom-right-radius: 2px;
         display: flex;
         height: 32px;
         justify-content: center;
-        margin: auto;
-        width: var(--cr-picture-image-size, 228px);
+        width: 288px;
       }
 
       #discard button {
         --iron-icon-fill-color: white;
+        -webkit-margin-end: 0;
+        -webkit-margin-start: 0;
         border-radius: 50%;
       }
     </style>
     <template is="dom-if"
         if="[[showImagePreview_(cameraActive_, imageSrc)]]">
-      <img alt="[[previewAltText]]" src="[[getImgSrc_(imageSrc)]]">
-      <div id="discard" hidden="[[!showDiscard_(imageType)]]">
-        <button is="paper-icon-button-light" id="discardImage"
-            class="icon-delete-white" title="[[discardImageLabel]]"
-            on-tap="onTapDiscardImage_">
-        </button>
+      <div id="preview">
+        <img alt="[[previewAltText]]" src="[[getImgSrc_(imageSrc)]]"
+            data-show-discard$="[[showDiscard_(imageType)]]">
+        <div id="discard" hidden="[[!showDiscard_(imageType)]]">
+          <button is="paper-icon-button-light" id="discardImage"
+              class="icon-delete-white" title="[[discardImageLabel]]"
+              on-tap="onTapDiscardImage_">
+          </button>
+        </div>
       </div>
     </template>
     <template is="dom-if" if="[[cameraActive_]]">

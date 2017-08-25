@@ -88,7 +88,6 @@
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_version_info.h"
-#include "ui/gl/gl_workarounds.h"
 #include "ui/gl/gpu_timing.h"
 
 #if defined(OS_MACOSX)
@@ -481,6 +480,10 @@ bool GLES2Decoder::GetServiceTextureId(uint32_t client_texture_id,
   return false;
 }
 
+TextureBase* GLES2Decoder::GetTextureBase(uint32_t client_id) {
+  return nullptr;
+}
+
 uint32_t GLES2Decoder::GetAndClearBackbufferClearBitsForTest() {
   return 0;
 }
@@ -615,6 +618,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
 
   bool GetServiceTextureId(uint32_t client_texture_id,
                            uint32_t* service_texture_id) override;
+  TextureBase* GetTextureBase(uint32_t client_id) override;
 
   // Restores the current state to the user's settings.
   void RestoreCurrentFramebufferBindings();
@@ -686,6 +690,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
 
   // Initialize or re-initialize the shader translator.
   bool InitializeShaderTranslator();
+  void DestroyShaderTranslator();
 
   void UpdateCapabilities();
 
@@ -1037,6 +1042,10 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
                                          const volatile GLbyte* key);
   void DoApplyScreenSpaceAntialiasingCHROMIUM();
 
+  void BindImage(uint32_t client_texture_id,
+                 uint32_t texture_target,
+                 gl::GLImage* image,
+                 bool can_bind_to_sampler) override;
   void DoBindTexImage2DCHROMIUM(
       GLenum target,
       GLint image_id);
@@ -1711,7 +1720,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   void DoOverlayPromotionHintCHROMIUM(GLuint client_id,
                                       GLboolean promotion_hint,
                                       GLint display_x,
-                                      GLint display_y);
+                                      GLint display_y,
+                                      GLint display_width,
+                                      GLint display_height);
 
   // Wrapper for glSetDrawRectangleCHROMIUM
   void DoSetDrawRectangleCHROMIUM(GLint x, GLint y, GLint width, GLint height);
@@ -1752,7 +1763,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
       GLuint renderbuffer, GLenum format);
 
   // Wrapper for glReleaseShaderCompiler.
-  void DoReleaseShaderCompiler() { }
+  void DoReleaseShaderCompiler();
 
   // Wrappers for glSamplerParameter functions.
   void DoSamplerParameterf(GLuint client_id, GLenum pname, GLfloat param);
@@ -2373,6 +2384,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   // if not returning an error.
   error::Error current_decoder_error_;
 
+  bool has_fragment_precision_high_ = false;
   scoped_refptr<ShaderTranslatorInterface> vertex_translator_;
   scoped_refptr<ShaderTranslatorInterface> fragment_translator_;
 
@@ -2832,8 +2844,19 @@ bool BackTexture::AllocateNativeGpuMemoryBuffer(const gfx::Size& size,
   scoped_refptr<gl::GLImage> image =
       decoder_->GetContextGroup()->image_factory()->CreateAnonymousImage(
           size,
-          format == GL_RGB ? gfx::BufferFormat::RGBX_8888
-                           : gfx::BufferFormat::RGBA_8888,
+          format == GL_RGB
+              ?
+#if defined(USE_OZONE)
+              // BGRX format is preferred for Ozone as it matches the format
+              // used by the buffer queue and is as a result guaranteed to work
+              // on all devices.
+              // TODO(reveman): Define this format in one place instead of
+              // having to duplicate BGRX_8888.
+              gfx::BufferFormat::BGRX_8888
+#else
+              gfx::BufferFormat::RGBX_8888
+#endif
+              : gfx::BufferFormat::RGBA_8888,
           format);
   if (!image || !image->BindTexImage(Target()))
     return false;
@@ -3171,13 +3194,6 @@ bool GLES2DecoderImpl::Initialize(
 
   // Create GPU Tracer for timing values.
   gpu_tracer_.reset(new GPUTracer(this));
-
-  // Pass some workarounds to GLContext so that we can apply them in RealGLApi.
-  gl::GLWorkarounds gl_workarounds;
-  if (workarounds().clear_to_zero_or_one_broken) {
-    gl_workarounds.clear_to_zero_or_one_broken = true;
-  }
-  GetGLContext()->SetGLWorkarounds(gl_workarounds);
 
   if (workarounds().disable_timestamp_queries) {
     // Forcing time elapsed query for any GPU Timing Client forces it for all
@@ -3521,9 +3537,12 @@ bool GLES2DecoderImpl::Initialize(
                               features().khr_robustness ||
                               features().ext_robustness;
 
-  if (!InitializeShaderTranslator()) {
-    return false;
-  }
+  GLint range[2] = {0, 0};
+  GLint precision = 0;
+  QueryShaderPrecisionFormat(gl_version_info(), GL_FRAGMENT_SHADER,
+                             GL_HIGH_FLOAT, range, &precision);
+  has_fragment_precision_high_ =
+      PrecisionMeetsSpecForHighpFloat(range[0], range[1], precision);
 
   GLint viewport_params[4] = { 0 };
   glGetIntegerv(GL_MAX_VIEWPORT_DIMS, viewport_params);
@@ -3869,6 +3888,10 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
       !surface_->IsOffscreen()) {
     caps.disable_non_empty_post_sub_buffers = true;
   }
+  if (workarounds().broken_egl_image_ref_counting &&
+      group_->gpu_preferences().enable_threaded_texture_mailboxes) {
+    caps.disable_2d_canvas_copy_on_write = true;
+  }
 
   return caps;
 }
@@ -3883,6 +3906,10 @@ void GLES2DecoderImpl::UpdateCapabilities() {
 bool GLES2DecoderImpl::InitializeShaderTranslator() {
   TRACE_EVENT0("gpu", "GLES2DecoderImpl::InitializeShaderTranslator");
   if (feature_info_->disable_shader_translator()) {
+    return true;
+  }
+  if (vertex_translator_ || fragment_translator_) {
+    DCHECK(vertex_translator_ && fragment_translator_);
     return true;
   }
   ShBuiltInResources resources;
@@ -3911,12 +3938,7 @@ bool GLES2DecoderImpl::InitializeShaderTranslator() {
     resources.MinProgramTexelOffset = group_->min_program_texel_offset();
   }
 
-  GLint range[2] = { 0, 0 };
-  GLint precision = 0;
-  QueryShaderPrecisionFormat(gl_version_info(), GL_FRAGMENT_SHADER,
-                             GL_HIGH_FLOAT, range, &precision);
-  resources.FragmentPrecisionHigh =
-      PrecisionMeetsSpecForHighpFloat(range[0], range[1], precision);
+  resources.FragmentPrecisionHigh = has_fragment_precision_high_;
 
   ShShaderSpec shader_spec;
   switch (feature_info_->context_type()) {
@@ -4033,6 +4055,11 @@ bool GLES2DecoderImpl::InitializeShaderTranslator() {
     return false;
   }
   return true;
+}
+
+void GLES2DecoderImpl::DestroyShaderTranslator() {
+  vertex_translator_ = nullptr;
+  fragment_translator_ = nullptr;
 }
 
 bool GLES2DecoderImpl::GenBuffersHelper(GLsizei n, const GLuint* client_ids) {
@@ -4726,6 +4753,11 @@ bool GLES2DecoderImpl::GetServiceTextureId(uint32_t client_texture_id,
   return false;
 }
 
+TextureBase* GLES2DecoderImpl::GetTextureBase(uint32_t client_id) {
+  TextureRef* texture_ref = texture_manager()->GetTexture(client_id);
+  return texture_ref ? texture_ref->texture() : nullptr;
+}
+
 void GLES2DecoderImpl::Destroy(bool have_context) {
   if (!initialized())
     return;
@@ -4896,8 +4928,7 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
 
   // Need to release these before releasing |group_| which may own the
   // ShaderTranslatorCache.
-  fragment_translator_ = NULL;
-  vertex_translator_ = NULL;
+  DestroyShaderTranslator();
 
   // Destroy the GPU Tracer which may own some in process GPU Timings.
   if (gpu_tracer_) {
@@ -8735,6 +8766,10 @@ bool GLES2DecoderImpl::VerifyMultisampleRenderbufferIntegrity(
       pixel[2] == 0xFF);
 }
 
+void GLES2DecoderImpl::DoReleaseShaderCompiler() {
+  DestroyShaderTranslator();
+}
+
 void GLES2DecoderImpl::DoRenderbufferStorage(
   GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
   Renderbuffer* renderbuffer =
@@ -8814,7 +8849,9 @@ void GLES2DecoderImpl::DoLinkProgram(GLuint program_id) {
 void GLES2DecoderImpl::DoOverlayPromotionHintCHROMIUM(GLuint client_id,
                                                       GLboolean promotion_hint,
                                                       GLint display_x,
-                                                      GLint display_y) {
+                                                      GLint display_y,
+                                                      GLint display_width,
+                                                      GLint display_height) {
   if (client_id == 0)
     return;
 
@@ -8833,7 +8870,8 @@ void GLES2DecoderImpl::DoOverlayPromotionHintCHROMIUM(GLuint client_id,
     return;
   }
 
-  image->NotifyPromotionHint(promotion_hint != GL_FALSE, display_x, display_y);
+  image->NotifyPromotionHint(promotion_hint != GL_FALSE, display_x, display_y,
+                             display_width, display_height);
 }
 
 void GLES2DecoderImpl::DoSetDrawRectangleCHROMIUM(GLint x,
@@ -8855,6 +8893,9 @@ void GLES2DecoderImpl::DoSetDrawRectangleCHROMIUM(GLint x,
   if (!surface_->SetDrawRectangle(rect)) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glSetDrawRectangleCHROMIUM",
                        "failed on surface");
+    LOG(ERROR) << "Context lost because SetDrawRectangleCHROMIUM failed.";
+    MarkContextLost(error::kUnknown);
+    group_->LoseContexts(error::kUnknown);
   }
   OnFboChanged();
 }
@@ -10564,6 +10605,9 @@ void GLES2DecoderImpl::DoTransformFeedbackVaryings(
 
 scoped_refptr<ShaderTranslatorInterface> GLES2DecoderImpl::GetTranslator(
     GLenum type) {
+  if (!InitializeShaderTranslator()) {
+    return nullptr;
+  }
   return type == GL_VERTEX_SHADER ? vertex_translator_ : fragment_translator_;
 }
 
@@ -15879,7 +15923,7 @@ error::Error GLES2DecoderImpl::HandleRequestExtensionCHROMIUM(
     frag_depth_explicitly_enabled_ |= desire_frag_depth;
     draw_buffers_explicitly_enabled_ |= desire_draw_buffers;
     shader_texture_lod_explicitly_enabled_ |= desire_shader_texture_lod;
-    InitializeShaderTranslator();
+    DestroyShaderTranslator();
   }
 
   if (feature_str.find("GL_CHROMIUM_color_buffer_float_rgba ") !=
@@ -17034,8 +17078,8 @@ void GLES2DecoderImpl::DoCopyTextureCHROMIUM(
   bool unpack_premultiply_alpha_change =
       (unpack_premultiply_alpha ^ unpack_unmultiply_alpha) != 0;
   // TODO(qiankun.miao@intel.com): Support level > 0 for CopyTexImage.
-  if (image && dest_level == 0 && !unpack_flip_y &&
-      !unpack_premultiply_alpha_change) {
+  if (image && internal_format == source_internal_format && dest_level == 0 &&
+      !unpack_flip_y && !unpack_premultiply_alpha_change) {
     glBindTexture(dest_binding_target, dest_texture->service_id());
     if (image->CopyTexImage(dest_target))
       return;
@@ -17244,8 +17288,8 @@ void GLES2DecoderImpl::DoCopySubTextureCHROMIUM(
   bool unpack_premultiply_alpha_change =
       (unpack_premultiply_alpha ^ unpack_unmultiply_alpha) != 0;
   // TODO(qiankun.miao@intel.com): Support level > 0 for CopyTexSubImage.
-  if (image && dest_level == 0 && !unpack_flip_y &&
-      !unpack_premultiply_alpha_change) {
+  if (image && dest_internal_format == source_internal_format &&
+      dest_level == 0 && !unpack_flip_y && !unpack_premultiply_alpha_change) {
     ScopedTextureBinder binder(&state_, dest_texture->service_id(),
                                dest_binding_target);
     if (image->CopyTexSubImage(dest_target, gfx::Point(xoffset, yoffset),
@@ -17914,6 +17958,26 @@ void GLES2DecoderImpl::DoPushGroupMarkerEXT(
 }
 
 void GLES2DecoderImpl::DoPopGroupMarkerEXT(void) {
+}
+
+void GLES2DecoderImpl::BindImage(uint32_t client_texture_id,
+                                 uint32_t texture_target,
+                                 gl::GLImage* image,
+                                 bool can_bind_to_sampler) {
+  TextureRef* ref = texture_manager()->GetTexture(client_texture_id);
+  if (!ref) {
+    return;
+  }
+
+  GLenum bind_target = GLES2Util::GLFaceTargetToTextureTarget(texture_target);
+  if (ref->texture()->target() != bind_target) {
+    return;
+  }
+
+  texture_manager()->SetLevelImage(ref, texture_target, 0, image,
+                                   can_bind_to_sampler
+                                       ? gpu::gles2::Texture::BOUND
+                                       : gpu::gles2::Texture::UNBOUND);
 }
 
 void GLES2DecoderImpl::DoBindTexImage2DCHROMIUM(

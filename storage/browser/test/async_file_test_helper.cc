@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
+#include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/fileapi/file_system_backend.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_operation_runner.h"
@@ -52,7 +53,7 @@ void CreateSnapshotFileCallback(
     base::File::Error result,
     const base::File::Info& file_info,
     const base::FilePath& platform_path,
-    const scoped_refptr<storage::ShareableFileReference>& file_ref) {
+    scoped_refptr<storage::ShareableFileReference> file_ref) {
   DCHECK(!file_ref.get());
   *result_out = result;
   if (platform_path_out)
@@ -75,6 +76,7 @@ void ReadDirectoryCallback(base::RunLoop* run_loop,
 void DidGetUsageAndQuota(storage::QuotaStatusCode* status_out,
                          int64_t* usage_out,
                          int64_t* quota_out,
+                         base::OnceClosure done_callback,
                          storage::QuotaStatusCode status,
                          int64_t usage,
                          int64_t quota) {
@@ -84,6 +86,8 @@ void DidGetUsageAndQuota(storage::QuotaStatusCode* status_out,
     *usage_out = usage;
   if (quota_out)
     *quota_out = quota;
+  if (done_callback)
+    std::move(done_callback).Run();
 }
 
 }  // namespace
@@ -258,10 +262,12 @@ storage::QuotaStatusCode AsyncFileTestHelper::GetUsageAndQuota(
     int64_t* usage,
     int64_t* quota) {
   storage::QuotaStatusCode status = storage::kQuotaStatusUnknown;
+  base::RunLoop run_loop;
   quota_manager->GetUsageAndQuota(
       origin, FileSystemTypeToQuotaStorageType(type),
-      base::Bind(&DidGetUsageAndQuota, &status, usage, quota));
-  base::RunLoop().RunUntilIdle();
+      base::Bind(&DidGetUsageAndQuota, &status, usage, quota,
+                 run_loop.QuitWhenIdleClosure()));
+  run_loop.Run();
   return status;
 }
 

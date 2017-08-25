@@ -13,8 +13,10 @@
 #include "base/values.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/elements/ui_element_transform_operations.h"
+#include "chrome/browser/vr/elements/viewport_aware_root.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/gfx/transform_util.h"
 
 #define TOLERANCE 0.0001
@@ -31,6 +33,7 @@ namespace {
 void addElement(UiScene* scene, int id) {
   auto element = base::MakeUnique<UiElement>();
   element->set_id(id);
+  element->set_draw_phase(0);
   scene->AddUiElement(std::move(element));
 }
 
@@ -78,6 +81,7 @@ TEST(UiScene, ParentTransformAppliesToChild) {
   operations.SetRotate(0, 0, 1, 90);
   operations.SetScale(3, 3, 1);
   element->SetTransformOperations(operations);
+  element->set_draw_phase(0);
   scene.AddUiElement(std::move(element));
 
   // Add a child to the parent, with different transformations.
@@ -89,13 +93,14 @@ TEST(UiScene, ParentTransformAppliesToChild) {
   child_operations.SetRotate(0, 0, 1, 90);
   child_operations.SetScale(2, 2, 1);
   element->SetTransformOperations(child_operations);
+  element->set_draw_phase(0);
   scene.AddUiElement(std::move(element));
   const UiElement* child = scene.GetUiElementById(1);
 
   gfx::Point3F origin(0, 0, 0);
   gfx::Point3F point(1, 0, 0);
 
-  scene.OnBeginFrame(MicrosecondsToTicks(1));
+  scene.OnBeginFrame(MicrosecondsToTicks(1), gfx::Vector3dF());
   child->world_space_transform().TransformPoint(&origin);
   child->world_space_transform().TransformPoint(&point);
   EXPECT_VEC3F_NEAR(gfx::Point3F(6, 10, 0), origin);
@@ -108,36 +113,46 @@ TEST(UiScene, Opacity) {
   auto element = base::MakeUnique<UiElement>();
   element->set_id(0);
   element->SetOpacity(0.5);
+  element->set_draw_phase(0);
   scene.AddUiElement(std::move(element));
 
   element = base::MakeUnique<UiElement>();
   element->set_id(1);
   scene.GetUiElementById(0)->AddChild(element.get());
   element->SetOpacity(0.5);
+  element->set_draw_phase(0);
   scene.AddUiElement(std::move(element));
 
-  scene.OnBeginFrame(MicrosecondsToTicks(0));
+  scene.OnBeginFrame(MicrosecondsToTicks(0), gfx::Vector3dF());
   EXPECT_EQ(0.5f, scene.GetUiElementById(0)->computed_opacity());
   EXPECT_EQ(0.25f, scene.GetUiElementById(1)->computed_opacity());
 }
 
-TEST(UiScene, LockToFov) {
+TEST(UiScene, ViewportAware) {
   UiScene scene;
 
+  auto root = base::MakeUnique<ViewportAwareRoot>();
+  root->set_id(0);
+  root->set_draw_phase(0);
+  scene.AddUiElement(std::move(root));
+
   auto element = base::MakeUnique<UiElement>();
-  element->set_id(0);
-  element->set_lock_to_fov(true);
+  element->set_id(1);
+  element->set_viewport_aware(true);
+  element->set_draw_phase(0);
+  scene.GetUiElementById(0)->AddChild(element.get());
   scene.AddUiElement(std::move(element));
 
   element = base::MakeUnique<UiElement>();
-  element->set_id(1);
-  scene.GetUiElementById(0)->AddChild(element.get());
-  element->set_lock_to_fov(false);
+  element->set_id(2);
+  scene.GetUiElementById(1)->AddChild(element.get());
+  element->set_viewport_aware(false);
+  element->set_draw_phase(0);
   scene.AddUiElement(std::move(element));
 
-  scene.OnBeginFrame(MicrosecondsToTicks(0));
-  EXPECT_TRUE(scene.GetUiElementById(0)->computed_lock_to_fov());
-  EXPECT_TRUE(scene.GetUiElementById(1)->computed_lock_to_fov());
+  scene.OnBeginFrame(MicrosecondsToTicks(0), gfx::Vector3dF());
+  EXPECT_TRUE(scene.GetUiElementById(1)->computed_viewport_aware());
+  EXPECT_TRUE(scene.GetUiElementById(2)->computed_viewport_aware());
 }
 
 typedef struct {
@@ -157,6 +172,7 @@ TEST_P(AnchoringTest, VerifyCorrectPosition) {
   element->set_id(0);
   element->SetSize(2, 2);
   element->SetScale(2, 2, 1);
+  element->set_draw_phase(0);
   scene.AddUiElement(std::move(element));
 
   // Add a child to the parent, with anchoring.
@@ -165,9 +181,10 @@ TEST_P(AnchoringTest, VerifyCorrectPosition) {
   scene.GetUiElementById(0)->AddChild(element.get());
   element->set_x_anchoring(GetParam().x_anchoring);
   element->set_y_anchoring(GetParam().y_anchoring);
+  element->set_draw_phase(0);
   scene.AddUiElement(std::move(element));
 
-  scene.OnBeginFrame(MicrosecondsToTicks(0));
+  scene.OnBeginFrame(MicrosecondsToTicks(0), gfx::Vector3dF());
   const UiElement* child = scene.GetUiElementById(1);
   EXPECT_NEAR(GetParam().expected_x, child->GetCenter().x(), TOLERANCE);
   EXPECT_NEAR(GetParam().expected_y, child->GetCenter().y(), TOLERANCE);

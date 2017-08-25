@@ -4,224 +4,316 @@
 
 #include "chrome/browser/profiling_host/profiling_process_host.h"
 
+#include "base/allocator/features.h"
 #include "base/command_line.h"
-#include "base/path_service.h"
-#include "base/process/launch.h"
+#include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/sys_info.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
+#include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/profiling/memlog_sender.h"
+#include "chrome/common/profiling/constants.mojom.h"
 #include "chrome/common/profiling/profiling_constants.h"
+#include "components/version_info/version_info.h"
+#include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_service.h"
+#include "content/public/browser/notification_types.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/common/bind_interface_helpers.h"
+#include "content/public/common/child_process_host.h"
 #include "content/public/common/content_switches.h"
-#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
+#include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.mojom.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
-#if defined(OS_POSIX)
-#include "base/files/scoped_file.h"
-#include "base/process/process_metrics.h"
-#include "base/third_party/valgrind/valgrind.h"
-#include "chrome/common/profiling/profiling_constants.h"
-#include "content/public/browser/posix_file_descriptor_info.h"
-#endif
-
 namespace profiling {
 
 namespace {
+const size_t kMaxTraceSizeUploadInBytes = 10 * 1024 * 1024;
 
-ProfilingProcessHost* pph_singleton = nullptr;
+void UploadTraceToCrashServer(base::FilePath file_path) {
+  std::string file_contents;
+  if (!base::ReadFileToStringWithMaxSize(file_path, &file_contents,
+                                         kMaxTraceSizeUploadInBytes)) {
+    LOG(ERROR) << "Cannot read trace file contents.";
+    return;
+  }
 
-#if defined(OS_LINUX)
-bool IsRunningOnValgrind() {
-  return RUNNING_ON_VALGRIND;
-}
-#endif
-
-base::CommandLine MakeProfilingCommandLine(const std::string& pipe_id) {
-  // Program name.
-  base::FilePath child_path;
-#if defined(OS_LINUX)
-  // Use /proc/self/exe rather than our known binary path so updates
-  // can't swap out the binary from underneath us.
-  // When running under Valgrind, forking /proc/self/exe ends up forking the
-  // Valgrind executable, which then crashes. However, it's almost safe to
-  // assume that the updates won't happen while testing with Valgrind tools.
-  if (!IsRunningOnValgrind())
-    child_path = base::FilePath(base::kProcSelfExe);
-#endif
-  if (child_path.empty())
-    base::PathService::Get(base::FILE_EXE, &child_path);
-  base::CommandLine result(child_path);
-
-  result.AppendSwitchASCII(switches::kProcessType, switches::kProfiling);
-  result.AppendSwitchASCII(switches::kMemlogPipe, pipe_id);
-
-#if defined(OS_WIN)
-  // Windows needs prefetch arguments.
-  result.AppendArg(switches::kPrefetchArgumentOther);
-#endif
-
-  return result;
+  // TODO(bug 753514): Upload the trace |file_contents| to crash server (slow
+  // reports).
 }
 
 }  // namespace
 
 ProfilingProcessHost::ProfilingProcessHost() {
-  pph_singleton = this;
-  Launch();
+  Add(this);
+  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CREATED,
+                 content::NotificationService::AllBrowserContextsAndSources());
 }
 
 ProfilingProcessHost::~ProfilingProcessHost() {
-  pph_singleton = nullptr;
+  Remove(this);
 }
 
-// static
-ProfilingProcessHost* ProfilingProcessHost::EnsureStarted() {
-  static ProfilingProcessHost host;
-  return &host;
-}
-
-// static
-ProfilingProcessHost* ProfilingProcessHost::Get() {
-  return pph_singleton;
-}
-
-// static
-void ProfilingProcessHost::AddSwitchesToChildCmdLine(
-    base::CommandLine* child_cmd_line) {
-  // TODO(ajwong): Figure out how to trace the zygote process.
-  if (child_cmd_line->GetSwitchValueASCII(switches::kProcessType) ==
-      switches::kZygoteProcess) {
-    return;
-  }
-
-  // Watch out: will be called on different threads.
-  ProfilingProcessHost* pph = ProfilingProcessHost::Get();
-  if (!pph)
-    return;
-  pph->EnsureControlChannelExists();
-
-  /* TODO(brettw) this currently doesn't work. Fix it.
-
-  // Create the socketpair for the low level memlog pipe.
-  mojo::edk::PlatformChannelPair data_channel;
-  pipe_id_ = data_channel.PrepareToPassClientHandleToChildProcessAsString(
-      &handle_passing_info);
-
-  // TODO(brettw) this isn't correct for Posix. Redo when we can shave over
-  // Mojo
-  child_cmd_line->AppendSwitchASCII(switches::kMemlogPipe, pph->pipe_id_);
-  */
-}
-
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
-void ProfilingProcessHost::GetAdditionalMappedFilesForChildProcess(
-    const base::CommandLine& command_line,
-    int child_process_id,
-    content::PosixFileDescriptorInfo* mappings) {
-  // TODO(ajwong): Figure out how to trace the zygote process.
-  if (command_line.GetSwitchValueASCII(switches::kProcessType) ==
-      switches::kZygoteProcess) {
-    return;
-  }
-
-  ProfilingProcessHost* pph = ProfilingProcessHost::Get();
-  if (!pph)
+void ProfilingProcessHost::BrowserChildProcessLaunchedAndConnected(
+    const content::ChildProcessData& data) {
+  // Ignore newly launched child process if only profiling the browser.
+  if (mode_ == Mode::kBrowser)
     return;
 
-  pph->EnsureControlChannelExists();
-
-  mojo::edk::PlatformChannelPair data_channel;
-  mappings->Transfer(
-      kProfilingDataPipe,
-      base::ScopedFD(data_channel.PassClientHandle().release().handle));
-
-  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
-      ->PostTask(
-          FROM_HERE,
-          base::BindOnce(&ProfilingProcessHost::AddNewSenderOnIO,
-                         base::Unretained(pph), data_channel.PassServerHandle(),
-                         child_process_id));
-}
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
-
-void ProfilingProcessHost::RequestProcessDump(base::ProcessId pid) {
-  // TODO(brettw) implement process dumping.
-}
-
-void ProfilingProcessHost::Launch() {
-  mojo::edk::PlatformChannelPair control_channel;
-  base::LaunchOptions options;
-  mojo::edk::HandlePassingInformation* handle_passing_info =
-#if defined(OS_WIN)
-      &options.handles_to_inherit;
-#else
-      &options.fds_to_remap;
-#endif
-
-  // Create the socketpair for the low level memlog pipe.
-  mojo::edk::PlatformChannelPair data_channel;
-  pipe_id_ = data_channel.PrepareToPassClientHandleToChildProcessAsString(
-      handle_passing_info);
-
-  mojo::edk::ScopedPlatformHandle child_end = data_channel.PassClientHandle();
-
-  base::CommandLine profiling_cmd = MakeProfilingCommandLine(pipe_id_);
-
-  // Keep the server handle, pass the client handle to the child.
-  pending_control_connection_ = control_channel.PassServerHandle();
-  control_channel.PrepareToPassClientHandleToChildProcess(&profiling_cmd,
-                                                          handle_passing_info);
-
-  mojo::edk::ScopedPlatformHandle local_pipe = data_channel.PassServerHandle();
-#if defined(OS_LINUX)
-  options.kill_on_parent_death = true;
-#endif
-
-  process_ = base::LaunchProcess(profiling_cmd, options);
-  StartMemlogSender(std::move(local_pipe));
-}
-
-void ProfilingProcessHost::EnsureControlChannelExists() {
-  // May get called on different threads, we need to be on the IO thread to
-  // work.
   if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
     content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
         ->PostTask(
             FROM_HERE,
-            base::BindOnce(&ProfilingProcessHost::EnsureControlChannelExists,
-                           base::Unretained(this)));
+            base::BindOnce(
+                &ProfilingProcessHost::BrowserChildProcessLaunchedAndConnected,
+                base::Unretained(this), data));
+    return;
+  }
+  content::BrowserChildProcessHost* host =
+      content::BrowserChildProcessHost::FromID(data.id);
+  if (!host)
+    return;
+
+  // Tell the child process to start profiling.
+  profiling::mojom::MemlogClientPtr memlog_client;
+  profiling::mojom::MemlogClientRequest request =
+      mojo::MakeRequest(&memlog_client);
+  BindInterface(host->GetHost(), std::move(request));
+  base::ProcessId pid = base::GetProcId(data.handle);
+  SendPipeToProfilingService(std::move(memlog_client), pid);
+}
+
+void ProfilingProcessHost::Observe(
+    int type,
+    const content::NotificationSource& source,
+    const content::NotificationDetails& details) {
+  // Ignore newly launched renderer if only profiling the browser.
+  if (mode_ == Mode::kBrowser)
+    return;
+
+  if (type != content::NOTIFICATION_RENDERER_PROCESS_CREATED)
+    return;
+
+  if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
+    content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
+        ->PostTask(FROM_HERE, base::BindOnce(&ProfilingProcessHost::Observe,
+                                             base::Unretained(this), type,
+                                             source, details));
     return;
   }
 
-  if (pending_control_connection_.is_valid())
-    ConnectControlChannelOnIO();
+  // Tell the child process to start profiling.
+  content::RenderProcessHost* host =
+      content::Source<content::RenderProcessHost>(source).ptr();
+  profiling::mojom::MemlogClientPtr memlog_client;
+  profiling::mojom::MemlogClientRequest request =
+      mojo::MakeRequest(&memlog_client);
+  content::BindInterface(host, std::move(request));
+  base::ProcessId pid = base::GetProcId(host->GetHandle());
+
+  SendPipeToProfilingService(std::move(memlog_client), pid);
 }
 
-// This must be called before the client attempts to connect to the control
-// pipe.
-void ProfilingProcessHost::ConnectControlChannelOnIO() {
-  mojo::edk::OutgoingBrokerClientInvitation invitation;
-  mojo::ScopedMessagePipeHandle control_pipe =
-      invitation.AttachMessagePipe(kProfilingControlPipeName);
+void ProfilingProcessHost::SendPipeToProfilingService(
+    profiling::mojom::MemlogClientPtr memlog_client,
+    base::ProcessId pid) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::IO));
 
-  invitation.Send(
-      process_.Handle(),
-      mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
-                                  std::move(pending_control_connection_)));
-  profiling_control_.Bind(
-      mojom::ProfilingControlPtrInfo(std::move(control_pipe), 0));
+  mojo::edk::PlatformChannelPair data_channel;
 
-  StartProfilingMojo();
+  memlog_->AddSender(
+      pid,
+      mojo::WrapPlatformFile(data_channel.PassServerHandle().release().handle),
+      base::BindOnce(&ProfilingProcessHost::SendPipeToClientProcess,
+                     base::Unretained(this), std::move(memlog_client),
+                     mojo::WrapPlatformFile(
+                         data_channel.PassClientHandle().release().handle)));
 }
 
-void ProfilingProcessHost::AddNewSenderOnIO(
-    mojo::edk::ScopedPlatformHandle handle,
-    int child_process_id) {
-  profiling_control_->AddNewSender(
-      mojo::WrapPlatformFile(handle.release().handle), child_process_id);
+void ProfilingProcessHost::SendPipeToClientProcess(
+    profiling::mojom::MemlogClientPtr memlog_client,
+    mojo::ScopedHandle handle) {
+  memlog_client->StartProfiling(std::move(handle));
+}
+
+// static
+ProfilingProcessHost::Mode ProfilingProcessHost::GetCurrentMode() {
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kMemlog)) {
+    std::string mode =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            switches::kMemlog);
+    if (mode == switches::kMemlogModeAll)
+      return Mode::kAll;
+    if (mode == switches::kMemlogModeBrowser)
+      return Mode::kBrowser;
+
+    LOG(ERROR) << "Unsupported value: \"" << mode << "\" passed to --"
+               << switches::kMemlog;
+  }
+  return Mode::kNone;
+#else
+  LOG_IF(ERROR,
+         base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kMemlog))
+      << "--" << switches::kMemlog
+      << " specified but it will have no effect because the use_allocator_shim "
+      << "is not available in this build.";
+  return Mode::kNone;
+#endif
+}
+
+// static
+ProfilingProcessHost* ProfilingProcessHost::EnsureStarted(
+    content::ServiceManagerConnection* connection,
+    Mode mode) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  ProfilingProcessHost* host = GetInstance();
+  host->SetMode(mode);
+  host->MakeConnector(connection);
+  host->LaunchAsService();
+  return host;
+}
+
+// static
+ProfilingProcessHost* ProfilingProcessHost::GetInstance() {
+  return base::Singleton<
+      ProfilingProcessHost,
+      base::LeakySingletonTraits<ProfilingProcessHost>>::get();
+}
+
+void ProfilingProcessHost::RequestProcessDump(base::ProcessId pid,
+                                              const base::FilePath& dest) {
+  if (!connector_) {
+    LOG(ERROR)
+        << "Requesting process dump when profiling process hasn't started.";
+    return;
+  }
+
+  const bool kNoUpload = false;
+  base::PostTaskWithTraits(
+      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      base::BindOnce(&ProfilingProcessHost::GetOutputFileOnBlockingThread,
+                     base::Unretained(this), pid, dest, kNoUpload));
+}
+
+void ProfilingProcessHost::RequestProcessReport(base::ProcessId pid) {
+  if (!connector_) {
+    LOG(ERROR)
+        << "Requesting process dump when profiling process hasn't started.";
+    return;
+  }
+
+  base::FilePath output_path;
+  if (!CreateTemporaryFile(&output_path)) {
+    LOG(ERROR) << "Cannot create temporary file for memory dump.";
+    return;
+  }
+
+  const bool kUpload = true;
+  base::PostTaskWithTraits(
+      FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+      base::BindOnce(&ProfilingProcessHost::GetOutputFileOnBlockingThread,
+                     base::Unretained(this), pid, output_path, kUpload));
+}
+
+void ProfilingProcessHost::MakeConnector(
+    content::ServiceManagerConnection* connection) {
+  connector_ = connection->GetConnector()->Clone();
+}
+
+void ProfilingProcessHost::LaunchAsService() {
+  // May get called on different threads, we need to be on the IO thread to
+  // work.
+  if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
+    content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
+        ->PostTask(FROM_HERE,
+                   base::BindOnce(&ProfilingProcessHost::LaunchAsService,
+                                  base::Unretained(this)));
+    return;
+  }
+
+  // Bind to the memlog service. This will start it if it hasn't started
+  // already.
+  connector_->BindInterface(mojom::kServiceName, &memlog_);
+
+  // Tell the current process to start profiling.
+  profiling::mojom::MemlogClientPtr memlog_client;
+  profiling::mojom::MemlogClientRequest request =
+      mojo::MakeRequest(&memlog_client);
+  connector_->BindInterface(content::mojom::kBrowserServiceName,
+                            mojo::MakeRequest(&memlog_client));
+  base::ProcessId pid = base::Process::Current().Pid();
+  SendPipeToProfilingService(std::move(memlog_client), pid);
+}
+
+void ProfilingProcessHost::GetOutputFileOnBlockingThread(
+    base::ProcessId pid,
+    const base::FilePath& dest,
+    bool upload) {
+  base::File file(dest,
+                  base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&ProfilingProcessHost::HandleDumpProcessOnIOThread,
+                     base::Unretained(this), pid, std::move(dest),
+                     std::move(file), upload));
+}
+
+void ProfilingProcessHost::HandleDumpProcessOnIOThread(base::ProcessId pid,
+                                                       base::FilePath file_path,
+                                                       base::File file,
+                                                       bool upload) {
+  mojo::ScopedHandle handle = mojo::WrapPlatformFile(file.TakePlatformFile());
+  memlog_->DumpProcess(
+      pid, std::move(handle), GetMetadataJSONForTrace(),
+      base::BindOnce(&ProfilingProcessHost::OnProcessDumpComplete,
+                     base::Unretained(this), std::move(file_path), upload));
+}
+
+void ProfilingProcessHost::OnProcessDumpComplete(base::FilePath file_path,
+                                                 bool upload,
+                                                 bool success) {
+  if (!success) {
+    LOG(ERROR) << "Cannot dump process.";
+    // On any errors, the requested trace output file is deleted.
+    base::DeleteFile(file_path, false);
+    return;
+  }
+
+  if (upload) {
+    UploadTraceToCrashServer(file_path);
+
+    // Uploaded file is a temporary file and must be deleted.
+    base::DeleteFile(file_path, false);
+  }
+}
+
+void ProfilingProcessHost::SetMode(Mode mode) {
+  mode_ = mode;
+}
+
+std::unique_ptr<base::DictionaryValue>
+ProfilingProcessHost::GetMetadataJSONForTrace() {
+  std::unique_ptr<base::DictionaryValue> metadata_dict(
+      new base::DictionaryValue);
+  metadata_dict->SetKey(
+      "product-version",
+      base::Value(version_info::GetProductNameAndVersionForUserAgent()));
+  metadata_dict->SetKey("user-agent", base::Value(GetUserAgent()));
+  metadata_dict->SetKey("os-name",
+                        base::Value(base::SysInfo::OperatingSystemName()));
+  metadata_dict->SetKey(
+      "command_line",
+      base::Value(
+          base::CommandLine::ForCurrentProcess()->GetCommandLineString()));
+  metadata_dict->SetKey(
+      "os-arch", base::Value(base::SysInfo::OperatingSystemArchitecture()));
+  return metadata_dict;
 }
 
 }  // namespace profiling

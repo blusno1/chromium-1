@@ -9,20 +9,17 @@ function testFunction()
     debugger;
 }
 
-var test = function()
-{
-    InspectorTest.startDebuggerTest(step1);
+var test = function() {
+  SourcesTestRunner.startDebuggerTest(step1);
 
-    function step1()
-    {
-        InspectorTest.runTestFunctionAndWaitUntilPaused(step2);
-    }
+  function step1() {
+    SourcesTestRunner.runTestFunctionAndWaitUntilPaused(step2);
+  }
 
-    function step2()
-    {
-        InspectorTest.completeDebuggerTest();
-    }
-}
+  function step2() {
+    SourcesTestRunner.completeDebuggerTest();
+  }
+};
 
 </script>
 </head>

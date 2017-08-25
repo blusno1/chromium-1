@@ -4,46 +4,54 @@
 
 #include "content/renderer/service_worker/worker_fetch_context_impl.h"
 
+#include "base/feature_list.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/resource_dispatcher.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/web_url_loader_impl.h"
 #include "content/common/frame_messages.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "content/public/common/content_features.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
 
 WorkerFetchContextImpl::WorkerFetchContextImpl(
-    mojom::WorkerURLLoaderFactoryProviderPtrInfo provider_info)
-    : provider_info_(std::move(provider_info)),
+    mojom::ServiceWorkerWorkerClientRequest request,
+    ChildURLLoaderFactoryGetter::Info url_loader_factory_getter_info)
+    : binding_(this),
+      request_(std::move(request)),
+      url_loader_factory_getter_info_(
+          std::move(url_loader_factory_getter_info)),
       thread_safe_sender_(ChildThreadImpl::current()->thread_safe_sender()) {}
 
 WorkerFetchContextImpl::~WorkerFetchContextImpl() {}
 
 void WorkerFetchContextImpl::InitializeOnWorkerThread(
     base::SingleThreadTaskRunner* loading_task_runner) {
+  DCHECK(request_.is_pending());
   DCHECK(loading_task_runner->RunsTasksInCurrentSequence());
   DCHECK(!resource_dispatcher_);
-  DCHECK(!binding_);
+  DCHECK(!binding_.is_bound());
   resource_dispatcher_ =
       base::MakeUnique<ResourceDispatcher>(nullptr, loading_task_runner);
-  binding_ = base::MakeUnique<
-      mojo::AssociatedBinding<mojom::ServiceWorkerWorkerClient>>(this);
-  DCHECK(provider_info_.is_valid());
-  provider_.Bind(std::move(provider_info_));
-  mojom::ServiceWorkerWorkerClientAssociatedPtrInfo ptr_info;
-  binding_->Bind(mojo::MakeRequest(&ptr_info));
-  provider_->GetURLLoaderFactoryAndRegisterClient(
-      mojo::MakeRequest(&url_loader_factory_), std::move(ptr_info),
-      service_worker_provider_id_);
+
+  url_loader_factory_getter_ = url_loader_factory_getter_info_.Bind();
+
+  binding_.Bind(std::move(request_));
 }
 
 std::unique_ptr<blink::WebURLLoader> WorkerFetchContextImpl::CreateURLLoader(
     const blink::WebURLRequest& request,
     base::SingleThreadTaskRunner* task_runner) {
+  if (request.Url().ProtocolIs(url::kBlobScheme)) {
+    return base::MakeUnique<content::WebURLLoaderImpl>(
+        resource_dispatcher_.get(), task_runner,
+        url_loader_factory_getter_->GetBlobLoaderFactory());
+  }
   return base::MakeUnique<content::WebURLLoaderImpl>(
-      resource_dispatcher_.get(), task_runner, url_loader_factory_.get());
+      resource_dispatcher_.get(), task_runner,
+      url_loader_factory_getter_->GetNetworkLoaderFactory());
 }
 
 void WorkerFetchContextImpl::WillSendRequest(blink::WebURLRequest& request) {
@@ -83,8 +91,8 @@ bool WorkerFetchContextImpl::IsOnSubframe() const {
   return is_on_sub_frame_;
 }
 
-blink::WebURL WorkerFetchContextImpl::FirstPartyForCookies() const {
-  return first_party_for_cookies_;
+blink::WebURL WorkerFetchContextImpl::SiteForCookies() const {
+  return site_for_cookies_;
 }
 
 void WorkerFetchContextImpl::DidRunContentWithCertificateErrors(
@@ -131,9 +139,9 @@ void WorkerFetchContextImpl::set_parent_frame_id(int id) {
   parent_frame_id_ = id;
 }
 
-void WorkerFetchContextImpl::set_first_party_for_cookies(
-    const blink::WebURL& first_party_for_cookies) {
-  first_party_for_cookies_ = first_party_for_cookies;
+void WorkerFetchContextImpl::set_site_for_cookies(
+    const blink::WebURL& site_for_cookies) {
+  site_for_cookies_ = site_for_cookies;
 }
 
 void WorkerFetchContextImpl::set_is_secure_context(bool flag) {

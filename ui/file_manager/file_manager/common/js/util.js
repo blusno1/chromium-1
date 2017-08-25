@@ -517,10 +517,13 @@ util.AppCache.cleanup_ = function(map) {
 };
 
 /**
- * Returns true if the board of the device matches the given prefix.
- * @param {string} boardPrefix The board prefix to match against.
- *     (ex. "x86-mario". Prefix is used as the actual board name comes with
- *     suffix like "x86-mario-something".
+ * Returns true if the board of the device matches the given prefix. Caution:
+ * There are cases in which the name of one board is a prefix for a different
+ * (only slightly related) board: E.g. daisy and daisy-spring, peach-pi and
+ * peach-pit, and maybe others. See also base::GetLsbReleaseBoard().
+ * @param {string} boardPrefix The board prefix to match against. (ex.
+ *     "x86-mario". Prefix is used as the actual board name comes with suffix
+ *     like "x86-mario-something".
  * @return {boolean} True if the board of the device matches the given prefix.
  */
 util.boardIs = function(boardPrefix) {
@@ -685,6 +688,16 @@ util.getTeamDriveName = function(entry) {
 };
 
 /**
+ * Returns true if the given entry is the root folder of recent files.
+ * @param {(!Entry|!FakeEntry)} entry Entry or a fake entry.
+ * @returns {boolean}
+ */
+util.isRecentRoot = function(entry) {
+  return util.isFakeEntry(entry) &&
+      entry.rootType == VolumeManagerCommon.RootType.RECENT;
+};
+
+/**
  * Creates an instance of UserDOMError with given error name that looks like a
  * FileError except that it does not have the deprecated FileError.code member.
  *
@@ -769,6 +782,24 @@ util.isSameFileSystem = function(fileSystem1, fileSystem2) {
   if (!fileSystem1 || !fileSystem2)
     return false;
   return util.isSameEntry(fileSystem1.root, fileSystem2.root);
+};
+
+/**
+ * Checks if given two entries are in the same directory.
+ * @param {!Entry} entry1
+ * @param {!Entry} entry2
+ * @return {boolean} True if given entries are in the same directory.
+ */
+util.isSiblingEntry = function(entry1, entry2) {
+  var path1 = entry1.fullPath.split('/');
+  var path2 = entry2.fullPath.split('/');
+  if (path1.length != path2.length)
+    return false;
+  for (var i = 0; i < path1.length - 1; i++) {
+    if (path1[i] != path2[i])
+      return false;
+  }
+  return true;
 };
 
 /**
@@ -1026,6 +1057,8 @@ util.getRootTypeLabel = function(locationInfo) {
       return str('DRIVE_SHARED_WITH_ME_COLLECTION_LABEL');
     case VolumeManagerCommon.RootType.DRIVE_RECENT:
       return str('DRIVE_RECENT_COLLECTION_LABEL');
+    case VolumeManagerCommon.RootType.RECENT:
+      return str('RECENT_ROOT_LABEL');
     case VolumeManagerCommon.RootType.MEDIA_VIEW:
       var mediaViewRootType =
           VolumeManagerCommon.getMediaViewRootTypeFromVolumeId(
@@ -1124,6 +1157,60 @@ util.validateFileName = function(parentEntry, name, filterHiddenOn) {
 };
 
 /**
+ * Verifies the user entered name for external drive to be
+ * renamed to. Name restrictions must correspond to the target filesystem
+ * restrictions.
+ *
+ * It also verifies that name length is in the limits of the filesystem.
+ *
+ * @param {string} name New external drive name.
+ * @param {!VolumeInfo} volumeInfo
+ * @return {Promise} Promise fulfilled on success, or rejected with the error
+ *     message.
+ */
+util.validateExternalDriveName = function(name, volumeInfo) {
+  // Verify if entered name for external drive respects restrictions provided by
+  // the target filesystem
+
+  var fileSystem = volumeInfo.diskFileSystemType;
+  var nameLength = name.length;
+
+  // Verify length for the target file system type
+  if (fileSystem == VolumeManagerCommon.FileSystemType.VFAT &&
+      nameLength >
+          VolumeManagerCommon.FileSystemTypeVolumeNameLengthLimit.VFAT) {
+    return Promise.reject(strf(
+        'ERROR_EXTERNAL_DRIVE_LONG_NAME',
+        VolumeManagerCommon.FileSystemTypeVolumeNameLengthLimit.VFAT));
+  } else if (
+      fileSystem == VolumeManagerCommon.FileSystemType.EXFAT &&
+      nameLength >
+          VolumeManagerCommon.FileSystemTypeVolumeNameLengthLimit.EXFAT) {
+    return Promise.reject(strf(
+        'ERROR_EXTERNAL_DRIVE_LONG_NAME',
+        VolumeManagerCommon.FileSystemTypeVolumeNameLengthLimit.EXFAT));
+  }
+
+  // Only printable ASCII (from ' ' to '~')
+  var containsNonPrintableAscii = /[\x00-\x1F\x7F-\x7F]/.exec(name);
+  if (containsNonPrintableAscii) {
+    return Promise.reject(strf(
+        'ERROR_EXTERNAL_DRIVE_INVALID_CHARACTER',
+        containsNonPrintableAscii[0]));
+  }
+
+  var containsForbiddenCharacters =
+      /[\*\?\.\,\;\:\/\\\|\+\=\<\>\[\]\"\'\t]/.exec(name);
+  if (containsForbiddenCharacters) {
+    return Promise.reject(strf(
+        'ERROR_EXTERNAL_DRIVE_INVALID_CHARACTER',
+        containsForbiddenCharacters[0]));
+  }
+
+  return Promise.resolve();
+};
+
+/**
  * Adds a foregorund listener to the background page components.
  * The lisner will be removed when the foreground window is closed.
  * @param {!cr.EventTarget} target
@@ -1171,4 +1258,19 @@ util.timeoutPromise = function(promise, ms, opt_message) {
       throw new Error(opt_message || 'Operation timed out.');
     })
   ]);
+};
+
+/**
+ * Examines whether the touch-specific UI mode is enabled.
+ * @return {Promise} Promise fulfilled with a boolean that indicate whether
+      the touch-specific UI mode is enabled. The promise is never rejected.
+ */
+util.isTouchModeEnabled = function() {
+  return new Promise(function(resolve) {
+    chrome.commandLinePrivate.hasSwitch(
+        'disable-file-manager-touch-mode', function(isDisabled) {
+          // Enabled by default.
+          resolve(!isDisabled);
+        });
+  });
 };

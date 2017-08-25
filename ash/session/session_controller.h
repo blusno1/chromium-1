@@ -21,6 +21,11 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 
 class AccountId;
+class PrefService;
+
+namespace service_manager {
+class Connector;
+}
 
 namespace ash {
 
@@ -29,10 +34,13 @@ class SessionObserver;
 // Implements mojom::SessionController to cache session related info such as
 // session state, meta data about user sessions to support synchronous
 // queries for ash.
-class ASH_EXPORT SessionController
-    : NON_EXPORTED_BASE(public mojom::SessionController) {
+class ASH_EXPORT SessionController : public mojom::SessionController {
  public:
-  SessionController();
+  // |connector| is used to connect to other services for connecting to per-user
+  // PrefServices. If |connector| is null, no per-user PrefService instances
+  // will be created. In tests, ProvideUserPrefServiceForTest() can be used to
+  // inject a PrefService for a user when |connector| is null.
+  explicit SessionController(service_manager::Connector* connector);
   ~SessionController() override;
 
   base::TimeDelta session_length_limit() const { return session_length_limit_; }
@@ -64,6 +72,9 @@ class ASH_EXPORT SessionController
   // is turned off or the system is suspended.
   bool ShouldLockScreenAutomatically() const;
 
+  // Returns true if the session is in a kiosk-like mode running a single app.
+  bool IsRunningInAppMode() const;
+
   // Returns true if user session blocked by some overlying UI. It can be
   // login screen, lock screen or screen for adding users into multi-profile
   // session.
@@ -87,6 +98,9 @@ class ASH_EXPORT SessionController
   // Convenience helper to gets the user session at a given index. Returns
   // nullptr if no user session is found for the index.
   const mojom::UserSession* GetUserSession(UserIndex index) const;
+
+  // Gets the primary user session.
+  const mojom::UserSession* GetPrimaryUserSession() const;
 
   // Returns true if the current user is supervised: has legacy supervised
   // account or kid account.
@@ -112,6 +126,14 @@ class ASH_EXPORT SessionController
 
   // Show the multi-profile login UI to add another user to this session.
   void ShowMultiProfileLogin();
+
+  // Returns the PrefService for |account_id| or null if one does not exist.
+  PrefService* GetUserPrefServiceForUser(const AccountId& account_id);
+
+  // Returns the PrefService for the last active user that had one or null if no
+  // PrefService connection has been successfully established, for example,
+  // during login before the first user is active.
+  PrefService* GetLastActiveUserPrefService();
 
   void AddObserver(SessionObserver* observer);
   void RemoveObserver(SessionObserver* observer);
@@ -139,6 +161,8 @@ class ASH_EXPORT SessionController
   void ClearUserSessionsForTest();
   void FlushMojoForTest();
   void LockScreenAndFlushForTest();
+  void ProvideUserPrefServiceForTest(const AccountId& account_id,
+                                     std::unique_ptr<PrefService> pref_service);
 
  private:
   void SetSessionState(session_manager::SessionState state);
@@ -158,6 +182,10 @@ class ASH_EXPORT SessionController
   // run |start_lock_callback_| to indicate ash is locked successfully.
   void OnLockAnimationFinished();
 
+  void OnProfilePrefServiceInitialized(
+      const AccountId& account_id,
+      std::unique_ptr<PrefService> pref_service);
+
   // Bindings for mojom::SessionController interface.
   mojo::BindingSet<mojom::SessionController> bindings_;
 
@@ -167,6 +195,7 @@ class ASH_EXPORT SessionController
   // Cached session info.
   bool can_lock_ = false;
   bool should_lock_screen_automatically_ = false;
+  bool is_running_in_app_mode_ = false;
   AddUserSessionPolicy add_user_session_policy_ = AddUserSessionPolicy::ALLOWED;
   session_manager::SessionState state_;
 
@@ -179,6 +208,10 @@ class ASH_EXPORT SessionController
   // is managed by session manager code, starting at 1. 0u is an invalid id
   // to detect first active user session.
   uint32_t active_session_id_ = 0u;
+
+  // The user session id of the primary user session. The primary user session
+  // is the very first user session of the current ash session.
+  uint32_t primary_session_id_ = 0u;
 
   // Last known login status. Used to track login status changes.
   LoginStatus login_status_ = LoginStatus::NOT_LOGGED_IN;
@@ -199,6 +232,11 @@ class ASH_EXPORT SessionController
   base::TimeTicks session_start_time_;
 
   base::ObserverList<ash::SessionObserver> observers_;
+
+  service_manager::Connector* const connector_;
+
+  std::map<AccountId, std::unique_ptr<PrefService>> per_user_prefs_;
+  PrefService* last_active_user_prefs_ = nullptr;
 
   base::WeakPtrFactory<SessionController> weak_ptr_factory_;
 

@@ -5,6 +5,8 @@
 #ifndef BASE_CONTAINERS_FLAT_SET_H_
 #define BASE_CONTAINERS_FLAT_SET_H_
 
+#include <functional>
+
 #include "base/containers/flat_tree.h"
 #include "base/template_util.h"
 
@@ -86,6 +88,8 @@ namespace base {
 //   pair<iterator, bool> insert(key_type&&);
 //   void                 insert(InputIterator first, InputIterator last,
 //                               FlatContainerDupes);
+//   iterator             insert(const_iterator hint, const key_type&);
+//   iterator             insert(const_iterator hint, key_type&&);
 //   pair<iterator, bool> emplace(Args&&...);
 //   iterator             emplace_hint(const_iterator, Args&&...);
 //
@@ -120,7 +124,7 @@ namespace base {
 //   bool operator>=(const flat_set&, const flat_set);
 //   bool operator<=(const flat_set&, const flat_set);
 //
-template <class Key, class Compare = ::base::less>
+template <class Key, class Compare = std::less<>>
 using flat_set = typename ::base::internal::flat_tree<
     Key,
     Key,

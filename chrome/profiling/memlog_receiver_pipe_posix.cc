@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/threading/thread.h"
+#include "chrome/profiling/memlog_receiver_pipe.h"
 #include "chrome/profiling/memlog_stream_receiver.h"
 #include "mojo/edk/embedder/platform_channel_utils_posix.h"
 #include "mojo/edk/embedder/platform_handle.h"
@@ -25,8 +26,8 @@ const int kReadBufferSize = 1024 * 64;
 
 }  // namespace
 
-MemlogReceiverPipe::MemlogReceiverPipe(int fd)
-    : handle_(mojo::edk::PlatformHandle(fd)),
+MemlogReceiverPipe::MemlogReceiverPipe(base::ScopedPlatformFile file)
+    : handle_(mojo::edk::PlatformHandle(file.release())),
       controller_(FROM_HERE),
       read_buffer_(new char[kReadBufferSize]) {
   base::MessageLoopForIO::current()->WatchFileDescriptor(
@@ -47,17 +48,23 @@ void MemlogReceiverPipe::SetReceiver(
   receiver_ = receiver;
 }
 
+void MemlogReceiverPipe::ReportError() {
+  handle_.reset();
+}
+
 void MemlogReceiverPipe::OnFileCanReadWithoutBlocking(int fd) {
   ssize_t bytes_read = 0;
   do {
-    std::deque<mojo::edk::PlatformHandle> dummy_for_receive;
+    base::circular_deque<mojo::edk::PlatformHandle> dummy_for_receive;
     bytes_read = mojo::edk::PlatformChannelRecvmsg(
         handle_.get(), read_buffer_.get(), kReadBufferSize, &dummy_for_receive);
     if (bytes_read > 0) {
       receiver_task_runner_->PostTask(
-          FROM_HERE,
-          base::BindOnce(&MemlogStreamReceiver::OnStreamData, receiver_,
-                         std::move(read_buffer_), bytes_read));
+          FROM_HERE, base::BindOnce(&ReceiverPipeStreamDataThunk,
+                                    base::MessageLoop::current()->task_runner(),
+                                    scoped_refptr<MemlogReceiverPipe>(this),
+                                    receiver_, std::move(read_buffer_),
+                                    static_cast<size_t>(bytes_read)));
       read_buffer_.reset(new char[kReadBufferSize]);
       return;
     } else if (bytes_read == 0) {

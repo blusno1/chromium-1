@@ -52,8 +52,8 @@ class FakePlatformSensor : public PlatformSensor {
     // Only mocking the shared memory update for AMBIENT_LIGHT type is enough.
     if (GetType() == SensorType::AMBIENT_LIGHT) {
       // Set the shared buffer value as frequency for testing purpose.
-      reading.values[0] = configuration.frequency();
-      UpdateSensorReading(reading, true);
+      reading.als.value = configuration.frequency();
+      UpdateSensorReading(reading);
     }
     return true;
   }
@@ -118,7 +118,7 @@ class TestSensorClient : public mojom::SensorClient {
   void SensorReadingChanged() override {
     UpdateReadingData();
     if (check_value_)
-      std::move(check_value_).Run(GetReadingValue());
+      std::move(check_value_).Run(reading_data_.als.value);
     if (quit_closure_)
       std::move(quit_closure_).Run();
   }
@@ -155,9 +155,8 @@ class TestSensorClient : public mojom::SensorClient {
     std::move(quit_closure).Run();
   }
 
-  void OnAddOrRemoveConfiguration(
-      base::OnceCallback<void(bool)> expect_function,
-      bool is_success) {
+  void OnAddConfiguration(base::OnceCallback<void(bool)> expect_function,
+                          bool is_success) {
     std::move(expect_function).Run(is_success);
   }
 
@@ -170,8 +169,6 @@ class TestSensorClient : public mojom::SensorClient {
   }
 
  private:
-  double GetReadingValue() { return reading_data_.values[0]; }
-
   void UpdateReadingData() {
     memset(&reading_data_, 0, sizeof(SensorReading));
     int read_attempts = 0;
@@ -222,7 +219,8 @@ class GenericSensorServiceTest : public DeviceServiceTestBase {
             base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(features::kGenericSensor);
+    scoped_feature_list_.InitWithFeatures(
+        {features::kGenericSensor, features::kGenericSensorExtraClasses}, {});
     DeviceServiceTestBase::SetUp();
     io_thread_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&GenericSensorServiceTest::SetUpOnIOThread,
@@ -295,7 +293,7 @@ TEST_F(GenericSensorServiceTest, ValidAddConfigurationTest) {
   PlatformSensorConfiguration configuration(50.0);
   sensor->AddConfiguration(
       configuration,
-      base::BindOnce(&TestSensorClient::OnAddOrRemoveConfiguration,
+      base::BindOnce(&TestSensorClient::OnAddConfiguration,
                      base::Unretained(client.get()),
                      base::BindOnce(&CheckSuccess,
                                     base::BindOnce(&base::DoNothing), true)));
@@ -326,8 +324,7 @@ TEST_F(GenericSensorServiceTest, InvalidAddConfigurationTest) {
   sensor->AddConfiguration(
       configuration,
       base::BindOnce(
-          &TestSensorClient::OnAddOrRemoveConfiguration,
-          base::Unretained(client.get()),
+          &TestSensorClient::OnAddConfiguration, base::Unretained(client.get()),
           base::BindOnce(&CheckSuccess, run_loop.QuitClosure(), false)));
 
   run_loop.Run();
@@ -357,7 +354,7 @@ TEST_F(GenericSensorServiceTest, MultipleClientsTest) {
     sensor_1->AddConfiguration(
         configuration,
         base::BindOnce(
-            &TestSensorClient::OnAddOrRemoveConfiguration,
+            &TestSensorClient::OnAddConfiguration,
             base::Unretained(client_1.get()),
             base::BindOnce(&CheckSuccess, run_loop.QuitClosure(), true)));
     run_loop.Run();
@@ -406,7 +403,7 @@ TEST_F(GenericSensorServiceTest, ClientMojoConnectionBrokenTest) {
     sensor_2->AddConfiguration(
         configuration,
         base::BindOnce(
-            &TestSensorClient::OnAddOrRemoveConfiguration,
+            &TestSensorClient::OnAddConfiguration,
             base::Unretained(client_2.get()),
             base::BindOnce(&CheckSuccess, run_loop.QuitClosure(), true)));
     run_loop.Run();
@@ -421,69 +418,8 @@ TEST_F(GenericSensorServiceTest, ClientMojoConnectionBrokenTest) {
   }
 }
 
-// Adds a valid configuration, then remove it.
-TEST_F(GenericSensorServiceTest, ValidRemoveConfigurationTest) {
-  mojom::SensorPtr sensor;
-  auto client = base::MakeUnique<TestSensorClient>(SensorType::AMBIENT_LIGHT);
-  sensor_provider_->GetSensor(SensorType::AMBIENT_LIGHT,
-                              mojo::MakeRequest(&sensor),
-                              base::BindOnce(&TestSensorClient::OnSensorCreated,
-                                             base::Unretained(client.get()),
-                                             base::BindOnce(&base::DoNothing)));
-
-  PlatformSensorConfiguration configuration(50.0);
-  sensor->AddConfiguration(
-      configuration,
-      base::BindOnce(&TestSensorClient::OnAddOrRemoveConfiguration,
-                     base::Unretained(client.get()),
-                     base::BindOnce(&CheckSuccess,
-                                    base::BindOnce(&base::DoNothing), true)));
-
-  // Expect the SensorReadingChanged() will be called after AddConfiguration.
-  {
-    base::RunLoop run_loop;
-    client->SetCheckValueCallback(base::BindOnce(&CheckValue, 50.0));
-    client->SetQuitClosure(run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  {
-    base::RunLoop run_loop;
-    sensor->RemoveConfiguration(
-        configuration,
-        base::BindOnce(
-            &TestSensorClient::OnAddOrRemoveConfiguration,
-            base::Unretained(client.get()),
-            base::BindOnce(&CheckSuccess, run_loop.QuitClosure(), true)));
-    run_loop.Run();
-  }
-}
-
-// Removes an invalid configuration.
-TEST_F(GenericSensorServiceTest, InvalidRemoveConfigurationTest) {
-  mojom::SensorPtr sensor;
-  auto client = base::MakeUnique<TestSensorClient>(SensorType::AMBIENT_LIGHT);
-  base::RunLoop run_loop;
-
-  sensor_provider_->GetSensor(SensorType::AMBIENT_LIGHT,
-                              mojo::MakeRequest(&sensor),
-                              base::BindOnce(&TestSensorClient::OnSensorCreated,
-                                             base::Unretained(client.get()),
-                                             base::BindOnce(&base::DoNothing)));
-
-  PlatformSensorConfiguration configuration(50.0);
-  sensor->RemoveConfiguration(
-      configuration,
-      base::BindOnce(
-          &TestSensorClient::OnAddOrRemoveConfiguration,
-          base::Unretained(client.get()),
-          base::BindOnce(&CheckSuccess, run_loop.QuitClosure(), false)));
-
-  run_loop.Run();
-}
-
-// Test mixed add and remove configuration operations.
-TEST_F(GenericSensorServiceTest, MixedAddAndRemoveConfigurationTest) {
+// Test add and remove configuration operations.
+TEST_F(GenericSensorServiceTest, AddAndRemoveConfigurationTest) {
   mojom::SensorPtr sensor;
   auto client = base::MakeUnique<TestSensorClient>(SensorType::AMBIENT_LIGHT);
   sensor_provider_->GetSensor(SensorType::AMBIENT_LIGHT,
@@ -497,7 +433,7 @@ TEST_F(GenericSensorServiceTest, MixedAddAndRemoveConfigurationTest) {
   PlatformSensorConfiguration configuration_30(30.0);
   sensor->AddConfiguration(
       configuration_30,
-      base::BindOnce(&TestSensorClient::OnAddOrRemoveConfiguration,
+      base::BindOnce(&TestSensorClient::OnAddConfiguration,
                      base::Unretained(client.get()),
                      base::BindOnce(&CheckSuccess,
                                     base::BindOnce(&base::DoNothing), true)));
@@ -515,7 +451,7 @@ TEST_F(GenericSensorServiceTest, MixedAddAndRemoveConfigurationTest) {
     PlatformSensorConfiguration configuration_20(20.0);
     sensor->AddConfiguration(
         configuration_20,
-        base::BindOnce(&TestSensorClient::OnAddOrRemoveConfiguration,
+        base::BindOnce(&TestSensorClient::OnAddConfiguration,
                        base::Unretained(client.get()),
                        base::BindOnce(&CheckSuccess,
                                       base::BindOnce(&base::DoNothing), true)));
@@ -524,16 +460,11 @@ TEST_F(GenericSensorServiceTest, MixedAddAndRemoveConfigurationTest) {
     run_loop.Run();
   }
 
-  // Expect the SensorReadingChanged() will be called. The frequency value
-  // should be 20.0.
+  // After 'configuration_30' is removed, expect the SensorReadingChanged() will
+  // be called. The frequency value should be 20.0.
   {
     base::RunLoop run_loop;
-    sensor->RemoveConfiguration(
-        configuration_30,
-        base::BindOnce(&TestSensorClient::OnAddOrRemoveConfiguration,
-                       base::Unretained(client.get()),
-                       base::BindOnce(&CheckSuccess,
-                                      base::BindOnce(&base::DoNothing), true)));
+    sensor->RemoveConfiguration(configuration_30);
     client->SetCheckValueCallback(base::BindOnce(&CheckValue, 20.0));
     client->SetQuitClosure(run_loop.QuitClosure());
     run_loop.Run();
@@ -567,7 +498,7 @@ TEST_F(GenericSensorServiceTest, SuspendTest) {
   PlatformSensorConfiguration configuration_1(30.0);
   sensor->AddConfiguration(
       configuration_1,
-      base::BindOnce(&TestSensorClient::OnAddOrRemoveConfiguration,
+      base::BindOnce(&TestSensorClient::OnAddConfiguration,
                      base::Unretained(client.get()),
                      base::BindOnce(&CheckSuccess,
                                     base::BindOnce(&base::DoNothing), true)));
@@ -575,8 +506,7 @@ TEST_F(GenericSensorServiceTest, SuspendTest) {
   sensor->AddConfiguration(
       configuration_2,
       base::BindOnce(
-          &TestSensorClient::OnAddOrRemoveConfiguration,
-          base::Unretained(client.get()),
+          &TestSensorClient::OnAddConfiguration, base::Unretained(client.get()),
           base::BindOnce(&CheckSuccess, run_loop.QuitClosure(), true)));
   run_loop.Run();
 }
@@ -599,7 +529,7 @@ TEST_F(GenericSensorServiceTest, SuspendThenResumeTest) {
     PlatformSensorConfiguration configuration_1(30.0);
     sensor->AddConfiguration(
         configuration_1,
-        base::BindOnce(&TestSensorClient::OnAddOrRemoveConfiguration,
+        base::BindOnce(&TestSensorClient::OnAddConfiguration,
                        base::Unretained(client.get()),
                        base::BindOnce(&CheckSuccess,
                                       base::BindOnce(&base::DoNothing), true)));
@@ -618,7 +548,7 @@ TEST_F(GenericSensorServiceTest, SuspendThenResumeTest) {
     PlatformSensorConfiguration configuration_2(50.0);
     sensor->AddConfiguration(
         configuration_2,
-        base::BindOnce(&TestSensorClient::OnAddOrRemoveConfiguration,
+        base::BindOnce(&TestSensorClient::OnAddConfiguration,
                        base::Unretained(client.get()),
                        base::BindOnce(&CheckSuccess,
                                       base::BindOnce(&base::DoNothing), true)));
@@ -653,7 +583,7 @@ TEST_F(GenericSensorServiceTest, MultipleClientsSuspendAndResumeTest) {
     sensor_2->AddConfiguration(
         configuration,
         base::BindOnce(
-            &TestSensorClient::OnAddOrRemoveConfiguration,
+            &TestSensorClient::OnAddConfiguration,
             base::Unretained(client_2.get()),
             base::BindOnce(&CheckSuccess, run_loop.QuitClosure(), true)));
     run_loop.Run();

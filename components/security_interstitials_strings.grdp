@@ -8,6 +8,59 @@
     Hide advanced
   </message>
 
+  <!-- Captive portal interstitial -->
+  <message name="IDS_CAPTIVE_PORTAL_AUTHORIZATION_DIALOG_NAME" desc="Name of the modal Web dialog (displayed in the title) displaying captive portal login page on Chrome OS.">
+    Captive Portal Authorization
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_HEADING_WIRED" desc="Heading in the error page when a secure request is blocked because a captive portal is manipulating a wired connection (e.g. ethernet)">
+    Connect to network
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_HEADING_WIFI" desc="Heading in the error page when a secure request is blocked because a captive portal is manipulating a Wi-Fi connection">
+    Connect to Wi-Fi
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_WIRED" desc="The primary explanatory paragraph for the captive portal error page for wired network connections.">
+    The network you are using may require you to visit <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="LOGIN_URL">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_WIFI" desc="The primary explanatory paragraph for the captive portal error page for Wi-Fi connections.">
+    The Wi-Fi you are using may require you to visit <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="LOGIN_URL">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_WIFI_SSID" desc="The primary explanatory paragraph for the captive portal error page for Wi-Fi connections, displaying the Wi-Fi name.">
+    The Wi-Fi you are using (<ph name="WIFI_NAME">$1<ex>Google Guest</ex></ph>) may require you to visit <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="LOGIN_URL">$2<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_NO_LOGIN_URL_WIRED" desc="The primary explanatory paragraph for the captive portal error page for network connections when the captive portal login url isn't available.">
+    The network you are using may require you to visit its login page.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_NO_LOGIN_URL_WIFI" desc="The primary explanatory paragraph for the captive portal error page for Wi-Fi connections when the captive portal login url isn't available.">
+    The Wi-Fi you are using may require you to visit its login page.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_NO_LOGIN_URL_WIFI_SSID" desc="The primary explanatory paragraph for the captive portal error page for Wi-Fi connections when the captive portal login url isn't available.">
+    The Wi-Fi you are using (<ph name="WIFI_NAME">$1<ex>Google Guest</ex></ph>) may require you to visit its login page.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_BUTTON_OPEN_LOGIN_PAGE" desc="Text for the open login page button">
+    Connect
+  </message>
+
+  <!-- MITM software interstitial -->
+  <message name="IDS_MITM_SOFTWARE_HEADING" desc="Heading of the error page for SSL errors triggered by misconfigured MITM software">
+    An application is stopping Chrome from safely connecting to this site
+  </message>
+  <message name="IDS_MITM_SOFTWARE_PRIMARY_PARAGRAPH_ENTERPRISE" desc="Primary explanatory paragraph for the MITM software error page shown to enterprise users">
+    &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; wasn’t installed properly on your computer or network. Ask your administrator to resolve this issue.
+  </message>
+  <message name="IDS_MITM_SOFTWARE_PRIMARY_PARAGRAPH_NONENTERPRISE" desc="Primary explanatory paragraph for the MITM software error page shown to non-enterprise users">
+    &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; wasn’t installed properly on your computer or the network:
+    &lt;ul&gt;
+    &lt;li&gt;Try uninstalling &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot;&lt;/li&gt;
+    &lt;li&gt;Try connecting to another Wi-Fi network&lt;/li&gt;
+    &lt;/ul&gt;
+  </message>
+  <message name="IDS_MITM_SOFTWARE_EXPLANATION_ENTERPRISE" desc="Body text under the 'Advanced' button for the MITM software error page shown to enterprise users. Provides more context about the error and offers solutions aimed at the network administrator.">
+    A root certificate for &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; is required but isn’t installed. Your network administrator should look at configuration instructions for &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; to fix this problem. Applications that can cause this error includes antivirus, firewall, and web-filtering or proxy software.
+  </message>
+  <message name="IDS_MITM_SOFTWARE_EXPLANATION_NONENTERPRISE" desc="Body text under the 'Advanced' button for the MITM software error page shown to enterprise users. Provides more context about the error.">
+    &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; isn’t configured correctly. Uninstalling &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; usually fixes the problem. Applications that can cause this error includes antivirus, firewall, and web-filtering or proxy software.
+  </message>
+
   <!-- Clock errors -->
   <message name="IDS_CLOCK_ERROR_TITLE" desc="Tab title. Context: the browser can't load a page because the device's clock is wrong.">
     Clock error

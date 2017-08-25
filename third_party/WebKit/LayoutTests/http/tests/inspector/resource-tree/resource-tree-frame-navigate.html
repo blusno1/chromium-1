@@ -14,19 +14,18 @@ function navigateIframe(url)
     return new Promise(x => iframe.onload = x);
 }
 
-async function test()
-{
-    InspectorTest.addResult("Before navigation");
-    InspectorTest.addResult("====================================");
-    await InspectorTest.evaluateInPageAsync('navigateIframe("resources/resource-tree-frame-navigate-iframe-before.html")');
-    InspectorTest.dumpResourceTreeEverything();
+async function test() {
+  TestRunner.addResult('Before navigation');
+  TestRunner.addResult('====================================');
+  await TestRunner.evaluateInPageAsync('navigateIframe("resources/resource-tree-frame-navigate-iframe-before.html")');
+  ApplicationTestRunner.dumpResourceTreeEverything();
 
-    InspectorTest.addResult("");
-    InspectorTest.addResult("After navigation");
-    InspectorTest.addResult("====================================");
-    await InspectorTest.evaluateInPageAsync('navigateIframe("resources/resource-tree-frame-navigate-iframe-after.html")');
-    InspectorTest.dumpResourceTreeEverything();
-    InspectorTest.completeTest();
+  TestRunner.addResult('');
+  TestRunner.addResult('After navigation');
+  TestRunner.addResult('====================================');
+  await TestRunner.evaluateInPageAsync('navigateIframe("resources/resource-tree-frame-navigate-iframe-after.html")');
+  ApplicationTestRunner.dumpResourceTreeEverything();
+  TestRunner.completeTest();
 }
 
 </script>

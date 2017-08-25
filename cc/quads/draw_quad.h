@@ -9,7 +9,7 @@
 
 #include "base/callback.h"
 #include "cc/cc_export.h"
-#include "cc/quads/shared_quad_state.h"
+#include "components/viz/common/quads/shared_quad_state.h"
 #include "components/viz/common/resources/resource_id.h"
 
 namespace base {
@@ -72,16 +72,14 @@ class CC_EXPORT DrawQuad {
   // Stores state common to a large bundle of quads; kept separate for memory
   // efficiency. There is special treatment to reconstruct these pointers
   // during serialization.
-  const SharedQuadState* shared_quad_state;
+  const viz::SharedQuadState* shared_quad_state;
 
   bool IsDebugQuad() const { return material == DEBUG_BORDER; }
 
   bool ShouldDrawWithBlending() const {
     if (needs_blending || shared_quad_state->opacity < 1.0f)
       return true;
-    if (visible_rect.IsEmpty())
-      return false;
-    return !opaque_rect.Contains(visible_rect);
+    return false;
   }
 
   // Is the left edge of this tile aligned with the originating layer's
@@ -137,7 +135,7 @@ class CC_EXPORT DrawQuad {
  protected:
   DrawQuad();
 
-  void SetAll(const SharedQuadState* shared_quad_state,
+  void SetAll(const viz::SharedQuadState* shared_quad_state,
               Material material,
               const gfx::Rect& rect,
               const gfx::Rect& opaque_rect,

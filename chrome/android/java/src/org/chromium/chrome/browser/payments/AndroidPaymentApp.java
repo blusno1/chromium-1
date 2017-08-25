@@ -7,8 +7,6 @@ package org.chromium.chrome.browser.payments;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.DialogInterface.OnCancelListener;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.content.ServiceConnection;
@@ -37,6 +35,7 @@ import org.chromium.ui.base.WindowAndroid;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -100,21 +99,25 @@ public class AndroidPaymentApp
     private InstrumentsCallback mInstrumentsCallback;
     private InstrumentDetailsCallback mInstrumentDetailsCallback;
     private ServiceConnection mServiceConnection;
+    @Nullable
+    private URI mCanDedupedApplicationId;
     private boolean mIsReadyToPayQueried;
 
     /**
      * Builds the point of interaction with a locally installed 3rd party native Android payment
      * app.
      *
-     * @param webContents The web contents.
-     * @param packageName The name of the package of the payment app.
-     * @param activity    The name of the payment activity in the payment app.
-     * @param label       The UI label to use for the payment app.
-     * @param icon        The icon to use in UI for the payment app.
-     * @param isIncognito Whether the user is in incognito mode.
+     * @param webContents             The web contents.
+     * @param packageName             The name of the package of the payment app.
+     * @param activity                The name of the payment activity in the payment app.
+     * @param label                   The UI label to use for the payment app.
+     * @param icon                    The icon to use in UI for the payment app.
+     * @param isIncognito             Whether the user is in incognito mode.
+     * @param canDedupedApplicationId The corresponding app Id this app can deduped.
      */
     public AndroidPaymentApp(WebContents webContents, String packageName, String activity,
-            String label, Drawable icon, boolean isIncognito) {
+            String label, Drawable icon, boolean isIncognito,
+            @Nullable URI canDedupedApplicationId) {
         super(packageName, label, null, icon);
         ThreadUtils.assertOnUiThread();
         mHandler = new Handler();
@@ -126,6 +129,7 @@ public class AndroidPaymentApp
         mPayIntent.setAction(ACTION_PAY);
         mMethodNames = new HashSet<>();
         mIsIncognito = isIncognito;
+        mCanDedupedApplicationId = canDedupedApplicationId;
     }
 
     /** @param methodName A payment method that this app supports, e.g., "https://bobpay.com". */
@@ -183,11 +187,8 @@ public class AndroidPaymentApp
             return;
         }
 
-        mHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (!mIsReadyToPayQueried) respondToGetInstrumentsQuery(null);
-            }
+        mHandler.postDelayed(() -> {
+            if (!mIsReadyToPayQueried) respondToGetInstrumentsQuery(null);
         }, SERVICE_CONNECTION_TIMEOUT_MS);
     }
 
@@ -198,19 +199,16 @@ public class AndroidPaymentApp
         }
 
         if (mInstrumentsCallback == null) return;
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                ThreadUtils.assertOnUiThread();
-                if (mInstrumentsCallback == null) return;
-                List<PaymentInstrument> instruments = null;
-                if (instrument != null) {
-                    instruments = new ArrayList<>();
-                    instruments.add(instrument);
-                }
-                mInstrumentsCallback.onInstrumentsReady(AndroidPaymentApp.this, instruments);
-                mInstrumentsCallback = null;
+        mHandler.post(() -> {
+            ThreadUtils.assertOnUiThread();
+            if (mInstrumentsCallback == null) return;
+            List<PaymentInstrument> instruments = null;
+            if (instrument != null) {
+                instruments = new ArrayList<>();
+                instruments.add(instrument);
             }
+            mInstrumentsCallback.onInstrumentsReady(AndroidPaymentApp.this, instruments);
+            mInstrumentsCallback = null;
         });
     }
 
@@ -235,12 +233,7 @@ public class AndroidPaymentApp
             respondToGetInstrumentsQuery(null);
             return;
         }
-        mHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                respondToGetInstrumentsQuery(null);
-            }
-        }, READY_TO_PAY_TIMEOUT_MS);
+        mHandler.postDelayed(() -> respondToGetInstrumentsQuery(null), READY_TO_PAY_TIMEOUT_MS);
     }
 
     @Override
@@ -249,6 +242,11 @@ public class AndroidPaymentApp
         Set<String> methodNames = new HashSet<>(methodsAndData.keySet());
         methodNames.retainAll(getAppMethodNames());
         return !methodNames.isEmpty();
+    }
+
+    @Override
+    public URI getCanDedupedApplicationId() {
+        return mCanDedupedApplicationId;
     }
 
     @Override
@@ -293,27 +291,13 @@ public class AndroidPaymentApp
                 .setTitle(R.string.external_app_leave_incognito_warning_title)
                 .setMessage(R.string.external_payment_app_leave_incognito_warning)
                 .setPositiveButton(R.string.ok,
-                        new OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                launchPaymentApp(id, merchantName, schemelessOrigin,
-                                        schemelessIframeOrigin, certificateChain, methodDataMap,
-                                        total, displayItems, modifiers);
-                            }
-                        })
+                        (OnClickListener) (dialog, which) -> launchPaymentApp(id, merchantName,
+                                schemelessOrigin,
+                                schemelessIframeOrigin, certificateChain, methodDataMap,
+                                total, displayItems, modifiers))
                 .setNegativeButton(R.string.cancel,
-                        new OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                notifyErrorInvokingPaymentApp();
-                            }
-                        })
-                .setOnCancelListener(new OnCancelListener() {
-                    @Override
-                    public void onCancel(DialogInterface dialog) {
-                        notifyErrorInvokingPaymentApp();
-                    }
-                })
+                        (OnClickListener) (dialog, which) -> notifyErrorInvokingPaymentApp())
+                .setOnCancelListener(dialog -> notifyErrorInvokingPaymentApp())
                 .show();
     }
 
@@ -438,12 +422,7 @@ public class AndroidPaymentApp
     }
 
     private void notifyErrorInvokingPaymentApp() {
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                mInstrumentDetailsCallback.onInstrumentDetailsError();
-            }
-        });
+        mHandler.post(() -> mInstrumentDetailsCallback.onInstrumentDetailsError());
     }
 
     private static String serializeDetails(
@@ -578,9 +557,4 @@ public class AndroidPaymentApp
 
     @Override
     public void dismissInstrument() {}
-
-    @Override
-    public int getAdditionalAppTextResourceId() {
-        return 0;
-    }
 }

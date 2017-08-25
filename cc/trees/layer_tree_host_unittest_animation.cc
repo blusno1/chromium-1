@@ -304,7 +304,7 @@ class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
       return;
 
     // Wait for the commit with the animation to happen.
-    if (host_impl->sync_tree()->source_frame_number() != 0)
+    if (host_impl->active_tree()->source_frame_number() != 0)
       return;
 
     scoped_refptr<AnimationTimeline> timeline_impl =
@@ -1225,8 +1225,13 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
   scoped_refptr<Layer> layer_;
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(
-    LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit);
+SINGLE_THREAD_TEST_F(LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit);
+
+// The multi-thread test is flaky. See http://crbug.com/755965.
+using DISABLED_LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit =
+    LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit;
+MULTI_THREAD_TEST_F(
+    DISABLED_LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit);
 
 // When a layer with an animation is removed from the tree and later re-added,
 // the animation should resume.

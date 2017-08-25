@@ -58,6 +58,8 @@ const char* GetEventAckName(InputEventAckState ack_result) {
       return "CONSUMED";
     case INPUT_EVENT_ACK_STATE_NOT_CONSUMED:
       return "NOT_CONSUMED";
+    case INPUT_EVENT_ACK_STATE_CONSUMED_SHOULD_BUBBLE:
+      return "CONSUMED_SHOULD_BUBBLE";
     case INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS:
       return "NO_CONSUMER_EXISTS";
     case INPUT_EVENT_ACK_STATE_IGNORED:
@@ -418,12 +420,6 @@ bool LegacyInputRouterImpl::OfferToRenderer(
     const WebInputEvent& input_event,
     const ui::LatencyInfo& latency_info,
     InputEventDispatchType dispatch_type) {
-  DCHECK(input_event.GetType() != blink::WebInputEvent::kGestureFlingStart ||
-         static_cast<const blink::WebGestureEvent&>(input_event)
-                 .data.fling_start.velocity_x != 0.0 ||
-         static_cast<const blink::WebGestureEvent&>(input_event)
-                 .data.fling_start.velocity_y != 0.0);
-
   // This conversion is temporary. WebInputEvent should be generated
   // directly from ui::Event with the viewport coordinates. See
   // crbug.com/563730.
@@ -509,7 +505,11 @@ void LegacyInputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
 
 void LegacyInputRouterImpl::OnSetWhiteListedTouchAction(
     cc::TouchAction white_listed_touch_action,
-    uint32_t unique_touch_event_id) {
+    uint32_t unique_touch_event_id,
+    InputEventAckState ack_result) {
+  // TODO(hayleyferr): Catch the cases that we have filtered out sending the
+  // touchstart.
+
   touch_action_filter_.OnSetWhiteListedTouchAction(white_listed_touch_action);
   client_->OnSetWhiteListedTouchAction(white_listed_touch_action);
 }
@@ -639,6 +639,10 @@ void LegacyInputRouterImpl::SetFrameTreeNodeId(int frameTreeNodeId) {
 
 cc::TouchAction LegacyInputRouterImpl::AllowedTouchAction() {
   return touch_action_filter_.allowed_touch_action();
+}
+
+void LegacyInputRouterImpl::SetForceEnableZoom(bool enabled) {
+  touch_action_filter_.SetForceEnableZoom(enabled);
 }
 
 void LegacyInputRouterImpl::SetMovementXYForTouchPoints(

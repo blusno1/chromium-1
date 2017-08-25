@@ -42,6 +42,7 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentDelegate;
@@ -64,11 +65,13 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.widget.findinpage.FindToolbar;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.FullscreenTestUtils;
+import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.components.navigation_interception.NavigationParams;
 import org.chromium.content.browser.ContentViewCore;
@@ -101,7 +104,8 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
-        ContextualSearchFieldTrial.ONLINE_DETECTION_DISABLED})
+        ContextualSearchFieldTrial.ONLINE_DETECTION_DISABLED,
+        "disable-features=" + ChromeFeatureList.FULLSCREEN_ACTIVITY})
 @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
 @RetryOnFailure
 public class ContextualSearchManagerTest {
@@ -1114,7 +1118,7 @@ public class ContextualSearchManagerTest {
             @Override
             public void run() {
                 // TODO(donnd): provide better time and x,y data to make this more broadly useful.
-                mPanel.handleBarClick(0, 0, 0);
+                mPanel.handleBarClick(0, 0);
             }
         });
     }
@@ -3106,5 +3110,36 @@ public class ContextualSearchManagerTest {
         Assert.assertEquals(
                 ContextualSearchInternalStateControllerWrapper.EXPECTED_LONGPRESS_SEQUENCE,
                 internalStateControllerWrapper.getFinishedStates());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"ContextualSearch"})
+    public void testTriggeringContextualSearchHidesFindInPageOverlay() throws Exception {
+        MenuUtils.invokeCustomMenuActionSync(InstrumentationRegistry.getInstrumentation(),
+                mActivityTestRule.getActivity(), R.id.find_in_page_id);
+
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                FindToolbar findToolbar =
+                        (FindToolbar) mActivityTestRule.getActivity().findViewById(
+                                R.id.find_toolbar);
+                return findToolbar != null && findToolbar.isShown() && !findToolbar.isAnimating();
+            }
+        });
+
+        KeyUtils.singleKeyEventView(InstrumentationRegistry.getInstrumentation(),
+                mActivityTestRule.getActivity().findViewById(R.id.find_query), KeyEvent.KEYCODE_T);
+
+        View findToolbar = mActivityTestRule.getActivity().findViewById(R.id.find_toolbar);
+        Assert.assertTrue(findToolbar.isShown());
+
+        simulateTapSearch("search");
+
+        waitForPanelToPeek();
+        Assert.assertFalse(
+                "Find Toolbar should no longer be shown once Contextual Search Panel appeared",
+                findToolbar.isShown());
     }
 }

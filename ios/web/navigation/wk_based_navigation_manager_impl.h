@@ -60,8 +60,6 @@ class WKBasedNavigationManagerImpl : public NavigationManagerImpl {
   // NavigationManagerImpl:
   void SetSessionController(CRWSessionController* session_controller) override;
   void InitializeSession() override;
-  void ReplaceSessionHistory(std::vector<std::unique_ptr<NavigationItem>> items,
-                             int current_index) override;
   void OnNavigationItemsPruned(size_t pruned_item_count) override;
   void OnNavigationItemChanged() override;
   void OnNavigationItemCommitted() override;
@@ -82,12 +80,7 @@ class WKBasedNavigationManagerImpl : public NavigationManagerImpl {
   BrowserState* GetBrowserState() const override;
   WebState* GetWebState() const override;
   NavigationItem* GetVisibleItem() const override;
-  NavigationItem* GetLastCommittedItem() const override;
-  // Returns the pending navigation item in the main frame.
-  NavigationItem* GetPendingItem() const override;
-  NavigationItem* GetTransientItem() const override;
   void DiscardNonCommittedItems() override;
-  void LoadURLWithParams(const NavigationManager::WebLoadParams&) override;
   int GetItemCount() const override;
   NavigationItem* GetItemAtIndex(size_t index) const override;
   int GetIndexOfItem(const NavigationItem* item) const override;
@@ -99,19 +92,25 @@ class WKBasedNavigationManagerImpl : public NavigationManagerImpl {
   bool CanGoToOffset(int offset) const override;
   void GoBack() override;
   void GoForward() override;
-  void GoToIndex(int index) override;
   NavigationItemList GetBackwardItems() const override;
   NavigationItemList GetForwardItems() const override;
   void CopyStateFromAndPrune(const NavigationManager* source) override;
   bool CanPruneAllButLastCommittedItem() const override;
+  void Restore(int last_committed_item_index,
+               std::vector<std::unique_ptr<NavigationItem>> items) override;
 
  private:
   // The SessionStorageBuilder functions require access to private variables of
   // NavigationManagerImpl.
   friend SessionStorageBuilder;
 
-  // NavigationManagerImpl methods used by SessionStorageBuilder.
+  // NavigationManagerImpl:
   NavigationItemImpl* GetNavigationItemImplAtIndex(size_t index) const override;
+  NavigationItemImpl* GetLastCommittedItemImpl() const override;
+  // Returns the pending navigation item in the main frame.
+  NavigationItemImpl* GetPendingItemImpl() const override;
+  NavigationItemImpl* GetTransientItemImpl() const override;
+  void FinishGoToIndex(int index) override;
 
   // Returns the absolute index of WKBackForwardList's |currentItem|. Returns -1
   // if |currentItem| is nil.
@@ -146,7 +145,10 @@ class WKBasedNavigationManagerImpl : public NavigationManagerImpl {
 
   // Time smoother for navigation item timestamps. See comment in
   // navigation_controller_impl.h.
-  TimeSmoother time_smoother_;
+  // NOTE: This is mutable because GetNavigationItemImplAtIndex() needs to call
+  // TimeSmoother::GetSmoothedTime() with a const 'this'. Since NavigationItems
+  // have to be lazily created on read, this is the only workaround.
+  mutable TimeSmoother time_smoother_;
 
   DISALLOW_COPY_AND_ASSIGN(WKBasedNavigationManagerImpl);
 };

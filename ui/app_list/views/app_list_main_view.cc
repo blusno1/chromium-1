@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "ui/app_list/app_list_constants.h"
@@ -33,7 +34,6 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
@@ -181,10 +181,17 @@ void AppListMainView::OnSearchEngineIsGoogleChanged(bool is_google) {
 
 void AppListMainView::ActivateApp(AppListItem* item, int event_flags) {
   // TODO(jennyz): Activate the folder via AppListModel notification.
-  if (item->GetItemType() == AppListFolderItem::kItemType)
+  if (item->GetItemType() == AppListFolderItem::kItemType) {
     contents_view_->ShowFolderContent(static_cast<AppListFolderItem*>(item));
-  else
+    UMA_HISTOGRAM_ENUMERATION(kAppListFolderOpenedHistogram, kOldFolders,
+                              kMaxFolderOpened);
+  } else {
     item->Activate(event_flags);
+    UMA_HISTOGRAM_BOOLEAN(features::IsFullscreenAppListEnabled()
+                              ? kAppListAppLaunchedFullscreen
+                              : kAppListAppLaunched,
+                          false /*not a suggested app*/);
+  }
 }
 
 void AppListMainView::CancelDragInActiveFolder() {

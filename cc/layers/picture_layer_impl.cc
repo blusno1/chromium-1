@@ -18,7 +18,6 @@
 #include "cc/base/math_util.h"
 #include "cc/benchmarks/micro_benchmark_impl.h"
 #include "cc/debug/debug_colors.h"
-#include "cc/debug/traced_value.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/solid_color_layer_impl.h"
 #include "cc/quads/debug_border_draw_quad.h"
@@ -30,6 +29,7 @@
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/traced_value.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -203,7 +203,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
       << " bounds " << bounds().ToString() << " pile "
       << raster_source_->GetSize().ToString();
 
-  SharedQuadState* shared_quad_state =
+  viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
 
   if (raster_source_->IsSolidColor()) {
@@ -224,10 +224,13 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
   float max_contents_scale = MaximumTilingContentsScale();
   PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
                                 max_contents_scale);
-  Occlusion scaled_occlusion =
-      draw_properties()
-          .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
-              shared_quad_state->quad_to_target_transform);
+  Occlusion scaled_occlusion;
+  if (mask_type_ == Layer::LayerMaskType::NOT_MASK) {
+    scaled_occlusion =
+        draw_properties()
+            .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
+                shared_quad_state->quad_to_target_transform);
+  }
 
   if (current_draw_mode_ == DRAW_MODE_RESOURCELESS_SOFTWARE) {
     AppendDebugBorderQuad(
@@ -240,6 +243,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     gfx::Rect opaque_rect = contents_opaque() ? geometry_rect : gfx::Rect();
     gfx::Rect visible_geometry_rect =
         scaled_occlusion.GetUnoccludedContentRect(geometry_rect);
+    bool needs_blending = !contents_opaque();
 
     // The raster source may not be valid over the entire visible rect,
     // and rastering outside of that may cause incorrect pixels.
@@ -260,9 +264,9 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     PictureDrawQuad* quad =
         render_pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
     quad->SetNew(shared_quad_state, geometry_rect, opaque_rect,
-                 visible_geometry_rect, texture_rect, texture_size,
-                 nearest_neighbor_, viz::RGBA_8888, quad_content_rect,
-                 max_contents_scale, raster_source_);
+                 visible_geometry_rect, needs_blending, texture_rect,
+                 texture_size, nearest_neighbor_, viz::RGBA_8888,
+                 quad_content_rect, max_contents_scale, raster_source_);
     ValidateQuadResources(quad);
     return;
   }
@@ -341,6 +345,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     gfx::Rect opaque_rect = contents_opaque() ? geometry_rect : gfx::Rect();
     gfx::Rect visible_geometry_rect =
         scaled_occlusion.GetUnoccludedContentRect(geometry_rect);
+    bool needs_blending = !contents_opaque();
     if (visible_geometry_rect.IsEmpty())
       continue;
 
@@ -371,9 +376,10 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
           TileDrawQuad* quad =
               render_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
           quad->SetNew(shared_quad_state, geometry_rect, opaque_rect,
-                       visible_geometry_rect, draw_info.resource_id(),
-                       texture_rect, draw_info.resource_size(),
-                       draw_info.contents_swizzled(), nearest_neighbor_);
+                       visible_geometry_rect, needs_blending,
+                       draw_info.resource_id(), texture_rect,
+                       draw_info.resource_size(), draw_info.contents_swizzled(),
+                       nearest_neighbor_);
           ValidateQuadResources(quad);
           has_draw_quad = true;
           break;
@@ -781,6 +787,14 @@ gfx::Size PictureLayerImpl::CalculateTileSize(
     // Grow default sizes to account for overlapping border texels.
     default_tile_width += 2 * PictureLayerTiling::kBorderTexels;
     default_tile_height += 2 * PictureLayerTiling::kBorderTexels;
+
+    // Use half-width GPU tiles on low-end devices when the content width is
+    // larger than the viewport width.
+    if (layer_tree_impl()
+            ->settings()
+            .use_half_width_tiles_for_gpu_rasterization &&
+        content_bounds.width() > viewport_width)
+      default_tile_width /= 2;
 
     // Round GPU default tile sizes to a multiple of kGpuDefaultTileAlignment.
     // This helps prevent rounding errors in our CA path. crbug.com/632274
@@ -1409,7 +1423,7 @@ void PictureLayerImpl::AsValueInto(
     MathUtil::AddToTracedValue("geometry_rect", iter.geometry_rect(), state);
 
     if (*iter)
-      TracedValue::SetIDRef(*iter, state, "tile");
+      viz::TracedValue::SetIDRef(*iter, state, "tile");
 
     state->EndDictionary();
   }

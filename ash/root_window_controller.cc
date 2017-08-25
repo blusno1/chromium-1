@@ -22,22 +22,20 @@
 #include "ash/screen_util.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_context_menu_model.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shelf/shelf_window_targeter.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
 #include "ash/shell_port.h"
 #include "ash/system/status_area_layout_manager.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/touch/touch_hud_debug.h"
 #include "ash/touch/touch_hud_projection.h"
 #include "ash/touch/touch_observer_hud.h"
 #include "ash/wallpaper/wallpaper_delegate.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/always_on_top_controller.h"
-#include "ash/wm/boot_splash_screen_chromeos.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/fullscreen_window_finder.h"
 #include "ash/wm/lock_action_handler_layout_manager.h"
@@ -89,12 +87,6 @@
 
 namespace ash {
 namespace {
-
-// Duration for the animation that hides the boot splash screen, in
-// milliseconds.  This should be short enough in relation to
-// wm/window_animation.cc's brightness/grayscale fade animation that the login
-// wallpaper image animation isn't hidden by the splash screen animation.
-const int kBootSplashScreenHideDurationMs = 500;
 
 bool IsWindowAboveContainer(aura::Window* window,
                             aura::Window* blocking_container) {
@@ -345,7 +337,6 @@ void RootWindowController::InitializeShelf() {
   if (shelf_initialized_)
     return;
   shelf_initialized_ = true;
-  shelf_->NotifyShelfInitialized();
 
   // TODO(jamescook): Pass |shelf_| into the constructors for these layout
   // managers.
@@ -403,16 +394,9 @@ bool RootWindowController::CanWindowReceiveEvents(aura::Window* window) {
     return false;
 
   aura::Window* blocking_container = nullptr;
-
-  int modal_container_id = 0;
-  if (Shell::Get()->session_controller()->IsUserSessionBlocked()) {
-    blocking_container =
-        GetContainer(kShellWindowId_LockScreenContainersContainer);
-    modal_container_id = kShellWindowId_LockSystemModalContainer;
-  } else {
-    modal_container_id = kShellWindowId_SystemModalContainer;
-  }
-  aura::Window* modal_container = GetContainer(modal_container_id);
+  aura::Window* modal_container = nullptr;
+  wm::GetBlockingContainersForRoot(GetRootWindow(), &blocking_container,
+                                   &modal_container);
   SystemModalContainerLayoutManager* modal_layout_manager = nullptr;
   modal_layout_manager = static_cast<SystemModalContainerLayoutManager*>(
       modal_container->layout_manager());
@@ -477,21 +461,9 @@ void RootWindowController::SetAnimatingWallpaperWidgetController(
   animating_wallpaper_widget_controller_.reset(controller);
 }
 
-void RootWindowController::OnInitialWallpaperAnimationStarted() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshAnimateFromBootSplashScreen) &&
-      boot_splash_screen_.get()) {
-    // Make the splash screen fade out so it doesn't obscure the wallpaper's
-    // brightness/grayscale animation.
-    boot_splash_screen_->StartHideAnimation(
-        base::TimeDelta::FromMilliseconds(kBootSplashScreenHideDurationMs));
-  }
-}
-
 void RootWindowController::OnWallpaperAnimationFinished(views::Widget* widget) {
   // Make sure the wallpaper is visible.
   system_wallpaper_->SetColor(SK_ColorBLACK);
-  boot_splash_screen_.reset();
   Shell::Get()->wallpaper_delegate()->OnWallpaperAnimationFinished();
   // Only removes old component when wallpaper animation finished. If we
   // remove the old one before the new wallpaper is done fading in there will
@@ -651,11 +623,11 @@ void RootWindowController::SetTouchAccessibilityAnchorPoint(
 
 void RootWindowController::ShowContextMenu(const gfx::Point& location_in_screen,
                                            ui::MenuSourceType source_type) {
-  ShellDelegate* delegate = Shell::Get()->shell_delegate();
-  DCHECK(delegate);
-  menu_model_.reset(delegate->CreateContextMenu(shelf_.get(), nullptr));
-  if (!menu_model_)
-    return;
+  const int64_t display_id = display::Screen::GetScreen()
+                                 ->GetDisplayNearestWindow(GetRootWindow())
+                                 .id();
+  menu_model_ = base::MakeUnique<ShelfContextMenuModel>(
+      std::vector<mojom::MenuItemPtr>(), nullptr, display_id);
 
   menu_model_adapter_ = base::MakeUnique<views::MenuModelAdapter>(
       menu_model_.get(),
@@ -786,7 +758,8 @@ void RootWindowController::InitLayoutManagers() {
   aura::Window* lock_container =
       GetContainer(kShellWindowId_LockScreenContainer);
   DCHECK(lock_container);
-  lock_container->SetLayoutManager(new LockLayoutManager(lock_container));
+  lock_container->SetLayoutManager(
+      new LockLayoutManager(lock_container, shelf_.get()));
 
   aura::Window* always_on_top_container =
       GetContainer(kShellWindowId_AlwaysOnTopContainer);
@@ -1008,15 +981,6 @@ void RootWindowController::CreateSystemWallpaper(
     color = kChromeOsBootColor;
   system_wallpaper_.reset(
       new SystemWallpaperController(GetRootWindow(), color));
-
-  // Make a copy of the system's boot splash screen so we can composite it
-  // onscreen until the wallpaper is ready.
-  if (is_boot_splash_screen &&
-      (base::CommandLine::ForCurrentProcess()->HasSwitch(
-           switches::kAshCopyHostBackgroundAtBoot) ||
-       base::CommandLine::ForCurrentProcess()->HasSwitch(
-           switches::kAshAnimateFromBootSplashScreen)))
-    boot_splash_screen_.reset(new BootSplashScreen(GetHost()));
 }
 
 void RootWindowController::EnableTouchHudProjection() {

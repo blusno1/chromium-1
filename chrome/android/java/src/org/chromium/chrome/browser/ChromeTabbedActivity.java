@@ -20,6 +20,7 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
+import android.support.annotation.StringRes;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.view.KeyEvent;
@@ -31,7 +32,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
-import android.widget.PopupWindow.OnDismissListener;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
@@ -70,8 +70,6 @@ import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotMonitor;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotMonitorDelegate;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.firstrun.FirstRunActivity;
-import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
@@ -119,6 +117,7 @@ import org.chromium.chrome.browser.toolbar.ToolbarControlContainer;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.vr_shell.VrShellDelegate;
+import org.chromium.chrome.browser.widget.ViewHighlighter;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetMetrics;
 import org.chromium.chrome.browser.widget.emptybackground.EmptyBackgroundViewWrapper;
@@ -151,8 +150,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class ChromeTabbedActivity
         extends ChromeActivity implements OverviewModeObserver, ScreenshotMonitorDelegate {
-    private static final int FIRST_RUN_EXPERIENCE_RESULT = 101;
-
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
         BACK_PRESSED_NOTHING_HAPPENED,
@@ -180,8 +177,6 @@ public class ChromeTabbedActivity
     private static final String TAG = "ChromeTabbedActivity";
 
     private static final String HELP_URL_PREFIX = "https://support.google.com/chrome/";
-
-    private static final String FRE_RUNNING = "First run is running";
 
     private static final String WINDOW_INDEX = "window_index";
 
@@ -215,6 +210,13 @@ public class ChromeTabbedActivity
     /** The task id of the activity that tabs were merged into. */
     private static int sMergedInstanceTaskId;
 
+    /**
+     * Time in ms from when we last backgrounded Chrome until we show the bottom sheet at half.
+     * Time is 3 hours.
+     * crbug.com/706258
+     */
+    private static final long TIME_SINCE_BACKGROUNDED_TO_SHOW_BOTTOM_SHEET_HALF_MS = 10800000L;
+
     private final ActivityStopMetrics mActivityStopMetrics;
     private final MainIntentBehaviorMetrics mMainIntentMetrics;
 
@@ -234,7 +236,6 @@ public class ChromeTabbedActivity
 
     private boolean mUIInitialized;
 
-    private boolean mIsOnFirstRun;
     private Boolean mMergeTabsOnResume;
 
     private Boolean mIsAccessibilityEnabled;
@@ -344,12 +345,8 @@ public class ChromeTabbedActivity
             if (getBottomSheet() != null && NewTabPage.isNTPUrl(url)) {
                 if (!mUIInitialized) {
                     assert mDelayedInitialTabBehaviorDuringUiInit == null;
-                    mDelayedInitialTabBehaviorDuringUiInit = new Runnable() {
-                        @Override
-                        public void run() {
-                            getBottomSheet().displayNewTabUi(mIsIncognito);
-                        }
-                    };
+                    mDelayedInitialTabBehaviorDuringUiInit =
+                            () -> getBottomSheet().displayNewTabUi(mIsIncognito);
                 } else {
                     getBottomSheet().displayNewTabUi(mIsIncognito);
                 }
@@ -433,18 +430,12 @@ public class ChromeTabbedActivity
                             NewTabPageUma.NTP_IMPESSION_POTENTIAL_NOTAB);
                 }
             };
-
-            Bundle state = getSavedInstanceState();
-            if (state != null && state.containsKey(FRE_RUNNING)) {
-                mIsOnFirstRun = state.getBoolean(FRE_RUNNING);
-            }
         } finally {
             TraceEvent.end("ChromeTabbedActivity.initializeCompositor");
         }
     }
 
     private void refreshSignIn() {
-        if (mIsOnFirstRun) return;
         FirstRunSignInProcessor.start(this);
     }
 
@@ -656,7 +647,7 @@ public class ChromeTabbedActivity
             super.onNewIntentWithNative(intent);
             if (isMainIntentFromLauncher(intent)) {
                 if (IntentHandler.getUrlFromIntent(intent) == null) {
-                    maybeLaunchNtpFromMainIntent(intent);
+                    maybeLaunchNtpOrResetBottomSheetFromMainIntent(intent);
                 }
                 logMainIntentBehavior(intent);
             }
@@ -739,32 +730,21 @@ public class ChromeTabbedActivity
                         (int) controlHeight;
             }
 
-            OnClickListener tabSwitcherClickHandler = new OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    if (getFullscreenManager() != null
-                            && getFullscreenManager().getPersistentFullscreenMode()) {
-                        return;
-                    }
-                    toggleOverview();
+            OnClickListener tabSwitcherClickHandler = v -> {
+                if (getFullscreenManager() != null
+                        && getFullscreenManager().getPersistentFullscreenMode()) {
+                    return;
                 }
+                toggleOverview();
             };
-            OnClickListener newTabClickHandler = new OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    getTabModelSelector().getModel(false).commitAllTabClosures();
-                    // This assumes that the keyboard can not be seen at the same time as the
-                    // newtab button on the toolbar.
-                    getCurrentTabCreator().launchNTP();
-                    mLocaleManager.showSearchEnginePromoIfNeeded(ChromeTabbedActivity.this, null);
-                }
+            OnClickListener newTabClickHandler = v -> {
+                getTabModelSelector().getModel(false).commitAllTabClosures();
+                // This assumes that the keyboard can not be seen at the same time as the
+                // newtab button on the toolbar.
+                getCurrentTabCreator().launchNTP();
+                mLocaleManager.showSearchEnginePromoIfNeeded(ChromeTabbedActivity.this, null);
             };
-            OnClickListener bookmarkClickHandler = new OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    addOrEditBookmark(getActivityTab());
-                }
-            };
+            OnClickListener bookmarkClickHandler = v -> addOrEditBookmark(getActivityTab());
 
             getToolbarManager().initializeWithNative(mTabModelSelectorImpl,
                     getFullscreenManager().getBrowserVisibilityDelegate(), getFindToolbarManager(),
@@ -787,12 +767,10 @@ public class ChromeTabbedActivity
 
             final Tracker tracker =
                     TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
-            tracker.addOnInitializedCallback(new Callback<Boolean>() {
-                @Override
-                public void onResult(Boolean result) {
-                    showFeatureEngagementTextBubbleForDownloadHome(tracker);
-                }
-            });
+            tracker.addOnInitializedCallback((Callback<Boolean>) success
+                    -> maybeShowDownloadHomeTextBubble(tracker,
+                            FeatureConstants.DOWNLOAD_HOME_FEATURE, R.string.iph_download_home_text,
+                            R.string.iph_download_home_accessibility_text));
 
             mScreenshotMonitor = ScreenshotMonitor.create(ChromeTabbedActivity.this);
 
@@ -802,31 +780,65 @@ public class ChromeTabbedActivity
         }
     }
 
-    private void showFeatureEngagementTextBubbleForDownloadHome(final Tracker tracker) {
-        if (!tracker.shouldTriggerHelpUI(FeatureConstants.DOWNLOAD_HOME_FEATURE)) return;
+    private void maybeShowDownloadHomeTextBubble(final Tracker tracker, String featureName,
+            @StringRes int stringId, @StringRes int accessibilityStringId) {
+        // Don't show the IPH, if bottom sheet is already open.
+        if (FeatureUtilities.isChromeHomeEnabled()
+                && getBottomSheet().getSheetState() != BottomSheet.SHEET_STATE_PEEK) {
+            return;
+        }
+
+        if (!tracker.shouldTriggerHelpUI(featureName)) return;
 
         ViewAnchoredTextBubble textBubble = new ViewAnchoredTextBubble(this,
-                getToolbarManager().getMenuButton(), R.string.iph_download_home_text,
-                R.string.iph_download_home_accessibility_text);
+                getToolbarAnchorViewForDownloadHomeTextBubble(), stringId, accessibilityStringId);
         textBubble.setDismissOnTouchInteraction(true);
-        textBubble.addOnDismissListener(new OnDismissListener() {
-            @Override
-            public void onDismiss() {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        tracker.dismissed(FeatureConstants.DOWNLOAD_HOME_FEATURE);
-                        getAppMenuHandler().setMenuHighlight(null);
-                    }
-                });
-            }
-        });
-        getAppMenuHandler().setMenuHighlight(R.id.downloads_menu_id);
+        textBubble.addOnDismissListener(() -> mHandler.postDelayed(() -> {
+            tracker.dismissed(featureName);
+            turnOffHighlightForDownloadHomeTextBubble();
+        }, ViewHighlighter.IPH_MIN_DELAY_BETWEEN_TWO_HIGHLIGHTS));
+
+        turnOnHighlightForDownloadHomeTextBubble();
+
+        boolean isChromeHomeExpandButtonEnabled = FeatureUtilities.isChromeHomeEnabled()
+                && FeatureUtilities.isChromeHomeExpandButtonEnabled();
         int yInsetPx =
                 getResources().getDimensionPixelOffset(R.dimen.text_bubble_menu_anchor_y_inset);
-        textBubble.setInsetPx(0, FeatureUtilities.isChromeHomeEnabled() ? yInsetPx : 0, 0,
+        textBubble.setInsetPx(0, isChromeHomeExpandButtonEnabled ? yInsetPx : 0, 0,
                 FeatureUtilities.isChromeHomeEnabled() ? 0 : yInsetPx);
         textBubble.show();
+    }
+
+    private View getToolbarAnchorViewForDownloadHomeTextBubble() {
+        if (FeatureUtilities.isChromeHomeEnabled()) {
+            return FeatureUtilities.isChromeHomeExpandButtonEnabled()
+                    ? mControlContainer.findViewById(R.id.expand_sheet_button)
+                    : mControlContainer.findViewById(R.id.toolbar_handle);
+        } else {
+            return getToolbarManager().getMenuButton();
+        }
+    }
+
+    private void turnOnHighlightForDownloadHomeTextBubble() {
+        if (FeatureUtilities.isChromeHomeEnabled()) {
+            getBottomSheetContentController().setHighlightItemId(R.id.action_downloads);
+            if (FeatureUtilities.isChromeHomeExpandButtonEnabled()) {
+                ViewHighlighter.turnOnHighlight(findViewById(R.id.expand_sheet_button), true);
+            }
+        } else {
+            getAppMenuHandler().setMenuHighlight(R.id.downloads_menu_id);
+        }
+    }
+
+    private void turnOffHighlightForDownloadHomeTextBubble() {
+        if (FeatureUtilities.isChromeHomeEnabled()) {
+            getBottomSheetContentController().setHighlightItemId(null);
+            if (FeatureUtilities.isChromeHomeExpandButtonEnabled()) {
+                ViewHighlighter.turnOffHighlight(findViewById(R.id.expand_sheet_button));
+            }
+        } else {
+            getAppMenuHandler().setMenuHighlight(null);
+        }
     }
 
     private boolean isMainIntentFromLauncher(Intent intent) {
@@ -837,9 +849,7 @@ public class ChromeTabbedActivity
     private void logMainIntentBehavior(Intent intent) {
         assert isMainIntentFromLauncher(intent);
         long currentTime = System.currentTimeMillis();
-        long lastBackgroundedTimeMs = ContextUtils.getAppSharedPreferences().getLong(
-                LAST_BACKGROUNDED_TIME_MS_PREF, currentTime);
-        mMainIntentMetrics.onMainIntentWithNative(currentTime - lastBackgroundedTimeMs);
+        mMainIntentMetrics.onMainIntentWithNative(currentTime - getTimeSinceLastBackgroundedMs());
     }
 
     /** Access the main intent metrics for test validation. */
@@ -849,16 +859,23 @@ public class ChromeTabbedActivity
     }
 
     /**
-     * Determines if the intent should trigger an NTP and launches it if applicable.
+     * Determines if the intent should trigger an NTP and launches it if applicable. If Chrome Home
+     * is enabled, we reset the bottom sheet state to half after some time being backgrounded.
      *
      * @param intent The intent to check whether an NTP should be triggered.
      * @return Whether an NTP was triggered as a result of this intent.
      */
-    private boolean maybeLaunchNtpFromMainIntent(Intent intent) {
+    private boolean maybeLaunchNtpOrResetBottomSheetFromMainIntent(Intent intent) {
         assert isMainIntentFromLauncher(intent);
 
         if (!mIntentHandler.isIntentUserVisible()) return false;
-        if (FeatureUtilities.isChromeHomeEnabled()) return false;
+
+        if (FeatureUtilities.isChromeHomeEnabled()) {
+            BottomSheet bottomSheet = getBottomSheet();
+            assert bottomSheet != null;
+            maybeSetBottomSheetStateToHalfOnStartup(bottomSheet);
+            return false;
+        }
 
         if (!ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_LAUNCH_AFTER_INACTIVITY)) {
             return false;
@@ -915,6 +932,26 @@ public class ChromeTabbedActivity
         return true;
     }
 
+    private boolean maybeSetBottomSheetStateToHalfOnStartup(BottomSheet bottomSheet) {
+        if (getTimeSinceLastBackgroundedMs()
+                >= TIME_SINCE_BACKGROUNDED_TO_SHOW_BOTTOM_SHEET_HALF_MS) {
+            bottomSheet.getBottomSheetMetrics().recordSheetOpenReason(
+                    BottomSheetMetrics.OPENED_BY_STARTUP);
+            bottomSheet.setSheetState(BottomSheet.SHEET_STATE_HALF, true);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Returns the number of milliseconds since Chrome was last backgrounded.
+     */
+    private long getTimeSinceLastBackgroundedMs() {
+        long lastBackgroundedTimeMs =
+                ContextUtils.getAppSharedPreferences().getLong(LAST_BACKGROUNDED_TIME_MS_PREF, -1);
+        return System.currentTimeMillis() - lastBackgroundedTimeMs;
+    }
+
     @Override
     public void initializeState() {
         // This method goes through 3 steps:
@@ -943,7 +980,7 @@ public class ChromeTabbedActivity
             if (noRestoreState) {
                 // Clear the state files because they are inconsistent and useless from now on.
                 mTabModelSelectorImpl.clearState();
-            } else if (!mIsOnFirstRun) {
+            } else {
                 // State should be clear when we start first run and hence we do not need to load
                 // a previous state. This may change the current Model, watch out for initialization
                 // based on the model.
@@ -955,7 +992,7 @@ public class ChromeTabbedActivity
 
             mIntentWithEffect = false;
             boolean activeTabBeingRestored = false;
-            if ((mIsOnFirstRun || getSavedInstanceState() == null) && intent != null) {
+            if (getSavedInstanceState() == null && intent != null) {
                 if (!mIntentHandler.shouldIgnoreIntent(intent)) {
                     mIntentWithEffect = mIntentHandler.onNewIntent(intent);
 
@@ -969,7 +1006,7 @@ public class ChromeTabbedActivity
                     if (IntentHandler.getUrlFromIntent(intent) == null) {
                         assert !mIntentWithEffect
                                 : "ACTION_MAIN should not have triggered any prior action";
-                        mIntentWithEffect = maybeLaunchNtpFromMainIntent(intent);
+                        mIntentWithEffect = maybeLaunchNtpOrResetBottomSheetFromMainIntent(intent);
                     }
                     logMainIntentBehavior(intent);
                 }
@@ -999,13 +1036,10 @@ public class ChromeTabbedActivity
                 // async reading, then create a tab at the async reading finished. If it takes
                 // too long, just create NTP.
                 PartnerBrowserCustomizations.setOnInitializeAsyncFinished(
-                        new Runnable() {
-                            @Override
-                            public void run() {
-                                mMainIntentMetrics.setIgnoreEvents(true);
-                                createInitialTab();
-                                mMainIntentMetrics.setIgnoreEvents(false);
-                            }
+                        () -> {
+                            mMainIntentMetrics.setIgnoreEvents(true);
+                            createInitialTab();
+                            mMainIntentMetrics.setIgnoreEvents(false);
                         }, INITIAL_TAB_CREATION_TIMEOUT_MS);
             }
 
@@ -1026,29 +1060,6 @@ public class ChromeTabbedActivity
         }
 
         getTabCreator(false).launchUrl(url, TabLaunchType.FROM_CHROME_UI);
-    }
-
-    @Override
-    public boolean onActivityResultWithNative(int requestCode, int resultCode, Intent data) {
-        if (super.onActivityResultWithNative(requestCode, resultCode, data)) return true;
-
-        if (requestCode == FIRST_RUN_EXPERIENCE_RESULT) {
-            mIsOnFirstRun = false;
-            if (resultCode == RESULT_OK) {
-                refreshSignIn();
-                mLocaleManager.showSearchEnginePromoIfNeeded(this, null);
-            } else {
-                if (data != null && data.getBooleanExtra(
-                        FirstRunActivity.RESULT_CLOSE_APP, false)) {
-                    getTabModelSelector().closeAllTabs(true);
-                    finish();
-                } else {
-                    launchFirstRunExperience();
-                }
-            }
-            return true;
-        }
-        return false;
     }
 
     @Override
@@ -1355,8 +1366,6 @@ public class ChromeTabbedActivity
                 && OmahaBase.isProbablyFreshInstall(this)) {
             getIntent().setData(null);
         }
-
-        launchFirstRunExperience();
     }
 
     @Override
@@ -1498,55 +1507,18 @@ public class ChromeTabbedActivity
                 new TabbedModeTabCreator(this, getWindowAndroid(), true));
     }
 
-    /**
-     * Launch the First Run flow to set up Chrome.
-     * There are two different pathways that can occur:
-     * 1) The First Run Experience activity is run, which walks the user through the ToS, signing
-     * in, and turning on UMA reporting.  This happens in most cases.
-     * 2) We automatically try to sign-in the user and skip the FRE activity, then ask the user to
-     * turn on UMA reporting some time later using an InfoBar.  This happens if Chrome is opened
-     * with an Intent to view a URL, or if we're on a Nexus device where the user has already
-     * been exposed to the ToS and Privacy Notice.
-     */
-    private void launchFirstRunExperience() {
-        if (mIsOnFirstRun) {
-            mTabModelSelectorImpl.clearState();
-            return;
-        }
-
-        final Intent freIntent =
-                FirstRunFlowSequencer.checkIfFirstRunIsNecessary(this, getIntent(), false);
-        if (freIntent == null) return;
-
-        mIsOnFirstRun = true;
-
-        // TODO(dtrainor): Investigate this further and revert once Android pushes fix?
-        // Posting this due to Android bug where we apparently are stopping a
-        // non-resumed activity.  That statement looks incorrect, but need to not hit
-        // the runtime exception here.
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                startActivityForResult(freIntent, FIRST_RUN_EXPERIENCE_RESULT);
-            }
-        });
-    }
-
     @Override
     protected void initDeferredStartupForActivity() {
         super.initDeferredStartupForActivity();
-        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
-            @Override
-            public void run() {
-                ActivityManager am =
-                        (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-                RecordHistogram.recordSparseSlowlyHistogram(
-                        "MemoryAndroid.DeviceMemoryClass", am.getMemoryClass());
+        DeferredStartupHandler.getInstance().addDeferredTask(() -> {
+            ActivityManager am =
+                    (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            RecordHistogram.recordSparseSlowlyHistogram(
+                    "MemoryAndroid.DeviceMemoryClass", am.getMemoryClass());
 
-                AutocompleteController.nativePrefetchZeroSuggestResults();
+            AutocompleteController.nativePrefetchZeroSuggestResults();
 
-                LauncherShortcutActivity.updateIncognitoShortcut(ChromeTabbedActivity.this);
-            }
+            LauncherShortcutActivity.updateIncognitoShortcut(ChromeTabbedActivity.this);
         });
     }
 
@@ -1615,12 +1587,9 @@ public class ChromeTabbedActivity
             }
         } else if (id == R.id.all_bookmarks_menu_id) {
             if (currentTab != null) {
-                getCompositorViewHolder().hideKeyboard(new Runnable() {
-                    @Override
-                    public void run() {
-                        StartupMetrics.getInstance().recordOpenedBookmarks();
-                        BookmarkUtils.showBookmarkManager(ChromeTabbedActivity.this);
-                    }
+                getCompositorViewHolder().hideKeyboard(() -> {
+                    StartupMetrics.getInstance().recordOpenedBookmarks();
+                    BookmarkUtils.showBookmarkManager(ChromeTabbedActivity.this);
                 });
                 if (currentTabIsNtp) {
                     NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_BOOKMARKS_MANAGER);
@@ -1814,16 +1783,13 @@ public class ChromeTabbedActivity
             //
             // If the runnable doesn't run before the Activity dies, Chrome won't crash but the tab
             // won't be closed (crbug.com/587565).
-            mHandler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    boolean hasNextTab =
-                            getCurrentTabModel().getNextTabIfClosed(tabToClose.getId()) != null;
-                    getCurrentTabModel().closeTab(tabToClose, false, true, false);
+            mHandler.postDelayed(() -> {
+                boolean hasNextTab =
+                        getCurrentTabModel().getNextTabIfClosed(tabToClose.getId()) != null;
+                getCurrentTabModel().closeTab(tabToClose, false, true, false);
 
-                    // If there is no next tab to open, enter overview mode.
-                    if (!hasNextTab) mLayoutManager.showOverview(false);
-                }
+                // If there is no next tab to open, enter overview mode.
+                if (!hasNextTab) mLayoutManager.showOverview(false);
             }, CLOSE_TAB_ON_MINIMIZE_DELAY_MS);
         }
     }
@@ -1893,12 +1859,7 @@ public class ChromeTabbedActivity
         ContentViewCore contentViewCore = currentTab.getContentViewCore();
 
         if (!mLayoutManager.overviewVisible()) {
-            getCompositorViewHolder().hideKeyboard(new Runnable() {
-                @Override
-                public void run() {
-                    mLayoutManager.showOverview(true);
-                }
-            });
+            getCompositorViewHolder().hideKeyboard(() -> mLayoutManager.showOverview(true));
             if (contentViewCore != null) {
                 contentViewCore.setAccessibilityState(false);
             }
@@ -1927,7 +1888,6 @@ public class ChromeTabbedActivity
         super.onSaveInstanceState(outState);
         CipherFactory.getInstance().saveToBundle(outState);
         outState.putBoolean("is_incognito_selected", getCurrentTabModel().isIncognito());
-        outState.putBoolean(FRE_RUNNING, mIsOnFirstRun);
         outState.putInt(WINDOW_INDEX,
                 TabWindowManager.getInstance().getIndexForWindow(this));
     }
@@ -2207,39 +2167,17 @@ public class ChromeTabbedActivity
 
     @Override
     public void onScreenshotTaken() {
-        // Second part of the check to determine whether to trigger help UI
-        if (isInOverviewMode() || !DownloadUtils.isAllowedToDownloadPage(getActivityTab())) return;
-
         Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
         tracker.notifyEvent(EventConstants.SCREENSHOT_TAKEN_CHROME_IN_FOREGROUND);
-        maybeShowFeatureEngagementTextBubbleForDownloadPage(tracker);
-    }
 
-    private void maybeShowFeatureEngagementTextBubbleForDownloadPage(final Tracker tracker) {
-        if (!tracker.shouldTriggerHelpUI(FeatureConstants.DOWNLOAD_PAGE_SCREENSHOT_FEATURE)) return;
-
-        ViewAnchoredTextBubble textBubble =
-                new ViewAnchoredTextBubble(this, getToolbarManager().getMenuButton(),
+        ThreadUtils.postOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                maybeShowDownloadHomeTextBubble(tracker,
+                        FeatureConstants.DOWNLOAD_PAGE_SCREENSHOT_FEATURE,
                         R.string.iph_download_page_for_offline_usage_text,
                         R.string.iph_download_page_for_offline_usage_accessibility_text);
-        textBubble.setDismissOnTouchInteraction(true);
-        textBubble.addOnDismissListener(new OnDismissListener() {
-            @Override
-            public void onDismiss() {
-                ThreadUtils.postOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        tracker.dismissed(FeatureConstants.DOWNLOAD_PAGE_SCREENSHOT_FEATURE);
-                        getAppMenuHandler().setMenuHighlight(null);
-                    }
-                });
             }
         });
-        getAppMenuHandler().setMenuHighlight(R.id.offline_page_id);
-        int yInsetPx =
-                getResources().getDimensionPixelOffset(R.dimen.text_bubble_menu_anchor_y_inset);
-        textBubble.setInsetPx(0, FeatureUtilities.isChromeHomeEnabled() ? yInsetPx : 0, 0,
-                FeatureUtilities.isChromeHomeEnabled() ? 0 : yInsetPx);
-        textBubble.show();
     }
 }

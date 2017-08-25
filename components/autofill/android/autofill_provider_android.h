@@ -63,6 +63,8 @@ class AutofillProviderAndroid : public AutofillProvider {
 
   gfx::RectF ToClientAreaBound(const gfx::RectF& bounding_box);
 
+  void Reset();
+
   int32_t id_;
   std::unique_ptr<FormDataAndroid> form_;
   base::WeakPtr<AutofillHandlerProxy> handler_;
@@ -71,9 +73,6 @@ class AutofillProviderAndroid : public AutofillProvider {
 
   DISALLOW_COPY_AND_ASSIGN(AutofillProviderAndroid);
 };
-
-bool RegisterAutofillProvider(JNIEnv* env);
-
 }  // namespace autofill
 
 #endif  // COMPONENTS_AUTOFILL_ANDROID_AUTOFILL_PROVIDER_ANDROID_H_

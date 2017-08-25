@@ -20,11 +20,13 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager.LayoutParams;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.PasswordUIView;
@@ -35,6 +37,33 @@ import org.chromium.ui.widget.Toast;
  * Password entry editor that allows to view and delete passwords stored in Chrome.
  */
 public class PasswordEntryEditor extends Fragment {
+    // Constants used to log UMA enum histogram, must stay in sync with
+    // PasswordManagerAndroidPasswordEntryActions. Further actions can only be appended, existing
+    // entries must not be overwritten.
+    private static final int PASSWORD_ENTRY_ACTION_VIEWED = 0;
+    private static final int PASSWORD_ENTRY_ACTION_DELETED = 1;
+    private static final int PASSWORD_ENTRY_ACTION_CANCELLED = 2;
+    private static final int PASSWORD_ENTRY_ACTION_BOUNDARY = 3;
+
+    // Constants used to log UMA enum histogram, must stay in sync with
+    // PasswordManagerAndroidWebsiteActions. Further actions can only be appended, existing
+    // entries must not be overwritten.
+    private static final int WEBSITE_ACTION_COPIED = 0;
+    private static final int WEBSITE_ACTION_BOUNDARY = 1;
+
+    // Constants used to log UMA enum histogram, must stay in sync with
+    // PasswordManagerAndroidUsernameActions. Further actions can only be appended, existing
+    // entries must not be overwritten.
+    private static final int USERNAME_ACTION_COPIED = 0;
+    private static final int USERNAME_ACTION_BOUNDARY = 1;
+
+    // Constants used to log UMA enum histogram, must stay in sync with
+    // PasswordManagerAndroidPasswordActions. Further actions can only be appended, existing
+    // entries must not be overwritten.
+    private static final int PASSWORD_ACTION_COPIED = 0;
+    private static final int PASSWORD_ACTION_DISPLAYED = 1;
+    private static final int PASSWORD_ACTION_HIDDEN = 2;
+    private static final int PASSWORD_ACTION_BOUNDARY = 3;
 
     // ID of this name/password or exception.
     private int mID;
@@ -86,25 +115,28 @@ public class PasswordEntryEditor extends Fragment {
             getActivity().setTitle(R.string.password_entry_editor_title);
             mClipboard = (ClipboardManager) getActivity().getApplicationContext().getSystemService(
                     Context.CLIPBOARD_SERVICE);
-            View urlRowsView = createSimpleCopyableRow(
-                    R.id.url_row, R.string.password_entry_editor_site_title, url);
+            View urlRowsView = mView.findViewById(R.id.url_row);
+            TextView dataView = urlRowsView.findViewById(R.id.password_entry_editor_row_data);
+            dataView.setText(url);
+
             hookupCopySiteButton(urlRowsView);
             if (!mException) {
-                View usernameView = createSimpleCopyableRow(
-                        R.id.username_row, R.string.password_entry_editor_username_title, name);
+                View usernameView = mView.findViewById(R.id.username_row);
+                TextView usernameDataView =
+                        usernameView.findViewById(R.id.password_entry_editor_row_data);
+                usernameDataView.setText(name);
                 hookupCopyUsernameButton(usernameView);
                 mKeyguardManager =
                         (KeyguardManager) getActivity().getApplicationContext().getSystemService(
                                 Context.KEYGUARD_SERVICE);
-                View passwordTitleView =
-                        mView.findViewById(R.id.password_entry_editor_password_title);
-                TextView passwordTitleTextView =
-                        (TextView) passwordTitleView.findViewById(R.id.password_entry_title);
-                passwordTitleTextView.setText(R.string.password_entry_editor_password);
-                hidePassword();
-                hookupPasswordButtons();
+                if (isReauthenticationAvailable()) {
+                    hidePassword();
+                    hookupPasswordButtons();
+                } else {
+                    mView.findViewById(R.id.password_title).setVisibility(View.GONE);
+                    mView.findViewById(R.id.password_data).setVisibility(View.GONE);
+                }
             }
-
         } else {
             mView = inflater.inflate(R.layout.password_entry_editor, container, false);
             TextView nameView = (TextView) mView.findViewById(R.id.password_entry_editor_name);
@@ -117,12 +149,22 @@ public class PasswordEntryEditor extends Fragment {
             urlView.setText(url);
             hookupCancelDeleteButtons();
         }
+        // NOTE: This is deliberately not simplified so that the histogram strings can be found via
+        // code search and pre-submit scripts can catch errors. Also applies to similar spots below.
+        if (mException) {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "PasswordManager.Android.PasswordExceptionEntry", PASSWORD_ENTRY_ACTION_VIEWED,
+                    PASSWORD_ENTRY_ACTION_BOUNDARY);
+        } else {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "PasswordManager.Android.PasswordCredentialEntry", PASSWORD_ENTRY_ACTION_VIEWED,
+                    PASSWORD_ENTRY_ACTION_BOUNDARY);
+        }
         return mView;
     }
 
     public boolean shouldDisplayInteractivePasswordEntryEditor() {
-        return ChromeFeatureList.isEnabled(VIEW_PASSWORDS)
-                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP;
+        return ChromeFeatureList.isEnabled(VIEW_PASSWORDS);
     }
 
     @Override
@@ -143,6 +185,10 @@ public class PasswordEntryEditor extends Fragment {
         return SavePasswordsPreferences.getLastReauthTimeMillis() != 0
                 && System.currentTimeMillis() - SavePasswordsPreferences.getLastReauthTimeMillis()
                 < VALID_REAUTHENTICATION_TIME_INTERVAL_MILLIS;
+    }
+
+    private boolean isReauthenticationAvailable() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP;
     }
 
     @Override
@@ -197,6 +243,15 @@ public class PasswordEntryEditor extends Fragment {
                 removeItem();
                 deleteButton.setEnabled(false);
                 cancelButton.setEnabled(false);
+                if (mException) {
+                    RecordHistogram.recordEnumeratedHistogram(
+                            "PasswordManager.Android.PasswordExceptionEntry",
+                            PASSWORD_ENTRY_ACTION_DELETED, PASSWORD_ENTRY_ACTION_BOUNDARY);
+                } else {
+                    RecordHistogram.recordEnumeratedHistogram(
+                            "PasswordManager.Android.PasswordCredentialEntry",
+                            PASSWORD_ENTRY_ACTION_DELETED, PASSWORD_ENTRY_ACTION_BOUNDARY);
+                }
             }
         });
 
@@ -204,6 +259,15 @@ public class PasswordEntryEditor extends Fragment {
             @Override
             public void onClick(View v) {
                 getActivity().finish();
+                if (mException) {
+                    RecordHistogram.recordEnumeratedHistogram(
+                            "PasswordManager.Android.PasswordExceptionEntry",
+                            PASSWORD_ENTRY_ACTION_CANCELLED, PASSWORD_ENTRY_ACTION_BOUNDARY);
+                } else {
+                    RecordHistogram.recordEnumeratedHistogram(
+                            "PasswordManager.Android.PasswordCredentialEntry",
+                            PASSWORD_ENTRY_ACTION_CANCELLED, PASSWORD_ENTRY_ACTION_BOUNDARY);
+                }
             }
         });
     }
@@ -211,6 +275,8 @@ public class PasswordEntryEditor extends Fragment {
     private void hookupCopyUsernameButton(View usernameView) {
         final ImageButton copyUsernameButton =
                 (ImageButton) usernameView.findViewById(R.id.password_entry_editor_copy);
+        copyUsernameButton.setContentDescription(
+                getActivity().getString(R.string.password_entry_editor_copy_stored_username));
         copyUsernameButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -221,6 +287,9 @@ public class PasswordEntryEditor extends Fragment {
                              R.string.password_entry_editor_username_copied_into_clipboard,
                              Toast.LENGTH_SHORT)
                         .show();
+                RecordHistogram.recordEnumeratedHistogram(
+                        "PasswordManager.Android.PasswordCredentialEntry.Username",
+                        USERNAME_ACTION_COPIED, USERNAME_ACTION_BOUNDARY);
             }
         });
     }
@@ -228,6 +297,8 @@ public class PasswordEntryEditor extends Fragment {
     private void hookupCopySiteButton(View siteView) {
         final ImageButton copySiteButton =
                 (ImageButton) siteView.findViewById(R.id.password_entry_editor_copy);
+        copySiteButton.setContentDescription(
+                getActivity().getString(R.string.password_entry_editor_copy_stored_site));
         copySiteButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -238,6 +309,15 @@ public class PasswordEntryEditor extends Fragment {
                              R.string.password_entry_editor_site_copied_into_clipboard,
                              Toast.LENGTH_SHORT)
                         .show();
+                if (mException) {
+                    RecordHistogram.recordEnumeratedHistogram(
+                            "PasswordManager.Android.PasswordExceptionEntry.Website",
+                            WEBSITE_ACTION_COPIED, WEBSITE_ACTION_BOUNDARY);
+                } else {
+                    RecordHistogram.recordEnumeratedHistogram(
+                            "PasswordManager.Android.PasswordCredentialEntry.Website",
+                            WEBSITE_ACTION_COPIED, WEBSITE_ACTION_BOUNDARY);
+                }
             }
         });
     }
@@ -252,13 +332,21 @@ public class PasswordEntryEditor extends Fragment {
     }
 
     private void displayPassword() {
+        getActivity().getWindow().setFlags(LayoutParams.FLAG_SECURE, LayoutParams.FLAG_SECURE);
+
         changeHowPasswordIsDisplayed(
                 R.drawable.ic_visibility_off, InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        RecordHistogram.recordEnumeratedHistogram(
+                "PasswordManager.Android.PasswordCredentialEntry.Password",
+                PASSWORD_ACTION_DISPLAYED, PASSWORD_ACTION_BOUNDARY);
     }
 
     private void hidePassword() {
         changeHowPasswordIsDisplayed(R.drawable.ic_visibility,
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        RecordHistogram.recordEnumeratedHistogram(
+                "PasswordManager.Android.PasswordCredentialEntry.Password", PASSWORD_ACTION_HIDDEN,
+                PASSWORD_ACTION_BOUNDARY);
     }
 
     private void copyPassword() {
@@ -269,6 +357,9 @@ public class PasswordEntryEditor extends Fragment {
                      R.string.password_entry_editor_password_copied_into_clipboard,
                      Toast.LENGTH_SHORT)
                 .show();
+        RecordHistogram.recordEnumeratedHistogram(
+                "PasswordManager.Android.PasswordCredentialEntry.Password", PASSWORD_ACTION_COPIED,
+                PASSWORD_ACTION_BOUNDARY);
     }
 
     private void displayReauthenticationFragment() {
@@ -323,13 +414,4 @@ public class PasswordEntryEditor extends Fragment {
         });
     }
 
-    private View createSimpleCopyableRow(int rowId, int titleId, String data) {
-        View rowsView = mView.findViewById(rowId);
-        View titleView = rowsView.findViewById(R.id.password_entry_editor_row_title);
-        TextView titleTextView = (TextView) titleView.findViewById(R.id.password_entry_title);
-        titleTextView.setText(titleId);
-        TextView dataView = (TextView) rowsView.findViewById(R.id.password_entry_editor_row_data);
-        dataView.setText(data);
-        return rowsView;
-    }
 }

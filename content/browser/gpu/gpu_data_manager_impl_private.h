@@ -206,10 +206,6 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   // gpu info is collected.
   void UpdatePreliminaryBlacklistedFeatures();
 
-  // Update the GPU switching status.
-  // This should only be called once at initialization time.
-  void UpdateGpuSwitchingManager(const gpu::GPUInfo& gpu_info);
-
   // Notify all observers whenever there is a GPU info update.
   void NotifyGpuInfoUpdate();
 
@@ -276,8 +272,6 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   // True if --single-process or --in-process-gpu is passed in.
   bool in_process_gpu_;
-
-  std::string disabled_extensions_;
 
   // If one tries to call a member before initialization then it is defered
   // until Initialize() is completed.

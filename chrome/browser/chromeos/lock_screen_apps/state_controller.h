@@ -25,6 +25,10 @@
 
 class PrefRegistrySimple;
 
+namespace base {
+class TickClock;
+}
+
 namespace content {
 class BrowserContext;
 }
@@ -49,6 +53,8 @@ class InputDeviceManager;
 
 namespace lock_screen_apps {
 
+class AppWindowMetricsTracker;
+class FocusCyclerDelegate;
 class StateObserver;
 
 // Manages state of lock screen action handler apps, and notifies
@@ -60,6 +66,48 @@ class StateController : public ash::mojom::TrayActionClient,
                         public ui::InputDeviceEventObserver,
                         public chromeos::PowerManagerClient::Observer {
  public:
+  // Type of action that triggered a request for new note.
+  // Used in histograms - should be kept in sync with
+  // NewLockScreenNoteRequestType histogram enum, and assigned values should
+  // never be changed.
+  enum class NewNoteRequestType {
+    kTrayAction = 0,
+    kLockScreenUiTap = 1,
+    kLockScreenUiSwipe = 2,
+    kLockScreenUiKeyboard = 3,
+    kStylusEject = 4,
+    kCount,
+  };
+
+  // Reason for resetting note taking app window, and exiting note taking app.
+  // Used primarily for metrics reporting.
+  // IMPORTANT: The values should be kept in sync with
+  // LockScreenNoteTakingExitReason histogram enum, and assigned values should
+  // never be changed.
+  enum class NoteTakingExitReason {
+    kSessionUnlock = 0,
+    kShutdown = 1,
+    kScreenDimmed = 2,
+    kSuspend = 3,
+    kAppWindowClosed = 4,
+    kAppLockScreenSupportDisabled = 5,
+    kUnlockButtonPressed = 6,
+    kCount
+  };
+
+  // Action taken by the user on lock screen when a lock screen app window was
+  // in the background - used primarily for metrics reporting.
+  // IMPORTANT: The values should be kept in sync with
+  // LockScreenNoteTakingUnlockUIAction, and assigned values should never be
+  // changed.
+  enum class LockScreenUnlockAction {
+    kSessionUnlocked = 0,
+    kUnlockCancelled = 1,
+    kShutdown = 2,
+    kSignOut = 3,
+    kCount
+  };
+
   // Returns whether the StateController is enabled - it is currently guarded by
   // a feature flag. If not enabled, |StateController| instance is not allowed
   // to be created. |Get| will still work, but it will return nullptr.
@@ -107,6 +155,10 @@ class StateController : public ash::mojom::TrayActionClient,
   void AddObserver(StateObserver* observer);
   void RemoveObserver(StateObserver* observer);
 
+  // Sets the focus cycler delegate the state controller should use to pass on
+  // from and give focus to the active lock screen app window.
+  void SetFocusCyclerDelegate(FocusCyclerDelegate* delegate);
+
   // Gets current state assiciated with the lock screen note action.
   ash::mojom::TrayActionState GetLockScreenNoteState() const;
 
@@ -117,6 +169,7 @@ class StateController : public ash::mojom::TrayActionClient,
   void OnSessionStateChanged() override;
 
   // extensions::AppWindowRegistry::Observer:
+  void OnAppWindowAdded(extensions::AppWindow* app_window) override;
   void OnAppWindowRemoved(extensions::AppWindow* app_window) override;
 
   // ui::InputDeviceEventObserver:
@@ -138,6 +191,12 @@ class StateController : public ash::mojom::TrayActionClient,
       extensions::api::app_runtime::ActionType action,
       std::unique_ptr<extensions::AppDelegate> app_delegate);
 
+  // Should be called when the active app window is tabbed through. If needed,
+  // the method will take focus from the app window and pass it on using
+  // |focus_cycler_delegate_|.
+  // Returns whether the focus has been taken from the app window.
+  bool HandleTakeFocus(content::WebContents* web_contents, bool reverse);
+
   // If there are any active lock screen action handlers, moved their windows
   // to background, to ensure lock screen UI is visible.
   void MoveToBackground();
@@ -145,6 +204,14 @@ class StateController : public ash::mojom::TrayActionClient,
   // If there are any lock screen action handler in background, moves their
   // windows back to foreground (i.e. visible over lock screen UI).
   void MoveToForeground();
+
+  // Handles new note requests that come from lock screen UI.
+  void HandleNewNoteRequestFromLockScreen(NewNoteRequestType type);
+
+  // Records the user action taken on lock screen when the lock screen app
+  // unlock UI is shown - i.e. when lock UI is shown on top of backgrounded
+  // lock screen app window.
+  void RecordLockScreenAppUnlockAction(LockScreenUnlockAction action);
 
  private:
   // Called when profiles needed to run lock screen apps are ready - i.e. when
@@ -167,6 +234,9 @@ class StateController : public ash::mojom::TrayActionClient,
   // lock screen context.
   void InitializeWithCryptoKey(Profile* profile, const std::string& crypto_key);
 
+  // Handles request to launch a new-note lock screen flow.
+  void HandleNewNoteRequest(NewNoteRequestType type);
+
   // Called when app manager reports that note taking availability has changed.
   void OnNoteTakingAvailabilityChanged();
 
@@ -174,7 +244,9 @@ class StateController : public ash::mojom::TrayActionClient,
   // on lock screen, unregisters the window, and closes is if |close_window| is
   // set. It changes the current state to kAvailable or kNotAvailable, depending
   // on whether lock screen note taking action can still be handled.
-  void ResetNoteTakingWindowAndMoveToNextState(bool close_window);
+  void ResetNoteTakingWindowAndMoveToNextState(
+      bool close_window,
+      NoteTakingExitReason exit_reason);
 
   // Requests lock screen note action state change to |state|.
   // Returns whether the action state has changed.
@@ -182,6 +254,11 @@ class StateController : public ash::mojom::TrayActionClient,
 
   // Notifies observers that the lock screen note action state changed.
   void NotifyLockScreenNoteStateChanged();
+
+  // Passed as a focus handler to |focus_cycler_delegate_| when the assiciated
+  // app window is visible (active or in background).
+  // It focuses the app window.
+  void FocusAppWindow(bool reverse);
 
   // Lock screen note action state.
   ash::mojom::TrayActionState lock_screen_note_state_ =
@@ -199,7 +276,14 @@ class StateController : public ash::mojom::TrayActionClient,
 
   std::unique_ptr<AppManager> app_manager_;
 
+  FocusCyclerDelegate* focus_cycler_delegate_ = nullptr;
+
   extensions::AppWindow* note_app_window_ = nullptr;
+  // Used to track metrics for app window launches - it is set when the user
+  // session is locked (and reset on unlock). Note that a single instance
+  // should not be reused for different lock sessions - it tracks number of app
+  // launches per lock screen.
+  std::unique_ptr<AppWindowMetricsTracker> note_app_window_metrics_;
 
   ScopedObserver<extensions::AppWindowRegistry,
                  extensions::AppWindowRegistry::Observer>
@@ -218,6 +302,10 @@ class StateController : public ash::mojom::TrayActionClient,
   // is ready for action - i.e. until the state controller starts reacting
   // to session / app manager changes.
   base::Closure ready_callback_;
+
+  // The clock used to keep track of time, for example to report app window
+  // lifetime metrics.
+  std::unique_ptr<base::TickClock> tick_clock_;
 
   base::WeakPtrFactory<StateController> weak_ptr_factory_;
 

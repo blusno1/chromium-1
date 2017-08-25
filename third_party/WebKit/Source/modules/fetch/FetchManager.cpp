@@ -31,8 +31,8 @@
 #include "platform/HTTPNames.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
+#include "platform/exported/WrappedResourceResponse.h"
 #include "platform/loader/SubresourceIntegrity.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
@@ -46,7 +46,9 @@
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebCORS.h"
 #include "public/platform/WebURLRequest.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -403,21 +405,21 @@ void FetchManager::Loader::DidReceiveResponse(
   }
   if (response.WasFetchedViaServiceWorker()) {
     switch (response.ResponseTypeViaServiceWorker()) {
-      case mojom::FetchResponseType::kBasic:
-      case mojom::FetchResponseType::kDefault:
+      case network::mojom::FetchResponseType::kBasic:
+      case network::mojom::FetchResponseType::kDefault:
         tainting = FetchRequestData::kBasicTainting;
         break;
-      case mojom::FetchResponseType::kCORS:
+      case network::mojom::FetchResponseType::kCORS:
         tainting = FetchRequestData::kCORSTainting;
         break;
-      case mojom::FetchResponseType::kOpaque:
+      case network::mojom::FetchResponseType::kOpaque:
         tainting = FetchRequestData::kOpaqueTainting;
         break;
-      case mojom::FetchResponseType::kOpaqueRedirect:
+      case network::mojom::FetchResponseType::kOpaqueRedirect:
         DCHECK(
             NetworkUtils::IsRedirectResponseCode(response_http_status_code_));
         break;  // The code below creates an opaque-redirect filtered response.
-      case mojom::FetchResponseType::kError:
+      case network::mojom::FetchResponseType::kError:
         LOG(FATAL) << "When ServiceWorker respond to the request from fetch() "
                       "with an error response, FetchManager::Loader::didFail() "
                       "must be called instead.";
@@ -468,9 +470,9 @@ void FetchManager::Loader::DidReceiveResponse(
         tainted_response = response_data->CreateBasicFilteredResponse();
         break;
       case FetchRequestData::kCORSTainting: {
-        HTTPHeaderSet header_names;
-        CrossOriginAccessControl::ExtractCorsExposedHeaderNamesList(
-            response, header_names);
+        WebCORS::HTTPHeaderSet header_names;
+        WebCORS::ExtractCorsExposedHeaderNamesList(
+            WrappedResourceResponse(response), header_names);
         tainted_response =
             response_data->CreateCORSFilteredResponse(header_names);
         break;

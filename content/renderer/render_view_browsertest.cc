@@ -914,10 +914,6 @@ TEST_F(RenderViewImplTest, DetachingProxyAlsoDestroysProvisionalFrame) {
 // changes after a cross-process navigation has commited.
 // See https://crbug.com/571603.
 TEST_F(RenderViewImplTest, SetZoomLevelAfterCrossProcessNavigation) {
-  // This test should only run with out-of-process iframes enabled.
-  if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
-    return;
-
   // The bug reproduces if zoom is used for devices scale factor.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableUseZoomForDSF);
@@ -1256,15 +1252,13 @@ TEST_F(RenderViewImplTest, ImeComposition) {
       case IME_SETCOMPOSITION:
         view()->OnImeSetComposition(
             base::WideToUTF16(ime_message->ime_string),
-            std::vector<blink::WebCompositionUnderline>(),
-            gfx::Range::InvalidRange(),
-            ime_message->selection_start,
-            ime_message->selection_end);
+            std::vector<blink::WebImeTextSpan>(), gfx::Range::InvalidRange(),
+            ime_message->selection_start, ime_message->selection_end);
         break;
 
       case IME_COMMITTEXT:
         view()->OnImeCommitText(base::WideToUTF16(ime_message->ime_string),
-                                std::vector<blink::WebCompositionUnderline>(),
+                                std::vector<blink::WebImeTextSpan>(),
                                 gfx::Range::InvalidRange(), 0);
         break;
 
@@ -1273,11 +1267,9 @@ TEST_F(RenderViewImplTest, ImeComposition) {
         break;
 
       case IME_CANCELCOMPOSITION:
-        view()->OnImeSetComposition(
-            base::string16(),
-            std::vector<blink::WebCompositionUnderline>(),
-            gfx::Range::InvalidRange(),
-            0, 0);
+        view()->OnImeSetComposition(base::string16(),
+                                    std::vector<blink::WebImeTextSpan>(),
+                                    gfx::Range::InvalidRange(), 0, 0);
         break;
     }
 
@@ -1511,48 +1503,44 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
 
   const base::string16 empty_string;
-  const std::vector<blink::WebCompositionUnderline> empty_underline;
+  const std::vector<blink::WebImeTextSpan> empty_ime_text_span;
   std::vector<gfx::Rect> bounds;
   view()->OnSetFocus(true);
 
   // ASCII composition
   const base::string16 ascii_composition = base::UTF8ToUTF16("aiueo");
-  view()->OnImeSetComposition(ascii_composition, empty_underline,
+  view()->OnImeSetComposition(ascii_composition, empty_ime_text_span,
                               gfx::Range::InvalidRange(), 0, 0);
   view()->GetCompositionCharacterBounds(&bounds);
   ASSERT_EQ(ascii_composition.size(), bounds.size());
 
   for (size_t i = 0; i < bounds.size(); ++i)
     EXPECT_LT(0, bounds[i].width());
-  view()->OnImeCommitText(empty_string,
-                          std::vector<blink::WebCompositionUnderline>(),
+  view()->OnImeCommitText(empty_string, std::vector<blink::WebImeTextSpan>(),
                           gfx::Range::InvalidRange(), 0);
 
   // Non surrogate pair unicode character.
   const base::string16 unicode_composition = base::UTF8ToUTF16(
       "\xE3\x81\x82\xE3\x81\x84\xE3\x81\x86\xE3\x81\x88\xE3\x81\x8A");
-  view()->OnImeSetComposition(unicode_composition, empty_underline,
+  view()->OnImeSetComposition(unicode_composition, empty_ime_text_span,
                               gfx::Range::InvalidRange(), 0, 0);
   view()->GetCompositionCharacterBounds(&bounds);
   ASSERT_EQ(unicode_composition.size(), bounds.size());
   for (size_t i = 0; i < bounds.size(); ++i)
     EXPECT_LT(0, bounds[i].width());
-  view()->OnImeCommitText(empty_string, empty_underline,
+  view()->OnImeCommitText(empty_string, empty_ime_text_span,
                           gfx::Range::InvalidRange(), 0);
 
   // Surrogate pair character.
   const base::string16 surrogate_pair_char =
       base::UTF8ToUTF16("\xF0\xA0\xAE\x9F");
-  view()->OnImeSetComposition(surrogate_pair_char,
-                              empty_underline,
-                              gfx::Range::InvalidRange(),
-                              0,
-                              0);
+  view()->OnImeSetComposition(surrogate_pair_char, empty_ime_text_span,
+                              gfx::Range::InvalidRange(), 0, 0);
   view()->GetCompositionCharacterBounds(&bounds);
   ASSERT_EQ(surrogate_pair_char.size(), bounds.size());
   EXPECT_LT(0, bounds[0].width());
   EXPECT_EQ(0, bounds[1].width());
-  view()->OnImeCommitText(empty_string, empty_underline,
+  view()->OnImeCommitText(empty_string, empty_ime_text_span,
                           gfx::Range::InvalidRange(), 0);
 
   // Mixed string.
@@ -1563,10 +1551,8 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
   const bool is_surrogate_pair_empty_rect[8] = {
     false, true, false, false, true, false, false, true };
   view()->OnImeSetComposition(surrogate_pair_mixed_composition,
-                              empty_underline,
-                              gfx::Range::InvalidRange(),
-                              0,
-                              0);
+                              empty_ime_text_span, gfx::Range::InvalidRange(),
+                              0, 0);
   view()->GetCompositionCharacterBounds(&bounds);
   ASSERT_EQ(utf16_length, bounds.size());
   for (size_t i = 0; i < utf16_length; ++i) {
@@ -1576,7 +1562,7 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
       EXPECT_LT(0, bounds[i].width());
     }
   }
-  view()->OnImeCommitText(empty_string, empty_underline,
+  view()->OnImeCommitText(empty_string, empty_ime_text_span,
                           gfx::Range::InvalidRange(), 0);
 }
 #endif
@@ -1592,8 +1578,8 @@ TEST_F(RenderViewImplTest, SetEditableSelectionAndComposition) {
            "</html>");
   ExecuteJavaScriptForTests("document.getElementById('test1').focus();");
   frame()->SetEditableSelectionOffsets(4, 8);
-  const std::vector<blink::WebCompositionUnderline> empty_underline;
-  frame()->SetCompositionFromExistingText(7, 10, empty_underline);
+  const std::vector<blink::WebImeTextSpan> empty_ime_text_span;
+  frame()->SetCompositionFromExistingText(7, 10, empty_ime_text_span);
   blink::WebInputMethodController* controller =
       frame()->GetWebFrame()->GetInputMethodController();
   blink::WebTextInputInfo info = controller->TextInputInfo();
@@ -1800,6 +1786,16 @@ class RendererErrorPageTest : public RenderViewImplTest {
                                    const blink::WebURLError& error,
                                    std::string* error_html,
                                    base::string16* error_description) override {
+      if (error_html)
+        *error_html = "A suffusion of yellow.";
+    }
+    void GetNavigationErrorStringsForHttpStatusError(
+        content::RenderFrame* render_frame,
+        const blink::WebURLRequest& failed_request,
+        const GURL& url,
+        int http_status_code,
+        std::string* error_html,
+        base::string16* error_description) override {
       if (error_html)
         *error_html = "A suffusion of yellow.";
     }
@@ -2447,13 +2443,13 @@ TEST_F(RenderViewImplScaleFactorTest,
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
 
   const base::string16 empty_string;
-  const std::vector<blink::WebCompositionUnderline> empty_underline;
+  const std::vector<blink::WebImeTextSpan> empty_ime_text_span;
   std::vector<gfx::Rect> bounds_at_1x;
   view()->OnSetFocus(true);
 
   // ASCII composition
   const base::string16 ascii_composition = base::UTF8ToUTF16("aiueo");
-  view()->OnImeSetComposition(ascii_composition, empty_underline,
+  view()->OnImeSetComposition(ascii_composition, empty_ime_text_span,
                               gfx::Range::InvalidRange(), 0, 0);
   view()->GetCompositionCharacterBounds(&bounds_at_1x);
   ASSERT_EQ(ascii_composition.size(), bounds_at_1x.size());

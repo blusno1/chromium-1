@@ -133,6 +133,7 @@ bool AutofillProviderAndroid::OnWillSubmitForm(
   if (obj.is_null())
     return false;
   Java_AutofillProvider_onWillSubmitForm(env, obj);
+  Reset();
   return true;
 }
 
@@ -198,8 +199,7 @@ void AutofillProviderAndroid::Reset(AutofillHandlerProxy* handler) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (handler == handler_.get()) {
     handler_.reset();
-    form_.reset(nullptr);
-    id_ = kNoQueryId;
+    Reset();
 
     JNIEnv* env = AttachCurrentThread();
     ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
@@ -228,8 +228,9 @@ gfx::RectF AutofillProviderAndroid::ToClientAreaBound(
   return bounding_box + client_area.OffsetFromOrigin();
 }
 
-bool RegisterAutofillProvider(JNIEnv* env) {
-  return RegisterNativesImpl(env);
+void AutofillProviderAndroid::Reset() {
+  form_.reset(nullptr);
+  id_ = kNoQueryId;
 }
 
 }  // namespace autofill

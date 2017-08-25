@@ -22,11 +22,14 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 
+namespace network {
+class NetToMojoPendingBuffer;
+}
+
 namespace content {
 
 class AppCacheRequest;
 class AppCacheURLLoaderRequest;
-class NetToMojoPendingBuffer;
 class URLLoaderFactoryGetter;
 
 // Holds information about the subresource load request like the routing id,
@@ -96,15 +99,6 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
     main_resource_loader_callback_ = std::move(callback);
   }
 
-  // Subresource request load information is passed in the
-  // |subresource_load_info| parameter. This includes the request id, the
-  // client pointer, etc.
-  // |default_url_loader| is used to retrieve the network loader for requests
-  // intended to be sent to the network.
-  void SetSubresourceLoadInfo(
-      std::unique_ptr<SubresourceLoadInfo> subresource_load_info,
-      URLLoaderFactoryGetter* default_url_loader);
-
   // Ownership of the |handler| is transferred to us via this call. This is
   // only for subresource requests.
   void set_request_handler(std::unique_ptr<AppCacheRequestHandler> handler) {
@@ -122,9 +116,12 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
   // AppCacheJob::Create() creates this instance.
   friend class AppCacheJob;
 
-  AppCacheURLLoaderJob(const ResourceRequest& request,
-                       AppCacheURLLoaderRequest* appcache_request,
-                       AppCacheStorage* storage);
+  AppCacheURLLoaderJob(
+      const ResourceRequest& request,
+      AppCacheURLLoaderRequest* appcache_request,
+      AppCacheStorage* storage,
+      std::unique_ptr<SubresourceLoadInfo> subresource_load_info,
+      URLLoaderFactoryGetter* loader_factory_getter);
 
   // AppCacheStorage::Delegate methods
   void OnResponseInfoLoaded(AppCacheResponseInfo* response_info,
@@ -183,7 +180,7 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
   // mojo data pipe entities.
   mojo::ScopedDataPipeProducerHandle response_body_stream_;
 
-  scoped_refptr<NetToMojoPendingBuffer> pending_write_;
+  scoped_refptr<network::NetToMojoPendingBuffer> pending_write_;
 
   mojo::SimpleWatcher writable_handle_watcher_;
 
@@ -212,6 +209,10 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
   // The AppCacheURLLoaderRequest instance. We use this to set the response
   // info when we receive it.
   AppCacheURLLoaderRequest* appcache_request_;
+
+  // Set to true when we receive a response from the network URL loader.
+  // Please see OnReceiveResponse()
+  bool received_response_;
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheURLLoaderJob);
 };

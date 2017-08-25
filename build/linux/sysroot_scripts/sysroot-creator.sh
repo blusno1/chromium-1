@@ -280,11 +280,6 @@ HacksAndPatchesAmd64() {
   sed -i -e 's|/usr/lib/x86_64-linux-gnu/||g'  ${lscripts}
   sed -i -e 's|/lib/x86_64-linux-gnu/||g' ${lscripts}
 
-  # Remove the symbol __cxa_thread_atexit_impl from libc6 to remove
-  # the dependency on glibc 2.18.
-  sed -i 's/__cxa_thread_atexit_impl/__dead_beef_dead_beef___/g' \
-      "${INSTALL_ROOT}/lib/x86_64-linux-gnu/libc.so.6"
-
   # This is for chrome's ./build/linux/pkg-config-wrapper
   # which overwrites PKG_CONFIG_LIBDIR internally
   SubBanner "Move pkgconfig scripts"
@@ -304,11 +299,6 @@ HacksAndPatchesI386() {
   # Rewrite linker scripts
   sed -i -e 's|/usr/lib/i386-linux-gnu/||g'  ${lscripts}
   sed -i -e 's|/lib/i386-linux-gnu/||g' ${lscripts}
-
-  # Remove the symbol __cxa_thread_atexit_impl from libc6 to remove
-  # the dependency on glibc 2.18.
-  sed -i 's/__cxa_thread_atexit_impl/__dead_beef_dead_beef___/g' \
-      "${INSTALL_ROOT}/lib/i386-linux-gnu/libc.so.6"
 
   # This is for chrome's ./build/linux/pkg-config-wrapper
   # which overwrites PKG_CONFIG_LIBDIR internally
@@ -330,11 +320,6 @@ HacksAndPatchesARM() {
   sed -i -e 's|/usr/lib/arm-linux-gnueabihf/||g' ${lscripts}
   sed -i -e 's|/lib/arm-linux-gnueabihf/||g' ${lscripts}
 
-  # Remove the symbol __cxa_thread_atexit_impl from libc6 to remove
-  # the dependency on glibc 2.18.
-  sed -i 's/__cxa_thread_atexit_impl/__dead_beef_dead_beef___/g' \
-      "${INSTALL_ROOT}/lib/arm-linux-gnueabihf/libc.so.6"
-
   # This is for chrome's ./build/linux/pkg-config-wrapper
   # which overwrites PKG_CONFIG_LIBDIR internally
   SubBanner "Move pkgconfig files"
@@ -353,11 +338,6 @@ HacksAndPatchesARM64() {
   # Rewrite linker scripts
   sed -i -e 's|/usr/lib/aarch64-linux-gnu/||g' ${lscripts}
   sed -i -e 's|/lib/aarch64-linux-gnu/||g' ${lscripts}
-
-  # Remove the symbol __cxa_thread_atexit_impl from libc6 to remove
-  # the dependency on glibc 2.18.
-  sed -i 's/__cxa_thread_atexit_impl/__dead_beef_dead_beef___/g' \
-      "${INSTALL_ROOT}/lib/aarch64-linux-gnu/libc.so.6"
 
   # This is for chrome's ./build/linux/pkg-config-wrapper
   # which overwrites PKG_CONFIG_LIBDIR internally
@@ -378,11 +358,6 @@ HacksAndPatchesMips() {
   # Rewrite linker scripts
   sed -i -e 's|/usr/lib/mipsel-linux-gnu/||g' ${lscripts}
   sed -i -e 's|/lib/mipsel-linux-gnu/||g' ${lscripts}
-
-  # Remove the symbol __cxa_thread_atexit_impl from libc6 to remove
-  # the dependency on glibc 2.18.
-  sed -i 's/__cxa_thread_atexit_impl/__dead_beef_dead_beef___/g' \
-      "${INSTALL_ROOT}/lib/mipsel-linux-gnu/libc.so.6"
 
   # This is for chrome's ./build/linux/pkg-config-wrapper
   # which overwrites PKG_CONFIG_LIBDIR internally
@@ -452,25 +427,9 @@ CleanupJailSymlinks() {
     # skip links with non-absolute paths
     echo "${target}" | grep -qs ^/ || continue
     echo "${link}: ${target}"
-    case "${link}" in
-      usr/lib/gcc/*-linux-gnu/4.*/* | usr/lib/gcc/arm-linux-gnueabihf/4.*/* | \
-      usr/lib/gcc/aarch64-linux-gnu/4.*/*)
-        # Relativize the symlink.
-        ln -snfv "../../../../..${target}" "${link}"
-        ;;
-      usr/lib/*-linux-gnu/* | usr/lib/arm-linux-gnueabihf/*)
-        # Relativize the symlink.
-        ln -snfv "../../..${target}" "${link}"
-        ;;
-      usr/lib/*)
-        # Relativize the symlink.
-        ln -snfv "../..${target}" "${link}"
-        ;;
-      lib64/* | lib/*)
-        # Relativize the symlink.
-        ln -snfv "..${target}" "${link}"
-        ;;
-    esac
+    # Relativize the symlink.
+    prefix=$(echo "${link}" | sed -e 's/[^/]//g' | sed -e 's|/|../|g')
+    ln -snfv "${prefix}${target}" "${link}"
   done
 
   find $libdirs -type l -printf '%p %l\n' | while read link target; do
@@ -712,8 +671,8 @@ VerifyPackageListing() {
   set +x
 
   echo "Verifying: ${output_file}"
-  local checksums=$(grep ${file_path} ${release_file} | cut -d " " -f 2)
-  local sha256sum=$(echo ${checksums} | cut -d " " -f 3)
+  local sha256sum=$(grep -E "${file_path}\$|:\$" "${release_file}" | \
+    grep "SHA256:" -A 1 | xargs echo | awk '{print $2;}')
 
   if [ "${#sha256sum}" -ne "64" ]; then
     echo "Bad sha256sum from ${release_list}"

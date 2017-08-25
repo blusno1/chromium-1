@@ -18,7 +18,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_client.h"
-#include "third_party/WebKit/public/web/shared_worker_content_settings_proxy.mojom.h"
+#include "third_party/WebKit/public/web/worker_content_settings_proxy.mojom.h"
 
 namespace content {
 namespace {
@@ -26,11 +26,9 @@ namespace {
 void NotifyWorkerReadyForInspection(int worker_process_id,
                                     int worker_route_id) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(BrowserThread::UI,
-                            FROM_HERE,
-                            base::Bind(NotifyWorkerReadyForInspection,
-                                       worker_process_id,
-                                       worker_route_id));
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(NotifyWorkerReadyForInspection,
+                                           worker_process_id, worker_route_id));
     return;
   }
   SharedWorkerDevToolsManager::GetInstance()->WorkerReadyForInspection(
@@ -39,10 +37,9 @@ void NotifyWorkerReadyForInspection(int worker_process_id,
 
 void NotifyWorkerDestroyed(int worker_process_id, int worker_route_id) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(NotifyWorkerDestroyed, worker_process_id, worker_route_id));
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(NotifyWorkerDestroyed,
+                                           worker_process_id, worker_route_id));
     return;
   }
   SharedWorkerDevToolsManager::GetInstance()->WorkerDestroyed(
@@ -78,9 +75,9 @@ SharedWorkerHost::~SharedWorkerHost() {
 }
 
 void SharedWorkerHost::Start(bool pause_on_start) {
-  blink::mojom::SharedWorkerContentSettingsProxyPtrInfo content_settings;
-  SharedWorkerContentSettingsProxyImpl::Create(
-      weak_factory_.GetWeakPtr(), mojo::MakeRequest(&content_settings));
+  blink::mojom::WorkerContentSettingsProxyPtrInfo content_settings;
+  content_settings_ = base::MakeUnique<SharedWorkerContentSettingsProxyImpl>(
+      instance_->url(), this, mojo::MakeRequest(&content_settings));
 
   WorkerProcessMsg_CreateWorker_Params params;
   params.url = instance_->url();

@@ -18,7 +18,6 @@
 #include "ash/shell_port_classic.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
-#include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
@@ -41,10 +40,6 @@
 #include "ui/aura/env.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window_tree_host.h"
-
-#if defined(USE_X11)
-#include "ui/base/x/x11_util.h"  // nogncheck
-#endif
 
 namespace {
 
@@ -71,9 +66,13 @@ std::unique_ptr<ash::mus::WindowManager> CreateMusShell() {
   // its own callback to detect when the connection to mus is lost and that is
   // what shuts everything down.
   window_manager->SetLostConnectionCallback(base::BindOnce(&base::DoNothing));
+  // When Ash runs in the same services as chrome content creates the
+  // DiscardableSharedMemoryManager.
+  const bool create_discardable_memory = false;
   std::unique_ptr<aura::WindowTreeClient> window_tree_client =
-      base::MakeUnique<aura::WindowTreeClient>(connector, window_manager.get(),
-                                               window_manager.get());
+      base::MakeUnique<aura::WindowTreeClient>(
+          connector, window_manager.get(), window_manager.get(), nullptr,
+          nullptr, create_discardable_memory);
   const bool automatically_create_display_roots = false;
   window_tree_client->ConnectAsWindowManager(
       automatically_create_display_roots);
@@ -87,17 +86,6 @@ std::unique_ptr<ash::mus::WindowManager> CreateMusShell() {
 }  // namespace
 
 AshInit::AshInit() {
-#if defined(USE_X11)
-  if (base::SysInfo::IsRunningOnChromeOS()) {
-    // Mus only runs on ozone.
-    DCHECK_NE(ash::Config::MUS, chromeos::GetAshConfig());
-    // Hides the cursor outside of the Aura root window. The cursor will be
-    // drawn within the Aura root window, and it'll remain hidden after the
-    // Aura window is closed.
-    ui::HideHostCursor();
-  }
-#endif
-
   // Hide the mouse cursor completely at boot.
   if (!chromeos::LoginState::Get()->IsUserLoggedIn())
     ash::Shell::set_initially_hide_cursor(true);
@@ -111,6 +99,10 @@ AshInit::AshInit() {
     CreateClassicShell();
 
   ash::Shell* shell = ash::Shell::Get();
+
+  // Under mash the local state pref service isn't available until after shell
+  // initialization. Make classic ash behave the same way.
+  shell->SetLocalStatePrefService(g_browser_process->local_state());
 
   ash::AcceleratorControllerDelegateClassic* accelerator_controller_delegate =
       nullptr;
@@ -153,6 +145,11 @@ AshInit::AshInit() {
 }
 
 AshInit::~AshInit() {
+  // ImageCursorsSet may indirectly hold a reference to CursorDataFactoryOzone,
+  // which is indirectly owned by Shell. Make sure we destroy the
+  // ImageCursorsSet before the Shell to avoid potential use after free.
+  g_browser_process->platform_part()->DestroyImageCursorsSet();
+
   // |window_manager_| deletes the Shell.
   if (!window_manager_ && ash::Shell::HasInstance()) {
     ash::Shell::DeleteInstance();

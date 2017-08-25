@@ -31,7 +31,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/EphemeralRange.h"
-#include "core/editing/SetSelectionData.h"
+#include "core/editing/SetSelectionOptions.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/layout/ScrollAlignment.h"
@@ -92,7 +92,7 @@ class CORE_EXPORT FrameSelection final
   // layout.
   const VisibleSelection& ComputeVisibleSelectionInDOMTreeDeprecated() const;
 
-  void SetSelection(const SelectionInDOMTree&, const SetSelectionData&);
+  void SetSelection(const SelectionInDOMTree&, const SetSelectionOptions&);
 
   // TODO(editing-dev): We should rename this function to
   // SetSelectionAndEndTyping()
@@ -110,8 +110,8 @@ class CORE_EXPORT FrameSelection final
   // setSelectionDeprecated() returns true if didSetSelectionDeprecated() should
   // be called.
   bool SetSelectionDeprecated(const SelectionInDOMTree&,
-                              const SetSelectionData&);
-  void DidSetSelectionDeprecated(const SetSelectionData&);
+                              const SetSelectionOptions&);
+  void DidSetSelectionDeprecated(const SetSelectionOptions&);
 
   // Call this after doing user-triggered selections to make it easy to delete
   // the frame you entirely selected.
@@ -177,7 +177,7 @@ class CORE_EXPORT FrameSelection final
 
   void SetUseSecureKeyboardEntryWhenActive(bool);
 
-  bool IsHandleVisible() const;
+  bool IsHandleVisible() const { return is_handle_visible_; }
 
   void UpdateSecureKeyboardEntryIfActive();
 
@@ -272,6 +272,7 @@ class CORE_EXPORT FrameSelection final
   LayoutUnit x_pos_for_vertical_arrow_navigation_;
 
   bool focused_ : 1;
+  bool is_handle_visible_ = false;
 
   // Controls text granularity used to adjust the selection's extent in
   // moveRangeSelectionExtent.

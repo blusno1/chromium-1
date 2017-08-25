@@ -81,6 +81,13 @@ enum SubresourceFilterAction {
   // this web contents.
   kActionForcedActivationEnabled,
 
+  // Logged when we are forcing activation (e.g. via devtools) and resources
+  // have been blocked. Note that in these cases the UI is suppressed.
+  kActionForcedActivationNoUIResourceBlocked,
+
+  // Logged when a popup is blocked due to subresource filter logic.
+  kActionPopupBlocked,
+
   kActionLastEntry
 };
 
@@ -122,6 +129,8 @@ class ChromeSubresourceFilterClient
 
  private:
   void WhitelistByContentSettings(const GURL& url);
+  void ShowUI(const GURL& url);
+
   std::set<std::string> whitelisted_hosts_;
 
   // Owned by the profile.

@@ -76,9 +76,8 @@ class WebLayer;
 
 // Manages a rendering target (framebuffer + attachment) for a canvas.  Can
 // publish its rendering results to a WebLayer for compositing.
-class PLATFORM_EXPORT DrawingBuffer
-    : public NON_EXPORTED_BASE(cc::TextureLayerClient),
-      public RefCounted<DrawingBuffer> {
+class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
+                                      public RefCounted<DrawingBuffer> {
   WTF_MAKE_NONCOPYABLE(DrawingBuffer);
 
  public:
@@ -236,7 +235,8 @@ class PLATFORM_EXPORT DrawingBuffer
   // store and RGB emulation is in use (basically, macOS only).
   class PLATFORM_EXPORT ScopedRGBEmulationForBlitFramebuffer {
    public:
-    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer*);
+    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer*,
+                                         bool is_user_draw_framebuffer_bound);
     ~ScopedRGBEmulationForBlitFramebuffer();
 
    private:
@@ -457,7 +457,7 @@ class PLATFORM_EXPORT DrawingBuffer
 
   // Helpers to ensure correct behavior of BlitFramebuffer when using
   // an emulated RGB CHROMIUM_image back buffer.
-  bool SetupRGBEmulationForBlitFramebuffer();
+  bool SetupRGBEmulationForBlitFramebuffer(bool is_user_draw_framebuffer_bound);
   void CleanupRGBEmulationForBlitFramebuffer();
 
   // Weak, reset by beginDestruction.

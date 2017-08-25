@@ -244,6 +244,7 @@
 
   BOOL applicationActive =
       [application applicationState] == UIApplicationStateActive;
+
   return [URLOpener openURL:url
           applicationActive:applicationActive
                     options:options

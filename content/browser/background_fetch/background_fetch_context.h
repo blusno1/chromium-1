@@ -48,8 +48,9 @@ class CONTENT_EXPORT BackgroundFetchContext
  public:
   // The BackgroundFetchContext will watch the ServiceWorkerContextWrapper so
   // that it can respond to service worker events such as unregister.
-  BackgroundFetchContext(BrowserContext* browser_context,
-                         scoped_refptr<ServiceWorkerContextWrapper> context);
+  BackgroundFetchContext(
+      BrowserContext* browser_context,
+      const scoped_refptr<ServiceWorkerContextWrapper>& service_worker_context);
 
   // Finishes initializing the Background Fetch context on the IO thread by
   // setting the |request_context_getter|.
@@ -64,9 +65,9 @@ class CONTENT_EXPORT BackgroundFetchContext
                   const BackgroundFetchOptions& options,
                   blink::mojom::BackgroundFetchService::FetchCallback callback);
 
-  // Returns a vector with the tags of the active fetches for the given |origin|
+  // Returns a vector with the ids of the active fetches for the given |origin|
   // and |service_worker_registration_id|.
-  std::vector<std::string> GetActiveTagsForServiceWorkerRegistration(
+  std::vector<std::string> GetActiveIdsForServiceWorkerRegistration(
       int64_t service_worker_registration_id,
       const url::Origin& origin) const;
 

@@ -9,7 +9,6 @@
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTable.h"
 #include "core/layout/LayoutTheme.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/BackgroundImageGeometry.h"
 #include "core/paint/BoxDecorationData.h"
 #include "core/paint/BoxModelObjectPainter.h"
@@ -20,6 +19,7 @@
 #include "core/paint/PaintInfo.h"
 #include "core/paint/ScrollRecorder.h"
 #include "core/paint/ThemePainter.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
@@ -161,7 +161,8 @@ void BoxPainter::PaintBoxDecorationBackgroundWithRect(
   }
 
   if (!painting_overflow_contents) {
-    BoxPainterBase::PaintInsetBoxShadow(paint_info, paint_rect, style);
+    BoxPainterBase::PaintInsetBoxShadowWithBorderRect(paint_info, paint_rect,
+                                                      style);
 
     // The theme will tell us whether or not we should also paint the CSS
     // border.

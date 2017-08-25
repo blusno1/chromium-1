@@ -389,86 +389,86 @@ class SpdyServerPushHelper : public ServerPushDelegate::ServerPushHelper {
 }  // namespace
 
 SpdyProtocolErrorDetails MapFramerErrorToProtocolError(
-    SpdyFramer::SpdyFramerError err) {
+    Http2DecoderAdapter::SpdyFramerError err) {
   switch (err) {
-    case SpdyFramer::SPDY_NO_ERROR:
+    case Http2DecoderAdapter::SPDY_NO_ERROR:
       return SPDY_ERROR_NO_ERROR;
-    case SpdyFramer::SPDY_INVALID_STREAM_ID:
+    case Http2DecoderAdapter::SPDY_INVALID_STREAM_ID:
       return SPDY_ERROR_INVALID_STREAM_ID;
-    case SpdyFramer::SPDY_INVALID_CONTROL_FRAME:
+    case Http2DecoderAdapter::SPDY_INVALID_CONTROL_FRAME:
       return SPDY_ERROR_INVALID_CONTROL_FRAME;
-    case SpdyFramer::SPDY_CONTROL_PAYLOAD_TOO_LARGE:
+    case Http2DecoderAdapter::SPDY_CONTROL_PAYLOAD_TOO_LARGE:
       return SPDY_ERROR_CONTROL_PAYLOAD_TOO_LARGE;
-    case SpdyFramer::SPDY_ZLIB_INIT_FAILURE:
+    case Http2DecoderAdapter::SPDY_ZLIB_INIT_FAILURE:
       return SPDY_ERROR_ZLIB_INIT_FAILURE;
-    case SpdyFramer::SPDY_UNSUPPORTED_VERSION:
+    case Http2DecoderAdapter::SPDY_UNSUPPORTED_VERSION:
       return SPDY_ERROR_UNSUPPORTED_VERSION;
-    case SpdyFramer::SPDY_DECOMPRESS_FAILURE:
+    case Http2DecoderAdapter::SPDY_DECOMPRESS_FAILURE:
       return SPDY_ERROR_DECOMPRESS_FAILURE;
-    case SpdyFramer::SPDY_COMPRESS_FAILURE:
+    case Http2DecoderAdapter::SPDY_COMPRESS_FAILURE:
       return SPDY_ERROR_COMPRESS_FAILURE;
-    case SpdyFramer::SPDY_GOAWAY_FRAME_CORRUPT:
+    case Http2DecoderAdapter::SPDY_GOAWAY_FRAME_CORRUPT:
       return SPDY_ERROR_GOAWAY_FRAME_CORRUPT;
-    case SpdyFramer::SPDY_RST_STREAM_FRAME_CORRUPT:
+    case Http2DecoderAdapter::SPDY_RST_STREAM_FRAME_CORRUPT:
       return SPDY_ERROR_RST_STREAM_FRAME_CORRUPT;
-    case SpdyFramer::SPDY_INVALID_PADDING:
+    case Http2DecoderAdapter::SPDY_INVALID_PADDING:
       return SPDY_ERROR_INVALID_PADDING;
-    case SpdyFramer::SPDY_INVALID_DATA_FRAME_FLAGS:
+    case Http2DecoderAdapter::SPDY_INVALID_DATA_FRAME_FLAGS:
       return SPDY_ERROR_INVALID_DATA_FRAME_FLAGS;
-    case SpdyFramer::SPDY_INVALID_CONTROL_FRAME_FLAGS:
+    case Http2DecoderAdapter::SPDY_INVALID_CONTROL_FRAME_FLAGS:
       return SPDY_ERROR_INVALID_CONTROL_FRAME_FLAGS;
-    case SpdyFramer::SPDY_UNEXPECTED_FRAME:
+    case Http2DecoderAdapter::SPDY_UNEXPECTED_FRAME:
       return SPDY_ERROR_UNEXPECTED_FRAME;
-    case SpdyFramer::SPDY_INTERNAL_FRAMER_ERROR:
+    case Http2DecoderAdapter::SPDY_INTERNAL_FRAMER_ERROR:
       return SPDY_ERROR_INTERNAL_FRAMER_ERROR;
-    case SpdyFramer::SPDY_INVALID_CONTROL_FRAME_SIZE:
+    case Http2DecoderAdapter::SPDY_INVALID_CONTROL_FRAME_SIZE:
       return SPDY_ERROR_INVALID_CONTROL_FRAME_SIZE;
-    case SpdyFramer::SPDY_OVERSIZED_PAYLOAD:
+    case Http2DecoderAdapter::SPDY_OVERSIZED_PAYLOAD:
       return SPDY_ERROR_OVERSIZED_PAYLOAD;
-    case SpdyFramer::LAST_ERROR:
+    case Http2DecoderAdapter::LAST_ERROR:
       NOTREACHED();
   }
   NOTREACHED();
   return static_cast<SpdyProtocolErrorDetails>(-1);
 }
 
-Error MapFramerErrorToNetError(SpdyFramer::SpdyFramerError err) {
+Error MapFramerErrorToNetError(Http2DecoderAdapter::SpdyFramerError err) {
   switch (err) {
-    case SpdyFramer::SPDY_NO_ERROR:
+    case Http2DecoderAdapter::SPDY_NO_ERROR:
       return OK;
-    case SpdyFramer::SPDY_INVALID_CONTROL_FRAME:
+    case Http2DecoderAdapter::SPDY_INVALID_CONTROL_FRAME:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_CONTROL_PAYLOAD_TOO_LARGE:
+    case Http2DecoderAdapter::SPDY_CONTROL_PAYLOAD_TOO_LARGE:
       return ERR_SPDY_FRAME_SIZE_ERROR;
-    case SpdyFramer::SPDY_ZLIB_INIT_FAILURE:
+    case Http2DecoderAdapter::SPDY_ZLIB_INIT_FAILURE:
       return ERR_SPDY_COMPRESSION_ERROR;
-    case SpdyFramer::SPDY_UNSUPPORTED_VERSION:
+    case Http2DecoderAdapter::SPDY_UNSUPPORTED_VERSION:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_DECOMPRESS_FAILURE:
+    case Http2DecoderAdapter::SPDY_DECOMPRESS_FAILURE:
       return ERR_SPDY_COMPRESSION_ERROR;
-    case SpdyFramer::SPDY_COMPRESS_FAILURE:
+    case Http2DecoderAdapter::SPDY_COMPRESS_FAILURE:
       return ERR_SPDY_COMPRESSION_ERROR;
-    case SpdyFramer::SPDY_GOAWAY_FRAME_CORRUPT:
+    case Http2DecoderAdapter::SPDY_GOAWAY_FRAME_CORRUPT:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_RST_STREAM_FRAME_CORRUPT:
+    case Http2DecoderAdapter::SPDY_RST_STREAM_FRAME_CORRUPT:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_INVALID_PADDING:
+    case Http2DecoderAdapter::SPDY_INVALID_PADDING:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_INVALID_DATA_FRAME_FLAGS:
+    case Http2DecoderAdapter::SPDY_INVALID_DATA_FRAME_FLAGS:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_INVALID_CONTROL_FRAME_FLAGS:
+    case Http2DecoderAdapter::SPDY_INVALID_CONTROL_FRAME_FLAGS:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_UNEXPECTED_FRAME:
+    case Http2DecoderAdapter::SPDY_UNEXPECTED_FRAME:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_INTERNAL_FRAMER_ERROR:
+    case Http2DecoderAdapter::SPDY_INTERNAL_FRAMER_ERROR:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_INVALID_CONTROL_FRAME_SIZE:
+    case Http2DecoderAdapter::SPDY_INVALID_CONTROL_FRAME_SIZE:
       return ERR_SPDY_FRAME_SIZE_ERROR;
-    case SpdyFramer::SPDY_INVALID_STREAM_ID:
+    case Http2DecoderAdapter::SPDY_INVALID_STREAM_ID:
       return ERR_SPDY_PROTOCOL_ERROR;
-    case SpdyFramer::SPDY_OVERSIZED_PAYLOAD:
+    case Http2DecoderAdapter::SPDY_OVERSIZED_PAYLOAD:
       return ERR_SPDY_FRAME_SIZE_ERROR;
-    case SpdyFramer::LAST_ERROR:
+    case Http2DecoderAdapter::LAST_ERROR:
       NOTREACHED();
   }
   NOTREACHED();
@@ -1575,15 +1575,13 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
 
   DCHECK(gurl.is_valid());
 
-  // Check that the pushed stream advertises the same origin as its associated
-  // stream. Bypass this check if and only if this session is with a SPDY proxy
-  // that is trusted explicitly as determined by the |proxy_delegate_| or if the
-  // proxy is pushing same-origin resources.
-  if (!HostPortPair::FromURL(gurl).Equals(host_port_pair())) {
+  // Cross-origin push validation.
+  GURL associated_url(associated_it->second->GetUrlFromHeaders());
+  if (associated_url.GetOrigin() != gurl.GetOrigin()) {
     if (proxy_delegate_ &&
         proxy_delegate_->IsTrustedSpdyProxy(
             ProxyServer(ProxyServer::SCHEME_HTTPS, host_port_pair()))) {
-      // Disallow pushing of HTTPS content.
+      // Disallow pushing of HTTPS content by trusted proxy.
       if (gurl.SchemeIs("https")) {
         EnqueueResetStreamFrame(
             stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
@@ -1593,29 +1591,25 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
         return;
       }
     } else {
-      GURL associated_url(associated_it->second->GetUrlFromHeaders());
-      if (associated_url.SchemeIs("https")) {
-        SSLInfo ssl_info;
-        CHECK(GetSSLInfo(&ssl_info));
-        if (!gurl.SchemeIs("https") ||
-            !CanPool(transport_security_state_, ssl_info, associated_url.host(),
-                     gurl.host())) {
-          EnqueueResetStreamFrame(
-              stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
-              SpdyStringPrintf("Rejected push stream %d on secure connection",
-                               associated_stream_id));
-          return;
-        }
-      } else {
-        // TODO(bnc): Change SpdyNetworkTransactionTests to use secure sockets.
-        if (associated_url.GetOrigin() != gurl.GetOrigin()) {
-          EnqueueResetStreamFrame(
-              stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
-              SpdyStringPrintf(
-                  "Rejected cross origin push stream %d on insecure connection",
-                  associated_stream_id));
-          return;
-        }
+      if (!gurl.SchemeIs("https") || !associated_url.SchemeIs("https")) {
+        EnqueueResetStreamFrame(
+            stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
+            SpdyStringPrintf("Rejected cross origin pushed stream %d: "
+                             "both pushed URL and associated URL "
+                             "must have https scheme.",
+                             associated_stream_id));
+        return;
+      }
+      SSLInfo ssl_info;
+      CHECK(GetSSLInfo(&ssl_info));
+      if (!CanPool(transport_security_state_, ssl_info, associated_url.host(),
+                   gurl.host())) {
+        EnqueueResetStreamFrame(
+            stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
+            SpdyStringPrintf("Rejected pushed stream %d because certificate "
+                             "does not match pushed URL.",
+                             associated_stream_id));
+        return;
       }
     }
   }
@@ -1912,7 +1906,7 @@ int SpdySession::DoReadComplete(int result) {
     }
 
     DCHECK_EQ(buffered_spdy_framer_->spdy_framer_error(),
-              SpdyFramer::SPDY_NO_ERROR);
+              Http2DecoderAdapter::SPDY_NO_ERROR);
   }
 
   read_buffer_ = nullptr;
@@ -2129,7 +2123,7 @@ void SpdySession::SendInitialData() {
     const int32_t delta_window_size =
         session_max_recv_window_size_ - session_recv_window_size_;
     session_recv_window_size_ += delta_window_size;
-    net_log_.AddEvent(NetLogEventType::HTTP2_STREAM_UPDATE_RECV_WINDOW,
+    net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_UPDATE_RECV_WINDOW,
                       base::Bind(&NetLogSpdySessionWindowUpdateCallback,
                                  delta_window_size, session_recv_window_size_));
 
@@ -2577,14 +2571,15 @@ void SpdySession::DeleteExpiredPushedStreams() {
       base::TimeDelta::FromSeconds(kMinPushedStreamLifetimeSeconds);
 }
 
-void SpdySession::OnError(SpdyFramer::SpdyFramerError spdy_framer_error) {
+void SpdySession::OnError(
+    Http2DecoderAdapter::SpdyFramerError spdy_framer_error) {
   CHECK(in_io_loop_);
 
   RecordProtocolErrorHistogram(
       MapFramerErrorToProtocolError(spdy_framer_error));
-  SpdyString description =
-      SpdyStringPrintf("Framer error: %d (%s).", spdy_framer_error,
-                       SpdyFramer::SpdyFramerErrorToString(spdy_framer_error));
+  SpdyString description = SpdyStringPrintf(
+      "Framer error: %d (%s).", spdy_framer_error,
+      Http2DecoderAdapter::SpdyFramerErrorToString(spdy_framer_error));
   DoDrainSession(MapFramerErrorToNetError(spdy_framer_error), description);
 }
 
@@ -2656,18 +2651,23 @@ void SpdySession::OnRstStream(SpdyStreamId stream_id,
     CloseActiveStreamIterator(it, ERR_SPDY_SERVER_REFUSED_STREAM);
   } else if (error_code == ERROR_CODE_HTTP_1_1_REQUIRED) {
     // TODO(bnc): Record histogram with number of open streams capped at 50.
-    it->second->LogStreamError(
-        ERR_HTTP_1_1_REQUIRED,
-        SpdyStringPrintf(
-            "SPDY session closed because of stream with error_code: %u",
-            error_code));
+    if (net_log().IsCapturing()) {
+      it->second->LogStreamError(
+          ERR_HTTP_1_1_REQUIRED,
+          SpdyStringPrintf(
+              "Closing session because server reset stream with error %s.",
+              ErrorCodeToString(error_code)));
+    }
     DoDrainSession(ERR_HTTP_1_1_REQUIRED, "HTTP_1_1_REQUIRED for stream.");
   } else {
     RecordProtocolErrorHistogram(
         PROTOCOL_ERROR_RST_STREAM_FOR_NON_ACTIVE_STREAM);
-    it->second->LogStreamError(
-        ERR_SPDY_PROTOCOL_ERROR,
-        SpdyStringPrintf("SPDY stream closed with error_code: %u", error_code));
+    if (net_log().IsCapturing()) {
+      it->second->LogStreamError(
+          ERR_SPDY_PROTOCOL_ERROR,
+          SpdyStringPrintf("Server reset stream with error %s.",
+                           ErrorCodeToString(error_code)));
+    }
     // TODO(mbelshe): Map from Spdy-protocol errors to something sensical.
     //                For now, it doesn't matter much - it is a protocol error.
     CloseActiveStreamIterator(it, ERR_SPDY_PROTOCOL_ERROR);
@@ -3142,7 +3142,7 @@ void SpdySession::IncreaseRecvWindowSize(int32_t delta_window_size) {
             std::numeric_limits<int32_t>::max() - session_recv_window_size_);
 
   session_recv_window_size_ += delta_window_size;
-  net_log_.AddEvent(NetLogEventType::HTTP2_STREAM_UPDATE_RECV_WINDOW,
+  net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_UPDATE_RECV_WINDOW,
                     base::Bind(&NetLogSpdySessionWindowUpdateCallback,
                                delta_window_size, session_recv_window_size_));
 

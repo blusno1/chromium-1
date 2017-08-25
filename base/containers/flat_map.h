@@ -5,6 +5,7 @@
 #ifndef BASE_CONTAINERS_FLAT_MAP_H_
 #define BASE_CONTAINERS_FLAT_MAP_H_
 
+#include <functional>
 #include <utility>
 
 #include "base/containers/flat_tree.h"
@@ -100,6 +101,8 @@ struct GetKeyFromValuePairFirst {
 //   Mapped&              operator[](key_type&&);
 //   pair<iterator, bool> insert(const value_type&);
 //   pair<iterator, bool> insert(value_type&&);
+//   iterator             insert(const_iterator hint, const value_type&);
+//   iterator             insert(const_iterator hint, value_type&&);
 //   void                 insert(InputIterator first, InputIterator last,
 //                               FlatContainerDupes);
 //   pair<iterator, bool> emplace(Args&&...);
@@ -136,7 +139,7 @@ struct GetKeyFromValuePairFirst {
 //   bool operator>=(const flat_map&, const flat_map);
 //   bool operator<=(const flat_map&, const flat_map);
 //
-template <class Key, class Mapped, class Compare = ::base::less>
+template <class Key, class Mapped, class Compare = std::less<>>
 // Meets the requirements of Container, AssociativeContainer,
 // ReversibleContainer.
 // Requires: Key is Movable, Compare is a StrictWeakOrdering on Key.

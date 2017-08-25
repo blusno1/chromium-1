@@ -20,9 +20,11 @@ namespace vr {
 class ContentElement;
 class ContentInputDelegate;
 class ExclusiveScreenToast;
+class Grid;
 class LoadingIndicator;
-class SplashScreenIcon;
-class TransientUrlBar;
+class Rect;
+class Text;
+class WebVrUrlToast;
 class UiBrowserInterface;
 class UiElement;
 class UiScene;
@@ -53,7 +55,6 @@ class UiSceneManager {
   void SetScreenCapturingIndicator(bool enabled);
   void SetAudioCapturingIndicator(bool enabled);
   void SetLocationAccessIndicator(bool enabled);
-  void SetSplashScreenIcon(const SkBitmap& bitmap);
   void SetBluetoothConnectedIndicator(bool enabled);
 
   // These methods are currently stubbed.
@@ -63,6 +64,7 @@ class UiSceneManager {
   void OnAppButtonClicked();
   void OnAppButtonGesturePerformed(UiInterface::Direction direction);
   void OnWebVrFrameAvailable();
+  void OnProjMatrixChanged(const gfx::Transform& proj_matrix);
 
   void SetExitVrPromptEnabled(bool enabled, UiUnsupportedMode reason);
 
@@ -75,9 +77,11 @@ class UiSceneManager {
   void CreateSystemIndicators();
   void CreateContentQuad(ContentInputDelegate* delegate);
   void CreateSplashScreen();
+  void CreateUnderDevelopmentNotice();
   void CreateBackground();
+  void CreateViewportAwareRoot();
   void CreateUrlBar();
-  void CreateTransientUrlBar();
+  void CreateWebVrUrlToast();
   void CreateCloseButton();
   void CreateExitPrompt();
   void CreateToasts();
@@ -104,6 +108,7 @@ class UiSceneManager {
   UiElement* permanent_security_warning_ = nullptr;
   TransientSecurityWarning* transient_security_warning_ = nullptr;
   ExclusiveScreenToast* exclusive_screen_toast_ = nullptr;
+  ExclusiveScreenToast* exclusive_screen_toast_viewport_aware_ = nullptr;
   ExitPrompt* exit_prompt_ = nullptr;
   UiElement* exit_prompt_backplane_ = nullptr;
   UiElement* exit_warning_ = nullptr;
@@ -114,12 +119,13 @@ class UiSceneManager {
   UiElement* screen_capture_indicator_ = nullptr;
   UiElement* location_access_indicator_ = nullptr;
   UiElement* screen_dimmer_ = nullptr;
-  UiElement* ceiling_ = nullptr;
-  UiElement* floor_ = nullptr;
+  UiElement* viewport_aware_root_ = nullptr;
+  Rect* ceiling_ = nullptr;
+  Grid* floor_ = nullptr;
   UiElement* close_button_ = nullptr;
-  SplashScreenIcon* splash_screen_icon_ = nullptr;
+  Text* splash_screen_text_ = nullptr;
   UrlBar* url_bar_ = nullptr;
-  TransientUrlBar* transient_url_bar_ = nullptr;
+  WebVrUrlToast* webvr_url_toast_ = nullptr;
   LoadingIndicator* loading_indicator_ = nullptr;
 
   std::vector<UiElement*> system_indicators_;
@@ -147,9 +153,11 @@ class UiSceneManager {
 
   int next_available_id_ = 1;
 
-  std::vector<UiElement*> background_panels_;
+  std::vector<Rect*> background_panels_;
   std::vector<UiElement*> content_elements_;
   std::vector<UiElement*> control_elements_;
+
+  gfx::SizeF last_content_screen_bounds_;
 
   base::WeakPtrFactory<UiSceneManager> weak_ptr_factory_;
 

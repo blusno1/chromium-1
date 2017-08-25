@@ -113,6 +113,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void Register(
       enterprise_management::DeviceRegisterRequest::Type registration_type,
       enterprise_management::DeviceRegisterRequest::Flavor flavor,
+      enterprise_management::LicenseType::LicenseTypeEnum license_type,
       const std::string& auth_token,
       const std::string& client_id,
       const std::string& requisition,
@@ -124,6 +125,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void RegisterWithCertificate(
       enterprise_management::DeviceRegisterRequest::Type registration_type,
       enterprise_management::DeviceRegisterRequest::Flavor flavor,
+      enterprise_management::LicenseType::LicenseTypeEnum license_type,
       const std::string& pem_certificate_chain,
       const std::string& client_id,
       const std::string& requisition,
@@ -220,6 +222,8 @@ class POLICY_EXPORT CloudPolicyClient {
   void set_last_policy_timestamp(const base::Time& timestamp) {
     last_policy_timestamp_ = timestamp;
   }
+
+  const base::Time& last_policy_timestamp() { return last_policy_timestamp_; }
 
   void set_public_key_version(int public_key_version) {
     public_key_version_ = public_key_version;

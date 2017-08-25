@@ -23,10 +23,10 @@
 - (void)dismissModalsAndOpenSelectedTabInMode:(ApplicationMode)targetMode
                                       withURL:(const GURL&)url
                                    transition:(ui::PageTransition)transition
-                                   completion:(ProceduralBlock)handler {
+                                   completion:(ProceduralBlock)completion {
   _url = url;
   _applicationMode = targetMode;
-  _completionBlock = [handler copy];
+  _completionBlock = [completion copy];
 }
 
 - (void)resetURL {
@@ -42,6 +42,18 @@
 - (BOOL)shouldOpenNTPTabOnActivationOfTabModel:(TabModel*)tabModel {
   // Stub.
   return YES;
+}
+
+- (ProceduralBlock)completionBlockForTriggeringAction:
+    (NTPTabOpeningPostOpeningAction)action {
+  // Stub
+  return nil;
+}
+
+- (BOOL)shouldCompletePaymentRequestOnCurrentTab:
+    (id<StartupInformation>)startupInformation {
+  // Stub.
+  return NO;
 }
 
 @end

@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "cc/paint/display_item_list.h"
+#include "cc/paint/paint_image_builder.h"
 #include "cc/paint/paint_record.h"
 #include "cc/paint/paint_recorder.h"
 #include "third_party/skia/include/core/SkAnnotation.h"
@@ -234,21 +235,6 @@ void RecordPaintCanvas::drawDRRect(const SkRRect& outer,
   list_->push<DrawDRRectOp>(outer, inner, flags);
 }
 
-void RecordPaintCanvas::drawCircle(SkScalar cx,
-                                   SkScalar cy,
-                                   SkScalar radius,
-                                   const PaintFlags& flags) {
-  list_->push<DrawCircleOp>(cx, cy, radius, flags);
-}
-
-void RecordPaintCanvas::drawArc(const SkRect& oval,
-                                SkScalar start_angle,
-                                SkScalar sweep_angle,
-                                bool use_center,
-                                const PaintFlags& flags) {
-  list_->push<DrawArcOp>(oval, start_angle, sweep_angle, use_center, flags);
-}
-
 void RecordPaintCanvas::drawRoundRect(const SkRect& rect,
                                       SkScalar rx,
                                       SkScalar ry,
@@ -289,27 +275,11 @@ void RecordPaintCanvas::drawBitmap(const SkBitmap& bitmap,
   // TODO(enne): Move into base class?
   if (bitmap.drawsNothing())
     return;
-  drawImage(
-      PaintImage(PaintImage::kNonLazyStableId, SkImage::MakeFromBitmap(bitmap)),
-      left, top, flags);
-}
-
-void RecordPaintCanvas::drawText(const void* text,
-                                 size_t byte_length,
-                                 SkScalar x,
-                                 SkScalar y,
-                                 const PaintFlags& flags) {
-  list_->push_with_data<DrawTextOp>(text, byte_length, x, y, flags);
-}
-
-void RecordPaintCanvas::drawPosText(const void* text,
-                                    size_t byte_length,
-                                    const SkPoint pos[],
-                                    const PaintFlags& flags) {
-  // TODO(enne): implement countText in PaintFlags??
-  SkPaint paint = flags.ToSkPaint();
-  size_t count = paint.countText(text, byte_length);
-  list_->push_with_array<DrawPosTextOp>(text, byte_length, pos, count, flags);
+  drawImage(PaintImageBuilder()
+                .set_id(PaintImage::kNonLazyStableId)
+                .set_image(SkImage::MakeFromBitmap(bitmap))
+                .TakePaintImage(),
+            left, top, flags);
 }
 
 void RecordPaintCanvas::drawTextBlob(sk_sp<SkTextBlob> blob,

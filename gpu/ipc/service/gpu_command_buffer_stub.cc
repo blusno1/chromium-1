@@ -51,6 +51,7 @@
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/gl_workarounds.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if defined(OS_WIN)
@@ -568,6 +569,11 @@ bool GpuCommandBufferStub::Initialize(
     GpuCommandBufferStub* share_command_buffer_stub,
     const GPUCreateCommandBufferConfig& init_params,
     std::unique_ptr<base::SharedMemory> shared_state_shm) {
+#if defined(OS_FUCHSIA)
+  // TODO(crbug.com/707031): Implement this.
+  NOTIMPLEMENTED();
+  return false;
+#else
   TRACE_EVENT0("gpu", "GpuCommandBufferStub::Initialize");
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
 
@@ -749,6 +755,10 @@ bool GpuCommandBufferStub::Initialize(
       // group.
       DCHECK(context->share_group() == share_group_.get());
       share_group_->SetSharedContext(surface_.get(), context.get());
+
+      // This needs to be called against the real shared context, not the
+      // virtual context created below.
+      manager->gpu_feature_info().ApplyToGLContext(context.get());
     }
     // This should be either:
     // (1) a non-virtual GL context, or
@@ -768,16 +778,17 @@ bool GpuCommandBufferStub::Initialize(
       DLOG(ERROR) << "Failed to initialize virtual GL context.";
       return false;
     }
-  }
-  if (!context.get()) {
+  } else {
     context = gl::init::CreateGLContext(
         share_group_.get(), surface_.get(),
         GenerateGLContextAttribs(init_params.attribs,
                                  context_group_->gpu_preferences()));
-  }
-  if (!context.get()) {
-    DLOG(ERROR) << "Failed to create context.";
-    return false;
+    if (!context.get()) {
+      DLOG(ERROR) << "Failed to create context.";
+      return false;
+    }
+
+    manager->gpu_feature_info().ApplyToGLContext(context.get());
   }
 
   if (!context->MakeCurrent(surface_.get())) {
@@ -834,6 +845,7 @@ bool GpuCommandBufferStub::Initialize(
 
   initialized_ = true;
   return true;
+#endif  // defined(OS_FUCHSIA)
 }
 
 void GpuCommandBufferStub::OnCreateStreamTexture(uint32_t texture_id,

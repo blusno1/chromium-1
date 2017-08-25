@@ -11,9 +11,9 @@
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
-#include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/time/default_clock.h"
+#include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/favicon/large_icon_service_factory.h"
@@ -40,23 +40,17 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/language/core/browser/url_language_histogram.h"
 #include "components/ntp_snippets/bookmarks/bookmark_suggestions_provider.h"
-#include "components/ntp_snippets/breaking_news/breaking_news_gcm_app_handler.h"
-#include "components/ntp_snippets/breaking_news/breaking_news_suggestions_provider.h"
-#include "components/ntp_snippets/breaking_news/subscription_manager.h"
-#include "components/ntp_snippets/breaking_news/subscription_manager_impl.h"
 #include "components/ntp_snippets/category_rankers/category_ranker.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
-#include "components/ntp_snippets/contextual_suggestions_source.h"
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/ntp_snippets_constants.h"
-#include "components/ntp_snippets/remote/contextual_suggestions_fetcher_impl.h"
 #include "components/ntp_snippets/remote/persistent_scheduler.h"
 #include "components/ntp_snippets/remote/prefetched_pages_tracker.h"
 #include "components/ntp_snippets/remote/remote_suggestions_database.h"
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher_impl.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
-#include "components/ntp_snippets/remote/remote_suggestions_status_service.h"
+#include "components/ntp_snippets/remote/remote_suggestions_status_service_impl.h"
 #include "components/ntp_snippets/sessions/foreign_sessions_suggestions_provider.h"
 #include "components/ntp_snippets/sessions/tab_delegate_sync_adapter.h"
 #include "components/ntp_snippets/user_classifier.h"
@@ -79,6 +73,9 @@
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_history.h"
 #include "chrome/browser/ntp_snippets/download_suggestions_provider.h"
+#include "components/ntp_snippets/breaking_news/breaking_news_gcm_app_handler.h"
+#include "components/ntp_snippets/breaking_news/subscription_manager.h"
+#include "components/ntp_snippets/breaking_news/subscription_manager_impl.h"
 #include "components/ntp_snippets/physical_web_pages/physical_web_page_suggestions_provider.h"
 #include "components/physical_web/data_source/physical_web_data_source.h"
 #endif
@@ -103,24 +100,18 @@ using history::HistoryService;
 using image_fetcher::ImageFetcherImpl;
 using language::UrlLanguageHistogram;
 using ntp_snippets::BookmarkSuggestionsProvider;
-using ntp_snippets::BreakingNewsGCMAppHandler;
-using ntp_snippets::BreakingNewsSuggestionsProvider;
+using ntp_snippets::BreakingNewsListener;
 using ntp_snippets::CategoryRanker;
 using ntp_snippets::ContentSuggestionsService;
-using ntp_snippets::ContextualSuggestionsFetcherImpl;
-using ntp_snippets::ContextualSuggestionsSource;
 using ntp_snippets::ForeignSessionsSuggestionsProvider;
 using ntp_snippets::GetFetchEndpoint;
-using ntp_snippets::GetPushUpdatesSubscriptionEndpoint;
-using ntp_snippets::GetPushUpdatesUnsubscriptionEndpoint;
 using ntp_snippets::PersistentScheduler;
 using ntp_snippets::PrefetchedPagesTracker;
 using ntp_snippets::RemoteSuggestionsDatabase;
 using ntp_snippets::RemoteSuggestionsFetcherImpl;
 using ntp_snippets::RemoteSuggestionsProviderImpl;
 using ntp_snippets::RemoteSuggestionsSchedulerImpl;
-using ntp_snippets::RemoteSuggestionsStatusService;
-using ntp_snippets::SubscriptionManagerImpl;
+using ntp_snippets::RemoteSuggestionsStatusServiceImpl;
 using ntp_snippets::TabDelegateSyncAdapter;
 using ntp_snippets::UserClassifier;
 using suggestions::ImageDecoderImpl;
@@ -128,7 +119,11 @@ using syncer::SyncService;
 
 #if defined(OS_ANDROID)
 using content::DownloadManager;
+using ntp_snippets::BreakingNewsGCMAppHandler;
+using ntp_snippets::GetPushUpdatesSubscriptionEndpoint;
+using ntp_snippets::GetPushUpdatesUnsubscriptionEndpoint;
 using ntp_snippets::PhysicalWebPageSuggestionsProvider;
+using ntp_snippets::SubscriptionManagerImpl;
 using physical_web::PhysicalWebDataSource;
 #endif  // OS_ANDROID
 
@@ -161,52 +156,6 @@ bool IsChromeHomeEnabled() {
 #else
   return false;
 #endif
-}
-
-bool IsContextualSuggestionsEnabled() {
-  return base::FeatureList::IsEnabled(
-      chrome::android::kContextualSuggestionsCarousel);
-}
-
-void RegisterContextualSuggestionsSourceIfEnabled(
-    ContentSuggestionsService* service,
-    Profile* profile) {
-  if (!IsContextualSuggestionsEnabled()) {
-    return;
-  }
-
-  PrefService* pref_service = profile->GetPrefs();
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile);
-  OAuth2TokenService* token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
-  scoped_refptr<net::URLRequestContextGetter> request_context =
-      profile->GetRequestContext();
-  auto contextual_suggestions_fetcher =
-      base::MakeUnique<ContextualSuggestionsFetcherImpl>(
-          signin_manager, token_service, request_context, pref_service,
-          base::Bind(&safe_json::SafeJsonParser::Parse));
-  base::FilePath database_dir(
-      profile->GetPath().Append("contextualSuggestionsDatabase"));
-  scoped_refptr<base::SequencedTaskRunner> task_runner =
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
-  auto contextual_suggestions_database =
-      base::MakeUnique<RemoteSuggestionsDatabase>(database_dir, task_runner);
-  auto cached_image_fetcher =
-      base::MakeUnique<ntp_snippets::CachedImageFetcher>(
-          base::MakeUnique<image_fetcher::ImageFetcherImpl>(
-              base::MakeUnique<ImageDecoderImpl>(), request_context.get()),
-          pref_service, contextual_suggestions_database.get());
-  auto contextual_suggestions_source =
-      base::MakeUnique<ContextualSuggestionsSource>(
-          std::move(contextual_suggestions_fetcher),
-          std::move(cached_image_fetcher),
-          std::move(contextual_suggestions_database));
-
-  service->set_contextual_suggestions_source(
-      std::move(contextual_suggestions_source));
 }
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -335,8 +284,76 @@ void RegisterPhysicalWebPageProviderIfEnabled(
 
 #endif  // OS_ANDROID
 
+#if defined(OS_ANDROID)
+
+bool AreGCMPushUpdatesEnabled() {
+  return base::FeatureList::IsEnabled(ntp_snippets::kBreakingNewsPushFeature);
+}
+
+std::unique_ptr<BreakingNewsGCMAppHandler>
+MakeBreakingNewsGCMAppHandlerIfEnabled(
+    Profile* profile,
+    const std::string& locale,
+    variations::VariationsService* variations_service) {
+  PrefService* pref_service = profile->GetPrefs();
+
+  if (!AreGCMPushUpdatesEnabled()) {
+    BreakingNewsGCMAppHandler::ClearProfilePrefs(pref_service);
+    SubscriptionManagerImpl::ClearProfilePrefs(pref_service);
+    return nullptr;
+  }
+
+  gcm::GCMDriver* gcm_driver =
+      gcm::GCMProfileServiceFactory::GetForProfile(profile)->driver();
+
+  OAuth2TokenService* token_service =
+      ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
+
+  SigninManagerBase* signin_manager =
+      SigninManagerFactory::GetForProfile(profile);
+
+  scoped_refptr<net::URLRequestContextGetter> request_context =
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLRequestContext();
+
+  std::string api_key;
+  // The API is private. If we don't have the official API key, don't even try.
+  if (google_apis::IsGoogleChromeAPIKeyUsed()) {
+    bool is_stable_channel =
+        chrome::GetChannel() == version_info::Channel::STABLE;
+    api_key = is_stable_channel ? google_apis::GetAPIKey()
+                                : google_apis::GetNonStableAPIKey();
+  }
+
+  auto subscription_manager = base::MakeUnique<SubscriptionManagerImpl>(
+      request_context, pref_service, variations_service, signin_manager,
+      token_service, api_key, locale,
+      GetPushUpdatesSubscriptionEndpoint(chrome::GetChannel()),
+      GetPushUpdatesUnsubscriptionEndpoint(chrome::GetChannel()));
+
+  instance_id::InstanceIDProfileService* instance_id_profile_service =
+      instance_id::InstanceIDProfileServiceFactory::GetForProfile(profile);
+  DCHECK(instance_id_profile_service);
+  DCHECK(instance_id_profile_service->driver());
+
+  return base::MakeUnique<BreakingNewsGCMAppHandler>(
+      gcm_driver, instance_id_profile_service->driver(), pref_service,
+      std::move(subscription_manager),
+      base::Bind(&safe_json::SafeJsonParser::Parse),
+      base::MakeUnique<base::DefaultClock>(),
+      /*token_validation_timer=*/base::MakeUnique<base::OneShotTimer>(),
+      /*forced_subscription_timer=*/base::MakeUnique<base::OneShotTimer>());
+}
+
+#endif  // OS_ANDROID
+
 bool IsArticleProviderEnabled() {
   return base::FeatureList::IsEnabled(ntp_snippets::kArticleSuggestionsFeature);
+}
+
+bool IsKeepingPrefetchedSuggestionsEnabled() {
+  return base::FeatureList::IsEnabled(
+      ntp_snippets::kKeepPrefetchedContentSuggestions);
 }
 
 void RegisterArticleProviderIfEnabled(ContentSuggestionsService* service,
@@ -360,10 +377,6 @@ void RegisterArticleProviderIfEnabled(ContentSuggestionsService* service,
 
   base::FilePath database_dir(
       profile->GetPath().Append(ntp_snippets::kDatabaseFolder));
-  scoped_refptr<base::SequencedTaskRunner> task_runner =
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
   std::string api_key;
   // The API is private. If we don't have the official API key, don't even try.
   if (google_apis::IsGoogleChromeAPIKeyUsed()) {
@@ -384,23 +397,34 @@ void RegisterArticleProviderIfEnabled(ContentSuggestionsService* service,
   }
   std::unique_ptr<PrefetchedPagesTracker> prefetched_pages_tracker;
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
-  prefetched_pages_tracker =
-      base::MakeUnique<PrefetchedPagesTrackerImpl>(offline_page_model);
+  if (IsKeepingPrefetchedSuggestionsEnabled()) {
+    prefetched_pages_tracker =
+        base::MakeUnique<PrefetchedPagesTrackerImpl>(offline_page_model);
+  }
 #endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
   auto suggestions_fetcher = base::MakeUnique<RemoteSuggestionsFetcherImpl>(
       signin_manager, token_service, request_context, pref_service,
       language_histogram, base::Bind(&safe_json::SafeJsonParser::Parse),
       GetFetchEndpoint(chrome::GetChannel()), api_key, user_classifier);
+
+  std::unique_ptr<BreakingNewsListener> breaking_news_raw_data_provider;
+#if defined(OS_ANDROID)
+  breaking_news_raw_data_provider = MakeBreakingNewsGCMAppHandlerIfEnabled(
+      profile, g_browser_process->GetApplicationLocale(),
+      g_browser_process->variations_service());
+#endif  //  OS_ANDROID
+
   auto provider = base::MakeUnique<RemoteSuggestionsProviderImpl>(
       service, pref_service, g_browser_process->GetApplicationLocale(),
       service->category_ranker(), service->remote_suggestions_scheduler(),
       std::move(suggestions_fetcher),
       base::MakeUnique<ImageFetcherImpl>(base::MakeUnique<ImageDecoderImpl>(),
                                          request_context.get()),
-      base::MakeUnique<RemoteSuggestionsDatabase>(database_dir, task_runner),
-      base::MakeUnique<RemoteSuggestionsStatusService>(
+      base::MakeUnique<RemoteSuggestionsDatabase>(database_dir),
+      base::MakeUnique<RemoteSuggestionsStatusServiceImpl>(
           signin_manager, pref_service, additional_toggle_pref),
-      std::move(prefetched_pages_tracker));
+      std::move(prefetched_pages_tracker),
+      std::move(breaking_news_raw_data_provider));
 
   service->remote_suggestions_scheduler()->SetProvider(provider.get());
   service->set_remote_suggestions_provider(provider.get());
@@ -426,65 +450,6 @@ void RegisterForeignSessionsProviderIfEnabled(
   auto provider = base::MakeUnique<ForeignSessionsSuggestionsProvider>(
       service, std::move(sync_adapter), profile->GetPrefs());
   service->RegisterProvider(std::move(provider));
-}
-
-void SubscribeForGCMPushUpdates(
-    PrefService* pref_service,
-    ContentSuggestionsService* content_suggestions_service,
-    Profile* profile) {
-  // TODO(mamir): Either pass all params from outside or pass only profile and
-  // create them inside the method, but be consistent.
-  gcm::GCMDriver* gcm_driver =
-      gcm::GCMProfileServiceFactory::GetForProfile(profile)->driver();
-
-  OAuth2TokenService* token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
-
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile);
-
-  scoped_refptr<net::URLRequestContextGetter> request_context =
-      content::BrowserContext::GetDefaultStoragePartition(profile)
-          ->GetURLRequestContext();
-
-  std::string api_key;
-  // The API is private. If we don't have the official API key, don't even try.
-  if (google_apis::IsGoogleChromeAPIKeyUsed()) {
-    bool is_stable_channel =
-        chrome::GetChannel() == version_info::Channel::STABLE;
-    api_key = is_stable_channel ? google_apis::GetAPIKey()
-                                : google_apis::GetNonStableAPIKey();
-  }
-
-  auto subscription_manager = base::MakeUnique<SubscriptionManagerImpl>(
-      request_context, pref_service, signin_manager, token_service, api_key,
-      GetPushUpdatesSubscriptionEndpoint(chrome::GetChannel()),
-      GetPushUpdatesUnsubscriptionEndpoint(chrome::GetChannel()));
-
-  instance_id::InstanceIDProfileService* instance_id_profile_service =
-      instance_id::InstanceIDProfileServiceFactory::GetForProfile(profile);
-  DCHECK(instance_id_profile_service);
-  DCHECK(instance_id_profile_service->driver());
-
-  auto handler = base::MakeUnique<BreakingNewsGCMAppHandler>(
-      gcm_driver, instance_id_profile_service->driver(), pref_service,
-      std::move(subscription_manager),
-      base::Bind(&safe_json::SafeJsonParser::Parse));
-
-  scoped_refptr<base::SequencedTaskRunner> task_runner =
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
-  // TODO(mamir): Check if the same DB can be used for both remote suggestions
-  // and breaking news. Don't create a separate DB for breaking news in order to
-  // reduce the memory footprint. (crbug.com/735402)
-  base::FilePath database_dir(
-      profile->GetPath().Append(ntp_snippets::kBreakingNewsDatabaseFolder));
-  auto provider = base::MakeUnique<BreakingNewsSuggestionsProvider>(
-      content_suggestions_service, std::move(handler),
-      base::MakeUnique<base::DefaultClock>(),
-      base::MakeUnique<RemoteSuggestionsDatabase>(database_dir, task_runner));
-  content_suggestions_service->RegisterProvider(std::move(provider));
 }
 
 }  // namespace
@@ -578,7 +543,6 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
       pref_service, std::move(category_ranker), std::move(user_classifier),
       std::move(scheduler));
 
-  RegisterContextualSuggestionsSourceIfEnabled(service, profile);
   RegisterArticleProviderIfEnabled(service, profile, signin_manager,
                                    user_classifier_raw, offline_page_model);
   RegisterBookmarkProviderIfEnabled(service, profile);
@@ -594,9 +558,6 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
   RegisterPrefetchingObserver(service, profile);
 #endif
 
-  if (base::FeatureList::IsEnabled(ntp_snippets::kBreakingNewsPushFeature)) {
-    SubscribeForGCMPushUpdates(pref_service, service, profile);
-  }
   return service;
 
 #else

@@ -21,10 +21,10 @@ namespace ash {
 enum class LoginStatus;
 class ScreenTrayItem;
 class SystemBubbleWrapper;
-class SystemTrayDelegate;
 class SystemTrayItem;
 class TrayAccessibility;
 class TrayAudio;
+class TrayCapsLock;
 class TrayCast;
 class TrayEnterprise;
 class TrayNetwork;
@@ -56,8 +56,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
 
   // Calls TrayBackgroundView::Initialize(), creates the tray items, and
   // adds them to SystemTrayNotifier.
-  void InitializeTrayItems(SystemTrayDelegate* delegate,
-                           WebNotificationTray* web_notification_tray);
+  void InitializeTrayItems(WebNotificationTray* web_notification_tray);
 
   // Resets internal pointers. This has to be called before deletion.
   void Shutdown();
@@ -156,7 +155,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   void ActivateAndStartNavigation(const ui::KeyEvent& key_event);
 
   // Creates the default set of items for the system tray.
-  void CreateItems(SystemTrayDelegate* delegate);
+  void CreateItems();
 
   // Resets |system_bubble_| and clears any related state.
   void DestroySystemBubble();
@@ -213,6 +212,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // These objects are not owned by this class.
   TrayAccessibility* tray_accessibility_ = nullptr;
   TrayAudio* tray_audio_ = nullptr;
+  TrayCapsLock* tray_caps_lock_ = nullptr;
   TrayCast* tray_cast_ = nullptr;
   TrayEnterprise* tray_enterprise_ = nullptr;
   TrayNetwork* tray_network_ = nullptr;

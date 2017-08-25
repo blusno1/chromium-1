@@ -7,8 +7,6 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/metrics/user_metrics_action.h"
-#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
@@ -22,6 +20,7 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/auto_reset.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -59,7 +58,7 @@ static const int kWindowSelectorMargin = kWindowMargin * 2;
 // Foreground label color.
 static const SkColor kLabelColor = SK_ColorWHITE;
 
-// TODO(tdanderson): Move this to a central location.
+// Close button color.
 static const SkColor kCloseButtonColor = SK_ColorWHITE;
 
 // Label background color once in overview mode.
@@ -120,10 +119,10 @@ void SetupFadeInAfterLayout(views::Widget* widget) {
 // A Button that has a listener and listens to mouse / gesture events on the
 // visible part of an overview window. Note that the drag events are only
 // handled in maximized mode.
-class ShieldButton : public views::CustomButton {
+class ShieldButton : public views::Button {
  public:
   ShieldButton(views::ButtonListener* listener, const base::string16& name)
-      : views::CustomButton(listener) {
+      : views::Button(listener) {
     SetAccessibleName(name);
   }
   ~ShieldButton() override {}
@@ -135,7 +134,7 @@ class ShieldButton : public views::CustomButton {
   // after the WindowSelectorItem has been destroyed.
   void ResetListener() { listener_ = nullptr; }
 
-  // views::CustomButton:
+  // views::Button:
   bool OnMousePressed(const ui::MouseEvent& event) override {
     if (listener() && SplitViewController::ShouldAllowSplitView()) {
       gfx::Point location(event.location());
@@ -143,7 +142,7 @@ class ShieldButton : public views::CustomButton {
       listener()->HandlePressEvent(location);
       return true;
     }
-    return views::CustomButton::OnMousePressed(event);
+    return views::Button::OnMousePressed(event);
   }
 
   void OnMouseReleased(const ui::MouseEvent& event) override {
@@ -153,7 +152,7 @@ class ShieldButton : public views::CustomButton {
       listener()->HandleReleaseEvent(location);
       return;
     }
-    views::CustomButton::OnMouseReleased(event);
+    views::Button::OnMouseReleased(event);
   }
 
   bool OnMouseDragged(const ui::MouseEvent& event) override {
@@ -163,7 +162,7 @@ class ShieldButton : public views::CustomButton {
       listener()->HandleDragEvent(location);
       return true;
     }
-    return views::CustomButton::OnMouseDragged(event);
+    return views::Button::OnMouseDragged(event);
   }
 
   void OnGestureEvent(ui::GestureEvent* event) override {
@@ -187,7 +186,7 @@ class ShieldButton : public views::CustomButton {
       event->SetHandled();
       return;
     }
-    views::CustomButton::OnGestureEvent(event);
+    views::Button::OnGestureEvent(event);
   }
 
   WindowSelectorItem* listener() {
@@ -207,7 +206,7 @@ class ShieldButton : public views::CustomButton {
 WindowSelectorItem::OverviewCloseButton::OverviewCloseButton(
     views::ButtonListener* listener)
     : views::ImageButton(listener) {
-  SetImage(views::CustomButton::STATE_NORMAL,
+  SetImage(views::Button::STATE_NORMAL,
            gfx::CreateVectorIcon(kWindowControlCloseIcon, kCloseButtonColor));
   SetImageAlignment(views::ImageButton::ALIGN_CENTER,
                     views::ImageButton::ALIGN_MIDDLE);
@@ -597,13 +596,13 @@ void WindowSelectorItem::SetDimmed(bool dimmed) {
 void WindowSelectorItem::ButtonPressed(views::Button* sender,
                                        const ui::Event& event) {
   if (sender == close_button_) {
-    Shell::Get()->metrics()->RecordUserMetricsAction(
-        UMA_WINDOW_OVERVIEW_CLOSE_BUTTON);
-    if (ash::Shell::Get()
+    base::RecordAction(
+        base::UserMetricsAction("WindowSelector_OverviewCloseButton"));
+    if (Shell::Get()
             ->tablet_mode_controller()
             ->IsTabletModeWindowManagerEnabled()) {
-      ash::Shell::Get()->metrics()->RecordUserMetricsAction(
-          ash::UMA_TABLET_WINDOW_CLOSE_THROUGH_OVERVIEW_CLOSE_BUTTON);
+      base::RecordAction(
+          base::UserMetricsAction("Tablet_WindowCloseFromOverviewButton"));
     }
     CloseWindow();
     return;

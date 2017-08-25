@@ -78,6 +78,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @synthesize pageHost = _pageHost;
 @synthesize connectionSecure = _connectionSecure;
 @synthesize pending = _pending;
+@synthesize cancellable = _cancellable;
 @synthesize delegate = _delegate;
 @synthesize dataSource = _dataSource;
 
@@ -105,6 +106,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _payButton = [[MDCButton alloc] init];
     [_payButton setTitle:l10n_util::GetNSString(IDS_PAYMENTS_PAY_BUTTON)
                 forState:UIControlStateNormal];
+    [_payButton setBackgroundColor:[[MDCPalette cr_bluePalette] tint500]];
     [_payButton setTitleColor:[UIColor whiteColor]
                      forState:UIControlStateNormal];
     [_payButton setInkColor:[UIColor colorWithWhite:1 alpha:0.2]];
@@ -153,6 +155,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [_payButton setEnabled:[_dataSource canPay]];
 }
 
+- (void)setCancellable:(BOOL)cancellable {
+  _cancellable = cancellable;
+  [_cancelButton setEnabled:_cancellable];
+  self.view.userInteractionEnabled = cancellable;
+}
+
 #pragma mark - CollectionViewController methods
 
 - (void)loadModel {
@@ -172,7 +180,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   if (_pending) {
     [_payButton setEnabled:NO];
-    [_cancelButton setEnabled:NO];
 
     StatusItem* statusItem = [[StatusItem alloc] initWithType:ItemTypeSpinner];
     statusItem.text = l10n_util::GetNSString(IDS_PAYMENTS_PROCESSING_MESSAGE);

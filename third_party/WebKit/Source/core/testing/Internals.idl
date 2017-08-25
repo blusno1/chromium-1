@@ -44,8 +44,6 @@ enum EffectiveConnectionType {
     unsigned long getResourcePriority (DOMString url, Document document);
     DOMString getResourceHeader (DOMString url, DOMString header, Document document);
 
-    boolean isSharingStyle(Element element1, Element element2);
-
     CSSStyleDeclaration computedStyleIncludingVisitedInfo(Node node);
 
     ShadowRoot createUserAgentShadowRoot(Element host);
@@ -56,6 +54,7 @@ enum EffectiveConnectionType {
     [RaisesException] ShadowRoot youngerShadowRoot(Node root);
 
     void setBrowserControlsState(float top_height, float bottom_height, boolean shrinksLayout);
+    void setBrowserControlsShownRatio(float ratio);
 
     [RaisesException] DOMString shadowRootType(Node root);
     [RaisesException] boolean hasShadowInsertionPoint(Node root);

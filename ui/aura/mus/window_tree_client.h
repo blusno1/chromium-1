@@ -89,8 +89,8 @@ using EventResultCallback = base::Callback<void(ui::mojom::EventResult)>;
 // When WindowTreeClient is deleted all windows are deleted (and observers
 // notified).
 class AURA_EXPORT WindowTreeClient
-    : NON_EXPORTED_BASE(public ui::mojom::WindowTreeClient),
-      NON_EXPORTED_BASE(public ui::mojom::WindowManager),
+    : public ui::mojom::WindowTreeClient,
+      public ui::mojom::WindowManager,
       public CaptureSynchronizerDelegate,
       public FocusSynchronizerDelegate,
       public DragDropControllerHost,
@@ -421,6 +421,8 @@ class AURA_EXPORT WindowTreeClient
   void OnDragDropDone() override;
   void OnChangeCompleted(uint32_t change_id, bool success) override;
   void RequestClose(uint32_t window_id) override;
+  void SetBlockingContainers(
+      const std::vector<BlockingContainers>& all_blocking_containers) override;
   void GetWindowManager(
       mojo::AssociatedInterfaceRequest<WindowManager> internal) override;
 
@@ -469,6 +471,7 @@ class AURA_EXPORT WindowTreeClient
                      uint32_t accelerator_id,
                      std::unique_ptr<ui::Event> event) override;
   void OnCursorTouchVisibleChanged(bool enabled) override;
+  void OnEventBlockedByModalWindow(Id window_id) override;
 
   // Overridden from WindowManagerClient:
   void SetFrameDecorationValues(
@@ -534,6 +537,8 @@ class AURA_EXPORT WindowTreeClient
   void OnWindowTreeHostMoveCursorToDisplayLocation(
       const gfx::Point& location_in_pixels,
       int64_t display_id) override;
+  void OnWindowTreeHostConfineCursorToBounds(const gfx::Rect& bounds_in_pixels,
+                                             int64_t display_id) override;
   std::unique_ptr<WindowPortMus> CreateWindowPortForTopLevel(
       const std::map<std::string, std::vector<uint8_t>>* properties) override;
   void OnWindowTreeHostCreated(WindowTreeHostMus* window_tree_host) override;

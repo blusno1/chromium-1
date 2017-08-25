@@ -29,10 +29,11 @@ CONTENT_EXPORT extern const base::Feature kCheckerImaging;
 CONTENT_EXPORT extern const base::Feature kCompositeOpaqueFixedPosition;
 CONTENT_EXPORT extern const base::Feature kCompositeOpaqueScrollers;
 CONTENT_EXPORT extern const base::Feature kCompositorTouchAction;
+CONTENT_EXPORT extern const base::Feature
+    kReducedSoftTileMemoryLimitOnLowEndAndroid;
 CONTENT_EXPORT extern const base::Feature kExpensiveBackgroundTimerThrottling;
 CONTENT_EXPORT extern const base::Feature kFeaturePolicy;
 CONTENT_EXPORT extern const base::Feature kFetchKeepaliveTimeoutSetting;
-CONTENT_EXPORT extern const base::Feature kFilterSameOriginTinyPlugin;
 CONTENT_EXPORT extern const base::Feature kFontCacheScaling;
 CONTENT_EXPORT extern const base::Feature
     kFramebustingNeedsSameOriginOrUserGesture;
@@ -44,7 +45,6 @@ CONTENT_EXPORT extern const base::Feature kImageCaptureAPI;
 CONTENT_EXPORT extern const base::Feature kLazyInitializeMediaControls;
 CONTENT_EXPORT extern const base::Feature kLazyParseCSS;
 CONTENT_EXPORT extern const base::Feature kLoadingWithMojo;
-CONTENT_EXPORT extern const base::Feature kMediaDocumentDownloadButton;
 CONTENT_EXPORT extern const base::Feature kMediaStreamOldAudioConstraints;
 CONTENT_EXPORT extern const base::Feature kMemoryCoordinator;
 CONTENT_EXPORT extern const base::Feature kNetworkService;
@@ -56,21 +56,20 @@ CONTENT_EXPORT extern const base::Feature kMojoVideoEncodeAccelerator;
 CONTENT_EXPORT extern const base::Feature kModuleScripts;
 CONTENT_EXPORT extern const base::Feature kOffMainThreadFetch;
 CONTENT_EXPORT extern const base::Feature kOriginTrials;
+CONTENT_EXPORT extern const base::Feature kOutOfBlinkCORS;
 CONTENT_EXPORT extern const base::Feature kParallelDownloading;
 CONTENT_EXPORT extern const base::Feature kPassiveDocumentEventListeners;
 CONTENT_EXPORT extern const base::Feature kPassiveEventListenersDueToFling;
 CONTENT_EXPORT extern const base::Feature kPepper3DImageChromium;
-CONTENT_EXPORT extern const base::Feature kPointerEvents;
 CONTENT_EXPORT extern const base::Feature kPurgeAndSuspend;
 CONTENT_EXPORT extern const base::Feature kRafAlignedMouseInputEvents;
 CONTENT_EXPORT extern const base::Feature kRafAlignedTouchInputEvents;
 CONTENT_EXPORT extern const base::Feature kRenderingPipelineThrottling;
 CONTENT_EXPORT extern const base::Feature kReportRendererPeakMemoryStats;
-CONTENT_EXPORT extern const base::Feature
-    kRequireSecureOriginsForPepperMediaRequests;
 CONTENT_EXPORT extern const base::Feature kResourceLoadScheduler;
 CONTENT_EXPORT extern const base::Feature kScrollAnchoring;
-CONTENT_EXPORT extern const base::Feature kServiceWorkerNavigationPreload;
+CONTENT_EXPORT
+extern const base::Feature kSendBeaconThrowForBlobWithNonSimpleType;
 CONTENT_EXPORT extern const base::Feature kServiceWorkerScriptStreaming;
 CONTENT_EXPORT extern const base::Feature kSharedArrayBuffer;
 CONTENT_EXPORT extern const base::Feature kSignInProcessIsolation;
@@ -79,6 +78,8 @@ CONTENT_EXPORT extern const base::Feature kSlimmingPaintInvalidation;
 CONTENT_EXPORT extern const base::Feature kTimerThrottlingForHiddenFrames;
 CONTENT_EXPORT extern const base::Feature kTopDocumentIsolation;
 CONTENT_EXPORT extern const base::Feature kTouchpadAndWheelScrollLatching;
+CONTENT_EXPORT extern const base::Feature
+    kTurnOff2DAndOpacityCompositorAnimations;
 CONTENT_EXPORT extern const base::Feature kUseFeaturePolicyForPermissions;
 CONTENT_EXPORT extern const base::Feature kUseMojoAudioOutputStreamFactory;
 CONTENT_EXPORT extern const base::Feature kVibrateRequiresUserGesture;
@@ -96,8 +97,6 @@ CONTENT_EXPORT extern const base::Feature kWebRtcUseEchoCanceller3;
 CONTENT_EXPORT extern const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames;
 CONTENT_EXPORT extern const base::Feature kWebUsb;
 CONTENT_EXPORT extern const base::Feature kWebVRExperimentalRendering;
-CONTENT_EXPORT
-extern const base::Feature kSendBeaconThrowForBlobWithNonSimpleType;
 
 #if defined(OS_ANDROID)
 CONTENT_EXPORT extern const base::Feature kAndroidAutofillAccessibility;
@@ -105,13 +104,12 @@ CONTENT_EXPORT extern const base::Feature kHideIncorrectlySizedFullscreenFrames;
 CONTENT_EXPORT extern const base::Feature kImeThread;
 CONTENT_EXPORT extern const base::Feature kServiceWorkerPaymentApps;
 CONTENT_EXPORT extern const base::Feature kWebNfc;
+CONTENT_EXPORT extern const base::Feature kWebVrVsyncAlign;
 #endif  // defined(OS_ANDROID)
-
-CONTENT_EXPORT extern const base::Feature
-    kDisablePreferCompositingToLCDTextOnLowEndAndroid;
 
 #if defined(OS_WIN)
 CONTENT_EXPORT extern const base::Feature kWinSboxDisableExtensionPoints;
+CONTENT_EXPORT extern const base::Feature kWinSboxForceMsSigned;
 #endif  // defined(OS_WIN)
 
 #if defined(OS_MACOSX)

@@ -108,10 +108,6 @@ void FakeDisplayDelegate::Initialize() {
   initialized_ = true;
 }
 
-void FakeDisplayDelegate::GrabServer() {}
-
-void FakeDisplayDelegate::UngrabServer() {}
-
 void FakeDisplayDelegate::TakeDisplayControl(
     const DisplayControlCallback& callback) {
   callback.Run(false);
@@ -121,12 +117,6 @@ void FakeDisplayDelegate::RelinquishDisplayControl(
     const DisplayControlCallback& callback) {
   callback.Run(false);
 }
-
-void FakeDisplayDelegate::SyncWithServer() {}
-
-void FakeDisplayDelegate::SetBackgroundColor(uint32_t color_argb) {}
-
-void FakeDisplayDelegate::ForceDPMSOn() {}
 
 void FakeDisplayDelegate::GetDisplays(const GetDisplaysCallback& callback) {
   std::vector<DisplaySnapshot*> displays;
@@ -180,18 +170,6 @@ void FakeDisplayDelegate::SetHDCPState(const DisplaySnapshot& output,
                                        HDCPState state,
                                        const SetHDCPStateCallback& callback) {
   callback.Run(false);
-}
-
-std::vector<ColorCalibrationProfile>
-FakeDisplayDelegate::GetAvailableColorCalibrationProfiles(
-    const DisplaySnapshot& output) {
-  return std::vector<ColorCalibrationProfile>();
-}
-
-bool FakeDisplayDelegate::SetColorCalibrationProfile(
-    const DisplaySnapshot& output,
-    ColorCalibrationProfile new_profile) {
-  return false;
 }
 
 bool FakeDisplayDelegate::SetColorCorrection(

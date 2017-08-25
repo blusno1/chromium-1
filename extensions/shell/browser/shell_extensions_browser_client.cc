@@ -202,7 +202,7 @@ void ShellExtensionsBrowserClient::RegisterExtensionInterfaces(
 std::unique_ptr<RuntimeAPIDelegate>
 ShellExtensionsBrowserClient::CreateRuntimeAPIDelegate(
     content::BrowserContext* context) const {
-  return base::MakeUnique<ShellRuntimeAPIDelegate>();
+  return std::make_unique<ShellRuntimeAPIDelegate>();
 }
 
 const ComponentExtensionResourceManager*
@@ -279,6 +279,11 @@ KioskDelegate* ShellExtensionsBrowserClient::GetKioskDelegate() {
 bool ShellExtensionsBrowserClient::IsLockScreenContext(
     content::BrowserContext* context) {
   return false;
+}
+
+std::string ShellExtensionsBrowserClient::GetApplicationLocale() {
+  // TODO(michaelpg): Use system locale.
+  return "en-US";
 }
 
 }  // namespace extensions

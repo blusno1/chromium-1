@@ -178,6 +178,10 @@ class ASH_EXPORT ShelfView : public views::View,
   // icons' animations.
   double GetAppListButtonAnimationCurrentValue();
 
+  bool is_tablet_mode_animation_running() const {
+    return is_tablet_mode_animation_running_;
+  }
+
  private:
   friend class ShelfViewTestAPI;
 
@@ -305,6 +309,13 @@ class ASH_EXPORT ShelfView : public views::View,
   void ShelfItemMoved(int start_index, int target_index) override;
   void ShelfItemDelegateChanged(const ShelfID& id,
                                 ShelfItemDelegate* delegate) override;
+
+  // Handles the result when querying ShelfItemDelegates for context menu items.
+  // Shows a default shelf context menu with optional extra custom |menu_items|.
+  void AfterGetContextMenuItems(const ShelfID& shelf_id,
+                                const gfx::Point& point,
+                                ui::MenuSourceType source_type,
+                                std::vector<mojom::MenuItemPtr> menu_items);
 
   // Handles the result of an item selection, records the |action| taken and
   // optionally shows an application menu with the given |menu_items|.
@@ -480,7 +491,12 @@ class ASH_EXPORT ShelfView : public views::View,
   // so, the repost event should be ignored.
   int last_pressed_index_ = -1;
 
-  // True while the animation to enter or exit tablet mode is running.
+  // True while the animation to enter or exit tablet mode is running. Sometimes
+  // this value is true when the shelf movements are not actually animating
+  // (animation value = 0.0). This is because this is set when we enter/exit
+  // tablet mode this is set to true but the animation is not started until a
+  // shelf OnBoundsChanged is called because of tablet mode. Use this value to
+  // sync up the animation for AppListButton.
   bool is_tablet_mode_animation_running_ = false;
 
   // Tracks UMA metrics based on shelf button press actions.

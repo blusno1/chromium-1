@@ -62,8 +62,6 @@ class WebLayer {
  public:
   virtual ~WebLayer() {}
 
-  static constexpr int kInvalidLayerId = cc::Layer::INVALID_ID;
-
   // Returns a positive ID that will be unique across all WebLayers allocated in
   // this process.
   virtual int Id() const = 0;
@@ -196,6 +194,8 @@ class WebLayer {
 
   virtual void SetIsContainerForFixedPositionLayers(bool) = 0;
   virtual bool IsContainerForFixedPositionLayers() const = 0;
+
+  virtual void SetIsResizedByBrowserControls(bool) = 0;
 
   // This function sets layer position constraint. The constraint will be used
   // to adjust layer position during threaded scrolling.

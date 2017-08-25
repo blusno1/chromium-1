@@ -73,6 +73,7 @@ class PDFiumEngine : public PDFEngine,
   void RotateCounterclockwise() override;
   std::string GetSelectedText() override;
   bool CanEditText() override;
+  void ReplaceSelection(const std::string& text) override;
   std::string GetLinkAtPosition(const pp::Point& point) override;
   bool HasPermission(DocumentPermission permission) const override;
   void SelectAll() override;
@@ -105,6 +106,7 @@ class PDFiumEngine : public PDFEngine,
 #if defined(PDF_ENABLE_XFA)
   void SetScrollPosition(const pp::Point& position) override;
 #endif
+  bool IsProgressiveLoad() override;
   std::string GetMetadata(const std::string& key) override;
   void SetCaretPosition(const pp::Point& position) override;
   void MoveRangeSelectionExtent(const pp::Point& extent) override;
@@ -113,12 +115,12 @@ class PDFiumEngine : public PDFEngine,
 
   // DocumentLoader::Client implementation.
   pp::Instance* GetPluginInstance() override;
-  std::unique_ptr<URLLoaderWrapper> CreateURLLoader() override;
+  pp::URLLoader CreateURLLoader() override;
+  void OnPartialDocumentLoaded() override;
   void OnPendingRequestComplete() override;
   void OnNewDataAvailable() override;
+  void OnDocumentFailed() override;
   void OnDocumentComplete() override;
-  void OnDocumentCanceled() override;
-  void CancelBrowserDownload() override;
 
   void UnsupportedFeature(int type);
   void FontSubstituted();
@@ -197,11 +199,11 @@ class PDFiumEngine : public PDFEngine,
   friend class SelectionChangeInvalidator;
 
   struct FileAvail : public FX_FILEAVAIL {
-    PDFiumEngine* engine;
+    DocumentLoader* loader;
   };
 
   struct DownloadHints : public FX_DOWNLOADHINTS {
-    PDFiumEngine* engine;
+    DocumentLoader* loader;
   };
 
   // PDFium interface to get block of data.
@@ -248,12 +250,6 @@ class PDFiumEngine : public PDFEngine,
   // Loads information about the pages in the document and calculate the
   // document size.
   void LoadPageInfo(bool reload);
-
-  void LoadBody();
-
-  void LoadPages();
-
-  void LoadForm();
 
   // Calculates which pages should be displayed right now.
   void CalculateVisiblePages();
@@ -338,13 +334,8 @@ class PDFiumEngine : public PDFEngine,
   // the plugin's text selection.
   void SetFormSelectedText(FPDF_FORMHANDLE form_handle, FPDF_PAGE page);
 
-  // Given a mouse event, returns which page and character location it's closest
-  // to.
-  PDFiumPage::Area GetCharIndex(const pp::MouseInputEvent& event,
-                                int* page_index,
-                                int* char_index,
-                                int* form_type,
-                                PDFiumPage::LinkTarget* target);
+  // Given |point|, returns which page and character location it's closest to,
+  // as well as extra information about objects at that point.
   PDFiumPage::Area GetCharIndex(const pp::Point& point,
                                 int* page_index,
                                 int* char_index,
@@ -353,6 +344,9 @@ class PDFiumEngine : public PDFEngine,
 
   void OnSingleClick(int page_index, int char_index);
   void OnMultipleClick(int click_count, int page_index, int char_index);
+  bool OnLeftMouseDown(const pp::MouseInputEvent& event);
+  bool OnMiddleMouseDown(const pp::MouseInputEvent& event);
+  bool OnRightMouseDown(const pp::MouseInputEvent& event);
 
   // Starts a progressive paint operation given a rectangle in screen
   // coordinates. Returns the index in progressive_rects_.
@@ -467,6 +461,13 @@ class PDFiumEngine : public PDFEngine,
 
   // Sets whether or not left mouse button is currently being held down.
   void SetMouseLeftButtonDown(bool is_mouse_left_button_down);
+
+  // Given coordinates on |page| has a form of |form_type| which is known to be
+  // a form text area, check if it is an editable form text area.
+  bool IsPointInEditableFormTextArea(FPDF_PAGE page,
+                                     double page_x,
+                                     double page_y,
+                                     int form_type);
 
   bool PageIndexInBounds(int index) const;
 
@@ -635,7 +636,7 @@ class PDFiumEngine : public PDFEngine,
   double current_zoom_;
   unsigned int current_rotation_;
 
-  std::unique_ptr<DocumentLoader> doc_loader_;  // Main document's loader.
+  DocumentLoader doc_loader_;  // Main document's loader.
   std::string url_;
   std::string headers_;
   pp::CompletionCallbackFactory<PDFiumEngine> find_factory_;
@@ -652,9 +653,6 @@ class PDFiumEngine : public PDFEngine,
   // The PDFium wrapper for form data.  Used even if there are no form controls
   // on the page.
   FPDF_FORMHANDLE form_;
-
-  // Current form availability status.
-  int form_status_ = PDF_FORM_NOTAVAIL;
 
   // The page(s) of the document.
   std::vector<std::unique_ptr<PDFiumPage>> pages_;
@@ -782,11 +780,6 @@ class PDFiumEngine : public PDFEngine,
   // Set to true if the user is being prompted for their password. Will be set
   // to false after the user finishes getting their password.
   bool getting_password_;
-
-  // While true, the document try to be opened and parsed after download each
-  // part. Else the document will be opened and parsed only on finish of
-  // downloading.
-  bool process_when_pending_request_complete_ = true;
 
   enum class RangeSelectionDirection { Left, Right };
   RangeSelectionDirection range_selection_direction_;

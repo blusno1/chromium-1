@@ -28,7 +28,6 @@ Polymer({
     chooseFileLabel: String,
     oldImageLabel: String,
     profileImageLabel: String,
-    profileImageLoadingLabel: String,
     takePhotoLabel: String,
 
     /**
@@ -48,7 +47,7 @@ Polymer({
      */
     profileImageUrl_: {
       type: String,
-      value: 'chrome://theme/IDR_LOGIN_DEFAULT_USER',
+      value: CrPicture.kDefaultImageUrl,
     },
 
     /**
@@ -128,6 +127,12 @@ Polymer({
    * @param {number=} imageIndex
    */
   setOldImageUrl(imageUrl, imageIndex) {
+    if (imageUrl == CrPicture.kDefaultImageUrl || imageIndex === 0) {
+      // Treat the default image as empty so it does not show in the list.
+      this.oldImageUrl_ = '';
+      this.setSelectedImageUrl(CrPicture.kDefaultImageUrl);
+      return;
+    }
     this.oldImageUrl_ = imageUrl;
     this.oldImageIndex_ = imageIndex === undefined ? -1 : imageIndex;
     if (imageUrl) {
@@ -135,8 +140,12 @@ Polymer({
       this.selectedImageUrl_ = imageUrl;
     } else if (this.cameraSelected_) {
       this.$.selector.select(this.$.selector.indexOf(this.$.cameraImage));
-    } else if (this.fallbackImage_) {
+    } else if (
+        this.fallbackImage_ &&
+        this.fallbackImage_.dataset.type != CrPicture.SelectionTypes.OLD) {
       this.selectImage_(this.fallbackImage_, true /* activate */);
+    } else {
+      this.selectImage_(this.$.profileImage, true /* activate */);
     }
   },
 
@@ -218,6 +227,15 @@ Polymer({
     // When clicking on the 'old' (current) image, do not activate (discard) it.
     var activate = type != CrPicture.SelectionTypes.OLD;
     this.selectImage_(event.detail.item, activate);
+  },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onSelectedItemChanged_: function(event) {
+    if (event.target.selectedItem)
+      event.target.selectedItem.scrollIntoViewIfNeeded(false);
   },
 
   /**

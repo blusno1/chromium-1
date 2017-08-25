@@ -31,23 +31,13 @@
  *     as containing media such as photos or videos.
  * @param {boolean} configurable When true, then the volume can be configured.
  * @param {VolumeManagerCommon.Source} source Source of the volume's data.
+ * @param {VolumeManagerCommon.FileSystemType} diskFileSystemType File system
+ *     type indentifier.
  */
 function VolumeInfoImpl(
-    volumeType,
-    volumeId,
-    fileSystem,
-    error,
-    deviceType,
-    devicePath,
-    isReadOnly,
-    isReadOnlyRemovableDevice,
-    profile,
-    label,
-    extensionId,
-    hasMedia,
-    configurable,
-    watchable,
-    source) {
+    volumeType, volumeId, fileSystem, error, deviceType, devicePath, isReadOnly,
+    isReadOnlyRemovableDevice, profile, label, extensionId, hasMedia,
+    configurable, watchable, source, diskFileSystemType) {
   this.volumeType_ = volumeType;
   this.volumeId_ = volumeId;
   this.fileSystem_ = fileSystem;
@@ -80,11 +70,6 @@ function VolumeInfoImpl(
       rootType: VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME,
       toURL: function() { return 'fake-entry://drive_shared_with_me'; }
     };
-    this.fakeEntries_[VolumeManagerCommon.RootType.DRIVE_RECENT] = {
-      isDirectory: true,
-      rootType: VolumeManagerCommon.RootType.DRIVE_RECENT,
-      toURL: function() { return 'fake-entry://drive_recent'; }
-    };
   }
 
   // Note: This represents if the mounting of the volume is successfully done
@@ -101,6 +86,7 @@ function VolumeInfoImpl(
   this.configurable_ = configurable;
   this.watchable_ = watchable;
   this.source_ = source;
+  this.diskFileSystemType_ = diskFileSystemType;
 }
 
 VolumeInfoImpl.prototype = /** @struct */ {
@@ -214,6 +200,12 @@ VolumeInfoImpl.prototype = /** @struct */ {
    */
   get source() {
     return this.source_;
+  },
+  /**
+   * @return {VolumeManagerCommon.FileSystemType} File system type identifier.
+   */
+  get diskFileSystemType() {
+    return this.diskFileSystemType_;
   }
 };
 

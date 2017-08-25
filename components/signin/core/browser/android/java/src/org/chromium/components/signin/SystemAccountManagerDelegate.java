@@ -20,6 +20,7 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PatternMatcher;
 import android.os.Process;
 import android.os.SystemClock;
 
@@ -50,13 +51,22 @@ import java.util.concurrent.TimeUnit;
 public class SystemAccountManagerDelegate implements AccountManagerDelegate {
     private final AccountManager mAccountManager;
     private final ObserverList<AccountsChangeObserver> mObservers = new ObserverList<>();
+    private boolean mRegisterObserversCalled;
 
     private static final String TAG = "Auth";
 
     public SystemAccountManagerDelegate() {
-        mAccountManager = AccountManager.get(ContextUtils.getApplicationContext());
+        Context context = ContextUtils.getApplicationContext();
+        mAccountManager = AccountManager.get(context);
+    }
 
-        BroadcastReceiver accountsChangedBroadcastReceiver = new BroadcastReceiver() {
+    @SuppressWarnings("deprecation")
+    @Override
+    public void registerObservers() {
+        assert !mRegisterObserversCalled;
+
+        Context context = ContextUtils.getApplicationContext();
+        BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override
             public void onReceive(final Context context, final Intent intent) {
                 fireOnAccountsChangedNotification();
@@ -64,8 +74,17 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
         };
         IntentFilter accountsChangedIntentFilter = new IntentFilter();
         accountsChangedIntentFilter.addAction(AccountManager.LOGIN_ACCOUNTS_CHANGED_ACTION);
-        ContextUtils.getApplicationContext().registerReceiver(
-                accountsChangedBroadcastReceiver, accountsChangedIntentFilter);
+        context.registerReceiver(receiver, accountsChangedIntentFilter);
+
+        IntentFilter gmsPackageReplacedFilter = new IntentFilter();
+        gmsPackageReplacedFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        gmsPackageReplacedFilter.addDataScheme("package");
+        gmsPackageReplacedFilter.addDataPath(
+                "com.google.android.gms", PatternMatcher.PATTERN_PREFIX);
+
+        context.registerReceiver(receiver, gmsPackageReplacedFilter);
+
+        mRegisterObserversCalled = true;
     }
 
     protected void checkCanUseGooglePlayServices() throws AccountManagerDelegateException {
@@ -86,12 +105,14 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
 
     @Override
     public void addObserver(AccountsChangeObserver observer) {
+        assert mRegisterObserversCalled : "Should call registerObservers first";
         mObservers.addObserver(observer);
     }
 
     @Override
     public void removeObserver(AccountsChangeObserver observer) {
-        mObservers.removeObserver(observer);
+        boolean success = mObservers.removeObserver(observer);
+        assert success : "Can't find observer";
     }
 
     @Override

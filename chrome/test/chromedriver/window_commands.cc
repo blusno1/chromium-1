@@ -37,7 +37,12 @@
 
 namespace {
 
-static const char kUnreachableWebDataURL[] = "data:text/html,chromewebdata";
+// The error page URL was renamed in
+// https://chromium-review.googlesource.com/c/580169, but because ChromeDriver
+// needs to be backward-compatible with older versions of Chrome, it is
+// necessary to compare against both the old and new error URL.
+static const char kUnreachableWebDataURL[] = "chrome-error://chromewebdata/";
+const char kDeprecatedUnreachableWebDataURL[] = "data:text/html,chromewebdata";
 
 // Defaults to 20 years into the future when adding a cookie.
 const double kDefaultCookieExpiryTime = 20*365*24*60*60;
@@ -131,7 +136,8 @@ Status GetVisibleCookies(WebView* web_view,
     cookie_dict->GetString("path", &path);
     double expiry = 0;
     cookie_dict->GetDouble("expires", &expiry);
-    expiry /= 1000;  // Convert from millisecond to second.
+    if (expiry > 1e12)
+      expiry /= 1000;  // Backwards compatibility ms -> sec.
     bool http_only = false;
     cookie_dict->GetBoolean("httpOnly", &http_only);
     bool session = false;
@@ -489,7 +495,8 @@ Status ExecuteGetCurrentUrl(Session* session,
   Status status = GetUrl(web_view, std::string(), &url);
   if (status.IsError())
     return status;
-  if (url == kUnreachableWebDataURL) {
+  if (url == kUnreachableWebDataURL ||
+      url == kDeprecatedUnreachableWebDataURL) {
     // https://bugs.chromium.org/p/chromedriver/issues/detail?id=1272
     const BrowserInfo* browser_info = session->chrome->GetBrowserInfo();
     bool is_kitkat_webview = browser_info->browser_name == "webview" &&
@@ -1069,7 +1076,21 @@ Status ExecuteDeleteCookie(Session* session,
   Status status = GetUrl(web_view, session->GetCurrentFrameId(), &url);
   if (status.IsError())
     return status;
-  return web_view->DeleteCookie(name, url);
+
+  std::list<Cookie> cookies;
+  status = GetVisibleCookies(web_view, &cookies);
+  if (status.IsError())
+    return status;
+
+  for (std::list<Cookie>::const_iterator it = cookies.begin();
+       it != cookies.end(); ++it) {
+    if (name == it->name) {
+      status = web_view->DeleteCookie(it->name, url, it->domain, it->path);
+      if (status.IsError())
+        return status;
+    }
+  }
+  return Status(kOk);
 }
 
 Status ExecuteDeleteAllCookies(Session* session,
@@ -1091,7 +1112,7 @@ Status ExecuteDeleteAllCookies(Session* session,
       return status;
     for (std::list<Cookie>::const_iterator it = cookies.begin();
          it != cookies.end(); ++it) {
-      status = web_view->DeleteCookie(it->name, url);
+      status = web_view->DeleteCookie(it->name, url, it->domain, it->path);
       if (status.IsError())
         return status;
     }

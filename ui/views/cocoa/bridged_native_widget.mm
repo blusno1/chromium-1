@@ -21,6 +21,7 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/base/layout.h"
+#include "ui/compositor/compositor_switches.h"
 #include "ui/gfx/geometry/dip_util.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
@@ -124,6 +125,20 @@ bool PositionWindowInScreenCoordinates(views::Widget* widget,
     return true;
 
   return widget && widget->is_top_level();
+}
+
+// Returns true if the content_view is reparented.
+bool PositionWindowInNativeViewParent(NSView* content_view) {
+  return [[content_view window] contentView] != content_view;
+}
+
+// Return the offset of the parent native view from the window.
+gfx::Vector2d GetNativeViewParentOffset(NSView* content_view) {
+  NSWindow* window = [content_view window];
+  NSView* parent_view = [content_view superview];
+  NSPoint p = NSMakePoint(0, NSHeight([parent_view frame]));
+  p = [parent_view convertPoint:p toView:nil];
+  return gfx::Vector2d(p.x, NSHeight([window frame]) - p.y);
 }
 
 // Return the content size for a minimum or maximum widget size.
@@ -520,6 +535,9 @@ void BridgedNativeWidget::SetBounds(const gfx::Rect& new_bounds) {
   if (parent_ && !PositionWindowInScreenCoordinates(widget, widget_type_))
     actual_new_bounds.Offset(parent_->GetChildWindowOffset());
 
+  if (PositionWindowInNativeViewParent(bridged_view_))
+    actual_new_bounds.Offset(GetNativeViewParentOffset(bridged_view_));
+
   [window_ setFrame:gfx::ScreenRectToNSRect(actual_new_bounds)
             display:YES
             animate:NO];
@@ -643,7 +661,7 @@ void BridgedNativeWidget::AcquireCapture() {
   // will reset the mouse cursor to an arrow. Asking the window for an update
   // here will restore what we want. However, it can sometimes cause the cursor
   // to flicker, once, on the initial mouseDown.
-  // TOOD(tapted): Make this unnecessary by only asking for global mouse capture
+  // TODO(tapted): Make this unnecessary by only asking for global mouse capture
   // for the cases that need it (e.g. menus, but not drag and drop).
   [window_ cursorUpdate:[NSApp currentEvent]];
 }
@@ -1064,6 +1082,42 @@ void BridgedNativeWidget::ReorderChildViews() {
   [bridged_view_ sortSubviewsUsingFunction:&SubviewSorter context:&rank];
 }
 
+void BridgedNativeWidget::ReparentNativeView(NSView* native_view,
+                                             NSView* new_parent) {
+  DCHECK([new_parent window]);
+  DCHECK([native_view isDescendantOf:bridged_view_]);
+  DCHECK(window_ && ![window_ isSheet]);
+
+  BridgedNativeWidget* parent_bridge =
+      NativeWidgetMac::GetBridgeForNativeWindow([new_parent window]);
+  if (native_view == bridged_view_.get() && parent_bridge != parent_) {
+    if (parent_)
+      parent_->RemoveChildWindow(this);
+
+    if (parent_bridge) {
+      parent_ = parent_bridge;
+      parent_bridge->child_windows_.push_back(this);
+    } else {
+      parent_ = new WidgetOwnerNSWindowAdapter(this, new_parent);
+    }
+
+    [[new_parent window] addChildWindow:window_ ordered:NSWindowAbove];
+  }
+
+  if (!native_widget_mac_->GetWidget()->is_top_level() ||
+      native_view != bridged_view_.get()) {
+    // Make native_view be a child of new_parent by adding it as a subview.
+    // The window_ must remain visible because it controls the bounds and
+    // visibility of the ui::Layer. So just hide it by setting alpha value to
+    // zero.
+    [new_parent addSubview:native_view];
+    if (native_view == bridged_view_.get()) {
+      [window_ setAlphaValue:0];
+      [window_ setIgnoresMouseEvents:YES];
+    }
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // BridgedNativeWidget, internal::InputMethodDelegate:
 
@@ -1275,7 +1329,8 @@ void BridgedNativeWidget::CreateCompositor() {
   compositor_.reset(new ui::Compositor(
       context_factory_private->AllocateFrameSinkId(), context_factory,
       context_factory_private, GetCompositorTaskRunner(),
-      false /* enable_surface_synchronization */));
+      false /* enable_surface_synchronization */,
+      ui::IsPixelCanvasRecordingEnabled()));
   compositor_->SetAcceleratedWidget(compositor_widget_->accelerated_widget());
   compositor_widget_->SetNSView(this);
 }

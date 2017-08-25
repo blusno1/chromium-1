@@ -25,6 +25,7 @@
 #include "media/base/video_codecs.h"
 #include "media/base/video_color_space.h"
 #include "media/base/video_types.h"
+#include "media/base/watch_time_keys.h"
 #include "ui/gfx/ipc/color/gfx_param_traits_macros.h"
 
 // Enum traits.
@@ -47,7 +48,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::CdmMessageType,
                           media::CdmMessageType::MESSAGE_TYPE_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmPromise::Exception,
-                          media::CdmPromise::EXCEPTION_MAX)
+                          media::CdmPromise::Exception::EXCEPTION_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmSessionType,
                           media::CdmSessionType::SESSION_TYPE_MAX)
@@ -88,6 +89,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::OutputDeviceStatus,
 IPC_ENUM_TRAITS_MAX_VALUE(media::SampleFormat, media::kSampleFormatMax)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::VideoCodec, media::kVideoCodecMax)
+
+IPC_ENUM_TRAITS_MAX_VALUE(media::WatchTimeKey,
+                          media::WatchTimeKey::kWatchTimeKeyMax);
 
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(media::VideoCodecProfile,
                               media::VIDEO_CODEC_PROFILE_MIN,

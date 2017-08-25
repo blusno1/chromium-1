@@ -119,7 +119,7 @@ class VIZ_SERVICE_EXPORT Surface : public SurfaceDeadlineObserver {
   // there is visible damage.
   bool QueueFrame(cc::CompositorFrame frame,
                   uint64_t frame_index,
-                  const base::Closure& draw_callback,
+                  base::OnceClosure draw_callback,
                   const WillDrawCallback& will_draw_callback);
   void RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> copy_request);
 
@@ -202,14 +202,14 @@ class VIZ_SERVICE_EXPORT Surface : public SurfaceDeadlineObserver {
   struct FrameData {
     FrameData(cc::CompositorFrame&& frame,
               uint64_t frame_index,
-              const base::Closure& draw_callback,
+              base::OnceClosure draw_callback,
               const WillDrawCallback& will_draw_callback);
     FrameData(FrameData&& other);
     ~FrameData();
     FrameData& operator=(FrameData&& other);
     cc::CompositorFrame frame;
     uint64_t frame_index;
-    base::Closure draw_callback;
+    base::OnceClosure draw_callback;
     WillDrawCallback will_draw_callback;
   };
 
@@ -251,6 +251,7 @@ class VIZ_SERVICE_EXPORT Surface : public SurfaceDeadlineObserver {
   base::Optional<FrameData> pending_frame_data_;
   base::Optional<FrameData> active_frame_data_;
   bool closed_ = false;
+  bool seen_first_frame_activation_ = false;
   const bool needs_sync_tokens_;
   std::vector<SurfaceSequence> destruction_dependencies_;
 

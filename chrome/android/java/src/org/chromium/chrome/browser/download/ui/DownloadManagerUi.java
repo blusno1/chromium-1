@@ -30,6 +30,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar.SearchDelegate;
@@ -214,7 +215,10 @@ public class DownloadManagerUi implements OnMenuItemClickListener, SearchDelegat
 
         mToolbar = (DownloadManagerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.download_manager_toolbar, mBackendProvider.getSelectionDelegate(), 0, null,
-                R.id.normal_menu_group, R.id.selection_mode_menu_group, null, this, true);
+                R.id.normal_menu_group, R.id.selection_mode_menu_group,
+                FeatureUtilities.isChromeHomeModernEnabled() ? R.color.modern_toolbar_bg
+                                                             : R.color.modern_primary_color,
+                this, true);
         mToolbar.setManager(this);
         mToolbar.initializeFilterSpinner(mFilterAdapter);
         mToolbar.initializeSearchView(this, R.string.download_manager_search, R.id.search_menu_id);
@@ -467,7 +471,8 @@ public class DownloadManagerUi implements OnMenuItemClickListener, SearchDelegat
      * @return True if info menu item should be shown on download toolbar, false otherwise.
      */
     boolean shouldShowInfoButton() {
-        return mHistoryAdapter.getItemCount() > 0 && !mToolbar.isSearching();
+        return mHistoryAdapter.getItemCount() > 0 && !mToolbar.isSearching()
+                && !mBackendProvider.getSelectionDelegate().isSelectionEnabled();
     }
 
     /**

@@ -35,8 +35,9 @@
 #include "ash/system/palette/palette_utils.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/system_notifier.h"
+#include "ash/system/toast/toast_data.h"
+#include "ash/system/toast/toast_manager.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/web_notification/web_notification_tray.h"
 #include "ash/wm/mru_window_tracker.h"
@@ -54,6 +55,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/presenter/app_list.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
@@ -363,7 +365,7 @@ void HandleShowKeyboardOverlay() {
   Shell::Get()->new_window_controller()->ShowKeyboardOverlay();
 }
 
-bool CanHandleShowMessageCenterBubble() {
+bool CanHandleToggleMessageCenterBubble() {
   aura::Window* target_root = Shell::GetRootWindowForNewWindows();
   StatusAreaWidget* status_area_widget =
       Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
@@ -371,17 +373,21 @@ bool CanHandleShowMessageCenterBubble() {
          status_area_widget->web_notification_tray()->visible();
 }
 
-void HandleShowMessageCenterBubble() {
-  base::RecordAction(UserMetricsAction("Accel_Show_Message_Center_Bubble"));
+void HandleToggleMessageCenterBubble() {
+  base::RecordAction(UserMetricsAction("Accel_Toggle_Message_Center_Bubble"));
   aura::Window* target_root = Shell::GetRootWindowForNewWindows();
   StatusAreaWidget* status_area_widget =
       Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
-  if (status_area_widget) {
-    WebNotificationTray* notification_tray =
-        status_area_widget->web_notification_tray();
-    if (notification_tray->visible())
-      notification_tray->ShowBubble();
-  }
+  if (!status_area_widget)
+    return;
+  WebNotificationTray* notification_tray =
+      status_area_widget->web_notification_tray();
+  if (!notification_tray->visible())
+    return;
+  if (notification_tray->IsMessageCenterBubbleVisible())
+    notification_tray->CloseBubble();
+  else
+    notification_tray->ShowBubble();
 }
 
 void HandleToggleSystemTrayBubble() {
@@ -448,7 +454,7 @@ bool CanHandleToggleAppList(const ui::Accelerator& accelerator,
 void HandleToggleAppList(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_LWIN)
     base::RecordAction(UserMetricsAction("Accel_Search_LWin"));
-  Shell::Get()->ToggleAppList();
+  Shell::Get()->ToggleAppList(app_list::kSearchKey);
 }
 
 void HandleToggleFullscreen(const ui::Accelerator& accelerator) {
@@ -582,10 +588,10 @@ bool CanHandleShowStylusTools() {
 }
 
 bool CanHandleStartVoiceInteraction() {
-  return chromeos::switches::IsVoiceInteractionEnabled();
+  return chromeos::switches::IsVoiceInteractionFlagsEnabled();
 }
 
-void HandleStartVoiceInteraction(const ui::Accelerator& accelerator) {
+void HandleToggleVoiceInteraction(const ui::Accelerator& accelerator) {
   if (accelerator.IsCmdDown() && accelerator.key_code() == ui::VKEY_SPACE) {
     base::RecordAction(
         base::UserMetricsAction("VoiceInteraction.Started.Search_Space"));
@@ -596,7 +602,18 @@ void HandleStartVoiceInteraction(const ui::Accelerator& accelerator) {
     base::RecordAction(
         base::UserMetricsAction("VoiceInteraction.Started.Assistant"));
   }
-  Shell::Get()->app_list()->StartVoiceInteractionSession();
+
+  // Show a toast if voice interaction is disabled due to unsupported locales.
+  if (!chromeos::switches::IsVoiceInteractionLocalesSupported()) {
+    ash::ToastData toast(
+        "voice_interaction_locales_unsupported",
+        l10n_util::GetStringUTF16(
+            IDS_ASH_VOICE_INTERACTION_LOCALE_UNSUPPORTED_TOAST_MESSAGE),
+        2500, base::Optional<base::string16>());
+    ash::Shell::Get()->toast_manager()->Show(toast);
+    return;
+  }
+  Shell::Get()->app_list()->ToggleVoiceInteractionSession();
 }
 
 void HandleSuspend() {
@@ -979,7 +996,7 @@ bool AcceleratorController::CanPerformAction(
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
     case DEBUG_TOGGLE_TOUCH_PAD:
     case DEBUG_TOGGLE_TOUCH_SCREEN:
-    case DEBUG_TOGGLE_TOUCH_VIEW:
+    case DEBUG_TOGGLE_TABLET_MODE:
     case DEBUG_TOGGLE_WALLPAPER_MODE:
     case DEBUG_TRIGGER_CRASH:
       return debug::DebugAcceleratorsEnabled();
@@ -1001,8 +1018,6 @@ bool AcceleratorController::CanPerformAction(
     case SCALE_UI_RESET:
     case SCALE_UI_UP:
       return accelerators::IsInternalDisplayZoomEnabled();
-    case SHOW_MESSAGE_CENTER_BUBBLE:
-      return CanHandleShowMessageCenterBubble();
     case SHOW_STYLUS_TOOLS:
       return CanHandleShowStylusTools();
     case START_VOICE_INTERACTION:
@@ -1018,6 +1033,8 @@ bool AcceleratorController::CanPerformAction(
       return CanHandleToggleAppList(accelerator, previous_accelerator);
     case TOGGLE_CAPS_LOCK:
       return CanHandleToggleCapsLock(accelerator, previous_accelerator);
+    case TOGGLE_MESSAGE_CENTER_BUBBLE:
+      return CanHandleToggleMessageCenterBubble();
     case TOGGLE_MIRROR_MODE:
       return true;
     case WINDOW_CYCLE_SNAP_LEFT:
@@ -1120,7 +1137,7 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
     case DEBUG_TOGGLE_TOUCH_PAD:
     case DEBUG_TOGGLE_TOUCH_SCREEN:
-    case DEBUG_TOGGLE_TOUCH_VIEW:
+    case DEBUG_TOGGLE_TABLET_MODE:
     case DEBUG_TOGGLE_WALLPAPER_MODE:
     case DEBUG_TRIGGER_CRASH:
       debug::PerformDebugActionIfEnabled(action);
@@ -1251,9 +1268,6 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case SHOW_KEYBOARD_OVERLAY:
       HandleShowKeyboardOverlay();
       break;
-    case SHOW_MESSAGE_CENTER_BUBBLE:
-      HandleShowMessageCenterBubble();
-      break;
     case SHOW_STYLUS_TOOLS:
       HandleShowStylusTools();
       break;
@@ -1261,7 +1275,7 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       HandleShowTaskManager();
       break;
     case START_VOICE_INTERACTION:
-      HandleStartVoiceInteraction(accelerator);
+      HandleToggleVoiceInteraction(accelerator);
       break;
     case SUSPEND:
       HandleSuspend();
@@ -1292,6 +1306,9 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       break;
     case TOGGLE_MAXIMIZED:
       accelerators::ToggleMaximized();
+      break;
+    case TOGGLE_MESSAGE_CENTER_BUBBLE:
+      HandleToggleMessageCenterBubble();
       break;
     case TOGGLE_MIRROR_MODE:
       HandleToggleMirrorMode();

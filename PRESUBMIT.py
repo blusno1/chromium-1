@@ -342,8 +342,7 @@ _BANNED_CPP_FUNCTIONS = (
       (),
     ),
     (
-      r'/(WebThread|BrowserThread)::'
-      r'(FILE|FILE_USER_BLOCKING|DB|PROCESS_LAUNCHER|CACHE)',
+      r'/(WebThread|BrowserThread)::(FILE|FILE_USER_BLOCKING|DB|CACHE)',
       (
         'The non-UI/IO BrowserThreads are deprecated, please migrate this',
         'code to TaskScheduler. See https://goo.gl/mDSxKl for details.',
@@ -412,8 +411,8 @@ _BANNED_CPP_FUNCTIONS = (
     (
       'MessageLoop::QuitWhenIdleClosure',
       (
-        'MessageLoop::QuitWhenIdleClosure is deprecated. Please migrate to'
-        'Runloop.'
+        'MessageLoop::QuitWhenIdleClosure is deprecated. Please migrate to',
+        'Runloop.',
       ),
       True,
       (),
@@ -421,8 +420,16 @@ _BANNED_CPP_FUNCTIONS = (
     (
       'RunLoop::QuitCurrent',
       (
-        'Please migrate away from RunLoop::QuitCurrent*() methods. Use member'
-        'methods of a specific RunLoop instance instead.'
+        'Please migrate away from RunLoop::QuitCurrent*() methods. Use member',
+        'methods of a specific RunLoop instance instead.',
+      ),
+      True,
+      (),
+    ),
+    (
+      'base::ScopedMockTimeMessageLoopTaskRunner',
+      (
+        'ScopedMockTimeMessageLoopTaskRunner is deprecated.',
       ),
       True,
       (),
@@ -1340,19 +1347,20 @@ def _CheckUserActionUpdate(input_api, output_api):
   return []
 
 
+def _ImportJSONCommentEater(input_api):
+  import sys
+  sys.path = sys.path + [input_api.os_path.join(
+      input_api.PresubmitLocalPath(),
+      'tools', 'json_comment_eater')]
+  import json_comment_eater
+  return json_comment_eater
+
+
 def _GetJSONParseError(input_api, filename, eat_comments=True):
   try:
     contents = input_api.ReadFile(filename)
     if eat_comments:
-      import sys
-      original_sys_path = sys.path
-      try:
-        sys.path = sys.path + [input_api.os_path.join(
-            input_api.PresubmitLocalPath(),
-            'tools', 'json_comment_eater')]
-        import json_comment_eater
-      finally:
-        sys.path = original_sys_path
+      json_comment_eater = _ImportJSONCommentEater(input_api)
       contents = json_comment_eater.Nom(contents)
 
     input_api.json.loads(contents)
@@ -1514,12 +1522,37 @@ def _CheckIpcOwners(input_api, output_api):
   # }
   to_check = {}
 
+  def AddPatternToCheck(input_file, pattern):
+    owners_file = input_api.os_path.join(
+        input_api.os_path.dirname(input_file.LocalPath()), 'OWNERS')
+    if owners_file not in to_check:
+      to_check[owners_file] = {}
+    if pattern not in to_check[owners_file]:
+      to_check[owners_file][pattern] = {
+          'files': [],
+          'rules': [
+              'per-file %s=set noparent' % pattern,
+              'per-file %s=file://ipc/SECURITY_OWNERS' % pattern,
+          ]
+      }
+      to_check[owners_file][pattern]['files'].append(f)
+
   # Iterate through the affected files to see what we actually need to check
   # for. We should only nag patch authors about per-file rules if a file in that
   # directory would match that pattern. If a directory only contains *.mojom
   # files and no *_messages*.h files, we should only nag about rules for
   # *.mojom files.
-  for f in input_api.change.AffectedFiles(include_deletes=False):
+  for f in input_api.AffectedFiles(include_deletes=False):
+    # Manifest files don't have a strong naming convention. Instead, scan
+    # affected files for .json files and see if they look like a manifest.
+    if f.LocalPath().endswith('.json'):
+      json_comment_eater = _ImportJSONCommentEater(input_api)
+      mostly_json_lines = '\n'.join(f.NewContents())
+      # Comments aren't allowed in strict JSON, so filter them out.
+      json_lines = json_comment_eater.Nom(mostly_json_lines)
+      json_content = input_api.json.loads(json_lines)
+      if 'interface_provider_specs' in json_content:
+        AddPatternToCheck(f, input_api.os_path.basename(f.LocalPath()))
     for pattern in file_patterns:
       if input_api.fnmatch.fnmatch(
           input_api.os_path.basename(f.LocalPath()), pattern):
@@ -1530,19 +1563,7 @@ def _CheckIpcOwners(input_api, output_api):
             break
         if skip:
           continue
-        owners_file = input_api.os_path.join(
-            input_api.os_path.dirname(f.LocalPath()), 'OWNERS')
-        if owners_file not in to_check:
-          to_check[owners_file] = {}
-        if pattern not in to_check[owners_file]:
-          to_check[owners_file][pattern] = {
-              'files': [],
-              'rules': [
-                  'per-file %s=set noparent' % pattern,
-                  'per-file %s=file://ipc/SECURITY_OWNERS' % pattern,
-              ]
-          }
-        to_check[owners_file][pattern]['files'].append(f)
+        AddPatternToCheck(f, pattern)
         break
 
   # Now go through the OWNERS files we collected, filtering out rules that are
@@ -2041,8 +2062,10 @@ def _CheckForRiskyJsConstLet(input_api, line_number, line):
 
 def _CheckForRiskyJsFeatures(input_api, output_api):
   maybe_ios_js = (r"^(ios|components|ui\/webui\/resources)\/.+\.js$", )
-  file_filter = lambda f: input_api.FilterSourceFile(f, white_list=maybe_ios_js)
-
+  # 'ui/webui/resources/cr_components are not allowed on ios'
+  not_ios_filter = (r".*ui\/webui\/resources\/cr_components.*", )
+  file_filter = lambda f: input_api.FilterSourceFile(f, white_list=maybe_ios_js,
+                                                     black_list=not_ios_filter)
   results = []
   for f in input_api.AffectedFiles(file_filter=file_filter):
     arrow_error_lines = []
@@ -2134,6 +2157,129 @@ def _CheckForRelativeIncludes(input_api, output_api):
 
   return results
 
+
+def _CheckWatchlistDefinitionsEntrySyntax(key, value, ast):
+  if not isinstance(key, ast.Str):
+    return 'Key at line %d must be a string literal' % key.lineno
+  if not isinstance(value, ast.Dict):
+    return 'Value at line %d must be a dict' % value.lineno
+  if len(value.keys) != 1:
+    return 'Dict at line %d must have single entry' % value.lineno
+  if not isinstance(value.keys[0], ast.Str) or value.keys[0].s != 'filepath':
+    return (
+        'Entry at line %d must have a string literal \'filepath\' as key' %
+        value.lineno)
+  return None
+
+
+def _CheckWatchlistsEntrySyntax(key, value, ast):
+  if not isinstance(key, ast.Str):
+    return 'Key at line %d must be a string literal' % key.lineno
+  if not isinstance(value, ast.List):
+    return 'Value at line %d must be a list' % value.lineno
+  return None
+
+
+def _CheckWATCHLISTSEntries(wd_dict, w_dict, ast):
+  mismatch_template = (
+      'Mismatch between WATCHLIST_DEFINITIONS entry (%s) and WATCHLISTS '
+      'entry (%s)')
+
+  i = 0
+  last_key = ''
+  while True:
+    if i >= len(wd_dict.keys):
+      if i >= len(w_dict.keys):
+        return None
+      return mismatch_template % ('missing', 'line %d' % w_dict.keys[i].lineno)
+    elif i >= len(w_dict.keys):
+      return (
+          mismatch_template % ('line %d' % wd_dict.keys[i].lineno, 'missing'))
+
+    wd_key = wd_dict.keys[i]
+    w_key = w_dict.keys[i]
+
+    result = _CheckWatchlistDefinitionsEntrySyntax(
+        wd_key, wd_dict.values[i], ast)
+    if result is not None:
+      return 'Bad entry in WATCHLIST_DEFINITIONS dict: %s' % result
+
+    result = _CheckWatchlistsEntrySyntax(w_key, w_dict.values[i], ast)
+    if result is not None:
+      return 'Bad entry in WATCHLISTS dict: %s' % result
+
+    if wd_key.s != w_key.s:
+      return mismatch_template % (
+          '%s at line %d' % (wd_key.s, wd_key.lineno),
+          '%s at line %d' % (w_key.s, w_key.lineno))
+
+    if wd_key.s < last_key:
+      return (
+          'WATCHLISTS dict is not sorted lexicographically at line %d and %d' %
+          (wd_key.lineno, w_key.lineno))
+    last_key = wd_key.s
+
+    i = i + 1
+
+
+def _CheckWATCHLISTSSyntax(expression, ast):
+  if not isinstance(expression, ast.Expression):
+    return 'WATCHLISTS file must contain a valid expression'
+  dictionary = expression.body
+  if not isinstance(dictionary, ast.Dict) or len(dictionary.keys) != 2:
+    return 'WATCHLISTS file must have single dict with exactly two entries'
+
+  first_key = dictionary.keys[0]
+  first_value = dictionary.values[0]
+  second_key = dictionary.keys[1]
+  second_value = dictionary.values[1]
+
+  if (not isinstance(first_key, ast.Str) or
+      first_key.s != 'WATCHLIST_DEFINITIONS' or
+      not isinstance(first_value, ast.Dict)):
+    return (
+        'The first entry of the dict in WATCHLISTS file must be '
+        'WATCHLIST_DEFINITIONS dict')
+
+  if (not isinstance(second_key, ast.Str) or
+      second_key.s != 'WATCHLISTS' or
+      not isinstance(second_value, ast.Dict)):
+    return (
+        'The second entry of the dict in WATCHLISTS file must be '
+        'WATCHLISTS dict')
+
+  return _CheckWATCHLISTSEntries(first_value, second_value, ast)
+
+
+def _CheckWATCHLISTS(input_api, output_api):
+  for f in input_api.AffectedFiles(include_deletes=False):
+    if f.LocalPath() == 'WATCHLISTS':
+      contents = input_api.ReadFile(f, 'r')
+
+      try:
+        # First, make sure that it can be evaluated.
+        input_api.ast.literal_eval(contents)
+        # Get an AST tree for it and scan the tree for detailed style checking.
+        expression = input_api.ast.parse(
+            contents, filename='WATCHLISTS', mode='eval')
+      except ValueError as e:
+        return [output_api.PresubmitError(
+            'Cannot parse WATCHLISTS file', long_text=repr(e))]
+      except SyntaxError as e:
+        return [output_api.PresubmitError(
+            'Cannot parse WATCHLISTS file', long_text=repr(e))]
+      except TypeError as e:
+        return [output_api.PresubmitError(
+            'Cannot parse WATCHLISTS file', long_text=repr(e))]
+
+      result = _CheckWATCHLISTSSyntax(expression, input_api.ast)
+      if result is not None:
+        return [output_api.PresubmitError(result)]
+      break
+
+  return []
+
+
 def _AndroidSpecificOnUploadChecks(input_api, output_api):
   """Groups checks that target android code."""
   results = []
@@ -2195,6 +2341,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckUselessForwardDeclarations(input_api, output_api))
   results.extend(_CheckForRiskyJsFeatures(input_api, output_api))
   results.extend(_CheckForRelativeIncludes(input_api, output_api))
+  results.extend(_CheckWATCHLISTS(input_api, output_api))
 
   if any('PRESUBMIT.py' == f.LocalPath() for f in input_api.AffectedFiles()):
     results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
@@ -2470,19 +2617,6 @@ def GetTryServerMasterForBot(bot):
     elif 'mac' in bot or 'ios' in bot:
       master = 'master.tryserver.chromium.mac'
   return master
-
-
-def GetDefaultTryConfigs(bots):
-  """Returns a list of ('bot', set(['tests']), filtered by [bots].
-  """
-
-  builders_and_tests = dict((bot, set(['defaulttests'])) for bot in bots)
-
-  # Build up the mapping from tryserver master to bot/test.
-  out = dict()
-  for bot, tests in builders_and_tests.iteritems():
-    out.setdefault(GetTryServerMasterForBot(bot), {})[bot] = tests
-  return out
 
 
 def CheckChangeOnCommit(input_api, output_api):

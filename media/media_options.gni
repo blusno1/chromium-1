@@ -11,6 +11,24 @@ import("//ppapi/features/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/widevine/cdm/widevine.gni")
 
+# Do not expand this list without double-checking with OWNERS, this is a list of
+# all targets which roll up into the //media component. It controls visibility
+# of subcomponent targets and public_deps for //media.
+media_subcomponent_deps = [
+  "//media/audio",
+  "//media/base",
+
+  # TODO(crbug.com/583067): These files should not be in //media/base.
+  "//media/base/android",
+  "//media/cdm",
+  "//media/device_monitors",
+  "//media/filters",
+  "//media/formats",
+  "//media/muxers",
+  "//media/renderers",
+  "//media/video",
+]
+
 declare_args() {
   # Allows distributions to link pulseaudio directly (DT_NEEDED) instead of
   # using dlopen. This helps with automated detection of ABI mismatches and
@@ -59,7 +77,7 @@ declare_args() {
   # which are encoded using HEVC require |enable_hevc_demuxing| to be enabled.
   enable_dolby_vision_demuxing = proprietary_codecs && is_chromecast
 
-  enable_webrtc = !is_cast_audio_only
+  enable_webrtc = !is_cast_audio_only && !is_fuchsia
 
   # Enable HLS with SAMPLE-AES decryption.
   # Enabled by default on the cast desktop implementation to allow unit tests of
@@ -68,10 +86,18 @@ declare_args() {
 
   # If true, use cast CMA backend instead of default chromium media pipeline.
   is_cast_using_cma_backend = is_cast_audio_only || !is_android
+
+  # A temporary arg for enabling MCVD while it's being implemented.
+  # See http://crbug.com/660942
+  enable_media_codec_video_decoder = false
 }
 
 # enable_hls_sample_aes can only be true if enable_mse_mpeg2ts_stream_parser is.
 assert(enable_mse_mpeg2ts_stream_parser || !enable_hls_sample_aes)
+
+if (media_use_ffmpeg) {
+  media_subcomponent_deps += [ "//media/ffmpeg" ]
+}
 
 # Use a second declare_args() to pick up possible overrides of |use_cras|.
 declare_args() {
@@ -183,6 +209,9 @@ declare_args() {
         "cdm",
         "audio_decoder",
       ]
+      if (enable_media_codec_video_decoder) {
+        mojo_media_services += [ "video_decoder" ]
+      }
       mojo_media_host = "gpu"
     } else if (enable_library_cdms) {
       mojo_media_services = [ "cdm" ]
@@ -196,4 +225,10 @@ declare_args() {
   # When enabled, media is allowed to be renderer and played back on remote
   # devices when the tab is being casted and other conditions are met.
   enable_media_remoting = !is_chromecast && !is_ios
+}
+
+declare_args() {
+  # Media Remoting RPC is disabled on Android since it's unused but increases
+  # the native binary size by ~70Kb.
+  enable_media_remoting_rpc = enable_media_remoting && !is_android
 }

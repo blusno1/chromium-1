@@ -273,7 +273,6 @@ extern const char kCannotUninstallManagedExtension[];
 extern const char kChromeVersionTooLow[];
 extern const char kDeclarativeNetRequestPermissionNeeded[];
 extern const char kDevToolsExperimental[];
-extern const char kDisabledByPolicy[];
 extern const char kExpectString[];
 extern const char kFileNotFound[];
 extern const char kInvalidAboutPage[];
@@ -496,6 +495,7 @@ extern const char kReservedMessageFound[];
 extern const char kRulesFileIsInvalid[];
 extern const char kUnrecognizedManifestKey[];
 extern const char kUnrecognizedManifestProperty[];
+extern const char kUrlHandlersInHostedApps[];
 extern const char kWebRequestConflictsWithLazyBackground[];
 #if defined(OS_CHROMEOS)
 extern const char kDuplicateActionHandlerFound[];

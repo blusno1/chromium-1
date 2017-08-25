@@ -21,11 +21,17 @@ public class SiteSuggestion {
     @TileSource
     public final int source;
 
-    public SiteSuggestion(String title, String url, String whitelistIconPath, int source) {
+    /** The {@link TileSectionType} the tile is contained in. */
+    @TileSectionType
+    public final int sectionType;
+
+    public SiteSuggestion(
+            String title, String url, String whitelistIconPath, int source, int sectionType) {
         this.title = title;
         this.url = url;
         this.whitelistIconPath = whitelistIconPath;
         this.source = source;
+        this.sectionType = sectionType;
     }
 
     @Override

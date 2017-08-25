@@ -12,6 +12,7 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "components/wallpaper/wallpaper_color_profile.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_model.h"
@@ -26,6 +27,7 @@
 #include "ui/app_list/views/speech_view.h"
 #include "ui/app_list/views/start_page_view.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/layer.h"
@@ -46,7 +48,10 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/shadow_types.h"
+
+using wallpaper::ColorProfileType;
 
 namespace app_list {
 
@@ -54,9 +59,6 @@ namespace {
 
 // The margin from the edge to the speech UI.
 constexpr int kSpeechUIMargin = 12;
-
-// The height of the peeking app list from the bottom of the screen.
-constexpr int kPeekingAppListHeight = 320;
 
 // The height of the half app list from the bottom of the screen.
 constexpr int kHalfAppListHeight = 561;
@@ -72,12 +74,16 @@ constexpr int kAppListDragVelocityThreshold = 25;
 // The scroll offset in order to transition from PEEKING to FULLSCREEN
 constexpr int kAppListMinScrollToSwitchStates = 20;
 
-// The DIP distance from the bezel that a drag event must end within to transfer
-// the |app_list_state_|.
+// The DIP distance from the bezel in which a gesture drag end results in a
+// closed app list.
 constexpr int kAppListBezelMargin = 50;
 
 // The blur radius of the app list background.
-constexpr int kAppListBlurRadius = 20;
+constexpr int kAppListBlurRadius = 30;
+
+// The size of app info dialog in fullscreen app list.
+constexpr int kAppInfoDialogWidth = 512;
+constexpr int kAppInfoDialogHeight = 384;
 
 // The vertical position for the appearing animation of the speech UI.
 constexpr float kSpeechUIAppearingPosition = 12;
@@ -131,6 +137,46 @@ class AppListOverlayView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(AppListOverlayView);
 };
 
+SkColor GetBackgroundShieldColor(const std::vector<SkColor>& prominent_colors) {
+  if (prominent_colors.empty())
+    return app_list::AppListView::kDefaultBackgroundColor;
+
+  DCHECK_EQ(static_cast<size_t>(ColorProfileType::NUM_OF_COLOR_PROFILES),
+            prominent_colors.size());
+
+  const SkColor dark_muted =
+      prominent_colors[static_cast<int>(ColorProfileType::DARK_MUTED)];
+  if (SK_ColorTRANSPARENT == dark_muted)
+    return app_list::AppListView::kDefaultBackgroundColor;
+  return color_utils::AlphaBlend(SK_ColorBLACK, dark_muted,
+                                 app_list::AppListView::kDarkMutedBlendAlpha);
+}
+
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kExcludeWindowFromEventHandling, false);
+
+// This targeter prevents routing events to sub-windows, such as
+// RenderHostWindow in order to handle events in context of app list.
+class AppListEventTargeter : public aura::WindowTargeter {
+ public:
+  AppListEventTargeter() = default;
+  ~AppListEventTargeter() override = default;
+
+  // aura::WindowTargeter:
+  bool SubtreeShouldBeExploredForEvent(aura::Window* window,
+                                       const ui::LocatedEvent& event) override {
+    if (window->GetProperty(kExcludeWindowFromEventHandling)) {
+      // Allow routing to sub-windows for ET_MOUSE_MOVED event which is used by
+      // accessibility to enter the mode of exploration of WebView contents.
+      if (event.type() != ui::ET_MOUSE_MOVED)
+        return false;
+    }
+    return aura::WindowTargeter::SubtreeShouldBeExploredForEvent(window, event);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AppListEventTargeter);
+};
+
 }  // namespace
 
 // An animation observer to hide the view at the end of the animation.
@@ -175,29 +221,35 @@ class HideViewAnimationObserver : public ui::ImplicitAnimationObserver {
 
 AppListView::AppListView(AppListViewDelegate* delegate)
     : delegate_(delegate),
-      app_list_main_view_(nullptr),
-      speech_view_(nullptr),
-      search_box_focus_host_(nullptr),
-      search_box_widget_(nullptr),
-      search_box_view_(nullptr),
+      model_(delegate->GetModel()),
       is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()),
-      processing_scroll_event_series_(false),
-      app_list_state_(PEEKING),
+      is_background_blur_enabled_(features::IsBackgroundBlurEnabled()),
       display_observer_(this),
-      overlay_view_(nullptr),
-      animation_observer_(new HideViewAnimationObserver()) {
+      animation_observer_(new HideViewAnimationObserver()),
+      app_list_animation_duration_ms_(kAppListAnimationDurationMs) {
   CHECK(delegate);
   delegate_->GetSpeechUI()->AddObserver(this);
 
-  if (is_fullscreen_app_list_enabled_)
+  if (is_fullscreen_app_list_enabled_) {
     display_observer_.Add(display::Screen::GetScreen());
+    delegate_->AddObserver(this);
+  }
 }
 
 AppListView::~AppListView() {
   delegate_->GetSpeechUI()->RemoveObserver(this);
+  if (is_fullscreen_app_list_enabled_)
+    delegate_->RemoveObserver(this);
+
   animation_observer_.reset();
   // Remove child views first to ensure no remaining dependencies on delegate_.
   RemoveAllChildViews(true);
+}
+
+// static
+void AppListView::ExcludeWindowFromEventHandling(aura::Window* window) {
+  DCHECK(window);
+  window->SetProperty(kExcludeWindowFromEventHandling, true);
 }
 
 void AppListView::Initialize(gfx::NativeView parent,
@@ -223,11 +275,11 @@ void AppListView::Initialize(gfx::NativeView parent,
   if (is_fullscreen_app_list_enabled_)
     SetState(app_list_state_);
 
-  if (delegate_)
-    delegate_->ViewInitialized();
+  delegate_->ViewInitialized();
 
   UMA_HISTOGRAM_TIMES("Apps.AppListCreationTime",
                       base::Time::Now() - start_time);
+  app_list_main_view_->model()->RecordItemsInFoldersForUMA();
 }
 
 void AppListView::SetBubbleArrow(views::BubbleBorder::Arrow arrow) {
@@ -332,6 +384,28 @@ bool AppListView::ShouldDescendIntoChildForEventHandling(
       ShouldDescendIntoChildForEventHandling(child, location);
 }
 
+class AppListView::FullscreenWidgetObserver : views::WidgetObserver {
+ public:
+  explicit FullscreenWidgetObserver(app_list::AppListView* view)
+      : widget_observer_(this) {
+    view_ = view;
+    widget_observer_.Add(view_->GetWidget());
+  }
+  ~FullscreenWidgetObserver() override {}
+
+  // Overridden from WidgetObserver:
+  void OnWidgetClosing(views::Widget* widget) override {
+    if (view_->app_list_state() != AppListView::CLOSED)
+      view_->SetState(AppListView::CLOSED);
+    widget_observer_.Remove(view_->GetWidget());
+  }
+
+ private:
+  app_list::AppListView* view_;
+  ScopedObserver<views::Widget, WidgetObserver> widget_observer_;
+  DISALLOW_COPY_AND_ASSIGN(FullscreenWidgetObserver);
+};
+
 void AppListView::InitContents(gfx::NativeView parent, int initial_apps_page) {
   // TODO(vadimt): Remove ScopedTracker below once crbug.com/440224 and
   // crbug.com/441028 are fixed.
@@ -344,9 +418,11 @@ void AppListView::InitContents(gfx::NativeView parent, int initial_apps_page) {
     // makes it transparent.
     app_list_background_shield_ = new views::View;
     app_list_background_shield_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
-    app_list_background_shield_->layer()->SetColor(SK_ColorBLACK);
-    app_list_background_shield_->layer()->SetOpacity(kAppListOpacity);
-    if (features::IsBackgroundBlurEnabled()) {
+    app_list_background_shield_->layer()->SetOpacity(
+        is_background_blur_enabled_ ? kAppListOpacityWithBlur
+                                    : kAppListOpacity);
+    SetBackgroundShieldColor();
+    if (is_background_blur_enabled_) {
       app_list_background_shield_->layer()->SetBackgroundBlur(
           kAppListBlurRadius);
     }
@@ -425,14 +501,17 @@ void AppListView::InitializeFullscreen(gfx::NativeView parent,
                                        int initial_apps_page) {
   const display::Display display_nearest_view = GetDisplayNearestView();
   const gfx::Rect display_work_area_bounds = display_nearest_view.work_area();
-  const int bottom_of_screen = display_nearest_view.size().height();
 
+  // Set the widget height to the shelf height to replace the shelf background
+  // on show animation with no flicker. In shelf mode we set the bounds to the
+  // top of the screen because the widget does not animate.
+  const int overlay_view_bounds_y = is_side_shelf_
+                                        ? display_work_area_bounds.y()
+                                        : display_work_area_bounds.bottom();
   gfx::Rect app_list_overlay_view_bounds(
-      display_work_area_bounds.x(),
-      bottom_of_screen,  // Set the widget at the bottom of the screen so it can
-                         // animate up when shown.
-      display_work_area_bounds.width(),
-      display_work_area_bounds.height() + kShelfSize);
+      display_nearest_view.bounds().x(), overlay_view_bounds_y,
+      display_nearest_view.bounds().width(),
+      display_nearest_view.bounds().height());
 
   fullscreen_widget_ = new views::Widget;
   views::Widget::InitParams app_list_overlay_view_params(
@@ -443,11 +522,25 @@ void AppListView::InitializeFullscreen(gfx::NativeView parent,
   app_list_overlay_view_params.delegate = this;
   app_list_overlay_view_params.opacity =
       views::Widget::InitParams::TRANSLUCENT_WINDOW;
-  app_list_overlay_view_params.bounds = app_list_overlay_view_bounds;
   app_list_overlay_view_params.layer_type = ui::LAYER_SOLID_COLOR;
   fullscreen_widget_->Init(app_list_overlay_view_params);
+  fullscreen_widget_->GetNativeWindow()->SetEventTargeter(
+      base::MakeUnique<AppListEventTargeter>());
+
+  // Set native view's bounds directly to avoid screen position controller
+  // setting bounds in the display where the widget has the largest
+  // intersection. Also, we should not set native view's bounds in screen
+  // coordinates as it causes crash in DesktopScreenPositionClient::SetBounds()
+  // when '--mash' flag is enabled for desktop build (See crbug.com/757573).
+  gfx::NativeView native_view = fullscreen_widget_->GetNativeView();
+  ::wm::ConvertRectFromScreen(native_view->parent(),
+                              &app_list_overlay_view_bounds);
+  native_view->SetBounds(app_list_overlay_view_bounds);
 
   overlay_view_ = new AppListOverlayView(0 /* no corners */);
+
+  widget_observer_ = std::unique_ptr<FullscreenWidgetObserver>(
+      new FullscreenWidgetObserver(this));
 }
 
 void AppListView::InitializeBubble(gfx::NativeView parent,
@@ -469,9 +562,16 @@ void AppListView::InitializeBubble(gfx::NativeView parent,
   overlay_view_->SetBoundsRect(GetContentsBounds());
 }
 
-void AppListView::HandleClickOrTap() {
+void AppListView::HandleClickOrTap(ui::LocatedEvent* event) {
   if (!is_fullscreen_app_list_enabled_)
     return;
+
+  // No-op if app list is on fullscreen all apps state and the event location is
+  // within apps grid view's bounds.
+  if (app_list_state_ == FULLSCREEN_ALL_APPS &&
+      GetAppsGridView()->GetBoundsInScreen().Contains(event->location())) {
+    return;
+  }
 
   if (!search_box_view_->is_search_box_active()) {
     SetState(CLOSED);
@@ -479,26 +579,29 @@ void AppListView::HandleClickOrTap() {
   }
 
   search_box_view_->ClearSearch();
+  search_box_view_->SetSearchBoxActive(false);
 }
 
 void AppListView::StartDrag(const gfx::Point& location) {
+  // Convert drag point from widget coordinates to screen coordinates because
+  // the widget bounds changes during the dragging.
   initial_drag_point_ = location;
+  ConvertPointToScreen(this, &initial_drag_point_);
+  initial_window_bounds_ = fullscreen_widget_->GetWindowBoundsInScreen();
+  if (app_list_state_ == PEEKING)
+    drag_started_from_peeking_ = true;
 }
 
 void AppListView::UpdateDrag(const gfx::Point& location) {
-  // Update the bounds of the widget while maintaining the
-  // relative position of the top of the widget and the mouse/gesture.
-  // Block drags north of 0 and recalculate the initial_drag_point_.
-  int const new_y_position = location.y() - initial_drag_point_.y() +
-                             fullscreen_widget_->GetWindowBoundsInScreen().y();
-  gfx::Rect new_widget_bounds = fullscreen_widget_->GetWindowBoundsInScreen();
-  if (new_y_position < 0) {
-    new_widget_bounds.set_y(0);
-    initial_drag_point_ = location;
-  } else {
-    new_widget_bounds.set_y(new_y_position);
-  }
-  fullscreen_widget_->SetBounds(new_widget_bounds);
+  // Update the widget bounds based on the initial widget bounds and drag delta.
+  gfx::Point location_in_screen_coordinates = location;
+  ConvertPointToScreen(this, &location_in_screen_coordinates);
+  int new_y_position = location_in_screen_coordinates.y() -
+                       initial_drag_point_.y() + initial_window_bounds_.y();
+
+  UpdateYPositionAndOpacity(new_y_position,
+                            GetAppListBackgroundOpacityDuringDragging(),
+                            false /* is_end_gesture */);
 }
 
 void AppListView::EndDrag(const gfx::Point& location) {
@@ -518,10 +621,8 @@ void AppListView::EndDrag(const gfx::Point& location) {
         case PEEKING:
         case HALF:
         case FULLSCREEN_SEARCH:
-          SetState(CLOSED);
-          break;
         case FULLSCREEN_ALL_APPS:
-          SetState(is_tablet_mode_ || is_side_shelf_ ? CLOSED : PEEKING);
+          SetState(CLOSED);
           break;
         case CLOSED:
           NOTREACHED();
@@ -537,6 +638,8 @@ void AppListView::EndDrag(const gfx::Point& location) {
           SetState(FULLSCREEN_SEARCH);
           break;
         case PEEKING:
+          UMA_HISTOGRAM_ENUMERATION(kAppListPeekingToFullscreenHistogram,
+                                    kSwipe, kMaxPeekingToFullscreen);
           SetState(FULLSCREEN_ALL_APPS);
           break;
         case CLOSED:
@@ -567,13 +670,21 @@ void AppListView::EndDrag(const gfx::Point& location) {
         break;
     }
 
-    gfx::Point location_in_screen_coordinates = location;
-    ConvertPointToScreen(this, &location_in_screen_coordinates);
-    const int new_y_position =
-        location_in_screen_coordinates.y() - initial_drag_point_.y();
     const int app_list_threshold =
         app_list_height / kAppListThresholdDenominator;
-    const int drag_delta = app_list_y_for_state - new_y_position;
+    gfx::Point location_in_screen_coordinates = location;
+    ConvertPointToScreen(this, &location_in_screen_coordinates);
+    const int drag_delta =
+        initial_drag_point_.y() - location_in_screen_coordinates.y();
+    const int location_y_in_current_display =
+        location_in_screen_coordinates.y() -
+        GetDisplayNearestView().bounds().y();
+    // If the drag ended near the bezel, close the app list and return early.
+    if (location_y_in_current_display >=
+        (display_height - kAppListBezelMargin)) {
+      SetState(CLOSED);
+      return;
+    }
     switch (app_list_state_) {
       case FULLSCREEN_ALL_APPS:
         if (std::abs(drag_delta) > app_list_threshold)
@@ -590,10 +701,6 @@ void AppListView::EndDrag(const gfx::Point& location) {
       case HALF:
         if (std::abs(drag_delta) > app_list_threshold) {
           SetState(drag_delta > 0 ? FULLSCREEN_SEARCH : CLOSED);
-        } else if (location_in_screen_coordinates.y() >=
-                   display_height - kAppListBezelMargin) {
-          // If the user drags to the bezel, close the app list.
-          SetState(CLOSED);
         } else {
           SetState(app_list_state_);
         }
@@ -601,10 +708,6 @@ void AppListView::EndDrag(const gfx::Point& location) {
       case PEEKING:
         if (std::abs(drag_delta) > app_list_threshold) {
           SetState(drag_delta > 0 ? FULLSCREEN_ALL_APPS : CLOSED);
-        } else if (location_in_screen_coordinates.y() >=
-                   display_height - kAppListBezelMargin) {
-          // If the user drags to the bezel, close the app list.
-          SetState(CLOSED);
         } else {
           SetState(app_list_state_);
         }
@@ -614,10 +717,116 @@ void AppListView::EndDrag(const gfx::Point& location) {
         break;
     }
   }
+
+  drag_started_from_peeking_ = false;
+  DraggingLayout();
+}
+
+void AppListView::RecordStateTransitionForUma(AppListState new_state) {
+  if (!is_fullscreen_app_list_enabled_)
+    return;
+
+  AppListStateTransitionSource transition =
+      GetAppListStateTransitionSource(new_state);
+  // kMaxAppListStateTransition denotes a transition we are not interested in
+  // recording (ie. PEEKING->PEEKING).
+  if (transition == kMaxAppListStateTransition)
+    return;
+
+  UMA_HISTOGRAM_ENUMERATION(kAppListStateTransitionSourceHistogram, transition,
+                            kMaxAppListStateTransition);
 }
 
 display::Display AppListView::GetDisplayNearestView() const {
   return display::Screen::GetScreen()->GetDisplayNearestView(parent_window());
+}
+
+AppsGridView* AppListView::GetAppsGridView() const {
+  return app_list_main_view_->contents_view()
+      ->apps_container_view()
+      ->apps_grid_view();
+}
+
+AppListStateTransitionSource AppListView::GetAppListStateTransitionSource(
+    AppListState target_state) const {
+  switch (app_list_state_) {
+    case CLOSED:
+      // CLOSED->X transitions are not useful for UMA.
+      NOTREACHED();
+      return kMaxAppListStateTransition;
+    case PEEKING:
+      switch (target_state) {
+        case CLOSED:
+          return kPeekingToClosed;
+        case HALF:
+          return kPeekingToHalf;
+        case FULLSCREEN_ALL_APPS:
+          return kPeekingToFullscreenAllApps;
+        case PEEKING:
+          // PEEKING->PEEKING is used when resetting the widget position after a
+          // failed state transition. Not useful for UMA.
+          return kMaxAppListStateTransition;
+        case FULLSCREEN_SEARCH:
+          // PEEKING->FULLSCREEN_SEARCH is not a valid transition.
+          NOTREACHED();
+          return kMaxAppListStateTransition;
+      }
+    case HALF:
+      switch (target_state) {
+        case CLOSED:
+          return kHalfToClosed;
+        case PEEKING:
+          return kHalfToPeeking;
+        case FULLSCREEN_SEARCH:
+          return KHalfToFullscreenSearch;
+        case HALF:
+          // HALF->HALF is used when resetting the widget position after a
+          // failed state transition. Not useful for UMA.
+          return kMaxAppListStateTransition;
+        case FULLSCREEN_ALL_APPS:
+          // HALF->FULLSCREEN_ALL_APPS is not a valid transition.
+          NOTREACHED();
+          return kMaxAppListStateTransition;
+      }
+
+    case FULLSCREEN_ALL_APPS:
+      switch (target_state) {
+        case CLOSED:
+          return kFullscreenAllAppsToClosed;
+        case PEEKING:
+          return kFullscreenAllAppsToPeeking;
+        case FULLSCREEN_SEARCH:
+          return kFullscreenAllAppsToFullscreenSearch;
+        case HALF:
+          // FULLSCREEN_ALL_APPS->HALF is not a valid transition.
+          NOTREACHED();
+          return kMaxAppListStateTransition;
+        case FULLSCREEN_ALL_APPS:
+          // FULLSCREEN_ALL_APPS->FULLSCREEN_ALL_APPS is used when resetting the
+          // widget positon after a failed state transition. Not useful for UMA.
+          return kMaxAppListStateTransition;
+      }
+    case FULLSCREEN_SEARCH:
+      switch (target_state) {
+        case CLOSED:
+          return kFullscreenSearchToClosed;
+        case FULLSCREEN_ALL_APPS:
+          return kFullscreenSearchToFullscreenAllApps;
+        case FULLSCREEN_SEARCH:
+          // FULLSCREEN_SEARCH->FULLSCREEN_SEARCH is used when resetting the
+          // widget position after a failed state transition. Not useful for
+          // UMA.
+          return kMaxAppListStateTransition;
+        case PEEKING:
+          // FULLSCREEN_SEARCH->PEEKING is not a valid transition.
+          NOTREACHED();
+          return kMaxAppListStateTransition;
+        case HALF:
+          // FULLSCREEN_SEARCH->HALF is not a valid transition.
+          NOTREACHED();
+          return kMaxAppListStateTransition;
+      }
+  }
 }
 
 void AppListView::OnBeforeBubbleWidgetInit(views::Widget::InitParams* params,
@@ -674,7 +883,7 @@ void AppListView::OnMouseEvent(ui::MouseEvent* event) {
   switch (event->type()) {
     case ui::ET_MOUSE_PRESSED:
       event->SetHandled();
-      HandleClickOrTap();
+      HandleClickOrTap(event);
       break;
     case ui::ET_MOUSEWHEEL:
       if (HandleScroll(event))
@@ -691,27 +900,37 @@ void AppListView::OnGestureEvent(ui::GestureEvent* event) {
 
   switch (event->type()) {
     case ui::ET_GESTURE_TAP:
-      processing_scroll_event_series_ = false;
+      SetIsInDrag(false);
       event->SetHandled();
-      HandleClickOrTap();
+      HandleClickOrTap(event);
       break;
     case ui::ET_SCROLL_FLING_START:
     case ui::ET_GESTURE_SCROLL_BEGIN:
-      processing_scroll_event_series_ = true;
-      StartDrag(event->location());
+      if (is_side_shelf_)
+        return;
+      // There may be multiple scroll begin events in one drag because the
+      // relative location of the finger and widget is almost unchanged and
+      // scroll begin event occurs when the relative location changes beyond a
+      // threshold. So avoid resetting the initial drag point in drag.
+      if (!is_in_drag_)
+        StartDrag(event->location());
+      SetIsInDrag(true);
       event->SetHandled();
       break;
     case ui::ET_GESTURE_SCROLL_UPDATE:
-      processing_scroll_event_series_ = true;
+      if (is_side_shelf_)
+        return;
+      SetIsInDrag(true);
       last_fling_velocity_ = event->details().scroll_y();
       UpdateDrag(event->location());
       event->SetHandled();
       break;
     case ui::ET_GESTURE_END:
-      if (!processing_scroll_event_series_)
+      if (!is_in_drag_)
         break;
-
-      processing_scroll_event_series_ = false;
+      if (is_side_shelf_)
+        return;
+      SetIsInDrag(false);
       EndDrag(event->location());
       event->SetHandled();
       break;
@@ -726,6 +945,8 @@ void AppListView::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void AppListView::OnWidgetDestroying(views::Widget* widget) {
+  DCHECK(!is_fullscreen_app_list_enabled_);
+
   BubbleDialogDelegateView::OnWidgetDestroying(widget);
   if (delegate_ && widget == GetWidget())
     delegate_->ViewClosing();
@@ -733,6 +954,8 @@ void AppListView::OnWidgetDestroying(views::Widget* widget) {
 
 void AppListView::OnWidgetVisibilityChanged(views::Widget* widget,
                                             bool visible) {
+  DCHECK(!is_fullscreen_app_list_enabled_);
+
   BubbleDialogDelegateView::OnWidgetVisibilityChanged(widget, visible);
 
   if (widget != GetWidget())
@@ -801,6 +1024,7 @@ void AppListView::SchedulePaintInRect(const gfx::Rect& rect) {
 void AppListView::OnTabletModeChanged(bool started) {
   is_tablet_mode_ = started;
   search_box_view_->OnTabletModeChanged(started);
+  model_->SetTabletMode(started);
   if (is_tablet_mode_ && !is_fullscreen()) {
     // Set |app_list_state_| to a tablet mode friendly state.
     SetState(app_list_state_ == PEEKING ? FULLSCREEN_ALL_APPS
@@ -816,6 +1040,12 @@ bool AppListView::HandleScroll(const ui::Event* event) {
     case ui::ET_MOUSEWHEEL:
       SetState(event->AsMouseWheelEvent()->y_offset() < 0 ? FULLSCREEN_ALL_APPS
                                                           : CLOSED);
+      if (app_list_state_ == FULLSCREEN_ALL_APPS) {
+        UMA_HISTOGRAM_ENUMERATION(kAppListPeekingToFullscreenHistogram,
+                                  kMousewheelScroll, kMaxPeekingToFullscreen);
+      }
+      // Return true unconditionally because all mousewheel events are large
+      // enough to transition the app list.
       return true;
     case ui::ET_SCROLL:
     case ui::ET_SCROLL_FLING_START: {
@@ -823,6 +1053,10 @@ bool AppListView::HandleScroll(const ui::Event* event) {
           kAppListMinScrollToSwitchStates) {
         SetState(event->AsScrollEvent()->y_offset() < 0 ? FULLSCREEN_ALL_APPS
                                                         : CLOSED);
+        if (app_list_state_ == FULLSCREEN_ALL_APPS) {
+          UMA_HISTOGRAM_ENUMERATION(kAppListPeekingToFullscreenHistogram,
+                                    kMousepadScroll, kMaxPeekingToFullscreen);
+        }
         return true;
       }
       break;
@@ -851,15 +1085,16 @@ void AppListView::SetState(AppListState new_state) {
     case PEEKING: {
       switch (app_list_state_) {
         case HALF:
-        case FULLSCREEN_ALL_APPS:
-          StartAnimationForState(new_state_override);
+        case PEEKING:
+        case FULLSCREEN_ALL_APPS: {
           app_list_main_view_->contents_view()->SetActiveState(
               AppListModel::STATE_START);
-          break;
-        case PEEKING: {
-          StartAnimationForState(new_state_override);
-          app_list_main_view_->contents_view()->SetActiveState(
-              AppListModel::STATE_START);
+          // Set the apps to first page at STATE_START state.
+          PaginationModel* pagination_model = GetAppsPaginationModel();
+          if (pagination_model->total_pages() > 0 &&
+              pagination_model->selected_page() != 0) {
+            pagination_model->SelectPage(0, false /* animate */);
+          }
           break;
         }
         case FULLSCREEN_SEARCH:
@@ -870,21 +1105,8 @@ void AppListView::SetState(AppListState new_state) {
       break;
     }
     case HALF:
-      switch (app_list_state_) {
-        case PEEKING:
-        case HALF: {
-          StartAnimationForState(new_state_override);
-          break;
-        }
-        case FULLSCREEN_SEARCH:
-        case FULLSCREEN_ALL_APPS:
-        case CLOSED:
-          NOTREACHED();
-          break;
-      }
       break;
     case FULLSCREEN_ALL_APPS: {
-      StartAnimationForState(new_state_override);
       AppsContainerView* apps_container_view =
           app_list_main_view_->contents_view()->apps_container_view();
 
@@ -892,21 +1114,41 @@ void AppListView::SetState(AppListState new_state) {
         apps_container_view->app_list_folder_view()->CloseFolderPage();
 
       app_list_main_view_->contents_view()->SetActiveState(
-          AppListModel::STATE_APPS);
+          AppListModel::STATE_APPS, !is_side_shelf_);
       break;
     }
     case FULLSCREEN_SEARCH:
-      StartAnimationForState(new_state_override);
       break;
     case CLOSED:
-      app_list_main_view_->Close();
-      delegate_->Dismiss();
-      break;
+      switch (app_list_state_) {
+        case CLOSED:
+          return;
+        case HALF:
+        case PEEKING:
+        case FULLSCREEN_ALL_APPS:
+        case FULLSCREEN_SEARCH:
+          delegate_->Dismiss();
+          app_list_main_view_->Close();
+          break;
+      }
   }
+  StartAnimationForState(new_state_override);
+  RecordStateTransitionForUma(new_state_override);
+  model_->SetStateFullscreen(new_state_override);
   app_list_state_ = new_state_override;
+
+  // Updates the visibility of app list items according to the change of
+  // |app_list_state_|.
+  app_list_main_view_->contents_view()
+      ->apps_container_view()
+      ->apps_grid_view()
+      ->UpdateControlVisibility(app_list_state_, is_in_drag_);
 }
 
 void AppListView::StartAnimationForState(AppListState target_state) {
+  if (is_side_shelf_)
+    return;
+
   const int display_height = GetDisplayNearestView().size().height();
   int target_state_y = 0;
 
@@ -917,24 +1159,37 @@ void AppListView::StartAnimationForState(AppListState target_state) {
     case HALF:
       target_state_y = display_height - kHalfAppListHeight;
       break;
+    case CLOSED:
+      // The close animation is handled by the delegate.
+      return;
     default:
       break;
   }
 
-  gfx::Rect target_bounds = fullscreen_widget_->GetWindowBoundsInScreen();
+  gfx::Rect target_bounds = fullscreen_widget_->GetNativeView()->bounds();
   target_bounds.set_y(target_state_y);
 
-  std::unique_ptr<ui::LayerAnimationElement> animation_element =
+  std::unique_ptr<ui::LayerAnimationElement> bounds_animation_element =
       ui::LayerAnimationElement::CreateBoundsElement(
           target_bounds,
-          base::TimeDelta::FromMilliseconds(kAppListAnimationDurationMs));
-  animation_element->set_tween_type(gfx::Tween::EASE_OUT);
+          base::TimeDelta::FromMilliseconds(app_list_animation_duration_ms_));
+
+  bounds_animation_element->set_tween_type(gfx::Tween::EASE_OUT);
 
   ui::LayerAnimator* animator = fullscreen_widget_->GetLayer()->GetAnimator();
   animator->set_preemption_strategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  animator->StopAnimating();
   animator->ScheduleAnimation(
-      new ui::LayerAnimationSequence(std::move(animation_element)));
+      new ui::LayerAnimationSequence(std::move(bounds_animation_element)));
+}
+
+void AppListView::StartCloseAnimation(base::TimeDelta animation_duration) {
+  DCHECK(is_fullscreen_app_list_enabled_);
+  if (is_side_shelf_ || !is_fullscreen_app_list_enabled_)
+    return;
+
+  app_list_main_view_->contents_view()->FadeOutOnClose(animation_duration);
 }
 
 void AppListView::SetStateFromSearchBoxView(bool search_box_is_empty) {
@@ -967,24 +1222,49 @@ void AppListView::SetStateFromSearchBoxView(bool search_box_is_empty) {
 void AppListView::UpdateYPositionAndOpacity(int y_position_in_screen,
                                             float background_opacity,
                                             bool is_end_gesture) {
-  gfx::Rect new_widget_bounds = fullscreen_widget_->GetWindowBoundsInScreen();
-  new_widget_bounds.set_y(std::max(y_position_in_screen, 0));
-  fullscreen_widget_->SetBounds(new_widget_bounds);
+  SetIsInDrag(!is_end_gesture);
+  background_opacity_ = background_opacity;
+  if (is_end_gesture) {
+    SetState(FULLSCREEN_ALL_APPS);
+  } else {
+    gfx::Rect new_widget_bounds = fullscreen_widget_->GetWindowBoundsInScreen();
+    app_list_y_position_in_screen_ =
+        std::max(y_position_in_screen, GetDisplayNearestView().bounds().y());
+    new_widget_bounds.set_y(app_list_y_position_in_screen_);
+    gfx::NativeView native_view = fullscreen_widget_->GetNativeView();
+    ::wm::ConvertRectFromScreen(native_view->parent(), &new_widget_bounds);
+    native_view->SetBounds(new_widget_bounds);
+  }
 
-  app_list_background_shield_->layer()->SetOpacity(background_opacity);
-  gfx::Rect work_area_bounds = fullscreen_widget_->GetWorkAreaBoundsInScreen();
-  search_box_view_->UpdateOpacity(work_area_bounds.bottom(), is_end_gesture);
+  DraggingLayout();
+}
+
+PaginationModel* AppListView::GetAppsPaginationModel() const {
+  return GetAppsGridView()->pagination_model();
+}
+
+gfx::Rect AppListView::GetAppInfoDialogBounds() const {
+  if (!is_fullscreen_app_list_enabled_)
+    return GetBoundsInScreen();
+  gfx::Rect app_info_bounds(GetDisplayNearestView().bounds());
+  app_info_bounds.ClampToCenteredSize(
+      gfx::Size(kAppInfoDialogWidth, kAppInfoDialogHeight));
+  return app_info_bounds;
+}
+
+void AppListView::SetIsInDrag(bool is_in_drag) {
+  if (is_in_drag == is_in_drag_)
+    return;
+
+  is_in_drag_ = is_in_drag;
   app_list_main_view_->contents_view()
       ->apps_container_view()
       ->apps_grid_view()
-      ->UpdateOpacity(work_area_bounds.bottom(), is_end_gesture);
+      ->UpdateControlVisibility(app_list_state_, is_in_drag_);
 }
 
-PaginationModel* AppListView::GetAppsPaginationModel() {
-  return app_list_main_view_->contents_view()
-      ->apps_container_view()
-      ->apps_grid_view()
-      ->pagination_model();
+int AppListView::GetWorkAreaBottom() {
+  return fullscreen_widget_->GetWorkAreaBoundsInScreen().bottom();
 }
 
 void AppListView::OnSpeechRecognitionStateChanged(
@@ -1062,13 +1342,55 @@ void AppListView::OnDisplayMetricsChanged(const display::Display& display,
     return;
 
   // Set the |fullscreen_widget_| size to fit the new display metrics.
-  gfx::Size size = GetDisplayNearestView().work_area().size();
-  size.Enlarge(0, kShelfSize);
+  gfx::Size size = GetDisplayNearestView().size();
   fullscreen_widget_->SetSize(size);
 
   // Update the |fullscreen_widget_| bounds to accomodate the new work
   // area.
   SetState(app_list_state_);
+}
+
+void AppListView::DraggingLayout() {
+  float shield_opacity =
+      is_background_blur_enabled_ ? kAppListOpacityWithBlur : kAppListOpacity;
+  app_list_background_shield_->layer()->SetOpacity(
+      is_in_drag_ ? background_opacity_ : shield_opacity);
+
+  // Updates the opacity of the items in the app list.
+  search_box_view_->UpdateOpacity();
+  GetAppsGridView()->UpdateOpacity();
+
+  Layout();
+}
+
+float AppListView::GetAppListBackgroundOpacityDuringDragging() {
+  float top_of_applist = fullscreen_widget_->GetWindowBoundsInScreen().y();
+  float dragging_height = std::max((GetWorkAreaBottom() - top_of_applist), 0.f);
+  float coefficient =
+      std::min(dragging_height / (kNumOfShelfSize * kShelfSize), 1.0f);
+  float shield_opacity =
+      is_background_blur_enabled_ ? kAppListOpacityWithBlur : kAppListOpacity;
+  return coefficient * shield_opacity;
+}
+
+void AppListView::GetWallpaperProminentColors(std::vector<SkColor>* colors) {
+  delegate_->GetWallpaperProminentColors(colors);
+}
+
+void AppListView::OnWallpaperColorsChanged() {
+  SetBackgroundShieldColor();
+}
+
+void AppListView::SetBackgroundShieldColor() {
+  // There is a chance when AppListView::OnWallpaperColorsChanged is called from
+  // AppListViewDelegate, the |app_list_background_shield_| is not initialized.
+  if (!is_fullscreen_app_list_enabled_ || !app_list_background_shield_)
+    return;
+
+  std::vector<SkColor> prominent_colors;
+  GetWallpaperProminentColors(&prominent_colors);
+  app_list_background_shield_->layer()->SetColor(
+      GetBackgroundShieldColor(prominent_colors));
 }
 
 }  // namespace app_list

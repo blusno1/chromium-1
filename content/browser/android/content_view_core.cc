@@ -101,12 +101,6 @@ int GetRenderProcessIdFromRenderViewHost(RenderViewHost* host) {
   return 0;
 }
 
-ScopedJavaLocalRef<jobject> CreateJavaRect(JNIEnv* env, const gfx::Rect& rect) {
-  return ScopedJavaLocalRef<jobject>(Java_ContentViewCore_createRect(
-      env, static_cast<int>(rect.x()), static_cast<int>(rect.y()),
-      static_cast<int>(rect.right()), static_cast<int>(rect.bottom())));
-}
-
 int ToGestureEventType(WebInputEvent::Type type) {
   switch (type) {
     case WebInputEvent::kGestureScrollBegin:
@@ -335,7 +329,7 @@ void ContentViewCore::RenderViewHostChanged(RenderViewHost* old_host,
     }
   }
 
-  SetFocusInternal(HasFocus());
+  SetFocusInternal(GetViewAndroid()->HasFocus());
 }
 
 RenderWidgetHostViewAndroid* ContentViewCore::GetRenderWidgetHostViewAndroid()
@@ -525,7 +519,7 @@ bool ContentViewCore::FilterInputEvent(const blink::WebInputEvent& event) {
   if (j_obj.is_null())
     return false;
 
-  Java_ContentViewCore_requestFocus(env, j_obj);
+  GetViewAndroid()->RequestFocus();
 
   if (event.GetType() == WebInputEvent::kMouseDown)
     return false;
@@ -538,46 +532,11 @@ bool ContentViewCore::FilterInputEvent(const blink::WebInputEvent& event) {
                                                     gesture.y * dpi_scale());
 }
 
-bool ContentViewCore::HasFocus() {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return false;
-  return Java_ContentViewCore_hasFocus(env, obj);
-}
-
 void ContentViewCore::RequestDisallowInterceptTouchEvent() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (!obj.is_null())
     Java_ContentViewCore_requestDisallowInterceptTouchEvent(env, obj);
-}
-
-void ContentViewCore::ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
-                                              const SkBitmap& zoomed_bitmap) {
-  JNIEnv* env = AttachCurrentThread();
-
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return;
-
-  ScopedJavaLocalRef<jobject> rect_object(CreateJavaRect(env, rect_pixels));
-
-  ScopedJavaLocalRef<jobject> java_bitmap =
-      gfx::ConvertToJavaBitmap(&zoomed_bitmap);
-  DCHECK(!java_bitmap.is_null());
-
-  Java_ContentViewCore_showDisambiguationPopup(env, obj, rect_object,
-                                               java_bitmap);
-}
-
-ScopedJavaLocalRef<jobject> ContentViewCore::CreateMotionEventSynthesizer() {
-  JNIEnv* env = AttachCurrentThread();
-
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return ScopedJavaLocalRef<jobject>();
-  return Java_ContentViewCore_createMotionEventSynthesizer(env, obj);
 }
 
 void ContentViewCore::DidStopFlinging() {

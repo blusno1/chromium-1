@@ -21,7 +21,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/safe_browsing/common/safebrowsing_types.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -77,7 +77,8 @@ class ThreatDetails : public base::RefCountedThreadSafe<
       content::WebContents* web_contents,
       const UnsafeResource& resource,
       net::URLRequestContextGetter* request_context_getter,
-      history::HistoryService* history_service);
+      history::HistoryService* history_service,
+      bool trim_to_ad_tags);
 
   // Makes the passed |factory| the factory used to instantiate
   // SafeBrowsingBlockingPage objects. Useful for tests.
@@ -261,13 +262,8 @@ class ThreatDetailsFactory {
       content::WebContents* web_contents,
       const security_interstitials::UnsafeResource& unsafe_resource,
       net::URLRequestContextGetter* request_context_getter,
-      history::HistoryService* history_service) = 0;
-  virtual ThreatDetails* CreateTrimmedThreatDetails(
-      BaseUIManager* ui_manager,
-      content::WebContents* web_contents,
-      const security_interstitials::UnsafeResource& unsafe_resource,
-      net::URLRequestContextGetter* request_context_getter,
-      history::HistoryService* history_service) = 0;
+      history::HistoryService* history_service,
+      bool trim_to_ad_tags) = 0;
 };
 
 }  // namespace safe_browsing

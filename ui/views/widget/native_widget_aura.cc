@@ -14,7 +14,6 @@
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
-#include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
@@ -63,7 +62,7 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #endif
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
 #endif
@@ -494,9 +493,9 @@ void NativeWidgetAura::StackAtTop() {
     window_->parent()->StackChildAtTop(window_);
 }
 
-void NativeWidgetAura::SetShape(std::unique_ptr<SkRegion> region) {
+void NativeWidgetAura::SetShape(std::unique_ptr<Widget::ShapeRects> shape) {
   if (window_)
-    window_->layer()->SetAlphaShape(std::move(region));
+    window_->layer()->SetAlphaShape(std::move(shape));
 }
 
 void NativeWidgetAura::Close() {
@@ -1004,7 +1003,7 @@ void NativeWidgetAura::SetInitialFocus(ui::WindowShowState show_state) {
 // Widget, public:
 
 namespace {
-#if defined(OS_WIN) || (defined(USE_X11) && !defined(OS_CHROMEOS))
+#if defined(OS_WIN) || defined(USE_X11)
 void CloseWindow(aura::Window* window) {
   if (window) {
     Widget* widget = Widget::GetWidgetForNativeView(window);
@@ -1034,7 +1033,7 @@ void Widget::CloseAllSecondaryWidgets() {
   EnumThreadWindows(GetCurrentThreadId(), WindowCallbackProc, 0);
 #endif
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   DesktopWindowTreeHostX11::CleanUpWindowList(CloseWindow);
 #endif
 }
@@ -1046,7 +1045,7 @@ bool Widget::ConvertRect(const Widget* source,
 }
 
 const ui::NativeTheme* Widget::GetNativeTheme() const {
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   const LinuxUI* linux_ui = LinuxUI::instance();
   if (linux_ui) {
     ui::NativeTheme* native_theme =

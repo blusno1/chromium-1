@@ -4,11 +4,8 @@
 
 #include "core/layout/ng/ng_length_utils.h"
 
-#include "core/layout/ng/ng_box_fragment.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
-#include "core/layout/ng/ng_fragment_builder.h"
-#include "core/layout/ng/ng_physical_box_fragment.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/CalculationValue.h"
 #include "platform/LayoutUnit.h"
@@ -29,11 +26,13 @@ class NGLengthUtilsTest : public ::testing::Test {
       bool fixed_inline = false,
       bool fixed_block = false,
       NGWritingMode writing_mode = NGWritingMode::kHorizontalTopBottom) {
-    return NGConstraintSpaceBuilder(writing_mode)
-        .SetAvailableSize(
-            NGLogicalSize(LayoutUnit(inline_size), LayoutUnit(block_size)))
-        .SetPercentageResolutionSize(
-            NGLogicalSize(LayoutUnit(inline_size), LayoutUnit(block_size)))
+    NGLogicalSize size = {LayoutUnit(inline_size), LayoutUnit(block_size)};
+
+    return NGConstraintSpaceBuilder(
+               writing_mode,
+               /* icb_size */ size.ConvertToPhysical(writing_mode))
+        .SetAvailableSize(size)
+        .SetPercentageResolutionSize(size)
         .SetIsFixedSizeInline(fixed_inline)
         .SetIsFixedSizeBlock(fixed_block)
         .ToConstraintSpace(writing_mode);

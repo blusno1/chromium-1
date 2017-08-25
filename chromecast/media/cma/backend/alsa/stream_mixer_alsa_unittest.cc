@@ -32,10 +32,6 @@ namespace media {
 
 namespace {
 
-const int kBufferAlignment = 4;
-static_assert((kBufferAlignment & (kBufferAlignment - 1)) == 0,
-              "alignment must be a power of 2");
-
 using FloatType = ::media::Float32SampleTypeTraits;
 
 // Testing constants that are common to multiple test cases.
@@ -184,10 +180,6 @@ std::unique_ptr<::media::AudioBus> GetTestData(size_t index) {
   auto data = ::media::AudioBus::Create(kNumChannels, frames);
   data->FromInterleaved(kTestData[index], frames, kBytesPerSample);
   return data;
-}
-
-int AlignedBufferSize(int size) {
-  return size & ~(kBufferAlignment - 1);
 }
 
 class MockInputQueue : public StreamMixerAlsa::InputQueue {
@@ -557,6 +549,7 @@ TEST_F(StreamMixerAlsaTest, WriteFrames) {
   }
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(1);
   for (size_t i = 0; i < inputs.size(); ++i) {
     EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
     mixer->AddInput(base::WrapUnique(inputs[i]));
@@ -567,27 +560,19 @@ TEST_F(StreamMixerAlsaTest, WriteFrames) {
   // The mixer should pull data from all streams, using the smallest
   // MaxReadSize provided by any of the channels.
   // TODO(slan): Check that the proper number of frames is pulled.
-  // Actual size of pulled data should be truncated to factor of
-  // kBufferAlignment.
-
   ASSERT_EQ(3u, inputs.size());
-  inputs[0]->SetMaxReadSize(kMaxChunkSize + 4);
+  inputs[0]->SetMaxReadSize(kMaxChunkSize + 1);
   inputs[1]->SetMaxReadSize(kMaxChunkSize - 1);
   inputs[2]->SetMaxReadSize(kMaxChunkSize * 2);
   for (auto* input : inputs) {
-    EXPECT_CALL(*input,
-                GetResampledData(_, AlignedBufferSize(kMaxChunkSize - 1)))
-        .Times(1);
-    EXPECT_CALL(*input, VolumeScaleAccumulate(
-                            _, _, AlignedBufferSize(kMaxChunkSize - 1), _))
+    EXPECT_CALL(*input, GetResampledData(_, kMaxChunkSize - 1)).Times(1);
+    EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, kMaxChunkSize - 1, _))
         .Times(kNumChannels);
     EXPECT_CALL(*input, AfterWriteFrames(_)).Times(1);
   }
 
   // TODO(slan): Verify that the data is mixed properly with math.
-  EXPECT_CALL(*mock_alsa(),
-              PcmWritei(_, _, AlignedBufferSize(kMaxChunkSize - 1)))
-      .Times(1);
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, kMaxChunkSize - 1)).Times(1);
   mixer->WriteFramesForTest();
 
   // Make two of these streams non-primary, and exhaust a non-primary stream.
@@ -622,6 +607,7 @@ TEST_F(StreamMixerAlsaTest, OneStreamMixesProperly) {
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
   EXPECT_CALL(*input, Initialize(_)).Times(1);
+  mixer->SetFilterFrameAlignmentForTest(4);
   mixer->AddInput(base::WrapUnique(input));
   EXPECT_EQ(StreamMixerAlsa::kStateNormalPlayback, mixer->state());
 
@@ -652,6 +638,7 @@ TEST_F(StreamMixerAlsaTest, OneStreamIsScaledDownProperly) {
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
   EXPECT_CALL(*input, Initialize(_)).Times(1);
+  mixer->SetFilterFrameAlignmentForTest(4);
   mixer->AddInput(base::WrapUnique(input));
   EXPECT_EQ(StreamMixerAlsa::kStateNormalPlayback, mixer->state());
 
@@ -689,6 +676,7 @@ TEST_F(StreamMixerAlsaTest, TwoUnscaledStreamsMixProperly) {
   }
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(4);
   for (size_t i = 0; i < inputs.size(); ++i) {
     EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
     mixer->AddInput(base::WrapUnique(inputs[i]));
@@ -730,6 +718,7 @@ TEST_F(StreamMixerAlsaTest, TwoUnscaledStreamsWithDifferentIdsMixProperly) {
   inputs.back()->SetPaused(false);
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(4);
   for (size_t i = 0; i < inputs.size(); ++i) {
     EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
     mixer->AddInput(base::WrapUnique(inputs[i]));
@@ -769,6 +758,7 @@ TEST_F(StreamMixerAlsaTest, TwoUnscaledStreamsMixProperlyWithEdgeCases) {
   }
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(4);
   for (size_t i = 0; i < inputs.size(); ++i) {
     EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
     mixer->AddInput(base::WrapUnique(inputs[i]));
@@ -837,16 +827,17 @@ TEST_F(StreamMixerAlsaTest, WriteBuffersOfVaryingLength) {
   input->SetPaused(false);
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(4);
   EXPECT_CALL(*input, Initialize(_)).Times(1);
   mixer->AddInput(base::WrapUnique(input));
   EXPECT_EQ(StreamMixerAlsa::kStateNormalPlayback, mixer->state());
 
   // The input stream will provide buffers of several different lengths.
-  input->SetMaxReadSize(4);
-  EXPECT_CALL(*input, GetResampledData(_, 4));
-  EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, 4, _)).Times(kNumChannels);
+  input->SetMaxReadSize(8);
+  EXPECT_CALL(*input, GetResampledData(_, 8));
+  EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, 8, _)).Times(kNumChannels);
   EXPECT_CALL(*input, AfterWriteFrames(_));
-  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, 4)).Times(1);
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, 8)).Times(1);
   mixer->WriteFramesForTest();
 
   input->SetMaxReadSize(100);
@@ -912,6 +903,7 @@ TEST_F(StreamMixerAlsaTest, StuckStreamWithUnderrun) {
   }
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(4);
   for (size_t i = 0; i < inputs.size(); ++i) {
     EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
     mixer->AddInput(base::WrapUnique(inputs[i]));
@@ -1012,6 +1004,7 @@ TEST_F(StreamMixerAlsaTest, PostProcessorDelayListedDeviceId) {
   }
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(4);
   for (size_t i = 0; i < inputs.size(); ++i) {
     EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
     mixer->AddInput(base::WrapUnique(inputs[i]));
@@ -1041,30 +1034,6 @@ TEST_F(StreamMixerAlsaTest, PostProcessorDelayListedDeviceId) {
                                 MatchDelay(delays[i], inputs[i]->device_id())));
   }
   mixer->WriteFramesForTest();
-}
-
-TEST_F(StreamMixerAlsaTest, OneStreamTruncatedProperly) {
-  auto* input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
-  input->SetPaused(false);
-
-  StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
-  EXPECT_CALL(*input, Initialize(_)).Times(1);
-  mixer->AddInput(base::WrapUnique(input));
-  EXPECT_EQ(StreamMixerAlsa::kStateNormalPlayback, mixer->state());
-
-  int preCalc[6][2] = {{4, 4}, {7, 4}, {8, 8}, {9, 8}, {880, 880}, {882, 880}};
-
-  for (int i = 0; i < 6; ++i) {
-    int readSize = preCalc[i][0];
-    int expectedSize = preCalc[i][1];
-    input->SetMaxReadSize(readSize);
-    EXPECT_CALL(*input, GetResampledData(_, expectedSize));
-    EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, expectedSize, _))
-        .Times(kNumChannels);
-    EXPECT_CALL(*input, AfterWriteFrames(_));
-    EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, expectedSize)).Times(1);
-    mixer->WriteFramesForTest();
-  }
 }
 
 TEST_F(StreamMixerAlsaTest, PostProcessorDelayUnlistedDevice) {
@@ -1102,6 +1071,69 @@ TEST_F(StreamMixerAlsaTest, PostProcessorDelayUnlistedDevice) {
   mixer->WriteFramesForTest();
 }
 
+TEST_F(StreamMixerAlsaTest, OneStreamTruncatedProperlyFrameAlignment4) {
+  auto* input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
+  input->SetPaused(false);
+
+  StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(4);
+  EXPECT_CALL(*input, Initialize(_)).Times(1);
+  mixer->AddInput(base::WrapUnique(input));
+  EXPECT_EQ(StreamMixerAlsa::kStateNormalPlayback, mixer->state());
+
+  // Precalculated output chunk sizes for given input chunk sizes assuming
+  // 4 frame alignment.
+  int in_out[6][2] = {{4, 4}, {7, 4}, {8, 8}, {9, 8}, {880, 880}, {882, 880}};
+
+  for (int i = 0; i < 6; ++i) {
+    int readSize = in_out[i][0];
+    int expectedSize = in_out[i][1];
+    input->SetMaxReadSize(readSize);
+    EXPECT_CALL(*input, GetResampledData(_, expectedSize));
+    EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, expectedSize, _))
+        .Times(kNumChannels);
+    EXPECT_CALL(*input, AfterWriteFrames(_));
+    EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, expectedSize)).Times(1);
+    mixer->WriteFramesForTest();
+  }
+}
+
+TEST_F(StreamMixerAlsaTest, OneStreamTruncatedProperlyFrameAlignment256) {
+  auto* input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
+  input->SetPaused(false);
+
+  StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  mixer->SetFilterFrameAlignmentForTest(256);
+  EXPECT_CALL(*input, Initialize(_)).Times(1);
+  mixer->AddInput(base::WrapUnique(input));
+  EXPECT_EQ(StreamMixerAlsa::kStateNormalPlayback, mixer->state());
+
+  // Precalculated output chunk sizes for given input chunk sizes assuming
+  // 256 frame alignment.
+  int in_out[4][2] = {{256, 256}, {511, 256}, {512, 512}, {513, 512}};
+
+  for (int i = 0; i < 4; ++i) {
+    int readSize = in_out[i][0];
+    int expectedSize = in_out[i][1];
+    input->SetMaxReadSize(readSize);
+    EXPECT_CALL(*input, GetResampledData(_, expectedSize));
+    EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, expectedSize, _))
+        .Times(kNumChannels);
+    EXPECT_CALL(*input, AfterWriteFrames(_));
+    EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, expectedSize)).Times(1);
+    mixer->WriteFramesForTest();
+  }
+
+  // Do nothing if there isn't enough data.
+  input->SetMaxReadSize(123);  // 0 < 123 < filter frame alignment
+  EXPECT_CALL(*input, GetResampledData(_, _)).Times(0);
+  EXPECT_CALL(*input, VolumeScaleAccumulate(_, _, _, _)).Times(0);
+  EXPECT_CALL(*input, AfterWriteFrames(_)).Times(0);
+
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, _)).Times(0);
+  mixer->WriteFramesForTest();
+}
+
 TEST_F(StreamMixerAlsaTest, PostProcessorRingingWithoutInput) {
   const char kTestPipelineJson[] = R"json(
 {
@@ -1132,6 +1164,7 @@ TEST_F(StreamMixerAlsaTest, PostProcessorRingingWithoutInput) {
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
   std::string test_pipeline_json = base::StringPrintf(
       kTestPipelineJson, kDelayModuleSolib, kDelayModuleSolib);
+  mixer->SetFilterFrameAlignmentForTest(4);
   mixer->ResetPostProcessorsForTest(test_pipeline_json);
   mixer->AddInput(base::WrapUnique(input));
 

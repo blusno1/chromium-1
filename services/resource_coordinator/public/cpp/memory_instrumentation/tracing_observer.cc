@@ -37,48 +37,6 @@ void OsDumpAsValueInto(TracedValue* value, const mojom::OSMemDump& os_dump) {
       base::StringPrintf("%" PRIx32, os_dump.private_footprint_kb * 1024));
 }
 
-void MemoryMapsAsValueInto(TracedValue* value,
-                           const std::vector<mojom::VmRegionPtr>& memory_maps) {
-  static const char kHexFmt[] = "%" PRIx64;
-
-  // Refer to the design doc goo.gl/sxfFY8 for the semantics of these fields.
-  value->BeginArray("vm_regions");
-  for (const auto& region : memory_maps) {
-    value->BeginDictionary();
-
-    value->SetString("sa", base::StringPrintf(kHexFmt, region->start_address));
-    value->SetString("sz", base::StringPrintf(kHexFmt, region->size_in_bytes));
-    if (region->module_timestamp)
-      value->SetString("ts",
-                       base::StringPrintf(kHexFmt, region->module_timestamp));
-    value->SetInteger("pf", region->protection_flags);
-    value->SetString("mf", region->mapped_file);
-
-    value->BeginDictionary("bs");  // byte stats
-    value->SetString(
-        "pss",
-        base::StringPrintf(kHexFmt, region->byte_stats_proportional_resident));
-    value->SetString(
-        "pd",
-        base::StringPrintf(kHexFmt, region->byte_stats_private_dirty_resident));
-    value->SetString(
-        "pc",
-        base::StringPrintf(kHexFmt, region->byte_stats_private_clean_resident));
-    value->SetString(
-        "sd",
-        base::StringPrintf(kHexFmt, region->byte_stats_shared_dirty_resident));
-    value->SetString(
-        "sc",
-        base::StringPrintf(kHexFmt, region->byte_stats_shared_clean_resident));
-    value->SetString("sw",
-                     base::StringPrintf(kHexFmt, region->byte_stats_swapped));
-    value->EndDictionary();
-
-    value->EndDictionary();
-  }
-  value->EndArray();
-}
-
 };  // namespace
 
 TracingObserver::TracingObserver(
@@ -171,9 +129,8 @@ void TracingObserver::AddToTrace(
       nullptr /* arg_values */, &event_value, TRACE_EVENT_FLAG_HAS_ID);
 }
 
-bool TracingObserver::AddDumpToTraceIfEnabled(
+bool TracingObserver::AddChromeDumpToTraceIfEnabled(
     const base::trace_event::MemoryDumpRequestArgs& args,
-    const base::ProcessId pid,
     const ProcessMemoryDump* process_memory_dump) {
   if (!ShouldAddToTrace(args))
     return false;
@@ -181,7 +138,7 @@ bool TracingObserver::AddDumpToTraceIfEnabled(
   std::unique_ptr<TracedValue> traced_value = base::MakeUnique<TracedValue>();
   process_memory_dump->AsValueInto(traced_value.get());
 
-  AddToTrace(args, pid, std::move(traced_value));
+  AddToTrace(args, base::kNullProcessId, std::move(traced_value));
 
   return true;
 }
@@ -202,12 +159,56 @@ bool TracingObserver::AddOsDumpToTraceIfEnabled(
 
   if (memory_maps->size()) {
     traced_value->BeginDictionary("process_mmaps");
-    MemoryMapsAsValueInto(traced_value.get(), *memory_maps);
+    MemoryMapsAsValueInto(*memory_maps, traced_value.get());
     traced_value->EndDictionary();
   }
 
   AddToTrace(args, pid, std::move(traced_value));
   return true;
+}
+
+// static
+void TracingObserver::MemoryMapsAsValueInto(
+    const std::vector<mojom::VmRegionPtr>& memory_maps,
+    TracedValue* value) {
+  static const char kHexFmt[] = "%" PRIx64;
+
+  // Refer to the design doc goo.gl/sxfFY8 for the semantics of these fields.
+  value->BeginArray("vm_regions");
+  for (const auto& region : memory_maps) {
+    value->BeginDictionary();
+
+    value->SetString("sa", base::StringPrintf(kHexFmt, region->start_address));
+    value->SetString("sz", base::StringPrintf(kHexFmt, region->size_in_bytes));
+    if (region->module_timestamp)
+      value->SetString("ts",
+                       base::StringPrintf(kHexFmt, region->module_timestamp));
+    value->SetInteger("pf", region->protection_flags);
+    value->SetString("mf", region->mapped_file);
+
+    value->BeginDictionary("bs");  // byte stats
+    value->SetString(
+        "pss",
+        base::StringPrintf(kHexFmt, region->byte_stats_proportional_resident));
+    value->SetString(
+        "pd",
+        base::StringPrintf(kHexFmt, region->byte_stats_private_dirty_resident));
+    value->SetString(
+        "pc",
+        base::StringPrintf(kHexFmt, region->byte_stats_private_clean_resident));
+    value->SetString(
+        "sd",
+        base::StringPrintf(kHexFmt, region->byte_stats_shared_dirty_resident));
+    value->SetString(
+        "sc",
+        base::StringPrintf(kHexFmt, region->byte_stats_shared_clean_resident));
+    value->SetString("sw",
+                     base::StringPrintf(kHexFmt, region->byte_stats_swapped));
+    value->EndDictionary();
+
+    value->EndDictionary();
+  }
+  value->EndArray();
 }
 
 bool TracingObserver::IsDumpModeAllowed(

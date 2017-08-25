@@ -78,18 +78,8 @@ void VerifyCalled(bool* called) {
 void ObserveStatusChanges(ServiceWorkerVersion* version,
                           std::vector<ServiceWorkerVersion::Status>* statuses) {
   statuses->push_back(version->status());
-  version->RegisterStatusChangeCallback(
-      base::Bind(&ObserveStatusChanges, base::Unretained(version), statuses));
-}
-
-void ReceiveTestEventResult(int* request_id,
-                            std::string* data,
-                            const base::Closure& callback,
-                            int actual_request_id,
-                            const std::string& actual_data) {
-  *request_id = actual_request_id;
-  *data = actual_data;
-  callback.Run();
+  version->RegisterStatusChangeCallback(base::BindOnce(
+      &ObserveStatusChanges, base::Unretained(version), statuses));
 }
 
 // A specialized listener class to receive test messages from a worker.
@@ -545,7 +535,7 @@ TEST_F(ServiceWorkerVersionTest, InstallAndWaitCompletion) {
   // Wait for the completion.
   bool status_change_called = false;
   version_->RegisterStatusChangeCallback(
-      base::Bind(&VerifyCalled, &status_change_called));
+      base::BindOnce(&VerifyCalled, &status_change_called));
 
   // Dispatch an install event.
   SimulateDispatchEvent(ServiceWorkerMetrics::EventType::INSTALL);
@@ -566,7 +556,7 @@ TEST_F(ServiceWorkerVersionTest, ActivateAndWaitCompletion) {
   // Wait for the completion.
   bool status_change_called = false;
   version_->RegisterStatusChangeCallback(
-      base::Bind(&VerifyCalled, &status_change_called));
+      base::BindOnce(&VerifyCalled, &status_change_called));
 
   // Dispatch an activate event.
   SimulateDispatchEvent(ServiceWorkerMetrics::EventType::ACTIVATE);
@@ -581,7 +571,7 @@ TEST_F(ServiceWorkerVersionTest, RepeatedlyObserveStatusChanges) {
 
   // Repeatedly observe status changes (the callback re-registers itself).
   std::vector<ServiceWorkerVersion::Status> statuses;
-  version_->RegisterStatusChangeCallback(base::Bind(
+  version_->RegisterStatusChangeCallback(base::BindOnce(
       &ObserveStatusChanges, base::RetainedRef(version_), &statuses));
 
   version_->SetStatus(ServiceWorkerVersion::INSTALLING);
@@ -795,10 +785,12 @@ TEST_F(ServiceWorkerVersionTest, StaleUpdate_DoNotDeferTimer) {
 
   // Stale time is not deferred.
   version_->RunAfterStartWorker(
-      ServiceWorkerMetrics::EventType::UNKNOWN, base::Bind(&base::DoNothing),
+      ServiceWorkerMetrics::EventType::UNKNOWN,
+      base::BindOnce(&base::DoNothing),
       base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
   version_->RunAfterStartWorker(
-      ServiceWorkerMetrics::EventType::UNKNOWN, base::Bind(&base::DoNothing),
+      ServiceWorkerMetrics::EventType::UNKNOWN,
+      base::BindOnce(&base::DoNothing),
       base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(stale_time, version_->stale_time_);
@@ -1225,42 +1217,6 @@ TEST_F(ServiceWorkerStallInStoppingTest, DetachThenRestart) {
   EXPECT_EQ(SERVICE_WORKER_OK, start_status);
 }
 
-TEST_F(ServiceWorkerStallInStoppingTest, DetachThenRestartNoCrash) {
-  // Start a worker.
-  ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
-  version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
-                        CreateReceiverOnCurrentThread(&status));
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
-  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
-
-  // Try to stop the worker.
-  status = SERVICE_WORKER_ERROR_FAILED;
-  version_->StopWorker(CreateReceiverOnCurrentThread(&status));
-  EXPECT_EQ(EmbeddedWorkerStatus::STOPPING, version_->running_status());
-
-  // Worker is now stalled in stopping. Add a start worker request.
-  ServiceWorkerStatusCode start_status = SERVICE_WORKER_ERROR_FAILED;
-  version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
-                        CreateReceiverOnCurrentThread(&start_status));
-
-  // Simulate timeout. The worker should stop and get restarted.
-  EXPECT_TRUE(version_->timeout_timer_.IsRunning());
-  version_->stop_time_ = base::TimeTicks::Now() -
-                         ServiceWorkerVersion::kStopWorkerTimeout -
-                         base::TimeDelta::FromSeconds(1);
-  ServiceWorkerVersion* version = version_.get();
-  // Don't crash even if no one externally holds a reference to version.
-  // The provider host for the version holds a reference, but it
-  // could be destroyed during detach of the embedded worker instance.
-  version_ = nullptr;
-  version->timeout_timer_.user_task().Run();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
-  EXPECT_NE(SERVICE_WORKER_OK, start_status);
-  // No crash.
-}
-
 TEST_F(ServiceWorkerVersionTest, RegisterForeignFetchScopes) {
   version_->SetStatus(ServiceWorkerVersion::INSTALLING);
   // Start a worker.
@@ -1367,45 +1323,6 @@ TEST_F(ServiceWorkerVersionTest, RendererCrashDuringEvent) {
   // Request already failed, calling finsh should return false.
   EXPECT_FALSE(version_->FinishRequest(request_id, true /* was_handled */,
                                        base::Time::Now()));
-}
-
-TEST_F(ServiceWorkerVersionTest, RegisterRequestCallback) {
-  ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_NETWORK;  // dummy value
-
-  // Activate and start worker.
-  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
-  version_->StartWorker(ServiceWorkerMetrics::EventType::SYNC,
-                        CreateReceiverOnCurrentThread(&status));
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
-  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
-
-  // Start request and dispatch test event.
-  scoped_refptr<MessageLoopRunner> runner(new MessageLoopRunner);
-  int request_id = version_->StartRequest(
-      ServiceWorkerMetrics::EventType::SYNC,
-      CreateReceiverOnCurrentThread(&status, runner->QuitClosure()));
-  int received_request_id = 0;
-  std::string received_data;
-  version_->RegisterRequestCallback<TestMsg_TestEventResult>(
-      request_id, base::Bind(&ReceiveTestEventResult, &received_request_id,
-                             &received_data, runner->QuitClosure()));
-
-  // Simulate sending reply to event.
-  std::string reply("foobar");
-  helper_->SimulateSendEventResult(
-      version_->embedded_worker()->embedded_worker_id(), request_id, reply);
-  runner->Run();
-
-  // Verify message callback got called with correct reply.
-  EXPECT_EQ(request_id, received_request_id);
-  EXPECT_EQ(reply, received_data);
-
-  // Should not have timed out, so error callback should not have been
-  // called and FinishRequest should return true.
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
-  EXPECT_TRUE(version_->FinishRequest(request_id, true /* was_handled */,
-                                      base::Time::Now()));
 }
 
 TEST_F(ServiceWorkerFailToStartTest, FailingWorkerUsesNewRendererProcess) {

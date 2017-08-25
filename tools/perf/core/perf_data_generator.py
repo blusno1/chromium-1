@@ -24,6 +24,7 @@ path_util.AddTelemetryToPath()
 
 from telemetry import benchmark as benchmark_module
 from telemetry import decorators
+from telemetry.story import expectations
 
 from py_utils import discover
 
@@ -589,10 +590,10 @@ def generate_isolate_script_entry(swarming_dimensions, test_args,
       # Always say this is true regardless of whether the tester
       # supports swarming. It doesn't hurt.
       'can_use_on_swarming_builders': True,
-      'expiration': 10 * 60 * 60, # 10 hour timeout for now (crbug.com/699312)
+      'expiration': 20 * 60 * 60, # 20 hour timeout for now (crbug.com/753367)
       'hard_timeout': swarming_timeout if swarming_timeout else 10800, # 3 hours
       'ignore_task_failure': ignore_task_failure,
-      'io_timeout': 3600,
+      'io_timeout': 10 * 60,
       'dimension_sets': swarming_dimensions,
       'upload_test_results': False,
     }
@@ -626,6 +627,10 @@ def generate_telemetry_test(swarming_dimensions, benchmark_name, browser):
   ignore_task_failure = False
   step_name = benchmark_name
   if browser == 'reference':
+    # If there are more than 5 failures, usually the whole ref build benchmark
+    # will fail & the reference browser binary need to be updated.
+    # Also see crbug.com/707236 for more context.
+    test_args.append('--max-failures=5')
     test_args.append('--output-trace-tag=_ref')
     step_name += '.reference'
     # We ignore the failures on reference builds since there is little we can do
@@ -677,28 +682,7 @@ def generate_cplusplus_isolate_script_test(dimension):
   ]
 
 
-def ShouldBenchmarkBeScheduled(benchmark, platform):
-  disabled_tags = decorators.GetDisabledAttributes(benchmark)
-  enabled_tags = decorators.GetEnabledAttributes(benchmark)
-
-  # Don't run benchmarks which are disabled on all platforms.
-  if 'all' in disabled_tags:
-    return False
-
-  # If we're not on android, don't run mobile benchmarks.
-  if platform != 'android' and 'android' in enabled_tags:
-    return False
-
-  # If we're on android, don't run benchmarks disabled on mobile
-  if platform == 'android' and 'android' in disabled_tags:
-    return False
-
-  return True
-
-
-# TODO(rnephew): Remove when no tests disable using
-# expectations.PermanentlyDisableBenchmark()
-def ShouldBenchmarksBeScheduledViaStoryExpectations(
+def ShouldBenchmarksBeScheduled(
     benchmark, name, os_name, browser_name):
   # StoryExpectations uses finder_options.browser_type, platform.GetOSName,
   # platform.GetDeviceTypeName, and platform.IsSvelte to determine if the
@@ -748,7 +732,13 @@ def ShouldBenchmarksBeScheduledViaStoryExpectations(
   device_type_name = ANDROID_BOT_TO_DEVICE_TYPE_MAP.get(name)
   os_name = sanitize_os_name(os_name)
   e = ExpectationData(browser_name, os_name, device_type_name)
-  return not benchmark().GetExpectations().IsBenchmarkDisabled(e, e)
+
+  # TODO(rnephew): Remove when no tests disable using
+  # expectations.PermanentlyDisableBenchmark()
+  b = benchmark()
+  if b.GetExpectations().IsBenchmarkDisabled(e, e):
+    return False
+  return any(t.ShouldDisable(e, e) for t in b.SUPPORTED_PLATFORMS)
 
 
 def generate_telemetry_tests(name, tester_config, benchmarks,
@@ -769,9 +759,6 @@ def generate_telemetry_tests(name, tester_config, benchmarks,
     browser_name ='release'
 
   for benchmark in benchmarks:
-    if not ShouldBenchmarkBeScheduled(benchmark, tester_config['platform']):
-      continue
-
     # First figure out swarming dimensions this test needs to be triggered on.
     # For each set of dimensions it is only triggered on one of the devices
     swarming_dimensions = []
@@ -791,7 +778,7 @@ def generate_telemetry_tests(name, tester_config, benchmarks,
 
     # TODO(rnephew): Remove when no tests disable using
     # expectations.PermanentlyDisableBenchmark()
-    if not ShouldBenchmarksBeScheduledViaStoryExpectations(
+    if not ShouldBenchmarksBeScheduled(
         benchmark, name, swarming_dimensions[0]['os'], browser_name):
       continue
 
@@ -812,6 +799,7 @@ def generate_telemetry_tests(name, tester_config, benchmarks,
 
 # Overrides the default 2 hour timeout for swarming tasks.
 BENCHMARK_SWARMING_TIMEOUTS = {
+    'loading.desktop': 14400, # 4 hours (crbug.com/753798)
     'loading.mobile': 16200, # 4.5 hours
     'system_health.memory_mobile': 10800, # 3 hours
     'system_health.memory_desktop': 10800, # 3 hours
@@ -1011,7 +999,11 @@ def get_all_benchmarks_metadata(metadata):
   benchmark_list = current_benchmarks()
 
   for benchmark in benchmark_list:
-    disabled = 'all' in decorators.GetDisabledAttributes(benchmark)
+    exp = benchmark().GetExpectations()
+    disabled = 'all' in decorators.GetDisabledAttributes(benchmark) or any(
+        any(isinstance(condition, expectations.ALL.__class__)
+            for condition in conditions)
+        for (conditions, _) in exp.disabled_platforms)
 
     emails = decorators.GetEmails(benchmark)
     if emails:

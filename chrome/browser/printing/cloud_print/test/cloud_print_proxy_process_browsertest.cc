@@ -42,7 +42,6 @@
 #include "chrome/test/base/chrome_unit_test_suite.h"
 #include "chrome/test/base/test_launcher_utils.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_io_thread_state.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -470,7 +469,7 @@ base::Process CloudPrintProxyPolicyStartupTest::Launch(
   EXPECT_FALSE(CheckServiceProcessReady());
 
   startup_channel_handle_ = mojo::edk::NamedPlatformHandle(
-      base::StringPrintf("%d.%p.%d", base::GetCurrentProcId(), this,
+      base::StringPrintf("%" CrPRIdPid ".%p.%d", base::GetCurrentProcId(), this,
                          base::RandInt(0, std::numeric_limits<int>::max())));
   startup_channel_ = IPC::ChannelProxy::Create(
       peer_connection_
@@ -480,9 +479,9 @@ base::Process CloudPrintProxyPolicyStartupTest::Launch(
           .release(),
       IPC::Channel::MODE_SERVER, this, IOTaskRunner());
 
-  base::SpawnChildResult spawn_result = SpawnChild(name);
-  EXPECT_TRUE(spawn_result.process.IsValid());
-  return std::move(spawn_result.process);
+  base::Process process = SpawnChild(name);
+  EXPECT_TRUE(process.IsValid());
+  return process;
 }
 
 void CloudPrintProxyPolicyStartupTest::WaitForConnect(
@@ -541,11 +540,6 @@ TEST_F(CloudPrintProxyPolicyStartupTest, StartAndShutdown) {
       TestingBrowserProcess::GetGlobal();
   TestingProfileManager profile_manager(browser_process);
   ASSERT_TRUE(profile_manager.SetUp());
-
-  // Must be created after the TestingProfileManager since that creates the
-  // LocalState for the BrowserProcess.  Must be created before profiles are
-  // constructed.
-  chrome::TestingIOThreadState testing_io_thread_state;
 
   base::Process process =
       Launch("CloudPrintMockService_StartEnabledWaitForQuit");

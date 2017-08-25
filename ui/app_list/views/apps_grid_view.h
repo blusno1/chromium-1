@@ -21,6 +21,7 @@
 #include "ui/app_list/app_list_model_observer.h"
 #include "ui/app_list/pagination_model.h"
 #include "ui/app_list/pagination_model_observer.h"
+#include "ui/app_list/views/app_list_view.h"
 #include "ui/base/models/list_model_observer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -49,6 +50,7 @@ class SuggestionsContainerView;
 class PageSwitcher;
 class PaginationController;
 class PulsingBlockView;
+class ExpandArrowView;
 
 // AppsGridView displays a grid for AppListItemList sub model.
 class APP_LIST_EXPORT AppsGridView : public views::View,
@@ -77,6 +79,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Returns the size of a tile view including its padding.
   static gfx::Size GetTotalTileSize();
 
+  // Returns the padding around a tile view.
+  static gfx::Insets GetTilePadding();
+
   // This resets the grid view to a fresh state for showing the app list.
   void ResetForShowApps();
 
@@ -92,10 +97,12 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void ClearAnySelectedView();
   bool IsSelectedView(const AppListItemView* view) const;
   bool has_selected_view() const { return selected_view_ != nullptr; }
+  views::View* GetSelectedView() const;
 
   void InitiateDrag(AppListItemView* view,
                     Pointer pointer,
-                    const ui::LocatedEvent& event);
+                    const gfx::Point& location,
+                    const gfx::Point& root_location);
 
   void StartDragAndDropHostDragAfterLongPress(Pointer pointer);
   void TryStartDragAndDropHostDrag(Pointer pointer,
@@ -139,6 +146,11 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
       std::set<ui::Clipboard::FormatType>* format_types) override;
   bool CanDrop(const OSExchangeData& data) override;
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
+
+  // Updates the visibility of app list items according to |app_list_state| and
+  // |is_in_drag|.
+  void UpdateControlVisibility(AppListView::AppListState app_list_state,
+                               bool is_in_drag);
 
   // Overridden from ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -192,11 +204,8 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // The grid view must be inside a folder view.
   void OnFolderItemRemoved();
 
-  // Updates the opacity of all the items in the grid during dragging. The
-  // opacity of each item is based on how much the item's |centroid_y| is above
-  // |work_area_bottom|. If |is_end_gesture| is true, set all the items opacity
-  // to 1.0f.
-  void UpdateOpacity(float work_area_bottom, bool is_end_gesture);
+  // Updates the opacity of all the items in the grid during dragging.
+  void UpdateOpacity();
 
   // Return the view model for test purposes.
   const views::ViewModelT<AppListItemView>* view_model_for_test() const {
@@ -225,6 +234,14 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   SuggestionsContainerView* suggestions_container_for_test() const {
     return suggestions_container_;
+  }
+
+  void set_page_flip_delay_in_ms_for_testing(int page_flip_delay_in_ms) {
+    page_flip_delay_in_ms_ = page_flip_delay_in_ms;
+  }
+
+  ExpandArrowView* expand_arrow_view_for_test() const {
+    return expand_arrow_view_;
   }
 
  private:
@@ -256,15 +273,8 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
     int slot;  // Which slot in the page an item view is in.
   };
 
-  // Creates indicator based on the indicator text message id.
-  IndicatorChipView* CreateIndicator(int indicator_text_message_id);
-
   // Updates suggestions from app list model.
   void UpdateSuggestions();
-
-  // Helper method for layouting indicator based on the given bounds |rect|.
-  void LayoutSuggestedAppsIndicator(gfx::Rect* rect);
-  void LayoutAllAppsIndicator(gfx::Rect* rect);
 
   // Returns all apps tiles per page based on |page|.
   int TilesPerPage(int page) const;
@@ -311,6 +321,12 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
                              int slot_x_delta,
                              int slot_y_delta);
 
+  // Returns true if the given moving operation should be handled by
+  // |expand_arrow_view_|, otherwise false.
+  bool HandleExpandArrowMove(int page_delta,
+                             int slot_x_delta,
+                             int slot_y_delta);
+
   // Calculates the offset for |page_of_view| based on current page and
   // transition target page.
   const gfx::Vector2d CalculateTransitionOffset(int page_of_view) const;
@@ -331,8 +347,8 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
                             bool animate_target,
                             const gfx::Rect& target);
 
-  // Extracts drag location info from |event| into |drag_point|.
-  void ExtractDragLocation(const ui::LocatedEvent& event,
+  // Extracts drag location info from |root_location| into |drag_point|.
+  void ExtractDragLocation(const gfx::Point& root_location,
                            gfx::Point* drag_point);
 
   // Updates |reorder_drop_target_|, |folder_drop_target_| and |drop_attempt_|
@@ -441,10 +457,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // slot if |point| is outside the page's bounds.
   Index GetNearestTileIndexForPoint(const gfx::Point& point) const;
 
-  // Gets height on top of the all apps tiles for |page|. For the first page,
-  // that includes suggested apps indicator, suggested apps tiles, all apps
-  // indicator views; For the non-first pages, that include all apps indicator
-  // view only.
+  // Gets height on top of the all apps tiles for |page|.
   int GetHeightOnTopOfAllAppsTiles(int page) const;
 
   // Gets the bounds of the tile located at |slot| on the current page.
@@ -494,9 +507,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Returns true if the grid view is under an OEM folder.
   bool IsUnderOEMFolder();
 
-  // Updates opacity of |view_item| in the app list based on |centroid_y|.
-  void UpdateOpacityOfItem(views::View* view_item, float centroid_y);
-
   AppListModel* model_ = nullptr;         // Owned by AppListView.
   AppListItemList* item_list_ = nullptr;  // Not owned.
 
@@ -512,9 +522,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   ContentsView* contents_view_ = nullptr;
 
   // Views below are owned by views hierarchy.
-  IndicatorChipView* suggested_apps_indicator_ = nullptr;
   SuggestionsContainerView* suggestions_container_ = nullptr;
   IndicatorChipView* all_apps_indicator_ = nullptr;
+  ExpandArrowView* expand_arrow_view_ = nullptr;
 
   int cols_ = 0;
   int rows_per_page_ = 0;
@@ -585,10 +595,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Target page to switch to when |page_flip_timer_| fires.
   int page_flip_target_ = -1;
 
-  // Delay in milliseconds of when |page_flip_timer_| should fire after user
-  // drags an item near the edges.
-  int page_flip_delay_in_ms_;
-
   views::BoundsAnimator bounds_animator_;
 
   // The most recent activated folder item view.
@@ -606,8 +612,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // True if the fullscreen app list feature is enabled.
   const bool is_fullscreen_app_list_enabled_;
 
-  // The bottom of work area.
-  float work_area_bottom_ = 0.f;
+  // Delay in milliseconds of when |page_flip_timer_| should fire after user
+  // drags an item near the edges.
+  int page_flip_delay_in_ms_;
 
   // True if it is the end gesture from shelf dragging.
   bool is_end_gesture_ = false;

@@ -415,11 +415,34 @@ void HTMLInputElement::UpdateType() {
   input_type_view_->DestroyShadowSubtree();
   LazyReattachIfAttached();
 
+  if (input_type_->SupportsRequired() != new_type->SupportsRequired() &&
+      IsRequired()) {
+    PseudoStateChanged(CSSSelector::kPseudoRequired);
+    PseudoStateChanged(CSSSelector::kPseudoOptional);
+  }
+  if (input_type_->SupportsReadOnly() != new_type->SupportsReadOnly()) {
+    PseudoStateChanged(CSSSelector::kPseudoReadOnly);
+    PseudoStateChanged(CSSSelector::kPseudoReadWrite);
+  }
+
+  bool placeholder_changed =
+      input_type_->SupportsPlaceholder() != new_type->SupportsPlaceholder();
+
   input_type_ = new_type;
   input_type_view_ = input_type_->CreateView();
   input_type_view_->CreateShadowSubtree();
 
   SetNeedsWillValidateCheck();
+
+  if (placeholder_changed) {
+    // We need to update the UA shadow and then the placeholder visibility flag
+    // here. Otherwise it would happen as part of attaching the layout tree
+    // which would be too late in order to make style invalidation work for
+    // the upcoming frame.
+    UpdatePlaceholderText();
+    UpdatePlaceholderVisibility();
+    PseudoStateChanged(CSSSelector::kPseudoPlaceholderShown);
+  }
 
   ValueMode new_value_mode = input_type_->GetValueMode();
 
@@ -1381,11 +1404,11 @@ static Vector<String> ParseAcceptAttribute(const String& accept_string,
   return types;
 }
 
-Vector<String> HTMLInputElement::AcceptMIMETypes() {
+Vector<String> HTMLInputElement::AcceptMIMETypes() const {
   return ParseAcceptAttribute(FastGetAttribute(acceptAttr), IsValidMIMEType);
 }
 
-Vector<String> HTMLInputElement::AcceptFileExtensions() {
+Vector<String> HTMLInputElement::AcceptFileExtensions() const {
   return ParseAcceptAttribute(FastGetAttribute(acceptAttr),
                               IsValidFileExtension);
 }
@@ -1689,19 +1712,6 @@ String HTMLInputElement::DefaultToolTip() const {
 
 bool HTMLInputElement::ShouldAppearIndeterminate() const {
   return input_type_->ShouldAppearIndeterminate();
-}
-
-CaptureFacingMode HTMLInputElement::capture() const {
-  const String capture = FastGetAttribute(captureAttr).LowerASCII();
-  if (capture == "user")
-    return CaptureFacingModeUser;
-
-  // |capture| is equivalent to 'environment' if unspecified.
-  return CaptureFacingModeEnvironment;
-}
-
-void HTMLInputElement::setCapture(const AtomicString& value) {
-  setAttribute(captureAttr, value);
 }
 
 bool HTMLInputElement::IsInRequiredRadioButtonGroup() {

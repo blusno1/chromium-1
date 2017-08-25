@@ -33,6 +33,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/service_utils.h"
+#include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -201,6 +202,8 @@ int GLManager::use_count_;
 scoped_refptr<gl::GLShareGroup>* GLManager::base_share_group_;
 scoped_refptr<gl::GLSurface>* GLManager::base_surface_;
 scoped_refptr<gl::GLContext>* GLManager::base_context_;
+// static
+GpuFeatureInfo GLManager::g_gpu_feature_info;
 
 GLManager::Options::Options() = default;
 
@@ -242,17 +245,28 @@ std::unique_ptr<gfx::GpuMemoryBuffer> GLManager::CreateGpuMemoryBuffer(
 }
 
 void GLManager::Initialize(const GLManager::Options& options) {
-  InitializeWithCommandLine(options, *base::CommandLine::ForCurrentProcess());
+  GpuDriverBugWorkarounds platform_workarounds(
+      g_gpu_feature_info.enabled_gpu_driver_bug_workarounds);
+  InitializeWithWorkaroundsImpl(options, platform_workarounds);
 }
 
-void GLManager::InitializeWithCommandLine(
+void GLManager::InitializeWithWorkarounds(
     const GLManager::Options& options,
-    const base::CommandLine& command_line) {
-  const int32_t kCommandBufferSize = 1024 * 1024;
-  const size_t kStartTransferBufferSize = 4 * 1024 * 1024;
-  const size_t kMinTransferBufferSize = 1 * 256 * 1024;
-  const size_t kMaxTransferBufferSize = 16 * 1024 * 1024;
+    const GpuDriverBugWorkarounds& workarounds) {
+  GpuDriverBugWorkarounds combined_workarounds(
+      g_gpu_feature_info.enabled_gpu_driver_bug_workarounds);
+  combined_workarounds.Append(workarounds);
+  InitializeWithWorkaroundsImpl(options, combined_workarounds);
+}
 
+void GLManager::InitializeWithWorkaroundsImpl(
+    const GLManager::Options& options,
+    const GpuDriverBugWorkarounds& workarounds) {
+  const SharedMemoryLimits limits;
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  DCHECK(!command_line.HasSwitch(switches::kGpuDriverBugWorkarounds));
+  DCHECK(!command_line.HasSwitch(switches::kDisableGLExtensions));
   InitializeGpuPreferencesForTestingFromCommandLine(command_line,
                                                     &gpu_preferences_);
 
@@ -307,9 +321,8 @@ void GLManager::InitializeWithCommandLine(
       base::MakeUnique<gles2::ShaderTranslatorCache>(gpu_preferences_);
 
   if (!context_group) {
-    GpuDriverBugWorkarounds gpu_driver_bug_workaround(&command_line);
     scoped_refptr<gles2::FeatureInfo> feature_info =
-        new gles2::FeatureInfo(command_line, gpu_driver_bug_workaround);
+        new gles2::FeatureInfo(workarounds);
     context_group = new gles2::ContextGroup(
         gpu_preferences_, mailbox_manager_, nullptr /* memory_tracker */,
         translator_cache_.get(), &completeness_cache_, feature_info,
@@ -330,7 +343,7 @@ void GLManager::InitializeWithCommandLine(
 
   command_buffer_->set_handler(decoder_.get());
 
-  surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+  surface_ = gl::init::CreateOffscreenGLSurface(options.size);
   ASSERT_TRUE(surface_.get() != NULL) << "could not create offscreen surface";
 
   if (base_context_) {
@@ -350,6 +363,7 @@ void GLManager::InitializeWithCommandLine(
       context_ = gl::init::CreateGLContext(
           share_group_.get(), surface_.get(),
           GenerateGLContextAttribs(attribs, context_group->gpu_preferences()));
+      g_gpu_feature_info.ApplyToGLContext(context_.get());
     }
   }
   ASSERT_TRUE(context_.get() != NULL) << "could not create GL context";
@@ -363,7 +377,7 @@ void GLManager::InitializeWithCommandLine(
 
   // Create the GLES2 helper, which writes the command buffer protocol.
   gles2_helper_.reset(new gles2::GLES2CmdHelper(command_buffer_.get()));
-  ASSERT_TRUE(gles2_helper_->Initialize(kCommandBufferSize));
+  ASSERT_TRUE(gles2_helper_->Initialize(limits.command_buffer_size));
 
   // Create a transfer buffer.
   transfer_buffer_.reset(new TransferBuffer(gles2_helper_.get()));
@@ -376,12 +390,16 @@ void GLManager::InitializeWithCommandLine(
       options.lose_context_when_out_of_memory, support_client_side_arrays,
       this));
 
-  ASSERT_TRUE(gles2_implementation_->Initialize(
-      kStartTransferBufferSize, kMinTransferBufferSize, kMaxTransferBufferSize,
-      SharedMemoryLimits::kNoLimit))
+  ASSERT_TRUE(gles2_implementation_->Initialize(limits))
       << "Could not init GLES2Implementation";
 
   MakeCurrent();
+}
+
+size_t GLManager::GetSharedMemoryBytesAllocated() const {
+  return decoder_->GetContextGroup()
+      ->transfer_buffer_manager()
+      ->shared_memory_bytes_allocated();
 }
 
 void GLManager::SetupBaseContext() {
@@ -395,6 +413,7 @@ void GLManager::SetupBaseContext() {
     base_context_ = new scoped_refptr<gl::GLContext>(gl::init::CreateGLContext(
         base_share_group_->get(), base_surface_->get(),
         gl::GLContextAttribs()));
+    g_gpu_feature_info.ApplyToGLContext(base_context_->get());
     #endif
   }
   ++use_count_;

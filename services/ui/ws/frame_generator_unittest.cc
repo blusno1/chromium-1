@@ -41,8 +41,11 @@ class TestClientBinding : public viz::mojom::CompositorFrameSink,
   ~TestClientBinding() override = default;
 
   // viz::mojom::CompositorFrameSink implementation:
-  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
-                             cc::CompositorFrame frame) override {
+  void SubmitCompositorFrame(
+      const viz::LocalSurfaceId& local_surface_id,
+      cc::CompositorFrame frame,
+      viz::mojom::HitTestRegionListPtr hit_test_region_list,
+      uint64_t submit_time) override {
     ++frames_submitted_;
     last_frame_ = std::move(frame);
     last_begin_frame_ack_ = last_frame_.metadata.begin_frame_ack;
@@ -133,7 +136,7 @@ class FrameGeneratorTest : public testing::Test {
   // |frame_generator_|. After InitWithSurfaceInfo finishes, |frame_generator_|
   // has a valid SurfaceInfo and does not request BeginFrames.
   void InitWithSurfaceInfo() {
-    frame_generator_->OnSurfaceCreated(kArbitrarySurfaceInfo);
+    frame_generator_->OnFirstSurfaceActivation(kArbitrarySurfaceInfo);
 
     // Issue a BeginFrame so that frame_generator_ stops requesting BeginFrames
     // after submitting a CompositorFrame.
@@ -185,7 +188,7 @@ TEST_F(FrameGeneratorTest, InvalidSurfaceInfo) {
   EXPECT_EQ(viz::BeginFrameAck(), LastBeginFrameAck());
 }
 
-TEST_F(FrameGeneratorTest, OnSurfaceCreated) {
+TEST_F(FrameGeneratorTest, OnFirstSurfaceActivation) {
   InitWithSurfaceInfo();
 
   // Verify that the CompositorFrame refers to the window manager's surface via

@@ -48,18 +48,20 @@ void UiRenderer::Draw(const RenderInfo& render_info,
   DrawOverlayElements(render_info, controller_info);
 }
 
-void UiRenderer::DrawHeadLocked(const RenderInfo& render_info,
-                                const ControllerInfo& controller_info) {
-  TRACE_EVENT0("gpu", "VrShellGl::DrawHeadLockedElements");
-  std::vector<const UiElement*> elements = scene_->GetHeadLockedElements();
+void UiRenderer::DrawViewportAware(const RenderInfo& render_info,
+                                   const ControllerInfo& controller_info,
+                                   bool web_vr_mode) {
+  TRACE_EVENT0("gpu", "VrShellGl::DrawViewportAwareElements");
+  std::vector<const UiElement*> elements = scene_->GetViewportAwareElements();
 
-  glEnable(GL_CULL_FACE);
-  glEnable(GL_DEPTH_TEST);
-  glDepthMask(GL_TRUE);
+  if (web_vr_mode) {
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
 
-  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  gfx::Transform identity_matrix;
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  }
   DrawUiView(render_info, controller_info, elements, false);
 }
 
@@ -161,29 +163,8 @@ void UiRenderer::DrawElements(const gfx::Transform& view_proj_matrix,
 void UiRenderer::DrawElement(const gfx::Transform& view_proj_matrix,
                              const UiElement& element) {
   DCHECK_GE(element.draw_phase(), 0);
-  gfx::Transform transform = view_proj_matrix * element.world_space_transform();
-
-  switch (element.fill()) {
-    case Fill::OPAQUE_GRADIENT: {
-      vr_shell_renderer_->GetGradientQuadRenderer()->Draw(
-          transform, element.edge_color(), element.center_color(),
-          element.computed_opacity());
-      break;
-    }
-    case Fill::GRID_GRADIENT: {
-      vr_shell_renderer_->GetGradientGridRenderer()->Draw(
-          transform, element.edge_color(), element.center_color(),
-          element.grid_color(), element.gridline_count(),
-          element.computed_opacity());
-      break;
-    }
-    case Fill::SELF: {
-      element.Render(vr_shell_renderer_, transform);
-      break;
-    }
-    default:
-      break;
-  }
+  element.Render(vr_shell_renderer_,
+                 view_proj_matrix * element.world_space_transform());
 }
 
 std::vector<const UiElement*> UiRenderer::GetElementsInDrawOrder(

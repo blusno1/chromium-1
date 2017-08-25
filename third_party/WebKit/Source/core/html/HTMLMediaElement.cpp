@@ -69,8 +69,9 @@
 #include "core/layout/IntersectionGeometry.h"
 #include "core/layout/LayoutMedia.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
+#include "core/page/Page.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "platform/Histogram.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -93,8 +94,10 @@
 #include "public/platform/WebAudioSourceProvider.h"
 #include "public/platform/WebContentDecryptionModule.h"
 #include "public/platform/WebInbandTextTrack.h"
+#include "public/platform/WebMediaPlayer.h"
 #include "public/platform/WebMediaPlayerSource.h"
 #include "public/platform/WebMediaStream.h"
+#include "public/platform/WebScreenInfo.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackClient.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackState.h"
@@ -497,9 +500,8 @@ HTMLMediaElement::HTMLMediaElement(const QualifiedName& tag_name,
       playing_remotely_(false),
       in_overlay_fullscreen_video_(false),
       mostly_filling_viewport_(false),
-      audio_tracks_(this, AudioTrackList::Create(*this)),
-      video_tracks_(this, VideoTrackList::Create(*this)),
-      text_tracks_(this, nullptr),
+      audio_tracks_(AudioTrackList::Create(*this)),
+      video_tracks_(VideoTrackList::Create(*this)),
       audio_source_node_(nullptr),
       autoplay_policy_(new AutoplayPolicy(this)),
       remote_playback_client_(nullptr),
@@ -2207,7 +2209,10 @@ WebMediaPlayer::Preload HTMLMediaElement::PreloadType() const {
     return WebMediaPlayer::kPreloadMetaData;
   }
 
-  if (DeprecatedEqualIgnoringCase(preload, "auto")) {
+  // Per HTML spec, "The empty string ... maps to the Automatic state."
+  // https://html.spec.whatwg.org/#attr-media-preload
+  if (DeprecatedEqualIgnoringCase(preload, "auto") ||
+      DeprecatedEqualIgnoringCase(preload, "")) {
     UseCounter::Count(GetDocument(), WebFeature::kHTMLMediaElementPreloadAuto);
     return WebMediaPlayer::kPreloadAuto;
   }
@@ -4098,6 +4103,13 @@ WebMediaPlayer::DisplayType HTMLMediaElement::DisplayType() const {
                         : WebMediaPlayer::DisplayType::kInline;
 }
 
+gfx::ColorSpace HTMLMediaElement::TargetColorSpace() {
+  const LocalFrame* frame = GetDocument().GetFrame();
+  if (!frame)
+    return gfx::ColorSpace();
+  return frame->GetPage()->GetChromeClient().GetScreenInfo().color_space;
+}
+
 void HTMLMediaElement::CheckViewportIntersectionTimerFired(TimerBase*) {
   bool should_report_root_bounds = true;
   IntersectionGeometry geometry(nullptr, *this, Vector<Length>(),
@@ -4118,5 +4130,16 @@ void HTMLMediaElement::CheckViewportIntersectionTimerFired(TimerBase*) {
   if (web_media_player_)
     web_media_player_->BecameDominantVisibleContent(mostly_filling_viewport_);
 }
+
+STATIC_ASSERT_ENUM(WebMediaPlayer::kReadyStateHaveNothing,
+                   HTMLMediaElement::kHaveNothing);
+STATIC_ASSERT_ENUM(WebMediaPlayer::kReadyStateHaveMetadata,
+                   HTMLMediaElement::kHaveMetadata);
+STATIC_ASSERT_ENUM(WebMediaPlayer::kReadyStateHaveCurrentData,
+                   HTMLMediaElement::kHaveCurrentData);
+STATIC_ASSERT_ENUM(WebMediaPlayer::kReadyStateHaveFutureData,
+                   HTMLMediaElement::kHaveFutureData);
+STATIC_ASSERT_ENUM(WebMediaPlayer::kReadyStateHaveEnoughData,
+                   HTMLMediaElement::kHaveEnoughData);
 
 }  // namespace blink

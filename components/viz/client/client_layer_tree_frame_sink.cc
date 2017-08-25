@@ -6,8 +6,10 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/trace_event/trace_event.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/layer_tree_frame_sink_client.h"
+#include "components/viz/client/hit_test_data_provider.h"
 #include "components/viz/client/local_surface_id_provider.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/resources/shared_bitmap_manager.h"
@@ -22,12 +24,14 @@ ClientLayerTreeFrameSink::ClientLayerTreeFrameSink(
     std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
     mojom::CompositorFrameSinkPtrInfo compositor_frame_sink_info,
     mojom::CompositorFrameSinkClientRequest client_request,
+    std::unique_ptr<HitTestDataProvider> hit_test_data_provider,
     std::unique_ptr<LocalSurfaceIdProvider> local_surface_id_provider,
     bool enable_surface_synchronization)
     : cc::LayerTreeFrameSink(std::move(context_provider),
                              std::move(worker_context_provider),
                              gpu_memory_buffer_manager,
                              shared_bitmap_manager),
+      hit_test_data_provider_(std::move(hit_test_data_provider)),
       local_surface_id_provider_(std::move(local_surface_id_provider)),
       synthetic_begin_frame_source_(std::move(synthetic_begin_frame_source)),
       compositor_frame_sink_info_(std::move(compositor_frame_sink_info)),
@@ -39,13 +43,15 @@ ClientLayerTreeFrameSink::ClientLayerTreeFrameSink(
 }
 
 ClientLayerTreeFrameSink::ClientLayerTreeFrameSink(
-    scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+    scoped_refptr<VulkanContextProvider> vulkan_context_provider,
     std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
     mojom::CompositorFrameSinkPtrInfo compositor_frame_sink_info,
     mojom::CompositorFrameSinkClientRequest client_request,
+    std::unique_ptr<HitTestDataProvider> hit_test_data_provider,
     std::unique_ptr<LocalSurfaceIdProvider> local_surface_id_provider,
     bool enable_surface_synchronization)
     : cc::LayerTreeFrameSink(std::move(vulkan_context_provider)),
+      hit_test_data_provider_(std::move(hit_test_data_provider)),
       local_surface_id_provider_(std::move(local_surface_id_provider)),
       synthetic_begin_frame_source_(std::move(synthetic_begin_frame_source)),
       compositor_frame_sink_info_(std::move(compositor_frame_sink_info)),
@@ -116,8 +122,19 @@ void ClientLayerTreeFrameSink::SubmitCompositorFrame(
         local_surface_id_provider_->GetLocalSurfaceIdForFrame(frame);
   }
 
-  compositor_frame_sink_->SubmitCompositorFrame(local_surface_id_,
-                                                std::move(frame));
+  TRACE_EVENT_FLOW_BEGIN0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+                          "SubmitCompositorFrame",
+                          local_surface_id_.local_id());
+  bool tracing_enabled;
+  TRACE_EVENT_CATEGORY_GROUP_ENABLED(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+                                     &tracing_enabled);
+
+  // TODO(gklassen): Use hit_test_data_provider_->GetHitTestData() to obtain
+  // hit-test data and send to |compositor_frame_sink_|.
+  compositor_frame_sink_->SubmitCompositorFrame(
+      local_surface_id_, std::move(frame), nullptr,
+      tracing_enabled ? base::TimeTicks::Now().since_origin().InMicroseconds()
+                      : 0);
 }
 
 void ClientLayerTreeFrameSink::DidNotProduceFrame(const BeginFrameAck& ack) {

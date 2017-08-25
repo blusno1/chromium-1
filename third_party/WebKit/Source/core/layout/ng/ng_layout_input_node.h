@@ -7,7 +7,6 @@
 
 #include "core/CoreExport.h"
 #include "platform/LayoutUnit.h"
-#include "platform/heap/Handle.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
@@ -15,7 +14,6 @@ namespace blink {
 class ComputedStyle;
 class LayoutObject;
 class LayoutBox;
-class LayoutUnit;
 class NGBreakToken;
 class NGConstraintSpace;
 class NGLayoutResult;
@@ -43,10 +41,15 @@ class CORE_EXPORT NGLayoutInputNode {
   bool IsOutOfFlowPositioned() const;
   bool IsReplaced() const;
 
+  // If the node is a quirky container for margin collapsing, see:
+  // https://html.spec.whatwg.org/#margin-collapsing-quirks
+  // NOTE: The spec appears to only somewhat match reality.
+  bool IsQuirkyContainer() const;
+
   bool CreatesNewFormattingContext() const;
 
   // Performs layout on this input node, will return the layout result.
-  RefPtr<NGLayoutResult> Layout(NGConstraintSpace*, NGBreakToken*);
+  RefPtr<NGLayoutResult> Layout(const NGConstraintSpace&, NGBreakToken*);
 
   MinMaxSize ComputeMinMaxSize();
 

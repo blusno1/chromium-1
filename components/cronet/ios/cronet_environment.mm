@@ -28,8 +28,10 @@
 #include "components/prefs/pref_filter.h"
 #include "ios/net/cookies/cookie_store_ios.h"
 #include "ios/web/public/global_state/ios_global_state.h"
+#include "ios/web/public/global_state/ios_global_state_configuration.h"
 #include "ios/web/public/user_agent.h"
 #include "net/base/network_change_notifier.h"
+#include "net/base/url_util.h"
 #include "net/cert/cert_verifier.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
@@ -97,10 +99,17 @@ bool IsNetLogPathValid(const base::FilePath& path) {
 
 namespace cronet {
 
+base::SingleThreadTaskRunner* CronetEnvironment::GetNetworkThreadTaskRunner() {
+  if (network_io_thread_) {
+    return network_io_thread_->task_runner().get();
+  }
+  return ios_global_state::GetSharedNetworkIOThreadTaskRunner().get();
+}
+
 void CronetEnvironment::PostToNetworkThread(
     const tracked_objects::Location& from_here,
     const base::Closure& task) {
-  network_io_thread_->task_runner()->PostTask(from_here, task);
+  GetNetworkThreadTaskRunner()->PostTask(from_here, task);
 }
 
 void CronetEnvironment::PostToFileUserBlockingThread(
@@ -226,16 +235,21 @@ void CronetEnvironment::Start() {
   network_cache_thread_.reset(new base::Thread("Chrome Network Cache Thread"));
   network_cache_thread_->StartWithOptions(
       base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
-  network_io_thread_.reset(new base::Thread("Chrome Network IO Thread"));
-  network_io_thread_->StartWithOptions(
-      base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
+  // Fetching the task_runner will create the shared thread if necessary.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      ios_global_state::GetSharedNetworkIOThreadTaskRunner();
+  if (!task_runner) {
+    network_io_thread_.reset(new base::Thread("Chrome Network IO Thread"));
+    network_io_thread_->StartWithOptions(
+        base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
+  }
   file_user_blocking_thread_.reset(
       new base::Thread("Chrome File User Blocking Thread"));
   file_user_blocking_thread_->StartWithOptions(
       base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
 
   main_context_getter_ = new CronetURLRequestContextGetter(
-      this, network_io_thread_->task_runner());
+      this, CronetEnvironment::GetNetworkThreadTaskRunner());
   base::subtle::MemoryBarrier();
   PostToNetworkThread(FROM_HERE,
                       base::Bind(&CronetEnvironment::InitializeOnNetworkThread,
@@ -255,12 +269,14 @@ CronetEnvironment::~CronetEnvironment() {
   // TODO(lilyhoughton) this should be smarter about making sure there are no
   // pending requests, etc.
 
-  network_io_thread_->task_runner().get()->DeleteSoon(FROM_HERE,
-                                                      main_context_.release());
+  if (network_io_thread_) {
+    network_io_thread_->task_runner().get()->DeleteSoon(
+        FROM_HERE, main_context_.release());
+  }
 }
 
 void CronetEnvironment::InitializeOnNetworkThread() {
-  DCHECK(network_io_thread_->task_runner()->BelongsToCurrentThread());
+  DCHECK(GetNetworkThreadTaskRunner()->BelongsToCurrentThread());
 
   static bool ssl_key_log_file_set = false;
   if (!ssl_key_log_file_set && !ssl_key_log_file_name_.empty()) {
@@ -327,8 +343,17 @@ void CronetEnvironment::InitializeOnNetworkThread() {
       new net::HttpServerPropertiesImpl());
 
   for (const auto& quic_hint : quic_hints_) {
+    url::CanonHostInfo host_info;
+    std::string canon_host(net::CanonicalizeHost(quic_hint.host(), &host_info));
+    if (!host_info.IsIPAddress() &&
+        !net::IsCanonicalizedHostCompliant(canon_host)) {
+      LOG(ERROR) << "Invalid QUIC hint host: " << quic_hint.host();
+      continue;
+    }
+
     net::AlternativeService alternative_service(net::kProtoQUIC, "",
                                                 quic_hint.port());
+
     url::SchemeHostPort quic_hint_server("https", quic_hint.host(),
                                          quic_hint.port());
     http_server_properties->SetQuicAlternativeService(

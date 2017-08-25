@@ -582,6 +582,9 @@ CSSSelector::RelationType CSSSelectorParser::ConsumeCombinator(
       const CSSParserToken& slash = range.ConsumeIncludingWhitespace();
       if (slash.GetType() != kDelimiterToken || slash.Delimiter() != '/')
         failed_parsing_ = true;
+      if (RuntimeEnabledFeatures::DeepCombinatorInCSSDynamicProfileEnabled()) {
+        return CSSSelector::kShadowDeep;
+      }
       return context_->IsDynamicProfile() ? CSSSelector::kShadowDeepAsDescendant
                                           : CSSSelector::kShadowDeep;
     }

@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "base/files/platform_file.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_pump_win.h"
@@ -27,7 +28,7 @@ class MemlogReceiverPipe
     : public base::RefCountedThreadSafe<MemlogReceiverPipe>,
       public base::MessagePumpForIO::IOHandler {
  public:
-  explicit MemlogReceiverPipe(HANDLE handle);
+  explicit MemlogReceiverPipe(base::ScopedPlatformFile handle);
 
   // Must be called on the IO thread.
   void StartReadingOnIOThread();
@@ -35,11 +36,13 @@ class MemlogReceiverPipe
   void SetReceiver(scoped_refptr<base::TaskRunner> task_runner,
                    scoped_refptr<MemlogStreamReceiver> receiver);
 
+  // Callback that indicates an error has occurred and the connection should
+  // be closed. May be called more than once in an error condition.
+  void ReportError();
+
  private:
   friend class base::RefCountedThreadSafe<MemlogReceiverPipe>;
   ~MemlogReceiverPipe() override;
-
-  void OnIOCompleted(size_t bytes_transfered, DWORD error);
 
   void ReadUntilBlocking();
   void ZeroOverlapped();
@@ -52,7 +55,7 @@ class MemlogReceiverPipe
   scoped_refptr<base::TaskRunner> receiver_task_runner_;
   scoped_refptr<MemlogStreamReceiver> receiver_;
 
-  HANDLE handle_;
+  base::win::ScopedHandle handle_;
   base::MessagePumpForIO::IOContext context_;
 
   bool read_outstanding_ = false;

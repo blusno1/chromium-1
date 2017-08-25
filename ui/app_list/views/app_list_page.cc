@@ -35,8 +35,22 @@ gfx::Rect AppListPage::GetSearchBoxBounds() const {
   return contents_view_->GetDefaultSearchBoxBounds();
 }
 
+gfx::Rect AppListPage::GetSearchBoxBoundsForState(
+    AppListModel::State state) const {
+  return GetSearchBoxBounds();
+}
+
+gfx::Rect AppListPage::GetPageBoundsDuringDragging(
+    AppListModel::State state) const {
+  return GetPageBoundsForState(state);
+}
+
 int AppListPage::GetSearchBoxZHeight() const {
   return kDefaultSearchBoxZHeight;
+}
+
+views::View* AppListPage::GetSelectedView() const {
+  return nullptr;
 }
 
 gfx::Rect AppListPage::GetAboveContentsOffscreenBounds(

@@ -21,14 +21,15 @@
 #include "cc/base/histograms.h"
 #include "cc/base/switches.h"
 #include "cc/output/texture_mailbox_deleter.h"
-#include "cc/output/vulkan_in_process_context_provider.h"
 #include "cc/raster/single_thread_task_graph_runner.h"
 #include "cc/raster/task_graph_runner.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/gl_helper.h"
+#include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #include "components/viz/host/host_frame_sink_manager.h"
+#include "components/viz/host/renderer_settings_creation.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
@@ -58,9 +59,7 @@
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/compositor/compositor.h"
-#include "ui/compositor/compositor_constants.h"
 #include "ui/compositor/compositor_switches.h"
-#include "ui/compositor/compositor_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/types/display_snapshot.h"
@@ -70,6 +69,7 @@
 
 #if defined(USE_AURA)
 #include "content/public/common/service_manager_connection.h"
+#include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #endif
 
@@ -234,7 +234,7 @@ GpuProcessTransportFactory::GpuProcessTransportFactory(
     scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner)
     : frame_sink_id_allocator_(kDefaultClientId),
       renderer_settings_(
-          ui::CreateRendererSettings(CreateBufferToTextureTargetMap())),
+          viz::CreateRendererSettings(CreateBufferToTextureTargetMap())),
       resize_task_runner_(std::move(resize_task_runner)),
       task_graph_runner_(new cc::SingleThreadTaskGraphRunner),
       callback_factory_(this) {
@@ -279,7 +279,7 @@ GpuProcessTransportFactory::CreateSoftwareOutputDevice(
     return base::WrapUnique(new cc::SoftwareOutputDevice);
 
 #if defined(USE_AURA)
-  if (service_manager::ServiceManagerIsRemote()) {
+  if (aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS) {
     NOTREACHED();
     return nullptr;
   }
@@ -343,11 +343,9 @@ static bool ShouldCreateGpuLayerTreeFrameSink(ui::Compositor* compositor) {
   // Software fallback does not happen on Chrome OS.
   return true;
 #endif
-#if defined(OS_WIN)
-  if (::GetProp(compositor->widget(), kForceSoftwareCompositor) &&
-      ::RemoveProp(compositor->widget(), kForceSoftwareCompositor))
+
+  if (compositor->force_software_compositor())
     return false;
-#endif
 
   return GpuDataManagerImpl::GetInstance()->CanUseGpuBrowserCompositor();
 }
@@ -427,7 +425,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
       compositor->widget());
 #endif
 
-  scoped_refptr<cc::VulkanInProcessContextProvider> vulkan_context_provider =
+  scoped_refptr<viz::VulkanInProcessContextProvider> vulkan_context_provider =
       SharedVulkanContextProvider();
   scoped_refptr<ui::ContextProviderCommandBuffer> context_provider;
   if (create_gpu_output_surface && !vulkan_context_provider) {
@@ -669,7 +667,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
           ? base::MakeUnique<viz::DirectLayerTreeFrameSink>(
                 compositor->frame_sink_id(), GetHostFrameSinkManager(),
                 GetFrameSinkManager(), data->display.get(),
-                static_cast<scoped_refptr<cc::VulkanContextProvider>>(
+                static_cast<scoped_refptr<viz::VulkanContextProvider>>(
                     vulkan_context_provider))
           : base::MakeUnique<viz::DirectLayerTreeFrameSink>(
                 compositor->frame_sink_id(), GetHostFrameSinkManager(),
@@ -986,8 +984,8 @@ GpuProcessTransportFactory::CreatePerCompositorData(
 void GpuProcessTransportFactory::OnLostMainThreadSharedContextInsideCallback() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&GpuProcessTransportFactory::OnLostMainThreadSharedContext,
-                 callback_factory_.GetWeakPtr()));
+      base::BindOnce(&GpuProcessTransportFactory::OnLostMainThreadSharedContext,
+                     callback_factory_.GetWeakPtr()));
 }
 
 void GpuProcessTransportFactory::OnLostMainThreadSharedContext() {
@@ -1011,13 +1009,13 @@ void GpuProcessTransportFactory::OnLostMainThreadSharedContext() {
   lost_shared_main_thread_contexts  = NULL;
 }
 
-scoped_refptr<cc::VulkanInProcessContextProvider>
+scoped_refptr<viz::VulkanInProcessContextProvider>
 GpuProcessTransportFactory::SharedVulkanContextProvider() {
   if (!shared_vulkan_context_provider_initialized_) {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kEnableVulkan)) {
       shared_vulkan_context_provider_ =
-          cc::VulkanInProcessContextProvider::Create();
+          viz::VulkanInProcessContextProvider::Create();
     }
 
     shared_vulkan_context_provider_initialized_ = true;

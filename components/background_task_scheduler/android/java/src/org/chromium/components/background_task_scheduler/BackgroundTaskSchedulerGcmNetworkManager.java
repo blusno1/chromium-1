@@ -36,7 +36,7 @@ class BackgroundTaskSchedulerGcmNetworkManager implements BackgroundTaskSchedule
 
     static BackgroundTask getBackgroundTaskFromTaskParams(@NonNull TaskParams taskParams) {
         String backgroundTaskClassName = getBackgroundTaskClassFromTaskParams(taskParams);
-        return BackgroundTaskScheduler.getBackgroundTaskFromClassName(backgroundTaskClassName);
+        return BackgroundTaskReflection.getBackgroundTaskFromClassName(backgroundTaskClassName);
     }
 
     private static String getBackgroundTaskClassFromTaskParams(@NonNull TaskParams taskParams) {
@@ -135,7 +135,7 @@ class BackgroundTaskSchedulerGcmNetworkManager implements BackgroundTaskSchedule
     @Override
     public boolean schedule(Context context, @NonNull TaskInfo taskInfo) {
         ThreadUtils.assertOnUiThread();
-        if (!BackgroundTaskScheduler.hasParameterlessPublicConstructor(
+        if (!BackgroundTaskReflection.hasParameterlessPublicConstructor(
                     taskInfo.getBackgroundTaskClass())) {
             Log.e(TAG,
                     "BackgroundTask " + taskInfo.getBackgroundTaskClass()
@@ -151,7 +151,13 @@ class BackgroundTaskSchedulerGcmNetworkManager implements BackgroundTaskSchedule
 
         Task task = createTaskFromTaskInfo(taskInfo);
 
-        gcmNetworkManager.schedule(task);
+        try {
+            gcmNetworkManager.schedule(task);
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "GcmNetworkManager failed to schedule task.");
+            return false;
+        }
+
         return true;
     }
 
@@ -165,7 +171,12 @@ class BackgroundTaskSchedulerGcmNetworkManager implements BackgroundTaskSchedule
             return;
         }
 
-        gcmNetworkManager.cancelTask(taskIdToTaskTag(taskId), BackgroundTaskGcmTaskService.class);
+        try {
+            gcmNetworkManager.cancelTask(
+                    taskIdToTaskTag(taskId), BackgroundTaskGcmTaskService.class);
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "GcmNetworkManager failed to cancel task.");
+        }
     }
 
     private GcmNetworkManager getGcmNetworkManager(Context context) {

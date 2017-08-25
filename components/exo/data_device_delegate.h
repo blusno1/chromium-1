@@ -22,6 +22,7 @@ namespace exo {
 
 class DataDevice;
 class DataOffer;
+class Surface;
 enum class DndAction;
 
 // Handles events on data devices in context-specific ways.
@@ -33,10 +34,7 @@ class DataDeviceDelegate {
 
   // Called when DataOffer object is delivered from a client. DataDeviceDelegate
   // has responsibility to release the returned DataOffer object.
-  virtual DataOffer* OnDataOffer(
-      const std::vector<std::string>& mime_types,
-      const base::flat_set<DndAction>& source_actions,
-      DndAction dnd_action) = 0;
+  virtual DataOffer* OnDataOffer() = 0;
 
   // Called during a drag operation when pointer enters |surface|.
   virtual void OnEnter(Surface* surface,
@@ -56,6 +54,10 @@ class DataDeviceDelegate {
 
   // Called when the data is pasted on the DataDevice.
   virtual void OnSelection(const DataOffer& data_offer) = 0;
+
+  // This should return true if |surface| is a valid target for this data
+  // device. E.g. the surface is owned by the same client as the data device.
+  virtual bool CanAcceptDataEventsForSurface(Surface* surface) = 0;
 
  protected:
   virtual ~DataDeviceDelegate() {}

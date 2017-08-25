@@ -19,6 +19,7 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/tray_popup_utils.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
@@ -83,11 +84,9 @@ constexpr float kBackgroundShadowElevationDip = 24.f;
 // Need to figure out a way to dynamically change sizes.
 constexpr float kBackgroundLargeWidthDip = 352.5f;
 constexpr float kBackgroundLargeHeightDip = 540.0f;
-constexpr float kBackgroundCornerRadiusDip = 2.f;
+constexpr float kBackgroundCornerRadiusDip = 12.f;
 constexpr float kBackgroundPaddingDip = 6.f;
-constexpr int kBackgroundMorphDurationMs = 300;
-constexpr SkColor kBackgroundColor = SK_ColorWHITE;
-constexpr SkColor kBackgroundFinalColor = static_cast<SkColor>(0xFFF5F5F5);
+constexpr int kBackgroundMorphDurationMs = 150;
 
 constexpr int kHideDurationMs = 200;
 
@@ -167,7 +166,8 @@ class VoiceInteractionIcon : public ui::Layer {
   void AnimationProgressed() {
     gfx::Transform transform;
 
-    uint64_t now = base::TimeTicks::Now().since_origin().InMilliseconds();
+    uint64_t now =
+        (base::TimeTicks::Now() - base::TimeTicks()).InMilliseconds();
     for (int i = 0; i < DOT_COUNT; ++i) {
       float normalizedTime =
           ((now - kMoleculeAnimationOffset * kMoleculeOrder[i]) %
@@ -226,26 +226,18 @@ class VoiceInteractionIconBackground : public ui::Layer,
         center_point_(
             gfx::PointF(kBackgroundSizeDip / 2, kBackgroundSizeDip / 2)),
         circle_layer_delegate_(base::MakeUnique<views::CircleLayerDelegate>(
-            kBackgroundColor,
-            kBackgroundSizeDip / 2)),
-        bg_circle_layer_delegate_(base::MakeUnique<views::CircleLayerDelegate>(
-            kBackgroundFinalColor,
+            SK_ColorWHITE,
             kBackgroundSizeDip / 2)),
         rect_layer_delegate_(base::MakeUnique<views::RectangleLayerDelegate>(
-            kBackgroundColor,
-            gfx::SizeF(small_size_))),
-        bg_rect_layer_delegate_(base::MakeUnique<views::RectangleLayerDelegate>(
-            kBackgroundFinalColor,
+            SK_ColorWHITE,
             gfx::SizeF(small_size_))) {
     set_name("VoiceInteractionOverlay:BACKGROUND_LAYER");
     SetBounds(gfx::Rect(0, 0, kBackgroundInitSizeDip, kBackgroundInitSizeDip));
     SetFillsBoundsOpaquely(false);
     SetMasksToBounds(false);
 
-    for (int i = 0; i < PAINTED_SHAPE_COUNT; ++i) {
-      AddPaintLayer(static_cast<PaintedShape>(i), true);
-      AddPaintLayer(static_cast<PaintedShape>(i), false);
-    }
+    for (int i = 0; i < PAINTED_SHAPE_COUNT; ++i)
+      AddPaintLayer(static_cast<PaintedShape>(i));
 
     shadow_values_ =
         gfx::ShadowValue::MakeMdShadowValues(kBackgroundShadowElevationDip);
@@ -286,6 +278,19 @@ class VoiceInteractionIconBackground : public ui::Layer,
         gfx::Tween::LINEAR_OUT_SLOW_IN, animation_observer);
   }
 
+  void SetToLarge(const gfx::PointF& new_center) {
+    PaintedShapeTransforms transforms;
+    SetPaintedLayersVisible(true);
+    // Hide the shadow layer
+    shadow_layer_->SetVisible(false);
+
+    center_point_ = new_center;
+    // Set the painted layers to the large rectangle size
+    CalculateRectTransforms(large_size_, kBackgroundCornerRadiusDip,
+                            &transforms);
+    SetTransforms(transforms);
+  }
+
   void ResetShape() {
     // This reverts to the original small round shape.
     shadow_layer_->SetVisible(true);
@@ -309,26 +314,18 @@ class VoiceInteractionIconBackground : public ui::Layer,
 
   typedef gfx::Transform PaintedShapeTransforms[PAINTED_SHAPE_COUNT];
 
-  void AddPaintLayer(PaintedShape painted_shape, bool is_background) {
+  void AddPaintLayer(PaintedShape painted_shape) {
     ui::LayerDelegate* delegate = nullptr;
     switch (painted_shape) {
       case TOP_LEFT_CIRCLE:
       case TOP_RIGHT_CIRCLE:
       case BOTTOM_RIGHT_CIRCLE:
       case BOTTOM_LEFT_CIRCLE:
-        if (is_background) {
-          delegate = bg_circle_layer_delegate_.get();
-        } else {
-          delegate = circle_layer_delegate_.get();
-        }
+        delegate = circle_layer_delegate_.get();
         break;
       case HORIZONTAL_RECT:
       case VERTICAL_RECT:
-        if (is_background) {
-          delegate = bg_rect_layer_delegate_.get();
-        } else {
-          delegate = rect_layer_delegate_.get();
-        }
+        delegate = rect_layer_delegate_.get();
         break;
       case PAINTED_SHAPE_COUNT:
         NOTREACHED() << "PAINTED_SHAPE_COUNT is not an actual shape type.";
@@ -346,27 +343,17 @@ class VoiceInteractionIconBackground : public ui::Layer,
     layer->SetMasksToBounds(false);
     layer->set_name("PAINTED_SHAPE_COUNT:" + ToLayerName(painted_shape));
 
-    if (is_background) {
-      bg_painted_layers_[static_cast<int>(painted_shape)].reset(layer);
-    } else {
-      painted_layers_[static_cast<int>(painted_shape)].reset(layer);
-    }
+    painted_layers_[static_cast<int>(painted_shape)].reset(layer);
   }
 
   void SetTransforms(const PaintedShapeTransforms transforms) {
-    for (int i = 0; i < PAINTED_SHAPE_COUNT; ++i) {
+    for (int i = 0; i < PAINTED_SHAPE_COUNT; ++i)
       painted_layers_[i]->SetTransform(transforms[i]);
-      bg_painted_layers_[i]->SetTransform(transforms[i]);
-    }
   }
 
   void SetPaintedLayersVisible(bool visible) {
-    for (int i = 0; i < PAINTED_SHAPE_COUNT; ++i) {
+    for (int i = 0; i < PAINTED_SHAPE_COUNT; ++i)
       painted_layers_[i]->SetVisible(visible);
-      painted_layers_[i]->SetOpacity(1);
-      bg_painted_layers_[i]->SetVisible(visible);
-      bg_painted_layers_[i]->SetOpacity(1);
-    }
   }
 
   void CalculateCircleTransforms(const gfx::Size& size,
@@ -469,25 +456,6 @@ class VoiceInteractionIconBackground : public ui::Layer,
       ui::ScopedLayerAnimationSettings animation(animator);
       animation.SetPreemptionStrategy(preemption_strategy);
       animation.SetTweenType(tween);
-      animation.SetTransitionDuration(duration);
-      painted_layers_[i]->SetOpacity(0);
-      std::unique_ptr<ui::LayerAnimationElement> element =
-          ui::LayerAnimationElement::CreateTransformElement(transforms[i],
-                                                            duration);
-      ui::LayerAnimationSequence* sequence =
-          new ui::LayerAnimationSequence(std::move(element));
-
-      if (animation_observer)
-        sequence->AddObserver(animation_observer);
-
-      animator->StartAnimation(sequence);
-    }
-
-    for (int i = 0; i < PAINTED_SHAPE_COUNT; ++i) {
-      ui::LayerAnimator* animator = bg_painted_layers_[i]->GetAnimator();
-      ui::ScopedLayerAnimationSettings animation(animator);
-      animation.SetPreemptionStrategy(preemption_strategy);
-      animation.SetTweenType(tween);
       std::unique_ptr<ui::LayerAnimationElement> element =
           ui::LayerAnimationElement::CreateTransformElement(transforms[i],
                                                             duration);
@@ -531,7 +499,7 @@ class VoiceInteractionIconBackground : public ui::Layer,
     gfx::Canvas* canvas = recorder.canvas();
 
     cc::PaintFlags flags;
-    flags.setColor(kBackgroundColor);
+    flags.setColor(SK_ColorWHITE);
     flags.setAntiAlias(true);
     flags.setStyle(cc::PaintFlags::kFill_Style);
     flags.setLooper(gfx::CreateShadowDrawLooper(shadow_values_));
@@ -546,11 +514,8 @@ class VoiceInteractionIconBackground : public ui::Layer,
   void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
 
   // ui::Layers for all of the painted shape layers that compose the morphing
-  // shape. We have two sets, one is rendered in the foreground, the other set
-  // behind. We use them to create an animated transition between two colors by
-  // fading out one set during transformation.
+  // shape.
   std::unique_ptr<ui::Layer> painted_layers_[PAINTED_SHAPE_COUNT];
-  std::unique_ptr<ui::Layer> bg_painted_layers_[PAINTED_SHAPE_COUNT];
 
   const gfx::Size large_size_;
 
@@ -561,11 +526,9 @@ class VoiceInteractionIconBackground : public ui::Layer,
 
   // ui::LayerDelegate to paint circles for all the circle layers.
   std::unique_ptr<views::CircleLayerDelegate> circle_layer_delegate_;
-  std::unique_ptr<views::CircleLayerDelegate> bg_circle_layer_delegate_;
 
   // ui::LayerDelegate to paint rectangles for all the rectangle layers.
   std::unique_ptr<views::RectangleLayerDelegate> rect_layer_delegate_;
-  std::unique_ptr<views::RectangleLayerDelegate> bg_rect_layer_delegate_;
 
   gfx::ShadowValues shadow_values_;
 
@@ -579,9 +542,6 @@ VoiceInteractionOverlay::VoiceInteractionOverlay(AppListButton* host_view)
       icon_layer_(base::MakeUnique<VoiceInteractionIcon>()),
       background_layer_(base::MakeUnique<VoiceInteractionIconBackground>()),
       host_view_(host_view),
-      is_bursting_(false),
-      show_icon_(false),
-      should_hide_animation_(false),
       circle_layer_delegate_(kRippleColor, kRippleCircleInitRadiusDip) {
   SetPaintToLayer(ui::LAYER_NOT_DRAWN);
   layer()->set_name("VoiceInteractionOverlay:ROOT_LAYER");
@@ -603,7 +563,7 @@ VoiceInteractionOverlay::VoiceInteractionOverlay(AppListButton* host_view)
 VoiceInteractionOverlay::~VoiceInteractionOverlay() {}
 
 void VoiceInteractionOverlay::StartAnimation(bool show_icon) {
-  is_bursting_ = false;
+  animation_state_ = AnimationState::STARTING;
   show_icon_ = show_icon;
   SetVisible(true);
 
@@ -654,10 +614,14 @@ void VoiceInteractionOverlay::StartAnimation(bool show_icon) {
   transform.Scale(scale_factor, scale_factor);
   icon_layer_->SetTransform(transform);
 
+  const bool is_tablet_mode = Shell::Get()
+                                  ->tablet_mode_controller()
+                                  ->IsTabletModeWindowManagerEnabled();
+  const int icon_x_offset = is_tablet_mode ? 0 : kIconOffsetDip;
   // Setup icon animation.
   scale_factor = kIconSizeDip / kIconInitSizeDip;
   transform.MakeIdentity();
-  transform.Translate(center.x() - kIconSizeDip / 2 + kIconOffsetDip,
+  transform.Translate(center.x() - kIconSizeDip / 2 + icon_x_offset,
                       center.y() - kIconSizeDip / 2 - kIconOffsetDip);
   transform.Scale(scale_factor, scale_factor);
 
@@ -685,7 +649,7 @@ void VoiceInteractionOverlay::StartAnimation(bool show_icon) {
   // Setup background animation.
   scale_factor = kBackgroundSizeDip / kBackgroundInitSizeDip;
   transform.MakeIdentity();
-  transform.Translate(center.x() - kBackgroundSizeDip / 2 + kIconOffsetDip,
+  transform.Translate(center.x() - kBackgroundSizeDip / 2 + icon_x_offset,
                       center.y() - kBackgroundSizeDip / 2 - kIconOffsetDip);
   transform.Scale(scale_factor, scale_factor);
 
@@ -709,8 +673,7 @@ void VoiceInteractionOverlay::StartAnimation(bool show_icon) {
 }
 
 void VoiceInteractionOverlay::BurstAnimation() {
-  is_bursting_ = true;
-  should_hide_animation_ = false;
+  animation_state_ = AnimationState::BURSTING;
 
   gfx::Point center = host_view_->GetAppListButtonCenterPoint();
   gfx::Transform transform;
@@ -760,27 +723,85 @@ void VoiceInteractionOverlay::BurstAnimation() {
   }
 
   // Setup background animation.
-  ui::CallbackLayerAnimationObserver* observer =
-      new ui::CallbackLayerAnimationObserver(
-          base::Bind(&VoiceInteractionOverlay::AnimationEndedCallback,
-                     base::Unretained(this)));
   // Transform to new shape.
   // We want to animate from the background's current position into a larger
   // size. The animation moves the background's center point while morphing from
   // circle to a rectangle.
-  float x_offset = center.x() - kBackgroundSizeDip / 2 + kIconOffsetDip;
+  const bool is_tablet_mode = Shell::Get()
+                                  ->tablet_mode_controller()
+                                  ->IsTabletModeWindowManagerEnabled();
+  const int icon_x_offset = is_tablet_mode ? 0 : kIconOffsetDip;
+  float x_offset = center.x() - kBackgroundSizeDip / 2 + icon_x_offset;
   float y_offset = center.y() - kBackgroundSizeDip / 2 - kIconOffsetDip;
 
   background_layer_->AnimateToLarge(
       gfx::PointF(
           kBackgroundLargeWidthDip / 2 + kBackgroundPaddingDip - x_offset,
           -kBackgroundLargeHeightDip / 2 - kBackgroundPaddingDip - y_offset),
-      observer);
-  observer->SetActive();
+      nullptr);
+}
+
+void VoiceInteractionOverlay::WaitingAnimation() {
+  // If we are already playing burst animation, it will end up at waiting state
+  // anyway.  No need to do anything.
+  if (IsBursting())
+    return;
+
+  animation_state_ = AnimationState::WAITING;
+
+  gfx::Point center = host_view_->GetAppListButtonCenterPoint();
+  gfx::Transform transform;
+
+  ripple_layer_->SetOpacity(0);
+  icon_layer_->SetOpacity(0);
+  background_layer_->SetOpacity(0);
+  SetVisible(true);
+
+  // Setup icon layer.
+  {
+    transform.Translate(kBackgroundLargeWidthDip / 2 + kBackgroundPaddingDip -
+                            kIconEndSizeDip / 2,
+                        -kBackgroundLargeHeightDip / 2 - kBackgroundPaddingDip -
+                            kIconEndSizeDip / 2);
+    SkMScalar scale_factor = kIconEndSizeDip / kIconInitSizeDip;
+    transform.Scale(scale_factor, scale_factor);
+    icon_layer_->SetTransform(transform);
+
+    ui::ScopedLayerAnimationSettings settings(icon_layer_->GetAnimator());
+    settings.SetTransitionDuration(
+        base::TimeDelta::FromMilliseconds(kBackgroundMorphDurationMs));
+    settings.SetPreemptionStrategy(
+        ui::LayerAnimator::PreemptionStrategy::ENQUEUE_NEW_ANIMATION);
+    settings.SetTweenType(gfx::Tween::LINEAR_OUT_SLOW_IN);
+
+    icon_layer_->SetOpacity(1);
+    icon_layer_->StartAnimation();
+  }
+
+  // Setup background layer.
+  {
+    float x_offset = center.x() - kBackgroundSizeDip / 2;
+    float y_offset = center.y() - kBackgroundSizeDip / 2;
+
+    transform.MakeIdentity();
+    background_layer_->SetTransform(transform);
+    background_layer_->SetToLarge(gfx::PointF(
+        kBackgroundLargeWidthDip / 2 + kBackgroundPaddingDip - x_offset,
+        -kBackgroundLargeHeightDip / 2 - kBackgroundPaddingDip - y_offset));
+
+    ui::ScopedLayerAnimationSettings settings(background_layer_->GetAnimator());
+    settings.SetTransitionDuration(
+        base::TimeDelta::FromMilliseconds(kBackgroundMorphDurationMs));
+    settings.SetPreemptionStrategy(
+        ui::LayerAnimator::PreemptionStrategy::ENQUEUE_NEW_ANIMATION);
+    settings.SetTweenType(gfx::Tween::LINEAR_OUT_SLOW_IN);
+
+    background_layer_->SetOpacity(1);
+  }
 }
 
 void VoiceInteractionOverlay::EndAnimation() {
-  if (is_bursting_) {
+  if (IsBursting()) {
     // Too late, user action already fired, we have to finish what's started.
     return;
   }
@@ -858,14 +879,7 @@ void VoiceInteractionOverlay::EndAnimation() {
 }
 
 void VoiceInteractionOverlay::HideAnimation() {
-  is_bursting_ = false;
-
-  if (background_layer_->GetAnimator()->is_animating()) {
-    // Wait for current animation to finish
-    should_hide_animation_ = true;
-    return;
-  }
-  should_hide_animation_ = false;
+  animation_state_ = AnimationState::HIDDEN;
 
   // Setup ripple animations.
   {
@@ -903,14 +917,6 @@ void VoiceInteractionOverlay::HideAnimation() {
 
     background_layer_->SetOpacity(0);
   }
-}
-
-bool VoiceInteractionOverlay::AnimationEndedCallback(
-    const ui::CallbackLayerAnimationObserver& observer) {
-  if (should_hide_animation_)
-    HideAnimation();
-
-  return true;
 }
 
 }  // namespace ash

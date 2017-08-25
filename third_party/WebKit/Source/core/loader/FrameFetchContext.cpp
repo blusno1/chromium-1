@@ -180,7 +180,7 @@ struct FrameFetchContext::FrozenState final
               RefPtr<const SecurityOrigin> parent_security_origin,
               const Optional<WebAddressSpace>& address_space,
               const ContentSecurityPolicy* content_security_policy,
-              KURL first_party_for_cookies,
+              KURL site_for_cookies,
               RefPtr<SecurityOrigin> requestor_origin,
               RefPtr<SecurityOrigin> requestor_origin_for_frame_loading,
               const ClientHintsPreferences& client_hints_preferences,
@@ -195,7 +195,7 @@ struct FrameFetchContext::FrozenState final
         parent_security_origin(std::move(parent_security_origin)),
         address_space(address_space),
         content_security_policy(content_security_policy),
-        first_party_for_cookies(first_party_for_cookies),
+        site_for_cookies(site_for_cookies),
         requestor_origin(requestor_origin),
         requestor_origin_for_frame_loading(requestor_origin_for_frame_loading),
         client_hints_preferences(client_hints_preferences),
@@ -211,7 +211,7 @@ struct FrameFetchContext::FrozenState final
   const RefPtr<const SecurityOrigin> parent_security_origin;
   const Optional<WebAddressSpace> address_space;
   const Member<const ContentSecurityPolicy> content_security_policy;
-  const KURL first_party_for_cookies;
+  const KURL site_for_cookies;
   const RefPtr<SecurityOrigin> requestor_origin;
   const RefPtr<SecurityOrigin> requestor_origin_for_frame_loading;
   const ClientHintsPreferences client_hints_preferences;
@@ -276,14 +276,14 @@ WebFrameScheduler* FrameFetchContext::GetFrameScheduler() {
   return GetFrame()->FrameScheduler();
 }
 
-KURL FrameFetchContext::GetFirstPartyForCookies() const {
+KURL FrameFetchContext::GetSiteForCookies() const {
   if (IsDetached())
-    return frozen_state_->first_party_for_cookies;
+    return frozen_state_->site_for_cookies;
 
   // Use document_ for subresource or nested frame cases,
   // GetFrame()->GetDocument() otherwise.
   Document* document = document_ ? document_.Get() : GetFrame()->GetDocument();
-  return document->FirstPartyForCookies();
+  return document->SiteForCookies();
 }
 
 LocalFrame* FrameFetchContext::GetFrame() const {
@@ -556,7 +556,8 @@ void FrameFetchContext::DispatchDidFail(unsigned long identifier,
     return;
 
   GetFrame()->Loader().Progress().CompleteProgress(identifier);
-  probe::didFailLoading(GetFrame()->GetDocument(), identifier, error);
+  probe::didFailLoading(GetFrame()->GetDocument(), identifier,
+                        MasterDocumentLoader(), error);
   // Notification to FrameConsole should come AFTER InspectorInstrumentation
   // call, DevTools front-end relies on this.
   if (!is_internal_request)
@@ -677,7 +678,7 @@ bool FrameFetchContext::IsControlledByServiceWorker() const {
   auto* service_worker_network_provider =
       MasterDocumentLoader()->GetServiceWorkerNetworkProvider();
   return service_worker_network_provider &&
-         service_worker_network_provider->IsControlledByServiceWorker();
+         service_worker_network_provider->HasControllerServiceWorker();
 }
 
 int64_t FrameFetchContext::ServiceWorkerID() const {
@@ -686,7 +687,7 @@ int64_t FrameFetchContext::ServiceWorkerID() const {
   auto* service_worker_network_provider =
       MasterDocumentLoader()->GetServiceWorkerNetworkProvider();
   return service_worker_network_provider
-             ? service_worker_network_provider->ServiceWorkerID()
+             ? service_worker_network_provider->ControllerServiceWorkerID()
              : -1;
 }
 
@@ -760,31 +761,6 @@ void FrameFetchContext::ModifyRequestForCSP(ResourceRequest& resource_request) {
   GetFrame()->Loader().ModifyRequestForCSP(resource_request, document_);
 }
 
-float FrameFetchContext::ClientHintsDeviceMemory(int64_t physical_memory_mb) {
-  // The calculations in this method are described in the specifcations:
-  // https://github.com/WICG/device-memory.
-  DCHECK_GT(physical_memory_mb, 0);
-  int lower_bound = physical_memory_mb;
-  int power = 0;
-
-  // Extract the most significant 2-bits and their location.
-  while (lower_bound >= 4) {
-    lower_bound >>= 1;
-    power++;
-  }
-  // The lower_bound value is either 0b10 or 0b11.
-  DCHECK(lower_bound & 2);
-
-  int64_t upper_bound = lower_bound + 1;
-  lower_bound = lower_bound << power;
-  upper_bound = upper_bound << power;
-
-  // Find the closest bound, and convert it to GB.
-  if (physical_memory_mb - lower_bound <= upper_bound - physical_memory_mb)
-    return static_cast<float>(lower_bound) / 1024.0;
-  return static_cast<float>(upper_bound) / 1024.0;
-}
-
 void FrameFetchContext::AddClientHintsIfNecessary(
     const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
@@ -792,19 +768,19 @@ void FrameFetchContext::AddClientHintsIfNecessary(
   if (!RuntimeEnabledFeatures::ClientHintsEnabled())
     return;
 
-  if (ShouldSendClientHint(kWebClientHintsTypeDeviceMemory,
+  if (ShouldSendClientHint(mojom::WebClientHintsType::kDeviceMemory,
                            hints_preferences)) {
-    int64_t physical_memory = MemoryCoordinator::GetPhysicalMemoryMB();
     request.AddHTTPHeaderField(
         "Device-Memory",
-        AtomicString(String::Number(ClientHintsDeviceMemory(physical_memory))));
+        AtomicString(
+            String::Number(MemoryCoordinator::GetApproximatedDeviceMemory())));
   }
 
   float dpr = GetDevicePixelRatio();
-  if (ShouldSendClientHint(kWebClientHintsTypeDpr, hints_preferences))
+  if (ShouldSendClientHint(mojom::WebClientHintsType::kDpr, hints_preferences))
     request.AddHTTPHeaderField("DPR", AtomicString(String::Number(dpr)));
 
-  if (ShouldSendClientHint(kWebClientHintsTypeResourceWidth,
+  if (ShouldSendClientHint(mojom::WebClientHintsType::kResourceWidth,
                            hints_preferences)) {
     if (resource_width.is_set) {
       float physical_width = resource_width.width * dpr;
@@ -813,7 +789,7 @@ void FrameFetchContext::AddClientHintsIfNecessary(
     }
   }
 
-  if (ShouldSendClientHint(kWebClientHintsTypeViewportWidth,
+  if (ShouldSendClientHint(mojom::WebClientHintsType::kViewportWidth,
                            hints_preferences) &&
       !IsDetached() && GetFrame()->View()) {
     request.AddHTTPHeaderField(
@@ -837,11 +813,11 @@ void FrameFetchContext::SetFirstPartyCookieAndRequestorOrigin(
   // Set the first party for cookies url if it has not been set yet (new
   // requests). This value will be updated during redirects, consistent with
   // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00#section-2.1.1?
-  if (request.FirstPartyForCookies().IsNull()) {
+  if (request.SiteForCookies().IsNull()) {
     if (request.GetFrameType() == WebURLRequest::kFrameTypeTopLevel) {
-      request.SetFirstPartyForCookies(request.Url());
+      request.SetSiteForCookies(request.Url());
     } else {
-      request.SetFirstPartyForCookies(GetFirstPartyForCookies());
+      request.SetSiteForCookies(GetSiteForCookies());
     }
   }
 
@@ -893,12 +869,11 @@ SubresourceFilter* FrameFetchContext::GetSubresourceFilter() const {
   return document_loader ? document_loader->GetSubresourceFilter() : nullptr;
 }
 
-bool FrameFetchContext::ShouldBlockRequestByInspector(
-    const ResourceRequest& resource_request) const {
+bool FrameFetchContext::ShouldBlockRequestByInspector(const KURL& url) const {
   if (IsDetached())
     return false;
   bool should_block_request = false;
-  probe::shouldBlockRequest(GetFrame()->GetDocument(), resource_request,
+  probe::shouldBlockRequest(GetFrame()->GetDocument(), url,
                             &should_block_request);
   return should_block_request;
 }
@@ -941,36 +916,52 @@ void FrameFetchContext::CountDeprecation(WebFeature feature) const {
 }
 
 bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
-    const ResourceRequest& resource_request,
+    WebURLRequest::RequestContext request_context,
+    WebURLRequest::FrameType frame_type,
+    ResourceRequest::RedirectStatus redirect_status,
     const KURL& url,
     SecurityViolationReportingPolicy reporting_policy) const {
   if (IsDetached()) {
     // TODO(yhirano): Implement the detached case.
     return false;
   }
-  return MixedContentChecker::ShouldBlockFetch(GetFrame(), resource_request,
-                                               url, reporting_policy);
+  return MixedContentChecker::ShouldBlockFetch(GetFrame(), request_context,
+                                               frame_type, redirect_status, url,
+                                               reporting_policy);
 }
 
 bool FrameFetchContext::ShouldBlockFetchAsCredentialedSubresource(
     const ResourceRequest& resource_request,
     const KURL& url) const {
-  if ((!url.User().IsEmpty() || !url.Pass().IsEmpty()) &&
-      resource_request.GetRequestContext() !=
-          WebURLRequest::kRequestContextXMLHttpRequest) {
-    if (Url().User() != url.User() || Url().Pass() != url.Pass() ||
-        !SecurityOrigin::Create(url)->IsSameSchemeHostPort(
-            GetSecurityOrigin())) {
-      CountDeprecation(
-          WebFeature::kRequestedSubresourceWithEmbeddedCredentials);
+  // BlockCredentialedSubresources has already been checked on the
+  // browser-side. It should not be checked a second time here because the
+  // renderer-side implementation suffers from https://crbug.com/756846.
+  if (!resource_request.CheckForBrowserSideNavigation())
+    return false;
 
-      // TODO(mkwst): Remove the runtime check one way or the other once we're
-      // sure it's going to stick (or that it's not).
-      if (RuntimeEnabledFeatures::BlockCredentialedSubresourcesEnabled())
-        return true;
-    }
+  // URLs with no embedded credentials should load correctly.
+  if (url.User().IsEmpty() && url.Pass().IsEmpty())
+    return false;
+
+  if (resource_request.GetRequestContext() ==
+      WebURLRequest::kRequestContextXMLHttpRequest) {
+    return false;
   }
-  return false;
+
+  // Relative URLs on top-level pages that were loaded with embedded credentials
+  // should load correctly.
+  // TODO(mkwst): This doesn't work when the subresource is an iframe.
+  // See https://crbug.com/756846.
+  if (Url().User() == url.User() && Url().Pass() == url.Pass() &&
+      SecurityOrigin::Create(url)->IsSameSchemeHostPort(GetSecurityOrigin())) {
+    return false;
+  }
+
+  CountDeprecation(WebFeature::kRequestedSubresourceWithEmbeddedCredentials);
+
+  // TODO(mkwst): Remove the runtime check one way or the other once we're
+  // sure it's going to stick (or that it's not).
+  return RuntimeEnabledFeatures::BlockCredentialedSubresourcesEnabled();
 }
 
 ReferrerPolicy FrameFetchContext::GetReferrerPolicy() const {
@@ -1091,7 +1082,7 @@ float FrameFetchContext::GetDevicePixelRatio() const {
 }
 
 bool FrameFetchContext::ShouldSendClientHint(
-    WebClientHintsType type,
+    mojom::WebClientHintsType type,
     const ClientHintsPreferences& hints_preferences) const {
   return GetClientHintsPreferences().ShouldSend(type) ||
          hints_preferences.ShouldSend(type);
@@ -1148,16 +1139,16 @@ FetchContext* FrameFetchContext::Detach() {
     frozen_state_ = new FrozenState(
         GetReferrerPolicy(), GetOutgoingReferrer(), Url(), GetSecurityOrigin(),
         GetParentSecurityOrigin(), GetAddressSpace(),
-        GetContentSecurityPolicy(), GetFirstPartyForCookies(),
-        GetRequestorOrigin(), GetRequestorOriginForFrameLoading(),
-        GetClientHintsPreferences(), GetDevicePixelRatio(), GetUserAgent(),
-        IsMainFrame(), IsSVGImageChromeClient());
+        GetContentSecurityPolicy(), GetSiteForCookies(), GetRequestorOrigin(),
+        GetRequestorOriginForFrameLoading(), GetClientHintsPreferences(),
+        GetDevicePixelRatio(), GetUserAgent(), IsMainFrame(),
+        IsSVGImageChromeClient());
   } else {
     // Some getters are unavailable in this case.
     frozen_state_ = new FrozenState(
         kReferrerPolicyDefault, String(), NullURL(), GetSecurityOrigin(),
         GetParentSecurityOrigin(), GetAddressSpace(),
-        GetContentSecurityPolicy(), GetFirstPartyForCookies(),
+        GetContentSecurityPolicy(), GetSiteForCookies(),
         SecurityOrigin::CreateUnique(), SecurityOrigin::CreateUnique(),
         GetClientHintsPreferences(), GetDevicePixelRatio(), GetUserAgent(),
         IsMainFrame(), IsSVGImageChromeClient());

@@ -14,7 +14,7 @@ interface Accelerometer : Sensor
     getter y
     getter z
     method constructor
-interface AccessibleNode
+interface AccessibleNode : EventTarget
     attribute @@toStringTag
     getter activeDescendant
     getter atomic
@@ -43,6 +43,7 @@ interface AccessibleNode
     getter modal
     getter multiline
     getter multiselectable
+    getter onaccessibleclick
     getter orientation
     getter owns
     getter placeholder
@@ -91,6 +92,7 @@ interface AccessibleNode
     setter modal
     setter multiline
     setter multiselectable
+    setter onaccessibleclick
     setter orientation
     setter owns
     setter placeholder
@@ -214,11 +216,6 @@ interface AnimationPlaybackEvent : Event
 interface AnimationTimeline
     attribute @@toStringTag
     getter currentTime
-    method constructor
-interface AppBannerPromptResult
-    attribute @@toStringTag
-    getter outcome
-    getter platform
     method constructor
 interface ApplicationCache : EventTarget
     attribute @@toStringTag
@@ -416,11 +413,11 @@ interface BackgroundFetchManager
     method constructor
     method fetch
     method get
-    method getTags
+    method getIds
 interface BackgroundFetchRegistration
     attribute @@toStringTag
     getter icons
-    getter tag
+    getter id
     getter title
     getter totalDownloadSize
     method abort
@@ -614,6 +611,7 @@ interface CDATASection : Text
     attribute @@toStringTag
     method constructor
 interface CSS
+    static getter paintWorklet
     static method Hz
     static method ch
     static method cm
@@ -1563,6 +1561,7 @@ interface Document : Node
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter onvisibilitychange
     getter onvolumechange
     getter onwaiting
     getter onwebkitfullscreenchange
@@ -1735,6 +1734,7 @@ interface Document : Node
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter onvisibilitychange
     setter onvolumechange
     setter onwaiting
     setter onwebkitfullscreenchange
@@ -3557,6 +3557,11 @@ interface HTMLTextAreaElement : HTMLElement
     setter selectionStart
     setter value
     setter wrap
+interface HTMLTimeElement : HTMLElement
+    attribute @@toStringTag
+    getter dateTime
+    method constructor
+    setter dateTime
 interface HTMLTitleElement : HTMLElement
     attribute @@toStringTag
     getter text
@@ -4432,13 +4437,13 @@ interface Navigator
     getter appCodeName
     getter appName
     getter appVersion
-    getter authentication
     getter bluetooth
     getter budget
     getter clipboard
     getter connection
     getter cookieEnabled
     getter credentials
+    getter deviceMemory
     getter doNotTrack
     getter geolocation
     getter hardwareConcurrency
@@ -4939,9 +4944,10 @@ interface PerformanceResourceTiming : PerformanceEntry
 interface PerformanceServerTiming
     attribute @@toStringTag
     getter description
-    getter metric
-    getter value
+    getter duration
+    getter name
     method constructor
+    method toJSON
 interface PerformanceTiming
     attribute @@toStringTag
     getter connectEnd
@@ -5188,6 +5194,7 @@ interface RTCPeerConnection : EventTarget
     getter onnegotiationneeded
     getter onremovestream
     getter onsignalingstatechange
+    getter ontrack
     getter remoteDescription
     getter signalingState
     method addIceCandidate
@@ -5204,7 +5211,6 @@ interface RTCPeerConnection : EventTarget
     method getRemoteStreams
     method getSenders
     method getStats
-    method getStreamById
     method removeStream
     method removeTrack
     method setConfiguration
@@ -5218,6 +5224,7 @@ interface RTCPeerConnection : EventTarget
     setter onnegotiationneeded
     setter onremovestream
     setter onsignalingstatechange
+    setter ontrack
 interface RTCPeerConnectionIceEvent : Event
     attribute @@toStringTag
     getter candidate
@@ -5255,6 +5262,12 @@ interface RTCStatsReport
     method has
     method keys
     method values
+interface RTCTrackEvent : Event
+    attribute @@toStringTag
+    getter receiver
+    getter streams
+    getter track
+    method constructor
 interface RadioNodeList : NodeList
     attribute @@toStringTag
     getter value
@@ -6170,7 +6183,6 @@ interface SVGNumberList
 interface SVGPathElement : SVGGeometryElement
     attribute @@toStringTag
     method constructor
-    method getPathSegAtLength
 interface SVGPatternElement : SVGElement
     attribute @@toStringTag
     getter height
@@ -7279,11 +7291,6 @@ interface WaveShaperNode : AudioNode
     method constructor
     setter curve
     setter oversample
-interface WebAuthentication
-    attribute @@toStringTag
-    method constructor
-    method getAssertion
-    method makeCredential
 interface WebGL2RenderingContext
     attribute @@toStringTag
     attribute ACTIVE_ATTRIBUTES
@@ -8839,6 +8846,7 @@ interface webkitRTCPeerConnection : EventTarget
     getter onnegotiationneeded
     getter onremovestream
     getter onsignalingstatechange
+    getter ontrack
     getter remoteDescription
     getter signalingState
     method addIceCandidate
@@ -8855,7 +8863,6 @@ interface webkitRTCPeerConnection : EventTarget
     method getRemoteStreams
     method getSenders
     method getStats
-    method getStreamById
     method removeStream
     method removeTrack
     method setConfiguration
@@ -8869,6 +8876,7 @@ interface webkitRTCPeerConnection : EventTarget
     setter onnegotiationneeded
     setter onremovestream
     setter onsignalingstatechange
+    setter ontrack
 interface webkitSpeechGrammar
     attribute @@toStringTag
     getter src
@@ -9119,7 +9127,6 @@ interface webkitURL
     getter outerWidth
     getter pageXOffset
     getter pageYOffset
-    getter paintWorklet
     getter performance
     getter personalbar
     getter screen

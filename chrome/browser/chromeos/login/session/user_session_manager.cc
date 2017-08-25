@@ -425,7 +425,7 @@ UserSessionManager::UserSessionManager()
       should_launch_browser_(true),
       waiting_for_child_account_status_(false),
       weak_factory_(this) {
-  net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
+  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
   user_manager::UserManager::Get()->AddSessionStateObserver(this);
 }
 
@@ -436,7 +436,7 @@ UserSessionManager::~UserSessionManager() {
   // / UserSessionManager objects.
   if (user_manager::UserManager::IsInitialized())
     user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
-  net::NetworkChangeNotifier::RemoveConnectionTypeObserver(this);
+  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
 }
 
 void UserSessionManager::SetShouldObtainHandleInTests(
@@ -911,7 +911,7 @@ void UserSessionManager::OnSessionRestoreStateChanged(
   }
 }
 
-void UserSessionManager::OnConnectionTypeChanged(
+void UserSessionManager::OnNetworkChanged(
     net::NetworkChangeNotifier::ConnectionType type) {
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   if (type == net::NetworkChangeNotifier::CONNECTION_NONE ||
@@ -1631,10 +1631,12 @@ void UserSessionManager::UpdateEasyUnlockKeys(const UserContext& user_context) {
   if (user_context.GetKey()->GetSecret().empty())
     return;
 
-  const base::ListValue* device_list = NULL;
+  const base::ListValue* device_list = nullptr;
   EasyUnlockService* easy_unlock_service = EasyUnlockService::GetForUser(*user);
   if (easy_unlock_service) {
-    device_list = easy_unlock_service->GetRemoteDevices();
+    device_list = easy_unlock_service->IsChromeOSLoginEnabled()
+                      ? easy_unlock_service->GetRemoteDevices()
+                      : nullptr;
     easy_unlock_service->SetHardlockState(
         EasyUnlockScreenlockStateHandler::NO_HARDLOCK);
   }

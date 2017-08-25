@@ -21,7 +21,7 @@
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/viz/compositing/privileged/interfaces/frame_sink_manager.mojom.h"
+#include "services/viz/privileged/interfaces/compositing/frame_sink_manager.mojom.h"
 
 namespace cc {
 
@@ -40,13 +40,12 @@ class FrameSinkManagerClient;
 
 // FrameSinkManagerImpl manages BeginFrame hierarchy. This is the implementation
 // detail for FrameSinkManagerImpl.
-class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
-    : public SurfaceObserver,
-      public NON_EXPORTED_BASE(mojom::FrameSinkManager) {
+class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
+                                                public mojom::FrameSinkManager {
  public:
-  FrameSinkManagerImpl(DisplayProvider* display_provider = nullptr,
-                       SurfaceManager::LifetimeType lifetime_type =
-                           SurfaceManager::LifetimeType::SEQUENCES);
+  FrameSinkManagerImpl(SurfaceManager::LifetimeType lifetime_type =
+                           SurfaceManager::LifetimeType::REFERENCES,
+                       DisplayProvider* display_provider = nullptr);
   ~FrameSinkManagerImpl() override;
 
   // Binds |this| as a FrameSinkManagerImpl for |request| on |task_runner|. On
@@ -112,7 +111,8 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   SurfaceManager* surface_manager() { return &surface_manager_; }
 
   // SurfaceObserver implementation.
-  void OnSurfaceCreated(const SurfaceInfo& surface_info) override;
+  void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override;
+  void OnSurfaceActivated(const SurfaceId& surface_id) override;
   bool OnSurfaceDamaged(const SurfaceId& surface_id,
                         const BeginFrameAck& ack) override;
   void OnSurfaceDiscarded(const SurfaceId& surface_id) override;
@@ -122,6 +122,15 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   void OnSurfaceWillDraw(const SurfaceId& surface_id) override;
 
   void OnClientConnectionLost(const FrameSinkId& frame_sink_id);
+
+  void OnAggregatedHitTestRegionListUpdated(
+      const FrameSinkId& frame_sink_id,
+      mojo::ScopedSharedBufferHandle active_handle,
+      uint32_t active_handle_size,
+      mojo::ScopedSharedBufferHandle idle_handle,
+      uint32_t idle_handle_size);
+  void SwitchActiveAggregatedHitTestRegionList(const FrameSinkId& frame_sink_id,
+                                               uint8_t active_handle_index);
 
   // It is necessary to pass |frame_sink_id| by value because the id
   // is owned by the GpuCompositorFrameSink in the map. When the sink is

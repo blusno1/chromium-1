@@ -46,9 +46,11 @@ import org.chromium.android_webview.AwNetworkChangeNotifierRegistrationPolicy;
 import org.chromium.android_webview.AwQuotaManagerBridge;
 import org.chromium.android_webview.AwResource;
 import org.chromium.android_webview.AwSettings;
+import org.chromium.android_webview.AwSwitches;
 import org.chromium.android_webview.HttpAuthDatabase;
 import org.chromium.android_webview.ResourcesContextWrapperFactory;
 import org.chromium.android_webview.command_line.CommandLineUtil;
+import org.chromium.android_webview.variations.AwVariationsSeedHandler;
 import org.chromium.base.BuildConfig;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLine;
@@ -453,6 +455,12 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         }
 
         mRunQueue.drainQueue();
+
+        boolean enableVariations =
+                CommandLine.getInstance().hasSwitch(AwSwitches.ENABLE_WEBVIEW_VARIATIONS);
+        if (enableVariations) {
+            AwVariationsSeedHandler.bindToVariationsService();
+        }
     }
 
     boolean hasStarted() {
@@ -565,16 +573,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                      */
                     // TODO(ntfschr): add @Override once next android SDK rolls
                     public void initSafeBrowsing(Context context, ValueCallback<Boolean> callback) {
-                        AwContentsStatics.initSafeBrowsing(
-                                context.getApplicationContext(), callback);
-                    }
-
-                    /**
-                     * Shuts down Safe Browsing. This should only be called once.
-                     */
-                    // TODO(ntfschr): add @Override once next android SDK rolls
-                    public void shutdownSafeBrowsing() {
-                        AwContentsStatics.shutdownSafeBrowsing();
+                        AwContentsStatics.initSafeBrowsing(context, callback);
                     }
 
                     // TODO(ntfschr): add @Override once next android SDK rolls
@@ -583,6 +582,16 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                         AwContentsStatics.setSafeBrowsingWhitelist(urls, callback);
                     }
 
+                    /**
+                     * Returns a URL pointing to the privacy policy for Safe Browsing reporting.
+                     *
+                     * @return the url pointing to a privacy policy document which can be displayed
+                     * to users.
+                     */
+                    // TODO(ntfschr): add @Override once next android SDK rolls
+                    public Uri getSafeBrowsingPrivacyPolicyUrl() {
+                        return AwContentsStatics.getSafeBrowsingPrivacyPolicyUrl();
+                    }
                 };
             }
         }

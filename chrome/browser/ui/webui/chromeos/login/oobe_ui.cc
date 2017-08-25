@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "ash/wm/screen_dimmer.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -30,6 +29,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/about_ui.h"
+#include "chrome/browser/ui/webui/chromeos/login/active_directory_password_change_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/arc_kiosk_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/arc_terms_of_service_screen_handler.h"
@@ -62,7 +62,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/voice_interaction_value_prop_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/wait_for_container_ready_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/wrong_hwid_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/network_element_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/chromeos/user_image_source.h"
 #include "chrome/browser/ui/webui/test_files_request_filter.h"
 #include "chrome/browser/ui/webui/theme_source.h"
@@ -95,14 +94,6 @@ const char* kKnownDisplayTypes[] = {OobeUI::kOobeDisplay,
                                     OobeUI::kUserAddingDisplay,
                                     OobeUI::kAppLaunchSplashDisplay,
                                     OobeUI::kArcKioskSplashDisplay};
-
-OobeScreen kDimOverlayScreenIds[] = {
-  OobeScreen::SCREEN_CONFIRM_PASSWORD,
-  OobeScreen::SCREEN_GAIA_SIGNIN,
-  OobeScreen::SCREEN_OOBE_ENROLLMENT,
-  OobeScreen::SCREEN_PASSWORD_CHANGED,
-  OobeScreen::SCREEN_USER_IMAGE_PICKER
-};
 
 const char kStringsJSPath[] = "strings.js";
 const char kLockJSPath[] = "lock.js";
@@ -307,8 +298,24 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 
   AddScreenHandler(base::MakeUnique<UserBoardScreenHandler>());
 
+  policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  ActiveDirectoryPasswordChangeScreenHandler*
+      active_directory_password_change_screen_handler = nullptr;
+  // Create Active Directory password change screen for corresponding devices
+  // only.
+  if (connector->IsActiveDirectoryManaged()) {
+    auto password_change_handler =
+        base::MakeUnique<ActiveDirectoryPasswordChangeScreenHandler>(
+            core_handler_);
+    active_directory_password_change_screen_handler =
+        password_change_handler.get();
+    AddScreenHandler(std::move(password_change_handler));
+  }
+
   AddScreenHandler(base::MakeUnique<GaiaScreenHandler>(
-      core_handler_, network_state_informer_));
+      core_handler_, network_state_informer_,
+      active_directory_password_change_screen_handler));
 
   auto signin_screen_handler = base::MakeUnique<SigninScreenHandler>(
       network_state_informer_, error_screen, core_handler_,
@@ -358,7 +365,6 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   content::WebUIDataSource* html_source =
       CreateOobeUIDataSource(localized_strings, display_type_);
   content::WebUIDataSource::Add(profile, html_source);
-  network_element::AddLocalizedStrings(html_source);
 
   // Set up the chrome://userimage/ source.
   UserImageSource* user_image_source = new UserImageSource();
@@ -376,11 +382,6 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 
 OobeUI::~OobeUI() {
   network_dropdown_handler_->RemoveObserver(GetView<ErrorScreenHandler>());
-  if (ash_util::IsRunningInMash()) {
-    // TODO: Ash needs to expose screen dimming api. See
-    // http://crbug.com/646034.
-    NOTIMPLEMENTED();
-  }
 }
 
 CoreOobeView* OobeUI::GetCoreOobeView() {
@@ -529,12 +530,11 @@ void OobeUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
   oobe_ui_md_mode_ =
       g_browser_process->local_state()->GetBoolean(prefs::kOobeMdMode);
   localized_strings->SetString("newOobeUI", oobe_ui_md_mode_ ? "on" : "off");
-
-  LoginDisplayHost* default_host = LoginDisplayHost::default_host();
-  bool oobe_shield_hide =
-      default_host ? default_host->IsVoiceInteractionOobe() : false;
-  localized_strings->SetString("hideOobeShield",
-                               oobe_shield_hide ? "on" : "off");
+  localized_strings->SetString(
+      "errorScreenMDMode", base::CommandLine::ForCurrentProcess()->HasSwitch(
+                               chromeos::switches::kDisableMdErrorScreen)
+                               ? "off"
+                               : "on");
 }
 
 void OobeUI::AddWebUIHandler(std::unique_ptr<BaseWebUIHandler> handler) {
@@ -570,23 +570,6 @@ void OobeUI::InitializeHandlers() {
 
 void OobeUI::CurrentScreenChanged(OobeScreen new_screen) {
   previous_screen_ = current_screen_;
-
-  const bool should_dim =
-      std::find(std::begin(kDimOverlayScreenIds),
-                std::end(kDimOverlayScreenIds),
-                new_screen) != std::end(kDimOverlayScreenIds);
-  if (!ash_util::IsRunningInMash()) {
-    if (!screen_dimmer_) {
-      screen_dimmer_ = base::MakeUnique<ash::ScreenDimmer>(
-          ash::ScreenDimmer::Container::LOCK_SCREEN);
-    }
-    screen_dimmer_->set_at_bottom(true);
-    screen_dimmer_->SetDimming(should_dim);
-  } else {
-    // TODO: Ash needs to expose screen dimming api. See
-    // http://crbug.com/646034.
-    NOTIMPLEMENTED();
-  }
 
   current_screen_ = new_screen;
   for (Observer& observer : observer_list_)

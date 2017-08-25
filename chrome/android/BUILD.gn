@@ -39,9 +39,8 @@ chrome_sync_shell_jinja_variables =
 app_hooks_impl = "java/src/org/chromium/chrome/browser/AppHooksImpl.java"
 
 if (enable_resource_whitelist_generation) {
-  # Path cannot depend on cur_toolchain.
   monochrome_resource_whitelist =
-      "$root_build_dir/monochrome_resource_whitelist.txt"
+      "$target_gen_dir/monochrome_resource_whitelist.txt"
   system_webview_locale_resource_id_list =
       "$target_gen_dir/system_webview_locale_resource_id_list.txt"
   monochrome_locale_whitelist =
@@ -181,6 +180,14 @@ android_library("chrome_java") {
     ":chrome_public_apk_template_resources",
     ":document_tab_model_info_proto_java",
     ":partner_location_descriptor_proto_java",
+    "$google_play_services_package:google_play_services_auth_base_java",
+    "$google_play_services_package:google_play_services_base_java",
+    "$google_play_services_package:google_play_services_basement_java",
+    "$google_play_services_package:google_play_services_cast_java",
+    "$google_play_services_package:google_play_services_gcm_java",
+    "$google_play_services_package:google_play_services_iid_java",
+    "$google_play_services_package:google_play_services_nearby_java",
+    "$google_play_services_package:google_play_services_tasks_java",
     "//base:base_java",
     "//chrome/android/webapk/libs/client:client_java",
     "//chrome/android/webapk/libs/common:common_java",
@@ -191,6 +198,7 @@ android_library("chrome_java") {
     "//components/crash/android:java",
     "//components/dom_distiller/content/browser/android:dom_distiller_content_java",
     "//components/dom_distiller/core/android:dom_distiller_core_java",
+    "//components/download/internal:internal_java",
     "//components/download/public:public_java",
     "//components/feature_engagement:feature_engagement_java",
     "//components/gcm_driver/android:gcm_driver_java",
@@ -204,7 +212,7 @@ android_library("chrome_java") {
     "//components/payments/content/android:java",
     "//components/payments/mojom:mojom_parser_java",
     "//components/policy/android:policy_java",
-    "//components/safe_browsing_db/android:safe_browsing_java",
+    "//components/safe_browsing/android:safe_browsing_java",
     "//components/safe_json/android:safe_json_java",
     "//components/signin/core/browser/android:java",
     "//components/spellcheck/browser/android:java",
@@ -253,7 +261,6 @@ android_library("chrome_java") {
     "//ui/base/mojo:mojo_bindings_java",
     "//ui/gfx/geometry/mojo:mojo_java",
     "//url/mojo:url_mojom_gurl_java",
-    google_play_services_library,
   ]
 
   srcjar_deps = [
@@ -373,6 +380,9 @@ junit_binary("chrome_junit_tests") {
     ":chrome_java",
     ":chrome_java_resources",
     ":partner_location_descriptor_proto_java",
+    "$google_play_services_package:google_play_services_base_java",
+    "$google_play_services_package:google_play_services_basement_java",
+    "$google_play_services_package:google_play_services_cast_java",
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android/webapk/libs/client:client_java",
@@ -410,7 +420,6 @@ junit_binary("chrome_junit_tests") {
     "//third_party/hamcrest:hamcrest_java",
     "//ui/android:ui_java",
     "//url/mojo:url_mojom_gurl_java",
-    google_play_services_library,
   ]
   srcjar_deps = [ "//base:base_build_config_gen" ]
 
@@ -451,6 +460,12 @@ android_library("chrome_test_java") {
 
   deps = [
     ":partner_location_descriptor_proto_java",
+    "$google_play_services_package:google_play_services_base_java",
+    "$google_play_services_package:google_play_services_basement_java",
+    "$google_play_services_package:google_play_services_cast_java",
+    "$google_play_services_package:google_play_services_gcm_java",
+    "$google_play_services_package:google_play_services_iid_java",
+    "$google_play_services_package:google_play_services_tasks_java",
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android:app_hooks_java",
@@ -519,7 +534,6 @@ android_library("chrome_test_java") {
     "//ui/android:ui_java",
     "//ui/base/mojo:mojo_bindings_java",
     "//url/mojo:url_mojom_gurl_java",
-    google_play_services_library,
   ]
 
   data = [
@@ -537,6 +551,7 @@ android_library("chrome_test_java") {
     "//chrome/test/media_router/resources/",
     "//components/test/data/payments/",
     "//content/test/data/android/geolocation.html",
+    "//content/test/data/android/installedapp.html",
     "//content/test/data/android/media_permissions.html",
     "//content/test/data/android/permission_navigation.html",
     "//content/test/data/android/quota_permissions.html",
@@ -554,16 +569,25 @@ if (enable_vr) {
     testonly = true
 
     java_files = [
+      "javatests/src/org/chromium/chrome/browser/customtabs/CustomTabActivityTestRule.java",
+      "javatests/src/org/chromium/chrome/browser/customtabs/CustomTabsTestUtils.java",
       "javatests/src/org/chromium/chrome/browser/media/RouterTestUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/EmulatedVrController.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/mock/MockVrCoreVersionCheckerImpl.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/mock/MockVrDaydreamApi.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/mock/MockVrIntentHandler.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/nfc_apk/SimNfcActivity.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/rules/ChromeTabbedActivityVrTestRule.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/rules/CustomTabActivityVrTestRule.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/rules/VrActivityRestriction.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/rules/VrActivityRestrictionRule.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/rules/VrTestRule.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/rules/WebappActivityVrTestRule.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/util/CardboardUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/util/NfcSimUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/util/VrInfoBarUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/util/VrShellDelegateUtils.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/util/VrTestRuleUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/util/VrTransitionUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrFeedbackInfoBarTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrInstallUpdateInfoBarTest.java",
@@ -572,11 +596,13 @@ if (enable_vr) {
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrShellNativeUiTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrShellNavigationTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrShellTransitionTest.java",
-      "javatests/src/org/chromium/chrome/browser/vr_shell/VrTestRule.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/VrTestFramework.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/WebVrDeviceTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/WebVrInputTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/WebVrTabTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/WebVrTransitionTest.java",
+      "javatests/src/org/chromium/chrome/browser/webapps/TestFetchStorageCallback.java",
+      "javatests/src/org/chromium/chrome/browser/webapps/WebappActivityTestRule.java",
     ]
 
     deps = [
@@ -703,30 +729,6 @@ shared_library("chrome") {
   public_configs = extra_chrome_shared_library_configs
 }
 
-# For why we defined the whitelist target in $fat_lib_toolchain rather than
-# just using :monochrome($fat_lib_toolchain) as a dep, see crbug.com/749003.
-if (enable_resource_whitelist_generation) {
-  if (!android_64bit_target_cpu) {
-    fat_lib_toolchain = current_toolchain
-  } else {
-    fat_lib_toolchain = android_secondary_abi_toolchain
-  }
-
-  # Always use the 32-bit library's whitelist since the 64-bit one is
-  # webview-only.
-  if (current_toolchain == fat_lib_toolchain) {
-    generate_resource_whitelist("monochrome_resource_whitelist") {
-      deps = [
-        ":monochrome",
-      ]
-
-      input = get_label_info(deps[0], "root_out_dir") +
-              "/libmonochrome$shlib_extension.whitelist"
-      output = monochrome_resource_whitelist
-    }
-  }
-}
-
 # Ensure that .pak files are built only once (build them in the default
 # toolchain). The central header file calling JNI registration functions
 # is generated from Java code so it just needs to be generated once.
@@ -745,6 +747,23 @@ if (current_toolchain == default_toolchain) {
   }
 
   if (enable_resource_whitelist_generation) {
+    generate_resource_whitelist("monochrome_resource_whitelist") {
+      # Always use the 32-bit library's whitelist since the 64-bit one is
+      # webview-only.
+      if (!android_64bit_target_cpu) {
+        _fat_lib_toolchain = current_toolchain
+      } else {
+        _fat_lib_toolchain = android_secondary_abi_toolchain
+      }
+      deps = [
+        ":monochrome($_fat_lib_toolchain)",
+      ]
+
+      input = get_label_info(deps[0], "root_out_dir") +
+              "/libmonochrome$shlib_extension.whitelist"
+      output = monochrome_resource_whitelist
+    }
+
     # Use custom resource ID list instead of android_webview's compiler
     # resource whitelist because //android_webview: generate_webui_resources
     # and //android_webview: generate_components_resources use hand-written
@@ -788,7 +807,7 @@ if (current_toolchain == default_toolchain) {
       ]
 
       deps = [
-        ":monochrome_resource_whitelist($fat_lib_toolchain)",
+        ":monochrome_resource_whitelist",
         ":system_webview_locale_resource_id_list",
         "//android_webview:system_webview_pak_whitelist",
       ]
@@ -814,7 +833,7 @@ if (current_toolchain == default_toolchain) {
 
     if (enable_resource_whitelist_generation) {
       repack_whitelist = monochrome_resource_whitelist
-      deps += [ ":monochrome_resource_whitelist($fat_lib_toolchain)" ]
+      deps += [ ":monochrome_resource_whitelist" ]
       locale_whitelist = monochrome_locale_whitelist
       deps += [ ":monochrome_locale_whitelist" ]
     }
@@ -893,8 +912,6 @@ shared_library("chrome_sync_shell") {
   testonly = true
   sources = [
     "../browser/android/chrome_sync_shell_entry_point.cc",
-    "../browser/android/chrome_sync_shell_main_delegate.cc",
-    "../browser/android/chrome_sync_shell_main_delegate.h",
     "../browser/android/chrome_sync_shell_main_delegate_initializer.cc",
   ]
   deps = [

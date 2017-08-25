@@ -25,7 +25,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/layout_manager.h"
@@ -285,9 +284,12 @@ void NetworkStateListDetailedView::UpdateHeaderButtons() {
         nullptr);
   }
   if (list_type_ == LIST_TYPE_NETWORK) {
+    NetworkStateHandler* network_state_handler =
+        NetworkHandler::Get()->network_state_handler();
+    // TODO(crbug.com/756092): Add | operator to NetworkTypePattern.
     const bool scanning =
-        NetworkHandler::Get()->network_state_handler()->GetScanningByType(
-            NetworkTypePattern::WiFi());
+        network_state_handler->GetScanningByType(NetworkTypePattern::WiFi()) ||
+        network_state_handler->GetScanningByType(NetworkTypePattern::Tether());
     ShowProgress(-1, scanning);
   }
 }

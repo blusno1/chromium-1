@@ -14,6 +14,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/page/Page.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/WebFeaturePolicyFeature.h"
 
 namespace {
@@ -202,6 +203,10 @@ void Deprecation::CountDeprecationCrossOriginIframe(const Document& document,
 void Deprecation::CountDeprecationFeaturePolicy(
     const Document& document,
     WebFeaturePolicyFeature feature) {
+  // If feature policy is not enabled, don't do anything.
+  if (!RuntimeEnabledFeatures::FeaturePolicyEnabled())
+    return;
+
   LocalFrame* frame = document.GetFrame();
   if (!frame)
     return;
@@ -440,11 +445,11 @@ String Deprecation::DeprecationMessage(WebFeature feature) {
              "details.";
 
     case WebFeature::kCSSDeepCombinator:
-      return "/deep/ combinator is no longer supported in CSS dynamic profile. "
-             "It is now effectively no-op, acting as if it were a descendant "
-             "combinator. You should consider to remove it. See "
-             "https://www.chromestatus.com/features/4964279606312960 for more "
-             "details.";
+      return willBeRemoved("/deep/ combinator in CSS", M63, "4964279606312960");
+
+    case WebFeature::kCSSSelectorPseudoShadow:
+      return willBeRemoved("::shadow pseudo-element in CSS", M63,
+                           "6750456638341120");
 
     case WebFeature::kVREyeParametersOffset:
       return replacedBy("VREyeParameters.offset",
@@ -488,14 +493,6 @@ String Deprecation::DeprecationMessage(WebFeature feature) {
              "load these resources. See "
              "https://www.chromestatus.com/feature/5735596811091968 for more "
              "details.";
-
-    case WebFeature::kV8RTCPeerConnection_GetStreamById_Method:
-      return willBeRemoved("RTCPeerConnection.getStreamById()", M62,
-                           "5751819573657600");
-
-    case WebFeature::kV8SVGPathElement_GetPathSegAtLength_Method:
-      return willBeRemoved("SVGPathElement.getPathSegAtLength", M62,
-                           "5638783282184192");
 
     case WebFeature::kCredentialManagerCredentialRequestOptionsUnmediated:
       return replacedWillBeRemoved(
@@ -563,6 +560,11 @@ String Deprecation::DeprecationMessage(WebFeature feature) {
           "deprecated and will be removed in M68. You should consider "
           "switching your application to a secure origin, such as HTTPS. See "
           "https://goo.gl/rStTGz for more details.");
+
+    case WebFeature::kPaymentRequestSupportedMethodsArray:
+      return replacedWillBeRemoved(
+          "PaymentRequest's supportedMethods taking an array",
+          "a single string", M64, "5177301645918208");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

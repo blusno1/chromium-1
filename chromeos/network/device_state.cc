@@ -32,8 +32,7 @@ DeviceState::~DeviceState() {
 bool DeviceState::PropertyChanged(const std::string& key,
                                   const base::Value& value) {
   // All property values get stored in |properties_|.
-  properties_.SetWithoutPathExpansion(key,
-                                      base::MakeUnique<base::Value>(value));
+  properties_.SetKey(key, value.Clone());
 
   if (ManagedStatePropertyChanged(key, value))
     return true;
@@ -79,8 +78,8 @@ bool DeviceState::PropertyChanged(const std::string& key,
     }
     if (dict->GetWithoutPathExpansion(shill::kSIMLockRetriesLeftProperty,
                                       &out_value)) {
-      GetUInt32Value(shill::kSIMLockRetriesLeftProperty, *out_value,
-                     &sim_retries_left_);
+      GetIntegerValue(shill::kSIMLockRetriesLeftProperty, *out_value,
+                      &sim_retries_left_);
     }
     return true;
   } else if (key == shill::kMeidProperty) {

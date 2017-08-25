@@ -122,6 +122,13 @@ void FakeFileSystemInstance::AddDocument(const Document& document) {
   }
 }
 
+void FakeFileSystemInstance::AddRecentDocument(const std::string& root_id,
+                                               const Document& document) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  RootKey key(document.authority, root_id);
+  recent_documents_[key].push_back(document);
+}
+
 void FakeFileSystemInstance::TriggerWatchers(
     const std::string& authority,
     const std::string& document_id,
@@ -231,6 +238,7 @@ void FakeFileSystemInstance::GetChildDocuments(
     const std::string& parent_document_id,
     const GetChildDocumentsCallback& callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  ++get_child_documents_count_;
   auto child_iter =
       child_documents_.find(DocumentKey(authority, parent_document_id));
   if (child_iter == child_documents_.end()) {
@@ -248,6 +256,25 @@ void FakeFileSystemInstance::GetChildDocuments(
       FROM_HERE,
       base::Bind(callback,
                  base::Passed(base::make_optional(std::move(children)))));
+}
+
+void FakeFileSystemInstance::GetRecentDocuments(
+    const std::string& authority,
+    const std::string& root_id,
+    const GetRecentDocumentsCallback& callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  auto recent_iter = recent_documents_.find(RootKey(authority, root_id));
+  if (recent_iter == recent_documents_.end()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(callback, base::nullopt));
+    return;
+  }
+  std::vector<mojom::DocumentPtr> recents;
+  for (const Document& document : recent_iter->second)
+    recents.emplace_back(MakeDocument(document));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(callback, base::make_optional(std::move(recents))));
 }
 
 void FakeFileSystemInstance::Init(mojom::FileSystemHostPtr host) {

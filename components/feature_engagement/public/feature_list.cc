@@ -20,6 +20,8 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDownloadHomeFeature,
     &kIPHDownloadPageFeature,
     &kIPHDownloadPageScreenshotFeature,
+    &kIPHChromeHomeExpandFeature,
+    &kIPHMediaDownloadFeature,
 #endif  // defined(OS_ANDROID)
 #if defined(OS_WIN) || defined(OS_LINUX)
     &kIPHIncognitoWindowFeature,

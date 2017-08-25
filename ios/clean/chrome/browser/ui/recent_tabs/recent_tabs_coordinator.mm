@@ -4,11 +4,11 @@
 
 #import "ios/clean/chrome/browser/ui/recent_tabs/recent_tabs_coordinator.h"
 
+#import "ios/chrome/browser/ui/browser_list/browser.h"
+#import "ios/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_panel_controller.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_panel_view_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/shared/chrome/browser/ui/browser_list/browser.h"
-#import "ios/shared/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -28,13 +28,15 @@
   if (!IsIPadIdiom()) {
     self.viewController = [RecentTabsPanelViewController
         controllerToPresentForBrowserState:self.browser->browser_state()
-                                    loader:nil];
+                                    loader:nil
+                                dispatcher:nil];
     self.viewController.modalPresentationStyle = UIModalPresentationFormSheet;
     self.viewController.modalPresentationCapturesStatusBarAppearance = YES;
   } else {
     self.wrapperController = [[RecentTabsPanelController alloc]
         initWithLoader:nil
-          browserState:self.browser->browser_state()];
+          browserState:self.browser->browser_state()
+            dispatcher:nil];
     self.viewController = [self.wrapperController viewController];
   }
   [super start];

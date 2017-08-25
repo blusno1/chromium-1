@@ -154,13 +154,6 @@ gfx::Size GetRotatedVideoSize(VideoRotation rotation, gfx::Size natural_size) {
   return natural_size;
 }
 
-base::TimeDelta GetCurrentTimeInternal(WebMediaPlayerImpl* p_this) {
-  // We wrap currentTime() instead of using pipeline_controller_.GetMediaTime()
-  // since there are a variety of cases in which that time is not accurate;
-  // e.g., while remoting and during a pause or seek.
-  return base::TimeDelta::FromSecondsD(p_this->CurrentTime());
-}
-
 // How much time must have elapsed since loading last progressed before we
 // assume that the decoder will have had time to complete preroll.
 constexpr base::TimeDelta kPrerollAttemptTimeout =
@@ -258,7 +251,8 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       surface_layer_for_video_enabled_(
           base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo)),
       request_routing_token_cb_(params->request_routing_token_cb()),
-      overlay_routing_token_(OverlayInfo::RoutingToken()) {
+      overlay_routing_token_(OverlayInfo::RoutingToken()),
+      watch_time_recorder_provider_(params->watch_time_recorder_provider()) {
   DVLOG(1) << __func__;
   DCHECK(!adjust_allocated_memory_cb_.is_null());
   DCHECK(renderer_factory_selector_);
@@ -546,8 +540,14 @@ void WebMediaPlayerImpl::Play() {
   if (observer_)
     observer_->OnPlaying();
 
-  DCHECK(watch_time_reporter_);
-  watch_time_reporter_->OnPlaying();
+  // If we're seeking we'll trigger the watch time reporter upon seek completed;
+  // we don't want to start it here since the seek time is unstable. E.g., when
+  // playing content with a positive start time we would have a zero seek time.
+  if (!Seeking()) {
+    DCHECK(watch_time_reporter_);
+    watch_time_reporter_->OnPlaying();
+  }
+
   media_log_->AddEvent(media_log_->CreateEvent(MediaLogEvent::PLAY));
   UpdatePlayState();
 }
@@ -576,13 +576,7 @@ void WebMediaPlayerImpl::Pause() {
 #endif
 
   pipeline_controller_.SetPlaybackRate(0.0);
-
-  // pause() may be called after playback has ended and the HTMLMediaElement
-  // requires that currentTime() == duration() after ending.  We want to ensure
-  // |paused_time_| matches currentTime() in this case or a future seek() may
-  // incorrectly discard what it thinks is a seek to the existing time.
-  paused_time_ =
-      ended_ ? GetPipelineMediaDuration() : pipeline_controller_.GetMediaTime();
+  paused_time_ = pipeline_controller_.GetMediaTime();
 
   if (observer_)
     observer_->OnPaused();
@@ -620,15 +614,17 @@ void WebMediaPlayerImpl::DoSeek(base::TimeDelta time, bool time_updated) {
   if (ready_state_ > WebMediaPlayer::kReadyStateHaveMetadata)
     SetReadyState(WebMediaPlayer::kReadyStateHaveMetadata);
 
-  // When paused, we know exactly what the current time is and can elide seeks
-  // to it. However, there are two cases that are not elided:
+  // When paused or ended, we know exactly what the current time is and can
+  // elide seeks to it. However, there are two cases that are not elided:
   //   1) When the pipeline state is not stable.
   //      In this case we just let |pipeline_controller_| decide what to do, as
   //      it has complete information.
   //   2) For MSE.
   //      Because the buffers may have changed between seeks, MSE seeks are
   //      never elided.
-  if (paused_ && pipeline_controller_.IsStable() && paused_time_ == time &&
+  if (paused_ && pipeline_controller_.IsStable() &&
+      (paused_time_ == time ||
+       (ended_ && time == base::TimeDelta::FromSecondsD(Duration()))) &&
       !chunk_demuxer_) {
     // If the ready state was high enough before, we can indicate that the seek
     // completed just by restoring it. Otherwise we will just wait for the real
@@ -849,27 +845,35 @@ double WebMediaPlayerImpl::timelineOffset() const {
   return pipeline_metadata_.timeline_offset.ToJsTime();
 }
 
+base::TimeDelta WebMediaPlayerImpl::GetCurrentTimeInternal() const {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  DCHECK_NE(ready_state_, WebMediaPlayer::kReadyStateHaveNothing);
+
+  base::TimeDelta current_time;
+  if (Seeking())
+    current_time = seek_time_;
+#if defined(OS_ANDROID)  // WMPI_CAST
+  else if (IsRemote())
+    current_time = cast_impl_.currentTime();
+#endif
+  else if (paused_)
+    current_time = paused_time_;
+  else
+    current_time = pipeline_controller_.GetMediaTime();
+
+  DCHECK_NE(current_time, kInfiniteDuration);
+  DCHECK_GE(current_time, base::TimeDelta());
+  return current_time;
+}
+
 double WebMediaPlayerImpl::CurrentTime() const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   DCHECK_NE(ready_state_, WebMediaPlayer::kReadyStateHaveNothing);
 
   // TODO(scherkus): Replace with an explicit ended signal to HTMLMediaElement,
   // see http://crbug.com/409280
-  if (ended_)
-    return Duration();
-
-  if (Seeking())
-    return seek_time_.InSecondsF();
-
-#if defined(OS_ANDROID)  // WMPI_CAST
-  if (IsRemote())
-    return cast_impl_.currentTime();
-#endif
-
-  if (paused_)
-    return paused_time_.InSecondsF();
-
-  return pipeline_controller_.GetMediaTime().InSecondsF();
+  // Note: Duration() may be infinity.
+  return ended_ ? Duration() : GetCurrentTimeInternal().InSecondsF();
 }
 
 WebMediaPlayer::NetworkState WebMediaPlayerImpl::GetNetworkState() const {
@@ -933,6 +937,16 @@ bool WebMediaPlayerImpl::IsPrerollAttemptNeeded() {
   // See http://crbug.com/671525.
   if (highest_ready_state_ >= ReadyState::kReadyStateHaveFutureData)
     return false;
+
+  // To suspend before we reach kReadyStateHaveCurrentData is only ok
+  // if we know we're going to get woken up when we get more data, which
+  // will only happen if the network is in the "Loading" state.
+  // This happens when the network is fast, but multiple videos are loading
+  // and multiplexing gets held up waiting for available threads.
+  if (highest_ready_state_ <= ReadyState::kReadyStateHaveMetadata &&
+      network_state_ != WebMediaPlayer::kNetworkStateLoading) {
+    return true;
+  }
 
   if (preroll_attempt_pending_)
     return true;
@@ -1205,7 +1219,7 @@ void WebMediaPlayerImpl::OnPipelineSeeked(bool time_updated) {
   if (paused_) {
 #if defined(OS_ANDROID)  // WMPI_CAST
     if (IsRemote()) {
-      paused_time_ = base::TimeDelta::FromSecondsD(cast_impl_.currentTime());
+      paused_time_ = cast_impl_.currentTime();
     } else {
       paused_time_ = pipeline_controller_.GetMediaTime();
     }
@@ -1308,6 +1322,18 @@ void WebMediaPlayerImpl::OnError(PipelineStatus status) {
   if (suppress_destruction_errors_)
     return;
 
+#if defined(OS_ANDROID)
+  if (status == PipelineStatus::DEMUXER_ERROR_DETECTED_HLS) {
+    renderer_factory_selector_->SetUseMediaPlayer(true);
+
+    pipeline_controller_.Stop();
+
+    main_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&WebMediaPlayerImpl::StartPipeline, AsWeakPtr()));
+    return;
+  }
+#endif
+
   ReportPipelineError(load_type_, status, media_log_.get());
   media_log_->AddEvent(media_log_->CreatePipelineErrorEvent(status));
 
@@ -1318,6 +1344,9 @@ void WebMediaPlayerImpl::OnError(PipelineStatus status) {
   } else {
     SetNetworkState(PipelineErrorToNetworkState(status));
   }
+
+  // PipelineController::Stop() is idempotent.
+  pipeline_controller_.Stop();
 
   UpdatePlayState();
 }
@@ -1435,12 +1464,6 @@ void WebMediaPlayerImpl::OnBufferingStateChange(BufferingState state) {
       "pipeline_buffering_state", state));
 
   if (state == BUFFERING_HAVE_ENOUGH) {
-    if (highest_ready_state_ < WebMediaPlayer::kReadyStateHaveEnoughData) {
-      // Record a zero value for underflow histogram so that the histogram
-      // includes playbacks which never encounter an underflow event.
-      RecordUnderflowDuration(base::TimeDelta());
-    }
-
     SetReadyState(CanPlayThrough() ? WebMediaPlayer::kReadyStateHaveEnoughData
                                    : WebMediaPlayer::kReadyStateHaveFutureData);
 
@@ -1664,7 +1687,7 @@ void WebMediaPlayerImpl::OnFrameShown() {
                    BindToCurrentLoop(frame_time_report_cb_.callback())));
   }
 
-  EnableVideoTrackIfNeeded();
+  UpdateBackgroundVideoOptimizationState();
 
   if (paused_when_hidden_) {
     paused_when_hidden_ = false;
@@ -1800,21 +1823,6 @@ void WebMediaPlayerImpl::DataSourceInitialized(bool success) {
 
   if (observer_ && IsNewRemotePlaybackPipelineEnabled() && data_source_)
     observer_->OnDataSourceInitialized(data_source_->GetUrlAfterRedirects());
-
-#if defined(OS_ANDROID)
-  // We can't play HLS URLs with WebMediaPlayerImpl, so in cases where they are
-  // encountered, instruct the HTML media element to use the MediaPlayerRenderer
-  // instead.
-  //
-  // TODO(tguilbert): Detect the presence of HLS based on demuxing results,
-  // rather than the URL string. See crbug.com/663503.
-  if (data_source_) {
-    const GURL url_after_redirects = data_source_->GetUrlAfterRedirects();
-    if (MediaCodecUtil::IsHLSURL(url_after_redirects)) {
-      renderer_factory_selector_->SetUseMediaPlayer(true);
-    }
-  }
-#endif
 
   if (!success) {
     SetNetworkState(WebMediaPlayer::kNetworkStateFormatError);
@@ -1961,7 +1969,7 @@ std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer() {
 #endif
   return renderer_factory_selector_->GetCurrentFactory()->CreateRenderer(
       media_task_runner_, worker_task_runner_, audio_source_provider_.get(),
-      compositor_, request_overlay_info_cb);
+      compositor_, request_overlay_info_cb, client_->TargetColorSpace());
 }
 
 void WebMediaPlayerImpl::StartPipeline() {
@@ -1983,9 +1991,8 @@ void WebMediaPlayerImpl::StartPipeline() {
     // TODO(tguilbert/avayvod): Update this flag when removing |cast_impl_|.
     using_media_player_renderer_ = true;
 
-    demuxer_.reset(
-        new MediaUrlDemuxer(media_task_runner_, loaded_url_,
-                            frame_->GetDocument().FirstPartyForCookies()));
+    demuxer_.reset(new MediaUrlDemuxer(media_task_runner_, loaded_url_,
+                                       frame_->GetDocument().SiteForCookies()));
     pipeline_controller_.Start(demuxer_.get(), this, false, false);
     return;
   }
@@ -2014,6 +2021,8 @@ void WebMediaPlayerImpl::StartPipeline() {
     chunk_demuxer_ = new ChunkDemuxer(
         BindToCurrentLoop(
             base::Bind(&WebMediaPlayerImpl::OnDemuxerOpened, AsWeakPtr())),
+        BindToCurrentLoop(
+            base::Bind(&WebMediaPlayerImpl::OnProgress, AsWeakPtr())),
         encrypted_media_init_data_cb, media_log_.get());
     demuxer_.reset(chunk_demuxer_);
 
@@ -2423,11 +2432,17 @@ void WebMediaPlayerImpl::CreateWatchTimeReporter() {
     return;
 
   // Create the watch time reporter and synchronize its initial state.
-  watch_time_reporter_.reset(
-      new WatchTimeReporter(HasAudio(), HasVideo(), !!chunk_demuxer_,
-                            is_encrypted_, embedded_media_experience_enabled_,
-                            media_log_.get(), pipeline_metadata_.natural_size,
-                            base::Bind(&GetCurrentTimeInternal, this)));
+  watch_time_reporter_.reset(new WatchTimeReporter(
+      mojom::PlaybackProperties::New(
+          pipeline_metadata_.audio_decoder_config.codec(),
+          pipeline_metadata_.video_decoder_config.codec(),
+          pipeline_metadata_.has_audio, pipeline_metadata_.has_video,
+          !!chunk_demuxer_, is_encrypted_, embedded_media_experience_enabled_,
+          pipeline_metadata_.natural_size,
+          url::Origin(frame_->GetSecurityOrigin())),
+      base::BindRepeating(&WebMediaPlayerImpl::GetCurrentTimeInternal,
+                          base::Unretained(this)),
+      watch_time_recorder_provider_));
   watch_time_reporter_->OnVolumeChange(volume_);
 
   if (delegate_->IsFrameHidden())
@@ -2545,11 +2560,24 @@ bool WebMediaPlayerImpl::IsBackgroundOptimizationCandidate() const {
 
 void WebMediaPlayerImpl::UpdateBackgroundVideoOptimizationState() {
   if (IsHidden()) {
-    if (ShouldPauseVideoWhenHidden())
+    if (ShouldPauseVideoWhenHidden()) {
       PauseVideoIfNeeded();
-    else
-      DisableVideoTrackIfNeeded();
+    } else if (update_background_status_cb_.IsCancelled()) {
+      // Only trigger updates when we don't have one already scheduled.
+      update_background_status_cb_.Reset(
+          base::Bind(&WebMediaPlayerImpl::DisableVideoTrackIfNeeded,
+                     base::Unretained(this)));
+
+      // Defer disable track until we're sure the clip will be backgrounded for
+      // some time. Resuming may take half a second, so frequent tab switches
+      // will yield a poor user experience otherwise. http://crbug.com/709302
+      // may also cause AV sync issues if disable/enable happens too fast.
+      main_task_runner_->PostDelayedTask(
+          FROM_HERE, update_background_status_cb_.callback(),
+          base::TimeDelta::FromSeconds(10));
+    }
   } else {
+    update_background_status_cb_.Cancel();
     EnableVideoTrackIfNeeded();
   }
 }
@@ -2635,28 +2663,40 @@ void WebMediaPlayerImpl::ReportTimeFromForegroundToFirstFrame(
                         time_to_first_frame);
   }
 }
-void WebMediaPlayerImpl::SwitchRenderer(bool is_rendered_remotely) {
+
+void WebMediaPlayerImpl::SwitchToRemoteRenderer(
+    const std::string& remote_device_friendly_name) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
-  disable_pipeline_auto_suspend_ = is_rendered_remotely;
+  disable_pipeline_auto_suspend_ = true;
+  // Requests to restart media pipeline. A remote renderer will be created via
+  // the |renderer_factory_selector_|.
   ScheduleRestart();
   if (client_) {
-    if (is_rendered_remotely)
-      client_->MediaRemotingStarted();
-    else
-      client_->MediaRemotingStopped();
+    client_->MediaRemotingStarted(
+        WebString::FromUTF8(remote_device_friendly_name));
   }
+}
+
+void WebMediaPlayerImpl::SwitchToLocalRenderer() {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  disable_pipeline_auto_suspend_ = false;
+  // Requests to restart media pipeline. A local renderer will be created via
+  // the |renderer_factory_selector_|.
+  ScheduleRestart();
+  if (client_)
+    client_->MediaRemotingStopped();
 }
 
 void WebMediaPlayerImpl::RecordUnderflowDuration(base::TimeDelta duration) {
   DCHECK(data_source_ || chunk_demuxer_);
 
   if (data_source_)
-    UMA_HISTOGRAM_TIMES("Media.UnderflowDuration", duration);
+    UMA_HISTOGRAM_TIMES("Media.UnderflowDuration2.SRC", duration);
   else
-    UMA_HISTOGRAM_TIMES("Media.UnderflowDuration.MSE", duration);
+    UMA_HISTOGRAM_TIMES("Media.UnderflowDuration2.MSE", duration);
 
   if (is_encrypted_)
-    UMA_HISTOGRAM_TIMES("Media.UnderflowDuration.EME", duration);
+    UMA_HISTOGRAM_TIMES("Media.UnderflowDuration2.EME", duration);
 }
 
 #define UMA_HISTOGRAM_VIDEO_HEIGHT(name, sample) \

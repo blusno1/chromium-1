@@ -261,10 +261,6 @@ target(link_target_type, "renderer") {
     "media/video_capture_impl_manager.h",
     "media/web_media_element_source_utils.cc",
     "media/web_media_element_source_utils.h",
-    "media/webmediaplayer_ms.cc",
-    "media/webmediaplayer_ms.h",
-    "media/webmediaplayer_ms_compositor.cc",
-    "media/webmediaplayer_ms_compositor.h",
     "menu_item_builder.cc",
     "menu_item_builder.h",
     "message_delivery_policy.h",
@@ -300,8 +296,6 @@ target(link_target_type, "renderer") {
     "presentation/presentation_connection_proxy.h",
     "presentation/presentation_dispatcher.cc",
     "presentation/presentation_dispatcher.h",
-    "previews_state_helper.cc",
-    "previews_state_helper.h",
     "push_messaging/push_messaging_client.cc",
     "push_messaging/push_messaging_client.h",
     "render_frame_impl.cc",
@@ -466,7 +460,6 @@ target(link_target_type, "renderer") {
     "//gin",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
-    "//jingle:jingle_glue",
     "//media",
     "//media:media_features",
     "//media/blink",
@@ -488,6 +481,7 @@ target(link_target_type, "renderer") {
     "//ppapi/features",
     "//printing/features",
     "//sandbox",
+    "//services/device/public/cpp/generic_sensor",
     "//services/device/public/interfaces",
     "//services/device/public/interfaces:constants",
     "//services/metrics/public/cpp:metrics_cpp",
@@ -558,6 +552,13 @@ target(link_target_type, "renderer") {
       "java/gin_java_bridge_value_converter.h",
       "java/gin_java_function_invocation_helper.cc",
       "java/gin_java_function_invocation_helper.h",
+    ]
+  }
+
+  if (is_fuchsia) {
+    sources += [
+      "render_view_fuchsia.cc",
+      "renderer_main_platform_delegate_fuchsia.cc",
     ]
   }
 
@@ -660,6 +661,10 @@ target(link_target_type, "renderer") {
       "media/video_track_adapter.h",
       "media/webaudio_media_stream_source.cc",
       "media/webaudio_media_stream_source.h",
+      "media/webmediaplayer_ms.cc",
+      "media/webmediaplayer_ms.h",
+      "media/webmediaplayer_ms_compositor.cc",
+      "media/webmediaplayer_ms_compositor.h",
       "media/webrtc/media_stream_remote_video_source.cc",
       "media/webrtc/media_stream_remote_video_source.h",
       "media/webrtc/media_stream_track_metrics.cc",
@@ -768,6 +773,7 @@ target(link_target_type, "renderer") {
 
     deps += [
       "//crypto",
+      "//jingle:jingle_glue",
       "//third_party/libvpx",
       "//third_party/opus",
       "//third_party/webrtc/api:libjingle_peerconnection",
@@ -775,6 +781,7 @@ target(link_target_type, "renderer") {
       "//third_party/webrtc/api:video_frame_api",
       "//third_party/webrtc/api/audio_codecs:builtin_audio_decoder_factory",
       "//third_party/webrtc/api/audio_codecs:builtin_audio_encoder_factory",
+      "//third_party/webrtc/common_video:common_video",
       "//third_party/webrtc/media:rtc_media",
       "//third_party/webrtc/media:rtc_media_base",
       "//third_party/webrtc/modules/audio_device",
@@ -970,8 +977,8 @@ target(link_target_type, "renderer") {
 
   if (enable_mojo_media) {
     sources += [
-      "media/media_interface_provider.cc",
-      "media/media_interface_provider.h",
+      "media/media_interface_factory.cc",
+      "media/media_interface_factory.h",
     ]
   }
 

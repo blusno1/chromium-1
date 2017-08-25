@@ -65,6 +65,7 @@
 #include "third_party/skia/include/encode/SkJpegEncoder.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
+#include "v8/include/v8.h"
 
 namespace blink {
 
@@ -337,7 +338,8 @@ bool ImageBuffer::GetImageData(Multiply multiplied,
   CheckedNumeric<int> data_size = bytes_per_pixel;
   data_size *= rect.Width();
   data_size *= rect.Height();
-  if (!data_size.IsValid())
+  if (!data_size.IsValid() ||
+      data_size.ValueOrDie() > v8::TypedArray::kMaxLength)
     return false;
 
   if (!IsSurfaceValid()) {
@@ -387,6 +389,10 @@ bool ImageBuffer::GetImageData(Multiply multiplied,
       rect.Width(), rect.Height(), color_type, alpha_type,
       surface_->color_params().GetSkColorSpaceForSkSurfaces());
 
+  // If color correct rendering is enabled but color canvas extensions is not,
+  // unpremul must be done in gamma encoded color space.
+  if (CanvasColorParams::ColorCorrectRenderingInSRGBOnly())
+    info = info.makeColorSpace(nullptr);
   snapshot->PaintImageForCurrentFrame().GetSkImage()->readPixels(
       info, result.Data(), bytes_per_pixel * rect.Width(), rect.X(), rect.Y());
   gpu_readback_invoked_in_current_frame_ = true;
@@ -443,6 +449,8 @@ void ImageBuffer::PutByteArray(Multiply multiplied,
         source_rect.Width(), source_rect.Height(),
         surface_->color_params().GetSkColorType(), alpha_type,
         surface_->color_params().GetSkColorSpaceForSkSurfaces());
+    if (info.colorType() == kN32_SkColorType)
+      info = info.makeColorType(kRGBA_8888_SkColorType);
   } else {
     info = SkImageInfo::Make(source_rect.Width(), source_rect.Height(),
                              kRGBA_8888_SkColorType, alpha_type);
@@ -511,16 +519,7 @@ void ImageBuffer::SetSurface(std::unique_ptr<ImageBufferSurface> surface) {
     image.Clear();
     image = StaticBitmapImage::Create(texture_image->makeNonTextureImage());
   }
-  // TODO(vmpstr): Figure out actual values for this.
-  auto animation_type = PaintImage::AnimationType::UNKNOWN;
-  auto completion_state = PaintImage::CompletionState::UNKNOWN;
-  static PaintImage::Id unknown_stable_id = PaintImage::GetNextId();
-  surface->Canvas()->drawImage(
-      PaintImage(unknown_stable_id,
-                 image->PaintImageForCurrentFrame().GetSkImage(),
-                 animation_type, completion_state),
-      0, 0);
-
+  surface->Canvas()->drawImage(image->PaintImageForCurrentFrame(), 0, 0);
   surface->SetImageBuffer(this);
   if (client_)
     client_->RestoreCanvasMatrixClipStack(surface->Canvas());

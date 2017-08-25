@@ -1326,6 +1326,15 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
       return;
     }
 
+    if (IsAutofillUpstreamShowNewUiExperimentEnabled()) {
+      upload_request_.active_experiments.push_back(
+          kAutofillUpstreamShowNewUi.name);
+    }
+    if (IsAutofillUpstreamShowGoogleLogoExperimentEnabled()) {
+      upload_request_.active_experiments.push_back(
+          kAutofillUpstreamShowGoogleLogo.name);
+    }
+
     // All required data is available, start the upload process.
     payments_client_->GetUploadDetails(upload_request_.profiles,
                                        upload_request_.active_experiments,
@@ -1415,7 +1424,7 @@ int AutofillManager::SetProfilesForCreditCardUpload(
       verified_name = comparator->NormalizeForComparison(card_name);
       for (const AutofillProfile& profile : candidate_profiles) {
         const base::string16 address_name = comparator->NormalizeForComparison(
-            profile.GetInfo(AutofillType(NAME_FULL), app_locale_));
+            profile.GetInfo(NAME_FULL, app_locale_));
         if (address_name.empty())
           continue;
         if (verified_name.empty() ||
@@ -1429,8 +1438,8 @@ int AutofillManager::SetProfilesForCreditCardUpload(
     } else {
       verified_name = RemoveMiddleInitial(card_name);
       for (const AutofillProfile& profile : candidate_profiles) {
-        const base::string16 address_name = RemoveMiddleInitial(
-            profile.GetInfo(AutofillType(NAME_FULL), app_locale_));
+        const base::string16 address_name =
+            RemoveMiddleInitial(profile.GetInfo(NAME_FULL, app_locale_));
         if (address_name.empty())
           continue;
         if (verified_name.empty()) {
@@ -2062,11 +2071,6 @@ void AutofillManager::ParseForms(const std::vector<FormData>& forms) {
                                         parse_form_start_time);
   }
 
-  if (!queryable_forms.empty() && download_manager_) {
-    // Query the server if at least one of the forms was parsed.
-    download_manager_->StartQueryRequest(queryable_forms);
-  }
-
   if (!queryable_forms.empty() || !non_queryable_forms.empty()) {
     AutofillMetrics::LogUserHappinessMetric(AutofillMetrics::FORMS_LOADED);
 
@@ -2093,10 +2097,16 @@ void AutofillManager::ParseForms(const std::vector<FormData>& forms) {
   }
 #endif
 
-  // For the |non_queryable_forms|, we have all the field type info we're ever
-  // going to get about them.  For the other forms, we'll wait until we get a
-  // response from the server.
+  // Send the current type predictions to the renderer. For non-queryable forms
+  // this is all the information about them that will ever be available. The
+  // queryable forms will be updated once the field type query is complete.
   driver()->SendAutofillTypePredictionsToRenderer(non_queryable_forms);
+  driver()->SendAutofillTypePredictionsToRenderer(queryable_forms);
+
+  if (!queryable_forms.empty() && download_manager_) {
+    // Query the server if at least one of the forms was parsed.
+    download_manager_->StartQueryRequest(queryable_forms);
+  }
 }
 
 bool AutofillManager::ParseForm(const FormData& form,

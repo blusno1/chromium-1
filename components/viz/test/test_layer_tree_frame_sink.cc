@@ -98,11 +98,10 @@ bool TestLayerTreeFrameSink::BindToClient(
     context_provider()->SetLostContextCallback(base::Closure());
 
   constexpr bool is_root = false;
-  constexpr bool handles_frame_sink_id_invalidation = true;
   constexpr bool needs_sync_points = true;
-  support_ = CompositorFrameSinkSupport::Create(
-      this, frame_sink_manager_.get(), frame_sink_id_, is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+  support_ = CompositorFrameSinkSupport::Create(this, frame_sink_manager_.get(),
+                                                frame_sink_id_, is_root,
+                                                needs_sync_points);
   client_->SetBeginFrameSource(&external_begin_frame_source_);
   if (begin_frame_source_) {
     frame_sink_manager_->RegisterBeginFrameSource(begin_frame_source_.get(),
@@ -139,8 +138,8 @@ void TestLayerTreeFrameSink::SubmitCompositorFrame(cc::CompositorFrame frame) {
             frame.metadata.begin_frame_ack.sequence_number);
   test_client_->DisplayReceivedCompositorFrame(frame);
 
-  gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
-  float device_scale_factor = frame.metadata.device_scale_factor;
+  gfx::Size frame_size = frame.size_in_pixels();
+  float device_scale_factor = frame.device_scale_factor();
   if (!local_surface_id_.is_valid() || frame_size != display_size_ ||
       device_scale_factor != device_scale_factor_) {
     local_surface_id_ = local_surface_id_allocator_->GenerateId();

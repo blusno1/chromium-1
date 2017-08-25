@@ -60,7 +60,7 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   gfx::Size GetMaximumSize() const override;
   void Layout() override;
   void OnPaint(gfx::Canvas* canvas) override;
-  void PaintChildren(const ui::PaintContext& context) override;
+  void PaintChildren(const PaintInfo& paint_info) override;
   void OnThemeChanged() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
   void ViewHierarchyChanged(
@@ -84,6 +84,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   gfx::Insets content_margins() const { return content_margins_; }
 
   void SetFootnoteView(View* view);
+  void set_footnote_margins(const gfx::Insets& footnote_margins) {
+    footnote_margins_ = footnote_margins;
+  }
 
   // Given the size of the contents and the rect to point at, returns the bounds
   // of the bubble window. The bubble's arrow location may change if the bubble
@@ -106,6 +109,7 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
  private:
   FRIEND_TEST_ALL_PREFIXES(BubbleFrameViewTest, GetBoundsForClientView);
   FRIEND_TEST_ALL_PREFIXES(BubbleFrameViewTest, RemoveFootnoteView);
+  FRIEND_TEST_ALL_PREFIXES(BubbleFrameViewTest, LayoutWithIcon);
   FRIEND_TEST_ALL_PREFIXES(BubbleDelegateTest, CloseReasons);
   FRIEND_TEST_ALL_PREFIXES(BubbleDialogDelegateTest, CloseMethods);
 
@@ -120,8 +124,26 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   void OffsetArrowIfOffScreen(const gfx::Rect& anchor_rect,
                               const gfx::Size& client_size);
 
+  // The width of the frame for the given |client_width|. The result accounts
+  // for the minimum title bar width and includes all insets and possible
+  // snapping. It does not include the border.
+  int GetFrameWidthForClientWidth(int client_width) const;
+
   // Calculates the size needed to accommodate the given client area.
-  gfx::Size GetSizeForClientSize(const gfx::Size& client_size) const;
+  gfx::Size GetFrameSizeForClientSize(const gfx::Size& client_size) const;
+
+  // True if the frame has a title area. This is the area affected by
+  // |title_margins_|, including the icon and title text, but not the close
+  // button.
+  bool HasTitle() const;
+
+  // The insets of the text portion of the title, based on |title_margins_| and
+  // whether there is an icon and/or close button. Note there may be no title,
+  // in which case only insets required for the close button are returned.
+  gfx::Insets GetTitleLabelInsetsFromFrame() const;
+
+  // The client_view insets (from the frame view) for the given |frame_width|.
+  gfx::Insets GetClientInsetsForFrameWidth(int frame_width) const;
 
   // The bubble border.
   BubbleBorder* bubble_border_;
@@ -131,6 +153,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
 
   // Margins between the content and the inside of the border, in pixels.
   gfx::Insets content_margins_;
+
+  // Margins between the footnote view and the footnote container.
+  gfx::Insets footnote_margins_;
 
   // The optional title icon.
   views::ImageView* title_icon_;

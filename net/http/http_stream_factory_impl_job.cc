@@ -315,6 +315,7 @@ void HttpStreamFactoryImpl::Job::Resume() {
 }
 
 void HttpStreamFactoryImpl::Job::Orphan() {
+  DCHECK_EQ(job_type_, ALTERNATIVE);
   net_log_.AddEvent(NetLogEventType::HTTP_STREAM_JOB_ORPHANED);
 }
 
@@ -440,9 +441,6 @@ void HttpStreamFactoryImpl::Job::OnStreamReadyCallback() {
   DCHECK(stream_.get());
   DCHECK_NE(job_type_, PRECONNECT);
   DCHECK(!delegate_->for_websockets());
-
-  UMA_HISTOGRAM_TIMES("Net.HttpStreamFactoryJob.StreamReadyCallbackTime",
-                      base::TimeTicks::Now() - job_stream_ready_start_time_);
 
   MaybeCopyConnectionAttemptsFromSocketOrHandle();
 
@@ -672,7 +670,6 @@ void HttpStreamFactoryImpl::Job::RunLoop(int result) {
         }
       } else {
         DCHECK(stream_.get());
-        job_stream_ready_start_time_ = base::TimeTicks::Now();
         base::ThreadTaskRunnerHandle::Get()->PostTask(
             FROM_HERE,
             base::Bind(&Job::OnStreamReadyCallback, ptr_factory_.GetWeakPtr()));
@@ -830,9 +827,8 @@ int HttpStreamFactoryImpl::Job::DoEvaluateThrottle() {
 void HttpStreamFactoryImpl::Job::ResumeInitConnection() {
   if (init_connection_already_resumed_)
     return;
+  DCHECK_EQ(next_state_, STATE_INIT_CONNECTION);
   net_log_.AddEvent(NetLogEventType::HTTP_STREAM_JOB_RESUME_INIT_CONNECTION);
-  // TODO(xunjieli): Change this to a DCHECK once crbug.com/718576 is stable.
-  CHECK_EQ(next_state_, STATE_INIT_CONNECTION);
   init_connection_already_resumed_ = true;
   OnIOComplete(OK);
 }
@@ -913,7 +909,7 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionImpl() {
     int rv = quic_request_.Request(
         destination, quic_version_, request_info_.privacy_mode,
         ssl_config->GetCertVerifyFlags(), url, request_info_.method, net_log_,
-        io_callback_);
+        &net_error_details_, io_callback_);
     if (rv == OK) {
       using_existing_quic_session_ = true;
     } else {

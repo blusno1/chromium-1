@@ -117,8 +117,8 @@ ApplyStyleCommand::ApplyStyleCommand(Document& document,
       style_(style->Copy()),
       input_type_(input_type),
       property_level_(property_level),
-      start_(MostForwardCaretPosition(EndingVisibleSelection().Start())),
-      end_(MostBackwardCaretPosition(EndingVisibleSelection().End())),
+      start_(MostForwardCaretPosition(EndingSelection().Start())),
+      end_(MostBackwardCaretPosition(EndingSelection().End())),
       use_ending_selection_(true),
       styled_inline_element_(nullptr),
       remove_only_(false),
@@ -144,8 +144,8 @@ ApplyStyleCommand::ApplyStyleCommand(Element* element, bool remove_only)
       style_(EditingStyle::Create()),
       input_type_(InputEvent::InputType::kNone),
       property_level_(kPropertyDefault),
-      start_(MostForwardCaretPosition(EndingVisibleSelection().Start())),
-      end_(MostBackwardCaretPosition(EndingVisibleSelection().End())),
+      start_(MostForwardCaretPosition(EndingSelection().Start())),
+      end_(MostBackwardCaretPosition(EndingSelection().End())),
       use_ending_selection_(true),
       styled_inline_element_(element),
       remove_only_(remove_only),
@@ -160,8 +160,8 @@ ApplyStyleCommand::ApplyStyleCommand(
       style_(style->Copy()),
       input_type_(input_type),
       property_level_(kPropertyDefault),
-      start_(MostForwardCaretPosition(EndingVisibleSelection().Start())),
-      end_(MostBackwardCaretPosition(EndingVisibleSelection().End())),
+      start_(MostForwardCaretPosition(EndingSelection().Start())),
+      end_(MostBackwardCaretPosition(EndingSelection().End())),
       use_ending_selection_(true),
       styled_inline_element_(nullptr),
       remove_only_(true),
@@ -175,26 +175,25 @@ void ApplyStyleCommand::UpdateStartEnd(const Position& new_start,
   if (!use_ending_selection_ && (new_start != start_ || new_end != end_))
     use_ending_selection_ = true;
 
-  SetEndingSelection(
-      SelectionInDOMTree::Builder()
-          .Collapse(new_start)
-          .Extend(new_end)
-          .SetIsDirectional(EndingVisibleSelection().IsDirectional())
-          .Build());
+  SetEndingSelection(SelectionInDOMTree::Builder()
+                         .Collapse(new_start)
+                         .Extend(new_end)
+                         .SetIsDirectional(EndingSelection().IsDirectional())
+                         .Build());
   start_ = new_start;
   end_ = new_end;
 }
 
 Position ApplyStyleCommand::StartPosition() {
   if (use_ending_selection_)
-    return EndingVisibleSelection().Start();
+    return EndingSelection().Start();
 
   return start_;
 }
 
 Position ApplyStyleCommand::EndPosition() {
   if (use_ending_selection_)
-    return EndingVisibleSelection().End();
+    return EndingSelection().End();
 
   return end_;
 }
@@ -283,7 +282,7 @@ void ApplyStyleCommand::ApplyBlockStyle(EditingStyle* style,
       NextPositionOf(EndOfParagraph(paragraph_start)));
   Position beyond_end =
       NextPositionOf(EndOfParagraph(visible_end)).DeepEquivalent();
-  // TODO(xiaochengh): Use a saner approach (e.g., temporary Ranges) to keep
+  // TODO(editing-dev): Use a saner approach (e.g., temporary Ranges) to keep
   // these positions in document instead of iteratively performing orphan checks
   // and recalculating them when they become orphans.
   while (paragraph_start.IsNotNull() &&
@@ -324,8 +323,9 @@ void ApplyStyleCommand::ApplyBlockStyle(EditingStyle* style,
       GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
       // Make the VisiblePositions valid again after style changes.
-      // TODO(xiaochengh): We shouldn't store VisiblePositions and inspect their
-      // properties after they have been invalidated by mutations.
+      // TODO(editing-dev): We shouldn't store VisiblePositions and inspect
+      // their properties after they have been invalidated by mutations. See
+      // crbug.com/648949 for details.
       DCHECK(!paragraph_start.IsOrphan()) << paragraph_start;
       paragraph_start =
           CreateVisiblePosition(paragraph_start.ToPositionWithAffinity());

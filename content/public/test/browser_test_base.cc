@@ -62,7 +62,7 @@
 namespace content {
 namespace {
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) && !defined(OS_FUCHSIA)
 // On SIGSEGV or SIGTERM (sent by the runner on timeouts), dump a stack trace
 // (to make debugging easier) and also exit with a known error code (so that
 // the test framework considers this a failure -- http://crbug.com/57578).
@@ -81,7 +81,7 @@ void DumpStackTraceSignalHandler(int signal) {
   }
   _exit(128 + signal);
 }
-#endif  // defined(OS_POSIX)
+#endif  // defined(OS_POSIX) && !defined(OS_FUCHSIA)
 
 void RunTaskOnRendererThread(const base::Closure& task,
                              const base::Closure& quit_task) {
@@ -277,13 +277,13 @@ void BrowserTestBase::TearDown() {
 }
 
 void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) && !defined(OS_FUCHSIA)
   g_browser_process_pid = base::GetCurrentProcId();
   signal(SIGSEGV, DumpStackTraceSignalHandler);
 
   if (handle_sigterm_)
     signal(SIGTERM, DumpStackTraceSignalHandler);
-#endif  // defined(OS_POSIX)
+#endif  // defined(OS_POSIX) && !defined(OS_FUCHSIA)
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableTracing)) {
@@ -344,8 +344,7 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 void BrowserTestBase::CreateTestServer(const base::FilePath& test_server_base) {
   CHECK(!spawned_test_server_.get());
   spawned_test_server_ = base::MakeUnique<net::SpawnedTestServer>(
-      net::SpawnedTestServer::TYPE_HTTP, net::SpawnedTestServer::kLocalhost,
-      test_server_base);
+      net::SpawnedTestServer::TYPE_HTTP, test_server_base);
   embedded_test_server()->AddDefaultHandlers(test_server_base);
 }
 
@@ -362,7 +361,7 @@ void BrowserTestBase::PostTaskToInProcessRendererAndWait(
 
   renderer_loop->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&RunTaskOnRendererThread, task, runner->QuitClosure()));
+      base::BindOnce(&RunTaskOnRendererThread, task, runner->QuitClosure()));
   runner->Run();
 }
 

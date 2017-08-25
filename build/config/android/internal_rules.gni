@@ -303,12 +303,12 @@ template("write_build_config") {
         _rebased_apk_path = rebase_path(invoker.apk_path, root_build_dir)
         _rebased_incremental_apk_path =
             rebase_path(invoker.incremental_apk_path, root_build_dir)
-        _rebased_incremental_install_script_path =
-            rebase_path(invoker.incremental_install_script_path, root_build_dir)
+        _rebased_incremental_install_json_path =
+            rebase_path(invoker.incremental_install_json_path, root_build_dir)
         _incremental_allowed =
             defined(invoker.incremental_allowed) && invoker.incremental_allowed
         args += [ "--apk-path=$_rebased_apk_path" ]
-        args += [ "--incremental-install-script-path=$_rebased_incremental_install_script_path" ]
+        args += [ "--incremental-install-json-path=$_rebased_incremental_install_json_path" ]
 
         assert(_rebased_incremental_apk_path != "")  # Mark as used.
         if (_incremental_allowed) {
@@ -465,10 +465,16 @@ template("test_runner_script") {
       forward_variables_from(invoker,
                              [
                                "data",
-                               "data_deps",
                                "deps",
                                "public_deps",
                              ])
+      data_deps = []
+      if (defined(invoker.data_deps)) {
+        data_deps += invoker.data_deps
+      }
+      if (defined(invoker.additional_apks)) {
+        data_deps += invoker.additional_apks
+      }
       write_runtime_deps = _runtime_deps_file
     }
   }
@@ -638,13 +644,13 @@ template("test_runner_script") {
     }
     if (_incremental_install) {
       test_runner_args += [
-        "--test-apk-incremental-install-script",
-        "@FileArg($_rebased_apk_build_config:deps_info:incremental_install_script_path)",
+        "--test-apk-incremental-install-json",
+        "@FileArg($_rebased_apk_build_config:deps_info:incremental_install_json_path)",
       ]
       if (defined(invoker.apk_under_test)) {
         test_runner_args += [
-          "--apk-under-test-incremental-install-script",
-          "@FileArg($_rebased_apk_under_test_build_config:deps_info:incremental_install_script_path)",
+          "--apk-under-test-incremental-install-json",
+          "@FileArg($_rebased_apk_under_test_build_config:deps_info:incremental_install_json_path)",
         ]
       }
       test_runner_args += [ "--fast-local-dev" ]
@@ -748,11 +754,6 @@ if (enable_java_templates) {
   android_sdk_jar = "$android_sdk/android.jar"
   rebased_android_sdk_jar = rebase_path(android_sdk_jar, root_build_dir)
   android_default_aapt_path = "$rebased_android_sdk_build_tools/aapt"
-
-  android_configuration_name = "Release"
-  if (is_debug) {
-    android_configuration_name = "Debug"
-  }
 
   template("android_lint") {
     action(target_name) {
@@ -863,12 +864,9 @@ if (enable_java_templates) {
                              ])
       script = "//build/android/gyp/proguard.py"
 
-      # http://crbug.com/725224. Speculative fix for bots running out of memory.
-      # TODO(agrieve): Change this to an explicit pool once those are supported.
-      #     http://crbug.com/635308
-      if (!enable_concurrent_apk_finalization) {
-        console = true
-      }
+      # http://crbug.com/725224. Fix for bots running out of memory.
+      pool = "//build/toolchain:link_pool($default_toolchain)"
+
       if (defined(invoker.proguard_jar_path)) {
         _proguard_jar_path = invoker.proguard_jar_path
       } else {
@@ -951,6 +949,8 @@ if (enable_java_templates) {
         rebase_path(depfile, root_build_dir),
         "--exclude",
         rebase_path(_exclusions_file, root_build_dir),
+        "--system-jar",
+        rebase_path(android_sdk_jar, root_build_dir),
         "--auxclasspath-gyp",
         "@FileArg($_rebased_build_config:javac:classpath)",
         "--output-file",
@@ -1046,13 +1046,8 @@ if (enable_java_templates) {
         script = "//build/android/gyp/main_dex_list.py"
         depfile = "$target_gen_dir/$target_name.d"
 
-        # http://crbug.com/725224. Speculative fix for bots running out of
-        #     memory.
-        # TODO(agrieve): Change this to an explicit pool once those are
-        #     supported. http://crbug.com/635308
-        if (!enable_concurrent_apk_finalization) {
-          console = true
-        }
+        # http://crbug.com/725224. Fix for bots running out of memory.
+        pool = "//build/toolchain:link_pool($default_toolchain)"
 
         main_dex_rules = "//build/android/main_dex_classes.flags"
 
@@ -1121,9 +1116,7 @@ if (enable_java_templates) {
       ]
 
       if (defined(invoker.use_pool) && invoker.use_pool) {
-        # TODO(agrieve): Change this to an explicit pool once those are
-        #     supported. http://crbug.com/635308
-        console = true
+        pool = "//build/toolchain:link_pool($default_toolchain)"
       }
 
       rebased_output = rebase_path(invoker.output, root_build_dir)
@@ -1178,6 +1171,12 @@ if (enable_java_templates) {
     _input_jar_path = invoker.input_jar_path
     _output_jar_path = invoker.output_jar_path
 
+    _enable_assert =
+        defined(invoker.supports_android) && invoker.supports_android &&
+        (is_java_debug || dcheck_always_on)
+
+    _desugar = defined(invoker.supports_android) && invoker.supports_android
+
     _jar_excluded_patterns = []
     if (defined(invoker.jar_excluded_patterns)) {
       _jar_excluded_patterns = invoker.jar_excluded_patterns
@@ -1186,16 +1185,91 @@ if (enable_java_templates) {
                               invoker.strip_resource_classes
     _filter_jar = _jar_excluded_patterns != [] || _strip_resource_classes
 
-    _enable_assert =
-        defined(invoker.supports_android) && invoker.supports_android &&
-        (is_java_debug || dcheck_always_on)
-
-    _retrolambda =
-        defined(invoker.supports_android) && invoker.supports_android &&
-        ((defined(invoker.process_java8) && invoker.process_java8) || use_java8)
-
     _deps = []
     _previous_output_jar = _input_jar_path
+
+    if (_enable_assert) {
+      _assert_target = "${target_name}__assert"
+      _assert_input_jar = _previous_output_jar
+      _assert_output_jar = "$target_out_dir/$target_name-asserted.jar"
+
+      action(_assert_target) {
+        script = "$root_build_dir/bin/helper/java_assertion_enabler"
+        deps = [
+          "//build/android/java_assertion_enabler($default_toolchain)",
+        ]
+        deps += _deps
+        if (defined(invoker.deps)) {
+          deps += invoker.deps
+        }
+        if (defined(invoker.public_deps)) {
+          public_deps = invoker.public_deps
+        }
+        inputs = [
+          _assert_input_jar,
+        ]
+        outputs = [
+          _assert_output_jar,
+        ]
+        args = [
+          rebase_path(_assert_input_jar, root_build_dir),
+          rebase_path(_assert_output_jar, root_build_dir),
+        ]
+      }
+
+      _deps = []
+      _deps = [ ":$_assert_target" ]
+      _previous_output_jar = _assert_output_jar
+    }
+
+    assert(!defined(invoker.alternative_android_sdk_ijar) ||
+           invoker.alternative_android_sdk_ijar != "")
+    assert(!defined(invoker.alternative_android_sdk_ijar_dep) ||
+           invoker.alternative_android_sdk_ijar_dep != "")
+    if (_desugar) {
+      _desugar_target = "${target_name}__desugar"
+      _desugar_input_jar = _previous_output_jar
+      _desugar_output_jar = "$target_out_dir/$target_name-desugar.jar"
+
+      action(_desugar_target) {
+        script = "//build/android/gyp/desugar.py"
+        deps = _deps
+        if (defined(invoker.deps)) {
+          deps += invoker.deps
+        }
+        if (defined(invoker.public_deps)) {
+          public_deps = invoker.public_deps
+        }
+        inputs = [
+          _build_config,
+          _desugar_input_jar,
+        ]
+        outputs = [
+          _desugar_output_jar,
+        ]
+        if (defined(invoker.alternative_android_sdk_ijar)) {
+          deps += [ invoker.alternative_android_sdk_ijar_dep ]
+          _android_sdk_ijar = invoker.alternative_android_sdk_ijar
+        } else {
+          deps += [ "//build/android:android_ijar" ]
+          _android_sdk_ijar = "$root_out_dir/lib.java/android.interface.jar"
+        }
+        inputs += [ _android_sdk_ijar ]
+        args = [
+          "--input-jar",
+          rebase_path(_desugar_input_jar, root_build_dir),
+          "--output-jar",
+          rebase_path(_desugar_output_jar, root_build_dir),
+          "--classpath=@FileArg($_rebased_build_config:javac:interface_classpath)",
+          "--bootclasspath-entry",
+          rebase_path(_android_sdk_ijar, root_build_dir),
+        ]
+      }
+
+      _deps = []
+      _deps = [ ":$_desugar_target" ]
+      _previous_output_jar = _desugar_output_jar
+    }
 
     if (_filter_jar) {
       _filter_target = "${target_name}__filter"
@@ -1233,78 +1307,6 @@ if (enable_java_templates) {
       _deps = []
       _deps = [ ":$_filter_target" ]
       _previous_output_jar = _filter_output_jar
-    }
-
-    if (_enable_assert) {
-      _assert_target = "${target_name}__assert"
-      _assert_input_jar = _previous_output_jar
-      _assert_output_jar = "$target_out_dir/$target_name-asserted.jar"
-
-      action(_assert_target) {
-        script = "$root_build_dir/bin/helper/java_assertion_enabler"
-        deps = [
-          "//build/android/java_assertion_enabler($default_toolchain)",
-        ]
-        deps += _deps
-        if (defined(invoker.deps)) {
-          deps += invoker.deps
-        }
-        if (defined(invoker.public_deps)) {
-          public_deps = invoker.public_deps
-        }
-        inputs = [
-          _assert_input_jar,
-        ]
-        outputs = [
-          _assert_output_jar,
-        ]
-        args = [
-          rebase_path(_assert_input_jar, root_build_dir),
-          rebase_path(_assert_output_jar, root_build_dir),
-        ]
-      }
-
-      _deps = []
-      _deps = [ ":$_assert_target" ]
-      _previous_output_jar = _assert_output_jar
-    }
-
-    if (_retrolambda) {
-      _retrolambda_target = "${target_name}__retrolambda"
-      _retrolambda_input_jar = _previous_output_jar
-      _retrolambda_output_jar = "$target_out_dir/$target_name-retrolambda.jar"
-
-      android_sdk_jar = "$android_sdk/android.jar"
-      action(_retrolambda_target) {
-        script = "//build/android/gyp/retrolambda.py"
-        deps = _deps
-        if (defined(invoker.deps)) {
-          deps += invoker.deps
-        }
-        if (defined(invoker.public_deps)) {
-          public_deps = invoker.public_deps
-        }
-        inputs = [
-          _build_config,
-          _retrolambda_input_jar,
-        ]
-        outputs = [
-          _retrolambda_output_jar,
-        ]
-        args = [
-          "--input-jar",
-          rebase_path(_retrolambda_input_jar, root_build_dir),
-          "--output-jar",
-          rebase_path(_retrolambda_output_jar, root_build_dir),
-          "--classpath=@FileArg($_rebased_build_config:javac:classpath)",
-          "--android-sdk-jar",
-          rebase_path(android_sdk_jar, root_build_dir),
-        ]
-      }
-
-      _deps = []
-      _deps = [ ":$_retrolambda_target" ]
-      _previous_output_jar = _retrolambda_output_jar
     }
 
     _output_jar_target = "${target_name}__copy"
@@ -1685,7 +1687,6 @@ if (enable_java_templates) {
           _rebased_android_sdk_jar,
           "--aapt-path",
           _android_aapt_path,
-          "--configuration-name=$android_configuration_name",
           "--android-manifest",
           rebase_path(invoker.android_manifest, root_build_dir),
           "--version-code",
@@ -1695,6 +1696,12 @@ if (enable_java_templates) {
           "--apk-path",
           rebase_path(_resource_packaged_apk_path, root_build_dir),
         ]
+
+        # Useful to have android:debuggable in the manifest even for Release
+        # builds. Just omit it for officai
+        if (debuggable_apks) {
+          args += [ "--debuggable" ]
+        }
 
         if (defined(_resources_zip)) {
           args += [
@@ -2054,7 +2061,6 @@ if (enable_java_templates) {
                              [
                                "jar_excluded_patterns",
                                "strip_resource_classes",
-                               "process_java8",
                              ])
 
       visibility = [
@@ -2281,6 +2287,7 @@ if (enable_java_templates) {
         "--jar-path=$_rebased_jar_path",
         "--java-srcjars=$_rebased_java_srcjars",
         "--java-srcjars=@FileArg($_rebased_build_config:javac:srcjars)",
+        "--java-version=1.8",
       ]
       if (_enable_interface_jars_javac) {
         args += [ "--classpath=@FileArg($_rebased_build_config:javac:interface_classpath)" ]
@@ -2306,11 +2313,6 @@ if (enable_java_templates) {
         _rebased_android_sdk_ijar =
             rebase_path(_android_sdk_ijar, root_build_dir)
         args += [ "--bootclasspath=$_rebased_android_sdk_ijar" ]
-      }
-      if (use_java8) {
-        args += [ "--java-version=1.8" ]
-      } else if (_supports_android) {
-        args += [ "--java-version=1.7" ]
       }
       foreach(e, _manifest_entries) {
         args += [ "--manifest-entry=" + e ]
@@ -2346,7 +2348,12 @@ if (enable_java_templates) {
     }
 
     process_java_prebuilt(_process_prebuilt_target_name) {
-      forward_variables_from(invoker, [ "jar_excluded_patterns" ])
+      forward_variables_from(invoker,
+                             [
+                               "alternative_android_sdk_ijar",
+                               "alternative_android_sdk_ijar_dep",
+                               "jar_excluded_patterns",
+                             ])
       supports_android = _supports_android
       build_config = _build_config
       input_jar_path = _javac_jar_path
@@ -2451,11 +2458,15 @@ if (enable_java_templates) {
 
     _enable_build_hooks =
         _supports_android &&
-        (!defined(invoker.no_build_hooks) ||
-         (defined(invoker.no_build_hooks) && !invoker.no_build_hooks))
-
+        (!defined(invoker.no_build_hooks) || !invoker.no_build_hooks)
     if (_enable_build_hooks) {
-      _accumulated_deps += [ "//build/android:build_hooks_java" ]
+      _accumulated_deps += [ "//build/android/buildhooks:build_hooks_java" ]
+    }
+
+    _enable_build_hooks_android = _enable_build_hooks && _requires_android
+    if (_enable_build_hooks_android) {
+      _accumulated_deps +=
+          [ "//build/android/buildhooks:build_hooks_android_java" ]
     }
 
     if (defined(invoker.run_findbugs_override)) {
@@ -2540,7 +2551,12 @@ if (enable_java_templates) {
         if (defined(invoker.deps)) {
           possible_config_deps = invoker.deps
           if (_enable_build_hooks) {
-            possible_config_deps += [ "//build/android:build_hooks_java" ]
+            possible_config_deps +=
+                [ "//build/android/buildhooks:build_hooks_java" ]
+          }
+          if (_enable_build_hooks_android) {
+            possible_config_deps +=
+                [ "//build/android/buildhooks:build_hooks_android_java" ]
           }
         }
         supports_android = _supports_android

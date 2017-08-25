@@ -38,6 +38,7 @@ include_rules = [
   "+ui/aura_extra",
   "+components/vector_icons",
   "+ui/webui",
+  "+storage/public/interfaces",
 
   # In general, //content shouldn't depend on //device.
   # This is the an exception.
@@ -57,6 +58,10 @@ include_rules = [
   # Allow non-browser Chrome OS code to be used.
   "+chromeos",
   "+third_party/cros_system_api",
+
+  # Temporary include to allow easier transition to using a network service.
+  # TODO(mmenke): Remove this when the network service ships.
+  "+content/network",
 
   # No inclusion of WebKit from the browser, other than strictly enum/POD,
   # header-only types, and some selected common code.
@@ -90,7 +95,6 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom.h",
   "+third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h",
   "+third_party/WebKit/public/platform/modules/broadcastchannel/broadcast_channel.mojom.h",
-  "+third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
   "+third_party/WebKit/public/platform/modules/installedapp/installed_app_provider.mojom.h",
@@ -122,13 +126,13 @@ include_rules = [
   "+third_party/WebKit/public/platform/reporting.mojom.h",
   "+third_party/WebKit/public/public_features.h",
   "+third_party/WebKit/public/web/WebAXEnums.h",
-  "+third_party/WebKit/public/web/WebCompositionUnderline.h",
   "+third_party/WebKit/public/web/WebConsoleMessage.h",
   "+third_party/WebKit/public/web/WebContextMenuData.h",
   "+third_party/WebKit/public/web/WebDeviceEmulationParams.h",
   "+third_party/WebKit/public/web/WebDragStatus.h",
   "+third_party/WebKit/public/web/WebFindOptions.h",
   "+third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h",
+  "+third_party/WebKit/public/web/WebImeTextSpan.h",
   "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
   "+third_party/WebKit/public/web/WebPluginAction.h",
   "+third_party/WebKit/public/web/WebPopupType.h",

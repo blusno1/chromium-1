@@ -2397,13 +2397,13 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AllTypesAreGettingDeleted) {
     } else {
       // Other website settings only allow dictionaries.
       base::DictionaryValue dict;
-      dict.SetIntegerWithoutPathExpansion("foo", 42);
+      dict.SetKey("foo", base::Value(42));
       some_value = std::move(dict);
     }
     // Create an exception.
     map->SetWebsiteSettingDefaultScope(
         url, url, info->type(), std::string(),
-        base::MakeUnique<base::Value>(some_value));
+        base::MakeUnique<base::Value>(some_value.Clone()));
 
     // Check that the exception was created.
     std::unique_ptr<base::Value> value =

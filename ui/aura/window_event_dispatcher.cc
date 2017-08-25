@@ -69,13 +69,9 @@ void ConvertEventLocationToTarget(ui::EventTarget* event_target,
     return;
 
   gfx::Point location = event->AsLocatedEvent()->location();
-  gfx::Point root_location = event->AsLocatedEvent()->root_location();
   Window::ConvertPointToTarget(static_cast<Window*>(event_target),
                                static_cast<Window*>(target), &location);
-  Window::ConvertPointToTarget(static_cast<Window*>(event_target),
-                               static_cast<Window*>(target), &root_location);
   event->AsLocatedEvent()->set_location(location);
-  event->AsLocatedEvent()->set_root_location(root_location);
 }
 
 }  // namespace
@@ -261,7 +257,9 @@ const Window* WindowEventDispatcher::window() const {
 
 void WindowEventDispatcher::TransformEventForDeviceScaleFactor(
     ui::LocatedEvent* event) {
-  event->UpdateForRootTransform(host_->GetInverseRootTransform());
+  event->UpdateForRootTransform(
+      host_->GetInverseRootTransform(),
+      host_->GetInverseRootTransformForLocalEventCoordinates());
 }
 
 void WindowEventDispatcher::DispatchMouseExitToHidingWindow(Window* window) {
@@ -585,7 +583,9 @@ void WindowEventDispatcher::DispatchSyntheticTouchEvent(ui::TouchEvent* event) {
   // the pointer, in dips. OnEventFromSource expects events with co-ordinates
   // in raw pixels, so we convert back to raw pixels here.
   DCHECK(event->type() == ui::ET_TOUCH_CANCELLED);
-  event->UpdateForRootTransform(host_->GetRootTransform());
+  event->UpdateForRootTransform(
+      host_->GetRootTransform(),
+      host_->GetRootTransformForLocalEventCoordinates());
   DispatchDetails details = OnEventFromSource(event);
   if (details.dispatcher_destroyed)
     return;
@@ -773,6 +773,14 @@ ui::EventDispatchDetails WindowEventDispatcher::SynthesizeMouseMoveEvent() {
   if (!synthesize_mouse_move_)
     return details;
   synthesize_mouse_move_ = false;
+
+  // No need to generate mouse event if the cursor is invisible.
+  client::CursorClient* cursor_client =
+      client::GetCursorClient(host_->window());
+  if (cursor_client && (!cursor_client->IsMouseEventsEnabled() ||
+                        !cursor_client->IsCursorVisible())) {
+    return details;
+  }
 
   // If one of the mouse buttons is currently down, then do not synthesize a
   // mouse-move event. In such cases, aura could synthesize a DRAGGED event

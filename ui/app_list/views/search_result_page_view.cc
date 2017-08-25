@@ -95,6 +95,8 @@ class SearchResultPageBackground : public views::Background {
     flags.setColor(color_);
     canvas->DrawRoundRect(bounds, corner_radius_, flags);
 
+    if (bounds.height() <= kSearchBoxHeight)
+      return;
     // Draw a separator between SearchBoxView and SearchResultPageView.
     bounds.set_y(kSearchBoxHeight);
     bounds.set_height(kSeparatorThickness);
@@ -142,14 +144,19 @@ SearchResultPageView::SearchResultPageView()
     : selected_index_(0),
       is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()),
       contents_view_(new views::View) {
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
+
   if (is_fullscreen_app_list_enabled_) {
     contents_view_->SetLayoutManager(
         new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 0));
 
     // Hides this view behind the search box by using the same color and
-    // background border corner radius.
+    // background border corner radius. All child views' background should be
+    // set transparent so that the rounded corner is not overwritten.
     SetBackground(base::MakeUnique<SearchResultPageBackground>(
-        kSearchBoxBackgroundDefault, kSearchBoxBorderCornerRadiusFullscreen));
+        kCardBackgroundColorFullscreen,
+        kSearchBoxBorderCornerRadiusFullscreen));
   } else {
     gfx::ShadowValue shadow = GetShadowForZHeight(kSearchResultZHeight);
     std::unique_ptr<views::Border> border(new views::ShadowBorder(shadow));
@@ -182,8 +189,7 @@ SearchResultPageView::SearchResultPageView()
   SetLayoutManager(new views::FillLayout);
 }
 
-SearchResultPageView::~SearchResultPageView() {
-}
+SearchResultPageView::~SearchResultPageView() = default;
 
 void SearchResultPageView::SetSelection(bool select) {
   if (select)
@@ -423,6 +429,14 @@ gfx::Rect SearchResultPageView::GetSearchBoxBounds() const {
     rect.set_size(gfx::Size(kFullscreenWidth, kSearchBoxHeight));
   }
   return rect;
+}
+
+views::View* SearchResultPageView::GetSelectedView() const {
+  if (!HasSelection())
+    return nullptr;
+  SearchResultContainerView* container =
+      result_container_views_[selected_index_];
+  return container->GetSelectedView();
 }
 
 }  // namespace app_list

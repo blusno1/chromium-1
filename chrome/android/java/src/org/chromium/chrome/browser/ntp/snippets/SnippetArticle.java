@@ -78,6 +78,9 @@ public class SnippetArticle implements OfflinableSuggestion {
     /** The offline id of the corresponding offline page, if any. */
     private Long mOfflinePageOfflineId;
 
+    /** Whether the corresponding offline page has been automatically prefetched. */
+    private boolean mIsPrefetched;
+
     /**
      * Creates a SnippetArticleListItem object that will hold the data.
      */
@@ -131,6 +134,11 @@ public class SnippetArticle implements OfflinableSuggestion {
     /** @return whether a snippet is a remote suggestion. */
     public boolean isArticle() {
         return mCategory == KnownCategories.ARTICLES;
+    }
+
+    /** @return whether a snippet is a contextual suggestion. */
+    public boolean isContextual() {
+        return mCategory == KnownCategories.CONTEXTUAL;
     }
 
     /** @return whether a snippet is either offline page or asset download. */
@@ -237,6 +245,14 @@ public class SnippetArticle implements OfflinableSuggestion {
     @Nullable
     public Long getOfflinePageOfflineId() {
         return mOfflinePageOfflineId;
+    }
+
+    public void setIsPrefetched(boolean isPrefetched) {
+        mIsPrefetched = isPrefetched;
+    }
+
+    public boolean isPrefetched() {
+        return mIsPrefetched;
     }
 
     @Override

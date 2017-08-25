@@ -19,7 +19,7 @@
 #include "cc/cc_export.h"
 #include "cc/resources/resource.h"
 #include "cc/resources/scoped_resource.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_format.h"
 
 namespace cc {
 
@@ -100,6 +100,9 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   }
   size_t GetBusyResourceCountForTesting() const {
     return busy_resources_.size();
+  }
+  bool AllowsNonExactReUseForTesting() const {
+    return !disallow_non_exact_reuse_;
   }
 
  protected:

@@ -40,6 +40,7 @@
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
 #include "core/loader/resource/ImageResourceContent.h"
+#include "platform/graphics/ColorCorrectionTestUtils.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/heap/Handle.h"
@@ -230,6 +231,8 @@ TEST_F(ImageBitmapTest, ImageBitmapSourceChanged) {
   }
 }
 
+constexpr float kWideGamutColorCorrectionTolerance = 0.01;
+
 enum class ColorSpaceConversion : uint8_t {
   NONE = 0,
   DEFAULT_NOT_COLOR_CORRECTED = 1,
@@ -384,9 +387,9 @@ TEST_F(ImageBitmapTest, MAYBE_ImageBitmapColorSpaceConversionHTMLImageElement) {
                              color_format32, src_pixel.get(), 1,
                              SkAlphaType::kPremul_SkAlphaType);
 
-    int compare = std::memcmp(converted_pixel.get(), transformed_pixel.get(),
-                              image_info.bytesPerPixel());
-    ASSERT_EQ(compare, 0);
+    ColorCorrectionTestUtils::CompareColorCorrectedPixels(
+        converted_pixel, transformed_pixel, image_info.bytesPerPixel(),
+        kWideGamutColorCorrectionTolerance);
   }
 }
 
@@ -510,9 +513,9 @@ TEST_F(ImageBitmapTest, MAYBE_ImageBitmapColorSpaceConversionImageBitmap) {
                              color_format32, src_pixel.get(), 1,
                              SkAlphaType::kPremul_SkAlphaType);
 
-    int compare = std::memcmp(converted_pixel.get(), transformed_pixel.get(),
-                              image_info.bytesPerPixel());
-    ASSERT_EQ(compare, 0);
+    ColorCorrectionTestUtils::CompareColorCorrectedPixels(
+        converted_pixel, transformed_pixel, image_info.bytesPerPixel(),
+        kWideGamutColorCorrectionTolerance);
   }
 }
 
@@ -627,9 +630,9 @@ TEST_F(ImageBitmapTest,
                              color_format32, src_pixel.get(), 1,
                              SkAlphaType::kPremul_SkAlphaType);
 
-    int compare = std::memcmp(converted_pixel.get(), transformed_pixel.get(),
-                              image_info.bytesPerPixel());
-    ASSERT_EQ(compare, 0);
+    ColorCorrectionTestUtils::CompareColorCorrectedPixels(
+        converted_pixel, transformed_pixel, image_info.bytesPerPixel(),
+        kWideGamutColorCorrectionTolerance);
   }
 }
 
@@ -716,9 +719,9 @@ TEST_F(ImageBitmapTest, ImageBitmapColorSpaceConversionImageData) {
         SkColorSpaceXform::ColorFormat::kRGBA_8888_ColorFormat, src_pixel.get(),
         1, SkAlphaType::kPremul_SkAlphaType);
 
-    int compare = std::memcmp(converted_pixel.get(), transformed_pixel.get(),
-                              image_info.bytesPerPixel());
-    ASSERT_EQ(compare, 0);
+    ColorCorrectionTestUtils::CompareColorCorrectedPixels(
+        converted_pixel, transformed_pixel, image_info.bytesPerPixel(),
+        kWideGamutColorCorrectionTolerance);
   }
 }
 

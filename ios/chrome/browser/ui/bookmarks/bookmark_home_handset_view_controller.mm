@@ -13,6 +13,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
@@ -31,6 +32,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_panel_view.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_position_cache.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_promo_controller.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_table_view.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -58,8 +60,6 @@ using bookmarks::BookmarkNode;
                             orientation:(UIInterfaceOrientation)orientation;
 // Whether the edit button on the navigation bar should be shown.
 - (BOOL)shouldShowEditButtonWithMenuVisibility:(BOOL)visible;
-// Called when the cancel button is pressed on the navigation bar.
-- (void)navigationBarCancel:(id)sender;
 // Called when the menu button is pressed on the navigation bar.
 - (void)navigationBarToggledMenu:(id)sender;
 
@@ -75,15 +75,11 @@ using bookmarks::BookmarkNode;
 - (void)showMenuAnimated:(BOOL)animated;
 - (void)hideMenuAnimated:(BOOL)animated updateNavigationBar:(BOOL)update;
 
-// Saves the current position and asks the delegate to open the url.
-- (void)delegateDismiss:(const GURL&)url;
-
 @end
 
 @implementation BookmarkHomeHandsetViewController
 
 @synthesize cachedContentPosition = _cachedContentPosition;
-@synthesize delegate = _delegate;
 
 - (instancetype)initWithLoader:(id<UrlLoader>)loader
                   browserState:(ios::ChromeBrowserState*)browserState {
@@ -99,13 +95,16 @@ using bookmarks::BookmarkNode;
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  self.navigationBar.frame = [self navigationBarFrame];
-  [self.navigationBar setMenuTarget:self
-                             action:@selector(navigationBarToggledMenu:)];
-  [self.navigationBar setCancelTarget:self
-                               action:@selector(navigationBarCancel:)];
-  [self.view addSubview:self.navigationBar];
-  [self.view bringSubviewToFront:self.navigationBar];
+  if (!base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    self.navigationBar.frame = [self navigationBarFrame];
+    [self.navigationBar setMenuTarget:self
+                               action:@selector(navigationBarToggledMenu:)];
+    [self.navigationBar setCancelTarget:self
+                                 action:@selector(navigationBarCancel:)];
+    [self.view addSubview:self.navigationBar];
+    [self.view bringSubviewToFront:self.navigationBar];
+  }
 
   if (self.bookmarks->loaded())
     [self loadBookmarkViews];
@@ -134,6 +133,12 @@ using bookmarks::BookmarkNode;
 
 - (void)viewWillLayoutSubviews {
   [super viewWillLayoutSubviews];
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    // TODO(crbug.com/695749): See if we need to store/restore the content
+    // scroll position for BookmarkTableView here.
+    return;
+  }
 
   // Store the content scroll position.
   CGFloat contentPosition =
@@ -170,13 +175,6 @@ using bookmarks::BookmarkNode;
   return NO;
 }
 
-#pragma mark - Accessibility
-
-- (BOOL)accessibilityPerformEscape {
-  [self delegateDismiss:GURL()];
-  return YES;
-}
-
 #pragma mark - Superclass overrides
 
 - (void)loadBookmarkViews {
@@ -184,36 +182,42 @@ using bookmarks::BookmarkNode;
   DCHECK(self.bookmarks->loaded());
   DCHECK([self isViewLoaded]);
 
-  self.menuView.delegate = self;
+  // TODO(crbug.com/695749): Restore the content scroll position for
+  // BookmarkTableView in the UI.
 
-  // Set view frames and add them to hierarchy.
-  [self.panelView setFrame:[self frameForPanelView]];
-  self.panelView.delegate = self;
-  [self.view insertSubview:self.panelView atIndex:0];
-  self.folderView.frame = self.panelView.contentView.bounds;
-  [self.panelView.contentView addSubview:self.folderView];
-  [self.panelView.menuView addSubview:self.menuView];
-  [self.menuView setFrame:self.panelView.menuView.bounds];
+  if (!base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    self.menuView.delegate = self;
 
-  // Load the last primary menu item which the user had active.
-  BookmarkMenuItem* item = nil;
-  CGFloat position = 0;
-  BOOL found =
-      bookmark_utils_ios::GetPositionCache(self.bookmarks, &item, &position);
-  if (!found)
-    item = [self.menuView defaultMenuItem];
+    // Set view frames and add them to hierarchy.
+    [self.panelView setFrame:[self frameForPanelView]];
+    self.panelView.delegate = self;
+    [self.view insertSubview:self.panelView atIndex:0];
+    self.folderView.frame = self.panelView.contentView.bounds;
+    [self.panelView.contentView addSubview:self.folderView];
+    [self.panelView.menuView addSubview:self.menuView];
+    [self.menuView setFrame:self.panelView.menuView.bounds];
 
-  [self updatePrimaryMenuItem:item animated:NO];
+    // Load the last primary menu item which the user had active.
+    BookmarkMenuItem* item = nil;
+    CGFloat position = 0;
+    BOOL found =
+        bookmark_utils_ios::GetPositionCache(self.bookmarks, &item, &position);
+    if (!found)
+      item = [self.menuView defaultMenuItem];
 
-  if (found) {
-    // If the view has already been laid out, then immediately apply the content
-    // position.
-    if (self.view.window) {
-      [self.folderView applyContentPosition:position];
-    } else {
-      // Otherwise, save the position to be applied once the view has been laid
-      // out.
-      self.cachedContentPosition = [NSNumber numberWithFloat:position];
+    [self updatePrimaryMenuItem:item animated:NO];
+
+    if (found) {
+      // If the view has already been laid out, then immediately apply the
+      // content position.
+      if (self.view.window) {
+        [self.folderView applyContentPosition:position];
+      } else {
+        // Otherwise, save the position to be applied once the view has been
+        // laid out.
+        self.cachedContentPosition = [NSNumber numberWithFloat:position];
+      }
     }
   }
 }
@@ -281,10 +285,6 @@ using bookmarks::BookmarkNode;
       }];
 }
 
-- (void)navigateToBookmarkURL:(const GURL&)url {
-  [self delegateDismiss:url];
-}
-
 - (ActionSheetCoordinator*)createActionSheetCoordinatorOnView:(UIView*)view {
   return [[ActionSheetCoordinator alloc] initWithBaseViewController:self
                                                               title:nil
@@ -349,10 +349,6 @@ using bookmarks::BookmarkNode;
 
 #pragma mark Navigation Bar Callbacks
 
-- (void)navigationBarCancel:(id)sender {
-  [self delegateDismiss:GURL()];
-}
-
 - (void)navigationBarToggledMenu:(id)sender {
   if ([self.panelView userDrivenAnimationInProgress])
     return;
@@ -400,17 +396,6 @@ using bookmarks::BookmarkNode;
     UIInterfaceOrientation orient = GetInterfaceOrientation();
     [self updateNavigationBarAnimated:animated orientation:orient];
   }
-}
-
-- (void)dismissModals:(BOOL)animated {
-  [self.actionSheetCoordinator stop];
-  self.actionSheetCoordinator = nil;
-}
-
-- (void)delegateDismiss:(const GURL&)url {
-  [self cachePosition];
-  [self.delegate bookmarkHomeHandsetViewControllerWantsDismissal:self
-                                                 navigationToUrl:url];
 }
 
 #pragma mark - BookmarkPanelViewDelegate

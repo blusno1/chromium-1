@@ -6,8 +6,8 @@
 #define COMPONENTS_GUEST_VIEW_BROWSER_GUEST_VIEW_BASE_H_
 
 #include <memory>
-#include <queue>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -194,6 +194,11 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // Destroy this guest.
   void Destroy(bool also_delete);
+
+  // Indicates whether a guest should call destroy during DidDetach().
+  // TODO(wjmaclean): Delete this when browser plugin goes away;
+  // https://crbug.com/533069 .
+  virtual bool ShouldDestroyOnDetach() const;
 
   // Saves the attach state of the custom element hosting this GuestView.
   void SetAttachParams(const base::DictionaryValue& params);
@@ -434,7 +439,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // This is a queue of Events that are destined to be sent to the embedder once
   // the guest is attached to a particular embedder.
-  std::deque<std::unique_ptr<GuestViewEvent>> pending_events_;
+  base::circular_deque<std::unique_ptr<GuestViewEvent>> pending_events_;
 
   // The opener guest view.
   base::WeakPtr<GuestViewBase> opener_;

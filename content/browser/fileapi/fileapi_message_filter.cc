@@ -167,8 +167,10 @@ void FileAPIMessageFilter::OnOpenFileSystem(int request_id,
   }
   storage::OpenFileSystemMode mode =
       storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT;
-  context_->OpenFileSystem(origin_url, type, mode, base::Bind(
-      &FileAPIMessageFilter::DidOpenFileSystem, this, request_id));
+  context_->OpenFileSystem(
+      origin_url, type, mode,
+      base::BindOnce(&FileAPIMessageFilter::DidOpenFileSystem, this,
+                     request_id));
 }
 
 void FileAPIMessageFilter::OnResolveURL(
@@ -571,7 +573,7 @@ void FileAPIMessageFilter::DidCreateSnapshot(
     base::File::Error result,
     const base::File::Info& info,
     const base::FilePath& platform_path,
-    const scoped_refptr<storage::ShareableFileReference>& /* unused */) {
+    scoped_refptr<storage::ShareableFileReference> /* unused */) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   operations_.erase(request_id);
 

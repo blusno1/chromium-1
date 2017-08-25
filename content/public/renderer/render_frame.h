@@ -30,7 +30,6 @@ namespace blink {
 class WebFrame;
 class WebLocalFrame;
 class WebPlugin;
-class WebURLRequest;
 struct WebPluginParams;
 }
 
@@ -148,12 +147,6 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
       const blink::WebPluginParams& params,
       std::unique_ptr<PluginInstanceThrottler> throttler) = 0;
 
-  // The client should handle the navigation externally.
-  virtual void LoadURLExternally(
-      const blink::WebURLRequest& request,
-      blink::WebNavigationPolicy policy,
-      blink::WebTriggeringEventInfo triggering_event_info) = 0;
-
   // Execute a string of JavaScript in this frame's context.
   virtual void ExecuteJavaScript(const base::string16& javascript) = 0;
 
@@ -248,6 +241,10 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
                                    const std::string& message) = 0;
   // Forcefully detaches all connected DevTools clients.
   virtual void DetachDevToolsForTest() = 0;
+
+  // Sets the PreviewsState of this frame, a bitmask of potentially several
+  // Previews optimizations.
+  virtual void SetPreviewsState(PreviewsState previews_state) = 0;
 
   // Returns the PreviewsState of this frame, a bitmask of potentially several
   // Previews optimizations.

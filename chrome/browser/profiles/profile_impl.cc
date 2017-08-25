@@ -28,7 +28,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread_restrictions.h"
@@ -217,51 +216,31 @@ void CreateProfileReadme(const base::FilePath& profile_path) {
   }
 }
 
-// Helper method needed because PostTask cannot currently take a Callback
-// function with non-void return type.
-void CreateDirectoryAndSignal(const base::FilePath& path,
-                              base::WaitableEvent* done_creating,
-                              bool create_readme) {
-  // If the readme exists, the profile directory must also already exist.
-  base::FilePath readme_path = path.Append(chrome::kReadmeFilename);
-  if (base::PathExists(readme_path)) {
-    done_creating->Signal();
-    return;
-  }
-
-  DVLOG(1) << "Creating directory " << path.value();
-  if (base::CreateDirectory(path) && create_readme)
-    CreateProfileReadme(path);
-  done_creating->Signal();
-}
-
-// Task that blocks the FILE thread until CreateDirectoryAndSignal() finishes on
-// the IO task runner.
-void BlockFileThreadOnDirectoryCreate(base::WaitableEvent* done_creating) {
-  done_creating->Wait();
-}
-
-// Initiates creation of profile directory on |io_task_runner| and ensures that
-// FILE thread is blocked until that operation finishes. If |create_readme| is
-// true, the profile README will be created in the profile directory.
+// Creates the profile directory synchronously if it doesn't exist. If
+// |create_readme| is true, the profile README will be created asynchronously in
+// the profile directory.
 void CreateProfileDirectory(base::SequencedTaskRunner* io_task_runner,
                             const base::FilePath& path,
                             bool create_readme) {
-  base::WaitableEvent* done_creating =
-      new base::WaitableEvent(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                              base::WaitableEvent::InitialState::NOT_SIGNALED);
-  io_task_runner->PostTask(
-      FROM_HERE, base::BindOnce(&CreateDirectoryAndSignal, path, done_creating,
-                                create_readme));
-  // Block the FILE thread until directory is created on I/O task runner to make
-  // sure that we don't attempt any operation until that part completes.
-  BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
-                          base::BindOnce(&BlockFileThreadOnDirectoryCreate,
-                                         base::Owned(done_creating)));
-}
+  // Create the profile directory synchronously otherwise we would need to
+  // sequence every otherwise independent I/O operation inside the profile
+  // directory with this operation. base::PathExists() and
+  // base::CreateDirectory() should be lightweight I/O operations and avoiding
+  // the headache of sequencing all otherwise unrelated I/O after these
+  // justifies running them on the main thread.
+  base::ThreadRestrictions::ScopedAllowIO allow_io_to_create_directory;
 
-base::FilePath GetCachePath(const base::FilePath& base) {
-  return base.Append(chrome::kCacheDirname);
+  // If the readme exists, the profile directory must also already exist.
+  if (base::PathExists(path.Append(chrome::kReadmeFilename)))
+    return;
+
+  DVLOG(1) << "Creating directory " << path.value();
+  if (base::CreateDirectory(path) && create_readme) {
+    base::PostTaskWithTraits(FROM_HERE,
+                             {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                              base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
+                             base::Bind(&CreateProfileReadme, path));
+  }
 }
 
 base::FilePath GetMediaCachePath(const base::FilePath& base) {
@@ -485,7 +464,6 @@ ProfileImpl::ProfileImpl(
   configuration_policy_provider_ =
       policy::UserCloudPolicyManagerFactory::CreateForOriginalBrowserContext(
           this, force_immediate_policy_load, io_task_runner_,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 #endif
   profile_policy_connector_ =
@@ -637,14 +615,10 @@ void ProfileImpl::DoFinalInit() {
   cookie_path = cookie_path.Append(chrome::kCookieFilename);
   base::FilePath channel_id_path = GetPath();
   channel_id_path = channel_id_path.Append(chrome::kChannelIDFilename);
-  base::FilePath cache_path = base_cache_path_;
-  int cache_max_size;
-  GetCacheParameters(false, &cache_path, &cache_max_size);
-  cache_path = GetCachePath(cache_path);
 
   base::FilePath media_cache_path = base_cache_path_;
   int media_cache_max_size;
-  GetCacheParameters(true, &media_cache_path, &media_cache_max_size);
+  GetMediaCacheParameters(&media_cache_path, &media_cache_max_size);
   media_cache_path = GetMediaCachePath(media_cache_path);
 
   base::FilePath extensions_cookie_path = GetPath();
@@ -669,10 +643,9 @@ void ProfileImpl::DoFinalInit() {
   // Make sure we initialize the ProfileIOData after everything else has been
   // initialized that we might be reading from the IO thread.
 
-  io_data_.Init(cookie_path, channel_id_path, cache_path,
-                cache_max_size, media_cache_path, media_cache_max_size,
-                extensions_cookie_path, GetPath(), predictor_,
-                session_cookie_mode, GetSpecialStoragePolicy(),
+  io_data_.Init(cookie_path, channel_id_path, media_cache_path,
+                media_cache_max_size, extensions_cookie_path, GetPath(),
+                predictor_, session_cookie_mode, GetSpecialStoragePolicy(),
                 CreateDomainReliabilityMonitor(local_state));
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -1368,23 +1341,16 @@ void ProfileImpl::UpdateIsEphemeralInStorage() {
   }
 }
 
-// Gets the cache parameters from the command line. If |is_media_context| is
-// set to true then settings for the media context type is what we need,
-// |cache_path| will be set to the user provided path, or will not be touched if
-// there is not an argument. |max_size| will be the user provided value or zero
-// by default.
-void ProfileImpl::GetCacheParameters(bool is_media_context,
-                                     base::FilePath* cache_path,
-                                     int* max_size) {
-  DCHECK(cache_path);
-  DCHECK(max_size);
-
+// Gets the media cache parameters from the command line. |cache_path| will be
+// set to the user provided path, or will not be touched if there is not an
+// argument. |max_size| will be the user provided value or zero by default.
+void ProfileImpl::GetMediaCacheParameters(base::FilePath* cache_path,
+                                          int* max_size) {
   base::FilePath path(prefs_->GetFilePath(prefs::kDiskCacheDir));
   if (!path.empty())
     *cache_path = path.Append(cache_path->BaseName());
 
-  *max_size = is_media_context ? prefs_->GetInteger(prefs::kMediaCacheSize) :
-                                 prefs_->GetInteger(prefs::kDiskCacheSize);
+  *max_size = prefs_->GetInteger(prefs::kMediaCacheSize);
 }
 
 PrefProxyConfigTracker* ProfileImpl::CreateProxyConfigTracker() {

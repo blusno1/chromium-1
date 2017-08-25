@@ -169,8 +169,7 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
     DCHECK(passwordStore_);
     passwordManagerEnabled_ = [[PrefBackedBoolean alloc]
         initWithPrefService:browserState_->GetPrefs()
-                   prefName:password_manager::prefs::
-                                kPasswordManagerSavingEnabled];
+                   prefName:password_manager::prefs::kCredentialsEnableService];
     [passwordManagerEnabled_ setObserver:self];
     [self getLoginsFromPasswordStore];
     [self updateEditButton];
@@ -437,11 +436,12 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
   if (!experimental_flags::IsViewCopyPasswordsEnabled())
     return;
 
-  UIViewController* controller =
+  PasswordDetailsCollectionViewController* controller =
       [[PasswordDetailsCollectionViewController alloc]
             initWithPasswordForm:form
                         delegate:self
           reauthenticationModule:reauthenticationModule_];
+  controller.dispatcher = self.dispatcher;
   [self.navigationController pushViewController:controller animated:YES];
 }
 

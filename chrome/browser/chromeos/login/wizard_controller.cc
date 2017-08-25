@@ -67,6 +67,8 @@
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
+#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
+#include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/profiles/profile.h"
@@ -842,12 +844,21 @@ void WizardController::OnTermsOfServiceAccepted() {
   ShowArcTermsOfServiceScreen();
 }
 
-void WizardController::OnArcTermsOfServiceFinished() {
-  const Profile* profile = ProfileManager::GetActiveUserProfile();
+void WizardController::OnArcTermsOfServiceSkipped() {
   if (is_in_session_oobe_) {
-    if (profile->GetPrefs()->GetBoolean(prefs::kArcTermsAccepted))
-      StartVoiceInteractionSetupWizard();
+    PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
+    prefs->SetBoolean(prefs::kArcVoiceInteractionValuePropAccepted, false);
     OnOobeFlowFinished();
+    return;
+  }
+  // If the user finished with the PlayStore Terms of Service, advance to the
+  // user image screen.
+  ShowUserImageScreen();
+}
+
+void WizardController::OnArcTermsOfServiceAccepted() {
+  if (is_in_session_oobe_) {
+    ShowWaitForContainerReadyScreen();
     return;
   }
   // If the user finished with the PlayStore Terms of Service, advance to the
@@ -954,6 +965,11 @@ void WizardController::StartOOBEUpdate() {
 }
 
 void WizardController::StartTimezoneResolve() {
+  if (!g_browser_process->platform_part()
+           ->GetTimezoneResolverManager()
+           ->TimeZoneResolverShouldBeRunning())
+    return;
+
   geolocation_provider_.reset(new SimpleGeolocationProvider(
       g_browser_process->system_request_context(),
       SimpleGeolocationProvider::DefaultGeolocationProviderURL()));
@@ -1241,8 +1257,11 @@ void WizardController::OnExit(BaseScreen& /* screen */,
     case ScreenExitCode::TERMS_OF_SERVICE_ACCEPTED:
       OnTermsOfServiceAccepted();
       break;
-    case ScreenExitCode::ARC_TERMS_OF_SERVICE_FINISHED:
-      OnArcTermsOfServiceFinished();
+    case ScreenExitCode::ARC_TERMS_OF_SERVICE_SKIPPED:
+      OnArcTermsOfServiceSkipped();
+      break;
+    case ScreenExitCode::ARC_TERMS_OF_SERVICE_ACCEPTED:
+      OnArcTermsOfServiceAccepted();
       break;
     case ScreenExitCode::WRONG_HWID_WARNING_SKIPPED:
       OnWrongHWIDWarningSkipped();
@@ -1502,9 +1521,7 @@ void WizardController::OnTimezoneResolved(
   if (!timezone->timeZoneId.empty()) {
     VLOG(1) << "Resolve TimeZone: setting timezone to '" << timezone->timeZoneId
             << "'";
-
-    system::TimezoneSettings::GetInstance()->SetTimezoneFromID(
-        base::UTF8ToUTF16(timezone->timeZoneId));
+    chromeos::system::SetSystemAndSigninScreenTimezone(timezone->timeZoneId);
   }
 }
 
@@ -1531,6 +1548,12 @@ void WizardController::OnLocationResolved(const Geoposition& position,
   if (elapsed >= timeout) {
     LOG(WARNING) << "Resolve TimeZone: got location after timeout ("
                  << elapsed.InSecondsF() << " seconds elapsed). Ignored.";
+    return;
+  }
+
+  if (!g_browser_process->platform_part()
+           ->GetTimezoneResolverManager()
+           ->TimeZoneResolverShouldBeRunning()) {
     return;
   }
 

@@ -45,11 +45,11 @@ struct InputEventAck;
 // Chrome IPC which is deprecated. This class will be replaced with a Mojo
 // backed transport. See crbug.com/722928.
 class CONTENT_EXPORT LegacyInputRouterImpl
-    : public NON_EXPORTED_BASE(InputRouter),
-      public NON_EXPORTED_BASE(GestureEventQueueClient),
-      public NON_EXPORTED_BASE(MouseWheelEventQueueClient),
-      public NON_EXPORTED_BASE(TouchEventQueueClient),
-      public NON_EXPORTED_BASE(TouchpadTapSuppressionControllerClient) {
+    : public InputRouter,
+      public GestureEventQueueClient,
+      public MouseWheelEventQueueClient,
+      public TouchEventQueueClient,
+      public TouchpadTapSuppressionControllerClient {
  public:
   LegacyInputRouterImpl(IPC::Sender* sender,
                         InputRouterClient* client,
@@ -79,6 +79,8 @@ class CONTENT_EXPORT LegacyInputRouterImpl
   void SetFrameTreeNodeId(int frameTreeNodeId) override;
 
   cc::TouchAction AllowedTouchAction() override;
+
+  void SetForceEnableZoom(bool enabled) override;
 
   int routing_id() const { return routing_id_; }
 
@@ -150,7 +152,8 @@ class CONTENT_EXPORT LegacyInputRouterImpl
   void OnHasTouchEventHandlers(bool has_handlers);
   void OnSetTouchAction(cc::TouchAction touch_action);
   void OnSetWhiteListedTouchAction(cc::TouchAction white_listed_touch_action,
-                                   uint32_t unique_touch_event_id);
+                                   uint32_t unique_touch_event_id,
+                                   InputEventAckState ack_result);
   void OnDidStopFlinging();
 
   // Indicates the source of an ack provided to |ProcessInputEventAck()|.

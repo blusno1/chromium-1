@@ -34,8 +34,8 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_status.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
 #include "storage/common/blob_storage/blob_storage_constants.h"
-#include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -178,6 +178,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
       ServiceWorkerFetchEventResult fetch_result,
       const ServiceWorkerResponse& response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+      storage::mojom::BlobPtr body_as_blob,
       const scoped_refptr<ServiceWorkerVersion>& version);
   void SetResponse(const ServiceWorkerResponse& response);
 
@@ -286,7 +287,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   // Headers that have not yet been committed to |http_response_info_|.
   scoped_refptr<net::HttpResponseHeaders> http_response_headers_;
   std::vector<GURL> response_url_list_;
-  blink::mojom::FetchResponseType fetch_response_type_;
+  network::mojom::FetchResponseType fetch_response_type_;
 
   // Used when response type is FORWARD_TO_SERVICE_WORKER.
   std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
@@ -309,6 +310,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   // using the userdata mechanism. So we have to keep it not to free the blobs.
   scoped_refptr<ResourceRequestBody> body_;
   std::unique_ptr<storage::BlobDataHandle> request_body_blob_data_handle_;
+  scoped_refptr<storage::BlobHandle> request_body_blob_handle_;
   ServiceWorkerFetchType fetch_type_;
   base::Optional<base::TimeDelta> timeout_;
 

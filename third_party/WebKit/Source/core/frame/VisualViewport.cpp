@@ -42,10 +42,10 @@
 #include "core/frame/Settings.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/layout/TextAutosizer.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
 #include "platform/geometry/DoubleRect.h"
@@ -500,6 +500,11 @@ void VisualViewport::SetScrollLayerOnScrollbars(WebLayer* scroll_layer) const {
 
 bool VisualViewport::VisualViewportSuppliesScrollbars() const {
   return GetPage().GetSettings().GetViewportEnabled();
+}
+
+CompositorElementId VisualViewport::GetCompositorElementId() const {
+  // TODO(chrishtr): Implement http://crbug.com/638473.
+  return CompositorElementId();
 }
 
 bool VisualViewport::ScrollAnimatorEnabled() const {

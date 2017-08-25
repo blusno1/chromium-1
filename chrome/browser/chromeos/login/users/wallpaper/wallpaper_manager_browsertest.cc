@@ -98,7 +98,6 @@ class WallpaperManagerBrowserTest : public InProcessBrowserTest {
   }
 
  protected:
-
   // Return custom wallpaper path. Create directory if not exist.
   base::FilePath GetCustomWallpaperPath(
       const char* sub_dir,
@@ -212,7 +211,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
       base::FilePath(test_account1_wallpaper_files_id_.id()).Append(id).value();
   // Saves wallpaper info to local state for user |test_account_id1_|.
   WallpaperInfo info = {relative_path, WALLPAPER_LAYOUT_CENTER_CROPPED,
-                        user_manager::User::CUSTOMIZED,
+                        wallpaper::CUSTOMIZED,
                         base::Time::Now().LocalMidnight()};
   wallpaper_manager->SetUserWallpaperInfo(test_account_id1_, info, true);
 
@@ -293,7 +292,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
       base::FilePath(test_account1_wallpaper_files_id_.id()).Append(id).value();
   // Saves wallpaper info to local state for user |test_account_id1_|.
   WallpaperInfo info = {relative_path, WALLPAPER_LAYOUT_CENTER_CROPPED,
-                        user_manager::User::CUSTOMIZED,
+                        wallpaper::CUSTOMIZED,
                         base::Time::Now().LocalMidnight()};
   wallpaper_manager->SetUserWallpaperInfo(test_account_id1_, info, true);
 
@@ -322,8 +321,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
   // wallpaper info directly to simulate the wallpaper migration. See
   // crosbug.com/38429 for details about why we modify wallpaper info this way.
   WallpaperInfo info = {"123", WALLPAPER_LAYOUT_CENTER_CROPPED,
-                        user_manager::User::DEFAULT,
-                        base::Time::Now().LocalMidnight()};
+                        wallpaper::DEFAULT, base::Time::Now().LocalMidnight()};
   base::FilePath user_data_dir;
   ASSERT_TRUE(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
   ASSERT_TRUE(wallpaper_manager_test_utils::WriteJPEGFile(
@@ -400,8 +398,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTestNoAnimation,
   // wallpaper info directly to simulate the wallpaper migration. See
   // crosbug.com/38429 for details about why we modify wallpaper info this way.
   WallpaperInfo info = {"123", WALLPAPER_LAYOUT_CENTER_CROPPED,
-                        user_manager::User::DEFAULT,
-                        base::Time::Now().LocalMidnight()};
+                        wallpaper::DEFAULT, base::Time::Now().LocalMidnight()};
   base::FilePath user_data_dir;
   ASSERT_TRUE(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
   ASSERT_TRUE(wallpaper_manager_test_utils::WriteJPEGFile(
@@ -513,7 +510,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTestCacheUpdate,
       base::FilePath(test_account1_wallpaper_files_id_.id()).Append(id).value();
   // Saves wallpaper info to local state for user |test_account_id1_|.
   WallpaperInfo info = {relative_path, WALLPAPER_LAYOUT_CENTER_CROPPED,
-                        user_manager::User::CUSTOMIZED,
+                        wallpaper::CUSTOMIZED,
                         base::Time::Now().LocalMidnight()};
   wallpaper_manager->SetUserWallpaperInfo(test_account_id1_, info, true);
   wallpaper_manager->SetUserWallpaperNow(test_account_id1_);
@@ -583,8 +580,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTestCacheUpdate,
   wallpaper_manager->SetCustomWallpaper(
       test_account_id1_, test_account1_wallpaper_files_id_,
       "dummy",  // dummy file name
-      WALLPAPER_LAYOUT_CENTER, user_manager::User::CUSTOMIZED, green_wallpaper,
-      true);
+      WALLPAPER_LAYOUT_CENTER, wallpaper::CUSTOMIZED, green_wallpaper, true);
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
   // SetCustomWallpaper should also update wallpaper cache when multi-profile is
   // turned on.
@@ -629,19 +625,17 @@ class TestObserver : public WallpaperManager::Observer {
   DISALLOW_COPY_AND_ASSIGN(TestObserver);
 };
 
-#if defined(OS_CHROMEOS) && defined(USE_OZONE)
-#define MAYBE_DisplayChange DISABLED_DisplayChange
-#else
-#define MAYBE_DisplayChange DisplayChange
-#endif
-IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, MAYBE_DisplayChange) {
+// TODO: test is flaky. http://crbug.com/691548.
+IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, DISABLED_DisplayChange) {
   TestObserver observer(WallpaperManager::Get());
 
   // Set the wallpaper to ensure that UpdateWallpaper() will be called when the
   // display configuration changes.
   gfx::ImageSkia image = wallpaper_manager_test_utils::CreateTestImage(
       640, 480, wallpaper_manager_test_utils::kCustomWallpaperColor);
-  controller_->SetWallpaperImage(image, WALLPAPER_LAYOUT_STRETCH);
+  WallpaperInfo info("", WALLPAPER_LAYOUT_STRETCH, wallpaper::DEFAULT,
+                     base::Time::Now().LocalMidnight());
+  controller_->SetWallpaperImage(image, info);
 
   // Small wallpaper images should be used for configurations less than or
   // equal to kSmallWallpaperMaxWidth by kSmallWallpaperMaxHeight, even if
@@ -818,7 +812,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
   WallpaperManager::Get()->SetCustomWallpaper(
       user_manager::StubAccountId(),
       wallpaper::WallpaperFilesId::FromString("test_hash"), "test-nofile.jpeg",
-      WALLPAPER_LAYOUT_STRETCH, user_manager::User::CUSTOMIZED, image, true);
+      WALLPAPER_LAYOUT_STRETCH, wallpaper::CUSTOMIZED, image, true);
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
 
   EXPECT_TRUE(wallpaper_manager_test_utils::ImageIsNearColor(
@@ -849,7 +843,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, IsPendingWallpaper) {
   WallpaperManager::Get()->SetCustomWallpaper(
       user_manager::StubAccountId(),
       wallpaper::WallpaperFilesId::FromString("test_hash"), "test-nofile.jpeg",
-      WALLPAPER_LAYOUT_STRETCH, user_manager::User::CUSTOMIZED, image, true);
+      WALLPAPER_LAYOUT_STRETCH, wallpaper::CUSTOMIZED, image, true);
   EXPECT_TRUE(WallpaperManager::Get()->IsPendingWallpaper(
       wallpaper::WallpaperResizer::GetImageId(image)));
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();

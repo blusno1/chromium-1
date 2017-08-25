@@ -36,10 +36,10 @@
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
 #include "core/editing/markers/DocumentMarker.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/input/KeyboardEventManager.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/api/LayoutAPIShim.h"
@@ -465,6 +465,13 @@ bool WebAXObject::AriaHasPopup() const {
   return private_->AriaHasPopup();
 }
 
+bool WebAXObject::IsEditableRoot() const {
+  if (IsDetached())
+    return false;
+
+  return private_->IsEditableRoot();
+}
+
 bool WebAXObject::IsEditable() const {
   if (IsDetached())
     return false;
@@ -512,13 +519,6 @@ bool WebAXObject::LiveRegionAtomic() const {
     return false;
 
   return private_->LiveRegionAtomic();
-}
-
-bool WebAXObject::LiveRegionBusy() const {
-  if (IsDetached())
-    return false;
-
-  return private_->LiveRegionBusy();
 }
 
 WebString WebAXObject::LiveRegionRelevant() const {
@@ -919,7 +919,7 @@ void WebAXObject::ShowContextMenu() const {
   if (!frame)
     return;
 
-  WebViewBase* view = WebLocalFrameBase::FromFrame(frame)->ViewImpl();
+  WebViewImpl* view = WebLocalFrameImpl::FromFrame(frame)->ViewImpl();
   if (!view)
     return;
 

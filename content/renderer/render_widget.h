@@ -46,12 +46,13 @@
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "ppapi/features/features.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "third_party/WebKit/public/platform/WebTextInputInfo.h"
-#include "third_party/WebKit/public/web/WebCompositionUnderline.h"
+#include "third_party/WebKit/public/web/WebImeTextSpan.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/WebKit/public/web/WebWidget.h"
@@ -130,7 +131,7 @@ struct ResizeParams;
 class CONTENT_EXPORT RenderWidget
     : public IPC::Listener,
       public IPC::Sender,
-      NON_EXPORTED_BASE(virtual public blink::WebWidgetClient),
+      virtual public blink::WebWidgetClient,
       public mojom::Widget,
       public RenderWidgetCompositorDelegate,
       public RenderWidgetInputHandlerDelegate,
@@ -405,13 +406,6 @@ class CONTENT_EXPORT RenderWidget
     return mouse_lock_dispatcher_.get();
   }
 
-  // TODO(ekaramad): The reference to the focused pepper plugin will be removed
-  // from RenderWidget. The purpose of having the reference here was to make IME
-  // work for OOPIF (https://crbug.com/643727).
-  void set_focused_pepper_plugin(PepperPluginInstanceImpl* plugin) {
-    focused_pepper_plugin_ = plugin;
-  }
-
   // When emulated, this returns original device scale factor.
   float GetOriginalDeviceScaleFactor() const;
 
@@ -432,6 +426,7 @@ class CONTENT_EXPORT RenderWidget
   void HandleInputEvent(const blink::WebCoalescedInputEvent& input_event,
                         const ui::LatencyInfo& latency_info,
                         HandledEventCallback callback) override;
+  void GetWidgetInputHandler(mojom::WidgetInputHandlerRequest request) override;
 
   scoped_refptr<MainThreadEventQueue> GetInputEventQueue();
 
@@ -441,15 +436,14 @@ class CONTENT_EXPORT RenderWidget
   void OnSetEditCommandsForNextKeyEvent(const EditCommands& edit_commands);
   void OnImeSetComposition(
       const base::string16& text,
-      const std::vector<blink::WebCompositionUnderline>& underlines,
+      const std::vector<blink::WebImeTextSpan>& ime_text_spans,
       const gfx::Range& replacement_range,
       int selection_start,
       int selection_end);
-  void OnImeCommitText(
-      const base::string16& text,
-      const std::vector<blink::WebCompositionUnderline>& underlines,
-      const gfx::Range& replacement_range,
-      int relative_cursor_pos);
+  void OnImeCommitText(const base::string16& text,
+                       const std::vector<blink::WebImeTextSpan>& ime_text_spans,
+                       const gfx::Range& replacement_range,
+                       int relative_cursor_pos);
   void OnImeFinishComposingText(bool keep_selection);
 
   // Called by the browser process to update text input state.
@@ -464,6 +458,13 @@ class CONTENT_EXPORT RenderWidget
   // composition info (when in monitor mode).
   void OnRequestCompositionUpdates(bool immediate_request,
                                    bool monitor_updates);
+  void SetWidgetBinding(mojom::WidgetRequest request);
+
+  // Time-To-First-Active-Paint(TTFAP) type
+  enum {
+    TTFAP_AFTER_PURGED,
+    TTFAP_5MIN_AFTER_BACKGROUNDED,
+  };
 
  protected:
   // Friend RefCounted so that the dtor can be non-public. Using this class
@@ -746,6 +747,10 @@ class CONTENT_EXPORT RenderWidget
   // Stores the current text input flags of |webwidget_|.
   int text_input_flags_;
 
+  // Indicates whether currently focused input field has next/previous focusable
+  // form input field.
+  int next_previous_flags_;
+
   // Stores the current type of composition text rendering of |webwidget_|.
   bool can_compose_inline_;
 
@@ -861,6 +866,14 @@ class CONTENT_EXPORT RenderWidget
                          const ui::LatencyInfo& latency_info,
                          std::unique_ptr<ui::DidOverscrollParams>);
 
+#if BUILDFLAG(ENABLE_PLUGINS)
+  // Returns the focused pepper plugin, if any, inside the WebWidget. That is
+  // the pepper plugin which is focused inside a frame which belongs to the
+  // local root associated with this RenderWidget.
+  PepperPluginInstanceImpl* GetFocusedPepperPluginInsideWidget();
+#endif
+  void RecordTimeToFirstActivePaint();
+
   // Indicates whether this widget has focus.
   bool has_focus_;
 
@@ -874,10 +887,6 @@ class CONTENT_EXPORT RenderWidget
   std::unique_ptr<TextInputClientObserver> text_input_client_observer_;
 #endif
 
-  // This reference is set by the RenderFrame and is used to query the IME-
-  // related state from the plugin to later send to the browser.
-  PepperPluginInstanceImpl* focused_pepper_plugin_;
-
   // Stores edit commands associated to the next key event.
   // Will be cleared as soon as the next key event is processed.
   EditCommands edit_commands_;
@@ -887,7 +896,7 @@ class CONTENT_EXPORT RenderWidget
   // session, this info is sent to the browser along with other drag/drop info.
   DragEventSourceInfo possible_drag_event_info_;
 
-  bool time_to_first_active_paint_recorded_;
+  bool first_update_visual_state_after_hidden_;
   base::TimeTicks was_shown_time_;
 
   // This is initialized to zero and is incremented on each non-same-page

@@ -12,10 +12,10 @@
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
 #include "core/testing/sim/SimCompositor.h"
 #include "core/testing/sim/SimDisplayItemList.h"
 #include "core/testing/sim/SimRequest.h"
@@ -54,8 +54,8 @@ class MockWebDisplayItemList : public WebDisplayItemList {
 void PaintRecursively(GraphicsLayer* layer, WebDisplayItemList* display_items) {
   if (layer->DrawsContent()) {
     layer->SetNeedsDisplay();
-    layer->ContentLayerDelegateForTesting()->PaintContents(
-        display_items, ContentLayerDelegate::kPaintDefaultBehaviorForTest);
+    layer->WebContentLayerClientForTesting().PaintContents(
+        display_items, WebContentLayerClient::kPaintDefaultBehaviorForTest);
   }
   for (const auto& child : layer->Children())
     PaintRecursively(child, display_items);
@@ -187,6 +187,70 @@ TEST_P(FrameThrottlingTest, HiddenCrossOriginFramesAreThrottled) {
   EXPECT_FALSE(GetDocument().View()->CanThrottleRendering());
   EXPECT_FALSE(frame_document->View()->CanThrottleRendering());
   EXPECT_TRUE(inner_frame_document->View()->CanThrottleRendering());
+}
+
+TEST_P(FrameThrottlingTest, IntersectionObservationOverridesThrottling) {
+  // Create a document with doubly nested iframes.
+  SimRequest main_resource("https://example.com/", "text/html");
+  SimRequest frame_resource("https://example.com/iframe.html", "text/html");
+
+  LoadURL("https://example.com/");
+  main_resource.Complete("<iframe id=frame src=iframe.html></iframe>");
+  frame_resource.Complete("<iframe id=innerFrame sandbox></iframe>");
+
+  auto* frame_element =
+      toHTMLIFrameElement(GetDocument().getElementById("frame"));
+  auto* frame_document = frame_element->contentDocument();
+
+  auto* inner_frame_element =
+      toHTMLIFrameElement(frame_document->getElementById("innerFrame"));
+  auto* inner_frame_document = inner_frame_element->contentDocument();
+
+  DocumentLifecycle::AllowThrottlingScope throttling_scope(
+      GetDocument().Lifecycle());
+
+  // Hidden cross origin frames are throttled.
+  frame_element->setAttribute(styleAttr, "transform: translateY(480px)");
+  CompositeFrame();
+  EXPECT_FALSE(GetDocument().View()->CanThrottleRendering());
+  EXPECT_FALSE(frame_document->View()->CanThrottleRendering());
+  EXPECT_TRUE(inner_frame_document->View()->ShouldThrottleRendering());
+
+  // An intersection observation overrides...
+  inner_frame_document->View()->SetNeedsIntersectionObservation();
+  EXPECT_FALSE(inner_frame_document->View()->ShouldThrottleRendering());
+  inner_frame_document->View()->ScheduleAnimation();
+
+  LayoutView* inner_view = inner_frame_document->View()->GetLayoutView();
+
+  inner_view->SetNeedsLayout("test");
+  inner_view->Compositor()->SetNeedsCompositingUpdate(
+      kCompositingUpdateRebuildTree);
+  inner_view->SetShouldDoFullPaintInvalidation(
+      PaintInvalidationReason::kForTesting);
+  inner_view->Layer()->SetNeedsRepaint();
+  EXPECT_FALSE(inner_frame_document->View()
+                   ->GetLayoutView()
+                   ->FullPaintInvalidationReason() ==
+               PaintInvalidationReason::kNone);
+  inner_view->Compositor()->SetNeedsCompositingUpdate(
+      kCompositingUpdateRebuildTree);
+  EXPECT_EQ(kCompositingUpdateRebuildTree,
+            inner_view->Compositor()->pending_update_type_);
+  EXPECT_TRUE(inner_view->Layer()->NeedsRepaint());
+
+  CompositeFrame();
+  // ...but only for one frame.
+  EXPECT_TRUE(inner_frame_document->View()->ShouldThrottleRendering());
+
+  EXPECT_FALSE(inner_view->NeedsLayout());
+  EXPECT_FALSE(inner_frame_document->View()
+                   ->GetLayoutView()
+                   ->FullPaintInvalidationReason() ==
+               PaintInvalidationReason::kNone);
+  EXPECT_EQ(kCompositingUpdateRebuildTree,
+            inner_view->Compositor()->pending_update_type_);
+  EXPECT_TRUE(inner_view->Layer()->NeedsRepaint());
 }
 
 TEST_P(FrameThrottlingTest, HiddenCrossOriginZeroByZeroFramesAreNotThrottled) {
@@ -823,7 +887,7 @@ TEST_P(FrameThrottlingTest, DumpThrottledFrame) {
   EXPECT_EQ(std::string::npos, result.Utf8().find("throttled"));
 }
 
-TEST_P(FrameThrottlingTest, PaintingViaContentLayerDelegateIsThrottled) {
+TEST_P(FrameThrottlingTest, PaintingViaGraphicsLayerIsThrottled) {
   WebView().GetSettings()->SetAcceleratedCompositingEnabled(true);
   WebView().GetSettings()->SetPreferCompositingToLCDTextEnabled(true);
 

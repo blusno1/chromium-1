@@ -9,7 +9,6 @@
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
-#include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -21,6 +20,7 @@
 #include "components/image_fetcher/ios/ios_image_decoder_impl.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
+#include "components/ntp_snippets/breaking_news/breaking_news_listener.h"
 #include "components/ntp_snippets/category_rankers/category_ranker.h"
 #include "components/ntp_snippets/category_rankers/click_based_category_ranker.h"
 #include "components/ntp_snippets/category_rankers/constant_category_ranker.h"
@@ -33,7 +33,7 @@
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher_impl.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
-#include "components/ntp_snippets/remote/remote_suggestions_status_service.h"
+#include "components/ntp_snippets/remote/remote_suggestions_status_service_impl.h"
 #include "components/ntp_snippets/user_classifier.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -43,6 +43,7 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
+#include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
@@ -60,7 +61,7 @@ using ntp_snippets::RemoteSuggestionsDatabase;
 using ntp_snippets::RemoteSuggestionsFetcherImpl;
 using ntp_snippets::RemoteSuggestionsProviderImpl;
 using ntp_snippets::RemoteSuggestionsSchedulerImpl;
-using ntp_snippets::RemoteSuggestionsStatusService;
+using ntp_snippets::RemoteSuggestionsStatusServiceImpl;
 using ntp_snippets::UserClassifier;
 
 namespace {
@@ -167,10 +168,6 @@ void RegisterRemoteSuggestionsProvider(ContentSuggestionsService* service,
       browser_state->GetRequestContext();
   base::FilePath database_dir(
       browser_state->GetStatePath().Append(ntp_snippets::kDatabaseFolder));
-  scoped_refptr<base::SequencedTaskRunner> task_runner =
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
 
   std::string api_key;
   // This API needs whitelisted API keys. Get the key only if it is not a
@@ -185,16 +182,20 @@ void RegisterRemoteSuggestionsProvider(ContentSuggestionsService* service,
       base::Bind(&ParseJson), GetFetchEndpoint(GetChannel()), api_key,
       service->user_classifier());
 
+  // This pref is also used for logging. If it is changed, change it in the
+  // other places.
+  std::string pref_name = prefs::kSearchSuggestEnabled;
   auto provider = base::MakeUnique<RemoteSuggestionsProviderImpl>(
       service, prefs, GetApplicationContext()->GetApplicationLocale(),
       service->category_ranker(), service->remote_suggestions_scheduler(),
       std::move(suggestions_fetcher),
       base::MakeUnique<ImageFetcherImpl>(CreateIOSImageDecoder(),
                                          request_context.get()),
-      base::MakeUnique<RemoteSuggestionsDatabase>(database_dir, task_runner),
-      base::MakeUnique<RemoteSuggestionsStatusService>(signin_manager, prefs,
-                                                       std::string()),
-      /*prefetched_pages_tracker=*/nullptr);
+      base::MakeUnique<RemoteSuggestionsDatabase>(database_dir),
+      base::MakeUnique<RemoteSuggestionsStatusServiceImpl>(signin_manager,
+                                                           prefs, pref_name),
+      /*prefetched_pages_tracker=*/nullptr,
+      /*breaking_news_raw_data_provider*/ nullptr);
 
   service->remote_suggestions_scheduler()->SetProvider(provider.get());
   service->set_remote_suggestions_provider(provider.get());

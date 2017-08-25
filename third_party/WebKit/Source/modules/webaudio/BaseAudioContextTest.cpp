@@ -5,10 +5,12 @@
 #include "modules/webaudio/BaseAudioContext.h"
 
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/FrameOwner.h"
 #include "core/frame/FrameTypes.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/media/AutoplayPolicy.h"
@@ -93,7 +95,14 @@ class BaseAudioContextTestPlatform : public TestingPlatformSupport {
 
 }  // anonymous namespace
 
-class BaseAudioContextAutoplayTest
+#if defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
+// Often times out with Android ASAN: https://crbug.com/758934.
+#define MAYBE_BaseAudioContextAutoplayTest DISABLED_BaseAudioContextAutoplayTest
+#else
+#define MAYBE_BaseAudioContextAutoplayTest BaseAudioContextAutoplayTest
+#endif
+
+class MAYBE_BaseAudioContextAutoplayTest
     : public ::testing::TestWithParam<AutoplayPolicy::Type> {
  protected:
   using AutoplayStatus = BaseAudioContext::AutoplayStatus;
@@ -161,7 +170,8 @@ class BaseAudioContextAutoplayTest
 };
 
 // Creates an AudioContext without a gesture inside a x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateNoGesture_Child) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_CreateNoGesture_Child) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   RecordAutoplayStatus(audio_context);
@@ -185,7 +195,8 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateNoGesture_Child) {
 }
 
 // Creates an AudioContext without a gesture inside a main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateNoGesture_Main) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_CreateNoGesture_Main) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   RecordAutoplayStatus(audio_context);
@@ -208,7 +219,7 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateNoGesture_Main) {
 
 // Creates an AudioContext then call resume without a gesture in a x-origin
 // child frame.
-TEST_P(BaseAudioContextAutoplayTest,
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
        AutoplayMetrics_CallResumeNoGesture_Child) {
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
@@ -237,7 +248,8 @@ TEST_P(BaseAudioContextAutoplayTest,
 }
 
 // Creates an AudioContext then call resume without a gesture in a main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeNoGesture_Main) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_CallResumeNoGesture_Main) {
   ScriptState::Scope scope(GetScriptStateFrom(GetDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
@@ -263,9 +275,11 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeNoGesture_Main) {
 }
 
 // Creates an AudioContext with a user gesture inside a x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Child) {
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_CreateGesture_Child) {
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -291,9 +305,10 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Child) {
 }
 
 // Creates an AudioContext with a user gesture inside a main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Main) {
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+TEST_P(MAYBE_BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Main) {
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -317,14 +332,16 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Main) {
 
 // Creates an AudioContext then calls resume with a user gesture inside a
 // x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeGesture_Child) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_CallResumeGesture_Child) {
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
 
   audio_context->resumeContext(GetScriptStateFrom(ChildDocument()));
   RejectPendingResolvers(audio_context);
@@ -351,14 +368,16 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeGesture_Child) {
 
 // Creates an AudioContext then calls resume with a user gesture inside a main
 // frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeGesture_Main) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_CallResumeGesture_Main) {
   ScriptState::Scope scope(GetScriptStateFrom(GetDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
 
   audio_context->resumeContext(GetScriptStateFrom(GetDocument()));
   RejectPendingResolvers(audio_context);
@@ -382,7 +401,8 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeGesture_Main) {
 
 // Creates an AudioContext then calls start on a node without a gesture inside a
 // x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartNoGesture_Child) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_NodeStartNoGesture_Child) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audio_context->MaybeRecordStartAttempt();
@@ -408,7 +428,8 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartNoGesture_Child) {
 
 // Creates an AudioContext then calls start on a node without a gesture inside a
 // main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartNoGesture_Main) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_NodeStartNoGesture_Main) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audio_context->MaybeRecordStartAttempt();
@@ -432,12 +453,14 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartNoGesture_Main) {
 
 // Creates an AudioContext then calls start on a node with a gesture inside a
 // x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartGesture_Child) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_NodeStartGesture_Child) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->MaybeRecordStartAttempt();
   RecordAutoplayStatus(audio_context);
 
@@ -462,12 +485,14 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartGesture_Child) {
 
 // Creates an AudioContext then calls start on a node with a gesture inside a
 // main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartGesture_Main) {
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
+       AutoplayMetrics_NodeStartGesture_Main) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->MaybeRecordStartAttempt();
   RecordAutoplayStatus(audio_context);
 
@@ -489,7 +514,7 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartGesture_Main) {
 
 // Creates an AudioContext then calls start on a node without a gesture and
 // finally allows the AudioContext to produce sound inside x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest,
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
        AutoplayMetrics_NodeStartNoGestureThenSuccess_Child) {
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
@@ -497,8 +522,9 @@ TEST_P(BaseAudioContextAutoplayTest,
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audio_context->MaybeRecordStartAttempt();
 
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->resumeContext(GetScriptStateFrom(ChildDocument()));
   RejectPendingResolvers(audio_context);
   RecordAutoplayStatus(audio_context);
@@ -524,7 +550,7 @@ TEST_P(BaseAudioContextAutoplayTest,
 
 // Creates an AudioContext then calls start on a node without a gesture and
 // finally allows the AudioContext to produce sound inside a main frame.
-TEST_P(BaseAudioContextAutoplayTest,
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
        AutoplayMetrics_NodeStartNoGestureThenSuccess_Main) {
   ScriptState::Scope scope(GetScriptStateFrom(GetDocument()));
 
@@ -532,8 +558,9 @@ TEST_P(BaseAudioContextAutoplayTest,
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audio_context->MaybeRecordStartAttempt();
 
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->resumeContext(GetScriptStateFrom(GetDocument()));
   RejectPendingResolvers(audio_context);
   RecordAutoplayStatus(audio_context);
@@ -556,15 +583,16 @@ TEST_P(BaseAudioContextAutoplayTest,
 
 // Creates an AudioContext then calls start on a node with a gesture and
 // finally allows the AudioContext to produce sound inside x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest,
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
        AutoplayMetrics_NodeStartGestureThenSucces_Child) {
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->MaybeRecordStartAttempt();
   audio_context->resumeContext(GetScriptStateFrom(ChildDocument()));
   RejectPendingResolvers(audio_context);
@@ -591,15 +619,16 @@ TEST_P(BaseAudioContextAutoplayTest,
 
 // Creates an AudioContext then calls start on a node with a gesture and
 // finally allows the AudioContext to produce sound inside a main frame.
-TEST_P(BaseAudioContextAutoplayTest,
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
        AutoplayMetrics_NodeStartGestureThenSucces_Main) {
   ScriptState::Scope scope(GetScriptStateFrom(GetDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->MaybeRecordStartAttempt();
   audio_context->resumeContext(GetScriptStateFrom(GetDocument()));
   RejectPendingResolvers(audio_context);
@@ -623,9 +652,9 @@ TEST_P(BaseAudioContextAutoplayTest,
 
 // Attempts to autoplay an AudioContext in a x-origin child frame when the
 // document previous received a user gesture.
-TEST_P(BaseAudioContextAutoplayTest,
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
        AutoplayMetrics_DocumentReceivedGesture_Child) {
-  ChildDocument().GetFrame()->SetDocumentHasReceivedUserGesture();
+  ChildDocument().GetFrame()->UpdateUserActivationInFrameTree();
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -659,9 +688,9 @@ TEST_P(BaseAudioContextAutoplayTest,
 
 // Attempts to autoplay an AudioContext in a main child frame when the
 // document previous received a user gesture.
-TEST_P(BaseAudioContextAutoplayTest,
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
        AutoplayMetrics_DocumentReceivedGesture_Main) {
-  GetDocument().GetFrame()->SetDocumentHasReceivedUserGesture();
+  GetDocument().GetFrame()->UpdateUserActivationInFrameTree();
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -685,7 +714,7 @@ TEST_P(BaseAudioContextAutoplayTest,
 
 // Attempts to autoplay an AudioContext in a main child frame when the
 // document received a user gesture before navigation.
-TEST_P(BaseAudioContextAutoplayTest,
+TEST_P(MAYBE_BaseAudioContextAutoplayTest,
        AutoplayMetrics_DocumentReceivedGesture_BeforeNavigation) {
   GetDocument().GetFrame()->SetDocumentHasReceivedUserGestureBeforeNavigation(
       true);
@@ -711,8 +740,8 @@ TEST_P(BaseAudioContextAutoplayTest,
 }
 
 INSTANTIATE_TEST_CASE_P(
-    BaseAudioContextAutoplayTest,
-    BaseAudioContextAutoplayTest,
+    MAYBE_BaseAudioContextAutoplayTest,
+    MAYBE_BaseAudioContextAutoplayTest,
     ::testing::Values(AutoplayPolicy::Type::kNoUserGestureRequired,
                       AutoplayPolicy::Type::kUserGestureRequired,
                       AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin,

@@ -19,7 +19,7 @@ const base::Feature kAllowContentInitiatedDataUrlNavigations{
 // Enables asm.js to WebAssembly V8 backend.
 // http://asmjs.org/spec/latest/
 const base::Feature kAsmJsToWebAssembly{"AsmJsToWebAssembly",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables async wheel events.
 const base::Feature kAsyncWheelEvents{"AsyncWheelEvents",
@@ -81,10 +81,6 @@ const base::Feature kExpensiveBackgroundTimerThrottling{
 const base::Feature kFeaturePolicy{"FeaturePolicy",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable filtering of same-origin tiny plugins
-const base::Feature kFilterSameOriginTinyPlugin{
-    "FilterSameOriginTinyPlugins", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables Fetch API keepalive timeout setting.
 const base::Feature kFetchKeepaliveTimeoutSetting{
     "FetchKeepaliveTimeoutSetting", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -133,13 +129,6 @@ const base::Feature kLazyParseCSS{"LazyParseCSS",
 const base::Feature kLoadingWithMojo{"LoadingWithMojo",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-// FeatureList definition for trials to enable the download button on
-// MediaDocument.
-const base::Feature kMediaDocumentDownloadButton{
-    "MediaDocumentDownloadButton",
-    base::FEATURE_DISABLED_BY_DEFAULT
-};
-
 // Enables the old algorithm for processing audio constraints in getUserMedia().
 const base::Feature kMediaStreamOldAudioConstraints{
     "MediaStreamOldAudioConstraints", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -180,13 +169,17 @@ const base::Feature kMojoVideoEncodeAccelerator{
 const base::Feature kModuleScripts{"ModuleScripts",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Experimental resource fetch optimizations for workers. See crbug.com/443374
+// Resource fetch optimizations for workers. See crbug.com/443374
 const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Origin Trials for controlling access to feature/API experiments.
 const base::Feature kOriginTrials{"OriginTrials",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Out of Blink CORS
+const base::Feature kOutOfBlinkCORS{"OutOfBlinkCORS",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Whether a download can be handled by parallel jobs.
 const base::Feature kParallelDownloading{
@@ -242,12 +235,6 @@ const base::Feature kRenderingPipelineThrottling{
 const base::Feature kReportRendererPeakMemoryStats{
     "ReportRendererPeakMemoryStats", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Require camera/mic requests from pepper plugins to be made from secure
-// origins.
-const base::Feature kRequireSecureOriginsForPepperMediaRequests{
-    "RequireSecureOriginsForPepperMediaRequests",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Loading Dispatcher v0 support with ResourceLoadScheduler (crbug.com/729954).
 const base::Feature kResourceLoadScheduler{"ResourceLoadScheduler",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
@@ -256,9 +243,10 @@ const base::Feature kResourceLoadScheduler{"ResourceLoadScheduler",
 const base::Feature kScrollAnchoring{"ScrollAnchoring",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Navigation preload feature of service workers.
-const base::Feature kServiceWorkerNavigationPreload{
-    "ServiceWorkerNavigationPreload", base::FEATURE_ENABLED_BY_DEFAULT};
+// Make sendBeacon throw for a Blob with a non simple type.
+const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
+    "SendBeaconThrowForBlobWithNonSimpleType",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Streaming installed scripts on starting service workers.
 const base::Feature kServiceWorkerScriptStreaming{
@@ -277,6 +265,12 @@ const base::Feature kSignInProcessIsolation{"sign-in-process-isolation",
 const base::Feature kSkipCompositingSmallScrollers{
     "SkipCompositingSmallScrollers", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// An experiment to reduce the soft tile memory limit on low-end android
+// devices.
+const base::Feature kReducedSoftTileMemoryLimitOnLowEndAndroid{
+    "ReducedSoftTileMemoryLimitOnLowEndAndroid",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Paint invalidation based on slimming paint. See https://goo.gl/eQczQW
 const base::Feature kSlimmingPaintInvalidation{
     "SlimmingPaintInvalidation", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -294,6 +288,11 @@ const base::Feature kTopDocumentIsolation{"top-document-isolation",
 // Enables touchpad and wheel scroll latching.
 const base::Feature kTouchpadAndWheelScrollLatching{
     "TouchpadAndWheelScrollLatching", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// An experiment to turn off compositing for 2D transform & opacity animations.
+const base::Feature kTurnOff2DAndOpacityCompositorAnimations{
+    "TurnOff2DAndOpacityCompositorAnimations",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use Feature Policy to gate the use of permission features like midi,
 // geolocation, camera, microphone, etc.
@@ -388,11 +387,6 @@ const base::Feature kImageCaptureAPI{"ImageCaptureAPI",
 const base::Feature kWebVRExperimentalRendering{
     "WebVRExperimentalRendering", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Make sendBeacon throw for a Blob with a non simple type.
-const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
-    "SendBeaconThrowForBlobWithNonSimpleType",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 #if defined(OS_ANDROID)
 // Autofill Accessibility in Android.
 // crbug.com/627860
@@ -412,20 +406,23 @@ const base::Feature kServiceWorkerPaymentApps{
 // Controls whether the WebNFC API is enabled:
 // https://w3c.github.io/web-nfc/
 const base::Feature kWebNfc{"WebNFC", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
 
-// Controls whether PreferCompositingToLCDText is forced off, even for
-// screens with high resolution.
-const base::Feature kDisablePreferCompositingToLCDTextOnLowEndAndroid{
-    "DisablePreferCompositingToLCDTextOnLowEndAndroid",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables WebVR VSync-aligned render loop timing.
+const base::Feature kWebVrVsyncAlign{"WebVrVsyncAlign",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)
 // Emergency "off switch" for new Windows sandbox security mitigation,
 // sandbox::MITIGATION_EXTENSION_POINT_DISABLE.
 const base::Feature kWinSboxDisableExtensionPoints{
     "WinSboxDisableExtensionPoint", base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
+
+// Emergency "off switch" for new Windows sandbox security mitigation,
+// sandbox::MITIGATION_FORCE_MS_SIGNED_BINS.
+const base::Feature kWinSboxForceMsSigned{"WinSboxForceMsSigned",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // defined(OS_WIN)
 
 #if defined(OS_MACOSX)
 // Enables caching of media devices for the purpose of enumerating them.

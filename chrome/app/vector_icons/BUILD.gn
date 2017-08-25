@@ -16,7 +16,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "add.1x.icon",
     "add.icon",
     "apps.icon",
-    "autologin.icon",
     "blocked_badge.icon",
     "browser_tools_animated.1x.icon",
     "browser_tools_animated.icon",
@@ -49,18 +48,23 @@ aggregate_vector_icons("chrome_vector_icons") {
     "folder_supervised.1x.icon",
     "folder_supervised.icon",
     "globe.icon",
+    "google_g_logo.icon",
     "image.icon",
+    "inactive_toast_close.icon",
+    "inactive_toast_logo.icon",
     "incognito.1x.icon",
     "incognito.icon",
+    "key.icon",
     "laptop.icon",
     "mixed_content.icon",
     "my_location.icon",
     "navigate_home.1x.icon",
     "navigate_home.icon",
-    "navigate_reload.1x.icon",
-    "navigate_reload.icon",
     "navigate_stop.1x.icon",
     "navigate_stop.icon",
+    "notification_end_of_support.icon",
+    "notification_image.1x.icon",
+    "notification_image.icon",
     "overflow_chevron.1x.icon",
     "overflow_chevron.icon",
     "paintbrush.icon",
@@ -70,8 +74,8 @@ aggregate_vector_icons("chrome_vector_icons") {
     "remove.icon",
     "remove_box.icon",
     "sad_tab.icon",
+    "security.icon",
     "settings.icon",
-    "open_in_new.icon",
     "smartphone.icon",
     "subresource_filter_active.icon",
     "supervisor_account.icon",
@@ -104,7 +108,6 @@ aggregate_vector_icons("chrome_vector_icons") {
   if (is_mac) {
     icons += [
       "default_favicon.icon",
-      "google_search_mac_touchbar.icon",
       "new_tab_mac_touchbar.icon",
     ]
   }
@@ -114,7 +117,11 @@ aggregate_vector_icons("chrome_vector_icons") {
   }
 
   if (is_chromeos) {
-    icons += [ "arc_migrate_encryption_notification.icon" ]
+    icons += [
+      "arc_migrate_encryption_notification.icon",
+      "warning_badge_circle.1x.icon",
+      "warning_badge_circle.icon",
+    ]
   }
 }
 

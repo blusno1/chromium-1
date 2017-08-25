@@ -4,24 +4,21 @@
 <script src="../../http/tests/inspector/elements-test.js"></script>
 <script>
 
-function test()
-{
-    InspectorTest.selectNodeAndWaitForStyles("inspected", step1);
+function test() {
+  ElementsTestRunner.selectNodeAndWaitForStyles('inspected', step1);
 
-    function step1(node)
-    {
-        InspectorTest.addResult("Before style property removal:");
-        InspectorTest.dumpSelectedElementStyles(true);
-        node.removeAttribute("style");
-        InspectorTest.waitForStyles("inspected", step2);
-    }
+  function step1(node) {
+    TestRunner.addResult('Before style property removal:');
+    ElementsTestRunner.dumpSelectedElementStyles(true);
+    node.removeAttribute('style');
+    ElementsTestRunner.waitForStyles('inspected', step2);
+  }
 
-    function step2()
-    {
-        InspectorTest.addResult("After style property removal:");
-        InspectorTest.dumpSelectedElementStyles(true);
-        InspectorTest.completeTest();
-    }
+  function step2() {
+    TestRunner.addResult('After style property removal:');
+    ElementsTestRunner.dumpSelectedElementStyles(true);
+    TestRunner.completeTest();
+  }
 }
 
 </script>

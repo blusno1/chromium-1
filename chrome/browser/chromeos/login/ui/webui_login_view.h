@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
+#include "chrome/browser/chromeos/lock_screen_apps/focus_cycler_delegate.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "content/public/browser/notification_observer.h"
@@ -47,6 +48,7 @@ class WebUILoginView : public views::View,
                        public content::NotificationObserver,
                        public ChromeWebModalDialogManagerDelegate,
                        public web_modal::WebContentsModalDialogHost,
+                       public lock_screen_apps::FocusCyclerDelegate,
                        public ash::StatusAreaFocusObserver {
  public:
   struct WebViewSettings {
@@ -99,8 +101,9 @@ class WebUILoginView : public views::View,
   // Returns instance of the OOBE WebUI.
   OobeUI* GetOobeUI();
 
-  // Opens proxy settings dialog.
-  void OpenProxySettings();
+  // Opens proxy settings dialog for the network matching |network_id| or the
+  // default network if |network_id| is empty.
+  void OpenProxySettings(const std::string& network_id);
 
   // Called when WebUI is being shown after being initilized hidden.
   void OnPostponedShow();
@@ -126,7 +129,6 @@ class WebUILoginView : public views::View,
 
   // Overridden from views::View:
   void Layout() override;
-  void OnLocaleChanged() override;
   void ChildPreferredSizeChanged(View* child) override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
 
@@ -136,6 +138,14 @@ class WebUILoginView : public views::View,
                const content::NotificationDetails& details) override;
 
   views::WebView* web_view();
+
+  // Sets |this| as lock_screen_apps::StateController's
+  // lock_screen_apps::FocusCyclerDelegate.
+  void SetLockScreenAppFocusCyclerDelegate();
+
+  // Resets the lock_screen_apps::StateController's FocusCyclerDelegate,
+  // provided that |this|  was set as the delegate.
+  void ClearLockScreenAppFocusCyclerDelegate();
 
  private:
   // Map type for the accelerator-to-identifier map.
@@ -166,8 +176,18 @@ class WebUILoginView : public views::View,
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
 
+  // lock_screen_apps::FocusCyclerDelegate:
+  void RegisterLockScreenAppFocusHandler(
+      const LockScreenAppFocusCallback& focus_handler) override;
+  void UnregisterLockScreenAppFocusHandler() override;
+  void HandleLockScreenAppFocusOut(bool reverse) override;
+
   // Overridden from ash::StatusAreaFocusObserver.
   void OnFocusOut(bool reverse) override;
+
+  // Attempts to move focus to system tray. Returns whether the attempt was
+  // successful (it might fail if the system tray is not visible).
+  bool MoveFocusToSystemTray(bool reverse);
 
   // Performs series of actions when login prompt is considered
   // to be ready and visible.
@@ -204,6 +224,15 @@ class WebUILoginView : public views::View,
 
   // True to forward keyboard event.
   bool forward_keyboard_event_ = true;
+
+  // If set, the callback that should be called when focus should be moved to
+  // a lock screen app window.
+  // It gets registered using |RegisterLockScreenAppFocusHandler|.
+  LockScreenAppFocusCallback lock_screen_app_focus_handler_;
+
+  // Whether this was set as lock_screen_apps::StateController's
+  // FocusCyclerDelegate.
+  bool delegates_lock_screen_app_focus_cycle_ = false;
 
   base::ObserverList<web_modal::ModalDialogHostObserver> observer_list_;
 

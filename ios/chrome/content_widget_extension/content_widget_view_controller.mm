@@ -4,14 +4,15 @@
 
 #import "ios/chrome/content_widget_extension/content_widget_view_controller.h"
 
-#import <NotificationCenter/NotificationCenter.h>
-
 #include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/ui/ntp/ntp_tile.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
+#include "ios/chrome/common/app_group/app_group_metrics.h"
 #include "ios/chrome/content_widget_extension/content_widget_view.h"
+#import "ios/chrome/content_widget_extension/most_visited_tile_view.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -23,17 +24,23 @@ namespace {
 // cannot be used. This class makes a very basic use of x-callback-url, so no
 // full implementation is required.
 NSString* const kXCallbackURLHost = @"x-callback-url";
+const CGFloat widgetCompactHeightIOS9 = 110;
 }  // namespace
 
-@interface ContentWidgetViewController ()
+@interface ContentWidgetViewController ()<ContentWidgetViewDelegate>
+@property(nonatomic, strong) NSDictionary<NSURL*, NTPTile*>* sites;
 @property(nonatomic, weak) ContentWidgetView* widgetView;
-@property(nonatomic, strong) NSArray<NTPTile*>* sites;
+@property(nonatomic, readonly) BOOL isCompact;
 
 // Updates the widget with latest data. Returns whether any visual updates
 // occurred.
 - (BOOL)updateWidget;
-// Opens the main application with the given |URL|.
-- (void)openAppWithURL:(NSString*)URL;
+// Expand the widget.
+- (void)setExpanded:(CGSize)maxSize;
+// Register a display of the widget in the app_group NSUserDefaults.
+// Metrics on the widget usage will be sent (if enabled) on the next Chrome
+// startup.
+- (void)registerWidgetDisplay;
 @end
 
 @implementation ContentWidgetViewController
@@ -41,16 +48,12 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
 @synthesize sites = _sites;
 @synthesize widgetView = _widgetView;
 
-- (instancetype)init {
-  self = [super init];
-  if (self) {
-    NSUserDefaults* sharedDefaults = [[NSUserDefaults alloc]
-        initWithSuiteName:app_group::ApplicationGroup()];
-    _sites = [NSKeyedUnarchiver
-        unarchiveObjectWithData:[sharedDefaults
-                                    objectForKey:app_group::kSuggestedItems]];
-  }
-  return self;
+#pragma mark - properties
+
+- (BOOL)isCompact {
+  return base::ios::IsRunningOnIOS10OrLater() &&
+         [self.extensionContext widgetActiveDisplayMode] ==
+             NCWidgetDisplayModeCompact;
 }
 
 #pragma mark - UIViewController
@@ -58,32 +61,45 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
 - (void)viewDidLoad {
   [super viewDidLoad];
 
+  CGFloat height =
+      self.extensionContext && base::ios::IsRunningOnIOS10OrLater()
+          ? [self.extensionContext
+                widgetMaximumSizeForDisplayMode:NCWidgetDisplayModeCompact]
+                .height
+          : widgetCompactHeightIOS9;
+
+  CGFloat width =
+      self.extensionContext && base::ios::IsRunningOnIOS10OrLater()
+          ? [self.extensionContext
+                widgetMaximumSizeForDisplayMode:NCWidgetDisplayModeCompact]
+                .width
+          // On the today view <iOS10, the full screen size is useable.
+          : [UIScreen mainScreen].bounds.size.width;
+
   // A local variable is necessary here as the property is declared weak and the
   // object would be deallocated before being retained by the addSubview call.
-  ContentWidgetView* widgetView = [[ContentWidgetView alloc] init];
+  ContentWidgetView* widgetView =
+      [[ContentWidgetView alloc] initWithDelegate:self
+                                    compactHeight:height
+                                            width:width
+                                 initiallyCompact:self.isCompact];
   self.widgetView = widgetView;
   [self.view addSubview:self.widgetView];
 
   if (base::ios::IsRunningOnIOS10OrLater()) {
     self.extensionContext.widgetLargestAvailableDisplayMode =
         NCWidgetDisplayModeExpanded;
+  } else {
+    [self setExpanded:[[UIScreen mainScreen] bounds].size];
   }
 
   self.widgetView.translatesAutoresizingMaskIntoConstraints = NO;
-  [NSLayoutConstraint activateConstraints:@[
-    [self.view.leadingAnchor
-        constraintEqualToAnchor:self.widgetView.leadingAnchor],
-    [self.view.trailingAnchor
-        constraintEqualToAnchor:self.widgetView.trailingAnchor],
-    [self.view.topAnchor constraintEqualToAnchor:self.widgetView.topAnchor],
-    [self.view.bottomAnchor
-        constraintEqualToAnchor:self.widgetView.bottomAnchor]
-  ]];
+  AddSameConstraints(self.widgetView, self.view);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  [self updateWidget];
+  [self registerWidgetDisplay];
 }
 
 - (void)widgetPerformUpdateWithCompletionHandler:
@@ -92,29 +108,31 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
                                         : NCUpdateResultNoData);
 }
 
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:
+           (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+
+  [coordinator
+      animateAlongsideTransition:^(
+          id<UIViewControllerTransitionCoordinatorContext> _Nonnull context) {
+        [self.widgetView showMode:self.isCompact];
+      }
+                      completion:nil];
+}
+
 #pragma mark - NCWidgetProviding
 
 - (void)widgetActiveDisplayModeDidChange:(NCWidgetDisplayMode)activeDisplayMode
                          withMaximumSize:(CGSize)maxSize {
-  BOOL isVariableHeight = (activeDisplayMode == NCWidgetDisplayModeExpanded);
-
-  // If the widget's height is not variable, the preferredContentSize is the
-  // maxSize. Widgets cannot be shrunk, and this ensures the view will lay
-  // itself out according to the actual screen size. (This is only likely to
-  // happen if the accessibility option for larger font is used.) If the widget
-  // is not a fixed size, if the fitting size for the widget's contents is
-  // larger than the maximum size for the current widget display mode, this
-  // maximum size is used for the widget. Otherwise, the preferredContentSize is
-  // set to the fitting size so that the widget gets the correct height.
-  if (isVariableHeight) {
-    CGSize fittingSize = [self.widgetView
-        systemLayoutSizeFittingSize:UILayoutFittingCompressedSize];
-    if (fittingSize.height < maxSize.height) {
-      self.preferredContentSize = fittingSize;
-      return;
-    }
+  switch (activeDisplayMode) {
+    case NCWidgetDisplayModeCompact:
+      self.preferredContentSize = maxSize;
+      break;
+    case NCWidgetDisplayModeExpanded:
+      [self setExpanded:maxSize];
+      break;
   }
-  self.preferredContentSize = maxSize;
 }
 
 // Implementing this method removes the leading edge inset for iOS version < 10.
@@ -128,22 +146,36 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
 
 #pragma mark - internal
 
+- (void)setExpanded:(CGSize)maxSize {
+  [self updateWidget];
+  self.preferredContentSize =
+      CGSizeMake(maxSize.width,
+                 MIN([self.widgetView widgetExpandedHeight], maxSize.height));
+}
+
 - (BOOL)updateWidget {
-  NSUserDefaults* sharedDefaults =
-      [[NSUserDefaults alloc] initWithSuiteName:app_group::ApplicationGroup()];
-  NSMutableArray<NTPTile*>* newSites = [NSKeyedUnarchiver
+  NSUserDefaults* sharedDefaults = app_group::GetGroupUserDefaults();
+  NSDictionary<NSURL*, NTPTile*>* newSites = [NSKeyedUnarchiver
       unarchiveObjectWithData:[sharedDefaults
                                   objectForKey:app_group::kSuggestedItems]];
-
-  if (newSites == self.sites) {
+  if ([newSites isEqualToDictionary:self.sites]) {
     return NO;
   }
+  self.sites = newSites;
+  [self.widgetView updateSites:self.sites];
   return YES;
 }
 
-- (void)openAppWithURL:(NSString*)URL {
-  NSUserDefaults* sharedDefaults =
-      [[NSUserDefaults alloc] initWithSuiteName:app_group::ApplicationGroup()];
+- (void)registerWidgetDisplay {
+  NSUserDefaults* sharedDefaults = app_group::GetGroupUserDefaults();
+  NSInteger numberOfDisplay =
+      [sharedDefaults integerForKey:app_group::kContentExtensionDisplayCount];
+  [sharedDefaults setInteger:numberOfDisplay + 1
+                      forKey:app_group::kContentExtensionDisplayCount];
+}
+
+- (void)openURL:(NSURL*)URL {
+  NSUserDefaults* sharedDefaults = app_group::GetGroupUserDefaults();
   NSString* defaultsKey =
       base::SysUTF8ToNSString(app_group::kChromeAppGroupCommandPreference);
 
@@ -153,15 +185,15 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
       base::SysUTF8ToNSString(app_group::kChromeAppGroupCommandAppPreference);
   NSString* commandPrefKey = base::SysUTF8ToNSString(
       app_group::kChromeAppGroupCommandCommandPreference);
-  NSString* paramPrefKey = base::SysUTF8ToNSString(
-      app_group::kChromeAppGroupCommandParameterPreference);
+  NSString* URLPrefKey =
+      base::SysUTF8ToNSString(app_group::kChromeAppGroupCommandURLPreference);
 
   NSDictionary* commandDict = @{
     timePrefKey : [NSDate date],
-    appPrefKey : @"TodayExtension",
+    appPrefKey : app_group::kOpenCommandSourceContentExtension,
     commandPrefKey :
         base::SysUTF8ToNSString(app_group::kChromeAppGroupOpenURLCommand),
-    paramPrefKey : URL,
+    URLPrefKey : URL.absoluteString,
   };
 
   [sharedDefaults setObject:commandDict forKey:defaultsKey];

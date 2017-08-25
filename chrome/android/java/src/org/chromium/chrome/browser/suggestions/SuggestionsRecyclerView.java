@@ -49,6 +49,8 @@ import java.util.Set;
 public class SuggestionsRecyclerView extends RecyclerView {
     private static final Interpolator DISMISS_INTERPOLATOR = new FastOutLinearInInterpolator();
     private static final int DISMISS_ANIMATION_TIME_MS = 300;
+    private static final int NEW_CONTENT_HIGHLIGHT_DURATION_MS = 3000;
+
     /**
      * A single instance of {@link ResetForDismissCallback} that can be reused as it has no
      * state.
@@ -198,14 +200,20 @@ public class SuggestionsRecyclerView extends RecyclerView {
         mContextMenuManager.closeContextMenu();
     }
 
+    /** Highlights the current length of the view by temporarily showing the scrollbar. */
+    public void highlightContentLength() {
+        int defaultDelay = getScrollBarDefaultDelayBeforeFade();
+        setScrollBarDefaultDelayBeforeFade(NEW_CONTENT_HIGHLIGHT_DURATION_MS);
+        awakenScrollBars();
+        setScrollBarDefaultDelayBeforeFade(defaultDelay);
+    }
+
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         int numberViews = getChildCount();
         for (int i = 0; i < numberViews; ++i) {
             View view = getChildAt(i);
-            NewTabPageViewHolder viewHolder = (NewTabPageViewHolder) getChildViewHolder(view);
-            if (viewHolder == null) return;
-            viewHolder.updateLayoutParams();
+            ((NewTabPageViewHolder) getChildViewHolder(view)).updateLayoutParams();
         }
         super.onLayout(changed, l, t, r, b);
     }

@@ -36,10 +36,21 @@ constexpr int kIconLeftRightPadding = 19;
 constexpr int kTextTrailPadding = 16;
 constexpr int kSeparatorPadding = 62;
 constexpr int kBorderSize = 1;
-constexpr SkColor kSeparatorColor = SkColorSetARGBMacro(0xFF, 0xE1, 0xE1, 0xE1);
-
 // Extra margin at the right of the rightmost action icon.
 constexpr int kActionButtonRightMargin = 8;
+
+constexpr SkColor kSeparatorColor = SkColorSetARGBMacro(0xFF, 0xE1, 0xE1, 0xE1);
+// Matched text color, #000 87%.
+constexpr SkColor kMatchedTextColor =
+    SkColorSetARGBMacro(0xDE, 0x00, 0x00, 0x00);
+// Default text color, #000 54%.
+constexpr SkColor kDefaultTextColor =
+    SkColorSetARGBMacro(0x8A, 0x00, 0x00, 0x00);
+// URL color.
+constexpr SkColor kUrlColor = SkColorSetARGBMacro(0xFF, 0x33, 0x67, 0xD6);
+// Row selected color, #000 8%.
+constexpr SkColor kRowSelectedColor =
+    SkColorSetARGBMacro(0x14, 0x00, 0x00, 0x00);
 
 int GetIconViewWidth() {
   if (!features::IsFullscreenAppListEnabled())
@@ -48,7 +59,7 @@ int GetIconViewWidth() {
 }
 
 // Creates a RenderText of given |text| and |styles|. Caller takes ownership
-// of returned RenderText.
+// of returned RenderText. Used for bubble launcher.
 gfx::RenderText* CreateRenderText(const base::string16& text,
                                   const SearchResult::Tags& tags) {
   gfx::RenderText* render_text = gfx::RenderText::CreateInstance();
@@ -78,9 +89,7 @@ gfx::RenderText* CreateRenderText(const base::string16& text,
 const char SearchResultView::kViewClassName[] = "ui/app_list/SearchResultView";
 
 SearchResultView::SearchResultView(SearchResultListView* list_view)
-    : views::CustomButton(this),
-      result_(NULL),
-      is_last_result_(false),
+    : views::Button(this),
       list_view_(list_view),
       icon_(new views::ImageView),
       badge_icon_(new views::ImageView),
@@ -132,8 +141,12 @@ void SearchResultView::UpdateTitleText() {
   if (!result_ || result_->title().empty()) {
     title_text_.reset();
   } else {
-    title_text_.reset(
-        CreateRenderText(result_->title(), result_->title_tags()));
+    if (!is_fullscreen_app_list_enabled_) {
+      title_text_.reset(
+          CreateRenderText(result_->title(), result_->title_tags()));
+    } else {
+      CreateTitleRenderText();
+    }
   }
 
   UpdateAccessibleName();
@@ -143,8 +156,12 @@ void SearchResultView::UpdateDetailsText() {
   if (!result_ || result_->details().empty()) {
     details_text_.reset();
   } else {
-    details_text_.reset(
-        CreateRenderText(result_->details(), result_->details_tags()));
+    if (!is_fullscreen_app_list_enabled_) {
+      details_text_.reset(
+          CreateRenderText(result_->details(), result_->details_tags()));
+    } else {
+      CreateDetailsRenderText();
+    }
   }
 
   UpdateAccessibleName();
@@ -164,6 +181,53 @@ base::string16 SearchResultView::ComputeAccessibleName() const {
 
 void SearchResultView::UpdateAccessibleName() {
   SetAccessibleName(ComputeAccessibleName());
+}
+
+void SearchResultView::CreateTitleRenderText() {
+  DCHECK(is_fullscreen_app_list_enabled_);
+  std::unique_ptr<gfx::RenderText> render_text(
+      gfx::RenderText::CreateInstance());
+  render_text->SetText(result_->title());
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  render_text->SetFontList(
+      rb.GetFontList(ui::ResourceBundle::BaseFont).DeriveWithSizeDelta(2));
+  // When result is an omnibox non-url search, the matched tag indicates
+  // proposed query. For all other cases, the matched tag indicates typed search
+  // query.
+  render_text->SetColor(result_->is_omnibox_search() ? kDefaultTextColor
+                                                     : kMatchedTextColor);
+  const SearchResult::Tags& tags = result_->title_tags();
+  for (const auto& tag : tags) {
+    if (tag.styles & SearchResult::Tag::URL) {
+      render_text->ApplyColor(kUrlColor, tag.range);
+    } else if (tag.styles & SearchResult::Tag::MATCH) {
+      render_text->ApplyColor(
+          result_->is_omnibox_search() ? kMatchedTextColor : kDefaultTextColor,
+          tag.range);
+    }
+  }
+  title_text_ = std::move(render_text);
+}
+
+void SearchResultView::CreateDetailsRenderText() {
+  DCHECK(is_fullscreen_app_list_enabled_);
+  // Ensures single line row for omnibox non-url search result.
+  if (result_->is_omnibox_search()) {
+    details_text_.reset();
+    return;
+  }
+  std::unique_ptr<gfx::RenderText> render_text(
+      gfx::RenderText::CreateInstance());
+  render_text->SetText(result_->details());
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  render_text->SetFontList(rb.GetFontList(ui::ResourceBundle::BaseFont));
+  render_text->SetColor(kDefaultTextColor);
+  const SearchResult::Tags& tags = result_->details_tags();
+  for (const auto& tag : tags) {
+    if (tag.styles & SearchResult::Tag::URL)
+      render_text->ApplyColor(kUrlColor, tag.range);
+  }
+  details_text_ = std::move(render_text);
 }
 
 const char* SearchResultView::GetClassName() const {
@@ -272,25 +336,8 @@ void SearchResultView::PaintButtonContents(gfx::Canvas* canvas) {
   const bool selected = list_view_->IsResultViewSelected(this);
   const bool hover = state() == STATE_HOVERED || state() == STATE_PRESSED;
 
-  canvas->FillRect(content_rect, kCardBackgroundColor);
-
-  // Possibly call FillRect a second time (these colours are partially
-  // transparent, so the previous FillRect is not redundant).
-  if (selected)
-    canvas->FillRect(content_rect, kSelectedColor);
-  else if (hover)
-    canvas->FillRect(content_rect, kHighlightedColor);
-
-  if (!is_fullscreen_app_list_enabled_ && !is_last_result_) {
-    gfx::Rect line_rect = content_rect;
-    line_rect.set_height(kBorderSize);
-    line_rect.set_y(content_rect.bottom() - kBorderSize);
-    line_rect.set_x(kSeparatorPadding);
-    canvas->FillRect(line_rect, kSeparatorColor);
-  }
-
-  gfx::Rect border_bottom = gfx::SubtractRects(rect, content_rect);
-  canvas->FillRect(border_bottom, kResultBorderColor);
+  if (!is_fullscreen_app_list_enabled_)
+    canvas->FillRect(content_rect, kCardBackgroundColor);
 
   gfx::Rect text_bounds(rect);
   text_bounds.set_x(GetIconViewWidth());
@@ -307,12 +354,39 @@ void SearchResultView::PaintButtonContents(gfx::Canvas* canvas) {
   text_bounds.set_x(
       GetMirroredXWithWidthInView(text_bounds.x(), text_bounds.width()));
 
+  if (is_fullscreen_app_list_enabled_) {
+    // Set solid color background to avoid broken text. See crbug.com/746563.
+    // This should be drawn before selected color which is semi-transparent.
+    canvas->FillRect(text_bounds, kCardBackgroundColorFullscreen);
+  }
+
+  // Possibly call FillRect a second time (these colours are partially
+  // transparent, so the previous FillRect is not redundant).
+  if (selected) {
+    canvas->FillRect(content_rect, is_fullscreen_app_list_enabled_
+                                       ? kRowSelectedColor
+                                       : kSelectedColor);
+  } else if (!is_fullscreen_app_list_enabled_ && hover) {
+    canvas->FillRect(content_rect, kHighlightedColor);
+  }
+
+  if (!is_fullscreen_app_list_enabled_ && !is_last_result_) {
+    gfx::Rect line_rect = content_rect;
+    line_rect.set_height(kBorderSize);
+    line_rect.set_y(content_rect.bottom() - kBorderSize);
+    line_rect.set_x(kSeparatorPadding);
+    canvas->FillRect(line_rect, kSeparatorColor);
+  }
+
+  gfx::Rect border_bottom = gfx::SubtractRects(rect, content_rect);
+  canvas->FillRect(border_bottom, kResultBorderColor);
+
   if (title_text_ && details_text_) {
     gfx::Size title_size(text_bounds.width(),
                          title_text_->GetStringSize().height());
     gfx::Size details_size(text_bounds.width(),
                            details_text_->GetStringSize().height());
-    int total_height = title_size.height() + +details_size.height();
+    int total_height = title_size.height() + details_size.height();
     int y = text_bounds.y() + (text_bounds.height() - total_height) / 2;
 
     title_text_->SetDisplayRect(

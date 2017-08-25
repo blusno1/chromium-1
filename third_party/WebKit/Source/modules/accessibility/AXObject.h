@@ -118,8 +118,6 @@ enum TextUnderElementMode {
                         // present
 };
 
-enum class AXBoolAttribute {};
-
 class AXSparseAttributeClient {
  public:
   virtual void AddBoolAttribute(AXBoolAttribute, bool) = 0;
@@ -145,7 +143,6 @@ enum AXTextFromNativeHTML {
 
 enum AXIgnoredReason {
   kAXActiveModalDialog,
-  kAXAncestorDisallowsChild,
   kAXAncestorIsLeafNode,
   kAXAriaHiddenElement,
   kAXAriaHiddenSubtree,
@@ -641,15 +638,12 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   virtual void AriaLabelledbyElements(AXObjectVector&) const {}
   virtual bool AriaHasPopup() const { return false; }
   virtual bool IsEditable() const { return false; }
+  bool IsEditableRoot() const;
   virtual bool IsMultiline() const { return false; }
   virtual bool IsRichlyEditable() const { return false; }
   bool AriaCheckedIsPresent() const;
   bool AriaPressedIsPresent() const;
   virtual AccessibilityRole AriaRoleAttribute() const { return kUnknownRole; }
-  virtual bool AriaRoleHasPresentationalChildren() const { return false; }
-  virtual AXObject* AncestorForWhichThisIsAPresentationalChild() const {
-    return 0;
-  }
   bool SupportsActiveDescendant() const;
   bool SupportsARIAAttributes() const;
   virtual bool SupportsARIADragging() const { return false; }
@@ -675,7 +669,6 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   virtual const AtomicString& LiveRegionStatus() const { return g_null_atom; }
   virtual const AtomicString& LiveRegionRelevant() const { return g_null_atom; }
   virtual bool LiveRegionAtomic() const { return false; }
-  virtual bool LiveRegionBusy() const { return false; }
 
   const AtomicString& ContainerLiveRegionStatus() const;
   const AtomicString& ContainerLiveRegionRelevant() const;
@@ -774,7 +767,7 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   // Modify or take an action on an object.
   virtual void Increment() {}
   virtual void Decrement() {}
-  bool PerformDefaultAction() { return Press(); }
+  bool PerformDefaultAction();
   virtual bool Press();
   // Make this object visible by scrolling as many nested scrollable views as
   // needed.
@@ -865,6 +858,9 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
 
   const AXObject* InertRoot() const;
 
+  // Returns true if the event was handled.
+  bool DispatchEventToAOMEventListeners(Event&, Element*);
+
   mutable Member<AXObject> parent_;
 
   // The following cached attribute values (the ones starting with m_cached*)
@@ -877,8 +873,8 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   mutable bool cached_is_descendant_of_leaf_node_ : 1;
   mutable bool cached_is_descendant_of_disabled_node_ : 1;
   mutable bool cached_has_inherited_presentational_role_ : 1;
-  mutable bool cached_is_presentational_child_ : 1;
   mutable bool cached_ancestor_exposes_active_descendant_ : 1;
+  mutable bool cached_is_editable_root_;
   mutable Member<AXObject> cached_live_region_root_;
 
   Member<AXObjectCacheImpl> ax_object_cache_;

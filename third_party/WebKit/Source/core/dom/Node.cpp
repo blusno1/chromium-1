@@ -313,13 +313,13 @@ Node::Node(TreeScope* tree_scope, ConstructionType type)
 #if !defined(NDEBUG) || (defined(DUMP_NODE_STATISTICS) && DUMP_NODE_STATISTICS)
   TrackForDebugging();
 #endif
-  InstanceCounters::IncrementNodeCounter();
+  InstanceCounters::IncrementCounter(InstanceCounters::kNodeCounter);
 }
 
 Node::~Node() {
   if (!HasRareData() && !data_.node_layout_data_->IsSharedEmptyData())
     delete data_.node_layout_data_;
-  InstanceCounters::DecrementNodeCounter();
+  InstanceCounters::DecrementCounter(InstanceCounters::kNodeCounter);
 }
 
 NodeRareData* Node::RareData() const {
@@ -338,7 +338,7 @@ NodeRareData& Node::EnsureRareData() {
 
   DCHECK(data_.rare_data_);
   SetFlag(kHasRareDataFlag);
-  ScriptWrappableVisitor::WriteBarrier(this, RareData());
+  ScriptWrappableVisitor::WriteBarrier(RareData());
   return *RareData();
 }
 
@@ -2002,7 +2002,8 @@ void Node::RemoveAllEventListenersRecursively() {
 }
 
 using EventTargetDataMap =
-    PersistentHeapHashMap<WeakMember<Node>, Member<EventTargetData>>;
+    PersistentHeapHashMap<WeakMember<Node>,
+                          TraceWrapperMember<EventTargetData>>;
 static EventTargetDataMap& GetEventTargetDataMap() {
   DEFINE_STATIC_LOCAL(EventTargetDataMap, map, ());
   return map;
@@ -2639,15 +2640,18 @@ DEFINE_TRACE(Node) {
     visitor->Trace(RareData());
 
   visitor->Trace(tree_scope_);
+  // EventTargetData is traced through EventTargetDataMap.
   EventTarget::Trace(visitor);
 }
 
 DEFINE_TRACE_WRAPPERS(Node) {
-  visitor->TraceWrappersWithManualWriteBarrier(parent_or_shadow_host_node_);
-  visitor->TraceWrappersWithManualWriteBarrier(previous_);
-  visitor->TraceWrappersWithManualWriteBarrier(next_);
+  visitor->TraceWrappers(parent_or_shadow_host_node_);
+  visitor->TraceWrappers(previous_);
+  visitor->TraceWrappers(next_);
   if (HasRareData())
     visitor->TraceWrappersWithManualWriteBarrier(RareData());
+  visitor->TraceWrappersWithManualWriteBarrier(
+      const_cast<Node*>(this)->GetEventTargetData());
   EventTarget::TraceWrappers(visitor);
 }
 

@@ -11,8 +11,10 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/prefetch/offline_metrics_collector.h"
 #include "components/offline_pages/core/prefetch/prefetch_background_task_handler.h"
+#include "components/offline_pages/core/prefetch/prefetch_configuration.h"
 #include "components/offline_pages/core/prefetch/prefetch_dispatcher.h"
 #include "components/offline_pages/core/prefetch/prefetch_downloader.h"
+#include "components/offline_pages/core/prefetch/prefetch_downloader_impl.h"
 #include "components/offline_pages/core/prefetch/prefetch_gcm_handler.h"
 #include "components/offline_pages/core/prefetch/prefetch_importer.h"
 #include "components/offline_pages/core/prefetch/prefetch_service_impl.h"
@@ -45,6 +47,17 @@ class StubPrefetchBackgroundTaskHandler : public PrefetchBackgroundTaskHandler {
   DISALLOW_COPY_AND_ASSIGN(StubPrefetchBackgroundTaskHandler);
 };
 
+class StubPrefetchConfiguration : public PrefetchConfiguration {
+ public:
+  StubPrefetchConfiguration() = default;
+  ~StubPrefetchConfiguration() override = default;
+
+  bool IsPrefetchingEnabledBySettings() override { return true; };
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(StubPrefetchConfiguration);
+};
+
 }  // namespace
 
 PrefetchServiceTestTaco::PrefetchServiceTestTaco() {
@@ -56,13 +69,15 @@ PrefetchServiceTestTaco::PrefetchServiceTestTaco() {
   prefetch_store_sql_ =
       base::MakeUnique<PrefetchStore>(base::ThreadTaskRunnerHandle::Get());
   suggested_articles_observer_ = base::MakeUnique<SuggestedArticlesObserver>();
-  prefetch_downloader_ = base::WrapUnique(new PrefetchDownloader(kTestChannel));
+  prefetch_downloader_ =
+      base::WrapUnique(new PrefetchDownloaderImpl(kTestChannel));
   prefetch_importer_ = base::MakeUnique<TestPrefetchImporter>();
   // This sets up the testing articles as an empty vector, we can ignore the
   // result here.  This allows us to not create a ContentSuggestionsService.
   suggested_articles_observer_->GetTestingArticles();
   prefetch_background_task_handler_ =
       base::MakeUnique<StubPrefetchBackgroundTaskHandler>();
+  prefetch_configuration_ = base::MakeUnique<StubPrefetchConfiguration>();
 }
 
 PrefetchServiceTestTaco::~PrefetchServiceTestTaco() = default;
@@ -123,6 +138,12 @@ void PrefetchServiceTestTaco::SetPrefetchBackgroundTaskHandler(
       std::move(prefetch_background_task_handler);
 }
 
+void PrefetchServiceTestTaco::SetPrefetchConfiguration(
+    std::unique_ptr<PrefetchConfiguration> prefetch_configuration) {
+  CHECK(!prefetch_service_);
+  prefetch_configuration_ = std::move(prefetch_configuration);
+}
+
 void PrefetchServiceTestTaco::CreatePrefetchService() {
   CHECK(metrics_collector_ && dispatcher_ && gcm_handler_ &&
         network_request_factory_ && prefetch_store_sql_ &&
@@ -133,7 +154,8 @@ void PrefetchServiceTestTaco::CreatePrefetchService() {
       std::move(gcm_handler_), std::move(network_request_factory_),
       std::move(prefetch_store_sql_), std::move(suggested_articles_observer_),
       std::move(prefetch_downloader_), std::move(prefetch_importer_),
-      std::move(prefetch_background_task_handler_));
+      std::move(prefetch_background_task_handler_),
+      std::move(prefetch_configuration_));
 }
 
 std::unique_ptr<PrefetchService>

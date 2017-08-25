@@ -34,7 +34,7 @@
 #include "ui/gl/scoped_make_current.h"
 #include "ui/gl/sync_control_vsync_provider.h"
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
 extern "C" {
 #include <X11/Xlib.h>
 #define Status int
@@ -56,10 +56,10 @@ extern "C" {
 
 // Not present egl/eglext.h yet.
 
-#ifndef EGL_EXT_gl_colorspace_display_p3_linear
-#define EGL_EXT_gl_colorspace_display_p3_linear 1
-#define EGL_GL_COLORSPACE_DISPLAY_P3_LINEAR_EXT 0x3362
-#endif /* EGL_EXT_gl_colorspace_display_p3_linear */
+#ifndef EGL_EXT_gl_colorspace_display_p3
+#define EGL_EXT_gl_colorspace_display_p3 1
+#define EGL_GL_COLORSPACE_DISPLAY_P3_EXT 0x3363
+#endif /* EGL_EXT_gl_colorspace_display_p3 */
 
 // From ANGLE's egl/eglext.h.
 
@@ -142,7 +142,7 @@ bool g_egl_surfaceless_context_supported = false;
 bool g_egl_surface_orientation_supported = false;
 bool g_egl_context_priority_supported = false;
 bool g_egl_khr_colorspace = false;
-bool g_egl_ext_colorspace_display_p3_linear = false;
+bool g_egl_ext_colorspace_display_p3 = false;
 bool g_use_direct_composition = false;
 
 class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
@@ -204,7 +204,7 @@ EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
     display_attribs.push_back(EGL_TRUE);
   }
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   // ANGLE_NULL doesn't use the visual, and may run without X11 where we can't
   // get it anyway.
   if (platform_type != EGL_PLATFORM_ANGLE_TYPE_NULL_ANGLE) {
@@ -314,7 +314,7 @@ EGLConfig ChooseConfig(GLSurfaceFormat format, bool surfaceless) {
   EGLint stencil_size = format.GetStencilBits();
   EGLint samples = format.GetSamples();
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   // If we're using ANGLE_NULL, we may not have a display, in which case we
   // can't use XVisualManager.
   if (g_native_display) {
@@ -553,8 +553,8 @@ bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
   g_egl_surface_orientation_supported =
       HasEGLExtension("EGL_ANGLE_surface_orientation");
   g_egl_khr_colorspace = HasEGLExtension("EGL_KHR_gl_colorspace");
-  g_egl_ext_colorspace_display_p3_linear =
-      HasEGLExtension("EGL_EXT_gl_colorspace_display_p3_linear");
+  g_egl_ext_colorspace_display_p3 =
+      HasEGLExtension("EGL_EXT_gl_colorspace_display_p3");
   // According to https://source.android.com/compatibility/android-cdd.html the
   // EGL_IMG_context_priority extension is mandatory for Virtual Reality High
   // Performance support, but due to a bug in Android Nougat the extension
@@ -603,7 +603,17 @@ bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
     }
   }
 #endif
+
   initialized_ = true;
+  return true;
+}
+
+// static
+bool GLSurfaceEGL::InitializeExtensionSettingsOneOff() {
+  if (!initialized_)
+    return false;
+  g_driver_egl.UpdateConditionalExtensionBindings();
+  g_egl_extensions = eglQueryString(g_display, EGL_EXTENSIONS);
 
   return true;
 }
@@ -843,12 +853,17 @@ bool NativeViewGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
       }
       break;
     case GLSurfaceFormat::COLOR_SPACE_DISPLAY_P3:
-      // As above, COLORSPACE_DISPLAY_P3_LINEAR is equivalent to
-      // COLORSPACE_DISPLAY_P3 with Disable(FRAMEBUFFER_SRGB).
-      if (g_egl_khr_colorspace && g_egl_ext_colorspace_display_p3_linear) {
+      // Note that it is not the case that
+      //   COLORSPACE_SRGB is to COLORSPACE_LINEAR_KHR
+      // as
+      //   COLORSPACE_DISPLAY_P3 is to COLORSPACE_DISPLAY_P3_LINEAR
+      // COLORSPACE_DISPLAY_P3 is equivalent to COLORSPACE_LINEAR, except with
+      // with the P3 gamut instead of the the sRGB gamut.
+      // COLORSPACE_DISPLAY_P3_LINEAR has a linear transfer function, and is
+      // intended for use with 16-bit formats.
+      if (g_egl_khr_colorspace && g_egl_ext_colorspace_display_p3) {
         egl_window_attributes.push_back(EGL_GL_COLORSPACE_KHR);
-        egl_window_attributes.push_back(
-            EGL_GL_COLORSPACE_DISPLAY_P3_LINEAR_EXT);
+        egl_window_attributes.push_back(EGL_GL_COLORSPACE_DISPLAY_P3_EXT);
       }
       break;
   }

@@ -24,23 +24,6 @@
 
 namespace subresource_filter {
 
-namespace {
-
-// Records histograms about the pattern of redirect chains, and about the
-// pattern of whether the last URL in the chain matched the activation list.
-#define REPORT_REDIRECT_PATTERN_FOR_SUFFIX(suffix, is_matched, chain_size)    \
-  do {                                                                        \
-    UMA_HISTOGRAM_BOOLEAN("SubresourceFilter.PageLoad.FinalURLMatch." suffix, \
-                          is_matched);                                        \
-    if (is_matched) {                                                         \
-      UMA_HISTOGRAM_COUNTS(                                                   \
-          "SubresourceFilter.PageLoad.RedirectChainLength." suffix,           \
-          chain_size);                                                        \
-    };                                                                        \
-  } while (0)
-
-}  // namespace
-
 SubresourceFilterSafeBrowsingActivationThrottle::
     SubresourceFilterSafeBrowsingActivationThrottle(
         content::NavigationHandle* handle,
@@ -73,11 +56,37 @@ SubresourceFilterSafeBrowsingActivationThrottle::
   // The last check could be ongoing when the navigation is cancelled.
   if (check_results_.empty() || !check_results_.back().finished)
     return;
+  ActivationList matched_list = GetListForThreatTypeAndMetadata(
+      check_results_.back().threat_type, check_results_.back().threat_metadata);
+
   // TODO(csharrison): Log more metrics based on check_results_.
-  RecordRedirectChainMatchPatternForList(
-      ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL);
-  RecordRedirectChainMatchPatternForList(ActivationList::PHISHING_INTERSTITIAL);
-  RecordRedirectChainMatchPatternForList(ActivationList::SUBRESOURCE_FILTER);
+  UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.PageLoad.ActivationList",
+                            matched_list,
+                            static_cast<int>(ActivationList::LAST) + 1);
+
+  size_t chain_size = check_results_.size();
+  switch (matched_list) {
+    case ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL:
+      UMA_HISTOGRAM_COUNTS(
+          "SubresourceFilter.PageLoad.RedirectChainLength."
+          "SocialEngineeringAdsInterstitial",
+          chain_size);
+      break;
+    case ActivationList::PHISHING_INTERSTITIAL:
+      UMA_HISTOGRAM_COUNTS(
+          "SubresourceFilter.PageLoad.RedirectChainLength."
+          "PhishingInterstitial",
+          chain_size);
+      break;
+    case ActivationList::SUBRESOURCE_FILTER:
+      UMA_HISTOGRAM_COUNTS(
+          "SubresourceFilter.PageLoad.RedirectChainLength."
+          "SubresourceFilterOnly",
+          chain_size);
+      break;
+    default:
+      break;
+  }
 }
 
 bool SubresourceFilterSafeBrowsingActivationThrottle::NavigationIsPageReload(
@@ -165,8 +174,11 @@ void SubresourceFilterSafeBrowsingActivationThrottle::NotifyResult() {
     client_->WhitelistInCurrentWebContents(navigation_handle()->GetURL());
   }
 
-  Configuration::ActivationOptions matched_options;
-  ActivationDecision activation_decision = ComputeActivation(&matched_options);
+  Configuration matched_configuration;
+  ActivationDecision activation_decision =
+      ComputeActivation(&matched_configuration);
+  Configuration::ActivationOptions& matched_options =
+      matched_configuration.activation_options;
 
   // For forced activation, keep all the options except activation_level.
   if (client_->ForceActivationInCurrentWebContents()) {
@@ -189,7 +201,7 @@ void SubresourceFilterSafeBrowsingActivationThrottle::NotifyResult() {
   }
 
   driver_factory->NotifyPageActivationComputed(
-      navigation_handle(), activation_decision, matched_options);
+      navigation_handle(), activation_decision, matched_configuration);
 
   base::TimeDelta delay = defer_time_.is_null()
                               ? base::TimeDelta::FromMilliseconds(0)
@@ -208,14 +220,15 @@ void SubresourceFilterSafeBrowsingActivationThrottle::NotifyResult() {
 
 ActivationDecision
 SubresourceFilterSafeBrowsingActivationThrottle::ComputeActivation(
-    Configuration::ActivationOptions* options) {
+    Configuration* configuration) {
   const GURL& url(navigation_handle()->GetURL());
   ActivationList matched_list = ActivationList::NONE;
   DCHECK(!database_client_ || !check_results_.empty());
   if (!check_results_.empty()) {
     DCHECK(check_results_.back().finished);
-    matched_list = GetListForThreatTypeAndMetadata(
-        check_results_.back().threat_type, check_results_.back().pattern_type);
+    matched_list =
+        GetListForThreatTypeAndMetadata(check_results_.back().threat_type,
+                                        check_results_.back().threat_metadata);
   }
 
   const auto config_list = GetEnabledConfigurations();
@@ -244,14 +257,14 @@ SubresourceFilterSafeBrowsingActivationThrottle::ComputeActivation(
   if (!has_activated_config)
     return ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET;
 
-  const Configuration::ActivationOptions activation_options =
+  const Configuration::ActivationOptions& activation_options =
       highest_priority_activated_config->activation_options;
   if (!scheme_is_http_or_https &&
       activation_options.activation_level != ActivationLevel::DISABLED) {
     return ActivationDecision::UNSUPPORTED_SCHEME;
   }
 
-  *options = activation_options;
+  *configuration = *highest_priority_activated_config;
   return activation_options.activation_level == ActivationLevel::DISABLED
              ? ActivationDecision::ACTIVATION_DISABLED
              : ActivationDecision::ACTIVATED;
@@ -281,6 +294,8 @@ bool SubresourceFilterSafeBrowsingActivationThrottle::
       // ACTIVATION_LIST does not support non http/s URLs.
       if (!scheme_is_http_or_https)
         return false;
+      if (matched_list == ActivationList::NONE)
+        return false;
       if (conditions.activation_list == matched_list)
         return true;
       if (conditions.activation_list == ActivationList::PHISHING_INTERSTITIAL &&
@@ -295,32 +310,6 @@ bool SubresourceFilterSafeBrowsingActivationThrottle::
   }
   NOTREACHED();
   return false;
-}
-
-void SubresourceFilterSafeBrowsingActivationThrottle::
-    RecordRedirectChainMatchPatternForList(ActivationList activation_list) {
-  DCHECK(check_results_.back().finished);
-  ActivationList matched_list = GetListForThreatTypeAndMetadata(
-      check_results_.back().threat_type, check_results_.back().pattern_type);
-  bool is_matched = matched_list == activation_list;
-  size_t chain_size = check_results_.size();
-  switch (activation_list) {
-    case ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL:
-      REPORT_REDIRECT_PATTERN_FOR_SUFFIX("SocialEngineeringAdsInterstitial",
-                                         is_matched, chain_size);
-      break;
-    case ActivationList::PHISHING_INTERSTITIAL:
-      REPORT_REDIRECT_PATTERN_FOR_SUFFIX("PhishingInterstitial", is_matched,
-                                         chain_size);
-      break;
-    case ActivationList::SUBRESOURCE_FILTER:
-      REPORT_REDIRECT_PATTERN_FOR_SUFFIX("SubresourceFilterOnly", is_matched,
-                                         chain_size);
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
 }
 
 }  //  namespace subresource_filter

@@ -13,7 +13,6 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentProgressObserver;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
@@ -282,7 +281,7 @@ public class ContextualSearchPanel extends OverlayPanel {
      * Handles a bar click. The position is given in dp.
      */
     @Override
-    public void handleBarClick(long time, float x, float y) {
+    public void handleBarClick(float x, float y) {
         getSearchBarControl().onSearchBarClick(x);
 
         if (isPeeking()) {
@@ -293,7 +292,7 @@ public class ContextualSearchPanel extends OverlayPanel {
                         mActivity.getActivityTab());
             } else {
                 // super takes care of expanding the Panel when peeking.
-                super.handleBarClick(time, x, y);
+                super.handleBarClick(x, y);
             }
         } else if (isExpanded() || isMaximized()) {
             if (isCoordinateInsideCloseButton(x)) {
@@ -404,15 +403,6 @@ public class ContextualSearchPanel extends OverlayPanel {
         // peeking.
         return (mActivity != null && mActivity.getBottomSheet() != null && isShowing())
                 || super.shouldHideAndroidBrowserControls();
-    }
-
-    @Override
-    public void setChromeActivity(ChromeActivity activity) {
-        super.setChromeActivity(activity);
-
-        if (mActivity.getBottomSheet() == null) return;
-
-        addBarHandle(mActivity.getToolbarManager().getToolbar().getHeight());
     }
 
     @Override
@@ -895,6 +885,6 @@ public class ContextualSearchPanel extends OverlayPanel {
         float yPosition = getOffsetY() + (getHeight() / 2);
 
         // Simulate the tap.
-        handleClick(System.currentTimeMillis(), xPosition, yPosition);
+        handleClick(xPosition, yPosition);
     }
 }

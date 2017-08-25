@@ -37,8 +37,16 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # Conformance expectations
     # ========================
 
+    # Need to fix test, which uses a bad interpretation of the spec
+    self.Fail('conformance/offscreencanvas/offscreencanvas-resize.html',
+        bug=754733)
+
     # Too slow (take about one hour to run)
     self.Skip('deqp/functional/gles3/builtinprecision/*.html', bug=619403)
+
+    # Timing out on multiple platforms right now.
+    self.Skip('conformance/glsl/bugs/sampler-array-struct-function-arg.html',
+        bug=757097)
 
     # All platforms.
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
@@ -70,8 +78,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         bug=1966) # angle bug ID
 
     # Windows only.
+    self.Fail('conformance2/buffers/uniform-buffers.html',
+        ['win'], bug=757098)
     self.Fail('conformance/glsl/bugs/sampler-struct-function-arg.html',
         ['win'], bug=2103) # angle bug ID
+    self.Fail('conformance2/glsl3/array-initialize-with-same-name-array.html',
+        ['win'], bug=757098)
     self.Fail('conformance2/rendering/blitframebuffer-outside-readbuffer.html',
         ['win', 'd3d11'], bug=644740)
     self.Fail('conformance2/textures/misc/tex-base-level-bug.html',
@@ -484,7 +496,7 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     # When this fails on this configuration, it fails multiple times in a row.
     self.Fail('deqp/functional/gles3/shaderoperator/common_functions.html',
-        ['mac', 'nvidia'], bug=702336)
+        ['mac', 'nvidia'], bug=756537)
 
     # Mac AMD
     # TODO(kbr): uncomment the following two exepectations after test
@@ -493,8 +505,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     #     ['mac', 'amd'], bug=735483)
     # self.Fail('conformance2/rendering/texture-switch-performance.html',
     #     ['mac', 'amd'], bug=735483)
-    self.Flaky('deqp/functional/gles3/shaderoperator/common_functions.html',
-        ['mac', 'amd'], bug=702336)
     self.Fail('deqp/functional/gles3/transformfeedback/' +
         'array_interleaved_lines.html',
         ['mac', 'amd'], bug=483282)
@@ -565,6 +575,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         'random_separate_triangles.html',
         ['mac', 'amd'], bug=483282)
 
+    self.Flaky('deqp/functional/gles3/shaderindexing/mat_00.html',
+        ['mac', 'amd'], bug=751254)
     self.Flaky('deqp/functional/gles3/shaderindexing/mat_01.html',
         ['mac', 'amd'], bug=636648)
     self.Flaky('deqp/functional/gles3/shaderindexing/mat_02.html',

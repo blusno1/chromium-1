@@ -348,6 +348,11 @@ void TapEdit() {
 
 @interface MockReauthenticationModule : NSObject<ReauthenticationProtocol>
 
+// Indicates whether the device is capable of reauthenticating the user.
+@property(nonatomic, assign) BOOL canAttempt;
+
+// Indicates whether (mock) authentication should succeed or not. Setting
+// |shouldSucceed| to any value sets |canAttempt| to YES.
 @property(nonatomic, assign) BOOL shouldSucceed;
 
 @end
@@ -355,9 +360,15 @@ void TapEdit() {
 @implementation MockReauthenticationModule
 
 @synthesize shouldSucceed = _shouldSucceed;
+@synthesize canAttempt = _canAttempt;
+
+- (void)setShouldSucceed:(BOOL)shouldSucceed {
+  _canAttempt = YES;
+  _shouldSucceed = shouldSucceed;
+}
 
 - (BOOL)canAttemptReauth {
-  return YES;
+  return _canAttempt;
 }
 
 - (void)attemptReauthWithLocalizedReason:(NSString*)localizedReason
@@ -376,6 +387,7 @@ namespace {
 MockReauthenticationModule* SetUpAndReturnMockReauthenticationModule() {
   MockReauthenticationModule* mock_reauthentication_module =
       [[MockReauthenticationModule alloc] init];
+  // TODO(crbug.com/754642): Stop using TopPresentedViewController();
   SettingsNavigationController* settings_navigation_controller =
       base::mac::ObjCCastStrict<SettingsNavigationController>(
           top_view_controller::TopPresentedViewController());
@@ -564,18 +576,16 @@ MockReauthenticationModule* SetUpAndReturnMockReauthenticationModule() {
   [GetInteractionForPasswordDetailItem(DeleteButton())
       performAction:grey_tap()];
 
-  // Tap the alert's Delete... button to confirm. Check sufficient visibility in
-  // addition to interactability to differentiate against the above
-  // DeleteButton()-matching element, which is covered by the alert enought to
-  // prevent being sufficiently visible, but not enough to prevent
-  // interactability.
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   ButtonWithAccessibilityLabel(
-                                       l10n_util::GetNSString(
-                                           IDS_IOS_CONFIRM_PASSWORD_DELETION)),
-                                   grey_interactable(),
-                                   grey_sufficientlyVisible(), nullptr)]
+  // Tap the alert's Delete button to confirm. Check accessibilityTrait to
+  // differentiate against the above DeleteButton()-matching element, which is
+  // has UIAccessibilityTraitSelected.
+  // TODO(crbug.com/751311): Revisit and check if there is a better solution to
+  // match the Delete button.
+  id<GREYMatcher> deleteConfirmationButton = grey_allOf(
+      ButtonWithAccessibilityLabel(
+          l10n_util::GetNSString(IDS_IOS_CONFIRM_PASSWORD_DELETION)),
+      grey_not(grey_accessibilityTrait(UIAccessibilityTraitSelected)), nil);
+  [[EarlGrey selectElementWithMatcher:deleteConfirmationButton]
       performAction:grey_tap()];
 
   // Wait until the alert and the detail view are dismissed.
@@ -1130,7 +1140,7 @@ MockReauthenticationModule* SetUpAndReturnMockReauthenticationModule() {
     const bool expected_final_state = !expected_initial_state;
     GREYAssertEqual(expected_final_state,
                     browserState->GetPrefs()->GetBoolean(
-                        password_manager::prefs::kPasswordManagerSavingEnabled),
+                        password_manager::prefs::kCredentialsEnableService),
                     @"State of the UI toggle differs from real preferences.");
   }
 
@@ -1190,6 +1200,84 @@ MockReauthenticationModule* SetUpAndReturnMockReauthenticationModule() {
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
+}
+
+// Checks that an attempt to copy a password provides appropriate feedback when
+// reauthentication cannot be attempted.
+- (void)testCopyPasswordToastNoReauth {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kViewPasswords);
+
+  // Saving a form is needed for using the "password details" view.
+  SaveExamplePasswordForm();
+
+  OpenPasswordSettings();
+
+  [GetInteractionForPasswordEntry(@"example.com, concrete username")
+      performAction:grey_tap()];
+
+  MockReauthenticationModule* mock_reauthentication_module =
+      SetUpAndReturnMockReauthenticationModule();
+
+  mock_reauthentication_module.canAttempt = NO;
+  [GetInteractionForPasswordDetailItem(CopyPasswordButton())
+      performAction:grey_tap()];
+
+  NSString* title =
+      l10n_util::GetNSString(IDS_IOS_SETTINGS_SET_UP_SCREENLOCK_TITLE);
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(title)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OKButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+      performAction:grey_tap()];
+}
+
+// Checks that an attempt to view a password provides appropriate feedback when
+// reauthentication cannot be attempted.
+- (void)testShowPasswordToastNoReauth {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kViewPasswords);
+
+  // Saving a form is needed for using the "password details" view.
+  SaveExamplePasswordForm();
+
+  OpenPasswordSettings();
+
+  [GetInteractionForPasswordEntry(@"example.com, concrete username")
+      performAction:grey_tap()];
+
+  MockReauthenticationModule* mock_reauthentication_module =
+      SetUpAndReturnMockReauthenticationModule();
+
+  mock_reauthentication_module.canAttempt = NO;
+  [GetInteractionForPasswordDetailItem(ShowPasswordButton())
+      performAction:grey_tap()];
+
+  NSString* title =
+      l10n_util::GetNSString(IDS_IOS_SETTINGS_SET_UP_SCREENLOCK_TITLE);
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(title)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  NSString* learnHow =
+      l10n_util::GetNSString(IDS_IOS_SETTINGS_SET_UP_SCREENLOCK_LEARN_HOW);
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
+                                   learnHow)] performAction:grey_tap()];
+  // Check the sub menu is closed due to the help article.
+  NSError* error = nil;
+  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+      assertWithMatcher:grey_notNil()
+                  error:&error];
+  GREYAssertTrue(error, @"The settings back button is still displayed");
+
+  // Check the settings page is closed.
+  error = nil;
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+      assertWithMatcher:grey_notNil()
+                  error:&error];
+  GREYAssertTrue(error, @"The settings page is still displayed");
 }
 
 @end

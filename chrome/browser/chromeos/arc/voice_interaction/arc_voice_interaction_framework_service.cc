@@ -21,6 +21,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/task_scheduler/post_task.h"
+#include "chrome/browser/chromeos/arc/boot_phase_monitor/arc_boot_phase_monitor_bridge.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -35,6 +36,7 @@
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/instance_holder.h"
+#include "components/session_manager/core/session_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -122,6 +124,11 @@ std::unique_ptr<ui::LayerTreeOwner> CreateLayerTreeForSnapshot(
   DCHECK(layer_tree_owner);
 
   auto* root_layer = layer_tree_owner->root();
+  // The root layer might have a scaling transform applied (if the user has
+  // changed the UI scale via Ctrl-Shift-Plus/Minus).
+  // Clear the transform so that the snapshot is taken at 1:1 scale relative
+  // to screen pixels.
+  root_layer->SetTransform(gfx::Transform());
   root_window->layer()->Add(root_layer);
   root_window->layer()->StackAtBottom(root_layer);
   return layer_tree_owner;
@@ -176,8 +183,9 @@ class ArcVoiceInteractionFrameworkServiceFactory
   }
 };
 
-void SetVoiceInteractionPrefs(mojom::VoiceInteractionStatusPtr status) {
-  PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
+void SetVoiceInteractionPrefs(content::BrowserContext* context,
+                              mojom::VoiceInteractionStatusPtr status) {
+  PrefService* prefs = Profile::FromBrowserContext(context)->GetPrefs();
   prefs->SetBoolean(prefs::kVoiceInteractionPrefSynced, status->configured);
   prefs->SetBoolean(prefs::kVoiceInteractionEnabled,
                     status->configured && status->voice_interaction_enabled);
@@ -205,11 +213,13 @@ ArcVoiceInteractionFrameworkService::ArcVoiceInteractionFrameworkService(
     : context_(context), arc_bridge_service_(bridge_service), binding_(this) {
   arc_bridge_service_->voice_interaction_framework()->AddObserver(this);
   ArcSessionManager::Get()->AddObserver(this);
+  session_manager::SessionManager::Get()->AddObserver(this);
 }
 
 ArcVoiceInteractionFrameworkService::~ArcVoiceInteractionFrameworkService() {
   ArcSessionManager::Get()->RemoveObserver(this);
   arc_bridge_service_->voice_interaction_framework()->RemoveObserver(this);
+  session_manager::SessionManager::Get()->RemoveObserver(this);
 }
 
 void ArcVoiceInteractionFrameworkService::OnInstanceReady() {
@@ -230,8 +240,6 @@ void ArcVoiceInteractionFrameworkService::OnInstanceReady() {
 
 void ArcVoiceInteractionFrameworkService::OnInstanceClosed() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  CallAndResetMetalayerCallback();
-  metalayer_enabled_ = false;
 }
 
 void ArcVoiceInteractionFrameworkService::CaptureFocusedWindow(
@@ -252,8 +260,6 @@ void ArcVoiceInteractionFrameworkService::CaptureFocusedWindow(
   }
   ui::GrabWindowSnapshotAsyncJPEG(
       window, gfx::Rect(window->bounds().size()),
-      base::CreateTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::USER_BLOCKING}),
       base::Bind(&ScreenshotCallback, callback));
 }
 
@@ -280,43 +286,48 @@ void ArcVoiceInteractionFrameworkService::CaptureFullscreen(
 
 void ArcVoiceInteractionFrameworkService::SetVoiceInteractionRunning(
     bool running) {
-  ash::Shell::Get()->NotifyVoiceInteractionStatusChanged(running);
+  ash::Shell::Get()->NotifyVoiceInteractionStatusChanged(
+      running ? ash::VoiceInteractionState::RUNNING
+              : ash::VoiceInteractionState::STOPPED);
+}
+
+void ArcVoiceInteractionFrameworkService::SetVoiceInteractionState(
+    ash::VoiceInteractionState state) {
+  DCHECK_NE(state_, state);
+  // Assume voice interaction state changing from NOT_READY to a state other
+  // than ready indicates container boot complete and it's safe to synchronize
+  // voice interaction flags. VoiceInteractionEnabled is locked at true in
+  // Android side so we don't need to synchronize it here.
+  if (state_ == ash::VoiceInteractionState::NOT_READY) {
+    PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
+    SetVoiceInteractionContextEnabled(
+        prefs->GetBoolean(prefs::kArcVoiceInteractionValuePropAccepted) &&
+        prefs->GetBoolean(prefs::kVoiceInteractionContextEnabled));
+  }
+  state_ = state;
+  ash::Shell::Get()->NotifyVoiceInteractionStatusChanged(state);
 }
 
 void ArcVoiceInteractionFrameworkService::OnMetalayerClosed() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  CallAndResetMetalayerCallback();
+  LOG(ERROR) << "Deprecated method called: "
+                "VoiceInteractionFrameworkHost.OnInstanceClosed";
 }
 
 void ArcVoiceInteractionFrameworkService::SetMetalayerEnabled(bool enabled) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  metalayer_enabled_ = enabled;
-  if (!metalayer_enabled_)
-    CallAndResetMetalayerCallback();
+  LOG(ERROR) << "Deprecated method called: "
+                "VoiceInteractionFrameworkHost.SetMetalayerEnabled";
 }
 
-bool ArcVoiceInteractionFrameworkService::IsMetalayerSupported() {
+void ArcVoiceInteractionFrameworkService::ShowMetalayer() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return metalayer_enabled_;
-}
-
-void ArcVoiceInteractionFrameworkService::ShowMetalayer(
-    const base::Closure& closed) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!metalayer_closed_callback_.is_null()) {
-    LOG(ERROR) << "Metalayer is already enabled";
-    return;
-  }
-  metalayer_closed_callback_ = closed;
+  NotifyMetalayerStatusChanged(true);
 }
 
 void ArcVoiceInteractionFrameworkService::HideMetalayer() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (metalayer_closed_callback_.is_null()) {
-    LOG(ERROR) << "Metalayer is already hidden";
-    return;
-  }
-  metalayer_closed_callback_ = base::Closure();
+  NotifyMetalayerStatusChanged(false);
 }
 
 void ArcVoiceInteractionFrameworkService::OnArcPlayStoreEnabledChanged(
@@ -328,7 +339,29 @@ void ArcVoiceInteractionFrameworkService::OnArcPlayStoreEnabledChanged(
   status->configured = false;
   status->voice_interaction_enabled = false;
   status->context_enabled = false;
-  SetVoiceInteractionPrefs(std::move(status));
+  SetVoiceInteractionPrefs(context_, std::move(status));
+}
+
+void ArcVoiceInteractionFrameworkService::OnSessionStateChanged() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  session_manager::SessionState session_state =
+      session_manager::SessionManager::Get()->session_state();
+  if (session_state != session_manager::SessionState::ACTIVE)
+    return;
+
+  // TODO(crbug.com/757012): Avoid using ash::Shell here so that it can work in
+  // mash.
+  bool enabled = Profile::FromBrowserContext(context_)->GetPrefs()->GetBoolean(
+      prefs::kVoiceInteractionEnabled);
+  ash::Shell::Get()->NotifyVoiceInteractionEnabled(enabled);
+
+  bool context = ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
+      prefs::kVoiceInteractionContextEnabled);
+  ash::Shell::Get()->NotifyVoiceInteractionContextEnabled(context);
+
+  // We only want notify the status change on first user signed in.
+  session_manager::SessionManager::Get()->RemoveObserver(this);
 }
 
 void ArcVoiceInteractionFrameworkService::StartVoiceInteractionSetupWizard() {
@@ -342,29 +375,40 @@ void ArcVoiceInteractionFrameworkService::StartVoiceInteractionSetupWizard() {
   framework_instance->StartVoiceInteractionSetupWizard();
 }
 
-void ArcVoiceInteractionFrameworkService::CallAndResetMetalayerCallback() {
+void ArcVoiceInteractionFrameworkService::NotifyMetalayerStatusChanged(
+    bool visible) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (metalayer_closed_callback_.is_null())
+  mojom::VoiceInteractionFrameworkInstance* framework_instance =
+      ARC_GET_INSTANCE_FOR_METHOD(
+          arc_bridge_service_->voice_interaction_framework(),
+          SetMetalayerVisibility);
+  if (!framework_instance)
     return;
-  base::ResetAndReturn(&metalayer_closed_callback_).Run();
+  framework_instance->SetMetalayerVisibility(visible);
 }
 
 void ArcVoiceInteractionFrameworkService::SetVoiceInteractionEnabled(
     bool enable) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  mojom::VoiceInteractionFrameworkInstance* framework_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(
-          arc_bridge_service_->voice_interaction_framework(),
-          SetVoiceInteractionEnabled);
-  if (!framework_instance)
-    return;
-  framework_instance->SetVoiceInteractionEnabled(enable);
+  ash::Shell::Get()->NotifyVoiceInteractionEnabled(enable);
+
+  PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
+
+  // We assume voice interaction is always enabled on in ARC, but we guard
+  // all possible entry points on CrOS side with this flag. In this case,
+  // we only need to set CrOS side flag.
+  prefs->SetBoolean(prefs::kVoiceInteractionEnabled, enable);
 }
 
 void ArcVoiceInteractionFrameworkService::SetVoiceInteractionContextEnabled(
     bool enable) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  ash::Shell::Get()->NotifyVoiceInteractionContextEnabled(enable);
+
+  PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
+  prefs->SetBoolean(prefs::kVoiceInteractionContextEnabled, enable);
 
   mojom::VoiceInteractionFrameworkInstance* framework_instance =
       ARC_GET_INSTANCE_FOR_METHOD(
@@ -376,7 +420,7 @@ void ArcVoiceInteractionFrameworkService::SetVoiceInteractionContextEnabled(
 }
 
 void ArcVoiceInteractionFrameworkService::UpdateVoiceInteractionPrefs() {
-  if (ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
+  if (Profile::FromBrowserContext(context_)->GetPrefs()->GetBoolean(
           prefs::kVoiceInteractionPrefSynced)) {
     return;
   }
@@ -387,33 +431,12 @@ void ArcVoiceInteractionFrameworkService::UpdateVoiceInteractionPrefs() {
   if (!framework_instance)
     return;
   framework_instance->GetVoiceInteractionSettings(
-      base::Bind(&SetVoiceInteractionPrefs));
+      base::Bind(&SetVoiceInteractionPrefs, context_));
 }
 
 void ArcVoiceInteractionFrameworkService::StartSessionFromUserInteraction(
     const gfx::Rect& rect) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  if (!Profile::FromBrowserContext(context_)->GetPrefs()->GetBoolean(
-          prefs::kArcVoiceInteractionValuePropAccepted)) {
-    // If voice interaction value prop already showing, return.
-    if (chromeos::LoginDisplayHost::default_host())
-      return;
-    // If voice interaction value prop has not been accepted, show the value
-    // prop OOBE page again.
-    gfx::Rect screen_bounds(chromeos::CalculateScreenBounds(gfx::Size()));
-    // The display host will be destructed at the end of OOBE flow.
-    chromeos::LoginDisplayHostImpl* display_host =
-        new chromeos::LoginDisplayHostImpl(screen_bounds);
-    display_host->StartVoiceInteractionOobe();
-    return;
-  }
-
-  if (!arc_bridge_service_->voice_interaction_framework()->has_instance()) {
-    SetArcCpuRestriction(false);
-    is_request_pending_ = true;
-    return;
-  }
 
   if (!InitiateUserInteraction())
     return;
@@ -433,6 +456,21 @@ void ArcVoiceInteractionFrameworkService::StartSessionFromUserInteraction(
     DCHECK(framework_instance);
     framework_instance->StartVoiceInteractionSessionForRegion(rect);
   }
+  VLOG(1) << "Sent voice interaction request.";
+}
+
+void ArcVoiceInteractionFrameworkService::ToggleSessionFromUserInteraction() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (!InitiateUserInteraction())
+    return;
+
+  mojom::VoiceInteractionFrameworkInstance* framework_instance =
+      ARC_GET_INSTANCE_FOR_METHOD(
+          arc_bridge_service_->voice_interaction_framework(),
+          ToggleVoiceInteractionSession);
+  DCHECK(framework_instance);
+  framework_instance->ToggleVoiceInteractionSession();
 }
 
 bool ArcVoiceInteractionFrameworkService::ValidateTimeSinceUserInteraction() {
@@ -466,15 +504,38 @@ bool ArcVoiceInteractionFrameworkService::ValidateTimeSinceUserInteraction() {
 }
 
 bool ArcVoiceInteractionFrameworkService::InitiateUserInteraction() {
-  auto start_time = base::TimeTicks::Now();
-  if ((start_time - user_interaction_start_time_) <
-          kAllowedTimeSinceUserInteraction &&
-      context_request_remaining_count_) {
-    // If next request starts too soon and there is an active session in action,
-    // we should drop it.
+  VLOG(1) << "Start voice interaction.";
+  if (!Profile::FromBrowserContext(context_)->GetPrefs()->GetBoolean(
+          prefs::kArcVoiceInteractionValuePropAccepted)) {
+    VLOG(1) << "Voice interaction feature not accepted.";
+    // If voice interaction value prop already showing, return.
+    if (chromeos::LoginDisplayHost::default_host())
+      return false;
+    // If voice interaction value prop has not been accepted, show the value
+    // prop OOBE page again.
+    gfx::Rect screen_bounds(chromeos::CalculateScreenBounds(gfx::Size()));
+    // The display host will be destructed at the end of OOBE flow.
+    chromeos::LoginDisplayHostImpl* display_host =
+        new chromeos::LoginDisplayHostImpl(screen_bounds);
+    display_host->StartVoiceInteractionOobe();
     return false;
   }
-  user_interaction_start_time_ = start_time;
+
+  if (state_ == ash::VoiceInteractionState::NOT_READY) {
+    // If the container side is not ready, we will be waiting for a while.
+    ash::Shell::Get()->NotifyVoiceInteractionStatusChanged(
+        ash::VoiceInteractionState::NOT_READY);
+  }
+
+  ArcBootPhaseMonitorBridge::RecordFirstAppLaunchDelayUMA(context_);
+  if (!arc_bridge_service_->voice_interaction_framework()->has_instance()) {
+    VLOG(1) << "Instance not ready.";
+    SetArcCpuRestriction(false);
+    is_request_pending_ = true;
+    return false;
+  }
+
+  user_interaction_start_time_ = base::TimeTicks::Now();
   context_request_remaining_count_ = kContextRequestMaxRemainingCount;
   return true;
 }

@@ -1992,7 +1992,7 @@ TEST_F(DisplayManagerTest, FHD125DefaultsTo08UIScalingNoOverride) {
   const gfx::Insets dummy_overscan_insets;
   display_manager()->RegisterDisplayProperty(
       display_id, display::Display::ROTATE_0, 1.0f, &dummy_overscan_insets,
-      gfx::Size(), 1.0f, display::ColorCalibrationProfile(), nullptr);
+      gfx::Size(), 1.0f, nullptr);
 
   // Setup the display modes with UI-scale.
   display::ManagedDisplayInfo native_display_info =
@@ -2073,13 +2073,13 @@ TEST_F(DisplayManagerTest, UpdateMouseCursorAfterRotateZoom) {
   generator1.MoveMouseToInHost(150, 50);
   EXPECT_EQ("150,50", env->last_mouse_location().ToString());
   UpdateDisplay("300x200/r,200x150");
-  EXPECT_EQ("50,149", env->last_mouse_location().ToString());
+  EXPECT_EQ("50,150", env->last_mouse_location().ToString());
 
   // Test on 2nd display.
   generator2.MoveMouseToInHost(50, 100);
   EXPECT_EQ("250,100", env->last_mouse_location().ToString());
   UpdateDisplay("300x200/r,200x150/l");
-  EXPECT_EQ("249,50", env->last_mouse_location().ToString());
+  EXPECT_EQ("250,50", env->last_mouse_location().ToString());
 
   // The native location is now outside, so move to the center
   // of closest display.
@@ -2856,9 +2856,9 @@ TEST_F(DisplayManagerFontTest,
 
 TEST_F(DisplayManagerTest, CheckInitializationOfRotationProperty) {
   int64_t id = display_manager()->GetDisplayAt(0).id();
-  display_manager()->RegisterDisplayProperty(
-      id, display::Display::ROTATE_90, 1.0f, nullptr, gfx::Size(), 1.0f,
-      display::COLOR_PROFILE_STANDARD, nullptr);
+  display_manager()->RegisterDisplayProperty(id, display::Display::ROTATE_90,
+                                             1.0f, nullptr, gfx::Size(), 1.0f,
+                                             nullptr);
 
   const display::ManagedDisplayInfo& info =
       display_manager()->GetDisplayInfo(id);

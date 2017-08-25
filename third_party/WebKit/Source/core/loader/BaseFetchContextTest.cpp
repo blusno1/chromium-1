@@ -44,10 +44,10 @@ class MockBaseFetchContext final : public BaseFetchContext {
   ~MockBaseFetchContext() override {}
 
   // BaseFetchContext overrides:
-  KURL GetFirstPartyForCookies() const override { return KURL(); }
+  KURL GetSiteForCookies() const override { return KURL(); }
   bool AllowScriptFromSource(const KURL&) const { return false; }
   SubresourceFilter* GetSubresourceFilter() const override { return nullptr; }
-  bool ShouldBlockRequestByInspector(const ResourceRequest&) const override {
+  bool ShouldBlockRequestByInspector(const KURL&) const override {
     return false;
   }
   void DispatchDidBlockRequest(const ResourceRequest&,
@@ -58,7 +58,9 @@ class MockBaseFetchContext final : public BaseFetchContext {
   void CountUsage(WebFeature) const override {}
   void CountDeprecation(WebFeature) const override {}
   bool ShouldBlockFetchByMixedContentCheck(
-      const ResourceRequest&,
+      WebURLRequest::RequestContext,
+      WebURLRequest::FrameType,
+      ResourceRequest::RedirectStatus,
       const KURL&,
       SecurityViolationReportingPolicy) const override {
     return false;
@@ -322,6 +324,20 @@ TEST_F(BaseFetchContextTest, CanRequestWhenDetached) {
                 FetchParameters::kNoOriginRestriction,
                 ResourceRequest::RedirectStatus::kNoRedirect));
 
+  EXPECT_EQ(ResourceRequestBlockedReason::kNone,
+            fetch_context_->CanRequest(
+                Resource::kRaw, request, url, ResourceLoaderOptions(),
+                SecurityViolationReportingPolicy::kSuppressReporting,
+                FetchParameters::kNoOriginRestriction,
+                ResourceRequest::RedirectStatus::kFollowedRedirect));
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kNone,
+            fetch_context_->CanRequest(
+                Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+                SecurityViolationReportingPolicy::kSuppressReporting,
+                FetchParameters::kNoOriginRestriction,
+                ResourceRequest::RedirectStatus::kFollowedRedirect));
+
   fetch_context_->SetIsDetached(true);
 
   EXPECT_EQ(ResourceRequestBlockedReason::kOther,
@@ -331,12 +347,26 @@ TEST_F(BaseFetchContextTest, CanRequestWhenDetached) {
                 FetchParameters::kNoOriginRestriction,
                 ResourceRequest::RedirectStatus::kNoRedirect));
 
-  EXPECT_EQ(ResourceRequestBlockedReason::kNone,
+  EXPECT_EQ(ResourceRequestBlockedReason::kOther,
             fetch_context_->CanRequest(
                 Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
                 SecurityViolationReportingPolicy::kSuppressReporting,
                 FetchParameters::kNoOriginRestriction,
                 ResourceRequest::RedirectStatus::kNoRedirect));
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kOther,
+            fetch_context_->CanRequest(
+                Resource::kRaw, request, url, ResourceLoaderOptions(),
+                SecurityViolationReportingPolicy::kSuppressReporting,
+                FetchParameters::kNoOriginRestriction,
+                ResourceRequest::RedirectStatus::kFollowedRedirect));
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kNone,
+            fetch_context_->CanRequest(
+                Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+                SecurityViolationReportingPolicy::kSuppressReporting,
+                FetchParameters::kNoOriginRestriction,
+                ResourceRequest::RedirectStatus::kFollowedRedirect));
 }
 
 }  // namespace blink

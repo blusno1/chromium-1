@@ -215,9 +215,9 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
           ash::switches::kAshForceEnableStylusTools);
     }
 
-    if (flags & ENABLE_LOCK_SCREEN_APPS) {
+    if (!(flags & ENABLE_LOCK_SCREEN_APPS)) {
       base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          chromeos::switches::kEnableLockScreenApps);
+          chromeos::switches::kDisableLockScreenApps);
     }
 
     // TODO(derat): Sigh, something in ArcAppTest appears to be re-enabling ARC.
@@ -874,6 +874,10 @@ TEST_P(NoteTakingHelperTest, AddProfileWithPlayStoreEnabled) {
   EXPECT_TRUE(helper()->play_store_enabled());
   EXPECT_FALSE(helper()->android_apps_received());
   EXPECT_EQ(1, observer.num_updates());
+
+  // TODO(derat|hidehiko): Check that NoteTakingHelper adds itself as an
+  // observer of the ArcIntentHelperBridge corresponding to the new profile:
+  // https://crbug.com/748763
 
   // Notification of updated intent filters should result in the apps being
   // refreshed.

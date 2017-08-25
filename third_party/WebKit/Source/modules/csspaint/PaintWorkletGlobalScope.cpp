@@ -10,11 +10,13 @@
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSSyntaxDescriptor.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/frame/LocalDOMWindow.h"
+#include "core/frame/LocalFrame.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "modules/csspaint/CSSPaintDefinition.h"
 #include "modules/csspaint/CSSPaintImageGeneratorImpl.h"
+#include "modules/csspaint/CSSPaintWorklet.h"
 #include "modules/csspaint/PaintWorklet.h"
-#include "modules/csspaint/WindowPaintWorklet.h"
 #include "platform/bindings/V8BindingMacros.h"
 
 namespace blink {
@@ -90,7 +92,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
       v8::Local<v8::Function>::Cast(ctor_value.V8Value());
 
   v8::Local<v8::Value> input_properties_value;
-  if (!constructor->Get(context, V8String(isolate, "inputProperties"))
+  if (!constructor->Get(context, V8AtomicString(isolate, "inputProperties"))
            .ToLocal(&input_properties_value))
     return;
 
@@ -120,7 +122,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
   Vector<CSSSyntaxDescriptor> input_argument_types;
   if (RuntimeEnabledFeatures::CSSPaintAPIArgumentsEnabled()) {
     v8::Local<v8::Value> input_argument_type_values;
-    if (!constructor->Get(context, V8String(isolate, "inputArguments"))
+    if (!constructor->Get(context, V8AtomicString(isolate, "inputArguments"))
              .ToLocal(&input_argument_type_values))
       return;
 
@@ -145,7 +147,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
 
   // Parse 'alpha' AKA hasAlpha property.
   v8::Local<v8::Value> alpha_value;
-  if (!constructor->Get(context, V8String(isolate, "alpha"))
+  if (!constructor->Get(context, V8AtomicString(isolate, "alpha"))
            .ToLocal(&alpha_value))
     return;
   if (!IsUndefinedOrNull(alpha_value) && !alpha_value->IsBoolean()) {
@@ -158,7 +160,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
                        : true;
 
   v8::Local<v8::Value> prototype_value;
-  if (!constructor->Get(context, V8String(isolate, "prototype"))
+  if (!constructor->Get(context, V8AtomicString(isolate, "prototype"))
            .ToLocal(&prototype_value))
     return;
 
@@ -178,7 +180,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
       v8::Local<v8::Object>::Cast(prototype_value);
 
   v8::Local<v8::Value> paint_value;
-  if (!prototype->Get(context, V8String(isolate, "paint"))
+  if (!prototype->Get(context, V8AtomicString(isolate, "paint"))
            .ToLocal(&paint_value))
     return;
 
@@ -200,14 +202,12 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
       ScriptController()->GetScriptState(), constructor, paint,
       native_invalidation_properties, custom_invalidation_properties,
       input_argument_types, has_alpha);
-  paint_definitions_.Set(
-      name, TraceWrapperMember<CSSPaintDefinition>(this, definition));
+  paint_definitions_.Set(name, definition);
 
   // TODO(xidachen): the following steps should be done with a postTask when
   // we move PaintWorklet off main thread.
-  LocalDOMWindow* dom_window = GetFrame()->GetDocument()->domWindow();
   PaintWorklet* paint_worklet =
-      WindowPaintWorklet::From(*dom_window).paintWorklet();
+      PaintWorklet::From(*GetFrame()->GetDocument()->domWindow());
   PaintWorklet::DocumentDefinitionMap& document_definition_map =
       paint_worklet->GetDocumentDefinitionMap();
   if (document_definition_map.Contains(name)) {
@@ -233,15 +233,17 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
   } else {
     DocumentPaintDefinition* document_definition =
         new DocumentPaintDefinition(definition);
-    document_definition_map.Set(
-        name,
-        TraceWrapperMember<DocumentPaintDefinition>(this, document_definition));
+    document_definition_map.Set(name, document_definition);
   }
 }
 
 CSSPaintDefinition* PaintWorkletGlobalScope::FindDefinition(
     const String& name) {
   return paint_definitions_.at(name);
+}
+
+double PaintWorkletGlobalScope::devicePixelRatio() const {
+  return GetFrame()->DevicePixelRatio();
 }
 
 DEFINE_TRACE(PaintWorkletGlobalScope) {

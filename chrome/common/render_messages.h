@@ -28,7 +28,6 @@
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/window_features.mojom.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 #include "url/ipc/url_param_traits.h"
@@ -114,14 +113,6 @@ IPC_STRUCT_TRAITS_END()
 // RenderView messages
 // These are messages sent from the browser to the renderer process.
 
-#if !defined(OS_ANDROID)
-// For WebUI testing, this message requests JavaScript to be executed at a time
-// which is late enough to not be thrown out, and early enough to be before
-// onload events are fired.
-IPC_MESSAGE_ROUTED1(ChromeViewMsg_WebUIJavaScript,
-                    base::string16  /* javascript */)
-#endif
-
 // Tells the render frame to load all blocked plugins with the given identifier.
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_LoadBlockedPlugins,
                     std::string /* identifier */)
@@ -138,10 +129,6 @@ IPC_MESSAGE_ROUTED3(ChromeViewMsg_UpdateBrowserControlsState,
                     content::BrowserControlsState /* constraints */,
                     content::BrowserControlsState /* current */,
                     bool /* animate */)
-
-// Updates the window features of the render view.
-IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetWindowFeatures,
-                    blink::mojom::WindowFeatures /* window_features */)
 
 // Requests application info for the frame. The renderer responds back with
 // ChromeFrameHostMsg_DidGetWebApplicationInfo.
@@ -294,12 +281,6 @@ IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_BlockedUnauthorizedPlugin,
 
 IPC_MESSAGE_ROUTED1(ChromeFrameHostMsg_DidGetWebApplicationInfo,
                     WebApplicationInfo)
-
-// Tells the renderer a list of URLs which should be bounced back to the browser
-// process so that they can be assigned to an Instant renderer.
-IPC_MESSAGE_CONTROL2(ChromeViewMsg_SetSearchURLs,
-                     std::vector<GURL> /* search_urls */,
-                     GURL /* new_tab_page_url */)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Sent by the renderer to check if crash reporting is enabled.

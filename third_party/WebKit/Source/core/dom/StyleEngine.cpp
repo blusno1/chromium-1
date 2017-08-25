@@ -56,6 +56,7 @@
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGStyleElement.h"
 #include "platform/fonts/FontCache.h"
+#include "platform/fonts/FontSelector.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
@@ -67,7 +68,6 @@ StyleEngine::StyleEngine(Document& document)
       is_master_(!document.ImportsController() ||
                  document.ImportsController()->Master() == &document),
       document_style_sheet_collection_(
-          this,
           DocumentStyleSheetCollection::Create(document)) {
   if (document.GetFrame()) {
     // We don't need to create CSSFontSelector for imported document or
@@ -140,10 +140,9 @@ StyleEngine::StyleSheetsForStyleSheetList(TreeScope& tree_scope) {
 
 WebStyleSheetId StyleEngine::InjectAuthorSheet(
     StyleSheetContents* author_sheet) {
-  injected_author_style_sheets_.push_back(std::make_pair(
-      ++injected_author_sheets_id_count_,
-      TraceWrapperMember<CSSStyleSheet>(
-          this, CSSStyleSheet::Create(author_sheet, *document_))));
+  injected_author_style_sheets_.push_back(
+      std::make_pair(++injected_author_sheets_id_count_,
+                     CSSStyleSheet::Create(author_sheet, *document_)));
 
   MarkDocumentDirty();
   return injected_author_sheets_id_count_;
@@ -622,7 +621,7 @@ void StyleEngine::CollectScopedStyleFeaturesTo(RuleFeatureSet& features) const {
   }
 }
 
-void StyleEngine::FontsNeedUpdate(CSSFontSelector*) {
+void StyleEngine::FontsNeedUpdate(FontSelector*) {
   if (!GetDocument().IsActive())
     return;
 
@@ -891,6 +890,22 @@ void StyleEngine::ScheduleTypeRuleSetInvalidations(
                                                         node);
   DCHECK(invalidation_lists.siblings.IsEmpty());
   style_invalidator_.ScheduleInvalidationSetsForNode(invalidation_lists, node);
+
+  if (!node.IsShadowRoot())
+    return;
+
+  Element& host = ToShadowRoot(node).host();
+  if (host.NeedsStyleRecalc())
+    return;
+
+  for (auto& invalidation_set : invalidation_lists.descendants) {
+    if (invalidation_set->InvalidatesTagName(host)) {
+      host.SetNeedsStyleRecalc(kLocalStyleChange,
+                               StyleChangeReasonForTracing::Create(
+                                   StyleChangeReason::kStyleSheetChange));
+      return;
+    }
+  }
 }
 
 void StyleEngine::InvalidateSlottedElements(HTMLSlotElement& slot) {
@@ -1191,6 +1206,22 @@ bool StyleEngine::MediaQueryAffectedByDeviceChange() {
   return false;
 }
 
+bool StyleEngine::UpdateRemUnits(const ComputedStyle* old_root_style,
+                                 const ComputedStyle* new_root_style) {
+  if (!UsesRemUnits())
+    return false;
+  if (!old_root_style ||
+      old_root_style->FontSize() != new_root_style->FontSize()) {
+    DCHECK(Resolver());
+    // Resolved rem units are stored in the matched properties cache so we need
+    // to make sure to invalidate the cache if the documentElement font size
+    // changes.
+    Resolver()->InvalidateMatchedPropertiesCache();
+    return true;
+  }
+  return false;
+}
+
 DEFINE_TRACE(StyleEngine) {
   visitor->Trace(document_);
   visitor->Trace(injected_author_style_sheets_);
@@ -1209,7 +1240,7 @@ DEFINE_TRACE(StyleEngine) {
   visitor->Trace(text_to_sheet_cache_);
   visitor->Trace(sheet_to_text_cache_);
   visitor->Trace(tracker_);
-  CSSFontSelectorClient::Trace(visitor);
+  FontSelectorClient::Trace(visitor);
 }
 
 DEFINE_TRACE_WRAPPERS(StyleEngine) {

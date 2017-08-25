@@ -65,7 +65,7 @@ class TabletPowerButtonControllerTest : public AshTestBase {
     power_manager_client_ = new chromeos::FakePowerManagerClient();
     dbus_setter->SetPowerManagerClient(base::WrapUnique(power_manager_client_));
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kAshEnableTouchView);
+        switches::kAshEnableTabletMode);
     AshTestBase::SetUp();
     // Trigger an accelerometer update so that |tablet_controller_| can be
     // initialized.
@@ -141,7 +141,11 @@ class TabletPowerButtonControllerTest : public AshTestBase {
   }
 
   void Initialize(LoginStatus status) {
-    SetUserLoggedIn(status != LoginStatus::NOT_LOGGED_IN);
+    if (status == LoginStatus::NOT_LOGGED_IN) {
+      ClearLogin();
+    } else {
+      CreateUserSessions(1);
+    }
   }
 
   void EnableTabletMode(bool enabled) {
@@ -392,15 +396,15 @@ TEST_F(TabletPowerButtonControllerTest, IgnorePowerOnKeyEvent) {
   // generated for each pressing and releasing, and multiple repeating pressed
   // events depending on holding.
   ASSERT_EQ(0, power_manager_client_->num_set_backlights_forced_off_calls());
-  tablet_controller_->OnKeyEvent(&power_key_pressed);
-  tablet_controller_->OnKeyEvent(&power_key_pressed);
+  test_api_->SendKeyEvent(&power_key_pressed);
+  test_api_->SendKeyEvent(&power_key_pressed);
   PressPowerButton();
-  tablet_controller_->OnKeyEvent(&power_key_pressed);
-  tablet_controller_->OnKeyEvent(&power_key_pressed);
-  tablet_controller_->OnKeyEvent(&power_key_pressed);
+  test_api_->SendKeyEvent(&power_key_pressed);
+  test_api_->SendKeyEvent(&power_key_pressed);
+  test_api_->SendKeyEvent(&power_key_pressed);
   ReleasePowerButton();
-  tablet_controller_->OnKeyEvent(&power_key_released);
-  tablet_controller_->OnKeyEvent(&power_key_released);
+  test_api_->SendKeyEvent(&power_key_released);
+  test_api_->SendKeyEvent(&power_key_released);
   EXPECT_EQ(1, power_manager_client_->num_set_backlights_forced_off_calls());
 }
 
@@ -598,6 +602,17 @@ TEST_F(TabletPowerButtonControllerTest, EnableOnAccelerometerUpdate) {
   EXPECT_TRUE(Shell::Get()
                   ->power_button_controller()
                   ->tablet_power_button_controller_for_test());
+
+  // If clamshell-like power button behavior is requested via a flag, the
+  // TabletPowerButtonController shouldn't be initialized in response to
+  // accelerometer events.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kForceClamshellPowerButton);
+  ResetTabletPowerButtonController();
+  SendAccelerometerUpdate(kSidewaysVector, kSidewaysVector);
+  EXPECT_FALSE(Shell::Get()
+                   ->power_button_controller()
+                   ->tablet_power_button_controller_for_test());
 }
 
 TEST_F(TabletPowerButtonControllerTest, IgnoreSpuriousEventsForAcceleration) {

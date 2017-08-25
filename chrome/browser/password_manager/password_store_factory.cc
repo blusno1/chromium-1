@@ -12,9 +12,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -65,7 +62,7 @@ using password_manager::PasswordStore;
 
 namespace {
 
-#if !defined(OS_CHROMEOS) && defined(USE_X11)
+#if defined(USE_X11)
 const LocalProfileId kInvalidLocalProfileId =
     static_cast<LocalProfileId>(0);
 #endif
@@ -122,7 +119,7 @@ PasswordStoreFactory::PasswordStoreFactory()
 
 PasswordStoreFactory::~PasswordStoreFactory() {}
 
-#if !defined(OS_CHROMEOS) && defined(USE_X11)
+#if defined(USE_X11)
 LocalProfileId PasswordStoreFactory::GetLocalProfileId(
     PrefService* prefs) const {
   LocalProfileId id =
@@ -155,28 +152,17 @@ PasswordStoreFactory::BuildServiceInstanceFor(
   std::unique_ptr<password_manager::LoginDatabase> login_db(
       password_manager::CreateLoginDatabase(profile->GetPath()));
 
-  scoped_refptr<base::SequencedTaskRunner> main_thread_runner(
-      base::SequencedTaskRunnerHandle::Get());
   scoped_refptr<PasswordStore> ps;
 #if defined(OS_WIN)
-  scoped_refptr<base::SequencedTaskRunner> background_thread_runner(
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
-  ps = new PasswordStoreWin(main_thread_runner, background_thread_runner,
-                            std::move(login_db),
+  ps = new PasswordStoreWin(std::move(login_db),
                             WebDataServiceFactory::GetPasswordWebDataForProfile(
                                 profile, ServiceAccessType::EXPLICIT_ACCESS));
 #elif defined(OS_MACOSX)
-  ps = new PasswordStoreMac(main_thread_runner, std::move(login_db),
-                            profile->GetPrefs());
+  ps = new PasswordStoreMac(std::move(login_db), profile->GetPrefs());
 #elif defined(OS_CHROMEOS) || defined(OS_ANDROID)
   // For now, we use PasswordStoreDefault. We might want to make a native
   // backend for PasswordStoreX (see below) in the future though.
-  scoped_refptr<base::SequencedTaskRunner> background_thread_runner(
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
-  ps = new password_manager::PasswordStoreDefault(
-      main_thread_runner, background_thread_runner, std::move(login_db));
+  ps = new password_manager::PasswordStoreDefault(std::move(login_db));
 #elif defined(USE_X11)
   // On POSIX systems, we try to use the "native" password management system of
   // the desktop environment currently running, allowing GNOME Keyring in XFCE.
@@ -258,15 +244,10 @@ PasswordStoreFactory::BuildServiceInstanceFor(
         " for more information about password storage options.";
   }
 
-  ps = new PasswordStoreX(main_thread_runner, std::move(login_db),
-                          backend.release());
+  ps = new PasswordStoreX(std::move(login_db), std::move(backend));
   RecordBackendStatistics(desktop_env, store_type, used_backend);
 #elif defined(USE_OZONE)
-  scoped_refptr<base::SequencedTaskRunner> background_thread_runner(
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
-  ps = new password_manager::PasswordStoreDefault(
-      main_thread_runner, background_thread_runner, std::move(login_db));
+  ps = new password_manager::PasswordStoreDefault(std::move(login_db));
 #else
   NOTIMPLEMENTED();
 #endif
@@ -296,7 +277,7 @@ PasswordStoreFactory::BuildServiceInstanceFor(
 
 void PasswordStoreFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-#if !defined(OS_CHROMEOS) && defined(USE_X11)
+#if defined(USE_X11)
   // Notice that the preprocessor conditions above are exactly those that will
   // result in using PasswordStoreX in BuildServiceInstanceFor().
   registry->RegisterIntegerPref(password_manager::prefs::kLocalProfileId,

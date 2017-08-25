@@ -24,12 +24,10 @@ std::unique_ptr<CompositorFrameSinkSupport> CompositorFrameSinkSupport::Create(
     FrameSinkManagerImpl* frame_sink_manager,
     const FrameSinkId& frame_sink_id,
     bool is_root,
-    bool handles_frame_sink_id_invalidation,
     bool needs_sync_tokens) {
   std::unique_ptr<CompositorFrameSinkSupport> support =
       base::WrapUnique(new CompositorFrameSinkSupport(
-          client, frame_sink_id, is_root, handles_frame_sink_id_invalidation,
-          needs_sync_tokens));
+          client, frame_sink_id, is_root, needs_sync_tokens));
   support->Init(frame_sink_manager);
   return support;
 }
@@ -52,8 +50,6 @@ CompositorFrameSinkSupport::~CompositorFrameSinkSupport() {
 
   EvictCurrentSurface();
   frame_sink_manager_->UnregisterFrameSinkManagerClient(frame_sink_id_);
-  if (handles_frame_sink_id_invalidation_)
-    surface_manager_->InvalidateFrameSinkId(frame_sink_id_);
 }
 
 void CompositorFrameSinkSupport::SetDestructionCallback(
@@ -62,27 +58,11 @@ void CompositorFrameSinkSupport::SetDestructionCallback(
 }
 
 void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
+  DCHECK(surface);
   DCHECK(surface->HasActiveFrame());
-  const cc::CompositorFrame& frame = surface->GetActiveFrame();
-  if (!seen_first_frame_activation_) {
-    // SurfaceCreated only applies for the first Surface activation.
-    seen_first_frame_activation_ = true;
-
-    gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
-    surface_manager_->SurfaceCreated(SurfaceInfo(
-        surface->surface_id(), frame.metadata.device_scale_factor, frame_size));
-  }
-  // Fire SurfaceCreated first so that a temporary reference is added before
-  // it is potentially transformed into a real reference by the client.
   DCHECK(surface->active_referenced_surfaces());
   UpdateSurfaceReferences(surface->surface_id().local_surface_id(),
                           *surface->active_referenced_surfaces());
-  if (!surface_manager_->SurfaceModified(surface->surface_id(),
-                                         frame.metadata.begin_frame_ack)) {
-    TRACE_EVENT_INSTANT0("cc", "Damage not visible.", TRACE_EVENT_SCOPE_THREAD);
-    surface->RunDrawCallback();
-  }
-  surface_manager_->SurfaceActivated(surface);
 }
 
 void CompositorFrameSinkSupport::RefResources(
@@ -186,9 +166,8 @@ bool CompositorFrameSinkSupport::SubmitCompositorFrame(
     current_surface = prev_surface;
   } else {
     SurfaceId surface_id(frame_sink_id_, local_surface_id);
-    gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
-    float device_scale_factor = frame.metadata.device_scale_factor;
-    SurfaceInfo surface_info(surface_id, device_scale_factor, frame_size);
+    SurfaceInfo surface_info(surface_id, frame.device_scale_factor(),
+                             frame.size_in_pixels());
 
     if (!surface_info.is_valid()) {
       TRACE_EVENT_INSTANT0("cc", "Invalid SurfaceInfo",
@@ -209,8 +188,8 @@ bool CompositorFrameSinkSupport::SubmitCompositorFrame(
 
   bool result = current_surface->QueueFrame(
       std::move(frame), frame_index,
-      base::Bind(&CompositorFrameSinkSupport::DidReceiveCompositorFrameAck,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&CompositorFrameSinkSupport::DidReceiveCompositorFrameAck,
+                     weak_factory_.GetWeakPtr()),
       base::BindRepeating(&CompositorFrameSinkSupport::WillDrawSurface,
                           weak_factory_.GetWeakPtr()));
 
@@ -299,30 +278,25 @@ CompositorFrameSinkSupport::CompositorFrameSinkSupport(
     CompositorFrameSinkSupportClient* client,
     const FrameSinkId& frame_sink_id,
     bool is_root,
-    bool handles_frame_sink_id_invalidation,
     bool needs_sync_tokens)
     : client_(client),
       frame_sink_id_(frame_sink_id),
       surface_resource_holder_(this),
       is_root_(is_root),
       needs_sync_tokens_(needs_sync_tokens),
-      handles_frame_sink_id_invalidation_(handles_frame_sink_id_invalidation),
       weak_factory_(this) {}
 
 void CompositorFrameSinkSupport::Init(
     FrameSinkManagerImpl* frame_sink_manager) {
   frame_sink_manager_ = frame_sink_manager;
   surface_manager_ = frame_sink_manager->surface_manager();
-  if (handles_frame_sink_id_invalidation_)
-    surface_manager_->RegisterFrameSinkId(frame_sink_id_);
   frame_sink_manager_->RegisterFrameSinkManagerClient(frame_sink_id_, this);
 }
 
 void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
   UpdateNeedsBeginFramesInternal();
-  if (current_surface_id_.is_valid()) {
+  if (current_surface_id_.is_valid())
     surface_manager_->SurfaceDamageExpected(current_surface_id_, args);
-  }
   last_begin_frame_args_ = args;
   if (client_)
     client_->OnBeginFrame(args);
@@ -354,7 +328,6 @@ void CompositorFrameSinkSupport::UpdateNeedsBeginFramesInternal() {
 
 Surface* CompositorFrameSinkSupport::CreateSurface(
     const SurfaceInfo& surface_info) {
-  seen_first_frame_activation_ = false;
   return surface_manager_->CreateSurface(
       weak_factory_.GetWeakPtr(), surface_info,
       frame_sink_manager_->GetPrimaryBeginFrameSource(), needs_sync_tokens_);

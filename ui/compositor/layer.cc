@@ -40,6 +40,10 @@
 namespace {
 
 const ui::Layer* GetRoot(const ui::Layer* layer) {
+  // Parent walk cannot be done on a layer that is being used as a mask. Get the
+  // layer to which this layer is a mask of.
+  if (layer->layer_mask_back_link())
+    layer = layer->layer_mask_back_link();
   while (layer->parent())
     layer = layer->parent();
   return layer;
@@ -108,7 +112,8 @@ Layer::Layer()
       delegate_(NULL),
       owner_(NULL),
       cc_layer_(NULL),
-      device_scale_factor_(1.0f) {
+      device_scale_factor_(1.0f),
+      cache_render_surface_requests_(0) {
   CreateCcLayer();
 }
 
@@ -135,7 +140,8 @@ Layer::Layer(LayerType type)
       delegate_(NULL),
       owner_(NULL),
       cc_layer_(NULL),
-      device_scale_factor_(1.0f) {
+      device_scale_factor_(1.0f),
+      cache_render_surface_requests_(0) {
   CreateCcLayer();
 }
 
@@ -178,7 +184,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetLayerInverted(layer_inverted_);
   clone->SetLayerBlur(layer_blur_sigma_);
   if (alpha_shape_)
-    clone->SetAlphaShape(base::MakeUnique<SkRegion>(*alpha_shape_));
+    clone->SetAlphaShape(base::MakeUnique<ShapeRects>(*alpha_shape_));
 
   // cc::Layer state.
   if (surface_layer_) {
@@ -315,7 +321,7 @@ void Layer::SetAnimator(LayerAnimator* animator) {
   Compositor* compositor = GetCompositor();
 
   if (animator_) {
-    if (compositor)
+    if (compositor && !layer_mask_back_link())
       animator_->DetachLayerAndTimeline(compositor);
     animator_->SetDelegate(nullptr);
   }
@@ -324,7 +330,7 @@ void Layer::SetAnimator(LayerAnimator* animator) {
 
   if (animator_) {
     animator_->SetDelegate(this);
-    if (compositor)
+    if (compositor && !layer_mask_back_link())
       animator_->AttachLayerAndTimeline(compositor);
   }
 }
@@ -473,8 +479,8 @@ void Layer::SetBackgroundZoom(float zoom, int inset) {
   SetLayerBackgroundFilters();
 }
 
-void Layer::SetAlphaShape(std::unique_ptr<SkRegion> region) {
-  alpha_shape_ = std::move(region);
+void Layer::SetAlphaShape(std::unique_ptr<ShapeRects> shape) {
+  alpha_shape_ = std::move(shape);
 
   SetLayerFilters();
 }
@@ -660,8 +666,22 @@ void Layer::SwitchCCLayerForTest() {
 // which could be a supprise. But we want to preserve it after switching to a
 // new cc::Layer. There could be a whole subtree and the root changed, but does
 // not mean we want to treat the cache all different.
-void Layer::SetCacheRenderSurface(bool cache_render_surface) {
-  cc_layer_->SetCacheRenderSurface(cache_render_surface);
+void Layer::AddCacheRenderSurfaceRequest() {
+  ++cache_render_surface_requests_;
+  TRACE_COUNTER_ID1("ui", "CacheRenderSurfaceRequests", this,
+                    cache_render_surface_requests_);
+  if (cache_render_surface_requests_ == 1)
+    cc_layer_->SetCacheRenderSurface(true);
+}
+
+void Layer::RemoveCacheRenderSurfaceRequest() {
+  DCHECK_GT(cache_render_surface_requests_, 0u);
+
+  --cache_render_surface_requests_;
+  TRACE_COUNTER_ID1("ui", "CacheRenderSurfaceRequests", this,
+                    cache_render_surface_requests_);
+  if (cache_render_surface_requests_ == 0)
+    cc_layer_->SetCacheRenderSurface(false);
 }
 
 void Layer::SetTextureMailbox(
@@ -738,6 +758,12 @@ void Layer::SetFallbackSurface(const viz::SurfaceInfo& surface_info) {
 
   for (const auto& mirror : mirrors_)
     mirror->dest()->SetFallbackSurface(surface_info);
+}
+
+const viz::SurfaceInfo* Layer::GetPrimarySurfaceInfo() const {
+  if (surface_layer_)
+    return &surface_layer_->primary_surface_info();
+  return nullptr;
 }
 
 const viz::SurfaceInfo* Layer::GetFallbackSurfaceInfo() const {
@@ -943,8 +969,9 @@ scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
   paint_region_.Clear();
   auto display_list = make_scoped_refptr(new cc::DisplayItemList);
   if (delegate_) {
-    delegate_->OnPaintLayer(
-        PaintContext(display_list.get(), device_scale_factor_, invalidation));
+    delegate_->OnPaintLayer(PaintContext(display_list.get(),
+                                         device_scale_factor_, invalidation,
+                                         GetCompositor()->is_pixel_canvas()));
   }
   display_list->Finalize();
   // TODO(domlaskowski): Move mirror invalidation to Layer::SchedulePaint.
@@ -1178,6 +1205,10 @@ int Layer::GetFrameNumber() const {
 float Layer::GetRefreshRate() const {
   const Compositor* compositor = GetCompositor();
   return compositor ? compositor->refresh_rate() : 60.0;
+}
+
+ui::Layer* Layer::GetLayer() {
+  return this;
 }
 
 cc::Layer* Layer::GetCcLayer() const {

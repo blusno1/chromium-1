@@ -81,10 +81,22 @@ const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         cookies_allowed: YES
         cookies_store: "user"
         setting: "This feature cannot be disabled."
-        policy_exception_justification:
-          "Not implemented, without this type of request, Chrome would be "
-          "unable to navigate to websites."
-      })");
+        chrome_policy {
+          URLBlacklist {
+            URLBlacklist: { entries: '*' }
+          }
+        }
+        chrome_policy {
+          URLWhitelist {
+            URLWhitelist { }
+          }
+        }
+      }
+      comments:
+        "Chrome would be unable to navigate to websites without this type of "
+        "request. Using either URLBlacklist or URLWhitelist policies (or a "
+        "combination of both) limits the scope of these requests."
+      )");
 
 }  // namespace
 
@@ -253,19 +265,37 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
     // for the response. e.g. AppCache.
     if (MaybeCreateLoaderForResponse(head))
       return;
+    scoped_refptr<ResourceResponse> response(new ResourceResponse());
+    response->head = head;
 
+    // Make a copy of the ResourceResponse before it is passed to another
+    // thread.
+    //
+    // TODO(davidben): This copy could be avoided if ResourceResponse weren't
+    // reference counted and the loader stack passed unique ownership of the
+    // response. https://crbug.com/416050
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigationURLLoaderNetworkService::OnReceiveResponse,
-                   owner_, head, ssl_info, base::Passed(&downloaded_file)));
+        base::BindOnce(&NavigationURLLoaderNetworkService::OnReceiveResponse,
+                       owner_, response->DeepCopy(), ssl_info,
+                       base::Passed(&downloaded_file)));
   }
 
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const ResourceResponseHead& head) override {
+    scoped_refptr<ResourceResponse> response(new ResourceResponse());
+    response->head = head;
+
+    // Make a copy of the ResourceResponse before it is passed to another
+    // thread.
+    //
+    // TODO(davidben): This copy could be avoided if ResourceResponse weren't
+    // reference counted and the loader stack passed unique ownership of the
+    // response. https://crbug.com/416050
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigationURLLoaderNetworkService::OnReceiveRedirect,
-                   owner_, redirect_info, head));
+        base::BindOnce(&NavigationURLLoaderNetworkService::OnReceiveRedirect,
+                       owner_, redirect_info, response->DeepCopy()));
   }
 
   void OnDataDownloaded(int64_t data_length, int64_t encoded_length) override {}
@@ -282,7 +312,7 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
       mojo::ScopedDataPipeConsumerHandle body) override {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &NavigationURLLoaderNetworkService::OnStartLoadingResponseBody,
             owner_, base::Passed(&body)));
   }
@@ -298,8 +328,8 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
     }
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigationURLLoaderNetworkService::OnComplete, owner_,
-                   completion_status));
+        base::BindOnce(&NavigationURLLoaderNetworkService::OnComplete, owner_,
+                       completion_status));
   }
 
   // Returns true if a handler wants to handle the response, i.e. return a
@@ -396,7 +426,7 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
 
   new_request->method = request_info->common_params.method;
   new_request->url = request_info->common_params.url;
-  new_request->first_party_for_cookies = request_info->first_party_for_cookies;
+  new_request->site_for_cookies = request_info->site_for_cookies;
   new_request->priority = net::HIGHEST;
 
   // The code below to set fields like request_initiator, referrer, etc has
@@ -420,6 +450,7 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
   new_request->load_flags = load_flags;
 
   new_request->request_body = request_info->common_params.post_data.get();
+  new_request->report_raw_headers = request_info->report_raw_headers;
 
   int frame_tree_node_id = request_info->frame_tree_node_id;
 
@@ -443,7 +474,7 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
       weak_factory_.GetWeakPtr());
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &URLLoaderRequestController::Start,
           base::Unretained(request_controller_.get()),
           service_worker_navigation_handle
@@ -466,14 +497,14 @@ NavigationURLLoaderNetworkService::~NavigationURLLoaderNetworkService() {
 void NavigationURLLoaderNetworkService::FollowRedirect() {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&URLLoaderRequestController::FollowRedirect,
-                 base::Unretained(request_controller_.get())));
+      base::BindOnce(&URLLoaderRequestController::FollowRedirect,
+                     base::Unretained(request_controller_.get())));
 }
 
 void NavigationURLLoaderNetworkService::ProceedWithResponse() {}
 
 void NavigationURLLoaderNetworkService::OnReceiveResponse(
-    const ResourceResponseHead& head,
+    scoped_refptr<ResourceResponse> response,
     const base::Optional<net::SSLInfo>& ssl_info,
     mojom::DownloadedTempFilePtr downloaded_file) {
   // TODO(scottmg): This needs to do more of what
@@ -481,19 +512,16 @@ void NavigationURLLoaderNetworkService::OnReceiveResponse(
   // OnStartLoadingResponseBody().
   if (ssl_info && ssl_info->cert)
     NavigationResourceHandler::GetSSLStatusForRequest(*ssl_info, &ssl_status_);
-  response_ = base::MakeRefCounted<ResourceResponse>();
-  response_->head = head;
+  response_ = std::move(response);
 }
 
 void NavigationURLLoaderNetworkService::OnReceiveRedirect(
     const net::RedirectInfo& redirect_info,
-    const ResourceResponseHead& head) {
+    scoped_refptr<ResourceResponse> response) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // TODO(kinuko): Perform the necessary check and call
   // URLLoaderRequestController::Restart with the new URL??
-  scoped_refptr<ResourceResponse> response(new ResourceResponse());
-  response->head = head;
-  delegate_->OnRequestRedirected(redirect_info, response);
+  delegate_->OnRequestRedirected(redirect_info, std::move(response));
 }
 
 void NavigationURLLoaderNetworkService::OnStartLoadingResponseBody(

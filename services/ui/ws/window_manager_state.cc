@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
+#include "components/viz/host/host_frame_sink_manager.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/accelerator_util.h"
 #include "services/ui/ws/accelerator.h"
@@ -18,6 +19,7 @@
 #include "services/ui/ws/event_targeter.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/server_window.h"
+#include "services/ui/ws/server_window_tracker.h"
 #include "services/ui/ws/user_display_manager.h"
 #include "services/ui/ws/user_id_tracker.h"
 #include "services/ui/ws/window_manager_display_root.h"
@@ -183,11 +185,6 @@ bool WindowManagerState::SetCapture(ServerWindow* window,
   }
 #endif
   return event_dispatcher_.SetCaptureWindow(window, client_id);
-}
-
-void WindowManagerState::ReleaseCaptureBlockedByModalWindow(
-    const ServerWindow* modal_window) {
-  event_dispatcher_.ReleaseCaptureBlockedByModalWindow(modal_window);
 }
 
 void WindowManagerState::ReleaseCaptureBlockedByAnyModalWindow() {
@@ -558,7 +555,7 @@ void WindowManagerState::ScheduleInputEventTimeout(WindowTree* tree,
       base::MakeUnique<InFlightEventDispatchDetails>(this, tree, display_id,
                                                      event, phase);
 
-  // TOOD(sad): Adjust this delay, possibly make this dynamic.
+  // TODO(sad): Adjust this delay, possibly make this dynamic.
   const base::TimeDelta max_delay = base::debug::BeingDebugged()
                                         ? base::TimeDelta::FromDays(1)
                                         : GetDefaultAckTimerDelay();
@@ -574,8 +571,11 @@ bool WindowManagerState::ConvertPointToScreen(int64_t display_id,
   Display* display = display_manager()->GetDisplayById(display_id);
   if (display) {
     const display::Display& originated_display = display->GetDisplay();
-    *point = gfx::ConvertPointToDIP(originated_display.device_scale_factor(),
-                                    *point);
+    const display::ViewportMetrics metrics =
+        display->platform_display()->GetViewportMetrics();
+    *point = gfx::ConvertPointToDIP(
+        originated_display.device_scale_factor() / metrics.ui_scale_factor,
+        *point);
     *point += originated_display.bounds().origin().OffsetFromOrigin();
     return true;
   }
@@ -806,12 +806,59 @@ ServerWindow* WindowManagerState::GetRootWindowContaining(
   return target_display_root->GetClientVisibleRoot();
 }
 
+ServerWindow* WindowManagerState::GetRootWindowForEventDispatch(
+    ServerWindow* window) {
+  for (auto& display_root_ptr : window_manager_display_roots_) {
+    ServerWindow* client_visible_root =
+        display_root_ptr->GetClientVisibleRoot();
+    if (client_visible_root->Contains(window))
+      return client_visible_root;
+  }
+  NOTREACHED();
+  return nullptr;
+}
+
 void WindowManagerState::OnEventTargetNotFound(const ui::Event& event,
                                                int64_t display_id) {
   window_server()->SendToPointerWatchers(event, user_id(), nullptr, /* window */
                                          nullptr /* ignore_tree */, display_id);
   if (event.IsMousePointerEvent())
     UpdateNativeCursorFromDispatcher();
+}
+
+ServerWindow* WindowManagerState::GetFallbackTargetForEventBlockedByModal(
+    ServerWindow* window) {
+  DCHECK(window);
+  // TODO(sky): reevaluate when http://crbug.com/646998 is fixed.
+  return GetWindowManagerRootForDisplayRoot(window);
+}
+
+void WindowManagerState::OnEventOccurredOutsideOfModalWindow(
+    ServerWindow* modal_window) {
+  window_tree_->OnEventOccurredOutsideOfModalWindow(modal_window);
+}
+
+viz::HitTestQuery* WindowManagerState::GetHitTestQueryForDisplay(
+    int64_t display_id) {
+  Display* display = display_manager()->GetDisplayById(display_id);
+  if (!display)
+    return nullptr;
+
+  const auto& display_hit_test_query_map =
+      window_server()->GetHostFrameSinkManager()->display_hit_test_query();
+  const auto iter =
+      display_hit_test_query_map.find(display->root_window()->frame_sink_id());
+  return (iter != display_hit_test_query_map.end()) ? iter->second.get()
+                                                    : nullptr;
+}
+
+ServerWindow* WindowManagerState::GetWindowFromFrameSinkId(
+    const viz::FrameSinkId& frame_sink_id) {
+  // TODO(riajiang): Use the correct id to look up window once FrameSinkId
+  // refactoring is done.
+  DCHECK(frame_sink_id.is_valid());
+  return window_tree()->GetWindow(
+      WindowIdFromTransportId(frame_sink_id.client_id()));
 }
 
 void WindowManagerState::OnWindowEmbeddedAppDisconnected(ServerWindow* window) {

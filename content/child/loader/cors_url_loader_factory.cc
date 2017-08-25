@@ -16,6 +16,8 @@ void CORSURLLoaderFactory::CreateAndBind(
     PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
         network_loader_factory,
     mojom::URLLoaderFactoryRequest request) {
+  DCHECK(network_loader_factory);
+
   mojo::MakeStrongBinding(
       base::MakeUnique<CORSURLLoaderFactory>(std::move(network_loader_factory)),
       std::move(request));
@@ -43,12 +45,12 @@ void CORSURLLoaderFactory::CreateLoaderAndStart(
       std::move(request));
 }
 
-void CORSURLLoaderFactory::SyncLoad(int32_t routing_id,
-                                    int32_t request_id,
-                                    const ResourceRequest& resource_request,
-                                    SyncLoadCallback callback) {
-  network_loader_factory_->SyncLoad(routing_id, request_id, resource_request,
-                                    std::move(callback));
+void CORSURLLoaderFactory::Clone(mojom::URLLoaderFactoryRequest request) {
+  mojom::URLLoaderFactoryPtr network_loader_factory_copy;
+  network_loader_factory_->Clone(
+      mojo::MakeRequest(&network_loader_factory_copy));
+  CORSURLLoaderFactory::CreateAndBind(std::move(network_loader_factory_copy),
+                                      std::move(request));
 }
 
 }  // namespace content

@@ -80,23 +80,25 @@ CHROMEOS_EXPORT extern const char kEafeUrl[];
 CHROMEOS_EXPORT extern const char kEnableAndroidWallpapersApp[];
 CHROMEOS_EXPORT extern const char kEnableArc[];
 CHROMEOS_EXPORT extern const char kEnableArcOOBEOptIn[];
+CHROMEOS_EXPORT extern const char kEnableCastReceiver[];
 CHROMEOS_EXPORT extern const char kEnableChromeVoxArcSupport[];
 CHROMEOS_EXPORT extern const char kEnableConsumerKiosk[];
 CHROMEOS_EXPORT extern const char kEnableDataSaverPrompt[];
 CHROMEOS_EXPORT extern const char kEnableEncryptionMigration[];
 CHROMEOS_EXPORT extern const char kEnableExperimentalAccessibilityFeatures[];
 CHROMEOS_EXPORT extern const char kEnableExtensionAssetsSharing[];
+CHROMEOS_EXPORT extern const char kEnableExternalDriveRename[];
 CHROMEOS_EXPORT extern const char kEnableFirstRunUITransitions[];
-CHROMEOS_EXPORT extern const char kEnableLockScreenApps[];
+CHROMEOS_EXPORT extern const char kDisableLockScreenApps[];
 CHROMEOS_EXPORT extern const char kTetherStub[];
 CHROMEOS_EXPORT extern const char kDisableMdOobe[];
+CHROMEOS_EXPORT extern const char kDisableMdErrorScreen[];
 CHROMEOS_EXPORT extern const char kEnableNetworkPortalNotification[];
 CHROMEOS_EXPORT extern const char kEnablePhysicalKeyboardAutocorrect[];
 CHROMEOS_EXPORT extern const char kEnableRequestTabletSite[];
 CHROMEOS_EXPORT extern const char kEnableScreenshotTestingWithMode[];
 CHROMEOS_EXPORT extern const char kEnableTouchCalibrationSetting[];
 CHROMEOS_EXPORT extern const char kEnableTouchpadThreeFingerClick[];
-CHROMEOS_EXPORT extern const char kEnableTouchSupportForScreenMagnifier[];
 CHROMEOS_EXPORT extern const char kEnableFileManagerTouchMode[];
 CHROMEOS_EXPORT extern const char kDisableFileManagerTouchMode[];
 CHROMEOS_EXPORT extern const char kEnableVideoPlayerChromecastSupport[];
@@ -147,6 +149,8 @@ CHROMEOS_EXPORT extern const char kForceSystemCompositorMode[];
 CHROMEOS_EXPORT extern const char kTestEncryptionMigrationUI[];
 CHROMEOS_EXPORT extern const char kCrosGaiaApiV1[];
 CHROMEOS_EXPORT extern const char kVoiceInteractionLocales[];
+CHROMEOS_EXPORT extern const char kEnterpriseEnableLicenseTypeSelection[];
+CHROMEOS_EXPORT extern const char kDisablePerUserTimezone[];
 
 // Returns true if the system should wake in response to wifi traffic.
 CHROMEOS_EXPORT bool WakeOnWifiEnabled();
@@ -164,6 +168,12 @@ CHROMEOS_EXPORT bool IsGaiaIdMigrationStarted();
 
 // Returns true if this is a Cellular First device.
 CHROMEOS_EXPORT bool IsCellularFirstDevice();
+
+// Returns true if the locale is supported by voice interaction.
+CHROMEOS_EXPORT bool IsVoiceInteractionLocalesSupported();
+
+// Returns true if voice interaction flags are enabled.
+CHROMEOS_EXPORT bool IsVoiceInteractionFlagsEnabled();
 
 // Returns true if voice interaction is enabled.
 CHROMEOS_EXPORT bool IsVoiceInteractionEnabled();

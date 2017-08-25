@@ -358,6 +358,11 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
         password_manager::features::kFillOnAccountSelect);
   }
 
+  void SetManualFallbacks() {
+    scoped_feature_list_.InitAndEnableFeature(
+        password_manager::features::kEnableManualFallbacksFilling);
+  }
+
   void EnableShowAutofillSignatures() {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kShowAutofillSignatures);
@@ -523,6 +528,11 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
   bool GetCalledShowPasswordSuggestions() {
     base::RunLoop().RunUntilIdle();
     return fake_driver_.called_show_pw_suggestions();
+  }
+
+  bool GetCalledShowManualFallbackSuggestion() {
+    base::RunLoop().RunUntilIdle();
+    return fake_driver_.called_manual_fallback_suggestion();
   }
 
   void ExpectFormSubmittedWithUsernameAndPasswords(
@@ -2250,6 +2260,7 @@ TEST_F(PasswordAutofillAgentTest, PasswordGenerationSupersedesAutofill) {
   SetFocused(password_element_);
   SimulateElementClick("new_password");
   EXPECT_FALSE(GetCalledShowPasswordSuggestions());
+  EXPECT_FALSE(GetCalledShowManualFallbackSuggestion());
   EXPECT_TRUE(GetCalledShowPasswordGenerationPopup());
 }
 
@@ -3028,6 +3039,82 @@ TEST_F(PasswordAutofillAgentTest, NoForm_MultipleAJAXEventsWithoutSubmission) {
   ASSERT_FALSE(static_cast<bool>(fake_driver_.password_form_submitted()));
 }
 
+TEST_F(PasswordAutofillAgentTest, ManualFallbackForSaving) {
+  // The users enters a username. No password - no fallback.
+  SimulateUsernameChange(kUsernameName);
+  EXPECT_EQ(0, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // The user enters a password.
+  SimulatePasswordChange(kPasswordName);
+  // SimulateUsernameChange/SimulatePasswordChange calls
+  // PasswordAutofillAgent::UpdateStateForTextChange only once.
+  EXPECT_EQ(1, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // Remove one character from the password value.
+  SimulateUserTypingASCIICharacter(ui::VKEY_BACK, true);
+  EXPECT_EQ(2, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // Add one character to the username value.
+  SetFocused(username_element_);
+  SimulateUserTypingASCIICharacter('a', true);
+  EXPECT_EQ(3, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // Remove username value.
+  SimulateUsernameChange("");
+  EXPECT_EQ(4, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // Change the password. Despite of empty username the fallback is still
+  // there.
+  SetFocused(password_element_);
+  SimulateUserTypingASCIICharacter('a', true);
+  EXPECT_EQ(5, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // Remove password value. The fallback should be disabled.
+  SimulatePasswordChange("");
+  EXPECT_EQ(0, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // The user enters new password. Show the fallback again.
+  SimulateUserTypingASCIICharacter('a', true);
+  EXPECT_EQ(1, fake_driver_.called_show_manual_fallback_for_saving_count());
+}
+
+TEST_F(PasswordAutofillAgentTest, ManualFallbackForSaving_PasswordChangeForm) {
+  LoadHTML(kPasswordChangeFormHTML);
+  UpdateOriginForHTML(kPasswordChangeFormHTML);
+  UpdateUsernameAndPasswordElements();
+
+  // No password to save yet - no fallback.
+  SimulateUsernameChange(kUsernameName);
+  EXPECT_EQ(0, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // The user enters in the current password field. The fallback should be
+  // available to save the entered value.
+  SimulatePasswordChange(kPasswordName);
+  // SimulateUsernameChange/SimulatePasswordChange calls
+  // PasswordAutofillAgent::UpdateStateForTextChange only once.
+  EXPECT_EQ(1, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // The user types into the new password field. The fallback should be updated.
+  WebInputElement new_password = GetInputElementByID("newpassword");
+  ASSERT_FALSE(new_password.IsNull());
+  SetFocused(new_password);
+  SimulateUserTypingASCIICharacter('a', true);
+  EXPECT_EQ(2, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // Edits of the confirmation password field trigger fallback updates.
+  WebInputElement confirmation_password =
+      GetInputElementByID("confirmpassword");
+  ASSERT_FALSE(confirmation_password.IsNull());
+  SetFocused(confirmation_password);
+  SimulateUserTypingASCIICharacter('a', true);
+  EXPECT_EQ(3, fake_driver_.called_show_manual_fallback_for_saving_count());
+
+  // Clear all password fields. The fallback should be disabled.
+  SimulatePasswordChange("");
+  SimulateUserInputChangeForElement(&new_password, "");
+  SimulateUserInputChangeForElement(&confirmation_password, "");
+  EXPECT_EQ(0, fake_driver_.called_show_manual_fallback_for_saving_count());
+}
 // Tests that information about Gaia reauthentication form is not sent to the
 // browser, nor on load nor on user click.
 TEST_F(PasswordAutofillAgentTest, GaiaReauthenticationFormIgnored) {
@@ -3055,6 +3142,73 @@ TEST_F(PasswordAutofillAgentTest, GaiaReauthenticationFormIgnored) {
   // Check that no information about Gaia reauthentication is not sent.
   EXPECT_FALSE(fake_driver_.called_password_forms_parsed());
   EXPECT_FALSE(fake_driver_.called_password_forms_rendered());
+}
+
+// Tests that "Show all saved passwords" option is shown on a password field.
+TEST_F(PasswordAutofillAgentTest, ShowAllSavedPasswordsTest) {
+  SetManualFallbacks();
+  LoadHTML(kFormHTML);
+  SetFocused(username_element_);
+  SimulateElementClick("username");
+  EXPECT_FALSE(GetCalledShowManualFallbackSuggestion());
+  SetFocused(password_element_);
+  SimulateElementClick("password");
+  EXPECT_TRUE(GetCalledShowManualFallbackSuggestion());
+}
+
+// Tests that "Show all saved passwords" option isn't shown on credit card
+// field.
+TEST_F(PasswordAutofillAgentTest,
+       NotShowAllSavedPasswordsOnCreditCardFormTest) {
+  SetManualFallbacks();
+  LoadHTML(kCreditCardFormHTML);
+  SetFocused(username_element_);
+  SimulateElementClick("username");
+  EXPECT_FALSE(GetCalledShowManualFallbackSuggestion());
+  SetFocused(password_element_);
+  SimulateElementClick("password");
+  EXPECT_FALSE(GetCalledShowManualFallbackSuggestion());
+}
+
+TEST_F(PasswordAutofillAgentTest, NotShowShowAllSavedPasswordsTest) {
+  SetManualFallbacks();
+  LoadHTML(kFormHTML);
+  SetFocused(password_element_);
+  SimulateElementClick("password");
+  EXPECT_TRUE(GetCalledShowManualFallbackSuggestion());
+  fake_driver_.reset_called_manual_fallback_suggestion();
+  password_element_.SetValue("123");
+  password_element_.SetAutofilled(false);
+  ASSERT_FALSE(GetCalledShowManualFallbackSuggestion());
+}
+
+TEST_F(PasswordAutofillAgentTest,
+       UpdateSuggestionsIfNewerCredentialsAreSupplied) {
+  // Supply old fill data
+  password_autofill_agent_->FillPasswordForm(0, fill_data_);
+  // The username and password should have been autocompleted.
+  CheckTextFieldsState(kAliceUsername, true, kAlicePassword, true);
+
+  // Change fill data
+  fill_data_.password_field.value = ASCIIToUTF16("a-changed-password");
+  // Supply changed fill data
+  password_autofill_agent_->FillPasswordForm(1 /* New key means new data */,
+                                             fill_data_);
+  CheckTextFieldsState(kAliceUsername, true, "a-changed-password", true);
+}
+
+TEST_F(PasswordAutofillAgentTest, SuggestLatestCredentials) {
+  password_autofill_agent_->FillPasswordForm(0, fill_data_);
+  SimulateElementClick(kPasswordName);
+  EXPECT_TRUE(GetCalledShowPasswordSuggestions());
+  EXPECT_EQ(0, fake_driver_.show_pw_suggestions_key());
+
+  fake_driver_.reset_show_pw_suggestions();
+
+  password_autofill_agent_->FillPasswordForm(1, fill_data_);
+  SimulateElementClick(kPasswordName);
+  EXPECT_TRUE(GetCalledShowPasswordSuggestions());
+  EXPECT_EQ(1, fake_driver_.show_pw_suggestions_key());
 }
 
 }  // namespace autofill

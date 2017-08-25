@@ -23,13 +23,11 @@ namespace content {
 
 // Implements the URLLoaderFactory mojom for AppCache requests.
 AppCacheSubresourceURLFactory::AppCacheSubresourceURLFactory(
-    mojom::URLLoaderFactoryRequest request,
     URLLoaderFactoryGetter* default_url_loader_factory_getter,
     base::WeakPtr<AppCacheHost> host)
-    : binding_(this, std::move(request)),
-      default_url_loader_factory_getter_(default_url_loader_factory_getter),
+    : default_url_loader_factory_getter_(default_url_loader_factory_getter),
       appcache_host_(host) {
-  binding_.set_connection_error_handler(
+  bindings_.set_connection_error_handler(
       base::Bind(&AppCacheSubresourceURLFactory::OnConnectionError,
                  base::Unretained(this)));
 }
@@ -37,17 +35,18 @@ AppCacheSubresourceURLFactory::AppCacheSubresourceURLFactory(
 AppCacheSubresourceURLFactory::~AppCacheSubresourceURLFactory() {}
 
 // static
-AppCacheSubresourceURLFactory*
-AppCacheSubresourceURLFactory::CreateURLLoaderFactory(
+void AppCacheSubresourceURLFactory::CreateURLLoaderFactory(
     URLLoaderFactoryGetter* default_url_loader_factory_getter,
     base::WeakPtr<AppCacheHost> host,
     mojom::URLLoaderFactoryPtr* loader_factory) {
   mojom::URLLoaderFactoryRequest request = mojo::MakeRequest(loader_factory);
 
-  // This instance will get deleted when the client drops the connection.
+  // This instance is effectively reference counted by the number of pipes open
+  // to it and will get deleted when all clients drop their connections.
   // Please see OnConnectionError() for details.
-  return new AppCacheSubresourceURLFactory(
-      std::move(request), default_url_loader_factory_getter, host);
+  auto* impl = new AppCacheSubresourceURLFactory(
+      default_url_loader_factory_getter, host);
+  impl->Clone(std::move(request));
 }
 
 void AppCacheSubresourceURLFactory::CreateLoaderAndStart(
@@ -77,9 +76,6 @@ void AppCacheSubresourceURLFactory::CreateLoaderAndStart(
     return;
   }
 
-  handler->set_network_url_loader_factory_getter(
-      default_url_loader_factory_getter_.get());
-
   std::unique_ptr<SubresourceLoadInfo> load_info(new SubresourceLoadInfo());
   load_info->url_loader_request = std::move(url_loader_request);
   load_info->routing_id = routing_id;
@@ -89,24 +85,25 @@ void AppCacheSubresourceURLFactory::CreateLoaderAndStart(
   load_info->client = std::move(client);
   load_info->traffic_annotation = traffic_annotation;
 
-  handler->SetSubresourceRequestLoadInfo(std::move(load_info));
-
-  AppCacheJob* job = handler->MaybeLoadResource(nullptr);
-  if (job) {
-    // The handler is owned by the job.
-    job->AsURLLoaderJob()->set_request_handler(std::move(handler));
+  // TODO(ananta/michaeln)
+  // We need to handle redirects correctly, i.e every subresource redirect
+  // could potentially be served out of the cache.
+  if (handler->MaybeCreateSubresourceLoader(
+          std::move(load_info), default_url_loader_factory_getter_.get())) {
+    // The handler is owned by the job and will be destoryed when the job is
+    // destroyed.
+    handler.release();
   }
 }
 
-void AppCacheSubresourceURLFactory::SyncLoad(int32_t routing_id,
-                                             int32_t request_id,
-                                             const ResourceRequest& request,
-                                             SyncLoadCallback callback) {
-  NOTREACHED();
+void AppCacheSubresourceURLFactory::Clone(
+    mojom::URLLoaderFactoryRequest request) {
+  bindings_.AddBinding(this, std::move(request));
 }
 
 void AppCacheSubresourceURLFactory::OnConnectionError() {
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+  if (bindings_.empty())
+    delete this;
 }
 
 void AppCacheSubresourceURLFactory::NotifyError(

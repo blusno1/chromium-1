@@ -232,34 +232,32 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
                     ? null
                     : app.activityInfo.metaData.getString(
                               META_DATA_NAME_OF_DEFAULT_PAYMENT_METHOD_NAME);
-            if (TextUtils.isEmpty(defaultMethod)) {
-                Log.e(TAG, "Skipping \"%s\" because of missing default payment method name.",
-                        app.activityInfo.packageName);
-                continue;
-            }
-
-            if (!methodToAppsMapping.containsKey(defaultMethod)) {
-                methodToAppsMapping.put(defaultMethod, new HashSet<ResolveInfo>());
-            }
-            methodToAppsMapping.get(defaultMethod).add(app);
 
             URI appOrigin = null;
-            if (UriUtils.looksLikeUriMethod(defaultMethod)) {
-                URI defaultUriMethod = UriUtils.parseUriFromString(defaultMethod);
-                if (defaultUriMethod != null) {
-                    uriMethods.add(defaultUriMethod);
+            URI defaultUriMethod = null;
+            if (!TextUtils.isEmpty(defaultMethod)) {
+                if (!methodToAppsMapping.containsKey(defaultMethod)) {
+                    methodToAppsMapping.put(defaultMethod, new HashSet<ResolveInfo>());
+                }
+                methodToAppsMapping.get(defaultMethod).add(app);
 
-                    if (!uriMethodToDefaultAppsMapping.containsKey(defaultUriMethod)) {
-                        uriMethodToDefaultAppsMapping.put(
-                                defaultUriMethod, new HashSet<ResolveInfo>());
-                    }
-                    uriMethodToDefaultAppsMapping.get(defaultUriMethod).add(app);
+                if (UriUtils.looksLikeUriMethod(defaultMethod)) {
+                    defaultUriMethod = UriUtils.parseUriFromString(defaultMethod);
+                    if (defaultUriMethod != null) {
+                        uriMethods.add(defaultUriMethod);
 
-                    appOrigin = UriUtils.getOrigin(defaultUriMethod);
-                    if (!mOriginToUriDefaultMethodsMapping.containsKey(appOrigin)) {
-                        mOriginToUriDefaultMethodsMapping.put(appOrigin, new HashSet<URI>());
+                        if (!uriMethodToDefaultAppsMapping.containsKey(defaultUriMethod)) {
+                            uriMethodToDefaultAppsMapping.put(
+                                    defaultUriMethod, new HashSet<ResolveInfo>());
+                        }
+                        uriMethodToDefaultAppsMapping.get(defaultUriMethod).add(app);
+
+                        appOrigin = UriUtils.getOrigin(defaultUriMethod);
+                        if (!mOriginToUriDefaultMethodsMapping.containsKey(appOrigin)) {
+                            mOriginToUriDefaultMethodsMapping.put(appOrigin, new HashSet<URI>());
+                        }
+                        mOriginToUriDefaultMethodsMapping.get(appOrigin).add(defaultUriMethod);
                     }
-                    mOriginToUriDefaultMethodsMapping.get(appOrigin).add(defaultUriMethod);
                 }
             }
 
@@ -267,14 +265,18 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
             // can support URI payment methods (e.g., "https://bobpay.com/public-standard").
             Set<String> supportedMethods = getSupportedPaymentMethods(app.activityInfo);
             for (String supportedMethod : supportedMethods) {
+                URI supportedUriMethod = UriUtils.looksLikeUriMethod(supportedMethod)
+                        ? UriUtils.parseUriFromString(supportedMethod)
+                        : null;
+                if (supportedUriMethod != null && supportedUriMethod.equals(defaultUriMethod)) {
+                    continue;
+                }
+
                 if (!methodToAppsMapping.containsKey(supportedMethod)) {
                     methodToAppsMapping.put(supportedMethod, new HashSet<ResolveInfo>());
                 }
                 methodToAppsMapping.get(supportedMethod).add(app);
 
-                if (!UriUtils.looksLikeUriMethod(supportedMethod)) continue;
-
-                URI supportedUriMethod = UriUtils.parseUriFromString(supportedMethod);
                 if (supportedUriMethod == null) continue;
 
                 if (!mMethodToSupportedAppsMapping.containsKey(supportedUriMethod)) {
@@ -467,9 +469,16 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
                 return;
             }
 
+            // Dedupe corresponding ServiceWorkerPaymentApp which is registered with the default
+            // payment method name as the scope and the scope is used as the app Id.
+            String webAppIdCanDeduped = resolveInfo.activityInfo.metaData == null
+                    ? null
+                    : resolveInfo.activityInfo.metaData.getString(
+                              META_DATA_NAME_OF_DEFAULT_PAYMENT_METHOD_NAME);
             app = new AndroidPaymentApp(mWebContents, packageName, resolveInfo.activityInfo.name,
-                    label.toString(), mPackageManagerDelegate.getAppIcon(resolveInfo),
-                    mIsIncognito);
+                    label.toString(), mPackageManagerDelegate.getAppIcon(resolveInfo), mIsIncognito,
+                    webAppIdCanDeduped == null ? null
+                                               : UriUtils.parseUriFromString(webAppIdCanDeduped));
             mValidApps.put(packageName, app);
         }
 

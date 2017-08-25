@@ -115,15 +115,18 @@ public class JourneyLogger {
                 mJourneyLoggerAndroid, requestShipping, requestEmail, requestPhone, requestName);
     }
 
-    /**
-     * Records the payment method that was selected by the user.
+    /*
+     * Records what types of payment methods were requested by the merchant in the Payment Request.
      *
-     * @param paymentMethod The payment method that was selected.
+     * @param requestedBasicCard    Whether the merchant requested basic-card.
+     * @param requestedMethodGoogle Whether the merchant requested a Google payment method.
+     * @param requestedMethodOther  Whether the merchant requested a non basic-card, non-Google
+     *                              payment method.
      */
-    public void setSelectedPaymentMethod(int paymentMethod) {
-        assert paymentMethod >= 0;
-        assert paymentMethod < SelectedPaymentMethod.MAX;
-        nativeSetSelectedPaymentMethod(mJourneyLoggerAndroid, paymentMethod);
+    public void setRequestedPaymentMethodTypes(boolean requestedBasicCard,
+            boolean requestedMethodGoogle, boolean requestedMethodOther) {
+        nativeSetRequestedPaymentMethodTypes(mJourneyLoggerAndroid, requestedBasicCard,
+                requestedMethodGoogle, requestedMethodOther);
     }
 
     /**
@@ -184,11 +187,12 @@ public class JourneyLogger {
     private native void nativeSetCanMakePaymentValue(
             long nativeJourneyLoggerAndroid, boolean value);
     private native void nativeSetEventOccurred(long nativeJourneyLoggerAndroid, int event);
-    private native void nativeSetSelectedPaymentMethod(
-            long nativeJourneyLoggerAndroid, int paymentMethod);
     private native void nativeSetRequestedInformation(long nativeJourneyLoggerAndroid,
             boolean requestShipping, boolean requestEmail, boolean requestPhone,
             boolean requestName);
+    private native void nativeSetRequestedPaymentMethodTypes(long nativeJourneyLoggerAndroid,
+            boolean requestedBasicCard, boolean requestedMethodGoogle,
+            boolean requestedMethodOther);
     private native void nativeSetCompleted(long nativeJourneyLoggerAndroid);
     private native void nativeSetAborted(long nativeJourneyLoggerAndroid, int reason);
     private native void nativeSetNotShown(long nativeJourneyLoggerAndroid, int reason);

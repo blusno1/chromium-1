@@ -22,8 +22,8 @@ enum class WebFrameLoadType;
 class WebView;
 
 class CORE_EXPORT WebRemoteFrameImpl final
-    : public NON_EXPORTED_BASE(GarbageCollectedFinalized<WebRemoteFrameImpl>),
-      public NON_EXPORTED_BASE(WebRemoteFrame) {
+    : public GarbageCollectedFinalized<WebRemoteFrameImpl>,
+      public WebRemoteFrame {
  public:
   static WebRemoteFrameImpl* Create(WebTreeScopeType, WebRemoteFrameClient*);
   static WebRemoteFrameImpl* CreateMainFrame(WebView*,
@@ -38,10 +38,7 @@ class CORE_EXPORT WebRemoteFrameImpl final
   void SetName(const WebString&) override;
   WebRect VisibleContentRect() const override;
   WebView* View() const override;
-  WebPerformance Performance() const override;
   void StopLoading() override;
-  void EnableViewSourceMode(bool enable) override;
-  bool IsViewSourceModeEnabled() const override;
 
   // WebRemoteFrame methods:
   WebLocalFrame* CreateLocalChild(WebTreeScopeType,

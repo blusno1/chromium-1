@@ -230,7 +230,7 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
     gfx::Size device_viewport_size =
         gfx::Size(root_layer->bounds().width() * device_scale_factor,
                   root_layer->bounds().height() * device_scale_factor);
-    update_layer_list_impl_.reset(new LayerImplList);
+    update_layer_impl_list_.reset(new LayerImplList);
     root_layer->layer_tree_impl()->BuildLayerListForTesting();
     PropertyTrees* property_trees =
         root_layer->layer_tree_impl()->property_trees();
@@ -243,9 +243,9 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
         root_layer, property_trees, can_adjust_raster_scales);
     draw_property_utils::FindLayersThatNeedUpdates(
         root_layer->layer_tree_impl(), property_trees,
-        update_layer_list_impl_.get());
+        update_layer_impl_list_.get());
     draw_property_utils::ComputeDrawPropertiesOfVisibleLayers(
-        update_layer_list_impl(), property_trees);
+        update_layer_impl_list(), property_trees);
   }
 
   void ExecuteCalculateDrawPropertiesWithoutAdjustingRasterScales(
@@ -262,8 +262,8 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
     LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
   }
 
-  bool UpdateLayerListImplContains(int id) const {
-    for (auto* layer : *update_layer_list_impl_) {
+  bool UpdateLayerImplListContains(int id) const {
+    for (auto* layer : *update_layer_impl_list_) {
       if (layer->id() == id)
         return true;
     }
@@ -281,8 +281,8 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
   const RenderSurfaceList* render_surface_list_impl() const {
     return render_surface_list_impl_.get();
   }
-  const LayerImplList* update_layer_list_impl() const {
-    return update_layer_list_impl_.get();
+  const LayerImplList* update_layer_impl_list() const {
+    return update_layer_impl_list_.get();
   }
   const LayerList& update_layer_list() const { return update_layer_list_; }
 
@@ -295,7 +295,7 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
  private:
   std::unique_ptr<RenderSurfaceList> render_surface_list_impl_;
   LayerList update_layer_list_;
-  std::unique_ptr<LayerImplList> update_layer_list_impl_;
+  std::unique_ptr<LayerImplList> update_layer_impl_list_;
 };
 
 class LayerTreeHostCommonTest : public LayerTreeHostCommonTestBase,
@@ -2178,6 +2178,11 @@ static bool TransformIsAnimating(LayerImpl* layer) {
       layer->element_id(), layer->GetElementTypeForAnimation());
 }
 
+static bool HasPotentiallyRunningTransformAnimation(LayerImpl* layer) {
+  return layer->GetMutatorHost()->HasPotentiallyRunningTransformAnimation(
+      layer->element_id(), layer->GetElementTypeForAnimation());
+}
+
 TEST_F(LayerTreeHostCommonTest,
        ScreenSpaceTransformIsAnimatingWithDelayedAnimation) {
   LayerImpl* root = root_layer_for_testing();
@@ -2211,7 +2216,7 @@ TEST_F(LayerTreeHostCommonTest,
   EXPECT_FALSE(child->screen_space_transform_is_animating());
 
   EXPECT_FALSE(TransformIsAnimating(grand_child));
-  EXPECT_TRUE(grand_child->HasPotentiallyRunningTransformAnimation());
+  EXPECT_TRUE(HasPotentiallyRunningTransformAnimation(grand_child));
   EXPECT_TRUE(grand_child->screen_space_transform_is_animating());
   EXPECT_TRUE(great_grand_child->screen_space_transform_is_animating());
 }
@@ -3750,10 +3755,10 @@ TEST_F(LayerTreeHostCommonTest, BackFaceCullingWithoutPreserves3d) {
   EXPECT_EQ(GetRenderSurface(back_facing_child_of_back_facing_surface),
             GetRenderSurface(back_facing_surface));
 
-  EXPECT_EQ(3u, update_layer_list_impl()->size());
-  EXPECT_TRUE(UpdateLayerListImplContains(front_facing_child->id()));
-  EXPECT_TRUE(UpdateLayerListImplContains(front_facing_surface->id()));
-  EXPECT_TRUE(UpdateLayerListImplContains(
+  EXPECT_EQ(3u, update_layer_impl_list()->size());
+  EXPECT_TRUE(UpdateLayerImplListContains(front_facing_child->id()));
+  EXPECT_TRUE(UpdateLayerImplListContains(front_facing_surface->id()));
+  EXPECT_TRUE(UpdateLayerImplListContains(
       front_facing_child_of_front_facing_surface->id()));
 }
 
@@ -3865,11 +3870,11 @@ TEST_F(LayerTreeHostCommonTest, BackFaceCullingWithPreserves3d) {
   EXPECT_EQ(GetRenderSurface(back_facing_child_of_back_facing_surface),
             GetRenderSurface(back_facing_surface));
 
-  EXPECT_EQ(3u, update_layer_list_impl()->size());
+  EXPECT_EQ(3u, update_layer_impl_list()->size());
 
-  EXPECT_TRUE(UpdateLayerListImplContains(front_facing_child->id()));
-  EXPECT_TRUE(UpdateLayerListImplContains(front_facing_surface->id()));
-  EXPECT_TRUE(UpdateLayerListImplContains(
+  EXPECT_TRUE(UpdateLayerImplListContains(front_facing_child->id()));
+  EXPECT_TRUE(UpdateLayerImplListContains(front_facing_surface->id()));
+  EXPECT_TRUE(UpdateLayerImplListContains(
       front_facing_child_of_front_facing_surface->id()));
 }
 
@@ -3936,11 +3941,11 @@ TEST_F(LayerTreeHostCommonTest, BackFaceCullingWithAnimatingTransforms) {
   EXPECT_EQ(GetRenderSurface(animating_child), GetRenderSurface(root));
   EXPECT_EQ(GetRenderSurface(child2), GetRenderSurface(root));
 
-  EXPECT_EQ(1u, update_layer_list_impl()->size());
+  EXPECT_EQ(1u, update_layer_impl_list()->size());
 
   // The back facing layers are culled from the layer list, and have an empty
   // visible rect.
-  EXPECT_TRUE(UpdateLayerListImplContains(child2->id()));
+  EXPECT_TRUE(UpdateLayerImplListContains(child2->id()));
   EXPECT_TRUE(child->visible_layer_rect().IsEmpty());
   EXPECT_TRUE(animating_surface->visible_layer_rect().IsEmpty());
   EXPECT_TRUE(child_of_animating_surface->visible_layer_rect().IsEmpty());
@@ -3997,9 +4002,9 @@ TEST_F(LayerTreeHostCommonTest,
   EXPECT_EQ(GetRenderSurface(child1), GetRenderSurface(front_facing_surface));
   EXPECT_EQ(GetRenderSurface(child2), GetRenderSurface(back_facing_surface));
 
-  EXPECT_EQ(2u, update_layer_list_impl()->size());
-  EXPECT_TRUE(UpdateLayerListImplContains(front_facing_surface->id()));
-  EXPECT_TRUE(UpdateLayerListImplContains(child1->id()));
+  EXPECT_EQ(2u, update_layer_impl_list()->size());
+  EXPECT_TRUE(UpdateLayerImplListContains(front_facing_surface->id()));
+  EXPECT_TRUE(UpdateLayerImplListContains(child1->id()));
 }
 
 TEST_F(LayerTreeHostCommonScalingTest, LayerTransformsInHighDPI) {
@@ -7110,6 +7115,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionNested) {
   outer_sticky->AddChild(inner_sticky);
   host()->SetRootLayer(root);
   scroller->SetElementId(LayerIdToElementIdForTesting(scroller->id()));
+  outer_sticky->SetElementId(LayerIdToElementIdForTesting(outer_sticky->id()));
 
   root->SetBounds(gfx::Size(100, 100));
   container->SetBounds(gfx::Size(100, 100));
@@ -7138,7 +7144,8 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionNested) {
       gfx::Rect(0, 50, 10, 10);
   inner_sticky_pos.scroll_container_relative_containing_block_rect =
       gfx::Rect(0, 50, 10, 50);
-  inner_sticky_pos.nearest_layer_shifting_containing_block = outer_sticky->id();
+  inner_sticky_pos.nearest_element_shifting_containing_block =
+      outer_sticky->element_id();
   inner_sticky->SetStickyPositionConstraint(inner_sticky_pos);
 
   ExecuteCalculateDrawProperties(root.get());
@@ -8125,6 +8132,7 @@ TEST_F(LayerTreeHostCommonTest, NodesAffectedByViewportBoundsDeltaGetUpdated) {
 
   inner_viewport_scroll_layer->SetIsContainerForFixedPositionLayers(true);
   outer_viewport_scroll_layer->SetIsContainerForFixedPositionLayers(true);
+  outer_viewport_scroll_layer->SetIsResizedByBrowserControls(true);
 
   host()->SetRootLayer(root);
   LayerTreeHost::ViewportLayers viewport_layers;
@@ -8350,6 +8358,11 @@ TEST_F(LayerTreeHostCommonTest, AnimatedFilterCreatesRenderSurface) {
   EXPECT_FALSE(FilterIsAnimating(grandchild));
 }
 
+bool HasPotentiallyRunningFilterAnimation(const LayerImpl& layer) {
+  return layer.GetMutatorHost()->HasPotentiallyRunningFilterAnimation(
+      layer.element_id(), layer.GetElementTypeForAnimation());
+}
+
 // Verify that having a filter animation with a delayed start time creates a
 // render surface.
 TEST_F(LayerTreeHostCommonTest, DelayedFilterAnimationCreatesRenderSurface) {
@@ -8390,11 +8403,11 @@ TEST_F(LayerTreeHostCommonTest, DelayedFilterAnimationCreatesRenderSurface) {
   EXPECT_TRUE(GetRenderSurface(child)->Filters().IsEmpty());
 
   EXPECT_FALSE(FilterIsAnimating(root));
-  EXPECT_FALSE(root->HasPotentiallyRunningFilterAnimation());
+  EXPECT_FALSE(HasPotentiallyRunningFilterAnimation(*root));
   EXPECT_FALSE(FilterIsAnimating(child));
-  EXPECT_TRUE(child->HasPotentiallyRunningFilterAnimation());
+  EXPECT_TRUE(HasPotentiallyRunningFilterAnimation(*child));
   EXPECT_FALSE(FilterIsAnimating(grandchild));
-  EXPECT_FALSE(grandchild->HasPotentiallyRunningFilterAnimation());
+  EXPECT_FALSE(HasPotentiallyRunningFilterAnimation(*grandchild));
 }
 
 // Ensures that the property tree code accounts for offsets between fixed

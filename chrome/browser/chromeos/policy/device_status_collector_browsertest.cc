@@ -331,11 +331,6 @@ class DeviceStatusCollectorTest : public testing::Test {
         settings_helper_.CreateOwnerSettingsService(nullptr);
     owner_settings_service_->set_ignore_profile_creation_notification(true);
 
-    RestartStatusCollector(base::Bind(&GetEmptyVolumeInfo),
-                           base::Bind(&GetEmptyCPUStatistics),
-                           base::Bind(&GetEmptyCPUTempInfo),
-                           base::Bind(&GetEmptyAndroidStatus));
-
     // Set up a fake local state for KioskAppManager.
     TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
     chromeos::KioskAppManager::RegisterPrefs(local_state_.registry());
@@ -348,6 +343,11 @@ class DeviceStatusCollectorTest : public testing::Test {
 
     chromeos::CrasAudioHandler::InitializeForTesting();
     chromeos::LoginState::Initialize();
+
+    RestartStatusCollector(base::Bind(&GetEmptyVolumeInfo),
+                           base::Bind(&GetEmptyCPUStatistics),
+                           base::Bind(&GetEmptyCPUTempInfo),
+                           base::Bind(&GetEmptyAndroidStatus));
   }
 
   ~DeviceStatusCollectorTest() override {
@@ -1483,10 +1483,10 @@ class DeviceStatusCollectorNetworkInterfacesTest
       if (strlen(fake_network.address) > 0) {
         // Set the IP config.
         base::DictionaryValue ip_config_properties;
-        ip_config_properties.SetStringWithoutPathExpansion(
-            shill::kAddressProperty, fake_network.address);
-        ip_config_properties.SetStringWithoutPathExpansion(
-            shill::kGatewayProperty, fake_network.gateway);
+        ip_config_properties.SetKey(shill::kAddressProperty,
+                                    base::Value(fake_network.address));
+        ip_config_properties.SetKey(shill::kGatewayProperty,
+                                    base::Value(fake_network.gateway));
         chromeos::ShillIPConfigClient::TestInterface* ip_config_test =
             chromeos::DBusThreadManager::Get()->GetShillIPConfigClient()->
             GetTestInterface();

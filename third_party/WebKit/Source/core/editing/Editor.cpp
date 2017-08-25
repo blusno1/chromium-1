@@ -46,7 +46,7 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/InputMethodController.h"
 #include "core/editing/RenderedPosition.h"
-#include "core/editing/SetSelectionData.h"
+#include "core/editing/SetSelectionOptions.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/ApplyStyleCommand.h"
 #include "core/editing/commands/DeleteSelectionCommand.h"
@@ -184,29 +184,26 @@ Editor::RevealSelectionScope::~RevealSelectionScope() {
 
 // When an event handler has moved the selection outside of a text control
 // we should use the target control's selection for this editing operation.
-// TODO(yosin): We should make |Editor::selectionForCommand()| to return
-// |SelectionInDOMTree| instead of |VisibleSelection|.
-VisibleSelection Editor::SelectionForCommand(Event* event) {
-  VisibleSelection selection =
-      GetFrame().Selection().ComputeVisibleSelectionInDOMTree();
+SelectionInDOMTree Editor::SelectionForCommand(Event* event) {
+  const SelectionInDOMTree selection =
+      GetFrame().Selection().GetSelectionInDOMTree();
   if (!event)
     return selection;
   // If the target is a text control, and the current selection is outside of
   // its shadow tree, then use the saved selection for that text control.
+  if (!IsTextControlElement(*event->target()->ToNode()))
+    return selection;
   TextControlElement* text_control_of_selection_start =
-      EnclosingTextControl(selection.Start());
+      EnclosingTextControl(selection.Base());
   TextControlElement* text_control_of_target =
-      IsTextControlElement(*event->target()->ToNode())
-          ? ToTextControlElement(event->target()->ToNode())
-          : nullptr;
-  if (text_control_of_target &&
-      (selection.Start().IsNull() ||
-       text_control_of_target != text_control_of_selection_start)) {
-    const SelectionInDOMTree& select = text_control_of_target->Selection();
-    if (!select.IsNone())
-      return CreateVisibleSelection(select);
-  }
-  return selection;
+      ToTextControlElement(event->target()->ToNode());
+  if (!selection.IsNone() &&
+      text_control_of_target == text_control_of_selection_start)
+    return selection;
+  const SelectionInDOMTree& select = text_control_of_target->Selection();
+  if (select.IsNone())
+    return selection;
+  return select;
 }
 
 // Function considers Mac editing behavior a fallback when Page or Settings is
@@ -297,10 +294,11 @@ bool Editor::CanEdit() const {
 }
 
 bool Editor::CanEditRichly() const {
-  return GetFrame()
-      .Selection()
-      .ComputeVisibleSelectionInDOMTreeDeprecated()
-      .IsContentRichlyEditable();
+  return IsRichlyEditablePosition(
+      GetFrame()
+          .Selection()
+          .ComputeVisibleSelectionInDOMTreeDeprecated()
+          .Base());
 }
 
 // WinIE uses onbeforecut and onbeforepaste to enables the cut and paste menu
@@ -689,7 +687,6 @@ void Editor::ReplaceSelectionWithText(const String& text,
                                input_type);
 }
 
-// TODO(xiaochengh): Merge it with |replaceSelectionWithFragment()|.
 void Editor::ReplaceSelectionAfterDragging(DocumentFragment* fragment,
                                            InsertMode insert_mode,
                                            DragSourceType drag_source_type) {
@@ -912,7 +909,7 @@ static void DispatchEditableContentChangedEvents(Element* start_root,
 }
 
 static SelectionInDOMTree CorrectedSelectionAfterCommand(
-    const VisibleSelection& passed_selection,
+    const SelectionForUndoStep& passed_selection,
     Document* document) {
   if (!passed_selection.Base().IsConnected() ||
       !passed_selection.Extent().IsConnected() ||
@@ -941,11 +938,11 @@ void Editor::AppliedEditing(CompositeEditCommand* cmd) {
       cmd->TextDataForInputEvent(), IsComposingFromCommand(cmd));
 
   const SelectionInDOMTree& new_selection = CorrectedSelectionAfterCommand(
-      cmd->EndingVisibleSelection(), GetFrame().GetDocument());
+      cmd->EndingSelection(), GetFrame().GetDocument());
 
   // Don't clear the typing style with this selection change. We do those things
   // elsewhere if necessary.
-  ChangeSelectionAfterCommand(new_selection, SetSelectionData());
+  ChangeSelectionAfterCommand(new_selection, SetSelectionOptions());
 
   if (!cmd->PreservesTypingStyle())
     ClearTypingStyle();
@@ -985,7 +982,7 @@ void Editor::UnappliedEditing(UndoStep* cmd) {
   const SelectionInDOMTree& new_selection = CorrectedSelectionAfterCommand(
       cmd->StartingSelection(), GetFrame().GetDocument());
   ChangeSelectionAfterCommand(new_selection,
-                              SetSelectionData::Builder()
+                              SetSelectionOptions::Builder()
                                   .SetShouldCloseTyping(true)
                                   .SetShouldClearTypingStyle(true)
                                   .Build());
@@ -1008,7 +1005,7 @@ void Editor::ReappliedEditing(UndoStep* cmd) {
   const SelectionInDOMTree& new_selection = CorrectedSelectionAfterCommand(
       cmd->EndingSelection(), GetFrame().GetDocument());
   ChangeSelectionAfterCommand(new_selection,
-                              SetSelectionData::Builder()
+                              SetSelectionOptions::Builder()
                                   .SetShouldCloseTyping(true)
                                   .SetShouldClearTypingStyle(true)
                                   .Build());
@@ -1054,7 +1051,8 @@ bool Editor::InsertTextWithoutSendingTextEvent(
     bool select_inserted_text,
     TextEvent* triggering_event,
     InputEvent::InputType input_type) {
-  const VisibleSelection& selection = SelectionForCommand(triggering_event);
+  const VisibleSelection& selection =
+      CreateVisibleSelection(SelectionForCommand(triggering_event));
   if (!selection.IsContentEditable())
     return false;
 
@@ -1485,7 +1483,7 @@ void Editor::AddToKillRing(const EphemeralRange& range) {
 
 void Editor::ChangeSelectionAfterCommand(
     const SelectionInDOMTree& new_selection,
-    const SetSelectionData& options) {
+    const SetSelectionOptions& options) {
   if (new_selection.IsNone())
     return;
 
@@ -1494,10 +1492,10 @@ void Editor::ChangeSelectionAfterCommand(
   bool selection_did_not_change_dom_position =
       new_selection == GetFrame().Selection().GetSelectionInDOMTree();
   GetFrame().Selection().SetSelection(
-      SelectionInDOMTree::Builder(new_selection)
-          .SetIsHandleVisible(GetFrame().Selection().IsHandleVisible())
-          .Build(),
-      options);
+      new_selection,
+      SetSelectionOptions::Builder(options)
+          .SetShouldShowHandle(GetFrame().Selection().IsHandleVisible())
+          .Build());
 
   // Some editing operations change the selection visually without affecting its
   // position within the DOM. For example when you press return in the following
@@ -1831,10 +1829,6 @@ void Editor::ReplaceSelection(const String& text) {
   bool smart_replace = true;
   ReplaceSelectionWithText(text, select_replacement, smart_replace,
                            InputEvent::InputType::kInsertReplacementText);
-}
-
-TypingCommand* Editor::LastTypingCommandIfStillOpenForTyping() const {
-  return TypingCommand::LastTypingCommandIfStillOpenForTyping(&GetFrame());
 }
 
 DEFINE_TRACE(Editor) {

@@ -137,7 +137,6 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
       factory_(factory),
       tree_(new ui::AXSerializableTree()),
       user_is_navigating_away_(false),
-      osk_state_(OSK_ALLOWED),
       last_focused_node_(nullptr),
       last_focused_manager_(nullptr),
       connected_to_parent_tree_node_(false),
@@ -156,7 +155,6 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
       factory_(factory),
       tree_(new ui::AXSerializableTree()),
       user_is_navigating_away_(false),
-      osk_state_(OSK_ALLOWED),
       last_focused_node_(nullptr),
       last_focused_manager_(nullptr),
       ax_tree_id_(ui::AXTreeIDRegistry::kNoAXTreeID),
@@ -225,10 +223,9 @@ void BrowserAccessibilityManager::FireFocusEventsIfNeeded(
   // Don't allow the document to be focused if it has no children and
   // hasn't finished loading yet. Wait for at least a tiny bit of content,
   // or for the document to actually finish loading.
-  if (focus &&
-      focus == focus->manager()->GetRoot() &&
+  if (focus && focus == focus->manager()->GetRoot() &&
       focus->PlatformChildCount() == 0 &&
-      !focus->HasState(ui::AX_STATE_BUSY) &&
+      !focus->GetBoolAttribute(ui::AX_ATTR_BUSY) &&
       !focus->manager()->GetTreeData().loaded) {
     focus = nullptr;
   }
@@ -446,11 +443,6 @@ void BrowserAccessibilityManager::OnAccessibilityEvents(
 
     if (event_type == ui::AX_EVENT_FOCUS ||
         event_type == ui::AX_EVENT_BLUR) {
-      if (osk_state_ != OSK_DISALLOWED_BECAUSE_TAB_HIDDEN &&
-          osk_state_ != OSK_DISALLOWED_BECAUSE_TAB_JUST_APPEARED) {
-        osk_state_ = OSK_ALLOWED;
-      }
-
       // We already handled all focus events above.
       continue;
     }
@@ -768,13 +760,13 @@ void BrowserAccessibilityManager::SetSelection(AXPlatformRange range) {
   delegate_->AccessibilityPerformAction(action_data);
 }
 
-void BrowserAccessibilityManager::SetAccessibilityFocus(
+void BrowserAccessibilityManager::LoadInlineTextBoxes(
     const BrowserAccessibility& node) {
   if (!delegate_)
     return;
 
   ui::AXActionData action_data;
-  action_data.action = ui::AX_ACTION_SET_ACCESSIBILITY_FOCUS;
+  action_data.action = ui::AX_ACTION_LOAD_INLINE_TEXT_BOXES;
   action_data.target_node_id = node.GetId();
   delegate_->AccessibilityPerformAction(action_data);
 }

@@ -33,7 +33,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
 #include "chrome/browser/resource_coordinator/resource_coordinator_web_contents_observer.h"
-#include "chrome/browser/resource_coordinator/tab_manager_grc_tab_signal_observer.h"
 #include "chrome/browser/resource_coordinator/tab_manager_observer.h"
 #include "chrome/browser/resource_coordinator/tab_manager_stats_collector.h"
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
@@ -200,6 +199,10 @@ class TabManager::TabManagerSessionRestoreObserver
     tab_manager_->OnSessionRestoreFinishedLoadingTabs();
   }
 
+  void OnWillRestoreTab(WebContents* web_contents) override {
+    tab_manager_->OnWillRestoreTab(web_contents);
+  }
+
  private:
   TabManager* tab_manager_;
 };
@@ -225,10 +228,7 @@ TabManager::TabManager()
 #endif
   browser_tab_strip_tracker_.Init();
   session_restore_observer_.reset(new TabManagerSessionRestoreObserver(this));
-  if (GRCTabSignalObserver::IsEnabled()) {
-    grc_tab_signal_observer_.reset(new GRCTabSignalObserver());
-  }
-  tab_manager_stats_collector_.reset(new TabManagerStatsCollector(this));
+  tab_manager_stats_collector_.reset(new TabManagerStatsCollector());
 }
 
 TabManager::~TabManager() {
@@ -590,6 +590,33 @@ void TabManager::OnSessionRestoreFinishedLoadingTabs() {
   is_session_restore_loading_tabs_ = false;
 }
 
+bool TabManager::IsTabInSessionRestore(WebContents* web_contents) const {
+  return GetWebContentsData(web_contents)->is_in_session_restore();
+}
+
+bool TabManager::IsTabRestoredInForeground(WebContents* web_contents) const {
+  return GetWebContentsData(web_contents)->is_restored_in_foreground();
+}
+
+bool TabManager::IsLoadingBackgroundTabs() const {
+  if (IsSessionRestoreLoadingTabs())
+    return false;
+
+  if (!pending_navigations_.empty())
+    return true;
+
+  // Excluding session restore above leaves only background opening tabs in
+  // |loading_contents_|. As long as they still remain in background, we are
+  // still loading background tabs, even after we emptied our pending navigation
+  // list.
+  for (const content::WebContents* tab : loading_contents_) {
+    if (!tab->IsVisible())
+      return true;
+  }
+
+  return false;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // TabManager, private:
 
@@ -887,8 +914,8 @@ WebContents* TabManager::DiscardWebContentsAt(int index,
 
   // Discard the old tab's renderer.
   // TODO(jamescook): This breaks script connections with other tabs.
-  // Find a different approach that doesn't do that, perhaps based on navigation
-  // to swappedout://.
+  // Find a different approach that doesn't do that, perhaps based on
+  // RenderFrameProxyHosts.
   delete old_contents;
   recent_tab_discard_ = true;
 
@@ -953,7 +980,7 @@ void TabManager::ActiveTabChanged(content::WebContents* old_contents,
             GetTimeToPurge(min_time_to_purge_, max_time_to_purge_));
     // Only record switch-to-tab metrics when a switch happens, i.e.
     // |old_contents| is set.
-    tab_manager_stats_collector_->RecordSwitchToTab(new_contents);
+    tab_manager_stats_collector_->RecordSwitchToTab(old_contents, new_contents);
   }
 
   // Reload |web_contents| if it is in an active browser and discarded.
@@ -969,16 +996,6 @@ void TabManager::TabInsertedAt(TabStripModel* tab_strip_model,
                                content::WebContents* contents,
                                int index,
                                bool foreground) {
-  // Gets CoordinationUnitID for this WebContents and adds it to
-  // GRCTabSignalObserver.
-  if (grc_tab_signal_observer_) {
-    auto* tab_resource_coordinator =
-        ResourceCoordinatorWebContentsObserver::FromWebContents(contents)
-            ->tab_resource_coordinator();
-    grc_tab_signal_observer_->AssociateCoordinationUnitIDWithWebContents(
-        tab_resource_coordinator->id(), contents);
-  }
-
   // Only interested in background tabs, as foreground tabs get taken care of by
   // ActiveTabChanged.
   if (foreground)
@@ -990,20 +1007,6 @@ void TabManager::TabInsertedAt(TabStripModel* tab_strip_model,
   // Re-setting time-to-purge every time a tab becomes inactive.
   GetWebContentsData(contents)->set_time_to_purge(
       GetTimeToPurge(min_time_to_purge_, max_time_to_purge_));
-}
-
-void TabManager::TabClosingAt(TabStripModel* tab_strip_model,
-                              content::WebContents* contents,
-                              int index) {
-  // Gets CoordinationUnitID for this WebContents and removes it from
-  // GRCTabSignalObserver.
-  if (!grc_tab_signal_observer_)
-    return;
-  auto* tab_resource_coordinator =
-      ResourceCoordinatorWebContentsObserver::FromWebContents(contents)
-          ->tab_resource_coordinator();
-  grc_tab_signal_observer_->RemoveCoordinationUnitID(
-      tab_resource_coordinator->id());
 }
 
 void TabManager::OnBrowserSetLastActive(Browser* browser) {
@@ -1120,7 +1123,9 @@ std::vector<BrowserInfo> TabManager::GetBrowserInfoList() const {
 content::NavigationThrottle::ThrottleCheckResult
 TabManager::MaybeThrottleNavigation(BackgroundTabNavigationThrottle* throttle) {
   content::NavigationHandle* navigation_handle = throttle->navigation_handle();
-  if (CanLoadNextTab()) {
+  if (!base::FeatureList::IsEnabled(
+          features::kStaggeredBackgroundTabOpenExperiment) ||
+      CanLoadNextTab()) {
     loading_contents_.insert(navigation_handle->GetWebContents());
     return content::NavigationThrottle::PROCEED;
   }
@@ -1147,6 +1152,13 @@ bool TabManager::CanLoadNextTab() const {
   return false;
 }
 
+void TabManager::OnWillRestoreTab(WebContents* web_contents) {
+  WebContentsData* data = GetWebContentsData(web_contents);
+  DCHECK(!data->is_in_session_restore());
+  data->SetIsInSessionRestore(true);
+  data->SetIsRestoredInForeground(web_contents->IsVisible());
+}
+
 void TabManager::OnDidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   auto it = pending_navigations_.begin();
@@ -1163,12 +1175,14 @@ void TabManager::OnDidFinishNavigation(
 void TabManager::OnDidStopLoading(content::WebContents* contents) {
   DCHECK_EQ(TAB_IS_LOADED, GetWebContentsData(contents)->tab_loading_state());
   loading_contents_.erase(contents);
+  tab_manager_stats_collector_->OnDidStopLoading(contents);
   LoadNextBackgroundTabIfNeeded();
 }
 
 void TabManager::OnWebContentsDestroyed(content::WebContents* contents) {
   RemovePendingNavigationIfNeeded(contents);
   loading_contents_.erase(contents);
+  tab_manager_stats_collector_->OnWebContentsDestroyed(contents);
   LoadNextBackgroundTabIfNeeded();
 }
 

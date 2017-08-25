@@ -169,6 +169,7 @@ void ArcSessionManager::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kArcDataRemoveRequested, false);
   registry->RegisterBooleanPref(prefs::kArcEnabled, false);
   registry->RegisterBooleanPref(prefs::kArcSignedIn, false);
+  registry->RegisterBooleanPref(prefs::kArcPaiStarted, false);
   registry->RegisterBooleanPref(prefs::kArcTermsAccepted, false);
   registry->RegisterBooleanPref(prefs::kArcVoiceInteractionValuePropAccepted,
                                 false);
@@ -233,6 +234,11 @@ void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
     observer.OnArcSessionStopped(reason);
 
   MaybeStartArcDataRemoval();
+}
+
+void ArcSessionManager::OnSessionRestarting() {
+  for (auto& observer : observer_list_)
+    observer.OnArcSessionRestarting();
 }
 
 void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
@@ -637,13 +643,17 @@ bool ArcSessionManager::RequestEnableImpl() {
     return false;
   }
 
-  if (!pai_starter_ && !profile_->GetPrefs()->GetBoolean(prefs::kArcSignedIn) &&
-      IsPlayStoreAvailable()) {
-    pai_starter_ = base::MakeUnique<ArcPaiStarter>(profile_);
+  if (!pai_starter_ && IsPlayStoreAvailable()) {
+    pai_starter_ =
+        ArcPaiStarter::CreateIfNeeded(profile_, profile_->GetPrefs());
   }
 
   if (start_arc_directly) {
     StartArc();
+    // When in ARC kiosk mode, there's no Chrome tabs to restore. Remove the
+    // cgroups now.
+    if (IsArcKioskMode())
+      SetArcCpuRestriction(false /* do_restrict */);
     // Check Android management in parallel.
     // Note: StartBackgroundAndroidManagementCheck() may call
     // OnBackgroundAndroidManagementChecked() synchronously (or
@@ -867,6 +877,9 @@ void ArcSessionManager::OnAndroidManagementChecked(
           base::Bind(&ArcSessionManager::OnArcSignInTimeout,
                      weak_ptr_factory_.GetWeakPtr()));
       StartArc();
+      // Since opt-in is an explicit user (or admin) action, relax the
+      // cgroups restriction now.
+      SetArcCpuRestriction(false /* do_restrict */);
       break;
     case policy::AndroidManagementClient::Result::MANAGED:
       ShowArcSupportHostError(
@@ -944,6 +957,7 @@ void ArcSessionManager::StopArc() {
   // management state is lost.
   if (!reenable_arc_ && state_ != State::STOPPED) {
     profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, false);
+    profile_->GetPrefs()->SetBoolean(prefs::kArcPaiStarted, false);
     profile_->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted, false);
   }
   ShutdownSession();
@@ -955,7 +969,9 @@ void ArcSessionManager::MaybeStartArcDataRemoval() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile_);
   // Data removal cannot run in parallel with ARC session.
-  DCHECK(arc_session_runner_->IsStopped());
+  // LoginScreen instance does not use data directory, so removing should work.
+  DCHECK(arc_session_runner_->IsStopped() ||
+         arc_session_runner_->IsLoginScreenInstanceStarting());
   DCHECK_EQ(state_, State::STOPPED);
 
   // TODO(hidehiko): Extract the implementation of data removal, so that

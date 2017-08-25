@@ -12,8 +12,9 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/printing/printer_configurer.h"
-#include "chrome/browser/chromeos/printing/printer_detector.h"
+#include "chrome/browser/chromeos/printing/printer_event_tracker.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chromeos/printing/ppd_provider.h"
 #include "chromeos/printing/printer_configuration.h"
@@ -27,7 +28,6 @@ class Profile;
 
 namespace chromeos {
 
-class CombiningPrinterDetector;
 class PpdProvider;
 
 namespace settings {
@@ -35,7 +35,7 @@ namespace settings {
 // Chrome OS CUPS printing settings page UI handler.
 class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
                             public ui::SelectFileDialog::Listener,
-                            public PrinterDetector::Observer {
+                            public CupsPrintersManager::Observer {
  public:
   explicit CupsPrintersHandler(content::WebUI* webui);
   ~CupsPrintersHandler() override;
@@ -70,7 +70,11 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
                      bool ipp_everywhere);
 
   void HandleAddCupsPrinter(const base::ListValue* args);
-  void OnAddedPrinter(const Printer& printer, PrinterSetupResult result);
+
+  // Handles the result of adding a printer which the user specified the
+  // location of (i.e. a printer that was not 'discovered' automatically).
+  void OnAddedSpecifiedPrinter(const Printer& printer,
+                               PrinterSetupResult result);
   void OnAddPrinterError();
 
   // Get a list of all manufacturers for which we have at least one model of
@@ -96,29 +100,51 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
                            PpdProvider::CallbackResultCode result_code,
                            const PpdProvider::ResolvedPrintersList& printers);
 
+  void HandleStartDiscovery(const base::ListValue* args);
+  void HandleStopDiscovery(const base::ListValue* args);
+
+  // Given a printer id, find the corresponding ppdManufacturer and ppdModel.
+  void HandleGetPrinterPpdManufacturerAndModel(const base::ListValue* args);
+  void OnGetPrinterPpdManufacturerAndModel(
+      const std::string& callback_id,
+      PpdProvider::CallbackResultCode result_code,
+      const std::string& manufacturer,
+      const std::string& model);
+
+  // Attempt to add a discovered printer.
+  void HandleAddDiscoveredPrinter(const base::ListValue* args);
+
+  // Post printer setup callback.
+  void OnAddedDiscoveredPrinter(const Printer& printer,
+                                PrinterSetupResult result_code);
+
+  // Code common between the discovered and manual add printer code paths.
+  // Returns true if the printer was added successfully, false otherwise.
+  bool OnAddedPrinterCommon(const Printer& printer,
+                            PrinterSetupResult result_code);
+
+  // CupsPrintersManager::Observer override:
+  void OnPrintersChanged(CupsPrintersManager::PrinterClass printer_class,
+                         const std::vector<Printer>& printers) override;
+
   // ui::SelectFileDialog::Listener override:
   void FileSelected(const base::FilePath& path,
                     int index,
                     void* params) override;
 
-  void HandleStartDiscovery(const base::ListValue* args);
-  void HandleStopDiscovery(const base::ListValue* args);
+  Profile* profile_;
 
-  // PrinterDetector::Observer implementations:
-  void OnPrintersFound(
-      const std::vector<PrinterDetector::DetectedPrinter>& printers) override;
-  void OnPrinterScanComplete() override;
+  // Discovery support.  discovery_active_ tracks whether or not the UI
+  // currently wants updates about printer availability.  The two vectors track
+  // the most recent list of printers in each class.
+  bool discovery_active_ = false;
+  std::vector<Printer> discovered_printers_;
+  std::vector<Printer> automatic_printers_;
 
-  // Invokes debugd to add the printer to CUPS.  If |ipp_everywhere| is true,
-  // automatic configuration will be attempted  and |ppd_path| is ignored.
-  // |ppd_path| is the path to a Postscript Printer Description file that will
-  // be used to configure the printer capabilities.  This file must be in
-  // Downloads or the PPD Cache.
-  void AddPrinterToCups(std::unique_ptr<Printer> printer,
-                        const base::FilePath& ppd_path,
-                        bool ipp_everywhere);
-
-  std::unique_ptr<CombiningPrinterDetector> printer_detector_;
+  // These must be initialized before printers_manager_, as they are
+  // used by callbacks that may be issued immediately by printers_manager_.
+  //
+  // TODO(crbug/757887) - Remove this subtle initialization constraint.
   scoped_refptr<PpdProvider> ppd_provider_;
   std::unique_ptr<PrinterConfigurer> printer_configurer_;
 
@@ -126,9 +152,9 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
   // that has been resolved in the lifetime of this object.
   std::map<std::string, PpdProvider::ResolvedPrintersList> resolved_printers_;
 
-  Profile* profile_;
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
   std::string webui_callback_id_;
+  std::unique_ptr<CupsPrintersManager> printers_manager_;
 
   base::WeakPtrFactory<CupsPrintersHandler> weak_factory_;
 

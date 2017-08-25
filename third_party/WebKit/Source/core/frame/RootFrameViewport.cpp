@@ -233,7 +233,7 @@ LayoutRect RootFrameViewport::ScrollIntoView(const LayoutRect& rect_in_content,
   if (target_viewport != view_rect_in_content) {
     ScrollOffset target_offset(target_viewport.X(), target_viewport.Y());
     if (is_for_scroll_sequence) {
-      DCHECK(scroll_type == kProgrammaticScroll || scroll_type == kUserScroll);
+      DCHECK(scroll_type == kProgrammaticScroll);
       ScrollBehavior behavior =
           is_smooth ? kScrollBehaviorSmooth : kScrollBehaviorInstant;
       GetSmoothScrollSequencer()->QueueAnimation(this, target_offset, behavior);
@@ -442,6 +442,10 @@ ScrollResult RootFrameViewport::UserScroll(ScrollGranularity granularity,
 
 bool RootFrameViewport::ScrollAnimatorEnabled() const {
   return LayoutViewport().ScrollAnimatorEnabled();
+}
+
+CompositorElementId RootFrameViewport::GetCompositorElementId() const {
+  return LayoutViewport().GetCompositorElementId();
 }
 
 PlatformChromeClient* RootFrameViewport::GetChromeClient() const {

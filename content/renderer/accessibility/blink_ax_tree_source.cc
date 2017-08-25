@@ -9,6 +9,7 @@
 #include <set>
 
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -80,7 +81,13 @@ class AXContentNodeDataSparseAttributeAdapter
 
   void AddBoolAttribute(blink::WebAXBoolAttribute attribute,
                         bool value) override {
-    NOTREACHED();
+    switch (attribute) {
+      case blink::WebAXBoolAttribute::kAriaBusy:
+        dst_->AddBoolAttribute(ui::AX_ATTR_BUSY, value);
+        break;
+      default:
+        NOTREACHED();
+    }
   }
 
   void AddStringAttribute(blink::WebAXStringAttribute attribute,
@@ -248,6 +255,49 @@ void BlinkAXTreeSource::SetAccessibilityMode(ui::AXMode new_mode) {
   accessibility_mode_ = new_mode;
 }
 
+bool BlinkAXTreeSource::ShouldLoadInlineTextBoxes(
+    const blink::WebAXObject& obj) const {
+#if !defined(OS_ANDROID)
+  // If inline text boxes are enabled globally, no need to explicitly load them.
+  if (accessibility_mode_.has_mode(ui::AXMode::kInlineTextBoxes))
+    return false;
+#endif
+
+  // On some platforms, like Android, we only load inline text boxes for
+  // a subset of nodes:
+  //
+  // Within the subtree of a focused editable text area.
+  // When specifically enabled for a subtree via |load_inline_text_boxes_ids_|.
+
+  int32_t focus_id = focus().AxID();
+  WebAXObject ancestor = obj;
+  while (!ancestor.IsDetached()) {
+    int32_t ancestor_id = ancestor.AxID();
+    if (base::ContainsKey(load_inline_text_boxes_ids_, ancestor_id) ||
+        (ancestor_id == focus_id && ancestor.IsEditable())) {
+      return true;
+    }
+    ancestor = ancestor.ParentObject();
+  }
+
+  return false;
+}
+
+void BlinkAXTreeSource::SetLoadInlineTextBoxesForId(int32_t id) {
+  // Keeping stale IDs in the set is harmless but we don't want it to keep
+  // growing without bound, so clear out any unnecessary IDs whenever this
+  // method is called.
+  for (auto iter = load_inline_text_boxes_ids_.begin();
+       iter != load_inline_text_boxes_ids_.end();) {
+    if (GetFromId(*iter).IsDetached())
+      iter = load_inline_text_boxes_ids_.erase(iter);
+    else
+      ++iter;
+  }
+
+  load_inline_text_boxes_ids_.insert(id);
+}
+
 bool BlinkAXTreeSource::GetTreeData(AXContentTreeData* tree_data) const {
   CHECK(frozen_);
   tree_data->doctype = "html";
@@ -315,17 +365,10 @@ void BlinkAXTreeSource::GetChildren(
     std::vector<WebAXObject>* out_children) const {
   CHECK(frozen_);
 
-  if (parent.Role() == blink::kWebAXRoleStaticText) {
-    int32_t focus_id = focus().AxID();
-    WebAXObject ancestor = parent;
-    while (!ancestor.IsDetached()) {
-      if (ancestor.AxID() == accessibility_focus_id_ ||
-          (ancestor.AxID() == focus_id && ancestor.IsEditable())) {
-        parent.LoadInlineTextBoxes();
-        break;
-      }
-      ancestor = ancestor.ParentObject();
-    }
+  if ((parent.Role() == blink::kWebAXRoleStaticText ||
+       parent.Role() == blink::kWebAXRoleLineBreak) &&
+      ShouldLoadInlineTextBoxes(parent)) {
+    parent.LoadInlineTextBoxes();
   }
 
   bool is_iframe = false;
@@ -634,9 +677,6 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
 
     if (src.IsInLiveRegion()) {
       dst->AddBoolAttribute(ui::AX_ATTR_LIVE_ATOMIC, src.LiveRegionAtomic());
-      dst->AddBoolAttribute(ui::AX_ATTR_LIVE_BUSY, src.LiveRegionBusy());
-      if (src.LiveRegionBusy())
-        dst->AddState(ui::AX_STATE_BUSY);
       if (!src.LiveRegionStatus().IsEmpty()) {
         dst->AddStringAttribute(ui::AX_ATTR_LIVE_STATUS,
                                 src.LiveRegionStatus().Utf8());
@@ -802,11 +842,15 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
     }
 
     if (src.IsEditable()) {
+      if (src.IsEditableRoot())
+        dst->AddBoolAttribute(ui::AX_ATTR_EDITABLE_ROOT, true);
+
       if (src.IsControl() && !src.IsRichlyEditable()) {
         // Only for simple input controls -- rich editable areas use AXTreeData
         dst->AddIntAttribute(ui::AX_ATTR_TEXT_SEL_START, src.SelectionStart());
         dst->AddIntAttribute(ui::AX_ATTR_TEXT_SEL_END, src.SelectionEnd());
       }
+
 #if defined(OS_CHROMEOS)
       // This attribute will soon be deprecated; see crbug.com/669134.
       WebVector<int> src_line_breaks;

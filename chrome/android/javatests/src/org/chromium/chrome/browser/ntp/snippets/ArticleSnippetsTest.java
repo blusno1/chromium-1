@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.ntp.snippets;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
+import android.support.annotation.DrawableRes;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.text.format.DateUtils;
@@ -26,6 +27,7 @@ import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
@@ -41,8 +43,10 @@ import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.ntp.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.ContextMenuManager.TouchEnabledDelegate;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
+import org.chromium.chrome.browser.ntp.cards.SignInPromo;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
@@ -53,6 +57,7 @@ import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.suggestions.ThumbnailGradient;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 import org.chromium.chrome.browser.widget.displaystyle.VerticalDisplayStyle;
@@ -112,6 +117,7 @@ public class ArticleSnippetsTest {
 
     private FrameLayout mContentView;
     private SnippetArticleViewHolder mSuggestion;
+    private SignInPromo.ViewHolder mSigninPromo;
 
     private UiConfig mUiConfig;
 
@@ -119,9 +125,10 @@ public class ArticleSnippetsTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/757735")
     @Feature({"ArticleSnippets", "RenderTest"})
-    @CommandLineParameter(
-            {"", "enable-features=" + ChromeFeatureList.SUGGESTIONS_HOME_MODERN_LAYOUT})
+    @CommandLineParameter({"", "enable-features=" + ChromeFeatureList.CHROME_HOME + ","
+            + ChromeFeatureList.CHROME_HOME_MODERN_LAYOUT})
     @RetryOnFailure
     public void testSnippetAppearance() throws IOException {
         // Don't load the Bitmap on the UI thread - this is a StrictModeViolation.
@@ -254,6 +261,35 @@ public class ArticleSnippetsTest {
         mRenderTestRule.render(mSuggestion.itemView, "download_snippet_thumbnail");
     }
 
+    @Test
+    @MediumTest
+    @Feature({"ArticleSnippets", "RenderTest"})
+    @CommandLineParameter({"", "enable-features=" + ChromeFeatureList.CHROME_HOME + ","
+                    + ChromeFeatureList.CHROME_HOME_MODERN_LAYOUT})
+    public void testSigninPromo() throws IOException {
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mContentView = new FrameLayout(mActivityTestRule.getActivity());
+            mUiConfig = new UiConfig(mContentView);
+
+            mActivityTestRule.getActivity().setContentView(mContentView);
+
+            mRecyclerView = new SuggestionsRecyclerView(mActivityTestRule.getActivity());
+            TouchEnabledDelegate touchEnabledDelegate =
+                    enabled -> mRecyclerView.setTouchEnabled(enabled);
+            ContextMenuManager contextMenuManager =
+                    new ContextMenuManager(mActivityTestRule.getActivity(),
+                            mUiDelegate.getNavigationDelegate(), touchEnabledDelegate);
+            mRecyclerView.init(mUiConfig, contextMenuManager);
+            mRecyclerView.setAdapter(mAdapter);
+
+            mSigninPromo = new SignInPromo.ViewHolder(mRecyclerView, contextMenuManager, mUiConfig);
+            mSigninPromo.onBindViewHolder(new SignInPromo(mUiDelegate));
+            mContentView.addView(mSigninPromo.itemView);
+        });
+
+        mRenderTestRule.render(mSigninPromo.itemView, "signin_promo");
+    }
+
     private void setupTestData(Bitmap thumbnail) {
         @CategoryInt
         int fullCategory = 0;
@@ -316,18 +352,25 @@ public class ArticleSnippetsTest {
     @Before
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
+        ChromePreferenceManager.getInstance().setNewTabPageSigninPromoDismissed(true);
         mThumbnailProvider = new MockThumbnailProvider();
         mSnippetsSource = new FakeSuggestionsSource();
         mSuggestionsDeps.getFactory().thumbnailProvider = mThumbnailProvider;
         mSuggestionsDeps.getFactory().suggestionsSource = mSnippetsSource;
         mUiDelegate = new MockUiDelegate();
-        Bitmap favicon = BitmapFactory.decodeResource(
-                mActivityTestRule.getActivity().getResources(), R.drawable.star_green);
-        mSnippetsSource.setDefaultFavicon(favicon);
+        mSnippetsSource.setDefaultFavicon(getBitmap(R.drawable.star_green));
 
-        if (isModern()) {
+        FeatureUtilities.resetChromeHomeEnabledForTests();
+        FeatureUtilities.cacheChromeHomeEnabled();
+
+        if (FeatureUtilities.isChromeHomeModernEnabled()) {
             mRenderTestRule.setVariantPrefix("modern");
         }
+    }
+
+    private Bitmap getBitmap(@DrawableRes int resId) {
+        return BitmapFactory.decodeResource(
+                mActivityTestRule.getInstrumentation().getTargetContext().getResources(), resId);
     }
 
     /**
@@ -421,13 +464,9 @@ public class ArticleSnippetsTest {
         public void makeFaviconRequest(SnippetArticle suggestion, final int faviconSizePx,
                 final Callback<Bitmap> faviconCallback) {
             // Run the callback asynchronously in case the caller made that assumption.
-            ThreadUtils.postOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    // Return an arbitrary drawable.
-                    faviconCallback.onResult(BitmapFactory.decodeResource(
-                            mActivityTestRule.getActivity().getResources(), R.drawable.star_green));
-                }
+            ThreadUtils.postOnUiThread(() -> {
+                // Return an arbitrary drawable.
+                faviconCallback.onResult(getBitmap(R.drawable.star_green));
             });
         }
 
@@ -435,25 +474,11 @@ public class ArticleSnippetsTest {
         public void makeLargeIconRequest(final String url, final int largeIconSizePx,
                 final LargeIconBridge.LargeIconCallback callback) {
             // Run the callback asynchronously in case the caller made that assumption.
-            ThreadUtils.postOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    // Return an arbitrary drawable.
-                    callback.onLargeIconAvailable(
-                            BitmapFactory.decodeResource(
-                                    mActivityTestRule.getActivity().getResources(),
-                                    R.drawable.star_green),
-                            largeIconSizePx, true);
-                }
+            ThreadUtils.postOnUiThread(() -> {
+                // Return an arbitrary drawable.
+                callback.onLargeIconAvailable(
+                        getBitmap(R.drawable.star_green), largeIconSizePx, true);
             });
         }
-    }
-
-    /**
-     * The test is parameterized on the Suggestions Modern layout, but only some tests make sense
-     * with Modern.
-     */
-    private boolean isModern() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.SUGGESTIONS_HOME_MODERN_LAYOUT);
     }
 }

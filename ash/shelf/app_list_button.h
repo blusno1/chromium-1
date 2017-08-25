@@ -8,6 +8,8 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/voice_interaction_state.h"
+#include "ash/session/session_observer.h"
 #include "ash/shell_observer.h"
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -25,7 +27,8 @@ class VoiceInteractionOverlay;
 
 // Button used for the AppList icon on the shelf.
 class ASH_EXPORT AppListButton : public views::ImageButton,
-                                 public ShellObserver {
+                                 public ShellObserver,
+                                 public SessionObserver {
  public:
   AppListButton(InkDropButtonListener* listener,
                 ShelfView* shelf_view,
@@ -69,18 +72,26 @@ class ASH_EXPORT AppListButton : public views::ImageButton,
   // ShellObserver:
   void OnAppListVisibilityChanged(bool shown,
                                   aura::Window* root_window) override;
-  void OnVoiceInteractionStatusChanged(bool running) override;
+  void OnVoiceInteractionStatusChanged(
+      ash::VoiceInteractionState state) override;
+  void OnVoiceInteractionEnabled(bool enabled) override;
+
+  // SessionObserver:
+  void OnActiveUserSessionChanged(const AccountId& account_id) override;
 
   void StartVoiceInteractionAnimation();
 
   // Helper function to determine whether and event at |location| should be
   // handled by the back button or the app list circle. Returns false if we are
-  // not in maximized mode (there is no back button).
+  // not in tablet mode (there is no back button).
   bool IsBackEvent(const gfx::Point& location);
 
   // Generate and send a VKEY_BROWSER_BACK key event when the back button
   // portion is clicked or tapped.
   void GenerateAndSendBackEvent(const ui::LocatedEvent& original_event);
+
+  // Whether voice interaction is currently active.
+  bool IsVoiceInteractionActive();
 
   // True if the app list is currently showing for this display.
   // This is useful because other IsApplistVisible functions aren't per-display.
@@ -93,16 +104,25 @@ class ASH_EXPORT AppListButton : public views::ImageButton,
   ShelfView* shelf_view_;
   Shelf* shelf_;
 
-  VoiceInteractionOverlay* voice_interaction_overlay_;
+  // Owned by the view hierarchy. Null if the voice interaction is not enabled.
+  VoiceInteractionOverlay* voice_interaction_overlay_ = nullptr;
   std::unique_ptr<base::OneShotTimer> voice_interaction_animation_delay_timer_;
   std::unique_ptr<base::OneShotTimer>
       voice_interaction_animation_hide_delay_timer_;
 
-  bool voice_interaction_running_ = false;
+  ash::VoiceInteractionState voice_interaction_state_ =
+      ash::VoiceInteractionState::STOPPED;
 
   // Flag that gets set each time we receive a mouse or gesture event. It is
   // then used to render the ink drop in the right location.
   bool last_event_is_back_event_ = false;
+
+  // Whether the primary user session is active. Arc is only supported in
+  // primary user session.
+  bool is_primary_user_active_ = false;
+
+  // Whether voice interaction is enabled in system settings.
+  bool voice_interaction_settings_enabled_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(AppListButton);
 };

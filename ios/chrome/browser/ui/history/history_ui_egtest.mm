@@ -14,11 +14,13 @@
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/history/history_entry_item.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
 #include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/util/transparent_link_button.h"
 #include "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -133,36 +135,6 @@ id<GREYMatcher> ClearBrowsingDataButton() {
 id<GREYMatcher> ConfirmClearBrowsingDataButton() {
   return ButtonWithAccessibilityLabelId(IDS_IOS_CONFIRM_CLEAR_BUTTON);
 }
-
-// Sign in with a mock identity.
-void MockSignIn() {
-  // Set up a mock identity.
-  ChromeIdentity* identity =
-      [FakeChromeIdentity identityWithEmail:@"foo@gmail.com"
-                                     gaiaID:@"fooID"
-                                       name:@"Fake Foo"];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-
-  [ChromeEarlGreyUI openSettingsMenu];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(kSettingsSignInCellId)]
-      performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
-                                   identity.userEmail)]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::ButtonWithAccessibilityLabelId(
-                     IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON)]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::ButtonWithAccessibilityLabelId(
-                     IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON)]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
-      performAction:grey_tap()];
-}
 }  // namespace
 
 // History UI tests.
@@ -276,12 +248,6 @@ void MockSignIn() {
 // in, and that tapping on the link in the message opens a new tab with the sync
 // help page.
 - (void)testHistoryEntriesStatusCell {
-  // TODO(crbug.com/747445): Re-enable this test on iOS 11 once the sign in UI
-  // is fixed.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
-
   [self loadTestURLs];
   [self openHistoryPanel];
   // Assert that no message is shown when the user is not signed in.
@@ -293,9 +259,22 @@ void MockSignIn() {
   [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 
-  // Sign in and assert that the page indicates what type of history entries
-  // are shown.
-  MockSignIn();
+  // Mock sign in and assert that the page indicates what type of history
+  // entries are shown.
+  ChromeIdentity* identity =
+      [FakeChromeIdentity identityWithEmail:@"foo@gmail.com"
+                                     gaiaID:@"fooID"
+                                       name:@"Fake Foo"];
+  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
+      identity);
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI
+      tapSettingsMenuButton:chrome_test_util::SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity.userEmail];
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+      performAction:grey_tap()];
+
   [self openHistoryPanel];
   // Assert that message about entries is shown. The "history is showing local
   // entries" message will be shown because sync is not set up for this test.
@@ -312,6 +291,12 @@ void MockSignIn() {
 
 // Tests that searching history displays only entries matching the search term.
 - (void)testSearchHistory {
+  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
+  // grey_typeText works on iOS 11.
+  if (base::ios::IsRunningOnIOS11OrLater() && IsIPadIdiom()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  }
+
   [self loadTestURLs];
   [self openHistoryPanel];
   [[EarlGrey selectElementWithMatcher:SearchIconButton()]

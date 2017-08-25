@@ -22,6 +22,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -30,6 +32,7 @@
 #include "content/child/request_extra_data.h"
 #include "content/child/resource_dispatcher.h"
 #include "content/child/shared_memory_data_consumer_handle.h"
+#include "content/child/sync_load_context.h"
 #include "content/child/sync_load_response.h"
 #include "content/child/web_url_request_util.h"
 #include "content/child/weburlresponse_extradata_impl.h"
@@ -391,7 +394,6 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
   void OnTransferSizeUpdated(int transfer_size_diff);
   void OnReceivedCachedMetadata(const char* data, int len);
   void OnCompletedRequest(int error_code,
-                          bool was_ignored_by_handler,
                           bool stale_copy_in_cache,
                           const base::TimeTicks& completion_time,
                           int64_t total_transfer_size,
@@ -451,7 +453,6 @@ class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
   void OnTransferSizeUpdated(int transfer_size_diff) override;
   void OnReceivedCachedMetadata(const char* data, int len) override;
   void OnCompletedRequest(int error_code,
-                          bool was_ignored_by_handler,
                           bool stale_copy_in_cache,
                           const base::TimeTicks& completion_time,
                           int64_t total_transfer_size,
@@ -516,7 +517,7 @@ void WebURLLoaderImpl::Context::SetDefersLoading(bool value) {
   } else if (!value && defers_loading_ != NOT_DEFERRING) {
     if (defers_loading_ == DEFERRED_DATA) {
       task_runner_->PostTask(FROM_HERE,
-                             base::Bind(&Context::HandleDataURL, this));
+                             base::BindOnce(&Context::HandleDataURL, this));
     }
     defers_loading_ = NOT_DEFERRING;
   }
@@ -549,7 +550,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
                              &sync_load_response->data);
     } else {
       task_runner_->PostTask(FROM_HERE,
-                             base::Bind(&Context::HandleDataURL, this));
+                             base::BindOnce(&Context::HandleDataURL, this));
     }
     return;
   }
@@ -582,7 +583,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
 
   resource_request->method = method;
   resource_request->url = url_;
-  resource_request->first_party_for_cookies = request.FirstPartyForCookies();
+  resource_request->site_for_cookies = request.SiteForCookies();
   resource_request->request_initiator =
       request.RequestorOrigin().IsNull()
           ? base::Optional<url::Origin>()
@@ -660,10 +661,37 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
 
   if (sync_load_response) {
     DCHECK(defers_loading_ == NOT_DEFERRING);
-    resource_dispatcher_->StartSync(
-        std::move(resource_request), request.RequestorID(), sync_load_response,
-        request.GetLoadingIPCType(), url_loader_factory_,
-        extra_data->TakeURLLoaderThrottles());
+
+    int routing_id = request.RequestorID();
+    blink::WebURLRequest::LoadingIPCType ipc_type = request.GetLoadingIPCType();
+    if (ipc_type == blink::WebURLRequest::LoadingIPCType::kMojo) {
+      mojom::URLLoaderFactoryPtrInfo url_loader_factory_copy;
+      url_loader_factory_->Clone(mojo::MakeRequest(&url_loader_factory_copy));
+      base::WaitableEvent event(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+
+      // TODO(reillyg): Support passing URLLoaderThrottles to this task.
+      DCHECK_EQ(0u, extra_data->TakeURLLoaderThrottles().size());
+
+      // A task is posted to a separate thread to execute the request so that
+      // this thread may block on a waitable event. It is safe to pass raw
+      // pointers to |sync_load_response| and |event| as this stack frame will
+      // survive until the request is complete.
+      base::CreateSingleThreadTaskRunnerWithTraits({})->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &SyncLoadContext::StartAsyncWithWaitableEvent,
+              std::move(resource_request), routing_id,
+              extra_data->frame_origin(), std::move(url_loader_factory_copy),
+              base::Unretained(sync_load_response), base::Unretained(&event)));
+
+      event.Wait();
+    } else {
+      resource_dispatcher_->StartSync(
+          std::move(resource_request), routing_id, sync_load_response, ipc_type,
+          url_loader_factory_, extra_data->TakeURLLoaderThrottles());
+    }
     return;
   }
 
@@ -671,7 +699,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
                          TRACE_EVENT_FLAG_FLOW_OUT);
   request_id_ = resource_dispatcher_->StartAsync(
       std::move(resource_request), request.RequestorID(), task_runner_,
-      extra_data->frame_origin(),
+      extra_data->frame_origin(), false /* is_sync */,
       base::MakeUnique<WebURLLoaderImpl::RequestPeerImpl>(this),
       request.GetLoadingIPCType(), url_loader_factory_,
       extra_data->TakeURLLoaderThrottles(), std::move(consumer_handle));
@@ -701,7 +729,7 @@ bool WebURLLoaderImpl::Context::OnReceivedRedirect(
 
   url_ = WebURL(redirect_info.new_url);
   return client_->WillFollowRedirect(
-      url_, redirect_info.new_first_party_for_cookies,
+      url_, redirect_info.new_site_for_cookies,
       WebString::FromUTF8(redirect_info.new_referrer),
       NetReferrerPolicyToBlinkReferrerPolicy(redirect_info.new_referrer_policy),
       WebString::FromUTF8(redirect_info.new_method), response,
@@ -864,7 +892,6 @@ void WebURLLoaderImpl::Context::OnReceivedCachedMetadata(
 
 void WebURLLoaderImpl::Context::OnCompletedRequest(
     int error_code,
-    bool was_ignored_by_handler,
     bool stale_copy_in_cache,
     const base::TimeTicks& completion_time,
     int64_t total_transfer_size,
@@ -1001,8 +1028,8 @@ void WebURLLoaderImpl::Context::HandleDataURL() {
       OnReceivedData(base::MakeUnique<FixedReceivedData>(data.data(), size));
   }
 
-  OnCompletedRequest(error_code, false, false, base::TimeTicks::Now(), 0,
-                     data.size(), data.size());
+  OnCompletedRequest(error_code, false, base::TimeTicks::Now(), 0, data.size(),
+                     data.size());
 }
 
 // WebURLLoaderImpl::RequestPeerImpl ------------------------------------------
@@ -1050,15 +1077,14 @@ void WebURLLoaderImpl::RequestPeerImpl::OnReceivedCachedMetadata(
 
 void WebURLLoaderImpl::RequestPeerImpl::OnCompletedRequest(
     int error_code,
-    bool was_ignored_by_handler,
     bool stale_copy_in_cache,
     const base::TimeTicks& completion_time,
     int64_t total_transfer_size,
     int64_t encoded_body_size,
     int64_t decoded_body_size) {
-  context_->OnCompletedRequest(
-      error_code, was_ignored_by_handler, stale_copy_in_cache, completion_time,
-      total_transfer_size, encoded_body_size, decoded_body_size);
+  context_->OnCompletedRequest(error_code, stale_copy_in_cache, completion_time,
+                               total_transfer_size, encoded_body_size,
+                               decoded_body_size);
 }
 
 // WebURLLoaderImpl -----------------------------------------------------------

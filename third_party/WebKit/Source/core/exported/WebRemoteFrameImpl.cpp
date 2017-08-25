@@ -7,7 +7,7 @@
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/dom/RemoteSecurityContext.h"
 #include "core/dom/SecurityContext.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/RemoteFrameClientImpl.h"
 #include "core/frame/RemoteFrameOwner.h"
@@ -58,7 +58,7 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
   WebRemoteFrameImpl* frame =
       new WebRemoteFrameImpl(WebTreeScopeType::kDocument, client);
   frame->SetOpener(opener);
-  Page& page = *static_cast<WebViewBase*>(web_view)->GetPage();
+  Page& page = *static_cast<WebViewImpl*>(web_view)->GetPage();
   // It would be nice to DCHECK that the main frame is not set yet here.
   // Unfortunately, there is an edge case with a pending RenderFrameHost that
   // violates this: the embedder may create a pending RenderFrameHost for
@@ -124,23 +124,9 @@ WebView* WebRemoteFrameImpl::View() const {
   return GetFrame()->GetPage()->GetChromeClient().GetWebView();
 }
 
-WebPerformance WebRemoteFrameImpl::Performance() const {
-  NOTREACHED();
-  return WebPerformance();
-}
-
 void WebRemoteFrameImpl::StopLoading() {
   // TODO(dcheng,japhet): Calling this method should stop loads
   // in all subframes, both remote and local.
-}
-
-void WebRemoteFrameImpl::EnableViewSourceMode(bool enable) {
-  NOTREACHED();
-}
-
-bool WebRemoteFrameImpl::IsViewSourceModeEnabled() const {
-  NOTREACHED();
-  return false;
 }
 
 WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
@@ -153,7 +139,7 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
     const WebParsedFeaturePolicy& container_policy,
     const WebFrameOwnerProperties& frame_owner_properties,
     WebFrame* opener) {
-  WebLocalFrameBase* child =
+  WebLocalFrameImpl* child =
       WebLocalFrameImpl::Create(scope, client, interface_registry, opener);
   InsertAfter(child, previous_sibling);
   RemoteFrameOwner* owner =
@@ -303,8 +289,8 @@ void WebRemoteFrameImpl::DidStartLoading() {
 void WebRemoteFrameImpl::DidStopLoading() {
   GetFrame()->SetIsLoading(false);
   if (Parent() && Parent()->IsWebLocalFrame()) {
-    WebLocalFrameBase* parent_frame =
-        ToWebLocalFrameBase(Parent()->ToWebLocalFrame());
+    WebLocalFrameImpl* parent_frame =
+        ToWebLocalFrameImpl(Parent()->ToWebLocalFrame());
     parent_frame->GetFrame()->GetDocument()->CheckCompleted();
   }
 }
@@ -340,7 +326,7 @@ void WebRemoteFrameImpl::WillEnterFullscreen() {
 }
 
 void WebRemoteFrameImpl::SetHasReceivedUserGesture() {
-  GetFrame()->SetDocumentHasReceivedUserGesture();
+  GetFrame()->UpdateUserActivationInFrameTree();
 }
 
 v8::Local<v8::Object> WebRemoteFrameImpl::GlobalProxy() const {

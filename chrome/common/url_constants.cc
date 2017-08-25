@@ -67,7 +67,7 @@ const char kChromeUIInspectURL[] = "chrome://inspect/";
 const char kChromeUIInstantURL[] = "chrome://instant/";
 const char kChromeUIInterstitialURL[] = "chrome://interstitials/";
 const char kChromeUIInvalidationsURL[] = "chrome://invalidations/";
-const char kChromeUIMdPolicyURL[] = "chrome://md-policy/";
+const char kChromeUIMemoryInternalsURL[] = "chrome://memory-internals/";
 const char kChromeUINaClURL[] = "chrome://nacl/";
 const char kChromeUINetInternalsURL[] = "chrome://net-internals/";
 const char kChromeUINewProfileURL[] = "chrome://newprofile/";
@@ -148,10 +148,6 @@ const char kChromeUITabModalConfirmDialogURL[] =
     "chrome://tab-modal-confirm-dialog/";
 #endif
 
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-extern const char kChromeUIMemoryInternalsURL[] = "chrome://memory-internals/";
-#endif
-
 #if BUILDFLAG(ENABLE_WEBRTC)
 const char kChromeUIWebRtcLogsURL[] = "chrome://webrtc-logs/";
 #endif
@@ -219,8 +215,8 @@ const char kChromeUIInvalidationsHost[] = "invalidations";
 const char kChromeUIKillHost[] = "kill";
 const char kChromeUILargeIconHost[] = "large-icon";
 const char kChromeUILocalStateHost[] = "local-state";
-const char kChromeUIMdPolicyHost[] = "md-policy";
 const char kChromeUIMediaEngagementHost[] = "media-engagement";
+const char kChromeUIMemoryInternalsHost[] = "memory-internals";
 const char kChromeUINaClHost[] = "nacl";
 const char kChromeUINetExportHost[] = "net-export";
 const char kChromeUINetInternalsHost[] = "net-internals";
@@ -344,10 +340,6 @@ const char kChromeUIMetroFlowHost[] = "make-metro";
 
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
 const char kChromeUITabModalConfirmDialogHost[] = "tab-modal-confirm-dialog";
-#endif
-
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-extern const char kChromeUIMemoryInternalsHost[] = "memory-internals";
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -719,7 +711,6 @@ const char* const kChromeHostURLs[] = {
     kChromeUIUberHost,
 #endif
 #if defined(OS_ANDROID)
-    kChromeUINetExportHost,
     kChromeUIOfflineInternalsHost,
     kChromeUISnippetsInternalsHost,
     kChromeUIWebApksHost,

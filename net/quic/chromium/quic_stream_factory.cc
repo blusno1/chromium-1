@@ -190,6 +190,7 @@ void SetInitialRttEstimate(base::TimeDelta estimate,
 }
 
 QuicConfig InitializeQuicConfig(const QuicTagVector& connection_options,
+                                const QuicTagVector& client_connection_options,
                                 int idle_connection_timeout_seconds) {
   DCHECK_GT(idle_connection_timeout_seconds, 0);
   QuicConfig config;
@@ -197,6 +198,7 @@ QuicConfig InitializeQuicConfig(const QuicTagVector& connection_options,
       QuicTime::Delta::FromSeconds(idle_connection_timeout_seconds),
       QuicTime::Delta::FromSeconds(idle_connection_timeout_seconds));
   config.SetConnectionOptionsToSend(connection_options);
+  config.SetClientConnectionOptions(client_connection_options);
   return config;
 }
 
@@ -353,8 +355,24 @@ class QuicStreamFactory::Job {
 
   base::WeakPtr<Job> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
+  void PopulateNetErrorDetails(NetErrorDetails* details) const;
+
   // Returns the estimate of dynamically allocated memory in bytes.
   size_t EstimateMemoryUsage() const;
+
+  void AddRequest(QuicStreamRequest* request) {
+    stream_requests_.insert(request);
+  }
+
+  void RemoveRequest(QuicStreamRequest* request) {
+    auto request_iter = stream_requests_.find(request);
+    DCHECK(request_iter != stream_requests_.end());
+    stream_requests_.erase(request_iter);
+  }
+
+  const std::set<QuicStreamRequest*>& stream_requests() {
+    return stream_requests_;
+  }
 
  private:
   enum IoState {
@@ -380,7 +398,9 @@ class QuicStreamFactory::Job {
   AddressList address_list_;
   base::TimeTicks dns_resolution_start_time_;
   base::TimeTicks dns_resolution_end_time_;
+  std::set<QuicStreamRequest*> stream_requests_;
   base::WeakPtrFactory<Job> weak_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(Job);
 };
 
@@ -472,6 +492,15 @@ void QuicStreamFactory::Job::Cancel() {
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
 }
 
+void QuicStreamFactory::Job::PopulateNetErrorDetails(
+    NetErrorDetails* details) const {
+  if (!session_)
+    return;
+  details->connection_info = QuicHttpStream::ConnectionInfoFromQuicVersion(
+      session_->connection()->version());
+  details->quic_connection_error = session_->error();
+}
+
 size_t QuicStreamFactory::Job::EstimateMemoryUsage() const {
   return base::trace_event::EstimateMemoryUsage(key_);
 }
@@ -506,8 +535,7 @@ int QuicStreamFactory::Job::DoResolveHostComplete(int rv) {
 int QuicStreamFactory::Job::DoConnect() {
   io_state_ = STATE_CONNECT_COMPLETE;
 
-  bool require_confirmation = factory_->require_confirmation() ||
-                              was_alternative_service_recently_broken_;
+  bool require_confirmation = was_alternative_service_recently_broken_;
   net_log_.BeginEvent(
       NetLogEventType::QUIC_STREAM_FACTORY_JOB_CONNECT,
       NetLog::BoolCallback("require_confirmation", require_confirmation));
@@ -592,10 +620,14 @@ int QuicStreamRequest::Request(const HostPortPair& destination,
                                const GURL& url,
                                QuicStringPiece method,
                                const NetLogWithSource& net_log,
+                               NetErrorDetails* net_error_details,
                                const CompletionCallback& callback) {
   DCHECK_NE(quic_version, QUIC_VERSION_UNSUPPORTED);
+  DCHECK(net_error_details);
   DCHECK(callback_.is_null());
   DCHECK(factory_);
+
+  net_error_details_ = net_error_details;
   server_id_ = QuicServerId(HostPortPair::FromURL(url), privacy_mode);
 
   int rv = factory_->Create(server_id_, destination, quic_version,
@@ -671,6 +703,7 @@ QuicStreamFactory::QuicStreamFactory(
     bool race_cert_verification,
     bool estimate_initial_rtt,
     const QuicTagVector& connection_options,
+    const QuicTagVector& client_connection_options,
     bool enable_token_binding)
     : require_confirmation_(true),
       net_log_(net_log),
@@ -687,6 +720,7 @@ QuicStreamFactory::QuicStreamFactory(
       clock_skew_detector_(base::TimeTicks::Now(), base::Time::Now()),
       socket_performance_watcher_factory_(socket_performance_watcher_factory),
       config_(InitializeQuicConfig(connection_options,
+                                   client_connection_options,
                                    idle_connection_timeout_seconds)),
       crypto_config_(base::WrapUnique(
           new ProofVerifierChromium(cert_verifier,
@@ -712,7 +746,7 @@ QuicStreamFactory::QuicStreamFactory(
       force_hol_blocking_(force_hol_blocking),
       race_cert_verification_(race_cert_verification),
       estimate_initial_rtt(estimate_initial_rtt),
-      check_persisted_supports_quic_(true),
+      need_to_check_persisted_supports_quic_(true),
       num_push_streams_created_(0),
       task_runner_(nullptr),
       ssl_config_service_(ssl_config_service),
@@ -784,8 +818,13 @@ void QuicStreamFactory::set_require_confirmation(bool require_confirmation) {
 
 base::TimeDelta QuicStreamFactory::GetTimeDelayForWaitingJob(
     const QuicServerId& server_id) {
-  if (require_confirmation_)
-    return base::TimeDelta();
+  if (require_confirmation_) {
+    IPAddress last_address;
+    if (!need_to_check_persisted_supports_quic_ ||
+        !http_server_properties_->GetSupportsQuic(&last_address)) {
+      return base::TimeDelta();
+    }
+  }
 
   int64_t srtt =
       1.5 * GetServerNetworkStatsSmoothedRttInMicroseconds(server_id);
@@ -812,7 +851,6 @@ void QuicStreamFactory::DumpMemoryStats(
       base::trace_event::EstimateMemoryUsage(session_peer_ip_) +
       base::trace_event::EstimateMemoryUsage(gone_away_aliases_) +
       base::trace_event::EstimateMemoryUsage(active_jobs_) +
-      base::trace_event::EstimateMemoryUsage(job_requests_map_) +
       base::trace_event::EstimateMemoryUsage(active_cert_verifier_jobs_);
   factory_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                           base::trace_event::MemoryAllocatorDump::kUnitsBytes,
@@ -905,7 +943,7 @@ int QuicStreamFactory::Create(const QuicServerId& server_id,
     net_log.AddEvent(
         NetLogEventType::HTTP_STREAM_JOB_BOUND_TO_QUIC_STREAM_FACTORY_JOB,
         job_net_log.source().ToEventParametersCallback());
-    job_requests_map_[server_id].insert(request);
+    it->second->AddRequest(request);
     return ERR_IO_PENDING;
   }
 
@@ -935,7 +973,7 @@ int QuicStreamFactory::Create(const QuicServerId& server_id,
   int rv = job->Run(base::Bind(&QuicStreamFactory::OnJobComplete,
                                base::Unretained(this), job.get()));
   if (rv == ERR_IO_PENDING) {
-    job_requests_map_[server_id].insert(request);
+    job->AddRequest(request);
     active_jobs_[server_id] = std::move(job);
     return rv;
   }
@@ -1001,37 +1039,33 @@ void QuicStreamFactory::OnJobComplete(Job* job, int rv) {
   // returns.
   const QuicServerId server_id(job->key().server_id());
 
-  ServerIDRequestsMap::iterator requests_iter =
-      job_requests_map_.find(server_id);
+  auto iter = active_jobs_.find(server_id);
   // TODO(xunjieli): Change following CHECKs back to DCHECKs after
   // crbug.com/750271 is fixed.
-  CHECK(requests_iter != job_requests_map_.end());
+  CHECK(iter != active_jobs_.end());
   if (rv == OK) {
     set_require_confirmation(false);
 
-    if (!requests_iter->second.empty()) {
-      SessionMap::iterator session_it = active_sessions_.find(server_id);
-      CHECK(session_it != active_sessions_.end());
-      QuicChromiumClientSession* session = session_it->second;
-      for (QuicStreamRequest* request : requests_iter->second) {
-        CHECK(request->server_id() == server_id);
-        // Do not notify |request| yet.
-        request->SetSession(session->CreateHandle());
-      }
+    SessionMap::iterator session_it = active_sessions_.find(server_id);
+    CHECK(session_it != active_sessions_.end());
+    QuicChromiumClientSession* session = session_it->second;
+    for (auto* request : iter->second->stream_requests()) {
+      CHECK(request->server_id() == server_id);
+      // Do not notify |request| yet.
+      request->SetSession(session->CreateHandle());
     }
   }
 
-  // It's okay not to erase |request| from |requests_iter->second| because the
-  // entire RequestSet will be erased from |job_requests_map_|.
-  for (auto* request : requests_iter->second) {
+  for (auto* request : iter->second->stream_requests()) {
     // Even though we're invoking callbacks here, we don't need to worry
     // about |this| being deleted, because the factory is owned by the
     // profile which can not be deleted via callbacks.
+    if (rv < 0) {
+      job->PopulateNetErrorDetails(request->net_error_details());
+    }
     request->OnRequestComplete(rv);
   }
-
-  active_jobs_.erase(server_id);
-  job_requests_map_.erase(requests_iter);
+  active_jobs_.erase(iter);
 }
 
 void QuicStreamFactory::OnCertVerifyJobComplete(CertVerifierJob* job, int rv) {
@@ -1100,10 +1134,8 @@ void QuicStreamFactory::OnBlackholeAfterHandshakeConfirmed(
 }
 
 void QuicStreamFactory::CancelRequest(QuicStreamRequest* request) {
-  ServerIDRequestsMap::iterator requests_it =
-      job_requests_map_.find(request->server_id());
-  DCHECK(requests_it != job_requests_map_.end());
-  requests_it->second.erase(request);
+  auto job_iter = active_jobs_.find(request->server_id());
+  job_iter->second->RemoveRequest(request);
 }
 
 void QuicStreamFactory::CloseAllSessions(int error, QuicErrorCode quic_error) {
@@ -1449,8 +1481,8 @@ int QuicStreamFactory::ConfigureSocket(DatagramClientSocket* socket,
   }
 
   socket->GetLocalAddress(&local_address_);
-  if (check_persisted_supports_quic_) {
-    check_persisted_supports_quic_ = false;
+  if (need_to_check_persisted_supports_quic_) {
+    need_to_check_persisted_supports_quic_ = false;
     IPAddress last_address;
     if (http_server_properties_->GetSupportsQuic(&last_address) &&
         last_address == local_address_.address()) {
@@ -1528,6 +1560,11 @@ int QuicStreamFactory::CreateSession(const QuicSessionKey& key,
         socket_performance_watcher_factory_->CreateSocketPerformanceWatcher(
             SocketPerformanceWatcherFactory::PROTOCOL_QUIC, address_list);
   }
+
+  // Wait for handshake confirmation before allowing streams to be created if
+  // either this session or the factory require confirmation.
+  if (require_confirmation_)
+    require_confirmation = true;
 
   *session = new QuicChromiumClientSession(
       connection, std::move(socket), this, quic_crypto_client_stream_factory_,

@@ -101,7 +101,7 @@ java_cpp_enum("aw_error_ui") {
 
 java_cpp_enum("aw_safe_browsing_action") {
   sources = [
-    "browser/aw_safe_browsing_resource_throttle.h",
+    "browser/aw_url_checker_delegate_impl.h",
   ]
 }
 
@@ -163,13 +163,13 @@ repack("repack_pack") {
 
 repack("repack_100_percent") {
   sources = [
-    "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
+    "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
   ]
   deps = [
     "//content/app/resources",
-    "//third_party/WebKit/public:image_resources",
+    "//third_party/WebKit/public:scaled_resources_100_percent",
     "//ui/resources",
   ]
   output = "$target_gen_dir/chrome_100_percent.pak"
@@ -442,8 +442,6 @@ source_set("common") {
     "browser/aw_browser_permission_request_delegate.h",
     "browser/aw_browser_policy_connector.cc",
     "browser/aw_browser_policy_connector.h",
-    "browser/aw_browser_process.cc",
-    "browser/aw_browser_process.h",
     "browser/aw_browser_terminator.cc",
     "browser/aw_browser_terminator.h",
     "browser/aw_content_browser_client.cc",
@@ -466,6 +464,8 @@ source_set("common") {
     "browser/aw_devtools_server.h",
     "browser/aw_download_manager_delegate.cc",
     "browser/aw_download_manager_delegate.h",
+    "browser/aw_field_trial_creator.cc",
+    "browser/aw_field_trial_creator.h",
     "browser/aw_form_database.cc",
     "browser/aw_form_database_service.cc",
     "browser/aw_form_database_service.h",
@@ -521,6 +521,10 @@ source_set("common") {
     "browser/aw_settings.h",
     "browser/aw_ssl_host_state_delegate.cc",
     "browser/aw_ssl_host_state_delegate.h",
+    "browser/aw_url_checker_delegate_impl.cc",
+    "browser/aw_url_checker_delegate_impl.h",
+    "browser/aw_variations_service_client.cc",
+    "browser/aw_variations_service_client.h",
     "browser/aw_web_contents_delegate.cc",
     "browser/aw_web_contents_delegate.h",
     "browser/aw_web_contents_view_delegate.cc",
@@ -699,14 +703,15 @@ source_set("common") {
     "//components/safe_browsing",
     "//components/safe_browsing/browser",
     "//components/safe_browsing/common",
+    "//components/safe_browsing/db:safe_browsing_mobile",
     "//components/safe_browsing/renderer:throttles",
     "//components/safe_browsing/triggers",
     "//components/safe_browsing/web_ui",
-    "//components/safe_browsing_db:safe_browsing_db_mobile",
     "//components/spellcheck:build_features",
     "//components/supervised_user_error_page",
     "//components/supervised_user_error_page:gin",
     "//components/url_matcher",
+    "//components/variations/service",
     "//components/version_info",
     "//components/visitedlink/browser",
     "//components/visitedlink/renderer",
@@ -805,7 +810,6 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/AwTokenBindingManager.java",
     "java/src/org/chromium/android_webview/AwViewMethods.java",
     "java/src/org/chromium/android_webview/AwViewAndroidDelegate.java",
-    "java/src/org/chromium/android_webview/AwVariationsSeedFetchService.java",
     "java/src/org/chromium/android_webview/AwWebContentsDelegate.java",
     "java/src/org/chromium/android_webview/AwWebContentsDelegateAdapter.java",
     "java/src/org/chromium/android_webview/AwWebContentsObserver.java",
@@ -831,6 +835,10 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/permission/AwGeolocationCallback.java",
     "java/src/org/chromium/android_webview/permission/AwPermissionRequest.java",
     "java/src/org/chromium/android_webview/policy/AwPolicyProvider.java",
+    "java/src/org/chromium/android_webview/variations/AwVariationsConfigurationService.java",
+    "java/src/org/chromium/android_webview/variations/AwVariationsSeedFetchService.java",
+    "java/src/org/chromium/android_webview/variations/AwVariationsSeedHandler.java",
+    "java/src/org/chromium/android_webview/variations/AwVariationsUtils.java",
   ]
   deps = [
     ":android_webview_commandline_java",
@@ -838,14 +846,16 @@ android_library("android_webview_java") {
     ":android_webview_platform_services_java",
     ":resources",
     ":strings_grd",
+    ":system_webview_manifest",
     "//base:base_java",
     "//components/autofill/android:autofill_java",
     "//components/autofill/android:provider_java",
+    "//components/background_task_scheduler:background_task_scheduler_java",
     "//components/crash/android:java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/policy/android:policy_java",
-    "//components/safe_browsing_db/android:safe_browsing_java",
+    "//components/safe_browsing/android:safe_browsing_java",
     "//components/variations/android:variations_java",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
     "//components/web_restrictions:client_java",
@@ -868,6 +878,9 @@ android_library("android_webview_java") {
     ":aw_safe_browsing_action",
     "//components/safe_browsing_db:sb_threat_values",
   ]
+
+  # Manifest used for linting (determining unused resources).
+  android_manifest = system_webview_android_manifest
 }
 
 java_strings_grd("strings_grd") {

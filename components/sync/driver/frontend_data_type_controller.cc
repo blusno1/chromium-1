@@ -5,7 +5,6 @@
 #include "components/sync/driver/frontend_data_type_controller.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/model_type.h"
@@ -104,11 +103,6 @@ void FrontendDataTypeController::Stop() {
   change_processor_.reset();
 
   state_ = NOT_RUNNING;
-}
-
-std::string FrontendDataTypeController::name() const {
-  // For logging only.
-  return ModelTypeToString(type());
 }
 
 DataTypeController::State FrontendDataTypeController::state() const {
@@ -214,7 +208,7 @@ void FrontendDataTypeController::StartDone(
 
 std::unique_ptr<DataTypeErrorHandler>
 FrontendDataTypeController::CreateErrorHandler() {
-  return base::MakeUnique<DataTypeErrorHandlerImpl>(
+  return std::make_unique<DataTypeErrorHandlerImpl>(
       base::ThreadTaskRunnerHandle::Get(), dump_stack_,
       base::Bind(&FrontendDataTypeController::OnUnrecoverableError,
                  base::AsWeakPtr(this)));

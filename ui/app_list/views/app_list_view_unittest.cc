@@ -201,6 +201,96 @@ class AppListViewFullscreenTest : public AppListViewTest {
     EXPECT_FALSE(view_->GetWidget()->IsVisible());
   }
 
+  void InitializeStartPageView(size_t apps_num) {
+    Initialize(0, false, false);
+    AppListTestModel* model = delegate_->GetTestModel();
+
+    // Adds suggestion apps to the start page view and show start page view.
+    for (size_t i = 0; i < apps_num; i++)
+      model->results()->Add(base::MakeUnique<TestStartPageSearchResult>());
+    EXPECT_TRUE(SetAppListState(AppListModel::STATE_START));
+    start_page_view()->UpdateForTesting();
+    EXPECT_EQ(apps_num, GetVisibleViews(start_page_view()->tile_views()));
+
+    // Initially, no view gets focus.
+    EXPECT_EQ(FOCUS_NONE, search_box_view()->get_focused_view_for_test());
+    EXPECT_EQ(StartPageView::kNoSelection,
+              start_page_view()->GetSelectedIndexForTest());
+  }
+
+  // Test focus movement within search box view and start page view on tab key
+  // or right arrow key.
+  void TestStartPageViewForwardFocusOnKey(ui::KeyEvent* key, size_t apps_num) {
+    // Sets focus on search box.
+    search_box_view()->search_box()->OnKeyEvent(key);
+    EXPECT_EQ(FOCUS_SEARCH_BOX, search_box_view()->get_focused_view_for_test());
+    EXPECT_EQ(StartPageView::kNoSelection,
+              start_page_view()->GetSelectedIndexForTest());
+
+    // When focus is on search box, moves focus through suggestion apps.
+    for (size_t i = 0; i < apps_num; i++) {
+      search_box_view()->search_box()->OnKeyEvent(key);
+      EXPECT_EQ(FOCUS_CONTENTS_VIEW,
+                search_box_view()->get_focused_view_for_test());
+      EXPECT_EQ(static_cast<int>(i),
+                start_page_view()->GetSelectedIndexForTest());
+    }
+
+    // When focus is on the last suggestion app, moves focus to expand arrow.
+    search_box_view()->search_box()->OnKeyEvent(key);
+    EXPECT_EQ(FOCUS_CONTENTS_VIEW,
+              search_box_view()->get_focused_view_for_test());
+    EXPECT_EQ(StartPageView::kExpandArrowSelection,
+              start_page_view()->GetSelectedIndexForTest());
+
+    // When focus is on expand arrow, clears focus.
+    search_box_view()->search_box()->OnKeyEvent(key);
+    EXPECT_EQ(FOCUS_NONE, search_box_view()->get_focused_view_for_test());
+    EXPECT_EQ(StartPageView::kNoSelection,
+              start_page_view()->GetSelectedIndexForTest());
+  }
+
+  // Test focus movement within search box view and start page view on shift+tab
+  // key or left arrow key.
+  void TestStartPageViewBackwardFocusOnKey(ui::KeyEvent* key, size_t apps_num) {
+    // Sets focus on expand arrow.
+    search_box_view()->search_box()->OnKeyEvent(key);
+    EXPECT_EQ(FOCUS_CONTENTS_VIEW,
+              search_box_view()->get_focused_view_for_test());
+    EXPECT_EQ(StartPageView::kExpandArrowSelection,
+              start_page_view()->GetSelectedIndexForTest());
+
+    // When focus is on search box, moves focus through suggestion apps
+    // reversely.
+    for (size_t i = 0; i < apps_num; i++) {
+      search_box_view()->search_box()->OnKeyEvent(key);
+      EXPECT_EQ(FOCUS_CONTENTS_VIEW,
+                search_box_view()->get_focused_view_for_test());
+      EXPECT_EQ(static_cast<int>(apps_num - 1 - i),
+                start_page_view()->GetSelectedIndexForTest());
+    }
+
+    // When focus is on the first suggestion app, moves focus to search box.
+    search_box_view()->search_box()->OnKeyEvent(key);
+    EXPECT_EQ(FOCUS_SEARCH_BOX, search_box_view()->get_focused_view_for_test());
+    EXPECT_EQ(StartPageView::kNoSelection,
+              start_page_view()->GetSelectedIndexForTest());
+
+    // When focus is on search box, clears focus.
+    search_box_view()->search_box()->OnKeyEvent(key);
+    EXPECT_EQ(FOCUS_NONE, search_box_view()->get_focused_view_for_test());
+    EXPECT_EQ(StartPageView::kNoSelection,
+              start_page_view()->GetSelectedIndexForTest());
+  }
+
+  AppListMainView* main_view() { return view_->app_list_main_view(); }
+
+  StartPageView* start_page_view() {
+    return main_view()->contents_view()->start_page_view();
+  }
+
+  SearchBoxView* search_box_view() { return main_view()->search_box_view(); }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
   DISALLOW_COPY_AND_ASSIGN(AppListViewFullscreenTest);
@@ -387,65 +477,34 @@ TEST_F(AppListViewFullscreenTest, MultiplePagesAlwaysReinitializeOnFirstPage) {
   ASSERT_EQ(view_->GetAppsPaginationModel()->selected_page(), 0);
 }
 
-// Tests the focus change in search box view and start page view triggered by
-// tab key .
-TEST_F(AppListViewFullscreenTest, StartPageTabFocusTest) {
+// Tests that when a click or tap event propagates to the AppListView, if the
+// event location is within the bounds of AppsGridView, do not close the
+// AppListView.
+TEST_F(AppListViewFullscreenTest, TapAndClickWithinAppsGridView) {
   Initialize(0, false, false);
-  AppListTestModel* model = delegate_->GetTestModel();
-  AppListMainView* main_view = view_->app_list_main_view();
-  StartPageView* start_page_view =
-      main_view->contents_view()->start_page_view();
-  SearchBoxView* search_box_view = main_view->search_box_view();
+  delegate_->GetTestModel()->PopulateApps(kInitialItems);
+  Show();
+  view_->SetState(AppListView::FULLSCREEN_ALL_APPS);
+  EXPECT_EQ(AppListView::FULLSCREEN_ALL_APPS, view_->app_list_state());
+  ContentsView* contents_view = view_->app_list_main_view()->contents_view();
+  AppsContainerView* container_view = contents_view->apps_container_view();
+  const gfx::Rect grid_view_bounds =
+      container_view->apps_grid_view()->GetBoundsInScreen();
+  gfx::Point target_point = grid_view_bounds.origin();
+  target_point.Offset(100, 100);
+  ASSERT_TRUE(grid_view_bounds.Contains(target_point));
 
-  // Adds 3 suggestion apps to the start page view and show start page view.
-  constexpr size_t apps_num = 3;
-  for (size_t i = 0; i < apps_num; i++)
-    model->results()->Add(base::MakeUnique<TestStartPageSearchResult>());
-  EXPECT_TRUE(SetAppListState(AppListModel::STATE_START));
-  start_page_view->UpdateForTesting();
-  EXPECT_EQ(apps_num, GetVisibleViews(start_page_view->tile_views()));
+  // Tests gesture tap within apps grid view doesn't close app list view.
+  ui::GestureEvent tap(target_point.x(), target_point.y(), 0, base::TimeTicks(),
+                       ui::GestureEventDetails(ui::ET_GESTURE_TAP));
+  view_->OnGestureEvent(&tap);
+  EXPECT_EQ(AppListView::FULLSCREEN_ALL_APPS, view_->app_list_state());
 
-  // Initially, no view gets focus.
-  EXPECT_EQ(FOCUS_NONE, search_box_view->get_focused_view_for_test());
-  EXPECT_EQ(StartPageView::kNoSelection,
-            start_page_view->GetSelectedIndexForTest());
-
-  // Hitting tab key sets focus on search box.
-  ui::KeyEvent tab(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_NONE);
-  search_box_view->search_box()->OnKeyEvent(&tab);
-  EXPECT_EQ(FOCUS_SEARCH_BOX, search_box_view->get_focused_view_for_test());
-  EXPECT_EQ(StartPageView::kNoSelection,
-            start_page_view->GetSelectedIndexForTest());
-
-  // Hitting tab key when focus is on search box moves focus through suggestion
-  // apps.
-  for (size_t i = 0; i < apps_num; i++) {
-    search_box_view->search_box()->OnKeyEvent(&tab);
-    EXPECT_EQ(FOCUS_CONTENTS_VIEW,
-              search_box_view->get_focused_view_for_test());
-    EXPECT_EQ(static_cast<int>(i), start_page_view->GetSelectedIndexForTest());
-  }
-
-  // Hitting tab key when focus is on the last suggestion app moves focus to
-  // expand arrow view.
-  search_box_view->search_box()->OnKeyEvent(&tab);
-  EXPECT_EQ(FOCUS_CONTENTS_VIEW, search_box_view->get_focused_view_for_test());
-  EXPECT_EQ(StartPageView::kExpandArrowSelection,
-            start_page_view->GetSelectedIndexForTest());
-
-  // Hitting tab key when focus is on the expand arrow view clears focus.
-  search_box_view->search_box()->OnKeyEvent(&tab);
-  EXPECT_EQ(FOCUS_NONE, search_box_view->get_focused_view_for_test());
-  EXPECT_EQ(StartPageView::kNoSelection,
-            start_page_view->GetSelectedIndexForTest());
-
-  // Hitting shift-tab key when no view gets focus sets focus to the expand
-  // arrow view.
-  ui::KeyEvent shift_tab(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_SHIFT_DOWN);
-  search_box_view->search_box()->OnKeyEvent(&shift_tab);
-  EXPECT_EQ(FOCUS_CONTENTS_VIEW, search_box_view->get_focused_view_for_test());
-  EXPECT_EQ(StartPageView::kExpandArrowSelection,
-            start_page_view->GetSelectedIndexForTest());
+  // Tests mouse click within apps grid view doesn't close app list view.
+  ui::MouseEvent mouse_click(ui::ET_MOUSE_PRESSED, target_point, target_point,
+                             base::TimeTicks(), 0, 0);
+  view_->OnMouseEvent(&mouse_click);
+  EXPECT_EQ(AppListView::FULLSCREEN_ALL_APPS, view_->app_list_state());
 }
 
 // Tests displaying the app list and performs a standard set of checks on its

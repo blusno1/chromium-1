@@ -51,7 +51,7 @@
 <translation id="1752547299766512813">Зберігати паролі</translation>
 <translation id="1753905327828125965">Часто відвідувані</translation>
 <translation id="1809939268435598390">Видалити папку</translation>
-<translation id="1813414402673211292">Очистити дані переглядача</translation>
+<translation id="1813414402673211292">Очистити історію</translation>
 <translation id="1820259098641718022">Додано в список читання</translation>
 <translation id="1876721852596493031">Надсилати статистику</translation>
 <translation id="1886928167269928266">Весь період</translation>
@@ -134,6 +134,8 @@
 <translation id="3474649192738347024">Форми заповнено.</translation>
 <translation id="3478058380795961209">Місяць закінчення терміну дії</translation>
 <translation id="3482959374254649722">Синхронізація вкладок…</translation>
+<translation id="3487093336331957349">Пропозиції пошукових термінів і сайтів</translation>
+<translation id="3493531032208478708"><ph name="BEGIN_LINK" />Докладніше<ph name="END_LINK" /> про пропонований вміст</translation>
 <translation id="3494788280727468875">Підтвердити очищення даних веб-перегляду</translation>
 <translation id="3519193562722059437">Щоб переглядати веб-сторінки, відкрийте вкладку.</translation>
 <translation id="3527085408025491307">Папка</translation>
@@ -151,6 +153,7 @@
 <translation id="3691593122358196899">Закладку збережено в папці "<ph name="FOLDER_TITLE" />"</translation>
 <translation id="3738139272394829648">Пошук дотиком</translation>
 <translation id="3771033907050503522">Анонімні вкладки</translation>
+<translation id="3779810277399252432">Немає з’єднання з Інтернетом</translation>
 <translation id="3783017676699494206">Зберегти зображення</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="3897092660631435901">Меню</translation>
@@ -172,7 +175,9 @@
 <translation id="4272631900155121838">Щоб відсканувати QR-код, увімкніть камеру в налаштуваннях</translation>
 <translation id="4281844954008187215">Умови використання</translation>
 <translation id="430793432425771671">Синхронізувати все</translation>
+<translation id="4342284590510997375">Нове</translation>
 <translation id="4359125752503270327">Ця сторінка відкриється в іншому додатку.</translation>
+<translation id="4375040482473363939">Шукати за QR-кодом</translation>
 <translation id="4378154925671717803">Телефон</translation>
 <translation id="441868831736628555">Примітка про конфіденційність</translation>
 <translation id="4508750114462689118">Закрити заклик до входу</translation>
@@ -245,6 +250,7 @@
 <translation id="5982717868370722439">Додати наявні дані в обліковий запис <ph name="USER_EMAIL" />.</translation>
 <translation id="6012140227487808125">Шифрування…</translation>
 <translation id="6021332621416007159">Відкрити в...</translation>
+<translation id="6039429417015973673"><ph name="TITLE" />, <ph name="PUBLISHER_INFORMATION" />, <ph name="PUBLICATION_DATE" /></translation>
 <translation id="6039694632319341016">Оновити пароль користувача <ph name="USERNAME" /> для цього сайту в <ph name="PASSWORD_MANAGER_BRAND" />?</translation>
 <translation id="6040143037577758943">Закрити</translation>
 <translation id="6042308850641462728">Більше</translation>
@@ -262,7 +268,6 @@
 <translation id="6196207969502475924">Голосовий пошук</translation>
 <translation id="6254066287920239840">Відкривайте посилання в додатку, а не у веб-переглядачі.</translation>
 <translation id="6255097610484507482">Редагувати дані кредитної картки</translation>
-<translation id="6273258929211277933"><ph name="TITLE" />, <ph name="PUBLISHER_INFORMATION" />, <ph name="PUBLICATION_DATE" />, <ph name="STATE" /></translation>
 <translation id="6308436439357671616">Ви зможете робити й завантажувати фотографії.</translation>
 <translation id="6314335155547195432">Згенерувати пароль</translation>
 <translation id="6324528485781869530">Змінити обліковий запис для синхронізації</translation>
@@ -302,7 +307,7 @@
 <translation id="6945221475159498467">Вибрати</translation>
 <translation id="6973630695168034713">Папки</translation>
 <translation id="7004499039102548441">Останні вкладки</translation>
-<translation id="7006788746334555276">Налаштування вмісту</translation>
+<translation id="7006788746334555276">Веб-контент</translation>
 <translation id="7031882061095297553">Синхронізувати</translation>
 <translation id="7062545763355031412">Прийняти та перейти в інший обліковий запис</translation>
 <translation id="7108338896283013870">Сховати</translation>
@@ -365,7 +370,6 @@
 <translation id="842017693807136194">Ви ввійшли як</translation>
 <translation id="8428045167754449968">Місто</translation>
 <translation id="8428213095426709021">Налаштування</translation>
-<translation id="8433678324664858900">Показ. пропозиції</translation>
 <translation id="8458397775385147834">Видалено 1 елемент</translation>
 <translation id="8487700953926739672">Доступ у режимі офлайн</translation>
 <translation id="8503813439785031346">Ім’я користувача</translation>

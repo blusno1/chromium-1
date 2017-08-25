@@ -84,7 +84,6 @@
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
@@ -105,6 +104,7 @@
 #include "core/paint/FirstMeaningfulPaintDetector.h"
 #include "core/paint/LinkHighlightImpl.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "platform/ContextMenu.h"
@@ -212,6 +212,46 @@ const double WebView::kTextSizeMultiplierRatio = 1.2;
 const double WebView::kMinTextSizeMultiplier = 0.5;
 const double WebView::kMaxTextSizeMultiplier = 3.0;
 
+const WebInputEvent* WebViewImpl::current_input_event_ = nullptr;
+
+const WebInputEvent* WebViewImpl::CurrentInputEvent() {
+  return current_input_event_;
+}
+
+// Used to defer all page activity in cases where the embedder wishes to run
+// a nested event loop. Using a stack enables nesting of message loop
+// invocations.
+static Vector<std::unique_ptr<ScopedPageSuspender>>& PageSuspenderStack() {
+  DEFINE_STATIC_LOCAL(Vector<std::unique_ptr<ScopedPageSuspender>>,
+                      suspender_stack, ());
+  return suspender_stack;
+}
+
+void WebView::WillEnterModalLoop() {
+  PageSuspenderStack().push_back(WTF::MakeUnique<ScopedPageSuspender>());
+}
+
+void WebView::DidExitModalLoop() {
+  DCHECK(PageSuspenderStack().size());
+  PageSuspenderStack().pop_back();
+}
+
+// static
+HashSet<WebViewImpl*>& WebViewImpl::AllInstances() {
+  DEFINE_STATIC_LOCAL(HashSet<WebViewImpl*>, all_instances, ());
+  return all_instances;
+}
+
+static bool g_should_use_external_popup_menus = false;
+
+void WebView::SetUseExternalPopupMenus(bool use_external_popup_menus) {
+  g_should_use_external_popup_menus = use_external_popup_menus;
+}
+
+bool WebViewImpl::UseExternalPopupMenus() {
+  return g_should_use_external_popup_menus;
+}
+
 namespace {
 
 class EmptyEventListener final : public EventListener {
@@ -257,7 +297,7 @@ WebView* WebView::Create(WebViewClient* client,
   return WebViewImpl::Create(client, visibility_state);
 }
 
-WebViewBase* WebViewImpl::Create(WebViewClient* client,
+WebViewImpl* WebViewImpl::Create(WebViewClient* client,
                                  WebPageVisibilityState visibility_state) {
   // Pass the WebViewImpl's self-reference to the caller.
   return AdoptRef(new WebViewImpl(client, visibility_state)).LeakRef();
@@ -1147,7 +1187,7 @@ WebInputEventResult WebViewImpl::HandleKeyEvent(const WebKeyboardEvent& event) {
   if ((is_unmodified_menu_key &&
        event.GetType() == kContextMenuKeyTriggeringEventType) ||
       (is_shift_f10 && event.GetType() == kShiftF10TriggeringEventType)) {
-    SendContextMenuEvent(event);
+    SendContextMenuEvent();
     return WebInputEventResult::kHandledSystem;
   }
 #endif  // !defined(OS_MACOSX)
@@ -1576,8 +1616,7 @@ bool WebViewImpl::HasTouchEventHandlersAt(const WebPoint& point) {
 
 #if !defined(OS_MACOSX)
 // Mac has no way to open a context menu based on a keyboard event.
-WebInputEventResult WebViewImpl::SendContextMenuEvent(
-    const WebKeyboardEvent& event) {
+WebInputEventResult WebViewImpl::SendContextMenuEvent() {
   // The contextMenuController() holds onto the last context menu that was
   // popped up on the page until a new one is created. We need to clear
   // this menu before propagating the event through the DOM so that we can
@@ -1602,8 +1641,7 @@ WebInputEventResult WebViewImpl::SendContextMenuEvent(
   }
 }
 #else
-WebInputEventResult WebViewImpl::SendContextMenuEvent(
-    const WebKeyboardEvent& event) {
+WebInputEventResult WebViewImpl::SendContextMenuEvent() {
   return WebInputEventResult::kNotHandled;
 }
 #endif
@@ -1815,11 +1853,8 @@ void WebViewImpl::DidUpdateBrowserControls() {
     // apparent position unchanged.
     ResizeViewportAnchor::ResizeScope resize_scope(*resize_viewport_anchor_);
 
-    float browser_controls_viewport_adjustment =
-        GetBrowserControls().LayoutHeight() -
-        GetBrowserControls().ContentOffset();
     visual_viewport.SetBrowserControlsAdjustment(
-        browser_controls_viewport_adjustment);
+        GetBrowserControls().UnreportedSizeAdjustment());
   }
 }
 
@@ -2028,19 +2063,8 @@ void WebViewImpl::Paint(WebCanvas* canvas, const WebRect& rect) {
   // This should only be used when compositing is not being used for this
   // WebView, and it is painting into the recording of its parent.
   DCHECK(!IsAcceleratedCompositingActive());
-
-  double paint_start = CurrentTime();
   PageWidgetDelegate::Paint(*page_, canvas, rect,
                             *page_->DeprecatedLocalMainFrame());
-  double paint_end = CurrentTime();
-  double pixels_per_sec =
-      (rect.width * rect.height) / (paint_end - paint_start);
-  DEFINE_STATIC_LOCAL(CustomCountHistogram, software_paint_duration_histogram,
-                      ("Renderer4.SoftwarePaintDurationMS", 0, 120, 30));
-  software_paint_duration_histogram.Count((paint_end - paint_start) * 1000);
-  DEFINE_STATIC_LOCAL(CustomCountHistogram, software_paint_rate_histogram,
-                      ("Renderer4.SoftwarePaintMegapixPerSecond", 10, 210, 30));
-  software_paint_rate_histogram.Count(pixels_per_sec / 1000000);
 }
 
 #if defined(OS_ANDROID)
@@ -2178,9 +2202,8 @@ WebInputEventResult WebViewImpl::HandleInputEvent(
         break;
       case WebInputEvent::kMouseDown:
         event_type = EventTypeNames::mousedown;
-        gesture_indicator =
-            WTF::WrapUnique(new UserGestureIndicator(UserGestureToken::Create(
-                &node->GetDocument(), UserGestureToken::kNewGesture)));
+        gesture_indicator = LocalFrame::CreateUserGesture(
+            node->GetDocument().GetFrame(), UserGestureToken::kNewGesture);
         mouse_capture_gesture_token_ = gesture_indicator->CurrentToken();
         break;
       case WebInputEvent::kMouseUp:

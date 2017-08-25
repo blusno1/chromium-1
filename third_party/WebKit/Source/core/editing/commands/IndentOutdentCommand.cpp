@@ -306,16 +306,18 @@ void IndentOutdentCommand::OutdentParagraph(EditingState* editing_state) {
 
     // Re-canonicalize visible{Start,End}OfParagraph, make them valid again
     // after DOM change.
-    // TODO(xiaochengh): We should not store a VisiblePosition and later inspect
-    // its properties when it is already invalidated.
+    // TODO(editing-dev): We should not store a VisiblePosition and later
+    // inspect its properties when it is already invalidated.
+    // See crbug.com/648949 for details.
     visible_start_of_paragraph = CreateVisiblePosition(
         visible_start_of_paragraph.ToPositionWithAffinity());
     visible_end_of_paragraph = CreateVisiblePosition(
         visible_end_of_paragraph.ToPositionWithAffinity());
   }
 
-  // TODO(xiaochengh): We should not store a VisiblePosition and later inspect
-  // its properties when it is already invalidated.
+  // TODO(editing-dev): We should not store a VisiblePosition and later
+  // inspect its properties when it is already invalidated.
+  // See crbug.com/648949 for details.
   VisiblePosition start_of_paragraph_to_move =
       StartOfParagraph(visible_start_of_paragraph);
   VisiblePosition end_of_paragraph_to_move =
@@ -365,12 +367,12 @@ void IndentOutdentCommand::OutdentRegion(
       SelectionInDOMTree::Builder builder;
       if (original_selection_end.IsNotNull())
         builder.Collapse(original_selection_end);
-      SetEndingSelection(builder.Build());
+      SetEndingSelection(SelectionForUndoStep::From(builder.Build()));
     } else {
-      SetEndingSelection(
+      SetEndingSelection(SelectionForUndoStep::From(
           SelectionInDOMTree::Builder()
               .Collapse(end_of_current_paragraph.DeepEquivalent())
-              .Build());
+              .Build()));
     }
 
     OutdentParagraph(editing_state);

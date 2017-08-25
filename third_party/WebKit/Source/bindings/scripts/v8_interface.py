@@ -172,6 +172,19 @@ def context_enabled_features(attributes):
     return features
 
 
+def runtime_call_stats_context(interface):
+    counter_prefix = 'Blink_' + v8_utilities.cpp_name(interface) + '_'
+    return {
+        'constructor_counter': counter_prefix + 'Constructor',
+        'cross_origin_named_getter_counter': counter_prefix + 'CrossOriginNamedGetter',
+        'cross_origin_named_setter_counter': counter_prefix + 'CrossOriginNamedSetter',
+        'indexed_property_getter_counter': counter_prefix + 'IndexedPropertyGetter',
+        'named_constructor_attribute_getter_counter': counter_prefix + 'NamedConstructorAttributeGetter',
+        'named_property_getter_counter': counter_prefix + 'NamedPropertyGetter',
+        'named_property_query_counter': counter_prefix + 'NamedPropertyQuery',
+        'named_property_setter_counter': counter_prefix + 'NamedPropertySetter',
+    }
+
 def interface_context(interface, interfaces):
     """Creates a Jinja template context for an interface.
 
@@ -250,6 +263,11 @@ def interface_context(interface, interfaces):
         raise Exception('[ActiveScriptWrappable] interface must also specify '
                         '[DependentLifetime]: %s' % interface.name)
 
+    # [LegacyUnenumerableNamedProperties]
+    # pylint: disable=C0103
+    has_legacy_unenumerable_named_properties = (interface.has_named_property_getter and
+                                                'LegacyUnenumerableNamedProperties' in extended_attributes)
+
     v8_class_name = v8_utilities.v8_class_name(interface)
     cpp_class_name = cpp_name(interface)
     cpp_class_name_or_partial = cpp_name_or_partial(interface)
@@ -260,6 +278,7 @@ def interface_context(interface, interfaces):
         'V8Window', 'V8HTMLDocument', 'V8Document', 'V8Node', 'V8EventTarget']
 
     context = {
+        'active_scriptwrappable': active_scriptwrappable,
         'context_enabled_feature_name': context_enabled_feature_name(interface),  # [ContextEnabled]
         'cpp_class': cpp_class_name,
         'cpp_class_or_partial': cpp_class_name_or_partial,
@@ -268,6 +287,7 @@ def interface_context(interface, interfaces):
         'has_access_check_callbacks': (is_check_security and
                                        interface.name != 'EventTarget'),
         'has_custom_legacy_call_as_function': has_extended_attribute_value(interface, 'Custom', 'LegacyCallAsFunction'),  # [Custom=LegacyCallAsFunction]
+        'has_legacy_unenumerable_named_properties': has_legacy_unenumerable_named_properties,
         'has_partial_interface': len(interface.partial_interfaces) > 0,
         'header_includes': header_includes,
         'interface_name': interface.name,
@@ -285,7 +305,7 @@ def interface_context(interface, interfaces):
         'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(interface),
         'parent_interface': parent_interface,
         'pass_cpp_type': cpp_name(interface) + '*',
-        'active_scriptwrappable': active_scriptwrappable,
+        'runtime_call_stats': runtime_call_stats_context(interface),
         'runtime_enabled_feature_name': runtime_enabled_feature_name(interface),  # [RuntimeEnabled]
         'v8_class': v8_class_name,
         'v8_class_or_partial': v8_class_name_or_partial,
@@ -826,6 +846,7 @@ def constant_context(constant, interface):
         'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(constant),  # [OriginTrialEnabled]
         'origin_trial_feature_name': v8_utilities.origin_trial_feature_name(constant),  # [OriginTrialEnabled]
         # FIXME: use 'reflected_name' as correct 'name'
+        'rcs_counter': 'Blink_' + v8_utilities.cpp_name(interface) + '_' + constant.name + '_ConstantGetter',
         'reflected_name': extended_attributes.get('Reflect', reflected_name(constant.name)),
         'runtime_enabled_feature_name': runtime_enabled_feature_name(constant),  # [RuntimeEnabled]
         'value': constant.value,
@@ -1339,6 +1360,7 @@ def constructor_context(interface, constructor):
         'is_raises_exception': is_constructor_raises_exception,
         'number_of_required_arguments':
             number_of_required_arguments(constructor),
+        'rcs_counter': 'Blink_' + v8_utilities.cpp_name(interface) + '_ConstructorCallback'
     }
 
 
@@ -1431,6 +1453,8 @@ def property_getter(getter, cpp_arguments):
             getter, 'Custom', 'PropertyEnumerator'),
         'is_custom_property_query': has_extended_attribute_value(
             getter, 'Custom', 'PropertyQuery'),
+        # TODO(rakuco): [NotEnumerable] does not make sense here and is only
+        # used in non-standard IDL operations. We need to get rid of them.
         'is_enumerable': 'NotEnumerable' not in extended_attributes,
         'is_null_expression': is_null_expression(idl_type),
         'is_raises_exception': is_raises_exception,

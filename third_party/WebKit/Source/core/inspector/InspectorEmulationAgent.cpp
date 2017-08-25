@@ -4,10 +4,10 @@
 
 #include "core/inspector/InspectorEmulationAgent.h"
 
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/inspector/DevToolsEmulator.h"
 #include "core/inspector/protocol/DOM.h"
 #include "core/page/Page.h"
@@ -18,6 +18,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebThread.h"
+#include "public/platform/WebTouchEvent.h"
 
 namespace blink {
 
@@ -27,25 +28,26 @@ using protocol::Response;
 namespace EmulationAgentState {
 static const char kScriptExecutionDisabled[] = "scriptExecutionDisabled";
 static const char kTouchEventEmulationEnabled[] = "touchEventEmulationEnabled";
+static const char kMaxTouchPoints[] = "maxTouchPoints";
 static const char kEmulatedMedia[] = "emulatedMedia";
 static const char kDefaultBackgroundColorOverrideRGBA[] =
     "defaultBackgroundColorOverrideRGBA";
 }
 
 InspectorEmulationAgent* InspectorEmulationAgent::Create(
-    WebLocalFrameBase* web_local_frame_impl,
+    WebLocalFrameImpl* web_local_frame_impl,
     Client* client) {
   return new InspectorEmulationAgent(web_local_frame_impl, client);
 }
 
 InspectorEmulationAgent::InspectorEmulationAgent(
-    WebLocalFrameBase* web_local_frame_impl,
+    WebLocalFrameImpl* web_local_frame_impl,
     Client* client)
     : web_local_frame_(web_local_frame_impl), client_(client) {}
 
 InspectorEmulationAgent::~InspectorEmulationAgent() {}
 
-WebViewBase* InspectorEmulationAgent::GetWebViewBase() {
+WebViewImpl* InspectorEmulationAgent::GetWebViewImpl() {
   return web_local_frame_->ViewImpl();
 }
 
@@ -55,7 +57,7 @@ void InspectorEmulationAgent::Restore() {
   setTouchEmulationEnabled(
       state_->booleanProperty(EmulationAgentState::kTouchEventEmulationEnabled,
                               false),
-      protocol::Maybe<String>());
+      state_->integerProperty(EmulationAgentState::kMaxTouchPoints, 1));
   String emulated_media;
   state_->getString(EmulationAgentState::kEmulatedMedia, &emulated_media);
   setEmulatedMedia(emulated_media);
@@ -73,7 +75,7 @@ void InspectorEmulationAgent::Restore() {
 
 Response InspectorEmulationAgent::disable() {
   setScriptExecutionDisabled(false);
-  setTouchEmulationEnabled(false, Maybe<String>());
+  setTouchEmulationEnabled(false, Maybe<int>());
   setEmulatedMedia(String());
   setCPUThrottlingRate(1);
   setDefaultBackgroundColorOverride(Maybe<protocol::DOM::RGBA>());
@@ -81,33 +83,40 @@ Response InspectorEmulationAgent::disable() {
 }
 
 Response InspectorEmulationAgent::resetPageScaleFactor() {
-  GetWebViewBase()->ResetScaleStateImmediately();
+  GetWebViewImpl()->ResetScaleStateImmediately();
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::setPageScaleFactor(double page_scale_factor) {
-  GetWebViewBase()->SetPageScaleFactor(static_cast<float>(page_scale_factor));
+  GetWebViewImpl()->SetPageScaleFactor(static_cast<float>(page_scale_factor));
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::setScriptExecutionDisabled(bool value) {
   state_->setBoolean(EmulationAgentState::kScriptExecutionDisabled, value);
-  GetWebViewBase()->GetDevToolsEmulator()->SetScriptExecutionDisabled(value);
+  GetWebViewImpl()->GetDevToolsEmulator()->SetScriptExecutionDisabled(value);
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::setTouchEmulationEnabled(
     bool enabled,
-    Maybe<String> configuration) {
+    protocol::Maybe<int> max_touch_points) {
+  int max_points = max_touch_points.fromMaybe(1);
+  if (max_points < 1 || max_points > WebTouchEvent::kTouchesLengthCap) {
+    return Response::InvalidParams(
+        "Touch points must be between 1 and " +
+        String::Number(WebTouchEvent::kTouchesLengthCap));
+  }
   state_->setBoolean(EmulationAgentState::kTouchEventEmulationEnabled, enabled);
-  GetWebViewBase()->GetDevToolsEmulator()->SetTouchEventEmulationEnabled(
-      enabled);
+  state_->setInteger(EmulationAgentState::kMaxTouchPoints, max_points);
+  GetWebViewImpl()->GetDevToolsEmulator()->SetTouchEventEmulationEnabled(
+      enabled, max_points);
   return Response::OK();
 }
 
 Response InspectorEmulationAgent::setEmulatedMedia(const String& media) {
   state_->setString(EmulationAgentState::kEmulatedMedia, media);
-  GetWebViewBase()->GetPage()->GetSettings().SetMediaTypeOverride(media);
+  GetWebViewImpl()->GetPage()->GetSettings().SetMediaTypeOverride(media);
   return Response::OK();
 }
 
@@ -152,7 +161,7 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
     Maybe<protocol::DOM::RGBA> color) {
   if (!color.isJust()) {
     // Clear the override and state.
-    GetWebViewBase()->ClearBaseBackgroundColorOverride();
+    GetWebViewImpl()->ClearBaseBackgroundColorOverride();
     state_->remove(EmulationAgentState::kDefaultBackgroundColorOverrideRGBA);
     return Response::OK();
   }
@@ -162,7 +171,7 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
                    rgba->toValue());
   // Clamping of values is done by Color() constructor.
   int alpha = lroundf(255.0f * rgba->getA(1.0f));
-  GetWebViewBase()->SetBaseBackgroundColorOverride(
+  GetWebViewImpl()->SetBaseBackgroundColorOverride(
       Color(rgba->getR(), rgba->getG(), rgba->getB(), alpha).Rgb());
   return Response::OK();
 }

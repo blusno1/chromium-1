@@ -30,10 +30,11 @@ enum UiElementDebugId {
   kExitWarning,
   kExitPrompt,
   kExitPromptBackplane,
-  kTransientUrlBar,
+  kWebVrUrlToast,
   kLocationAccessIndicator,
   kExclusiveScreenToast,
-  kSplashScreenIcon,
+  kExclusiveScreenToastViewportAware,
+  kSplashScreenText,
   kBluetoothConnectedIndicator,
   kBackgroundFront,
   kBackgroundLeft,
@@ -41,6 +42,7 @@ enum UiElementDebugId {
   kBackgroundRight,
   kBackgroundTop,
   kBackgroundBottom,
+  kUnderDevelopmentNotice,
 };
 
 }  // namespace vr

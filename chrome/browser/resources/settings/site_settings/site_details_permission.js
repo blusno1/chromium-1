@@ -27,26 +27,13 @@ Polymer({
     defaultSetting_: String,
   },
 
-  observers: ['siteChanged_(site, category)'],
+  observers: ['siteChanged_(site)'],
 
   /** @override */
   attached: function() {
     this.addWebUIListener(
-        'contentSettingSitePermissionChanged',
-        this.sitePermissionChanged_.bind(this));
-  },
-
-  /**
-   * Returns true if the origins match, e.g. http://google.com and
-   * http://[*.]google.com.
-   * @param {string} left The first origin to compare.
-   * @param {string} right The second origin to compare.
-   * @return {boolean} True if the origins are the same.
-   * @private
-   */
-  sameOrigin_: function(left, right) {
-    return this.removePatternWildcard(left) ==
-        this.removePatternWildcard(right);
+        'contentSettingCategoryChanged',
+        this.onDefaultSettingChanged_.bind(this));
   },
 
   /**
@@ -60,10 +47,7 @@ Polymer({
       this.$.permission.value = settings.ContentSetting.DEFAULT;
     } else {
       // The default setting is unknown, so consult the C++ backend for it.
-      this.browserProxy.getDefaultValueForContentType(this.category)
-          .then((defaultValue) => {
-            this.defaultSetting_ = defaultValue.setting;
-          });
+      this.updateDefaultPermission_(site);
       this.$.permission.value = site.setting;
     }
 
@@ -78,27 +62,39 @@ Polymer({
       this.$.permission.disabled =
           site.source != settings.SiteSettingSource.EMBARGO;
     }
+
+    if (this.isNonDefaultAsk_(site.setting, site.source)) {
+      assert(
+          this.$.permission.disabled,
+          'The \'Ask\' entry is for display-only and cannot be set by the ' +
+              'user.');
+      assert(
+          this.$.permission.value == settings.ContentSetting.ASK,
+          '\'Ask\' should only show up when it\'s currently selected.');
+    }
   },
 
   /**
-   * Called when a site within a category has been changed.
-   * @param {number} category The category that changed.
-   * @param {string} origin The origin of the site that changed.
-   * @param {string} embeddingOrigin The embedding origin of the site that
-   *     changed.
+   * Updates the default permission setting for this permission category.
+   * @param {!RawSiteException} site The site to display.
    * @private
    */
-  sitePermissionChanged_: function(category, origin, embeddingOrigin) {
-    if (this.site === undefined)
-      return;
-    if (category != this.category)
-      return;
+  updateDefaultPermission_: function(site) {
+    this.browserProxy.getDefaultValueForContentType(this.category)
+        .then((defaultValue) => {
+          this.defaultSetting_ = defaultValue.setting;
+        });
+  },
 
-    if (origin == '' ||
-        (origin == this.site.origin &&
-         embeddingOrigin == this.site.embeddingOrigin)) {
-      this.siteChanged_(this.site);
-    }
+  /**
+   * Handles the category permission changing for this origin.
+   * @param {!settings.ContentSettingsTypes} category The permission category
+   *     that has changed default permission.
+   * @private
+   */
+  onDefaultSettingChanged_: function(category) {
+    if (category == this.category)
+      this.updateDefaultPermission_(this.site);
   },
 
   /**
@@ -135,9 +131,8 @@ Polymer({
 
   /**
    * Returns true if there's a string to display that describes the source of
-   * this permission's setting.
-   * Note |source| is a subproperty of |this.site|, so this will only be called
-   * when |this.site| is updated.
+   * this permission's setting. Currently, this only gets called when
+   * |this.site| is updated.
    * @param {!settings.SiteSettingSource} source The source of the permission.
    * @private
    */
@@ -148,9 +143,28 @@ Polymer({
   },
 
   /**
+   * Returns true if the permission is set to a non-default 'ask'. Currently,
+   * this only gets called when |this.site| is updated.
+   * @param {!settings.ContentSetting} setting The setting of the permission.
+   * @param {!settings.SiteSettingSource} source The source of the permission.
+   * @private
+   */
+  isNonDefaultAsk_: function(setting, source) {
+    if (setting != settings.ContentSetting.ASK ||
+        source == settings.SiteSettingSource.DEFAULT) {
+      return false;
+    }
+
+    assert(
+        source == settings.SiteSettingSource.EXTENSION ||
+            source == settings.SiteSettingSource.POLICY,
+        'Only extensions or enterprise policy can change the setting to ASK.');
+    return true;
+  },
+
+  /**
    * Updates the string used to describe the source of this permission setting.
-   * Note |source| is a subproperty of |this.site|, so this will only be called
-   * when |this.site| is updated.
+   * Currently, this only gets called when |this.site| is updated.
    * @param {!settings.SiteSettingSource} source The source of the permission.
    * @param {!string} embargoString
    * @param {!string} insecureOriginString
@@ -168,14 +182,14 @@ Polymer({
       extensionAllowString, extensionBlockString, extensionAskString,
       policyAllowString, policyBlockString, policyAskString) {
 
-    var extensionStrings =
-        /** @type {Object<!settings.ContentSetting, string>} */ {};
+    /** @type {Object<!settings.ContentSetting, string>} */
+    var extensionStrings = {};
     extensionStrings[settings.ContentSetting.ALLOW] = extensionAllowString;
     extensionStrings[settings.ContentSetting.BLOCK] = extensionBlockString;
     extensionStrings[settings.ContentSetting.ASK] = extensionAskString;
 
-    var policyStrings =
-        /** @type {Object<!settings.ContentSetting, string>} */ {};
+    /** @type {Object<!settings.ContentSetting, string>} */
+    var policyStrings = {};
     policyStrings[settings.ContentSetting.ALLOW] = policyAllowString;
     policyStrings[settings.ContentSetting.BLOCK] = policyBlockString;
     policyStrings[settings.ContentSetting.ASK] = policyAskString;

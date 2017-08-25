@@ -66,7 +66,7 @@ int RunClientFunction(Func handler, bool pass_pipe_ownership_to_main) {
 MultiprocessTestHelper::MultiprocessTestHelper() {}
 
 MultiprocessTestHelper::~MultiprocessTestHelper() {
-  CHECK(!test_child_.process.IsValid());
+  CHECK(!test_child_.IsValid());
 }
 
 ScopedMessagePipeHandle MultiprocessTestHelper::StartChild(
@@ -82,7 +82,7 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
     const std::string& switch_value,
     LaunchType launch_type) {
   CHECK(!test_child_name.empty());
-  CHECK(!test_child_.process.IsValid());
+  CHECK(!test_child_.IsValid());
 
   std::string test_child_main = test_child_name + "TestChildMain";
 
@@ -108,22 +108,32 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
   NamedPlatformHandle named_pipe;
   base::LaunchOptions options;
   if (launch_type == LaunchType::CHILD || launch_type == LaunchType::PEER) {
-#if defined(OS_POSIX)
+#if defined(OS_FUCHSIA)
+    channel.PrepareToPassClientHandleToChildProcess(
+        &command_line, &options.handles_to_transfer);
+#elif defined(OS_POSIX)
     channel.PrepareToPassClientHandleToChildProcess(&command_line,
                                                     &options.fds_to_remap);
-#else  // Windows
+#elif defined(OS_WIN)
     channel.PrepareToPassClientHandleToChildProcess(
         &command_line, &options.handles_to_inherit);
+#else
+#error "Platform not yet supported."
 #endif
   } else if (launch_type == LaunchType::NAMED_CHILD ||
              launch_type == LaunchType::NAMED_PEER) {
-#if defined(OS_POSIX)
+#if defined(OS_FUCHSIA)
+    // TODO(fuchsia): Implement named channels. See crbug.com/754038.
+    NOTREACHED();
+#elif defined(OS_POSIX)
     base::FilePath temp_dir;
     CHECK(base::PathService::Get(base::DIR_TEMP, &temp_dir));
     named_pipe = NamedPlatformHandle(
         temp_dir.AppendASCII(GenerateRandomToken()).value());
-#else
+#elif defined(OS_WIN)
     named_pipe = NamedPlatformHandle(GenerateRandomToken());
+#else
+#error "Platform not yet supported."
 #endif
     command_line.AppendSwitchNative(kNamedPipeName, named_pipe.name);
   }
@@ -159,7 +169,7 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
     command_line.AppendSwitch(kRunAsBrokerClient);
   } else if (launch_type == LaunchType::PEER ||
              launch_type == LaunchType::NAMED_PEER) {
-    peer_connection_ = base::MakeUnique<PeerConnection>();
+    peer_connection_ = std::make_unique<PeerConnection>();
     pipe = peer_connection_->Connect(
         ConnectionParams(TransportProtocol::kLegacy, std::move(server_handle)));
   }
@@ -173,22 +183,22 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
       launch_type == LaunchType::NAMED_CHILD) {
     DCHECK(server_handle.is_valid());
     child_invitation.Send(
-        test_child_.process.Handle(),
+        test_child_.Handle(),
         ConnectionParams(TransportProtocol::kLegacy, std::move(server_handle)),
         process_error_callback_);
   }
 
-  CHECK(test_child_.process.IsValid());
+  CHECK(test_child_.IsValid());
   return pipe;
 }
 
 int MultiprocessTestHelper::WaitForChildShutdown() {
-  CHECK(test_child_.process.IsValid());
+  CHECK(test_child_.IsValid());
 
   int rv = -1;
-  WaitForMultiprocessTestChildExit(test_child_.process,
-                                   TestTimeouts::action_timeout(), &rv);
-  test_child_.process.Close();
+  WaitForMultiprocessTestChildExit(test_child_, TestTimeouts::action_timeout(),
+                                   &rv);
+  test_child_.Close();
   return rv;
 }
 

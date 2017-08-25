@@ -42,9 +42,10 @@ login.createScreen('UserImageScreen', 'user-image', function() {
      * @type {array} Array of Buttons.
      */
     get buttons() {
-      var okButton = this.ownerDocument.createElement('button');
+      var okButton = this.ownerDocument.createElement('oobe-text-button');
       okButton.id = 'ok-button';
       okButton.textContent = loadTimeData.getString('okButtonText');
+      okButton.setAttribute('inverse', '');
       okButton.addEventListener('click', this.acceptImage_.bind(this));
       return [okButton];
     },
@@ -130,6 +131,7 @@ login.createScreen('UserImageScreen', 'user-image', function() {
      */
     hideCurtain: function() {
       this.loading = false;
+      $('changePicture').focus();
     },
 
     /**

@@ -130,6 +130,16 @@ MAX_LAUNCH_FAILURES = SHORT_BACKOFF_THRESHOLD + 10
 # Number of seconds to save session output to the log.
 SESSION_OUTPUT_TIME_LIMIT_SECONDS = 30
 
+# This is the file descriptor used to pass messages to the user_session binary
+# during startup. It must be kept in sync with kMessageFd in
+# remoting_user_session.cc.
+USER_SESSION_MESSAGE_FD = 202
+
+# This is the exit code used to signal to wrapper that it should restart instead
+# of exiting. It must be kept in sync with kRestartExitCode in
+# remoting_user_session.cc.
+RELAUNCH_EXIT_CODE = 41
+
 # Globals needed by the atexit cleanup() handler.
 g_desktop = None
 g_host_hash = hashlib.md5(socket.gethostname()).hexdigest()
@@ -885,23 +895,46 @@ class ParentProcessLogger(object):
   daemon removes the log-handler and closes the pipe, causing the the parent
   process to reach end-of-file while reading the pipe and exit.
 
-  The (singleton) logger should be instantiated before forking. The parent
-  process should call wait_for_logs() before exiting. The (grand-)child process
-  should call start_logging() when it starts, and then use logging.* to issue
-  log statements, as usual. When the child has either succesfully started the
-  host or terminated, it must call release_parent() to allow the parent to exit.
+  When daemonizing, the (singleton) logger should be instantiated before
+  forking. The parent process should call wait_for_logs() before exiting. When
+  running via user-session, the file descriptor for the pipe to the parent
+  process should be passed to the constructor. In the latter case, wait_for_logs
+  may not be used.
+
+  In either case, the (grand-)child process should call start_logging() when it
+  starts, and then use logging.* to issue log statements, as usual. When the
+  child has either succesfully started the host or terminated, it must call
+  release_parent() to allow the parent to exit.
   """
 
   __instance = None
 
-  def __init__(self):
-    """Constructor. Must be called before forking."""
-    read_pipe, write_pipe = os.pipe()
+  def __init__(self, write_fd=None):
+    """Constructor. When daemonizing, must be called before forking.
+
+    Constructs the singleton instance of ParentProcessLogger. This should be
+    called at most once.
+
+    write_fd: If specified, the logger will use the file descriptor provided
+              for sending log messages instead of creating a new pipe. It is
+              assumed that this is the write end of a pipe created by an
+              already-existing parent process, such as user-session. If
+              write_fd is not a valid file descriptor, the constructor will
+              throw either IOError or OSError.
+    """
+    if write_fd is None:
+      read_pipe, write_pipe = os.pipe()
+    else:
+      read_pipe = None
+      write_pipe = write_fd
     # Ensure write_pipe is closed on exec, otherwise it will be kept open by
     # child processes (X, host), preventing the read pipe from EOF'ing.
     old_flags = fcntl.fcntl(write_pipe, fcntl.F_GETFD)
     fcntl.fcntl(write_pipe, fcntl.F_SETFD, old_flags | fcntl.FD_CLOEXEC)
-    self._read_file = os.fdopen(read_pipe, 'r')
+    if read_pipe is not None:
+      self._read_file = os.fdopen(read_pipe, 'r')
+    else:
+      self._read_file = None
     self._write_file = os.fdopen(write_pipe, 'w')
     self._logging_handler = None
     ParentProcessLogger.__instance = self
@@ -913,7 +946,8 @@ class ParentProcessLogger(object):
 
     Must be called by the child process.
     """
-    self._read_file.close()
+    if self._read_file is not None:
+      self._read_file.close()
     self._logging_handler = logging.StreamHandler(self._write_file)
     self._logging_handler.setFormatter(logging.Formatter(fmt='MSG:%(message)s'))
     logging.getLogger().addHandler(self._logging_handler)
@@ -1161,9 +1195,18 @@ class RelaunchInhibitor:
     logging.info("Failure count for '%s' is now %d", self.label, self.failures)
 
 
-def relaunch_self():
-  cleanup()
-  os.execvp(SCRIPT_PATH, sys.argv)
+def relaunch_self(child_process):
+  """Relaunches the session to pick up any changes to the session logic in case
+  Chrome Remote Desktop has been upgraded. If this script is running standalone,
+  just relaunch the script. If running under user-session, bubble the relaunch
+  request up so it can relaunch as well.
+  """
+  if child_process:
+    # cleanup run via atexit
+    sys.exit(RELAUNCH_EXIT_CODE)
+  else:
+    cleanup()
+    os.execvp(SCRIPT_PATH, sys.argv)
 
 
 def waitpid_with_timeout(pid, deadline):
@@ -1314,7 +1357,9 @@ Web Store: https://chrome.google.com/remotedesktop"""
                     action="store", metavar="USER",
                     help="Adds the specified user to the chrome-remote-desktop "
                     "group (must be run as root).")
-  parser.add_option("", "--keep-parent-env", dest="keep_env", default=False,
+  # The script is being run as a child process under the user-session binary.
+  # Don't daemonize and use the inherited environment.
+  parser.add_option("", "--child-process", dest="child_process", default=False,
                     action="store_true",
                     help=optparse.SUPPRESS_HELP)
   parser.add_option("", "--watch-resolution", dest="watch_resolution",
@@ -1486,9 +1531,19 @@ Web Store: https://chrome.google.com/remotedesktop"""
     print("Service already running.")
     return 0
 
-  # Detach a separate "daemon" process to run the session, unless specifically
-  # requested to run in the foreground.
-  if not options.foreground:
+  # If we're running under user-session, try to open the messaging pipe.
+  if options.child_process:
+    # Log to existing messaging pipe if it exists.
+    try:
+      ParentProcessLogger(USER_SESSION_MESSAGE_FD).start_logging()
+    except (IOError, OSError):
+      # One of these will be thrown if the file descriptor is invalid, such as
+      # if the the fd got closed by the login shell. In that case, just continue
+      # without sending log messages.
+      pass
+  # Otherwise, detach a separate "daemon" process to run the session, unless
+  # specifically requested to run in the foreground.
+  elif not options.foreground:
     daemonize()
 
   if host.host_id:
@@ -1541,7 +1596,7 @@ Web Store: https://chrome.google.com/remotedesktop"""
         # state to lose and now is a good time to pick up any updates to this
         # script that might have been installed.
         logging.info("Relaunching self")
-        relaunch_self()
+        relaunch_self(options.child_process)
       else:
         # If there is a non-zero |failures| count, restarting the whole script
         # would lose this information, so just launch the session as normal.
@@ -1550,7 +1605,7 @@ Web Store: https://chrome.google.com/remotedesktop"""
           relaunch_times.append(x_server_inhibitor.earliest_relaunch_time)
         else:
           logging.info("Launching X server and X session.")
-          desktop.launch_session(options.keep_env, args)
+          desktop.launch_session(options.child_process, args)
           x_server_inhibitor.record_started(MINIMUM_PROCESS_LIFETIME,
                                             backoff_time)
           allow_relaunch_self = True

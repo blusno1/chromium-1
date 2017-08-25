@@ -19,7 +19,8 @@
         ]
       },
       "requires": {
-        "content_browser": [ "memory_instrumentation", "renderer" ],
+        "*": [ "app" ],
+        "content_browser": [ "renderer" ],
         "device": [
           "device:battery_monitor",
           "device:power_monitor",
@@ -75,6 +76,12 @@
     "v8_snapshot_64_data" : [{
       "path": "assets/snapshot_blob_64.bin",
       "platform": "android"
-    }]
+    }],
+    "v8_context_snapshot_data" : [
+      {
+        "path": "v8_context_snapshot.bin",
+        "platform": "linux"
+      }
+    ]
   }
 }

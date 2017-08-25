@@ -585,7 +585,9 @@ void LayoutBlock::UpdateBlockChildDirtyBitsBeforeLayout(bool relayout_children,
       child.StretchesToViewport();
   if (relayout_children || (has_relative_logical_height && !IsLayoutView()) ||
       (height_available_to_children_changed_ &&
-       ChangeInAvailableLogicalHeightAffectsChild(this, child))) {
+       ChangeInAvailableLogicalHeightAffectsChild(this, child)) ||
+      (child.IsListMarker() && IsListItem() &&
+       ToLayoutBlockFlow(this)->ContainsFloats())) {
     child.SetChildNeedsLayout(kMarkOnlyThis);
   }
 }
@@ -694,7 +696,7 @@ void LayoutBlock::MarkFixedPositionObjectForLayoutIfNeeded(
     return;
 
   LayoutObject* o = child->Parent();
-  while (o && !o->IsLayoutView() &&
+  while (!o->IsLayoutView() &&
          o->Style()->GetPosition() != EPosition::kAbsolute)
     o = o->Parent();
   // The LayoutView is absolute-positioned, but does not move.
@@ -903,10 +905,6 @@ LayoutUnit LayoutBlock::LogicalRightSelectionOffset(
     return ContainingBlock()->LogicalRightSelectionOffset(
         root_block, position + LogicalTop());
   return LogicalRightOffsetForContent();
-}
-
-void LayoutBlock::SetSelectionState(SelectionState state) {
-  LayoutBox::SetSelectionState(state);
 }
 
 TrackedLayoutBoxListHashSet* LayoutBlock::PositionedObjectsInternal() const {

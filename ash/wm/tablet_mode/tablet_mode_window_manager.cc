@@ -11,6 +11,7 @@
 #include "ash/shell_port.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/tablet_mode/scoped_skip_user_session_blocked_check.h"
 #include "ash/wm/tablet_mode/tablet_mode_backdrop_delegate_impl.h"
 #include "ash/wm/tablet_mode/tablet_mode_event_handler.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_state.h"
@@ -213,6 +214,9 @@ TabletModeWindowManager::TabletModeWindowManager() {
 }
 
 void TabletModeWindowManager::MaximizeAllWindows() {
+  // For maximizing and tracking windows, we want the build mru list to ignore
+  // the fact that the windows are on the lock screen.
+  ScopedSkipUserSessionBlockedCheck scoped_skip_user_session_blocked_check;
   MruWindowTracker::WindowList windows =
       Shell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal();
   // Add all existing MRU windows.
@@ -243,13 +247,15 @@ void TabletModeWindowManager::MaximizeAndTrackWindow(aura::Window* window) {
 }
 
 void TabletModeWindowManager::ForgetWindow(aura::Window* window) {
-  WindowToState::iterator it = window_state_map_.find(window);
-
-  // The following DCHECK could fail if our window state object was destroyed
-  // earlier by someone else. However - at this point there is no other client
-  // which replaces the state object and therefore this should not happen.
-  DCHECK(it != window_state_map_.end());
+  added_windows_.erase(window);
   window->RemoveObserver(this);
+
+  WindowToState::iterator it = window_state_map_.find(window);
+  // A window may not be registered yet if the observer was
+  // registered in OnWindowHierarchyChanged.
+  if (it == window_state_map_.end()) {
+    return;
+  }
 
   // By telling the state object to revert, it will switch back the old
   // State object and destroy itself, calling WindowStateDestroyed().

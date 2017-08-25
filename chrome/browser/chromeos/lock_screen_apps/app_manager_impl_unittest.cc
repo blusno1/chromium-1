@@ -14,6 +14,7 @@
 #include "base/json/json_file_value_serializer.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/scoped_command_line.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_test_user_manager.h"
@@ -32,6 +33,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/event_router_factory.h"
+#include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/api/app_runtime.h"
@@ -87,8 +89,13 @@ class TestEventRouter : public extensions::EventRouter {
     ASSERT_TRUE(launch_data->action_data);
     EXPECT_EQ(extensions::api::app_runtime::ACTION_TYPE_NEW_NOTE,
               launch_data->action_data->action_type);
+
     ASSERT_TRUE(launch_data->action_data->is_lock_screen_action);
     EXPECT_TRUE(*launch_data->action_data->is_lock_screen_action);
+
+    ASSERT_TRUE(launch_data->action_data->restore_last_action_state);
+    EXPECT_EQ(expect_restore_action_state_,
+              *launch_data->action_data->restore_last_action_state);
 
     launched_apps_.push_back(extension_id);
   }
@@ -99,9 +106,14 @@ class TestEventRouter : public extensions::EventRouter {
 
   void ClearLaunchedApps() { launched_apps_.clear(); }
 
+  void set_expect_restore_action_state(bool expect_restore_action_state) {
+    expect_restore_action_state_ = expect_restore_action_state;
+  }
+
  private:
   std::vector<std::string> launched_apps_;
   content::BrowserContext* context_;
+  bool expect_restore_action_state_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(TestEventRouter);
 };
@@ -347,7 +359,9 @@ class LockScreenAppManagerImplTest
 
   AppManager* app_manager() { return app_manager_.get(); }
 
-  void ResetAppManager() { app_manager_ = base::MakeUnique<AppManagerImpl>(); }
+  void ResetAppManager() {
+    app_manager_ = base::MakeUnique<AppManagerImpl>(&tick_clock_);
+  }
 
   int note_taking_changed_count() const { return note_taking_changed_count_; }
 
@@ -358,17 +372,17 @@ class LockScreenAppManagerImplTest
   // file runner task finish,
   void RunExtensionServiceTaskRunner(Profile* profile) {
     base::RunLoop run_loop;
-    extensions::ExtensionSystem::Get(profile)
-        ->extension_service()
-        ->GetFileTaskRunner()
-        ->PostTaskAndReply(FROM_HERE, base::Bind(&base::DoNothing),
-                           run_loop.QuitClosure());
+    extensions::GetExtensionFileTaskRunner()->PostTaskAndReply(
+        FROM_HERE, base::Bind(&base::DoNothing), run_loop.QuitClosure());
     run_loop.Run();
   }
 
   bool IsInstallAsync() { return GetParam() != TestAppLocation::kUnpacked; }
 
   int NoteTakingChangedCountOnStart() { return IsInstallAsync() ? 1 : 0; }
+
+ protected:
+  base::SimpleTestTickClock tick_clock_;
 
  private:
   void OnNoteTakingChanged() { ++note_taking_changed_count_; }
@@ -997,6 +1011,40 @@ TEST_P(LockScreenAppManagerImplTest, LaunchAppWhenEnabled) {
           lock_screen_profile()->GetOriginalProfile(),
           &TestEventRouterFactoryFunction));
   ASSERT_TRUE(event_router);
+
+  scoped_refptr<const extensions::Extension> note_taking_app =
+      AddTestAppWithLockScreenSupport(
+          profile(), chromeos::NoteTakingHelper::kProdKeepExtensionId, "1.0",
+          true /* enable_on_lock_screen */);
+
+  InitializeAndStartAppManager(profile());
+  RunExtensionServiceTaskRunner(lock_screen_profile());
+
+  ASSERT_EQ(chromeos::NoteTakingHelper::kProdKeepExtensionId,
+            app_manager()->GetNoteTakingAppId());
+
+  EXPECT_TRUE(app_manager()->LaunchNoteTaking());
+
+  ASSERT_EQ(1u, event_router->launched_apps().size());
+  EXPECT_EQ(chromeos::NoteTakingHelper::kProdKeepExtensionId,
+            event_router->launched_apps()[0]);
+  event_router->ClearLaunchedApps();
+
+  app_manager()->Stop();
+
+  EXPECT_FALSE(app_manager()->LaunchNoteTaking());
+  EXPECT_TRUE(event_router->launched_apps().empty());
+}
+
+TEST_P(LockScreenAppManagerImplTest, LaunchAppWithFalseRestoreLastActionState) {
+  TestEventRouter* event_router = static_cast<TestEventRouter*>(
+      extensions::EventRouterFactory::GetInstance()->SetTestingFactoryAndUse(
+          lock_screen_profile()->GetOriginalProfile(),
+          &TestEventRouterFactoryFunction));
+  ASSERT_TRUE(event_router);
+
+  event_router->set_expect_restore_action_state(false);
+  profile()->GetPrefs()->SetBoolean(prefs::kRestoreLastLockScreenNote, false);
 
   scoped_refptr<const extensions::Extension> note_taking_app =
       AddTestAppWithLockScreenSupport(

@@ -541,16 +541,6 @@ void WebContentsViewMac::CloseTab() {
   return mouseDownCanMoveWindow_;
 }
 
-- (void)setOpaque:(BOOL)opaque {
-  WebContentsImpl* webContents = [self webContents];
-  if (!webContents)
-    return;
-  RenderWidgetHostViewMac* view = static_cast<RenderWidgetHostViewMac*>(
-      webContents->GetRenderWidgetHostView());
-  DCHECK(view);
-  [view->cocoa_view() setOpaque:opaque];
-}
-
 - (void)pasteboard:(NSPasteboard*)sender provideDataForType:(NSString*)type {
   [dragSource_ lazyWriteToPasteboard:sender
                              forType:type];
@@ -686,6 +676,9 @@ void WebContentsViewMac::CloseTab() {
 
 - (void)setFrameSize:(NSSize)newSize {
   [super setFrameSize:newSize];
+
+  if (webContentsView_ && webContentsView_->delegate())
+    webContentsView_->delegate()->SizeChanged(gfx::Size(newSize));
 
   // Perform manual layout of subviews, e.g., when the window size changes.
   for (NSView* subview in [self subviews])

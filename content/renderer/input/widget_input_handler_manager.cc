@@ -35,6 +35,8 @@ InputEventAckState InputEventDispositionToAck(
       return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
     case ui::InputHandlerProxy::DID_HANDLE_NON_BLOCKING:
       return INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING;
+    case ui::InputHandlerProxy::DID_HANDLE_SHOULD_BUBBLE:
+      return INPUT_EVENT_ACK_STATE_CONSUMED_SHOULD_BUBBLE;
   }
   NOTREACHED();
   return INPUT_EVENT_ACK_STATE_UNKNOWN;
@@ -53,6 +55,19 @@ void CallCallback(mojom::WidgetInputHandler::DispatchEventCallback callback,
 
 }  // namespace
 
+scoped_refptr<WidgetInputHandlerManager> WidgetInputHandlerManager::Create(
+    base::WeakPtr<RenderWidget> render_widget,
+    IPC::Sender* legacy_host_channel,
+    scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
+    blink::scheduler::RendererScheduler* renderer_scheduler) {
+  scoped_refptr<WidgetInputHandlerManager> manager =
+      new WidgetInputHandlerManager(
+          std::move(render_widget), legacy_host_channel,
+          std::move(compositor_task_runner), renderer_scheduler);
+  manager->Init();
+  return manager;
+}
+
 WidgetInputHandlerManager::WidgetInputHandlerManager(
     base::WeakPtr<RenderWidget> render_widget,
     IPC::Sender* legacy_host_channel,
@@ -67,14 +82,16 @@ WidgetInputHandlerManager::WidgetInputHandlerManager(
   // TODO(dtapuska): Define a mojo channel for back to the host. Currently
   // we use legacy IPC.
   legacy_host_message_routing_id_ = render_widget->routing_id();
+}
 
+void WidgetInputHandlerManager::Init() {
   if (compositor_task_runner_) {
     compositor_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(
             &WidgetInputHandlerManager::InitOnCompositorThread, this,
-            render_widget->compositor()->GetInputHandler(),
-            render_widget->compositor_deps()->IsScrollAnimatorEnabled()));
+            render_widget_->compositor()->GetInputHandler(),
+            render_widget_->compositor_deps()->IsScrollAnimatorEnabled()));
   }
 }
 
@@ -112,8 +129,9 @@ void WidgetInputHandlerManager::WillShutdown() {}
 void WidgetInputHandlerManager::TransferActiveWheelFlingAnimation(
     const blink::WebActiveWheelFlingParameters& params) {
   main_thread_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&RenderWidget::TransferActiveWheelFlingAnimation,
-                            render_widget_, params));
+      FROM_HERE,
+      base::BindOnce(&RenderWidget::TransferActiveWheelFlingAnimation,
+                     render_widget_, params));
 }
 
 void WidgetInputHandlerManager::DispatchNonBlockingEventToMainThread(
@@ -181,9 +199,12 @@ void WidgetInputHandlerManager::GenerateScrollBeginAndSendToMainThread(
 
 void WidgetInputHandlerManager::SetWhiteListedTouchAction(
     cc::TouchAction touch_action,
-    uint32_t unique_touch_event_id) {
+    uint32_t unique_touch_event_id,
+    ui::InputHandlerProxy::EventDisposition event_disposition) {
+  InputEventAckState ack_state = InputEventDispositionToAck(event_disposition);
   legacy_host_message_sender_->Send(new InputHostMsg_SetWhiteListedTouchAction(
-      legacy_host_message_routing_id_, touch_action, unique_touch_event_id));
+      legacy_host_message_routing_id_, touch_action, unique_touch_event_id,
+      ack_state));
 }
 
 void WidgetInputHandlerManager::ObserveGestureEventOnMainThread(

@@ -441,7 +441,12 @@ class ColorTransformSkTransferFn : public ColorTransformPerChannelTransferFn {
   bool IsNull() override { return SkTransferFnIsApproximatelyIdentity(fn_); }
 
   // ColorTransformPerChannelTransferFn implementation:
-  float Evaluate(float v) const override { return SkTransferFnEval(fn_, v); }
+  float Evaluate(float v) const override {
+    // Note that the sign-extension is performed by the caller.
+    if (v < 0.f)
+      return 0.f;
+    return SkTransferFnEvalUnclamped(fn_, v);
+  }
   void AppendTransferShaderSource(std::stringstream* result) const override {
     const float kEpsilon = 1.f / 1024.f;
 
@@ -811,9 +816,10 @@ void ColorTransformInternal::AppendColorSpaceToColorSpaceTransform(
         // SMPTE 1886 suggests that we should be using gamma 2.4 for BT709
         // content. However, most displays actually use a gamma of 2.2, and
         // user studies shows that users don't really care. Using the same
-        // gamma as the display will let us optimize a lot more, so lets stick
-        // with using the SRGB transfer function.
-        src.transfer_ = ColorSpace::TransferID::IEC61966_2_1;
+        // gamma as the destination will let us optimize a lot more, so use it
+        // if we can.
+        if (dst.transfer_ == ColorSpace::TransferID::IEC61966_2_1)
+          src.transfer_ = ColorSpace::TransferID::IEC61966_2_1;
         break;
 
       case ColorSpace::TransferID::SMPTEST2084:

@@ -27,10 +27,11 @@
 #include "media/base/bitstream_buffer.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
-#include "media/filters/h264_parser.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
+#include "media/video/gpu_video_accelerator_factories.h"
+#include "media/video/h264_parser.h"
 #include "media/video/video_encode_accelerator.h"
 #include "third_party/libyuv/include/libyuv.h"
+#include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
 #include "third_party/webrtc/rtc_base/timeutils.h"
 
 namespace content {
@@ -47,25 +48,16 @@ struct RTCTimestamps {
   DISALLOW_IMPLICIT_CONSTRUCTORS(RTCTimestamps);
 };
 
-// Translate from webrtc::VideoCodecType and webrtc::VideoCodec to
-// media::VideoCodecProfile.
-media::VideoCodecProfile WebRTCVideoCodecToVideoCodecProfile(
-    webrtc::VideoCodecType type,
-    const webrtc::VideoCodec* codec_settings) {
-  DCHECK_EQ(type, codec_settings->codecType);
-  switch (type) {
-    case webrtc::kVideoCodecVP8:
-      return media::VP8PROFILE_ANY;
-    case webrtc::kVideoCodecVP9:
-      return media::VP9PROFILE_MIN;
-    case webrtc::kVideoCodecH264:
-      // TODO(magjed): WebRTC is only using Baseline profile for now. Update
-      // once http://crbug/webrtc/6337 is fixed.
-      return media::H264PROFILE_BASELINE;
-    default:
-      NOTREACHED() << "Unrecognized video codec type";
-      return media::VIDEO_CODEC_PROFILE_UNKNOWN;
+webrtc::VideoCodecType ProfileToWebRtcVideoCodecType(
+    media::VideoCodecProfile profile) {
+  if (profile >= media::VP8PROFILE_MIN && profile <= media::VP8PROFILE_MAX) {
+    return webrtc::kVideoCodecVP8;
+  } else if (profile >= media::H264PROFILE_MIN &&
+             profile <= media::H264PROFILE_MAX) {
+    return webrtc::kVideoCodecH264;
   }
+  NOTREACHED() << "Invalid profile " << GetProfileName(profile);
+  return webrtc::kVideoCodecUnknown;
 }
 
 // Populates struct webrtc::RTPFragmentationHeader for H264 codec.
@@ -568,15 +560,22 @@ void RTCVideoEncoder::Impl::BitstreamBufferReady(int32_t bitstream_buffer_id,
 void RTCVideoEncoder::Impl::NotifyError(
     media::VideoEncodeAccelerator::Error error) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  int32_t retval;
+  int32_t retval = WEBRTC_VIDEO_CODEC_ERROR;
   switch (error) {
     case media::VideoEncodeAccelerator::kInvalidArgumentError:
       retval = WEBRTC_VIDEO_CODEC_ERR_PARAMETER;
       break;
-    default:
+    case media::VideoEncodeAccelerator::kIllegalStateError:
       retval = WEBRTC_VIDEO_CODEC_ERROR;
+      break;
+    case media::VideoEncodeAccelerator::kPlatformFailureError:
+      // Some platforms(i.e. Android) do not have SW H264 implementation so
+      // check if it is available before asking for fallback.
+      retval = video_codec_type_ != webrtc::kVideoCodecH264 ||
+                       webrtc::H264Encoder::IsSupported()
+                   ? WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE
+                   : WEBRTC_VIDEO_CODEC_ERROR;
   }
-
   video_encoder_.reset();
 
   SetStatus(retval);
@@ -798,12 +797,12 @@ void RTCVideoEncoder::Impl::ReturnEncodedImage(
 }
 
 RTCVideoEncoder::RTCVideoEncoder(
-    webrtc::VideoCodecType type,
+    media::VideoCodecProfile profile,
     media::GpuVideoAcceleratorFactories* gpu_factories)
-    : video_codec_type_(type),
+    : profile_(profile),
       gpu_factories_(gpu_factories),
       gpu_task_runner_(gpu_factories->GetTaskRunner()) {
-  DVLOG(1) << __func__ << " codec type=" << type;
+  DVLOG(1) << "RTCVideoEncoder(): profile=" << GetProfileName(profile);
 }
 
 RTCVideoEncoder::~RTCVideoEncoder() {
@@ -822,9 +821,7 @@ int32_t RTCVideoEncoder::InitEncode(const webrtc::VideoCodec* codec_settings,
   if (impl_)
     Release();
 
-  impl_ = new Impl(gpu_factories_, video_codec_type_);
-  const media::VideoCodecProfile profile = WebRTCVideoCodecToVideoCodecProfile(
-      impl_->video_codec_type(), codec_settings);
+  impl_ = new Impl(gpu_factories_, ProfileToWebRtcVideoCodecType(profile_));
 
   base::WaitableEvent initialization_waiter(
       base::WaitableEvent::ResetPolicy::MANUAL,
@@ -832,17 +829,14 @@ int32_t RTCVideoEncoder::InitEncode(const webrtc::VideoCodec* codec_settings,
   int32_t initialization_retval = WEBRTC_VIDEO_CODEC_UNINITIALIZED;
   gpu_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&RTCVideoEncoder::Impl::CreateAndInitializeVEA,
-                 impl_,
-                 gfx::Size(codec_settings->width, codec_settings->height),
-                 codec_settings->startBitrate,
-                 profile,
-                 &initialization_waiter,
-                 &initialization_retval));
+      base::BindOnce(&RTCVideoEncoder::Impl::CreateAndInitializeVEA, impl_,
+                     gfx::Size(codec_settings->width, codec_settings->height),
+                     codec_settings->startBitrate, profile_,
+                     &initialization_waiter, &initialization_retval));
 
   // webrtc::VideoEncoder expects this call to be synchronous.
   initialization_waiter.Wait();
-  RecordInitEncodeUMA(initialization_retval, profile);
+  RecordInitEncodeUMA(initialization_retval, profile_);
   return initialization_retval;
 }
 
@@ -864,12 +858,8 @@ int32_t RTCVideoEncoder::Encode(
   int32_t encode_retval = WEBRTC_VIDEO_CODEC_UNINITIALIZED;
   gpu_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&RTCVideoEncoder::Impl::Enqueue,
-                 impl_,
-                 &input_image,
-                 want_key_frame,
-                 &encode_waiter,
-                 &encode_retval));
+      base::BindOnce(&RTCVideoEncoder::Impl::Enqueue, impl_, &input_image,
+                     want_key_frame, &encode_waiter, &encode_retval));
 
   // webrtc::VideoEncoder expects this call to be synchronous.
   encode_waiter.Wait();
@@ -891,8 +881,8 @@ int32_t RTCVideoEncoder::RegisterEncodeCompleteCallback(
   int32_t register_retval = WEBRTC_VIDEO_CODEC_UNINITIALIZED;
   gpu_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&RTCVideoEncoder::Impl::RegisterEncodeCompleteCallback, impl_,
-                 &register_waiter, &register_retval, callback));
+      base::BindOnce(&RTCVideoEncoder::Impl::RegisterEncodeCompleteCallback,
+                     impl_, &register_waiter, &register_retval, callback));
   register_waiter.Wait();
   return register_retval;
 }
@@ -907,7 +897,7 @@ int32_t RTCVideoEncoder::Release() {
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   gpu_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&RTCVideoEncoder::Impl::Destroy, impl_, &release_waiter));
+      base::BindOnce(&RTCVideoEncoder::Impl::Destroy, impl_, &release_waiter));
   release_waiter.Wait();
   impl_ = NULL;
   return WEBRTC_VIDEO_CODEC_OK;
@@ -936,10 +926,8 @@ int32_t RTCVideoEncoder::SetRates(uint32_t new_bit_rate, uint32_t frame_rate) {
 
   gpu_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&RTCVideoEncoder::Impl::RequestEncodingParametersChange,
-                 impl_,
-                 new_bit_rate,
-                 frame_rate));
+      base::BindOnce(&RTCVideoEncoder::Impl::RequestEncodingParametersChange,
+                     impl_, new_bit_rate, frame_rate));
   return WEBRTC_VIDEO_CODEC_OK;
 }
 

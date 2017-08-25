@@ -735,7 +735,7 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   layer->SetLayerInverted(true);
   const float temperature = 0.8f;
   layer->SetLayerTemperature(temperature);
-  layer->SetCacheRenderSurface(true);
+  layer->AddCacheRenderSurfaceRequest();
 
   auto clone = layer->Clone();
 
@@ -1264,9 +1264,9 @@ TEST_F(LayerWithRealCompositorTest, DrawAlphaThresholdFilterPixels) {
       CreateColorLayer(blue_with_alpha, gfx::Rect(viewport_size)));
 
   // Add a shape to restrict the visible part of the layer.
-  SkRegion shape;
-  shape.setRect(0, 0, viewport_size.width(), blue_height);
-  foreground_layer->SetAlphaShape(base::WrapUnique(new SkRegion(shape)));
+  auto shape = base::MakeUnique<Layer::ShapeRects>();
+  shape->emplace_back(0, 0, viewport_size.width(), blue_height);
+  foreground_layer->SetAlphaShape(std::move(shape));
 
   foreground_layer->SetFillsBoundsOpaquely(false);
 
@@ -2009,7 +2009,7 @@ TEST_F(LayerWithRealCompositorTest, SwitchCCLayerCacheRenderSurface) {
   GetCompositor()->SetRootLayer(root.get());
   root->Add(l1.get());
 
-  l1->SetCacheRenderSurface(true);
+  l1->AddCacheRenderSurfaceRequest();
 
   // Change l1's cc::Layer.
   l1->SwitchCCLayerForTest();

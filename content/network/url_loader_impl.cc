@@ -4,11 +4,12 @@
 
 #include "content/network/url_loader_impl.h"
 
+#include <string>
+
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/common/loader_util.h"
-#include "content/common/net_adapters.h"
 #include "content/network/network_context.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/resource_response.h"
@@ -19,6 +20,7 @@
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_file_element_reader.h"
 #include "net/url_request/url_request_context.h"
+#include "services/network/public/cpp/net_adapters.h"
 
 namespace content {
 
@@ -72,6 +74,7 @@ void PopulateResourceResponse(net::URLRequest* request,
 
   response->head.request_start = request->creation_time();
   response->head.response_start = base::TimeTicks::Now();
+  response->head.encoded_data_length = request->GetTotalReceivedBytes();
 }
 
 // A subclass of net::UploadBytesElementReader which owns
@@ -171,16 +174,20 @@ URLLoaderImpl::URLLoaderImpl(
                                mojo::SimpleWatcher::ArmingPolicy::MANUAL),
       peer_closed_handle_watcher_(FROM_HERE,
                                   mojo::SimpleWatcher::ArmingPolicy::MANUAL),
+      report_raw_headers_(false),
       weak_ptr_factory_(this) {
+  // TODO(caseq): Make sure the client renderer actually has premissions to
+  // get raw headers (i.e. has DevTools attached).
+  report_raw_headers_ = request.report_raw_headers;
   context_->RegisterURLLoader(this);
-  binding_.set_connection_error_handler(
-      base::Bind(&URLLoaderImpl::OnConnectionError, base::Unretained(this)));
+  binding_.set_connection_error_handler(base::BindOnce(
+      &URLLoaderImpl::OnConnectionError, base::Unretained(this)));
 
   url_request_ = context_->url_request_context()->CreateRequest(
       GURL(request.url), net::DEFAULT_PRIORITY, this, traffic_annotation);
   url_request_->set_method(request.method);
 
-  url_request_->set_first_party_for_cookies(request.first_party_for_cookies);
+  url_request_->set_site_for_cookies(request.site_for_cookies);
 
   const Referrer referrer(request.referrer, request.referrer_policy);
   Referrer::SetReferrerForRequest(url_request_.get(), referrer);
@@ -200,7 +207,11 @@ URLLoaderImpl::URLLoaderImpl(
 
   int load_flags = BuildLoadFlagsForRequest(request, false);
   url_request_->SetLoadFlags(load_flags);
-
+  if (report_raw_headers_) {
+    url_request_->SetRequestHeadersCallback(
+        base::Bind(&net::HttpRawRequestHeaders::Assign,
+                   base::Unretained(&raw_request_headers_)));
+  }
   url_request_->Start();
 }
 
@@ -217,6 +228,7 @@ void URLLoaderImpl::Cleanup() {
 void URLLoaderImpl::FollowRedirect() {
   if (!url_request_) {
     NotifyCompleted(net::ERR_UNEXPECTED);
+    // |this| may have been deleted.
     return;
   }
 
@@ -240,8 +252,10 @@ void URLLoaderImpl::OnReceivedRedirect(net::URLRequest* url_request,
 
   scoped_refptr<ResourceResponse> response = new ResourceResponse();
   PopulateResourceResponse(url_request_.get(), response.get());
-  response->head.encoded_data_length = url_request_->GetTotalReceivedBytes();
-
+  if (report_raw_headers_) {
+    response->head.devtools_info =
+        BuildDevToolsInfo(*url_request_, raw_request_headers_);
+  }
   url_loader_client_->OnReceiveRedirect(redirect_info, response->head);
 }
 
@@ -251,12 +265,16 @@ void URLLoaderImpl::OnResponseStarted(net::URLRequest* url_request,
 
   if (net_error != net::OK) {
     NotifyCompleted(net_error);
+    // |this| may have been deleted.
     return;
   }
 
   response_ = new ResourceResponse();
   PopulateResourceResponse(url_request_.get(), response_.get());
-  response_->head.encoded_data_length = url_request_->raw_header_size();
+  if (report_raw_headers_) {
+    response_->head.devtools_info =
+        BuildDevToolsInfo(*url_request_, raw_request_headers_);
+  }
 
   mojo::DataPipe data_pipe(kDefaultAllocationSize);
   response_body_stream_ = std::move(data_pipe.producer_handle);
@@ -287,7 +305,7 @@ void URLLoaderImpl::ReadMore() {
   if (!pending_write_.get()) {
     // TODO: we should use the abstractions in MojoAsyncResourceHandler.
     pending_write_buffer_offset_ = 0;
-    MojoResult result = NetToMojoPendingBuffer::BeginWrite(
+    MojoResult result = network::NetToMojoPendingBuffer::BeginWrite(
         &response_body_stream_, &pending_write_, &pending_write_buffer_size_);
     if (result != MOJO_RESULT_OK && result != MOJO_RESULT_SHOULD_WAIT) {
       // The response body stream is in a bad state. Bail.
@@ -311,8 +329,8 @@ void URLLoaderImpl::ReadMore() {
     }
   }
 
-  scoped_refptr<net::IOBuffer> buf(new NetToMojoIOBuffer(
-      pending_write_.get(), pending_write_buffer_offset_));
+  auto buf = base::MakeRefCounted<network::NetToMojoIOBuffer>(
+      pending_write_.get(), pending_write_buffer_offset_);
   int bytes_read;
   url_request_->Read(buf.get(),
                      static_cast<int>(pending_write_buffer_size_ -
@@ -323,11 +341,14 @@ void URLLoaderImpl::ReadMore() {
   } else if (url_request_->status().is_success() && bytes_read > 0) {
     DidRead(static_cast<uint32_t>(bytes_read), true);
   } else {
-    NotifyCompleted(net::OK);
     writable_handle_watcher_.Cancel();
-    pending_write_->Complete(pending_write_buffer_offset_);
-    pending_write_ = nullptr;  // This closes the data pipe.
-    DeleteIfNeeded();
+    CompletePendingWrite();
+
+    // Close body pipe.
+    response_body_stream_.reset();
+
+    NotifyCompleted(url_request_->status().ToNetError());
+    // |this| may have been deleted.
     return;
   }
 }
@@ -355,14 +376,12 @@ void URLLoaderImpl::DidRead(uint32_t num_bytes, bool completed_synchronously) {
   }
 
   if (complete_read) {
-    response_body_stream_ =
-        pending_write_->Complete(pending_write_buffer_offset_);
-    pending_write_ = nullptr;
+    CompletePendingWrite();
   }
   if (completed_synchronously) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&URLLoaderImpl::ReadMore, weak_ptr_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&URLLoaderImpl::ReadMore,
+                                  weak_ptr_factory_.GetWeakPtr()));
   } else {
     ReadMore();
   }
@@ -374,8 +393,14 @@ void URLLoaderImpl::OnReadCompleted(net::URLRequest* url_request,
 
   if (!url_request->status().is_success()) {
     writable_handle_watcher_.Cancel();
-    pending_write_ = nullptr;  // This closes the data pipe.
-    DeleteIfNeeded();
+    CompletePendingWrite();
+
+    // This closes the data pipe.
+    // TODO(mmenke): Should NotifyCompleted close the data pipe itself instead?
+    response_body_stream_.reset();
+
+    NotifyCompleted(url_request_->status().ToNetError());
+    // |this| may have been deleted.
     return;
   }
 
@@ -398,6 +423,7 @@ void URLLoaderImpl::NotifyCompleted(int error_code) {
   request_complete_data.encoded_data_length =
       url_request_->GetTotalReceivedBytes();
   request_complete_data.encoded_body_length = url_request_->GetRawBodyBytes();
+  request_complete_data.decoded_body_length = total_written_bytes_;
 
   url_loader_client_->OnComplete(request_complete_data);
   DeleteIfNeeded();
@@ -446,6 +472,13 @@ void URLLoaderImpl::SendResponseToClient() {
 
   url_loader_client_->OnStartLoadingResponseBody(std::move(consumer_handle_));
   response_ = nullptr;
+}
+
+void URLLoaderImpl::CompletePendingWrite() {
+  response_body_stream_ =
+      pending_write_->Complete(pending_write_buffer_offset_);
+  pending_write_ = nullptr;
+  total_written_bytes_ += pending_write_buffer_offset_;
 }
 
 }  // namespace content

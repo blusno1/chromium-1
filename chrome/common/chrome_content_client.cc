@@ -710,3 +710,8 @@ media::MediaDrmBridgeClient* ChromeContentClient::GetMediaDrmBridgeClient() {
   return new ChromeMediaDrmBridgeClient();
 }
 #endif  // OS_ANDROID
+
+void ChromeContentClient::OnServiceManagerConnected(
+    content::ServiceManagerConnection* connection) {
+  memlog_client_.OnServiceManagerConnected(connection);
+}

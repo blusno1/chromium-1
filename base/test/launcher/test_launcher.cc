@@ -4,6 +4,8 @@
 
 #include "base/test/launcher/test_launcher.h"
 
+#include <stdio.h>
+
 #include <memory>
 
 #include "base/at_exit.h"
@@ -60,6 +62,12 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
+#endif
+
+#if defined(OS_FUCHSIA)
+// TODO(scottmg): For temporary code in OnOutputTimeout().
+#include <magenta/syscalls.h>
+#include <magenta/syscalls/object.h>
 #endif
 
 namespace base {
@@ -251,6 +259,9 @@ int LaunchChildTestProcessWithOptions(
     const TestLauncher::GTestProcessLaunchedCallback& launched_callback,
     bool* was_timeout) {
   TimeTicks start_time(TimeTicks::Now());
+#if defined(OS_FUCHSIA)  // TODO(scottmg): https://crbug.com/755282
+  const bool kOnBot = getenv("CHROME_HEADLESS") != nullptr;
+#endif  // OS_FUCHSIA
 
 #if defined(OS_POSIX)
   // Make sure an option we rely on is present - see LaunchChildGTestProcess.
@@ -327,6 +338,12 @@ int LaunchChildTestProcessWithOptions(
       return -1;
 
     // TODO(rvargas) crbug.com/417532: Don't store process handles.
+#if defined(OS_FUCHSIA)  // TODO(scottmg): https://crbug.com/755282
+    if (kOnBot) {
+      LOG(ERROR) << base::StringPrintf("adding %x to live process list",
+                                       process.Handle());
+    }
+#endif  // OS_FUCHSIA
     GetLiveProcesses()->insert(std::make_pair(process.Handle(), command_line));
   }
 
@@ -338,6 +355,12 @@ int LaunchChildTestProcessWithOptions(
     *was_timeout = true;
     exit_code = -1;  // Set a non-zero exit code to signal a failure.
 
+#if defined(OS_FUCHSIA)  // TODO(scottmg): https://crbug.com/755282
+    if (kOnBot) {
+      LOG(ERROR) << base::StringPrintf("about to process.Terminate() %x",
+                                       process.Handle());
+    }
+#endif  // OS_FUCHSIA
     // Ensure that the process terminates.
     process.Terminate(-1, true);
   }
@@ -354,10 +377,22 @@ int LaunchChildTestProcessWithOptions(
       // or due to it timing out, we need to clean up any child processes that
       // it might have created. On Windows, child processes are automatically
       // cleaned up using JobObjects.
+#if defined(OS_FUCHSIA)  // TODO(scottmg): https://crbug.com/755282
+      if (kOnBot) {
+        LOG(ERROR) << base::StringPrintf("going to KillProcessGroup() for %x",
+                                         process.Handle());
+      }
+#endif  // OS_FUCHSIA
       KillProcessGroup(process.Handle());
     }
 #endif
 
+#if defined(OS_FUCHSIA)  // TODO(scottmg): https://crbug.com/755282
+    if (kOnBot) {
+      LOG(ERROR) << base::StringPrintf("removing %x from live process list",
+                                       process.Handle());
+    }
+#endif  // OS_FUCHSIA
     GetLiveProcesses()->erase(process.Handle());
   }
 
@@ -385,72 +420,65 @@ void DoLaunchChildTestProcess(
     const TestLauncher::GTestProcessLaunchedCallback& launched_callback) {
   TimeTicks start_time = TimeTicks::Now();
 
-  // Redirect child process output to a file.
-  FilePath output_file;
-  CHECK(CreateTemporaryFile(&output_file));
+  ScopedFILE output_file;
+  FilePath output_filename;
+  if (redirect_stdio) {
+    FILE* raw_output_file = CreateAndOpenTemporaryFile(&output_filename);
+    output_file.reset(raw_output_file);
+    CHECK(output_file);
+  }
 
   LaunchOptions options;
 #if defined(OS_WIN)
   options.inherit_mode = test_launch_options.inherit_mode;
   options.handles_to_inherit = test_launch_options.handles_to_inherit;
-
-  win::ScopedHandle handle;
-
   if (redirect_stdio) {
-    handle.Set(CreateFile(output_file.value().c_str(), GENERIC_WRITE,
-                          FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
-                          OPEN_EXISTING, FILE_ATTRIBUTE_TEMPORARY, NULL));
-    CHECK(handle.IsValid());
+    HANDLE handle =
+        reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(output_file.get())));
+    CHECK_NE(INVALID_HANDLE_VALUE, handle);
     options.stdin_handle = INVALID_HANDLE_VALUE;
-    options.stdout_handle = handle.Get();
-    options.stderr_handle = handle.Get();
+    options.stdout_handle = handle;
+    options.stderr_handle = handle;
     // See LaunchOptions.stdout_handle comments for why this compares against
     // FILE_TYPE_CHAR.
     if (options.inherit_mode == base::LaunchOptions::Inherit::kSpecific &&
-        GetFileType(handle.Get()) != FILE_TYPE_CHAR)
-      options.handles_to_inherit.push_back(handle.Get());
+        GetFileType(handle) != FILE_TYPE_CHAR) {
+      options.handles_to_inherit.push_back(handle);
+    }
   }
-
 #elif defined(OS_POSIX)
   options.new_process_group = true;
-#if defined(OS_LINUX)
-  options.kill_on_parent_death = true;
-#endif  // defined(OS_LINUX)
-
-  ScopedFD output_file_fd;
-
   options.fds_to_remap = test_launch_options.fds_to_remap;
   if (redirect_stdio) {
-    output_file_fd.reset(open(output_file.value().c_str(), O_RDWR));
-    CHECK(output_file_fd.is_valid());
-
+    int output_file_fd = fileno(output_file.get());
+    CHECK_LE(0, output_file_fd);
     options.fds_to_remap.push_back(
-        std::make_pair(output_file_fd.get(), STDOUT_FILENO));
+        std::make_pair(output_file_fd, STDOUT_FILENO));
     options.fds_to_remap.push_back(
-        std::make_pair(output_file_fd.get(), STDERR_FILENO));
+        std::make_pair(output_file_fd, STDERR_FILENO));
   }
+
+#if defined(OS_LINUX)
+  options.kill_on_parent_death = true;
 #endif
+
+#endif  // defined(OS_POSIX)
 
   bool was_timeout = false;
   int exit_code = LaunchChildTestProcessWithOptions(
       command_line, options, test_launch_options.flags, timeout,
       launched_callback, &was_timeout);
 
-  if (redirect_stdio) {
-#if defined(OS_WIN)
-    FlushFileBuffers(handle.Get());
-    handle.Close();
-#elif defined(OS_POSIX)
-    output_file_fd.reset();
-#endif
-  }
-
   std::string output_file_contents;
-  CHECK(ReadFileToString(output_file, &output_file_contents));
+  if (redirect_stdio) {
+    fflush(output_file.get());
+    output_file.reset();
+    CHECK(ReadFileToString(output_filename, &output_file_contents));
 
-  if (!DeleteFile(output_file, false)) {
-    // This needs to be non-fatal at least for Windows.
-    LOG(WARNING) << "Failed to delete " << output_file.AsUTF8Unsafe();
+    if (!DeleteFile(output_filename, false)) {
+      // This needs to be non-fatal at least for Windows.
+      LOG(WARNING) << "Failed to delete " << output_filename.AsUTF8Unsafe();
+    }
   }
 
   // Run target callback on the thread it was originating from, not on
@@ -808,10 +836,10 @@ bool TestLauncher::Init() {
     // redirection experiment concludes https://crbug.com/622400.
     SequencedWorkerPool::EnableForProcess();
 
-    worker_pool_owner_ = MakeUnique<SequencedWorkerPoolOwner>(
+    worker_pool_owner_ = std::make_unique<SequencedWorkerPoolOwner>(
         parallel_jobs_, "test_launcher");
   } else {
-    worker_thread_ = MakeUnique<Thread>("test_launcher");
+    worker_thread_ = std::make_unique<Thread>("test_launcher");
     worker_thread_->Start();
   }
 
@@ -1165,6 +1193,26 @@ void TestLauncher::OnOutputTimeout() {
 #else
     fprintf(stdout, "\t%s\n", pair.second.GetCommandLineString().c_str());
 #endif
+
+#if defined(OS_FUCHSIA)
+    // TODO(scottmg): Temporary code to try to identify why child processes
+    // appear to not be terminated after a timeout correctly.
+    // https://crbug.com/750370 and https://crbug.com/738275.
+
+    mx_info_process_t proc_info = {};
+    mx_status_t status =
+        mx_object_get_info(pair.first, MX_INFO_PROCESS, &proc_info,
+                           sizeof(proc_info), nullptr, nullptr);
+    if (status != MX_OK) {
+      fprintf(stdout, "mx_object_get_info failed for '%s', status=%d\n",
+              pair.second.GetCommandLineString().c_str(), status);
+    } else {
+      fprintf(stdout, "  return_code=%d\n", proc_info.return_code);
+      fprintf(stdout, "  started=%d\n", proc_info.started);
+      fprintf(stdout, "  exited=%d\n", proc_info.exited);
+      fprintf(stdout, "  debugger_attached=%d\n", proc_info.debugger_attached);
+    }
+#endif  // OS_FUCHSIA
   }
 
   fflush(stdout);

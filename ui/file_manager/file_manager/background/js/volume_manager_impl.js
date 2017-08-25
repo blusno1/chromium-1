@@ -76,7 +76,7 @@ VolumeManagerImpl.prototype.__proto__ = cr.EventTarget.prototype;
  */
 VolumeManagerImpl.prototype.addVolumeMetadata_ = function(volumeMetadata) {
   return volumeManagerUtil.createVolumeInfo(volumeMetadata).then(
-      /**
+      (/**
        * @param {!VolumeInfo} volumeInfo
        * @return {!VolumeInfo}
        */
@@ -115,7 +115,7 @@ VolumeManagerImpl.prototype.addVolumeMetadata_ = function(volumeMetadata) {
           this.volumeInfoList.add(volumeInfo);
         }
         return volumeInfo;
-      }.bind(this));
+      }).bind(this));
 };
 
 /**
@@ -291,8 +291,6 @@ VolumeManagerImpl.prototype.getCurrentProfileVolumeInfo = function(volumeType) {
 /** @override */
 VolumeManagerImpl.prototype.getLocationInfo = function(entry) {
   var volumeInfo = this.volumeInfoList.findByEntry(entry);
-  if (!volumeInfo)
-    return null;
 
   if (util.isFakeEntry(entry)) {
     return new EntryLocationImpl(
@@ -300,6 +298,9 @@ VolumeManagerImpl.prototype.getLocationInfo = function(entry) {
         true /* the entry points a root directory. */,
         true /* fake entries are read only. */);
   }
+
+  if (!volumeInfo)
+    return null;
 
   var rootType;
   var isReadOnly;

@@ -89,10 +89,15 @@
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(USE_NSS_CERTS)
-#include "chrome/browser/ui/webui/settings/certificates_handler.h"
+#include "chrome/browser/ui/webui/certificates_handler.h"
 #elif defined(OS_WIN) || defined(OS_MACOSX)
 #include "chrome/browser/ui/webui/settings/native_certificates_handler.h"
 #endif  // defined(USE_NSS_CERTS)
+
+#if defined(SAFE_BROWSING_DB_LOCAL)
+#include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
+#include "chrome/browser/ui/webui/settings/change_password_handler.h"
+#endif
 
 namespace settings {
 
@@ -117,7 +122,8 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(base::MakeUnique<AppearanceHandler>(web_ui));
 
 #if defined(USE_NSS_CERTS)
-  AddSettingsPageUIHandler(base::MakeUnique<CertificatesHandler>(false));
+  AddSettingsPageUIHandler(
+      base::MakeUnique<certificate_manager::CertificatesHandler>());
 #elif defined(OS_WIN) || defined(OS_MACOSX)
   AddSettingsPageUIHandler(base::MakeUnique<NativeCertificatesHandler>());
 #endif  // defined(USE_NSS_CERTS)
@@ -208,6 +214,13 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   }
 #endif  // defined(OS_WIN)
 
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  AddSettingsPageUIHandler(base::MakeUnique<ChangePasswordHandler>(profile));
+  html_source->AddBoolean("changePasswordEnabled",
+                          safe_browsing::ChromePasswordProtectionService::
+                              ShouldShowChangePasswordSettingUI(profile));
+#endif
+
 #if defined(OS_CHROMEOS)
   chromeos::settings::EasyUnlockSettingsHandler* easy_unlock_handler =
       chromeos::settings::EasyUnlockSettingsHandler::Create(html_source,
@@ -223,6 +236,9 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean(
       "quickUnlockEnabled",
       chromeos::quick_unlock::IsPinEnabled(profile->GetPrefs()));
+  html_source->AddBoolean(
+      "quickUnlockDisabledByPolicy",
+      chromeos::quick_unlock::IsPinDisabledByPolicy(profile->GetPrefs()));
   html_source->AddBoolean("fingerprintUnlockEnabled",
                           chromeos::quick_unlock::IsFingerprintEnabled());
   html_source->AddBoolean("hasInternalStylus",
@@ -294,9 +310,8 @@ MdSettingsUI::~MdSettingsUI() {
 }
 
 void MdSettingsUI::AddSettingsPageUIHandler(
-    std::unique_ptr<SettingsPageUIHandler> handler) {
+    std::unique_ptr<content::WebUIMessageHandler> handler) {
   DCHECK(handler);
-  handlers_.insert(handler.get());
   web_ui()->AddMessageHandler(std::move(handler));
 }
 

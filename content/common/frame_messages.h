@@ -193,7 +193,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameOwnerProperties)
   IPC_STRUCT_TRAITS_MEMBER(allow_payment_request)
   IPC_STRUCT_TRAITS_MEMBER(is_display_none)
   IPC_STRUCT_TRAITS_MEMBER(required_csp)
-  IPC_STRUCT_TRAITS_MEMBER(allowed_features)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::PageImportanceSignals)
@@ -400,6 +399,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::RequestNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(redirects)
   IPC_STRUCT_TRAITS_MEMBER(redirect_response)
   IPC_STRUCT_TRAITS_MEMBER(redirect_infos)
+  IPC_STRUCT_TRAITS_MEMBER(post_content_type)
   IPC_STRUCT_TRAITS_MEMBER(original_url)
   IPC_STRUCT_TRAITS_MEMBER(original_method)
   IPC_STRUCT_TRAITS_MEMBER(can_load_local_resources)
@@ -1259,7 +1259,7 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_DomOperationResponse,
 IPC_SYNC_MESSAGE_CONTROL3_1(FrameHostMsg_CookiesEnabled,
                             int /* render_frame_id */,
                             GURL /* url */,
-                            GURL /* first_party_for_cookies */,
+                            GURL /* site_for_cookies */,
                             bool /* cookies_enabled */)
 
 // Sent by the renderer process to check whether client 3D APIs

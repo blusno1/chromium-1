@@ -167,6 +167,11 @@ class MOJO_CPP_BINDINGS_EXPORT Message {
     return &associated_endpoint_handles_;
   }
 
+  // Takes ownership of any handles within |*context| and attaches them to this
+  // Message.
+  void AttachHandlesFromSerializationContext(
+      internal::SerializationContext* context);
+
   // Takes a scoped MessageHandle which may be passed to |WriteMessageNew()| for
   // transmission. Note that this invalidates this Message object, taking
   // ownership of its internal storage and any attached handles.
@@ -285,8 +290,7 @@ class MessageReceiverWithResponderStatus : public MessageReceiver {
                                        responder) WARN_UNUSED_RESULT = 0;
 };
 
-class MOJO_CPP_BINDINGS_EXPORT PassThroughFilter
-    : NON_EXPORTED_BASE(public MessageReceiver) {
+class MOJO_CPP_BINDINGS_EXPORT PassThroughFilter : public MessageReceiver {
  public:
   PassThroughFilter();
   ~PassThroughFilter() override;
@@ -348,7 +352,7 @@ MojoResult ReadMessage(MessagePipeHandle handle, Message* message);
 // Reports the currently dispatching Message as bad. Note that this is only
 // legal to call from directly within the stack frame of a message dispatch. If
 // you need to do asynchronous work before you can determine the legitimacy of
-// a message, use TakeBadMessageCallback() and retain its result until you're
+// a message, use GetBadMessageCallback() and retain its result until you're
 // ready to invoke or discard it.
 MOJO_CPP_BINDINGS_EXPORT
 void ReportBadMessage(const std::string& error);

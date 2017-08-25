@@ -136,10 +136,7 @@ OfflineAudioContext::OfflineAudioContext(Document* document,
                                          size_t number_of_frames,
                                          float sample_rate,
                                          ExceptionState& exception_state)
-    : BaseAudioContext(document,
-                       number_of_channels,
-                       number_of_frames,
-                       sample_rate),
+    : BaseAudioContext(document, kOfflineContext),
       is_rendering_started_(false),
       total_render_frames_(number_of_frames) {
   destination_node_ = OfflineAudioDestinationNode::Create(
@@ -202,7 +199,7 @@ ScriptPromise OfflineAudioContext::startOfflineRendering(
   float sample_rate = DestinationHandler().SampleRate();
   unsigned number_of_channels = DestinationHandler().NumberOfChannels();
 
-  AudioBuffer* render_target = AudioBuffer::Create(
+  AudioBuffer* render_target = AudioBuffer::CreateUninitialized(
       number_of_channels, total_render_frames_, sample_rate);
 
   if (!render_target) {
@@ -353,14 +350,14 @@ void OfflineAudioContext::FireCompletionEvent() {
   // that the context has been closed.
   SetContextState(kClosed);
 
-  AudioBuffer* rendered_buffer = DestinationHandler().RenderTarget();
-
-  DCHECK(rendered_buffer);
-  if (!rendered_buffer)
-    return;
-
   // Avoid firing the event if the document has already gone away.
   if (GetExecutionContext()) {
+    AudioBuffer* rendered_buffer = DestinationHandler().RenderTarget();
+
+    DCHECK(rendered_buffer);
+    if (!rendered_buffer)
+      return;
+
     // Call the offline rendering completion event listener and resolve the
     // promise too.
     DispatchEvent(OfflineAudioCompletionEvent::Create(rendered_buffer));

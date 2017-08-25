@@ -31,9 +31,9 @@
 #include "platform/graphics/gpu/DrawingBuffer.h"
 
 #include <memory>
-#include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "components/viz/common/quads/single_release_callback.h"
 #include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
@@ -46,6 +46,7 @@
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "v8/include/v8.h"
 
 using ::testing::Test;
 using ::testing::_;
@@ -60,7 +61,7 @@ class FakePlatformSupport : public TestingPlatformSupport {
   }
 
  private:
-  cc::TestGpuMemoryBufferManager test_gpu_memory_buffer_manager_;
+  viz::TestGpuMemoryBufferManager test_gpu_memory_buffer_manager_;
 };
 
 }  // anonymous namespace
@@ -722,6 +723,17 @@ TEST_F(DrawingBufferTest, verifySetIsHiddenProperlyAffectsMailboxes) {
 
   EXPECT_EQ(wait_sync_token, gl_->MostRecentlyWaitedSyncToken());
 
+  drawing_buffer_->BeginDestruction();
+}
+
+TEST_F(DrawingBufferTest,
+       verifyTooBigDrawingBufferExceedingV8MaxSizeFailsToCreate) {
+  IntSize too_big_size(1, (v8::TypedArray::kMaxLength / 4) + 1);
+  RefPtr<DrawingBuffer> too_big_drawing_buffer = DrawingBuffer::Create(
+      nullptr, nullptr, too_big_size, false, false, false, false, false,
+      DrawingBuffer::kDiscard, DrawingBuffer::kWebGL1,
+      DrawingBuffer::kAllowChromiumImage, CanvasColorParams());
+  EXPECT_EQ(too_big_drawing_buffer, nullptr);
   drawing_buffer_->BeginDestruction();
 }
 

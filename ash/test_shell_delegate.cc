@@ -14,7 +14,6 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test/test_accessibility_delegate.h"
 #include "ash/wallpaper/test_wallpaper_delegate.h"
@@ -100,8 +99,8 @@ void TestShellDelegate::ShelfInit() {
 
 void TestShellDelegate::ShelfShutdown() {}
 
-SystemTrayDelegate* TestShellDelegate::CreateSystemTrayDelegate() {
-  return new SystemTrayDelegate;
+NetworkingConfigDelegate* TestShellDelegate::GetNetworkingConfigDelegate() {
+  return nullptr;
 }
 
 std::unique_ptr<WallpaperDelegate>
@@ -117,11 +116,6 @@ std::unique_ptr<PaletteDelegate> TestShellDelegate::CreatePaletteDelegate() {
   return nullptr;
 }
 
-ui::MenuModel* TestShellDelegate::CreateContextMenu(Shelf* shelf,
-                                                    const ShelfItem* item) {
-  return nullptr;
-}
-
 GPUSupport* TestShellDelegate::CreateGPUSupport() {
   // Real GPU support depends on src/content, so just use a stub.
   return new GPUSupportStub;
@@ -133,14 +127,6 @@ base::string16 TestShellDelegate::GetProductName() const {
 
 gfx::Image TestShellDelegate::GetDeprecatedAcceleratorImage() const {
   return gfx::Image();
-}
-
-PrefService* TestShellDelegate::GetActiveUserPrefService() const {
-  return active_user_pref_service_;
-}
-
-PrefService* TestShellDelegate::GetLocalStatePrefService() const {
-  return nullptr;
 }
 
 bool TestShellDelegate::IsTouchscreenEnabledInPrefs(
@@ -160,11 +146,9 @@ void TestShellDelegate::SuspendMediaSessions() {
   media_sessions_suspended_ = true;
 }
 
-#if defined(USE_OZONE)
 ui::InputDeviceControllerClient*
 TestShellDelegate::GetInputDeviceControllerClient() {
   return nullptr;
 }
-#endif
 
 }  // namespace ash

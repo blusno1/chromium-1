@@ -8,6 +8,7 @@
 
 #include "base/process/process_handle.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_impl.h"
+#include "services/resource_coordinator/coordination_unit/frame_coordination_unit_impl.h"
 
 namespace resource_coordinator {
 
@@ -22,24 +23,25 @@ void CoordinationUnitIntrospectorImpl::GetProcessToURLMap(
       CoordinationUnitImpl::GetCoordinationUnitsOfType(
           CoordinationUnitType::kProcess);
   for (CoordinationUnitImpl* process_cu : process_cus) {
-    mojom::ProcessInfoPtr process_info(mojom::ProcessInfo::New());
+    int64_t pid;
+    if (!process_cu->GetProperty(mojom::PropertyType::kPID, &pid))
+      continue;
 
-    // The implicit contract for process CUs is that the |id| is the |pid|.
-    process_info->pid = process_cu->id().id;
+    mojom::ProcessInfoPtr process_info(mojom::ProcessInfo::New());
+    process_info->pid = pid;
     DCHECK_NE(base::kNullProcessId, process_info->pid);
 
-    std::vector<std::string> urls;
-    std::set<CoordinationUnitImpl*> frame_cus =
+    std::set<CoordinationUnitImpl*> web_contents_cus =
         process_cu->GetAssociatedCoordinationUnitsOfType(
-            CoordinationUnitType::kFrame);
-    for (CoordinationUnitImpl* frame_cu : frame_cus) {
-      base::Value url_value = frame_cu->GetProperty(
-          resource_coordinator::mojom::PropertyType::kURL);
-      if (url_value.is_string()) {
-        urls.push_back(url_value.GetString());
+            CoordinationUnitType::kWebContents);
+    for (CoordinationUnitImpl* web_contents_cu : web_contents_cus) {
+      int64_t ukm_source_id;
+      if (web_contents_cu->GetProperty(
+              resource_coordinator::mojom::PropertyType::kUKMSourceId,
+              &ukm_source_id)) {
+        process_info->ukm_source_ids.push_back(ukm_source_id);
       }
     }
-    process_info->urls = std::move(urls);
     process_infos.push_back(std::move(process_info));
   }
   callback.Run(std::move(process_infos));

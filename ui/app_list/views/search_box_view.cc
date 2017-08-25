@@ -22,6 +22,7 @@
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/app_list/views/contents_view.h"
 #include "ui/app_list/views/search_box_view_delegate.h"
+#include "ui/app_list/views/search_result_page_view.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -36,6 +37,7 @@
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -51,10 +53,11 @@ namespace app_list {
 namespace {
 
 constexpr int kPadding = 12;
+constexpr int kPaddingSearchResult = 16;
 constexpr int kInnerPadding = 24;
+constexpr int kInnerPaddingFullscreen = 16;
 constexpr int kPreferredWidth = 360;
 constexpr int kPreferredWidthFullscreen = 544;
-constexpr int kSearchBoxPreferredHeight = 48;
 constexpr int kSearchBoxBorderWidth = 4;
 
 constexpr SkColor kHintTextColor = SkColorSetARGBMacro(0xFF, 0xA0, 0xA0, 0xA0);
@@ -65,12 +68,25 @@ constexpr int kSearchBoxBorderCornerRadius = 2;
 constexpr int kSearchBoxBorderCornerRadiusSearchResult = 4;
 constexpr int kMicIconSize = 24;
 constexpr int kCloseIconSize = 24;
+constexpr int kSearchBoxFocusBorderCornerRadius = 28;
 
 constexpr int kLightVibrantBlendAlpha = 0xE6;
+
+// Range of the fraction of app list from collapsed to peeking that search box
+// should change opacity.
+constexpr float kOpacityStartFraction = 0.1f;
+constexpr float kOpacityEndFraction = 0.6f;
 
 // Color of placeholder text in zero query state.
 constexpr SkColor kZeroQuerySearchboxColor =
     SkColorSetARGBMacro(0x8A, 0x00, 0x00, 0x00);
+
+// Gets the box layout inset horizontal padding for the state of AppListModel.
+int GetBoxLayoutPaddingForState(AppListModel::State state) {
+  if (state == AppListModel::STATE_SEARCH_RESULTS)
+    return kPaddingSearchResult;
+  return kPadding;
+}
 
 }  // namespace
 
@@ -132,7 +148,7 @@ class SearchBoxImageButton : public views::ImageButton {
     if (event.key_code() == ui::VKEY_SPACE)
       return false;
 
-    return CustomButton::OnKeyPressed(event);
+    return Button::OnKeyPressed(event);
   }
 
  private:
@@ -151,13 +167,42 @@ class SearchBoxImageButton : public views::ImageButton {
   DISALLOW_COPY_AND_ASSIGN(SearchBoxImageButton);
 };
 
+// To show context menu of selected view instead of that of focused view which
+// is always this view when the user uses keyboard shortcut to open context
+// menu.
+class SearchBoxTextfield : public views::Textfield {
+ public:
+  explicit SearchBoxTextfield(SearchBoxView* search_box_view)
+      : search_box_view_(search_box_view) {}
+  ~SearchBoxTextfield() override = default;
+
+  // Overridden from views::View:
+  void ShowContextMenu(const gfx::Point& p,
+                       ui::MenuSourceType source_type) override {
+    views::View* selected_view =
+        search_box_view_->GetSelectedViewInContentsView();
+    if (source_type != ui::MENU_SOURCE_KEYBOARD || !selected_view) {
+      views::Textfield::ShowContextMenu(p, source_type);
+      return;
+    }
+    selected_view->ShowContextMenu(
+        selected_view->GetKeyboardContextMenuLocation(),
+        ui::MENU_SOURCE_KEYBOARD);
+  }
+
+ private:
+  SearchBoxView* const search_box_view_;
+
+  DISALLOW_COPY_AND_ASSIGN(SearchBoxTextfield);
+};
+
 SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
                              AppListViewDelegate* view_delegate,
                              AppListView* app_list_view)
     : delegate_(delegate),
       view_delegate_(view_delegate),
       content_container_(new views::View),
-      search_box_(new views::Textfield),
+      search_box_(new SearchBoxTextfield(this)),
       app_list_view_(app_list_view),
       is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()),
       focused_view_(is_fullscreen_app_list_enabled_ ? FOCUS_NONE
@@ -179,13 +224,15 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
   content_container_->SetBackground(
       base::MakeUnique<SearchBoxBackground>(background_color_));
 
-  views::BoxLayout* layout = new views::BoxLayout(
+  box_layout_ = new views::BoxLayout(
       views::BoxLayout::kHorizontal, gfx::Insets(0, kPadding),
-      kInnerPadding - views::Textfield::kTextPadding);
-  content_container_->SetLayoutManager(layout);
-  layout->set_cross_axis_alignment(
+      (is_fullscreen_app_list_enabled_ ? kInnerPaddingFullscreen
+                                       : kInnerPadding) -
+          views::Textfield::kTextPadding);
+  content_container_->SetLayoutManager(box_layout_);
+  box_layout_->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-  layout->set_minimum_cross_axis_size(kSearchBoxPreferredHeight);
+  box_layout_->set_minimum_cross_axis_size(kSearchBoxPreferredHeight);
 
   search_box_->SetBorder(views::NullBorder());
   search_box_->SetTextColor(kSearchTextColor);
@@ -216,24 +263,35 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
     search_box_->set_placeholder_text_color(kHintTextColor);
   }
   content_container_->AddChildView(search_box_);
-  layout->SetFlexForView(search_box_, 1);
+  box_layout_->SetFlexForView(search_box_, 1);
 
   if (is_fullscreen_app_list_enabled_) {
+    // An invisible space view to align |search_box_| to center.
+    search_box_right_space_ = new views::View();
+    search_box_right_space_->SetPreferredSize(gfx::Size(kSearchIconSize, 0));
+    content_container_->AddChildView(search_box_right_space_);
+
     close_button_ = new SearchBoxImageButton(this);
     close_button_->SetImage(
         views::ImageButton::STATE_NORMAL,
         gfx::CreateVectorIcon(kIcCloseIcon, kCloseIconSize, search_box_color_));
     close_button_->SetVisible(false);
+    close_button_->SetAccessibleName(
+        l10n_util::GetStringUTF16(IDS_APP_LIST_CLEAR_SEARCHBOX));
     content_container_->AddChildView(close_button_);
   }
 
   view_delegate_->GetSpeechUI()->AddObserver(this);
+  if (is_fullscreen_app_list_enabled_)
+    view_delegate_->AddObserver(this);
   ModelChanged();
 }
 
 SearchBoxView::~SearchBoxView() {
   view_delegate_->GetSpeechUI()->RemoveObserver(this);
   model_->search_box()->RemoveObserver(this);
+  if (is_fullscreen_app_list_enabled_)
+    view_delegate_->RemoveObserver(this);
 }
 
 void SearchBoxView::ModelChanged() {
@@ -245,9 +303,10 @@ void SearchBoxView::ModelChanged() {
   if (is_fullscreen_app_list_enabled_)
     UpdateSearchIcon();
   model_->search_box()->AddObserver(this);
+
   SpeechRecognitionButtonPropChanged();
   HintTextChanged();
-  WallpaperProminentColorsChanged();
+  OnWallpaperColorsChanged();
 }
 
 bool SearchBoxView::HasSearch() const {
@@ -256,15 +315,14 @@ bool SearchBoxView::HasSearch() const {
 
 void SearchBoxView::ClearSearch() {
   search_box_->SetText(base::string16());
+  UpdateCloseButtonVisisbility();
   view_delegate_->AutoLaunchCanceled();
   // Updates model and fires query changed manually because SetText() above
   // does not generate ContentsChanged() notification.
   UpdateModel();
   NotifyQueryChanged();
-  if (is_fullscreen_app_list_enabled_) {
-    SetSearchBoxActive(false);
+  if (is_fullscreen_app_list_enabled_)
     app_list_view_->SetStateFromSearchBoxView(search_box_->text().empty());
-  }
 }
 
 void SearchBoxView::SetShadow(const gfx::ShadowValue& shadow) {
@@ -290,6 +348,42 @@ views::ImageButton* SearchBoxView::close_button() {
   return static_cast<views::ImageButton*>(close_button_);
 }
 
+bool SearchBoxView::MoveArrowFocus(const ui::KeyEvent& event) {
+  DCHECK(IsArrowKey(event));
+  DCHECK(is_fullscreen_app_list_enabled_);
+
+  // Left and right arrow should work in the same way as shift+tab and tab.
+  if (event.key_code() == ui::VKEY_LEFT)
+    return MoveTabFocus(true);
+  if (event.key_code() == ui::VKEY_RIGHT)
+    return MoveTabFocus(false);
+  if (back_button_)
+    back_button_->SetSelected(false);
+  if (close_button_)
+    close_button_->SetSelected(false);
+  const bool move_up = event.key_code() == ui::VKEY_UP;
+
+  switch (focused_view_) {
+    case FOCUS_NONE:
+      focused_view_ = move_up ? FOCUS_NONE : FOCUS_SEARCH_BOX;
+      break;
+    case FOCUS_BACK_BUTTON:
+    case FOCUS_SEARCH_BOX:
+    case FOCUS_CLOSE_BUTTON:
+      focused_view_ = move_up ? FOCUS_NONE : FOCUS_CONTENTS_VIEW;
+      break;
+    case FOCUS_CONTENTS_VIEW:
+      focused_view_ = move_up ? FOCUS_SEARCH_BOX : FOCUS_CONTENTS_VIEW;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  SetSelected(IsSearchBoxTrimmedQueryEmpty() &&
+              focused_view_ == FOCUS_SEARCH_BOX);
+  return (focused_view_ < FOCUS_CONTENTS_VIEW);
+}
+
 // Returns true if set internally, i.e. if focused_view_ != CONTENTS_VIEW.
 // Note: because we always want to be able to type in the edit box, this is only
 // a faux-focus so that buttons can respond to the ENTER key.
@@ -307,7 +401,7 @@ bool SearchBoxView::MoveTabFocus(bool move_backwards) {
       case FOCUS_NONE:
         focused_view_ =
             move_backwards
-                ? FOCUS_CONTENTS_VIEW
+                ? FOCUS_NONE
                 : (back_button_ && back_button_->visible() ? FOCUS_BACK_BUTTON
                                                            : FOCUS_SEARCH_BOX);
         break;
@@ -335,7 +429,7 @@ bool SearchBoxView::MoveTabFocus(bool move_backwards) {
                             ? (close_button_ && close_button_->visible()
                                    ? FOCUS_CLOSE_BUTTON
                                    : FOCUS_SEARCH_BOX)
-                            : FOCUS_NONE;
+                            : FOCUS_CONTENTS_VIEW;
         break;
       default:
         NOTREACHED();
@@ -377,18 +471,11 @@ bool SearchBoxView::MoveTabFocus(bool move_backwards) {
         back_button_->SetSelected(true);
       break;
     case FOCUS_SEARCH_BOX:
-      if (search_box_->text().empty()) {
-        // The search box should only be selected in PEEKING or
-        // FULLSCREEN_ALL_APPS state.
-        search_box_selected = true;
-      }
-      // Set the ChromeVox focus to the search box. However, DO NOT do this if
-      // we are in the search results state (i.e., if the search box has text in
-      // it), because the focus is about to be shifted to the first search
-      // result and we do not want to read out the name of the search box as
-      // well.
-      if (search_box_->text().empty())
-        search_box_->NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, true);
+      if (!IsSearchBoxTrimmedQueryEmpty())
+        break;
+      // The search box should only be selected in PEEKING or
+      // FULLSCREEN_ALL_APPS state.
+      search_box_selected = true;
       break;
     case FOCUS_MIC_BUTTON:
       if (speech_button_)
@@ -453,19 +540,16 @@ void SearchBoxView::SetSearchBoxActive(bool active) {
 
   is_search_box_active_ = active;
   UpdateSearchIcon();
-  UpdateBackgroundColor(active ? kSearchBoxBackgroundDefault
-                               : background_color_);
+  UpdateBackgroundColor(background_color_);
   search_box_->set_placeholder_text_draw_flags(
       active ? gfx::Canvas::TEXT_ALIGN_LEFT : gfx::Canvas::TEXT_ALIGN_CENTER);
   search_box_->set_placeholder_text_color(active ? kZeroQuerySearchboxColor
                                                  : search_box_color_);
   search_box_->SetCursorEnabled(active);
+  search_box_right_space_->SetVisible(!active);
 
   UpdateKeyboardVisibility();
 
-  if (speech_button_)
-    speech_button_->SetVisible(!active);
-  close_button_->SetVisible(active);
   if (focused_view_ != FOCUS_CONTENTS_VIEW)
     ResetTabFocus(false);
   content_container_->Layout();
@@ -583,6 +667,16 @@ void SearchBoxView::UpdateBackground(double progress,
   UpdateBackgroundColor(color);
 }
 
+void SearchBoxView::UpdateLayout(double progress,
+                                 AppListModel::State current_state,
+                                 AppListModel::State target_state) {
+  box_layout_->set_inside_border_insets(
+      gfx::Insets(0, gfx::Tween::LinearIntValueBetween(
+                         progress, GetBoxLayoutPaddingForState(current_state),
+                         GetBoxLayoutPaddingForState(target_state))));
+  InvalidateLayout();
+}
+
 void SearchBoxView::OnTabletModeChanged(bool started) {
   if (!is_fullscreen_app_list_enabled_)
     return;
@@ -601,25 +695,46 @@ int SearchBoxView::GetSearchBoxBorderCornerRadiusForState(
 SkColor SearchBoxView::GetBackgroundColorForState(
     AppListModel::State state) const {
   if (state == AppListModel::STATE_SEARCH_RESULTS)
-    return kSearchBoxBackgroundDefault;
+    return kCardBackgroundColorFullscreen;
   return background_color_;
 }
 
-void SearchBoxView::UpdateOpacity(float work_area_bottom, bool is_end_gesture) {
-  float opacity = 1.0f;
-  if (!is_end_gesture) {
-    gfx::Rect search_box_bounds = this->GetBoundsInScreen();
-    float delta_y = std::max(
-        (work_area_bottom - search_box_bounds.CenterPoint().y()), 0.0f);
-    opacity = std::min(
-        delta_y / (AppListView::kNumOfShelfSize * AppListView::kShelfSize),
-        1.0f);
-  }
+void SearchBoxView::UpdateOpacity() {
+  // The opacity of searchbox is a function of the fractional displacement of
+  // the app list from collapsed(0) to peeking(1) state. When the fraction
+  // changes from |kOpacityStartFraction| to |kOpaticyEndFraction|, the opacity
+  // of searchbox changes from 0.f to 1.0f.
+  ContentsView* contents_view = static_cast<ContentsView*>(contents_view_);
+  int app_list_y_position_in_screen =
+      contents_view->app_list_view()->app_list_y_position_in_screen();
+  float fraction =
+      std::max<float>(0, contents_view->app_list_view()->GetWorkAreaBottom() -
+                             app_list_y_position_in_screen) /
+      (kPeekingAppListHeight - kShelfSize);
 
-  // Restores the opacity of searchbox to 1.0f if it is the end of the gesture
-  // dragging.
+  float opacity = 1.0f;
+  if (contents_view->app_list_view()->is_in_drag())
+    opacity =
+        std::min(std::max((fraction - kOpacityStartFraction) /
+                              (kOpacityEndFraction - kOpacityStartFraction),
+                          0.f),
+                 1.0f);
+
+  // Restores the opacity of searchbox if the gesture dragging ends.
   this->layer()->SetOpacity(opacity);
-  contents_view_->layer()->SetOpacity(opacity);
+  contents_view->search_results_page_view()->layer()->SetOpacity(opacity);
+}
+
+bool SearchBoxView::IsArrowKey(const ui::KeyEvent& event) {
+  return event.key_code() == ui::VKEY_UP || event.key_code() == ui::VKEY_DOWN ||
+         event.key_code() == ui::VKEY_LEFT ||
+         event.key_code() == ui::VKEY_RIGHT;
+}
+
+views::View* SearchBoxView::GetSelectedViewInContentsView() const {
+  if (!contents_view_)
+    return nullptr;
+  return static_cast<ContentsView*>(contents_view_)->GetSelectedView();
 }
 
 void SearchBoxView::UpdateModel() {
@@ -640,19 +755,18 @@ void SearchBoxView::ContentsChanged(views::Textfield* sender,
   UpdateModel();
   view_delegate_->AutoLaunchCanceled();
   NotifyQueryChanged();
-  if (is_fullscreen_app_list_enabled_) {
-    SetSearchBoxActive(!search_box_->text().empty());
-    // If the query is only whitespace, don't transition the AppListView state.
-    base::string16 trimmed_query = search_box_->text();
-    base::TrimWhitespace(search_box_->text(), base::TrimPositions::TRIM_ALL,
-                         &trimmed_query);
-    app_list_view_->SetStateFromSearchBoxView(trimmed_query.empty());
-    if (!search_box_->text().empty()) {
-      // Unselect the search box when the state is transiting to HALF or
-      // FULLSCREEN_SEARCH.
-      SetSelected(false);
-    }
-  }
+  if (!is_fullscreen_app_list_enabled_)
+    return;
+  SetSearchBoxActive(true);
+  UpdateCloseButtonVisisbility();
+  const bool is_trimmed_query_empty = IsSearchBoxTrimmedQueryEmpty();
+  // If the query is only whitespace, don't transition the AppListView state.
+  app_list_view_->SetStateFromSearchBoxView(is_trimmed_query_empty);
+  if (is_trimmed_query_empty)
+    return;
+  // Unselect the search box when the state is transiting to HALF or
+  // FULLSCREEN_SEARCH.
+  SetSelected(false);
 }
 
 bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
@@ -661,6 +775,10 @@ bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
     if (key_event.key_code() == ui::VKEY_TAB &&
         focused_view_ != FOCUS_CONTENTS_VIEW &&
         MoveTabFocus(key_event.IsShiftDown()))
+      return true;
+
+    if (is_fullscreen_app_list_enabled_ && IsArrowKey(key_event) &&
+        focused_view_ != FOCUS_CONTENTS_VIEW && MoveArrowFocus(key_event))
       return true;
 
     if (focused_view_ == FOCUS_BACK_BUTTON && back_button_ &&
@@ -683,7 +801,10 @@ bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
     // If they didn't, we still select the first search item, in case they're
     // moving the caret through typed search text.  The UP arrow never moves
     // focus from text/buttons to app list/results, so ignore it.
-    if (focused_view_ < FOCUS_CONTENTS_VIEW &&
+    // For fullscreen app list, the arrow key should be ignored here since it
+    // has been handled.
+    if (!is_fullscreen_app_list_enabled_ &&
+        focused_view_ < FOCUS_CONTENTS_VIEW &&
         (key_event.key_code() == ui::VKEY_LEFT ||
          key_event.key_code() == ui::VKEY_RIGHT ||
          key_event.key_code() == ui::VKEY_DOWN)) {
@@ -785,14 +906,16 @@ void SearchBoxView::SelectionModelChanged() {
 
 void SearchBoxView::Update() {
   search_box_->SetText(model_->search_box()->text());
+  UpdateCloseButtonVisisbility();
   NotifyQueryChanged();
 }
 
-void SearchBoxView::WallpaperProminentColorsChanged() {
+void SearchBoxView::OnWallpaperColorsChanged() {
   if (!is_fullscreen_app_list_enabled_)
     return;
 
-  const std::vector<SkColor> prominent_colors = GetWallpaperProminentColors();
+  std::vector<SkColor> prominent_colors;
+  GetWallpaperProminentColors(&prominent_colors);
   if (prominent_colors.empty())
     return;
   DCHECK_EQ(static_cast<size_t>(ColorProfileType::NUM_OF_COLOR_PROFILES),
@@ -833,10 +956,11 @@ void SearchBoxView::UpdateSearchIcon() {
       gfx::CreateVectorIcon(icon, kSearchIconSize, search_box_color_));
 }
 
-const std::vector<SkColor>& SearchBoxView::GetWallpaperProminentColors() const {
-  return model_->search_box()->wallpaper_prominent_colors();
+void SearchBoxView::GetWallpaperProminentColors(std::vector<SkColor>* colors) {
+  view_delegate_->GetWallpaperProminentColors(colors);
 }
 
+// TODO(crbug.com/755219): Unify this with UpdateBackgroundColor.
 void SearchBoxView::SetBackgroundColor(SkColor light_vibrant) {
   DCHECK(is_fullscreen_app_list_enabled_);
   const SkColor light_vibrant_mixed = color_utils::AlphaBlend(
@@ -851,13 +975,33 @@ void SearchBoxView::SetSearchBoxColor(SkColor color) {
       SK_ColorTRANSPARENT == color ? kDefaultSearchboxColor : color;
 }
 
+// TODO(crbug.com/755219): Unify this with SetBackgroundColor.
 void SearchBoxView::UpdateBackgroundColor(SkColor color) {
+  if (is_search_box_active_)
+    color = kSearchBoxBackgroundDefault;
   GetSearchBoxBackground()->set_color(color);
   search_box_->SetBackgroundColor(color);
 }
 
+void SearchBoxView::UpdateCloseButtonVisisbility() {
+  if (!close_button_)
+    return;
+  bool should_show_close_button_ = !search_box_->text().empty();
+  if (close_button_->visible() == should_show_close_button_)
+    return;
+  close_button_->SetVisible(should_show_close_button_);
+  content_container_->Layout();
+}
+
 SearchBoxBackground* SearchBoxView::GetSearchBoxBackground() const {
   return static_cast<SearchBoxBackground*>(content_container_->background());
+}
+
+bool SearchBoxView::IsSearchBoxTrimmedQueryEmpty() const {
+  base::string16 trimmed_query;
+  base::TrimWhitespace(search_box_->text(), base::TrimPositions::TRIM_ALL,
+                       &trimmed_query);
+  return trimmed_query.empty();
 }
 
 void SearchBoxView::SetDefaultBorder() {
@@ -875,9 +1019,15 @@ void SearchBoxView::SetSelected(bool selected) {
     return;
   selected_ = selected;
   if (selected) {
-    SetBorder(views::CreateRoundedRectBorder(
-        kSearchBoxBorderWidth, kSearchBoxBorderCornerRadiusFullscreen,
-        kSearchBoxBorderColor));
+    SetBorder(views::CreateRoundedRectBorder(kSearchBoxBorderWidth,
+                                             kSearchBoxFocusBorderCornerRadius,
+                                             kSearchBoxBorderColor));
+    // Set the ChromeVox focus to the search box. However, DO NOT do this if
+    // we are in the search results state (i.e., if the search box has text in
+    // it), because the focus is about to be shifted to the first search
+    // result and we do not want to read out the name of the search box as
+    // well.
+    search_box_->NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
   } else {
     SetDefaultBorder();
   }

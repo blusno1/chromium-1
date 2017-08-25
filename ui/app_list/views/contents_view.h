@@ -105,6 +105,8 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   AppListMainView* app_list_main_view() const { return app_list_main_view_; }
 
+  AppListView* app_list_view() const { return app_list_view_; }
+
   // Returns the pagination model for the ContentsView.
   const PaginationModel& pagination_model() { return pagination_model_; }
 
@@ -137,6 +139,15 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   void SelectedPageChanged(int old_selected, int new_selected) override;
   void TransitionStarted() override;
   void TransitionChanged() override;
+
+  // Returns the height of current display.
+  int GetDisplayHeight() const;
+
+  // Starts the fade out animation when the app list is closed.
+  void FadeOutOnClose(base::TimeDelta animation_duration);
+
+  // Returns selected view in active page.
+  views::View* GetSelectedView() const;
 
  private:
   // Sets the active launcher page, accounting for whether the change is for

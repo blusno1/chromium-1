@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "base/numerics/safe_math.h"
-#include "mojo/public/cpp/bindings/array_traits_carray.h"
+#include "mojo/public/cpp/bindings/array_traits_span.h"
 #include "mojo/public/cpp/bindings/array_traits_stl.h"
 #include "mojo/public/cpp/bindings/lib/array_serialization.h"
 #include "mojo/public/cpp/bindings/lib/buffer.h"
@@ -30,11 +30,10 @@ namespace internal {
 template <typename MojomType, typename UserType>
 mojo::Message StructSerializeAsMessageImpl(UserType* input) {
   SerializationContext context;
-  PrepareToSerialize<MojomType>(*input, &context);
-  mojo::Message message;
-  context.PrepareMessage(0, 0, &message);
+  mojo::Message message(0, 0, 0, 0, nullptr);
   typename MojomTypeTraits<MojomType>::Data::BufferWriter writer;
   Serialize<MojomType>(*input, message.payload_buffer(), &writer, &context);
+  message.AttachHandlesFromSerializationContext(&context);
   return message;
 }
 

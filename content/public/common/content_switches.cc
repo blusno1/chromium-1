@@ -64,6 +64,9 @@ const char kBlinkSettings[]                 = "blink-settings";
 // Causes the browser process to crash on startup.
 const char kBrowserCrashTest[]              = "crash-test";
 
+// Causes the browser process to display a dialog on launch.
+const char kBrowserStartupDialog[]          = "browser-startup-dialog";
+
 // Path to the exe to run for the renderer and plugin subprocesses.
 const char kBrowserSubprocessPath[]         = "browser-subprocess-path";
 
@@ -342,6 +345,10 @@ const char kEnableDistanceFieldText[]       = "enable-distance-field-text";
 // Enable the creation of compositing layers when it would prevent LCD text.
 const char kEnablePreferCompositingToLCDText[] =
     "enable-prefer-compositing-to-lcd-text";
+
+// Enable work-in-progress persistent storage for the Background Fetch API.
+const char kEnableBackgroundFetchPersistence[] =
+    "enable-background-fetch-persistence";
 
 // Enable one or more Blink runtime-enabled features.
 // Use names from RuntimeEnabledFeatures.json5, separated by commas.
@@ -678,7 +685,8 @@ const char kNumRasterThreads[]              = "num-raster-threads";
 
 // Override the behavior of plugin throttling for testing.
 // By default the throttler is only enabled for a hard-coded list of plugins.
-// Set the value to 'always' to always throttle every plugin instance.
+// Set the value to 'always' to always throttle every plugin instance. Set the
+// value to 'never' to disable throttling.
 const char kOverridePluginPowerSaverForTesting[] =
     "override-plugin-power-saver-for-testing";
 
@@ -897,11 +905,18 @@ const char kUtilityCmdPrefix[]              = "utility-cmd-prefix";
 // Causes the process to run as a utility subprocess.
 const char kUtilityProcess[]                = "utility";
 
-// The utility process is sandboxed, with access to one directory. This flag
-// specifies the directory that can be accessed.
+// When utility process is sandboxed, there is still access to one directory.
+// This flag specifies the directory that can be accessed.
 const char kUtilityProcessAllowedDir[]      = "utility-allowed-dir";
 
 const char kUtilityProcessRunningElevated[] = "utility-run-elevated";
+
+// Type of sandbox to apply to the utility process. Options are "none",
+// "network", or "utility" (the default).
+const char kUtilityProcessSandboxType[] = "utility-sandbox-type";
+
+// Causes the utility process to display a dialog on launch.
+const char kUtilityStartupDialog[] = "utility-startup-dialog";
 
 // In debug builds, asserts that the stream of input events is valid.
 const char kValidateInputEventStream[] = "validate-input-event-stream";
@@ -931,6 +946,12 @@ const char kDisableWebRtcHWEncoding[] = "disable-webrtc-hw-encoding";
 // Enables negotiation of GCM cipher suites from RFC 7714 for SRTP in WebRTC.
 // See https://tools.ietf.org/html/rfc7714 for further information.
 const char kEnableWebRtcSrtpAesGcm[] = "enable-webrtc-srtp-aes-gcm";
+
+// Enables negotiation of encrypted header extensions from RFC 6904 for SRTP
+// in WebRTC.
+// See https://tools.ietf.org/html/rfc6904 for further information.
+const char kEnableWebRtcSrtpEncryptedHeaders[] =
+    "enable-webrtc-srtp-encrypted-headers";
 
 // Enables Origin header in Stun messages for WebRTC.
 const char kEnableWebRtcStunOrigin[]        = "enable-webrtc-stun-origin";

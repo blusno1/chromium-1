@@ -27,12 +27,11 @@ class WidgetInputHandlerManager
     : public base::RefCountedThreadSafe<WidgetInputHandlerManager>,
       public ui::InputHandlerProxyClient {
  public:
-  WidgetInputHandlerManager(
+  static scoped_refptr<WidgetInputHandlerManager> Create(
       base::WeakPtr<RenderWidget> render_widget,
       IPC::Sender* legacy_host_channel,
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
       blink::scheduler::RendererScheduler* renderer_scheduler);
-
   void AddAssociatedInterface(
       mojom::WidgetInputHandlerAssociatedRequest interface_request);
 
@@ -58,8 +57,10 @@ class WidgetInputHandlerManager
   void DidAnimateForInput() override;
   void GenerateScrollBeginAndSendToMainThread(
       const blink::WebGestureEvent& update_event) override;
-  void SetWhiteListedTouchAction(cc::TouchAction touch_action,
-                                 uint32_t unique_touch_event_id) override;
+  void SetWhiteListedTouchAction(
+      cc::TouchAction touch_action,
+      uint32_t unique_touch_event_id,
+      ui::InputHandlerProxy::EventDisposition event_disposition) override;
 
   void ObserveGestureEventOnMainThread(
       const blink::WebGestureEvent& gesture_event,
@@ -73,6 +74,12 @@ class WidgetInputHandlerManager
   ~WidgetInputHandlerManager() override;
 
  private:
+  WidgetInputHandlerManager(
+      base::WeakPtr<RenderWidget> render_widget,
+      IPC::Sender* legacy_host_channel,
+      scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
+      blink::scheduler::RendererScheduler* renderer_scheduler);
+  void Init();
   void InitOnCompositorThread(
       const base::WeakPtr<cc::InputHandler>& input_handler,
       bool smooth_scroll_enabled);

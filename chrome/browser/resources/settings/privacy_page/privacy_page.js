@@ -75,6 +75,14 @@ Polymer({
     showClearBrowsingDataDialog_: Boolean,
 
     /** @private */
+    tabsInCbd_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('tabsInCbd');
+      }
+    },
+
+    /** @private */
     showDoNotTrackDialog_: {
       type: Boolean,
       value: false,
@@ -96,6 +104,14 @@ Polymer({
       type: Boolean,
       value: function() {
         return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
+      }
+    },
+
+    /** @private */
+    enableSoundContentSetting_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableSoundContentSetting');
       }
     },
 

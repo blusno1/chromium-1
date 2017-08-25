@@ -22,7 +22,7 @@ using PaintRecord = PaintOpBuffer;
 
 class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
  public:
-  enum class Type {
+  enum class Type : uint8_t {
     kColor,
     kLinearGradient,
     kRadialGradient,
@@ -36,7 +36,7 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
   // Scaling behavior dictates how a PaintRecord shader will behave. Use
   // RasterAtScale to create a picture shader. Use FixedScale to create an image
   // shader that is backed by the paint record.
-  enum class ScalingBehavior { kRasterAtScale, kFixedScale };
+  enum class ScalingBehavior : uint8_t { kRasterAtScale, kFixedScale };
 
   static sk_sp<PaintShader> MakeColor(SkColor color);
 
@@ -80,6 +80,9 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
       const SkColor colors[],
       const SkScalar pos[],
       int color_count,
+      SkShader::TileMode mode,
+      SkScalar start_degrees,
+      SkScalar end_degrees,
       uint32_t flags = 0,
       const SkMatrix* local_matrix = nullptr,
       SkColor fallback_color = SK_ColorTRANSPARENT);
@@ -113,8 +116,17 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
 
   bool IsOpaque() const;
 
+  // Returns true if the shader looks like it is valid (ie the members required
+  // for this shader type all look reasonable. Returns false otherwise. Note
+  // that this is a best effort function since truly validating whether the
+  // shader is correct is hard.
+  bool IsValid() const;
+
  private:
   friend class PaintFlags;
+  friend class PaintOpReader;
+  friend class PaintOpSerializationTestUtils;
+  friend class PaintOpWriter;
 
   explicit PaintShader(Type type);
 
@@ -144,6 +156,9 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
 
   SkPoint start_point_ = SkPoint::Make(0, 0);
   SkPoint end_point_ = SkPoint::Make(0, 0);
+
+  SkScalar start_degrees_ = 0;
+  SkScalar end_degrees_ = 0;
 
   PaintImage image_;
   sk_sp<PaintRecord> record_;

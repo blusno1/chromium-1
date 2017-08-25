@@ -426,13 +426,7 @@ IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest,
 
 // Catch an error from a BrowserAction; this is more complex than a content
 // script error, since browser actions are routed through our own code.
-#if defined(OS_WIN)  // Flakes on XP. http://crbug.com/517029
-#define MAYBE_BrowserActionRuntimeError DISABLED_BrowserActionRuntimeError
-#else
-#define MAYBE_BrowserActionRuntimeError BrowserActionRuntimeError
-#endif
-IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest,
-                       MAYBE_BrowserActionRuntimeError) {
+IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest, BrowserActionRuntimeError) {
   const Extension* extension = NULL;
   LoadExtensionAndCheckErrors(
       "browser_action_runtime_error",
@@ -450,10 +444,12 @@ IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest,
   std::string message;
   bool use_native_bindings = FeatureSwitch::native_crx_bindings()->IsEnabled();
   if (use_native_bindings) {
-    // TODO(devlin): The "Error in event handler for browserAction.onClicked"
-    // portion may or may not be worth preserving. In most cases, it's
-    // unnecessary with the line number, but it could be useful in some cases.
-    message = "Uncaught ReferenceError: baz is not defined";
+    // TODO(devlin): The specific event name (here, 'browserAction.onClicked')
+    // may or may not be worth preserving. In most cases, it's unnecessary with
+    // the line number, but it could be useful in some cases.
+    message =
+        "Error in event handler: ReferenceError: "
+        "baz is not defined";
   } else {
     message =
         "Error in event handler for browserAction.onClicked: "

@@ -30,8 +30,8 @@
 #include "chrome/browser/download/drag_download_item.h"
 #include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/download_feedback_service.h"
-#include "chrome/browser/safe_browsing/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/views/download/download_feedback_dialog_view.h"
@@ -883,7 +883,7 @@ void DownloadItemView::SetDropdownState(State new_state) {
   // Avoid extra SchedulePaint()s if the state is going to be the same and
   // |dropdown_button_| has already been initialized.
   if (dropdown_state_ == new_state &&
-      !dropdown_button_->GetImage(views::CustomButton::STATE_NORMAL).isNull())
+      !dropdown_button_->GetImage(views::Button::STATE_NORMAL).isNull())
     return;
 
   if (new_state != dropdown_state_) {

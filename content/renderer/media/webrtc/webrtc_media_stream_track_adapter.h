@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "base/synchronization/waitable_event.h"
 #include "content/common/content_export.h"
 #include "content/renderer/media/remote_media_stream_track_adapter.h"
 #include "content/renderer/media/webrtc/media_stream_video_webrtc_sink.h"
@@ -50,12 +51,13 @@ class CONTENT_EXPORT WebRtcMediaStreamTrackAdapter
   // adapter.
   void Dispose();
 
-  // The adapter must be initialized in order to use |web_track| and
-  // |webrtc_track|.
   bool is_initialized() const;
-  const blink::WebMediaStreamTrack& web_track() const;
-  webrtc::MediaStreamTrackInterface* webrtc_track() const;
-  bool IsEqual(const blink::WebMediaStreamTrack& web_track) const;
+  // These methods must be called on the main thread.
+  // TODO(hbos): Allow these methods to be called on any thread and make them
+  // const. https://crbug.com/756436
+  const blink::WebMediaStreamTrack& web_track();
+  webrtc::MediaStreamTrackInterface* webrtc_track();
+  bool IsEqual(const blink::WebMediaStreamTrack& web_track);
 
   // For testing.
   WebRtcAudioSink* GetLocalTrackAudioSinkForTesting() {
@@ -90,6 +92,7 @@ class CONTENT_EXPORT WebRtcMediaStreamTrackAdapter
   void InitializeRemoteVideoTrack(
       webrtc::VideoTrackInterface* webrtc_video_track);
   void FinalizeRemoteTrackInitializationOnMainThread();
+  void EnsureTrackIsInitialized();
 
   // Disposing starts and finishes on the main thread. Local tracks and remote
   // video tracks are disposed synchronously. Remote audio tracks are disposed
@@ -106,10 +109,11 @@ class CONTENT_EXPORT WebRtcMediaStreamTrackAdapter
   PeerConnectionDependencyFactory* const factory_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
 
-  // This class is immutable between being initialized (triggered by
-  // |Create...|) and being disposed (by calling |Dispose|). As such, no locks
-  // are required in the implementation for only inherently racey actions could
-  // cause problems (such as disposing while still in use).
+  // Part of the initialization of remote tracks occurs on the signaling thread.
+  // |remote_track_can_complete_initialization_| allows waiting until that part
+  // of the process is finished, so that full initialization of the track can be
+  // completed on the main thread.
+  base::WaitableEvent remote_track_can_complete_initialization_;
   bool is_initialized_;
   blink::WebMediaStreamTrack web_track_;
   scoped_refptr<webrtc::MediaStreamTrackInterface> webrtc_track_;

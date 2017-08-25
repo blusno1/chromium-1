@@ -252,6 +252,14 @@ PrefService::PrefInitializationStatus PrefService::GetInitializationStatus()
   }
 }
 
+PrefService::PrefInitializationStatus
+PrefService::GetAllPrefStoresInitializationStatus() const {
+  if (!pref_value_store_->IsInitializationComplete())
+    return INITIALIZATION_STATUS_WAITING;
+
+  return GetInitializationStatus();
+}
+
 bool PrefService::IsManagedPreference(const std::string& pref_name) const {
   const Preference* pref = FindPreference(pref_name);
   return pref && pref->IsManaged();
@@ -372,6 +380,10 @@ void PrefService::ClearPref(const std::string& path) {
 
 void PrefService::ClearMutableValues() {
   user_pref_store_->ClearMutableValues();
+}
+
+void PrefService::OnStoreDeletionFromDisk() {
+  user_pref_store_->OnStoreDeletionFromDisk();
 }
 
 void PrefService::Set(const std::string& path, const base::Value& value) {

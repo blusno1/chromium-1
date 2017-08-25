@@ -31,6 +31,7 @@
           Dacă această setare este dezactivată sau nu este configurată, gazda asistenței la distanță va rula în contextul utilizatorului, iar utilizatorii la distanță nu vor putea să interacționeze cu ferestrele cu privilegii superioare de pe computer.</translation>
 <translation id="1096105751829466145">Furnizor de căutare prestabilit</translation>
 <translation id="1117535567637097036">Handlerele de protocol stabilite prin această politică nu sunt folosite pentru gestionarea intențiilor Android.</translation>
+<translation id="1122282995569868661">Afișează pictograma <ph name="PRODUCT_NAME" /> în bara de instrumente</translation>
 <translation id="1128903365609589950">Configurează directorul pe care <ph name="PRODUCT_NAME" /> îl va folosi pentru a stoca fișierele din memoria cache pe disc.
 
       Dacă configurezi această politică, <ph name="PRODUCT_NAME" /> va folosi directorul indicat, indiferent dacă utilizatorul a specificat semnalizatorul „--disk-cache-dir”. Pentru a evita pierderea de date sau alte erori neașteptate, această politică nu ar trebui setată la un director rădăcină al volumului sau la un director folosit pentru alte scopuri, deoarece <ph name="PRODUCT_NAME" /> îi gestionează conținutul.
@@ -53,6 +54,7 @@
       Dacă această politică nu este configurată, frecvența prestabilită este de 3
       ore. Frecvența minimă permisă este de 60 de secunde.</translation>
 <translation id="1221359380862872747">Încărcați adrese URL specificate la conectarea demonstrativă</translation>
+<translation id="123081309365616809">Activează proiectarea conținutului pe dispozitiv</translation>
 <translation id="1265053460044691532">Limitați intervalul de timp pentru care un utilizator autentificat prin SAML se poate conecta offline</translation>
 <translation id="1291880496936992484">Avertisment: compatibilitatea cu RC4 va fi eliminată complet din <ph name="PRODUCT_NAME" /> după versiunea 52 (aproximativ în septembrie 2016), iar această politică nu va mai funcționa de la momentul respectiv.
 
@@ -262,6 +264,7 @@
       Dacă politica nu este configurată, valoarea prestabilită este 0 grade, iar
       utilizatorul poate să o schimbe. În acest caz, valoarea prestabilită
       nu este reaplicată la repornire.</translation>
+<translation id="2156132677421487971">Configurează politicile pentru <ph name="PRODUCT_NAME" />, o funcție cu ajutorul căreia utilizatorii pot să trimită conținutul filelor, al site-urilor sau al desktopului din browser pe ecrane și sisteme audio aflate la distanță.</translation>
 <translation id="2168397434410358693">Interval de inactivitate la funcționarea pe c.a.</translation>
 <translation id="2170233653554726857">Activați optimizarea pentru WPAD</translation>
 <translation id="2176565653304920879">Când această politică este configurată, fluxul de detectare automată a fusului orar va fi într-unul dintre următoarele moduri, în funcție de valoarea setării:
@@ -320,7 +323,6 @@
 <translation id="2312134445771258233">Poți să configurezi paginile încărcate la pornire.
 
       Conținutul listei „Adrese URL care se deschid la pornire” este ignorat, cu excepția cazului în care selectezi „Deschide o listă cu adrese URL” în „Acțiune la pornire”.</translation>
-<translation id="23323722127921515">Afișează pictograma Google Cast în bara de instrumente</translation>
 <translation id="2337466621458842053">Vă permite să setați o listă de modele pentru adresele URL care specifică site-urile care au permisiunea să afișeze imagini. Dacă această politică rămâne nesetată, valoarea prestabilită la nivel global va fi folosită pentru toate site-urile, fie din politica „DefaultImagesSetting”, în cazul în care politica este setată, fie din configurația personală a utilizatorului, în caz contrar.</translation>
 <translation id="2372547058085956601">Stabilește intervalul de inactivitate până la conectarea automată la o sesiune publică.
 
@@ -405,7 +407,6 @@
 
       Dacă această politică este dezactivată, în locul solicitării privind configurația rețelei se va afișa un mesaj de eroare.</translation>
 <translation id="2498238926436517902">Ascundeți întotdeauna automat raftul</translation>
-<translation id="2503514368596117142">Configurează politicile pentru Google Cast, o funcție cu ajutorul căreia utilizatorii pot să trimită conținutul filelor, al site-urilor sau al desktopului din browser către afișaje și sisteme audio la distanță.</translation>
 <translation id="2514328368635166290">Specifică adresa URL a pictogramei preferate pentru furnizorul de căutare prestabilit. Această politică este opțională. Dacă nu este setată, nu va apărea nicio pictogramă pentru furnizorul de căutare. Această politică este urmată numai în cazul în care este activată politica „DefaultSearchProviderEnabled”.</translation>
 <translation id="2516600974234263142">Activează printarea în <ph name="PRODUCT_NAME" /> și nu le permite utilizatorilor să modifice această setare.
 
@@ -418,9 +419,6 @@
 <translation id="2529880111512635313">Configurează lista aplicațiilor și a extensiilor cu instalare forțată</translation>
 <translation id="253135976343875019">Interval de inactivitate la funcționarea pe c.a.</translation>
 <translation id="2552966063069741410">Fus orar</translation>
-<translation id="2558917182010914102">Dacă această politică este activată sau nu este configurată, funcția Google Cast va fi activată, iar utilizatorii o vor putea lansa din meniul aplicației, din meniurile contextuale ale paginii, din comenzile media de pe site-urile compatibile cu Cast și folosind pictograma Cast din bara de instrumente (dacă se afișează).
-
-          Dacă politica este dezactivată, Google Cast va fi dezactivată.</translation>
 <translation id="2562339630163277285">Specifică adresa URL a motorului de căutare folosit pentru a oferi rezultate instantanee. Adresa URL trebuie să conțină șirul <ph name="SEARCH_TERM_MARKER" />, care va fi înlocuit în momentul interogării cu textul pe care utilizatorul l-a introdus până atunci.
 
           Această politică este opțională. Dacă nu este configurată, nu vor fi afișate rezultate ale căutării instantanee.
@@ -543,6 +541,7 @@
 <translation id="3001534538097271560">Dacă dezactivezi această politică, utilizatorii nu vor mai putea trimite unele informații de sistem și conținutul paginii la serverele Google. Dacă această setare este activată sau nu este configurată, utilizatorii au permisiunea să trimită unele informații de sistem și conținutul paginii la Navigarea sigură pentru detectarea aplicațiilor și a site-urilor periculoase.
 
       Consultă https://developers.google.com/safe-browsing pentru mai multe informații despre Navigarea sigură.</translation>
+<translation id="3016255526521614822">Trece în lista albă aplicațiile pentru creat note permise pe ecranul de blocare din <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="3021409116652377124">Dezactivează instrumentul de găsire de pluginuri</translation>
 <translation id="3030000825273123558">Activați raportarea statisticilor</translation>
 <translation id="3034580675120919256">Vă permite să setați dacă site-urile web au permisiunea de a rula JavaScript. Rularea JavaScript poate fi permisă sau refuzată în bloc pentru toate site-urile web. Dacă această politică este lăsată nesetată, va fi utilizată politica „AllowJavaScript”, dar utilizatorul va putea să o schimbe.</translation>
@@ -560,6 +559,7 @@
       Indiferent dacă politica este configurată sau nu și indiferent de modul în care este configurată, utilizatorii nu pot să modifice setarea privind optimizarea pentru WPAD.</translation>
 <translation id="3072045631333522102">Screen saver setat pentru ecranul de conectare în modul Vânzare</translation>
 <translation id="3072847235228302527">Setați Termenii și condițiile pentru un cont local de pe dispozitiv</translation>
+<translation id="3086995894968271156">Configurează Cast Receiver în <ph name="PRODUCT_NAME" />.</translation>
 <translation id="3096595567015595053">Lista de pluginuri activate</translation>
 <translation id="3101501961102569744">Alege modul de specificare a setărilor serverului proxy</translation>
 <translation id="3117676313396757089">Avertisment: compatibilitatea cu DHE va fi eliminată complet din <ph name="PRODUCT_NAME" /> după versiunea 57 (aproximativ în martie 2017), iar această politică nu va mai funcționa de la momentul respectiv.
@@ -567,7 +567,6 @@
       Dacă această politică nu este configurată sau dacă este dezactivată, suitele de codificare DHE din TLS nu vor fi activate. În caz contrar, politica poate fi activată pentru a activa suitele de codificare DHE și pentru a se menține compatibilitatea cu un server învechit. Aceasta este o măsură temporară, iar serverul trebuie să fie reconfigurat.
 
       Se recomandă ca serverele să fie migrate la suitele de codificare ECDHE. Dacă acestea nu sunt disponibile, asigură-te că este activată o suită de codificare care folosește schimbul de chei RSA.</translation>
-<translation id="3153348162326497318">Vă permite să specificați extensiile pe care utilizatorii NU le pot instala. Extensiile deja instalate vor fi eliminate, dacă sunt pe lista neagră. O valoare „*” din lista neagră înseamnă că toate extensiile apar în lista neagră, cu excepția cazului în care acestea sunt explicit specificate în lista albă. Dacă această politică este lăsată nesetată, utilizatorul poate instala orice extensie în <ph name="PRODUCT_NAME" />.</translation>
 <translation id="316778957754360075">Această politică a fost retrasă începând cu <ph name="PRODUCT_NAME" /> versiunea 29. Pentru a crea colecții de extensii/aplicații găzduite la nivel de organizație, se recomandă să includeți site-ul care găzduiește pachetele CRX în ExtensionInstallSources și să afișați pe o pagină web linkuri de descărcare directă spre pachete. Puteți crea un lansator pentru respectiva pagină web utilizând politica ExtensionInstallForcelist.</translation>
 <translation id="3185009703220253572">de la versiunea <ph name="SINCE_VERSION" /></translation>
 <translation id="3187220842205194486">Aplicațiile Android nu pot obține accesul la certificatele companiei. Această politică nu are niciun efect asupra lor.</translation>
@@ -879,6 +878,16 @@
       "1412.24.34": se actualizează numai la această versiune.
 
       Avertisment: nu se recomandă să se configureze restricții ale versiunilor, deoarece utilizatorii pot fi împiedicați să primească actualizări de software și remedieri importante de securitate. Dacă restricționezi actualizările pentru un anumit prefix de versiune, este posibil să pui în pericol utilizatorii.</translation>
+<translation id="4298509794364745131">Specifică lista de aplicații care pot fi activate ca aplicație pentru creat note pe ecranul de blocare din <ph name="PRODUCT_OS_NAME" />.
+
+      Dacă aplicația preferată pentru creat note este activată pe ecranul de blocare, acesta va include un element al interfeței de utilizare pentru lansarea aplicației preferate pentru creat note.
+      Când este lansată, aplicația va putea să creeze o fereastră peste ecranul de blocare și elemente de date (note) în contextul ecranului de blocare. Aplicația va putea să importe notele create în sesiunea utilizatorului principal, când sesiunea este deblocată. Momentan, doar aplicațiile pentru creat note din Chrome sunt acceptate pe ecranul de blocare.
+
+      Dacă politica este configurată, utilizatorul va putea să activeze o aplicație pe ecranul de blocare, numai dacă ID-ul extensiei aplicației este inclus în lista de valori a politicii.
+      Prin urmare, setarea unei liste goale pentru această politică va dezactiva complet crearea de note pe ecranul de blocare.
+      Reține că dacă politica conține un ID de aplicație nu înseamnă neapărat că utilizatorul va putea activa aplicația ca aplicație pentru creat note pe ecranul de blocare. De exemplu, în Chrome 61, setul de aplicații disponibile este restricționat suplimentar de platformă.
+
+      Dacă politica nu este configurată, nu vor exista restricții impuse de politică privind setul de aplicații pe care utilizatorul le poate activa pe ecranul de blocare.</translation>
 <translation id="4309640770189628899">Specifică dacă suitele de codificare DHE din TLS sunt activate</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 sau o versiune ulterioară</translation>
 <translation id="4322842393287974810">Permite aplicației chioșc lansate automat fără nicio întârziere să controleze versiunea <ph name="PRODUCT_OS_NAME" /></translation>
@@ -923,6 +932,9 @@
       Dacă valoarea pentru această politică este 0, se va utiliza dimensiunea prestabilită a memoriei cache, dar utilizatorul nu o va putea modifica.
 
       Dacă această politică nu este setată, se va utiliza dimensiunea prestabilită, iar utilizatorul o va putea modifica folosind parametrul --media-cache-size.</translation>
+<translation id="4508686775017063528">Dacă această politică este activată sau nu este configurată, <ph name="PRODUCT_NAME" /> va fi activat, iar utilizatorii îl vor putea lansa din meniul aplicației, din meniurile contextuale ale paginilor, din comenzile media de pe site-urile compatibile cu Cast și folosind pictograma Cast din bara de instrumente (dacă se afișează).
+
+          Dacă politica este dezactivată, <ph name="PRODUCT_NAME" /> va fi dezactivat.</translation>
 <translation id="4518251772179446575">Notifică-mă dacă un site încearcă să urmărească locația fizică a utilizatorilor</translation>
 <translation id="4519046672992331730">Activează sugestiile de căutare în caseta polivalentă din <ph name="PRODUCT_NAME" /> și împiedică modificarea acestei setări de către utilizatori.
 
@@ -1027,6 +1039,7 @@
 <translation id="489803897780524242">Parametru care controlează poziționarea termenilor de căutare pentru furnizorul prestabilit de servicii de căutare</translation>
 <translation id="4899708173828500852">Activează funcția Navigare sigură</translation>
 <translation id="4906194810004762807">Rata de actualizare pentru Politica privind dispozitivele</translation>
+<translation id="494613465159630803">Cast Receiver</translation>
 <translation id="4962262530309732070">Dacă această politică este activată sau nu este configurată, <ph name="PRODUCT_NAME" /> va permite opțiunea Adaugă o persoană din managerul de utilizatori.
 
       Dacă această politică este dezactivată, <ph name="PRODUCT_NAME" /> nu va permite crearea de profiluri noi din managerul de utilizatori.</translation>
@@ -1267,7 +1280,6 @@
       Dacă activați această setare, Căutarea sigură din Căutarea Google este întotdeauna activă.
 
       Dacă dezactivați această setare sau nu configurați nicio valoare, nu se va impune Căutarea sigură din Căutarea Google.</translation>
-<translation id="5940306398763671235">Activează Google Cast</translation>
 <translation id="5946082169633555022">Canal în versiune beta</translation>
 <translation id="5950205771952201658">Deoarece verificările de revocare online care tolerează erorile temporare nu oferă avantaje de securitate clare, acestea sunt dezactivate în mod prestabilit în <ph name="PRODUCT_NAME" /> versiunea 19 și în versiunile ulterioare. Prin activarea acestei politici, comportamentul anterior este restabilit și sunt efectuate verificări OCSP/CRL online.
 
@@ -1320,6 +1332,7 @@
 <translation id="6155936611791017817">Setați cursorul mare pe ecranul de conectare ca stare prestabilită</translation>
 <translation id="6157537876488211233">Lista de valori separate prin virgulă a regulilor de ocolire a proxy-ului</translation>
 <translation id="6158324314836466367">Numele magazinului web pentru întreprinderi (politică învechită)</translation>
+<translation id="6161405879872578475">Activează <ph name="PRODUCT_NAME" /></translation>
 <translation id="6167074305866468481">Avertisment: compatibilitatea cu SSLv3 va fi eliminată complet pentru <ph name="PRODUCT_NAME" /> după versiunea 43 (în jurul lunii iulie 2015), iar această politică va fi eliminată concomitent.
 
       Dacă această politică nu este configurată, <ph name="PRODUCT_NAME" /> va folosi o versiune minimă prestabilită, care pentru <ph name="PRODUCT_NAME" /> 39 este SSLv3, iar pentru versiunile ulterioare este TLS 1.0.
@@ -1590,13 +1603,6 @@ nu poate fi stabilit de utilizator din setările browserului.
 
           Această politică este respectată numai dacă este activată politica „DefaultSearchProviderEnabled”.</translation>
 <translation id="7302043767260300182">Interval până la blocarea ecranului la funcționarea pe c.a.</translation>
-<translation id="7309839952828354215">Specifică modul în care trebuie să se comporte un dispozitiv care a fost livrat cu ecryptfs și necesită trecerea la criptarea ext4.
-
-      Dacă setezi politica la „DisallowArc”, aplicațiile Android vor fi dezactivate pentru toți utilizatorii de pe dispozitiv (inclusiv pentru cei care folosesc deja criptarea ext4). Niciunui utilizator nu i se va oferi migrarea de la ecryptfs la criptarea ext4.
-
-      Dacă setezi politica la „AllowMigration”, utilizatorilor cu directoare principale ecryptfs li se va oferi posibilitatea să migreze la criptarea ext4, după cum este necesar (când Android N devine disponibil pe dispozitiv).
-
-      Dacă politica nu este configurată, dispozitivul se comportă ca și cum ar fi aleasă opțiunea „DisallowArc”.</translation>
 <translation id="7311458740754205918">Dacă politica este activată sau nu este configurată, este posibil ca pagina Filă nouă să afișeze sugestii privind conținutul pe baza istoricului de navigare, a intereselor și a locației utilizatorului.
 
       Dacă politica este dezactivată, sugestiile generate automat privind conținutul nu sunt afișate pe pagina Filă nouă.</translation>
@@ -1673,7 +1679,6 @@ nu poate fi stabilit de utilizator din setările browserului.
 <translation id="7625444193696794922">Specifică un canal de lansare la care ar trebui să fie blocat acest dispozitiv.</translation>
 <translation id="7632724434767231364">Nume bibliotecă GSSAPI</translation>
 <translation id="7635471475589566552">Configurează limba aplicației din <ph name="PRODUCT_NAME" /> și împiedică modificarea limbii de către utilizatori. Dacă activați această setare, <ph name="PRODUCT_NAME" /> utilizează limba indicată. Dacă limba configurată nu este acceptată, este utilizată „en-US”. Dacă această setare este dezactivată sau nu este configurată, <ph name="PRODUCT_NAME" /> utilizează limba preferată specificată de utilizator (dacă este configurată), limba sistemului sau limba „en-US” alternativă.</translation>
-<translation id="7638300388094655454">Google Cast</translation>
 <translation id="7651739109954974365">Această politică stabilește dacă roamingul de date trebuie să fie activat pentru dispozitiv. Dacă această politică este activată, roamingul de date este permis. Dacă politica nu este configurată sau este neactivată, roamingul de date nu va fi disponibil.</translation>
 <translation id="7683777542468165012">Actualizează politica dinamică</translation>
 <translation id="7694807474048279351">Programați o repornire automată după aplicarea unei actualizări <ph name="PRODUCT_OS_NAME" />.
@@ -1787,7 +1792,9 @@ nu poate fi stabilit de utilizator din setările browserului.
 <translation id="7953256619080733119">Gazde pentru excepții adăugate manual ale utilizatorilor gestionați</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Această politică nu mai este acceptată. Permite utilizarea de servere STUN și de retransmisie în cazul conectării la un client la distanță. Dacă această setare este activată, atunci acest computer poate să descopere computere gazdă la distanță și să se conecteze la acestea, chiar dacă există un firewall. Dacă această setare este dezactivată, iar conexiunile UDP de ieșire sunt filtrate de firewall, atunci acest computer se poate conecta numai la computerele gazdă aflate în rețeaua locală.</translation>
+<translation id="7976157349247117979">Numele destinației pentru <ph name="PRODUCT_NAME" /></translation>
 <translation id="7980227303582973781">Fără restricții speciale</translation>
+<translation id="7985242821674907985"><ph name="PRODUCT_NAME" /></translation>
 <translation id="802147957407376460">Rotește ecranul la 0 grade</translation>
 <translation id="8044493735196713914">Raportați modul de pornire al dispozitivului</translation>
 <translation id="8050080920415773384">Printare nativă</translation>

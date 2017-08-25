@@ -19,11 +19,11 @@
 #include "base/metrics/histogram.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
+#include "base/sys_info.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/base/histograms.h"
-#include "cc/debug/traced_value.h"
 #include "cc/layers/picture_layer_impl.h"
 #include "cc/raster/playback_image_provider.h"
 #include "cc/raster/raster_buffer.h"
@@ -370,7 +370,8 @@ TileManager::TileManager(
                         std::move(image_worker_task_runner)),
       checker_image_tracker_(&image_controller_,
                              this,
-                             tile_manager_settings_.enable_checker_imaging),
+                             tile_manager_settings_.enable_checker_imaging,
+                             tile_manager_settings_.min_image_bytes_to_checker),
       more_tiles_need_prepare_check_notifier_(
           task_runner_,
           base::Bind(&TileManager::CheckIfMoreTilesNeedToBePrepared,
@@ -828,6 +829,15 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
     }
   }
 
+  // The hard_limit for low-end devices is 8MB, so we set the max_value for the
+  // histogram to be 8200KB.
+  if (had_enough_memory_to_schedule_tiles_needed_now &&
+      base::SysInfo::AmountOfPhysicalMemoryMB() <= 512) {
+    int64_t tiles_gpu_memory_kb = memory_usage.memory_bytes() / 1024;
+    UMA_HISTOGRAM_CUSTOM_COUNTS("TileManager.TilesGPUMemoryUsage",
+                                tiles_gpu_memory_kb, 1, 8200, 100);
+  }
+
   UMA_HISTOGRAM_BOOLEAN("TileManager.ExceededMemoryBudget",
                         !had_enough_memory_to_schedule_tiles_needed_now);
   did_oom_on_last_assign_ = !had_enough_memory_to_schedule_tiles_needed_now;
@@ -875,17 +885,18 @@ void TileManager::PartitionImagesForCheckering(
     std::vector<DrawImage>* sync_decoded_images,
     std::vector<PaintImage>* checkered_images) {
   Tile* tile = prioritized_tile.tile();
-  std::vector<DrawImage> images_in_tile;
+  std::vector<const DrawImage*> images_in_tile;
   prioritized_tile.raster_source()->GetDiscardableImagesInRect(
-      tile->enclosing_layer_rect(), tile->raster_transform().scale(),
-      raster_color_space, &images_in_tile);
+      tile->enclosing_layer_rect(), &images_in_tile);
   WhichTree tree = tile->tiling()->tree();
 
-  for (auto& draw_image : images_in_tile) {
+  for (const auto* original_draw_image : images_in_tile) {
+    DrawImage draw_image(*original_draw_image, tile->raster_transform().scale(),
+                         raster_color_space);
     if (checker_image_tracker_.ShouldCheckerImage(draw_image, tree))
       checkered_images->push_back(draw_image.paint_image());
     else
-      sync_decoded_images->push_back(draw_image);
+      sync_decoded_images->push_back(std::move(draw_image));
   }
 }
 
@@ -895,13 +906,14 @@ void TileManager::AddCheckeredImagesToDecodeQueue(
     CheckerImageTracker::DecodeType decode_type,
     CheckerImageTracker::ImageDecodeQueue* image_decode_queue) {
   Tile* tile = prioritized_tile.tile();
-  std::vector<DrawImage> images_in_tile;
+  std::vector<const DrawImage*> images_in_tile;
   prioritized_tile.raster_source()->GetDiscardableImagesInRect(
-      tile->enclosing_layer_rect(), tile->raster_transform().scale(),
-      raster_color_space, &images_in_tile);
+      tile->enclosing_layer_rect(), &images_in_tile);
   WhichTree tree = tile->tiling()->tree();
 
-  for (auto& draw_image : images_in_tile) {
+  for (const auto* original_draw_image : images_in_tile) {
+    DrawImage draw_image(*original_draw_image, tile->raster_transform().scale(),
+                         raster_color_space);
     if (checker_image_tracker_.ShouldCheckerImage(draw_image, tree)) {
       image_decode_queue->push_back(CheckerImageTracker::ImageDecodeRequest(
           draw_image.paint_image(), decode_type));
@@ -996,9 +1008,10 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
 
     // Add the sync decoded images to |new_locked_images| so they can be added
     // to the task graph.
-    new_locked_images.insert(new_locked_images.end(),
-                             sync_decoded_images.begin(),
-                             sync_decoded_images.end());
+    new_locked_images.insert(
+        new_locked_images.end(),
+        std::make_move_iterator(sync_decoded_images.begin()),
+        std::make_move_iterator(sync_decoded_images.end()));
 
     // For checkered-images, send them to the decode service.
     for (auto& image : checkered_images) {
@@ -1452,6 +1465,10 @@ void TileManager::DidActivateSyncTree() {
 void TileManager::ClearCheckerImageTracking(
     bool can_clear_decode_policy_tracking) {
   checker_image_tracker_.ClearTracker(can_clear_decode_policy_tracking);
+}
+
+void TileManager::SetCheckerImagingForceDisabled(bool force_disable) {
+  checker_image_tracker_.set_force_disabled(force_disable);
 }
 
 void TileManager::NeedsInvalidationForCheckerImagedTiles() {

@@ -16,7 +16,6 @@
 #include "chrome/browser/notifications/message_center_settings_controller.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/profile_notification.h"
-#include "chrome/browser/notifications/screen_lock_notification_blocker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -32,11 +31,8 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/notifications/login_state_notification_blocker_chromeos.h"
-#endif
-
-#if defined(USE_ASH)
-#include "ash/shell.h"
-#include "ash/system/web_notification/web_notification_tray.h"
+#else
+#include "chrome/browser/notifications/screen_lock_notification_blocker.h"
 #endif
 
 using message_center::NotifierId;
@@ -65,7 +61,7 @@ MessageCenterNotificationManager::MessageCenterNotificationManager(
   || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   // On Windows, Linux and Mac, the notification manager owns the tray icon and
   // views.Other platforms have global ownership and Create will return NULL.
-  tray_.reset(message_center::CreateMessageCenterTray());
+  tray_.reset(CreateMessageCenterTrayDelegate());
 #endif
 }
 
@@ -283,20 +279,6 @@ void MessageCenterNotificationManager::OnCenterVisibilityChanged(
 
 void MessageCenterNotificationManager::OnNotificationUpdated(
     const std::string& id) {
-}
-
-void MessageCenterNotificationManager::EnsureMessageCenterClosed() {
-  if (tray_.get() && tray_->GetMessageCenterTray())
-    tray_->GetMessageCenterTray()->HideMessageCenterBubble();
-
-#if defined(USE_ASH)
-  if (ash::Shell::HasInstance()) {
-    ash::WebNotificationTray* tray =
-        ash::Shell::Get()->GetWebNotificationTray();
-    if (tray)
-      tray->GetMessageCenterTray()->HideMessageCenterBubble();
-  }
-#endif
 }
 
 void MessageCenterNotificationManager::SetMessageCenterTrayDelegateForTest(

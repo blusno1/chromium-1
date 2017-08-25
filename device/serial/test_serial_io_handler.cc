@@ -10,7 +10,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
-#include "device/serial/serial.mojom.h"
+#include "services/device/public/interfaces/serial.mojom.h"
 
 namespace device {
 
@@ -27,11 +27,11 @@ scoped_refptr<SerialIoHandler> TestSerialIoHandler::Create() {
 
 void TestSerialIoHandler::Open(const std::string& port,
                                const mojom::SerialConnectionOptions& options,
-                               const OpenCompleteCallback& callback) {
+                               OpenCompleteCallback callback) {
   DCHECK(!opened_);
   opened_ = true;
   ConfigurePort(options);
-  callback.Run(true);
+  std::move(callback).Run(true);
 }
 
 void TestSerialIoHandler::ReadImpl() {
@@ -42,8 +42,8 @@ void TestSerialIoHandler::ReadImpl() {
 
   size_t num_bytes =
       std::min(buffer_.size(), static_cast<size_t>(pending_read_buffer_len()));
-  memcpy(pending_read_buffer(), buffer_.c_str(), num_bytes);
-  buffer_ = buffer_.substr(num_bytes);
+  memcpy(pending_read_buffer(), buffer_.data(), num_bytes);
+  buffer_.erase(buffer_.begin(), buffer_.begin() + num_bytes);
   ReadCompleted(static_cast<uint32_t>(num_bytes),
                 mojom::SerialReceiveError::NONE);
 }
@@ -53,13 +53,12 @@ void TestSerialIoHandler::CancelReadImpl() {
 }
 
 void TestSerialIoHandler::WriteImpl() {
-  if (!send_callback_.is_null()) {
-    base::Closure callback = send_callback_;
-    send_callback_.Reset();
-    callback.Run();
+  if (send_callback_) {
+    std::move(send_callback_).Run();
     return;
   }
-  buffer_ += std::string(pending_write_buffer(), pending_write_buffer_len());
+  buffer_.insert(buffer_.end(), pending_write_buffer(),
+                 pending_write_buffer() + pending_write_buffer_len());
   WriteCompleted(pending_write_buffer_len(), mojom::SerialSendError::NONE);
   if (pending_read_buffer())
     ReadImpl();
@@ -80,14 +79,13 @@ bool TestSerialIoHandler::ConfigurePortImpl() {
 
 mojom::SerialDeviceControlSignalsPtr TestSerialIoHandler::GetControlSignals()
     const {
-  mojom::SerialDeviceControlSignalsPtr signals(
-      mojom::SerialDeviceControlSignals::New());
+  auto signals = mojom::SerialDeviceControlSignals::New();
   *signals = device_control_signals_;
   return signals;
 }
 
 mojom::SerialConnectionInfoPtr TestSerialIoHandler::GetPortInfo() const {
-  mojom::SerialConnectionInfoPtr info(mojom::SerialConnectionInfo::New());
+  auto info = mojom::SerialConnectionInfo::New();
   *info = info_;
   return info;
 }
@@ -112,6 +110,15 @@ bool TestSerialIoHandler::SetBreak() {
 
 bool TestSerialIoHandler::ClearBreak() {
   return true;
+}
+
+void TestSerialIoHandler::ForceReceiveError(
+    device::mojom::SerialReceiveError error) {
+  ReadCompleted(0, error);
+}
+
+void TestSerialIoHandler::ForceSendError(device::mojom::SerialSendError error) {
+  WriteCompleted(0, error);
 }
 
 TestSerialIoHandler::~TestSerialIoHandler() {

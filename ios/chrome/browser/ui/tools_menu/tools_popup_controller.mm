@@ -143,10 +143,6 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
   [_toolsMenuViewController setIsCurrentPageBookmarked:value];
 }
 
-- (void)setCanUseReaderMode:(BOOL)enabled {
-  [_toolsMenuViewController setCanUseReaderMode:enabled];
-}
-
 - (void)setCanShowFindBar:(BOOL)enabled {
   [_toolsMenuViewController setCanShowFindBar:enabled];
 }
@@ -170,10 +166,10 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case TOOLS_BOOKMARK_ITEM:
       base::RecordAction(UserMetricsAction("MobileMenuAddToBookmarks"));
       break;
-    case IDC_CLOSE_ALL_TABS:
+    case TOOLS_CLOSE_ALL_TABS:
       base::RecordAction(UserMetricsAction("MobileMenuCloseAllTabs"));
       break;
-    case IDC_CLOSE_ALL_INCOGNITO_TABS:
+    case TOOLS_CLOSE_ALL_INCOGNITO_TABS:
       base::RecordAction(UserMetricsAction("MobileMenuCloseAllIncognitoTabs"));
       break;
     case IDC_FIND:
@@ -203,13 +199,10 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case IDC_REQUEST_MOBILE_SITE:
       base::RecordAction(UserMetricsAction("MobileMenuRequestMobileSite"));
       break;
-    case TOOLS_READER_MODE:
-      base::RecordAction(UserMetricsAction("MobileMenuRequestReaderMode"));
-      break;
     case IDC_SHOW_BOOKMARK_MANAGER:
       base::RecordAction(UserMetricsAction("MobileMenuAllBookmarks"));
       break;
-    case IDC_SHOW_HISTORY:
+    case TOOLS_SHOW_HISTORY:
       base::RecordAction(UserMetricsAction("MobileMenuHistory"));
       break;
     case IDC_SHOW_OTHER_DEVICES:
@@ -222,7 +215,7 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
       self.containerView.hidden = YES;
       base::RecordAction(UserMetricsAction("MobileMenuReportAnIssue"));
       break;
-    case IDC_VIEW_SOURCE:
+    case TOOLS_VIEW_SOURCE:
       // Debug only; no metric.
       break;
     case TOOLS_MENU_ITEM:

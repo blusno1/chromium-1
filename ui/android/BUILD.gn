@@ -34,15 +34,12 @@ component("android") {
     "resources/resource.cc",
     "resources/resource.h",
     "resources/resource_factory.cc",
-    "resources/resource_factory.h",
     "resources/resource_manager.h",
     "resources/resource_manager_impl.cc",
     "resources/resource_manager_impl.h",
     "resources/ui_resource_provider.h",
     "screen_android.h",
     "ui_android_export.h",
-    "ui_android_jni_registrar.cc",
-    "ui_android_jni_registrar.h",
     "view_android.cc",
     "view_android.h",
     "view_client.cc",
@@ -64,6 +61,7 @@ component("android") {
     "//components/viz/host",
     "//components/viz/service",
     "//skia",
+    "//third_party/WebKit/public:blink_headers",
     "//ui/base",
     "//ui/display",
     "//ui/events",
@@ -209,6 +207,7 @@ android_library("ui_full_java") {
     "java/src/org/chromium/ui/base/SPenSupport.java",
     "java/src/org/chromium/ui/base/TouchDevice.java",
     "java/src/org/chromium/ui/base/ViewAndroidDelegate.java",
+    "java/src/org/chromium/ui/base/ViewUtils.java",
     "java/src/org/chromium/ui/base/WindowAndroid.java",
     "java/src/org/chromium/ui/display/DisplayAndroid.java",
     "java/src/org/chromium/ui/display/DisplayAndroidManager.java",
@@ -250,7 +249,10 @@ android_library("ui_full_java") {
     "//third_party/android_tools:android_support_annotations_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
   ]
-  srcjar_deps = [ ":java_enums_srcjar" ]
+  srcjar_deps = [
+    ":java_enums_srcjar",
+    "//third_party/WebKit/public:blink_cursor_type_java_enums_srcjar",
+  ]
 }
 
 junit_binary("ui_junit_tests") {

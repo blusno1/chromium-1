@@ -15,12 +15,12 @@ DebugBorderDrawQuad::DebugBorderDrawQuad()
       width(0) {
 }
 
-void DebugBorderDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
+void DebugBorderDrawQuad::SetNew(const viz::SharedQuadState* shared_quad_state,
                                  const gfx::Rect& rect,
                                  const gfx::Rect& visible_rect,
                                  SkColor color,
                                  int width) {
-  gfx::Rect opaque_rect;
+  gfx::Rect opaque_rect = SkColorGetA(color) < 255 ? gfx::Rect() : visible_rect;
   bool needs_blending = SkColorGetA(color) < 255;
   DrawQuad::SetAll(shared_quad_state, DrawQuad::DEBUG_BORDER, rect, opaque_rect,
                    visible_rect, needs_blending);
@@ -28,7 +28,7 @@ void DebugBorderDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
   this->width = width;
 }
 
-void DebugBorderDrawQuad::SetAll(const SharedQuadState* shared_quad_state,
+void DebugBorderDrawQuad::SetAll(const viz::SharedQuadState* shared_quad_state,
                                  const gfx::Rect& rect,
                                  const gfx::Rect& opaque_rect,
                                  const gfx::Rect& visible_rect,

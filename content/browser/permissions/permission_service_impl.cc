@@ -54,6 +54,10 @@ PermissionType PermissionDescriptorToPermissionType(
       return PermissionType::VIDEO_CAPTURE;
     case PermissionName::BACKGROUND_SYNC:
       return PermissionType::BACKGROUND_SYNC;
+    case PermissionName::SENSORS:
+      return PermissionType::SENSORS;
+    case PermissionName::ACCESSIBILITY_EVENTS:
+      return PermissionType::ACCESSIBILITY_EVENTS;
   }
 
   NOTREACHED();
@@ -79,6 +83,8 @@ blink::WebFeaturePolicyFeature PermissionTypeToFeaturePolicyFeature(
     case PermissionType::DURABLE_STORAGE:
     case PermissionType::BACKGROUND_SYNC:
     case PermissionType::FLASH:
+    case PermissionType::SENSORS:
+    case PermissionType::ACCESSIBILITY_EVENTS:
     case PermissionType::NUM:
       // These aren't exposed by feature policy.
       return blink::WebFeaturePolicyFeature::kNotFound;

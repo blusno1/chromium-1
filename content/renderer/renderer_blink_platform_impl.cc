@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/guid.h"
 #include "base/lazy_instance.h"
@@ -26,6 +27,7 @@
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/child/blob_storage/webblobregistry_impl.h"
+#include "content/child/child_url_loader_factory_getter.h"
 #include "content/child/database_util.h"
 #include "content/child/file_info_util.h"
 #include "content/child/fileapi/webfilesystem_impl.h"
@@ -197,6 +199,13 @@ media::AudioParameters GetAudioHardwareParams() {
       .output_params();
 }
 
+mojom::URLLoaderFactoryPtr GetBlobURLLoaderFactoryGetter() {
+  mojom::URLLoaderFactoryPtr blob_loader_factory;
+  RenderThreadImpl::current()->GetRendererHost()->GetBlobURLLoaderFactory(
+      mojo::MakeRequest(&blob_loader_factory));
+  return blob_loader_factory;
+}
+
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -212,7 +221,7 @@ class RendererBlinkPlatformImpl::FileUtilities : public WebFileUtilitiesImpl {
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
 };
 
-#if !defined(OS_ANDROID) && !defined(OS_WIN)
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
 class RendererBlinkPlatformImpl::SandboxSupport
     : public blink::WebSandboxSupport {
  public:
@@ -257,7 +266,7 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
       web_scrollbar_behavior_(new WebScrollbarBehaviorImpl),
       renderer_scheduler_(renderer_scheduler),
       blink_interface_provider_(new BlinkInterfaceProviderImpl(connector)) {
-#if !defined(OS_ANDROID) && !defined(OS_WIN)
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
   if (g_sandbox_enabled && sandboxEnabled()) {
     sandbox_support_.reset(new RendererBlinkPlatformImpl::SandboxSupport);
   } else {
@@ -300,7 +309,7 @@ RendererBlinkPlatformImpl::~RendererBlinkPlatformImpl() {
 }
 
 void RendererBlinkPlatformImpl::Shutdown() {
-#if !defined(OS_ANDROID) && !defined(OS_WIN)
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
   // SandboxSupport contains a map of WebFallbackFont objects, which hold
   // WebStrings and WebVectors, which become invalidated when blink is shut
   // down. Hence, we need to clear that map now, just before blink::shutdown()
@@ -316,32 +325,49 @@ std::unique_ptr<blink::WebURLLoader> RendererBlinkPlatformImpl::CreateURLLoader(
     base::SingleThreadTaskRunner* task_runner) {
   ChildThreadImpl* child_thread = ChildThreadImpl::current();
 
-  if (!url_loader_factory_ && child_thread) {
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-      mojom::URLLoaderFactoryPtr factory_ptr;
-      connector_->BindInterface(mojom::kBrowserServiceName, &factory_ptr);
-      url_loader_factory_ = std::move(factory_ptr);
-    } else {
-      mojom::URLLoaderFactoryAssociatedPtr factory_ptr;
-      child_thread->channel()->GetRemoteAssociatedInterface(&factory_ptr);
-      url_loader_factory_ = std::move(factory_ptr);
-    }
-
-    // Attach the CORS-enabled URLLoader if we use the default (non-custom)
-    // network URLLoader.
-    if (request.ShouldProcessCORSOutOfBlink()) {
-      mojom::URLLoaderFactoryPtr factory_ptr;
-      CORSURLLoaderFactory::CreateAndBind(std::move(url_loader_factory_),
-                                          mojo::MakeRequest(&factory_ptr));
-      url_loader_factory_ = std::move(factory_ptr);
-    }
-  }
+  if (!url_loader_factory_ && child_thread)
+    url_loader_factory_ = CreateNetworkURLLoaderFactory();
 
   // There may be no child thread in RenderViewTests.  These tests can still use
   // data URLs to bypass the ResourceDispatcher.
   return base::MakeUnique<WebURLLoaderImpl>(
       child_thread ? child_thread->resource_dispatcher() : nullptr, task_runner,
       url_loader_factory_.get());
+}
+
+scoped_refptr<ChildURLLoaderFactoryGetter>
+RendererBlinkPlatformImpl::CreateDefaultURLLoaderFactoryGetter() {
+  return base::MakeRefCounted<ChildURLLoaderFactoryGetter>(
+      CreateNetworkURLLoaderFactory(),
+      base::FeatureList::IsEnabled(features::kNetworkService)
+          ? base::BindOnce(&GetBlobURLLoaderFactoryGetter)
+          : ChildURLLoaderFactoryGetter::URLLoaderFactoryGetterCallback());
+}
+
+PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
+RendererBlinkPlatformImpl::CreateNetworkURLLoaderFactory() {
+  ChildThreadImpl* child_thread = ChildThreadImpl::current();
+  DCHECK(child_thread);
+  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory> url_loader_factory;
+
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+    mojom::URLLoaderFactoryPtr factory_ptr;
+    connector_->BindInterface(mojom::kBrowserServiceName, &factory_ptr);
+    url_loader_factory = std::move(factory_ptr);
+  } else {
+    mojom::URLLoaderFactoryAssociatedPtr factory_ptr;
+    child_thread->channel()->GetRemoteAssociatedInterface(&factory_ptr);
+    url_loader_factory = std::move(factory_ptr);
+  }
+
+  // Attach the CORS-enabled URLLoader for the network URLLoaderFactory.
+  if (base::FeatureList::IsEnabled(features::kOutOfBlinkCORS)) {
+    mojom::URLLoaderFactoryPtr factory_ptr;
+    CORSURLLoaderFactory::CreateAndBind(std::move(url_loader_factory),
+                                        mojo::MakeRequest(&factory_ptr));
+    url_loader_factory = std::move(factory_ptr);
+  }
+  return url_loader_factory;
 }
 
 blink::WebThread* RendererBlinkPlatformImpl::CurrentThread() {
@@ -371,7 +397,7 @@ blink::WebFileUtilities* RendererBlinkPlatformImpl::GetFileUtilities() {
 }
 
 blink::WebSandboxSupport* RendererBlinkPlatformImpl::GetSandboxSupport() {
-#if defined(OS_ANDROID) || defined(OS_WIN)
+#if defined(OS_ANDROID) || defined(OS_WIN) || defined(OS_FUCHSIA)
   // These platforms do not require sandbox support.
   return NULL;
 #else
@@ -580,7 +606,7 @@ bool RendererBlinkPlatformImpl::SandboxSupport::LoadFont(NSFont* src_font,
   return FontLoader::CGFontRefFromBuffer(font_data, font_data_size, out);
 }
 
-#elif defined(OS_POSIX) && !defined(OS_ANDROID)
+#elif defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
 void RendererBlinkPlatformImpl::SandboxSupport::GetFallbackFontForCharacter(
     blink::WebUChar32 character,

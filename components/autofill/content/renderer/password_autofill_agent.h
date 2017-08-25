@@ -43,7 +43,8 @@ class RendererSavePasswordProgressLogger;
 class PasswordAutofillAgent : public content::RenderFrameObserver,
                               public mojom::PasswordAutofillAgent {
  public:
-  explicit PasswordAutofillAgent(content::RenderFrame* render_frame);
+  PasswordAutofillAgent(content::RenderFrame* render_frame,
+                        service_manager::BinderRegistry* registry);
   ~PasswordAutofillAgent() override;
 
   void BindRequest(mojom::PasswordAutofillAgentRequest request);
@@ -113,6 +114,11 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // This UI is shown when a username or password field is autofilled or edited
   // on a non-secure page.
   void ShowNotSecureWarning(const blink::WebInputElement& element);
+
+  // Shows an Autofill-style popup with an option to go to settings and check
+  // all saved passwords. Returns true if the suggestion was shown, false
+  // otherwise.
+  bool ShowManualFallbackSuggestion(const blink::WebInputElement& element);
 
   // Called when new form controls are inserted.
   void OnDynamicFormsSeen();
@@ -202,9 +208,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   };
 
   // RenderFrameObserver:
-  void OnInterfaceRequestForFrame(
-      const std::string& interface_name,
-      mojo::ScopedMessagePipeHandle* interface_pipe) override;
   void DidFinishDocumentLoad() override;
   void DidFinishLoad() override;
   void FrameDetached() override;
@@ -273,6 +276,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   WebInputToPasswordInfoMap web_input_to_password_info_;
   // A (sort-of) reverse map to |web_input_to_password_info_|.
   PasswordToLoginMap password_to_username_;
+  // The chronologically last insertion into |web_input_to_password_info_|.
+  WebInputToPasswordInfoMap::iterator last_supplied_password_info_iter_;
 
   // Set if the user might be submitting a password form on the current page,
   // but the submit may still fail (i.e. doesn't pass JavaScript validation).
@@ -316,8 +321,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   mojo::Binding<mojom::PasswordAutofillAgent> binding_;
 
   blink::WebFormElementObserver* form_element_observer_;
-
-  service_manager::BinderRegistry registry_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordAutofillAgent);
 };

@@ -59,7 +59,7 @@ CSSPrimitiveValue* ConsumeLengthOrPercent(
     UnitlessQuirk = UnitlessQuirk::kForbid);
 
 CSSPrimitiveValue* ConsumeAngle(CSSParserTokenRange&,
-                                const CSSParserContext&,
+                                const CSSParserContext*,
                                 WTF::Optional<WebFeature> unitlessZeroFeature);
 CSSPrimitiveValue* ConsumeTime(CSSParserTokenRange&, ValueRange);
 CSSPrimitiveValue* ConsumeResolution(CSSParserTokenRange&);
@@ -128,8 +128,7 @@ void CountKeywordOnlyPropertyUsage(CSSPropertyID,
 const CSSValue* ParseLonghandViaAPI(CSSPropertyID unresolved_property,
                                     CSSPropertyID current_shorthand,
                                     const CSSParserContext&,
-                                    CSSParserTokenRange&,
-                                    bool& needs_legacy_parsing);
+                                    CSSParserTokenRange&);
 
 bool ConsumeShorthandVia2LonghandAPIs(const StylePropertyShorthand&,
                                       bool important,
@@ -149,6 +148,11 @@ bool ConsumeShorthandGreedilyViaLonghandAPIs(
     const CSSParserContext&,
     CSSParserTokenRange&,
     HeapVector<CSSProperty, 256>& properties);
+
+void AddExpandedPropertyForValue(CSSPropertyID prop_id,
+                                 const CSSValue&,
+                                 bool,
+                                 HeapVector<CSSProperty, 256>& properties);
 
 // Template implementations are at the bottom of the file for readability.
 

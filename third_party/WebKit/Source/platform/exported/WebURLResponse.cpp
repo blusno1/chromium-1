@@ -291,7 +291,7 @@ void WebURLResponse::SetWasFallbackRequiredByServiceWorker(bool value) {
 }
 
 void WebURLResponse::SetResponseTypeViaServiceWorker(
-    mojom::FetchResponseType value) {
+    network::mojom::FetchResponseType value) {
   resource_response_->SetResponseTypeViaServiceWorker(value);
 }
 
@@ -315,6 +315,10 @@ void WebURLResponse::SetMultipartBoundary(const char* bytes, size_t size) {
 void WebURLResponse::SetCacheStorageCacheName(
     const WebString& cache_storage_cache_name) {
   resource_response_->SetCacheStorageCacheName(cache_storage_cache_name);
+}
+
+WebVector<WebString> WebURLResponse::CorsExposedHeaderNames() const {
+  return resource_response_->CorsExposedHeaderNames();
 }
 
 void WebURLResponse::SetCorsExposedHeaderNames(

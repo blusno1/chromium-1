@@ -18,7 +18,7 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/values.h"
 #include "components/history/core/browser/history_service_observer.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
@@ -148,7 +148,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
                     const GURL& main_frame_url,
                     const GURL& password_form_action,
                     const GURL& password_form_frame_url,
-                    const std::string& saved_domain,
+                    bool matches_sync_password,
+                    const std::vector<std::string>& matching_domains,
                     TriggerType trigger_type,
                     bool password_field_exists);
 
@@ -161,8 +162,13 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   virtual void MaybeStartProtectedPasswordEntryRequest(
       content::WebContents* web_contents,
       const GURL& main_frame_url,
-      const std::string& saved_domain,
+      bool matches_sync_password,
+      const std::vector<std::string>& matching_domains,
       bool password_field_exists);
+
+  // Records a Chrome Sync event that sync password reuse was detected.
+  virtual void MaybeLogPasswordReuseDetectedEvent(
+      content::WebContents* web_contents) = 0;
 
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager();
 
@@ -188,15 +194,22 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   virtual void ShowModalWarning(
       content::WebContents* web_contents,
       const LoginReputationClientRequest* request_proto,
-      const LoginReputationClientResponse* response_proto);
+      const LoginReputationClientResponse* response_proto) {}
 
   // Record UMA stats and trigger event logger when warning UI is shown.
   virtual void OnWarningShown(content::WebContents* web_contents,
                               WarningUIType ui_type);
 
+  // If we want to show softer warnings based on Finch parameters.
+  static bool ShouldShowSofterWarning();
+
+  virtual void UpdateSecurityState(safe_browsing::SBThreatType threat_type,
+                                   content::WebContents* web_contents) {}
+
  protected:
   friend class PasswordProtectionRequest;
   FRIEND_TEST_ALL_PREFIXES(PasswordProtectionServiceTest, VerifyCanSendPing);
+
   // Chrome can send password protection ping if it is allowed by Finch config
   // and if Safe Browsing can compute reputation of |main_frame_url| (e.g.
   // Safe Browsing is not able to compute reputation of a private IP or
@@ -257,10 +270,14 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // |NOT_SIGNED_IN|.
   virtual SyncAccountType GetSyncAccountType() = 0;
 
-  void CheckCsdWhitelistOnIOThread(const GURL& url, bool* check_result);
+  // Records a Chrome Sync event for the result of the URL reputation lookup
+  // if the user enters their sync password on a website.
+  virtual void MaybeLogPasswordReuseLookupEvent(
+      content::WebContents* web_contents,
+      PasswordProtectionService::RequestOutcome,
+      const LoginReputationClientResponse*) = 0;
 
-  virtual void UpdateSecurityState(safe_browsing::SBThreatType threat_type,
-                                   content::WebContents* web_contents) {}
+  void CheckCsdWhitelistOnIOThread(const GURL& url, bool* check_result);
 
   HostContentSettingsMap* content_settings() const { return content_settings_; }
 

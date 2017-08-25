@@ -17,10 +17,16 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/web_site_settings_uma_util.h"
+#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/permissions/chooser_context_base.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/page_info/page_info_infobar_delegate.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/grit/generated_resources.h"
@@ -30,6 +36,7 @@
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
@@ -155,6 +162,9 @@ void SiteSettingsHandler::RegisterMessages() {
       "setCategoryPermissionForPattern",
       base::Bind(&SiteSettingsHandler::HandleSetCategoryPermissionForPattern,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "isOriginValid", base::Bind(&SiteSettingsHandler::HandleIsOriginValid,
+                                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "isPatternValid",
       base::Bind(&SiteSettingsHandler::HandleIsPatternValid,
@@ -508,14 +518,17 @@ void SiteSettingsHandler::HandleGetOriginPermissions(
 void SiteSettingsHandler::HandleSetOriginPermissions(
     const base::ListValue* args) {
   CHECK_EQ(3U, args->GetSize());
-  std::string origin;
-  CHECK(args->GetString(0, &origin));
+  std::string origin_string;
+  CHECK(args->GetString(0, &origin_string));
   const base::ListValue* types;
   CHECK(args->GetList(1, &types));
   std::string value;
   CHECK(args->GetString(2, &value));
 
-  const GURL origin_url(origin);
+  const GURL origin(origin_string);
+  if (!origin.is_valid())
+    return;
+
   ContentSetting setting;
   CHECK(content_settings::ContentSettingFromString(value, &setting));
   for (size_t i = 0; i < types->GetSize(); ++i) {
@@ -528,11 +541,32 @@ void SiteSettingsHandler::HandleSetOriginPermissions(
         HostContentSettingsMapFactory::GetForProfile(profile_);
 
     PermissionUtil::ScopedRevocationReporter scoped_revocation_reporter(
-        profile_, origin_url, origin_url, content_type,
+        profile_, origin, origin, content_type,
         PermissionSourceUI::SITE_SETTINGS);
-    map->SetContentSettingDefaultScope(origin_url, origin_url, content_type,
+
+    // Clear any existing embargo status if the new setting isn't block.
+    if (setting != CONTENT_SETTING_BLOCK) {
+      PermissionDecisionAutoBlocker::GetForProfile(profile_)
+          ->RemoveEmbargoByUrl(origin, content_type);
+    }
+    map->SetContentSettingDefaultScope(origin, origin, content_type,
                                        std::string(), setting);
     WebSiteSettingsUmaUtil::LogPermissionChange(content_type, setting);
+  }
+
+  // Show an infobar reminding the user to reload tabs where their site
+  // permissions have been updated.
+  for (auto* it : *BrowserList::GetInstance()) {
+    TabStripModel* tab_strip = it->tab_strip_model();
+    for (int i = 0; i < tab_strip->count(); ++i) {
+      content::WebContents* web_contents = tab_strip->GetWebContentsAt(i);
+      GURL tab_url = web_contents->GetLastCommittedURL();
+      if (url::IsSameOriginWith(origin, tab_url)) {
+        InfoBarService* infobar_service =
+            InfoBarService::FromWebContents(web_contents);
+        PageInfoInfoBarDelegate::Create(infobar_service);
+      }
+    }
   }
 }
 
@@ -627,6 +661,18 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForPattern(
                                     content_type, "", setting);
 
   WebSiteSettingsUmaUtil::LogPermissionChange(content_type, setting);
+}
+
+void SiteSettingsHandler::HandleIsOriginValid(const base::ListValue* args) {
+  AllowJavascript();
+  CHECK_EQ(2U, args->GetSize());
+  const base::Value* callback_id;
+  CHECK(args->Get(0, &callback_id));
+  std::string origin_string;
+  CHECK(args->GetString(1, &origin_string));
+
+  ResolveJavascriptCallback(*callback_id,
+                            base::Value(GURL(origin_string).is_valid()));
 }
 
 void SiteSettingsHandler::HandleIsPatternValid(

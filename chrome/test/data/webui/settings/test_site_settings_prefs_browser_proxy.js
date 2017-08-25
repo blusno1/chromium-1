@@ -31,6 +31,7 @@ var prefsEmpty = {
     plugins: {},
     images: {},
     popups: {},
+    sound: {},
     unsandboxed_plugins: {},
   },
   exceptions: {
@@ -47,6 +48,7 @@ var prefsEmpty = {
     plugins: [],
     images: [],
     popups: [],
+    sound: [],
     unsandboxed_plugins: [],
   },
 };
@@ -67,6 +69,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       'getDefaultValueForContentType',
       'getExceptionList',
       'getOriginPermissions',
+      'isOriginValid',
       'isPatternValid',
       'observeProtocolHandlers',
       'observeProtocolHandlersEnabledState',
@@ -102,6 +105,9 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
     this.cookieDetails_ = null;
 
     /** @private {boolean} */
+    this.isOriginValid_ = true;
+
+    /** @private {boolean} */
     this.isPatternValid_ = true;
   }
 
@@ -128,6 +134,46 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
           settings.ContentSettingsTypes[type],
           '');
     }
+  }
+
+  /**
+   * Sets the default prefs only. Use this only when there is a need to
+   * distinguish between the callback for permissions changing and the callback
+   * for default permissions changing.
+   * TODO(https://crbug.com/742706): This function is a hack and should be
+   * removed.
+   * @param {!Map<string, !DefaultContentSetting>} defaultPrefs The new
+   *     default prefs to set.
+   */
+  setDefaultPrefs(defaultPrefs) {
+    this.prefs_.defaults = defaultPrefs;
+
+    // Notify all listeners that their data may be out of date.
+    for (var type in settings.ContentSettingsTypes) {
+      cr.webUIListenerCallback(
+          'contentSettingCategoryChanged', settings.ContentSettingsTypes[type]);
+    }
+  }
+
+  /**
+   * Sets one exception for a given category, replacing any existing exceptions
+   * for the same origin. Note this ignores embedding origins.
+   * @param {!settings.ContentSettingsTypes} category The category the new
+   *     exception belongs to.
+   * @param {!RawSiteException} newException The new preference to add/replace.
+   */
+  setSingleException(category, newException) {
+    // Remove entries from the current prefs which have the same origin.
+    var newPrefs = /** @type {!Array<RawSiteException>} */
+        (this.prefs_.exceptions[category].filter((categoryException) => {
+          if (categoryException.origin != newException.origin)
+            return true;
+        }));
+    newPrefs.push(newException);
+    this.prefs_.exceptions[category] = newPrefs;
+
+    cr.webUIListenerCallback(
+        'contentSettingSitePermissionChanged', category, newException.origin);
   }
 
   /**
@@ -215,6 +261,8 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       pref = this.prefs_.defaults.popups;
     } else if (contentType == settings.ContentSettingsTypes.PLUGINS) {
       pref = this.prefs_.defaults.plugins;
+    } else if (contentType == settings.ContentSettingsTypes.SOUND) {
+      pref = this.prefs_.defaults.sound;
     } else if (
         contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS) {
       pref = this.prefs_.defaults.unsandboxed_plugins;
@@ -261,6 +309,8 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       pref = this.prefs_.exceptions.protectedContent;
     else if (contentType == settings.ContentSettingsTypes.POPUPS)
       pref = this.prefs_.exceptions.popups;
+    else if (contentType == settings.ContentSettingsTypes.SOUND)
+      pref = this.prefs_.exceptions.sound;
     else if (contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS)
       pref = this.prefs_.exceptions.unsandboxed_plugins;
     else
@@ -276,6 +326,19 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
     }
 
     return Promise.resolve(pref);
+  }
+
+  /** @override */
+  isOriginValid(origin) {
+    this.methodCalled('isOriginValid', origin);
+    return Promise.resolve(this.isOriginValid_);
+  }
+
+  /**
+   * Specify whether isOriginValid should succeed or fail.
+   */
+  setIsOriginValid(isValid) {
+    this.isOriginValid_ = isValid;
   }
 
   /** @override */
@@ -327,7 +390,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
 
       var setting;
       var source;
-      this.prefs_.exceptions[contentType].some(function(originPrefs) {
+      this.prefs_.exceptions[contentType].some((originPrefs) => {
         if (originPrefs.origin == origin) {
           setting = originPrefs.setting;
           source = originPrefs.source;
@@ -335,7 +398,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
         }
       });
       assert(
-          settings !== undefined,
+          setting != undefined,
           'There was no exception set for origin: ' + origin +
               ' and contentType: ' + contentType);
 

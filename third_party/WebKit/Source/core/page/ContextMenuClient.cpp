@@ -43,11 +43,11 @@
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/exported/WebDocumentLoaderImpl.h"
 #include "core/exported/WebPluginContainerImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLFrameElementBase.h"
@@ -213,8 +213,8 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
   r.SetToShadowHostIfInRestrictedShadowRoot();
 
   LocalFrame* selected_frame = r.InnerNodeFrame();
-  WebLocalFrameBase* selected_web_frame =
-      WebLocalFrameBase::FromFrame(selected_frame);
+  WebLocalFrameImpl* selected_web_frame =
+      WebLocalFrameImpl::FromFrame(selected_frame);
 
   WebContextMenuData data;
   data.mouse_position = selected_frame->View()->ContentsToViewport(
@@ -302,6 +302,16 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
           data.selected_text = text;
           data.edit_flags |= WebContextMenuData::kCanCopy;
         }
+        bool plugin_can_edit_text = plugin->Plugin()->CanEditText();
+        if (plugin_can_edit_text) {
+          data.is_editable = true;
+          if (!!(data.edit_flags & WebContextMenuData::kCanCopy))
+            data.edit_flags |= WebContextMenuData::kCanCut;
+          data.edit_flags |= WebContextMenuData::kCanPaste;
+          // TODO(bug 753216): Implement "SelectAll" command and enable when
+          // focus is within an editable text area.
+          data.edit_flags &= ~WebContextMenuData::kCanSelectAll;
+        }
         data.edit_flags &= ~WebContextMenuData::kCanTranslate;
         data.link_url = plugin->Plugin()->LinkAtPosition(data.mouse_position);
         if (plugin->Plugin()->SupportsPaginatedPrint())
@@ -313,7 +323,9 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
         data.media_flags |= WebContextMenuData::kMediaCanSave;
 
         // Add context menu commands that are supported by the plugin.
-        if (plugin->Plugin()->CanRotateView())
+        // Only show rotate view options if focus is not in an editable text
+        // area.
+        if (!plugin_can_edit_text && plugin->Plugin()->CanRotateView())
           data.media_flags |= WebContextMenuData::kMediaCanRotate;
       }
     }
@@ -348,12 +360,8 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
   }
 
   // HitTestResult::isSelected() ensures clean layout by performing a hit test.
-  if (r.IsSelected()) {
-    if (!isHTMLInputElement(*r.InnerNode()) ||
-        toHTMLInputElement(r.InnerNode())->type() != InputTypeNames::password) {
-      data.selected_text = selected_frame->SelectedText();
-    }
-  }
+  if (r.IsSelected())
+    data.selected_text = selected_frame->SelectedText();
 
   if (r.IsContentEditable()) {
     data.is_editable = true;
@@ -467,8 +475,8 @@ void ContextMenuClient::ClearContextMenu() {
   if (!selected_frame)
     return;
 
-  WebLocalFrameBase* selected_web_frame =
-      WebLocalFrameBase::FromFrame(selected_frame);
+  WebLocalFrameImpl* selected_web_frame =
+      WebLocalFrameImpl::FromFrame(selected_frame);
   selected_web_frame->ClearContextMenuNode();
 }
 

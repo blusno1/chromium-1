@@ -103,6 +103,7 @@
 -DragDropControllerTest.ViewRemovedWhileInDragDropTest
 -DragDropControllerTest.WindowDestroyedDuringDragDrop
 -DragDropControllerTest.DragStartedAndEndedEvents
+-DragDropControllerTest.EventTarget
 -DragWindowResizerTest.CursorDeviceScaleFactor
 -DragWindowResizerTest.DragWindowController
 -DragWindowResizerTest.DragWindowControllerAcrossThreeDisplays
@@ -130,6 +131,8 @@
 -ExtendedesktopTest.CaptureventocationHighP
 -ExtendedesktopTest.KeyventsOnockScreen
 -LockActionHandlerLayoutManagerTest.KeyboardBounds
+-LockLayoutManagerTest.AccessibilityPanel
+-LockLayoutManagerTest.AccessibilityPanelWithMultipleMonitors
 -LockLayoutManagerTest.KeyboardBounds
 -LockLayoutManagerTest.MaximizedFullscreenWindowBoundsAreEqualToScreen
 -LockLayoutManagerTest.MultipleMonitors
@@ -216,6 +219,7 @@
 -PointerWatcherdapterClassicTest.Mousevents
 -PointerWatcherdapterClassicTest.Touchvents
 -ResizeShadowAndCursorTest.MaximizeRestore
+-ResizeShadowAndCursorTest.Minimize
 -ResizeShadowAndCursorTest.MouseDrag
 -ResizeShadowAndCursorTest.MouseHover
 -ResizeShadowAndCursorTest.Touch

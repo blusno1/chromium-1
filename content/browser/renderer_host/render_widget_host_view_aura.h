@@ -79,7 +79,7 @@ class TouchSelectionControllerClientAura;
 // RenderWidgetHostView class hierarchy described in render_widget_host_view.h.
 class CONTENT_EXPORT RenderWidgetHostViewAura
     : public RenderWidgetHostViewBase,
-      NON_EXPORTED_BASE(public RenderWidgetHostViewEventHandler::Delegate),
+      public RenderWidgetHostViewEventHandler::Delegate,
       public TextInputManager::Observer,
       public ui::TextInputClient,
       public display::DisplayObserver,
@@ -276,7 +276,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                        aura::Window* lost_focus) override;
 
   // Overridden from aura::WindowTreeHostObserver:
-  void OnHostMovedInPixels(const aura::WindowTreeHost* host,
+  void OnHostMovedInPixels(aura::WindowTreeHost* host,
                            const gfx::Point& new_origin_in_pixels) override;
 
 #if defined(OS_WIN)
@@ -608,7 +608,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   std::unique_ptr<RenderWidgetHostViewEventHandler> event_handler_;
 
   viz::FrameSinkId frame_sink_id_;
-  viz::LocalSurfaceId local_surface_id_;
 
   std::unique_ptr<CursorManager> cursor_manager_;
 

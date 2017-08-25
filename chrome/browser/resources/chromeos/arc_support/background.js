@@ -40,16 +40,16 @@ var currentDeviceId = null;
 var lastFocusedElement = null;
 
 /**
- * Host window inner default width.
+ * Host window outer default width.
  * @const {number}
  */
-var INNER_WIDTH = 960;
+var OUTER_WIDTH = 768;
 
 /**
- * Host window inner default height.
+ * Host window outer default height.
  * @const {number}
  */
-var INNER_HEIGHT = 687;
+var OUTER_HEIGHT = 640;
 
 
 /**
@@ -133,8 +133,9 @@ class PreferenceCheckbox {
   /**
    * Called when the "Learn More" link is clicked.
    */
-  onLearnMoreLinkClicked() {
+  onLearnMoreLinkClicked(event) {
     showTextOverlay(this.learnMoreContent_);
+    event.stopPropagation();
   }
 }
 
@@ -152,6 +153,7 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
     // So pass |null| intentionally.
     super(container, learnMoreContent, null, null);
 
+    this.textLabel_ = container.querySelector('.content-text');
     this.learnMoreLinkId_ = learnMoreLinkId;
     this.isOwner_ = isOwner;
 
@@ -170,9 +172,11 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
     // Hide the checkbox if it is not allowed to (re-)enable.
     var canEnable = !isEnabled && !isManaged;
     this.checkbox_.hidden = !canEnable;
+    this.textLabel_.hidden = canEnable;
+    var label = canEnable ? this.label_ : this.textLabel_;
 
-    // Update the label.
-    this.label_.innerHTML = this.texts_[isManaged ? 1 : 0][isEnabled ? 1 : 0];
+    // Update label text.
+    label.innerHTML = this.texts_[isManaged ? 1 : 0][isEnabled ? 1 : 0];
 
     // Work around for the current translation text.
     // The translation text has tags for following links, although those
@@ -180,10 +184,10 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
     // the translation target).
     // So, meanwhile, we set the link everytime we update the text.
     // TODO: fix the translation text, and main html.
-    var learnMoreLink = this.label_.querySelector(this.learnMoreLinkId_);
+    var learnMoreLink = label.querySelector(this.learnMoreLinkId_);
     learnMoreLink.addEventListener(
         'click', (event) => this.onLearnMoreLinkClicked(event));
-    var settingsLink = this.label_.querySelector('#settings-link');
+    var settingsLink = label.querySelector('#settings-link');
     settingsLink.addEventListener(
         'click', (event) => this.onSettingsLinkClicked(event));
   }
@@ -191,7 +195,7 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
   /** Called when "settings" link is clicked. */
   onSettingsLinkClicked(event) {
     chrome.browser.openTab({'url': 'chrome://settings'}, function() {});
-    event.preventDefault();
+    event.stopPropagation();
   }
 }
 
@@ -247,6 +251,7 @@ class TermsOfServicePage {
 
     var scriptSetCountryCode =
         'document.countryCode = \'' + countryCode.toLowerCase() + '\';';
+    scriptSetCountryCode += 'document.viewMode = \'large-view\';';
     this.termsView_.addContentScripts([
       {
         name: 'preProcess',
@@ -274,7 +279,6 @@ class TermsOfServicePage {
     // On managed case, do not show TermsOfService section. Note that the
     // checkbox for the prefereces are still visible.
     var visibility = isManaged ? 'hidden' : 'visible';
-    container.querySelector('#terms-title').style.visibility = visibility;
     container.querySelector('#terms-container').style.visibility = visibility;
 
     // Set event handler for buttons.
@@ -447,7 +451,7 @@ class ActiveDirectoryAuthPage {
     // end of the SAML flow. Before that, we're on the Active Directory
     // Federation Services server.
     if (this.deviceManagementUrlPrefix_ &&
-        details.url.startsWith(this.deviceManagementUrlPrefix)) {
+        details.url.startsWith(this.deviceManagementUrlPrefix_)) {
       // Did it actually work?
       if (details.statusCode == 200) {
         // 'code' is unused, but it needs to be there.
@@ -510,6 +514,29 @@ function initialize(data, deviceId) {
   // Initialize the Active Directory SAML authentication page.
   activeDirectoryAuthPage =
       new ActiveDirectoryAuthPage(doc.getElementById('active-directory-auth'));
+
+  adjustTopMargin();
+}
+
+// With UI request to change inner window size to outer window size and reduce
+// top spacing, adjust top margin to negtive window top bar height.
+function adjustTopMargin() {
+  if (!appWindow)
+    return;
+
+  var decorationHeight =
+      appWindow.outerBounds.height - appWindow.innerBounds.height;
+
+  var doc = appWindow.contentWindow.document;
+  var headers = doc.getElementsByClassName('header');
+  for (var i = 0; i < headers.length; i++) {
+    headers[i].style.marginTop = -decorationHeight + 'px';
+  }
+
+  var authPages = doc.getElementsByClassName('section-active-directory-auth');
+  for (var i = 0; i < authPages.length; i++) {
+    authPages[i].style.marginTop = -decorationHeight + 'px';
+  }
 }
 
 /**
@@ -570,6 +597,7 @@ function showPage(pageDivId) {
   }
 
   hideOverlay();
+  appWindow.contentWindow.stopProgressAnimation();
   var doc = appWindow.contentWindow.document;
   // If the request is lso-loading and arc-loading page is currently shown,
   // then we do not switch the view. This is because both pages are saying
@@ -593,6 +621,13 @@ function showPage(pageDivId) {
   appWindow.show();
   if (pageDivId == 'terms') {
     termsPage.onShow();
+  }
+
+  // Start progress bar animation for the page that has the dynamic progress
+  // bar. 'error' page has the static progress bar that no need to be animated.
+  if (pageDivId == 'terms' || pageDivId == 'arc-loading' ||
+      pageDivId == 'lso-loading') {
+    appWindow.contentWindow.startProgressAnimation(pageDivId);
   }
 }
 
@@ -694,13 +729,8 @@ function setWindowBounds() {
     return;
   }
 
-  var decorationWidth =
-      appWindow.outerBounds.width - appWindow.innerBounds.width;
-  var decorationHeight =
-      appWindow.outerBounds.height - appWindow.innerBounds.height;
-
-  var outerWidth = INNER_WIDTH + decorationWidth;
-  var outerHeight = INNER_HEIGHT + decorationHeight;
+  var outerWidth = OUTER_WIDTH;
+  var outerHeight = OUTER_HEIGHT;
   if (outerWidth > screen.availWidth) {
     outerWidth = screen.availWidth;
   }
@@ -818,7 +848,6 @@ chrome.app.runtime.onLaunched.addListener(function() {
     appWindow = createdWindow;
     appWindow.contentWindow.onload = onAppContentLoad;
     appWindow.onClosed.addListener(onWindowClosed);
-
     setWindowBounds();
   };
 
@@ -840,7 +869,7 @@ chrome.app.runtime.onLaunched.addListener(function() {
     'resizable': false,
     'hidden': true,
     'frame': {type: 'chrome', color: '#ffffff'},
-    'innerBounds': {'width': INNER_WIDTH, 'height': INNER_HEIGHT}
+    'outerBounds': {'width': OUTER_WIDTH, 'height': OUTER_HEIGHT}
   };
   chrome.app.window.create('main.html', options, onWindowCreated);
 });

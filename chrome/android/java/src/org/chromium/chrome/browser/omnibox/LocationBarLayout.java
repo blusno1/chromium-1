@@ -28,6 +28,7 @@ import android.os.Parcelable;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.speech.RecognizerIntent;
+import android.support.annotation.DrawableRes;
 import android.support.annotation.IntDef;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -164,6 +165,7 @@ public class LocationBarLayout extends FrameLayout
     private NavigationButtonType mNavigationButtonType;
 
     // The type of the security icon currently active.
+    @DrawableRes
     private int mSecurityIconResource;
 
     private final OmniboxResultsAdapter mSuggestionListAdapter;
@@ -1306,6 +1308,7 @@ public class LocationBarLayout extends FrameLayout
      * @param isOfflinePage Whether the page for which the icon is shown is an offline page.
      * @return The resource ID of the icon that should be displayed, 0 if no icon should show.
      */
+    @DrawableRes
     public static int getSecurityIconResource(
             int securityLevel, boolean isSmallDevice, boolean isOfflinePage) {
         if (isOfflinePage) {
@@ -1316,10 +1319,9 @@ public class LocationBarLayout extends FrameLayout
                 return isSmallDevice ? 0 : R.drawable.omnibox_info;
             case ConnectionSecurityLevel.HTTP_SHOW_WARNING:
                 return R.drawable.omnibox_info;
-            case ConnectionSecurityLevel.SECURITY_WARNING:
-                return R.drawable.omnibox_info;
             case ConnectionSecurityLevel.DANGEROUS:
                 return R.drawable.omnibox_https_invalid;
+            case ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT:
             case ConnectionSecurityLevel.SECURE:
             case ConnectionSecurityLevel.EV_SECURE:
                 return R.drawable.omnibox_https_valid;
@@ -1370,6 +1372,7 @@ public class LocationBarLayout extends FrameLayout
     @Override
     public void updateSecurityIcon(int securityLevel) {
         boolean isSmallDevice = !DeviceFormFactor.isTablet();
+        @DrawableRes
         int id = getSecurityIconResource(
                 securityLevel, isSmallDevice, mToolbarDataProvider.isOfflinePage());
         if (id == 0) {
@@ -1419,6 +1422,15 @@ public class LocationBarLayout extends FrameLayout
     @VisibleForTesting
     public boolean isSecurityButtonShown() {
         return mLocationBarButtonType == BUTTON_TYPE_SECURITY_ICON;
+    }
+
+    /**
+     * @return The ID of the drawable currently shown in the security icon.
+     */
+    @VisibleForTesting
+    @DrawableRes
+    int getSecurityIconResourceId() {
+        return mSecurityIconResource;
     }
 
     /**
@@ -2290,6 +2302,8 @@ public class LocationBarLayout extends FrameLayout
     }
 
     private void updateOmniboxResultsContainerVisibility(boolean visible) {
+        if (mOmniboxResultsContainer == null) return;
+
         boolean currentlyVisible = mOmniboxResultsContainer.getVisibility() == VISIBLE;
         if (currentlyVisible == visible) return;
 
@@ -2547,5 +2561,13 @@ public class LocationBarLayout extends FrameLayout
     @Override
     public boolean mustQueryUrlBarLocationForSuggestions() {
         return DeviceFormFactor.isTablet();
+    }
+
+    /**
+     * Scroll to ensure the TLD is visible.
+     * @return Whether the TLD was discovered and successfully scrolled to.
+     */
+    public boolean scrollUrlBarToTld() {
+        return mUrlBar.scrollToTLD();
     }
 }

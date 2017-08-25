@@ -24,121 +24,7 @@ class CoordinationUnitImplTest : public CoordinationUnitImplTestBase {};
 
 using CoordinationUnitImplDeathTest = CoordinationUnitImplTest;
 
-class TestCoordinationUnit : public mojom::CoordinationPolicyCallback {
- public:
-  TestCoordinationUnit(CoordinationUnitProviderImpl* provider,
-                       const CoordinationUnitType& type,
-                       const std::string& id)
-      : binding_(this) {
-    CHECK(provider);
-
-    CoordinationUnitID new_cu_id(type, id);
-    mojom::CoordinationUnitPtr coordination_unit;
-    provider->CreateCoordinationUnit(mojo::MakeRequest(&coordination_unit_),
-                                     new_cu_id);
-
-    base::RunLoop callback;
-    SetGetIDClosure(callback.QuitClosure());
-    coordination_unit_->SetCoordinationPolicyCallback(GetPolicyCallback());
-    // Forces us to wait for the creation of the CUID to finish.
-    coordination_unit_->GetID(base::Bind(&TestCoordinationUnit::GetIDCallback,
-                                         base::Unretained(this)));
-
-    callback.Run();
-  }
-
-  void GetIDCallback(const CoordinationUnitID& cu_id) {
-    id_ = cu_id;
-    get_id_closure_.Run();
-  }
-
-  void SetGetIDClosure(const base::Closure& get_id_closure) {
-    get_id_closure_ = get_id_closure;
-  }
-
-  void SetPolicyClosure(const base::Closure& policy_closure) {
-    policy_update_closure_ = policy_closure;
-  }
-
-  mojom::CoordinationPolicyCallbackPtr GetPolicyCallback() {
-    mojom::CoordinationPolicyCallbackPtr callback_proxy;
-    binding_.Bind(mojo::MakeRequest(&callback_proxy));
-    return callback_proxy;
-  }
-
-  // The CU will always send policy updates on events (including parent events)
-  void ForcePolicyUpdates() {
-    base::RunLoop callback;
-    SetPolicyClosure(callback.QuitClosure());
-    mojom::EventPtr event = mojom::Event::New();
-    event->type = mojom::EventType::kTestEvent;
-    coordination_unit_->SendEvent(std::move(event));
-    callback.Run();
-  }
-
-  const mojom::CoordinationUnitPtr& interface() const {
-    return coordination_unit_;
-  }
-
-  const CoordinationUnitID& id() const { return id_; }
-
-  // mojom::CoordinationPolicyCallback:
-  void SetCoordinationPolicy(
-      resource_coordinator::mojom::CoordinationPolicyPtr policy) override {
-    if (policy_update_closure_) {
-      policy_update_closure_.Run();
-    }
-  }
-
- private:
-  base::Closure policy_update_closure_;
-  base::Closure get_id_closure_;
-
-  mojo::Binding<mojom::CoordinationPolicyCallback> binding_;
-  mojom::CoordinationUnitPtr coordination_unit_;
-  CoordinationUnitID id_;
-};
-
 }  // namespace
-
-TEST_F(CoordinationUnitImplTest, BasicPolicyCallback) {
-  TestCoordinationUnit test_coordination_unit(
-      provider(), CoordinationUnitType::kWebContents, "test_id");
-  test_coordination_unit.ForcePolicyUpdates();
-}
-
-TEST_F(CoordinationUnitImplTest, AddChild) {
-  TestCoordinationUnit parent_unit(
-      provider(), CoordinationUnitType::kWebContents, "parent_unit");
-
-  TestCoordinationUnit child_unit(
-      provider(), CoordinationUnitType::kWebContents, "child_unit");
-
-  child_unit.ForcePolicyUpdates();
-  parent_unit.ForcePolicyUpdates();
-
-  {
-    base::RunLoop callback;
-    child_unit.SetPolicyClosure(callback.QuitClosure());
-    parent_unit.interface()->AddChild(child_unit.id());
-    callback.Run();
-  }
-
-  {
-    base::RunLoop parent_callback;
-    base::RunLoop child_callback;
-    parent_unit.SetPolicyClosure(parent_callback.QuitClosure());
-    child_unit.SetPolicyClosure(child_callback.QuitClosure());
-
-    // This event should force the policy to recalculated for all children.
-    mojom::EventPtr event = mojom::Event::New();
-    event->type = mojom::EventType::kTestEvent;
-    parent_unit.interface()->SendEvent(std::move(event));
-
-    parent_callback.Run();
-    child_callback.Run();
-  }
-}
 
 TEST_F(CoordinationUnitImplTest, AddChildBasic) {
   CoordinationUnitID tab_cu_id(CoordinationUnitType::kFrame, std::string());
@@ -232,15 +118,16 @@ TEST_F(CoordinationUnitImplTest, GetSetProperty) {
       CreateCoordinationUnit(CoordinationUnitType::kWebContents);
 
   // An empty value should be returned if property is not found
-  EXPECT_EQ(base::Value(),
-            coordination_unit->GetProperty(mojom::PropertyType::kTest));
+  int64_t test_value;
+  EXPECT_FALSE(
+      coordination_unit->GetProperty(mojom::PropertyType::kTest, &test_value));
 
   // Perform a valid storage property set
-  coordination_unit->SetProperty(mojom::PropertyType::kTest,
-                                 base::MakeUnique<base::Value>(41));
+  coordination_unit->SetProperty(mojom::PropertyType::kTest, 41);
   EXPECT_EQ(1u, coordination_unit->properties_for_testing().size());
-  EXPECT_EQ(base::Value(41),
-            coordination_unit->GetProperty(mojom::PropertyType::kTest));
+  EXPECT_TRUE(
+      coordination_unit->GetProperty(mojom::PropertyType::kTest, &test_value));
+  EXPECT_EQ(41, test_value);
 }
 
 TEST_F(CoordinationUnitImplTest,

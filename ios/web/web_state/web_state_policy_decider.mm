@@ -25,11 +25,13 @@ WebStatePolicyDecider::~WebStatePolicyDecider() {
   }
 }
 
-bool WebStatePolicyDecider::ShouldAllowRequest(NSURLRequest* request) {
+bool WebStatePolicyDecider::ShouldAllowRequest(NSURLRequest* request,
+                                               ui::PageTransition transition) {
   return true;
 }
 
-bool WebStatePolicyDecider::ShouldAllowResponse(NSURLResponse* response) {
+bool WebStatePolicyDecider::ShouldAllowResponse(NSURLResponse* response,
+                                                bool for_main_frame) {
   return true;
 }
 

@@ -55,7 +55,7 @@ class StubOffscreenCanvasSurfaceClient
 
  private:
   // blink::mojom::OffscreenCanvasSurfaceClient:
-  void OnSurfaceCreated(const viz::SurfaceInfo& surface_info) override {
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override {
     last_surface_info_ = surface_info;
   }
 
@@ -206,7 +206,9 @@ TEST_F(OffscreenCanvasProviderImplTest,
 
   // Renderer submits a CompositorFrame with |local_id|.
   const viz::LocalSurfaceId local_id(1, base::UnguessableToken::Create());
-  compositor_frame_sink->SubmitCompositorFrame(local_id, MakeCompositorFrame());
+  compositor_frame_sink->SubmitCompositorFrame(
+      local_id, MakeCompositorFrame(), nullptr,
+      base::TimeTicks::Now().since_origin().InMicroseconds());
 
   RunUntilIdle();
 

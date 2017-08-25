@@ -82,7 +82,6 @@ component("views") {
     "controls/button/blue_button.h",
     "controls/button/button.h",
     "controls/button/checkbox.h",
-    "controls/button/custom_button.h",
     "controls/button/image_button.h",
     "controls/button/image_button_factory.h",
     "controls/button/label_button.h",
@@ -185,6 +184,7 @@ component("views") {
     "native_cursor.h",
     "native_theme_delegate.h",
     "painter.h",
+    "paint_info.h",
     "pointer_watcher.h",
     "rect_based_targeting_utils.h",
     "repeat_controller.h",
@@ -229,6 +229,7 @@ component("views") {
     "window/frame_background.h",
     "window/frame_buttons.h",
     "window/native_frame_view.h",
+    "window/nav_button_provider.h",
     "window/non_client_view.h",
     "window/window_button_order_provider.h",
     "window/window_resources.h",
@@ -276,7 +277,6 @@ component("views") {
     "controls/button/blue_button.cc",
     "controls/button/button.cc",
     "controls/button/checkbox.cc",
-    "controls/button/custom_button.cc",
     "controls/button/image_button.cc",
     "controls/button/image_button_factory.cc",
     "controls/button/label_button.cc",
@@ -364,6 +364,7 @@ component("views") {
     "mouse_watcher.cc",
     "mouse_watcher_view_host.cc",
     "native_cursor_mac.mm",
+    "paint_info.cc",
     "painter.cc",
     "rect_based_targeting_utils.cc",
     "repeat_controller.cc",
@@ -462,7 +463,7 @@ component("views") {
     "//ui/views/resources",
   ]
 
-  if (use_x11 && !is_chromeos) {
+  if (use_x11) {
     deps += [ "//ui/display/util" ]
   }
   if (is_linux && !is_chromeos) {
@@ -495,6 +496,7 @@ component("views") {
       "win/hwnd_message_handler.h",
       "win/hwnd_message_handler_delegate.h",
       "win/hwnd_util.h",
+      "win/pen_event_processor.h",
       "win/scoped_fullscreen_visibility.h",
       "win/windows_session_change_observer.h",
     ]
@@ -503,6 +505,7 @@ component("views") {
       "win/fullscreen_handler.cc",
       "win/hwnd_message_handler.cc",
       "win/hwnd_util_aurawin.cc",
+      "win/pen_event_processor.cc",
       "win/scoped_fullscreen_visibility.cc",
       "win/windows_session_change_observer.cc",
     ]
@@ -822,7 +825,7 @@ static_library("test_support_internal") {
       "//ui/wm",
       "//ui/wm/public",
     ]
-    if (use_x11 && !is_chromeos) {
+    if (use_x11) {
       sources += [
         "test/desktop_screen_x11_test_api.cc",
         "test/desktop_screen_x11_test_api.h",
@@ -891,12 +894,13 @@ source_set("views_unittests_sources") {
     "cocoa/cocoa_mouse_capture_unittest.mm",
     "cocoa/drag_drop_client_mac_unittest.mm",
     "controls/button/blue_button_unittest.cc",
-    "controls/button/custom_button_unittest.cc",
+    "controls/button/button_unittest.cc",
     "controls/button/image_button_factory_unittest.cc",
     "controls/button/image_button_unittest.cc",
     "controls/button/label_button_label_unittest.cc",
     "controls/button/label_button_unittest.cc",
     "controls/button/menu_button_unittest.cc",
+    "controls/button/radio_button_unittest.cc",
     "controls/button/toggle_button_unittest.cc",
     "controls/combobox/combobox_unittest.cc",
     "controls/label_unittest.cc",
@@ -930,6 +934,7 @@ source_set("views_unittests_sources") {
     "layout/box_layout_unittest.cc",
     "layout/fill_layout_unittest.cc",
     "layout/grid_layout_unittest.cc",
+    "paint_info_unittest.cc",
     "rect_based_targeting_utils_unittest.cc",
     "test/widget_test_unittest.cc",
     "view_model_unittest.cc",
@@ -999,6 +1004,7 @@ source_set("views_unittests_sources") {
       "oleacc.lib",
       "comctl32.lib",
     ]
+    sources += [ "win/pen_event_processor_unittest.cc" ]
   }
 
   if (has_native_accessibility) {

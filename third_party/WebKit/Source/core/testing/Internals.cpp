@@ -102,8 +102,6 @@
 #include "core/layout/LayoutTreeAsText.h"
 #include "core/layout/api/LayoutMenuListItem.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/HistoryItem.h"
@@ -113,6 +111,8 @@
 #include "core/page/PrintContext.h"
 #include "core/page/scrolling/ScrollState.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGImageElement.h"
 #include "core/testing/CallbackFunctionTest.h"
@@ -465,11 +465,6 @@ String Internals::getResourceHeader(const String& url,
   return resource->GetResourceRequest().HttpHeaderField(header.Utf8().data());
 }
 
-bool Internals::isSharingStyle(Element* element1, Element* element2) const {
-  DCHECK(element1 && element2);
-  return element1->GetComputedStyle() == element2->GetComputedStyle();
-}
-
 bool Internals::isValidContentSelect(Element* insertion_point,
                                      ExceptionState& exception_state) {
   DCHECK(insertion_point);
@@ -739,6 +734,10 @@ void Internals::setBrowserControlsState(float top_height,
                                         bool shrinks_layout) {
   document_->GetPage()->GetChromeClient().SetBrowserControlsState(
       top_height, bottom_height, shrinks_layout);
+}
+
+void Internals::setBrowserControlsShownRatio(float ratio) {
+  document_->GetPage()->GetChromeClient().SetBrowserControlsShownRatio(ratio);
 }
 
 ShadowRoot* Internals::shadowRoot(Element* host) {
@@ -3096,10 +3095,11 @@ String Internals::textSurroundingNode(Node* node,
     return String();
   blink::WebPoint point(x, y);
   SurroundingText surrounding_text(
-      CreateVisiblePosition(node->GetLayoutObject()->PositionForPoint(
-                                static_cast<IntPoint>(point)))
-          .DeepEquivalent()
-          .ParentAnchoredEquivalent(),
+      EphemeralRange(
+          CreateVisiblePosition(node->GetLayoutObject()->PositionForPoint(
+                                    static_cast<IntPoint>(point)))
+              .DeepEquivalent()
+              .ParentAnchoredEquivalent()),
       max_length);
   return surrounding_text.Content();
 }

@@ -44,16 +44,16 @@ namespace blink {
 class PagePopup;
 class PagePopupClient;
 class WebAutofillClient;
-class WebViewBase;
+class WebViewImpl;
 struct WebCursorInfo;
 
 // Handles window-level notifications from core on behalf of a WebView.
 class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
  public:
-  static ChromeClientImpl* Create(WebViewBase*);
+  static ChromeClientImpl* Create(WebViewImpl*);
   ~ChromeClientImpl() override;
 
-  WebViewBase* GetWebView() const override;
+  WebViewImpl* GetWebView() const override;
 
   // ChromeClient methods:
   void ChromeDestroyed() override;
@@ -147,7 +147,6 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   void SetHasScrollEventHandlers(LocalFrame*, bool has_event_handlers) override;
   void SetNeedsLowLatencyInput(LocalFrame*, bool needs_low_latency) override;
   void SetTouchAction(LocalFrame*, TouchAction) override;
-  const WebInputEvent* GetCurrentInputEvent() const override;
 
   void AttachRootGraphicsLayer(GraphicsLayer*, LocalFrame* local_root) override;
 
@@ -187,6 +186,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   void SetBrowserControlsState(float top_height,
                                float bottom_height,
                                bool shrinks_layout) override;
+  void SetBrowserControlsShownRatio(float) override;
 
   bool ShouldOpenModalDialogDuringPageDismissal(
       LocalFrame&,
@@ -230,14 +230,12 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
 
   WebLayerTreeView* GetWebLayerTreeView(LocalFrame*) override;
 
-  WebLocalFrameBase* GetWebLocalFrameBase(LocalFrame*) override;
-
   void RequestDecode(LocalFrame*,
                      const PaintImage&,
                      WTF::Function<void(bool)> callback) override;
 
  private:
-  explicit ChromeClientImpl(WebViewBase*);
+  explicit ChromeClientImpl(WebViewImpl*);
 
   bool IsChromeClientImpl() const override { return true; }
 
@@ -247,7 +245,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   // returns nullable.
   WebAutofillClient* AutofillClientFromFrame(LocalFrame*);
 
-  WebViewBase* web_view_;  // Weak pointer.
+  WebViewImpl* web_view_;  // Weak pointer.
   Vector<PopupOpeningObserver*> popup_opening_observers_;
   Cursor last_set_mouse_cursor_for_testing_;
   bool cursor_overridden_;

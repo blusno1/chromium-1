@@ -45,7 +45,7 @@
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/extensions/api/messaging/messaging_delegate.h"
+#include "chrome/browser/extensions/api/chrome_extensions_api_client.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_management_constants.h"
@@ -161,6 +161,7 @@
 #include "content/public/test/test_utils.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
+#include "extensions/browser/api/messaging/messaging_delegate.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
@@ -170,7 +171,7 @@
 #include "extensions/browser/scoped_ignore_content_verifier_for_test.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/browser/uninstall_reason.h"
-#include "extensions/common/constants.h"
+#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/features/feature_channel.h"
@@ -620,6 +621,18 @@ extensions::AppWindow* TestAddAppWindowObserver::WaitForAppWindow() {
 
 #endif
 
+#if !defined(OS_CHROMEOS)
+extensions::MessagingDelegate::PolicyPermission IsNativeMessagingHostAllowed(
+    content::BrowserContext* browser_context,
+    const std::string& native_host_name) {
+  extensions::MessagingDelegate* messaging_delegate =
+      extensions::ExtensionsAPIClient::Get()->GetMessagingDelegate();
+  EXPECT_NE(messaging_delegate, nullptr);
+  return messaging_delegate->IsNativeMessagingHostAllowed(browser_context,
+                                                          native_host_name);
+}
+#endif
+
 }  // namespace
 
 class PolicyTest : public InProcessBrowserTest {
@@ -766,8 +779,8 @@ class PolicyTest : public InProcessBrowserTest {
   void DisableExtension(const std::string& id) {
     extensions::TestExtensionRegistryObserver observer(
         extensions::ExtensionRegistry::Get(browser()->profile()));
-    extension_service()->DisableExtension(id,
-                                          extensions::Extension::DISABLE_NONE);
+    extension_service()->DisableExtension(
+        id, extensions::disable_reason::DISABLE_NONE);
     observer.WaitForExtensionUnloaded();
   }
 
@@ -1512,12 +1525,16 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_ExtensionInstallBlacklistWildcard) {
                blacklist.CreateDeepCopy(), nullptr);
   UpdateProviderPolicy(policies);
 
-  // AdBlock was automatically removed.
-  ASSERT_FALSE(service->GetExtensionById(kAdBlockCrxId, true));
+  // AdBlock should be disabled.
+  EXPECT_TRUE(service->GetExtensionById(kAdBlockCrxId, true));
+  EXPECT_FALSE(service->IsExtensionEnabled(kAdBlockCrxId));
 
-  // And can't be installed again, nor can good.crx.
-  EXPECT_FALSE(InstallExtension(kAdBlockCrxName));
-  EXPECT_FALSE(service->GetExtensionById(kAdBlockCrxId, true));
+  // It shouldn't be possible to re-enable AdBlock, until it satisfies
+  // management policy.
+  service->EnableExtension(kAdBlockCrxId);
+  EXPECT_FALSE(service->IsExtensionEnabled(kAdBlockCrxId));
+
+  // It shouldn't be possible to install good.crx.
   EXPECT_FALSE(InstallExtension(kGoodCrxName));
   EXPECT_FALSE(service->GetExtensionById(kGoodCrxId, true));
 }
@@ -1930,7 +1947,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequired) {
   EXPECT_EQ(1u, interceptor.GetPendingSize());
 
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::Extension::DISABLE_UPDATE_REQUIRED_BY_POLICY,
+  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
             extension_prefs->GetDisableReasons(kGoodCrxId));
 
   // Provide a new version (1.0.0.1) which is expected to be auto updated to
@@ -1981,7 +1998,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequiredAlt) {
   // Install the 1.0.0.0 version, it should be installed but disabled.
   EXPECT_TRUE(InstallExtension(kGoodV1CrxName));
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::Extension::DISABLE_UPDATE_REQUIRED_BY_POLICY,
+  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
             extension_prefs->GetDisableReasons(kGoodCrxId));
   EXPECT_EQ("1.0.0.0",
             service->GetInstalledExtension(kGoodCrxId)->version()->GetString());
@@ -2006,7 +2023,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequiredAlt) {
   EXPECT_EQ("1.0.0.1",
             service->GetInstalledExtension(kGoodCrxId)->version()->GetString());
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::Extension::DISABLE_UPDATE_REQUIRED_BY_POLICY,
+  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
             extension_prefs->GetDisableReasons(kGoodCrxId));
 
   // Remove the minimum version requirement. The extension should be re-enabled.
@@ -2018,7 +2035,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequiredAlt) {
 
   EXPECT_TRUE(registry->enabled_extensions().Contains(kGoodCrxId));
   EXPECT_FALSE(extension_prefs->HasDisableReason(
-      kGoodCrxId, extensions::Extension::DISABLE_UPDATE_REQUIRED_BY_POLICY));
+      kGoodCrxId,
+      extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
 }
 
 // Verifies that a force-installed extension which does not meet a subsequently
@@ -2058,7 +2076,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionForceInstalled) {
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(registry->enabled_extensions().Contains(kGoodCrxId));
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::Extension::DISABLE_UPDATE_REQUIRED_BY_POLICY,
+  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
             extension_prefs->GetDisableReasons(kGoodCrxId));
 }
 
@@ -2401,6 +2419,39 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklist) {
         loop.QuitClosure());
     loop.Run();
   }
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistAndWhitelist) {
+  // Regression test for http://crbug.com/755256. Blacklisting * and
+  // whitelisting an origin should work.
+
+  // Filter |kURLS| on IO thread, so that requests to those hosts end up
+  // as URLRequestMockHTTPJobs.
+  const char* kURLS[] = {
+      "http://aaa.com/empty.html",
+  };
+  {
+    base::RunLoop loop;
+    BrowserThread::PostTaskAndReply(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(RedirectHostsToTestData, kURLS, arraysize(kURLS)),
+        loop.QuitClosure());
+    loop.Run();
+  }
+
+  base::ListValue blacklist;
+  blacklist.AppendString("*");
+  PolicyMap policies;
+  policies.Set(key::kURLBlacklist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, blacklist.CreateDeepCopy(), nullptr);
+
+  base::ListValue whitelist;
+  whitelist.AppendString("aaa.com");
+  policies.Set(key::kURLWhitelist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, whitelist.CreateDeepCopy(), nullptr);
+  UpdateProviderPolicy(policies);
+  FlushBlacklistPolicy();
+  CheckCanOpenURL(browser(), kURLS[0]);
 }
 
 IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistSubresources) {
@@ -4119,11 +4170,10 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlacklistSelective) {
   UpdateProviderPolicy(policies);
 
   EXPECT_EQ(extensions::MessagingDelegate::PolicyPermission::DISALLOW,
-            extensions::MessagingDelegate::IsNativeMessagingHostAllowed(
-                browser()->profile(), "host.name"));
-  EXPECT_EQ(extensions::MessagingDelegate::PolicyPermission::ALLOW_ALL,
-            extensions::MessagingDelegate::IsNativeMessagingHostAllowed(
-                browser()->profile(), "other.host.name"));
+            IsNativeMessagingHostAllowed(browser()->profile(), "host.name"));
+  EXPECT_EQ(
+      extensions::MessagingDelegate::PolicyPermission::ALLOW_ALL,
+      IsNativeMessagingHostAllowed(browser()->profile(), "other.host.name"));
 }
 
 IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlacklistWildcard) {
@@ -4136,11 +4186,10 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlacklistWildcard) {
   UpdateProviderPolicy(policies);
 
   EXPECT_EQ(extensions::MessagingDelegate::PolicyPermission::DISALLOW,
-            extensions::MessagingDelegate::IsNativeMessagingHostAllowed(
-                browser()->profile(), "host.name"));
-  EXPECT_EQ(extensions::MessagingDelegate::PolicyPermission::DISALLOW,
-            extensions::MessagingDelegate::IsNativeMessagingHostAllowed(
-                browser()->profile(), "other.host.name"));
+            IsNativeMessagingHostAllowed(browser()->profile(), "host.name"));
+  EXPECT_EQ(
+      extensions::MessagingDelegate::PolicyPermission::DISALLOW,
+      IsNativeMessagingHostAllowed(browser()->profile(), "other.host.name"));
 }
 
 IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingWhitelist) {
@@ -4158,11 +4207,10 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingWhitelist) {
   UpdateProviderPolicy(policies);
 
   EXPECT_EQ(extensions::MessagingDelegate::PolicyPermission::ALLOW_ALL,
-            extensions::MessagingDelegate::IsNativeMessagingHostAllowed(
-                browser()->profile(), "host.name"));
-  EXPECT_EQ(extensions::MessagingDelegate::PolicyPermission::DISALLOW,
-            extensions::MessagingDelegate::IsNativeMessagingHostAllowed(
-                browser()->profile(), "other.host.name"));
+            IsNativeMessagingHostAllowed(browser()->profile(), "host.name"));
+  EXPECT_EQ(
+      extensions::MessagingDelegate::PolicyPermission::DISALLOW,
+      IsNativeMessagingHostAllowed(browser()->profile(), "other.host.name"));
 }
 
 #endif  // !defined(CHROME_OS)
@@ -4316,18 +4364,17 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
   PrefService* const pref = browser()->profile()->GetPrefs();
 
   // Values of the ArcLocationServiceEnabled policy to be tested.
-  const std::vector<base::Value> test_policy_values = {
-      base::Value(),       // unset
-      base::Value(false),  // disabled
-      base::Value(true),   // enabled
-  };
+  std::vector<base::Value> test_policy_values;
+  test_policy_values.emplace_back();       // unset
+  test_policy_values.emplace_back(false);  // disabled
+  test_policy_values.emplace_back(true);   // enabled
+
   // Values of the DefaultGeolocationSetting policy to be tested.
-  const std::vector<base::Value> test_default_geo_policy_values = {
-      base::Value(),   // unset
-      base::Value(1),  // 'AllowGeolocation'
-      base::Value(2),  // 'BlockGeolocation'
-      base::Value(3),  // 'AskGeolocation'
-  };
+  std::vector<base::Value> test_default_geo_policy_values;
+  test_default_geo_policy_values.emplace_back();   // unset
+  test_default_geo_policy_values.emplace_back(1);  // 'AllowGeolocation'
+  test_default_geo_policy_values.emplace_back(2);  // 'BlockGeolocation'
+  test_default_geo_policy_values.emplace_back(3);  // 'AskGeolocation'
 
   // The pref is switched off by default.
   EXPECT_FALSE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
@@ -4459,7 +4506,6 @@ class NoteTakingOnLockScreenPolicyTest : public PolicyTest {
   ~NoteTakingOnLockScreenPolicyTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(chromeos::switches::kEnableLockScreenApps);
     // An app requires lockScreen permission to be enabled as a lock screen app.
     // This permission is protected by a whitelist, so the test app has to be
     // whitelisted as well.

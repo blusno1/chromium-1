@@ -11,23 +11,24 @@ function requestHelper(method, url)
     makeSimpleXHR(method, url, false);
 }
 
-async function test()
-{
-    Common.settingForTest('monitoringXHREnabled').set(true);
-    await InspectorTest.evaluateInPagePromise("requestHelper('GET', 'resources/xhr-exists.html')");
-    await InspectorTest.evaluateInPagePromise("requestHelper('GET', 'resources/xhr-does-not-exist.html')");
-    await InspectorTest.evaluateInPagePromise("requestHelper('POST', 'resources/post-target.cgi')");
-    await InspectorTest.evaluateInPagePromise("requestHelper('GET', 'http://localhost:8000/inspector/resources/xhr-exists.html')");
-    Common.settingForTest('monitoringXHREnabled').set(false);
-    await InspectorTest.evaluateInPagePromise("requestHelper('GET', 'resources/xhr-exists.html')");
-    await InspectorTest.evaluateInPagePromise("requestHelper('GET', 'resources/xhr-does-not-exist.html')");
-    await InspectorTest.evaluateInPagePromise("requestHelper('POST', 'resources/post-target.cgi')");
-    await InspectorTest.evaluateInPagePromise("requestHelper('GET', 'http://localhost:8000/inspector/resources/xhr-exists.html')");
+async function test() {
+  Common.settingForTest('monitoringXHREnabled').set(true);
+  await TestRunner.evaluateInPagePromise('requestHelper(\'GET\', \'resources/xhr-exists.html\')');
+  await TestRunner.evaluateInPagePromise('requestHelper(\'GET\', \'resources/xhr-does-not-exist.html\')');
+  await TestRunner.evaluateInPagePromise('requestHelper(\'POST\', \'resources/post-target.cgi\')');
+  await TestRunner.evaluateInPagePromise(
+      'requestHelper(\'GET\', \'http://localhost:8000/inspector/resources/xhr-exists.html\')');
+  Common.settingForTest('monitoringXHREnabled').set(false);
+  await TestRunner.evaluateInPagePromise('requestHelper(\'GET\', \'resources/xhr-exists.html\')');
+  await TestRunner.evaluateInPagePromise('requestHelper(\'GET\', \'resources/xhr-does-not-exist.html\')');
+  await TestRunner.evaluateInPagePromise('requestHelper(\'POST\', \'resources/post-target.cgi\')');
+  await TestRunner.evaluateInPagePromise(
+      'requestHelper(\'GET\', \'http://localhost:8000/inspector/resources/xhr-exists.html\')');
 
-    InspectorTest.deprecatedRunAfterPendingDispatches(() => {
-      InspectorTest.dumpConsoleMessages();
-      InspectorTest.completeTest();
-    });
+  TestRunner.deprecatedRunAfterPendingDispatches(() => {
+    ConsoleTestRunner.dumpConsoleMessages();
+    TestRunner.completeTest();
+  });
 }
 //# sourceURL=console-xhr-logging.html
 </script>

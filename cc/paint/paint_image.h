@@ -5,17 +5,22 @@
 #ifndef CC_PAINT_PAINT_IMAGE_H_
 #define CC_PAINT_PAINT_IMAGE_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "cc/paint/paint_export.h"
+#include "cc/paint/skia_paint_image_generator.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace cc {
 
+class PaintImageGenerator;
 class PaintOpBuffer;
 using PaintRecord = PaintOpBuffer;
 
-// TODO(vmpstr): Add a persistent id to the paint image.
+// A representation of an image for the compositor.
+// Note that aside from default construction, it can only be constructed using a
+// PaintImageBuilder, or copied/moved into using operator=.
 class CC_PAINT_EXPORT PaintImage {
  public:
   using Id = int;
@@ -25,33 +30,12 @@ class CC_PAINT_EXPORT PaintImage {
   // GetNextId to generate a stable id for such images.
   static const Id kNonLazyStableId = -1;
 
-  // This is the id used in places where we are currently not plumbing the
-  // correct image id from blink.
-  // TODO(khushalsagar): The only user of these seems to be the ImageBuffer in
-  // blink. Same goes for the animation and completion states.
-  static const Id kUnknownStableId = -2;
-
-  // TODO(vmpstr): Work towards removing "UNKNOWN" value.
-  enum class AnimationType { UNKNOWN, ANIMATED, VIDEO, STATIC };
-
-  // TODO(vmpstr): Work towards removing "UNKNOWN" value.
-  enum class CompletionState { UNKNOWN, DONE, PARTIALLY_DONE };
+  enum class AnimationType { ANIMATED, VIDEO, STATIC };
+  enum class CompletionState { DONE, PARTIALLY_DONE };
 
   static Id GetNextId();
 
   PaintImage();
-  // - id: stable id for this image; can be generated using GetNextId().
-  // - sk_image: the underlying skia image that this represents.
-  // - animation_type: the animation type of this paint image.
-  // - completion_state: indicates whether the image is completed loading.
-  // - frame_count: the known number of frames in this image. E.g. number of GIF
-  //   frames in an animated GIF.
-  explicit PaintImage(Id id,
-                      sk_sp<SkImage> sk_image,
-                      AnimationType animation_type = AnimationType::STATIC,
-                      CompletionState completion_state = CompletionState::DONE,
-                      size_t frame_count = 0,
-                      bool is_multipart = false);
   PaintImage(const PaintImage& other);
   PaintImage(PaintImage&& other);
   ~PaintImage();
@@ -59,7 +43,36 @@ class CC_PAINT_EXPORT PaintImage {
   PaintImage& operator=(const PaintImage& other);
   PaintImage& operator=(PaintImage&& other);
 
+  // Makes a new PaintImage representing a subset of the original image. The
+  // subset must be non-empty and lie within the image bounds.
+  PaintImage MakeSubset(const gfx::Rect& subset) const;
+
   bool operator==(const PaintImage& other) const;
+
+  // Returns the smallest size that is at least as big as the requested_size
+  // such that we can decode to exactly that scale. If the requested size is
+  // larger than the image, this returns the image size. Any returned value is
+  // guaranteed to be stable. That is,
+  // GetSupportedDecodeSize(GetSupportedDecodeSize(size)) is guaranteed to be
+  // GetSupportedDecodeSize(size).
+  SkISize GetSupportedDecodeSize(const SkISize& requested_size) const;
+
+  // Returns SkImageInfo that should be used to decode this image to the given
+  // size and color type. The size must be supported.
+  SkImageInfo CreateDecodeImageInfo(const SkISize& size,
+                                    SkColorType color_type) const;
+
+  // Decode the image into the given memory for the given SkImageInfo.
+  // - Size in |info| must be supported.
+  // - The amount of memory allocated must be at least
+  //   |info|.minRowBytes() * |info|.height().
+  // Returns true on success and false on failure. Updates |info| to match the
+  // requested color space, if provided.
+  // Note that for non-lazy images this will do a copy or readback if the image
+  // is texture backed.
+  bool Decode(void* memory,
+              SkImageInfo* info,
+              sk_sp<SkColorSpace> color_space) const;
 
   Id stable_id() const { return id_; }
   const sk_sp<SkImage>& GetSkImage() const;
@@ -69,27 +82,29 @@ class CC_PAINT_EXPORT PaintImage {
   bool is_multipart() const { return is_multipart_; }
 
   // TODO(vmpstr): Don't get the SkImage here if you don't need to.
+  uint32_t unique_id() const { return GetSkImage()->uniqueID(); }
   explicit operator bool() const { return !!GetSkImage(); }
   bool IsLazyGenerated() const { return GetSkImage()->isLazyGenerated(); }
   int width() const { return GetSkImage()->width(); }
   int height() const { return GetSkImage()->height(); }
-
-  // Returns a PaintImage that has the same fields as this PaintImage, except
-  // with a replaced sk_image_. This can be used to swap out a specific SkImage
-  // in an otherwise unchanged PaintImage. This is also used to swap out a
-  // paint record representation with an SkImage instead.
-  PaintImage CloneWithSkImage(sk_sp<SkImage> new_image) const;
+  SkColorSpace* color_space() const { return GetSkImage()->colorSpace(); }
 
  private:
   friend class PaintImageBuilder;
+  FRIEND_TEST_ALL_PREFIXES(PaintImageTest, Subsetting);
 
   sk_sp<SkImage> sk_image_;
   sk_sp<PaintRecord> paint_record_;
   gfx::Rect paint_record_rect_;
+  sk_sp<PaintImageGenerator> paint_image_generator_;
 
-  Id id_ = kUnknownStableId;
-  AnimationType animation_type_ = AnimationType::UNKNOWN;
-  CompletionState completion_state_ = CompletionState::UNKNOWN;
+  Id id_ = 0;
+  AnimationType animation_type_ = AnimationType::STATIC;
+  CompletionState completion_state_ = CompletionState::DONE;
+
+  // If non-empty, holds the subset of this image relative to the original image
+  // at the origin.
+  gfx::Rect subset_rect_;
 
   // The number of frames known to exist in this image (eg number of GIF frames
   // loaded). 0 indicates either unknown or only a single frame, both of which

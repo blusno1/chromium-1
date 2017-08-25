@@ -120,7 +120,7 @@
 #include "content/renderer/text_input_client_observer.h"
 #endif
 
-using blink::WebCompositionUnderline;
+using blink::WebImeTextSpan;
 using blink::WebCursorInfo;
 using blink::WebDeviceEmulationParams;
 using blink::WebDragOperation;
@@ -155,6 +155,8 @@ namespace content {
 namespace {
 
 typedef std::map<std::string, ui::TextInputMode> TextInputModeMap;
+
+static const int kInvalidNextPreviousFlagsValue = -1;
 
 class WebWidgetLockTarget : public content::MouseLockDispatcher::LockTarget {
  public:
@@ -363,6 +365,7 @@ RenderWidget::RenderWidget(int32_t widget_routing_id,
       text_input_type_(ui::TEXT_INPUT_TYPE_NONE),
       text_input_mode_(ui::TEXT_INPUT_MODE_DEFAULT),
       text_input_flags_(0),
+      next_previous_flags_(kInvalidNextPreviousFlagsValue),
       can_compose_inline_(true),
       composition_range_(gfx::Range::InvalidRange()),
       popup_type_(popup_type),
@@ -379,8 +382,7 @@ RenderWidget::RenderWidget(int32_t widget_routing_id,
 #if defined(OS_MACOSX)
       text_input_client_observer_(new TextInputClientObserver(this)),
 #endif
-      focused_pepper_plugin_(nullptr),
-      time_to_first_active_paint_recorded_(true),
+      first_update_visual_state_after_hidden_(false),
       was_shown_time_(base::TimeTicks::Now()),
       current_content_source_id_(0),
       widget_binding_(this, std::move(widget_request)),
@@ -540,7 +542,7 @@ void RenderWidget::Init(const ShowCallback& show_callback,
   if (base::FeatureList::IsEnabled(features::kMojoInputMessages)) {
     RenderThreadImpl* render_thread_impl = RenderThreadImpl::current();
 
-    widget_input_handler_manager_ = new WidgetInputHandlerManager(
+    widget_input_handler_manager_ = WidgetInputHandlerManager::Create(
         weak_ptr_factory_.GetWeakPtr(), RenderThread::Get()->GetChannel(),
         render_thread_impl && compositor_
             ? render_thread_impl->compositor_task_runner()
@@ -990,17 +992,26 @@ void RenderWidget::UpdateVisualState() {
   GetWebWidget()->UpdateAllLifecyclePhases();
   GetWebWidget()->SetSuppressFrameRequestsWorkaroundFor704763Only(false);
 
-  if (time_to_first_active_paint_recorded_)
-    return;
+  if (first_update_visual_state_after_hidden_) {
+    RecordTimeToFirstActivePaint();
+    first_update_visual_state_after_hidden_ = false;
+  }
+}
 
+void RenderWidget::RecordTimeToFirstActivePaint() {
   RenderThreadImpl* render_thread_impl = RenderThreadImpl::current();
-  if (!render_thread_impl->NeedsToRecordFirstActivePaint())
-    return;
-
-  time_to_first_active_paint_recorded_ = true;
   base::TimeDelta sample = base::TimeTicks::Now() - was_shown_time_;
-  UMA_HISTOGRAM_TIMES("PurgeAndSuspend.Experimental.TimeToFirstActivePaint",
-                      sample);
+  if (render_thread_impl->NeedsToRecordFirstActivePaint(TTFAP_AFTER_PURGED)) {
+    UMA_HISTOGRAM_TIMES("PurgeAndSuspend.Experimental.TimeToFirstActivePaint",
+                        sample);
+  }
+  if (render_thread_impl->NeedsToRecordFirstActivePaint(
+          TTFAP_5MIN_AFTER_BACKGROUNDED)) {
+    UMA_HISTOGRAM_TIMES(
+        "PurgeAndSuspend.Experimental.TimeToFirstActivePaint."
+        "AfterBackgrounded.5min",
+        sample);
+  }
 }
 
 void RenderWidget::WillBeginCompositorFrame() {
@@ -1105,6 +1116,7 @@ void RenderWidget::ClearTextInputState() {
   text_input_mode_ = ui::TextInputMode::TEXT_INPUT_MODE_DEFAULT;
   can_compose_inline_ = false;
   text_input_flags_ = 0;
+  next_previous_flags_ = kInvalidNextPreviousFlagsValue;
 }
 
 void RenderWidget::UpdateTextInputState() {
@@ -1147,6 +1159,21 @@ void RenderWidget::UpdateTextInputStateInternal(bool show_virtual_keyboard,
     params.type = new_type;
     params.mode = new_mode;
     params.flags = new_info.flags;
+    if (next_previous_flags_ == kInvalidNextPreviousFlagsValue) {
+      // Due to a focus change, values will be reset by the frame.
+      // That case we only need fresh NEXT/PREVIOUS information.
+      // Also we won't send ViewHostMsg_TextInputStateChanged if next/previous
+      // focusable status is changed.
+      if (auto* controller = GetInputMethodController()) {
+        next_previous_flags_ =
+            controller->ComputeWebTextInputNextPreviousFlags();
+      } else {
+        // For safety in case GetInputMethodController() is null, because -1 is
+        // invalid value to send to browser process.
+        next_previous_flags_ = 0;
+      }
+    }
+    params.flags |= next_previous_flags_;
     params.value = new_info.value.Utf8();
     params.selection_start = new_info.selection_start;
     params.selection_end = new_info.selection_end;
@@ -1237,18 +1264,18 @@ void RenderWidget::Resize(const ResizeParams& params) {
     local_surface_id_ = *params.local_surface_id;
 
   if (compositor_) {
-    compositor_->SetViewportSize(params.physical_backing_size);
-    compositor_->SetBrowserControlsHeight(
-        params.top_controls_height, params.bottom_controls_height,
-        params.browser_controls_shrink_blink_size);
-    compositor_->SetRasterColorSpace(
-        screen_info_.color_space.GetParametricApproximation());
     // If surface synchronization is enable, then this will use the provided
     // |local_surface_id_| to submit the next generated CompositorFrame.
     // If the ID is not valid, then the compositor will defer commits until
     // it receives a valid surface ID. This is a no-op if surface
     // synchronization is disabled.
-    compositor_->SetLocalSurfaceId(local_surface_id_);
+    compositor_->SetViewportSize(params.physical_backing_size,
+                                 local_surface_id_);
+    compositor_->SetBrowserControlsHeight(
+        params.top_controls_height, params.bottom_controls_height,
+        params.browser_controls_shrink_blink_size);
+    compositor_->SetRasterColorSpace(
+        screen_info_.color_space.GetRasterColorSpace());
   }
 
   visible_viewport_size_ = params.visible_viewport_size;
@@ -1319,8 +1346,11 @@ void RenderWidget::SetScreenRects(const gfx::Rect& view_screen_rect,
 
 void RenderWidget::AutoResizeCompositor()  {
   physical_backing_size_ = gfx::ScaleToCeiledSize(size_, device_scale_factor_);
+  // A new LocalSurfaceId will need to be allocated by the browser for the new
+  // size.
+  local_surface_id_ = viz::LocalSurfaceId();
   if (compositor_)
-    compositor_->SetViewportSize(physical_backing_size_);
+    compositor_->SetViewportSize(physical_backing_size_, local_surface_id_);
 }
 
 blink::WebLayerTreeView* RenderWidget::InitializeLayerTreeView() {
@@ -1337,12 +1367,11 @@ blink::WebLayerTreeView* RenderWidget::InitializeLayerTreeView() {
   compositor_->Initialize(std::move(layer_tree_host),
                           std::move(animation_host));
 
-  compositor_->SetViewportSize(physical_backing_size_);
+  compositor_->SetViewportSize(physical_backing_size_, local_surface_id_);
   OnDeviceScaleFactorChanged();
   compositor_->SetRasterColorSpace(
-      screen_info_.color_space.GetParametricApproximation());
+      screen_info_.color_space.GetRasterColorSpace());
   compositor_->SetContentSourceId(current_content_source_id_);
-  compositor_->SetLocalSurfaceId(local_surface_id_);
   // For background pages and certain tests, we don't want to trigger
   // LayerTreeFrameSink creation.
   bool should_generate_frame_sink =
@@ -1640,16 +1669,17 @@ void RenderWidget::OnShowContextMenu(ui::MenuSourceType source_type,
 
 void RenderWidget::OnImeSetComposition(
     const base::string16& text,
-    const std::vector<WebCompositionUnderline>& underlines,
+    const std::vector<WebImeTextSpan>& ime_text_spans,
     const gfx::Range& replacement_range,
-    int selection_start, int selection_end) {
+    int selection_start,
+    int selection_end) {
   if (!ShouldHandleImeEvents())
     return;
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (focused_pepper_plugin_) {
-    focused_pepper_plugin_->render_frame()->OnImeSetComposition(
-        text, underlines, selection_start, selection_end);
+  if (auto* plugin = GetFocusedPepperPluginInsideWidget()) {
+    plugin->render_frame()->OnImeSetComposition(text, ime_text_spans,
+                                                selection_start, selection_end);
     return;
   }
 #endif
@@ -1657,8 +1687,7 @@ void RenderWidget::OnImeSetComposition(
   blink::WebInputMethodController* controller = GetInputMethodController();
   if (!controller ||
       !controller->SetComposition(
-          WebString::FromUTF16(text),
-          WebVector<WebCompositionUnderline>(underlines),
+          WebString::FromUTF16(text), WebVector<WebImeTextSpan>(ime_text_spans),
           replacement_range.IsValid()
               ? WebRange(replacement_range.start(), replacement_range.length())
               : WebRange(),
@@ -1673,16 +1702,16 @@ void RenderWidget::OnImeSetComposition(
 
 void RenderWidget::OnImeCommitText(
     const base::string16& text,
-    const std::vector<WebCompositionUnderline>& underlines,
+    const std::vector<WebImeTextSpan>& ime_text_spans,
     const gfx::Range& replacement_range,
     int relative_cursor_pos) {
   if (!ShouldHandleImeEvents())
     return;
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (focused_pepper_plugin_) {
-    focused_pepper_plugin_->render_frame()->OnImeCommitText(
-        text, replacement_range, relative_cursor_pos);
+  if (auto* plugin = GetFocusedPepperPluginInsideWidget()) {
+    plugin->render_frame()->OnImeCommitText(text, replacement_range,
+                                            relative_cursor_pos);
     return;
   }
 #endif
@@ -1690,8 +1719,7 @@ void RenderWidget::OnImeCommitText(
   input_handler_->set_handling_input_event(true);
   if (auto* controller = GetInputMethodController()) {
     controller->CommitText(
-        WebString::FromUTF16(text),
-        WebVector<WebCompositionUnderline>(underlines),
+        WebString::FromUTF16(text), WebVector<WebImeTextSpan>(ime_text_spans),
         replacement_range.IsValid()
             ? WebRange(replacement_range.start(), replacement_range.length())
             : WebRange(),
@@ -1706,9 +1734,8 @@ void RenderWidget::OnImeFinishComposingText(bool keep_selection) {
     return;
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (focused_pepper_plugin_) {
-    focused_pepper_plugin_->render_frame()->OnImeFinishComposingText(
-        keep_selection);
+  if (auto* plugin = GetFocusedPepperPluginInsideWidget()) {
+    plugin->render_frame()->OnImeFinishComposingText(keep_selection);
     return;
   }
 #endif
@@ -1894,8 +1921,8 @@ void RenderWidget::ShowVirtualKeyboardOnElementFocus() {
 
 ui::TextInputType RenderWidget::GetTextInputType() {
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (focused_pepper_plugin_)
-    return focused_pepper_plugin_->text_input_type();
+  if (auto* plugin = GetFocusedPepperPluginInsideWidget())
+    return plugin->text_input_type();
 #endif
   if (auto* controller = GetInputMethodController())
     return ConvertWebTextInputType(controller->TextInputType());
@@ -1994,7 +2021,7 @@ void RenderWidget::SetHidden(bool hidden) {
 
   if (is_hidden_) {
     RenderThreadImpl::current()->WidgetHidden();
-    time_to_first_active_paint_recorded_ = false;
+    first_update_visual_state_after_hidden_ = true;
   } else
     RenderThreadImpl::current()->WidgetRestored();
 
@@ -2051,12 +2078,12 @@ void RenderWidget::OnImeEventGuardFinish(ImeEventGuard* guard) {
 
 void RenderWidget::GetSelectionBounds(gfx::Rect* focus, gfx::Rect* anchor) {
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (focused_pepper_plugin_) {
+  if (auto* plugin = GetFocusedPepperPluginInsideWidget()) {
     // TODO(kinaba) http://crbug.com/101101
     // Current Pepper IME API does not handle selection bounds. So we simply
     // use the caret position as an empty range for now. It will be updated
     // after Pepper API equips features related to surrounding text retrieval.
-    blink::WebRect caret(focused_pepper_plugin_->GetCaretBounds());
+    blink::WebRect caret(plugin->GetCaretBounds());
     ConvertViewportToWindow(&caret);
     *focus = caret;
     *anchor = caret;
@@ -2136,7 +2163,7 @@ void RenderWidget::GetCompositionCharacterBounds(
   bounds->clear();
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (focused_pepper_plugin_)
+  if (GetFocusedPepperPluginInsideWidget())
     return;
 #endif
 
@@ -2154,7 +2181,7 @@ void RenderWidget::GetCompositionCharacterBounds(
 
 void RenderWidget::GetCompositionRange(gfx::Range* range) {
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (focused_pepper_plugin_)
+  if (GetFocusedPepperPluginInsideWidget())
     return;
 #endif
   WebRange web_range = GetWebWidget()->CompositionRange();
@@ -2184,8 +2211,8 @@ bool RenderWidget::ShouldUpdateCompositionInfo(
 
 bool RenderWidget::CanComposeInline() {
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (focused_pepper_plugin_)
-    return focused_pepper_plugin_->IsPluginAcceptingCompositionEvents();
+  if (auto* plugin = GetFocusedPepperPluginInsideWidget())
+    return plugin->IsPluginAcceptingCompositionEvents();
 #endif
   return true;
 }
@@ -2409,5 +2436,45 @@ blink::WebInputMethodController* RenderWidget::GetInputMethodController()
   return static_cast<blink::WebFrameWidget*>(GetWebWidget())
       ->GetActiveWebInputMethodController();
 }
+
+void RenderWidget::GetWidgetInputHandler(
+    mojom::WidgetInputHandlerRequest request) {
+  widget_input_handler_manager_->AddInterface(std::move(request));
+}
+
+void RenderWidget::SetWidgetBinding(mojom::WidgetRequest request) {
+  // Close the old binding if there was one.
+  // A RenderWidgetHost should not need more than one channel.
+  widget_binding_.Close();
+  widget_binding_.Bind(std::move(request));
+}
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+PepperPluginInstanceImpl* RenderWidget::GetFocusedPepperPluginInsideWidget() {
+  if (!GetWebWidget() || !GetWebWidget()->IsWebFrameWidget())
+    return nullptr;
+
+  // Focused pepper instance might not always be in the focused frame. For
+  // instance if a pepper instance and its embedder frame are focused an then
+  // another frame takes focus using javascript, the embedder frame will no
+  // longer be focused while the pepper instance is (the embedder frame's
+  // |focused_pepper_plugin_| is not nullptr). Especially, if the pepper plugin
+  // is fullscreen, clicking into the pepper will not refocus the embedder
+  // frame. This is why we have to traverse the whole frame tree to find the
+  // focused plugin.
+  blink::WebFrame* current_frame =
+      static_cast<blink::WebFrameWidget*>(GetWebWidget())->LocalRoot();
+  while (current_frame) {
+    RenderFrameImpl* render_frame =
+        current_frame->IsWebLocalFrame()
+            ? RenderFrameImpl::FromWebFrame(current_frame)
+            : nullptr;
+    if (render_frame && render_frame->focused_pepper_plugin())
+      return render_frame->focused_pepper_plugin();
+    current_frame = current_frame->TraverseNext();
+  }
+  return nullptr;
+}
+#endif
 
 }  // namespace content

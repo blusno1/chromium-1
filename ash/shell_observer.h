@@ -16,6 +16,8 @@ class PrefService;
 
 namespace ash {
 
+enum class VoiceInteractionState;
+
 class ASH_EXPORT ShellObserver {
  public:
   // Called when the AppList is shown or dismissed.
@@ -68,8 +70,17 @@ class ASH_EXPORT ShellObserver {
   // Called when a new KeyboardController is created.
   virtual void OnKeyboardControllerCreated() {}
 
-  // Called when voice interaction session starts / finishes.
-  virtual void OnVoiceInteractionStatusChanged(bool running) {}
+  // TODO(kaznacheev) Move voice interaction related methods to a separate
+  // observer (crbug.com/758650)
+  // Called when voice interaction session state changes.
+  virtual void OnVoiceInteractionStatusChanged(VoiceInteractionState state) {}
+
+  // Called when voice interaction is enabled/disabled.
+  virtual void OnVoiceInteractionEnabled(bool enabled) {}
+
+  // Called when voice interaction service is allowed/disallowed to access
+  // the "context" (text and graphic content that is currently on screen).
+  virtual void OnVoiceInteractionContextEnabled(bool enabled) {}
 
   // Called at the end of Shell::Init.
   virtual void OnShellInitialized() {}
@@ -78,14 +89,9 @@ class ASH_EXPORT ShellObserver {
   // most of Shell's state has been deleted.
   virtual void OnShellDestroyed() {}
 
-  // Called when the user profile pref service is available. Also called after
-  // multiprofile user switch. Never called with the login screen profile.
-  // On mash will be called with null at the start of user switch then again
-  // with a pref service once the connection to the mojo pref service is made.
-  // TODO(jamescook): Either maintain pref service connections for all multiuser
-  // profiles or make the pref service switch atomic with active user switch.
-  // http://crbug.com/705347
-  virtual void OnActiveUserPrefServiceChanged(PrefService* pref_service) {}
+  // Called when local state prefs are available. This occurs an arbitrary
+  // amount of time after Shell initialization. Only called once.
+  virtual void OnLocalStatePrefServiceInitialized(PrefService* pref_service) {}
 
  protected:
   virtual ~ShellObserver() {}

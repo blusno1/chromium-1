@@ -76,7 +76,7 @@ bool SetUserInputMethodImpl(
 
     base::DictionaryValue* const users_last_input_methods = updater.Get();
     if (users_last_input_methods)
-      users_last_input_methods->SetStringWithoutPathExpansion(username, "");
+      users_last_input_methods->SetKey(username, base::Value(""));
     return false;
   }
   if (!base::ContainsValue(ime_state->GetActiveInputMethodIds(),
@@ -96,7 +96,9 @@ void EnforcePolicyInputMethods(std::string user_input_method) {
   chromeos::CrosSettings* cros_settings = chromeos::CrosSettings::Get();
   const base::ListValue* login_screen_input_methods = nullptr;
   if (!cros_settings->GetList(chromeos::kDeviceLoginScreenInputMethods,
-                              &login_screen_input_methods)) {
+                              &login_screen_input_methods) ||
+      login_screen_input_methods->empty()) {
+    StopEnforcingPolicyInputMethods();
     return;
   }
 

@@ -25,6 +25,10 @@
 
 class BrowserContextKeyedServiceFactory;
 
+namespace chromeos {
+class RecentArcMediaSourceTest;
+}  // namespace chromeos
+
 namespace content {
 class BrowserContext;
 }  // namespace content
@@ -70,6 +74,8 @@ class ArcFileSystemOperationRunner
   using GetDocumentCallback = mojom::FileSystemInstance::GetDocumentCallback;
   using GetChildDocumentsCallback =
       mojom::FileSystemInstance::GetChildDocumentsCallback;
+  using GetRecentDocumentsCallback =
+      mojom::FileSystemInstance::GetRecentDocumentsCallback;
   using AddWatcherCallback = base::Callback<void(int64_t watcher_id)>;
   using RemoveWatcherCallback = base::Callback<void(bool success)>;
   using ChangeType = storage::WatcherManager::ChangeType;
@@ -121,6 +127,9 @@ class ArcFileSystemOperationRunner
   void GetChildDocuments(const std::string& authority,
                          const std::string& parent_document_id,
                          const GetChildDocumentsCallback& callback);
+  void GetRecentDocuments(const std::string& authority,
+                          const std::string& root_id,
+                          const GetRecentDocumentsCallback& callback);
   void AddWatcher(const std::string& authority,
                   const std::string& document_id,
                   const WatcherCallback& watcher_callback,
@@ -140,8 +149,12 @@ class ArcFileSystemOperationRunner
   void OnInstanceReady() override;
   void OnInstanceClosed() override;
 
+  // Returns true if operations will be deferred.
+  bool WillDefer() const { return should_defer_; }
+
  private:
   friend class ArcFileSystemOperationRunnerTest;
+  friend class chromeos::RecentArcMediaSourceTest;
 
   ArcFileSystemOperationRunner(content::BrowserContext* context,
                                ArcBridgeService* bridge_service,

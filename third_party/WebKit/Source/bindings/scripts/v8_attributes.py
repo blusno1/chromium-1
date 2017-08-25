@@ -139,7 +139,7 @@ def attribute_context(interface, attribute, interfaces):
         'has_custom_getter': has_custom_getter(attribute),
         'has_custom_setter': has_custom_setter(attribute),
         'has_setter': has_setter(interface, attribute),
-        'idl_type': str(idl_type),  # need trailing [] on array for Dictionary::ConversionContext::setConversionType
+        'idl_type': str(idl_type),
         'is_cached_accessor': is_cached_accessor,
         'is_call_with_execution_context': has_extended_attribute_value(attribute, 'CallWith', 'ExecutionContext'),
         'is_call_with_script_state': has_extended_attribute_value(attribute, 'CallWith', 'ScriptState'),
@@ -198,7 +198,7 @@ def attribute_context(interface, attribute, interfaces):
         setter_context(interface, attribute, interfaces, context)
 
     # [RuntimeCallStatsCounter]
-    runtime_call_stats_context(context, extended_attributes)
+    runtime_call_stats_context(interface, attribute, context)
 
     # [CrossOrigin] is incompatible with a number of other attributes, so check
     # for them here.
@@ -213,14 +213,15 @@ def attribute_context(interface, attribute, interfaces):
     return context
 
 
-def runtime_call_stats_context(context, extended_attributes):
-    counter = ''
-    if 'RuntimeCallStatsCounter' in extended_attributes:
-        includes.add('platform/bindings/RuntimeCallStats.h')
-        counter = extended_attributes['RuntimeCallStatsCounter']
+def runtime_call_stats_context(interface, attribute, context):
+    includes.add('platform/bindings/RuntimeCallStats.h')
+    generic_counter_name = 'Blink_' + v8_utilities.cpp_name(interface) + '_' + attribute.name
+    (counter, extended_attribute_defined) = v8_utilities.rcs_counter_name(attribute, generic_counter_name)
     runtime_call_stats = {
-        'getter_counter': 'k%s_Getter' % counter if counter else '',
-        'setter_counter': 'k%s_Setter' % counter if counter else ''
+        'extended_attribute_defined': extended_attribute_defined,
+        'getter_counter': '%s_Getter' % counter,
+        'setter_counter': '%s_Setter' % counter,
+        'constructor_getter_callback_counter': '%s_ConstructorGetterCallback' % generic_counter_name,
     }
     context.update({
         'runtime_call_stats': runtime_call_stats
@@ -365,7 +366,9 @@ def getter_base_name(interface, attribute, arguments):
     extended_attributes = attribute.extended_attributes
 
     if 'Reflect' not in extended_attributes:
-        return uncapitalize(cpp_name(attribute))
+        name = cpp_name(attribute)
+        return name if 'ImplementedAs' in extended_attributes \
+            else uncapitalize(name)
 
     content_attribute_name = extended_attributes['Reflect'] or attribute.name.lower()
     if content_attribute_name in ['class', 'id', 'name']:
@@ -485,12 +488,12 @@ def setter_expression(interface, attribute, context):
                 attribute.name == 'onerror'):
             includes.add('bindings/core/v8/V8ErrorHandler.h')
             arguments.append(
-                'V8EventListenerHelper::EnsureEventListener<V8ErrorHandler>(' +
-                'v8Value, true, ScriptState::ForReceiverObject(info))')
+                'V8EventListenerHelper::EnsureErrorHandler(' +
+                'ScriptState::ForRelevantRealm(info), v8Value)')
         else:
             arguments.append(
                 'V8EventListenerHelper::GetEventListener(' +
-                'ScriptState::ForReceiverObject(info), v8Value, true, ' +
+                'ScriptState::ForRelevantRealm(info), v8Value, true, ' +
                 'kListenerFindOrCreate)')
     else:
         arguments.append('cppValue')

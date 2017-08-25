@@ -59,6 +59,7 @@ Layer::Inputs::Inputs(int layer_id)
       user_scrollable_vertical(true),
       main_thread_scrolling_reasons(
           MainThreadScrollingReason::kNotScrollingOnMain),
+      is_resized_by_browser_controls(false),
       is_container_for_fixed_position_layers(false),
       mutable_properties(MutableProperty::kNone),
       scroll_parent(nullptr),
@@ -126,16 +127,15 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
   if (layer_tree_host_) {
     layer_tree_host_->property_trees()->needs_rebuild = true;
     layer_tree_host_->UnregisterLayer(this);
-    if (!layer_tree_host_->GetSettings().use_layer_lists &&
-        inputs_.element_id) {
+    if (!layer_tree_host_->IsUsingLayerLists() && inputs_.element_id) {
       layer_tree_host_->UnregisterElement(inputs_.element_id,
-                                          ElementListType::ACTIVE, this);
+                                          ElementListType::ACTIVE);
     }
   }
   if (host) {
     host->property_trees()->needs_rebuild = true;
     host->RegisterLayer(this);
-    if (!host->GetSettings().use_layer_lists && inputs_.element_id) {
+    if (!host->IsUsingLayerLists() && inputs_.element_id) {
       host->RegisterElement(inputs_.element_id, ElementListType::ACTIVE, this);
     }
   }
@@ -153,7 +153,7 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
   if (inputs_.mask_layer.get())
     inputs_.mask_layer->SetLayerTreeHost(host);
 
-  if (host && !host->GetSettings().use_layer_lists &&
+  if (host && !host->IsUsingLayerLists() &&
       GetMutatorHost()->HasAnyAnimation(element_id())) {
     host->SetNeedsCommit();
   }
@@ -1112,6 +1112,18 @@ bool Layer::DescendantIsFixedToContainerLayer() const {
   return false;
 }
 
+void Layer::SetIsResizedByBrowserControls(bool resized) {
+  if (inputs_.is_resized_by_browser_controls == resized)
+    return;
+  inputs_.is_resized_by_browser_controls = resized;
+
+  SetNeedsCommit();
+}
+
+bool Layer::IsResizedByBrowserControls() const {
+  return inputs_.is_resized_by_browser_controls;
+}
+
 void Layer::SetIsContainerForFixedPositionLayers(bool container) {
   if (inputs_.is_container_for_fixed_position_layers == container)
     return;
@@ -1419,13 +1431,14 @@ void Layer::RunMicroBenchmark(MicroBenchmark* benchmark) {
 
 void Layer::SetElementId(ElementId id) {
   DCHECK(IsPropertyChangeAllowed());
-  if (inputs_.element_id == id)
+  if ((layer_tree_host_ && layer_tree_host_->IsUsingLayerLists()) ||
+      inputs_.element_id == id)
     return;
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
                "Layer::SetElementId", "element", id.AsValue().release());
   if (inputs_.element_id && layer_tree_host()) {
     layer_tree_host_->UnregisterElement(inputs_.element_id,
-                                        ElementListType::ACTIVE, this);
+                                        ElementListType::ACTIVE);
   }
 
   inputs_.element_id = id;

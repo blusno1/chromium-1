@@ -241,6 +241,9 @@ class ServiceManagerTest : public test::ServiceTest,
 #if defined(OS_WIN)
     platform_channel_pair.PrepareToPassClientHandleToChildProcess(
         &child_command_line, &options.handles_to_inherit);
+#elif defined(OS_FUCHSIA)
+    platform_channel_pair.PrepareToPassClientHandleToChildProcess(
+        &child_command_line, &options.handles_to_transfer);
 #else
     platform_channel_pair.PrepareToPassClientHandleToChildProcess(
         &child_command_line, &options.fds_to_remap);
@@ -262,6 +265,7 @@ class ServiceManagerTest : public test::ServiceTest,
 
     target_ = base::LaunchProcess(child_command_line, options);
     DCHECK(target_.IsValid());
+    platform_channel_pair.ChildProcessLaunched();
     receiver->SetPID(target_.Pid());
     invitation.Send(
         target_.Handle(),

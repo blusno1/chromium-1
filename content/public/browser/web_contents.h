@@ -409,6 +409,9 @@ class WebContents : public PageNavigator,
   virtual bool IsAudioMuted() const = 0;
   virtual void SetAudioMuted(bool mute) = 0;
 
+  // Returns true if the audio is currently audible.
+  virtual bool IsCurrentlyAudible() = 0;
+
   // Indicates whether any frame in the WebContents is connected to a Bluetooth
   // Device.
   virtual bool IsConnectedToBluetoothDevice() const = 0;
@@ -792,7 +795,7 @@ class WebContents : public PageNavigator,
   // Returns a map containing the sizes of all currently playing videos.
   using VideoSizeMap =
       base::flat_map<WebContentsObserver::MediaPlayerId, gfx::Size>;
-  virtual const VideoSizeMap& GetCurrentlyPlayingVideoSizes() = 0;
+  virtual base::Optional<gfx::Size> GetFullscreenVideoSize() = 0;
   virtual bool IsFullscreen() = 0;
 
   // Tells the renderer to clear the focused element (if any).

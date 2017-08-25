@@ -57,10 +57,17 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebFallbackThemeEngine.h"
 #include "public/platform/WebRect.h"
+#include "public/web/WebKit.h"
 
 // The methods in this file are shared by all themes on every platform.
 
 namespace blink {
+
+// Wrapper function defined in WebKit.h
+void SetMockThemeEnabledForTest(bool value) {
+  LayoutTestSupport::SetMockThemeEnabledForTest(value);
+  LayoutTheme::GetTheme().DidChangeThemeEngine();
+}
 
 using namespace HTMLNames;
 
@@ -177,18 +184,20 @@ void LayoutTheme::AdjustStyle(ComputedStyle& style, Element* e) {
         LengthSize control_size = platform_theme_->GetControlSize(
             part, style.GetFont().GetFontDescription(),
             LengthSize(style.Width(), style.Height()), style.EffectiveZoom());
+
+        LengthSize min_control_size = platform_theme_->MinimumControlSize(
+            part, style.GetFont().GetFontDescription(), style.EffectiveZoom());
+
+        // Only potentially set min-size to |control_size| for these parts.
+        if (part == kCheckboxPart || part == kRadioPart)
+          SetMinimumSize(style, &control_size, &min_control_size);
+        else
+          SetMinimumSize(style, nullptr, &min_control_size);
+
         if (control_size.Width() != style.Width())
           style.SetWidth(control_size.Width());
         if (control_size.Height() != style.Height())
           style.SetHeight(control_size.Height());
-
-        // Min-Width / Min-Height
-        LengthSize min_control_size = platform_theme_->MinimumControlSize(
-            part, style.GetFont().GetFontDescription(), style.EffectiveZoom());
-        if (min_control_size.Width() != style.MinWidth())
-          style.SetMinWidth(min_control_size.Width());
-        if (min_control_size.Height() != style.MinHeight())
-          style.SetMinHeight(min_control_size.Height());
 
         // Font
         FontDescription control_font = platform_theme_->ControlFont(
@@ -268,48 +277,6 @@ String LayoutTheme::ExtraMediaControlsStyleSheet() {
 
 String LayoutTheme::ExtraFullscreenStyleSheet() {
   return String();
-}
-
-static String FormatChromiumMediaControlsTime(float time,
-                                              float duration,
-                                              bool include_separator) {
-  if (!std::isfinite(time))
-    time = 0;
-  if (!std::isfinite(duration))
-    duration = 0;
-  int seconds = static_cast<int>(fabsf(time));
-  int minutes = seconds / 60;
-
-  seconds %= 60;
-
-  // duration defines the format of how the time is rendered
-  int duration_secs = static_cast<int>(fabsf(duration));
-  int duration_mins = duration_secs / 60;
-
-  // New UI includes a leading "/ " before duration.
-  const char* separator = include_separator ? "/ " : "";
-
-  // 0-9 minutes duration is 0:00
-  // 10-99 minutes duration is 00:00
-  // >99 minutes duration is 000:00
-  if (duration_mins > 99 || minutes > 99)
-    return String::Format("%s%s%03d:%02d", separator, (time < 0 ? "-" : ""),
-                          minutes, seconds);
-  if (duration_mins > 10)
-    return String::Format("%s%s%02d:%02d", separator, (time < 0 ? "-" : ""),
-                          minutes, seconds);
-
-  return String::Format("%s%s%01d:%02d", separator, (time < 0 ? "-" : ""),
-                        minutes, seconds);
-}
-
-String LayoutTheme::FormatMediaControlsTime(float time) const {
-  return FormatChromiumMediaControlsTime(time, time, true);
-}
-
-String LayoutTheme::FormatMediaControlsCurrentTime(float current_time,
-                                                   float duration) const {
-  return FormatChromiumMediaControlsTime(current_time, duration, false);
 }
 
 Color LayoutTheme::ActiveSelectionBackgroundColor() const {
@@ -898,15 +865,30 @@ void LayoutTheme::SetSizeIfAuto(ComputedStyle& style, const IntSize& size) {
 }
 
 // static
-void LayoutTheme::SetMinimumSizeIfAuto(ComputedStyle& style,
-                                       const IntSize& size) {
+void LayoutTheme::SetMinimumSize(ComputedStyle& style,
+                                 const LengthSize* part_size,
+                                 const LengthSize* min_part_size) {
+  DCHECK(part_size || min_part_size);
   // We only want to set a minimum size if no explicit size is specified, to
   // avoid overriding author intentions.
-  if (style.MinWidth().IsIntrinsicOrAuto() && style.Width().IsIntrinsicOrAuto())
-    style.SetMinWidth(Length(size.Width(), kFixed));
-  if (style.MinHeight().IsIntrinsicOrAuto() &&
+  if (part_size && style.MinWidth().IsIntrinsicOrAuto() &&
+      style.Width().IsIntrinsicOrAuto())
+    style.SetMinWidth(part_size->Width());
+  else if (min_part_size && min_part_size->Width() != style.MinWidth())
+    style.SetMinWidth(min_part_size->Width());
+  if (part_size && style.MinHeight().IsIntrinsicOrAuto() &&
       style.Height().IsIntrinsicOrAuto())
-    style.SetMinHeight(Length(size.Height(), kFixed));
+    style.SetMinHeight(part_size->Height());
+  else if (min_part_size && min_part_size->Height() != style.MinHeight())
+    style.SetMinHeight(min_part_size->Height());
+}
+
+// static
+void LayoutTheme::SetMinimumSizeIfAuto(ComputedStyle& style,
+                                       const IntSize& size) {
+  LengthSize length_size(Length(size.Width(), kFixed),
+                         Length(size.Height(), kFixed));
+  SetMinimumSize(style, &length_size);
 }
 
 void LayoutTheme::AdjustCheckboxStyleUsingFallbackTheme(

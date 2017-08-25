@@ -13,7 +13,6 @@
 #include "base/strings/string16.h"
 
 class GURL;
-class PrefService;
 
 namespace aura {
 class Window;
@@ -32,20 +31,15 @@ class Connector;
 }
 
 namespace ui {
-#if defined(USE_OZONE)
 class InputDeviceControllerClient;
-#endif
-class MenuModel;
 }
 
 namespace ash {
 
 class AccessibilityDelegate;
 class GPUSupport;
+class NetworkingConfigDelegate;
 class PaletteDelegate;
-class Shelf;
-struct ShelfItem;
-class SystemTrayDelegate;
 class WallpaperDelegate;
 
 // Delegate of the Shell.
@@ -98,8 +92,8 @@ class ASH_EXPORT ShellDelegate {
   virtual void ShelfInit() = 0;
   virtual void ShelfShutdown() = 0;
 
-  // Creates a system-tray delegate. Shell takes ownership of the delegate.
-  virtual SystemTrayDelegate* CreateSystemTrayDelegate() = 0;
+  // Returns the delegate. May be null in tests.
+  virtual NetworkingConfigDelegate* GetNetworkingConfigDelegate() = 0;
 
   // Creates a wallpaper delegate. Shell takes ownership of the delegate.
   virtual std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() = 0;
@@ -108,11 +102,6 @@ class ASH_EXPORT ShellDelegate {
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;
 
   virtual std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() = 0;
-
-  // Creates a menu model for the |shelf| and optional shelf |item|.
-  // If |item| is null, this creates a context menu for the wallpaper or shelf.
-  virtual ui::MenuModel* CreateContextMenu(Shelf* shelf,
-                                           const ShelfItem* item) = 0;
 
   // Creates a GPU support object. Shell takes ownership of the object.
   virtual GPUSupport* CreateGPUSupport() = 0;
@@ -123,10 +112,6 @@ class ASH_EXPORT ShellDelegate {
   virtual void OpenKeyboardShortcutHelpPage() const {}
 
   virtual gfx::Image GetDeprecatedAcceleratorImage() const = 0;
-
-  virtual PrefService* GetActiveUserPrefService() const = 0;
-
-  virtual PrefService* GetLocalStatePrefService() const = 0;
 
   // If |use_local_state| is true, returns the touchscreen status from local
   // state, otherwise from user prefs.
@@ -147,10 +132,8 @@ class ASH_EXPORT ShellDelegate {
   // Suspends all WebContents-associated media sessions to stop managed players.
   virtual void SuspendMediaSessions() {}
 
-#if defined(USE_OZONE)
   // Creator of Shell owns this; it's assumed this outlives Shell.
   virtual ui::InputDeviceControllerClient* GetInputDeviceControllerClient() = 0;
-#endif
 };
 
 }  // namespace ash

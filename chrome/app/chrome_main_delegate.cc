@@ -72,6 +72,7 @@
 #include "chrome/browser/downgrade/user_data_downgrade.h"
 #include "chrome/child/v8_breakpad_support_win.h"
 #include "chrome/common/child_process_logging.h"
+#include "chrome_elf/chrome_elf_main.h"
 #include "sandbox/win/src/sandbox.h"
 #include "ui/base/resource/resource_bundle_win.h"
 #endif
@@ -390,19 +391,14 @@ struct MainFunction {
 // Initializes the user data dir. Must be called before InitializeLocalState().
 void InitializeUserDataDir(base::CommandLine* command_line) {
 #if defined(OS_WIN)
+  // Reach out to chrome_elf for the truth on the user data directory.
+  // Note that in tests, this links to chrome_elf_test_stubs.
   wchar_t user_data_dir_buf[MAX_PATH], invalid_user_data_dir_buf[MAX_PATH];
 
-  using GetUserDataDirectoryThunkFunction =
-      void (*)(wchar_t*, size_t, wchar_t*, size_t);
-  HMODULE elf_module = GetModuleHandle(chrome::kChromeElfDllName);
-  if (elf_module) {
-    // If we're in a test, chrome_elf won't be loaded.
-    GetUserDataDirectoryThunkFunction get_user_data_directory_thunk =
-        reinterpret_cast<GetUserDataDirectoryThunkFunction>(
-            GetProcAddress(elf_module, "GetUserDataDirectoryThunk"));
-    get_user_data_directory_thunk(
-        user_data_dir_buf, arraysize(user_data_dir_buf),
-        invalid_user_data_dir_buf, arraysize(invalid_user_data_dir_buf));
+  // In tests this may return false, implying the user data dir should be unset.
+  if (GetUserDataDirectoryThunk(user_data_dir_buf, arraysize(user_data_dir_buf),
+                                invalid_user_data_dir_buf,
+                                arraysize(invalid_user_data_dir_buf))) {
     base::FilePath user_data_dir(user_data_dir_buf);
     if (invalid_user_data_dir_buf[0] != 0) {
       chrome::SetInvalidSpecifiedUserDataDir(
@@ -411,16 +407,6 @@ void InitializeUserDataDir(base::CommandLine* command_line) {
     }
     CHECK(PathService::OverrideAndCreateIfNeeded(chrome::DIR_USER_DATA,
                                                  user_data_dir, false, true));
-  } else {
-    // In tests, just respect the flag if given.
-    base::FilePath user_data_dir =
-        command_line->GetSwitchValuePath(switches::kUserDataDir);
-    if (!user_data_dir.empty()) {
-      if (user_data_dir.EndsWithSeparator())
-        user_data_dir = user_data_dir.StripTrailingSeparators();
-      CHECK(PathService::OverrideAndCreateIfNeeded(chrome::DIR_USER_DATA,
-                                                   user_data_dir, false, true));
-    }
   }
 #else  // OS_WIN
   base::FilePath user_data_dir =
@@ -1145,10 +1131,8 @@ service_manager::ProcessType ChromeMainDelegate::OverrideProcessType() {
   }
 
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
-  if (command_line.HasSwitch(switches::kMus) ||
-      command_line.HasSwitch(switches::kMash)) {
+  if (command_line.HasSwitch(switches::kMash))
     return service_manager::ProcessType::kServiceManager;
-  }
 #endif
 
   return service_manager::ProcessType::kDefault;

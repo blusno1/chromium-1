@@ -30,12 +30,13 @@
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/events/UIEventWithKeyState.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/FrameClient.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoadRequest.h"
-#include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
@@ -285,8 +286,8 @@ static Frame* CreateNewWindow(LocalFrame& opener_frame,
   if (!old_page)
     return nullptr;
 
-  policy = EffectiveNavigationPolicy(
-      policy, old_page->GetChromeClient().GetCurrentInputEvent(), features);
+  policy = EffectiveNavigationPolicy(policy, WebViewImpl::CurrentInputEvent(),
+                                     features);
 
   const SandboxFlags sandbox_flags =
       opener_frame.GetDocument()->IsSandboxed(
@@ -403,6 +404,23 @@ DOMWindow* CreateWindow(const String& url_string,
         kSyntaxError, "Unable to open a window with invalid URL '" +
                           completed_url.GetString() + "'.\n");
     return nullptr;
+  }
+
+  if (completed_url.ProtocolIsJavaScript() &&
+      opener_frame.GetDocument()->GetContentSecurityPolicy() &&
+      !ContentSecurityPolicy::ShouldBypassMainWorld(
+          opener_frame.GetDocument())) {
+    const int kJavascriptSchemeLength = sizeof("javascript:") - 1;
+    String script_source = DecodeURLEscapeSequences(completed_url.GetString())
+                               .Substring(kJavascriptSchemeLength);
+
+    if (!opener_frame.GetDocument()
+             ->GetContentSecurityPolicy()
+             ->AllowJavaScriptURLs(nullptr, script_source,
+                                   opener_frame.GetDocument()->Url(),
+                                   OrdinalNumber())) {
+      return nullptr;
+    }
   }
 
   WebWindowFeatures window_features =

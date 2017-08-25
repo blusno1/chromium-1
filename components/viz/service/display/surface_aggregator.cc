@@ -20,11 +20,11 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass_draw_quad.h"
-#include "cc/quads/shared_quad_state.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
-#include "cc/resources/resource_provider.h"
+#include "cc/resources/display_resource_provider.h"
+#include "components/viz/common/quads/shared_quad_state.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_client.h"
@@ -77,7 +77,7 @@ bool CalculateQuadSpaceDamageRect(
 }  // namespace
 
 SurfaceAggregator::SurfaceAggregator(SurfaceManager* manager,
-                                     cc::ResourceProvider* provider,
+                                     cc::DisplayResourceProvider* provider,
                                      bool aggregate_only_damaged)
     : manager_(manager),
       provider_(provider),
@@ -205,8 +205,10 @@ void SurfaceAggregator::HandleSurfaceQuad(
                         damage_rect_in_quad_space,
                         damage_rect_in_quad_space_valid);
     } else if (!surface) {
+      DLOG(ERROR) << surface_id << " is missing during aggregation";
       ++uma_stats_.missing_surface;
     } else {
+      DLOG(ERROR) << surface_id << " has no active frame during aggregation";
       ++uma_stats_.no_active_frame;
     }
     return;
@@ -379,9 +381,13 @@ void SurfaceAggregator::AddColorConversionPass() {
 
   auto* shared_quad_state =
       color_conversion_pass->CreateAndAppendSharedQuadState();
-  shared_quad_state->quad_layer_rect = output_rect;
-  shared_quad_state->visible_quad_layer_rect = output_rect;
-  shared_quad_state->opacity = 1.f;
+  shared_quad_state->SetAll(
+      /*quad_to_target_transform=*/gfx::Transform(),
+      /*quad_layer_rect=*/output_rect,
+      /*visible_quad_layer_rect=*/output_rect,
+      /*clip_rect=*/gfx::Rect(),
+      /*is_clipped=*/false, /*opacity=*/1.f,
+      /*blend_mode=*/SkBlendMode::kSrcOver, /*sorting_context_id=*/0);
 
   auto* quad =
       color_conversion_pass->CreateAndAppendDrawQuad<cc::RenderPassDrawQuad>();
@@ -391,28 +397,30 @@ void SurfaceAggregator::AddColorConversionPass() {
   dest_pass_list_->push_back(std::move(color_conversion_pass));
 }
 
-cc::SharedQuadState* SurfaceAggregator::CopySharedQuadState(
-    const cc::SharedQuadState* source_sqs,
+SharedQuadState* SurfaceAggregator::CopySharedQuadState(
+    const SharedQuadState* source_sqs,
     const gfx::Transform& target_transform,
     const ClipData& clip_rect,
     cc::RenderPass* dest_render_pass) {
   auto* copy_shared_quad_state =
       dest_render_pass->CreateAndAppendSharedQuadState();
-  *copy_shared_quad_state = *source_sqs;
   // target_transform contains any transformation that may exist
   // between the context that these quads are being copied from (i.e. the
   // surface's draw transform when aggregated from within a surface) to the
   // target space of the pass. This will be identity except when copying the
   // root draw pass from a surface into a pass when the surface draw quad's
   // transform is not identity.
-  copy_shared_quad_state->quad_to_target_transform.ConcatTransform(
-      target_transform);
-
+  gfx::Transform new_transform = source_sqs->quad_to_target_transform;
+  new_transform.ConcatTransform(target_transform);
   ClipData new_clip_rect = CalculateClipRect(
       clip_rect, ClipData(source_sqs->is_clipped, source_sqs->clip_rect),
       target_transform);
-  copy_shared_quad_state->is_clipped = new_clip_rect.is_clipped;
-  copy_shared_quad_state->clip_rect = new_clip_rect.rect;
+  copy_shared_quad_state->SetAll(new_transform, source_sqs->quad_layer_rect,
+                                 source_sqs->visible_quad_layer_rect,
+                                 new_clip_rect.rect, new_clip_rect.is_clipped,
+                                 source_sqs->opacity, source_sqs->blend_mode,
+                                 source_sqs->sorting_context_id);
+
   return copy_shared_quad_state;
 }
 
@@ -424,8 +432,7 @@ void SurfaceAggregator::CopyQuadsToPass(
     const ClipData& clip_rect,
     cc::RenderPass* dest_pass,
     const SurfaceId& surface_id) {
-  const cc::SharedQuadState* last_copied_source_shared_quad_state = nullptr;
-  const cc::SharedQuadState* dest_shared_quad_state = nullptr;
+  const SharedQuadState* last_copied_source_shared_quad_state = nullptr;
   // If the current frame has copy requests or cached render passes, then
   // aggregate the entire thing, as otherwise parts of the copy requests may be
   // ignored and we could cache partially drawn render pass.
@@ -469,7 +476,7 @@ void SurfaceAggregator::CopyQuadsToPass(
                         &damage_rect_in_quad_space_valid);
     } else {
       if (quad->shared_quad_state != last_copied_source_shared_quad_state) {
-        dest_shared_quad_state = CopySharedQuadState(
+        const SharedQuadState* dest_shared_quad_state = CopySharedQuadState(
             quad->shared_quad_state, target_transform, clip_rect, dest_pass);
         last_copied_source_shared_quad_state = quad->shared_quad_state;
         if (aggregate_only_damaged_ && !has_copy_requests_ &&
@@ -501,23 +508,22 @@ void SurfaceAggregator::CopyQuadsToPass(
           dest_pass->has_damage_from_contributing_content = true;
 
         dest_quad = dest_pass->CopyFromAndAppendRenderPassDrawQuad(
-            pass_quad, dest_shared_quad_state, remapped_pass_id);
+            pass_quad, remapped_pass_id);
       } else if (quad->material == cc::DrawQuad::TEXTURE_CONTENT) {
         const auto* texture_quad = cc::TextureDrawQuad::MaterialCast(quad);
         if (texture_quad->secure_output_only &&
             (!output_is_secure_ || copy_request_passes_.count(dest_pass->id))) {
           auto* solid_color_quad =
               dest_pass->CreateAndAppendDrawQuad<cc::SolidColorDrawQuad>();
-          solid_color_quad->SetNew(dest_shared_quad_state, quad->rect,
-                                   quad->visible_rect, SK_ColorBLACK, false);
+          solid_color_quad->SetNew(dest_pass->shared_quad_state_list.back(),
+                                   quad->rect, quad->visible_rect,
+                                   SK_ColorBLACK, false);
           dest_quad = solid_color_quad;
         } else {
-          dest_quad = dest_pass->CopyFromAndAppendDrawQuad(
-              quad, dest_shared_quad_state);
+          dest_quad = dest_pass->CopyFromAndAppendDrawQuad(quad);
         }
       } else {
-        dest_quad =
-            dest_pass->CopyFromAndAppendDrawQuad(quad, dest_shared_quad_state);
+        dest_quad = dest_pass->CopyFromAndAppendDrawQuad(quad);
       }
       if (!child_to_parent_map.empty()) {
         for (ResourceId& resource_id : dest_quad->resources) {

@@ -55,6 +55,7 @@
 #include "ui/views/mus/pointer_watcher_event_router.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/shadow_types.h"
+#include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/wm_state.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -297,10 +298,13 @@ void WindowManager::SetWindowManagerClient(aura::WindowManagerClient* client) {
 }
 
 void WindowManager::OnWmConnected() {
+  // InstallFrameDecorationValues() must be called before the shell is created,
+  // otherwise Mus attempts to notify clients with no frame decorations, which
+  // triggers validation errors.
+  InstallFrameDecorationValues();
   CreateShell();
   if (show_primary_host_on_connect_)
     Shell::GetPrimaryRootWindow()->GetHost()->Show();
-  InstallFrameDecorationValues();
 }
 
 void WindowManager::OnWmSetBounds(aura::Window* window,
@@ -485,6 +489,10 @@ bool WindowManager::IsWindowActive(aura::Window* window) {
 
 void WindowManager::OnWmDeactivateWindow(aura::Window* window) {
   Shell::Get()->activation_client()->DeactivateWindow(window);
+}
+
+void WindowManager::OnEventBlockedByModalWindow(aura::Window* window) {
+  AnimateWindow(window, ::wm::WINDOW_ANIMATION_TYPE_BOUNCE);
 }
 
 }  // namespace mus

@@ -201,8 +201,8 @@ const base::Feature kMediaCastOverlayButton{"MediaCastOverlayButton",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use AndroidOverlay rather than ContentVideoView in clank?
-const base::Feature kUseAndroidOverlay{"use-android_overlay",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kUseAndroidOverlay{"UseAndroidOverlay",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Let video track be unselected when video is playing in the background.
 const base::Feature kBackgroundVideoTrackOptimization{
@@ -225,6 +225,10 @@ const base::Feature kMemoryPressureBasedSourceBufferGC{
 // Note that mojo CDM support is still under development. Some features are
 // still missing and this feature should only be enabled for testing.
 const base::Feature kMojoCdm{"MojoCdm", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Support FLAC codec within ISOBMFF streams used with Media Source Extensions.
+const base::Feature kMseFlacInIsobmff{"MseFlacInIsobmff",
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use the new Remote Playback / media flinging pipeline.
 const base::Feature kNewRemotePlaybackPipeline{
@@ -267,7 +271,7 @@ const base::Feature kLowDelayVideoRenderingOnLiveStream{
 // Enables Media Engagement Index recording. The data from which will
 // be used to bypass autoplay policies.
 const base::Feature kRecordMediaEngagementScores{
-    "kRecordMediaEngagementScores", base::FEATURE_ENABLED_BY_DEFAULT};
+    "RecordMediaEngagementScores", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the Media Engagement Index to override autoplay policies if an
 // origins engagement score is high enough.
@@ -287,7 +291,7 @@ const base::Feature kVideoRotateToFullscreen{"VideoRotateToFullscreen",
 // when using Encrypted Media Extensions (EME) API.
 // TODO(xhwang): Remove this after feature launch. See http://crbug.com/493521
 const base::Feature kMediaDrmPersistentLicense{
-    "MediaDrmPersistentLicense", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MediaDrmPersistentLicense", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #endif
 

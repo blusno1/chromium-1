@@ -30,6 +30,7 @@
 #include "build/build_config.h"
 #include "cc/input/touch_action.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "content/browser/child_process_importance.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_navigation_entry.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -38,7 +39,6 @@
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
-#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/renderer_host/cursor_manager.h"
@@ -47,6 +47,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -76,6 +77,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
+#include "content/test/mock_overscroll_observer.h"
 #include "ipc/ipc.mojom.h"
 #include "ipc/ipc_security_test_util.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -101,7 +103,10 @@
 #include "ui/native_theme/native_theme_features.h"
 
 #if defined(USE_AURA)
+#include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
+#include "content/public/browser/overscroll_configuration.h"
+#include "content/test/mock_overscroll_controller_delegate_aura.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -116,6 +121,7 @@
 #include "content/browser/android/ime_adapter_android.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_manager_android.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
+#include "content/test/mock_overscroll_refresh_handler_android.h"
 #include "ui/gfx/geometry/point_f.h"
 #endif
 
@@ -744,6 +750,21 @@ class SitePerProcessFeaturePolicyBrowserTest
     result[0].feature = feature;
     result[0].matches_all_origins = true;
     return result;
+  }
+};
+
+// SitePerProcessFeaturePolicyDisabledBrowserTest
+
+class SitePerProcessFeaturePolicyDisabledBrowserTest
+    : public SitePerProcessBrowserTest {
+ public:
+  SitePerProcessFeaturePolicyDisabledBrowserTest() {}
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    SitePerProcessBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(switches::kDisableBlinkFeatures,
+                                    "FeaturePolicy");
   }
 };
 
@@ -1411,6 +1432,220 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
   DCHECK_EQ(filter->last_rect().x(), 0);
   DCHECK_EQ(filter->last_rect().y(), 0);
 }
+
+#if defined(USE_AURA) || defined(OS_ANDROID)
+
+// When unconsumed scrolls in a child bubble to the root and start an
+// overscroll gesture, the subsequent gesture scroll update events should be
+// consumed by the root. The child should not be able to scroll during the
+// overscroll gesture.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       RootConsumesScrollDuringOverscrollGesture) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  RenderWidgetHostViewBase* rwhv_root = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+  ASSERT_EQ(1U, root->child_count());
+
+  FrameTreeNode* child_node = root->child_at(0);
+
+#if defined(USE_AURA)
+  // The child must be horizontally scrollable.
+  GURL child_url(embedded_test_server()->GetURL("b.com", "/wide_page.html"));
+#elif defined(OS_ANDROID)
+  // The child must be vertically scrollable.
+  GURL child_url(embedded_test_server()->GetURL("b.com", "/tall_page.html"));
+#endif
+  NavigateFrameToURL(child_node, child_url);
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   +--Site B ------- proxies for A\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/",
+      DepictFrameTree(root));
+
+  RenderWidgetHostViewChildFrame* rwhv_child =
+      static_cast<RenderWidgetHostViewChildFrame*>(
+          child_node->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  WaitForChildFrameSurfaceReady(child_node->current_frame_host());
+
+  ASSERT_EQ(gfx::Vector2dF(), rwhv_root->GetLastScrollOffset());
+  ASSERT_EQ(gfx::Vector2dF(), rwhv_child->GetLastScrollOffset());
+
+  RenderWidgetHostInputEventRouter* router =
+      static_cast<WebContentsImpl*>(shell()->web_contents())
+          ->GetInputEventRouter();
+
+  {
+    // Set up the RenderWidgetHostInputEventRouter to send the gesture stream
+    // to the child.
+    const gfx::Rect root_bounds = rwhv_root->GetViewBounds();
+    const gfx::Rect child_bounds = rwhv_child->GetViewBounds();
+    const float page_scale_factor = GetPageScaleFactor(shell());
+    const gfx::Point point_in_child(
+        gfx::ToCeiledInt((child_bounds.x() - root_bounds.x() + 10) *
+                         page_scale_factor),
+        gfx::ToCeiledInt((child_bounds.y() - root_bounds.y() + 10) *
+                         page_scale_factor));
+    gfx::Point dont_care;
+    ASSERT_EQ(rwhv_child->GetRenderWidgetHost(),
+              router->GetRenderWidgetHostAtPoint(rwhv_root, point_in_child,
+                                                 &dont_care));
+
+    blink::WebTouchEvent touch_event(
+        blink::WebInputEvent::kTouchStart, blink::WebInputEvent::kNoModifiers,
+        blink::WebInputEvent::kTimeStampForTesting);
+    touch_event.touches_length = 1;
+    touch_event.touches[0].state = blink::WebTouchPoint::kStatePressed;
+    touch_event.touches[0].SetPositionInWidget(point_in_child.x(),
+                                               point_in_child.y());
+    touch_event.unique_touch_event_id = 1;
+    router->RouteTouchEvent(rwhv_root, &touch_event,
+                            ui::LatencyInfo(ui::SourceEventType::TOUCH));
+
+    blink::WebGestureEvent gesture_event(
+        blink::WebInputEvent::kGestureTapDown,
+        blink::WebInputEvent::kNoModifiers,
+        blink::WebInputEvent::kTimeStampForTesting);
+    gesture_event.source_device = blink::kWebGestureDeviceTouchscreen;
+    gesture_event.unique_touch_event_id = touch_event.unique_touch_event_id;
+    router->RouteGestureEvent(rwhv_root, &gesture_event,
+                              ui::LatencyInfo(ui::SourceEventType::TOUCH));
+  }
+
+#if defined(USE_AURA)
+  RenderWidgetHostViewAura* rwhva =
+      static_cast<RenderWidgetHostViewAura*>(rwhv_root);
+  std::unique_ptr<MockOverscrollControllerDelegateAura>
+      mock_overscroll_delegate =
+          base::MakeUnique<MockOverscrollControllerDelegateAura>(rwhva);
+  rwhva->overscroll_controller()->set_delegate(mock_overscroll_delegate.get());
+  MockOverscrollObserver* mock_overscroll_observer =
+      mock_overscroll_delegate.get();
+#elif defined(OS_ANDROID)
+  RenderWidgetHostViewAndroid* rwhv_android =
+      static_cast<RenderWidgetHostViewAndroid*>(rwhv_root);
+  std::unique_ptr<MockOverscrollRefreshHandlerAndroid> mock_overscroll_handler =
+      base::MakeUnique<MockOverscrollRefreshHandlerAndroid>();
+  rwhv_android->SetOverscrollControllerForTesting(
+      mock_overscroll_handler.get());
+  MockOverscrollObserver* mock_overscroll_observer =
+      mock_overscroll_handler.get();
+#endif  // defined(USE_AURA)
+
+  std::unique_ptr<InputEventAckWaiter> gesture_begin_observer_child =
+      base::MakeUnique<InputEventAckWaiter>(
+          blink::WebInputEvent::kGestureScrollBegin);
+  child_node->current_frame_host()
+      ->GetRenderWidgetHost()
+      ->AddInputEventObserver(gesture_begin_observer_child.get());
+  std::unique_ptr<InputEventAckWaiter> gesture_end_observer_child =
+      base::MakeUnique<InputEventAckWaiter>(
+          blink::WebInputEvent::kGestureScrollEnd);
+  child_node->current_frame_host()
+      ->GetRenderWidgetHost()
+      ->AddInputEventObserver(gesture_end_observer_child.get());
+
+#if defined(USE_AURA)
+  const float overscroll_threshold =
+      GetOverscrollConfig(OVERSCROLL_CONFIG_HORIZ_THRESHOLD_START_TOUCHSCREEN);
+#elif defined(OS_ANDROID)
+  const float overscroll_threshold = 0.f;
+#endif
+
+  // First we need our scroll to initiate an overscroll gesture in the root
+  // via unconsumed scrolls in the child.
+  blink::WebGestureEvent gesture_scroll_begin(
+      blink::WebGestureEvent::kGestureScrollBegin,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::kTimeStampForTesting);
+  gesture_scroll_begin.source_device = blink::kWebGestureDeviceTouchscreen;
+  gesture_scroll_begin.unique_touch_event_id = 1;
+  gesture_scroll_begin.data.scroll_begin.delta_hint_units =
+      blink::WebGestureEvent::ScrollUnits::kPrecisePixels;
+  gesture_scroll_begin.data.scroll_begin.delta_x_hint = 0.f;
+  gesture_scroll_begin.data.scroll_begin.delta_y_hint = 0.f;
+#if defined(USE_AURA)
+  // For aura, we scroll horizontally to activate an overscroll navigation.
+  gesture_scroll_begin.data.scroll_begin.delta_x_hint =
+      overscroll_threshold + 1;
+#elif defined(OS_ANDROID)
+  // For android, we scroll vertically to activate pull-to-refresh.
+  gesture_scroll_begin.data.scroll_begin.delta_y_hint =
+      overscroll_threshold + 1;
+#endif
+  router->RouteGestureEvent(rwhv_root, &gesture_scroll_begin,
+                            ui::LatencyInfo(ui::SourceEventType::TOUCH));
+
+  // Make sure the child is indeed receiving the gesture stream.
+  gesture_begin_observer_child->Wait();
+
+  blink::WebGestureEvent gesture_scroll_update(
+      blink::WebGestureEvent::kGestureScrollUpdate,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::kTimeStampForTesting);
+  gesture_scroll_update.source_device = blink::kWebGestureDeviceTouchscreen;
+  gesture_scroll_update.unique_touch_event_id = 1;
+  gesture_scroll_update.data.scroll_update.delta_units =
+      blink::WebGestureEvent::ScrollUnits::kPrecisePixels;
+  gesture_scroll_update.data.scroll_update.delta_x = 0.f;
+  gesture_scroll_update.data.scroll_update.delta_y = 0.f;
+#if defined(USE_AURA)
+  float* delta = &gesture_scroll_update.data.scroll_update.delta_x;
+#elif defined(OS_ANDROID)
+  float* delta = &gesture_scroll_update.data.scroll_update.delta_y;
+#endif
+  *delta = overscroll_threshold + 1;
+  mock_overscroll_observer->Reset();
+  // This will bring us into an overscroll gesture.
+  router->RouteGestureEvent(rwhv_root, &gesture_scroll_update,
+                            ui::LatencyInfo(ui::SourceEventType::TOUCH));
+  // Note that in addition to verifying that we get the overscroll update, it
+  // is necessary to wait before sending the next event to prevent our multiple
+  // GestureScrollUpdates from being coalesced.
+  mock_overscroll_observer->WaitForUpdate();
+
+  // This scroll is in the same direction and so it will contribute to the
+  // overscroll.
+  *delta = 10.0f;
+  mock_overscroll_observer->Reset();
+  router->RouteGestureEvent(rwhv_root, &gesture_scroll_update,
+                            ui::LatencyInfo(ui::SourceEventType::TOUCH));
+  mock_overscroll_observer->WaitForUpdate();
+
+  // Now we reverse direction. The child could scroll in this direction, but
+  // since we're in an overscroll gesture, the root should consume it.
+  *delta = -5.0f;
+  mock_overscroll_observer->Reset();
+  router->RouteGestureEvent(rwhv_root, &gesture_scroll_update,
+                            ui::LatencyInfo(ui::SourceEventType::TOUCH));
+  mock_overscroll_observer->WaitForUpdate();
+
+  blink::WebGestureEvent gesture_scroll_end(
+      blink::WebGestureEvent::kGestureScrollEnd,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::kTimeStampForTesting);
+  gesture_scroll_end.source_device = blink::kWebGestureDeviceTouchscreen;
+  gesture_scroll_end.unique_touch_event_id = 1;
+  gesture_scroll_end.data.scroll_end.delta_units =
+      blink::WebGestureEvent::ScrollUnits::kPrecisePixels;
+  mock_overscroll_observer->Reset();
+  router->RouteGestureEvent(rwhv_root, &gesture_scroll_end,
+                            ui::LatencyInfo(ui::SourceEventType::TOUCH));
+  mock_overscroll_observer->WaitForEnd();
+
+  // Ensure that the method of providing the child's scroll events to the root
+  // does not leave the child in an invalid state.
+  gesture_end_observer_child->Wait();
+}
+#endif  // defined(USE_AURA) || defined(OS_ANDROID)
 
 // Test that an ET_SCROLL event sent to an out-of-process iframe correctly
 // results in a scroll. This is only handled by RenderWidgetHostViewAura
@@ -2477,10 +2712,8 @@ class FailingLoadFactory : public mojom::URLLoaderFactory {
                                 traffic_annotation) override {
     new FailingURLLoaderImpl(std::move(client));
   }
-  void SyncLoad(int32_t routing_id,
-                int32_t request_id,
-                const ResourceRequest& request,
-                SyncLoadCallback callback) override {}
+
+  void Clone(mojom::URLLoaderFactoryRequest request) override { NOTREACHED(); }
 };
 }
 
@@ -7119,43 +7352,131 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ParentDetachRemoteChild) {
   EXPECT_TRUE(watcher.did_exit_normally());
 }
 
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, VisibilityChanged) {
-  GURL main_url(
-      embedded_test_server()->GetURL("a.com", "/page_with_iframe.html"));
+// TODO(ekaramad): Move this test out of this file when addressing
+// https://crbug.com/754726.
+// This test verifies that RFHImpl::ForEachImmediateLocalRoot works as expected.
+// The frame tree used in the test is:
+//                                A0
+//                            /    |    \
+//                          A1     B1    A2
+//                         /  \    |    /  \
+//                        B2   A3  B3  A4   C2
+//                       /    /   / \    \
+//                      D1   D2  C3  C4  C5
+//
+// As an example, the expected set of immediate local roots for the root node A0
+// should be {B1, B2, C2, D2, C5}. Note that the order is compatible with that
+// of a BFS traversal from root node A0.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, FindImmediateLocalRoots) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com",
+      "/cross_site_iframe_factory.html?a(a(b(d),a(d)),b(b(c,c)),a(a(c),c))"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
-  EXPECT_EQ(shell()->web_contents()->GetLastCommittedURL(), main_url);
 
-  GURL cross_site_url =
-      embedded_test_server()->GetURL("oopif.com", "/title1.html");
+  // Each entry is of the frame "LABEL:ILR1ILR2..." where ILR stands for
+  // immediate local root.
+  std::string immediate_local_roots[] = {
+      "A0:B1B2C2D2C5", "A1:B2D2", "B1:C3C4", "A2:C2C5", "B2:D1",
+      "A3:D2",         "B3:C3C4", "A4:C5",   "C2:",     "D1:",
+      "D2:",           "C3:",     "C4:",     "C5:"};
 
-  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  std::map<RenderFrameHostImpl*, std::string>
+      frame_to_immediate_local_roots_map;
+  std::map<RenderFrameHostImpl*, std::string> frame_to_label_map;
+  size_t index = 0;
+  // Map each RenderFrameHostImpl to its label and set of immediate local roots.
+  for (auto* ftn : web_contents()->GetFrameTree()->Nodes()) {
+    std::string roots = immediate_local_roots[index++];
+    frame_to_immediate_local_roots_map[ftn->current_frame_host()] = roots;
+    frame_to_label_map[ftn->current_frame_host()] = roots.substr(0, 2);
+  }
 
-  TestNavigationObserver observer(shell()->web_contents());
+  // For each frame in the tree, verify that ForEachImmediateLocalRoot properly
+  // visits each and only each immediate local root in a BFS traversal order.
+  for (auto* ftn : web_contents()->GetFrameTree()->Nodes()) {
+    RenderFrameHostImpl* current_frame_host = ftn->current_frame_host();
+    std::list<RenderFrameHostImpl*> frame_list;
+    current_frame_host->ForEachImmediateLocalRoot(
+        base::Bind([](std::list<RenderFrameHostImpl*>* ilr_list,
+                      RenderFrameHostImpl* rfh) { ilr_list->push_back(rfh); },
+                   &frame_list));
 
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
-  EXPECT_EQ(cross_site_url, observer.last_navigation_url());
-  EXPECT_TRUE(observer.last_navigation_succeeded());
+    std::string result = frame_to_label_map[current_frame_host];
+    result.append(":");
+    for (auto* ilr_ptr : frame_list)
+      result.append(frame_to_label_map[ilr_ptr]);
+    EXPECT_EQ(frame_to_immediate_local_roots_map[current_frame_host], result);
+  }
+}
 
-  RenderWidgetHostImpl* render_widget_host =
-      root->child_at(0)->current_frame_host()->GetRenderWidgetHost();
-  EXPECT_FALSE(render_widget_host->is_hidden());
+// This test verifies that changing the CSS visibility of a cross-origin
+// <iframe> is forwarded to its corresponding RenderWidgetHost and all other
+// RenderWidgetHosts corresponding to the nested cross-origin frame.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, CSSVisibilityChanged) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b(b(c(d(d(a))))))"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // Find all child RenderWidgetHosts.
+  std::vector<RenderWidgetHostImpl*> child_widget_hosts;
+  FrameTreeNode* first_cross_process_child =
+      web_contents()->GetFrameTree()->root()->child_at(0);
+  for (auto* ftn : web_contents()->GetFrameTree()->SubtreeNodes(
+           first_cross_process_child)) {
+    RenderFrameHostImpl* frame_host = ftn->current_frame_host();
+    if (!frame_host->is_local_root())
+      continue;
+
+    child_widget_hosts.push_back(frame_host->GetRenderWidgetHost());
+  }
+
+  // Ignoring the root, there is exactly 4 local roots and hence 5
+  // RenderWidgetHosts on the page.
+  EXPECT_EQ(4U, child_widget_hosts.size());
+
+  // Initially all the RenderWidgetHosts should be visible.
+  for (size_t index = 0; index < child_widget_hosts.size(); ++index) {
+    EXPECT_FALSE(child_widget_hosts[index]->is_hidden())
+        << "The RWH at distance " << index + 1U
+        << " from root RWH should not be hidden.";
+  }
 
   std::string show_script =
       "document.querySelector('iframe').style.visibility = 'visible';";
   std::string hide_script =
       "document.querySelector('iframe').style.visibility = 'hidden';";
 
-  // Verify that hiding leads to a notification from RenderWidgetHost.
-  RenderWidgetHostVisibilityObserver hide_observer(
-      root->child_at(0)->current_frame_host()->GetRenderWidgetHost(), false);
-  EXPECT_TRUE(ExecuteScript(shell(), hide_script));
-  EXPECT_TRUE(hide_observer.WaitUntilSatisfied());
+  // Define observers for notifications about hiding child RenderWidgetHosts.
+  std::vector<std::unique_ptr<RenderWidgetHostVisibilityObserver>>
+      hide_widget_host_observers(child_widget_hosts.size());
+  for (size_t index = 0U; index < child_widget_hosts.size(); ++index) {
+    hide_widget_host_observers[index].reset(
+        new RenderWidgetHostVisibilityObserver(child_widget_hosts[index],
+                                               false));
+  }
 
-  // Verify showing leads to a notification as well.
-  RenderWidgetHostVisibilityObserver show_observer(
-      root->child_at(0)->current_frame_host()->GetRenderWidgetHost(), true);
+  EXPECT_TRUE(ExecuteScript(shell(), hide_script));
+  for (size_t index = 0U; index < child_widget_hosts.size(); ++index) {
+    EXPECT_TRUE(hide_widget_host_observers[index]->WaitUntilSatisfied())
+        << "Expected RenderWidgetHost at distance " << index + 1U
+        << " from root RenderWidgetHost to become hidden.";
+  }
+
+  // Define observers for notifications about showing child RenderWidgetHosts.
+  std::vector<std::unique_ptr<RenderWidgetHostVisibilityObserver>>
+      show_widget_host_observers(child_widget_hosts.size());
+  for (size_t index = 0U; index < child_widget_hosts.size(); ++index) {
+    show_widget_host_observers[index].reset(
+        new RenderWidgetHostVisibilityObserver(child_widget_hosts[index],
+                                               true));
+  }
+
   EXPECT_TRUE(ExecuteScript(shell(), show_script));
-  EXPECT_TRUE(show_observer.WaitUntilSatisfied());
+  for (size_t index = 0U; index < child_widget_hosts.size(); ++index) {
+    EXPECT_TRUE(show_widget_host_observers[index]->WaitUntilSatisfied())
+        << "Expected RenderWidgetHost at distance " << index + 1U
+        << " from root RenderWidgetHost to become shown.";
+  }
 }
 
 // A class which counts the number of times a RenderWidgetHostViewChildFrame
@@ -7288,7 +7609,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
       shell(),
       "document.getElementsByName('frame1')[0].style.visibility = 'hidden'"));
   ASSERT_TRUE(hide_observer.WaitUntilSatisfied());
-  EXPECT_TRUE(first_child_view->FrameConnectorForTesting()->is_hidden());
+  EXPECT_TRUE(first_child_view->FrameConnectorForTesting()->IsHidden());
 
   // Verify that only the second view can become visible now.
   EXPECT_FALSE(first_child_view->CanBecomeVisible());
@@ -8285,12 +8606,12 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // Prevent b.com process from terminating right away once the subframe
   // navigates away from b.com below.  This is necessary so that the renderer
   // process has time to process the closings of RenderWidget and RenderView,
-  // which is where the original bug was triggered.  Incrementing worker
-  // RefCount will cause RenderProcessHostImpl::Cleanup to forego process
+  // which is where the original bug was triggered.  Incrementing the keep alive
+  // ref count will cause RenderProcessHostImpl::Cleanup to forego process
   // termination.
   RenderProcessHost* subframe_process =
       root->child_at(0)->current_frame_host()->GetProcess();
-  subframe_process->IncrementSharedWorkerRefCount();
+  subframe_process->IncrementKeepAliveRefCount();
 
   // Navigate the subframe away from b.com.  Since this is the last active
   // frame in the b.com process, this causes the RenderWidget and RenderView to
@@ -8312,7 +8633,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // process hasn't heard the OnChannelError yet).  This race will need to be
   // fixed.
 
-  subframe_process->DecrementSharedWorkerRefCount();
+  subframe_process->DecrementKeepAliveRefCount();
 }
 
 // Tests that an input event targeted to a out-of-process iframe correctly
@@ -8696,10 +9017,10 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 #endif
 
 // Check that out-of-process frames correctly calculate their ability to enter
-// fullscreen. A frame is allowed enter fullscreen if the allowFullscreen
-// attribute is present in all of its ancestor <iframe> elements.  For OOPIF,
-// when a parent frame changes this attribute, the change is replicated to the
-// child frame and its proxies.
+// fullscreen when Feature Policy is disabled. A frame is allowed to enter
+// fullscreen if the allowFullscreen attribute is present in all of its ancestor
+// <iframe> elements.  For OOPIF, when a parent frame changes this attribute,
+// the change is replicated to the child frame and its proxies.
 //
 // The test checks the following cases:
 //
@@ -8707,7 +9028,12 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 // 2. Attribute injected dynamically via JavaScript
 // 3. Multiple levels of nesting (A-embed-B-embed-C)
 // 4. Cross-site subframe navigation
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, AllowFullscreen) {
+//
+// Note that this is testing deprecated behavior that will eventually be
+// removed, once the Fullscreen spec has been updated to integrate with Feature
+// Policy.
+IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyDisabledBrowserTest,
+                       AllowFullscreen) {
   // Load a page with a cross-site <iframe allowFullscreen>.
   GURL url_1(embedded_test_server()->GetURL(
       "a.com", "/page_with_allowfullscreen_frame.html"));
@@ -9969,74 +10295,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
       FrameHostMsg_ContextMenu(rfh->GetRoutingID(), ContextMenuParams()));
 }
 
-// Test iframe "allow" attribute is propagated correctly.
-IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest, AllowedIFrames) {
-  GURL url(embedded_test_server()->GetURL("/allowed_frames.html"));
-  EXPECT_TRUE(NavigateToURL(shell(), url));
-
-  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
-
-  // Iframes without "allow" attribute, or an empty "allow" attribute will not
-  // have any allowed features propagated.
-  EXPECT_TRUE(
-      root->child_at(0)->frame_owner_properties().allowed_features.empty());
-  EXPECT_TRUE(
-      root->child_at(1)->frame_owner_properties().allowed_features.empty());
-
-  // Make sure the third frame starts out at the correct cross-site page.
-  EXPECT_EQ(embedded_test_server()->GetURL("bar.com", "/title1.html"),
-            root->child_at(2)->current_url());
-  // Check allowed features are propagated correctly for cross-site iframes.
-  EXPECT_EQ(root->child_at(2)->frame_owner_properties().allowed_features.size(),
-            2u);
-  EXPECT_EQ(root->child_at(2)->frame_owner_properties().allowed_features[0],
-            blink::WebFeaturePolicyFeature::kFullscreen);
-  EXPECT_EQ(root->child_at(2)->frame_owner_properties().allowed_features[1],
-            blink::WebFeaturePolicyFeature::kVibrate);
-
-  // Check allowed features are propagated correctly for same-site iframes.
-  EXPECT_EQ(root->child_at(3)->frame_owner_properties().allowed_features.size(),
-            2u);
-  EXPECT_EQ(root->child_at(3)->frame_owner_properties().allowed_features[0],
-            blink::WebFeaturePolicyFeature::kFullscreen);
-  EXPECT_EQ(root->child_at(3)->frame_owner_properties().allowed_features[1],
-            blink::WebFeaturePolicyFeature::kVibrate);
-}
-
-// Test dynamic updates to iframe "allow" attribute are propagated correctly.
-IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
-                       AllowedIFramesDynamic) {
-  GURL main_url(embedded_test_server()->GetURL("/allowed_frames.html"));
-  EXPECT_TRUE(NavigateToURL(shell(), main_url));
-
-  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
-
-  // Test for dynamically removing "allow" attribute.
-  EXPECT_TRUE(ExecuteScript(
-      root, "document.getElementById('child-2').removeAttribute('allow')"));
-  EXPECT_TRUE(
-      root->child_at(2)->frame_owner_properties().allowed_features.empty());
-
-  // Test for dynamically setting "allow" attribute by element.setAttribute.
-  EXPECT_TRUE(ExecuteScript(
-      root,
-      "document.getElementById('child-3').setAttribute('allow', 'payment')"));
-  EXPECT_EQ(root->child_at(3)->frame_owner_properties().allowed_features.size(),
-            1u);
-  EXPECT_EQ(root->child_at(3)->frame_owner_properties().allowed_features[0],
-            blink::WebFeaturePolicyFeature::kPayment);
-
-  // Test for dynamically setting "allow" attribute by frame.allow="...".
-  EXPECT_TRUE(ExecuteScript(
-      root, "document.getElementById('child-3').allow='fullscreen vibrate'"));
-  EXPECT_EQ(root->child_at(3)->frame_owner_properties().allowed_features.size(),
-            2u);
-  EXPECT_EQ(root->child_at(3)->frame_owner_properties().allowed_features[0],
-            blink::WebFeaturePolicyFeature::kFullscreen);
-  EXPECT_EQ(root->child_at(3)->frame_owner_properties().allowed_features[1],
-            blink::WebFeaturePolicyFeature::kVibrate);
-}
-
 // Test iframe container policy is replicated properly to the browser.
 IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
                        ContainerPolicy) {
@@ -10844,6 +11102,98 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
                 ->child_at(0)
                 ->current_frame_host()
                 ->GetProcess());
+}
+
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TestChildProcessImportance) {
+  web_contents()->SetImportance(ChildProcessImportance::MODERATE);
+
+  // Construct root page with one child in different domain.
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  ASSERT_EQ(1u, root->child_count());
+  FrameTreeNode* child = root->child_at(0);
+
+  // Importance should survive initial navigation.
+  EXPECT_EQ(ChildProcessImportance::MODERATE,
+            static_cast<RenderProcessHostImpl*>(
+                root->current_frame_host()->GetProcess())
+                ->GetWidgetImportanceForTesting());
+  EXPECT_EQ(ChildProcessImportance::MODERATE,
+            static_cast<RenderProcessHostImpl*>(
+                child->current_frame_host()->GetProcess())
+                ->GetWidgetImportanceForTesting());
+
+  // Check setting importance.
+  web_contents()->SetImportance(ChildProcessImportance::NORMAL);
+  EXPECT_EQ(ChildProcessImportance::NORMAL,
+            static_cast<RenderProcessHostImpl*>(
+                root->current_frame_host()->GetProcess())
+                ->GetWidgetImportanceForTesting());
+  EXPECT_EQ(ChildProcessImportance::NORMAL,
+            static_cast<RenderProcessHostImpl*>(
+                child->current_frame_host()->GetProcess())
+                ->GetWidgetImportanceForTesting());
+  web_contents()->SetImportance(ChildProcessImportance::IMPORTANT);
+  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
+            static_cast<RenderProcessHostImpl*>(
+                root->current_frame_host()->GetProcess())
+                ->GetWidgetImportanceForTesting());
+  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
+            static_cast<RenderProcessHostImpl*>(
+                child->current_frame_host()->GetProcess())
+                ->GetWidgetImportanceForTesting());
+
+  // Check importance is maintained if child navigates to new domain.
+  int old_child_process_id = child->current_frame_host()->GetProcess()->GetID();
+  GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    NavigateFrameToURL(root->child_at(0), url);
+    deleted_observer.WaitUntilDeleted();
+  }
+  int new_child_process_id = child->current_frame_host()->GetProcess()->GetID();
+  EXPECT_NE(old_child_process_id, new_child_process_id);
+  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
+            static_cast<RenderProcessHostImpl*>(
+                child->current_frame_host()->GetProcess())
+                ->GetWidgetImportanceForTesting());
+
+  // Check importance is maintained if root navigates to new domain.
+  int old_root_process_id = root->current_frame_host()->GetProcess()->GetID();
+  child = nullptr;  // Going to navigate root to page without any child.
+  {
+    RenderFrameDeletedObserver deleted_observer(root->current_frame_host());
+    NavigateFrameToURL(root, url);
+    deleted_observer.WaitUntilDeleted();
+  }
+  EXPECT_EQ(0u, root->child_count());
+  int new_root_process_id = root->current_frame_host()->GetProcess()->GetID();
+  EXPECT_NE(old_root_process_id, new_root_process_id);
+  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
+            static_cast<RenderProcessHostImpl*>(
+                root->current_frame_host()->GetProcess())
+                ->GetWidgetImportanceForTesting());
+
+  // Check interstitial maintains importance.
+  TestInterstitialDelegate* delegate = new TestInterstitialDelegate;
+  WebContentsImpl* contents_impl =
+      static_cast<WebContentsImpl*>(web_contents());
+  GURL interstitial_url("http://interstitial");
+  InterstitialPageImpl* interstitial = new InterstitialPageImpl(
+      contents_impl, contents_impl, true, interstitial_url, delegate);
+  interstitial->Show();
+  WaitForInterstitialAttach(contents_impl);
+  RenderProcessHostImpl* interstitial_process =
+      static_cast<RenderProcessHostImpl*>(
+          interstitial->GetMainFrame()->GetProcess());
+  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
+            interstitial_process->GetWidgetImportanceForTesting());
+
+  web_contents()->SetImportance(ChildProcessImportance::MODERATE);
+  EXPECT_EQ(ChildProcessImportance::MODERATE,
+            interstitial_process->GetWidgetImportanceForTesting());
 }
 
 #if defined(OS_ANDROID)

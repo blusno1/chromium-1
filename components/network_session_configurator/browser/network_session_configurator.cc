@@ -15,6 +15,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "components/network_session_configurator/common/network_features.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/variations/variations_associated_data.h"
@@ -149,6 +150,17 @@ net::QuicTagVector GetQuicConnectionOptions(
   return net::ParseQuicConnectionOptions(it->second);
 }
 
+net::QuicTagVector GetQuicClientConnectionOptions(
+    const VariationParameters& quic_trial_params) {
+  VariationParameters::const_iterator it =
+      quic_trial_params.find("client_connection_options");
+  if (it == quic_trial_params.end()) {
+    return net::QuicTagVector();
+  }
+
+  return net::ParseQuicConnectionOptions(it->second);
+}
+
 bool ShouldForceHolBlocking(const VariationParameters& quic_trial_params) {
   return base::LowerCaseEqualsASCII(
       GetVariationParam(quic_trial_params, "force_hol_blocking"), "true");
@@ -259,6 +271,8 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
     params->quic_force_hol_blocking = ShouldForceHolBlocking(quic_trial_params);
     params->quic_connection_options =
         GetQuicConnectionOptions(quic_trial_params);
+    params->quic_client_connection_options =
+        GetQuicClientConnectionOptions(quic_trial_params);
     params->quic_close_sessions_on_ip_change =
         ShouldQuicCloseSessionsOnIpChange(quic_trial_params);
     int idle_connection_timeout_seconds =
@@ -419,6 +433,36 @@ void ParseCommandLineAndFieldTrials(const base::CommandLine& command_line,
 
   params->enable_token_binding =
       base::FeatureList::IsEnabled(features::kTokenBinding);
+}
+
+net::URLRequestContextBuilder::HttpCacheParams::Type ChooseCacheType(
+    const base::CommandLine& command_line) {
+#if !defined(OS_ANDROID)
+  if (command_line.HasSwitch(switches::kUseSimpleCacheBackend)) {
+    const std::string opt_value =
+        command_line.GetSwitchValueASCII(switches::kUseSimpleCacheBackend);
+    if (base::LowerCaseEqualsASCII(opt_value, "off"))
+      return net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE;
+    if (opt_value.empty() || base::LowerCaseEqualsASCII(opt_value, "on"))
+      return net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE;
+  }
+  const std::string experiment_name =
+      base::FieldTrialList::FindFullName("SimpleCacheTrial");
+  if (base::StartsWith(experiment_name, "Disable",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+    return net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE;
+  }
+  if (base::StartsWith(experiment_name, "ExperimentYes",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+    return net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE;
+  }
+#endif  // #if !defined(OS_ANDROID)
+
+#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
+  return net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE;
+#else
+  return net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE;
+#endif
 }
 
 }  // namespace network_session_configurator

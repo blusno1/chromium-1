@@ -54,15 +54,15 @@ SurfacesInstance::SurfacesInstance()
   // Webview does not own the surface so should not clear it.
   settings.should_clear_root_render_pass = false;
 
-  frame_sink_manager_.reset(new viz::FrameSinkManagerImpl);
+  frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>(
+      viz::SurfaceManager::LifetimeType::SEQUENCES);
   local_surface_id_allocator_.reset(new viz::LocalSurfaceIdAllocator());
 
   constexpr bool is_root = true;
-  constexpr bool handles_frame_sink_id_invalidation = true;
   constexpr bool needs_sync_points = true;
   support_ = viz::CompositorFrameSinkSupport::Create(
       this, frame_sink_manager_.get(), frame_sink_id_, is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+      needs_sync_points);
 
   begin_frame_source_.reset(new viz::StubBeginFrameSource);
   std::unique_ptr<cc::TextureMailboxDeleter> texture_mailbox_deleter(
@@ -130,7 +130,7 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   render_pass->SetNew(1, gfx::Rect(viewport), clip, gfx::Transform());
   render_pass->has_transparent_background = false;
 
-  cc::SharedQuadState* quad_state =
+  viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   quad_state->quad_to_target_transform = transform;
   quad_state->quad_layer_rect = gfx::Rect(frame_size);
@@ -186,7 +186,7 @@ void SurfacesInstance::SetSolidColorRootFrame() {
   gfx::Rect rect(surface_size_);
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
   render_pass->SetNew(1, rect, rect, gfx::Transform());
-  cc::SharedQuadState* quad_state =
+  viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   quad_state->SetAll(gfx::Transform(), rect, rect, rect, false, 1.f,
                      SkBlendMode::kSrcOver, 0);

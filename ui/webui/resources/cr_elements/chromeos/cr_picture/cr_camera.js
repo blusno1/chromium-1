@@ -13,7 +13,7 @@
  * Dimensions for camera capture.
  * @const
  */
-var CAPTURE_SIZE = {height: 480, width: 480};
+var CAPTURE_SIZE = {height: 576, width: 576};
 
 Polymer({
   is: 'cr-camera',
@@ -39,12 +39,13 @@ Polymer({
      */
     isFlipped_: {
       type: Boolean,
-      value: false,
+      value: true,
     },
   },
 
   /** @override */
   attached: function() {
+    this.$.userImageStreamCrop.classList.toggle('flip-x', this.isFlipped_);
     this.$.cameraVideo.addEventListener('canplay', function() {
       this.cameraOnline_ = true;
     }.bind(this));

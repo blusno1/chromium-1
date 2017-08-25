@@ -109,14 +109,14 @@
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/editing/CompositionUnderlineVectorBuilder.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FindInPageCoordinates.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/ImeTextSpanVectorBuilder.h"
 #include "core/editing/InputMethodController.h"
 #include "core/editing/PlainTextRange.h"
-#include "core/editing/SetSelectionData.h"
+#include "core/editing/SetSelectionOptions.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/TextFinder.h"
 #include "core/editing/iterators/TextIterator.h"
@@ -131,7 +131,7 @@
 #include "core/exported/WebDocumentLoaderImpl.h"
 #include "core/exported/WebPluginContainerImpl.h"
 #include "core/exported/WebRemoteFrameImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/PageScaleConstraintsSet.h"
@@ -954,7 +954,7 @@ void WebLocalFrameImpl::ReplaceSelection(const WebString& text) {
 void WebLocalFrameImpl::SetMarkedText(const WebString& text,
                                       unsigned location,
                                       unsigned length) {
-  Vector<CompositionUnderline> decorations;
+  Vector<ImeTextSpan> decorations;
   GetFrame()->GetInputMethodController().SetComposition(text, decorations,
                                                         location, length);
 }
@@ -1033,7 +1033,10 @@ bool WebLocalFrameImpl::ExecuteCommand(const WebString& name) {
     command = command.Substring(0, command.length() - 1);
 
   Node* plugin_lookup_context_node =
-      context_menu_node_ && name == "Copy" ? context_menu_node_ : nullptr;
+      context_menu_node_ && WebPluginContainerImpl::SupportsCommand(name)
+          ? context_menu_node_
+          : nullptr;
+
   WebPluginContainerImpl* plugin_container =
       GetFrame()->GetWebPluginContainer(plugin_lookup_context_node);
   if (plugin_container && plugin_container->ExecuteEditCommand(name))
@@ -1210,13 +1213,13 @@ void WebLocalFrameImpl::SelectRange(
       handle_visibility_behavior == kShowSelectionHandle ||
       (handle_visibility_behavior == kPreserveHandleVisibility &&
        selection.IsHandleVisible());
-  selection.SetSelection(SelectionInDOMTree::Builder()
-                             .SetBaseAndExtent(range)
-                             .SetAffinity(VP_DEFAULT_AFFINITY)
-                             .SetIsHandleVisible(show_handles)
-                             .SetIsDirectional(false)
-                             .Build(),
-                         SetSelectionData());
+  selection.SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(range)
+          .SetAffinity(VP_DEFAULT_AFFINITY)
+          .SetIsDirectional(false)
+          .Build(),
+      SetSelectionOptions::Builder().SetShouldShowHandle(show_handles).Build());
 }
 
 WebString WebLocalFrameImpl::RangeAsText(const WebRange& web_range) {
@@ -1286,7 +1289,7 @@ bool WebLocalFrameImpl::SetEditableSelectionOffsets(int start, int end) {
 bool WebLocalFrameImpl::SetCompositionFromExistingText(
     int composition_start,
     int composition_end,
-    const WebVector<WebCompositionUnderline>& underlines) {
+    const WebVector<WebImeTextSpan>& ime_text_spans) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::setCompositionFromExistingText");
   if (!GetFrame()->GetEditor().CanEdit())
     return false;
@@ -1299,7 +1302,7 @@ bool WebLocalFrameImpl::SetCompositionFromExistingText(
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   input_method_controller.SetCompositionFromExistingText(
-      CompositionUnderlineVectorBuilder::Build(underlines), composition_start,
+      ImeTextSpanVectorBuilder::Build(ime_text_spans), composition_start,
       composition_end);
 
   return true;
@@ -1537,7 +1540,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::CreateMainFrame(
   WebLocalFrameImpl* frame = new WebLocalFrameImpl(WebTreeScopeType::kDocument,
                                                    client, interface_registry);
   frame->SetOpener(opener);
-  Page& page = *static_cast<WebViewBase*>(web_view)->GetPage();
+  Page& page = *static_cast<WebViewImpl*>(web_view)->GetPage();
   DCHECK(!page.MainFrame());
   frame->InitializeCoreFrame(page, nullptr, name);
   // Can't force sandbox flags until there's a core frame.
@@ -1598,7 +1601,7 @@ WebLocalFrameImpl::WebLocalFrameImpl(
     WebTreeScopeType scope,
     WebFrameClient* client,
     blink::InterfaceRegistry* interface_registry)
-    : WebLocalFrameBase(scope),
+    : WebLocalFrame(scope),
       local_frame_client_(LocalFrameClientImpl::Create(this)),
       client_(client),
       autofill_client_(0),
@@ -1640,8 +1643,6 @@ DEFINE_TRACE(WebLocalFrameImpl) {
   visitor->Trace(context_menu_node_);
   visitor->Trace(input_method_controller_);
   visitor->Trace(text_checker_client_);
-  WebLocalFrameBase::Trace(visitor);
-  // TODO(slangley): Call this from WebLocalFrameBase, once WebFrame is in core.
   WebFrame::TraceFrames(visitor, this);
 }
 
@@ -1687,7 +1688,7 @@ LocalFrame* WebLocalFrameImpl::CreateChildFrame(
       owner_element->ScrollingMode(), owner_element->MarginWidth(),
       owner_element->MarginHeight(), owner_element->AllowFullscreen(),
       owner_element->AllowPaymentRequest(), owner_element->IsDisplayNone(),
-      owner_element->Csp(), owner_element->AllowedFeatures());
+      owner_element->Csp());
   // FIXME: Using subResourceAttributeName as fallback is not a perfect
   // solution. subResourceAttributeName returns just one attribute name. The
   // element might not have the attribute, and there might be other attributes
@@ -1719,7 +1720,7 @@ void WebLocalFrameImpl::CreateFrameView() {
   DCHECK(GetFrame());  // If frame() doesn't exist, we probably didn't init
                        // properly.
 
-  WebViewBase* web_view = ViewImpl();
+  WebViewImpl* web_view = ViewImpl();
 
   // Check if we're shutting down.
   if (!web_view->GetPage())
@@ -1768,7 +1769,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::FromFrameOwnerElement(Element* element) {
       ToLocalFrame(ToHTMLFrameOwnerElement(element)->ContentFrame()));
 }
 
-WebViewBase* WebLocalFrameImpl::ViewImpl() const {
+WebViewImpl* WebLocalFrameImpl::ViewImpl() const {
   if (!GetFrame())
     return nullptr;
   return GetFrame()->GetPage()->GetChromeClient().GetWebView();
@@ -1818,7 +1819,6 @@ void WebLocalFrameImpl::SetInputEventsScaleForEmulation(
 
 void WebLocalFrameImpl::LoadJavaScriptURL(const KURL& url) {
   DCHECK(GetFrame());
-
   // This is copied from ScriptController::executeScriptIfJavaScriptURL.
   // Unfortunately, we cannot just use that method since it is private, and
   // it also doesn't quite behave as we require it to for bookmarklets. The
@@ -1840,8 +1840,8 @@ void WebLocalFrameImpl::LoadJavaScriptURL(const KURL& url) {
 
   String script = DecodeURLEscapeSequences(
       url.GetString().Substring(strlen("javascript:")));
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Create(owner_document, UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(GetFrame(), UserGestureToken::kNewGesture);
   v8::HandleScope handle_scope(ToIsolate(GetFrame()));
   v8::Local<v8::Value> result =
       GetFrame()->GetScriptController().ExecuteScriptInMainWorldAndReturnValue(
@@ -2094,7 +2094,7 @@ void WebLocalFrameImpl::SetCommittedFirstRealLoad() {
 
 void WebLocalFrameImpl::SetHasReceivedUserGesture() {
   if (GetFrame())
-    GetFrame()->SetDocumentHasReceivedUserGesture();
+    GetFrame()->UpdateUserActivationInFrameTree();
 }
 
 void WebLocalFrameImpl::BlinkFeatureUsageReport(const std::set<int>& features) {

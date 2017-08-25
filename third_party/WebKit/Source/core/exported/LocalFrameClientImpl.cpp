@@ -46,10 +46,10 @@
 #include "core/exported/WebDevToolsFrontendImpl.h"
 #include "core/exported/WebDocumentLoaderImpl.h"
 #include "core/exported/WebPluginContainerImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLMediaElement.h"
@@ -112,12 +112,12 @@ Frame* ToCoreFrame(WebFrame* frame) {
 
 // Return the parent of |frame| as a LocalFrame, nullptr when there is no
 // parent or when the parent is a remote frame.
-LocalFrame* GetLocalParentFrame(WebLocalFrameBase* frame) {
+LocalFrame* GetLocalParentFrame(WebLocalFrameImpl* frame) {
   WebFrame* parent = frame->Parent();
   if (!parent || !parent->IsWebLocalFrame())
     return nullptr;
 
-  return ToWebLocalFrameBase(parent)->GetFrame();
+  return ToWebLocalFrameImpl(parent)->GetFrame();
 }
 
 // Returns whether the |local_frame| has been loaded using an MHTMLArchive. When
@@ -137,10 +137,10 @@ bool IsBackForwardNavigationInProgress(LocalFrame* local_frame) {
 
 }  // namespace
 
-LocalFrameClientImpl::LocalFrameClientImpl(WebLocalFrameBase* frame)
+LocalFrameClientImpl::LocalFrameClientImpl(WebLocalFrameImpl* frame)
     : web_frame_(frame) {}
 
-LocalFrameClientImpl* LocalFrameClientImpl::Create(WebLocalFrameBase* frame) {
+LocalFrameClientImpl* LocalFrameClientImpl::Create(WebLocalFrameImpl* frame) {
   return new LocalFrameClientImpl(frame);
 }
 
@@ -151,13 +151,13 @@ DEFINE_TRACE(LocalFrameClientImpl) {
   LocalFrameClient::Trace(visitor);
 }
 
-WebLocalFrameBase* LocalFrameClientImpl::GetWebFrame() const {
+WebLocalFrameImpl* LocalFrameClientImpl::GetWebFrame() const {
   return web_frame_.Get();
 }
 
 void LocalFrameClientImpl::DidCreateNewDocument() {
   if (web_frame_->Client())
-    web_frame_->Client()->DidCreateNewDocument(web_frame_);
+    web_frame_->Client()->DidCreateNewDocument();
 }
 
 void LocalFrameClientImpl::DispatchDidClearWindowObjectInMainWorld() {
@@ -173,7 +173,7 @@ void LocalFrameClientImpl::DispatchDidClearWindowObjectInMainWorld() {
   // FIXME: when extensions go out of process, this whole concept stops working.
   WebDevToolsFrontendImpl* dev_tools_frontend =
       web_frame_->Top()->IsWebLocalFrame()
-          ? ToWebLocalFrameBase(web_frame_->Top())->DevToolsFrontend()
+          ? ToWebLocalFrameImpl(web_frame_->Top())->DevToolsFrontend()
           : nullptr;
   if (dev_tools_frontend)
     dev_tools_frontend->DidClearWindowObject(web_frame_);
@@ -181,12 +181,12 @@ void LocalFrameClientImpl::DispatchDidClearWindowObjectInMainWorld() {
 
 void LocalFrameClientImpl::DocumentElementAvailable() {
   if (web_frame_->Client())
-    web_frame_->Client()->DidCreateDocumentElement(web_frame_);
+    web_frame_->Client()->DidCreateDocumentElement();
 }
 
 void LocalFrameClientImpl::RunScriptsAtDocumentElementAvailable() {
   if (web_frame_->Client())
-    web_frame_->Client()->RunScriptsAtDocumentElementAvailable(web_frame_);
+    web_frame_->Client()->RunScriptsAtDocumentElementAvailable();
   // The callback might have deleted the frame, do not use |this|!
 }
 
@@ -332,8 +332,7 @@ void LocalFrameClientImpl::Detached(FrameDetachType type) {
   // place at this point since we are no longer associated with the Page.
   web_frame_->SetClient(0);
 
-  client->FrameDetached(web_frame_,
-                        static_cast<WebFrameClient::DetachType>(type));
+  client->FrameDetached(static_cast<WebFrameClient::DetachType>(type));
 
   if (type == FrameDetachType::kRemove)
     web_frame_->DetachFromParent();
@@ -469,7 +468,7 @@ void LocalFrameClientImpl::DispatchDidChangeThemeColor() {
 }
 
 static bool AllowCreatingBackgroundTabs() {
-  const WebInputEvent* input_event = WebViewBase::CurrentInputEvent();
+  const WebInputEvent* input_event = WebViewImpl::CurrentInputEvent();
   if (!input_event || (input_event->GetType() != WebInputEvent::kMouseUp &&
                        (input_event->GetType() != WebInputEvent::kRawKeyDown &&
                         input_event->GetType() != WebInputEvent::kKeyDown) &&
@@ -634,28 +633,13 @@ void LocalFrameClientImpl::DownloadURL(const ResourceRequest& request,
                                     suggested_name);
 }
 
-void LocalFrameClientImpl::LoadURLExternally(
-    const ResourceRequest& request,
-    NavigationPolicy policy,
-    WebTriggeringEventInfo triggering_event_info,
-    bool should_replace_current_entry) {
-  DCHECK_NE(policy, NavigationPolicy::kNavigationPolicyDownload);
-  if (!web_frame_->Client())
-    return;
-  DCHECK(web_frame_->GetFrame()->GetDocument());
-  Fullscreen::FullyExitFullscreen(*web_frame_->GetFrame()->GetDocument());
-  web_frame_->Client()->LoadURLExternally(
-      WrappedResourceRequest(request), static_cast<WebNavigationPolicy>(policy),
-      triggering_event_info, should_replace_current_entry);
-}
-
 void LocalFrameClientImpl::LoadErrorPage(int reason) {
   if (web_frame_->Client())
     web_frame_->Client()->LoadErrorPage(reason);
 }
 
 bool LocalFrameClientImpl::NavigateBackForward(int offset) const {
-  WebViewBase* webview = web_frame_->ViewImpl();
+  WebViewImpl* webview = web_frame_->ViewImpl();
   if (!webview->Client())
     return false;
 
@@ -750,7 +734,7 @@ DocumentLoader* LocalFrameClientImpl::CreateDocumentLoader(
   WebDocumentLoaderImpl* document_loader = WebDocumentLoaderImpl::Create(
       frame, request, data, client_redirect_policy);
   if (web_frame_->Client())
-    web_frame_->Client()->DidCreateDocumentLoader(web_frame_, document_loader);
+    web_frame_->Client()->DidCreateDocumentLoader(document_loader);
   return document_loader;
 }
 
@@ -831,8 +815,8 @@ std::unique_ptr<WebMediaPlayer> LocalFrameClientImpl::CreateWebMediaPlayer(
     HTMLMediaElement& html_media_element,
     const WebMediaPlayerSource& source,
     WebMediaPlayerClient* client) {
-  WebLocalFrameBase* web_frame =
-      WebLocalFrameBase::FromFrame(html_media_element.GetDocument().GetFrame());
+  WebLocalFrameImpl* web_frame =
+      WebLocalFrameImpl::FromFrame(html_media_element.GetDocument().GetFrame());
 
   if (!web_frame || !web_frame->Client())
     return nullptr;
@@ -914,7 +898,7 @@ void LocalFrameClientImpl::DidChangeFrameOwnerProperties(
           frame_element->ScrollingMode(), frame_element->MarginWidth(),
           frame_element->MarginHeight(), frame_element->AllowFullscreen(),
           frame_element->AllowPaymentRequest(), frame_element->IsDisplayNone(),
-          frame_element->Csp(), frame_element->AllowedFeatures()));
+          frame_element->Csp()));
 }
 
 void LocalFrameClientImpl::DispatchWillStartUsingPeerConnectionHandler(
@@ -931,7 +915,7 @@ bool LocalFrameClientImpl::AllowWebGL(bool enabled_per_settings) {
 
 void LocalFrameClientImpl::DispatchWillInsertBody() {
   if (web_frame_->Client())
-    web_frame_->Client()->WillInsertBody(web_frame_);
+    web_frame_->Client()->WillInsertBody();
 }
 
 std::unique_ptr<WebServiceWorkerProvider>
@@ -964,7 +948,7 @@ void LocalFrameClientImpl::DispatchDidChangeManifest() {
 }
 
 unsigned LocalFrameClientImpl::BackForwardLength() {
-  WebViewBase* webview = web_frame_->ViewImpl();
+  WebViewImpl* webview = web_frame_->ViewImpl();
   if (!webview || !webview->Client())
     return 0;
   return webview->Client()->HistoryBackListCount() + 1 +
@@ -1007,7 +991,7 @@ bool LocalFrameClientImpl::ShouldUseClientLoFiForRequest(
 }
 
 WebDevToolsAgentImpl* LocalFrameClientImpl::DevToolsAgent() {
-  return WebLocalFrameBase::FromFrame(web_frame_->GetFrame()->LocalFrameRoot())
+  return WebLocalFrameImpl::FromFrame(web_frame_->GetFrame()->LocalFrameRoot())
       ->DevToolsAgentImpl();
 }
 

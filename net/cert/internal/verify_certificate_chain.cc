@@ -50,9 +50,10 @@ bool IsHandledCriticalExtension(const ParsedExtension& extension) {
     //   be able to interpret this extension (including the optional
     //   qualifier), or MUST reject the certificate.
     std::vector<der::Input> unused_policies;
+    CertErrors unused_errors;
     return ParseCertificatePoliciesExtension(
         extension.value, true /*fail_parsing_unknown_qualifier_oids*/,
-        &unused_policies);
+        &unused_policies, &unused_errors);
 
     // TODO(eroman): Give a better error message.
   }
@@ -176,6 +177,18 @@ void VerifyExtendedKeyUsage(const ParsedCertificate& cert,
           return;
         if (key_purpose_oid == ServerAuth())
           return;
+      }
+
+      // Add a warning if the certificate contains Netscape Server Gated Crypto.
+      // nsSGC is a deprecated mechanism, and not part of RFC 5280's
+      // profile. Some unexpired certificate chains still rely on it though
+      // (there are intermediates valid until 2020 that use it). See
+      // crbug.com/733403 for details.
+      for (const auto& key_purpose_oid : cert.extended_key_usage()) {
+        if (key_purpose_oid == NetscapeServerGatedCrypto()) {
+          errors->AddWarning(cert_errors::kEkuLacksServerAuthButHasGatedCrypto);
+          break;
+        }
       }
 
       errors->AddError(cert_errors::kEkuLacksServerAuth);

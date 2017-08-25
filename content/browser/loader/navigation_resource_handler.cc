@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "content/browser/loader/navigation_url_loader_impl_core.h"
-#include "content/browser/loader/netlog_observer.h"
 #include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_loader.h"
 #include "content/browser/loader/resource_request_info_impl.h"
@@ -57,7 +56,7 @@ void NavigationResourceHandler::Cancel() {
   if (core_) {
     DetachFromCore();
     if (has_controller()) {
-      CancelAndIgnore();
+      LayeredResourceHandler::Cancel();
     } else {
       OutOfBandCancel(net::ERR_ABORTED, true /* tell_renderer */);
     }
@@ -92,11 +91,10 @@ void NavigationResourceHandler::OnRequestRedirected(
 
   // The UI thread already cancelled the navigation. Do not proceed.
   if (!core_) {
-    controller->CancelAndIgnore();
+    controller->Cancel();
     return;
   }
 
-  NetLogObserver::PopulateResponseInfo(request(), response);
   response->head.encoded_data_length = request()->GetTotalReceivedBytes();
   core_->NotifyRequestRedirected(redirect_info, response);
 
@@ -112,13 +110,12 @@ void NavigationResourceHandler::OnResponseStarted(
 
   // The UI thread already cancelled the navigation. Do not proceed.
   if (!core_) {
-    controller->CancelAndIgnore();
+    controller->Cancel();
     return;
   }
 
   ResourceRequestInfoImpl* info = GetRequestInfo();
 
-  NetLogObserver::PopulateResponseInfo(request(), response);
   response->head.encoded_data_length = request()->raw_header_size();
 
   std::unique_ptr<NavigationData> cloned_data;

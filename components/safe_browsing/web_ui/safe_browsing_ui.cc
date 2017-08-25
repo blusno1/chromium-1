@@ -9,7 +9,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64url.h"
 #include "base/i18n/time_formatting.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -31,6 +33,14 @@ using base::Time;
 namespace safe_browsing {
 namespace {
 #if SAFE_BROWSING_DB_LOCAL
+
+base::Value UserReadableTimeFromMillisSinceEpoch(int64_t time_in_milliseconds) {
+  base::Time time = base::Time::UnixEpoch() +
+                    base::TimeDelta::FromMilliseconds(time_in_milliseconds);
+  return base::Value(
+      base::UTF16ToASCII(base::TimeFormatShortDateAndTime(time)));
+}
+
 void AddStoreInfo(const DatabaseManagerInfo::DatabaseInfo::StoreInfo store_info,
                   base::ListValue* database_info_list) {
   if (store_info.has_file_size_bytes() && store_info.has_file_name()) {
@@ -43,6 +53,18 @@ void AddStoreInfo(const DatabaseManagerInfo::DatabaseInfo::StoreInfo store_info,
     database_info_list->GetList().push_back(base::Value("Store update status"));
     database_info_list->GetList().push_back(
         base::Value(store_info.update_status()));
+  }
+  if (store_info.has_last_apply_update_time_millis()) {
+    database_info_list->GetList().push_back(base::Value("Last update time"));
+    database_info_list->GetList().push_back(
+        UserReadableTimeFromMillisSinceEpoch(
+            store_info.last_apply_update_time_millis()));
+  }
+  if (store_info.has_checks_attempted()) {
+    database_info_list->GetList().push_back(
+        base::Value("Number of database checks"));
+    database_info_list->GetList().push_back(
+        base::Value(static_cast<int>(store_info.checks_attempted())));
   }
 }
 
@@ -72,14 +94,106 @@ void AddUpdateInfo(const DatabaseManagerInfo::UpdateInfo update_info,
   }
   if (update_info.has_last_update_time_millis()) {
     database_info_list->GetList().push_back(base::Value("Last update time"));
-    // Converts time to Base::Time
-    base::Time last_update =
-        base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(
-                                      update_info.last_update_time_millis());
-    database_info_list->GetList().push_back(base::Value(
-        base::UTF16ToASCII(base::TimeFormatShortDateAndTime(last_update))));
+    database_info_list->GetList().push_back(
+        UserReadableTimeFromMillisSinceEpoch(
+            update_info.last_update_time_millis()));
   }
 }
+
+void ParseFullHashInfo(
+    const FullHashCacheInfo::FullHashCache::CachedHashPrefixInfo::FullHashInfo
+        full_hash_info,
+    base::DictionaryValue* full_hash_info_dict) {
+  if (full_hash_info.has_positive_expiry()) {
+    full_hash_info_dict->SetString(
+        "Positivie expiry",
+        UserReadableTimeFromMillisSinceEpoch(full_hash_info.positive_expiry())
+            .GetString());
+  }
+  if (full_hash_info.has_full_hash()) {
+    std::string full_hash;
+    base::Base64UrlEncode(full_hash_info.full_hash(),
+                          base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                          &full_hash);
+    full_hash_info_dict->SetString("Full hash (base64)", full_hash);
+  }
+  if (full_hash_info.list_identifier().has_platform_type()) {
+    full_hash_info_dict->SetInteger(
+        "platform_type", full_hash_info.list_identifier().platform_type());
+  }
+  if (full_hash_info.list_identifier().has_threat_entry_type()) {
+    full_hash_info_dict->SetInteger(
+        "threat_entry_type",
+        full_hash_info.list_identifier().threat_entry_type());
+  }
+  if (full_hash_info.list_identifier().has_threat_type()) {
+    full_hash_info_dict->SetInteger(
+        "threat_type", full_hash_info.list_identifier().threat_type());
+  }
+}
+
+void ParseFullHashCache(const FullHashCacheInfo::FullHashCache full_hash_cache,
+                        base::ListValue* full_hash_cache_list) {
+  base::DictionaryValue full_hash_cache_parsed;
+
+  if (full_hash_cache.has_hash_prefix()) {
+    std::string hash_prefix;
+    base::Base64UrlEncode(full_hash_cache.hash_prefix(),
+                          base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                          &hash_prefix);
+    full_hash_cache_parsed.SetString("Hash prefix (base64)", hash_prefix);
+  }
+  if (full_hash_cache.cached_hash_prefix_info().has_negative_expiry()) {
+    full_hash_cache_parsed.SetString(
+        "Negative expiry",
+        UserReadableTimeFromMillisSinceEpoch(
+            full_hash_cache.cached_hash_prefix_info().negative_expiry())
+            .GetString());
+  }
+
+  full_hash_cache_list->GetList().push_back(std::move(full_hash_cache_parsed));
+
+  for (auto full_hash_info_it :
+       full_hash_cache.cached_hash_prefix_info().full_hash_info()) {
+    base::DictionaryValue full_hash_info_dict;
+    ParseFullHashInfo(full_hash_info_it, &full_hash_info_dict);
+    full_hash_cache_list->GetList().push_back(std::move(full_hash_info_dict));
+  }
+}
+
+void ParseFullHashCacheInfo(const FullHashCacheInfo full_hash_cache_info_proto,
+                            base::ListValue* full_hash_cache_info) {
+  if (full_hash_cache_info_proto.has_number_of_hits()) {
+    base::DictionaryValue number_of_hits;
+    number_of_hits.SetInteger("Number of cache hits",
+                              full_hash_cache_info_proto.number_of_hits());
+    full_hash_cache_info->GetList().push_back(std::move(number_of_hits));
+  }
+
+  // Record FullHashCache list.
+  for (auto full_hash_cache_it : full_hash_cache_info_proto.full_hash_cache()) {
+    base::ListValue full_hash_cache_list;
+    ParseFullHashCache(full_hash_cache_it, &full_hash_cache_list);
+    full_hash_cache_info->GetList().push_back(std::move(full_hash_cache_list));
+  }
+}
+
+std::string AddFullHashCacheInfo(
+    const FullHashCacheInfo full_hash_cache_info_proto) {
+  std::string full_hash_cache_parsed;
+
+  base::ListValue full_hash_cache;
+  ParseFullHashCacheInfo(full_hash_cache_info_proto, &full_hash_cache);
+
+  base::Value* full_hash_cache_tree = &full_hash_cache;
+
+  JSONStringValueSerializer serializer(&full_hash_cache_parsed);
+  serializer.set_pretty_print(true);
+  serializer.Serialize(*full_hash_cache_tree);
+
+  return full_hash_cache_parsed;
+}
+
 #endif
 
 }  // namespace
@@ -141,12 +255,12 @@ void SafeBrowsingUIHandler::GetDatabaseManagerInfo(
 #if SAFE_BROWSING_DB_LOCAL
   const V4LocalDatabaseManager* local_database_manager_instance =
       V4LocalDatabaseManager::current_local_database_manager();
-
   if (local_database_manager_instance) {
     DatabaseManagerInfo database_manager_info_proto;
+    FullHashCacheInfo full_hash_cache_info_proto;
 
     local_database_manager_instance->CollectDatabaseManagerInfo(
-        &database_manager_info_proto);
+        &database_manager_info_proto, &full_hash_cache_info_proto);
 
     if (database_manager_info_proto.has_update_info()) {
       AddUpdateInfo(database_manager_info_proto.update_info(),
@@ -156,6 +270,9 @@ void SafeBrowsingUIHandler::GetDatabaseManagerInfo(
       AddDatabaseInfo(database_manager_info_proto.database_info(),
                       &database_manager_info);
     }
+
+    database_manager_info.GetList().push_back(
+        base::Value(AddFullHashCacheInfo(full_hash_cache_info_proto)));
   }
 #endif
 

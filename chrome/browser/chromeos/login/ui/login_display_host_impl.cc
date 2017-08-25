@@ -99,7 +99,7 @@
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
-#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/input_device_manager.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/geometry/rect.h"
@@ -190,20 +190,29 @@ void ShowLoginWizardFinish(
     chromeos::LoginDisplayHost* display_host) {
   TRACE_EVENT0("chromeos", "ShowLoginWizard::ShowLoginWizardFinish");
 
+  // Restore system timezone.
+  std::string timezone;
+  if (chromeos::system::PerUserTimezoneEnabled()) {
+    timezone = g_browser_process->local_state()->GetString(
+        prefs::kSigninScreenTimezone);
+  }
+
   if (ShouldShowSigninScreen(first_screen)) {
     display_host->StartSignInScreen(chromeos::LoginScreenContext());
   } else {
     display_host->StartWizard(first_screen);
 
     // Set initial timezone if specified by customization.
-    const std::string timezone_name = startup_manifest->initial_timezone();
-    VLOG(1) << "Initial time zone: " << timezone_name;
+    const std::string customization_timezone =
+        startup_manifest->initial_timezone();
+    VLOG(1) << "Initial time zone: " << customization_timezone;
     // Apply locale customizations only once to preserve whatever locale
     // user has changed to during OOBE.
-    if (!timezone_name.empty()) {
-      chromeos::system::TimezoneSettings::GetInstance()->SetTimezoneFromID(
-          base::UTF8ToUTF16(timezone_name));
-    }
+    if (!customization_timezone.empty())
+      timezone = customization_timezone;
+  }
+  if (!timezone.empty()) {
+    chromeos::system::SetSystemAndSigninScreenTimezone(timezone);
   }
 }
 
@@ -385,11 +394,7 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& wallpaper_bounds)
 
   display::Screen::GetScreen()->AddObserver(this);
 
-  // TODO(crbug.com/747267): Add Mash case. Not strictly needed since callee in
-  // observer method is NOP in Mash, but good for symmetry and to avoid leaking
-  // implementation details about OobeUI.
-  if (!ash_util::IsRunningInMash())
-    ui::DeviceDataManager::GetInstance()->AddObserver(this);
+  ui::InputDeviceManager::GetInstance()->AddObserver(this);
 
   // We need to listen to CLOSE_ALL_BROWSERS_REQUEST but not APP_TERMINATING
   // because/ APP_TERMINATING will never be fired as long as this keeps
@@ -501,11 +506,7 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
   CrasAudioHandler::Get()->RemoveAudioObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
 
-  // TODO(crbug.com/747267): Add Mash case. Not strictly needed since callee in
-  // observer method is NOP in Mash, but good for symmetry and to avoid leaking
-  // implementation details about OobeUI.
-  if (!ash_util::IsRunningInMash())
-    ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
+  ui::InputDeviceManager::GetInstance()->RemoveObserver(this);
 
   if (login_view_ && login_window_)
     login_window_->RemoveRemovalsObserver(this);
@@ -592,9 +593,9 @@ void LoginDisplayHostImpl::Finalize(base::OnceClosure completion_callback) {
   }
 }
 
-void LoginDisplayHostImpl::OpenProxySettings() {
+void LoginDisplayHostImpl::OpenProxySettings(const std::string& network_id) {
   if (login_view_)
-    login_view_->OpenProxySettings();
+    login_view_->OpenProxySettings(network_id);
 }
 
 void LoginDisplayHostImpl::SetStatusAreaVisible(bool visible) {
@@ -1168,18 +1169,25 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.bounds = wallpaper_bounds();
-  params.show_state = ui::SHOW_STATE_FULLSCREEN;
+  // Disable fullscreen state for voice interaction OOBE since the shelf should
+  // be visible.
+  if (!is_voice_interaction_oobe_)
+    params.show_state = ui::SHOW_STATE_FULLSCREEN;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+
+  // Put the voice interaction oobe inside AlwaysOnTop container instead of
+  // LockScreenContainer.
+  ash::ShellWindowId container = is_voice_interaction_oobe_
+                                     ? ash::kShellWindowId_AlwaysOnTopContainer
+                                     : ash::kShellWindowId_LockScreenContainer;
   // The ash::Shell containers are not available in Mash
   if (!ash_util::IsRunningInMash()) {
     params.parent =
-        ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
-                                 ash::kShellWindowId_LockScreenContainer);
+        ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(), container);
   } else {
     using ui::mojom::WindowManager;
     params.mus_properties[WindowManager::kContainerId_InitProperty] =
-        mojo::ConvertTo<std::vector<uint8_t>>(
-            static_cast<int32_t>(ash::kShellWindowId_LockScreenContainer));
+        mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int32_t>(container));
   }
   login_window_ = new views::Widget;
   params.delegate = login_window_delegate_ =
@@ -1191,8 +1199,9 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
   if (login_view_->webui_visible())
     OnLoginPromptVisible();
 
-  // Animations are not available in Mash
-  if (!ash_util::IsRunningInMash()) {
+  // Animations are not available in Mash.
+  // For voice interaction OOBE, we do not want the animation here.
+  if (!ash_util::IsRunningInMash() && !is_voice_interaction_oobe_) {
     login_window_->SetVisibilityAnimationDuration(
         base::TimeDelta::FromMilliseconds(kLoginFadeoutTransitionDurationMs));
     login_window_->SetVisibilityAnimationTransition(
@@ -1295,15 +1304,10 @@ void LoginDisplayHostImpl::DisableRestrictiveProxyCheckForTest() {
 
 void LoginDisplayHostImpl::StartVoiceInteractionOobe() {
   is_voice_interaction_oobe_ = true;
-
-  // Lock container can be transparent after lock screen animation.
-  aura::Window* lock_container = ash::Shell::GetContainer(
-      ash::Shell::GetPrimaryRootWindow(),
-      ash::kShellWindowId_LockScreenContainersContainer);
-  lock_container->layer()->SetOpacity(1.0);
-
   finalize_animation_type_ = ANIMATION_NONE;
   StartWizard(chromeos::OobeScreen::SCREEN_VOICE_INTERACTION_VALUE_PROP);
+  // We should emit this signal only at login screen (after reboot or sign out).
+  login_view_->set_should_emit_login_prompt_visible(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

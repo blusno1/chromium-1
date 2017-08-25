@@ -27,8 +27,8 @@ class WebAssociatedURLLoader;
 namespace media {
 
 class MEDIA_BLINK_EXPORT ResourceMultiBufferDataProvider
-    : NON_EXPORTED_BASE(public MultiBuffer::DataProvider),
-      NON_EXPORTED_BASE(public blink::WebAssociatedURLLoaderClient) {
+    : public MultiBuffer::DataProvider,
+      public blink::WebAssociatedURLLoaderClient {
  public:
   // NUmber of times we'll retry if the connection fails.
   enum { kMaxRetries = 30 };
@@ -48,8 +48,8 @@ class MEDIA_BLINK_EXPORT ResourceMultiBufferDataProvider
 
   // blink::WebAssociatedURLLoaderClient implementation.
   bool WillFollowRedirect(
-      const blink::WebURLRequest& newRequest,
-      const blink::WebURLResponse& redirectResponse) override;
+      const blink::WebURL& new_url,
+      const blink::WebURLResponse& redirect_response) override;
   void DidSendData(unsigned long long bytesSent,
                    unsigned long long totalBytesToBeSent) override;
   void DidReceiveResponse(const blink::WebURLResponse& response) override;
@@ -110,10 +110,8 @@ class MEDIA_BLINK_EXPORT ResourceMultiBufferDataProvider
   const GURL origin_;
 
   // Keeps track of an active WebAssociatedURLLoader.
+  // Only valid while loading resource.
   std::unique_ptr<blink::WebAssociatedURLLoader> active_loader_;
-
-  // Injected WebAssociatedURLLoader instance for testing purposes.
-  std::unique_ptr<blink::WebAssociatedURLLoader> test_loader_;
 
   // When we encounter a redirect, this is the source of the redirect.
   GURL redirects_to_;

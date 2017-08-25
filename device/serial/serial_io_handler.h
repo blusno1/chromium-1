@@ -18,7 +18,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "device/serial/buffer.h"
-#include "device/serial/serial.mojom.h"
+#include "services/device/public/interfaces/serial.mojom.h"
 
 namespace device {
 
@@ -32,12 +32,12 @@ class SerialIoHandler : public base::RefCountedThreadSafe<SerialIoHandler> {
   static scoped_refptr<SerialIoHandler> Create(
       scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner);
 
-  typedef base::Callback<void(bool success)> OpenCompleteCallback;
+  typedef base::OnceCallback<void(bool success)> OpenCompleteCallback;
 
   // Initiates an asynchronous Open of the device.
   virtual void Open(const std::string& port,
                     const mojom::SerialConnectionOptions& options,
-                    const OpenCompleteCallback& callback);
+                    OpenCompleteCallback callback);
 
 #if defined(OS_CHROMEOS)
   // Signals that the port has been opened.
@@ -176,7 +176,7 @@ class SerialIoHandler : public base::RefCountedThreadSafe<SerialIoHandler> {
 
   bool read_canceled() const { return read_canceled_; }
 
-  const char* pending_write_buffer() const {
+  const uint8_t* pending_write_buffer() const {
     return pending_write_buffer_ ? pending_write_buffer_->GetData() : NULL;
   }
 

@@ -7,21 +7,51 @@
 #include <WebKit/WebKit.h>
 #include <memory>
 
+#include "base/strings/sys_string_conversions.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/test/fakes/test_browser_state.h"
+#import "ios/web/public/web_client.h"
 #import "ios/web/test/fakes/crw_test_back_forward_list.h"
 #include "ios/web/test/fakes/test_navigation_manager_delegate.h"
+#include "ios/web/test/test_url_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "ui/base/page_transition_types.h"
+#include "url/scheme_host_port.h"
+#include "url/url_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 namespace web {
+
+// Query parameter that will be appended by AppendingUrlRewriter if it is
+// installed into NavigationManager by a test case.
+const char kRewrittenQueryParam[] = "wknavigationmanagerrewrittenquery";
+
+// Appends |kRewrittenQueryParam| to |url|.
+bool AppendingUrlRewriter(GURL* url, BrowserState* browser_state) {
+  GURL::Replacements query_replacements;
+  query_replacements.SetQueryStr(kRewrittenQueryParam);
+  *url = url->ReplaceComponents(query_replacements);
+  return false;
+}
+
+// URL scheme that will be rewritten by WebUIUrlRewriter.
+const char kSchemeToRewrite[] = "wknavigationmanagerschemetorewrite";
+
+// Replaces |kSchemeToRewrite| scheme with |kTestWebUIScheme|.
+bool WebUIUrlRewriter(GURL* url, BrowserState* browser_state) {
+  if (url->scheme() == kSchemeToRewrite) {
+    GURL::Replacements scheme_replacements;
+    scheme_replacements.SetSchemeStr(kTestWebUIScheme);
+    *url = url->ReplaceComponents(scheme_replacements);
+  }
+  return false;
+}
 
 // Test fixture for WKBasedNavigationManagerImpl.
 class WKBasedNavigationManagerTest : public PlatformTest {
@@ -34,6 +64,9 @@ class WKBasedNavigationManagerTest : public PlatformTest {
 
     manager_->SetDelegate(&delegate_);
     manager_->SetBrowserState(&browser_state_);
+
+    BrowserURLRewriter::GetInstance()->AddURLRewriter(WebUIUrlRewriter);
+    url::AddStandardScheme(kSchemeToRewrite, url::SCHEME_WITHOUT_PORT);
   }
 
  protected:
@@ -62,14 +95,14 @@ TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndex) {
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_LINK,
                                            item->GetTransitionType()));
   EXPECT_EQ(UserAgentType::MOBILE, item->GetUserAgentType());
+  EXPECT_FALSE(item->GetTimestamp().is_null());
 }
 
 // Tests that Referrer is inferred from the previous WKBackForwardListItem.
 TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndexWithPreviousItem) {
-  [mock_wk_list_
-        setCurrentURL:@"http://www.1.com"
-         backListURLs:[NSArray arrayWithObjects:@"http://www.0.com", nil]
-      forwardListURLs:[NSArray arrayWithObjects:@"http://www.2.com", nil]];
+  [mock_wk_list_ setCurrentURL:@"http://www.1.com"
+                  backListURLs:@[ @"http://www.0.com" ]
+               forwardListURLs:@[ @"http://www.2.com" ]];
   EXPECT_EQ(3, manager_->GetItemCount());
   EXPECT_EQ(1, manager_->GetLastCommittedItemIndex());
 
@@ -82,6 +115,7 @@ TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndexWithPreviousItem) {
                                            item2->GetTransitionType()));
   EXPECT_EQ(UserAgentType::MOBILE, item2->GetUserAgentType());
   EXPECT_EQ(GURL("http://www.1.com"), item2->GetReferrer().url);
+  EXPECT_FALSE(item2->GetTimestamp().is_null());
 
   NavigationItem* item1 = manager_->GetItemAtIndex(1);
   ASSERT_NE(item1, nullptr);
@@ -90,6 +124,7 @@ TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndexWithPreviousItem) {
                                            item1->GetTransitionType()));
   EXPECT_EQ(UserAgentType::MOBILE, item1->GetUserAgentType());
   EXPECT_EQ(GURL("http://www.0.com"), item1->GetReferrer().url);
+  EXPECT_FALSE(item1->GetTimestamp().is_null());
 
   NavigationItem* item0 = manager_->GetItemAtIndex(0);
   ASSERT_NE(item0, nullptr);
@@ -97,6 +132,42 @@ TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndexWithPreviousItem) {
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_LINK,
                                            item0->GetTransitionType()));
   EXPECT_EQ(UserAgentType::MOBILE, item0->GetUserAgentType());
+  EXPECT_FALSE(item0->GetTimestamp().is_null());
+}
+
+// Tests that GetLastCommittedItem() creates a default NavigationItem when the
+// last committed item in WKWebView does not have a linked entry.
+TEST_F(WKBasedNavigationManagerTest, SyncInGetLastCommittedItem) {
+  [mock_wk_list_ setCurrentURL:@"http://www.0.com"];
+  EXPECT_EQ(1, manager_->GetItemCount());
+
+  NavigationItem* item = manager_->GetLastCommittedItem();
+  ASSERT_NE(item, nullptr);
+  EXPECT_EQ("http://www.0.com/", item->GetURL().spec());
+  EXPECT_FALSE(item->GetTimestamp().is_null());
+}
+
+// Tests that GetLastCommittedItem() creates a default NavigationItem when the
+// last committed item in WKWebView is an app-specific URL.
+TEST_F(WKBasedNavigationManagerTest,
+       SyncInGetLastCommittedItemForAppSpecificURL) {
+  GURL url(url::SchemeHostPort(kSchemeToRewrite, "test", 0).Serialize());
+
+  // Verifies that the test URL is rewritten into an app-specific URL.
+  manager_->AddPendingItem(
+      url, Referrer(), ui::PAGE_TRANSITION_TYPED,
+      web::NavigationInitiationType::USER_INITIATED,
+      web::NavigationManager::UserAgentOverrideOption::INHERIT);
+  NavigationItem* pending_item = manager_->GetPendingItem();
+  ASSERT_TRUE(pending_item);
+  ASSERT_TRUE(web::GetWebClient()->IsAppSpecificURL(pending_item->GetURL()));
+
+  [mock_wk_list_ setCurrentURL:base::SysUTF8ToNSString(url.spec())];
+  NavigationItem* item = manager_->GetLastCommittedItem();
+
+  ASSERT_NE(item, nullptr);
+  EXPECT_EQ(url, item->GetURL());
+  EXPECT_EQ(1, manager_->GetItemCount());
 }
 
 // Tests that CommitPendingItem() will sync navigation items to
@@ -128,11 +199,9 @@ TEST_F(WKBasedNavigationManagerTest, GetItemAtIndexAfterCommitPending) {
   NavigationItem* pending_item2 = manager_->GetPendingItem();
 
   // Simulate an iframe navigation between the two main frame navigations.
-  [mock_wk_list_
-        setCurrentURL:@"http://www.2.com"
-         backListURLs:[NSArray arrayWithObjects:@"http://www.0.com",
-                                                @"http://www.1.com", nil]
-      forwardListURLs:nil];
+  [mock_wk_list_ setCurrentURL:@"http://www.2.com"
+                  backListURLs:@[ @"http://www.0.com", @"http://www.1.com" ]
+               forwardListURLs:nil];
   manager_->CommitPendingItem();
 
   EXPECT_EQ(3, manager_->GetItemCount());
@@ -160,10 +229,9 @@ TEST_F(WKBasedNavigationManagerTest, GetItemAtIndexAfterCommitPending) {
 // pending item is a back forward navigation.
 TEST_F(WKBasedNavigationManagerTest, ReusePendingItemForHistoryNavigation) {
   // Simulate two regular navigations.
-  [mock_wk_list_
-        setCurrentURL:@"http://www.1.com"
-         backListURLs:[NSArray arrayWithObjects:@"http://www.0.com", nil]
-      forwardListURLs:nil];
+  [mock_wk_list_ setCurrentURL:@"http://www.1.com"
+                  backListURLs:@[ @"http://www.0.com" ]
+               forwardListURLs:nil];
 
   // Force sync NavigationItems.
   NavigationItem* original_item0 = manager_->GetItemAtIndex(0);
@@ -176,7 +244,7 @@ TEST_F(WKBasedNavigationManagerTest, ReusePendingItemForHistoryNavigation) {
   WKBackForwardListItem* wk_item1 = [mock_wk_list_ itemAtIndex:0];
   mock_wk_list_.currentItem = wk_item0;
   mock_wk_list_.backList = nil;
-  mock_wk_list_.forwardList = [NSArray arrayWithObjects:wk_item1, nil];
+  mock_wk_list_.forwardList = @[ wk_item1 ];
   OCMExpect([mock_web_view_ URL])
       .andReturn([[NSURL alloc] initWithString:@"http://www.0.com"]);
 
@@ -186,6 +254,34 @@ TEST_F(WKBasedNavigationManagerTest, ReusePendingItemForHistoryNavigation) {
       web::NavigationManager::UserAgentOverrideOption::MOBILE);
 
   EXPECT_EQ(original_item0, manager_->GetPendingItem());
+}
+
+// Tests that transient URL rewriters are only applied to a new pending item.
+TEST_F(WKBasedNavigationManagerTest,
+       TransientURLRewritersOnlyUsedForPendingItem) {
+  manager_->AddPendingItem(GURL("http://www.0.com"), Referrer(),
+                           ui::PAGE_TRANSITION_TYPED,
+                           NavigationInitiationType::USER_INITIATED,
+                           NavigationManager::UserAgentOverrideOption::INHERIT);
+
+  // Install transient URL rewriters.
+  manager_->AddTransientURLRewriter(&AppendingUrlRewriter);
+  [mock_wk_list_ setCurrentURL:@"http://www.0.com"];
+
+  // Transient URL rewriters do not apply to lazily synced items.
+  NavigationItem* item0 = manager_->GetItemAtIndex(0);
+  EXPECT_EQ(GURL("http://www.0.com"), item0->GetURL());
+
+  // Transient URL rewriters do not apply to transient items.
+  manager_->AddTransientItem(GURL("http://www.1.com"));
+  EXPECT_EQ(GURL("http://www.1.com"), manager_->GetTransientItem()->GetURL());
+
+  // Transient URL rewriters are applied to a new pending item.
+  manager_->AddPendingItem(GURL("http://www.2.com"), Referrer(),
+                           ui::PAGE_TRANSITION_TYPED,
+                           NavigationInitiationType::USER_INITIATED,
+                           NavigationManager::UserAgentOverrideOption::INHERIT);
+  EXPECT_EQ(kRewrittenQueryParam, manager_->GetPendingItem()->GetURL().query());
 }
 
 // Tests DiscardNonCommittedItems discards both pending and transient items.

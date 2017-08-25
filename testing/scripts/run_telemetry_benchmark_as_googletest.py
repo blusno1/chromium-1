@@ -11,8 +11,8 @@ argument:
 
   --isolated-script-test-output=[FILENAME]
 
-json is written to that file in the format produced by
-common.parse_common_test_results.
+json is written to that file in the format detailed here:
+https://www.chromium.org/developers/the-json-test-results-format
 
 This script is intended to be the base command invoked by the isolate,
 followed by a subsequent Python script. It could be generalized to
@@ -46,8 +46,13 @@ def main():
       required=True)
   parser.add_argument(
       '--isolated-script-test-chartjson-output', required=False)
+  parser.add_argument(
+      '--isolated-script-test-perf-output', required=False)
   parser.add_argument('--xvfb', help='Start xvfb.', action='store_true')
+  parser.add_argument('--output-format', action='append')
   args, rest_args = parser.parse_known_args()
+  for output_format in args.output_format:
+    rest_args.append('--output-format=' + output_format)
   env = os.environ.copy()
   # Assume we want to set up the sandbox environment variables all the
   # time; doing so is harmless on non-Linux platforms and is needed
@@ -55,8 +60,8 @@ def main():
   env[CHROME_SANDBOX_ENV] = CHROME_SANDBOX_PATH
   tempfile_dir = tempfile.mkdtemp('telemetry')
   valid = True
-  failures = []
-  chartjson_results_present = '--output-format=chartjson' in rest_args
+  num_failures = 0
+  chartjson_results_present = 'chartjson' in args.output_format
   chartresults = None
   json_test_results = None
 
@@ -78,28 +83,14 @@ def main():
       chart_tempfile_name = os.path.join(tempfile_dir, 'results-chart.json')
       with open(chart_tempfile_name) as f:
         chartresults = json.load(f)
-    # We need to get chartjson results first as this may be a disabled
-    # benchmark that was run
-    # TODO(ashleymarie): potentially remove the following if it's dead code
-    # http://crbug.com/748638
-    if (not chartjson_results_present or
-       (chartjson_results_present and chartresults.get('enabled', True))):
-      tempfile_name = os.path.join(tempfile_dir, 'results.json')
-      with open(tempfile_name) as f:
-        results = json.load(f)
-      for value in results['per_page_values']:
-        if value['type'] == 'failure':
-          page_data = results['pages'][str(value['page_id'])]
-          name = page_data.get('name')
-          if not name:
-            name = page_data['url']
 
-          failures.append(name)
-      valid = bool(rc == 0 or failures)
-
+    # test-results.json is the file name output by telemetry when the
+    # json-test-results format is included
     tempfile_name = os.path.join(tempfile_dir, 'test-results.json')
     with open(tempfile_name) as f:
       json_test_results = json.load(f)
+    num_failures = json_test_results['num_failures_by_type'].get('FAIL', 0)
+    valid = bool(rc == 0 or num_failures != 0)
 
   except Exception:
     traceback.print_exc()
@@ -110,8 +101,7 @@ def main():
   finally:
     shutil.rmtree(tempfile_dir)
 
-  if not valid and not failures:
-    failures = ['(entire test suite)']
+  if not valid and num_failures == 0:
     if rc == 0:
       rc = 1  # Signal an abnormal exit.
 

@@ -14,10 +14,11 @@
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
@@ -48,6 +49,8 @@
 
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
+using chrome_test_util::PrimarySignInButton;
+using chrome_test_util::SecondarySignInButton;
 
 namespace {
 // TODO(crbug.com/616929): Move common matchers that are useful across tests
@@ -87,6 +90,11 @@ id<GREYMatcher> BookmarksDoneButton() {
   return grey_allOf(
       ButtonWithAccessibilityLabelId(IDS_IOS_BOOKMARK_DONE_BUTTON),
       grey_not(grey_accessibilityTrait(UIAccessibilityTraitKeyboardKey)), nil);
+}
+
+// Matcher for the Delete button on the bookmarks UI.
+id<GREYMatcher> BookmarksDeleteSwipeButton() {
+  return ButtonWithAccessibilityLabel(@"Delete");
 }
 
 // Matcher for the More Menu.
@@ -219,6 +227,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that tapping a bookmark on the NTP navigates to the proper URL.
 - (void)testTapBookmark {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   const GURL bookmarkURL = web::test::HttpServer::MakeUrl(
       "http://ios/testing/data/http_server_files/destination.html");
   NSString* bookmarkTitle = @"smokeTapBookmark";
@@ -279,6 +291,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Try deleting a bookmark, then undoing that delete.
 - (void)testUndoDeleteBookmark {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -304,6 +320,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Try deleting a bookmark from the edit screen, then undoing that delete.
 - (void)testUndoDeleteBookmarkFromEditScreen {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -339,8 +359,40 @@ id<GREYMatcher> ActionSheet(Action action) {
       assertWithMatcher:grey_notNil()];
 }
 
+- (void)testUndoDeleteBookmarkFromSwipe {
+  if (!base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with new UI.");
+  }
+  [BookmarksTestCase setupStandardBookmarks];
+  [BookmarksTestCase openMobileBookmarks];
+
+  // Swipe action on the URL.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"Second URL")]
+      performAction:grey_swipeFastInDirection(kGREYDirectionLeft)];
+
+  // Delete it.
+  [[EarlGrey selectElementWithMatcher:BookmarksDeleteSwipeButton()]
+      performAction:grey_tap()];
+
+  // Wait until it's gone.
+  [BookmarksTestCase waitForDeletionOfBookmarkWithTitle:@"Second URL"];
+
+  // Press undo
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Undo")]
+      performAction:grey_tap()];
+
+  // Verify it's back.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Second URL")]
+      assertWithMatcher:grey_notNil()];
+}
+
 // Try moving bookmarks, then undoing that move.
 - (void)testUndoMoveBookmark {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -393,6 +445,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 }
 
 - (void)testLabelUpdatedUponMove {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -476,6 +532,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that changing a folder's title in edit mode works as expected.
 - (void)testChangeFolderTitle {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   NSString* existingFolderTitle = @"Folder 1";
   NSString* newFolderTitle = @"New Folder Title";
 
@@ -502,6 +562,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that the default folder bookmarks are saved in is updated to the last
 // used folder.
 - (void)testStickyDefaultFolder {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -577,6 +641,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that changes to the parent folder from the Single Bookmark Controller
 // are saved to the bookmark only when saving the results.
 - (void)testMoveDoesSaveOnSave {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -626,6 +694,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Test thats editing a single bookmark correctly persists data.
 - (void)testSingleBookmarkEdit {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -636,28 +708,12 @@ id<GREYMatcher> ActionSheet(Action action) {
   // Tap the edit action.
   [[EarlGrey selectElementWithMatcher:ActionSheet(ActionEdit)]
       performAction:grey_tap()];
-
-  // Replace the title field with new text.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Title Field_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"Title Field_textField")]
-      performAction:grey_typeText(@"n5")];
-
-  // Replace the url field with new text.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
+      performAction:grey_replaceText(@"n5")];
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"URL Field_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"URL Field_textField")]
-      performAction:grey_typeText(@"www.a.fr")];
+      performAction:grey_replaceText(@"www.a.fr")];
 
   // Dismiss editor.
   [[EarlGrey selectElementWithMatcher:BookmarksDoneButton()]
@@ -676,6 +732,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that cancelling editing a single bookmark correctly doesn't persist
 // data.
 - (void)testSingleBookmarkCancelEdit {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -686,28 +746,12 @@ id<GREYMatcher> ActionSheet(Action action) {
   // Tap the edit action.
   [[EarlGrey selectElementWithMatcher:ActionSheet(ActionEdit)]
       performAction:grey_tap()];
-
-  // Replace the title field with new text.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Title Field_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"Title Field_textField")]
-      performAction:grey_typeText(@"n5")];
-
-  // Replace the url field with new text.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
+      performAction:grey_replaceText(@"n5")];
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"URL Field_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"URL Field_textField")]
-      performAction:grey_typeText(@"www.a.fr")];
+      performAction:grey_replaceText(@"www.a.fr")];
 
   // Dismiss editor with Cancel button.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Cancel")]
@@ -725,6 +769,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that long pressing a bookmark selects it and gives access to editing,
 // as does the Info menu.
 - (void)testLongPressBookmark {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -755,6 +803,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests the editing of a folder.
 - (void)testEditFolder {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
 
@@ -762,15 +814,8 @@ id<GREYMatcher> ActionSheet(Action action) {
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Edit_navigation_bar")]
       performAction:grey_tap()];
-
-  // Change the title.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-      performAction:grey_typeText(@"Renamed Folder")];
+      performAction:grey_replaceText(@"Renamed Folder")];
 
   // Cancel without saving.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Cancel")]
@@ -784,15 +829,8 @@ id<GREYMatcher> ActionSheet(Action action) {
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Edit_navigation_bar")]
       performAction:grey_tap()];
-
-  // Change the title.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-      performAction:grey_typeText(@"Renamed Folder")];
+      performAction:grey_replaceText(@"Renamed Folder")];
 
   // Save.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Save")]
@@ -805,6 +843,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests the deletion of a folder.
 - (void)testDeleteFolder {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
 
@@ -818,6 +860,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Navigates to a deeply nested folder, deletes it and makes sure the UI is
 // consistent.
 - (void)testDeleteCurrentSubfolder {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
   [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(@"Folder 2")]
@@ -840,6 +886,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Navigates to a deeply nested folder, delete its parent programatically.
 // Verifies that the UI is as expected.
 - (void)testDeleteParentFolder {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
   [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(@"Folder 2")]
@@ -883,6 +933,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that the menu button changes to a back button as expected when browsing
 // nested folders.
 - (void)testBrowseNestedFolders {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -923,6 +977,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests moving a bookmark into a new folder created in the moving process.
 - (void)testCreateNewFolderWhileMovingBookmark {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -1002,6 +1060,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Navigates to a deeply nested folder, deletes its root ancestor and checks
 // that the UI is on the top level folder.
 - (void)testDeleteRootFolder {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
   [[EarlGrey selectElementWithMatcher:grey_text(@"Folder 2")]
@@ -1085,6 +1147,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that tapping No thanks on the promo make it disappear.
 - (void)testPromoNoThanksMakeItDisappear {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -1095,16 +1161,16 @@ id<GREYMatcher> ActionSheet(Action action) {
   }];
   // Check that promo is visible.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"promo_view")]
-      assertWithMatcher:grey_notNil()];
+  [[EarlGrey selectElementWithMatcher:PrimarySignInButton()]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Tap the dismiss button.
   [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"promo_no_thanks_button")]
+      selectElementWithMatcher:grey_accessibilityID(kSigninPromoCloseButtonId)]
       performAction:grey_tap()];
 
   // Wait until promo is gone.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"promo_view")]
+  [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
       assertWithMatcher:grey_notVisible()];
 
   // Check that the promo already seen state is updated.
@@ -1114,6 +1180,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that tapping Sign in on the promo make the Sign in sheet appear and
 // the promo still appears after dismissing the Sign in sheet.
 - (void)testUIPromoSignIn {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
   // Set up a fake identity.
@@ -1126,12 +1196,16 @@ id<GREYMatcher> ActionSheet(Action action) {
 
   // Check that promo is visible.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"promo_view")]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(SecondarySignInButton(),
+                                          grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_notNil()];
 
   // Tap the Sign in button.
   [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"promo_sign_in_button")]
+      selectElementWithMatcher:grey_allOf(grey_accessibilityID(
+                                              kSigninPromoSecondaryButtonId),
+                                          grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
 
   // Tap the CANCEL button.
@@ -1141,7 +1215,9 @@ id<GREYMatcher> ActionSheet(Action action) {
                      uppercaseString])] performAction:grey_tap()];
 
   // Check that the bookmarks UI reappeared and the cell is still here.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"promo_view")]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(SecondarySignInButton(),
+                                          grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_notNil()];
 
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
@@ -1149,6 +1225,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on the bookmarks landing page are accessible.
 - (void)testAccessibilityOnBookmarksLandingPage {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
@@ -1161,6 +1241,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on the bookmarks Edit page are accessible.
 - (void)testAccessibilityOnBookmarksEditPage {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1182,6 +1266,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on the bookmarks Move page are accessible.
 - (void)testAccessibilityOnBookmarksMovePage {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1204,6 +1292,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that all elements on the bookmarks Move to New Folder page are
 // accessible.
 - (void)testAccessibilityOnBookmarksMoveToNewFolderPage {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1229,6 +1321,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on bookmarks Delete and Undo are accessible.
 - (void)testAccessibilityOnBookmarksDeleteUndo {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1248,6 +1344,10 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on the bookmarks Select page are accessible.
 - (void)testAccessibilityOnBookmarksSelect {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old UI.");
+  }
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1261,6 +1361,28 @@ id<GREYMatcher> ActionSheet(Action action) {
   // Dismiss selector with Cancel button.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Exit Edit Mode")]
       performAction:grey_tap()];
+}
+
+// Tests that the bookmark context bar is shown in MobileBookmarks.
+- (void)testBookmarkContextBarShown {
+  if (!base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with new UI.");
+  }
+  [BookmarksTestCase setupStandardBookmarks];
+  [BookmarksTestCase openMobileBookmarks];
+
+  // Verify the context bar is shown.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Context Bar")]
+      assertWithMatcher:grey_notNil()];
+
+  // Verify the context bar's leading and trailing buttons are shown.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          @"Context Bar Leading Button")]
+      assertWithMatcher:grey_notNil()];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          @"Context Bar Trailing Button")]
+      assertWithMatcher:grey_notNil()];
 }
 
 #pragma mark Helper Methods
@@ -1283,6 +1405,16 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Navigates to the bookmark manager UI, and selects |bookmarkFolder|.
 + (void)openBookmarkFolder:(NSString*)bookmarkFolder {
   [BookmarksTestCase openBookmarks];
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    [[EarlGrey
+        selectElementWithMatcher:grey_allOf(grey_kindOfClass(NSClassFromString(
+                                                @"UITableViewCell")),
+                                            grey_descendant(
+                                                grey_text(@"Mobile Bookmarks")),
+                                            nil)] performAction:grey_tap()];
+    return;
+  }
   if (IsCompact()) {
     // Opens the bookmark manager sidebar on handsets.
     [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Menu")]
@@ -1344,25 +1476,8 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Rename folder title to |folderTitle|. Must be in edit folder UI.
 + (void)renameBookmarkFolderWithFolderTitle:(NSString*)folderTitle {
   NSString* titleIdentifier = @"Title_textField";
-
-  // Edit the title field.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(titleIdentifier)]
-      performAction:grey_tap()];
-  // TODO(crbug.com/748748): Getting the clear button from the text field since
-  // the clear button has no accessibility label on iOS11/XCode9 betas thus we
-  // can't access it directly. EarlGray team believes that this could be a bug
-  // and might be fixed later on.
-  id<GREYMatcher> clearTextButton =
-      grey_allOf(grey_ancestor(grey_accessibilityID(titleIdentifier)),
-                 grey_kindOfClass([UIButton class]), nil);
-  [[EarlGrey selectElementWithMatcher:clearTextButton]
-      performAction:grey_tap()];
-
-  // Type in the new title and use '\n' to dismiss the keyboard.
-  NSString* folderTitleWithNewLine =
-      [NSString stringWithFormat:@"%@\n", folderTitle];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(titleIdentifier)]
-      performAction:grey_typeText(folderTitleWithNewLine)];
+      performAction:grey_replaceText(folderTitle)];
 }
 
 // Tap on the star to bookmark a page, then edit the bookmark to change the
@@ -1377,21 +1492,7 @@ id<GREYMatcher> ActionSheet(Action action) {
       performAction:grey_tap()];
   NSString* titleIdentifier = @"Title Field_textField";
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(titleIdentifier)]
-      performAction:grey_tap()];
-  // TODO(crbug.com/748748): Getting the clear button from the text field since
-  // the clear button has no accessibility label on iOS11/XCode9 betas thus we
-  // can't access it directly. EarlGray team believes that this could be a bug
-  // and might be fixed later on.
-  id<GREYMatcher> clearTextButton =
-      grey_allOf(grey_ancestor(grey_accessibilityID(titleIdentifier)),
-                 grey_kindOfClass([UIButton class]), nil);
-  [[EarlGrey selectElementWithMatcher:clearTextButton]
-      performAction:grey_tap()];
-
-  // Use '\n' to tap Done and dismiss the keyboard.
-  NSString* bookmarkTitle = [NSString stringWithFormat:@"%@\n", title];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(titleIdentifier)]
-      performAction:grey_typeText(bookmarkTitle)];
+      performAction:grey_replaceText(title)];
 
   // Dismiss the window.
   [[EarlGrey selectElementWithMatcher:BookmarksDoneButton()]
@@ -1518,15 +1619,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
   // Change the name of the folder.
   if (name.length > 0) {
-    // TODO(crbug.com/644730): Use grey_replaceText instead of
-    // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-    // https://github.com/google/EarlGrey/issues/253
     [[EarlGrey
         selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-        performAction:grey_clearText()];
-    [[EarlGrey
-        selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-        performAction:grey_typeText(name)];
+        performAction:grey_replaceText(name)];
   }
 
   // Tap the Save button.

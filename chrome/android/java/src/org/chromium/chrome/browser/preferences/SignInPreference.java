@@ -97,7 +97,9 @@ public class SignInPreference
         if (SigninManager.get(getContext()).isSigninDisabledByPolicy()) {
             setupSigninDisabled();
         } else if (accountName == null) {
-            if (SigninPromoController.shouldShowPromo()) {
+            // Don't change the promo type if the promo is already being shown.
+            final boolean forceNew = mSigninPromoController != null;
+            if (forceNew || SigninPromoController.shouldShowPromo(SigninAccessPoint.SETTINGS)) {
                 setupNewPromo();
             } else {
                 setupOldPromo();
@@ -133,7 +135,7 @@ public class SignInPreference
         setSummary("");
         setFragment(null);
         setIcon(null);
-        setWidgetLayoutResource(R.layout.signin_promo_view);
+        setWidgetLayoutResource(R.layout.signin_promo_view_settings);
         setViewEnabled(true);
 
         Account[] accounts = AccountManagerFacade.get().tryGetGoogleAccounts();
@@ -226,7 +228,7 @@ public class SignInPreference
         update();
     }
 
-    // ProfileDownloader.Observer
+    // ProfileDataCacheObserver implementation.
 
     @Override
     public void onProfileDataUpdated(String accountId) {

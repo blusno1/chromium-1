@@ -10,6 +10,7 @@ import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.BackgroundColorSpan;
 import android.view.KeyEvent;
+import android.view.accessibility.AccessibilityEvent;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
@@ -60,6 +61,7 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
     private boolean mLastEditWasTyping = true;
     private boolean mIgnoreTextChangeFromAutocomplete = true;
     private int mBatchEditNestCount;
+    private int mDeletePostfixOnNextBeginImeCommand;
 
     // For testing.
     private int mLastUpdateSelStart;
@@ -103,6 +105,73 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
                 BaseInputConnection.getComposingSpanEnd(editable));
     }
 
+    private void sendAccessibilityEventForUserTextChange(
+            AutocompleteState oldState, AutocompleteState newState) {
+        int addedCount = -1;
+        int removedCount = -1;
+        int fromIndex = -1;
+
+        if (newState.isBackwardDeletedFrom(oldState)) {
+            addedCount = 0;
+            removedCount = oldState.getText().length() - newState.getUserText().length();
+            fromIndex = newState.getUserText().length();
+        } else if (newState.isForwardTypedFrom(oldState)) {
+            addedCount = newState.getUserText().length() - oldState.getUserText().length();
+            removedCount = oldState.getAutocompleteText().length();
+            fromIndex = oldState.getUserText().length();
+        } else if (newState.getUserText().equals(oldState.getUserText())) {
+            addedCount = 0;
+            removedCount = oldState.getAutocompleteText().length();
+            fromIndex = oldState.getUserText().length();
+        } else {
+            // Assume that the whole text has been replaced.
+            addedCount = newState.getText().length();
+            removedCount = oldState.getUserText().length();
+            fromIndex = 0;
+        }
+        // Note: send out text changed event only when there is deletion or replacement. This is to
+        // emulate the undocumented behavior of TextView. Check AutocompleteEditTextTest to compare
+        // the behavior with the old model.
+        if (removedCount != 0) {
+            AccessibilityEvent event =
+                    AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED);
+            event.setBeforeText(oldState.getText());
+            event.setFromIndex(fromIndex);
+            event.setRemovedCount(removedCount);
+            event.setAddedCount(addedCount);
+            mDelegate.sendAccessibilityEventUnchecked(event);
+        }
+        if (oldState.getSelStart() != newState.getSelEnd()
+                || oldState.getSelEnd() != newState.getSelEnd()) {
+            AccessibilityEvent event =
+                    AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED);
+            event.setFromIndex(newState.getSelStart());
+            event.setToIndex(newState.getSelEnd());
+            event.setItemCount(newState.getUserText().length());
+            mDelegate.sendAccessibilityEventUnchecked(event);
+        }
+    }
+
+    private void sendAccessibilityEventForAppendingAutocomplete(AutocompleteState newState) {
+        if (!newState.hasAutocompleteText()) return;
+        // Note that only text changes and selection does not change.
+        AccessibilityEvent eventTextChanged =
+                AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED);
+        eventTextChanged.setBeforeText(newState.getUserText());
+        eventTextChanged.setFromIndex(newState.getUserText().length());
+        eventTextChanged.setRemovedCount(0);
+        eventTextChanged.setAddedCount(newState.getAutocompleteText().length());
+        mDelegate.sendAccessibilityEventUnchecked(eventTextChanged);
+    }
+
+    private void notifyAccessibilityService() {
+        if (mCurrentState.equals(mPreviouslyNotifiedState)) return;
+        if (!mDelegate.isAccessibilityEnabled()) return;
+        sendAccessibilityEventForUserTextChange(mPreviouslyNotifiedState, mCurrentState);
+        // Read autocomplete text separately.
+        sendAccessibilityEventForAppendingAutocomplete(mCurrentState);
+    }
+
     private void notifyAutocompleteTextStateChanged() {
         if (DEBUG) {
             Log.i(TAG, "notifyAutocompleteTextStateChanged PRV[%s] CUR[%s] IGN[%b]",
@@ -110,6 +179,7 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
         }
         if (mBatchEditNestCount > 0) return;
         if (mCurrentState.equals(mPreviouslyNotifiedState)) return;
+        notifyAccessibilityService();
         // Nothing has changed except that autocomplete text has been set or modified.
         if (mCurrentState.equalsExceptAutocompleteText(mPreviouslyNotifiedState)
                 && mCurrentState.hasAutocompleteText()) {
@@ -287,6 +357,11 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
         mDelegate.onUpdateSelectionForTesting(selStart, selEnd);
     }
 
+    @Override
+    public boolean shouldIgnoreAccessibilityEvent() {
+        return mBatchEditNestCount > 0;
+    }
+
     /**
      * A class to set and remove, or do other operations on Span and SpannableString of autocomplete
      * text that will be appended to the user text. In addition, cursor will be hidden whenever we
@@ -305,8 +380,9 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
 
             if (mSpan == null) mSpan = new BackgroundColorSpan(mDelegate.getHighlightColor());
             SpannableString spanString = new SpannableString(state.getAutocompleteText());
-            spanString.setSpan(
-                    mSpan, 0, state.getAutocompleteText().length(), Spanned.SPAN_INTERMEDIATE);
+            // The flag here helps make sure that span does not get spill to other part of the text.
+            spanString.setSpan(mSpan, 0, state.getAutocompleteText().length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             Editable editable = mDelegate.getEditableText();
             editable.append(spanString);
 
@@ -407,13 +483,24 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
             boolean retVal = incrementBatchEditCount();
             if (mBatchEditNestCount == 1) {
                 mPreBatchEditState.copyFrom(mCurrentState);
+            } else if (mDeletePostfixOnNextBeginImeCommand > 0) {
+                int len = mDelegate.getText().length();
+                mDelegate.getText().delete(len - mDeletePostfixOnNextBeginImeCommand, len);
             }
+            mDeletePostfixOnNextBeginImeCommand = 0;
             mSpanCursorController.removeSpan();
             return retVal;
         }
 
         private void restoreBackspacedText(String diff) {
             if (DEBUG) Log.i(TAG, "restoreBackspacedText. diff: " + diff);
+
+            if (mBatchEditNestCount > 0) {
+                // If batch edit hasn't finished, we will restore backspaced text only for visual
+                // effects. However, for internal operations to work correctly, we need to remove
+                // the restored diff at the beginning of next IME operation.
+                mDeletePostfixOnNextBeginImeCommand = diff.length();
+            }
             incrementBatchEditCount(); // avoids additional notifyAutocompleteTextStateChanged()
             Editable editable = mDelegate.getEditableText();
             editable.append(diff);
@@ -446,12 +533,6 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
 
         private boolean onEndImeCommand() {
             if (DEBUG) Log.i(TAG, "onEndImeCommand: " + (mBatchEditNestCount - 1));
-            if (mBatchEditNestCount > 1) {
-                String diff = mCurrentState.getBackwardDeletedTextFrom(mPreBatchEditState);
-                if (diff == null) setAutocompleteSpan();
-                return decrementBatchEditCount();
-            }
-
             String diff = mCurrentState.getBackwardDeletedTextFrom(mPreBatchEditState);
             if (diff != null) {
                 // Update selection first such that keyboard app gets what it expects.

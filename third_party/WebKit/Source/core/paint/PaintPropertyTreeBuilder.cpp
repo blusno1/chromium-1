@@ -11,7 +11,6 @@
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/compositing/CompositingReasonFinder.h"
 #include "core/layout/svg/LayoutSVGResourceMasker.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
@@ -22,6 +21,7 @@
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/SVGRootPainter.h"
+#include "core/paint/compositing/CompositingReasonFinder.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "platform/wtf/PtrUtil.h"
 
@@ -78,12 +78,9 @@ static bool UpdateContentClip(
 
 // True if a new property was created or a main thread scrolling reason changed
 // (which can affect descendants), false if an existing one was updated.
-static bool UpdateScrollTranslation(
+static bool UpdateScroll(
     LocalFrameView& frame_view,
-    RefPtr<const TransformPaintPropertyNode> parent,
-    const TransformationMatrix& matrix,
-    const FloatPoint3D& origin,
-    RefPtr<const ScrollPaintPropertyNode> scroll_parent,
+    RefPtr<const ScrollPaintPropertyNode> parent,
     const IntSize& clip,
     const IntSize& bounds,
     bool user_scrollable_horizontal,
@@ -91,27 +88,41 @@ static bool UpdateScrollTranslation(
     MainThreadScrollingReasons main_thread_scrolling_reasons,
     WebLayerScrollClient* scroll_client) {
   DCHECK(!RuntimeEnabledFeatures::RootLayerScrollingEnabled());
-  if (auto* existing_scroll_translation = frame_view.ScrollTranslation()) {
-    auto existing_reasons = existing_scroll_translation->ScrollNode()
-                                ->GetMainThreadScrollingReasons();
-    existing_scroll_translation->UpdateScrollTranslation(
-        std::move(parent), matrix, origin, false, 0, kCompositingReasonNone,
-        CompositorElementIdFromLayoutObjectId(
-            frame_view.GetLayoutView()->UniqueId(),
-            CompositorElementIdNamespace::kScrollTranslation),
-        std::move(scroll_parent), clip, bounds, user_scrollable_horizontal,
-        user_scrollable_vertical, main_thread_scrolling_reasons, scroll_client);
+  auto element_id = CompositorElementIdFromLayoutObjectId(
+      frame_view.GetLayoutView()->UniqueId(),
+      CompositorElementIdNamespace::kScroll);
+  if (auto* existing_scroll = frame_view.ScrollNode()) {
+    auto existing_reasons = existing_scroll->GetMainThreadScrollingReasons();
+    existing_scroll->Update(
+        std::move(parent), IntPoint(), clip, bounds, user_scrollable_horizontal,
+        user_scrollable_vertical, main_thread_scrolling_reasons, element_id,
+        scroll_client);
     return existing_reasons != main_thread_scrolling_reasons;
   }
-  frame_view.SetScrollTranslation(
-      TransformPaintPropertyNode::CreateScrollTranslation(
-          std::move(parent), matrix, origin, false, 0, kCompositingReasonNone,
-          CompositorElementIdFromLayoutObjectId(
-              frame_view.GetLayoutView()->UniqueId(),
-              CompositorElementIdNamespace::kScrollTranslation),
-          std::move(scroll_parent), clip, bounds, user_scrollable_horizontal,
-          user_scrollable_vertical, main_thread_scrolling_reasons,
-          scroll_client));
+  frame_view.SetScrollNode(ScrollPaintPropertyNode::Create(
+      std::move(parent), IntPoint(), clip, bounds, user_scrollable_horizontal,
+      user_scrollable_vertical, main_thread_scrolling_reasons, element_id,
+      scroll_client));
+  return true;
+}
+
+// True if a new property was created, false if an existing one was updated.
+static bool UpdateScrollTranslation(
+    LocalFrameView& frame_view,
+    RefPtr<const TransformPaintPropertyNode> parent,
+    const TransformationMatrix& matrix,
+    PassRefPtr<ScrollPaintPropertyNode> scroll) {
+  DCHECK(!RuntimeEnabledFeatures::RootLayerScrollingEnabled());
+  // TODO(pdr): Set the correct compositing reasons here.
+  if (auto* existing_scroll_translation = frame_view.ScrollTranslation()) {
+    existing_scroll_translation->Update(
+        std::move(parent), matrix, FloatPoint3D(), false, 0,
+        kCompositingReasonNone, CompositorElementId(), std::move(scroll));
+    return false;
+  }
+  frame_view.SetScrollTranslation(TransformPaintPropertyNode::Create(
+      std::move(parent), matrix, FloatPoint3D(), false, 0,
+      kCompositingReasonNone, CompositorElementId(), std::move(scroll)));
   return true;
 }
 
@@ -167,11 +178,7 @@ void PaintPropertyTreeBuilder::UpdateProperties(
         frame_view, context.current.clip, frame_view.PreTranslation(),
         content_clip, full_context.clip_changed);
 
-    ScrollOffset scroll_offset = frame_view.GetScrollOffset();
-    if (frame_view.IsScrollable() || !scroll_offset.IsZero()) {
-      TransformationMatrix frame_scroll;
-      frame_scroll.Translate(-scroll_offset.Width(), -scroll_offset.Height());
-
+    if (frame_view.IsScrollable()) {
       IntSize scroll_clip = frame_view.VisibleContentSize();
       IntSize scroll_bounds = frame_view.ContentsSize();
       bool user_scrollable_horizontal =
@@ -184,18 +191,31 @@ void PaintPropertyTreeBuilder::UpdateProperties(
       auto reasons =
           GetMainThreadScrollingReasons(frame_view, ancestor_reasons);
 
-      full_context.force_subtree_update |= UpdateScrollTranslation(
-          frame_view, frame_view.PreTranslation(), frame_scroll, FloatPoint3D(),
-          context.current.scroll, scroll_clip, scroll_bounds,
+      full_context.force_subtree_update |= UpdateScroll(
+          frame_view, context.current.scroll, scroll_clip, scroll_bounds,
           user_scrollable_horizontal, user_scrollable_vertical, reasons,
           frame_view.GetScrollableArea());
-    } else {
-      if (frame_view.ScrollTranslation()) {
-        // Ensure pre-existing properties are cleared if there is no scrolling.
-        frame_view.SetScrollTranslation(nullptr);
-        // Rebuild all descendant properties because a property was removed.
-        full_context.force_subtree_update = true;
-      }
+    } else if (frame_view.ScrollNode()) {
+      // Ensure pre-existing properties are cleared if there is no scrolling.
+      frame_view.SetScrollNode(nullptr);
+      // Rebuild all descendant properties because a property was removed.
+      full_context.force_subtree_update = true;
+    }
+
+    // A scroll translation node is created for static offset (e.g., overflow
+    // hidden with scroll offset) or cases that scroll and have a scroll node.
+    ScrollOffset scroll_offset = frame_view.GetScrollOffset();
+    if (frame_view.IsScrollable() || !scroll_offset.IsZero()) {
+      TransformationMatrix frame_scroll;
+      frame_scroll.Translate(-scroll_offset.Width(), -scroll_offset.Height());
+      full_context.force_subtree_update |=
+          UpdateScrollTranslation(frame_view, frame_view.PreTranslation(),
+                                  frame_scroll, frame_view.ScrollNode());
+    } else if (frame_view.ScrollTranslation()) {
+      // Ensure pre-existing properties are cleared if there is no scrolling.
+      frame_view.SetScrollTranslation(nullptr);
+      // Rebuild all descendant properties because a property was removed.
+      full_context.force_subtree_update = true;
     }
   }
 
@@ -210,10 +230,10 @@ void PaintPropertyTreeBuilder::UpdateProperties(
   context.current.transform = frame_view.PreTranslation();
   DCHECK(frame_view.ContentClip());
   context.current.clip = frame_view.ContentClip();
-  if (const auto* scroll_translation = frame_view.ScrollTranslation()) {
+  if (const auto* scroll_node = frame_view.ScrollNode())
+    context.current.scroll = scroll_node;
+  if (const auto* scroll_translation = frame_view.ScrollTranslation())
     context.current.transform = scroll_translation;
-    context.current.scroll = scroll_translation->ScrollNode();
-  }
   context.current.paint_offset = LayoutPoint();
   context.current.rendering_context_id = 0;
   context.current.should_flatten_inherited_transform = true;
@@ -947,13 +967,20 @@ static MainThreadScrollingReasons GetMainThreadScrollingReasons(
                                        ancestor_reasons);
 }
 
-static bool NeedsScrollTranslation(const LayoutObject& object) {
+static bool NeedsScrollNode(const LayoutObject& object) {
   if (!object.HasOverflowClip())
     return false;
-  const LayoutBox& box = ToLayoutBox(object);
-  auto* scrollable_area = box.GetScrollableArea();
-  IntSize scroll_offset = box.ScrolledContentOffset();
-  return !scroll_offset.IsZero() || scrollable_area->ScrollsOverflow();
+  return ToLayoutBox(object).GetScrollableArea()->ScrollsOverflow();
+}
+
+// True if a scroll translation is needed for static scroll offset (e.g.,
+// overflow hidden with scroll), or if a scroll node is needed for composited
+// scrolling.
+static bool NeedsScrollOrScrollTranslation(const LayoutObject& object) {
+  if (!object.HasOverflowClip())
+    return false;
+  IntSize scroll_offset = ToLayoutBox(object).ScrolledContentOffset();
+  return !scroll_offset.IsZero() || NeedsScrollNode(object);
 }
 
 void PaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation(
@@ -962,17 +989,19 @@ void PaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation(
     PaintPropertyTreeBuilderFragmentContext& context,
     bool& force_subtree_update) {
   if (object.NeedsPaintPropertyUpdate() || force_subtree_update) {
-    if (NeedsScrollTranslation(object)) {
+    if (NeedsScrollNode(object)) {
       const LayoutBox& box = ToLayoutBox(object);
       auto* scrollable_area = box.GetScrollableArea();
-      IntSize scroll_offset = box.ScrolledContentOffset();
 
-      auto clip_rect = box.OverflowClipRect(context.current.paint_offset);
       // The container bounds are snapped to integers to match the equivalent
-      // bounds on cc::ScrollNode.
-      IntSize container_bounds = PixelSnappedIntRect(clip_rect).Size();
-
+      // bounds on cc::ScrollNode. The offset is snapped to match the current
+      // integer offsets used in CompositedLayerMapping.
+      auto clip_rect = PixelSnappedIntRect(
+          box.OverflowClipRect(context.current.paint_offset));
+      IntPoint bounds_offset = clip_rect.Location();
+      IntSize container_bounds = clip_rect.Size();
       IntSize scroll_bounds = scrollable_area->ContentsSize();
+
       bool user_scrollable_horizontal =
           scrollable_area->UserInputScrollable(kHorizontalScrollbar);
       bool user_scrollable_vertical =
@@ -984,24 +1013,38 @@ void PaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation(
 
       // Main thread scrolling reasons depend on their ancestor's reasons
       // so ensure the entire subtree is updated when reasons change.
-      if (auto* existing_scroll_translation = properties.ScrollTranslation()) {
-        auto* existing_scroll_node = existing_scroll_translation->ScrollNode();
-        if (existing_scroll_node->GetMainThreadScrollingReasons() != reasons)
+      if (auto* existing_scroll = properties.Scroll()) {
+        if (existing_scroll->GetMainThreadScrollingReasons() != reasons)
           force_subtree_update = true;
       }
 
-      TransformationMatrix matrix = TransformationMatrix().Translate(
-          -scroll_offset.Width(), -scroll_offset.Height());
+      auto element_id = CompositorElementIdFromLayoutObjectId(
+          object.UniqueId(), CompositorElementIdNamespace::kScroll);
+
+      // TODO(pdr): Set the correct compositing reasons here.
+      auto result = properties.UpdateScroll(
+          context.current.scroll, bounds_offset, container_bounds,
+          scroll_bounds, user_scrollable_horizontal, user_scrollable_vertical,
+          reasons, element_id, scrollable_area);
+      force_subtree_update |= result.NewNodeCreated();
+    } else {
+      // Ensure pre-existing properties are cleared.
+      force_subtree_update |= properties.ClearScroll();
+    }
+
+    // A scroll translation node is created for static offset (e.g., overflow
+    // hidden with scroll offset) or cases that scroll and have a scroll node.
+    if (NeedsScrollOrScrollTranslation(object)) {
+      const LayoutBox& box = ToLayoutBox(object);
+      IntSize scroll_offset = box.ScrolledContentOffset();
+      TransformationMatrix scroll_offset_matrix =
+          TransformationMatrix().Translate(-scroll_offset.Width(),
+                                           -scroll_offset.Height());
       auto result = properties.UpdateScrollTranslation(
-          context.current.transform, matrix, FloatPoint3D(),
+          context.current.transform, scroll_offset_matrix, FloatPoint3D(),
           context.current.should_flatten_inherited_transform,
           context.current.rendering_context_id, kCompositingReasonNone,
-          CompositorElementIdFromLayoutObjectId(
-              object.UniqueId(),
-              CompositorElementIdNamespace::kScrollTranslation),
-          context.current.scroll, container_bounds, scroll_bounds,
-          user_scrollable_horizontal, user_scrollable_vertical, reasons,
-          scrollable_area);
+          CompositorElementId(), properties.Scroll());
       force_subtree_update |= result.NewNodeCreated();
     } else {
       // Ensure pre-existing properties are cleared.
@@ -1009,9 +1052,10 @@ void PaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation(
     }
   }
 
+  if (properties.Scroll())
+    context.current.scroll = properties.Scroll();
   if (properties.ScrollTranslation()) {
     context.current.transform = properties.ScrollTranslation();
-    context.current.scroll = context.current.transform->ScrollNode();
     context.current.should_flatten_inherited_transform = false;
   }
 }
@@ -1207,7 +1251,7 @@ void PaintPropertyTreeBuilder::UpdatePaintProperties(
       NeedsFilter(object) || NeedsCssClip(object) ||
       NeedsScrollbarPaintOffset(object) || NeedsOverflowClip(object) ||
       NeedsPerspective(object) || NeedsSVGLocalToBorderBoxTransform(object) ||
-      NeedsScrollTranslation(object);
+      NeedsScrollOrScrollTranslation(object);
 
   // We need at least the fragment for all PaintLayers, which store their
   // local border box properties on the fragment.

@@ -59,9 +59,11 @@ void InitializeCrashpad(bool initial_client, const std::string& process_type);
 #if defined(OS_WIN)
 // This is the same as InitializeCrashpad(), but rather than launching a
 // crashpad_handler executable, relaunches the current executable with a command
-// line argument of --type=crashpad-handler.
+// line argument of --type=crashpad-handler. If user_data_dir is non-empty, it
+// is added to the handler's command line for use by Chrome Crashpad extensions.
 void InitializeCrashpadWithEmbeddedHandler(bool initial_client,
-                                           const std::string& process_type);
+                                           const std::string& process_type,
+                                           const std::string& user_data_dir);
 #endif  // OS_WIN
 
 // Returns the CrashpadClient for this process. This will lazily create it if
@@ -90,9 +92,9 @@ enum class ReportUploadState {
 };
 
 struct Report {
-  std::string local_id;
+  char local_id[64];
   time_t capture_time;
-  std::string remote_id;
+  char remote_id[64];
   time_t upload_time;
   ReportUploadState state;
 };
@@ -109,6 +111,12 @@ void RequestSingleCrashUpload(const std::string& local_id);
 
 void DumpWithoutCrashing();
 
+// The implementation function for GetReports.
+void GetReportsImpl(std::vector<Report>* reports);
+
+// The implementation function for RequestSingleCrashUpload.
+void RequestSingleCrashUploadImpl(const std::string& local_id);
+
 namespace internal {
 
 #if defined(OS_WIN)
@@ -118,11 +126,14 @@ void GetPlatformCrashpadAnnotations(
     std::map<std::string, std::string>* annotations);
 #endif  // defined(OS_WIN)
 
-// The platform-specific portion of InitializeCrashpad().
+// The platform-specific portion of InitializeCrashpad(). On windows, if
+// user_data_dir is non-empty, the user data directory will be passed to the
+// handler process for use by Chrome Crashpad extensions.
 // Returns the database path, if initializing in the browser process.
 base::FilePath PlatformCrashpadInitialization(bool initial_client,
                                               bool browser_process,
-                                              bool embedded_handler);
+                                              bool embedded_handler,
+                                              const std::string& user_data_dir);
 
 }  // namespace internal
 

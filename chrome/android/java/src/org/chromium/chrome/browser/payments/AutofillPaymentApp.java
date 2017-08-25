@@ -96,12 +96,7 @@ public class AutofillPaymentApp implements PaymentApp {
             }
         }
 
-        new Handler().post(new Runnable() {
-            @Override
-            public void run() {
-                callback.onInstrumentsReady(AutofillPaymentApp.this, instruments);
-            }
-        });
+        new Handler().post(() -> callback.onInstrumentsReady(AutofillPaymentApp.this, instruments));
     }
 
     /** @return A set of card networks (e.g., "visa", "amex") accepted by "basic-card" method. */
@@ -133,7 +128,7 @@ public class AutofillPaymentApp implements PaymentApp {
         result.add(CardType.UNKNOWN);
 
         Map<Integer, Integer> cardTypes = getCardTypes();
-        if (data == null || data.supportedTypes == null || data.supportedTypes.length == 0) {
+        if (!isBasicCardTypeSpecified(data)) {
             // Merchant website supports all card types.
             result.addAll(cardTypes.values());
         } else {
@@ -145,6 +140,11 @@ public class AutofillPaymentApp implements PaymentApp {
         }
 
         return result;
+    }
+
+    /** @return True if supported card type is specified in data for "basic-card" method. */
+    public static boolean isBasicCardTypeSpecified(PaymentMethodData data) {
+        return data != null && data.supportedTypes != null && data.supportedTypes.length != 0;
     }
 
     private static Map<Integer, String> getNetworks() {

@@ -59,6 +59,8 @@ const char* GetEventAckName(InputEventAckState ack_result) {
       return "CONSUMED";
     case INPUT_EVENT_ACK_STATE_NOT_CONSUMED:
       return "NOT_CONSUMED";
+    case INPUT_EVENT_ACK_STATE_CONSUMED_SHOULD_BUBBLE:
+      return "CONSUMED_SHOULD_BUBBLE";
     case INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS:
       return "NO_CONSUMER_EXISTS";
     case INPUT_EVENT_ACK_STATE_IGNORED:
@@ -342,6 +344,8 @@ bool InputRouterImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_HasTouchEventHandlers,
                         OnHasTouchEventHandlers)
     IPC_MESSAGE_HANDLER(InputHostMsg_SetTouchAction, OnSetTouchAction)
+    IPC_MESSAGE_HANDLER(InputHostMsg_SetWhiteListedTouchAction,
+                        OnSetWhiteListedTouchAction)
     IPC_MESSAGE_HANDLER(InputHostMsg_DidStopFlinging, OnDidStopFlinging)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -476,6 +480,17 @@ void InputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
   UpdateTouchAckTimeoutEnabled();
 }
 
+void InputRouterImpl::OnSetWhiteListedTouchAction(
+    cc::TouchAction white_listed_touch_action,
+    uint32_t unique_touch_event_id,
+    InputEventAckState ack_result) {
+  // TODO(hayleyferr): Catch the cases that we have filtered out sending the
+  // touchstart.
+
+  touch_action_filter_.OnSetWhiteListedTouchAction(white_listed_touch_action);
+  client_->OnSetWhiteListedTouchAction(white_listed_touch_action);
+}
+
 void InputRouterImpl::OnDidStopFlinging() {
   DCHECK_GT(active_renderer_fling_count_, 0);
   // Note that we're only guaranteed to get a fling end notification from the
@@ -500,6 +515,10 @@ void InputRouterImpl::SetFrameTreeNodeId(int frame_tree_node_id) {
 
 cc::TouchAction InputRouterImpl::AllowedTouchAction() {
   return touch_action_filter_.allowed_touch_action();
+}
+
+void InputRouterImpl::SetForceEnableZoom(bool enabled) {
+  touch_action_filter_.SetForceEnableZoom(enabled);
 }
 
 void InputRouterImpl::SetMovementXYForTouchPoints(blink::WebTouchEvent* event) {

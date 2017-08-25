@@ -5,7 +5,9 @@
 #import <EarlGrey/EarlGrey.h>
 #import <XCTest/XCTest.h>
 
+#include "base/ios/ios_util.h"
 #include "components/strings/grit/components_strings.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
@@ -120,6 +122,10 @@ void AssertNTPScrolledToTop(bool scrolledToTop) {
 
 // Tests that all items are accessible on the bookmarks page.
 - (void)testAccessibilityOnBookmarks {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old Bookmarks UI.");
+  }
   SelectNewTabPagePanel(NewTabPage::kBookmarksPanel);
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
   DismissNewTabPagePanel();

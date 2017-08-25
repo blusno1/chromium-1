@@ -20,6 +20,7 @@
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -35,6 +36,10 @@
 #if defined(OS_POSIX)
 #include <unistd.h>
 #endif  // OS_POSIX
+
+#if defined(OS_WIN)
+#include "components/crash/content/app/crash_export_thunks.h"
+#endif
 
 namespace crash_reporter {
 
@@ -92,6 +97,7 @@ bool LogMessageHandler(int severity,
 
 void InitializeCrashpadImpl(bool initial_client,
                             const std::string& process_type,
+                            const std::string& user_data_dir,
                             bool embedded_handler) {
   static bool initialized = false;
   DCHECK(!initialized);
@@ -119,7 +125,7 @@ void InitializeCrashpadImpl(bool initial_client,
 
   // database_path is only valid in the browser process.
   base::FilePath database_path = internal::PlatformCrashpadInitialization(
-      initial_client, browser_process, embedded_handler);
+      initial_client, browser_process, embedded_handler, user_data_dir);
 
   crashpad::CrashpadInfo* crashpad_info =
       crashpad::CrashpadInfo::GetCrashpadInfo();
@@ -190,13 +196,14 @@ void InitializeCrashpadImpl(bool initial_client,
 }  // namespace
 
 void InitializeCrashpad(bool initial_client, const std::string& process_type) {
-  InitializeCrashpadImpl(initial_client, process_type, false);
+  InitializeCrashpadImpl(initial_client, process_type, std::string(), false);
 }
 
 #if defined(OS_WIN)
 void InitializeCrashpadWithEmbeddedHandler(bool initial_client,
-                                           const std::string& process_type) {
-  InitializeCrashpadImpl(initial_client, process_type, true);
+                                           const std::string& process_type,
+                                           const std::string& user_data_dir) {
+  InitializeCrashpadImpl(initial_client, process_type, user_data_dir, true);
 }
 #endif  // OS_WIN
 
@@ -238,7 +245,51 @@ bool GetUploadsEnabled() {
   return false;
 }
 
+void DumpWithoutCrashing() {
+  CRASHPAD_SIMULATE_CRASH();
+}
+
 void GetReports(std::vector<Report>* reports) {
+#if defined(OS_WIN)
+  // On Windows, the crash client may be linked into another module, which
+  // does the client registration. That means the global that holds the crash
+  // report database lives across a module boundary, where the other module
+  // implements the GetCrashReportsImpl function. Since the other module has
+  // a separate allocation domain, this awkward copying is necessary.
+
+  // Start with an arbitrary copy size.
+  reports->resize(25);
+  while (true) {
+    size_t available_reports =
+        GetCrashReportsImpl(&reports->at(0), reports->size());
+    if (available_reports <= reports->size()) {
+      // The input size was large enough to capture all available crashes.
+      // Trim the vector to the actual number of reports returned and return.
+      reports->resize(available_reports);
+      return;
+    }
+
+    // Resize to the number of available reports, plus some slop to all but
+    // eliminate the possibility of running around the loop again due to a
+    // newly arrived crash report.
+    reports->resize(available_reports + 5);
+  }
+#else
+  GetReportsImpl(reports);
+#endif
+}
+
+void RequestSingleCrashUpload(const std::string& local_id) {
+#if defined(OS_WIN)
+  // On Windows, crash reporting may be implemented in another module, which is
+  // why this can't call crash_reporter::RequestSingleCrashUpload directly.
+  RequestSingleCrashUploadImpl(local_id);
+#else
+  crash_reporter::RequestSingleCrashUploadImpl(local_id);
+#endif
+}
+
+void GetReportsImpl(std::vector<Report>* reports) {
   reports->clear();
 
   if (!g_database) {
@@ -260,10 +311,15 @@ void GetReports(std::vector<Report>* reports) {
 
   for (const crashpad::CrashReportDatabase::Report& completed_report :
        completed_reports) {
-    Report report;
-    report.local_id = completed_report.uuid.ToString();
+    Report report = {};
+
+    // TODO(siggi): CHECK that this fits?
+    base::strlcpy(report.local_id, completed_report.uuid.ToString().c_str(),
+                  sizeof(report.local_id));
+
     report.capture_time = completed_report.creation_time;
-    report.remote_id = completed_report.id;
+    base::strlcpy(report.remote_id, completed_report.id.c_str(),
+                  sizeof(report.remote_id));
     if (completed_report.uploaded) {
       report.upload_time = completed_report.last_upload_attempt_time;
       report.state = ReportUploadState::Uploaded;
@@ -276,8 +332,9 @@ void GetReports(std::vector<Report>* reports) {
 
   for (const crashpad::CrashReportDatabase::Report& pending_report :
        pending_reports) {
-    Report report;
-    report.local_id = pending_report.uuid.ToString();
+    Report report = {};
+    base::strlcpy(report.local_id, pending_report.uuid.ToString().c_str(),
+                  sizeof(report.local_id));
     report.capture_time = pending_report.creation_time;
     report.upload_time = 0;
     report.state = pending_report.upload_explicitly_requested
@@ -292,16 +349,12 @@ void GetReports(std::vector<Report>* reports) {
             });
 }
 
-void RequestSingleCrashUpload(const std::string& local_id) {
+void RequestSingleCrashUploadImpl(const std::string& local_id) {
   if (!g_database)
     return;
   crashpad::UUID uuid;
   uuid.InitializeFromString(local_id);
   g_database->RequestUpload(uuid);
-}
-
-void DumpWithoutCrashing() {
-  CRASHPAD_SIMULATE_CRASH();
 }
 
 }  // namespace crash_reporter
@@ -317,7 +370,7 @@ extern "C" {
 // be consistent with
 // crash_reporter::GetCrashReporterClient()->GetCollectStatsConsent(), but it's
 // not enforced to avoid blocking startup code on synchronizing them.
-void __declspec(dllexport) __cdecl SetUploadConsentImpl(bool consent) {
+void SetUploadConsentImpl(bool consent) {
   crash_reporter::SetUploadConsent(consent);
 }
 
@@ -325,22 +378,23 @@ void __declspec(dllexport) __cdecl SetUploadConsentImpl(bool consent) {
 // change the name or signature of this function you will break SyzyASAN
 // instrumented releases of Chrome. Please contact syzygy-team@chromium.org
 // before doing so! See also http://crbug.com/567781.
-void __declspec(dllexport) __cdecl SetCrashKeyValueImpl(const wchar_t* key,
-                                                        const wchar_t* value) {
+void SetCrashKeyValueImpl(const wchar_t* key, const wchar_t* value) {
   crash_reporter::SetCrashKeyValue(base::UTF16ToUTF8(key),
                                    base::UTF16ToUTF8(value));
 }
 
-void __declspec(dllexport) __cdecl ClearCrashKeyValueImpl(const wchar_t* key) {
+void ClearCrashKeyValueImpl(const wchar_t* key) {
   crash_reporter::ClearCrashKey(base::UTF16ToUTF8(key));
 }
 
-// This helper is invoked by code in chrome.dll to request a single crash report
-// upload. See CrashUploadListCrashpad.
-void __declspec(dllexport)
-    RequestSingleCrashUploadImpl(const std::string& local_id) {
-  crash_reporter::RequestSingleCrashUpload(local_id);
+void SetCrashKeyValueImplEx(const char* key, const char* value) {
+  crash_reporter::SetCrashKeyValue(key, value);
 }
+
+void ClearCrashKeyValueImplEx(const char* key) {
+  crash_reporter::ClearCrashKey(key);
+}
+
 }  // extern "C"
 
 #endif  // OS_WIN

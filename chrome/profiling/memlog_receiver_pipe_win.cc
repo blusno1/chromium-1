@@ -10,6 +10,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
+#include "chrome/profiling/memlog_receiver_pipe.h"
 #include "chrome/profiling/memlog_stream_receiver.h"
 
 namespace profiling {
@@ -24,14 +25,13 @@ const int kReadBufferSize = 1024 * 64;
 
 }  // namespace
 
-MemlogReceiverPipe::MemlogReceiverPipe(HANDLE handle)
-    : handle_(handle), read_buffer_(new char[kReadBufferSize]) {
+MemlogReceiverPipe::MemlogReceiverPipe(base::ScopedPlatformFile handle)
+    : handle_(std::move(handle)), read_buffer_(new char[kReadBufferSize]) {
   ZeroOverlapped();
-  base::MessageLoopForIO::current()->RegisterIOHandler(handle_, this);
+  base::MessageLoopForIO::current()->RegisterIOHandler(handle_.Get(), this);
 }
 
 MemlogReceiverPipe::~MemlogReceiverPipe() {
-  ::CloseHandle(handle_);
 }
 
 void MemlogReceiverPipe::StartReadingOnIOThread() {
@@ -45,6 +45,10 @@ void MemlogReceiverPipe::SetReceiver(
   receiver_ = receiver;
 }
 
+void MemlogReceiverPipe::ReportError() {
+  handle_.Close();
+}
+
 void MemlogReceiverPipe::ReadUntilBlocking() {
   // TODO(brettw) note that the IO completion callback will always be issued,
   // even for sync returns of ReadFile. If there is a lot of data ready to be
@@ -56,8 +60,8 @@ void MemlogReceiverPipe::ReadUntilBlocking() {
 
   DCHECK(!read_outstanding_);
   read_outstanding_ = true;
-  if (!::ReadFile(handle_, read_buffer_.get(), kReadBufferSize, &bytes_read,
-                  &context_.overlapped)) {
+  if (!::ReadFile(handle_.Get(), read_buffer_.get(), kReadBufferSize,
+                  &bytes_read, &context_.overlapped)) {
     if (GetLastError() == ERROR_IO_PENDING) {
       return;
     } else {
@@ -86,7 +90,9 @@ void MemlogReceiverPipe::OnIOCompleted(
 
   if (bytes_transfered && receiver_) {
     receiver_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&MemlogStreamReceiver::OnStreamData,
+        FROM_HERE, base::BindOnce(&ReceiverPipeStreamDataThunk,
+                                  base::MessageLoop::current()->task_runner(),
+                                  scoped_refptr<MemlogReceiverPipe>(this),
                                   receiver_, std::move(read_buffer_),
                                   static_cast<size_t>(bytes_transfered)));
     read_buffer_.reset(new char[kReadBufferSize]);

@@ -2797,6 +2797,17 @@
     "test_policy": { "EcryptfsMigrationStrategy": 1 }
   },
 
+  "CloudPolicyOverridesMachinePolicy": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "CloudPolicyOverridesMachinePolicy": false },
+    "pref_mappings": [
+      { "pref": "policy.cloud_override",
+        "local_state": true
+      }
+    ]
+  },
+
+
   "----- Chrome OS device policies ---------------------------------------": {},
 
   "DevicePolicyRefreshRate": {
@@ -3136,6 +3147,23 @@
     ]
   },
 
+  "CastReceiverEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "CastReceiverEnabled": true },
+    "pref_mappings": [
+      { "pref": "cast_receiver.enabled" }
+    ]
+  },
+
+  "CastReceiverName": {
+    "os": ["chromeos"],
+    "test_policy": { "CastReceiverName": "Hallway" },
+    "pref_mappings": [
+      { "pref": "cast_receiver.name",
+        "local_state": true }
+    ]
+  },
+
   "----- Chrome Frame policies -------------------------------------------": {},
 
   "ChromeFrameRendererSettings": {
@@ -3160,5 +3188,10 @@
   },
 
   "SkipMetadataCheck": {
+  },
+
+  "DeviceOffHours": {
+    "os": ["chromeos"],
+    "test_policy": {"DeviceOffHours": {"interval": [{"start" : {"weekday" : 1, "time": 12840000}, "end": {"weekday" : 1, "time": 21720000}}], "timezone" : "GMT", "ignored_policy": ["allow_new_users", "guest_mode_enabled"]}}
   }
 }

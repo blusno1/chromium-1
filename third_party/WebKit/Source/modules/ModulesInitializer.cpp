@@ -13,10 +13,11 @@
 #include "core/exported/WebSharedWorkerImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/InspectorSession.h"
+#include "core/leak_detector/BlinkLeakDetector.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "core/page/ChromeClient.h"
@@ -35,6 +36,7 @@
 #include "modules/audio_output_devices/HTMLMediaElementAudioOutputDevice.h"
 #include "modules/cachestorage/InspectorCacheStorageAgent.h"
 #include "modules/canvas2d/CanvasRenderingContext2D.h"
+#include "modules/compositorworker/AbstractAnimationWorkletThread.h"
 #include "modules/compositorworker/CompositorWorkerThread.h"
 #include "modules/credentialmanager/CredentialManagerClient.h"
 #include "modules/csspaint/CSSPaintImageGeneratorImpl.h"
@@ -50,12 +52,12 @@
 #include "modules/filesystem/LocalFileSystemClient.h"
 #include "modules/gamepad/NavigatorGamepad.h"
 #include "modules/imagebitmap/ImageBitmapRenderingContext.h"
-#include "modules/indexeddb/IndexedDBClientImpl.h"
+#include "modules/indexeddb/IndexedDBClient.h"
 #include "modules/indexeddb/InspectorIndexedDBAgent.h"
 #include "modules/installation/InstallationServiceImpl.h"
 #include "modules/installedapp/InstalledAppController.h"
 #include "modules/media_controls/MediaControlsImpl.h"
-#include "modules/mediastream/UserMediaClientImpl.h"
+#include "modules/mediastream/UserMediaClient.h"
 #include "modules/mediastream/UserMediaController.h"
 #include "modules/navigatorcontentutils/NavigatorContentUtils.h"
 #include "modules/navigatorcontentutils/NavigatorContentUtilsClient.h"
@@ -151,13 +153,12 @@ void ModulesInitializer::InitLocalFrame(LocalFrame& frame) const {
 }
 
 void ModulesInitializer::InstallSupplements(LocalFrame& frame) const {
-  WebLocalFrameBase* web_frame = WebLocalFrameBase::FromFrame(&frame);
+  WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(&frame);
   WebFrameClient* client = web_frame->Client();
   DCHECK(client);
   ProvidePushControllerTo(frame, client->PushClient());
-  ProvideUserMediaTo(frame,
-                     UserMediaClientImpl::Create(client->UserMediaClient()));
-  ProvideIndexedDBClientTo(frame, IndexedDBClientImpl::Create(frame));
+  ProvideUserMediaTo(frame, UserMediaClient::Create(client->UserMediaClient()));
+  ProvideIndexedDBClientTo(frame, IndexedDBClient::Create(frame));
   ProvideLocalFileSystemTo(frame, LocalFileSystemClient::Create());
   NavigatorContentUtils::ProvideTo(
       *frame.DomWindow()->navigator(),
@@ -183,7 +184,7 @@ void ModulesInitializer::ProvideLocalFileSystemToWorker(
 void ModulesInitializer::ProvideIndexedDBClientToWorker(
     WorkerClients& worker_clients) const {
   ::blink::ProvideIndexedDBClientToWorker(
-      &worker_clients, IndexedDBClientImpl::Create(worker_clients));
+      &worker_clients, IndexedDBClient::Create(worker_clients));
 }
 
 MediaControls* ModulesInitializer::CreateMediaControls(
@@ -273,6 +274,10 @@ void ModulesInitializer::ProvideModulesToPage(Page& page,
 
 void ModulesInitializer::ForceNextWebGLContextCreationToFail() const {
   WebGLRenderingContext::ForceNextWebGLContextCreationToFail();
+}
+
+void ModulesInitializer::CollectAllGarbageForAnimationWorklet() const {
+  AbstractAnimationWorkletThread::CollectAllGarbage();
 }
 
 }  // namespace blink

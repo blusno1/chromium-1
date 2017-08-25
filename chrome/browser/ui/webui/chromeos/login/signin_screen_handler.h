@@ -10,7 +10,8 @@
 #include <set>
 #include <string>
 
-#include "ash/public/interfaces/touch_view.mojom.h"
+#include "ash/public/interfaces/tablet_mode.mojom.h"
+#include "ash/wallpaper/wallpaper_controller_observer.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_webui_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
@@ -238,10 +238,10 @@ class SigninScreenHandler
       public NetworkStateInformer::NetworkStateInformerObserver,
       public PowerManagerClient::Observer,
       public input_method::ImeKeyboard::Observer,
-      public ash::mojom::TouchViewObserver,
+      public ash::mojom::TabletModeObserver,
       public lock_screen_apps::StateObserver,
       public OobeUI::Observer,
-      public wallpaper::WallpaperManagerBase::Observer {
+      public ash::WallpaperControllerObserver {
  public:
   SigninScreenHandler(
       const scoped_refptr<NetworkStateInformer>& network_state_informer,
@@ -275,12 +275,13 @@ class SigninScreenHandler
   // Required Local State preferences.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
-  // OobeUI::Observer implemetation.
+  // OobeUI::Observer implementation:
   void OnCurrentScreenChanged(OobeScreen current_screen,
                               OobeScreen new_screen) override;
 
-  // wallpaper::WallpaperManagerBase::Observer implementation.
+  // ash::WallpaperControllerObserver implementation:
   void OnWallpaperColorsChanged() override;
+  void OnWallpaperDataChanged() override;
 
   void SetFocusPODCallbackForTesting(base::Closure callback);
 
@@ -319,9 +320,9 @@ class SigninScreenHandler
                           NetworkError::ErrorReason reason);
   void ReloadGaia(bool force_reload);
 
-  // Sets signin screen overlay colors based on the wallpaper color extraction
-  // results.
-  void SetSigninScreenColors(SkColor dm_color);
+  // Updates the color of the scrollable container on account picker screen,
+  // based on wallpaper color extraction results.
+  void UpdateAccountPickerColors();
 
   // BaseScreenHandler implementation:
   void DeclareLocalizedValues(
@@ -363,8 +364,8 @@ class SigninScreenHandler
   // PowerManagerClient::Observer implementation:
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
 
-  // ash::mojom::TouchView:
-  void OnTouchViewToggled(bool enabled) override;
+  // ash::mojom::TabletMode:
+  void OnTabletModeToggled(bool enabled) override;
 
   // lock_screen_apps::StateObserver:
   void OnLockScreenNoteStateChanged(ash::mojom::TrayActionState state) override;
@@ -420,11 +421,13 @@ class SigninScreenHandler
   void HandleLaunchArcKioskApp(const AccountId& app_account_id);
   void HandleGetPublicSessionKeyboardLayouts(const AccountId& account_id,
                                              const std::string& locale);
-  void HandleGetTouchViewState();
+  void HandleGetTabletModeState();
   void HandleLogRemoveUserWarningShown();
   void HandleFirstIncorrectPasswordAttempt(const AccountId& account_id);
   void HandleMaxIncorrectPasswordAttempts(const AccountId& account_id);
   void HandleSendFeedbackAndResyncUserData();
+  void HandleRequestNewNoteAction(const std::string& request_type);
+  void HandleRecordLockScreenAppUnlockUIAction(const std::string& action);
   void HandleSetLockScreenAppsState(const std::string& state);
 
   // Sends the list of |keyboard_layouts| available for the |locale| that is
@@ -538,9 +541,9 @@ class SigninScreenHandler
   // TODO(antrim@): remove this dependency.
   GaiaScreenHandler* gaia_screen_handler_ = nullptr;
 
-  mojo::Binding<ash::mojom::TouchViewObserver> touch_view_binding_;
-  ash::mojom::TouchViewManagerPtr touch_view_manager_ptr_;
-  bool touch_view_enabled_ = false;
+  mojo::Binding<ash::mojom::TabletModeObserver> tablet_mode_binding_;
+  ash::mojom::TabletModeManagerPtr tablet_mode_manager_ptr_;
+  bool tablet_mode_enabled_ = false;
 
   // Input Method Engine state used at signin screen.
   scoped_refptr<input_method::InputMethodManager::State> ime_state_;

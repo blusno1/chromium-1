@@ -16,6 +16,7 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/ntp_snippets/features.h"
+#include "components/ntp_tiles/constants.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/payments/core/features.h"
@@ -57,9 +58,12 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kCCTPostMessageAPI,
     &kCCTRedirectPreconnect,
     &kChromeHomeFeature,
+    &kChromeHomeDoodle,
     &kChromeHomeExpandButton,
+    &kChromeHomeModernLayout,
     &kChromeHomeSwipeLogic,
     &kContentSuggestionsLargeThumbnail,
+    &kContentSuggestionsScrollToLoad,
     &kContentSuggestionsVideoOverlay,
     &kContentSuggestionsSettings,
     &kContentSuggestionsShowSummary,
@@ -92,7 +96,6 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kSpannableInlineAutocomplete,
     &kSpecialLocaleFeature,
     &kSpecialLocaleWrapper,
-    &kSuggestionsHomeModernLayout,
     &kTabReparenting,
     &kVideoPersistence,
     &kVrBrowsingFeedback,
@@ -107,6 +110,8 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &ntp_snippets::kForeignSessionsSuggestionsFeature,
     &ntp_snippets::kNotificationsFeature,
     &ntp_snippets::kPublisherFaviconsFromNewServerFeature,
+    &ntp_tiles::kLowerResolutionFaviconsFeature,
+    &ntp_tiles::kSiteExplorationUiFeature,
     &offline_pages::kBackgroundLoaderForDownloadsFeature,
     &offline_pages::kOfflinePagesCTFeature,  // See crbug.com/620421.
     &offline_pages::kOfflinePagesSharingFeature,
@@ -149,13 +154,19 @@ const base::Feature kCCTPostMessageAPI{"CCTPostMessageAPI",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kCCTRedirectPreconnect{"CCTRedirectPreconnect",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kChromeHomeFeature{"ChromeHome",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kChromeHomeDoodle{"ChromeHomeDoodle",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kChromeHomeExpandButton{"ChromeHomeExpandButton",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kChromeHomeModernLayout{"ChromeHomeModernLayout",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kChromeHomeSwipeLogic{"ChromeHomeSwipeLogic",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
@@ -163,8 +174,11 @@ const base::Feature kChromeHomeSwipeLogic{"ChromeHomeSwipeLogic",
 const base::Feature kContentSuggestionsLargeThumbnail{
     "ContentSuggestionsLargeThumbnail", base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kContentSuggestionsScrollToLoad{
+    "ContentSuggestionsScrollToLoad", base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kContentSuggestionsVideoOverlay{
-    "ContentSuggestionsVideoOverlay", base::FEATURE_ENABLED_BY_DEFAULT};
+    "ContentSuggestionsVideoOverlay", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kContentSuggestionsSettings{
     "ContentSuggestionsSettings", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -197,12 +211,14 @@ const base::Feature kDownloadHomeShowStorageInfo{
     "DownloadHomeShowStorageInfo", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kFullscreenActivity{"FullscreenActivity",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Makes "Add to Home screen" in the app menu generate an APK for the shortcut
 // URL which opens Chrome in fullscreen.
+// This feature is kept around so that we have a kill-switch in case of server
+// issues.
 const base::Feature kImprovedA2HS{"ImprovedA2HS",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSearchEnginePromoExistingDevice{
     "SearchEnginePromo.ExistingDevice", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -258,9 +274,6 @@ const base::Feature kSpecialLocaleFeature{"SpecialLocale",
 const base::Feature kSpecialLocaleWrapper{"SpecialLocaleWrapper",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kSuggestionsHomeModernLayout{
-    "SuggestionsHomeModernLayout", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kTabReparenting{"TabReparenting",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -280,7 +293,7 @@ const base::Feature kWebPaymentsSingleAppUiSkip{
     "WebPaymentsSingleAppUiSkip", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kWebVrAutopresent{"WebVrAutopresent",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kWebVRCardboardSupport{"WebVRCardboardSupport",
                                            base::FEATURE_ENABLED_BY_DEFAULT};

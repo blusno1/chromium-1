@@ -157,16 +157,35 @@ void BoxPainterBase::PaintNormalBoxShadow(const PaintInfo& info,
   }
 }
 
+void BoxPainterBase::PaintInsetBoxShadowWithBorderRect(
+    const PaintInfo& info,
+    const LayoutRect& border_rect,
+    const ComputedStyle& style,
+    bool include_logical_left_edge,
+    bool include_logical_right_edge) {
+  if (!style.BoxShadow())
+    return;
+  auto bounds = style.GetRoundedInnerBorderFor(
+      border_rect, include_logical_left_edge, include_logical_right_edge);
+  PaintInsetBoxShadow(info, bounds, style, include_logical_left_edge,
+                      include_logical_right_edge);
+}
+
+void BoxPainterBase::PaintInsetBoxShadowWithInnerRect(
+    const PaintInfo& info,
+    const LayoutRect& inner_rect,
+    const ComputedStyle& style) {
+  if (!style.BoxShadow())
+    return;
+  auto bounds = style.GetRoundedInnerBorderFor(inner_rect, LayoutRectOutsets());
+  PaintInsetBoxShadow(info, bounds, style);
+}
+
 void BoxPainterBase::PaintInsetBoxShadow(const PaintInfo& info,
-                                         const LayoutRect& paint_rect,
+                                         const FloatRoundedRect& bounds,
                                          const ComputedStyle& style,
                                          bool include_logical_left_edge,
                                          bool include_logical_right_edge) {
-  if (!style.BoxShadow())
-    return;
-  FloatRoundedRect bounds = style.GetRoundedInnerBorderFor(
-      paint_rect, include_logical_left_edge, include_logical_right_edge);
-
   GraphicsContext& context = info.context;
   bool is_horizontal = style.IsHorizontalWritingMode();
   GraphicsContextStateSaver state_saver(context, false);
@@ -378,8 +397,7 @@ inline bool PaintFastBottomLayer(const DisplayItemClient& image_client,
   if (geometry.CellUsingContainerBackground())
     return false;
   // Complex cases not handled on the fast path.
-  if (!info.is_bottom_layer || !info.is_border_fill ||
-      info.is_clipped_with_local_scrolling)
+  if (!info.is_bottom_layer || !info.is_border_fill)
     return false;
 
   // Transparent layer, nothing to paint.
@@ -444,7 +462,9 @@ inline bool PaintFastBottomLayer(const DisplayItemClient& image_client,
       image_tile, border.Rect(), intrinsic_tile_size);
 
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage",
-               "data", InspectorPaintImageEvent::Data(node, *info.image));
+               "data",
+               InspectorPaintImageEvent::Data(node, *info.image, image->Rect(),
+                                              FloatRect(rect)));
   context.DrawImageRRect(image, border, src_rect, composite_op);
 
   return true;
@@ -471,8 +491,10 @@ void BoxPainterBase::PaintFillLayerBackground(
 
   // No progressive loading of the background image.
   if (info.should_paint_image && !geometry.DestRect().IsEmpty()) {
-    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage",
-                 "data", InspectorPaintImageEvent::Data(node_, *info.image));
+    TRACE_EVENT1(
+        TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data",
+        InspectorPaintImageEvent::Data(node_, *info.image, image->Rect(),
+                                       FloatRect(scrolled_paint_rect)));
     context.DrawTiledImage(image, FloatRect(geometry.DestRect()),
                            FloatPoint(geometry.Phase()),
                            FloatSize(geometry.TileSize()), composite_op,

@@ -154,6 +154,7 @@
 #include "components/metrics/metrics_rotation_scheduler.h"
 #include "components/metrics/metrics_service_client.h"
 #include "components/metrics/metrics_state_manager.h"
+#include "components/metrics/persistent_system_profile.h"
 #include "components/metrics/stability_metrics_provider.h"
 #include "components/metrics/url_constants.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -201,8 +202,6 @@ void MetricsService::RegisterPrefs(PrefRegistrySimple* registry) {
   ExecutionPhaseManager::RegisterPrefs(registry);
   MetricsReportingService::RegisterPrefs(registry);
 
-  registry->RegisterInt64Pref(prefs::kInstallDate, 0);
-
   registry->RegisterIntegerPref(prefs::kMetricsSessionID, -1);
 
   registry->RegisterInt64Pref(prefs::kUninstallLaunchCount, 0);
@@ -228,13 +227,10 @@ MetricsService::MetricsService(MetricsStateManager* state_manager,
   DCHECK(client_);
   DCHECK(local_state_);
 
-  // Set the install date if this is our first run.
-  int64_t install_date = local_state_->GetInt64(prefs::kInstallDate);
-  if (install_date == 0)
-    local_state_->SetInt64(prefs::kInstallDate, base::Time::Now().ToTimeT());
-
   RegisterMetricsProvider(
       base::MakeUnique<StabilityMetricsProvider>(local_state_));
+
+  RegisterMetricsProvider(state_manager_->GetProvider());
 
   RegisterMetricsProvider(base::MakeUnique<variations::FieldTrialsProvider>(
       &synthetic_trial_registry_, base::StringPiece()));
@@ -263,9 +259,11 @@ void MetricsService::InitializeMetricsRecordingState() {
 }
 
 void MetricsService::Start() {
+  base::StatisticsRecorder::ValidateAllHistograms();
   HandleIdleSinceLastTransmission(false);
   EnableRecording();
   EnableReporting();
+  base::StatisticsRecorder::ValidateAllHistograms();
 }
 
 void MetricsService::StartRecordingForTests() {
@@ -275,9 +273,11 @@ void MetricsService::StartRecordingForTests() {
 }
 
 void MetricsService::Stop() {
+  base::StatisticsRecorder::ValidateAllHistograms();
   HandleIdleSinceLastTransmission(false);
   DisableReporting();
   DisableRecording();
+  base::StatisticsRecorder::ValidateAllHistograms();
 }
 
 void MetricsService::EnableReporting() {
@@ -296,11 +296,7 @@ std::string MetricsService::GetClientId() {
 }
 
 int64_t MetricsService::GetInstallDate() {
-  return local_state_->GetInt64(prefs::kInstallDate);
-}
-
-int64_t MetricsService::GetMetricsReportingEnabledDate() {
-  return local_state_->GetInt64(prefs::kMetricsReportingEnabledTimestamp);
+  return state_manager_->GetInstallDate();
 }
 
 bool MetricsService::WasLastShutdownClean() const {
@@ -316,6 +312,12 @@ void MetricsService::EnableRecording() {
 
   state_manager_->ForceClientIdCreation();
   client_->SetMetricsClientId(state_manager_->client_id());
+
+  SystemProfileProto system_profile;
+  MetricsLog::RecordCoreSystemProfile(client_, &system_profile);
+  GlobalPersistentSystemProfile::GetInstance()->SetSystemProfile(
+      system_profile, /*complete=*/false);
+
   if (!log_manager_.current_log())
     OpenNewLog();
 
@@ -357,8 +359,10 @@ bool MetricsService::has_unsent_logs() const {
 
 void MetricsService::RecordDelta(const base::HistogramBase& histogram,
                                  const base::HistogramSamples& snapshot) {
+  histogram.ValidateHistogramContents(true, -1);
   log_manager_.current_log()->RecordHistogramDelta(histogram.histogram_name(),
                                                    snapshot);
+  histogram.ValidateHistogramContents(true, -2);
 }
 
 void MetricsService::HandleIdleSinceLastTransmission(bool in_idle) {
@@ -385,6 +389,7 @@ void MetricsService::RecordCompletedSessionEnd() {
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
 void MetricsService::OnAppEnterBackground() {
+  base::StatisticsRecorder::ValidateAllHistograms();
   rotation_scheduler_->Stop();
   reporting_service_.Stop();
 
@@ -406,12 +411,15 @@ void MetricsService::OnAppEnterBackground() {
     // process is killed.
     OpenNewLog();
   }
+  base::StatisticsRecorder::ValidateAllHistograms();
 }
 
 void MetricsService::OnAppEnterForeground() {
+  base::StatisticsRecorder::ValidateAllHistograms();
   state_manager_->clean_exit_beacon()->WriteBeaconValue(false);
   ExecutionPhaseManager(local_state_).OnAppEnterForeground();
   StartSchedulerIfNecessary();
+  base::StatisticsRecorder::ValidateAllHistograms();
 }
 #else
 void MetricsService::LogNeedForCleanShutdown() {
@@ -589,6 +597,7 @@ void MetricsService::GetUptimes(PrefService* pref,
 
 void MetricsService::OpenNewLog() {
   DCHECK(!log_manager_.current_log());
+  base::StatisticsRecorder::ValidateAllHistograms();
 
   log_manager_.BeginLoggingWithLog(CreateLog(MetricsLog::ONGOING_LOG));
   delegating_provider_.OnDidCreateMetricsLog();
@@ -607,6 +616,8 @@ void MetricsService::OpenNewLog() {
                    self_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromSeconds(2 * kInitializationDelaySeconds));
   }
+
+  base::StatisticsRecorder::ValidateAllHistograms();
 }
 
 void MetricsService::StartInitTask() {
@@ -615,6 +626,8 @@ void MetricsService::StartInitTask() {
 }
 
 void MetricsService::CloseCurrentLog() {
+  base::StatisticsRecorder::ValidateAllHistograms();
+
   if (!log_manager_.current_log())
     return;
 
@@ -641,6 +654,8 @@ void MetricsService::CloseCurrentLog() {
   current_log->TruncateEvents();
   DVLOG(1) << "Generated an ongoing log.";
   log_manager_.FinishCurrentLog(log_store());
+
+  base::StatisticsRecorder::ValidateAllHistograms();
 }
 
 void MetricsService::PushPendingLogsToPersistentStorage() {
@@ -672,6 +687,7 @@ void MetricsService::StartSchedulerIfNecessary() {
 void MetricsService::StartScheduledUpload() {
   DVLOG(1) << "StartScheduledUpload";
   DCHECK(state_ >= INIT_TASK_DONE);
+  base::StatisticsRecorder::ValidateAllHistograms();
   // If we're getting no notifications, then the log won't have much in it, and
   // it's possible the computer is about to go to sleep, so don't upload and
   // stop the scheduler.
@@ -699,10 +715,13 @@ void MetricsService::StartScheduledUpload() {
         base::Bind(&MetricsService::OnFinalLogInfoCollectionDone,
                    self_ptr_factory_.GetWeakPtr()));
   }
+
+  base::StatisticsRecorder::ValidateAllHistograms();
 }
 
 void MetricsService::OnFinalLogInfoCollectionDone() {
   DVLOG(1) << "OnFinalLogInfoCollectionDone";
+  base::StatisticsRecorder::ValidateAllHistograms();
   // Abort if metrics were turned off during the final info gathering.
   if (!recording_active()) {
     rotation_scheduler_->Stop();
@@ -720,6 +739,7 @@ void MetricsService::OnFinalLogInfoCollectionDone() {
   reporting_service_.Start();
   rotation_scheduler_->RotationFinished();
   HandleIdleSinceLastTransmission(true);
+  base::StatisticsRecorder::ValidateAllHistograms();
 }
 
 bool MetricsService::PrepareInitialStabilityLog(
@@ -733,7 +753,7 @@ bool MetricsService::PrepareInitialStabilityLog(
   // log describes stats from the _previous_ session.
   std::string system_profile_app_version;
   if (!initial_stability_log->LoadSavedEnvironmentFromPrefs(
-          &system_profile_app_version)) {
+          local_state_, &system_profile_app_version)) {
     return false;
   }
   if (system_profile_app_version != prefs_previous_version)
@@ -812,15 +832,26 @@ void MetricsService::CheckForClonedInstall() {
 std::unique_ptr<MetricsLog> MetricsService::CreateLog(
     MetricsLog::LogType log_type) {
   return base::MakeUnique<MetricsLog>(state_manager_->client_id(), session_id_,
-                                      log_type, client_, local_state_);
+                                      log_type, client_);
+}
+
+std::string MetricsService::RecordCurrentEnvironmentHelper(
+    MetricsLog* log,
+    PrefService* local_state,
+    DelegatingProvider* delegating_provider) {
+  const SystemProfileProto& system_profile =
+      log->RecordEnvironment(delegating_provider);
+  EnvironmentRecorder recorder(local_state);
+  return recorder.SerializeAndRecordEnvironmentToPrefs(system_profile);
 }
 
 void MetricsService::RecordCurrentEnvironment(MetricsLog* log) {
   DCHECK(client_);
-  std::string serialized_environment =
-      log->RecordEnvironment(&delegating_provider_, GetInstallDate(),
-                             GetMetricsReportingEnabledDate());
-  client_->OnEnvironmentUpdate(&serialized_environment);
+  std::string serialized_proto =
+      RecordCurrentEnvironmentHelper(log, local_state_, &delegating_provider_);
+  GlobalPersistentSystemProfile::GetInstance()->SetSystemProfile(
+      serialized_proto, /*complete=*/true);
+  client_->OnEnvironmentUpdate(&serialized_proto);
 }
 
 void MetricsService::RecordCurrentHistograms() {

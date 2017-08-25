@@ -94,10 +94,7 @@ void NotifyPrunedEntries(NavigationControllerImpl* nav_controller,
   PrunedDetails details;
   details.from_front = from_front;
   details.count = count;
-  NotificationService::current()->Notify(
-      NOTIFICATION_NAV_LIST_PRUNED,
-      Source<NavigationController>(nav_controller),
-      Details<PrunedDetails>(&details));
+  nav_controller->delegate()->NotifyNavigationListPruned(details);
 }
 
 // Ensure the given NavigationEntry has a valid state, so that WebKit does not
@@ -419,12 +416,6 @@ void NavigationControllerImpl::Reload(ReloadType reload_type,
     } else {
       pending_entry_ = entry;
       pending_entry_index_ = current_index;
-
-      // The title of the page being reloaded might have been removed in the
-      // meanwhile, so we need to revert to the default title upon reload and
-      // invalidate the previously cached title (SetTitle will do both).
-      // See Chromium issue 96041.
-      pending_entry_->SetTitle(base::string16());
 
       pending_entry_->SetTransitionType(ui::PAGE_TRANSITION_RELOAD);
     }
@@ -2229,10 +2220,7 @@ void NavigationControllerImpl::NotifyEntryChanged(
   det.changed_entry = entry;
   det.index = GetIndexOfEntry(
       NavigationEntryImpl::FromNavigationEntry(entry));
-  NotificationService::current()->Notify(
-      NOTIFICATION_NAV_ENTRY_CHANGED,
-      Source<NavigationController>(this),
-      Details<EntryChangedDetails>(&det));
+  delegate_->NotifyNavigationEntryChanged(det);
 }
 
 void NavigationControllerImpl::FinishRestore(int selected_index,

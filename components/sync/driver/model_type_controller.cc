@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/base/data_type_histogram.h"
@@ -215,11 +214,6 @@ void ModelTypeController::Stop() {
   }
 
   state_ = NOT_RUNNING;
-}
-
-std::string ModelTypeController::name() const {
-  // For logging only.
-  return ModelTypeToString(type());
 }
 
 DataTypeController::State ModelTypeController::state() const {

@@ -182,6 +182,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   // PostAfterStartupTask() API instead.
   virtual bool IsBrowserStartupComplete();
 
+  // Allows the embedder to handle a request from unit tests running in the
+  // content layer to consider startup complete (for the sake of
+  // PostAfterStartupTask()).
+  virtual void SetBrowserStartupIsCompleteForTesting();
+
   // If content creates the WebContentsView implementation, it will ask the
   // embedder to return an (optional) delegate to customize it. The view will
   // own the delegate.
@@ -594,8 +599,8 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::unique_ptr<VpnServiceProxy> GetVpnServiceProxy(
       BrowserContext* browser_context);
 
-  // Returns an implementation of a file selecition policy. Can return nullptr.
-  virtual ui::SelectFilePolicy* CreateSelectFilePolicy(
+  // Returns an implementation of a file selecition policy. Can return null.
+  virtual std::unique_ptr<ui::SelectFilePolicy> CreateSelectFilePolicy(
       WebContents* web_contents);
 
   // Returns additional allowed scheme set which can access files in
@@ -831,10 +836,22 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::vector<std::unique_ptr<URLLoaderThrottle>>
   CreateURLLoaderThrottles(const base::Callback<WebContents*()>& wc_getter);
 
-  // Creates the main NetworkContext for a BrowserContext's StoragePartition.
-  // Only called when the network service is enabled. If |in_memory| is true,
-  // |relative_partition_path| is still a path that uniquely identifies the
-  // storage partition, though nothing should be written to it.
+  // Creates a NetworkContext for a BrowserContext's StoragePartition. If the
+  // network service is enabled, it must return a NetworkContext using the
+  // network service. If the network service is disabled, the embedder may
+  // return a NetworkContext, or it may return nullptr, in which case the
+  // StoragePartition will create one wrapping the URLRequestContext obtained
+  // from the BrowserContext.
+  //
+  // Called before the corresonding BrowserContext::CreateRequestContext method
+  // is called.
+  //
+  // If |in_memory| is true, |relative_partition_path| is still a path that
+  // uniquely identifies the storage partition, though nothing should be written
+  // to it.
+  //
+  // If |relative_partition_path| is the empty string, it means this needs to
+  // create the default NetworkContext for the BrowserContext.
   virtual mojom::NetworkContextPtr CreateNetworkContext(
       BrowserContext* context,
       bool in_memory,

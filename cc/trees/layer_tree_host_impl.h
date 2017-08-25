@@ -28,7 +28,7 @@
 #include "cc/output/layer_tree_frame_sink_client.h"
 #include "cc/output/managed_memory_policy.h"
 #include "cc/quads/render_pass.h"
-#include "cc/resources/resource_provider.h"
+#include "cc/resources/layer_tree_resource_provider.h"
 #include "cc/resources/ui_resource_client.h"
 #include "cc/scheduler/begin_frame_tracker.h"
 #include "cc/scheduler/commit_earlyout_reason.h"
@@ -147,7 +147,6 @@ class CC_EXPORT LayerTreeHostImpl
       public BrowserControlsOffsetManagerClient,
       public ScrollbarAnimationControllerClient,
       public VideoFrameControllerClient,
-      public LayerTreeMutatorClient,
       public MutatorHostClient,
       public base::SupportsWeakPtr<LayerTreeHostImpl> {
  public:
@@ -274,7 +273,6 @@ class CC_EXPORT LayerTreeHostImpl
   void SetTreeLayerScrollOffsetMutated(ElementId element_id,
                                        LayerTreeImpl* tree,
                                        const gfx::ScrollOffset& scroll_offset);
-  bool AnimationsPreserveAxisAlignment(const LayerImpl* layer) const;
   void SetNeedUpdateGpuRasterizationStatus();
 
   // MutatorHostClient implementation.
@@ -339,6 +337,7 @@ class CC_EXPORT LayerTreeHostImpl
   void UnregisterScrollbarAnimationController(ElementId scroll_element_id);
   ScrollbarAnimationController* ScrollbarAnimationControllerForElementId(
       ElementId scroll_element_id) const;
+  void FlashAllScrollbars(bool did_scroll);
 
   DrawMode GetDrawMode() const;
 
@@ -382,9 +381,6 @@ class CC_EXPORT LayerTreeHostImpl
   void OnDraw(const gfx::Transform& transform,
               const gfx::Rect& viewport,
               bool resourceless_software_draw) override;
-
-  // LayerTreeMutatorClient.
-  void SetNeedsMutate() override;
 
   // Called from LayerTreeImpl.
   void OnCanDrawStateChangedForTree();
@@ -435,9 +431,7 @@ class CC_EXPORT LayerTreeHostImpl
   const LayerTreeImpl* recycle_tree() const { return recycle_tree_.get(); }
   // Returns the tree LTH synchronizes with.
   LayerTreeImpl* sync_tree() const {
-    // TODO(enne): This is bogus.  It should return based on the value of
-    // CommitToActiveTree() and not whether the pending tree exists.
-    return pending_tree_ ? pending_tree_.get() : active_tree_.get();
+    return CommitToActiveTree() ? active_tree_.get() : pending_tree_.get();
   }
   virtual void CreatePendingTree();
   virtual void ActivateSyncTree();
@@ -480,7 +474,9 @@ class CC_EXPORT LayerTreeHostImpl
   FrameRateCounter* fps_counter() { return fps_counter_.get(); }
   MemoryHistory* memory_history() { return memory_history_.get(); }
   DebugRectHistory* debug_rect_history() { return debug_rect_history_.get(); }
-  ResourceProvider* resource_provider() { return resource_provider_.get(); }
+  LayerTreeResourceProvider* resource_provider() {
+    return resource_provider_.get();
+  }
   BrowserControlsOffsetManager* browser_controls_manager() {
     return browser_controls_offset_manager_.get();
   }
@@ -539,7 +535,7 @@ class CC_EXPORT LayerTreeHostImpl
 
   // Returns the amount of delta that can be applied to scroll_node, taking
   // page scale into account.
-  gfx::Vector2dF ComputeScrollDelta(ScrollNode* scroll_node,
+  gfx::Vector2dF ComputeScrollDelta(const ScrollNode& scroll_node,
                                     const gfx::Vector2dF& delta);
 
   void ScheduleMicroBenchmark(std::unique_ptr<MicroBenchmarkImpl> benchmark);
@@ -603,7 +599,6 @@ class CC_EXPORT LayerTreeHostImpl
                              base::TimeDelta delayed_by);
 
   void SetLayerTreeMutator(std::unique_ptr<LayerTreeMutator> mutator);
-  LayerTreeMutator* mutator() { return mutator_.get(); }
 
   LayerImpl* ViewportMainScrollLayer();
 
@@ -612,6 +607,9 @@ class CC_EXPORT LayerTreeHostImpl
   std::vector<base::Closure> TakeCompletedImageDecodeCallbacks();
 
   void ClearImageCacheOnNavigation();
+
+  bool CanConsumeDelta(const ScrollNode& scroll_node,
+                       const ScrollState& scroll_state);
 
  protected:
   LayerTreeHostImpl(
@@ -681,8 +679,6 @@ class CC_EXPORT LayerTreeHostImpl
       InputHandler::ScrollInputType type);
   bool IsInitialScrollHitTestReliable(LayerImpl* layer, const gfx::PointF&);
   void DistributeScrollDelta(ScrollState* scroll_state);
-  bool CanConsumeDelta(ScrollNode* scroll_node,
-                       const ScrollState& scroll_state);
 
   bool AnimatePageScale(base::TimeTicks monotonic_time);
   bool AnimateScrollbars(base::TimeTicks monotonic_time);
@@ -758,7 +754,7 @@ class CC_EXPORT LayerTreeHostImpl
   std::unique_ptr<viz::ContextCacheController::ScopedVisibility>
       worker_context_visibility_;
 
-  std::unique_ptr<ResourceProvider> resource_provider_;
+  std::unique_ptr<LayerTreeResourceProvider> resource_provider_;
   bool need_update_gpu_rasterization_status_;
   bool content_has_slow_paths_;
   bool content_has_non_aa_paint_;
@@ -876,8 +872,6 @@ class CC_EXPORT LayerTreeHostImpl
   bool has_valid_layer_tree_frame_sink_;
 
   std::unique_ptr<Viewport> viewport_;
-
-  std::unique_ptr<LayerTreeMutator> mutator_;
 
   std::unique_ptr<PendingTreeDurationHistogramTimer>
       pending_tree_duration_timer_;

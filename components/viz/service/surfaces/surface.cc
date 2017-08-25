@@ -98,15 +98,12 @@ void Surface::Close() {
 
 bool Surface::QueueFrame(cc::CompositorFrame frame,
                          uint64_t frame_index,
-                         const base::Closure& callback,
+                         base::OnceClosure callback,
                          const WillDrawCallback& will_draw_callback) {
   late_activation_dependencies_.clear();
 
-  gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
-  float device_scale_factor = frame.metadata.device_scale_factor;
-
-  if (frame_size != surface_info_.size_in_pixels() ||
-      device_scale_factor != surface_info_.device_scale_factor()) {
+  if (frame.size_in_pixels() != surface_info_.size_in_pixels() ||
+      frame.device_scale_factor() != surface_info_.device_scale_factor()) {
     TRACE_EVENT_INSTANT0("cc", "Surface invariants violation",
                          TRACE_EVENT_SCOPE_THREAD);
     return false;
@@ -116,7 +113,7 @@ bool Surface::QueueFrame(cc::CompositorFrame frame,
     std::vector<ReturnedResource> resources =
         TransferableResource::ReturnResources(frame.resource_list);
     surface_client_->ReturnResources(resources);
-    callback.Run();
+    std::move(callback).Run();
     return true;
   }
 
@@ -137,11 +134,11 @@ bool Surface::QueueFrame(cc::CompositorFrame frame,
 
   if (activation_dependencies_.empty()) {
     // If there are no blockers, then immediately activate the frame.
-    ActivateFrame(
-        FrameData(std::move(frame), frame_index, callback, will_draw_callback));
+    ActivateFrame(FrameData(std::move(frame), frame_index, std::move(callback),
+                            will_draw_callback));
   } else {
-    pending_frame_data_ =
-        FrameData(std::move(frame), frame_index, callback, will_draw_callback);
+    pending_frame_data_ = FrameData(std::move(frame), frame_index,
+                                    std::move(callback), will_draw_callback);
 
     RejectCompositorFramesToFallbackSurfaces();
 
@@ -208,11 +205,11 @@ void Surface::ActivatePendingFrameForDeadline() {
 
 Surface::FrameData::FrameData(cc::CompositorFrame&& frame,
                               uint64_t frame_index,
-                              const base::Closure& draw_callback,
+                              base::OnceClosure draw_callback,
                               const WillDrawCallback& will_draw_callback)
     : frame(std::move(frame)),
       frame_index(frame_index),
-      draw_callback(draw_callback),
+      draw_callback(std::move(draw_callback)),
       will_draw_callback(will_draw_callback) {}
 
 Surface::FrameData::FrameData(FrameData&& other) = default;
@@ -253,13 +250,15 @@ void Surface::ActivateFrame(FrameData frame_data) {
 
   UnrefFrameResourcesAndRunDrawCallback(std::move(previous_frame_data));
 
-  // TODO(fsamuel): If |surface_client_| is not available then we will not
-  // immediately generate a display frame once the cc::CompositorFrame here
-  // activates. This isn't a major issue though because this would only
-  // happen if the client that generated the surface has went away and so
-  // we likely don't care to preserve the surface for long anyway.
+  if (!seen_first_frame_activation_) {
+    seen_first_frame_activation_ = true;
+    surface_manager_->FirstSurfaceActivation(surface_info_);
+  }
+
   if (surface_client_)
     surface_client_->OnSurfaceActivated(this);
+
+  surface_manager_->SurfaceActivated(this);
 }
 
 void Surface::UpdateActivationDependencies(
@@ -340,11 +339,8 @@ void Surface::TakeLatencyInfo(std::vector<ui::LatencyInfo>* latency_info) {
 }
 
 void Surface::RunDrawCallback() {
-  if (active_frame_data_ && !active_frame_data_->draw_callback.is_null()) {
-    base::Closure callback = active_frame_data_->draw_callback;
-    active_frame_data_->draw_callback = base::Closure();
-    callback.Run();
-  }
+  if (active_frame_data_ && !active_frame_data_->draw_callback.is_null())
+    std::move(active_frame_data_->draw_callback).Run();
 }
 
 void Surface::RunWillDrawCallback(const gfx::Rect& damage_rect) {
@@ -386,7 +382,7 @@ void Surface::UnrefFrameResourcesAndRunDrawCallback(
   surface_client_->UnrefResources(resources);
 
   if (!frame_data->draw_callback.is_null())
-    frame_data->draw_callback.Run();
+    std::move(frame_data->draw_callback).Run();
 }
 
 void Surface::ClearCopyRequests() {

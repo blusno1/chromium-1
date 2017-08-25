@@ -171,7 +171,7 @@ void PrintViewManagerBase::OnDidPrintPage(
   }
 
   std::unique_ptr<PdfMetafileSkia> metafile(
-      new PdfMetafileSkia(PDF_SKIA_DOCUMENT_TYPE));
+      new PdfMetafileSkia(SkiaDocumentType::PDF));
   if (metafile_must_be_valid) {
     if (!metafile->InitFromData(shared_buf->memory(), params.data_size)) {
       NOTREACHED() << "Invalid metafile header";
@@ -273,6 +273,19 @@ void PrintViewManagerBase::RenderFrameDeleted(
     TerminatePrintJob(!document->IsComplete());
   }
 }
+
+#if defined(OS_WIN) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
+void PrintViewManagerBase::SystemDialogCancelled() {
+  // System dialog was cancelled. Clean up the print job and notify the
+  // BackgroundPrintingManager.
+  ReleasePrinterQuery();
+  TerminatePrintJob(true);
+  content::NotificationService::current()->Notify(
+      chrome::NOTIFICATION_PRINT_JOB_RELEASED,
+      content::Source<content::WebContents>(web_contents()),
+      content::NotificationService::NoDetails());
+}
+#endif
 
 bool PrintViewManagerBase::OnMessageReceived(
     const IPC::Message& message,

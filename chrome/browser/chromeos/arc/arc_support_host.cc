@@ -7,7 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/system/devicetype_utils.h"
 #include "base/bind.h"
 #include "base/i18n/timezone.h"
 #include "base/json/json_reader.h"
@@ -28,6 +27,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/chromeos/devicetype_utils.h"
 #include "ui/display/screen.h"
 
 namespace {
@@ -462,13 +462,16 @@ bool ArcSupportHost::Initialize() {
   DCHECK(message_host_);
 
   auto loadtime_data = base::MakeUnique<base::DictionaryValue>();
-  base::string16 device_name = ash::GetChromeOSDeviceName();
+  loadtime_data->SetString("appWindow", l10n_util::GetStringUTF16(
+                                            IDS_ARC_PLAYSTORE_ICON_TITLE_BETA));
   loadtime_data->SetString(
-      "greetingHeader",
-      l10n_util::GetStringFUTF16(IDS_ARC_OPT_IN_DIALOG_HEADER, device_name));
-  loadtime_data->SetString("greetingDescription",
-                           l10n_util::GetStringFUTF16(
-                               IDS_ARC_OPT_IN_DIALOG_DESCRIPTION, device_name));
+      "greetingHeader", l10n_util::GetStringUTF16(IDS_ARC_OOBE_TERMS_HEADING));
+  loadtime_data->SetString(
+      "loadingDescription",
+      l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_PROGRESS_LSO));
+  loadtime_data->SetString(
+      "greetingDescription",
+      l10n_util::GetStringUTF16(IDS_ARC_OOBE_TERMS_DESCRIPTION));
   loadtime_data->SetString(
       "buttonAgree",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE));
@@ -519,7 +522,7 @@ bool ArcSupportHost::Initialize() {
       l10n_util::GetStringUTF16(IDS_ARC_SERVER_COMMUNICATION_ERROR));
   loadtime_data->SetString(
       "controlledByPolicy",
-      l10n_util::GetStringUTF16(IDS_OPTIONS_CONTROLLED_SETTING_POLICY));
+      l10n_util::GetStringUTF16(IDS_CONTROLLED_SETTING_POLICY));
   loadtime_data->SetString(
       "learnMoreStatistics",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_LEARN_MORE_STATISTICS));

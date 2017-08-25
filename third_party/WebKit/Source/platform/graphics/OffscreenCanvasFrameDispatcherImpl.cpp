@@ -6,7 +6,7 @@
 
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/texture_draw_quad.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_format.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/WebTaskRunner.h"
@@ -140,7 +140,7 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
                          damage_rect.height()),
                gfx::Transform());
 
-  cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
+  viz::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
   sqs->SetAll(gfx::Transform(), bounds, bounds, bounds, false, 1.f,
               SkBlendMode::kSrcOver, 0);
 
@@ -198,7 +198,7 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
   const bool kNeedsBlending = true;
   gfx::Rect opaque_rect(0, 0);
 
-  // TOOD(crbug.com/645993): this should be inherited from WebGL context's
+  // TODO(crbug.com/645993): this should be inherited from WebGL context's
   // creation settings.
   const bool kPremultipliedAlpha = true;
   const gfx::PointF uv_top_left(0.f, 0.f);
@@ -308,7 +308,8 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
   }
 
   pending_compositor_frames_++;
-  sink_->SubmitCompositorFrame(current_local_surface_id_, std::move(frame));
+  sink_->SubmitCompositorFrame(current_local_surface_id_, std::move(frame),
+                               nullptr, 0);
 }
 
 void OffscreenCanvasFrameDispatcherImpl::DidReceiveCompositorFrameAck(

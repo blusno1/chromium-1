@@ -35,6 +35,15 @@ cr.define('bookmarks', function() {
   }
 
   /**
+   * @param {BookmarkElement} element
+   * @return {boolean}
+   */
+  function isClosedBookmarkFolderNode(element) {
+    return isBookmarkFolderNode(element) &&
+        !(/** @type {BookmarksFolderNodeElement} */ (element).isOpen);
+  }
+
+  /**
    * @param {Array<!Element>|undefined} path
    * @return {BookmarkElement}
    */
@@ -186,9 +195,8 @@ cr.define('bookmarks', function() {
         var action = bookmarks.actions.changeFolderOpen(itemId, true);
         store.dispatch(action);
       } else if (
-          overElement && isBookmarkFolderNode(overElement) &&
-          bookmarks.util.hasChildFolders(itemId, store.data.nodes) &&
-          store.data.closedFolders.has(itemId)) {
+          overElement && isClosedBookmarkFolderNode(overElement) &&
+          bookmarks.util.hasChildFolders(itemId, store.data.nodes)) {
         // Since this is a closed folder node that has children, set the auto
         // expander to this element.
         this.lastTimestamp_ = eventTimestamp;
@@ -635,13 +643,16 @@ cr.define('bookmarks', function() {
      */
     startNativeDrag_: function() {
       var state = bookmarks.Store.getInstance().data;
-      this.dndChip.hide();
 
       if (!this.dragInfo_.isDragValid())
         return false;
 
       var draggedNodes =
           this.dragInfo_.dragData.elements.map((item) => item.id);
+
+      // Clear the drag data here so that the chip is hidden. The native drag
+      // will return after the clearing and set up its data.
+      this.clearDragData_();
 
       // TODO(calamity): account for touch.
       chrome.bookmarkManagerPrivate.startDrag(draggedNodes, false);
@@ -860,7 +871,7 @@ cr.define('bookmarks', function() {
 
       // Don't allow dropping below an expanded sidebar folder item since it is
       // confusing to the user anyway.
-      if (isOverFolderNode && !state.closedFolders.has(overElement.itemId) &&
+      if (isOverFolderNode && !isClosedBookmarkFolderNode(overElement) &&
           bookmarks.util.hasChildFolders(overElement.itemId, state.nodes)) {
         return validDropPositions;
       }

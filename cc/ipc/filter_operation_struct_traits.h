@@ -5,6 +5,7 @@
 #ifndef CC_IPC_FILTER_OPERATION_STRUCT_TRAITS_H_
 #define CC_IPC_FILTER_OPERATION_STRUCT_TRAITS_H_
 
+#include "base/containers/span.h"
 #include "cc/base/filter_operation.h"
 #include "cc/ipc/filter_operation.mojom-shared.h"
 #include "skia/public/interfaces/blur_image_filter_tile_mode_struct_traits.h"
@@ -45,7 +46,6 @@ cc::mojom::FilterType CCFilterTypeToMojo(
     case cc::FilterOperation::SATURATING_BRIGHTNESS:
       return cc::mojom::FilterType::SATURATING_BRIGHTNESS;
     case cc::FilterOperation::ALPHA_THRESHOLD:
-      NOTREACHED();
       return cc::mojom::FilterType::ALPHA_THRESHOLD;
   }
   NOTREACHED();
@@ -84,7 +84,6 @@ cc::FilterOperation::FilterType MojoFilterTypeToCC(
     case cc::mojom::FilterType::SATURATING_BRIGHTNESS:
       return cc::FilterOperation::SATURATING_BRIGHTNESS;
     case cc::mojom::FilterType::ALPHA_THRESHOLD:
-      NOTREACHED();
       return cc::FilterOperation::ALPHA_THRESHOLD;
   }
   NOTREACHED();
@@ -92,8 +91,6 @@ cc::FilterOperation::FilterType MojoFilterTypeToCC(
 }
 
 }  // namespace
-
-using FilterOperationMatrix = CArray<float>;
 
 template <>
 struct StructTraits<cc::mojom::FilterOperationDataView, cc::FilterOperation> {
@@ -107,6 +104,12 @@ struct StructTraits<cc::mojom::FilterOperationDataView, cc::FilterOperation> {
       return 0.f;
     }
     return operation.amount();
+  }
+
+  static float outer_threshold(const cc::FilterOperation& operation) {
+    if (operation.type() != cc::FilterOperation::ALPHA_THRESHOLD)
+      return 0.f;
+    return operation.outer_threshold();
   }
 
   static gfx::Point drop_shadow_offset(const cc::FilterOperation& operation) {
@@ -128,12 +131,17 @@ struct StructTraits<cc::mojom::FilterOperationDataView, cc::FilterOperation> {
     return operation.image_filter();
   }
 
-  static FilterOperationMatrix matrix(const cc::FilterOperation& operation) {
+  static base::span<const float> matrix(const cc::FilterOperation& operation) {
     if (operation.type() != cc::FilterOperation::COLOR_MATRIX)
-      return FilterOperationMatrix();
-    constexpr size_t MATRIX_SIZE = 20;
-    return {MATRIX_SIZE, MATRIX_SIZE,
-            const_cast<float*>(&operation.matrix()[0])};
+      return base::span<const float>();
+    return operation.matrix();
+  }
+
+  static base::span<const gfx::Rect> shape(
+      const cc::FilterOperation& operation) {
+    if (operation.type() != cc::FilterOperation::ALPHA_THRESHOLD)
+      return base::span<gfx::Rect>();
+    return operation.shape();
   }
 
   static int32_t zoom_inset(const cc::FilterOperation& operation) {
@@ -184,11 +192,8 @@ struct StructTraits<cc::mojom::FilterOperationDataView, cc::FilterOperation> {
       case cc::FilterOperation::COLOR_MATRIX: {
         // TODO(fsamuel): It would be nice to modify cc::FilterOperation to
         // avoid this extra copy.
-        constexpr size_t MATRIX_SIZE = 20;
-        float matrix_buffer[MATRIX_SIZE];
-        memset(&matrix_buffer[0], 0, sizeof(matrix_buffer));
-        FilterOperationMatrix matrix = {MATRIX_SIZE, MATRIX_SIZE,
-                                        &matrix_buffer[0]};
+        cc::FilterOperation::Matrix matrix_buffer = {};
+        base::span<float> matrix(matrix_buffer);
         if (!data.ReadMatrix(&matrix))
           return false;
         out->set_matrix(matrix_buffer);
@@ -209,8 +214,13 @@ struct StructTraits<cc::mojom::FilterOperationDataView, cc::FilterOperation> {
         return true;
       }
       case cc::FilterOperation::ALPHA_THRESHOLD:
-        // TODO(fsamuel): We cannot serialize this type.
-        return false;
+        out->set_amount(data.amount());
+        out->set_outer_threshold(data.outer_threshold());
+        cc::FilterOperation::ShapeRects shape;
+        if (!data.ReadShape(&shape))
+          return false;
+        out->set_shape(shape);
+        return true;
     }
     return false;
   }

@@ -243,19 +243,19 @@ TEST(WebRequestConditionAttributeTest, ThirdParty) {
     if (!(kActiveStages & i))
       continue;
     const RequestStage stage = static_cast<RequestStage>(i);
-    url_request->set_first_party_for_cookies(url_empty);
+    url_request->set_site_for_cookies(url_empty);
     EXPECT_FALSE(third_party_attribute->IsFulfilled(
         WebRequestData(url_request.get(), stage)));
     EXPECT_TRUE(first_party_attribute->IsFulfilled(
         WebRequestData(url_request.get(), stage)));
 
-    url_request->set_first_party_for_cookies(url_b);
+    url_request->set_site_for_cookies(url_b);
     EXPECT_TRUE(third_party_attribute->IsFulfilled(
         WebRequestData(url_request.get(), stage)));
     EXPECT_FALSE(first_party_attribute->IsFulfilled(
         WebRequestData(url_request.get(), stage)));
 
-    url_request->set_first_party_for_cookies(url_a);
+    url_request->set_site_for_cookies(url_a);
     EXPECT_FALSE(third_party_attribute->IsFulfilled(
         WebRequestData(url_request.get(), stage)));
     EXPECT_TRUE(first_party_attribute->IsFulfilled(
@@ -390,7 +390,7 @@ std::unique_ptr<base::DictionaryValue> GetDictionaryFromArray(
       switch (entry->GetType()) {
         case base::Value::Type::STRING: {
           // Replace the present string with a list.
-          auto list = base::MakeUnique<base::ListValue>();
+          auto list = std::make_unique<base::ListValue>();
           // Ignoring return value, we already verified the entry is there.
           dictionary->RemoveWithoutPathExpansion(*name, &entry_owned);
           list->Append(std::move(entry_owned));

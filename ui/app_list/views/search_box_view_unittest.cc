@@ -241,7 +241,13 @@ TEST_P(SearchBoxViewTest, Basic) {
 
   KeyPress(ui::VKEY_DOWN);
   EXPECT_EQ(0, GetQueryChangedCountAndReset());
-  EXPECT_EQ(1, GetContentsViewKeyPressCountAndReset());
+  if (test_with_fullscreen()) {
+    // The initial down arrow key is handled by search box in fullscreen
+    // app list.
+    EXPECT_EQ(0, GetContentsViewKeyPressCountAndReset());
+  } else {
+    EXPECT_EQ(1, GetContentsViewKeyPressCountAndReset());
+  }
 
   view()->ClearSearch();
   EXPECT_EQ(1, GetQueryChangedCountAndReset());
@@ -270,22 +276,56 @@ TEST_P(SearchBoxViewTest, CancelAutoLaunch) {
   EXPECT_EQ(base::TimeDelta(), GetAutoLaunchTimeout());
 }
 
-TEST_F(SearchBoxViewFullscreenTest, CloseButtonTest) {
+// Tests that the close button is invisible by default.
+TEST_F(SearchBoxViewFullscreenTest, CloseButtonInvisibleByDefault) {
   EXPECT_FALSE(view()->close_button()->visible());
-  EXPECT_EQ(AppListView::PEEKING, app_list_view()->app_list_state());
+}
 
+// Tests that the close button becomes visible after typing in the search box.
+TEST_F(SearchBoxViewFullscreenTest, CloseButtonVisibleAfterTyping) {
   KeyPress(ui::VKEY_A);
   EXPECT_TRUE(view()->close_button()->visible());
-  EXPECT_EQ(AppListView::HALF, app_list_view()->app_list_state());
+}
 
-  // Click the close button in search box view.
+// Tests that the close button is still invisible after the search box is
+// activated.
+TEST_F(SearchBoxViewFullscreenTest, CloseButtonInvisibleAfterSearchBoxActived) {
+  view()->SetSearchBoxActive(true);
+  EXPECT_FALSE(view()->close_button()->visible());
+}
+
+// Tests that the close button becomes invisible after close button is clicked.
+TEST_F(SearchBoxViewFullscreenTest,
+       CloseButtonInvisibleAfterCloseButtonClicked) {
+  KeyPress(ui::VKEY_A);
   view()->ButtonPressed(
       view()->close_button(),
       ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                      base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON,
                      ui::EF_LEFT_MOUSE_BUTTON));
   EXPECT_FALSE(view()->close_button()->visible());
-  EXPECT_EQ(AppListView::PEEKING, app_list_view()->app_list_state());
+}
+
+// Tests that the search box becomes empty after close button is clicked.
+TEST_F(SearchBoxViewFullscreenTest, SearchBoxEmptyAfterCloseButtonClicked) {
+  KeyPress(ui::VKEY_A);
+  view()->ButtonPressed(
+      view()->close_button(),
+      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                     base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON,
+                     ui::EF_LEFT_MOUSE_BUTTON));
+  EXPECT_TRUE(view()->search_box()->text().empty());
+}
+
+// Tests that the search box is still active after close button is clicked.
+TEST_F(SearchBoxViewFullscreenTest, SearchBoxActiveAfterCloseButtonClicked) {
+  KeyPress(ui::VKEY_A);
+  view()->ButtonPressed(
+      view()->close_button(),
+      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                     base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON,
+                     ui::EF_LEFT_MOUSE_BUTTON));
+  EXPECT_TRUE(view()->is_search_box_active());
 }
 
 // Tests that the search box is inactive by default.

@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
+import("//media/media_options.gni")
 
 # See //content/BUILD.gn for how this works.
 group("browser") {
@@ -31,6 +32,7 @@ source_set("browser_sources") {
     "android/content_view_layer_renderer.h",
     "android/devtools_auth.h",
     "android/java_interfaces.h",
+    "android/motion_event_action.h",
     "android/synchronous_compositor.cc",
     "android/synchronous_compositor.h",
     "android/synchronous_compositor_client.h",
@@ -85,8 +87,6 @@ source_set("browser_sources") {
     "content_browser_client.h",
     "context_factory.h",
     "cookie_store_factory.h",
-    "desktop_capture.cc",
-    "desktop_capture.h",
     "desktop_media_id.cc",
     "desktop_media_id.h",
     "devtools_agent_host.h",
@@ -99,6 +99,7 @@ source_set("browser_sources") {
     "devtools_manager_delegate.cc",
     "devtools_manager_delegate.h",
     "devtools_socket_factory.h",
+    "discardable_shared_memory_manager.h",
     "dom_storage_context.h",
     "download_danger_type.h",
     "download_interrupt_reason_values.h",
@@ -230,6 +231,7 @@ source_set("browser_sources") {
     "restore_type.h",
     "save_page_type.h",
     "screen_orientation_delegate.h",
+    "security_style_explanation.cc",
     "security_style_explanation.h",
     "security_style_explanations.cc",
     "security_style_explanations.h",
@@ -327,11 +329,11 @@ source_set("browser_sources") {
     "//net",
     "//ppapi/c",
     "//services/device/public/interfaces",
-    "//third_party/webrtc/modules/desktop_capture",
     "//ui/accessibility",
     "//ui/base",
     "//ui/events",
     "//ui/gl",
+    "//ui/shell_dialogs",
     "//ui/surface",
   ]
 
@@ -367,5 +369,13 @@ source_set("browser_sources") {
       "arc_tracing_agent.cc",
       "arc_tracing_agent.h",
     ]
+  }
+
+  if (enable_webrtc) {
+    sources += [
+      "desktop_capture.cc",
+      "desktop_capture.h",
+    ]
+    deps += [ "//third_party/webrtc/modules/desktop_capture" ]
   }
 }

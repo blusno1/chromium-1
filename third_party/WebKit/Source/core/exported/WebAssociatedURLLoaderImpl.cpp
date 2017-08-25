@@ -41,7 +41,6 @@
 #include "platform/Timer.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
@@ -50,6 +49,7 @@
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebCORS.h"
 #include "public/platform/WebHTTPHeaderVisitor.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURLError.h"
@@ -115,8 +115,8 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
 
   // DocumentThreadableLoaderClient
   bool WillFollowRedirect(
-      const ResourceRequest& /*newRequest*/,
-      const ResourceResponse& /*redirectResponse*/) override;
+      const KURL& /*new_url*/,
+      const ResourceResponse& /*redirect_response*/) override;
 
   // Sets an error to be reported back to the client, asychronously.
   void SetDelayedError(const ResourceError&);
@@ -184,14 +184,14 @@ WebAssociatedURLLoaderImpl::ClientAdapter::ClientAdapter(
 }
 
 bool WebAssociatedURLLoaderImpl::ClientAdapter::WillFollowRedirect(
-    const ResourceRequest& new_request,
+    const KURL& new_url,
     const ResourceResponse& redirect_response) {
   if (!client_)
     return true;
 
-  WrappedResourceRequest wrapped_new_request(new_request);
+  WebURL wrapped_new_url(new_url);
   WrappedResourceResponse wrapped_redirect_response(redirect_response);
-  return client_->WillFollowRedirect(wrapped_new_request,
+  return client_->WillFollowRedirect(wrapped_new_url,
                                      wrapped_redirect_response);
 }
 
@@ -222,14 +222,13 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveResponse(
     return;
   }
 
-  HTTPHeaderSet exposed_headers;
-  CrossOriginAccessControl::ExtractCorsExposedHeaderNamesList(response,
-                                                              exposed_headers);
-  HTTPHeaderSet blocked_headers;
+  WebCORS::HTTPHeaderSet exposed_headers;
+  WebCORS::ExtractCorsExposedHeaderNamesList(WrappedResourceResponse(response),
+                                             exposed_headers);
+  WebCORS::HTTPHeaderSet blocked_headers;
   for (const auto& header : response.HttpHeaderFields()) {
     if (FetchUtils::IsForbiddenResponseHeaderName(header.key) ||
-        (!CrossOriginAccessControl::IsOnAccessControlResponseHeaderWhitelist(
-             header.key) &&
+        (!WebCORS::IsOnAccessControlResponseHeaderWhitelist(header.key) &&
          !exposed_headers.Contains(header.key)))
       blocked_headers.insert(header.key);
   }

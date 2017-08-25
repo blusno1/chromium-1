@@ -59,7 +59,9 @@ static_assert(sizeof(CollapsedBorderValue) == 8,
 LayoutTableCell::LayoutTableCell(Element* element)
     : LayoutBlockFlow(element),
       absolute_column_index_(kUnsetColumnIndex),
-      cell_width_changed_(false),
+      cell_children_need_layout_(false),
+      is_spanning_collapsed_row_(false),
+      is_spanning_collapsed_column_(false),
       collapsed_border_values_valid_(false),
       intrinsic_padding_before_(0),
       intrinsic_padding_after_(0) {
@@ -287,7 +289,7 @@ void LayoutTableCell::SetCellLogicalWidth(int table_layout_logical_width,
   layouter.SetNeedsLayout(this, LayoutInvalidationReason::kSizeChanged);
 
   SetLogicalWidth(LayoutUnit(table_layout_logical_width));
-  SetCellWidthChanged(true);
+  SetCellChildrenNeedLayout(true);
 }
 
 void LayoutTableCell::UpdateLayout() {
@@ -295,7 +297,7 @@ void LayoutTableCell::UpdateLayout() {
   LayoutAnalyzer::Scope analyzer(*this);
 
   LayoutUnit old_cell_baseline = CellBaselinePosition();
-  UpdateBlockLayout(CellWidthChanged());
+  UpdateBlockLayout(CellChildrenNeedLayout());
 
   // If we have replaced content, the intrinsic height of our content may have
   // changed since the last time we laid out. If that's the case the intrinsic
@@ -317,72 +319,46 @@ void LayoutTableCell::UpdateLayout() {
     SetIntrinsicPaddingBefore(new_intrinsic_padding_before.Round());
     SubtreeLayoutScope layouter(*this);
     layouter.SetNeedsLayout(this, LayoutInvalidationReason::kTableChanged);
-    UpdateBlockLayout(CellWidthChanged());
+    UpdateBlockLayout(CellChildrenNeedLayout());
   }
 
   // FIXME: This value isn't the intrinsic content logical height, but we need
   // to update the value as its used by flexbox layout. crbug.com/367324
   SetIntrinsicContentLogicalHeight(ContentLogicalHeight());
 
-  SetCellWidthChanged(false);
+  SetCellChildrenNeedLayout(false);
 }
 
 LayoutUnit LayoutTableCell::PaddingTop() const {
   LayoutUnit result = ComputedCSSPaddingTop();
-  if (IsHorizontalWritingMode()) {
-    result += (blink::IsHorizontalWritingMode(Style()->GetWritingMode())
-                   ? IntrinsicPaddingBefore()
-                   : IntrinsicPaddingAfter());
-  }
-  // TODO(leviw): The floor call should be removed when Table is sub-pixel
-  // aware. crbug.com/377847
-  return LayoutUnit(result.Floor());
+  result += LogicalIntrinsicPaddingToPhysical().Top();
+  // TODO(crbug.com/377847): The ToInt call should be removed when Table is
+  // sub-pixel aware.
+  return LayoutUnit(result.ToInt());
 }
 
 LayoutUnit LayoutTableCell::PaddingBottom() const {
   LayoutUnit result = ComputedCSSPaddingBottom();
-  if (IsHorizontalWritingMode()) {
-    result += (blink::IsHorizontalWritingMode(Style()->GetWritingMode())
-                   ? IntrinsicPaddingAfter()
-                   : IntrinsicPaddingBefore());
-  }
-  // TODO(leviw): The floor call should be removed when Table is sub-pixel
-  // aware. crbug.com/377847
-  return LayoutUnit(result.Floor());
+  result += LogicalIntrinsicPaddingToPhysical().Bottom();
+  // TODO(crbug.com/377847): The ToInt call should be removed when Table is
+  // sub-pixel aware.
+  return LayoutUnit(result.ToInt());
 }
 
 LayoutUnit LayoutTableCell::PaddingLeft() const {
   LayoutUnit result = ComputedCSSPaddingLeft();
-  if (!IsHorizontalWritingMode()) {
-    result += (IsFlippedLinesWritingMode(Style()->GetWritingMode())
-                   ? IntrinsicPaddingBefore()
-                   : IntrinsicPaddingAfter());
-  }
-  // TODO(leviw): The floor call should be removed when Table is sub-pixel
-  // aware. crbug.com/377847
-  return LayoutUnit(result.Floor());
+  result += LogicalIntrinsicPaddingToPhysical().Left();
+  // TODO(crbug.com/377847): The ToInt call should be removed when Table is
+  // sub-pixel aware.
+  return LayoutUnit(result.ToInt());
 }
 
 LayoutUnit LayoutTableCell::PaddingRight() const {
   LayoutUnit result = ComputedCSSPaddingRight();
-  if (!IsHorizontalWritingMode()) {
-    result += (IsFlippedLinesWritingMode(Style()->GetWritingMode())
-                   ? IntrinsicPaddingAfter()
-                   : IntrinsicPaddingBefore());
-  }
-  // TODO(leviw): The floor call should be removed when Table is sub-pixel
-  // aware. crbug.com/377847
-  return LayoutUnit(result.Floor());
-}
-
-LayoutUnit LayoutTableCell::PaddingBefore() const {
-  return LayoutUnit(ComputedCSSPaddingBefore().Floor() +
-                    IntrinsicPaddingBefore());
-}
-
-LayoutUnit LayoutTableCell::PaddingAfter() const {
-  return LayoutUnit(ComputedCSSPaddingAfter().Floor() +
-                    IntrinsicPaddingAfter());
+  result += LogicalIntrinsicPaddingToPhysical().Right();
+  // TODO(crbug.com/377847): The ToInt call should be removed when Table is
+  // sub-pixel aware.
+  return LayoutUnit(result.ToInt());
 }
 
 void LayoutTableCell::SetOverrideLogicalContentHeightFromRowHeight(
@@ -456,17 +432,8 @@ void LayoutTableCell::ComputeOverflow(LayoutUnit old_client_after_edge,
 }
 
 bool LayoutTableCell::ShouldClipOverflow() const {
-  if (LayoutBox::ShouldClipOverflow())
-    return true;
-  unsigned row_span = RowSpan();
-  if (row_span == 1)
-    return false;
-  unsigned row_index = RowIndex();
-  for (unsigned r = row_index; r < row_index + row_span; r++) {
-    if (Section()->RowHasVisibilityCollapse(r))
-      return true;
-  }
-  return false;
+  return IsSpanningCollapsedRow() || IsSpanningCollapsedColumn() ||
+         LayoutBox::ShouldClipOverflow();
 }
 
 LayoutUnit LayoutTableCell::CellBaselinePosition() const {
@@ -1081,31 +1048,12 @@ LayoutUnit LayoutTableCell::BorderBottom() const {
              : LayoutBlockFlow::BorderBottom();
 }
 
-// FIXME: https://bugs.webkit.org/show_bug.cgi?id=46191, make the collapsed
-// border drawing work with different block flow values instead of being
-// hard-coded to top-to-bottom.
-LayoutUnit LayoutTableCell::BorderStart() const {
-  return Table()->ShouldCollapseBorders()
-             ? LayoutUnit(CollapsedBorderHalfStart(false))
-             : LayoutBlockFlow::BorderStart();
-}
-
-LayoutUnit LayoutTableCell::BorderEnd() const {
-  return Table()->ShouldCollapseBorders()
-             ? LayoutUnit(CollapsedBorderHalfEnd(false))
-             : LayoutBlockFlow::BorderEnd();
-}
-
-LayoutUnit LayoutTableCell::BorderBefore() const {
-  return Table()->ShouldCollapseBorders()
-             ? LayoutUnit(CollapsedBorderHalfBefore(false))
-             : LayoutBlockFlow::BorderBefore();
-}
-
-LayoutUnit LayoutTableCell::BorderAfter() const {
-  return Table()->ShouldCollapseBorders()
-             ? LayoutUnit(CollapsedBorderHalfAfter(false))
-             : LayoutBlockFlow::BorderAfter();
+bool LayoutTableCell::IsFirstColumnCollapsed() const {
+  if (!RuntimeEnabledFeatures::VisibilityCollapseColumnEnabled())
+    return false;
+  if (!HasSetAbsoluteColumnIndex())
+    return false;
+  return Table()->IsAbsoluteColumnCollapsed(AbsoluteColumnIndex());
 }
 
 void LayoutTableCell::Paint(const PaintInfo& paint_info,

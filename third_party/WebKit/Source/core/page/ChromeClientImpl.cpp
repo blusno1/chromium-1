@@ -32,6 +32,7 @@
 #include "core/page/ChromeClientImpl.h"
 
 #include <memory>
+#include <utility>
 
 #include "bindings/core/v8/ScriptController.h"
 #include "build/build_config.h"
@@ -43,7 +44,8 @@
 #include "core/exported/WebPluginContainerImpl.h"
 #include "core/exported/WebRemoteFrameImpl.h"
 #include "core/exported/WebSettingsImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
+#include "core/frame/BrowserControls.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -61,18 +63,18 @@
 #include "core/html/forms/DateTimeChooserImpl.h"
 #include "core/html/forms/ExternalDateTimeChooser.h"
 #include "core/html/forms/ExternalPopupMenu.h"
+#include "core/html/forms/FileChooser.h"
 #include "core/html/forms/InternalPopupMenu.h"
 #include "core/inspector/DevToolsEmulator.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutEmbeddedContent.h"
-#include "core/layout/compositing/CompositedSelection.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/PopupOpeningObserver.h"
+#include "core/paint/compositing/CompositedSelection.h"
 #include "platform/Cursor.h"
-#include "platform/FileChooser.h"
 #include "platform/Histogram.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -155,23 +157,23 @@ const char* DismissalTypeToString(Document::PageDismissalType dismissal_type) {
 
 class CompositorAnimationTimeline;
 
-ChromeClientImpl::ChromeClientImpl(WebViewBase* web_view)
+ChromeClientImpl::ChromeClientImpl(WebViewImpl* web_view)
     : web_view_(web_view),
       cursor_overridden_(false),
       did_request_non_empty_tool_tip_(false) {}
 
 ChromeClientImpl::~ChromeClientImpl() {}
 
-ChromeClientImpl* ChromeClientImpl::Create(WebViewBase* web_view) {
+ChromeClientImpl* ChromeClientImpl::Create(WebViewImpl* web_view) {
   return new ChromeClientImpl(web_view);
 }
 
-WebViewBase* ChromeClientImpl::GetWebView() const {
+WebViewImpl* ChromeClientImpl::GetWebView() const {
   return web_view_;
 }
 
 void ChromeClientImpl::ChromeDestroyed() {
-  // Our lifetime is bound to the WebViewBase.
+  // Our lifetime is bound to the WebViewImpl.
 }
 
 void ChromeClientImpl::SetWindowRect(const IntRect& r, LocalFrame& frame) {
@@ -271,8 +273,8 @@ Page* ChromeClientImpl::CreateWindow(LocalFrame* frame,
   const AtomicString& frame_name =
       !EqualIgnoringASCIICase(r.FrameName(), "_blank") ? r.FrameName()
                                                        : g_empty_atom;
-  WebViewBase* new_view =
-      static_cast<WebViewBase*>(web_view_->Client()->CreateView(
+  WebViewImpl* new_view =
+      static_cast<WebViewImpl*>(web_view_->Client()->CreateView(
           WebLocalFrameImpl::FromFrame(frame),
           WrappedResourceRequest(r.GetResourceRequest()), features, frame_name,
           static_cast<WebNavigationPolicy>(navigation_policy),
@@ -352,7 +354,7 @@ bool ChromeClientImpl::OpenJavaScriptAlertDelegate(LocalFrame* frame,
   WebLocalFrameImpl* webframe = WebLocalFrameImpl::FromFrame(frame);
   if (webframe->Client()) {
     if (WebUserGestureIndicator::IsProcessingUserGesture())
-      WebUserGestureIndicator::CurrentUserGestureToken().SetJavascriptPrompt();
+      WebUserGestureIndicator::DisableTimeout();
     webframe->Client()->RunModalAlertDialog(message);
     return true;
   }
@@ -366,7 +368,7 @@ bool ChromeClientImpl::OpenJavaScriptConfirmDelegate(LocalFrame* frame,
   WebLocalFrameImpl* webframe = WebLocalFrameImpl::FromFrame(frame);
   if (webframe->Client()) {
     if (WebUserGestureIndicator::IsProcessingUserGesture())
-      WebUserGestureIndicator::CurrentUserGestureToken().SetJavascriptPrompt();
+      WebUserGestureIndicator::DisableTimeout();
     return webframe->Client()->RunModalConfirmDialog(message);
   }
   return false;
@@ -381,7 +383,7 @@ bool ChromeClientImpl::OpenJavaScriptPromptDelegate(LocalFrame* frame,
   WebLocalFrameImpl* webframe = WebLocalFrameImpl::FromFrame(frame);
   if (webframe->Client()) {
     if (WebUserGestureIndicator::IsProcessingUserGesture())
-      WebUserGestureIndicator::CurrentUserGestureToken().SetJavascriptPrompt();
+      WebUserGestureIndicator::DisableTimeout();
     WebString actual_value;
     bool ok = webframe->Client()->RunModalPromptDialog(message, default_value,
                                                        &actual_value);
@@ -585,15 +587,7 @@ void ChromeClientImpl::OpenFileChooser(LocalFrame* frame,
   if (!client)
     return;
 
-  WebFileChooserParams params;
-  params.multi_select = file_chooser->GetSettings().allows_multiple_files;
-  params.directory = file_chooser->GetSettings().allows_directory_upload;
-  params.accept_types = file_chooser->GetSettings().AcceptTypes();
-  params.selected_files = file_chooser->GetSettings().selected_files;
-  params.use_media_capture = file_chooser->GetSettings().use_media_capture;
-  params.need_local_path = file_chooser->GetSettings().allows_directory_upload;
-  params.requestor = frame->GetDocument()->Url();
-
+  const WebFileChooserParams& params = file_chooser->Params();
   WebFileChooserCompletionImpl* chooser_completion =
       new WebFileChooserCompletionImpl(std::move(file_chooser));
   if (client->RunFileChooser(params, chooser_completion))
@@ -611,11 +605,11 @@ void ChromeClientImpl::EnumerateChosenDirectory(FileChooser* file_chooser) {
       new WebFileChooserCompletionImpl(file_chooser);
 
   DCHECK(file_chooser);
-  DCHECK(file_chooser->GetSettings().selected_files.size());
+  DCHECK(file_chooser->Params().selected_files.size());
 
   // If the enumeration can't happen, call the callback with an empty list.
   if (!client->EnumerateChosenDirectory(
-          file_chooser->GetSettings().selected_files[0], chooser_completion))
+          file_chooser->Params().selected_files[0], chooser_completion))
     chooser_completion->DidChooseFile(WebVector<WebString>());
 }
 
@@ -782,7 +776,7 @@ PopupMenu* ChromeClientImpl::OpenPopupMenu(LocalFrame& frame,
     return nullptr;
 
   NotifyPopupOpeningObservers();
-  if (WebViewBase::UseExternalPopupMenus())
+  if (WebViewImpl::UseExternalPopupMenus())
     return new ExternalPopupMenu(frame, select, *web_view_);
 
   DCHECK(RuntimeEnabledFeatures::PagePopupEnabled());
@@ -812,6 +806,11 @@ void ChromeClientImpl::SetBrowserControlsState(float top_height,
                                        shrinks_layout);
 }
 
+void ChromeClientImpl::SetBrowserControlsShownRatio(float ratio) {
+  web_view_->GetBrowserControls().SetShownRatio(ratio);
+  web_view_->DidUpdateBrowserControls();
+}
+
 bool ChromeClientImpl::ShouldOpenModalDialogDuringPageDismissal(
     LocalFrame& frame,
     DialogType dialog_type,
@@ -829,10 +828,6 @@ bool ChromeClientImpl::ShouldOpenModalDialogDuringPageDismissal(
 WebLayerTreeView* ChromeClientImpl::GetWebLayerTreeView(LocalFrame* frame) {
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
   return web_frame->LocalRoot()->FrameWidget()->GetLayerTreeView();
-}
-
-WebLocalFrameBase* ChromeClientImpl::GetWebLocalFrameBase(LocalFrame* frame) {
-  return WebLocalFrameImpl::FromFrame(frame);
 }
 
 void ChromeClientImpl::RequestDecode(LocalFrame* frame,
@@ -961,10 +956,6 @@ void ChromeClientImpl::SetTouchAction(LocalFrame* frame,
     client->SetTouchAction(static_cast<TouchAction>(touch_action));
 }
 
-const WebInputEvent* ChromeClientImpl::GetCurrentInputEvent() const {
-  return WebViewBase::CurrentInputEvent();
-}
-
 bool ChromeClientImpl::RequestPointerLock(LocalFrame* frame) {
   LocalFrame& local_root = frame->LocalFrameRoot();
   return WebLocalFrameImpl::FromFrame(&local_root)
@@ -1031,6 +1022,7 @@ void ChromeClientImpl::DidChangeValueInTextField(
   UseCounter::Count(doc, doc.IsSecureContext()
                              ? WebFeature::kFieldEditInSecureContext
                              : WebFeature::kFieldEditInNonSecureContext);
+  doc.MaybeQueueSendDidEditFieldInInsecureContext();
   web_view_->PageImportanceSignals()->SetHadFormInteraction();
 }
 

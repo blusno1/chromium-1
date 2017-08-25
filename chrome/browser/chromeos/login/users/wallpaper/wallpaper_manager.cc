@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ash/ash_constants.h"
+#include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/constants.mojom.h"
@@ -38,6 +39,7 @@
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_window_state_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/image_decoder.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
@@ -52,10 +54,10 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_names.h"
-#include "components/user_manager/user_type.h"
 #include "components/wallpaper/wallpaper_files_id.h"
-#include "components/wallpaper/wallpaper_layout.h"
 #include "components/wallpaper/wallpaper_resizer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -63,7 +65,6 @@
 #include "content/public/common/service_manager_connection.h"
 #include "crypto/sha2.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "ui/gfx/color_analysis.h"
 #include "url/gurl.h"
 
 using content::BrowserThread;
@@ -83,8 +84,7 @@ const int kMoveCustomWallpaperDelaySeconds = 30;
 
 const int kCacheWallpaperDelayMs = 500;
 
-// Names of nodes with info about wallpaper in |kUserWallpapersProperties|
-// dictionary.
+// Names of nodes with wallpaper info in |kUserWallpapersInfo| dictionary.
 const char kNewWallpaperDateNodeName[] = "date";
 const char kNewWallpaperLayoutNodeName[] = "layout";
 const char kNewWallpaperLocationNodeName[] = "file";
@@ -149,6 +149,16 @@ int FindPublicSession(const user_manager::UserList& users) {
   return index;
 }
 
+// Returns true if |users| contains users other than device local account users.
+bool HasNonDeviceLocalAccounts(const user_manager::UserList& users) {
+  for (const auto* user : users) {
+    if (!policy::IsDeviceLocalAccountUser(user->GetAccountId().GetUserEmail(),
+                                          nullptr))
+      return true;
+  }
+  return false;
+}
+
 // This has once been copied from
 // brillo::cryptohome::home::SanitizeUserName(username) to be used for
 // wallpaper identification purpose only.
@@ -203,9 +213,7 @@ void SetKnownUserWallpaperFilesId(
 }
 
 // A helper to set the wallpaper image for Classic Ash and Mash.
-void SetWallpaper(const gfx::ImageSkia& image,
-                  wallpaper::WallpaperLayout layout) {
-  WallpaperManager::Get()->CalculateProminentColor(image);
+void SetWallpaper(const gfx::ImageSkia& image, wallpaper::WallpaperInfo info) {
   if (ash_util::IsRunningInMash()) {
     // In mash, connect to the WallpaperController interface via mojo.
     service_manager::Connector* connector =
@@ -217,11 +225,11 @@ void SetWallpaper(const gfx::ImageSkia& image,
     connector->BindInterface(ash::mojom::kServiceName, &wallpaper_controller);
     // TODO(crbug.com/655875): Optimize ash wallpaper transport; avoid sending
     // large bitmaps over Mojo; use shared memory like BitmapUploader, etc.
-    wallpaper_controller->SetWallpaper(*image.bitmap(), layout);
+    wallpaper_controller->SetWallpaper(*image.bitmap(), info);
   } else if (ash::Shell::HasInstance()) {
     // Note: Wallpaper setting is skipped in unit tests without shell instances.
     // In classic ash, interact with the WallpaperController class directly.
-    ash::Shell::Get()->wallpaper_controller()->SetWallpaperImage(image, layout);
+    ash::Shell::Get()->wallpaper_controller()->SetWallpaperImage(image, info);
   }
 }
 
@@ -328,7 +336,7 @@ class WallpaperManager::PendingWallpaper :
     if (default_) {
       manager->DoSetDefaultWallpaper(account_id_, std::move(on_finish_));
     } else if (!user_wallpaper_.isNull()) {
-      SetWallpaper(user_wallpaper_, info_.layout);
+      SetWallpaper(user_wallpaper_, info_);
     } else if (!wallpaper_path_.empty()) {
       manager->task_runner_->PostTask(
           FROM_HERE,
@@ -398,10 +406,6 @@ class WallpaperManager::PendingWallpaper :
 WallpaperManager::~WallpaperManager() {
   show_user_name_on_signin_subscription_.reset();
   device_wallpaper_image_subscription_.reset();
-  if (color_calculator_) {
-    color_calculator_->RemoveObserver(this);
-    color_calculator_.reset();
-  }
   user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
   weak_factory_.InvalidateWeakPtrs();
 }
@@ -425,11 +429,6 @@ void WallpaperManager::Shutdown() {
   wallpaper_manager = nullptr;
 }
 
-// static
-bool WallpaperManager::HasInstance() {
-  return wallpaper_manager != nullptr;
-}
-
 bool WallpaperManager::IsPendingWallpaper(uint32_t image_id) {
   for (size_t i = 0; i < loading_.size(); ++i) {
     if (loading_[i]->GetImageId() == image_id) {
@@ -437,31 +436,6 @@ bool WallpaperManager::IsPendingWallpaper(uint32_t image_id) {
     }
   }
   return false;
-}
-
-void WallpaperManager::CalculateProminentColor(const gfx::ImageSkia& image) {
-  // Cancel in-flight color calculations, if any.
-  if (color_calculator_) {
-    color_calculator_->RemoveObserver(this);
-    color_calculator_.reset();
-  }
-
-  // TODO(warx): this color fetching should go through ash::WallpaperController.
-  std::vector<color_utils::ColorProfile> color_profiles;
-  color_profiles.emplace_back(color_utils::LumaRange::DARK,
-                              color_utils::SaturationRange::MUTED);
-  color_calculator_ = base::MakeUnique<wallpaper::WallpaperColorCalculator>(
-      image, color_profiles, task_runner_);
-  color_calculator_->AddObserver(this);
-  if (!color_calculator_->StartCalculation()) {
-    color_calculator_->RemoveObserver(this);
-    color_calculator_.reset();
-    if (!prominent_color_.has_value())
-      return;
-    prominent_color_.reset();
-    for (auto& observer : observers_)
-      observer.OnWallpaperColorsChanged();
-  }
 }
 
 WallpaperManager::WallpaperResolution
@@ -491,7 +465,7 @@ void WallpaperManager::EnsureLoggedInUserWallpaperLoaded() {
   WallpaperInfo info;
   if (GetLoggedInUserWallpaperInfo(&info)) {
     UMA_HISTOGRAM_ENUMERATION("Ash.Wallpaper.Type", info.type,
-                              user_manager::User::WALLPAPER_TYPE_COUNT);
+                              wallpaper::WALLPAPER_TYPE_COUNT);
     RecordWallpaperAppType();
     if (info == current_user_wallpaper_info_)
       return;
@@ -612,6 +586,10 @@ void WallpaperManager::RemoveUserWallpaperInfo(const AccountId& account_id) {
       prefs, wallpaper::kUsersWallpaperInfo);
   prefs_wallpapers_info_update->RemoveWithoutPathExpansion(
       account_id.GetUserEmail(), NULL);
+  // Remove the color cache of the previous wallpaper if it exists.
+  DictionaryPrefUpdate wallpaper_colors_update(prefs,
+                                               ash::prefs::kWallpaperColors);
+  wallpaper_colors_update->RemoveWithoutPathExpansion(info.location, nullptr);
   DeleteUserWallpapers(account_id, info.location);
 }
 
@@ -633,7 +611,7 @@ void WallpaperManager::SetCustomWallpaper(
     const wallpaper::WallpaperFilesId& wallpaper_files_id,
     const std::string& file,
     wallpaper::WallpaperLayout layout,
-    user_manager::User::WallpaperType type,
+    wallpaper::WallpaperType type,
     const gfx::ImageSkia& image,
     bool update_wallpaper) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -643,7 +621,7 @@ void WallpaperManager::SetCustomWallpaper(
     return;
 
   // Don't allow custom wallpapers while policy is in effect.
-  if (type != user_manager::User::POLICY && IsPolicyControlled(account_id))
+  if (type != wallpaper::POLICY && IsPolicyControlled(account_id))
     return;
 
   base::FilePath wallpaper_path = GetCustomWallpaperPath(
@@ -662,7 +640,7 @@ void WallpaperManager::SetCustomWallpaper(
   const bool is_persistent =
       !user_manager::UserManager::Get()->IsUserNonCryptohomeDataEphemeral(
           account_id) ||
-      (type == user_manager::User::POLICY &&
+      (type == wallpaper::POLICY &&
        user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT);
 
   WallpaperInfo wallpaper_info = {
@@ -763,7 +741,9 @@ void WallpaperManager::DoSetDefaultWallpaper(
       default_wallpaper_image_->image().height() == 1)
     layout = wallpaper::WALLPAPER_LAYOUT_STRETCH;
 
-  SetWallpaper(default_wallpaper_image_->image(), layout);
+  WallpaperInfo info(default_wallpaper_image_->file_path().value(), layout,
+                     wallpaper::DEFAULT, base::Time::Now().LocalMidnight());
+  SetWallpaper(default_wallpaper_image_->image(), info);
 }
 
 void WallpaperManager::SetUserWallpaperInfo(const AccountId& account_id,
@@ -775,6 +755,14 @@ void WallpaperManager::SetUserWallpaperInfo(const AccountId& account_id,
     return;
 
   PrefService* local_state = g_browser_process->local_state();
+  // Remove the color cache of the previous wallpaper if it exists.
+  WallpaperInfo old_info;
+  if (GetUserWallpaperInfo(account_id, &old_info)) {
+    DictionaryPrefUpdate wallpaper_colors_update(local_state,
+                                                 ash::prefs::kWallpaperColors);
+    wallpaper_colors_update->RemoveWithoutPathExpansion(old_info.location,
+                                                        nullptr);
+  }
   DictionaryPrefUpdate wallpaper_update(local_state,
                                         wallpaper::kUsersWallpaperInfo);
 
@@ -848,11 +836,10 @@ void WallpaperManager::ScheduleSetUserWallpaper(const AccountId& account_id,
       return;
     }
 
-    if (info.type == user_manager::User::CUSTOMIZED ||
-        info.type == user_manager::User::POLICY ||
-        info.type == user_manager::User::DEVICE) {
+    if (info.type == wallpaper::CUSTOMIZED || info.type == wallpaper::POLICY ||
+        info.type == wallpaper::DEVICE) {
       base::FilePath wallpaper_path;
-      if (info.type != user_manager::User::DEVICE) {
+      if (info.type != wallpaper::DEVICE) {
         const char* sub_dir = GetCustomWallpaperSubdirForCurrentResolution();
         // Wallpaper is not resized when layout is
         // wallpaper::WALLPAPER_LAYOUT_CENTER.
@@ -948,20 +935,6 @@ void WallpaperManager::OnWindowDestroying(aura::Window* window) {
       user_manager::UserManager::Get()->GetActiveUser()->username_hash());
 }
 
-void WallpaperManager::OnColorCalculationComplete() {
-  size_t num_of_calculation = color_calculator_->prominent_colors().size();
-  DCHECK_EQ(1u, num_of_calculation);
-  SkColor color = color_calculator_->prominent_colors()[num_of_calculation - 1];
-  color_calculator_->RemoveObserver(this);
-  color_calculator_.reset();
-  if (prominent_color_ == color)
-    return;
-  prominent_color_ = color;
-
-  for (auto& observer : observers_)
-    observer.OnWallpaperColorsChanged();
-}
-
 // WallpaperManager, private: --------------------------------------------------
 
 WallpaperManager::WallpaperManager()
@@ -1049,10 +1022,14 @@ void WallpaperManager::SetPolicyControlledWallpaper(
   if (!wallpaper_files_id.is_valid())
     LOG(FATAL) << "Wallpaper flies id if invalid!";
 
+  // If we're at the login screen, do not change the wallpaper to the user
+  // policy controlled wallpaper but only update the cache. It will be later
+  // updated after the user logs in.
   SetCustomWallpaper(account_id, wallpaper_files_id, "policy-controlled.jpeg",
                      wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED,
-                     user_manager::User::POLICY, user_image->image(),
-                     true /* update wallpaper */);
+                     wallpaper::POLICY, user_image->image(),
+                     user_manager::UserManager::Get()
+                         ->IsUserLoggedIn() /* update wallpaper */);
 }
 
 void WallpaperManager::OnDeviceWallpaperPolicyChanged() {
@@ -1143,14 +1120,16 @@ void WallpaperManager::OnCheckDeviceWallpaperMatchHash(
 void WallpaperManager::OnDeviceWallpaperDecoded(
     const AccountId& account_id,
     std::unique_ptr<user_manager::UserImage> user_image) {
-  WallpaperInfo wallpaper_info = {GetDeviceWallpaperFilePath().value(),
-                                  wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED,
-                                  user_manager::User::DEVICE,
-                                  base::Time::Now().LocalMidnight()};
-  DCHECK(!user_manager::UserManager::Get()->IsUserLoggedIn());
-  // In the login screen set the device wallpaper as the wallpaper.
-  GetPendingWallpaper(user_manager::SignInAccountId(), false)
-      ->ResetSetWallpaperImage(user_image->image(), wallpaper_info);
+  // It might be possible that the device policy controlled wallpaper finishes
+  // decoding after the user logs in. In this case do nothing.
+  if (!user_manager::UserManager::Get()->IsUserLoggedIn()) {
+    WallpaperInfo wallpaper_info = {GetDeviceWallpaperFilePath().value(),
+                                    wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED,
+                                    wallpaper::DEVICE,
+                                    base::Time::Now().LocalMidnight()};
+    GetPendingWallpaper(user_manager::SignInAccountId(), false)
+        ->ResetSetWallpaperImage(user_image->image(), wallpaper_info);
+  }
 }
 
 void WallpaperManager::InitializeRegisteredDeviceWallpaper() {
@@ -1167,7 +1146,8 @@ void WallpaperManager::InitializeRegisteredDeviceWallpaper() {
   const user_manager::UserList& users =
       user_manager::UserManager::Get()->GetUsers();
   int public_session_user_index = FindPublicSession(users);
-  if ((!show_users && public_session_user_index == -1) || users.empty()) {
+  if ((!show_users && public_session_user_index == -1) ||
+      !HasNonDeviceLocalAccounts(users)) {
     // Boot into sign in form, preload default wallpaper.
     if (!SetDeviceWallpaperIfApplicable(user_manager::SignInAccountId()))
       SetDefaultWallpaperDelayed(user_manager::SignInAccountId());
@@ -1224,7 +1204,7 @@ bool WallpaperManager::GetUserWallpaperInfo(const AccountId& account_id,
 
   info->location = location;
   info->layout = static_cast<wallpaper::WallpaperLayout>(layout);
-  info->type = static_cast<user_manager::User::WallpaperType>(type);
+  info->type = static_cast<wallpaper::WallpaperType>(type);
   info->date = base::Time::FromInternalValue(date_val);
   return true;
 }
@@ -1268,7 +1248,7 @@ base::FilePath WallpaperManager::GetDeviceWallpaperFilePath() {
 
 void WallpaperManager::OnWallpaperDecoded(
     const AccountId& account_id,
-    wallpaper::WallpaperLayout layout,
+    const wallpaper::WallpaperInfo& info,
     bool update_wallpaper,
     MovableOnDestroyCallbackHolder on_finish,
     std::unique_ptr<user_manager::UserImage> user_image) {
@@ -1279,11 +1259,10 @@ void WallpaperManager::OnWallpaperDecoded(
   // Use default wallpaper in this case.
   if (user_image->image().isNull()) {
     // Updates user pref to default wallpaper.
-    WallpaperInfo info = {"",
-                          wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED,
-                          user_manager::User::DEFAULT,
-                          base::Time::Now().LocalMidnight()};
-    SetUserWallpaperInfo(account_id, info, true);
+    wallpaper::WallpaperInfo default_info(
+        "", wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED, wallpaper::DEFAULT,
+        base::Time::Now().LocalMidnight());
+    SetUserWallpaperInfo(account_id, default_info, true);
 
     if (update_wallpaper)
       DoSetDefaultWallpaper(account_id, std::move(on_finish));
@@ -1294,7 +1273,7 @@ void WallpaperManager::OnWallpaperDecoded(
   wallpaper_cache_[account_id].second = user_image->image();
 
   if (update_wallpaper)
-    SetWallpaper(user_image->image(), layout);
+    SetWallpaper(user_image->image(), info);
 }
 
 void WallpaperManager::StartLoad(const AccountId& account_id,
@@ -1314,8 +1293,8 @@ void WallpaperManager::StartLoad(const AccountId& account_id,
       task_runner_, wallpaper_path, ImageDecoder::ROBUST_JPEG_CODEC,
       0,  // Do not crop.
       base::Bind(&WallpaperManager::OnWallpaperDecoded,
-                 weak_factory_.GetWeakPtr(), account_id, info.layout,
-                 update_wallpaper, base::Passed(std::move(on_finish))));
+                 weak_factory_.GetWeakPtr(), account_id, info, update_wallpaper,
+                 base::Passed(std::move(on_finish))));
 }
 
 void WallpaperManager::SetCustomizedDefaultWallpaperAfterCheck(
@@ -1434,7 +1413,9 @@ void WallpaperManager::OnDefaultWallpaperDecoded(
   }
 
   *result_out = std::move(user_image);
-  SetWallpaper((*result_out)->image(), layout);
+  WallpaperInfo info(path.value(), layout, wallpaper::DEFAULT,
+                     base::Time::Now().LocalMidnight());
+  SetWallpaper((*result_out)->image(), info);
 }
 
 void WallpaperManager::StartLoadAndSetDefaultWallpaper(

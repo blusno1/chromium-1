@@ -794,7 +794,7 @@ void ReplaceSelectionCommand::RemoveUnrenderedTextNodesAtEnds(
 
 VisiblePosition ReplaceSelectionCommand::PositionAtEndOfInsertedContent()
     const {
-  // TODO(xiaochengh): Hoist the call and change it into a DCHECK.
+  // TODO(editing-dev): Hoist the call and change it into a DCHECK.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
   // TODO(yosin): We should set |m_endOfInsertedContent| not in SELECT
   // element, since contents of SELECT elements, e.g. OPTION, OPTGROUP, are
@@ -810,7 +810,7 @@ VisiblePosition ReplaceSelectionCommand::PositionAtEndOfInsertedContent()
 
 VisiblePosition ReplaceSelectionCommand::PositionAtStartOfInsertedContent()
     const {
-  // TODO(xiaochengh): Hoist the call and change it into a DCHECK.
+  // TODO(editing-dev): Hoist the call and change it into a DCHECK.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
   if (start_of_inserted_content_.IsOrphan())
     return VisiblePosition();
@@ -913,7 +913,8 @@ void ReplaceSelectionCommand::MergeEndIfNeeded(EditingState* editing_state) {
   VisiblePosition destination = merge_forward
                                     ? NextPositionOf(end_of_inserted_content)
                                     : end_of_inserted_content;
-  // TODO(xiaochengh): Stop storing VisiblePositions through mutations.
+  // TODO(editing-dev): Stop storing VisiblePositions through mutations.
+  // See crbug.com/648949 for details.
   VisiblePosition start_of_paragraph_to_move =
       merge_forward ? StartOfParagraph(end_of_inserted_content)
                     : NextPositionOf(end_of_inserted_content);
@@ -1000,28 +1001,10 @@ ElementToSplitToAvoidPastingIntoInlineElementsWithStyle(
       containing_block));
 }
 
-void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
-  TRACE_EVENT0("blink", "ReplaceSelectionCommand::doApply");
-  const VisibleSelection selection = EndingVisibleSelection();
-  DCHECK(!selection.IsNone());
-  DCHECK(selection.Start().AnchorNode());
-  if (!selection.IsNonOrphanedCaretOrRange() || !selection.Start().AnchorNode())
-    return;
-
-  if (!selection.RootEditableElement())
-    return;
-
-  ReplacementFragment fragment(&GetDocument(), document_fragment_.Get(),
-                               selection);
-  bool trivial_replace_result = PerformTrivialReplace(fragment, editing_state);
-  if (editing_state->IsAborted())
-    return;
-  if (trivial_replace_result)
-    return;
-
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-
+void ReplaceSelectionCommand::SetUpStyle(const VisibleSelection& selection) {
   // We can skip matching the style if the selection is plain text.
+  // TODO(editing-dev): Use IsEditablePosition instead of using UserModify
+  // directly.
   if ((selection.Start().AnchorNode()->GetLayoutObject() &&
        selection.Start()
                .AnchorNode()
@@ -1037,7 +1020,12 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
     insertion_style_ = EditingStyle::Create(selection.Start());
     insertion_style_->MergeTypingStyle(&GetDocument());
   }
+}
 
+void ReplaceSelectionCommand::InsertParagraphSeparatorIfNeeds(
+    const VisibleSelection& selection,
+    const ReplacementFragment& fragment,
+    EditingState* editing_state) {
   const VisiblePosition visible_start = selection.VisibleStart();
   const VisiblePosition visible_end = selection.VisibleEnd();
 
@@ -1045,13 +1033,13 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
   const bool selection_start_was_start_of_paragraph =
       IsStartOfParagraph(visible_start);
 
-  Element* enclosing_block_of_visible_start =
+  Element* const enclosing_block_of_visible_start =
       EnclosingBlock(visible_start.DeepEquivalent().AnchorNode());
 
   const bool start_is_inside_mail_blockquote = EnclosingNodeOfType(
       selection.Start(), IsMailHTMLBlockquoteElement, kCanCrossEditingBoundary);
-  const bool selection_is_plain_text = !selection.IsContentRichlyEditable();
-  Element* current_root = selection.RootEditableElement();
+  const bool selection_is_plain_text = !IsRichlyEditablePosition(selection.Base());
+  Element* const current_root = selection.RootEditableElement();
 
   if ((selection_start_was_start_of_paragraph &&
        selection_end_was_end_of_paragraph &&
@@ -1140,6 +1128,42 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
               .Build());
     }
   }
+}
+
+void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
+  TRACE_EVENT0("blink", "ReplaceSelectionCommand::doApply");
+  const VisibleSelection selection = EndingVisibleSelection();
+  DCHECK(!selection.IsNone());
+  DCHECK(selection.Start().AnchorNode());
+  if (!selection.IsNonOrphanedCaretOrRange() || !selection.Start().AnchorNode())
+    return;
+
+  if (!selection.RootEditableElement())
+    return;
+
+  ReplacementFragment fragment(&GetDocument(), document_fragment_.Get(),
+                               selection);
+  bool trivial_replace_result = PerformTrivialReplace(fragment, editing_state);
+  if (editing_state->IsAborted())
+    return;
+  if (trivial_replace_result)
+    return;
+
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+
+  SetUpStyle(selection);
+  Element* const current_root = selection.RootEditableElement();
+  const bool start_is_inside_mail_blockquote = EnclosingNodeOfType(
+      selection.Start(), IsMailHTMLBlockquoteElement, kCanCrossEditingBoundary);
+  const bool selection_is_plain_text =
+      !IsRichlyEditablePosition(selection.Base());
+  const bool selection_end_was_end_of_paragraph =
+      IsEndOfParagraph(selection.VisibleEnd());
+  const bool selection_start_was_start_of_paragraph =
+      IsStartOfParagraph(selection.VisibleStart());
+  InsertParagraphSeparatorIfNeeds(selection, fragment, editing_state);
+  if (editing_state->IsAborted())
+    return;
 
   Position insertion_pos = EndingVisibleSelection().Start();
   // We don't want any of the pasted content to end up nested in a Mail
@@ -1759,20 +1783,18 @@ void ReplaceSelectionCommand::CompleteHTMLReplacement(
   end_of_inserted_range_ = end;
 
   if (select_replacement_) {
-    SetEndingSelection(
-        SelectionInDOMTree::Builder()
-            .SetBaseAndExtentDeprecated(start, end)
-            .SetIsDirectional(EndingVisibleSelection().IsDirectional())
-            .Build());
+    SetEndingSelection(SelectionInDOMTree::Builder()
+                           .SetBaseAndExtentDeprecated(start, end)
+                           .SetIsDirectional(EndingSelection().IsDirectional())
+                           .Build());
     return;
   }
 
   if (end.IsNotNull()) {
-    SetEndingSelection(
-        SelectionInDOMTree::Builder()
-            .Collapse(end)
-            .SetIsDirectional(EndingVisibleSelection().IsDirectional())
-            .Build());
+    SetEndingSelection(SelectionInDOMTree::Builder()
+                           .Collapse(end)
+                           .SetIsDirectional(EndingSelection().IsDirectional())
+                           .Build());
     return;
   }
   SetEndingSelection(SelectionInDOMTree());

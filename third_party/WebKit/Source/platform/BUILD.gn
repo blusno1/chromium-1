@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
@@ -206,6 +207,18 @@ config("blink_platform_config") {
   ]
 }
 
+declare_args() {
+  runtime_call_stats_count_everything = false
+}
+
+buildflag_header("rcs_count_everything") {
+  header = "RuntimeCallStatsCountEverything.h"
+
+  header_dir = "blink/platform/bindings"
+
+  flags = [ "RCS_COUNT_EVERYTHING=$runtime_call_stats_count_everything" ]
+}
+
 config("blink_platform_implementation") {
   defines = [ "BLINK_PLATFORM_IMPLEMENTATION=1" ]
 }
@@ -273,8 +286,6 @@ component("platform") {
     "DragImage.h",
     "EventDispatchForbiddenScope.cpp",
     "EventDispatchForbiddenScope.h",
-    "FileChooser.cpp",
-    "FileChooser.h",
     "FileMetadata.cpp",
     "FileMetadata.h",
     "FileSystemType.h",
@@ -306,6 +317,8 @@ component("platform") {
     "LifecycleObserver.h",
     "LinkHash.cpp",
     "LinkHash.h",
+    "LongTaskDetector.cpp",
+    "LongTaskDetector.h",
     "MemoryCoordinator.cpp",
     "MemoryCoordinator.h",
     "PODArena.h",
@@ -565,7 +578,8 @@ component("platform") {
     "exported/WebAudioBus.cpp",
     "exported/WebAudioDevice.cpp",
     "exported/WebBlobData.cpp",
-    "exported/WebCString.cpp",
+    "exported/WebCORS.cpp",
+    "exported/WebCORSPreflightResultCache.cpp",
     "exported/WebCache.cpp",
     "exported/WebCanvasCaptureHandler.cpp",
     "exported/WebCoalescedInputEvent.cpp",
@@ -707,6 +721,9 @@ component("platform") {
     "fonts/FontSelectionAlgorithm.h",
     "fonts/FontSelectionTypes.cpp",
     "fonts/FontSelectionTypes.h",
+    "fonts/FontSelector.cpp",
+    "fonts/FontSelector.h",
+    "fonts/FontSelectorClient.h",
     "fonts/FontSmoothingMode.h",
     "fonts/FontVariantNumeric.h",
     "fonts/FontWidthVariant.h",
@@ -769,6 +786,7 @@ component("platform") {
     "fonts/shaping/HarfBuzzShaper.h",
     "fonts/shaping/RunSegmenter.cpp",
     "fonts/shaping/RunSegmenter.h",
+    "fonts/shaping/ShapeCache.cpp",
     "fonts/shaping/ShapeCache.h",
     "fonts/shaping/ShapeResult.cpp",
     "fonts/shaping/ShapeResult.h",
@@ -847,7 +865,6 @@ component("platform") {
     "graphics/BitmapImageMetrics.h",
     "graphics/BoxReflection.cpp",
     "graphics/BoxReflection.h",
-    "graphics/Canvas2DImageBufferSurface.h",
     "graphics/Canvas2DLayerBridge.cpp",
     "graphics/Canvas2DLayerBridge.h",
     "graphics/CanvasColorParams.cpp",
@@ -876,8 +893,6 @@ component("platform") {
     "graphics/CompositorMutator.h",
     "graphics/CompositorMutatorClient.cpp",
     "graphics/CompositorMutatorClient.h",
-    "graphics/ContentLayerDelegate.cpp",
-    "graphics/ContentLayerDelegate.h",
     "graphics/ContiguousContainer.cpp",
     "graphics/ContiguousContainer.h",
     "graphics/CrossfadeGeneratedImage.cpp",
@@ -1061,6 +1076,8 @@ component("platform") {
     "graphics/gpu/DrawingBuffer.h",
     "graphics/gpu/Extensions3DUtil.cpp",
     "graphics/gpu/Extensions3DUtil.h",
+    "graphics/gpu/GraphicsContext3DUtils.cpp",
+    "graphics/gpu/GraphicsContext3DUtils.h",
     "graphics/gpu/ImageLayerBridge.cpp",
     "graphics/gpu/ImageLayerBridge.h",
     "graphics/gpu/SharedContextRateLimiter.cpp",
@@ -1114,7 +1131,9 @@ component("platform") {
     "graphics/paint/PaintArtifact.cpp",
     "graphics/paint/PaintArtifact.h",
     "graphics/paint/PaintCanvas.h",
+    "graphics/paint/PaintChunk.cpp",
     "graphics/paint/PaintChunk.h",
+    "graphics/paint/PaintChunkProperties.cpp",
     "graphics/paint/PaintChunkProperties.h",
     "graphics/paint/PaintChunker.cpp",
     "graphics/paint/PaintChunker.h",
@@ -1136,6 +1155,8 @@ component("platform") {
     "graphics/paint/ScopedPaintChunkProperties.h",
     "graphics/paint/ScrollDisplayItem.cpp",
     "graphics/paint/ScrollDisplayItem.h",
+    "graphics/paint/ScrollHitTestDisplayItem.cpp",
+    "graphics/paint/ScrollHitTestDisplayItem.h",
     "graphics/paint/ScrollPaintPropertyNode.cpp",
     "graphics/paint/ScrollPaintPropertyNode.h",
     "graphics/paint/SubsequenceRecorder.h",
@@ -1159,14 +1180,14 @@ component("platform") {
     "image-decoders/ImageFrame.h",
     "image-decoders/SegmentReader.cpp",
     "image-decoders/SegmentReader.h",
+    "image-decoders/SegmentStream.cpp",
+    "image-decoders/SegmentStream.h",
     "image-decoders/bmp/BMPImageDecoder.cpp",
     "image-decoders/bmp/BMPImageDecoder.h",
     "image-decoders/bmp/BMPImageReader.cpp",
     "image-decoders/bmp/BMPImageReader.h",
     "image-decoders/gif/GIFImageDecoder.cpp",
     "image-decoders/gif/GIFImageDecoder.h",
-    "image-decoders/gif/GIFImageReader.cpp",
-    "image-decoders/gif/GIFImageReader.h",
     "image-decoders/ico/ICOImageDecoder.cpp",
     "image-decoders/ico/ICOImageDecoder.h",
     "image-decoders/jpeg/JPEGImageDecoder.cpp",
@@ -1181,19 +1202,6 @@ component("platform") {
     "image-encoders/ImageEncoder.h",
     "image-encoders/ImageEncoderUtils.cpp",
     "image-encoders/ImageEncoderUtils.h",
-    "instrumentation/PlatformInstrumentation.cpp",
-    "instrumentation/PlatformInstrumentation.h",
-    "instrumentation/resource_coordinator/FrameResourceCoordinator.cpp",
-    "instrumentation/resource_coordinator/FrameResourceCoordinator.h",
-    "instrumentation/tracing/MemoryCacheDumpProvider.cpp",
-    "instrumentation/tracing/MemoryCacheDumpProvider.h",
-    "instrumentation/tracing/TraceEvent.h",
-    "instrumentation/tracing/TracedValue.cpp",
-    "instrumentation/tracing/TracedValue.h",
-    "instrumentation/tracing/web_memory_allocator_dump.cc",
-    "instrumentation/tracing/web_memory_allocator_dump.h",
-    "instrumentation/tracing/web_process_memory_dump.cc",
-    "instrumentation/tracing/web_process_memory_dump.h",
     "json/JSONParser.cpp",
     "json/JSONParser.h",
     "json/JSONValues.cpp",
@@ -1469,6 +1477,7 @@ component("platform") {
 
   public_deps = [
     ":make_platform_generated",
+    ":rcs_count_everything",
     "//base",
     "//cc",
     "//cc/animation",
@@ -1502,6 +1511,7 @@ component("platform") {
     "//mojo/public/cpp/bindings:wtf_support",
     "//services/service_manager/public/cpp",
     "//third_party/WebKit/Source/platform/heap",
+    "//third_party/WebKit/Source/platform/instrumentation",
     "//third_party/WebKit/Source/platform/loader",
     "//third_party/WebKit/Source/platform/scheduler",
     "//third_party/WebKit/public:mojo_bindings_blink",
@@ -1570,6 +1580,14 @@ component("platform") {
     set_sources_assignment_filter(sources_assignment_filter)
   } else {
     sources -= [ "scroll/ScrollbarThemeAndroid.cpp" ]
+  }
+
+  if (is_fuchsia) {
+    sources += [
+      "fonts/fuchsia/FontCacheFuchsia.cpp",
+      "fonts/fuchsia/FontPlatformDataFuchsia.cpp",
+      "text/fuchsia/HyphenationFuchsia.cpp",
+    ]
   }
 
   if (use_minikin_hyphenation) {
@@ -1710,6 +1728,8 @@ test("blink_platform_unittests") {
     "LayoutLocaleTest.cpp",
     "LayoutUnitTest.cpp",
     "LifecycleContextTest.cpp",
+    "LongTaskDetectorTest.cpp",
+    "MemoryCoordinatorTest.cpp",
     "PODArenaTest.cpp",
     "PODFreeListArenaTest.cpp",
     "PODIntervalTreeTest.cpp",
@@ -1734,6 +1754,8 @@ test("blink_platform_unittests") {
     "blob/BlobBytesProviderTest.cpp",
     "blob/BlobDataTest.cpp",
     "exported/FilePathConversionTest.cpp",
+    "exported/WebCORSPreflightResultCacheTest.cpp",
+    "exported/WebCORSTest.cpp",
     "exported/WebStringTest.cpp",
     "feature_policy/FeaturePolicyTest.cpp",
     "fonts/AcceptLanguagesResolverTest.cpp",
@@ -1778,8 +1800,10 @@ test("blink_platform_unittests") {
     "graphics/CompositorElementIdTest.cpp",
     "graphics/CompositorMutatorClientTest.cpp",
     "graphics/ContiguousContainerTest.cpp",
+    "graphics/DecodingImageGeneratorTest.cpp",
     "graphics/DeferredImageDecoderTestWoPlatform.cpp",
     "graphics/GraphicsContextTest.cpp",
+    "graphics/ImageBufferTest.cpp",
     "graphics/PaintInvalidationReasonTest.cpp",
     "graphics/RecordingImageBufferSurfaceTest.cpp",
     "graphics/compositing/ContentLayerClientImplTest.cpp",
@@ -1804,14 +1828,13 @@ test("blink_platform_unittests") {
     "image-decoders/ImageDecoderTest.cpp",
     "image-decoders/ImageDecoderTestHelpers.cpp",
     "image-decoders/ImageDecoderTestHelpers.h",
+    "image-decoders/SegmentStreamTest.cpp",
     "image-decoders/bmp/BMPImageDecoderTest.cpp",
     "image-decoders/gif/GIFImageDecoderTest.cpp",
     "image-decoders/ico/ICOImageDecoderTest.cpp",
     "image-decoders/jpeg/JPEGImageDecoderTest.cpp",
     "image-decoders/png/PNGImageDecoderTest.cpp",
     "image-decoders/webp/WEBPImageDecoderTest.cpp",
-    "instrumentation/tracing/TracedValueTest.cpp",
-    "instrumentation/tracing/web_process_memory_dump_test.cc",
     "json/JSONParserTest.cpp",
     "json/JSONValuesTest.cpp",
     "mac/GraphicsContextCanvasTest.mm",
@@ -1898,6 +1921,7 @@ test("blink_platform_unittests") {
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/WebKit/Source/platform/instrumentation:unit_tests",
     "//third_party/WebKit/Source/platform/loader:unit_tests",
     "//third_party/WebKit/Source/platform/scheduler:unit_tests",
     "//third_party/WebKit/Source/platform/wtf",
@@ -2059,7 +2083,7 @@ fuzzer_test("blink_png_decoder_fuzzer") {
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/png.dict"
   seed_corpuses = [
-    "//cc/test/data",
+    "//components/viz/test/data",
     "//third_party/WebKit/LayoutTests/images/png-suite/samples",
     "//third_party/WebKit/LayoutTests/images/resources/pngfuzz",
   ]
@@ -2124,6 +2148,8 @@ source_set("unit_tests") {
   visibility = [ "//third_party/WebKit/Source/*" ]
   sources = [
     "graphics/Canvas2DLayerBridgeTest.cpp",
+    "graphics/CanvasColorParamsTest.cpp",
+    "graphics/ColorCorrectionTestUtils.cpp",
     "graphics/DeferredImageDecoderTest.cpp",
     "graphics/GraphicsLayerTest.cpp",
     "graphics/ImageDecodingStoreTest.cpp",
@@ -2131,6 +2157,7 @@ source_set("unit_tests") {
     "graphics/ImageLayerChromiumTest.cpp",
     "graphics/gpu/DrawingBufferSoftwareRenderingTest.cpp",
     "graphics/test/FakeGLES2Interface.h",
+    "graphics/test/FakeScrollableArea.h",
     "graphics/test/FakeWebGraphicsContext3DProvider.h",
     "graphics/test/MockImageDecoder.h",
     "graphics/test/MockPaintCanvas.h",

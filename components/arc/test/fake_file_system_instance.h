@@ -36,11 +36,15 @@ namespace arc {
 // Documents provider based functions are:
 // - GetDocument()
 // - GetChildDocuments()
+// - GetRecentDocuments()
 // Fake documents for those functions can be set up by AddDocument().
 //
 // Notes:
 // - GetChildDocuments() returns child documents in the same order as they were
 //   added with AddDocument().
+// - GetRecentDocuments() returns recent documents in the same order as they
+//   were added with AddRecentDocument().
+// - Callbacks are never invoked synchronously.
 // - All member functions must be called on the same thread.
 class FakeFileSystemInstance : public mojom::FileSystemInstance {
  public:
@@ -120,10 +124,16 @@ class FakeFileSystemInstance : public mojom::FileSystemInstance {
   // Adds a document accessible by document provider based methods.
   void AddDocument(const Document& document);
 
+  // Adds a recent document accessible by document provider based methods.
+  void AddRecentDocument(const std::string& root_id, const Document& document);
+
   // Triggers watchers installed to a document.
   void TriggerWatchers(const std::string& authority,
                        const std::string& document_id,
                        storage::WatcherManager::ChangeType type);
+
+  // Returns how many times GetChildDocuments() was called.
+  int get_child_documents_count() const { return get_child_documents_count_; }
 
   // mojom::FileSystemInstance:
   void AddWatcher(const std::string& authority,
@@ -139,6 +149,9 @@ class FakeFileSystemInstance : public mojom::FileSystemInstance {
                    const GetFileSizeCallback& callback) override;
   void GetMimeType(const std::string& url,
                    const GetMimeTypeCallback& callback) override;
+  void GetRecentDocuments(const std::string& authority,
+                          const std::string& root_id,
+                          const GetRecentDocumentsCallback& callback) override;
   void Init(mojom::FileSystemHostPtr host) override;
   void OpenFileToRead(const std::string& url,
                       const OpenFileToReadCallback& callback) override;
@@ -150,6 +163,10 @@ class FakeFileSystemInstance : public mojom::FileSystemInstance {
   // A pair of an authority and a document ID which identifies the location
   // of a document in documents providers.
   using DocumentKey = std::pair<std::string, std::string>;
+
+  // A pair of an authority and a root ID which identifies a root in
+  // documents providers.
+  using RootKey = std::pair<std::string, std::string>;
 
   THREAD_CHECKER(thread_checker_);
 
@@ -166,6 +183,9 @@ class FakeFileSystemInstance : public mojom::FileSystemInstance {
   // Mapping from a document key to its child documents.
   std::map<DocumentKey, std::vector<DocumentKey>> child_documents_;
 
+  // Mapping from a root to its recent documents.
+  std::map<RootKey, std::vector<Document>> recent_documents_;
+
   // Mapping from a document key to its watchers.
   std::map<DocumentKey, std::set<int64_t>> document_to_watchers_;
 
@@ -173,6 +193,7 @@ class FakeFileSystemInstance : public mojom::FileSystemInstance {
   std::map<int64_t, DocumentKey> watcher_to_document_;
 
   int64_t next_watcher_id_ = 1;
+  int get_child_documents_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(FakeFileSystemInstance);
 };

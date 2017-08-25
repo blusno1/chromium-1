@@ -124,8 +124,8 @@ void ServiceWorkerRegisterJob::Start() {
   start_time_ = base::TimeTicks::Now();
   BrowserThread::PostAfterStartupTask(
       FROM_HERE, base::ThreadTaskRunnerHandle::Get(),
-      base::Bind(&ServiceWorkerRegisterJob::StartImpl,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&ServiceWorkerRegisterJob::StartImpl,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void ServiceWorkerRegisterJob::StartImpl() {
@@ -438,8 +438,8 @@ void ServiceWorkerRegisterJob::InstallAndContinue() {
   // "Fire an event named install..."
   new_version()->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::INSTALL,
-      base::Bind(&ServiceWorkerRegisterJob::DispatchInstallEvent,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&ServiceWorkerRegisterJob::DispatchInstallEvent,
+                     weak_factory_.GetWeakPtr()),
       base::Bind(&ServiceWorkerRegisterJob::OnInstallFailed,
                  weak_factory_.GetWeakPtr()));
 }
@@ -460,9 +460,9 @@ void ServiceWorkerRegisterJob::DispatchInstallEvent() {
   install_methods_receiver->BindInterface(&ptr_info);
   new_version()->event_dispatcher()->DispatchInstallEvent(
       std::move(ptr_info),
-      base::Bind(&ServiceWorkerRegisterJob::OnInstallFinished,
-                 weak_factory_.GetWeakPtr(), request_id,
-                 base::Passed(&install_methods_receiver)));
+      base::BindOnce(&ServiceWorkerRegisterJob::OnInstallFinished,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     base::Passed(&install_methods_receiver)));
 }
 
 void ServiceWorkerRegisterJob::OnInstallFinished(

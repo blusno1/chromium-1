@@ -37,7 +37,7 @@
 #import "ui/base/cocoa/command_dispatcher.h"
 #include "ui/base/cocoa/remote_layer_api.h"
 #import "ui/base/cocoa/tool_tip_base_view.h"
-#include "ui/base/ime/composition_underline.h"
+#include "ui/base/ime/ime_text_span.h"
 #include "ui/display/display_observer.h"
 
 namespace content {
@@ -72,7 +72,6 @@ struct TextInputState;
       responderDelegate_;
   BOOL canBeKeyView_;
   BOOL closeOnDeactivate_;
-  BOOL opaque_;
   std::unique_ptr<content::RenderWidgetHostViewMacEditCommandHelper>
       editCommand_helper_;
 
@@ -128,7 +127,7 @@ struct TextInputState;
   NSRange markedTextSelectedRange_;
 
   // Underline information of the |markedText_|.
-  std::vector<ui::CompositionUnderline> underlines_;
+  std::vector<ui::ImeTextSpan> ime_text_spans_;
 
   // Replacement range information received from |setMarkedText:|.
   gfx::Range setMarkedTextReplacementRange_;
@@ -211,7 +210,6 @@ struct TextInputState;
 
 - (void)setCanBeKeyView:(BOOL)can;
 - (void)setCloseOnDeactivate:(BOOL)b;
-- (void)setOpaque:(BOOL)opaque;
 // True for always-on-top special windows (e.g. Balloons and Panels).
 - (BOOL)acceptsMouseEventsWhenInactive;
 // Cancel ongoing composition (abandon the marked text).
@@ -429,9 +427,9 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   WebContents* GetWebContents();
 
-  // Applies background color without notifying the RenderWidget about
-  // opaqueness changes.
-  void UpdateBackgroundColorFromRenderer(SkColor color);
+  // Set the color of the background CALayer shown when no content is ready to
+  // see.
+  void SetBackgroundLayerColor(SkColor color);
 
   bool HasPendingWheelEndEventForTesting() {
     return mouse_wheel_phase_handler_.HasPendingWheelEndEvent();
@@ -449,6 +447,9 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   // Delegated frame management and compositor interface.
   std::unique_ptr<BrowserCompositorMac> browser_compositor_;
+  BrowserCompositorMac* BrowserCompositorForTesting() const {
+    return browser_compositor_.get();
+  }
 
   // Set when the currently-displayed frame is the minimum scale. Used to
   // determine if pinch gestures need to be thresholded.
@@ -589,9 +590,18 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // Whether a request for begin frames has been issued.
   bool needs_begin_frames_;
 
-  // The background color of the web content. This color will be drawn when the
-  // web content is not able to draw in time.
-  SkColor background_color_ = SK_ColorTRANSPARENT;
+  // Whether or not the background is opaque as determined by calls to
+  // SetBackgroundColor. The default value is opaque.
+  bool background_is_opaque_ = true;
+
+  // The color of the background CALayer, stored as a SkColor for efficient
+  // comparison. Initially transparent so that the embedding NSView shows
+  // through.
+  SkColor background_layer_color_ = SK_ColorTRANSPARENT;
+
+  // The background color of the last frame that was swapped. This is not
+  // applied until the swap completes (see comments in
+  // AcceleratedWidgetSwapCompleted).
   SkColor last_frame_root_background_color_ = SK_ColorTRANSPARENT;
 
   std::unique_ptr<CursorManager> cursor_manager_;

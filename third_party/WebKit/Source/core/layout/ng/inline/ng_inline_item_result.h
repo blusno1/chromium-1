@@ -6,6 +6,7 @@
 #define NGInlineItemResult_h
 
 #include "core/layout/ng/geometry/ng_box_strut.h"
+#include "core/layout/ng/inline/ng_text_end_effect.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "platform/LayoutUnit.h"
 #include "platform/fonts/shaping/ShapeResult.h"
@@ -14,7 +15,7 @@
 namespace blink {
 
 class NGConstraintSpace;
-
+class NGInlineItem;
 class NGInlineNode;
 
 // The result of measuring NGInlineItem.
@@ -28,8 +29,11 @@ struct CORE_EXPORT NGInlineItemResult {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
  public:
-  // The index of NGInlineItem and its text range.
+  // The NGInlineItem and its index.
+  const NGInlineItem* item;
   unsigned item_index;
+
+  // The range of text content for this item.
   unsigned start_offset;
   unsigned end_offset;
 
@@ -65,8 +69,15 @@ struct CORE_EXPORT NGInlineItemResult {
   // Set only for text items.
   bool has_hanging_spaces = false;
 
+  // End effects for text items.
+  // The effects are included in |shape_result|, but not in text content.
+  NGTextEndEffect text_end_effect = NGTextEndEffect::kNone;
+
   NGInlineItemResult();
-  NGInlineItemResult(unsigned index, unsigned start, unsigned end);
+  NGInlineItemResult(const NGInlineItem*,
+                     unsigned index,
+                     unsigned start,
+                     unsigned end);
 };
 
 // Represents a set of NGInlineItemResult that form a line box.

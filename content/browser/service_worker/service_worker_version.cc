@@ -20,6 +20,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -78,9 +79,10 @@ const char kForceUpdateInfoMessage[] =
     "Service Worker was updated because \"Update on reload\" was "
     "checked in the DevTools Application panel.";
 
-void RunSoon(const base::Closure& callback) {
+void RunSoon(base::OnceClosure callback) {
   if (!callback.is_null())
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, callback);
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  std::move(callback));
 }
 
 template <typename CallbackArray, typename Arg>
@@ -101,11 +103,10 @@ void RunStartWorkerCallback(
 }
 
 // A callback adapter to start a |task| after StartWorker.
-void RunTaskAfterStartWorker(
-    base::WeakPtr<ServiceWorkerVersion> version,
-    const StatusCallback& error_callback,
-    const base::Closure& task,
-    ServiceWorkerStatusCode status) {
+void RunTaskAfterStartWorker(base::WeakPtr<ServiceWorkerVersion> version,
+                             const StatusCallback& error_callback,
+                             base::OnceClosure task,
+                             ServiceWorkerStatusCode status) {
   if (status != SERVICE_WORKER_OK) {
     if (!error_callback.is_null())
       error_callback.Run(status);
@@ -119,7 +120,7 @@ void RunTaskAfterStartWorker(
       error_callback.Run(SERVICE_WORKER_ERROR_START_WORKER_FAILED);
     return;
   }
-  task.Run();
+  std::move(task).Run();
 }
 
 void KillEmbeddedWorkerProcess(int process_id, ResultCode code) {
@@ -290,7 +291,8 @@ ServiceWorkerVersion::ServiceWorkerVersion(
       site_for_uma_(ServiceWorkerMetrics::SiteFromURL(scope_)),
       context_(context),
       script_cache_map_(this, context),
-      tick_clock_(base::WrapUnique(new base::DefaultTickClock)),
+      tick_clock_(base::MakeUnique<base::DefaultTickClock>()),
+      clock_(base::MakeUnique<base::DefaultClock>()),
       ping_controller_(new PingController(this)),
       weak_factory_(this) {
   DCHECK_NE(kInvalidServiceWorkerVersionId, version_id);
@@ -365,10 +367,10 @@ void ServiceWorkerVersion::SetStatus(Status status) {
   for (auto& observer : listeners_)
     observer.OnVersionStateChanged(this);
 
-  std::vector<base::Closure> callbacks;
+  std::vector<base::OnceClosure> callbacks;
   callbacks.swap(status_change_callbacks_);
-  for (const auto& callback : callbacks)
-    callback.Run();
+  for (auto& callback : callbacks)
+    std::move(callback).Run();
 
   if (status == INSTALLED)
     embedded_worker_->OnWorkerVersionInstalled();
@@ -377,8 +379,8 @@ void ServiceWorkerVersion::SetStatus(Status status) {
 }
 
 void ServiceWorkerVersion::RegisterStatusChangeCallback(
-    const base::Closure& callback) {
-  status_change_callbacks_.push_back(callback);
+    base::OnceClosure callback) {
+  status_change_callbacks_.push_back(std::move(callback));
 }
 
 ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
@@ -432,14 +434,14 @@ void ServiceWorkerVersion::StartWorker(ServiceWorkerMetrics::EventType purpose,
     RecordStartWorkerResult(purpose, status_, kInvalidTraceId,
                             is_browser_startup_complete,
                             SERVICE_WORKER_ERROR_ABORT);
-    RunSoon(base::Bind(callback, SERVICE_WORKER_ERROR_ABORT));
+    RunSoon(base::BindOnce(callback, SERVICE_WORKER_ERROR_ABORT));
     return;
   }
   if (is_redundant()) {
     RecordStartWorkerResult(purpose, status_, kInvalidTraceId,
                             is_browser_startup_complete,
                             SERVICE_WORKER_ERROR_REDUNDANT);
-    RunSoon(base::Bind(callback, SERVICE_WORKER_ERROR_REDUNDANT));
+    RunSoon(base::BindOnce(callback, SERVICE_WORKER_ERROR_REDUNDANT));
     return;
   }
 
@@ -454,7 +456,7 @@ void ServiceWorkerVersion::StartWorker(ServiceWorkerMetrics::EventType purpose,
     RecordStartWorkerResult(purpose, status_, kInvalidTraceId,
                             is_browser_startup_complete,
                             SERVICE_WORKER_ERROR_DISALLOWED);
-    RunSoon(base::Bind(callback, SERVICE_WORKER_ERROR_DISALLOWED));
+    RunSoon(base::BindOnce(callback, SERVICE_WORKER_ERROR_DISALLOWED));
     return;
   }
 
@@ -483,7 +485,7 @@ void ServiceWorkerVersion::StopWorker(const StatusCallback& callback) {
       // TODO(shimazu): Remove this check after Stop() hides the IPC behavior.
       // See also a TODO on EmbeddedWorkerInstance::Stop.
       if (!embedded_worker_->Stop()) {
-        RunSoon(base::Bind(callback, SERVICE_WORKER_ERROR_IPC_FAILED));
+        RunSoon(base::BindOnce(callback, SERVICE_WORKER_ERROR_IPC_FAILED));
         return;
       }
       stop_callbacks_.push_back(callback);
@@ -492,7 +494,7 @@ void ServiceWorkerVersion::StopWorker(const StatusCallback& callback) {
       stop_callbacks_.push_back(callback);
       return;
     case EmbeddedWorkerStatus::STOPPED:
-      RunSoon(base::Bind(callback, SERVICE_WORKER_OK));
+      RunSoon(base::BindOnce(callback, SERVICE_WORKER_OK));
       return;
   }
 }
@@ -552,7 +554,7 @@ int ServiceWorkerVersion::StartRequestWithCustomTimeout(
       << " can only be dispatched to an active worker: " << status();
 
   int request_id = pending_requests_.Add(base::MakeUnique<PendingRequest>(
-      error_callback, base::Time::Now(), tick_clock_->NowTicks(), event_type));
+      error_callback, clock_->Now(), tick_clock_->NowTicks(), event_type));
   TRACE_EVENT_ASYNC_BEGIN2("ServiceWorker", "ServiceWorkerVersion::Request",
                            pending_requests_.Lookup(request_id), "Request id",
                            request_id, "Event type",
@@ -622,7 +624,7 @@ bool ServiceWorkerVersion::FinishExternalRequest(
   if (iter != external_request_uuid_to_request_id_.end()) {
     int request_id = iter->second;
     external_request_uuid_to_request_id_.erase(iter);
-    return FinishRequest(request_id, true, base::Time::Now());
+    return FinishRequest(request_id, true, clock_->Now());
   }
 
   // It is possible that the request was cancelled or timed out before and we
@@ -641,16 +643,16 @@ ServiceWorkerVersion::CreateSimpleEventCallback(int request_id) {
 
 void ServiceWorkerVersion::RunAfterStartWorker(
     ServiceWorkerMetrics::EventType purpose,
-    const base::Closure& task,
+    base::OnceClosure task,
     const StatusCallback& error_callback) {
   if (running_status() == EmbeddedWorkerStatus::RUNNING) {
     DCHECK(start_callbacks_.empty());
-    task.Run();
+    std::move(task).Run();
     return;
   }
   StartWorker(purpose,
               base::Bind(&RunTaskAfterStartWorker, weak_factory_.GetWeakPtr(),
-                         error_callback, task));
+                         error_callback, base::Passed(std::move(task))));
 }
 
 void ServiceWorkerVersion::AddControllee(
@@ -743,8 +745,8 @@ void ServiceWorkerVersion::Doom() {
 
 void ServiceWorkerVersion::SetValidOriginTrialTokens(
     const TrialTokenValidator::FeatureToTokensMap& tokens) {
-  origin_trial_tokens_ =
-      TrialTokenValidator::GetValidTokens(url::Origin(scope()), tokens);
+  origin_trial_tokens_ = TrialTokenValidator::GetValidTokens(
+      url::Origin(scope()), tokens, clock_->Now());
 }
 
 void ServiceWorkerVersion::SetDevToolsAttached(bool attached) {
@@ -796,7 +798,7 @@ void ServiceWorkerVersion::SetMainScriptHttpResponseInfo(
   //     wasn't set in the entry.
   if (!origin_trial_tokens_) {
     origin_trial_tokens_ = TrialTokenValidator::GetValidTokensFromHeaders(
-        url::Origin(scope()), http_info.headers.get());
+        url::Origin(scope()), http_info.headers.get(), clock_->Now());
   }
 
   for (auto& observer : listeners_)
@@ -810,6 +812,11 @@ void ServiceWorkerVersion::SimulatePingTimeoutForTesting() {
 void ServiceWorkerVersion::SetTickClockForTesting(
     std::unique_ptr<base::TickClock> tick_clock) {
   tick_clock_ = std::move(tick_clock);
+}
+
+void ServiceWorkerVersion::SetClockForTesting(
+    std::unique_ptr<base::Clock> clock) {
+  clock_ = std::move(clock);
 }
 
 const net::HttpResponseInfo*
@@ -1103,9 +1110,9 @@ void ServiceWorkerVersion::OnOpenWindow(int request_id,
   if (!url.is_valid()) {
     DVLOG(1) << "Received unexpected invalid URL from renderer process.";
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(&KillEmbeddedWorkerProcess,
-                                       embedded_worker_->process_id(),
-                                       RESULT_CODE_KILLED_BAD_MESSAGE));
+                            base::BindOnce(&KillEmbeddedWorkerProcess,
+                                           embedded_worker_->process_id(),
+                                           RESULT_CODE_KILLED_BAD_MESSAGE));
     return;
   }
 
@@ -1266,10 +1273,10 @@ void ServiceWorkerVersion::OnNavigateClient(int request_id,
 
   if (!url.is_valid() || !base::IsValidGUID(client_uuid)) {
     DVLOG(1) << "Received unexpected invalid URL/UUID from renderer process.";
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&KillEmbeddedWorkerProcess, embedded_worker_->process_id(),
-                   RESULT_CODE_KILLED_BAD_MESSAGE));
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(&KillEmbeddedWorkerProcess,
+                                           embedded_worker_->process_id(),
+                                           RESULT_CODE_KILLED_BAD_MESSAGE));
     return;
   }
 
@@ -1381,20 +1388,20 @@ void ServiceWorkerVersion::RegisterForeignFetchScopes(
         !base::StartsWith(url.path(), scope_path,
                           base::CompareCase::SENSITIVE)) {
       DVLOG(1) << "Received unexpected invalid URL from renderer process.";
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(&KillEmbeddedWorkerProcess, embedded_worker_->process_id(),
-                     RESULT_CODE_KILLED_BAD_MESSAGE));
+      BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                              base::BindOnce(&KillEmbeddedWorkerProcess,
+                                             embedded_worker_->process_id(),
+                                             RESULT_CODE_KILLED_BAD_MESSAGE));
       return;
     }
   }
   for (const url::Origin& url : origins) {
     if (url.unique()) {
       DVLOG(1) << "Received unexpected unique origin from renderer process.";
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(&KillEmbeddedWorkerProcess, embedded_worker_->process_id(),
-                     RESULT_CODE_KILLED_BAD_MESSAGE));
+      BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                              base::BindOnce(&KillEmbeddedWorkerProcess,
+                                             embedded_worker_->process_id(),
+                                             RESULT_CODE_KILLED_BAD_MESSAGE));
       return;
     }
   }
@@ -1424,14 +1431,14 @@ void ServiceWorkerVersion::DidEnsureLiveRegistrationForStartWorker(
   if (status != SERVICE_WORKER_OK) {
     RecordStartWorkerResult(purpose, prestart_status, kInvalidTraceId,
                             is_browser_startup_complete, status);
-    RunSoon(base::Bind(callback, SERVICE_WORKER_ERROR_START_WORKER_FAILED));
+    RunSoon(base::BindOnce(callback, SERVICE_WORKER_ERROR_START_WORKER_FAILED));
     return;
   }
   if (is_redundant()) {
     RecordStartWorkerResult(purpose, prestart_status, kInvalidTraceId,
                             is_browser_startup_complete,
                             SERVICE_WORKER_ERROR_REDUNDANT);
-    RunSoon(base::Bind(callback, SERVICE_WORKER_ERROR_REDUNDANT));
+    RunSoon(base::BindOnce(callback, SERVICE_WORKER_ERROR_REDUNDANT));
     return;
   }
 
@@ -1439,7 +1446,7 @@ void ServiceWorkerVersion::DidEnsureLiveRegistrationForStartWorker(
 
   switch (running_status()) {
     case EmbeddedWorkerStatus::RUNNING:
-      RunSoon(base::Bind(callback, SERVICE_WORKER_OK));
+      RunSoon(base::BindOnce(callback, SERVICE_WORKER_OK));
       return;
     case EmbeddedWorkerStatus::STARTING:
       DCHECK(!start_callbacks_.empty());
@@ -1518,7 +1525,7 @@ void ServiceWorkerVersion::StartWorkerInternal() {
       mojo::MakeRequest(&event_dispatcher_), std::move(installed_scripts_info),
       base::Bind(&ServiceWorkerVersion::OnStartSentAndScriptEvaluated,
                  weak_factory_.GetWeakPtr()));
-  event_dispatcher_.set_connection_error_handler(base::Bind(
+  event_dispatcher_.set_connection_error_handler(base::BindOnce(
       &OnEventDispatcherConnectionError, embedded_worker_->AsWeakPtr()));
 }
 
@@ -1659,8 +1666,8 @@ void ServiceWorkerVersion::PingWorker() {
   DCHECK(running_status() == EmbeddedWorkerStatus::STARTING ||
          running_status() == EmbeddedWorkerStatus::RUNNING);
   // base::Unretained here is safe because event_dispatcher is owned by |this|.
-  event_dispatcher()->Ping(base::Bind(&ServiceWorkerVersion::OnPongFromWorker,
-                                      base::Unretained(this)));
+  event_dispatcher()->Ping(base::BindOnce(
+      &ServiceWorkerVersion::OnPongFromWorker, base::Unretained(this)));
 }
 
 void ServiceWorkerVersion::OnPingTimeout() {
@@ -1706,6 +1713,10 @@ void ServiceWorkerVersion::RecordStartWorkerResult(
   if (context_ && IsInstalled(prestart_status))
     context_->UpdateVersionFailureCount(version_id_, status);
 
+  if (installed_scripts_sender_) {
+    ServiceWorkerMetrics::RecordInstalledScriptsSenderStatus(
+        installed_scripts_sender_->finished_reason());
+  }
   ServiceWorkerMetrics::RecordStartWorkerStatus(status, purpose,
                                                 IsInstalled(prestart_status));
 
@@ -1799,7 +1810,7 @@ void ServiceWorkerVersion::MarkIfStale() {
   if (!registration || registration->active_version() != this)
     return;
   base::TimeDelta time_since_last_check =
-      base::Time::Now() - registration->last_update_check();
+      clock_->Now() - registration->last_update_check();
   if (time_since_last_check > kServiceWorkerScriptMaxCacheAge)
     RestartTick(&stale_time_);
 }
@@ -1866,7 +1877,8 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
   // Let all message callbacks fail (this will also fire and clear all
   // callbacks for events).
   // TODO(kinuko): Consider if we want to add queue+resend mechanism here.
-  IDMap<std::unique_ptr<PendingRequest>>::iterator iter(&pending_requests_);
+  base::IDMap<std::unique_ptr<PendingRequest>>::iterator iter(
+      &pending_requests_);
   while (!iter.IsAtEnd()) {
     TRACE_EVENT_ASYNC_END1("ServiceWorker", "ServiceWorkerVersion::Request",
                            iter.GetCurrentValue(), "Error", "Worker Stopped");

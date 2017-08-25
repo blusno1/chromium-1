@@ -7,6 +7,7 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
+#include "cc/resources/display_resource_provider.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/fake_resource_provider.h"
 #include "cc/test/test_context_provider.h"
@@ -24,7 +25,6 @@ namespace {
 
 constexpr bool kIsRoot = true;
 constexpr bool kIsChildRoot = false;
-constexpr bool kHandlesFrameSinkIdInvalidation = true;
 constexpr bool kNeedsSyncPoints = true;
 
 const base::UnguessableToken kArbitraryToken = base::UnguessableToken::Create();
@@ -36,8 +36,9 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     context_provider_->BindToCurrentThread();
     shared_bitmap_manager_ = base::MakeUnique<cc::TestSharedBitmapManager>();
 
-    resource_provider_ = cc::FakeResourceProvider::Create(
-        context_provider_.get(), shared_bitmap_manager_.get());
+    resource_provider_ =
+        cc::FakeResourceProvider::Create<cc::DisplayResourceProvider>(
+            context_provider_.get(), shared_bitmap_manager_.get());
   }
 
   void RunTest(int num_surfaces,
@@ -51,7 +52,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     for (int i = 0; i < num_surfaces; i++) {
       child_supports[i] = CompositorFrameSinkSupport::Create(
           nullptr, &manager_, FrameSinkId(1, i + 1), kIsChildRoot,
-          kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
+          kNeedsSyncPoints);
     }
     aggregator_ = base::MakeUnique<SurfaceAggregator>(
         manager_.surface_manager(), resource_provider_.get(), optimize_damage);
@@ -107,7 +108,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
 
     auto root_support = CompositorFrameSinkSupport::Create(
         nullptr, &manager_, FrameSinkId(1, num_surfaces + 1), kIsRoot,
-        kHandlesFrameSinkIdInvalidation, kNeedsSyncPoints);
+        kNeedsSyncPoints);
     timer_.Reset();
     do {
       auto pass = cc::RenderPass::Create();
@@ -150,7 +151,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
   FrameSinkManagerImpl manager_;
   scoped_refptr<cc::TestContextProvider> context_provider_;
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
-  std::unique_ptr<cc::ResourceProvider> resource_provider_;
+  std::unique_ptr<cc::DisplayResourceProvider> resource_provider_;
   std::unique_ptr<SurfaceAggregator> aggregator_;
   cc::LapTimer timer_;
 };

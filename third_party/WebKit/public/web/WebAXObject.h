@@ -161,6 +161,7 @@ class WebAXObject {
   BLINK_EXPORT WebString AriaAutoComplete() const;
   BLINK_EXPORT WebAXAriaCurrentState AriaCurrentState() const;
   BLINK_EXPORT bool AriaHasPopup() const;
+  BLINK_EXPORT bool IsEditableRoot() const;
   BLINK_EXPORT bool IsEditable() const;
   BLINK_EXPORT bool IsMultiline() const;
   BLINK_EXPORT bool IsRichlyEditable() const;
@@ -237,7 +238,6 @@ class WebAXObject {
   // Live regions.
   BLINK_EXPORT bool IsInLiveRegion() const;
   BLINK_EXPORT bool LiveRegionAtomic() const;
-  BLINK_EXPORT bool LiveRegionBusy() const;
   BLINK_EXPORT WebString LiveRegionRelevant() const;
   BLINK_EXPORT WebString LiveRegionStatus() const;
   BLINK_EXPORT WebAXObject LiveRegionRoot() const;
@@ -354,7 +354,7 @@ class WebAXObject {
   // window.
   BLINK_EXPORT void ScrollToGlobalPoint(const WebPoint&) const;
 
-#if BLINK_IMPLEMENTATION
+#if INSIDE_BLINK
   BLINK_EXPORT WebAXObject(AXObject*);
   WebAXObject& operator=(AXObject*);
   operator AXObject*() const;

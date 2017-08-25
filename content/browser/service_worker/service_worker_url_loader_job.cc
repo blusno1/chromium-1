@@ -212,6 +212,7 @@ void ServiceWorkerURLLoaderJob::DidDispatchFetchEvent(
     ServiceWorkerFetchEventResult fetch_result,
     const ServiceWorkerResponse& response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+    storage::mojom::BlobPtr body_as_blob,
     const scoped_refptr<ServiceWorkerVersion>& version) {
   if (!did_navigation_preload_)
     fetch_dispatcher_.reset();
@@ -256,20 +257,21 @@ void ServiceWorkerURLLoaderJob::DidDispatchFetchEvent(
     ssl_info_ = main_script_http_info->ssl_info;
 
   std::move(loader_callback_)
-      .Run(base::Bind(&ServiceWorkerURLLoaderJob::StartResponse,
-                      weak_factory_.GetWeakPtr(), response,
-                      base::Passed(std::move(body_as_stream))));
+      .Run(base::BindOnce(&ServiceWorkerURLLoaderJob::StartResponse,
+                          weak_factory_.GetWeakPtr(), response,
+                          std::move(body_as_stream), std::move(body_as_blob)));
 }
 
 void ServiceWorkerURLLoaderJob::StartResponse(
     const ServiceWorkerResponse& response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+    storage::mojom::BlobPtr body_as_blob,
     mojom::URLLoaderRequest request,
     mojom::URLLoaderClientPtr client) {
   DCHECK(!binding_.is_bound());
   binding_.Bind(std::move(request));
-  binding_.set_connection_error_handler(
-      base::Bind(&ServiceWorkerURLLoaderJob::Cancel, base::Unretained(this)));
+  binding_.set_connection_error_handler(base::BindOnce(
+      &ServiceWorkerURLLoaderJob::Cancel, base::Unretained(this)));
   url_loader_client_ = std::move(client);
 
   SaveResponseInfo(response);
@@ -281,12 +283,15 @@ void ServiceWorkerURLLoaderJob::StartResponse(
     CommitResponseHeaders();
     url_loader_client_->OnStartLoadingResponseBody(
         std::move(body_as_stream->stream));
+    // TODO(falken): Call CommitCompleted() when stream finished.
+    // See https://crbug.com/758455
     CommitCompleted(net::OK);
     return;
   }
 
   // Handle a blob response body. Ideally we'd just get a data pipe from
   // SWFetchDispatcher, and this could be treated the same as a stream response.
+  // |body_as_blob| must be kept around until here to ensure the blob is alive.
   // See:
   // https://docs.google.com/a/google.com/document/d/1_ROmusFvd8ATwIZa29-P6Ls5yyLjfld0KvKchVfA84Y/edit?usp=drive_web
   if (!response.blob_uuid.empty() && blob_storage_context_) {

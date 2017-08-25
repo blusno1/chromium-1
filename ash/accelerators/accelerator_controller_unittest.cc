@@ -17,7 +17,6 @@
 #include "ash/shell_port.h"
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test_screenshot_delegate.h"
 #include "ash/wm/lock_state_controller.h"
@@ -48,11 +47,6 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/widget/widget.h"
-
-#if defined(USE_X11)
-#include <X11/Xlib.h>
-#include "ui/events/test/events_test_utils_x11.h"
-#endif
 
 using chromeos::input_method::InputMethodManager;
 

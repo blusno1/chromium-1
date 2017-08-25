@@ -49,15 +49,6 @@ void LegacyNavigationManagerImpl::InitializeSession() {
       [[CRWSessionController alloc] initWithBrowserState:browser_state_]);
 }
 
-void LegacyNavigationManagerImpl::ReplaceSessionHistory(
-    std::vector<std::unique_ptr<web::NavigationItem>> items,
-    int lastCommittedItemIndex) {
-  SetSessionController([[CRWSessionController alloc]
-        initWithBrowserState:browser_state_
-             navigationItems:std::move(items)
-      lastCommittedItemIndex:lastCommittedItemIndex]);
-}
-
 void LegacyNavigationManagerImpl::OnNavigationItemsPruned(
     size_t pruned_item_count) {
   delegate_->OnNavigationItemsPruned(pruned_item_count);
@@ -140,25 +131,8 @@ NavigationItem* LegacyNavigationManagerImpl::GetVisibleItem() const {
   return [session_controller_ visibleItem];
 }
 
-NavigationItem* LegacyNavigationManagerImpl::GetLastCommittedItem() const {
-  return [session_controller_ lastCommittedItem];
-}
-
-NavigationItem* LegacyNavigationManagerImpl::GetPendingItem() const {
-  return [session_controller_ pendingItem];
-}
-
-NavigationItem* LegacyNavigationManagerImpl::GetTransientItem() const {
-  return [session_controller_ transientItem];
-}
-
 void LegacyNavigationManagerImpl::DiscardNonCommittedItems() {
   [session_controller_ discardNonCommittedItems];
-}
-
-void LegacyNavigationManagerImpl::LoadURLWithParams(
-    const NavigationManager::WebLoadParams& params) {
-  delegate_->LoadURLWithParams(params);
 }
 
 int LegacyNavigationManagerImpl::GetItemCount() const {
@@ -223,15 +197,11 @@ bool LegacyNavigationManagerImpl::CanGoToOffset(int offset) const {
 }
 
 void LegacyNavigationManagerImpl::GoBack() {
-  delegate_->GoToIndex(GetIndexForOffset(-1));
+  GoToIndex(GetIndexForOffset(-1));
 }
 
 void LegacyNavigationManagerImpl::GoForward() {
-  delegate_->GoToIndex(GetIndexForOffset(1));
-}
-
-void LegacyNavigationManagerImpl::GoToIndex(int index) {
-  delegate_->GoToIndex(index);
+  GoToIndex(GetIndexForOffset(1));
 }
 
 NavigationItemList LegacyNavigationManagerImpl::GetBackwardItems() const {
@@ -240,6 +210,18 @@ NavigationItemList LegacyNavigationManagerImpl::GetBackwardItems() const {
 
 NavigationItemList LegacyNavigationManagerImpl::GetForwardItems() const {
   return [session_controller_ forwardItems];
+}
+
+void LegacyNavigationManagerImpl::Restore(
+    int last_committed_item_index,
+    std::vector<std::unique_ptr<NavigationItem>> items) {
+  DCHECK(GetItemCount() == 0 && !GetPendingItem());
+  DCHECK_GE(last_committed_item_index, 0);
+  DCHECK_LT(static_cast<size_t>(last_committed_item_index), items.size());
+  SetSessionController([[CRWSessionController alloc]
+        initWithBrowserState:browser_state_
+             navigationItems:std::move(items)
+      lastCommittedItemIndex:last_committed_item_index]);
 }
 
 void LegacyNavigationManagerImpl::CopyStateFromAndPrune(
@@ -303,26 +285,47 @@ int LegacyNavigationManagerImpl::GetIndexForOffset(int offset) const {
   return result;
 }
 
+NavigationItemImpl* LegacyNavigationManagerImpl::GetLastCommittedItemImpl()
+    const {
+  return [session_controller_ lastCommittedItem];
+}
+
+NavigationItemImpl* LegacyNavigationManagerImpl::GetPendingItemImpl() const {
+  return [session_controller_ pendingItem];
+}
+
+NavigationItemImpl* LegacyNavigationManagerImpl::GetTransientItemImpl() const {
+  return [session_controller_ transientItem];
+}
+
+void LegacyNavigationManagerImpl::FinishGoToIndex(int index) {
+  const ScopedNavigationItemImplList& items = [session_controller_ items];
+  NavigationItem* to_item = items[index].get();
+  NavigationItem* previous_item = [session_controller_ currentItem];
+
+  bool same_document_navigation =
+      [session_controller_ isSameDocumentNavigationBetweenItem:previous_item
+                                                       andItem:to_item];
+  if (same_document_navigation) {
+    [session_controller_ goToItemAtIndex:index discardNonCommittedItems:YES];
+    delegate_->UpdateHtml5HistoryState();
+  } else {
+    [session_controller_ discardNonCommittedItems];
+    [session_controller_ setPendingItemIndex:index];
+
+    NavigationItemImpl* pending_item = [session_controller_ pendingItem];
+    pending_item->SetTransitionType(ui::PageTransitionFromInt(
+        pending_item->GetTransitionType() | ui::PAGE_TRANSITION_FORWARD_BACK));
+
+    delegate_->LoadCurrentItem();
+  }
+}
+
 bool LegacyNavigationManagerImpl::IsRedirectItemAtIndex(int index) const {
   DCHECK_GE(index, 0);
   DCHECK_LT(index, GetItemCount());
   ui::PageTransition transition = GetItemAtIndex(index)->GetTransitionType();
   return transition & ui::PAGE_TRANSITION_IS_REDIRECT_MASK;
-}
-
-NavigationItem*
-LegacyNavigationManagerImpl::GetLastCommittedNonAppSpecificItem() const {
-  int index = GetLastCommittedItemIndex();
-  if (index == -1)
-    return nullptr;
-  WebClient* client = GetWebClient();
-  const ScopedNavigationItemImplList& items = [session_controller_ items];
-  while (index >= 0) {
-    NavigationItem* item = items[index--].get();
-    if (!client->IsAppSpecificURL(item->GetVirtualURL()))
-      return item;
-  }
-  return nullptr;
 }
 
 int LegacyNavigationManagerImpl::GetPreviousItemIndex() const {

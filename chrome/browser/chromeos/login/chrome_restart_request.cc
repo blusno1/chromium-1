@@ -40,6 +40,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/ipc/host/gpu_switches.h"
 #include "gpu/ipc/service/switches.h"
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
@@ -112,6 +113,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableGpuRasterization,
     ::switches::kEnableLogging,
     ::switches::kEnableLowResTiling,
+    ::switches::kEnableNativeGpuMemoryBuffers,
     ::switches::kDisablePartialRaster,
     ::switches::kEnablePartialRaster,
     ::switches::kEnablePinch,
@@ -124,12 +126,10 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableUseZoomForDSF,
     ::switches::kEnableViewport,
     ::switches::kEnableZeroCopy,
-#if defined(USE_OZONE)
     ::switches::kEnableDrmAtomic,
     ::switches::kEnableHardwareOverlays,
     ::switches::kExtraTouchNoiseFiltering,
     ::switches::kEdgeTouchFiltering,
-#endif
     ::switches::kHostWindowBounds,
     ::switches::kMainFrameResizesAreOrientationChanges,
     ::switches::kForceDeviceScaleFactor,
@@ -149,9 +149,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kRemoteDebuggingPort,
     ::switches::kRendererStartupDialog,
     ::switches::kRootLayerScrolls,
-#if defined(USE_X11) || defined(USE_OZONE)
     ::switches::kTouchCalibration,
-#endif
     ::switches::kTouchDevices,
     ::switches::kTouchEventFeatureDetection,
     ::switches::kTopChromeMD,
@@ -174,16 +172,15 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableWebRtcHWEncoding,
 #endif
     ::switches::kDisableVaapiAcceleratedVideoEncode,
-#if defined(USE_OZONE)
     ::switches::kOzonePlatform,
-#endif
     app_list::switches::kDisableSyncAppList,
     app_list::switches::kEnableSyncAppList,
-    ash::switches::kAshEnableTouchView,
+    ash::switches::kAshEnableTabletMode,
     ash::switches::kAshForceEnableStylusTools,
     ash::switches::kAshEnablePaletteOnAllDisplays,
     ash::switches::kAshTouchHud,
     ash::switches::kAuraLegacyPowerButton,
+    ash::switches::kForceClamshellPowerButton,
     chromeos::switches::kDefaultWallpaperLarge,
     chromeos::switches::kDefaultWallpaperSmall,
     chromeos::switches::kGuestWallpaperLarge,

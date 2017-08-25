@@ -18,13 +18,14 @@
 #include "services/ui/ws/default_access_policy.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
+#include "services/ui/ws/event_dispatcher.h"
 #include "services/ui/ws/event_matcher.h"
 #include "services/ui/ws/focus_controller.h"
 #include "services/ui/ws/frame_generator.h"
+#include "services/ui/ws/modal_window_controller.h"
 #include "services/ui/ws/operation.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/server_window.h"
-#include "services/ui/ws/server_window_compositor_frame_sink_manager.h"
 #include "services/ui/ws/server_window_observer.h"
 #include "services/ui/ws/user_display_manager.h"
 #include "services/ui/ws/window_manager_display_root.h"
@@ -56,6 +57,15 @@ FrameGenerator* GetFrameGenerator(WindowManagerDisplayRoot* display_root) {
   return display_root->display()->platform_display()
              ? display_root->display()->platform_display()->GetFrameGenerator()
              : nullptr;
+}
+
+display::ViewportMetrics TransportMetricsToDisplayMetrics(
+    const ui::mojom::WmViewportMetrics& transport_metrics) {
+  display::ViewportMetrics viewport_metrics;
+  viewport_metrics.bounds_in_pixels = transport_metrics.bounds_in_pixels;
+  viewport_metrics.device_scale_factor = transport_metrics.device_scale_factor;
+  viewport_metrics.ui_scale_factor = transport_metrics.ui_scale_factor;
+  return viewport_metrics;
 }
 
 }  // namespace
@@ -292,7 +302,7 @@ void WindowTree::OnWmMoveDragImageAck() {
 
 ServerWindow* WindowTree::ProcessSetDisplayRoot(
     const display::Display& display_to_create,
-    const mojom::WmViewportMetrics& transport_viewport_metrics,
+    const display::ViewportMetrics& viewport_metrics,
     bool is_primary_display,
     const ClientWindowId& client_window_id) {
   DCHECK(window_manager_state_);  // Only called for window manager.
@@ -324,12 +334,6 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
     return nullptr;
   }
 
-  display::ViewportMetrics viewport_metrics;
-  viewport_metrics.bounds_in_pixels =
-      transport_viewport_metrics.bounds_in_pixels;
-  viewport_metrics.device_scale_factor =
-      transport_viewport_metrics.device_scale_factor;
-  viewport_metrics.ui_scale_factor = transport_viewport_metrics.ui_scale_factor;
   Display* display = display_manager()->AddDisplayForWindowManager(
       is_primary_display, display_to_create, viewport_metrics);
   DCHECK(display);
@@ -393,6 +397,30 @@ bool WindowTree::ProcessSwapDisplayRoots(int64_t display_id1,
   if (frame_generator1 && frame_generator2)
     frame_generator1->SwapSurfaceWith(frame_generator2);
 
+  return true;
+}
+
+bool WindowTree::ProcessSetBlockingContainers(
+    std::vector<mojom::BlockingContainersPtr>
+        transport_all_blocking_containers) {
+  DCHECK(window_manager_state_);  // Can only be called by the window manager.
+
+  std::vector<BlockingContainers> all_containers;
+  for (auto& transport_container : transport_all_blocking_containers) {
+    BlockingContainers blocking_containers;
+    blocking_containers.system_modal_container = GetWindowByClientId(
+        ClientWindowId(transport_container->system_modal_container_id));
+    if (!blocking_containers.system_modal_container) {
+      DVLOG(1) << "SetBlockingContainers called with unknown modal container";
+      return false;
+    }
+    blocking_containers.min_container = GetWindowByClientId(
+        ClientWindowId(transport_container->min_container_id));
+    all_containers.push_back(blocking_containers);
+  }
+  window_manager_state_->event_dispatcher()
+      ->modal_window_controller()
+      ->SetBlockingContainers(all_containers);
   return true;
 }
 
@@ -552,26 +580,28 @@ bool WindowTree::SetModalType(const ClientWindowId& window_id,
   if (window->modal_type() == modal_type)
     return true;
 
-  auto* display_root = GetWindowManagerDisplayRoot(window);
-  switch (modal_type) {
-    case MODAL_TYPE_SYSTEM:
-      if (!display_root) {
-        DVLOG(1) << "SetModalType failed (no display root)";
-        return false;
-      }
-      window->SetModalType(modal_type);
-      display_root->window_manager_state()->AddSystemModalWindow(window);
-      break;
-    case MODAL_TYPE_NONE:
-    case MODAL_TYPE_WINDOW:
-    case MODAL_TYPE_CHILD:
-      window->SetModalType(modal_type);
-      break;
+  window->SetModalType(modal_type);
+  return true;
+}
+
+bool WindowTree::SetChildModalParent(
+    const ClientWindowId& window_id,
+    const ClientWindowId& modal_parent_window_id) {
+  ServerWindow* window = GetWindowByClientId(window_id);
+  ServerWindow* modal_parent_window =
+      GetWindowByClientId(modal_parent_window_id);
+  // A value of null for |modal_parent_window| resets the modal parent.
+  if (!window) {
+    DVLOG(1) << "SetChildModalParent failed (invalid id)";
+    return false;
   }
-  if (display_root && modal_type != MODAL_TYPE_NONE) {
-    display_root->window_manager_state()->ReleaseCaptureBlockedByModalWindow(
-        window);
+
+  if (!access_policy_->CanSetChildModalParent(window, modal_parent_window)) {
+    DVLOG(1) << "SetChildModalParent failed (access denied)";
+    return false;
   }
+
+  window->SetChildModalParent(modal_parent_window);
   return true;
 }
 
@@ -720,17 +750,10 @@ void WindowTree::OnWindowManagerCreatedTopLevelWindow(
 
 void WindowTree::AddActivationParent(const ClientWindowId& window_id) {
   ServerWindow* window = GetWindowByClientId(window_id);
-  if (window) {
-    Display* display = GetDisplay(window);
-    if (display) {
-      display->AddActivationParent(window);
-    } else {
-      DVLOG(1) << "AddActivationParent failed "
-               << "(window not associated with display)";
-    }
-  } else {
+  if (window)
+    window->set_is_activation_parent(true);
+  else
     DVLOG(1) << "AddActivationParent failed (invalid window id)";
-  }
 }
 
 void WindowTree::OnChangeCompleted(uint32_t change_id, bool success) {
@@ -753,6 +776,20 @@ void WindowTree::OnAccelerator(uint32_t accelerator_id,
   // mojom::Event directly to ui::Event.
   window_manager_internal_->OnAccelerator(event_ack_id_, accelerator_id,
                                           ui::Event::Clone(event));
+}
+
+void WindowTree::OnEventOccurredOutsideOfModalWindow(
+    const ServerWindow* modal_window) {
+  DCHECK(window_manager_internal_);
+  // Only tell the window manager about windows it created.
+  if (modal_window->id().client_id != id_)
+    return;
+
+  ClientWindowId client_window_id;
+  const bool is_known = IsWindowKnown(modal_window, &client_window_id);
+  // The window manager knows all windows.
+  DCHECK(is_known);
+  window_manager_internal_->OnEventBlockedByModalWindow(client_window_id.id);
 }
 
 void WindowTree::OnCursorTouchVisibleChanged(bool enabled) {
@@ -1389,7 +1426,8 @@ uint32_t WindowTree::GenerateEventAckId() {
 void WindowTree::DispatchInputEventImpl(ServerWindow* target,
                                         const ui::Event& event,
                                         DispatchEventCallback callback) {
-  DVLOG(3) << "DispatchInputEventImpl client=" << id_;
+  // DispatchInputEventImpl() is called so often that log level 4 is used.
+  DVLOG(4) << "DispatchInputEventImpl client=" << id_;
   GenerateEventAckId();
   event_ack_callback_ = std::move(callback);
   WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(target);
@@ -1538,6 +1576,14 @@ void WindowTree::SetModalType(uint32_t change_id,
       change_id, SetModalType(ClientWindowId(window_id), modal_type));
 }
 
+void WindowTree::SetChildModalParent(uint32_t change_id,
+                                     Id window_id,
+                                     Id parent_window_id) {
+  client()->OnChangeCompleted(
+      change_id, SetChildModalParent(ClientWindowId(window_id),
+                                     ClientWindowId(parent_window_id)));
+}
+
 void WindowTree::ReorderWindow(uint32_t change_id,
                                Id window_id,
                                Id relative_window_id,
@@ -1615,10 +1661,10 @@ void WindowTree::SetWindowBounds(
     return;
   }
 
-  DVLOG(3) << "set window bounds client window_id=" << window_id
-           << " global window_id="
-           << (window ? WindowIdToTransportId(window->id()) : 0)
-           << " bounds=" << bounds.ToString();
+  DVLOG(3) << "SetWindowBounds window_id=" << window_id << " global window_id="
+           << (window ? window->id().ToString() : std::string())
+           << " bounds=" << bounds.ToString() << " local_surface_id="
+           << (local_surface_id ? local_surface_id->ToString() : "null");
 
   if (!window) {
     DVLOG(1) << "SetWindowBounds failed (invalid window id)";
@@ -1644,7 +1690,7 @@ void WindowTree::SetWindowTransform(uint32_t change_id,
   // we don't bother routing it to the window-manager.
 
   ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
-  DVLOG(3) << "set window transform client window_id=" << window_id
+  DVLOG(3) << "SetWindowTransform client window_id=" << window_id
            << " global window_id="
            << (window ? WindowIdToTransportId(window->id()) : 0)
            << " transform=" << transform.ToString();
@@ -1757,7 +1803,8 @@ void WindowTree::SetImeVisibility(Id transport_window_id,
 
 void WindowTree::OnWindowInputEventAck(uint32_t event_id,
                                        mojom::EventResult result) {
-  DVLOG(3) << "OnWindowInputEventAck client=" << id_;
+  // DispatchInputEventImpl() is called so often that log level 4 is used.
+  DVLOG(4) << "OnWindowInputEventAck client=" << id_;
   if (event_ack_id_ == 0 || event_id != event_ack_id_ || !event_ack_callback_) {
     // TODO(sad): Something bad happened. Kill the client?
     NOTIMPLEMENTED() << ": Wrong event acked. event_id=" << event_id
@@ -2269,14 +2316,7 @@ void WindowTree::RemoveActivationParent(Id transport_window_id) {
     DVLOG(1) << "RemoveActivationParent failed (invalid window id)";
     return;
   }
-
-  Display* display = GetDisplay(window);
-  if (!display) {
-    DVLOG(1) << "RemoveActivationParent window not associated with display";
-    return;
-  }
-
-  display->RemoveActivationParent(window);
+  window->set_is_activation_parent(false);
 }
 
 void WindowTree::ActivateNextWindow() {
@@ -2339,9 +2379,9 @@ void WindowTree::SetDisplayRoot(const display::Display& display,
                                 bool is_primary_display,
                                 Id window_id,
                                 const SetDisplayRootCallback& callback) {
-  ServerWindow* display_root =
-      ProcessSetDisplayRoot(display, *viewport_metrics, is_primary_display,
-                            ClientWindowId(window_id));
+  ServerWindow* display_root = ProcessSetDisplayRoot(
+      display, TransportMetricsToDisplayMetrics(*viewport_metrics),
+      is_primary_display, ClientWindowId(window_id));
   if (!display_root) {
     callback.Run(base::nullopt);
     return;
@@ -2352,13 +2392,15 @@ void WindowTree::SetDisplayRoot(const display::Display& display,
 
 void WindowTree::SetDisplayConfiguration(
     const std::vector<display::Display>& displays,
-    std::vector<ui::mojom::WmViewportMetricsPtr> viewport_metrics,
+    std::vector<ui::mojom::WmViewportMetricsPtr> transport_metrics,
     int64_t primary_display_id,
     int64_t internal_display_id,
     const SetDisplayConfigurationCallback& callback) {
+  std::vector<display::ViewportMetrics> metrics;
+  for (auto& transport_ptr : transport_metrics)
+    metrics.push_back(TransportMetricsToDisplayMetrics(*transport_ptr));
   callback.Run(display_manager()->SetDisplayConfiguration(
-      displays, std::move(viewport_metrics), primary_display_id,
-      internal_display_id));
+      displays, metrics, primary_display_id, internal_display_id));
 }
 
 void WindowTree::SwapDisplayRoots(int64_t display_id1,
@@ -2366,6 +2408,13 @@ void WindowTree::SwapDisplayRoots(int64_t display_id1,
                                   const SwapDisplayRootsCallback& callback) {
   DCHECK(window_manager_state_);  // Only applicable to the window manager.
   callback.Run(ProcessSwapDisplayRoots(display_id1, display_id2));
+}
+
+void WindowTree::SetBlockingContainers(
+    std::vector<::ui::mojom::BlockingContainersPtr> blocking_containers,
+    const SetBlockingContainersCallback& callback) {
+  DCHECK(window_manager_state_);  // Only applicable to the window manager.
+  callback.Run(ProcessSetBlockingContainers(std::move(blocking_containers)));
 }
 
 void WindowTree::WmResponse(uint32_t change_id, bool response) {
@@ -2464,6 +2513,24 @@ void WindowTree::WmMoveCursorToDisplayLocation(const gfx::Point& display_pixels,
                                                int64_t display_id) {
   DCHECK(window_manager_state_);
   window_manager_state_->SetCursorLocation(display_pixels, display_id);
+}
+
+void WindowTree::WmConfineCursorToBounds(const gfx::Rect& bounds_in_pixels,
+                                         int64_t display_id) {
+  DCHECK(window_manager_state_);
+  Display* display = display_manager()->GetDisplayById(display_id);
+  if (!display) {
+    DVLOG(1) << "WmConfineCursorToBounds failed (invalid display id)";
+    return;
+  }
+
+  PlatformDisplay* platform_display = display->platform_display();
+  if (!platform_display) {
+    DVLOG(1) << "WmConfineCursorToBounds failed (no platform display)";
+    return;
+  }
+
+  platform_display->ConfineCursorToBounds(bounds_in_pixels);
 }
 
 void WindowTree::WmSetCursorTouchVisible(bool enabled) {

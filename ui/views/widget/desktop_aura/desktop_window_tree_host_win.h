@@ -77,7 +77,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   gfx::Rect GetRestoredBounds() const override;
   std::string GetWorkspace() const override;
   gfx::Rect GetWorkAreaBoundsInScreen() const override;
-  void SetShape(std::unique_ptr<SkRegion> native_region) override;
+  void SetShape(std::unique_ptr<Widget::ShapeRects> native_shape) override;
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;
@@ -188,6 +188,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void HandleNativeFocus(HWND last_focused_window) override;
   void HandleNativeBlur(HWND focused_window) override;
   bool HandleMouseEvent(const ui::MouseEvent& event) override;
+  bool HandlePointerEvent(ui::PointerEvent* event) override;
   void HandleKeyEvent(ui::KeyEvent* event) override;
   void HandleTouchEvent(const ui::TouchEvent& event) override;
   bool HandleIMEMessage(UINT message,

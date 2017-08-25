@@ -9,6 +9,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/browser_sync/profile_sync_service.h"
+#include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service_helper.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
@@ -17,16 +18,15 @@
 #include "ios/chrome/browser/feature_engagement/tracker_util.h"
 #import "ios/chrome/browser/metrics/tab_usage_recorder.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#include "ios/chrome/browser/sessions/session_util.h"
 #include "ios/chrome/browser/sessions/tab_restore_service_delegate_impl_ios.h"
 #include "ios/chrome/browser/sessions/tab_restore_service_delegate_impl_ios_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #include "ios/chrome/browser/ui/commands/application_commands.h"
 #include "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #include "ios/chrome/browser/ui/ntp/recent_tabs/synced_sessions.h"
@@ -47,12 +47,14 @@
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
-#import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -93,10 +95,10 @@ enum class SnapshotViewOption {
   // weak.
   ios::ChromeBrowserState* _browserState;
   // weak.
-  id<TabSwitcherDelegate> _delegate;
+  __weak id<TabSwitcherDelegate> _delegate;
   // The model selected when the tab switcher was toggled.
   // weak.
-  TabModel* _onLoadActiveModel;
+  __weak TabModel* _onLoadActiveModel;
   // The view this controller manages.
   TabSwitcherView* _tabSwitcherView;
   // The list of panels controllers for distant sessions.
@@ -422,18 +424,6 @@ enum class SnapshotViewOption {
                            atIndex:NSNotFound
                         transition:ui::PAGE_TRANSITION_TYPED
                           tabModel:model];
-}
-
-- (IBAction)chromeExecuteCommand:(id)sender {
-  int command = [sender tag];
-  switch (command) {
-    case IDC_TOGGLE_TAB_SWITCHER:
-      [self tabSwitcherDismissWithCurrentSelectedModel];
-      break;
-    default:
-      [super chromeExecuteCommand:sender];
-      break;
-  }
 }
 
 #pragma mark - Private
@@ -898,24 +888,24 @@ enum class SnapshotViewOption {
   const sessions::SessionTab* toLoad = nullptr;
   if (openTabs->GetForeignTab(distantTab->session_tag, distantTab->tab_id,
                               &toLoad)) {
-    TabModel* mainModel = [_tabSwitcherModel mainTabModel];
     // Disable user interactions until the tab is inserted to prevent multiple
     // concurrent tab model updates.
     [_tabSwitcherView setUserInteractionEnabled:NO];
-    Tab* tab = [mainModel insertTabWithURL:GURL()
-                                  referrer:web::Referrer()
-                                transition:ui::PAGE_TRANSITION_TYPED
-                                    opener:nil
-                               openedByDOM:NO
-                                   atIndex:NSNotFound
-                              inBackground:NO];
-    [tab loadSessionTab:toLoad];
-    [mainModel setCurrentTab:tab];
+
+    TabModel* tabModel = [_tabSwitcherModel mainTabModel];
+    WebStateList* webStateList = [tabModel webStateList];
+    webStateList->InsertWebState(
+        webStateList->count(),
+        session_util::CreateWebStateWithNavigationEntries(
+            [tabModel browserState], toLoad->current_navigation_index,
+            toLoad->navigations),
+        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
+        WebStateOpener());
 
     // Reenable touch events.
     [_tabSwitcherView setUserInteractionEnabled:YES];
     [self
-        tabSwitcherDismissWithModel:mainModel
+        tabSwitcherDismissWithModel:tabModel
                            animated:YES
                      withCompletion:^{
                        [self.delegate tabSwitcherDismissTransitionDidEnd:self];

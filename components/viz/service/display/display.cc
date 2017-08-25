@@ -13,6 +13,7 @@
 #include "cc/benchmarks/benchmark_instrumentation.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/direct_renderer.h"
+#include "cc/output/output_surface.h"
 #include "cc/output/software_renderer.h"
 #include "cc/output/texture_mailbox_deleter.h"
 #include "components/viz/common/display/renderer_settings.h"
@@ -20,6 +21,7 @@
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/gl_renderer.h"
+#include "components/viz/service/display/skia_renderer.h"
 #include "components/viz/service/display/surface_aggregator.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_manager.h"
@@ -181,16 +183,21 @@ void Display::SetOutputIsSecure(bool secure) {
 void Display::InitializeRenderer() {
   // Not relevant for display compositor since it's not delegated.
   constexpr bool delegated_sync_points_required = false;
-  resource_provider_ = base::MakeUnique<cc::ResourceProvider>(
+  resource_provider_ = base::MakeUnique<cc::DisplayResourceProvider>(
       output_surface_->context_provider(), bitmap_manager_,
       gpu_memory_buffer_manager_, nullptr, delegated_sync_points_required,
       settings_.enable_color_correct_rendering, settings_.resource_settings);
 
   if (output_surface_->context_provider()) {
     DCHECK(texture_mailbox_deleter_);
-    renderer_ = base::MakeUnique<GLRenderer>(&settings_, output_surface_.get(),
-                                             resource_provider_.get(),
-                                             texture_mailbox_deleter_.get());
+    if (!settings_.use_skia_renderer) {
+      renderer_ = base::MakeUnique<GLRenderer>(
+          &settings_, output_surface_.get(), resource_provider_.get(),
+          texture_mailbox_deleter_.get());
+    } else {
+      renderer_ = base::MakeUnique<SkiaRenderer>(
+          &settings_, output_surface_.get(), resource_provider_.get());
+    }
   } else if (output_surface_->vulkan_context_provider()) {
 #if defined(ENABLE_VULKAN)
     DCHECK(texture_mailbox_deleter_);

@@ -267,11 +267,14 @@ void DesktopCaptureDevice::Core::OnCaptureResult(
   }
   // Align to 2x2 pixel boundaries, as required by OnIncomingCapturedData() so
   // it can convert the frame to I420 format.
-  const webrtc::DesktopSize output_size(
+  webrtc::DesktopSize output_size(
       resolution_chooser_->capture_size().width() & ~1,
       resolution_chooser_->capture_size().height() & ~1);
-  if (output_size.is_empty())
-    return;
+  if (output_size.is_empty()) {
+    // Even RESOLUTION_POLICY_ANY_WITHIN_LIMIT is used, a non-empty size should
+    // be guaranteed.
+    output_size.set(2, 2);
+  }
 
   size_t output_bytes = output_size.width() * output_size.height() *
       webrtc::DesktopFrame::kBytesPerPixel;
@@ -469,8 +472,8 @@ void DesktopCaptureDevice::AllocateAndStart(
     std::unique_ptr<Client> client) {
   thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&Core::AllocateAndStart, base::Unretained(core_.get()), params,
-                 base::Passed(&client)));
+      base::BindOnce(&Core::AllocateAndStart, base::Unretained(core_.get()),
+                     params, base::Passed(&client)));
 }
 
 void DesktopCaptureDevice::StopAndDeAllocate() {
@@ -487,8 +490,8 @@ void DesktopCaptureDevice::SetNotificationWindowId(
   if (!core_)
     return;
   thread_.task_runner()->PostTask(
-      FROM_HERE, base::Bind(&Core::SetNotificationWindowId,
-                            base::Unretained(core_.get()), window_id));
+      FROM_HERE, base::BindOnce(&Core::SetNotificationWindowId,
+                                base::Unretained(core_.get()), window_id));
 }
 
 DesktopCaptureDevice::DesktopCaptureDevice(

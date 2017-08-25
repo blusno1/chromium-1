@@ -222,6 +222,7 @@ void WindowTreeTest::SetupEventTargeting(TestWindowTreeClient** out_client,
       gfx::Rect(0, 0, 100, 100), gfx::Rect(0, 0, 50, 50));
   window_event_targeting_helper_.CreateSecondaryTree(
       embed_window, gfx::Rect(20, 20, 20, 20), out_client, window_tree, window);
+  FirstRoot(*window_tree)->set_is_activation_parent(true);
 }
 
 // Verifies focus correctly changes on pointer events.
@@ -274,7 +275,7 @@ TEST_F(WindowTreeTest, FocusOnPointer) {
   tree1_client->tracker()->changes()->clear();
   wm_client()->tracker()->changes()->clear();
 
-  display1->AddActivationParent(embed_window);
+  embed_window->set_is_activation_parent(true);
 
   // Focus should go to child1. This result in notifying both the window
   // manager and client client being notified.
@@ -329,6 +330,25 @@ TEST_F(WindowTreeTest, BasicInputEventTarget) {
             ChangesToDescription1(*embed_client->tracker()->changes())[0]);
   EXPECT_EQ("InputEvent window=2,1 event_action=16",
             ChangesToDescription1(*embed_client->tracker()->changes())[1]);
+}
+
+// Verifies SetChildModalParent() works correctly.
+TEST_F(WindowTreeTest, SetChildModalParent) {
+  TestWindowTreeClient* embed_client = nullptr;
+  WindowTree* tree = nullptr;
+  ServerWindow* window = nullptr;
+  EXPECT_NO_FATAL_FAILURE(SetupEventTargeting(&embed_client, &tree, &window));
+
+  ClientWindowId w1_id;
+  ServerWindow* w1 = NewWindowInTreeWithParent(tree, window, &w1_id);
+  ASSERT_TRUE(w1);
+  ClientWindowId w2_id;
+  ServerWindow* w2 = NewWindowInTreeWithParent(tree, window, &w2_id);
+  ASSERT_TRUE(w2);
+  ASSERT_TRUE(tree->SetChildModalParent(w1_id, w2_id));
+  EXPECT_EQ(w2, w1->GetChildModalParent());
+  ASSERT_TRUE(tree->SetChildModalParent(w1_id, ClientWindowId()));
+  EXPECT_EQ(nullptr, w1->GetChildModalParent());
 }
 
 // Tests that a client can watch for events outside its bounds.
@@ -745,6 +765,29 @@ TEST_F(WindowTreeTest, ModalTypeSystemToModalTypeNone) {
             modal_window_controller_test_api.GetActiveSystemModalWindow());
 }
 
+TEST_F(WindowTreeTest, ModalTypeSystemUnparentedThenParented) {
+  const ClientWindowId test_window_id = BuildClientWindowId(wm_tree(), 21);
+  EXPECT_TRUE(wm_tree()->NewWindow(test_window_id, ServerWindow::Properties()));
+  ServerWindow* test_window = wm_tree()->GetWindowByClientId(test_window_id);
+  ASSERT_TRUE(test_window);
+  test_window->SetVisible(true);
+  const ClientWindowId wm_root_id = FirstRootId(wm_tree());
+  EXPECT_TRUE(wm_tree()->SetModalType(test_window_id, MODAL_TYPE_SYSTEM));
+  WindowManagerState* wms =
+      display()->GetActiveWindowManagerDisplayRoot()->window_manager_state();
+  ModalWindowControllerTestApi modal_window_controller_test_api(
+      EventDispatcherTestApi(wms->event_dispatcher())
+          .modal_window_controller());
+  EXPECT_EQ(nullptr,
+            modal_window_controller_test_api.GetActiveSystemModalWindow());
+  EXPECT_TRUE(wm_tree()->AddWindow(wm_root_id, test_window_id));
+  EXPECT_EQ(test_window,
+            modal_window_controller_test_api.GetActiveSystemModalWindow());
+  EXPECT_TRUE(wm_tree()->SetModalType(test_window_id, MODAL_TYPE_NONE));
+  EXPECT_EQ(nullptr,
+            modal_window_controller_test_api.GetActiveSystemModalWindow());
+}
+
 // Establish client, call NewTopLevelWindow(), make sure get id, and make
 // sure client paused.
 TEST_F(WindowTreeTest, NewTopLevelWindow) {
@@ -1117,7 +1160,7 @@ TEST_F(WindowTreeTest, MoveCaptureWindowToModalParent) {
   EXPECT_NO_FATAL_FAILURE(SetupEventTargeting(&embed_client, &tree, &w1));
 
   w1->SetBounds(gfx::Rect(10, 10, 30, 30));
-  const ServerWindow* root_window = *tree->roots().begin();
+  ServerWindow* root_window = FirstRoot(tree);
   ClientWindowId root_window_id = ClientWindowIdForWindow(tree, root_window);
   ClientWindowId w1_id = ClientWindowIdForWindow(tree, w1);
   Display* display = tree->GetDisplay(w1);
@@ -1562,6 +1605,17 @@ TEST_F(WindowTreeTest, TestWindowManagerSettingCursorLocation) {
   EXPECT_EQ(ui::CursorType::kIBeam, cursor_type());
 }
 
+TEST_F(WindowTreeTest, TestWindowManagerConfineCursor) {
+  const gfx::Rect bounds(10, 10, 100, 100);
+  const int64_t display_id = display()->GetId();
+  static_cast<mojom::WindowManagerClient*>(wm_tree())->WmConfineCursorToBounds(
+      bounds, display_id);
+
+  PlatformDisplay* platform_display = display()->platform_display();
+  EXPECT_EQ(bounds, static_cast<TestPlatformDisplay*>(platform_display)
+                        ->confine_cursor_bounds());
+}
+
 using WindowTreeShutdownTest = testing::Test;
 
 // Makes sure WindowTreeClient doesn't get any messages during shutdown.
@@ -1649,7 +1703,7 @@ TEST_F(WindowTreeManualDisplayTest, ClientCreatesDisplayRoot) {
   display::Display display1 = MakeDisplay(0, 0, 1024, 768, 1.0f);
   display1.set_id(101);
 
-  mojom::WmViewportMetrics metrics;
+  display::ViewportMetrics metrics;
   metrics.bounds_in_pixels = display1.bounds();
   metrics.device_scale_factor = 1.5;
   metrics.ui_scale_factor = 2.5;
@@ -1700,7 +1754,7 @@ TEST_F(WindowTreeManualDisplayTest, MoveDisplayRootToNewDisplay) {
   constexpr int64_t display1_id = 101;
   display1.set_id(display1_id);
 
-  mojom::WmViewportMetrics metrics;
+  display::ViewportMetrics metrics;
   metrics.bounds_in_pixels = display1.bounds();
   metrics.device_scale_factor = 1.5;
   metrics.ui_scale_factor = 2.5;
@@ -1797,7 +1851,7 @@ TEST_F(WindowTreeManualDisplayTest,
       MakeDisplay(0, 0, 1024, 768, kDisplay1ScaleFactor);
   const int64_t display_id1 = 101;
   display1.set_id(display_id1);
-  mojom::WmViewportMetrics metrics1;
+  display::ViewportMetrics metrics1;
   metrics1.bounds_in_pixels = display1.bounds();
   metrics1.device_scale_factor = kDisplay1ScaleFactor;
   metrics1.ui_scale_factor = 2.5;
@@ -1808,14 +1862,15 @@ TEST_F(WindowTreeManualDisplayTest,
   RunUntilIdle();
   EXPECT_TRUE(display_manager_observer.GetAndClearObserverCalls().empty());
 
-  // Configure the displays.
+  // Configure the displays, updating the bounds of the first display.
   std::vector<display::Display> displays;
   displays.push_back(display1);
-  std::vector<ui::mojom::WmViewportMetricsPtr> viewport_metrics;
-  viewport_metrics.push_back(ui::mojom::WmViewportMetrics::New(metrics1));
+  std::vector<display::ViewportMetrics> viewport_metrics;
+  viewport_metrics.push_back(metrics1);
+  const gfx::Rect updated_bounds(1, 2, 3, 4);
+  viewport_metrics[0].bounds_in_pixels = updated_bounds;
   ASSERT_TRUE(display_manager->SetDisplayConfiguration(
-      displays, std::move(viewport_metrics), display_id1,
-      display::kInvalidDisplayId));
+      displays, viewport_metrics, display_id1, display::kInvalidDisplayId));
   RunUntilIdle();
   EXPECT_EQ("OnDisplaysChanged " + std::to_string(display_id1) + " " +
                 std::to_string(display::kInvalidDisplayId),
@@ -1826,6 +1881,9 @@ TEST_F(WindowTreeManualDisplayTest,
   EXPECT_EQ(
       kDisplay1ScaleFactor * ui::mojom::kCursorMultiplierForExternalDisplays,
       static_cast<TestPlatformDisplay*>(platform_display1)->cursor_scale());
+  EXPECT_EQ(updated_bounds, static_cast<TestPlatformDisplay*>(platform_display1)
+                                ->metrics()
+                                .bounds_in_pixels);
 
   // Create a window for the windowmanager and set it as the root.
   ClientWindowId display_root_id2 =
@@ -1844,7 +1902,7 @@ TEST_F(WindowTreeManualDisplayTest,
       MakeDisplay(0, 0, 1024, 768, kDisplay2ScaleFactor);
   const int64_t display_id2 = 102;
   display2.set_id(display_id2);
-  mojom::WmViewportMetrics metrics2;
+  display::ViewportMetrics metrics2;
   metrics2.bounds_in_pixels = display2.bounds();
   metrics2.device_scale_factor = kDisplay2ScaleFactor;
   metrics2.ui_scale_factor = 2.5;
@@ -1864,10 +1922,11 @@ TEST_F(WindowTreeManualDisplayTest,
   metrics2.bounds_in_pixels = display2.bounds();
   displays.push_back(display2);
 
-  viewport_metrics.push_back(ui::mojom::WmViewportMetrics::New(metrics1));
-  viewport_metrics.push_back(ui::mojom::WmViewportMetrics::New(metrics2));
+  viewport_metrics.clear();
+  viewport_metrics.push_back(metrics1);
+  viewport_metrics.push_back(metrics2);
   ASSERT_TRUE(display_manager->SetDisplayConfiguration(
-      displays, std::move(viewport_metrics), display_id2, display_id2));
+      displays, viewport_metrics, display_id2, display_id2));
   RunUntilIdle();
   EXPECT_EQ("OnDisplaysChanged " + std::to_string(display_id1) + " " +
                 std::to_string(display_id2) + " " + std::to_string(display_id2),
@@ -1892,9 +1951,10 @@ TEST_F(WindowTreeManualDisplayTest,
   displays.clear();
   displays.push_back(display1);
 
-  viewport_metrics.push_back(ui::mojom::WmViewportMetrics::New(metrics1));
+  viewport_metrics.clear();
+  viewport_metrics.push_back(metrics1);
   ASSERT_TRUE(display_manager->SetDisplayConfiguration(
-      displays, std::move(viewport_metrics), display_id1, display_id1));
+      displays, viewport_metrics, display_id1, display_id1));
   RunUntilIdle();
   EXPECT_EQ("OnDisplaysChanged " + std::to_string(display_id1) + " " +
                 std::to_string(display_id1),
@@ -1944,7 +2004,7 @@ TEST_F(WindowTreeManualDisplayTest, SwapDisplayRoots) {
   const int64_t display_id1 = 101;
   display::Display display1 = MakeDisplay(0, 0, 1024, 768, 1.0f);
   display1.set_id(display_id1);
-  mojom::WmViewportMetrics metrics;
+  display::ViewportMetrics metrics;
   metrics.bounds_in_pixels = display1.bounds();
   metrics.device_scale_factor = 1.5;
   metrics.ui_scale_factor = 2.5;

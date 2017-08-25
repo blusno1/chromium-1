@@ -24,7 +24,7 @@
 #include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/core/SkFontStyle.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "ui/gfx/break_list.h"
@@ -70,7 +70,7 @@ class RenderTextTestApi {
 
   // Callers should ensure that the associated RenderText object is a
   // RenderTextHarfBuzz instance.
-  internal::TextRunList* GetHarfBuzzRunList() {
+  const internal::TextRunList* GetHarfBuzzRunList() const {
     RenderTextHarfBuzz* render_text =
         static_cast<RenderTextHarfBuzz*>(render_text_);
     return render_text->GetRunList();
@@ -458,14 +458,43 @@ class RenderTextTest : public testing::Test,
 
   void DrawVisualText() { test_api_->DrawVisualText(renderer()); }
 
-  internal::TextRunList* GetHarfBuzzRunList() {
+  const internal::TextRunList* GetHarfBuzzRunList() const {
     DCHECK_EQ(RENDER_TEXT_HARFBUZZ, GetParam());
     return test_api_->GetHarfBuzzRunList();
   }
 
+  // Converts the current run list into a human-readable string. Can be used in
+  // test assertions for a readable expectation and failure message.
+  //
+  // The string shows the runs in visual order. Each run is enclosed in square
+  // brackets, and shows the begin and end inclusive logical character position,
+  // with an arrow indicating the direction of the run. Single-character runs
+  // just show the character position.
+  //
+  // For example, the the logical bidirectional string "abc+\x05d0\x05d1\x05d2"
+  // (visual string: "abc+אבג") yields "[0->2][3][6<-4]".
+  std::string GetRunListStructureString() const {
+    const internal::TextRunList* run_list = GetHarfBuzzRunList();
+    std::string result;
+    for (size_t i = 0; i < run_list->size(); ++i) {
+      size_t logical_index = run_list->visual_to_logical(i);
+      const internal::TextRunHarfBuzz& run = *run_list->runs()[logical_index];
+      if (run.range.length() == 1) {
+        result.append(base::StringPrintf("[%d]", run.range.start()));
+      } else if (run.is_rtl) {
+        result.append(base::StringPrintf("[%d<-%d]", run.range.end() - 1,
+                                         run.range.start()));
+      } else {
+        result.append(base::StringPrintf("[%d->%d]", run.range.start(),
+                                         run.range.end() - 1));
+      }
+    }
+    return result;
+  }
+
   // Returns a vector of text fragments corresponding to the current list of
   // text runs.
-  std::vector<base::string16> GetRuns() {
+  std::vector<base::string16> GetRunListStrings() const {
     std::vector<base::string16> runs_as_text;
     const std::vector<RenderText::FontSpan> spans =
         render_text_->GetFontSpansForTesting();
@@ -476,11 +505,11 @@ class RenderTextTest : public testing::Test,
     return runs_as_text;
   }
 
-  // Sets the text to |text|, then returns GetRuns().
+  // Sets the text to |text|, then returns GetRunListStrings().
   std::vector<base::string16> RunsFor(const base::string16& text) {
     render_text_->SetText(text);
     test_api()->EnsureLayout();
-    return GetRuns();
+    return GetRunListStrings();
   }
 
   void ResetRenderTextInstance() {
@@ -976,43 +1005,58 @@ TEST_P(RenderTextTest, ElidedText) {
     const wchar_t* display_text;
     const bool elision_expected;
   } cases[] = {
-    // Strings shorter than the elision width should be laid out in full.
-    { L"",        L""       , false },
-    { L"M",       L""       , false },
-    { L" . ",     L" . "    , false },
-    { kWeak,      kWeak     , false },
-    { kLtr,       kLtr      , false },
-    { kLtrRtl,    kLtrRtl   , false },
-    { kLtrRtlLtr, kLtrRtlLtr, false },
-    { kRtl,       kRtl      , false },
-    { kRtlLtr,    kRtlLtr   , false },
-    { kRtlLtrRtl, kRtlLtrRtl, false },
-    // Strings as long as the elision width should be laid out in full.
-    { L"012ab",   L"012ab"  , false },
-    // Long strings should be elided with an ellipsis appended at the end.
-    { L"012abc",              L"012a\x2026", true },
-    { L"012ab" L"\x5d0\x5d1", L"012a\x2026", true },
-    { L"012a" L"\x5d1" L"b",  L"012a\x2026", true },
-    // No RLM marker added as digits (012) have weak directionality.
-    { L"01" L"\x5d0\x5d1\x5d2", L"01\x5d0\x5d1\x2026", true },
-    // RLM marker added as "ab" have strong LTR directionality.
-    { L"ab" L"\x5d0\x5d1\x5d2", L"ab\x5d0\x5d1\x2026\x200f", true },
-    // Test surrogate pairs. \xd834\xdd1e forms a single code point U+1D11E;
-    // \xd834\xdd22 forms a second code point U+1D122. The first should be kept;
-    // the second removed (no surrogate pair should be partially elided).
-    { L"0123\xd834\xdd1e\xd834\xdd22", L"0123\xd834\xdd1e\x2026", true },
-    // Test combining character sequences. U+0915 U+093F forms a compound glyph;
-    // U+0915 U+0942 forms a second compound glyph. The first should be kept;
-    // the second removed (no combining sequence should be partially elided).
-    { L"0123\x0915\x093f\x0915\x0942", L"0123\x0915\x093f\x2026", true },
-    // U+05E9 U+05BC U+05C1 U+05B8 forms a four-character compound glyph. Again,
-    // it should be either fully elided, or not elided at all. If completely
-    // elided, an LTR Mark (U+200E) should be added.
-    { L"0\x05e9\x05bc\x05c1\x05b8",   L"0\x05e9\x05bc\x05c1\x05b8", false },
-    { L"0\x05e9\x05bc\x05c1\x05b8",   L"0\x2026\x200E"            , true  },
-    { L"01\x05e9\x05bc\x05c1\x05b8",  L"01\x2026\x200E"           , true  },
-    { L"012\x05e9\x05bc\x05c1\x05b8", L"012\x2026\x200E"          , true  },
-    { L"012\xF0\x9D\x84\x9E",         L"012\xF0\x2026"            , true  },
+      // Strings shorter than the elision width should be laid out in full.
+      {L"", L"", false},
+      {L"M", L"", false},
+      {L" . ", L" . ", false},
+      {kWeak, kWeak, false},
+      {kLtr, kLtr, false},
+      {kLtrRtl, kLtrRtl, false},
+      {kLtrRtlLtr, kLtrRtlLtr, false},
+      {kRtl, kRtl, false},
+      {kRtlLtr, kRtlLtr, false},
+      {kRtlLtrRtl, kRtlLtrRtl, false},
+      // Strings as long as the elision width should be laid out in full.
+      {L"012ab", L"012ab", false},
+      // Long strings should be elided with an ellipsis appended at the end.
+      {L"012abc", L"012a\x2026", true},
+      {L"012ab"
+       L"\x5d0\x5d1",
+       L"012a\x2026", true},
+      {L"012a"
+       L"\x5d1"
+       L"b",
+       L"012a\x2026", true},
+      // No RLM marker added as digits (012) have weak directionality.
+      {L"01"
+       L"\x5d0\x5d1\x5d2",
+       L"01\x5d0\x5d1\x2026", true},
+      // RLM marker added as "ab" have strong LTR directionality.
+      {L"ab"
+       L"\x5d0\x5d1\x5d2",
+       L"ab\x5d0\x5d1\x2026\x200f", true},
+      // Test surrogate pairs. \xd834\xdd1e forms a single code point U+1D11E;
+      // \xd834\xdd22 forms a second code point U+1D122. The first should be
+      // kept;
+      // the second removed (no surrogate pair should be partially elided).
+      {L"0123\xd834\xdd1e\xd834\xdd22", L"0123\xd834\xdd1e\x2026", true},
+      // Test combining character sequences. U+0915 U+093F forms a compound
+      // glyph;
+      // U+0915 U+0942 forms a second compound glyph. The first should be kept;
+      // the second removed (no combining sequence should be partially elided).
+      {L"0123\x0915\x093f\x0915\x0942", L"0123\x0915\x093f\x2026", true},
+      // U+05E9 U+05BC U+05C1 U+05B8 forms a four-character compound glyph.
+      // Again,
+      // it should be either fully elided, or not elided at all. If completely
+      // elided, an LTR Mark (U+200E) should be added.
+      {L"0\x05e9\x05bc\x05c1\x05b8", L"0\x05e9\x05bc\x05c1\x05b8", false},
+      {L"0\x05e9\x05bc\x05c1\x05b8", L"0\x2026\x200E", true},
+      {L"01\x05e9\x05bc\x05c1\x05b8", L"01\x2026\x200E", true},
+      {L"012\x05e9\x05bc\x05c1\x05b8", L"012\x2026\x200E", true},
+      // \xF0\x9D\x84\x9E is the UTF-8 bytestring for MUSICAL SYMBOL G CLEF.  It
+      // should not have any internal grapheme boundaries; it should be
+      // completely removed when eliding.
+      {L"012\xF0\x9D\x84\x9E", L"012\x2026", true},
   };
 
   std::unique_ptr<RenderText> expected_render_text(CreateRenderTextInstance());
@@ -3460,14 +3504,12 @@ TEST_P(RenderTextHarfBuzzTest, NewlineWithoutMultilineFlag) {
 TEST_P(RenderTextHarfBuzzTest, HarfBuzz_HorizontalPositions) {
   const struct {
     const wchar_t* const text;
-    const Range first_run_char_range;
-    const Range second_run_char_range;
-    bool is_rtl;
+    const char* expected_runs;
   } kTestStrings[] = {
-    { L"abc\x3042\x3044\x3046\x3048\x304A", Range(0, 3), Range(3, 8), false },
-    { L"\x062A\x0641\x0627\x062D"
-      L"\x05EA\x05E4\x05D5\x05D6\x05D9\x05DA\x05DB\x05DD",
-      Range(0, 4), Range(4, 12), true },
+      {L"abc\x3042\x3044\x3046\x3048\x304A", "[0->2][3->7]"},
+      {L"\x062A\x0641\x0627\x062D"
+       L"\x05EA\x05E4\x05D5\x05D6\x05D9\x05DA\x05DB\x05DD",
+       "[11<-4][3<-0]"},
   };
 
   RenderTextHarfBuzz* render_text = GetRenderTextHarfBuzz();
@@ -3477,26 +3519,16 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_HorizontalPositions) {
     render_text->SetText(WideToUTF16(kTestStrings[i].text));
 
     test_api()->EnsureLayout();
-    const internal::TextRunList* run_list = GetHarfBuzzRunList();
-    ASSERT_EQ(2U, run_list->runs().size());
-    EXPECT_EQ(kTestStrings[i].first_run_char_range, run_list->runs()[0]->range);
-    EXPECT_EQ(kTestStrings[i].second_run_char_range,
-              run_list->runs()[1]->range);
-    // If it's RTL, the visual order is reversed.
-    if (kTestStrings[i].is_rtl) {
-      EXPECT_EQ(1U, run_list->logical_to_visual(0));
-      EXPECT_EQ(0U, run_list->logical_to_visual(1));
-    } else {
-      EXPECT_EQ(0U, run_list->logical_to_visual(0));
-      EXPECT_EQ(1U, run_list->logical_to_visual(1));
-    }
+    EXPECT_EQ(kTestStrings[i].expected_runs, GetRunListStructureString());
 
     DrawVisualText();
 
     std::vector<TestSkiaTextRenderer::TextLog> text_log;
     renderer()->GetTextLogAndReset(&text_log);
 
-    EXPECT_EQ(2U, text_log.size());
+    const internal::TextRunList* run_list = GetHarfBuzzRunList();
+    ASSERT_EQ(2U, run_list->size());
+    ASSERT_EQ(2U, text_log.size());
 
     // Verifies the DrawText happens in the visual order and left-to-right.
     // If the text is RTL, the logically first run should be drawn at last.
@@ -3564,6 +3596,19 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_Clusters) {
   }
 }
 
+// Ensures GetClusterAt does not crash on invalid conditions. crbug.com/724880
+TEST_P(RenderTextHarfBuzzTest, HarfBuzz_NoCrashOnTextRunGetClusterAt) {
+  internal::TextRunHarfBuzz run((Font()));
+  run.range = Range(0, 4);
+  run.glyph_count = 4;
+  // Construct a |glyph_to_char| map where no glyph maps to the first character.
+  run.glyph_to_char = {1u, 1u, 2u, 3u};
+
+  Range chars, glyphs;
+  // GetClusterAt should not crash asking for the cluster at position 0.
+  ASSERT_NO_FATAL_FAILURE(run.GetClusterAt(0, &chars, &glyphs));
+}
+
 // Ensure that graphemes with multiple code points do not get split.
 TEST_P(RenderTextHarfBuzzTest, HarfBuzz_SubglyphGraphemeCases) {
   const wchar_t* cases[] = {
@@ -3584,7 +3629,7 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_SubglyphGraphemeCases) {
     base::string16 text = WideToUTF16(cases[i]);
     render_text->SetText(text);
     test_api()->EnsureLayout();
-    internal::TextRunList* run_list = GetHarfBuzzRunList();
+    const internal::TextRunList* run_list = GetHarfBuzzRunList();
     ASSERT_EQ(1U, run_list->size());
     internal::TextRunHarfBuzz* run = run_list->runs()[0].get();
 
@@ -3661,33 +3706,11 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_RunDirection) {
   // Get the run list for both display directions.
   render_text->SetDirectionalityMode(DIRECTIONALITY_FORCE_LTR);
   test_api()->EnsureLayout();
-  internal::TextRunList* run_list = GetHarfBuzzRunList();
-  ASSERT_EQ(4U, run_list->size());
-  EXPECT_TRUE(run_list->runs()[0]->is_rtl);
-  EXPECT_FALSE(run_list->runs()[1]->is_rtl);
-  EXPECT_TRUE(run_list->runs()[2]->is_rtl);
-  EXPECT_FALSE(run_list->runs()[3]->is_rtl);
-
-  // The Latin letters should appear to the right of the other runs.
-  EXPECT_EQ(2U, run_list->logical_to_visual(0));
-  EXPECT_EQ(1U, run_list->logical_to_visual(1));
-  EXPECT_EQ(0U, run_list->logical_to_visual(2));
-  EXPECT_EQ(3U, run_list->logical_to_visual(3));
+  EXPECT_EQ("[7<-6][2->5][1<-0][8->10]", GetRunListStructureString());
 
   render_text->SetDirectionalityMode(DIRECTIONALITY_FORCE_RTL);
   test_api()->EnsureLayout();
-  run_list = GetHarfBuzzRunList();
-  ASSERT_EQ(4U, run_list->size());
-  EXPECT_TRUE(run_list->runs()[0]->is_rtl);
-  EXPECT_FALSE(run_list->runs()[1]->is_rtl);
-  EXPECT_TRUE(run_list->runs()[2]->is_rtl);
-  EXPECT_FALSE(run_list->runs()[3]->is_rtl);
-
-  // The Latin letters should appear to the left of the other runs.
-  EXPECT_EQ(3U, run_list->logical_to_visual(0));
-  EXPECT_EQ(2U, run_list->logical_to_visual(1));
-  EXPECT_EQ(1U, run_list->logical_to_visual(2));
-  EXPECT_EQ(0U, run_list->logical_to_visual(3));
+  EXPECT_EQ("[8->10][7<-6][2->5][1<-0]", GetRunListStructureString());
 }
 
 TEST_P(RenderTextHarfBuzzTest, HarfBuzz_BreakRunsByUnicodeBlocks) {
@@ -3696,23 +3719,13 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_BreakRunsByUnicodeBlocks) {
   // The '\x25B6' "play character" should break runs. http://crbug.com/278913
   render_text->SetText(WideToUTF16(L"x\x25B6y"));
   test_api()->EnsureLayout();
-  internal::TextRunList* run_list = GetHarfBuzzRunList();
-  EXPECT_EQ(ToString16Vec({"x", "▶", "y"}), GetRuns());
-  ASSERT_EQ(3U, run_list->size());
-  EXPECT_EQ(Range(0, 1), run_list->runs()[0]->range);
-  EXPECT_EQ(Range(1, 2), run_list->runs()[1]->range);
-  EXPECT_EQ(Range(2, 3), run_list->runs()[2]->range);
+  EXPECT_EQ(ToString16Vec({"x", "▶", "y"}), GetRunListStrings());
+  EXPECT_EQ("[0][1][2]", GetRunListStructureString());
 
   render_text->SetText(WideToUTF16(L"x \x25B6 y"));
   test_api()->EnsureLayout();
-  run_list = GetHarfBuzzRunList();
-  EXPECT_EQ(ToString16Vec({"x", " ", "▶", " ", "y"}), GetRuns());
-  ASSERT_EQ(5U, run_list->size());
-  EXPECT_EQ(Range(0, 1), run_list->runs()[0]->range);
-  EXPECT_EQ(Range(1, 2), run_list->runs()[1]->range);
-  EXPECT_EQ(Range(2, 3), run_list->runs()[2]->range);
-  EXPECT_EQ(Range(3, 4), run_list->runs()[3]->range);
-  EXPECT_EQ(Range(4, 5), run_list->runs()[4]->range);
+  EXPECT_EQ(ToString16Vec({"x", " ", "▶", " ", "y"}), GetRunListStrings());
+  EXPECT_EQ("[0][1][2][3][4]", GetRunListStructureString());
 }
 
 TEST_P(RenderTextHarfBuzzTest, HarfBuzz_BreakRunsByEmoji) {
@@ -3723,13 +3736,9 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_BreakRunsByEmoji) {
   // separated. See crbug.com/448909
   render_text->SetText(UTF8ToUTF16("x\xF0\x9F\x98\x81y\xE2\x9C\xA8"));
   test_api()->EnsureLayout();
-  internal::TextRunList* run_list = GetHarfBuzzRunList();
-  ASSERT_EQ(4U, run_list->size());
-  EXPECT_EQ(Range(0, 1), run_list->runs()[0]->range);
-  // The length is 2 since U+1F601 is represented as a surrogate pair in UTF16.
-  EXPECT_EQ(Range(1, 3), run_list->runs()[1]->range);
-  EXPECT_EQ(Range(3, 4), run_list->runs()[2]->range);
-  EXPECT_EQ(Range(4, 5), run_list->runs()[3]->range);
+  EXPECT_EQ(ToString16Vec({"x", "😁", "y", "✨"}), GetRunListStrings());
+  // U+1F601 is represented as a surrogate pair in UTF-16.
+  EXPECT_EQ("[0][1->2][3][4]", GetRunListStructureString());
 }
 
 TEST_P(RenderTextHarfBuzzTest, HarfBuzz_BreakRunsByAscii) {
@@ -3739,11 +3748,9 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_BreakRunsByAscii) {
   // run from the ASCII period character.
   render_text->SetText(UTF8ToUTF16("\xF0\x9F\x90\xB1."));
   test_api()->EnsureLayout();
-  internal::TextRunList* run_list = GetHarfBuzzRunList();
-  ASSERT_EQ(2U, run_list->size());
-  // U+1F431 is represented as a surrogate pair in UTF16.
-  EXPECT_EQ(Range(0, 2), run_list->runs()[0]->range);
-  EXPECT_EQ(Range(2, 3), run_list->runs()[1]->range);
+  EXPECT_EQ(ToString16Vec({"🐱", "."}), GetRunListStrings());
+  // U+1F431 is represented as a surrogate pair in UTF-16.
+  EXPECT_EQ("[0->1][2]", GetRunListStructureString());
 }
 
 TEST_P(RenderTextHarfBuzzTest, GlyphBounds) {
@@ -3766,7 +3773,7 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_NonExistentFont) {
   RenderTextHarfBuzz* render_text = GetRenderTextHarfBuzz();
   render_text->SetText(ASCIIToUTF16("test"));
   test_api()->EnsureLayout();
-  internal::TextRunList* run_list = GetHarfBuzzRunList();
+  const internal::TextRunList* run_list = GetHarfBuzzRunList();
   ASSERT_EQ(1U, run_list->size());
   internal::TextRunHarfBuzz* run = run_list->runs()[0].get();
   ShapeRunWithFont(render_text->text(), Font("TheFontThatDoesntExist", 13),
@@ -3862,7 +3869,7 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_UniscribeFallback) {
   // Korean character "han".
   render_text->SetText(WideToUTF16(L"\xd55c"));
   test_api()->EnsureLayout();
-  internal::TextRunList* run_list = GetHarfBuzzRunList();
+  const internal::TextRunList* run_list = GetHarfBuzzRunList();
   ASSERT_EQ(1U, run_list->size());
   EXPECT_EQ(0U, run_list->runs()[0]->CountMissingGlyphs());
 }
@@ -3881,7 +3888,7 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_UnicodeFallback) {
   // Korean character "han".
   render_text->SetText(WideToUTF16(L"\xd55c"));
   test_api()->EnsureLayout();
-  internal::TextRunList* run_list = GetHarfBuzzRunList();
+  const internal::TextRunList* run_list = GetHarfBuzzRunList();
   ASSERT_EQ(1U, run_list->size());
   EXPECT_EQ(0U, run_list->runs()[0]->CountMissingGlyphs());
 }
@@ -4118,19 +4125,22 @@ TEST_P(RenderTextTest, StylePropagated) {
   render_text->SetFontList(font_list);
 
   DrawVisualText();
-  EXPECT_EQ(SkTypeface::kNormal, GetRendererPaint().getTypeface()->style());
+  EXPECT_EQ(SkFontStyle::Normal(),
+            GetRendererPaint().getTypeface()->fontStyle());
 
   render_text->SetWeight(Font::Weight::BOLD);
   DrawVisualText();
-  EXPECT_EQ(SkTypeface::kBold, GetRendererPaint().getTypeface()->style());
+  EXPECT_EQ(SkFontStyle::Bold(), GetRendererPaint().getTypeface()->fontStyle());
 
   render_text->SetStyle(TextStyle::ITALIC, true);
   DrawVisualText();
-  EXPECT_EQ(SkTypeface::kBoldItalic, GetRendererPaint().getTypeface()->style());
+  EXPECT_EQ(SkFontStyle::BoldItalic(),
+            GetRendererPaint().getTypeface()->fontStyle());
 
   render_text->SetWeight(Font::Weight::NORMAL);
   DrawVisualText();
-  EXPECT_EQ(SkTypeface::kItalic, GetRendererPaint().getTypeface()->style());
+  EXPECT_EQ(SkFontStyle::Italic(),
+            GetRendererPaint().getTypeface()->fontStyle());
 }
 
 // Ensure the painter adheres to RenderText::subpixel_rendering_suppressed().

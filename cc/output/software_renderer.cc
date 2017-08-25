@@ -55,7 +55,7 @@ bool IsScaleAndIntegerTranslate(const SkMatrix& matrix) {
 
 SoftwareRenderer::SoftwareRenderer(const viz::RendererSettings* settings,
                                    OutputSurface* output_surface,
-                                   ResourceProvider* resource_provider)
+                                   DisplayResourceProvider* resource_provider)
     : DirectRenderer(settings, output_surface, resource_provider),
       output_device_(output_surface->software_device()) {}
 
@@ -387,8 +387,8 @@ void SoftwareRenderer::DrawTextureQuad(const TextureDrawQuad* quad) {
   }
 
   // TODO(skaslev): Add support for non-premultiplied alpha.
-  ResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
-                                               quad->resource_id());
+  DisplayResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
+                                                      quad->resource_id());
   if (!lock.valid())
     return;
   const SkImage* image = lock.sk_image();
@@ -430,8 +430,8 @@ void SoftwareRenderer::DrawTileQuad(const TileDrawQuad* quad) {
   DCHECK(resource_provider_);
   DCHECK(IsSoftwareResource(quad->resource_id()));
 
-  ResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
-                                               quad->resource_id());
+  DisplayResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
+                                                      quad->resource_id());
   if (!lock.valid())
     return;
 

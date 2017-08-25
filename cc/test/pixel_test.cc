@@ -20,7 +20,6 @@
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/pixel_test_output_surface.h"
 #include "cc/test/pixel_test_utils.h"
-#include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_in_process_context_provider.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/blocking_task_runner.h"
@@ -29,6 +28,7 @@
 #include "components/viz/common/quads/copy_output_result.h"
 #include "components/viz/service/display/gl_renderer.h"
 #include "components/viz/test/paths.h"
+#include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -153,8 +153,7 @@ bool PixelTest::PixelsMatchReference(const base::FilePath& ref_file,
       *result_bitmap_, test_data_dir.Append(ref_file), comparator);
 }
 
-void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
-                                bool flipped_output_surface) {
+void PixelTest::SetUpGLRenderer(bool flipped_output_surface) {
   enable_pixel_output_.reset(new gl::DisableNullDrawGLBindings);
 
   scoped_refptr<TestInProcessContextProvider> context_provider(
@@ -164,10 +163,11 @@ void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
   output_surface_->BindToClient(output_surface_client_.get());
 
   shared_bitmap_manager_.reset(new TestSharedBitmapManager);
-  gpu_memory_buffer_manager_.reset(new TestGpuMemoryBufferManager);
+  gpu_memory_buffer_manager_ =
+      std::make_unique<viz::TestGpuMemoryBufferManager>();
   // Not relevant for display compositor since it's not delegated.
   constexpr bool delegated_sync_points_required = false;
-  resource_provider_ = base::MakeUnique<ResourceProvider>(
+  resource_provider_ = base::MakeUnique<DisplayResourceProvider>(
       output_surface_->context_provider(), shared_bitmap_manager_.get(),
       gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(),
       delegated_sync_points_required,
@@ -196,7 +196,7 @@ void PixelTest::SetUpSoftwareRenderer() {
   shared_bitmap_manager_.reset(new TestSharedBitmapManager());
   constexpr bool delegated_sync_points_required =
       false;  // Meaningless for software.
-  resource_provider_ = base::MakeUnique<ResourceProvider>(
+  resource_provider_ = base::MakeUnique<DisplayResourceProvider>(
       nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
       main_thread_task_runner_.get(), delegated_sync_points_required,
       settings_.enable_color_correct_rasterization,

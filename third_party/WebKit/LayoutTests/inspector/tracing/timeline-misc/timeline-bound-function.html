@@ -14,22 +14,20 @@ function performActions()
     b.click();
 }
 
-function test()
-{
-    InspectorTest.evaluateWithTimeline("performActions()", finish);
+function test() {
+  PerformanceTestRunner.evaluateWithTimeline('performActions()', finish);
 
-    function finish()
-    {
-        InspectorTest.timelineModel().mainThreadEvents().forEach(event => {
-            if (event.name !== TimelineModel.TimelineModel.RecordType.FunctionCall)
-                return;
-            var data = event.args["data"];
-            var scriptName = data.scriptName;
-            var scriptNameShort = scriptName.substring(scriptName.lastIndexOf("/") + 1);
-            InspectorTest.addResult(`${event.name} ${scriptNameShort}: ${data.scriptLine}`);
-        });
-        InspectorTest.completeTest();
-    }
+  function finish() {
+    PerformanceTestRunner.timelineModel().mainThreadEvents().forEach(event => {
+      if (event.name !== TimelineModel.TimelineModel.RecordType.FunctionCall)
+        return;
+      var data = event.args['data'];
+      var scriptName = data.scriptName;
+      var scriptNameShort = scriptName.substring(scriptName.lastIndexOf('/') + 1);
+      TestRunner.addResult(`${event.name} ${scriptNameShort}: ${data.scriptLine}`);
+    });
+    TestRunner.completeTest();
+  }
 }
 
 </script>

@@ -104,6 +104,14 @@ declare_args() {
   # on by default when goma is enabled because setting this to true may make
   # it harder to debug binaries.
   strip_absolute_paths_from_debug_symbols = false
+
+  # Allow projects that wish to stay on C++11 to override Chromium's default.
+  use_cxx11 = false
+}
+
+declare_args() {
+  # C++11 may not be an option if Android test infrastructure is used.
+  use_cxx11_on_android = use_cxx11
 }
 
 if (is_clang && !is_nacl) {
@@ -182,8 +190,6 @@ config("compiler") {
   }
 
   configs += [
-    "//build/config/c++:c++flags",
-
     # See the definitions below.
     ":compiler_cpu_abi",
     ":compiler_codegen",
@@ -365,13 +371,7 @@ config("compiler") {
     ldflags += [ "-fuse-ld=lld" ]
   } else if (use_gold) {
     ldflags += [ "-fuse-ld=gold" ]
-    if (is_android) {
-      # Use -mstackrealign due to a bug on ia32 Jelly Bean.
-      # See crbug.com/521527
-      if (current_cpu == "x86") {
-        cflags += [ "-mstackrealign" ]
-      }
-    } else {
+    if (!is_android) {
       # On Android, this isn't needed.  gcc in the NDK knows to look next to
       # it with -fuse-ld=gold, and clang gets a --gcc-toolchain flag passed
       # above.
@@ -438,7 +438,7 @@ config("compiler") {
   # Print absolute paths in diagnostics. There is no precedent for doing this
   # on Linux/Mac (GCC doesn't support it), but MSVC does this with /FC and
   # Windows developers rely on it (crbug.com/636109) so only do this on Windows.
-  if (is_clang && is_win) {
+  if (msvc_use_absolute_paths && is_clang && is_win) {
     cflags += [ "-fdiagnostics-absolute-paths" ]
   }
 
@@ -454,19 +454,40 @@ config("compiler") {
   # C11/C++11 compiler flags setup.
   # ---------------------------
   if (is_linux || is_android || (is_nacl && is_clang) || current_os == "aix") {
+    if (target_os == "android") {
+      cxx11_override = use_cxx11_on_android
+    } else {
+      cxx11_override = use_cxx11
+    }
+
     # gnu11/gnu++11 instead of c11/c++11 is needed because some code uses typeof()
     # (a GNU extension).
     # TODO(thakis): Eventually switch this to c++11 instead,
     # http://crbug.com/427584
     cflags_c += [ "-std=gnu11" ]
-    cflags_cc += [ "-std=gnu++14" ]
+    if (cxx11_override) {
+      # Override Chromium's default for projects that wish to stay on C++11.
+      cflags_cc += [ "-std=gnu++11" ]
+    } else {
+      cflags_cc += [ "-std=gnu++14" ]
+    }
   } else if (!is_win && !is_nacl) {
+    if (target_os == "android") {
+      cxx11_override = use_cxx11_on_android
+    } else {
+      cxx11_override = use_cxx11
+    }
+
     # TODO(mcgrathr) - the NaCl GCC toolchain doesn't support either gnu11/gnu++11
     # or c11/c++11; we technically don't need this toolchain any more, but there
     # are still a few buildbots using it, so until those are turned off
     # we need the !is_nacl clause and the (is_nacl && is_clang) clause, above.
     cflags_c += [ "-std=c11" ]
-    cflags_cc += [ "-std=c++14" ]
+    if (cxx11_override) {
+      cflags_cc += [ "-std=c++11" ]
+    } else {
+      cflags_cc += [ "-std=c++14" ]
+    }
   }
 
   if (is_mac) {
@@ -691,6 +712,12 @@ config("compiler_cpu_abi") {
             "-Wa,-mips32",
           ]
         }
+      } else if (mips_arch_variant == "loongson3") {
+        cflags += [
+          "-march=loongson3a",
+          "-mno-branch-likely",
+          "-Wa,-march=loongson3a",
+        ]
       }
 
       if (mips_dsp_rev == 1) {
@@ -764,6 +791,12 @@ config("compiler_cpu_abi") {
           "-Wa,-mips64r2",
         ]
         ldflags += [ "-mips64r2" ]
+      } else if (mips_arch_variant == "loongson3") {
+        cflags += [
+          "-march=loongson3a",
+          "-mno-branch-likely",
+          "-Wa,-march=loongson3a",
+        ]
       }
     } else if (current_cpu == "mips64") {
       if (mips_arch_variant == "r6") {
@@ -863,12 +896,14 @@ config("compiler_codegen") {
 #   configs -= [ "//build/config/compiler:clang_stackrealign" ]
 # See https://crbug.com/556393 for details of where it must be avoided.
 config("clang_stackrealign") {
-  if (is_clang && current_cpu == "x86" && is_linux) {
-    cflags = [
+  if (is_clang && current_cpu == "x86" && (is_android || is_linux)) {
+    # Android needs -mstackrealign due to a bug on ia32 Jelly Bean.
+    # See crbug.com/521527
+    cflags = [ "-mstackrealign" ]
+    if (is_linux) {
       # Align the stack on 16-byte boundaries, http://crbug.com/418554.
-      "-mstack-alignment=16",
-      "-mstackrealign",
-    ]
+      cflags += [ "-mstack-alignment=16" ]
+    }
   }
 }
 
@@ -980,6 +1015,13 @@ config("default_warnings") {
       #        used by clients of class 'type2'
       # This is necessary for the shared library build.
       "/wd4251",
+
+      # C4275:  non dll-interface class used as base for dll-interface class
+      # This points out a potential (but rare) problem with referencing static
+      # fields of a non-exported base, through the base's non-exported inline
+      # functions, or directly. The warning is subtle enough that people just
+      # suppressed it when they saw it, so it's not worth it.
+      "/wd4275",
 
       # C4312 is a VS 2015 64-bit warning for integer to larger pointer.
       # TODO(brucedawson): fix warnings, crbug.com/554200
@@ -1175,6 +1217,9 @@ config("default_warnings") {
 
         # TODO(thakis ): https://crbug.com/683349
         "-Wno-user-defined-warnings",
+
+        # TODO(thakis): https://crbug.com/753973
+        "-Wno-enum-compare-switch",
       ]
     } else if (use_xcode_clang && xcode_version_int >= 830) {
       # This is necessary to allow a progressive transition from using xcode 8.0
@@ -1734,9 +1779,15 @@ config("symbols") {
       }
     } else {
       cflags = []
-      if (target_cpu == "arm") {
+      if (!use_debug_fission && target_cpu == "arm") {
         # dump_syms has issues with dwarf4 on arm, https://crbug.com/744956
         # TODO(thakis): Remove this again once dump_syms is fixed.
+        #
+        # debug fission needs DWARF DIEs to be emitted at version 4.
+        # Chrome OS emits Debug Frame in DWARF1 to make breakpad happy. [1]
+        # Unless Android needs debug fission, DWARF3 is the simplest solution.
+        #
+        # [1] crrev.com/a81d5ade0b043208e06ad71a38bcf9c348a1a52f
         cflags += [ "-gdwarf-3" ]
       }
       cflags += [ "-g2" ]

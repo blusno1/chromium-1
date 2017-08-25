@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/app_list/search/answer_card/answer_card_contents.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/test/base/testing_profile.h"
-#include "ui/app_list/search_result_observer.h"
 #include "ui/views/view.h"
 
 namespace app_list {
@@ -31,10 +30,6 @@ class AnswerCardTestContents : public AnswerCardContents {
 
   // AnswerCardContents overrides:
   void LoadURL(const GURL& url) override { NOTREACHED(); }
-  bool IsLoading() const override {
-    NOTREACHED();
-    return true;
-  }
   views::View* GetView() override { return &view_; }
 
  private:
@@ -45,8 +40,7 @@ class AnswerCardTestContents : public AnswerCardContents {
 
 }  // namespace
 
-class AnswerCardResultTest : public AppListTestBase,
-                             public app_list::SearchResultObserver {
+class AnswerCardResultTest : public AppListTestBase {
  public:
   AnswerCardResultTest() {}
 
@@ -65,13 +59,6 @@ class AnswerCardResultTest : public AppListTestBase,
     return app_list_controller_delegate_->last_opened_url();
   }
 
-  void VerifyLastMouseHoverEvent(bool expected_mouse_in_view,
-                                 SearchResult* result) {
-    ASSERT_TRUE(received_hover_event_);
-    EXPECT_EQ(expected_mouse_in_view, result->is_mouse_in_view());
-    received_hover_event_ = false;
-  }
-
   views::View* GetView() const { return contents_->GetView(); }
 
   // AppListTestBase overrides:
@@ -83,20 +70,8 @@ class AnswerCardResultTest : public AppListTestBase,
         base::MakeUnique<::test::TestAppListControllerDelegate>();
   }
 
-  void TearDown() override {
-    ASSERT_FALSE(received_hover_event_);
-    AppListTestBase::TearDown();
-  }
-
-  // SearchResultObserver overrides:
-  void OnViewHoverStateChanged() override {
-    ASSERT_FALSE(received_hover_event_);
-    received_hover_event_ = true;
-  }
-
  private:
   std::unique_ptr<AnswerCardTestContents> contents_;
-  bool received_hover_event_ = false;
   std::unique_ptr<::test::TestAppListControllerDelegate>
       app_list_controller_delegate_;
 
@@ -142,19 +117,6 @@ TEST_F(AnswerCardResultTest, EarlyDeleteContents) {
   DeleteContents();
 
   result->Duplicate();
-}
-
-TEST_F(AnswerCardResultTest, MouseEvents) {
-  std::unique_ptr<SearchResult> result = CreateResult(
-      kResultUrl, kResultUrlStripped, base::ASCIIToUTF16(kResultTitle));
-
-  result->AddObserver(this);
-
-  result->SetIsMouseInView(true);
-  VerifyLastMouseHoverEvent(true, result.get());
-
-  result->SetIsMouseInView(false);
-  VerifyLastMouseHoverEvent(false, result.get());
 }
 
 }  // namespace test

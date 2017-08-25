@@ -21,34 +21,30 @@ function callback2()
     (function FAIL_Should_Not_Pause_Here() { debugger; })();
 
     if (window.testRunner)
-        testRunner.evaluateInWebInspector(0, "(InspectorTest.completeDebuggerTest())")
+        testRunner.evaluateInWebInspector(0, "(SourcesTestRunner.completeDebuggerTest())")
 }
 
-var test = function()
-{
-    InspectorTest.startDebuggerTest(step1, true);
+var test = function() {
+  SourcesTestRunner.startDebuggerTest(step1, true);
 
-    function step1()
-    {
-        InspectorTest.runTestFunctionAndWaitUntilPaused(step2);
-    }
+  function step1() {
+    SourcesTestRunner.runTestFunctionAndWaitUntilPaused(step2);
+  }
 
-    function step2()
-    {
-        var actions = [
-            "Print", // "debugger" in callback1
-            "StepInto",
-            "StepInto",
-            "Print",
-        ];
-        InspectorTest.waitUntilPausedAndPerformSteppingActions(actions, resume);
-    }
+  function step2() {
+    var actions = [
+      'Print',  // "debugger" in callback1
+      'StepInto',
+      'StepInto',
+      'Print',
+    ];
+    SourcesTestRunner.waitUntilPausedAndPerformSteppingActions(actions, resume);
+  }
 
-    function resume()
-    {
-        InspectorTest.resumeExecution(InspectorTest.waitUntilPaused.bind(InspectorTest, resume));
-    }
-}
+  function resume() {
+    SourcesTestRunner.resumeExecution(SourcesTestRunner.waitUntilPaused.bind(InspectorTest, resume));
+  }
+};
 
 </script>
 </head>

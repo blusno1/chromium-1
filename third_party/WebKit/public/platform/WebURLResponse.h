@@ -35,12 +35,12 @@
 
 #include "base/time/time.h"
 #include "net/http/http_response_info.h"
-#include "public/platform/WebCString.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebSecurityStyle.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
 #include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "services/network/public/interfaces/fetch_api.mojom-shared.h"
 
 namespace blink {
 
@@ -227,7 +227,7 @@ class WebURLResponse {
 
   // The type of the response which was returned by the ServiceWorker.
   BLINK_PLATFORM_EXPORT void SetResponseTypeViaServiceWorker(
-      mojom::FetchResponseType);
+      network::mojom::FetchResponseType);
 
   // The URL list of the Response object the ServiceWorker passed to
   // respondWith(). See ServiceWorkerResponseInfo::url_list_via_service_worker()
@@ -250,6 +250,7 @@ class WebURLResponse {
 
   // The headers that should be exposed according to CORS. Only guaranteed
   // to be set if the response was served by a ServiceWorker.
+  BLINK_PLATFORM_EXPORT WebVector<WebString> CorsExposedHeaderNames() const;
   BLINK_PLATFORM_EXPORT void SetCorsExposedHeaderNames(
       const WebVector<WebString>&);
 
@@ -299,15 +300,15 @@ class WebURLResponse {
 #if INSIDE_BLINK
  protected:
   // Permit subclasses to set arbitrary ResourceResponse pointer as
-  // |m_resourceResponse|. |m_ownedResourceResponse| is not set in this case.
+  // |resource_response_|. |owned_resource_response_| is not set in this case.
   BLINK_PLATFORM_EXPORT explicit WebURLResponse(ResourceResponse&);
 #endif
 
  private:
   struct ResourceResponseContainer;
 
-  // If this instance owns a ResourceResponse then |m_ownedResourceResponse|
-  // is non-null and |m_resourceResponse| points to the ResourceResponse
+  // If this instance owns a ResourceResponse then |owned_resource_response_|
+  // is non-null and |resource_response_| points to the ResourceResponse
   // instance it contains.
   std::unique_ptr<ResourceResponseContainer> owned_resource_response_;
 

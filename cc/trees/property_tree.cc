@@ -1255,7 +1255,7 @@ void ScrollTree::OnScrollOffsetAnimated(ElementId id,
 
   ScrollNode* scroll_node = Node(scroll_tree_index);
   if (SetScrollOffset(id,
-                      ClampScrollOffsetToLimits(scroll_offset, scroll_node)))
+                      ClampScrollOffsetToLimits(scroll_offset, *scroll_node)))
     layer_tree_impl->DidUpdateScrollOffset(id);
   layer_tree_impl->DidAnimateScrollOffset();
 }
@@ -1413,21 +1413,22 @@ void ScrollTree::PushScrollUpdatesFromMainThread(
     SyncedScrollOffset* synced_scroll_offset =
         GetOrCreateSyncedScrollOffset(id);
 
-    bool changed = synced_scroll_offset->PushFromMainThread(map_entry.second);
+    // If the value on the main thread differs from the value on the pending
+    // tree after state sync, we need to update the scroll state on the newly
+    // committed PropertyTrees.
+    bool needs_scroll_update =
+        synced_scroll_offset->PushMainToPending(map_entry.second);
 
     // If we are committing directly to the active tree, push pending to active
-    // here.
+    // here. If the value differs between the pending and active trees, we need
+    // to update the scroll state on the newly activated PropertyTrees.
+    // In the case of pushing to the active tree, even if the pending and active
+    // tree state match but the value on the active tree changed, we need to
+    // update the scrollbar geometries.
     if (property_trees()->is_active)
-      changed |= synced_scroll_offset->PushPendingToActive();
+      needs_scroll_update |= synced_scroll_offset->PushPendingToActive();
 
-    // If the pushed main thread scroll offset differs from the current scroll
-    // offset (accounting for delta), ensure DidUpdateScrollOffset is called to
-    // update the TransformNode's scroll offset. We also need to ensure
-    // scrollbar geometries are updated if the underlying scroll offset changes.
-    // TODO(pdr): This is confusing because we need to account for multiple
-    // cases where the value is dirty.
-    if (changed || map_entry.second != synced_scroll_offset->Current(
-                                           property_trees()->is_active))
+    if (needs_scroll_update)
       sync_tree->DidUpdateScrollOffset(id);
   }
 }
@@ -1457,17 +1458,17 @@ void ScrollTree::ApplySentScrollDeltasFromAbortedCommit() {
     map_entry.second->AbortCommit();
 }
 
-bool ScrollTree::SetBaseScrollOffset(ElementId id,
+void ScrollTree::SetBaseScrollOffset(ElementId id,
                                      const gfx::ScrollOffset& scroll_offset) {
   if (property_trees()->is_main_thread) {
     scroll_offset_map_[id] = scroll_offset;
-    return true;
+    return;
   }
 
   // Scroll offset updates on the impl thread should only be for layers which
   // were created on the main thread. But this method is called when we build
   // PropertyTrees on the impl thread from LayerTreeImpl.
-  return GetOrCreateSyncedScrollOffset(id)->PushFromMainThread(scroll_offset);
+  GetOrCreateSyncedScrollOffset(id)->PushMainToPending(scroll_offset);
 }
 
 bool ScrollTree::SetScrollOffset(ElementId id,
@@ -1491,7 +1492,7 @@ bool ScrollTree::UpdateScrollOffsetBaseForTesting(
     const gfx::ScrollOffset& offset) {
   DCHECK(!property_trees()->is_main_thread);
   SyncedScrollOffset* synced_scroll_offset = GetOrCreateSyncedScrollOffset(id);
-  bool changed = synced_scroll_offset->PushFromMainThread(offset);
+  bool changed = synced_scroll_offset->PushMainToPending(offset);
   if (property_trees()->is_active)
     changed |= synced_scroll_offset->PushPendingToActive();
   return changed;
@@ -1556,7 +1557,7 @@ gfx::Vector2dF ScrollTree::ScrollBy(ScrollNode* scroll_node,
   DCHECK(scroll_node->scrollable);
   gfx::ScrollOffset old_offset = current_scroll_offset(scroll_node->element_id);
   gfx::ScrollOffset new_offset =
-      ClampScrollOffsetToLimits(old_offset + adjusted_scroll, scroll_node);
+      ClampScrollOffsetToLimits(old_offset + adjusted_scroll, *scroll_node);
   if (SetScrollOffset(scroll_node->element_id, new_offset))
     layer_tree_impl->DidUpdateScrollOffset(scroll_node->element_id);
 
@@ -1567,8 +1568,8 @@ gfx::Vector2dF ScrollTree::ScrollBy(ScrollNode* scroll_node,
 
 gfx::ScrollOffset ScrollTree::ClampScrollOffsetToLimits(
     gfx::ScrollOffset offset,
-    ScrollNode* scroll_node) const {
-  offset.SetToMin(MaxScrollOffset(scroll_node->id));
+    const ScrollNode& scroll_node) const {
+  offset.SetToMin(MaxScrollOffset(scroll_node.id));
   offset.SetToMax(gfx::ScrollOffset());
   return offset;
 }

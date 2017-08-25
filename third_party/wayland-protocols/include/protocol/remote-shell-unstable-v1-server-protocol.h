@@ -383,6 +383,46 @@ enum zcr_remote_surface_v1_systemui_visibility_state {
 };
 #endif /* ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_ENUM */
 
+#ifndef ZCR_REMOTE_SURFACE_V1_ORIENTATION_ENUM
+#define ZCR_REMOTE_SURFACE_V1_ORIENTATION_ENUM
+/**
+ * @ingroup iface_zcr_remote_surface_v1
+ * window orientation
+ *
+ * The orientation of the window.
+ */
+enum zcr_remote_surface_v1_orientation {
+	/**
+	 * portrait
+	 */
+	ZCR_REMOTE_SURFACE_V1_ORIENTATION_PORTRAIT = 1,
+	/**
+	 * landscape
+	 */
+	ZCR_REMOTE_SURFACE_V1_ORIENTATION_LANDSCAPE = 2,
+};
+#endif /* ZCR_REMOTE_SURFACE_V1_ORIENTATION_ENUM */
+
+#ifndef ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_ENUM
+#define ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_ENUM
+/**
+ * @ingroup iface_zcr_remote_surface_v1
+ * window type
+ *
+ * The type of the window.
+ */
+enum zcr_remote_surface_v1_window_type {
+  /**
+   * normal app window
+   */
+  ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_NORMAL = 1,
+  /**
+   * window is treated as systemui
+   */
+  ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_SYSTEM_UI = 2,
+};
+#endif /* ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_ENUM */
+
 /**
  * @ingroup iface_zcr_remote_surface_v1
  * @struct zcr_remote_surface_v1_interface
@@ -712,6 +752,26 @@ struct zcr_remote_surface_v1_interface {
 	 */
 	void (*move)(struct wl_client *client,
 		     struct wl_resource *resource);
+	/**
+	 * set orientation
+	 *
+	 * Set an orientation for the surface.
+	 * @since 6
+	 */
+	void (*set_orientation)(struct wl_client *client,
+				struct wl_resource *resource,
+				int32_t orientation);
+        /**
+         * set the type of the window
+         *
+         * Set the type of window. This is only a hint to the compositor
+         * and the compositor is free to ignore it.
+         * @param type type of the window
+         * @since 7
+         */
+        void (*set_window_type)(struct wl_client* client,
+                                struct wl_resource* resource,
+                                uint32_t type);
 };
 
 #define ZCR_REMOTE_SURFACE_V1_CLOSE 0
@@ -827,6 +887,14 @@ struct zcr_remote_surface_v1_interface {
  * @ingroup iface_zcr_remote_surface_v1
  */
 #define ZCR_REMOTE_SURFACE_V1_MOVE_SINCE_VERSION 5
+/**
+ * @ingroup iface_zcr_remote_surface_v1
+ */
+#define ZCR_REMOTE_SURFACE_V1_SET_ORIENTATION_SINCE_VERSION 6
+/**
+ * @ingroup iface_zcr_remote_surface_v1
+ */
+#define ZCR_REMOTE_SURFACE_V1_SET_WINDOW_TYPE_SINCE_VERSION 7
 
 /**
  * @ingroup iface_zcr_remote_surface_v1

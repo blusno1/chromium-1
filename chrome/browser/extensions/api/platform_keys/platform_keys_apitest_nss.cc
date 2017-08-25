@@ -195,8 +195,7 @@ class PlatformKeysTest : public ExtensionApiTest {
     {
       std::unique_ptr<base::DictionaryValue> cert1_key_permission(
           new base::DictionaryValue);
-      cert1_key_permission->SetBooleanWithoutPathExpansion(
-          "allowCorporateKeyUsage", true);
+      cert1_key_permission->SetKey("allowCorporateKeyUsage", base::Value(true));
       key_permissions_policy.SetWithoutPathExpansion(
           extension_->id(), std::move(cert1_key_permission));
     }
@@ -207,8 +206,8 @@ class PlatformKeysTest : public ExtensionApiTest {
                                        &key_permissions_policy_str);
 
     base::DictionaryValue user_policy;
-    user_policy.SetStringWithoutPathExpansion(policy::key::kKeyPermissions,
-                                              key_permissions_policy_str);
+    user_policy.SetKey(policy::key::kKeyPermissions,
+                       base::Value(key_permissions_policy_str));
 
     policy_helper_->UpdatePolicy(
         user_policy, base::DictionaryValue() /* empty recommended policy */,

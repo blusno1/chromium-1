@@ -11,11 +11,11 @@
 #include "ash/keyboard/test_keyboard_ui.h"
 #include "ash/palette_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
-#include "ash/shell/context_menu.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/toplevel_window.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/wm/window_state.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -50,8 +50,7 @@ class PaletteDelegateImpl : public PaletteDelegate {
       done.Run();
   }
   void CancelPartialScreenshot() override {}
-  bool IsMetalayerSupported() override { return false; }
-  void ShowMetalayer(const base::Closure& closed) override {}
+  void ShowMetalayer() override {}
   void HideMetalayer() override {}
 
  private:
@@ -102,12 +101,16 @@ std::unique_ptr<keyboard::KeyboardUI> ShellDelegateImpl::CreateKeyboardUI() {
 
 void ShellDelegateImpl::OpenUrlFromArc(const GURL& url) {}
 
-void ShellDelegateImpl::ShelfInit() {}
+void ShellDelegateImpl::ShelfInit() {
+  Shelf* shelf = Shell::GetPrimaryRootWindowController()->shelf();
+  shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+}
 
 void ShellDelegateImpl::ShelfShutdown() {}
 
-SystemTrayDelegate* ShellDelegateImpl::CreateSystemTrayDelegate() {
-  return new SystemTrayDelegate;
+NetworkingConfigDelegate* ShellDelegateImpl::GetNetworkingConfigDelegate() {
+  return nullptr;
 }
 
 std::unique_ptr<WallpaperDelegate>
@@ -123,11 +126,6 @@ std::unique_ptr<PaletteDelegate> ShellDelegateImpl::CreatePaletteDelegate() {
   return base::MakeUnique<PaletteDelegateImpl>();
 }
 
-ui::MenuModel* ShellDelegateImpl::CreateContextMenu(Shelf* shelf,
-                                                    const ShelfItem* item) {
-  return new ContextMenu(shelf);
-}
-
 GPUSupport* ShellDelegateImpl::CreateGPUSupport() {
   // Real GPU support depends on src/content, so just use a stub.
   return new GPUSupportStub;
@@ -141,14 +139,6 @@ gfx::Image ShellDelegateImpl::GetDeprecatedAcceleratorImage() const {
   return gfx::Image();
 }
 
-PrefService* ShellDelegateImpl::GetActiveUserPrefService() const {
-  return nullptr;
-}
-
-PrefService* ShellDelegateImpl::GetLocalStatePrefService() const {
-  return nullptr;
-}
-
 bool ShellDelegateImpl::IsTouchscreenEnabledInPrefs(
     bool use_local_state) const {
   return true;
@@ -159,12 +149,10 @@ void ShellDelegateImpl::SetTouchscreenEnabledInPrefs(bool enabled,
 
 void ShellDelegateImpl::UpdateTouchscreenStatusFromPrefs() {}
 
-#if defined(USE_OZONE)
 ui::InputDeviceControllerClient*
 ShellDelegateImpl::GetInputDeviceControllerClient() {
   return nullptr;
 }
-#endif
 
 }  // namespace shell
 }  // namespace ash

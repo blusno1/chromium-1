@@ -48,22 +48,6 @@ enum YAnchoring {
   YBOTTOM,
 };
 
-// TODO(vollick): Make every UiElement draw itself (i.e., encapsulate rendering
-// logic in the elements). This will let us remove this enumeration and the
-// UiRender can then just iterate over elements and tell them to render
-// themselves in turn. NB: this includes the reticle and controller, which are
-// not yet represented as UiElements.
-enum Fill {
-  NONE = 0,
-  // The element is filled with a radial gradient as specified by the edge and
-  // center color.
-  OPAQUE_GRADIENT = 1,
-  // Same as OPAQUE_GRADIENT but the element is drawn as a grid.
-  GRID_GRADIENT = 2,
-  // The element draws itself.
-  SELF = 3,
-};
-
 class UiElement : public cc::AnimationTarget {
  public:
   UiElement();
@@ -127,10 +111,13 @@ class UiElement : public cc::AnimationTarget {
   bool hit_testable() const { return hit_testable_; }
   void set_hit_testable(bool hit_testable) { hit_testable_ = hit_testable; }
 
-  // If true, transformations will be applied relative to the field of view,
-  // rather than the world.
-  bool lock_to_fov() const { return lock_to_fov_; }
-  void set_lock_to_fov(bool lock) { lock_to_fov_ = lock; }
+  // TODO(bshe): We might be able to remove this state.
+  bool viewport_aware() const { return viewport_aware_; }
+  void set_viewport_aware(bool enable) { viewport_aware_ = enable; }
+  bool computed_viewport_aware() const { return computed_viewport_aware_; }
+  void set_computed_viewport_aware(bool computed_lock) {
+    computed_viewport_aware_ = computed_lock;
+  }
 
   // If true should be drawn in the world viewport, but over all other elements.
   bool is_overlay() const { return is_overlay_; }
@@ -138,12 +125,6 @@ class UiElement : public cc::AnimationTarget {
 
   bool scrollable() const { return scrollable_; }
   void set_scrollable(bool scrollable) { scrollable_ = scrollable; }
-
-  // The computed lock to the FoV, incorporating lock of parent objects.
-  bool computed_lock_to_fov() const { return computed_lock_to_fov_; }
-  void set_computed_lock_to_fov(bool computed_lock) {
-    computed_lock_to_fov_ = computed_lock;
-  }
 
   // The size of the object.  This does not affect children.
   gfx::SizeF size() const { return size_; }
@@ -189,25 +170,6 @@ class UiElement : public cc::AnimationTarget {
 
   YAnchoring y_anchoring() const { return y_anchoring_; }
   void set_y_anchoring(YAnchoring y_anchoring) { y_anchoring_ = y_anchoring; }
-
-  Fill fill() const { return fill_; }
-  void set_fill(Fill fill) { fill_ = fill; }
-
-  SkColor edge_color() const { return edge_color_; }
-  void set_edge_color(const SkColor& edge_color) { edge_color_ = edge_color; }
-
-  SkColor center_color() const { return center_color_; }
-  void set_center_color(const SkColor& center_color) {
-    center_color_ = center_color;
-  }
-
-  SkColor grid_color() const { return grid_color_; }
-  void set_grid_color(const SkColor& grid_color) { grid_color_ = grid_color; }
-
-  int gridline_count() const { return gridline_count_; }
-  void set_gridline_count(int gridline_count) {
-    gridline_count_ = gridline_count;
-  }
 
   int draw_phase() const { return draw_phase_; }
   void set_draw_phase(int draw_phase) { draw_phase_ = draw_phase; }
@@ -290,10 +252,18 @@ class UiElement : public cc::AnimationTarget {
 
   virtual gfx::Transform LocalTransform() const;
 
+  // Handles positioning adjustment for element which may reposition itself
+  // automatically under certain circumstances. For example, viewport aware
+  // element needs to reposition itself when the element is too far to the left
+  // or right where the head is pointing.
+  virtual void AdjustRotationForHeadPose(const gfx::Vector3dF& look_at);
+
  protected:
   virtual void OnSetMode();
 
   std::vector<UiElement*>& children() { return children_; }
+
+  base::TimeTicks last_frame_time() const { return last_frame_time_; }
 
  private:
   // Valid IDs are non-negative.
@@ -305,12 +275,11 @@ class UiElement : public cc::AnimationTarget {
   // If false, the reticle will not hit the element, even if visible.
   bool hit_testable_ = true;
 
-  // If true, transformations will be applied relative to the field of view,
-  // rather than the world.
-  bool lock_to_fov_ = false;
+  // If true, the element will reposition itself to viewport if neccessary.
+  bool viewport_aware_ = false;
 
-  // The computed lock to the FoV, incorporating lock of parent objects.
-  bool computed_lock_to_fov_ = false;
+  // The computed viewport aware, incorporating from parent objects.
+  bool computed_viewport_aware_ = false;
 
   // If true, then this element will be drawn in the world viewport, but above
   // all other elements.
@@ -336,14 +305,6 @@ class UiElement : public cc::AnimationTarget {
   YAnchoring y_anchoring_ = YAnchoring::YNONE;
 
   AnimationPlayer animation_player_;
-
-  Fill fill_ = Fill::NONE;
-
-  SkColor edge_color_ = SK_ColorWHITE;
-  SkColor center_color_ = SK_ColorWHITE;
-  SkColor grid_color_ = SK_ColorWHITE;
-
-  int gridline_count_ = 1;
 
   int draw_phase_ = -1;
 

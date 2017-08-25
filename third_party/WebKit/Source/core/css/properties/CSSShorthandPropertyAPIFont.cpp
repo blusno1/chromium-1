@@ -102,7 +102,8 @@ bool ConsumeFont(bool important,
     CSSValueID id = range.Peek().Id();
     if (!font_style && (id == CSSValueNormal || id == CSSValueItalic ||
                         id == CSSValueOblique)) {
-      font_style = CSSPropertyFontUtils::ConsumeFontStyle(range);
+      font_style =
+          CSSPropertyFontUtils::ConsumeFontStyle(range, context.Mode());
       continue;
     }
     if (!font_variant_caps &&
@@ -115,7 +116,8 @@ bool ConsumeFont(bool important,
         continue;
     }
     if (!font_weight) {
-      font_weight = CSSPropertyFontUtils::ConsumeFontWeight(range);
+      font_weight =
+          CSSPropertyFontUtils::ConsumeFontWeight(range, context.Mode());
       if (font_weight)
         continue;
     }
@@ -211,12 +213,13 @@ bool ConsumeFont(bool important,
 
 }  // namespace
 
-bool CSSShorthandPropertyAPIFont::parseShorthand(
+bool CSSShorthandPropertyAPIFont::ParseShorthand(
+    CSSPropertyID,
     bool important,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    bool,
-    HeapVector<CSSProperty, 256>& properties) {
+    const CSSParserLocalContext&,
+    HeapVector<CSSProperty, 256>& properties) const {
   const CSSParserToken& token = range.Peek();
   if (token.Id() >= CSSValueCaption && token.Id() <= CSSValueStatusBar)
     return ConsumeSystemFont(important, range, properties);

@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -96,23 +95,30 @@ ServiceWorkerDispatcherHost::ServiceWorkerDispatcherHost(
 ServiceWorkerDispatcherHost::~ServiceWorkerDispatcherHost() {
   // Temporary CHECK for debugging https://crbug.com/736203.
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-  if (GetContext())
+  if (GetContext() && phase_ == Phase::kAddedToContext)
     GetContext()->RemoveDispatcherHost(render_process_id_);
 }
 
 void ServiceWorkerDispatcherHost::Init(
     ServiceWorkerContextWrapper* context_wrapper) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(&ServiceWorkerDispatcherHost::Init, this,
-                                       base::RetainedRef(context_wrapper)));
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&ServiceWorkerDispatcherHost::Init, this,
+                       base::RetainedRef(context_wrapper)));
     return;
   }
+
+  // Just speculating that maybe we were destructed before Init() was called on
+  // the IO thread in order to try to fix https://crbug.com/750267.
+  if (phase_ != Phase::kInitial)
+    return;
 
   context_wrapper_ = context_wrapper;
   if (!GetContext())
     return;
   GetContext()->AddDispatcherHost(render_process_id_, this);
+  phase_ = Phase::kAddedToContext;
 }
 
 void ServiceWorkerDispatcherHost::OnFilterAdded(IPC::Channel* channel) {
@@ -133,8 +139,9 @@ void ServiceWorkerDispatcherHost::OnFilterRemoved() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   // Don't wait until the destructor to teardown since a new dispatcher host
   // for this process might be created before then.
-  if (GetContext())
+  if (GetContext() && phase_ == Phase::kAddedToContext)
     GetContext()->RemoveDispatcherHost(render_process_id_);
+  phase_ = Phase::kRemovedFromContext;
   context_wrapper_ = nullptr;
   channel_ready_ = false;
 }
@@ -218,7 +225,8 @@ void ServiceWorkerDispatcherHost::RegisterServiceWorkerRegistrationHandle(
 ServiceWorkerHandle* ServiceWorkerDispatcherHost::FindServiceWorkerHandle(
     int provider_id,
     int64_t version_id) {
-  for (IDMap<std::unique_ptr<ServiceWorkerHandle>>::iterator iter(&handles_);
+  for (base::IDMap<std::unique_ptr<ServiceWorkerHandle>>::iterator iter(
+           &handles_);
        !iter.IsAtEnd(); iter.Advance()) {
     ServiceWorkerHandle* handle = iter.GetCurrentValue();
     DCHECK(handle);
@@ -666,9 +674,6 @@ void ServiceWorkerDispatcherHost::OnEnableNavigationPreload(
         this, bad_message::SWDH_ENABLE_NAVIGATION_PRELOAD_BAD_REGISTRATION_ID);
     return;
   }
-  // The spec discussion consensus is to reject if there is no active worker:
-  // https://github.com/w3c/ServiceWorker/issues/920#issuecomment-262212670
-  // TODO(falken): Remove this comment when the spec is updated.
   if (!registration->active_version()) {
     Send(new ServiceWorkerMsg_EnableNavigationPreloadError(
         thread_id, request_id, WebServiceWorkerError::kErrorTypeState,
@@ -808,9 +813,6 @@ void ServiceWorkerDispatcherHost::OnSetNavigationPreloadHeader(
         bad_message::SWDH_SET_NAVIGATION_PRELOAD_HEADER_BAD_REGISTRATION_ID);
     return;
   }
-  // The spec discussion consensus is to reject if there is no active worker:
-  // https://github.com/w3c/ServiceWorker/issues/920#issuecomment-262212670
-  // TODO(falken): Remove this comment when the spec is updated.
   if (!registration->active_version()) {
     Send(new ServiceWorkerMsg_SetNavigationPreloadHeaderError(
         thread_id, request_id, WebServiceWorkerError::kErrorTypeState,
@@ -1010,10 +1012,11 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEventInternal(
 
   worker->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::MESSAGE,
-      base::Bind(&ServiceWorkerDispatcherHost::
-                     DispatchExtendableMessageEventAfterStartWorker,
-                 this, worker, message, source_origin, sent_message_ports,
-                 ExtendableMessageEventSource(source_info), timeout, callback),
+      base::BindOnce(&ServiceWorkerDispatcherHost::
+                         DispatchExtendableMessageEventAfterStartWorker,
+                     this, worker, message, source_origin, sent_message_ports,
+                     ExtendableMessageEventSource(source_info), timeout,
+                     callback),
       base::Bind(
           &ServiceWorkerDispatcherHost::DidFailToDispatchExtendableMessageEvent<
               SourceInfo>,

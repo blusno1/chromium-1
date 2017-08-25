@@ -26,8 +26,7 @@
 @synthesize keyboardType = _keyboardType;
 @synthesize spellCheckingType = _spellCheckingType;
 
-@synthesize hasPhysicalKeyboard = _hasPhysicalKeyboard;
-
+@synthesize selectedTextRange = _selectedTextRange;
 @synthesize delegate = _delegate;
 
 // TODO(nicholss): For physical keyboard, look at UIKeyCommand
@@ -42,7 +41,7 @@
     _keyboardType = UIKeyboardTypeDefault;
     _spellCheckingType = UITextSpellCheckingTypeNo;
 
-    self.hasPhysicalKeyboard = NO;
+    self.showsSoftKeyboard = NO;
   }
   return self;
 }
@@ -67,6 +66,21 @@
   return YES;
 }
 
+- (BOOL)resignFirstResponder {
+  if (self.showsSoftKeyboard) {
+    // This translates the action of resigning first responder when the keyboard
+    // is showing into hiding the soft keyboard while keeping the view first
+    // responder. This is to allow the hide keyboard button on the soft keyboard
+    // to work properly with ClientKeyboard's soft keyboard logic, which calls
+    // resignFirstResponder.
+    // This may cause weird behavior if the superview has multiple responders
+    // (text views).
+    self.showsSoftKeyboard = NO;
+    return NO;
+  }
+  return [super resignFirstResponder];
+}
+
 - (UIView*)inputAccessoryView {
   return nil;
 }
@@ -79,15 +93,23 @@
 
 #pragma mark - Properties
 
-- (void)setHasPhysicalKeyboard:(BOOL)hasPhysicalKeyboard {
-  _hasPhysicalKeyboard = hasPhysicalKeyboard;
+- (void)setShowsSoftKeyboard:(BOOL)showsSoftKeyboard {
+  if (self.showsSoftKeyboard == showsSoftKeyboard) {
+    return;
+  }
 
-  // If the physical keyboard is presented, we hide the soft keyboard by
-  // replacing it with an empty view (nil will show the default soft keyboard).
-  // iPad will show a soft keyboard with only a toolbar when the physical
-  // keyboard is presented.
+  // Returning nil for inputView will fallback to the system soft keyboard.
+  // Returning an empty view will effectively hide it.
   _inputView =
-      hasPhysicalKeyboard ? [[UIView alloc] initWithFrame:CGRectZero] : nil;
+      showsSoftKeyboard ? nil : [[UIView alloc] initWithFrame:CGRectZero];
+
+  if (self.isFirstResponder) {
+    [self reloadInputViews];
+  }
+}
+
+- (BOOL)showsSoftKeyboard {
+  return _inputView == nil;
 }
 
 @end

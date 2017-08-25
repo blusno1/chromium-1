@@ -11,6 +11,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "content/renderer/media/audio_renderer_sink_cache_impl.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_parameters.h"
@@ -224,7 +225,14 @@ TEST_F(AudioRendererSinkCacheTest, GarbageCollection) {
 
 // Verify that the sink created with GetSinkInfo() is not deleted if used within
 // the timeout.
-TEST_F(AudioRendererSinkCacheTest, NoGarbageCollectionForUsedSink) {
+// Flaky on Linux TSan Tests. https://crbug.com/754196
+#if defined(OS_LINUX)
+#define MAYBE_NoGarbageCollectionForUsedSink \
+  DISABLED_NoGarbageCollectionForUsedSink
+#else
+#define MAYBE_NoGarbageCollectionForUsedSink NoGarbageCollectionForUsedSink
+#endif
+TEST_F(AudioRendererSinkCacheTest, MAYBE_NoGarbageCollectionForUsedSink) {
   EXPECT_EQ(0, sink_count());
   media::OutputDeviceInfo device_info =
       cache_->GetSinkInfo(kRenderFrameId, 0, kDefaultDeviceId, url::Origin());
@@ -303,7 +311,14 @@ TEST_F(AudioRendererSinkCacheTest, ReleaseSinkBeforeScheduledDeletion) {
 
 // Check that a sink created on one thread in response to GetSinkInfo can be
 // used on another thread.
-TEST_F(AudioRendererSinkCacheTest, MultithreadedAccess) {
+// Flaky on Linux TSan Tests. https://crbug.com/753228
+#if defined(OS_LINUX)
+#define MAYBE_MultithreadedAccess DISABLED_MultithreadedAccess
+#else
+#define MAYBE_MultithreadedAccess MultithreadedAccess
+#endif
+
+TEST_F(AudioRendererSinkCacheTest, MAYBE_MultithreadedAccess) {
   EXPECT_EQ(0, sink_count());
 
   base::Thread thread1("thread1");
@@ -370,12 +385,13 @@ TEST_F(AudioRendererSinkCacheTest, SmokeTest) {
   for (int i = 0; i < kExperimentSize; ++i) {
     for (auto& thread : threads) {
       thread->task_runner()->PostTask(
-          FROM_HERE, base::Bind(&AudioRendererSinkCacheTest::GetRandomSinkInfo,
-                                base::Unretained(this), rand() % kSinkCount));
+          FROM_HERE,
+          base::BindOnce(&AudioRendererSinkCacheTest::GetRandomSinkInfo,
+                         base::Unretained(this), rand() % kSinkCount));
       thread->task_runner()->PostTask(
-          FROM_HERE, base::Bind(&AudioRendererSinkCacheTest::GetRandomSink,
-                                base::Unretained(this), rand() % kSinkCount,
-                                kSleepTimeout));
+          FROM_HERE, base::BindOnce(&AudioRendererSinkCacheTest::GetRandomSink,
+                                    base::Unretained(this), rand() % kSinkCount,
+                                    kSleepTimeout));
     }
   }
 
@@ -383,7 +399,7 @@ TEST_F(AudioRendererSinkCacheTest, SmokeTest) {
   media::WaitableMessageLoopEvent loop_event(
       TestTimeouts::action_max_timeout());
   threads[kThreadCount - 1]->task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&base::DoNothing), loop_event.GetClosure());
+      FROM_HERE, base::BindOnce(&base::DoNothing), loop_event.GetClosure());
   // Runs the loop and waits for the thread to call event's closure.
   loop_event.RunAndWait();
 }

@@ -9,9 +9,11 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/ui/blocked_content/blocked_window_params.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/render_messages.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -21,8 +23,11 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/page_navigator.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/associated_interface_provider.h"
+#include "url/gurl.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
@@ -41,35 +46,20 @@ struct PopupBlockerTabHelper::BlockedRequest {
   blink::mojom::WindowFeatures window_features;
 };
 
-bool PopupBlockerTabHelper::ConsiderForPopupBlocking(
-    content::WebContents* web_contents,
-    bool user_gesture,
-    const content::OpenURLParams* open_url_params) {
-  DCHECK(web_contents);
-  CHECK(!open_url_params || open_url_params->user_gesture == user_gesture);
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisablePopupBlocking)) {
-    return false;
-  }
-
-  if (!user_gesture)
-    return true;
-
-  // The subresource_filter triggers an extra aggressive popup blocker on
-  // pages where ads are being blocked, even if there is a user gesture.
-  auto* driver_factory = subresource_filter::
-      ContentSubresourceFilterDriverFactory::FromWebContents(web_contents);
-  return driver_factory &&
-         driver_factory->throttle_manager()->ShouldDisallowNewWindow(
-             open_url_params);
-}
-
 PopupBlockerTabHelper::PopupBlockerTabHelper(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {
 }
 
 PopupBlockerTabHelper::~PopupBlockerTabHelper() {
+}
+
+void PopupBlockerTabHelper::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void PopupBlockerTabHelper::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 void PopupBlockerTabHelper::DidFinishNavigation(
@@ -98,36 +88,61 @@ void PopupBlockerTabHelper::PopupNotificationVisibilityChanged(
   }
 }
 
+// static
 bool PopupBlockerTabHelper::MaybeBlockPopup(
+    content::WebContents* web_contents,
+    const base::Optional<GURL>& opener_url,
     const chrome::NavigateParams& params,
+    const content::OpenURLParams* open_url_params,
     const blink::mojom::WindowFeatures& window_features) {
-  // A page can't spawn popups (or do anything else, either) until its load
-  // commits, so when we reach here, the popup was spawned by the
-  // NavigationController's last committed entry, not the active entry.  For
-  // example, if a page opens a popup in an onunload() handler, then the active
-  // entry is the page to be loaded as we navigate away from the unloading
-  // page.  For this reason, we can't use GetURL() to get the opener URL,
-  // because it returns the active entry.
-  content::NavigationEntry* entry =
-      web_contents()->GetController().GetLastCommittedEntry();
-  GURL creator = entry ? entry->GetVirtualURL() : GURL();
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  DCHECK(!open_url_params ||
+         open_url_params->user_gesture == params.user_gesture);
 
-  if (creator.is_valid() &&
+  const bool user_gesture = params.user_gesture;
+  if (!web_contents)
+    return false;
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisablePopupBlocking)) {
+    return false;
+  }
+
+  auto* popup_blocker = PopupBlockerTabHelper::FromWebContents(web_contents);
+  if (!popup_blocker)
+    return false;
+
+  // If an explicit opener is not given, use the current committed load in this
+  // web contents. This is because A page can't spawn popups (or do anything
+  // else, either) until its load commits, so when we reach here, the popup was
+  // spawned by the NavigationController's last committed entry, not the active
+  // entry.  For example, if a page opens a popup in an onunload() handler, then
+  // the active entry is the page to be loaded as we navigate away from the
+  // unloading page.
+  const GURL& url =
+      opener_url ? opener_url.value() : web_contents->GetLastCommittedURL();
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  if (url.is_valid() &&
       HostContentSettingsMapFactory::GetForProfile(profile)->GetContentSetting(
-          creator, creator, CONTENT_SETTINGS_TYPE_POPUPS, std::string()) ==
+          url, url, CONTENT_SETTINGS_TYPE_POPUPS, std::string()) ==
           CONTENT_SETTING_ALLOW) {
     return false;
   }
 
-  AddBlockedPopup(params, window_features);
-  return true;
-}
+  // The subresource_filter triggers an extra aggressive popup blocker on
+  // pages where ads are being blocked, even if there is a user gesture.
+  if (user_gesture) {
+    auto* driver_factory = subresource_filter::
+        ContentSubresourceFilterDriverFactory::FromWebContents(web_contents);
+    if (!driver_factory ||
+        !driver_factory->ShouldDisallowNewWindow(open_url_params)) {
+      return false;
+    }
+    ChromeSubresourceFilterClient::LogAction(kActionPopupBlocked);
+  }
 
-void PopupBlockerTabHelper::AddBlockedPopup(const BlockedWindowParams& params) {
-  AddBlockedPopup(params.CreateNavigateParams(web_contents()),
-                  params.features());
+  popup_blocker->AddBlockedPopup(params, window_features);
+  return true;
 }
 
 void PopupBlockerTabHelper::AddBlockedPopup(
@@ -136,28 +151,41 @@ void PopupBlockerTabHelper::AddBlockedPopup(
   if (blocked_popups_.size() >= kMaximumNumberOfPopups)
     return;
 
-  blocked_popups_.Add(
+  auto id = blocked_popups_.Add(
       base::MakeUnique<BlockedRequest>(params, window_features));
   TabSpecificContentSettings::FromWebContents(web_contents())->
       OnContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS);
+  for (auto& observer : observers_)
+    observer.BlockedPopupAdded(id, params.url);
 }
 
-void PopupBlockerTabHelper::ShowBlockedPopup(int32_t id) {
+void PopupBlockerTabHelper::ShowBlockedPopup(
+    int32_t id,
+    WindowOpenDisposition disposition) {
   BlockedRequest* popup = blocked_popups_.Lookup(id);
   if (!popup)
     return;
+
   // We set user_gesture to true here, so the new popup gets correctly focused.
   popup->params.user_gesture = true;
+  if (disposition != WindowOpenDisposition::CURRENT_TAB)
+    popup->params.disposition = disposition;
+
 #if defined(OS_ANDROID)
   TabModelList::HandlePopupNavigation(&popup->params);
 #else
   chrome::Navigate(&popup->params);
 #endif
-  if (popup->params.target_contents) {
-    popup->params.target_contents->Send(new ChromeViewMsg_SetWindowFeatures(
-        popup->params.target_contents->GetRenderViewHost()->GetRoutingID(),
-        popup->window_features));
+  if (popup->params.disposition == WindowOpenDisposition::NEW_POPUP &&
+      popup->params.target_contents) {
+    content::RenderFrameHost* host =
+        popup->params.target_contents->GetMainFrame();
+    DCHECK(host);
+    chrome::mojom::ChromeRenderFrameAssociatedPtr client;
+    host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
+    client->SetWindowFeatures(popup->window_features.Clone());
   }
+
   blocked_popups_.Remove(id);
   if (blocked_popups_.IsEmpty())
     PopupNotificationVisibilityChanged(false);
@@ -170,10 +198,9 @@ size_t PopupBlockerTabHelper::GetBlockedPopupsCount() const {
 PopupBlockerTabHelper::PopupIdMap
     PopupBlockerTabHelper::GetBlockedPopupRequests() {
   PopupIdMap result;
-  for (IDMap<std::unique_ptr<BlockedRequest>>::const_iterator iter(
+  for (base::IDMap<std::unique_ptr<BlockedRequest>>::const_iterator iter(
            &blocked_popups_);
-       !iter.IsAtEnd();
-       iter.Advance()) {
+       !iter.IsAtEnd(); iter.Advance()) {
     result[iter.GetCurrentKey()] = iter.GetCurrentValue()->params.url;
   }
   return result;

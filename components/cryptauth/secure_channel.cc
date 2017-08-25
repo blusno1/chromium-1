@@ -69,11 +69,6 @@ SecureChannel::SecureChannel(std::unique_ptr<Connection> connection,
       connection_(std::move(connection)),
       cryptauth_service_(cryptauth_service),
       weak_ptr_factory_(this) {
-  DCHECK(connection_);
-  DCHECK(!connection_->IsConnected());
-  DCHECK(!connection_->remote_device().user_id.empty());
-  DCHECK(cryptauth_service);
-
   connection_->AddObserver(this);
 }
 
@@ -94,7 +89,8 @@ int SecureChannel::SendMessage(const std::string& feature,
   int sequence_number = next_sequence_number_;
   next_sequence_number_++;
 
-  queued_messages_.push_back(PendingMessage(feature, payload, sequence_number));
+  queued_messages_.emplace(
+      base::MakeUnique<PendingMessage>(feature, payload, sequence_number));
   ProcessMessageQueue();
 
   return sequence_number;
@@ -102,7 +98,11 @@ int SecureChannel::SendMessage(const std::string& feature,
 
 void SecureChannel::Disconnect() {
   if (connection_->IsConnected()) {
+    // If |connection_| is active, calling Disconnect() will eventually cause
+    // its status to transition to DISCONNECTED, which will in turn cause this
+    // class to transition to DISCONNECTED.
     connection_->Disconnect();
+    return;
   }
 
   TransitionToStatus(Status::DISCONNECTED);
@@ -156,15 +156,40 @@ void SecureChannel::OnMessageReceived(const Connection& connection,
 void SecureChannel::OnSendCompleted(const cryptauth::Connection& connection,
                                     const cryptauth::WireMessage& wire_message,
                                     bool success) {
-  DCHECK(pending_message_->feature == wire_message.feature());
+  if (wire_message.feature() == Authenticator::kAuthenticationFeature) {
+    // No need to process authentication messages; these are handled by
+    // |authenticator_|.
+    return;
+  }
+
+  if (!pending_message_) {
+    PA_LOG(ERROR) << "OnSendCompleted(), but a send was not expected to be in "
+                  << "progress. Disconnecting from "
+                  << connection_->GetDeviceAddress();
+    Disconnect();
+    return;
+  }
 
   if (success && status_ != Status::DISCONNECTED) {
     pending_message_.reset();
 
-    for (auto& observer : observer_list_)
-      observer.OnMessageSent(this, wire_message.sequence_number());
+    // Create a WeakPtr to |this| before invoking observer callbacks. It is
+    // possible that an Observer will respond to the OnMessageSent() call by
+    // destroying the connection (e.g., if the client only wanted to send one
+    // message and destroyed the connection after the message was sent).
+    base::WeakPtr<SecureChannel> weak_this = weak_ptr_factory_.GetWeakPtr();
 
-    ProcessMessageQueue();
+    if (wire_message.sequence_number() != -1) {
+      for (auto& observer : observer_list_)
+        observer.OnMessageSent(this, wire_message.sequence_number());
+    }
+
+    // Process the next message if possible. Note that if the SecureChannel was
+    // deleted by the OnMessageSent() callback, this will be a no-op since
+    // |weak_this| will have been invalidated in that case.
+    if (weak_this.get())
+      weak_this->ProcessMessageQueue();
+
     return;
   }
 
@@ -214,8 +239,8 @@ void SecureChannel::ProcessMessageQueue() {
 
   DCHECK(!connection_->is_sending_message());
 
-  pending_message_.reset(new PendingMessage(queued_messages_.front()));
-  queued_messages_.pop_front();
+  pending_message_ = std::move(queued_messages_.front());
+  queued_messages_.pop();
 
   PA_LOG(INFO) << "Sending message to " << connection_->GetDeviceAddress()
                << ": {"

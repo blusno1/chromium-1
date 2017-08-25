@@ -5,18 +5,24 @@
 #include "components/ui_devtools/views/ui_devtools_dom_agent.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/ui_devtools/devtools_server.h"
+#include "components/ui_devtools/views/ui_devtools_overlay_agent.h"
 #include "components/ui_devtools/views/ui_element.h"
 #include "components/ui_devtools/views/view_element.h"
 #include "components/ui_devtools/views/widget_element.h"
 #include "components/ui_devtools/views/window_element.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/effects/SkDashPathEffect.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/compositor/paint_recorder.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/render_text.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/view.h"
@@ -37,6 +43,7 @@ std::unique_ptr<DOM::Node> BuildNode(
   constexpr int kDomElementNodeType = 1;
   std::unique_ptr<DOM::Node> node = DOM::Node::create()
                                         .setNodeId(node_ids)
+                                        .setBackendNodeId(node_ids)
                                         .setNodeName(name)
                                         .setNodeType(kDomElementNodeType)
                                         .setAttributes(std::move(attributes))
@@ -80,20 +87,6 @@ std::unique_ptr<Array<std::string>> GetAttributes(UIElement* ui_element) {
   return attributes;
 }
 
-int MaskColor(int value) {
-  return value & 0xff;
-}
-
-SkColor RGBAToSkColor(DOM::RGBA* rgba) {
-  if (!rgba)
-    return SkColorSetARGB(0, 0, 0, 0);
-  // Default alpha value is 0 (not visible) and need to convert alpha decimal
-  // percentage value to hex
-  return SkColorSetARGB(MaskColor(static_cast<int>(rgba->getA(0) * 255)),
-                        MaskColor(rgba->getR()), MaskColor(rgba->getG()),
-                        MaskColor(rgba->getB()));
-}
-
 views::Widget* GetWidgetFromWindow(aura::Window* window) {
   return views::Widget::GetWidgetForNativeView(window);
 }
@@ -103,21 +96,14 @@ std::unique_ptr<DOM::Node> BuildDomNodeFromUIElement(UIElement* root) {
   for (auto* it : root->children())
     children->addItem(BuildDomNodeFromUIElement(it));
 
-  constexpr int kDomElementNodeType = 1;
-  std::unique_ptr<DOM::Node> node = DOM::Node::create()
-                                        .setNodeId(root->node_id())
-                                        .setNodeName(root->GetTypeName())
-                                        .setNodeType(kDomElementNodeType)
-                                        .setAttributes(GetAttributes(root))
-                                        .build();
-  node->setChildNodeCount(static_cast<int>(children->length()));
-  node->setChildren(std::move(children));
-  return node;
+  return BuildNode(root->GetTypeName(), GetAttributes(root),
+                   std::move(children), root->node_id());
 }
 
 }  // namespace
 
-UIDevToolsDOMAgent::UIDevToolsDOMAgent() : is_building_tree_(false) {
+UIDevToolsDOMAgent::UIDevToolsDOMAgent()
+    : is_building_tree_(false), show_size_on_canvas_(false) {
   aura::Env::GetInstance()->AddObserver(this);
 }
 
@@ -137,16 +123,19 @@ ui_devtools::protocol::Response UIDevToolsDOMAgent::getDocument(
   return ui_devtools::protocol::Response::OK();
 }
 
-ui_devtools::protocol::Response UIDevToolsDOMAgent::highlightNode(
-    std::unique_ptr<ui_devtools::protocol::DOM::HighlightConfig>
-        highlight_config,
-    ui_devtools::protocol::Maybe<int> node_id) {
-  return HighlightNode(std::move(highlight_config), node_id.fromJust());
-}
-
 ui_devtools::protocol::Response UIDevToolsDOMAgent::hideHighlight() {
   if (layer_for_highlighting_ && layer_for_highlighting_->visible())
     layer_for_highlighting_->SetVisible(false);
+  return ui_devtools::protocol::Response::OK();
+}
+
+ui_devtools::protocol::Response
+UIDevToolsDOMAgent::pushNodesByBackendIdsToFrontend(
+    std::unique_ptr<protocol::Array<int>> backend_node_ids,
+    std::unique_ptr<protocol::Array<int>>* result) {
+  *result = protocol::Array<int>::create();
+  for (size_t index = 0; index < backend_node_ids->length(); ++index)
+    (*result)->addItem(backend_node_ids->get(index));
   return ui_devtools::protocol::Response::OK();
 }
 
@@ -191,7 +180,7 @@ void UIDevToolsDOMAgent::OnUIElementRemoved(UIElement* ui_element) {
 
 void UIDevToolsDOMAgent::OnUIElementBoundsChanged(UIElement* ui_element) {
   for (auto& observer : observers_)
-    observer.OnNodeBoundsChanged(ui_element->node_id());
+    observer.OnElementBoundsChanged(ui_element);
 }
 
 void UIDevToolsDOMAgent::AddObserver(UIDevToolsDOMAgentObserver* observer) {
@@ -206,13 +195,122 @@ UIElement* UIDevToolsDOMAgent::GetElementFromNodeId(int node_id) {
   return node_id_to_ui_element_[node_id];
 }
 
+ui_devtools::protocol::Response UIDevToolsDOMAgent::HighlightNode(
+    int node_id,
+    bool show_size) {
+  if (!layer_for_highlighting_) {
+    layer_for_highlighting_.reset(new ui::Layer(ui::LayerType::LAYER_TEXTURED));
+    layer_for_highlighting_->set_name("HighlightingLayer");
+    layer_for_highlighting_->set_delegate(this);
+    layer_for_highlighting_->SetFillsBoundsOpaquely(false);
+  }
+  std::pair<aura::Window*, gfx::Rect> window_and_bounds =
+      node_id_to_ui_element_.count(node_id)
+          ? node_id_to_ui_element_[node_id]->GetNodeWindowAndBounds()
+          : std::make_pair<aura::Window*, gfx::Rect>(nullptr, gfx::Rect());
+
+  if (!window_and_bounds.first)
+    return ui_devtools::protocol::Response::Error("No node found with that id");
+
+  show_size_on_canvas_ = show_size;
+  UpdateHighlight(window_and_bounds);
+
+  if (!layer_for_highlighting_->visible())
+    layer_for_highlighting_->SetVisible(true);
+
+  return ui_devtools::protocol::Response::OK();
+}
+
+int UIDevToolsDOMAgent::FindElementIdTargetedByPoint(
+    const gfx::Point& p,
+    aura::Window* root_window) const {
+  aura::Window* targeted_window = root_window->GetEventHandlerForPoint(p);
+  if (!targeted_window)
+    return 0;
+
+  views::Widget* targeted_widget =
+      views::Widget::GetWidgetForNativeWindow(targeted_window);
+  if (!targeted_widget) {
+    return window_element_root_->FindUIElementIdForBackendElement<aura::Window>(
+        targeted_window);
+  }
+
+  views::View* root_view = targeted_widget->GetRootView();
+  DCHECK(root_view);
+
+  gfx::Point point_in_targeted_window(p);
+  aura::Window::ConvertPointToTarget(root_window, targeted_window,
+                                     &point_in_targeted_window);
+  views::View* targeted_view =
+      root_view->GetEventHandlerForPoint(point_in_targeted_window);
+  DCHECK(targeted_view);
+  return window_element_root_->FindUIElementIdForBackendElement<views::View>(
+      targeted_view);
+}
+
+void UIDevToolsDOMAgent::OnPaintLayer(const ui::PaintContext& context) {
+  const gfx::Rect& screen_bounds(layer_for_highlighting_->bounds());
+  ui::PaintRecorder recorder(context, screen_bounds.size());
+  gfx::Canvas* canvas = recorder.canvas();
+  gfx::RectF rect_f(hovered_element_bounds_);
+  rect_f.Inset(gfx::InsetsF(-1));
+
+  cc::PaintFlags flags;
+  flags.setColor(SK_ColorBLUE);
+  flags.setStrokeWidth(1.0f);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+
+  // Draw ui element bounds.
+  canvas->DrawRect(rect_f, flags);
+
+  constexpr SkScalar intervals[] = {1.f, 4.f};
+  flags.setPathEffect(SkDashPathEffect::Make(intervals, 2, 0));
+
+  // Top horizontal dotted line from left to right.
+  canvas->DrawLine(gfx::PointF(0.0f, rect_f.y()),
+                   gfx::PointF(screen_bounds.right(), rect_f.y()), flags);
+
+  // Bottom horizontal dotted line from left to right.
+  canvas->DrawLine(gfx::PointF(0.0f, rect_f.bottom()),
+                   gfx::PointF(screen_bounds.right(), rect_f.bottom()), flags);
+
+  // Left vertical dotted line from top to bottom.
+  canvas->DrawLine(gfx::PointF(rect_f.x(), 0.0f),
+                   gfx::PointF(rect_f.x(), screen_bounds.bottom()), flags);
+
+  // Right vertical dotted line from top to bottom.
+  canvas->DrawLine(gfx::PointF(rect_f.right(), 0.0f),
+                   gfx::PointF(rect_f.right(), screen_bounds.bottom()), flags);
+
+  if (show_size_on_canvas_) {
+    base::string16 utf16_text =
+        base::UTF8ToUTF16(hovered_element_bounds_.size().ToString());
+    if (!render_text_) {
+      render_text_ =
+          base::WrapUnique<gfx::RenderText>(gfx::RenderText::CreateInstance());
+    }
+    render_text_->SetText(utf16_text);
+    const gfx::Size& text_size = render_text_->GetStringSize();
+    render_text_->SetColor(SK_ColorRED);
+    const gfx::Point text_top_left_point(hovered_element_bounds_.x() + 1,
+                                         hovered_element_bounds_.height() / 2 -
+                                             text_size.height() / 2 +
+                                             hovered_element_bounds_.y());
+    const gfx::Rect display_rect(
+        text_top_left_point, gfx::Size(text_size.width(), text_size.height()));
+    canvas->FillRect(display_rect, SK_ColorWHITE, SkBlendMode::kColor);
+    render_text_->SetDisplayRect(display_rect);
+    render_text_->Draw(canvas);
+  }
+}
+
 void UIDevToolsDOMAgent::OnHostInitialized(aura::WindowTreeHost* host) {
   root_windows_.push_back(host->window());
 }
 
-void UIDevToolsDOMAgent::OnNodeBoundsChanged(int node_id) {
+void UIDevToolsDOMAgent::OnElementBoundsChanged(UIElement* ui_element) {
   for (auto& observer : observers_)
-    observer.OnNodeBoundsChanged(node_id);
+    observer.OnElementBoundsChanged(ui_element);
 }
 
 std::unique_ptr<ui_devtools::protocol::DOM::Node>
@@ -324,6 +422,7 @@ void UIDevToolsDOMAgent::RemoveDomNode(UIElement* ui_element) {
 
 void UIDevToolsDOMAgent::Reset() {
   is_building_tree_ = false;
+  render_text_.reset();
   layer_for_highlighting_.reset();
   window_element_root_.reset();
   node_id_to_ui_element_.clear();
@@ -331,14 +430,14 @@ void UIDevToolsDOMAgent::Reset() {
 }
 
 void UIDevToolsDOMAgent::UpdateHighlight(
-    const std::pair<aura::Window*, gfx::Rect>& window_and_bounds,
-    SkColor background) {
-  layer_for_highlighting_->SetColor(background);
-
+    const std::pair<aura::Window*, gfx::Rect>& window_and_bounds) {
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestWindow(
           window_and_bounds.first);
   aura::Window* root = window_and_bounds.first->GetRootWindow();
+  layer_for_highlighting_->SetBounds(root->bounds());
+  layer_for_highlighting_->SchedulePaint(root->bounds());
+
   if (root->layer() != layer_for_highlighting_->parent())
     root->layer()->Add(layer_for_highlighting_.get());
   else
@@ -346,40 +445,10 @@ void UIDevToolsDOMAgent::UpdateHighlight(
 
   aura::client::ScreenPositionClient* screen_position_client =
       aura::client::GetScreenPositionClient(root);
-
-  gfx::Rect bounds(window_and_bounds.second);
-  gfx::Point origin = bounds.origin();
+  hovered_element_bounds_ = window_and_bounds.second;
+  gfx::Point origin = hovered_element_bounds_.origin();
   screen_position_client->ConvertPointFromScreen(root, &origin);
-  bounds.set_origin(origin);
-  layer_for_highlighting_->SetBounds(bounds);
-}
-
-ui_devtools::protocol::Response UIDevToolsDOMAgent::HighlightNode(
-    std::unique_ptr<ui_devtools::protocol::DOM::HighlightConfig>
-        highlight_config,
-    int node_id) {
-  if (!layer_for_highlighting_) {
-    layer_for_highlighting_.reset(
-        new ui::Layer(ui::LayerType::LAYER_SOLID_COLOR));
-    layer_for_highlighting_->set_name("HighlightingLayer");
-  }
-
-  std::pair<aura::Window*, gfx::Rect> window_and_bounds =
-      node_id_to_ui_element_.count(node_id)
-          ? node_id_to_ui_element_[node_id]->GetNodeWindowAndBounds()
-          : std::make_pair<aura::Window*, gfx::Rect>(nullptr, gfx::Rect());
-
-  if (!window_and_bounds.first) {
-    return ui_devtools::protocol::Response::Error("No node found with that id");
-  }
-  SkColor content_color =
-      RGBAToSkColor(highlight_config->getContentColor(nullptr));
-  UpdateHighlight(window_and_bounds, content_color);
-
-  if (!layer_for_highlighting_->visible())
-    layer_for_highlighting_->SetVisible(true);
-
-  return ui_devtools::protocol::Response::OK();
+  hovered_element_bounds_.set_origin(origin);
 }
 
 }  // namespace ui_devtools

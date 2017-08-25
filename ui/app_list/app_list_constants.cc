@@ -16,8 +16,10 @@ const SkColor kSearchTextColor = SkColorSetRGB(0x33, 0x33, 0x33);
 
 const SkColor kLabelBackgroundColor = SK_ColorTRANSPARENT;
 
-const SkColor kTopSeparatorColor = SkColorSetRGB(0xC0, 0xC0, 0xC0);
 const SkColor kBottomSeparatorColor = SkColorSetRGB(0xC0, 0xC0, 0xC0);
+// Color of bottom separtor under folder title (12% white) in full screen mode.
+const SkColor kBottomSeparatorColorFullScreen =
+    SkColorSetARGB(0x1F, 0xFF, 0xFF, 0xFF);
 
 // The color of the separator used inside dialogs in the app list.
 const SkColor kDialogSeparatorColor = SkColorSetRGB(0xD1, 0xD1, 0xD1);
@@ -55,12 +57,17 @@ const SkColor kFolderTitleColor = SkColorSetRGB(0x33, 0x33, 0x33);
 const SkColor kFolderTitleHintTextColor = SkColorSetRGB(0xA0, 0xA0, 0xA0);
 // Color of the folder ink bubble.
 const SkColor kFolderBubbleColor = SK_ColorWHITE;
+// Color of folder bubble color (12% white) in full screen mode.
+const SkColor kFolderBubbleColorFullScreen =
+    SkColorSetARGB(0x1F, 0xFF, 0xFF, 0xFF);
 // Color of the folder bubble shadow.
 const SkColor kFolderShadowColor = SkColorSetRGB(0xBF, 0xBF, 0xBF);
+const float kFolderBubbleOpacity = 0.12f;
 const float kFolderBubbleRadius = 23;
 const float kFolderBubbleOffsetY = 1;
 
 const SkColor kCardBackgroundColor = SK_ColorWHITE;
+const SkColor kCardBackgroundColorFullscreen = SkColorSetRGB(0xFA, 0xFA, 0xFC);
 
 // Duration in milliseconds for page transition.
 const int kPageTransitionDurationInMs = 180;
@@ -118,6 +125,9 @@ const size_t kNumStartPageTilesFullscreen = 5;
 // Maximum number of results to show in the launcher Search UI.
 const size_t kMaxSearchResults = 6;
 
+// Top padding of expand arrow.
+const size_t kExpandArrowTopPadding = 29;
+
 // Radius of the circle, in which if entered, show re-order preview.
 const int kReorderDroppingCircleRadius = 35;
 
@@ -129,13 +139,34 @@ const int kAppsGridPadding = 24;
 // same space to keep the apps grid horizontally centered.
 const int kAppsGridLeftRightPaddingFullscreen = 28;
 
+// The left and right padding from the folder name bottom separator to the edge
+// of the left or right edge of the left most and right most app item.
+const int kBottomSeparatorLeftRightPaddingFullScreen = 24;
+
+// The bottom padding from the bottom separator to the top of the app item.
+const int kBottomSeparatorBottomPaddingFullScreen = 24;
+
 // The padding around the outside of the search box (top and sides).
 const int kSearchBoxPadding = 16;
 const int kSearchBoxTopPadding = 24;
-const int kSearchBoxBottomPadding = 21;
+
+// Bottom padding of search box in peeking state.
+const int kSearchBoxPeekingBottomPadding = 12;
+
+// Bottom padding of search box in fullscreen state.
+const int kSearchBoxFullscreenBottomPadding = 24;
 
 // The background border corner radius of the search box in fullscreen mode.
 const int kSearchBoxBorderCornerRadiusFullscreen = 24;
+
+// Preferred height of search box.
+const int kSearchBoxPreferredHeight = 48;
+
+// The height of the peeking app list from the bottom of the screen.
+const int kPeekingAppListHeight = 320;
+
+// The height/width of the shelf from the bottom/side of the screen.
+const int kShelfSize = 48;
 
 // Max items allowed in a folder.
 size_t kMaxFolderItems = 16;
@@ -150,6 +181,35 @@ const size_t kMaxFolderNameChars = 80;
 // Font style for app item labels.
 const ui::ResourceBundle::FontStyle kItemTextFontStyle =
     ui::ResourceBundle::SmallFont;
+
+// The UMA histogram that logs usage of suggested and regular apps.
+const char kAppListAppLaunched[] = "Apps.AppListAppLaunched";
+
+// The UMA histogram that logs usage of suggested and regular apps while the
+// fullscreen launcher is enabled.
+const char kAppListAppLaunchedFullscreen[] =
+    "Apps.AppListAppLaunchedFullscreen";
+
+// The UMA histogram that logs usage of state transitions in the new
+// app list UI.
+const char kAppListStateTransitionSourceHistogram[] =
+    "Apps.AppListStateTransitionSource";
+
+// The UMA histogram that logs the source of vertical page switcher usage in the
+// app list.
+const char kAppListPageSwitcherSourceHistogram[] =
+    "Apps.AppListPageSwitcherSource";
+
+// The UMA histogram that logs usage of the original and redesigned folders.
+const char kAppListFolderOpenedHistogram[] = "Apps.AppListFolderOpened";
+
+// The UMA histogram that logs how the app list transitions from peeking to
+// fullscreen.
+const char kAppListPeekingToFullscreenHistogram[] =
+    "Apps.AppListPeekingToFullscreen";
+
+// The UMA histogram that logs how the app list is shown.
+const char kAppListToggleMethodHistogram[] = "Apps.AppListShowSource";
 
 // The UMA histogram that logs which page gets opened by the user.
 const char kPageOpenedHistogram[] = "Apps.AppListPageOpened";

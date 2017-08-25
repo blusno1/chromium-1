@@ -29,7 +29,10 @@
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#include "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
+#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_consumer.h"
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
 #include "ios/chrome/browser/ui/ntp/ntp_tile_saver.h"
@@ -40,7 +43,6 @@
 #include "ios/chrome/common/app_group/app_group_constants.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
-#import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "skia/ext/skia_utils_ios.h"
 
@@ -361,7 +363,8 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 
 - (void)webStateList:(WebStateList*)webStateList
     didInsertWebState:(web::WebState*)webState
-              atIndex:(int)index {
+              atIndex:(int)index
+           activating:(BOOL)activating {
   [self.consumer setTabCount:self.webStateList->count()];
 }
 
@@ -448,9 +451,14 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   }
 
   if (_notificationPromo->IsChromeCommand()) {
-    GenericChromeCommand* command = [[GenericChromeCommand alloc]
-        initWithTag:_notificationPromo->command_id()];
-    [self.dispatcher chromeExecuteCommand:command];
+    int command_id = _notificationPromo->command_id();
+    if (command_id == IDC_RATE_THIS_APP) {
+      [self.dispatcher performSelector:@selector(showRateThisAppDialog)];
+    } else {
+      GenericChromeCommand* command =
+          [[GenericChromeCommand alloc] initWithTag:command_id];
+      [self.dispatcher chromeExecuteCommand:command];
+    }
     return;
   }
   NOTREACHED();

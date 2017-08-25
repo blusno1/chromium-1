@@ -103,7 +103,7 @@ void TestRunnerForSpecificView::Reset() {
 #endif
     web_view()->SetVisibilityState(kWebPageVisibilityStateVisible, true);
     if (web_view()->MainFrame()->IsWebLocalFrame()) {
-      web_view()->MainFrame()->EnableViewSourceMode(false);
+      web_view()->MainFrame()->ToWebLocalFrame()->EnableViewSourceMode(false);
       web_view()->SetTextZoomFactor(1);
       web_view()->SetZoomLevel(0);
     }
@@ -240,9 +240,9 @@ void TestRunnerForSpecificView::CapturePixelsAsyncThen(
       ->GetTestRunner()
       ->DumpPixelsAsync(
           web_view()->MainFrame()->ToWebLocalFrame(),
-          base::Bind(&TestRunnerForSpecificView::CapturePixelsCallback,
-                     weak_factory_.GetWeakPtr(),
-                     base::Passed(std::move(persistent_callback))));
+          base::BindOnce(&TestRunnerForSpecificView::CapturePixelsCallback,
+                         weak_factory_.GetWeakPtr(),
+                         base::Passed(std::move(persistent_callback))));
 }
 
 void TestRunnerForSpecificView::CapturePixelsCallback(
@@ -300,9 +300,9 @@ void TestRunnerForSpecificView::CopyImageAtAndCapturePixelsAsyncThen(
 
   CopyImageAtAndCapturePixels(
       web_view()->MainFrame()->ToWebLocalFrame(), x, y,
-      base::Bind(&TestRunnerForSpecificView::CapturePixelsCallback,
-                 weak_factory_.GetWeakPtr(),
-                 base::Passed(std::move(persistent_callback))));
+      base::BindOnce(&TestRunnerForSpecificView::CapturePixelsCallback,
+                     weak_factory_.GetWeakPtr(),
+                     base::Passed(std::move(persistent_callback))));
 }
 
 void TestRunnerForSpecificView::GetManifestThen(
@@ -686,8 +686,11 @@ void TestRunnerForSpecificView::SetViewSourceForFrame(const std::string& name,
                                                       bool enabled) {
   WebFrame* target_frame =
       GetLocalMainFrame()->FindFrameByName(WebString::FromUTF8(name));
-  if (target_frame)
-    target_frame->EnableViewSourceMode(enabled);
+  if (target_frame) {
+    CHECK(target_frame->IsWebLocalFrame())
+        << "This function requires that the target frame is a local frame.";
+    target_frame->ToWebLocalFrame()->EnableViewSourceMode(enabled);
+  }
 }
 
 blink::WebLocalFrame* TestRunnerForSpecificView::GetLocalMainFrame() {

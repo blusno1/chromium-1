@@ -34,9 +34,9 @@
 
 #include "core/exported/WebRemoteFrameImpl.h"
 #include "core/frame/WebLocalFrameImpl.h"
+#include "core/layout/LayoutTestHelper.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
-#include "platform/testing/WebLayerTreeViewImplForTesting.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
@@ -242,7 +242,7 @@ WebViewHelper::~WebViewHelper() {
   Reset();
 }
 
-WebViewBase* WebViewHelper::InitializeWithOpener(
+WebViewImpl* WebViewHelper::InitializeWithOpener(
     WebFrame* opener,
     TestWebFrameClient* web_frame_client,
     TestWebViewClient* web_view_client,
@@ -273,7 +273,7 @@ WebViewBase* WebViewHelper::InitializeWithOpener(
   return web_view_;
 }
 
-WebViewBase* WebViewHelper::Initialize(
+WebViewImpl* WebViewHelper::Initialize(
     TestWebFrameClient* web_frame_client,
     TestWebViewClient* web_view_client,
     TestWebWidgetClient* web_widget_client,
@@ -282,7 +282,7 @@ WebViewBase* WebViewHelper::Initialize(
                               web_widget_client, update_settings_func);
 }
 
-WebViewBase* WebViewHelper::InitializeAndLoad(
+WebViewImpl* WebViewHelper::InitializeAndLoad(
     const std::string& url,
     TestWebFrameClient* web_frame_client,
     TestWebViewClient* web_view_client,
@@ -296,7 +296,7 @@ WebViewBase* WebViewHelper::InitializeAndLoad(
   return WebView();
 }
 
-WebViewBase* WebViewHelper::InitializeRemote(
+WebViewImpl* WebViewHelper::InitializeRemote(
     TestWebRemoteFrameClient* web_remote_frame_client,
     RefPtr<SecurityOrigin> security_origin,
     TestWebViewClient* web_view_client) {
@@ -317,6 +317,13 @@ WebViewBase* WebViewHelper::InitializeRemote(
   return web_view_;
 }
 
+void WebViewHelper::LoadAhem() {
+  LocalFrame* local_frame =
+      ToLocalFrame(WebFrame::ToCoreFrame(*LocalMainFrame()));
+  DCHECK(local_frame);
+  RenderingTest::LoadAhem(*local_frame);
+}
+
 void WebViewHelper::Reset() {
   if (web_view_) {
     DCHECK(!TestWebFrameClient::IsLoading());
@@ -333,6 +340,11 @@ WebRemoteFrameImpl* WebViewHelper::RemoteMainFrame() const {
   return ToWebRemoteFrameImpl(web_view_->MainFrame());
 }
 
+void WebViewHelper::SetViewportSize(const WebSize& viewport_size) {
+  test_web_view_client_->GetLayerTreeViewForTesting()->SetViewportSize(
+      viewport_size);
+}
+
 void WebViewHelper::Resize(WebSize size) {
   test_web_view_client_->ClearAnimationScheduled();
   WebView()->Resize(size);
@@ -342,7 +354,7 @@ void WebViewHelper::Resize(WebSize size) {
 
 void WebViewHelper::InitializeWebView(TestWebViewClient* web_view_client) {
   owned_test_web_view_client_ = CreateDefaultClientIfNeeded(web_view_client);
-  web_view_ = static_cast<WebViewBase*>(
+  web_view_ = static_cast<WebViewImpl*>(
       WebView::Create(web_view_client, kWebPageVisibilityStateVisible));
   web_view_->GetSettings()->SetJavaScriptEnabled(true);
   web_view_->GetSettings()->SetPluginsEnabled(true);
@@ -378,7 +390,7 @@ void TestWebFrameClient::BindWidgetClient(
   owned_widget_client_ = std::move(client);
 }
 
-void TestWebFrameClient::FrameDetached(WebLocalFrame* frame, DetachType type) {
+void TestWebFrameClient::FrameDetached(DetachType type) {
   if (frame_->FrameWidget()) {
     frame_->FrameWidget()->WillCloseLayerTreeView();
     frame_->FrameWidget()->Close();
@@ -423,6 +435,11 @@ void TestWebRemoteFrameClient::Bind(
 void TestWebRemoteFrameClient::FrameDetached(DetachType type) {
   frame_->Close();
   self_owned_.reset();
+}
+
+WebLayerTreeViewImplForTesting*
+TestWebViewClient::GetLayerTreeViewForTesting() {
+  return layer_tree_view_.get();
 }
 
 WebLayerTreeView* TestWebViewClient::InitializeLayerTreeView() {

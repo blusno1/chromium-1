@@ -45,6 +45,7 @@ import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.offlinepages.DownloadUiActionFlags;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageOrigin;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -230,17 +231,19 @@ public class DownloadUtils {
      * @param context Context to pull resources from.
      */
     public static void downloadOfflinePage(Context context, Tab tab) {
+        OfflinePageOrigin origin = new OfflinePageOrigin(context, tab);
+
         if (tab.isShowingErrorPage()) {
             // The download needs to be scheduled to happen at later time due to current network
             // error.
             final OfflinePageBridge bridge = OfflinePageBridge.getForProfile(tab.getProfile());
             bridge.scheduleDownload(tab.getWebContents(), OfflinePageBridge.ASYNC_NAMESPACE,
-                    tab.getUrl(), DownloadUiActionFlags.PROMPT_DUPLICATE);
+                    tab.getUrl(), DownloadUiActionFlags.PROMPT_DUPLICATE, origin);
         } else {
             // Otherwise, the download can be started immediately.
             final OfflinePageDownloadBridge bridge =
                     new OfflinePageDownloadBridge(tab.getProfile());
-            bridge.startDownload(tab);
+            bridge.startDownload(tab, origin);
             bridge.destroy();
             DownloadUtils.recordDownloadPageMetrics(tab);
         }
@@ -839,8 +842,8 @@ public class DownloadUtils {
                 return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_site_white_24dp
                                                    : R.drawable.ic_drive_site_white_36dp;
             case DownloadFilter.FILTER_VIDEO:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_play_arrow_white_24dp
-                                                   : R.drawable.ic_play_arrow_white_36dp;
+                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_videocam_white_24dp
+                                                   : R.drawable.ic_videocam_white_36dp;
             case DownloadFilter.FILTER_AUDIO:
                 return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_music_note_white_24dp
                                                    : R.drawable.ic_music_note_white_36dp;

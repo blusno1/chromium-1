@@ -12,13 +12,10 @@ import("//testing/test.gni")
 buildflag_header("features") {
   header = "features.h"
 
-  flags = [ "USE_VAAPI=$use_vaapi" ]
-}
-
-declare_args() {
-  # A temporary arg for building MCVD while it's being implemented.
-  # See http://crbug.com/660942
-  enable_media_codec_video_decoder = false
+  flags = [
+    "USE_VAAPI=$use_vaapi",
+    "ENABLE_MEDIA_CODEC_VIDEO_DECODER=$enable_media_codec_video_decoder",
+  ]
 }
 
 if (is_mac) {
@@ -124,6 +121,7 @@ component("gpu") {
     "//content/renderer:*",
     "//media/gpu/ipc/*",
     "//media/mojo/*",
+    "//remoting/codec:encoder",
     ":*",
   ]
 
@@ -274,7 +272,10 @@ component("gpu") {
       deps += [ ":libv4l2_generate_stubs" ]
     }
     if (use_v4l2_codec) {
-      deps += [ "//third_party/libyuv" ]
+      deps += [
+        "//third_party/libyuv",
+        "//ui/ozone",
+      ]
       sources += [
         "generic_v4l2_device.cc",
         "generic_v4l2_device.h",
@@ -357,7 +358,7 @@ component("gpu") {
       "media_foundation_video_encode_accelerator_win.h",
     ]
     configs += [
-      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      # TODO(crbug.com/167187): Fix size_t to int truncations.
       "//build/config/compiler:no_size_t_to_int_warning",
       "//third_party/khronos:khronos_headers",
     ]
@@ -387,7 +388,7 @@ component("gpu") {
 }
 
 # TODO(watk): Run this on bots. http://crbug.com/461437
-if (is_win || is_android || is_chromeos) {
+if (is_win || is_android || use_v4l2_codec || use_vaapi) {
   test("video_decode_accelerator_unittest") {
     sources = [
       "video_accelerator_unittest_helpers.h",
@@ -401,8 +402,7 @@ if (is_win || is_android || is_chromeos) {
       ":gpu",
       "//base",
       "//base/test:test_support",
-      "//media",
-      "//media/base:test_support",
+      "//media:test_support",
       "//testing/gtest",
       "//ui/base",
       "//ui/display/manager",
@@ -442,7 +442,7 @@ if (is_win || is_android || is_chromeos) {
     }
 
     if (is_win) {
-      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      # TODO(crbug.com/167187): Fix size_t to int truncations.
       configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
       deps += [
         "//third_party/angle:libEGL",
@@ -500,12 +500,11 @@ source_set("android_video_decode_accelerator_unittests") {
   }
 }
 
-if (is_chromeos || is_mac || is_win) {
+if (use_v4l2_codec || use_vaapi || is_mac || is_win) {
   test("video_encode_accelerator_unittest") {
     deps = [
       "//base",
-      "//media",
-      "//media/base:test_support",
+      "//media:test_support",
       "//media/gpu",
       "//testing/gtest",
       "//ui/base",
@@ -532,13 +531,13 @@ if (is_chromeos || is_mac || is_win) {
   }
 }
 
-if (is_chromeos) {
+if (use_v4l2_codec || use_vaapi) {
   test("jpeg_decode_accelerator_unittest") {
     deps = [
       "//base",
-      "//media",
-      "//media/base:test_support",
+      "//media:test_support",
       "//media/gpu",
+      "//media/gpu/ipc/service",
       "//testing/gtest",
       "//third_party/libyuv",
       "//ui/base",
@@ -569,7 +568,7 @@ source_set("unit_tests") {
   testonly = true
   deps = [
     "//base",
-    "//media/base:test_support",
+    "//media:test_support",
     "//media/gpu",
     "//testing/gmock",
     "//testing/gtest",

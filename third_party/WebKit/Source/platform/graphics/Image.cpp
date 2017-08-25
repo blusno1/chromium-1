@@ -304,11 +304,7 @@ void Image::DrawPattern(GraphicsContext& context,
   // Fetch this now as subsetting may swap the image.
   auto image_id = image.GetSkImage()->uniqueID();
 
-  // TODO(vmpstr): PaintImage might need to be smart about subsetting.
-  image = PaintImage(
-      stable_image_id_,
-      image.GetSkImage()->makeSubset(EnclosingIntRect(norm_src_rect)),
-      image.animation_type(), image.completion_state(), image.frame_count());
+  image = image.MakeSubset(EnclosingIntRect(norm_src_rect));
   if (!image)
     return;
 
@@ -349,19 +345,17 @@ PassRefPtr<Image> Image::ImageForDefaultFrame() {
   return image;
 }
 
-PaintImage Image::PaintImageForCurrentFrame() {
-  PaintImageBuilder builder;
-  builder.set_id(stable_image_id_);
-  builder.set_animation_type(MaybeAnimated()
-                                 ? PaintImage::AnimationType::ANIMATED
-                                 : PaintImage::AnimationType::STATIC);
-  builder.set_completion_state(
-      CurrentFrameIsComplete() ? PaintImage::CompletionState::DONE
-                               : PaintImage::CompletionState::PARTIALLY_DONE);
-  builder.set_frame_count(FrameCount());
-  builder.set_is_multipart(is_multipart_);
-  PopulateImageForCurrentFrame(builder);
-  return builder.TakePaintImage();
+void Image::InitPaintImageBuilder(PaintImageBuilder& builder) {
+  auto animation_type = MaybeAnimated() ? PaintImage::AnimationType::ANIMATED
+                                        : PaintImage::AnimationType::STATIC;
+  auto completion_state = CurrentFrameIsComplete()
+                              ? PaintImage::CompletionState::DONE
+                              : PaintImage::CompletionState::PARTIALLY_DONE;
+  builder.set_id(stable_image_id_)
+      .set_animation_type(animation_type)
+      .set_completion_state(completion_state)
+      .set_frame_count(FrameCount())
+      .set_is_multipart(is_multipart_);
 }
 
 bool Image::ApplyShader(PaintFlags& flags, const SkMatrix& local_matrix) {

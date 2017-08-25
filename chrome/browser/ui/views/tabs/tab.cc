@@ -8,7 +8,6 @@
 #include <limits>
 #include <utility>
 
-#include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
@@ -31,7 +30,6 @@
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/touch_uma/touch_uma.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -299,12 +297,12 @@ class Tab::TabCloseButton : public views::ImageButton,
 
   void OnMouseMoved(const ui::MouseEvent& event) override {
     tab_->controller_->OnMouseEventInTab(this, event);
-    CustomButton::OnMouseMoved(event);
+    Button::OnMouseMoved(event);
   }
 
   void OnMouseReleased(const ui::MouseEvent& event) override {
     tab_->controller_->OnMouseEventInTab(this, event);
-    CustomButton::OnMouseReleased(event);
+    Button::OnMouseReleased(event);
   }
 
   void OnGestureEvent(ui::GestureEvent* event) override {
@@ -485,8 +483,8 @@ Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
       kTabCloseHoveredPressedIcon, SkColorSetRGB(0xDB, 0x44, 0x37));
   const gfx::ImageSkia& pressed = gfx::CreateVectorIcon(
       kTabCloseHoveredPressedIcon, SkColorSetRGB(0xA8, 0x35, 0x2A));
-  close_button_->SetImage(views::CustomButton::STATE_HOVERED, &hovered);
-  close_button_->SetImage(views::CustomButton::STATE_PRESSED, &pressed);
+  close_button_->SetImage(views::Button::STATE_HOVERED, &hovered);
+  close_button_->SetImage(views::Button::STATE_PRESSED, &pressed);
 
   // Disable animation so that the red danger sign shows up immediately
   // to help avoid mis-clicks.
@@ -1297,27 +1295,6 @@ void Tab::UpdateThrobber(const TabRendererData& old) {
   const bool should_show = ShouldShowThrobber(data_.network_state);
   const bool is_showing = throbber_->visible();
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDelayReloadStopButtonChange)) {
-    // Minimize flip-flops between showing the throbber and the favicon. Delay
-    // the switch from favicon to throbber if the switch would occur just after
-    // the a throbbing session finishes. The heuristic for "throbbing session
-    // finishing" is that the old and new URLs match and that the throbber has
-    // been shown recently. See crbug.com/734104
-    constexpr auto kSuppressChangeDuration = base::TimeDelta::FromSeconds(3);
-    if (!is_showing && should_show && old.url == data_.url &&
-        (base::TimeTicks::Now() - last_throbber_show_time_) <
-            kSuppressChangeDuration) {
-      if (!delayed_throbber_show_timer_.IsRunning()) {
-        delayed_throbber_show_timer_.Start(FROM_HERE, kSuppressChangeDuration,
-                                           this, &Tab::RefreshThrobber);
-      }
-      return;
-    }
-
-    delayed_throbber_show_timer_.Stop();
-  }
-
   if (!is_showing && !should_show)
     return;
 
@@ -1331,8 +1308,6 @@ void Tab::RefreshThrobber() {
     ScheduleIconPaint();
     return;
   }
-
-  last_throbber_show_time_ = base::TimeTicks::Now();
 
   // Since the throbber can animate for a long time, paint to a separate layer
   // when possible to reduce repaint overhead.
@@ -1447,7 +1422,7 @@ void Tab::OnButtonColorMaybeChanged() {
     alert_indicator_button_->OnParentTabButtonColorChanged();
     const gfx::ImageSkia& close_button_normal_image =
         gfx::CreateVectorIcon(kTabCloseNormalIcon, button_color_);
-    close_button_->SetImage(views::CustomButton::STATE_NORMAL,
+    close_button_->SetImage(views::Button::STATE_NORMAL,
                             &close_button_normal_image);
   }
 }

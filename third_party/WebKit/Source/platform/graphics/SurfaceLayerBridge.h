@@ -37,8 +37,7 @@ class PLATFORM_EXPORT SurfaceLayerBridgeObserver {
 };
 
 class PLATFORM_EXPORT SurfaceLayerBridge
-    : public NON_EXPORTED_BASE(
-          blink::mojom::blink::OffscreenCanvasSurfaceClient),
+    : public blink::mojom::blink::OffscreenCanvasSurfaceClient,
       public WebSurfaceLayerBridge {
  public:
   SurfaceLayerBridge(SurfaceLayerBridgeObserver*, WebLayerTreeView*);
@@ -47,7 +46,7 @@ class PLATFORM_EXPORT SurfaceLayerBridge
   void CreateSolidColorLayer();
 
   // Implementation of blink::mojom::blink::OffscreenCanvasSurfaceClient
-  void OnSurfaceCreated(const viz::SurfaceInfo&) override;
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo&) override;
   void SatisfyCallback(const viz::SurfaceSequence&);
   void RequireCallback(const viz::SurfaceId&, const viz::SurfaceSequence&);
 

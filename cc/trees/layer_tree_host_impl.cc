@@ -29,7 +29,6 @@
 #include "cc/base/math_util.h"
 #include "cc/benchmarks/benchmark_instrumentation.h"
 #include "cc/debug/rendering_stats_instrumentation.h"
-#include "cc/debug/traced_value.h"
 #include "cc/input/browser_controls_offset_manager.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/page_scale_animation.h"
@@ -50,7 +49,6 @@
 #include "cc/output/compositor_frame_metadata.h"
 #include "cc/output/layer_tree_frame_sink.h"
 #include "cc/quads/render_pass_draw_quad.h"
-#include "cc/quads/shared_quad_state.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/raster/bitmap_raster_buffer_provider.h"
@@ -83,6 +81,8 @@
 #include "cc/trees/tree_synchronizer.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/quads/shared_quad_state.h"
+#include "components/viz/common/traced_value.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -241,7 +241,6 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       requires_high_res_to_draw_(false),
       is_likely_to_require_a_draw_(false),
       has_valid_layer_tree_frame_sink_(false),
-      mutator_(nullptr),
       scroll_animating_latched_node_id_(ScrollTree::kInvalidNodeId),
       has_scrolled_by_wheel_(false),
       has_scrolled_by_touch_(false),
@@ -485,8 +484,6 @@ void LayerTreeHostImpl::AnimateInternal(bool active_tree) {
   did_animate |= AnimateBrowserControls(monotonic_time);
 
   if (active_tree) {
-    did_animate |= Mutate(monotonic_time);
-
     // Animating stuff can change the root scroll offset, so inform the
     // synchronous input handler.
     UpdateRootLayerStateForSynchronousInputHandler();
@@ -498,19 +495,6 @@ void LayerTreeHostImpl::AnimateInternal(bool active_tree) {
   }
 }
 
-bool LayerTreeHostImpl::Mutate(base::TimeTicks monotonic_time) {
-  if (!mutator_)
-    return false;
-  TRACE_EVENT0("compositor-worker", "LayerTreeHostImpl::Mutate");
-  if (mutator_->Mutate(monotonic_time, active_tree()))
-    client_->SetNeedsOneBeginImplFrameOnImplThread();
-  return true;
-}
-
-void LayerTreeHostImpl::SetNeedsMutate() {
-  TRACE_EVENT0("compositor-worker", "LayerTreeHostImpl::SetNeedsMutate");
-  client_->SetNeedsOneBeginImplFrameOnImplThread();
-}
 
 bool LayerTreeHostImpl::PrepareTiles() {
   if (!tile_priorities_dirty_)
@@ -777,7 +761,7 @@ static void AppendQuadsToFillScreen(
   gfx::Rect root_target_rect = root_render_surface->content_rect();
   float opacity = 1.f;
   int sorting_context_id = 0;
-  SharedQuadState* shared_quad_state =
+  viz::SharedQuadState* shared_quad_state =
       target_render_pass->CreateAndAppendSharedQuadState();
   shared_quad_state->SetAll(gfx::Transform(), root_target_rect,
                             root_target_rect, root_target_rect, false, opacity,
@@ -861,7 +845,8 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
         render_surface->EffectTreeIndex() == EffectTree::kContentsRootNodeId;
     bool should_draw_into_render_pass =
         is_root_surface || render_surface->contributes_to_drawn_surface() ||
-        render_surface->HasCopyRequest();
+        render_surface->HasCopyRequest() ||
+        render_surface->ShouldCacheRenderSurface();
     if (should_draw_into_render_pass)
       frame->render_passes.push_back(render_surface->CreateRenderPass());
   }
@@ -1749,9 +1734,11 @@ bool LayerTreeHostImpl::DrawLayers(FrameData* frame) {
   // drawn.
   if (active_tree_->hud_layer()) {
     TRACE_EVENT0("cc", "DrawLayers.UpdateHudTexture");
+    // TODO(sohanjg): Temporarily do not pass context provider, so that SW
+    // raster path is chosen till we fix the FPS drop issue with gpu raster
+    // crbug.com/751732
     active_tree_->hud_layer()->UpdateHudTexture(
-        draw_mode, resource_provider_.get(),
-        layer_tree_frame_sink_->context_provider(), frame->render_passes);
+        draw_mode, resource_provider_.get(), nullptr, frame->render_passes);
   }
 
   CompositorFrameMetadata metadata = MakeCompositorFrameMetadata();
@@ -1894,7 +1881,7 @@ bool LayerTreeHostImpl::UpdateGpuRasterizationStatus() {
     const auto& caps = compositor_context_provider->ContextCapabilities();
     gpu_rasterization_enabled = caps.gpu_rasterization;
     supports_disable_msaa = caps.multisample_compatibility;
-    if (!caps.msaa_is_slow)
+    if (!caps.msaa_is_slow && !caps.avoid_stencil_buffers)
       max_msaa_samples = caps.max_samples;
   }
 
@@ -2208,10 +2195,6 @@ void LayerTreeHostImpl::ActivateSyncTree() {
     // If we commit to the active tree directly, this is already done during
     // commit.
     ActivateAnimations();
-
-    // Compositor worker operates on the active tree so we have to run again
-    // after activation.
-    Mutate(CurrentBeginFrameArgs().frame_time);
   } else {
     active_tree_->ProcessUIResourceRequestQueue();
   }
@@ -2317,6 +2300,10 @@ void LayerTreeHostImpl::ReleaseTileResources() {
     pending_tree_->ReleaseTileResources();
   if (recycle_tree_)
     recycle_tree_->ReleaseTileResources();
+
+  // Need to update tiles again in order to kick of raster work for all the
+  // tiles that are dropped here.
+  active_tree_->set_needs_update_draw_properties();
 }
 
 void LayerTreeHostImpl::RecreateTileResources() {
@@ -2334,12 +2321,14 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
   if (use_gpu_rasterization_) {
     image_decode_cache_ = base::MakeUnique<GpuImageDecodeCache>(
         layer_tree_frame_sink_->worker_context_provider(),
-        settings_.preferred_tile_format,
+        viz::ResourceFormatToClosestSkColorType(
+            settings_.preferred_tile_format),
         settings_.decoded_image_working_set_budget_bytes,
         settings_.decoded_image_cache_budget_bytes);
   } else {
     image_decode_cache_ = base::MakeUnique<SoftwareImageDecodeCache>(
-        settings_.preferred_tile_format,
+        viz::ResourceFormatToClosestSkColorType(
+            settings_.preferred_tile_format),
         settings_.decoded_image_working_set_budget_bytes);
   }
 
@@ -2360,6 +2349,8 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
                                  ? std::numeric_limits<size_t>::max()
                                  : settings_.scheduled_raster_task_limit,
                              use_gpu_rasterization_);
+  tile_manager_.SetCheckerImagingForceDisabled(
+      settings_.only_checker_images_with_gpu_raster && !use_gpu_rasterization_);
   UpdateTileManagerMemoryPolicy(ActualManagedMemoryPolicy());
 }
 
@@ -2446,12 +2437,7 @@ void LayerTreeHostImpl::CreateResourceAndRasterBufferProvider(
 
 void LayerTreeHostImpl::SetLayerTreeMutator(
     std::unique_ptr<LayerTreeMutator> mutator) {
-  if (mutator == mutator_)
-    return;
-  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
-               "LayerTreeHostImpl::SetLayerTreeMutator");
-  mutator_ = std::move(mutator);
-  mutator_->SetClient(this);
+  mutator_host_->SetLayerTreeMutator(std::move(mutator));
 }
 
 LayerImpl* LayerTreeHostImpl::ViewportMainScrollLayer() {
@@ -2573,7 +2559,7 @@ bool LayerTreeHostImpl::InitializeRenderer(
 
   layer_tree_frame_sink_ = layer_tree_frame_sink;
   has_valid_layer_tree_frame_sink_ = true;
-  resource_provider_ = base::MakeUnique<ResourceProvider>(
+  resource_provider_ = base::MakeUnique<LayerTreeResourceProvider>(
       layer_tree_frame_sink_->context_provider(),
       layer_tree_frame_sink_->shared_bitmap_manager(),
       layer_tree_frame_sink_->gpu_memory_buffer_manager(),
@@ -2869,6 +2855,19 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBeginImpl(
     return scroll_status;
   }
 
+  // If the viewport is scrolling and it cannot consume any delta hints, the
+  // scroll event will need to get bubbled if the viewport is for a guest or
+  // oopif.
+  ScrollNode* viewport_scroll_node =
+      viewport()->MainScrollLayer()
+          ? active_tree_->property_trees()->scroll_tree.Node(
+                viewport()->MainScrollLayer()->scroll_tree_index())
+          : nullptr;
+  if (active_tree_->CurrentlyScrollingNode() == viewport_scroll_node &&
+      !viewport()->CanScroll(*scroll_state)) {
+    scroll_status.bubble = true;
+  }
+
   client_->RenewTreePriority();
   RecordCompositorSlowScrollMetric(type, CC_THREAD);
 
@@ -3032,20 +3031,20 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimatedBegin(
 }
 
 gfx::Vector2dF LayerTreeHostImpl::ComputeScrollDelta(
-    ScrollNode* scroll_node,
+    const ScrollNode& scroll_node,
     const gfx::Vector2dF& delta) {
   ScrollTree& scroll_tree = active_tree()->property_trees()->scroll_tree;
   float scale_factor = active_tree()->current_page_scale_factor();
 
   gfx::Vector2dF adjusted_scroll(delta);
   adjusted_scroll.Scale(1.f / scale_factor);
-  if (!scroll_node->user_scrollable_horizontal)
+  if (!scroll_node.user_scrollable_horizontal)
     adjusted_scroll.set_x(0);
-  if (!scroll_node->user_scrollable_vertical)
+  if (!scroll_node.user_scrollable_vertical)
     adjusted_scroll.set_y(0);
 
   gfx::ScrollOffset old_offset =
-      scroll_tree.current_scroll_offset(scroll_node->element_id);
+      scroll_tree.current_scroll_offset(scroll_node.element_id);
   gfx::ScrollOffset new_offset = scroll_tree.ClampScrollOffsetToLimits(
       old_offset + gfx::ScrollOffset(adjusted_scroll), scroll_node);
 
@@ -3071,7 +3070,7 @@ bool LayerTreeHostImpl::ScrollAnimationCreate(ScrollNode* scroll_node,
   gfx::ScrollOffset current_offset =
       scroll_tree.current_scroll_offset(scroll_node->element_id);
   gfx::ScrollOffset target_offset = scroll_tree.ClampScrollOffsetToLimits(
-      current_offset + gfx::ScrollOffset(delta), scroll_node);
+      current_offset + gfx::ScrollOffset(delta), *scroll_node);
 
   // Start the animation one full frame in. Without any offset, the animation
   // doesn't start until next frame, increasing latency, and preventing our
@@ -3088,17 +3087,10 @@ bool LayerTreeHostImpl::ScrollAnimationCreate(ScrollNode* scroll_node,
 }
 
 static bool CanPropagate(ScrollNode* scroll_node, float x, float y) {
-  // ScrollBoundaryBehavior may have different values on x-axis and y-axis.
-  // We need to find out the dominant axis of user's intended scroll to decide
-  // which node's ScrollBoundaryBehavior should be applied, i.e. which the
-  // scroll should be propagated from this node given its relevant*
-  // ScrollBoundaryBehavior value. * relevant here depends on the dominant
-  // axis of scroll gesture.
-  bool x_dominant = std::abs(x) > std::abs(y);
-  return (x_dominant &&
+  return (x == 0 ||
           scroll_node->scroll_boundary_behavior.x ==
-              ScrollBoundaryBehavior::kScrollBoundaryBehaviorTypeAuto) ||
-         (!x_dominant &&
+              ScrollBoundaryBehavior::kScrollBoundaryBehaviorTypeAuto) &&
+         (y == 0 ||
           scroll_node->scroll_boundary_behavior.y ==
               ScrollBoundaryBehavior::kScrollBoundaryBehaviorTypeAuto);
 }
@@ -3115,11 +3107,14 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
 
   if (scroll_node) {
     // Flash the overlay scrollbar even if the scroll dalta is 0.
-    ScrollbarAnimationController* animation_controller =
-        ScrollbarAnimationControllerForElementId(scroll_node->element_id);
-
-    if (animation_controller)
-      animation_controller->WillUpdateScroll();
+    if (settings_.scrollbar_flash_after_any_scroll_update) {
+      FlashAllScrollbars(false);
+    } else {
+      ScrollbarAnimationController* animation_controller =
+          ScrollbarAnimationControllerForElementId(scroll_node->element_id);
+      if (animation_controller)
+        animation_controller->WillUpdateScroll();
+    }
 
     gfx::Vector2dF delta = scroll_delta;
     if (!scroll_node->user_scrollable_horizontal)
@@ -3166,11 +3161,14 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
           viewport()->MainScrollLayer()->scroll_tree_index() == scroll_node->id;
       if (scrolls_main_viewport_scroll_layer) {
         // Flash the overlay scrollbar even if the scroll dalta is 0.
-        ScrollbarAnimationController* animation_controller =
-            ScrollbarAnimationControllerForElementId(scroll_node->element_id);
-
-        if (animation_controller)
-          animation_controller->WillUpdateScroll();
+        if (settings_.scrollbar_flash_after_any_scroll_update) {
+          FlashAllScrollbars(false);
+        } else {
+          ScrollbarAnimationController* animation_controller =
+              ScrollbarAnimationControllerForElementId(scroll_node->element_id);
+          if (animation_controller)
+            animation_controller->WillUpdateScroll();
+        }
 
         gfx::Vector2dF scrolled =
             viewport()->ScrollAnimated(pending_delta, delayed_by);
@@ -3184,7 +3182,7 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
       }
 
       gfx::Vector2dF scroll_delta =
-          ComputeScrollDelta(scroll_node, pending_delta);
+          ComputeScrollDelta(*scroll_node, pending_delta);
       if (ScrollAnimationCreate(scroll_node, scroll_delta, delayed_by)) {
         scroll_animating_latched_node_id_ = scroll_node->id;
         return scroll_status;
@@ -3446,7 +3444,7 @@ void LayerTreeHostImpl::DistributeScrollDelta(ScrollState* scroll_state) {
       if (!scroll_node->scrollable)
         continue;
 
-      if (CanConsumeDelta(scroll_node, *scroll_state))
+      if (CanConsumeDelta(*scroll_node, *scroll_state))
         current_scroll_chain.push_front(scroll_node);
 
       float delta_x = scroll_state->is_beginning()
@@ -3467,9 +3465,8 @@ void LayerTreeHostImpl::DistributeScrollDelta(ScrollState* scroll_state) {
   scroll_state->DistributeToScrollChainDescendant();
 }
 
-bool LayerTreeHostImpl::CanConsumeDelta(ScrollNode* scroll_node,
+bool LayerTreeHostImpl::CanConsumeDelta(const ScrollNode& scroll_node,
                                         const ScrollState& scroll_state) {
-  DCHECK(scroll_node);
   gfx::Vector2dF delta_to_scroll;
   if (scroll_state.is_beginning()) {
     delta_to_scroll = gfx::Vector2dF(scroll_state.delta_x_hint(),
@@ -3486,7 +3483,7 @@ bool LayerTreeHostImpl::CanConsumeDelta(ScrollNode* scroll_node,
   if (scroll_state.is_direct_manipulation()) {
     gfx::Vector2dF local_scroll_delta;
     if (!CalculateLocalScrollDeltaAndStartPoint(
-            *scroll_node,
+            scroll_node,
             gfx::PointF(scroll_state.position_x(), scroll_state.position_y()),
             delta_to_scroll, scroll_tree, &local_scroll_delta)) {
       return false;
@@ -3511,11 +3508,15 @@ InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(
   if (!scroll_node)
     return InputHandlerScrollResult();
 
-  ScrollbarAnimationController* animation_controller =
-      ScrollbarAnimationControllerForElementId(scroll_node->element_id);
-
-  if (animation_controller)
-    animation_controller->WillUpdateScroll();
+  // Flash the overlay scrollbar even if the scroll dalta is 0.
+  if (settings_.scrollbar_flash_after_any_scroll_update) {
+    FlashAllScrollbars(false);
+  } else {
+    ScrollbarAnimationController* animation_controller =
+        ScrollbarAnimationControllerForElementId(scroll_node->element_id);
+    if (animation_controller)
+      animation_controller->WillUpdateScroll();
+  }
 
   float initial_top_controls_offset =
       browser_controls_offset_manager_->ControlsTopOffset();
@@ -3584,8 +3585,8 @@ InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(
     UpdateRootLayerStateForSynchronousInputHandler();
   }
 
-  // Update compositor worker mutations which may respond to scrolling.
-  Mutate(CurrentBeginFrameArgs().frame_time);
+  // Run animations which need to respond to updated scroll offset.
+  mutator_host_->TickScrollAnimations(CurrentBeginFrameArgs().frame_time);
 
   return scroll_result;
 }
@@ -3691,18 +3692,23 @@ void LayerTreeHostImpl::MouseMoveAt(const gfx::Point& viewport_point) {
       scroll_element_id = OuterViewportScrollLayer()->element_id();
   }
 
+  ScrollbarAnimationController* new_animation_controller =
+      ScrollbarAnimationControllerForElementId(scroll_element_id);
   if (scroll_element_id != scroll_element_id_mouse_currently_over_) {
     ScrollbarAnimationController* old_animation_controller =
         ScrollbarAnimationControllerForElementId(
             scroll_element_id_mouse_currently_over_);
-    if (old_animation_controller) {
+    if (old_animation_controller)
       old_animation_controller->DidMouseLeave();
-    }
+
     scroll_element_id_mouse_currently_over_ = scroll_element_id;
+
+    // Experiment: Enables will flash scorllbar when user move mouse enter a
+    // scrollable area.
+    if (settings_.scrollbar_flash_when_mouse_enter && new_animation_controller)
+      new_animation_controller->DidScrollUpdate();
   }
 
-  ScrollbarAnimationController* new_animation_controller =
-      ScrollbarAnimationControllerForElementId(scroll_element_id);
   if (!new_animation_controller)
     return;
 
@@ -3757,11 +3763,9 @@ void LayerTreeHostImpl::PinchGestureEnd() {
 std::unique_ptr<BeginFrameCallbackList>
 LayerTreeHostImpl::ProcessLayerTreeMutations() {
   std::unique_ptr<BeginFrameCallbackList> callbacks(new BeginFrameCallbackList);
-  if (mutator_) {
-    const base::Closure& callback = mutator_->TakeMutations();
-    if (!callback.is_null())
-      callbacks->push_back(callback);
-  }
+  const base::Closure& callback = mutator_host_->TakeMutations();
+  if (!callback.is_null())
+    callbacks->push_back(callback);
   return callbacks;
 }
 
@@ -3884,7 +3888,7 @@ bool LayerTreeHostImpl::AnimateLayers(base::TimeTicks monotonic_time) {
   // still request an extra SetNeedsAnimate here.
   if (animated)
     SetNeedsOneBeginImplFrame();
-  // TODO(crbug.com/551138): We could return true only if the animations are on
+  // TODO(crbug.com/551138): We could return true only if the animaitons are on
   // the active tree. There's no need to cause a draw to take place from
   // animations starting/ticking on the pending tree.
   return animated;
@@ -3954,6 +3958,15 @@ LayerTreeHostImpl::ScrollbarAnimationControllerForElementId(
   if (i == scrollbar_animation_controllers_.end())
     return nullptr;
   return i->second.get();
+}
+
+void LayerTreeHostImpl::FlashAllScrollbars(bool did_scroll) {
+  for (auto& pair : scrollbar_animation_controllers_) {
+    if (did_scroll)
+      pair.second->DidScrollUpdate();
+    else
+      pair.second->WillUpdateScroll();
+  }
 }
 
 void LayerTreeHostImpl::PostDelayedScrollbarAnimationTask(
@@ -4071,7 +4084,7 @@ void LayerTreeHostImpl::AsValueWithFrameInto(
 
 void LayerTreeHostImpl::ActivationStateAsValueInto(
     base::trace_event::TracedValue* state) const {
-  TracedValue::SetIDRef(this, state, "lthi");
+  viz::TracedValue::SetIDRef(this, state, "lthi");
   state->BeginDictionary("tile_manager");
   tile_manager_.BasicStateAsValueInto(state);
   state->EndDictionary();
@@ -4316,13 +4329,8 @@ void LayerTreeHostImpl::SetTreeLayerScrollOffsetMutated(
       property_trees->element_id_to_scroll_node_index[element_id];
   property_trees->scroll_tree.OnScrollOffsetAnimated(
       element_id, scroll_node_index, scroll_offset, tree);
-  // Run mutation callbacks to respond to updated scroll offset.
-  Mutate(CurrentBeginFrameArgs().frame_time);
-}
-
-bool LayerTreeHostImpl::AnimationsPreserveAxisAlignment(
-    const LayerImpl* layer) const {
-  return mutator_host_->AnimationsPreserveAxisAlignment(layer->element_id());
+  // Run animations which need to respond to updated scroll offset.
+  mutator_host_->TickScrollAnimations(CurrentBeginFrameArgs().frame_time);
 }
 
 void LayerTreeHostImpl::SetNeedUpdateGpuRasterizationStatus() {
@@ -4421,9 +4429,7 @@ bool LayerTreeHostImpl::SupportsImplScrolling() const {
 }
 
 bool LayerTreeHostImpl::CommitToActiveTree() const {
-  // In single threaded mode we skip the pending tree and commit directly to the
-  // active tree.
-  return !task_runner_provider_->HasImplThread();
+  return settings_.commit_to_active_tree;
 }
 
 void LayerTreeHostImpl::SetContextVisibility(bool is_visible) {
@@ -4468,6 +4474,10 @@ void LayerTreeHostImpl::UpdateScrollSourceInfo(bool is_wheel_scroll) {
 }
 
 void LayerTreeHostImpl::ShowScrollbarsForImplScroll(ElementId element_id) {
+  if (settings_.scrollbar_flash_after_any_scroll_update) {
+    FlashAllScrollbars(true);
+    return;
+  }
   if (!element_id)
     return;
   if (ScrollbarAnimationController* animation_controller =

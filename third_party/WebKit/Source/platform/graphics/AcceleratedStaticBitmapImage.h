@@ -66,7 +66,8 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
   // To be called on sender thread before performing a transfer
   void Transfer() final;
 
-  void EnsureMailbox() final;
+  void EnsureMailbox(MailboxSyncMode) final;
+
   gpu::Mailbox GetMailbox() final { return texture_holder_->GetMailbox(); }
   gpu::SyncToken GetSyncToken() final {
     return texture_holder_->GetSyncToken();
@@ -77,8 +78,9 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
   // was a snapshot of an SkSurface that may be rendered to after
   void RetainOriginalSkImageForCopyOnWrite();
 
- protected:
-  void PopulateImageForCurrentFrame(PaintImageBuilder&) override;
+  PaintImage PaintImageForCurrentFrame() override;
+
+  void Abandon() final;
 
  private:
   AcceleratedStaticBitmapImage(sk_sp<SkImage>,

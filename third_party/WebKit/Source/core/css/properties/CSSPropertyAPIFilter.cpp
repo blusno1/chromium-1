@@ -13,7 +13,6 @@
 #include "core/frame/UseCounter.h"
 
 namespace blink {
-class CSSParserLocalContext;
 
 namespace {
 
@@ -45,7 +44,7 @@ static CSSFunctionValue* ConsumeFilterFunction(
       }
     } else if (filter_type == CSSValueHueRotate) {
       parsed_value = CSSPropertyParserHelpers::ConsumeAngle(
-          args, context, WebFeature::kUnitlessZeroAngleFilter);
+          args, &context, WebFeature::kUnitlessZeroAngleFilter);
     } else if (filter_type == CSSValueBlur) {
       parsed_value = CSSPropertyParserHelpers::ConsumeLength(
           args, kHTMLStandardMode, kValueRangeNonNegative);
@@ -78,10 +77,11 @@ static CSSFunctionValue* ConsumeFilterFunction(
 
 }  // namespace
 
-const CSSValue* CSSPropertyAPIFilter::parseSingleValue(
+const CSSValue* CSSPropertyAPIFilter::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   if (range.Peek().Id() == CSSValueNone)
     return CSSPropertyParserHelpers::ConsumeIdent(range);
 

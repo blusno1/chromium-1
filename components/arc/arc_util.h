@@ -34,6 +34,10 @@ namespace arc {
 // check, so it is ok to access them directly.
 bool IsArcAvailable();
 
+// Returns true if ARC is not installed and the current device is not supported
+// to run ARC.
+bool IsWebstoreSearchEnabled();
+
 // Returns true if ARC image has Play Store package.
 bool IsPlayStoreAvailable();
 
@@ -89,6 +93,7 @@ bool IsArcAppWindow(aura::Window* window);
 // Adjusts the amount of CPU the ARC instance is allowed to use. When
 // |do_restrict| is true, the limit is adjusted so ARC can only use tightly
 // restricted CPU resources.
+// TODO(yusukes): Use enum instead of bool.
 void SetArcCpuRestriction(bool do_restrict);
 
 }  // namespace arc

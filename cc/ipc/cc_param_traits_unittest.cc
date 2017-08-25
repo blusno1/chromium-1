@@ -30,7 +30,6 @@ using cc::PictureDrawQuad;
 using cc::RenderPass;
 using cc::RenderPassDrawQuad;
 using cc::ResourceProvider;
-using cc::SharedQuadState;
 using cc::SolidColorDrawQuad;
 using cc::SurfaceDrawQuad;
 using cc::TextureDrawQuad;
@@ -39,6 +38,7 @@ using cc::StreamVideoDrawQuad;
 using cc::YUVVideoDrawQuad;
 using gfx::Transform;
 using viz::ResourceId;
+using viz::SharedQuadState;
 using viz::TransferableResource;
 
 namespace content {
@@ -291,6 +291,8 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   FilterOperations arbitrary_filters1;
   arbitrary_filters1.Append(
       FilterOperation::CreateGrayscaleFilter(arbitrary_float1));
+  arbitrary_filters1.Append(
+      FilterOperation::CreateBlurFilter(arbitrary_float2));
   arbitrary_filters1.Append(cc::FilterOperation::CreateReferenceFilter(
       SkBlurImageFilter::Make(arbitrary_sigma, arbitrary_sigma, nullptr)));
 
@@ -336,8 +338,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
                          arbitrary_rect1_inside_rect3,
                          arbitrary_rect2_inside_rect3, arbitrary_bool1,
                          arbitrary_color, arbitrary_int);
-  pass_cmp->CopyFromAndAppendDrawQuad(debugborder_in,
-                                      debugborder_in->shared_quad_state);
+  pass_cmp->CopyFromAndAppendDrawQuad(debugborder_in);
 
   SharedQuadState* shared_state2_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state2_in->SetAll(arbitrary_matrix2, arbitrary_rect2, arbitrary_rect2,
@@ -354,9 +355,8 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       arbitrary_rect1_inside_rect1, arbitrary_bool1, child_id,
       arbitrary_resourceid2, arbitrary_rectf1, arbitrary_size1,
       arbitrary_vector2df2, arbitrary_pointf2, arbitrary_rectf1);
-  pass_cmp->CopyFromAndAppendRenderPassDrawQuad(
-      renderpass_in, renderpass_in->shared_quad_state,
-      renderpass_in->render_pass_id);
+  pass_cmp->CopyFromAndAppendRenderPassDrawQuad(renderpass_in,
+                                                renderpass_in->render_pass_id);
 
   SharedQuadState* shared_state3_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state3_in->SetAll(arbitrary_matrix1, arbitrary_rect3, arbitrary_rect3,
@@ -372,8 +372,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
                         arbitrary_rect1_inside_rect3,
                         arbitrary_rect2_inside_rect3, arbitrary_bool1,
                         arbitrary_color, arbitrary_bool2);
-  pass_cmp->CopyFromAndAppendDrawQuad(solidcolor_in,
-                                      solidcolor_in->shared_quad_state);
+  pass_cmp->CopyFromAndAppendDrawQuad(solidcolor_in);
 
   StreamVideoDrawQuad* streamvideo_in =
       pass_in->CreateAndAppendDrawQuad<StreamVideoDrawQuad>();
@@ -381,8 +380,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       shared_state3_in, arbitrary_rect2, arbitrary_rect2_inside_rect2,
       arbitrary_rect1_inside_rect2, arbitrary_bool1, arbitrary_resourceid2,
       arbitrary_size1, arbitrary_matrix1);
-  pass_cmp->CopyFromAndAppendDrawQuad(streamvideo_in,
-                                      streamvideo_in->shared_quad_state);
+  pass_cmp->CopyFromAndAppendDrawQuad(streamvideo_in);
 
   viz::SurfaceId arbitrary_surface_id(
       kArbitraryFrameSinkId,
@@ -393,8 +391,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
                      arbitrary_rect2_inside_rect2, arbitrary_rect1_inside_rect2,
                      arbitrary_bool1, arbitrary_surface_id,
                      cc::SurfaceDrawQuadType::PRIMARY, nullptr);
-  pass_cmp->CopyFromAndAppendDrawQuad(surface_in,
-                                      surface_in->shared_quad_state);
+  pass_cmp->CopyFromAndAppendDrawQuad(surface_in);
 
   TextureDrawQuad* texture_in =
       pass_in->CreateAndAppendDrawQuad<TextureDrawQuad>();
@@ -404,15 +401,14 @@ TEST_F(CCParamTraitsTest, AllQuads) {
                      arbitrary_bool2, arbitrary_pointf1, arbitrary_pointf2,
                      arbitrary_color, arbitrary_float_array, arbitrary_bool4,
                      arbitrary_bool5, arbitrary_bool6);
-  pass_cmp->CopyFromAndAppendDrawQuad(texture_in,
-                                      texture_in->shared_quad_state);
+  pass_cmp->CopyFromAndAppendDrawQuad(texture_in);
 
   TileDrawQuad* tile_in = pass_in->CreateAndAppendDrawQuad<TileDrawQuad>();
   tile_in->SetAll(shared_state3_in, arbitrary_rect2,
                   arbitrary_rect2_inside_rect2, arbitrary_rect1_inside_rect2,
                   arbitrary_bool1, arbitrary_resourceid3, arbitrary_rectf1,
                   arbitrary_size1, arbitrary_bool2, arbitrary_bool3);
-  pass_cmp->CopyFromAndAppendDrawQuad(tile_in, tile_in->shared_quad_state);
+  pass_cmp->CopyFromAndAppendDrawQuad(tile_in);
 
   YUVVideoDrawQuad* yuvvideo_in =
       pass_in->CreateAndAppendDrawQuad<YUVVideoDrawQuad>();
@@ -423,8 +419,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       arbitrary_resourceid2, arbitrary_resourceid3, arbitrary_resourceid4,
       arbitrary_video_color_space, arbitrary_color_space, arbitrary_float1,
       arbitrary_float2, arbitrary_int, arbitrary_bool2);
-  pass_cmp->CopyFromAndAppendDrawQuad(yuvvideo_in,
-                                      yuvvideo_in->shared_quad_state);
+  pass_cmp->CopyFromAndAppendDrawQuad(yuvvideo_in);
 
   // Make sure the in and cmp RenderPasses match.
   Compare(child_pass_cmp.get(), child_pass_in.get());

@@ -30,6 +30,9 @@
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
+#include "ios/chrome/browser/drag_and_drop/drop_and_navigate_delegate.h"
+#include "ios/chrome/browser/drag_and_drop/drop_and_navigate_interaction.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
@@ -37,13 +40,9 @@
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #include "ios/chrome/browser/ui/commands/start_voice_search_command.h"
-#import "ios/chrome/browser/ui/history/tab_history_popup_controller.h"
 #import "ios/chrome/browser/ui/image_util.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_controller_impl.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
@@ -85,10 +84,6 @@
 using base::UserMetricsAction;
 using ios::material::TimingFunction;
 
-NSString* const kTabHistoryPopupWillShowNotification =
-    @"kTabHistoryPopupWillShowNotification";
-NSString* const kTabHistoryPopupWillHideNotification =
-    @"kTabHistoryPopupWillHideNotification";
 const CGFloat kiPhoneOmniboxPlaceholderColorBrightness = 150 / 255.0;
 
 // The histogram recording CLAuthorizationStatus for omnibox queries.
@@ -229,13 +224,14 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 // TODO(crbug.com/619982) Remove this block and add CAAnimationDelegate when we
 // switch the main bots to Xcode 8.
 #if defined(__IPHONE_10_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0)
-@interface WebToolbarController ()<CAAnimationDelegate,
-                                   ToolbarAssistiveKeyboardDelegate>
+@interface WebToolbarController ()<CAAnimationDelegate>
 @end
 #endif
 
-@interface WebToolbarController ()<LocationBarDelegate,
+@interface WebToolbarController ()<DropAndNavigateDelegate,
+                                   LocationBarDelegate,
                                    OmniboxPopupPositioner,
+                                   ToolbarAssistiveKeyboardDelegate,
                                    ToolbarFrameDelegate> {
   // Top-level view for web content.
   UIView* _webToolbar;
@@ -282,9 +278,9 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   // A hash of the state of the toolbar when the snapshot was taken.
   uint32_t _snapshotHash;
 
-  // View controller for displaying tab history when the user long presses the
-  // back or forward button. nil if not visible.
-  TabHistoryPopupController* _tabHistoryPopupController;
+#if defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_0)
+  API_AVAILABLE(ios(11.0)) DropAndNavigateInteraction* _dropInteraction;
+#endif
 
   // The current browser state.
   ios::ChromeBrowserState* _browserState;  // weak
@@ -514,10 +510,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
                            action:@selector(toolbarVoiceSearchButtonPressed:)
                  forControlEvents:UIControlEventTouchUpInside];
 
-    // Assign tags before calling -setUpButton, since only buttons with tags
-    // have -chromeExecuteCommand added as a target.
-    [_voiceSearchButton setTag:IDC_VOICE_SEARCH];
-
     [_webToolbar addSubview:_voiceSearchButton];
     [_webToolbar addSubview:_starButton];
     [_webToolbar addSubview:_stopButton];
@@ -680,6 +672,22 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   }
   [self.view setDelegate:self];
 
+  if (idiom == IPHONE_IDIOM) {
+    [[self stackButton] addTarget:dispatcher
+                           action:@selector(displayTabSwitcher)
+                 forControlEvents:UIControlEventTouchUpInside];
+  }
+
+#if defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_0)
+  if (DragAndDropIsEnabled()) {
+    if (@available(iOS 11, *)) {
+      _dropInteraction =
+          [[DropAndNavigateInteraction alloc] initWithDelegate:self];
+      [self.view addInteraction:_dropInteraction];
+    }
+  }
+#endif
+
   return self;
 }
 
@@ -692,7 +700,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 
 - (void)dealloc {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
-  [_tabHistoryPopupController setDelegate:nil];
 }
 
 #pragma mark -
@@ -827,65 +834,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   return _snapshot;
 }
 
-- (void)showTabHistoryPopupInView:(UIView*)view
-                        withItems:(const web::NavigationItemList&)items
-                   forBackHistory:(BOOL)isBackHistory {
-  if (_tabHistoryPopupController)
-    return;
-
-  base::RecordAction(UserMetricsAction("MobileToolbarShowTabHistoryMenu"));
-
-  UIButton* historyButton = isBackHistory ? _backButton : _forwardButton;
-  // Keep the button pressed by swapping the normal and highlighted images.
-  [self setImagesForNavButton:historyButton withTabHistoryVisible:YES];
-
-  // Set the origin for the tools popup to the leading side of the bottom of the
-  // pressed buttons.
-  CGRect buttonBounds = [historyButton.imageView bounds];
-  CGPoint origin = CGPointMake(CGRectGetLeadingEdge(buttonBounds),
-                               CGRectGetMaxY(buttonBounds));
-  CGPoint convertedOrigin =
-      [view convertPoint:origin fromView:historyButton.imageView];
-  _tabHistoryPopupController =
-      [[TabHistoryPopupController alloc] initWithOrigin:convertedOrigin
-                                             parentView:view
-                                                  items:items
-                                             dispatcher:self.dispatcher];
-  [_tabHistoryPopupController setDelegate:self];
-
-  // Fade in the popup and notify observers.
-  CGRect containerFrame = [[_tabHistoryPopupController popupContainer] frame];
-  CGPoint destination = CGPointMake(CGRectGetLeadingEdge(containerFrame),
-                                    CGRectGetMinY(containerFrame));
-  [_tabHistoryPopupController fadeInPopupFromSource:convertedOrigin
-                                      toDestination:destination];
-  [[NSNotificationCenter defaultCenter]
-      postNotificationName:kTabHistoryPopupWillShowNotification
-                    object:nil];
-}
-
-- (void)dismissTabHistoryPopup {
-  if (!_tabHistoryPopupController)
-    return;
-  __block TabHistoryPopupController* tempTHPC = _tabHistoryPopupController;
-  [tempTHPC containerView].userInteractionEnabled = NO;
-  [tempTHPC dismissAnimatedWithCompletion:^{
-    // Unpress the back/forward button by restoring the normal and
-    // highlighted images to their usual state.
-    [self setImagesForNavButton:_backButton withTabHistoryVisible:NO];
-    [self setImagesForNavButton:_forwardButton withTabHistoryVisible:NO];
-    // Reference tempTHPC so the block retains it.
-    tempTHPC = nil;
-  }];
-  // reset _tabHistoryPopupController to prevent -applicationDidEnterBackground
-  // from posting another kTabHistoryPopupWillHideNotification.
-  _tabHistoryPopupController = nil;
-
-  [[NSNotificationCenter defaultCenter]
-      postNotificationName:kTabHistoryPopupWillHideNotification
-                    object:nil];
-}
-
 - (BOOL)isOmniboxFirstResponder {
   return [_omniBox isFirstResponder];
 }
@@ -921,19 +869,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 
 #pragma mark -
 #pragma mark Overridden superclass methods.
-
-- (void)applicationDidEnterBackground:(NSNotification*)notify {
-  if (_tabHistoryPopupController) {
-    // Dismiss the tab history popup without animation.
-    [self setImagesForNavButton:_backButton withTabHistoryVisible:NO];
-    [self setImagesForNavButton:_forwardButton withTabHistoryVisible:NO];
-    _tabHistoryPopupController = nil;
-    [[NSNotificationCenter defaultCenter]
-        postNotificationName:kTabHistoryPopupWillHideNotification
-                      object:nil];
-  }
-  [super applicationDidEnterBackground:notify];
-}
 
 - (void)setUpButton:(UIButton*)button
        withImageEnum:(int)imageEnum
@@ -986,10 +921,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   } else {
     [super recordUserMetrics:sender];
   }
-}
-
-- (IBAction)stackButtonTouchDown:(id)sender {
-  [self.delegate prepareToEnterTabSwitcher:self];
 }
 
 - (BOOL)imageShouldFlipForRightToLeftLayoutDirection:(int)imageEnum {
@@ -1416,17 +1347,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 }
 
 #pragma mark -
-#pragma mark PopupMenuDelegate methods.
-
-- (void)dismissPopupMenu:(PopupMenuController*)controller {
-  if ([controller isKindOfClass:[TabHistoryPopupController class]] &&
-      (TabHistoryPopupController*)controller == _tabHistoryPopupController)
-    [self dismissTabHistoryPopup];
-  else
-    [super dismissPopupMenu:controller];
-}
-
-#pragma mark -
 #pragma mark ToolbarFrameDelegate methods.
 
 - (void)frameDidChangeFrame:(CGRect)newFrame fromFrame:(CGRect)oldFrame {
@@ -1451,7 +1371,7 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 }
 
 #pragma mark -
-#pragma mark QRScannerViewControllerDelegate methods.
+#pragma mark QRScanner Requirements.
 
 - (void)receiveQRScannerResult:(NSString*)result loadImmediately:(BOOL)load {
   DCHECK(result);
@@ -1496,6 +1416,44 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 - (void)keyPressed:(NSString*)title {
   NSString* text = [self updateTextForDotCom:title];
   [_omniBox insertTextWhileEditing:text];
+}
+
+#pragma mark - TabHistory Requirements
+
+- (CGPoint)originPointForToolbarButton:(ToolbarButtonType)toolbarButton {
+  UIButton* historyButton = toolbarButton ? _backButton : _forwardButton;
+
+  // Set the origin for the tools popup to the leading side of the bottom of the
+  // pressed buttons.
+  CGRect buttonBounds = [historyButton.imageView bounds];
+  CGPoint leadingBottomCorner = CGPointMake(CGRectGetLeadingEdge(buttonBounds),
+                                            CGRectGetMaxY(buttonBounds));
+  CGPoint origin = [historyButton.imageView convertPoint:leadingBottomCorner
+                                                  toView:historyButton.window];
+  return origin;
+}
+
+- (void)updateUIForTabHistoryPresentationFrom:(ToolbarButtonType)button {
+  UIButton* historyButton = button ? _backButton : _forwardButton;
+  // Keep the button pressed by swapping the normal and highlighted images.
+  [self setImagesForNavButton:historyButton withTabHistoryVisible:YES];
+}
+
+- (void)updateUIForTabHistoryWasDismissed {
+  [self setImagesForNavButton:_backButton withTabHistoryVisible:NO];
+  [self setImagesForNavButton:_forwardButton withTabHistoryVisible:NO];
+}
+
+#pragma mark -
+#pragma mark DropAndNavigateDelegate
+
+- (void)URLWasDropped:(GURL const&)gurl {
+  ui::PageTransition transition =
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+  [self.urlLoader loadURL:gurl
+                 referrer:web::Referrer()
+               transition:transition
+        rendererInitiated:NO];
 }
 
 #pragma mark -
@@ -1839,7 +1797,7 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 
 - (void)loadURLForQuery:(NSString*)query {
   GURL searchURL;
-  metrics::OmniboxInputType::Type type = AutocompleteInput::Parse(
+  metrics::OmniboxInputType type = AutocompleteInput::Parse(
       base::SysNSStringToUTF16(query), std::string(),
       AutocompleteSchemeClassifierImpl(), nullptr, nullptr, &searchURL);
   if (type != metrics::OmniboxInputType::URL || !searchURL.is_valid()) {
@@ -1864,11 +1822,7 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   DCHECK(ios::GetChromeBrowserProvider()
              ->GetVoiceSearchProvider()
              ->IsVoiceSearchEnabled());
-  // Use a GenericChromeCommand because |sender| already has a tag set for a
-  // different command.
-  GenericChromeCommand* command =
-      [[GenericChromeCommand alloc] initWithTag:IDC_PRELOAD_VOICE_SEARCH];
-  [sender chromeExecuteCommand:command];
+  [self.dispatcher preloadVoiceSearch];
 }
 
 - (CGFloat)omniboxLeading {

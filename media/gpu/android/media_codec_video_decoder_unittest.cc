@@ -3,13 +3,11 @@
 // found in the LICENSE file.
 
 #include "media/gpu/android/media_codec_video_decoder.h"
-#include "base/android/jni_android.h"
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_task_environment.h"
 #include "media/base/android/media_codec_util.h"
-#include "media/base/android/media_jni_registrar.h"
 #include "media/base/android/mock_android_overlay.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/gmock_callback_support.h"
@@ -22,17 +20,20 @@
 #include "media/gpu/mock_surface_texture_gl_owner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using testing::_;
 using testing::InvokeWithoutArgs;
 using testing::NiceMock;
 using testing::NotNull;
 using testing::Return;
 using testing::SaveArg;
+using testing::_;
 
 namespace media {
 namespace {
 
 void OutputCb(const scoped_refptr<VideoFrame>& frame) {}
+
+void OutputWithReleaseMailboxCb(VideoFrameFactory::ReleaseMailboxCB release_cb,
+                                const scoped_refptr<VideoFrame>& frame) {}
 
 gpu::GpuCommandBufferStub* GetStubCb() {
   return nullptr;
@@ -51,16 +52,19 @@ class MockVideoFrameFactory : public VideoFrameFactory {
                     scoped_refptr<SurfaceTextureGLOwner> surface_texture,
                     base::TimeDelta timestamp,
                     gfx::Size natural_size,
-                    FrameCreatedCb frame_created_cb));
+                    OutputWithReleaseMailboxCB output_cb));
 
   void CreateVideoFrame(std::unique_ptr<CodecOutputBuffer> output_buffer,
                         scoped_refptr<SurfaceTextureGLOwner> surface_texture,
                         base::TimeDelta timestamp,
                         gfx::Size natural_size,
-                        FrameCreatedCb frame_created_cb) override {
+                        OutputWithReleaseMailboxCB output_cb) override {
     MockCreateVideoFrame(output_buffer.get(), surface_texture, timestamp,
-                         natural_size, frame_created_cb);
+                         natural_size, output_cb);
+    last_output_buffer_ = std::move(output_buffer);
   }
+
+  std::unique_ptr<CodecOutputBuffer> last_output_buffer_;
 };
 
 class MediaCodecVideoDecoderTest : public testing::Test {
@@ -68,9 +72,8 @@ class MediaCodecVideoDecoderTest : public testing::Test {
   MediaCodecVideoDecoderTest() = default;
 
   void SetUp() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    RegisterJni(env);
-
+    uint8_t data = 0;
+    fake_decoder_buffer_ = DecoderBuffer::CopyFrom(&data, 1);
     codec_allocator_ = base::MakeUnique<FakeCodecAllocator>();
     device_info_ = base::MakeUnique<NiceMock<MockDeviceInfo>>();
     auto surface_chooser = base::MakeUnique<NiceMock<FakeSurfaceChooser>>();
@@ -89,7 +92,8 @@ class MediaCodecVideoDecoderTest : public testing::Test {
 
     mcvd_ = base::MakeUnique<MediaCodecVideoDecoder>(
         base::ThreadTaskRunnerHandle::Get(), base::Bind(&GetStubCb),
-        device_info_.get(), codec_allocator_.get(), std::move(surface_chooser),
+        base::Bind(&OutputWithReleaseMailboxCb), device_info_.get(),
+        codec_allocator_.get(), std::move(surface_chooser),
         std::move(video_frame_factory));
   }
 
@@ -105,10 +109,11 @@ class MediaCodecVideoDecoderTest : public testing::Test {
   }
 
   // Call Initialize() and Decode() to start lazy init. MCVD will be waiting for
-  // a codec.
-  MockAndroidOverlay* InitializeWithOverlay() {
-    Initialize(TestVideoConfig::NormalH264());
-    mcvd_->Decode(nullptr, decode_cb_.Get());
+  // a codec and have one decode pending.
+  MockAndroidOverlay* InitializeWithOverlay(
+      VideoDecoderConfig config = TestVideoConfig::Large(kCodecVP8)) {
+    Initialize(config);
+    mcvd_->Decode(fake_decoder_buffer_, decode_cb_.Get());
     auto overlay_ptr = base::MakeUnique<MockAndroidOverlay>();
     auto* overlay = overlay_ptr.get();
     surface_chooser_->ProvideOverlay(std::move(overlay_ptr));
@@ -116,24 +121,38 @@ class MediaCodecVideoDecoderTest : public testing::Test {
   }
 
   // Call Initialize() and Decode() to start lazy init. MCVD will be waiting for
-  // a codec.
-  void InitializeWithSurfaceTexture() {
-    Initialize(TestVideoConfig::NormalH264());
-    mcvd_->Decode(nullptr, decode_cb_.Get());
+  // a codec and have one decode pending.
+  void InitializeWithSurfaceTexture(
+      VideoDecoderConfig config = TestVideoConfig::Large(kCodecVP8)) {
+    Initialize(config);
+    mcvd_->Decode(fake_decoder_buffer_, decode_cb_.Get());
     surface_chooser_->ProvideSurfaceTexture();
   }
 
+  // Fully initializes MCVD and returns the codec it's configured with. MCVD
+  // will have one decode pending.
+  MockMediaCodecBridge* InitializeFully(
+      VideoDecoderConfig config = TestVideoConfig::Large(kCodecVP8)) {
+    InitializeWithSurfaceTexture(config);
+    return codec_allocator_->ProvideMockCodecAsync();
+  }
+
+  // Provide access to MCVD's private PumpCodec() to avoid trying to make its
+  // repeating task run in the test environment.
+  void PumpCodec() { mcvd_->PumpCodec(false); }
+
  protected:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  scoped_refptr<DecoderBuffer> fake_decoder_buffer_;
   std::unique_ptr<MockDeviceInfo> device_info_;
   std::unique_ptr<FakeCodecAllocator> codec_allocator_;
   FakeSurfaceChooser* surface_chooser_;
   MockSurfaceTextureGLOwner* surface_texture_;
   MockVideoFrameFactory* video_frame_factory_;
-  base::MockCallback<VideoDecoder::DecodeCB> decode_cb_;
+  NiceMock<base::MockCallback<VideoDecoder::DecodeCB>> decode_cb_;
 
-  // mcvd_ is last so it's destructed after its dependencies.
+  // mcvd_ is last so it's destructed first.
   std::unique_ptr<MediaCodecVideoDecoder> mcvd_;
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
 };
 
 TEST_F(MediaCodecVideoDecoderTest, DestructBeforeInitWorks) {
@@ -318,11 +337,10 @@ TEST_F(MediaCodecVideoDecoderTest, PumpCodecPerformsPendingSurfaceTransitions) {
   InitializeWithOverlay();
   auto* codec = codec_allocator_->ProvideMockCodecAsync();
 
-  // Set a pending surface transition and then call Decode() (which calls
-  // PumpCodec()).
+  // Set a pending surface transition and then call PumpCodec().
   surface_chooser_->ProvideSurfaceTexture();
   EXPECT_CALL(*codec, SetSurface(_)).WillOnce(Return(true));
-  mcvd_->Decode(nullptr, decode_cb_.Get());
+  PumpCodec();
 }
 
 TEST_F(MediaCodecVideoDecoderTest,
@@ -377,6 +395,144 @@ TEST_F(MediaCodecVideoDecoderTest,
   EXPECT_CALL(*codec, SetSurface(_)).Times(0);
   surface_chooser_->ProvideSurfaceTexture();
   mcvd_->Decode(nullptr, decode_cb_.Get());
+}
+
+TEST_F(MediaCodecVideoDecoderTest,
+       ResetBeforeCodecInitializedSucceedsImmediately) {
+  InitializeWithSurfaceTexture();
+  base::MockCallback<base::Closure> reset_cb;
+  EXPECT_CALL(reset_cb, Run());
+  mcvd_->Reset(reset_cb.Get());
+}
+
+TEST_F(MediaCodecVideoDecoderTest, ResetAbortsPendingDecodes) {
+  InitializeWithSurfaceTexture();
+  // One decode is now pending.
+  EXPECT_CALL(decode_cb_, Run(DecodeStatus::ABORTED));
+  mcvd_->Reset(base::Bind(&base::DoNothing));
+}
+
+TEST_F(MediaCodecVideoDecoderTest, ResetAbortsPendingEosDecode) {
+  // EOS is treated differently by MCVD. This verifies that it's also aborted.
+  auto* codec = InitializeFully();
+  base::MockCallback<VideoDecoder::DecodeCB> eos_decode_cb;
+  mcvd_->Decode(DecoderBuffer::CreateEOSBuffer(), eos_decode_cb.Get());
+
+  // Accept the two pending decodes.
+  codec->AcceptOneInput();
+  PumpCodec();
+  codec->AcceptOneInput(MockMediaCodecBridge::kEos);
+  PumpCodec();
+
+  EXPECT_CALL(eos_decode_cb, Run(DecodeStatus::ABORTED));
+  mcvd_->Reset(base::Bind(&base::DoNothing));
+}
+
+TEST_F(MediaCodecVideoDecoderTest, ResetDoesNotFlushAnAlreadyFlushedCodec) {
+  auto* codec = InitializeFully();
+
+  // The codec is still in the flushed state so Reset() doesn't need to flush.
+  EXPECT_CALL(*codec, Flush()).Times(0);
+  base::MockCallback<base::Closure> reset_cb;
+  EXPECT_CALL(reset_cb, Run());
+  mcvd_->Reset(reset_cb.Get());
+}
+
+TEST_F(MediaCodecVideoDecoderTest, ResetDrainsVP8CodecsBeforeFlushing) {
+  auto* codec = InitializeFully();
+  // Accept the first decode to transition out of the flushed state.
+  codec->AcceptOneInput();
+  PumpCodec();
+
+  // The reset should not complete immediately because the codec needs to be
+  // drained.
+  EXPECT_CALL(*codec, Flush()).Times(0);
+  base::MockCallback<base::Closure> reset_cb;
+  EXPECT_CALL(reset_cb, Run()).Times(0);
+  mcvd_->Reset(reset_cb.Get());
+
+  // The next input should be an EOS.
+  codec->AcceptOneInput(MockMediaCodecBridge::kEos);
+  PumpCodec();
+  testing::Mock::VerifyAndClearExpectations(codec);
+
+  // After the EOS is dequeued, the reset should complete.
+  EXPECT_CALL(reset_cb, Run());
+  codec->ProduceOneOutput(MockMediaCodecBridge::kEos);
+  PumpCodec();
+  testing::Mock::VerifyAndClearExpectations(&reset_cb);
+}
+
+TEST_F(MediaCodecVideoDecoderTest, ResetDoesNotDrainNonVp8Codecs) {
+  auto* codec = InitializeFully(TestVideoConfig::NormalH264());
+  // Accept the first decode to transition out of the flushed state.
+  codec->AcceptOneInput();
+  PumpCodec();
+
+  // The reset should complete immediately because the codec is not VP8 so
+  // it doesn't need draining.
+  EXPECT_CALL(*codec, Flush());
+  base::MockCallback<base::Closure> reset_cb;
+  EXPECT_CALL(reset_cb, Run());
+  mcvd_->Reset(reset_cb.Get());
+}
+
+TEST_F(MediaCodecVideoDecoderTest, DestructionCompletesPendingReset) {
+  auto* codec = InitializeFully();
+  // Accept the first decode to transition out of the flushed state.
+  codec->AcceptOneInput();
+  PumpCodec();
+
+  base::MockCallback<base::Closure> reset_cb;
+  EXPECT_CALL(reset_cb, Run()).Times(0);
+  mcvd_->Reset(reset_cb.Get());
+  EXPECT_CALL(reset_cb, Run());
+  mcvd_.reset();
+}
+
+TEST_F(MediaCodecVideoDecoderTest, CodecFlushIsDeferredAfterDraining) {
+  auto* codec = InitializeFully();
+  mcvd_->Decode(DecoderBuffer::CreateEOSBuffer(), decode_cb_.Get());
+
+  // Produce one output that VFF will hold onto.
+  codec->AcceptOneInput();
+  codec->ProduceOneOutput();
+  PumpCodec();
+
+  // Drain the codec.
+  EXPECT_CALL(*codec, Flush()).Times(0);
+  codec->AcceptOneInput(MockMediaCodecBridge::kEos);
+  codec->ProduceOneOutput(MockMediaCodecBridge::kEos);
+  PumpCodec();
+
+  // Create a pending decode. The codec should still not be flushed because
+  // there is an unrendered output buffer.
+  mcvd_->Decode(nullptr, decode_cb_.Get());
+  PumpCodec();
+
+  // Releasing the output buffer should now trigger a flush.
+  video_frame_factory_->last_output_buffer_.reset();
+  EXPECT_CALL(*codec, Flush());
+  PumpCodec();
+}
+
+TEST_F(MediaCodecVideoDecoderTest, EosDecodeCbIsRunAfterEosIsDequeued) {
+  auto* codec = InitializeFully();
+  base::MockCallback<VideoDecoder::DecodeCB> eos_decode_cb;
+  mcvd_->Decode(DecoderBuffer::CreateEOSBuffer(), eos_decode_cb.Get());
+
+  codec->AcceptOneInput();
+  PumpCodec();
+  EXPECT_CALL(eos_decode_cb, Run(_)).Times(0);
+  codec->AcceptOneInput(MockMediaCodecBridge::kEos);
+  PumpCodec();
+
+  EXPECT_CALL(eos_decode_cb, Run(_));
+  codec->ProduceOneOutput(MockMediaCodecBridge::kEos);
+  PumpCodec();
+  // eos_codec_cb is posted to the gpu task runner which is this thread's task
+  // runner in the test.
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace media

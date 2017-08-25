@@ -17,17 +17,22 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/devtools/devtools_session.h"
+#include "content/browser/devtools/protocol/devtools_download_manager_delegate.h"
+#include "content/browser/devtools/protocol/devtools_download_manager_helper.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/view_messages.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_manager.h"
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -45,7 +50,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_util.h"
 #include "ui/snapshot/snapshot.h"
-#include "url/gurl.h"
 
 namespace content {
 namespace protocol {
@@ -113,6 +117,21 @@ PageHandler::PageHandler(EmulationHandler* emulation_handler)
 }
 
 PageHandler::~PageHandler() {
+}
+
+// static
+std::vector<PageHandler*> PageHandler::EnabledForWebContents(
+    WebContentsImpl* contents) {
+  if (!DevToolsAgentHost::HasFor(contents))
+    return std::vector<PageHandler*>();
+  std::vector<PageHandler*> result;
+  for (auto* handler :
+       PageHandler::ForAgentHost(static_cast<DevToolsAgentHostImpl*>(
+           DevToolsAgentHost::GetOrCreateFor(contents).get()))) {
+    if (handler->enabled_)
+      result.push_back(handler);
+  }
+  return result;
 }
 
 // static
@@ -198,6 +217,45 @@ void PageHandler::DidDetachInterstitialPage() {
   frontend_->InterstitialHidden();
 }
 
+void PageHandler::DidRunJavaScriptDialog(
+    const GURL& url,
+    const base::string16& message,
+    const base::string16& default_prompt,
+    JavaScriptDialogType dialog_type,
+    const JavaScriptDialogCallback& callback) {
+  if (!enabled_)
+    return;
+  DCHECK(pending_dialog_.is_null());
+  pending_dialog_ = callback;
+  std::string type = Page::DialogTypeEnum::Alert;
+  if (dialog_type == JAVASCRIPT_DIALOG_TYPE_CONFIRM)
+    type = Page::DialogTypeEnum::Confirm;
+  if (dialog_type == JAVASCRIPT_DIALOG_TYPE_PROMPT)
+    type = Page::DialogTypeEnum::Prompt;
+  frontend_->JavascriptDialogOpening(url.spec(), base::UTF16ToUTF8(message),
+                                     type, base::UTF16ToUTF8(default_prompt));
+}
+
+void PageHandler::DidRunBeforeUnloadConfirm(
+    const GURL& url,
+    const JavaScriptDialogCallback& callback) {
+  if (!enabled_)
+    return;
+  DCHECK(pending_dialog_.is_null());
+  pending_dialog_ = callback;
+  frontend_->JavascriptDialogOpening(url.spec(), std::string(),
+                                     Page::DialogTypeEnum::Beforeunload,
+                                     std::string());
+}
+
+void PageHandler::DidCloseJavaScriptDialog(bool success,
+                                           const base::string16& user_input) {
+  if (!enabled_)
+    return;
+  pending_dialog_.Reset();
+  frontend_->JavascriptDialogClosed(success, base::UTF16ToUTF8(user_input));
+}
+
 Response PageHandler::Enable() {
   enabled_ = true;
   if (GetWebContents() && GetWebContents()->ShowingInterstitialPage())
@@ -208,6 +266,10 @@ Response PageHandler::Enable() {
 Response PageHandler::Disable() {
   enabled_ = false;
   screencast_enabled_ = false;
+  if (!pending_dialog_.is_null())
+    pending_dialog_.Run(false, base::string16());
+  pending_dialog_.Reset();
+  download_manager_delegate_ = nullptr;
   return Response::FallThrough();
 }
 
@@ -401,8 +463,10 @@ void PageHandler::CaptureScreenshot(
     if (!modified_params.view_size.height)
       emulated_view_size.set_height(original_view_size.height());
 
-    dpfactor =
-        modified_params.device_scale_factor / screen_info.device_scale_factor;
+    dpfactor = modified_params.device_scale_factor
+                   ? modified_params.device_scale_factor /
+                         screen_info.device_scale_factor
+                   : 1;
     // When clip is specified, we scale viewport via clip, otherwise we use
     // scale.
     modified_params.scale = clip.isJust() ? 1 : dpfactor;
@@ -511,23 +575,28 @@ Response PageHandler::ScreencastFrameAck(int session_id) {
 
 Response PageHandler::HandleJavaScriptDialog(bool accept,
                                              Maybe<std::string> prompt_text) {
-  base::string16 prompt_override;
-  if (prompt_text.isJust())
-    prompt_override = base::UTF8ToUTF16(prompt_text.fromJust());
-
   WebContentsImpl* web_contents = GetWebContents();
   if (!web_contents)
     return Response::InternalError();
 
+  if (pending_dialog_.is_null())
+    return Response::InvalidParams("No dialog is showing");
+
+  base::string16 prompt_override;
+  if (prompt_text.isJust())
+    prompt_override = base::UTF8ToUTF16(prompt_text.fromJust());
+  pending_dialog_.Run(accept, prompt_override);
+
+  // Clean up the dialog UI if any.
   JavaScriptDialogManager* manager =
       web_contents->GetDelegate()->GetJavaScriptDialogManager(web_contents);
-  if (manager && manager->HandleJavaScriptDialog(
-          web_contents, accept,
-          prompt_text.isJust() ? &prompt_override : nullptr)) {
-    return Response::OK();
+  if (manager) {
+    manager->HandleJavaScriptDialog(
+        web_contents, accept,
+        prompt_text.isJust() ? &prompt_override : nullptr);
   }
 
-  return Response::Error("Could not handle JavaScript dialog");
+  return Response::OK();
 }
 
 Response PageHandler::RequestAppBanner() {
@@ -545,6 +614,47 @@ Response PageHandler::BringToFront() {
     return Response::OK();
   }
   return Response::InternalError();
+}
+
+Response PageHandler::SetDownloadBehavior(const std::string& behavior,
+                                          Maybe<std::string> download_path) {
+  WebContentsImpl* web_contents = GetWebContents();
+  if (!web_contents)
+    return Response::InternalError();
+
+  if (behavior == Page::SetDownloadBehavior::BehaviorEnum::Allow &&
+      !download_path.isJust())
+    return Response::Error("downloadPath not provided");
+
+  if (behavior == Page::SetDownloadBehavior::BehaviorEnum::Default) {
+    DevToolsDownloadManagerHelper::RemoveFromWebContents(web_contents);
+    download_manager_delegate_ = nullptr;
+    return Response::OK();
+  }
+
+  // Override download manager delegate.
+  content::BrowserContext* browser_context = web_contents->GetBrowserContext();
+  DCHECK(browser_context);
+  content::DownloadManager* download_manager =
+      content::BrowserContext::GetDownloadManager(browser_context);
+  download_manager_delegate_ =
+      DevToolsDownloadManagerDelegate::TakeOver(download_manager);
+
+  // Ensure that there is one helper attached. If there's already one, we reuse
+  // it.
+  DevToolsDownloadManagerHelper::CreateForWebContents(web_contents);
+  DevToolsDownloadManagerHelper* download_helper =
+      DevToolsDownloadManagerHelper::FromWebContents(web_contents);
+
+  download_helper->SetDownloadBehavior(
+      DevToolsDownloadManagerHelper::DownloadBehavior::DENY);
+  if (behavior == Page::SetDownloadBehavior::BehaviorEnum::Allow) {
+    download_helper->SetDownloadBehavior(
+        DevToolsDownloadManagerHelper::DownloadBehavior::ALLOW);
+    download_helper->SetDownloadPath(download_path.fromJust());
+  }
+
+  return Response::OK();
 }
 
 WebContentsImpl* PageHandler::GetWebContents() {
@@ -620,8 +730,9 @@ void PageHandler::ScreencastFrameCaptured(cc::CompositorFrameMetadata metadata,
     if (capture_retry_count_) {
       --capture_retry_count_;
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&PageHandler::InnerSwapCompositorFrame,
-                                weak_factory_.GetWeakPtr()),
+          FROM_HERE,
+          base::BindOnce(&PageHandler::InnerSwapCompositorFrame,
+                         weak_factory_.GetWeakPtr()),
           base::TimeDelta::FromMilliseconds(kFrameRetryDelayMs));
     }
     --frames_in_flight_;

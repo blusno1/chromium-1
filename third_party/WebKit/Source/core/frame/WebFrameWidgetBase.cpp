@@ -6,10 +6,10 @@
 
 #include "core/dom/UserGestureIndicator.h"
 #include "core/events/WebInputEventConversion.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/input/ContextMenuAllowedScope.h"
 #include "core/input/EventHandler.h"
 #include "core/page/ContextMenuController.h"
@@ -30,7 +30,7 @@ namespace {
 // Helper to get LocalFrame* from WebLocalFrame*.
 // TODO(dcheng): This should be moved into WebLocalFrame.
 LocalFrame* ToCoreFrame(WebLocalFrame* frame) {
-  return ToWebLocalFrameBase(frame)->GetFrame();
+  return ToWebLocalFrameImpl(frame)->GetFrame();
 }
 
 }  // namespace
@@ -225,8 +225,8 @@ WebPoint WebFrameWidgetBase::ViewportToRootFrame(
   return GetPage()->GetVisualViewport().ViewportToRootFrame(point_in_viewport);
 }
 
-WebViewBase* WebFrameWidgetBase::View() const {
-  return ToWebLocalFrameBase(LocalRoot())->ViewImpl();
+WebViewImpl* WebFrameWidgetBase::View() const {
+  return ToWebLocalFrameImpl(LocalRoot())->ViewImpl();
 }
 
 Page* WebFrameWidgetBase::GetPage() const {
@@ -268,7 +268,7 @@ void WebFrameWidgetBase::PointerLockMouseEvent(
   const WebMouseEvent& mouse_event =
       static_cast<const WebMouseEvent&>(input_event);
   WebMouseEvent transformed_event = TransformWebMouseEvent(
-      ToWebLocalFrameBase(LocalRoot())->GetFrameView(), mouse_event);
+      ToWebLocalFrameImpl(LocalRoot())->GetFrameView(), mouse_event);
 
   LocalFrame* focusedFrame = FocusedLocalFrameInWidget();
   if (focusedFrame) {
@@ -283,12 +283,13 @@ void WebFrameWidgetBase::PointerLockMouseEvent(
       event_type = EventTypeNames::mousedown;
       if (!GetPage() || !GetPage()->GetPointerLockController().GetElement())
         break;
-      gesture_indicator = WTF::WrapUnique(new UserGestureIndicator(
-          UserGestureToken::Create(&GetPage()
-                                        ->GetPointerLockController()
-                                        .GetElement()
-                                        ->GetDocument(),
-                                   UserGestureToken::kNewGesture)));
+      gesture_indicator =
+          LocalFrame::CreateUserGesture(GetPage()
+                                            ->GetPointerLockController()
+                                            .GetElement()
+                                            ->GetDocument()
+                                            .GetFrame(),
+                                        UserGestureToken::kNewGesture);
       pointer_lock_gesture_token_ = gesture_indicator->CurrentToken();
       break;
     case WebInputEvent::kMouseUp:

@@ -48,8 +48,6 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("Banner");
     case blink::kWebAXRoleBlockquote:
       return result.append("Blockquote");
-    case blink::kWebAXRoleBusyIndicator:
-      return result.append("BusyIndicator");
     case blink::kWebAXRoleButton:
       return result.append("Button");
     case blink::kWebAXRoleCanvas:
@@ -114,8 +112,6 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("Heading");
     case blink::kWebAXRoleIgnored:
       return result.append("Ignored");
-    case blink::kWebAXRoleImageMapLink:
-      return result.append("ImageMapLink");
     case blink::kWebAXRoleImageMap:
       return result.append("ImageMap");
     case blink::kWebAXRoleImage:
@@ -176,8 +172,6 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("None");
     case blink::kWebAXRoleNote:
       return result.append("Note");
-    case blink::kWebAXRoleOutline:
-      return result.append("Outline");
     case blink::kWebAXRoleParagraph:
       return result.append("Paragraph");
     case blink::kWebAXRolePopUpButton:
@@ -194,24 +188,16 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("RadioGroup");
     case blink::kWebAXRoleRegion:
       return result.append("Region");
-    case blink::kWebAXRoleRootWebArea:
-      return result.append("RootWebArea");
     case blink::kWebAXRoleRowHeader:
       return result.append("RowHeader");
     case blink::kWebAXRoleRow:
       return result.append("Row");
     case blink::kWebAXRoleRuby:
       return result.append("Ruby");
-    case blink::kWebAXRoleRuler:
-      return result.append("Ruler");
     case blink::kWebAXRoleSVGRoot:
       return result.append("SVGRoot");
-    case blink::kWebAXRoleScrollArea:
-      return result.append("ScrollArea");
     case blink::kWebAXRoleScrollBar:
       return result.append("ScrollBar");
-    case blink::kWebAXRoleSeamlessWebArea:
-      return result.append("SeamlessWebArea");
     case blink::kWebAXRoleSearch:
       return result.append("Search");
     case blink::kWebAXRoleSearchBox:
@@ -232,8 +218,6 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("Status");
     case blink::kWebAXRoleSwitch:
       return result.append("Switch");
-    case blink::kWebAXRoleTabGroup:
-      return result.append("TabGroup");
     case blink::kWebAXRoleTabList:
       return result.append("TabList");
     case blink::kWebAXRoleTabPanel:
@@ -268,8 +252,6 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("Video");
     case blink::kWebAXRoleWebArea:
       return result.append("WebArea");
-    case blink::kWebAXRoleWindow:
-      return result.append("Window");
     default:
       return result.append("Unknown");
   }
@@ -593,6 +575,7 @@ gin::ObjectTemplateBuilder WebAXObjectProxy::GetObjectTemplateBuilder(
       .SetProperty("isBusy", &WebAXObjectProxy::IsBusy)
       .SetProperty("isRequired", &WebAXObjectProxy::IsRequired)
       .SetProperty("isEditable", &WebAXObjectProxy::IsEditable)
+      .SetProperty("isEditableRoot", &WebAXObjectProxy::IsEditableRoot)
       .SetProperty("isRichlyEditable", &WebAXObjectProxy::IsRichlyEditable)
       .SetProperty("isFocused", &WebAXObjectProxy::IsFocused)
       .SetProperty("isFocusable", &WebAXObjectProxy::IsFocusable)
@@ -973,7 +956,10 @@ bool WebAXObjectProxy::IsAtomic() {
 
 bool WebAXObjectProxy::IsBusy() {
   accessibility_object_.UpdateLayoutAndCheckValidity();
-  return accessibility_object_.LiveRegionBusy();
+  SparseAttributeAdapter attribute_adapter;
+  accessibility_object_.GetSparseAXAttributes(attribute_adapter);
+  return attribute_adapter
+      .bool_attributes[blink::WebAXBoolAttribute::kAriaBusy];
 }
 
 std::string WebAXObjectProxy::Restriction() {
@@ -992,6 +978,11 @@ std::string WebAXObjectProxy::Restriction() {
 bool WebAXObjectProxy::IsRequired() {
   accessibility_object_.UpdateLayoutAndCheckValidity();
   return accessibility_object_.IsRequired();
+}
+
+bool WebAXObjectProxy::IsEditableRoot() {
+  accessibility_object_.UpdateLayoutAndCheckValidity();
+  return accessibility_object_.IsEditableRoot();
 }
 
 bool WebAXObjectProxy::IsEditable() {

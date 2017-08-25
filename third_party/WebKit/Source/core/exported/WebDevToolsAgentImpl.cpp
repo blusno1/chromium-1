@@ -39,7 +39,7 @@
 #include "core/CoreProbeSink.h"
 #include "core/events/WebInputEventConversion.h"
 #include "core/exported/WebSettingsImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
@@ -48,19 +48,20 @@
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorAnimationAgent.h"
 #include "core/inspector/InspectorApplicationCacheAgent.h"
+#include "core/inspector/InspectorAuditsAgent.h"
 #include "core/inspector/InspectorCSSAgent.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/InspectorDOMDebuggerAgent.h"
 #include "core/inspector/InspectorDOMSnapshotAgent.h"
 #include "core/inspector/InspectorEmulationAgent.h"
 #include "core/inspector/InspectorIOAgent.h"
-#include "core/inspector/InspectorInputAgent.h"
 #include "core/inspector/InspectorLayerTreeAgent.h"
 #include "core/inspector/InspectorLogAgent.h"
 #include "core/inspector/InspectorMemoryAgent.h"
 #include "core/inspector/InspectorNetworkAgent.h"
 #include "core/inspector/InspectorOverlayAgent.h"
 #include "core/inspector/InspectorPageAgent.h"
+#include "core/inspector/InspectorPerformanceAgent.h"
 #include "core/inspector/InspectorResourceContainer.h"
 #include "core/inspector/InspectorResourceContentLoader.h"
 #include "core/inspector/InspectorTaskRunner.h"
@@ -72,6 +73,7 @@
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/CrossThreadFunctional.h"
+#include "platform/LayoutTestSupport.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
@@ -162,7 +164,7 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
 
     // 1. Disable input events.
     WebFrameWidgetBase::SetIgnoreInputEvents(true);
-    for (const auto view : WebViewBase::AllInstances())
+    for (const auto view : WebViewImpl::AllInstances())
       view->GetChromeClient().NotifyPopupOpeningObservers();
 
     // 2. Notify embedder about pausing.
@@ -236,7 +238,7 @@ WebDevToolsAgentImpl* WebDevToolsAgentImpl::Create(
     return agent;
   }
 
-  WebViewBase* view = frame->ViewImpl();
+  WebViewImpl* view = frame->ViewImpl();
   WebDevToolsAgentImpl* agent = new WebDevToolsAgentImpl(frame, client, true);
   agent->LayerTreeViewChanged(view->LayerTreeView());
   return agent;
@@ -334,6 +336,8 @@ InspectorSession* WebDevToolsAgentImpl::InitializeSession(int session_id,
 
   session->Append(InspectorMemoryAgent::Create());
 
+  session->Append(InspectorPerformanceAgent::Create(inspected_frames_.Get()));
+
   session->Append(
       InspectorApplicationCacheAgent::Create(inspected_frames_.Get()));
 
@@ -348,8 +352,6 @@ InspectorSession* WebDevToolsAgentImpl::InitializeSession(int session_id,
 
   session->Append(
       new InspectorDOMDebuggerAgent(isolate, dom_agent, session->V8Session()));
-
-  session->Append(InspectorInputAgent::Create(inspected_frames_.Get()));
 
   InspectorPageAgent* page_agent = InspectorPageAgent::Create(
       inspected_frames_.Get(), this, resource_content_loader_.Get(),
@@ -368,6 +370,8 @@ InspectorSession* WebDevToolsAgentImpl::InitializeSession(int session_id,
   session->Append(overlay_agent);
 
   session->Append(new InspectorIOAgent(isolate, session->V8Session()));
+
+  session->Append(new InspectorAuditsAgent(network_agent));
 
   tracing_agent->SetLayerTreeId(layer_tree_id_);
   network_agent->SetHostId(host_id);
@@ -556,6 +560,10 @@ void WebDevToolsAgentImpl::SendProtocolMessage(int session_id,
                                                const String& response,
                                                const String& state) {
   DCHECK(Attached());
+  // Make tests more predictable by flushing all sessions before sending
+  // protocol response in any of them.
+  if (LayoutTestSupport::IsRunningLayoutTest() && call_id)
+    FlushProtocolNotifications();
   if (client_)
     client_->SendProtocolMessage(session_id, call_id, response, state);
 }

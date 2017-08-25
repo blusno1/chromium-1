@@ -372,7 +372,6 @@ void ResourceDispatcher::OnRequestComplete(
   // but the past attempt to change it seems to have caused crashes.
   // (crbug.com/547047)
   peer->OnCompletedRequest(request_complete_data.error_code,
-                           request_complete_data.was_ignored_by_handler,
                            request_complete_data.exists_in_cache,
                            renderer_completion_time,
                            request_complete_data.encoded_data_length,
@@ -473,8 +472,8 @@ void ResourceDispatcher::SetDefersLoading(int request_id, bool value) {
     FollowPendingRedirect(request_info);
 
     thread_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&ResourceDispatcher::FlushDeferredMessages,
-                              weak_factory_.GetWeakPtr(), request_id));
+        FROM_HERE, base::BindOnce(&ResourceDispatcher::FlushDeferredMessages,
+                                  weak_factory_.GetWeakPtr(), request_id));
   }
 }
 
@@ -586,26 +585,14 @@ void ResourceDispatcher::StartSync(
 
   SyncLoadResult result;
 
-  if (ipc_type == blink::WebURLRequest::LoadingIPCType::kMojo) {
-    // TODO(yzshen): There is no way to apply a throttle to sync loading. We
-    // could use async loading + sync handle watching to emulate this behavior.
-    // That may require to extend the bindings API to change the priority of
-    // messages. It would result in more messages during this blocking
-    // operation, but sync loading is discouraged anyway.
-    if (!url_loader_factory->SyncLoad(
-            routing_id, MakeRequestID(), *request, &result)) {
-      response->error_code = net::ERR_FAILED;
-      return;
-    }
-  } else {
-    IPC::SyncMessage* msg = new ResourceHostMsg_SyncLoad(
-        routing_id, MakeRequestID(), *request, &result);
+  DCHECK_NE(ipc_type, blink::WebURLRequest::LoadingIPCType::kMojo);
+  IPC::SyncMessage* msg = new ResourceHostMsg_SyncLoad(
+      routing_id, MakeRequestID(), *request, &result);
 
-    // NOTE: This may pump events (see RenderThread::Send).
-    if (!message_sender_->Send(msg)) {
-      response->error_code = net::ERR_FAILED;
-      return;
-    }
+  // NOTE: This may pump events (see RenderThread::Send).
+  if (!message_sender_->Send(msg)) {
+    response->error_code = net::ERR_FAILED;
+    return;
   }
 
   response->error_code = result.error_code;
@@ -629,6 +616,7 @@ int ResourceDispatcher::StartAsync(
     int routing_id,
     scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
     const url::Origin& frame_origin,
+    bool is_sync,
     std::unique_ptr<RequestPeer> peer,
     blink::WebURLRequest::LoadingIPCType ipc_type,
     mojom::URLLoaderFactory* url_loader_factory,
@@ -654,10 +642,10 @@ int ResourceDispatcher::StartAsync(
     pending_requests_[request_id]->url_loader_client =
         base::MakeUnique<URLLoaderClientImpl>(request_id, this, task_runner);
 
-    task_runner->PostTask(FROM_HERE,
-                          base::Bind(&ResourceDispatcher::ContinueForNavigation,
-                                     weak_factory_.GetWeakPtr(), request_id,
-                                     base::Passed(std::move(consumer_handle))));
+    task_runner->PostTask(
+        FROM_HERE, base::BindOnce(&ResourceDispatcher::ContinueForNavigation,
+                                  weak_factory_.GetWeakPtr(), request_id,
+                                  base::Passed(std::move(consumer_handle))));
 
     return request_id;
   }
@@ -700,6 +688,8 @@ int ResourceDispatcher::StartAsync(
       // MIME sniffing should be disabled for a request initiated by fetch().
       options |= mojom::kURLLoadOptionSniffMimeType;
     }
+    if (is_sync)
+      options |= mojom::kURLLoadOptionSynchronous;
 
     std::unique_ptr<ThrottlingURLLoader> url_loader =
         ThrottlingURLLoader::CreateLoaderAndStart(
@@ -828,7 +818,6 @@ void ResourceDispatcher::ContinueForNavigation(
   // TODO(kinuko): Fill this properly.
   ResourceRequestCompletionStatus completion_status;
   completion_status.error_code = net::OK;
-  completion_status.was_ignored_by_handler = false;
   completion_status.exists_in_cache = false;
   completion_status.completion_time = base::TimeTicks::Now();
   completion_status.encoded_data_length = -1;

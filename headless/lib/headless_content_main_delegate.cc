@@ -15,6 +15,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/crash/content/app/breakpad_linux.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/common/content_switches.h"
@@ -50,8 +51,10 @@ const int kTraceEventBrowserProcessSortIndex = -6;
 
 HeadlessContentMainDelegate* g_current_headless_content_main_delegate = nullptr;
 
+#if !defined(OS_FUCHSIA)
 base::LazyInstance<HeadlessCrashReporterClient>::Leaky g_headless_crash_client =
     LAZY_INSTANCE_INITIALIZER;
+#endif
 
 const char kLogFileName[] = "CHROME_LOG_FILE";
 }  // namespace
@@ -165,8 +168,14 @@ void HeadlessContentMainDelegate::InitLogging(
   DCHECK(success);
 }
 
+
 void HeadlessContentMainDelegate::InitCrashReporter(
     const base::CommandLine& command_line) {
+#if defined(OS_FUCHSIA)
+  // TODO(fuchsia): Implement this when crash reporting/Breakpad are available
+  // in Fuchsia. (crbug.com/753619)
+  NOTIMPLEMENTED();
+#else
   const std::string process_type =
       command_line.GetSwitchValueASCII(switches::kProcessType);
   crash_reporter::SetCrashReporterClient(g_headless_crash_client.Pointer());
@@ -187,9 +196,11 @@ void HeadlessContentMainDelegate::InitCrashReporter(
 // TODO(dvallet): Ideally we would also want to avoid this for component builds.
 #elif defined(OS_WIN) && !defined(CHROME_MULTIPLE_DLL)
   crash_reporter::InitializeCrashpadWithEmbeddedHandler(process_type.empty(),
-                                                        process_type);
+                                                        process_type, "");
 #endif  // defined(HEADLESS_USE_BREAKPAD)
+#endif  // defined(OS_FUCHSIA)
 }
+
 
 void HeadlessContentMainDelegate::PreSandboxStartup() {
   const base::CommandLine& command_line(
@@ -202,6 +213,7 @@ void HeadlessContentMainDelegate::PreSandboxStartup() {
   if (command_line.HasSwitch(switches::kEnableLogging))
     InitLogging(command_line);
 #endif  // defined(OS_WIN)
+
   InitCrashReporter(command_line);
   InitializeResourceBundle();
 }
@@ -257,11 +269,6 @@ HeadlessContentMainDelegate* HeadlessContentMainDelegate::GetInstance() {
 
 // static
 void HeadlessContentMainDelegate::InitializeResourceBundle() {
-  base::FilePath dir_module;
-  base::FilePath pak_file;
-  bool result = PathService::Get(base::DIR_MODULE, &dir_module);
-  DCHECK(result);
-
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   const std::string locale = command_line->GetSwitchValueASCII(switches::kLang);
   ui::ResourceBundle::InitSharedInstanceWithLocale(
@@ -273,21 +280,51 @@ void HeadlessContentMainDelegate::InitializeResourceBundle() {
           reinterpret_cast<const char*>(kHeadlessResourcePak.contents),
           kHeadlessResourcePak.length),
       ui::SCALE_FACTOR_NONE);
+
 #else
+
+  base::FilePath dir_module;
+  bool result = PathService::Get(base::DIR_MODULE, &dir_module);
+  DCHECK(result);
+
   // Try loading the headless library pak file first. If it doesn't exist (i.e.,
   // when we're running with the --headless switch), fall back to the browser's
   // resource pak.
-  pak_file = dir_module.Append(FILE_PATH_LITERAL("headless_lib.pak"));
-  if (!base::PathExists(pak_file))
-    pak_file = dir_module.Append(FILE_PATH_LITERAL("resources.pak"));
+  base::FilePath headless_pak =
+      dir_module.Append(FILE_PATH_LITERAL("headless_lib.pak"));
+  if (base::PathExists(headless_pak)) {
+    ResourceBundle::GetSharedInstance().AddDataPackFromPath(
+        headless_pak, ui::SCALE_FACTOR_NONE);
+    return;
+  }
+
+  // Otherwise, load resources.pak, chrome_100 and chrome_200.
+  base::FilePath resources_pak =
+      dir_module.Append(FILE_PATH_LITERAL("resources.pak"));
+  base::FilePath chrome_100_pak =
+      dir_module.Append(FILE_PATH_LITERAL("chrome_100_percent.pak"));
+  base::FilePath chrome_200_pak =
+      dir_module.Append(FILE_PATH_LITERAL("chrome_200_percent.pak"));
+
 #if defined(OS_MACOSX) && !defined(COMPONENT_BUILD)
   // In non component builds, check if fall back in Resources/ folder is
   // available.
-  if (!base::PathExists(pak_file))
-    pak_file = dir_module.Append(FILE_PATH_LITERAL("Resources/resources.pak"));
+  if (!base::PathExists(resources_pak)) {
+    resources_pak =
+        dir_module.Append(FILE_PATH_LITERAL("Resources/resources.pak"));
+    chrome_100_pak = dir_module.Append(
+        FILE_PATH_LITERAL("Resources/chrome_100_percent.pak"));
+    chrome_200_pak = dir_module.Append(
+        FILE_PATH_LITERAL("Resources/chrome_200_percent.pak"));
+  }
 #endif
+
   ResourceBundle::GetSharedInstance().AddDataPackFromPath(
-      pak_file, ui::SCALE_FACTOR_NONE);
+      resources_pak, ui::SCALE_FACTOR_NONE);
+  ResourceBundle::GetSharedInstance().AddDataPackFromPath(
+      chrome_100_pak, ui::SCALE_FACTOR_100P);
+  ResourceBundle::GetSharedInstance().AddDataPackFromPath(
+      chrome_200_pak, ui::SCALE_FACTOR_200P);
 #endif
 }
 

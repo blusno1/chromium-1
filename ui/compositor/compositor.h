@@ -20,7 +20,9 @@
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "components/viz/common/surfaces/surface_sequence.h"
+#include "components/viz/host/host_frame_sink_client.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/compositor_animation_observer.h"
 #include "ui/compositor/compositor_export.h"
@@ -182,17 +184,19 @@ class COMPOSITOR_EXPORT ContextFactory {
 // displayable form of pixels comprising a single widget's contents. It draws an
 // appropriately transformed texture for each transformed view in the widget's
 // view hierarchy.
-class COMPOSITOR_EXPORT Compositor
-    : NON_EXPORTED_BASE(public cc::LayerTreeHostClient),
-      NON_EXPORTED_BASE(public cc::LayerTreeHostSingleThreadClient),
-      NON_EXPORTED_BASE(public CompositorLockDelegate) {
+class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
+                                     public cc::LayerTreeHostSingleThreadClient,
+                                     public CompositorLockDelegate,
+                                     public viz::HostFrameSinkClient {
  public:
   Compositor(const viz::FrameSinkId& frame_sink_id,
              ui::ContextFactory* context_factory,
              ui::ContextFactoryPrivate* context_factory_private,
              scoped_refptr<base::SingleThreadTaskRunner> task_runner,
              bool enable_surface_synchronization,
-             bool external_begin_frames_enabled = false);
+             bool enable_pixel_canvas,
+             bool external_begin_frames_enabled = false,
+             bool force_software_compositor = false);
   ~Compositor() override;
 
   ui::ContextFactory* context_factory() { return context_factory_; }
@@ -231,6 +235,11 @@ class COMPOSITOR_EXPORT Compositor
   // compositing layers on.
   float device_scale_factor() const { return device_scale_factor_; }
 
+  // The color space of the device that this compositor is being displayed on.
+  const gfx::ColorSpace& output_color_space() const {
+    return output_color_space_;
+  }
+
   // Where possible, draws are scissored to a damage region calculated from
   // changes to layer properties.  This bypasses that and indicates that
   // the whole frame needs to be drawn.
@@ -247,7 +256,10 @@ class COMPOSITOR_EXPORT Compositor
   void SetLatencyInfo(const LatencyInfo& latency_info);
 
   // Sets the compositor's device scale factor and size.
-  void SetScaleAndSize(float scale, const gfx::Size& size_in_pixel);
+  void SetScaleAndSize(
+      float scale,
+      const gfx::Size& size_in_pixel,
+      const viz::LocalSurfaceId& local_surface_id = viz::LocalSurfaceId());
 
   // Set the output color profile into which this compositor should render.
   void SetDisplayColorSpace(const gfx::ColorSpace& color_space);
@@ -313,6 +325,8 @@ class COMPOSITOR_EXPORT Compositor
   // the compositor if the enable_external_begin_frames setting is true.
   void OnNeedsExternalBeginFrames(bool needs_begin_frames);
 
+  bool force_software_compositor() { return force_software_compositor_; }
+
   // Returns the main thread task runner this compositor uses. Users of the
   // compositor generally shouldn't use this.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner() const {
@@ -329,12 +343,9 @@ class COMPOSITOR_EXPORT Compositor
   void RemoveAnimationObserver(CompositorAnimationObserver* observer);
   bool HasAnimationObserver(const CompositorAnimationObserver* observer) const;
 
-  // Creates a compositor lock. If the timeout is null, then no timeout is used.
-  // If multiple locks exist simultaneously, the timeout behavior is as follows:
-  //   1. if allow_locks_to_extend_timeouts has been set, all locks time out at
-  //      the latest chronological timeout value provided;
-  //   2. otherwise, all locks time out at the time specified by the first lock
-  //      that was created with a non-zero timeout value.
+  // Creates a compositor lock. Returns NULL if it is not possible to lock at
+  // this time (i.e. we're waiting to complete a previous unlock). If the
+  // timeout is null, then no timeout is used.
   std::unique_ptr<CompositorLock> GetCompositorLock(
       CompositorLockClient* client,
       base::TimeDelta timeout =
@@ -381,6 +392,9 @@ class COMPOSITOR_EXPORT Compositor
   void DidSubmitCompositorFrame() override;
   void DidLoseLayerTreeFrameSink() override {}
 
+  // viz::HostFrameSinkClient implementation.
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
+
   bool IsLocked() { return !active_locks_.empty(); }
 
   void SetOutputIsSecure(bool output_is_secure);
@@ -399,6 +413,9 @@ class COMPOSITOR_EXPORT Compositor
   void set_allow_locks_to_extend_timeout(bool allowed) {
     allow_locks_to_extend_timeout_ = allowed;
   }
+
+  // If true, all paint commands are recorded at pixel size instead of DIP.
+  bool is_pixel_canvas() const { return is_pixel_canvas_; }
 
  private:
   friend class base::RefCounted<Compositor>;
@@ -447,6 +464,8 @@ class COMPOSITOR_EXPORT Compositor
   ExternalBeginFrameClient* external_begin_frame_client_ = nullptr;
   bool needs_external_begin_frames_ = false;
 
+  const bool force_software_compositor_;
+
   // The device scale factor of the monitor that this compositor is compositing
   // layers on.
   float device_scale_factor_ = 0.f;
@@ -464,6 +483,8 @@ class COMPOSITOR_EXPORT Compositor
   base::TimeTicks scheduled_timeout_;
   // If true, the |scheduled_timeout_| might be recalculated and extended.
   bool allow_locks_to_extend_timeout_;
+  // If true, all paint commands are recorded at pixel size instead of DIP.
+  const bool is_pixel_canvas_;
 
   base::WeakPtrFactory<Compositor> weak_ptr_factory_;
   base::WeakPtrFactory<Compositor> lock_timeout_weak_ptr_factory_;

@@ -52,10 +52,12 @@
 #include "core/probe/CoreProbes.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/Histogram.h"
+#include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/Threading.h"
 #include "platform/wtf/Vector.h"
+#include "public/web/WebSettings.h"
 
 namespace blink {
 namespace {
@@ -153,14 +155,8 @@ DEFINE_TRACE(EventTargetData) {
   visitor->Trace(event_listener_map);
 }
 
-DEFINE_TRACE_WRAPPERS(EventTarget) {
-  EventListenerIterator iterator(const_cast<EventTarget*>(this));
-  while (EventListener* listener = iterator.NextListener()) {
-    if (listener->GetType() != EventListener::kJSEventListenerType)
-      continue;
-    visitor->TraceWrappersWithManualWriteBarrier(
-        static_cast<V8AbstractEventListener*>(listener));
-  }
+DEFINE_TRACE_WRAPPERS(EventTargetData) {
+  visitor->TraceWrappers(event_listener_map);
 }
 
 EventTarget::EventTarget() {}
@@ -355,10 +351,6 @@ bool EventTarget::AddEventListenerInternal(
   bool added = EnsureEventTargetData().event_listener_map.Add(
       event_type, listener, options, &registered_listener);
   if (added) {
-    if (listener->GetType() == EventListener::kJSEventListenerType) {
-      ScriptWrappableVisitor::WriteBarrier(
-          this, static_cast<V8AbstractEventListener*>(listener));
-    }
     AddedEventListener(event_type, registered_listener);
   }
   return added;
@@ -833,5 +825,12 @@ void EventTarget::RemoveAllEventListeners() {
     }
   }
 }
+
+STATIC_ASSERT_ENUM(WebSettings::PassiveEventListenerDefault::kFalse,
+                   PassiveListenerDefault::kFalse);
+STATIC_ASSERT_ENUM(WebSettings::PassiveEventListenerDefault::kTrue,
+                   PassiveListenerDefault::kTrue);
+STATIC_ASSERT_ENUM(WebSettings::PassiveEventListenerDefault::kForceAllTrue,
+                   PassiveListenerDefault::kForceAllTrue);
 
 }  // namespace blink

@@ -209,6 +209,60 @@
       <message name="IDS_LOGIN_DEFAULT_USER_DESC_47" desc="Description of the default user icon with a picture of butterflies">
         Butterflies
       </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_48" desc="Description of the default user icon with a picture of a bird">
+        Bird
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_49" desc="Description of the default user icon with a picture of ramen">
+        Ramen
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_50" desc="Description of the default user icon with a picture of a tamagotchi">
+        Tamagotchi
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_51" desc="Description of the default user icon with a picture of a cheese">
+        Cheese
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_52" desc="Description of the default user icon with a picture of a football">
+        Football
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_53" desc="Description of the default user icon with a picture of a basketball">
+        Basketball
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_54" desc="Description of the default user icon with a picture of a vinyl record">
+        Vinyl record
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_55" desc="Description of the default user icon with a picture of sushi">
+        Sushi
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_56" desc="Description of the default user icon with a picture of a bike">
+        Bike
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_57" desc="Description of the default user icon with a picture of a pair of sunglasses">
+        Sunglasses
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_58" desc="Description of the default user icon with a picture of a pizza">
+        Pizza
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_59" desc="Description of the default user icon with a picture of a sandwich">
+        Sandwich
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_60" desc="Description of the default user icon with a picture of a cappuccino">
+        Cappuccino
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_61" desc="Description of the default user icon with a picture of an ice water">
+        Ice water
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_62" desc="Description of the default user icon with a picture of an ice cream">
+        Ice cream
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_63" desc="Description of the default user icon with a picture of onigiri">
+        Onigiri
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_64" desc="Description of the default user icon with a picture of a melon">
+        Melon
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_65" desc="Description of the default user icon with a picture of an avocado">
+        Avocado
+      </message>
 
       <!-- Attribution strings for stock user images, not translateable. -->
       <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR">
@@ -376,6 +430,23 @@
         http://www.magdawasiczek.pl
       </message>
       <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_33">
+      </message>
+
+      <!-- Generic device type names -->
+      <message name="IDS_CHROMEBASE_DEVICE_NAME" desc="The device name for a Chromebase (versus say Chromebox)">
+        Chromebase
+      </message>
+      <message name="IDS_CHROMEBIT_DEVICE_NAME" desc="The device name for a Chromebit (versus say Chromebox)">
+        Chromebit
+      </message>
+      <message name="IDS_CHROMEBOOK_DEVICE_NAME" desc="The device name for a Chromebook (versus say Chromebox)">
+        Chromebook
+      </message>
+      <message name="IDS_CHROMEBOX_DEVICE_NAME" desc="The device name for a Chromebox (versus say Chromebook)">
+        Chromebox
+      </message>
+      <message name="IDS_GENERIC_CHROMEOS_DEVICE_NAME" desc="The device name for a generic Chrome device">
+        Chrome device
       </message>
 
       <!-- Input method strings. -->

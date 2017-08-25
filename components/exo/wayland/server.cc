@@ -33,6 +33,7 @@
 #include <utility>
 
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "ash/shell.h"
 #include "base/bind.h"
@@ -222,11 +223,6 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasSecurityKey, false);
 // associated with window.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasBlendingKey, false);
 
-// A property key containing a boolean set to true whether the current
-// OnWindowActivated invocation should be ignored. The defualt is true
-// to ignore the activation event originated by creation.
-DEFINE_UI_CLASS_PROPERTY_KEY(bool, kIgnoreWindowActivated, true);
-
 // A property key containing a boolean set to true if the stylus_tool
 // object is associated with a window.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasStylusToolKey, false);
@@ -337,8 +333,36 @@ void surface_commit(wl_client* client, wl_resource* resource) {
 
 void surface_set_buffer_transform(wl_client* client,
                                   wl_resource* resource,
-                                  int transform) {
-  NOTIMPLEMENTED();
+                                  int32_t transform) {
+  Transform buffer_transform;
+  switch (transform) {
+    case WL_OUTPUT_TRANSFORM_NORMAL:
+      buffer_transform = Transform::NORMAL;
+      break;
+    case WL_OUTPUT_TRANSFORM_90:
+      buffer_transform = Transform::ROTATE_90;
+      break;
+    case WL_OUTPUT_TRANSFORM_180:
+      buffer_transform = Transform::ROTATE_180;
+      break;
+    case WL_OUTPUT_TRANSFORM_270:
+      buffer_transform = Transform::ROTATE_270;
+      break;
+    case WL_OUTPUT_TRANSFORM_FLIPPED:
+    case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+    case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+    case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+      NOTIMPLEMENTED();
+      return;
+    default:
+      wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_TRANSFORM,
+                             "buffer transform must be one of the values from "
+                             "the wl_output.transform enum ('%d' specified)",
+                             transform);
+      return;
+  }
+
+  GetUserDataAs<Surface>(resource)->SetBufferTransform(buffer_transform);
 }
 
 void surface_set_buffer_scale(wl_client* client,
@@ -1227,16 +1251,21 @@ void bind_shell(wl_client* client, void* data, uint32_t version, uint32_t id) {
 ////////////////////////////////////////////////////////////////////////////////
 // wl_output_interface:
 
+// Returns the transform that a compositor will apply to a surface to
+// compensate for the rotation of an output device.
 wl_output_transform OutputTransform(display::Display::Rotation rotation) {
+  // Note: |rotation| describes the counter clockwise rotation that a
+  // display's output is currently adjusted for, which is the inverse
+  // of what we need to return.
   switch (rotation) {
     case display::Display::ROTATE_0:
       return WL_OUTPUT_TRANSFORM_NORMAL;
     case display::Display::ROTATE_90:
-      return WL_OUTPUT_TRANSFORM_90;
+      return WL_OUTPUT_TRANSFORM_270;
     case display::Display::ROTATE_180:
       return WL_OUTPUT_TRANSFORM_180;
     case display::Display::ROTATE_270:
-      return WL_OUTPUT_TRANSFORM_270;
+      return WL_OUTPUT_TRANSFORM_90;
   }
   NOTREACHED();
   return WL_OUTPUT_TRANSFORM_NORMAL;
@@ -2047,6 +2076,15 @@ void remote_surface_set_window_geometry(wl_client* client,
       gfx::Rect(x, y, width, height));
 }
 
+void remote_surface_set_orientation(wl_client* client,
+                                    wl_resource* resource,
+                                    int32_t orientation) {
+  GetUserDataAs<ShellSurface>(resource)->SetOrientation(
+      orientation == ZCR_REMOTE_SURFACE_V1_ORIENTATION_PORTRAIT
+          ? Orientation::PORTRAIT
+          : Orientation::LANDSCAPE);
+}
+
 void remote_surface_set_scale(wl_client* client,
                               wl_resource* resource,
                               wl_fixed_t scale) {
@@ -2085,35 +2123,10 @@ void remote_surface_set_top_inset(wl_client* client,
   GetUserDataAs<ShellSurface>(resource)->SetTopInset(height);
 }
 
-// Helper class used to temporarily ignore window activation. Sets the
-// ignore window actiavated property to false when instance is destroyed.
-class ScopedIgnoreWindowActivated {
- public:
-  explicit ScopedIgnoreWindowActivated(ShellSurface* shell_surface)
-      : widget_(shell_surface->GetWidget()) {
-    if (widget_)
-      widget_->GetNativeWindow()->SetProperty(kIgnoreWindowActivated, true);
-  }
-  ~ScopedIgnoreWindowActivated() {
-    if (widget_)
-      widget_->GetNativeWindow()->SetProperty(kIgnoreWindowActivated, false);
-  }
-
- private:
-  views::Widget* const widget_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedIgnoreWindowActivated);
-};
-
 void remote_surface_activate(wl_client* client,
                              wl_resource* resource,
                              uint32_t serial) {
   ShellSurface* shell_surface = GetUserDataAs<ShellSurface>(resource);
-
-  // Activation on Aura is synchronous, so activation callbacks will be called
-  // before the flag is reset.
-  ScopedIgnoreWindowActivated scoped_ignore_window_activated(shell_surface);
-
   shell_surface->Activate();
 }
 
@@ -2197,6 +2210,16 @@ void remote_surface_move(wl_client* client, wl_resource* resource) {
   GetUserDataAs<ShellSurface>(resource)->Move();
 }
 
+void remote_surface_set_window_type(wl_client* client,
+                                    wl_resource* resource,
+                                    uint32_t type) {
+  if (type == ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_SYSTEM_UI) {
+    auto* widget = GetUserDataAs<ShellSurface>(resource)->GetWidget();
+    if (widget)
+      widget->GetNativeWindow()->SetProperty(ash::kShowInOverviewKey, false);
+  }
+}
+
 const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_destroy,
     remote_surface_set_app_id,
@@ -2221,7 +2244,9 @@ const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_set_always_on_top,
     remote_surface_unset_always_on_top,
     remote_surface_ack_configure,
-    remote_surface_move};
+    remote_surface_move,
+    remote_surface_set_orientation,
+    remote_surface_set_window_type};
 
 ////////////////////////////////////////////////////////////////////////////////
 // notification_surface_interface:
@@ -2321,16 +2346,6 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
   // Overridden from WMHelper::ActivationObserver:
   void OnWindowActivated(aura::Window* gained_active,
                          aura::Window* lost_active) override {
-    // If the origin of activation is Wayland client, then assume it's been
-    // already activated on the client side, so do not notify about the
-    // activation. It means that zcr_remote_shell_v1_send_activated is used
-    // only to notify about activations originating in Aura.
-    if (gained_active && ShellSurface::GetMainSurface(gained_active) &&
-        gained_active->GetProperty(kIgnoreWindowActivated)) {
-      gained_active->SetProperty(kIgnoreWindowActivated, false);
-      return;
-    }
-
     SendActivated(gained_active, lost_active);
   }
 
@@ -2341,6 +2356,22 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
         FROM_HERE, base::Bind(&WaylandRemoteShell::SendDisplayMetrics,
                               weak_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromMilliseconds(delay_ms));
+  }
+
+  // Returns the transform that a display's output is currently adjusted for.
+  wl_output_transform DisplayTransform(display::Display::Rotation rotation) {
+    switch (rotation) {
+      case display::Display::ROTATE_0:
+        return WL_OUTPUT_TRANSFORM_NORMAL;
+      case display::Display::ROTATE_90:
+        return WL_OUTPUT_TRANSFORM_90;
+      case display::Display::ROTATE_180:
+        return WL_OUTPUT_TRANSFORM_180;
+      case display::Display::ROTATE_270:
+        return WL_OUTPUT_TRANSFORM_270;
+    }
+    NOTREACHED();
+    return WL_OUTPUT_TRANSFORM_NORMAL;
   }
 
   void SendDisplayMetrics() {
@@ -2360,14 +2391,12 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
                 .device_scale_factor();
 
         zcr_remote_shell_v1_send_workspace(
-            remote_shell_resource_,
-            static_cast<uint32_t>(display.id() >> 32),
-            static_cast<uint32_t>(display.id()),
-            bounds.x(), bounds.y(), bounds.width(), bounds.height(),
-            insets.left(), insets.top(), insets.right(), insets.bottom(),
-            OutputTransform(display.rotation()),
-            wl_fixed_from_double(device_scale_factor),
-            display.IsInternal());
+            remote_shell_resource_, static_cast<uint32_t>(display.id() >> 32),
+            static_cast<uint32_t>(display.id()), bounds.x(), bounds.y(),
+            bounds.width(), bounds.height(), insets.left(), insets.top(),
+            insets.right(), insets.bottom(),
+            DisplayTransform(display.rotation()),
+            wl_fixed_from_double(device_scale_factor), display.IsInternal());
       }
 
       zcr_remote_shell_v1_send_configure(remote_shell_resource_, layout_mode_);
@@ -2377,10 +2406,9 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
     const gfx::Insets& insets = primary_display.GetWorkAreaInsets();
 
     zcr_remote_shell_v1_send_configuration_changed(
-        remote_shell_resource_,
-        primary_display.size().width(),
+        remote_shell_resource_, primary_display.size().width(),
         primary_display.size().height(),
-        OutputTransform(primary_display.rotation()),
+        DisplayTransform(primary_display.rotation()),
         wl_fixed_from_double(primary_display.device_scale_factor()),
         insets.left(), insets.top(), insets.right(), insets.bottom(),
         layout_mode_);
@@ -2574,7 +2602,7 @@ const struct zcr_remote_shell_v1_interface remote_shell_implementation = {
     remote_shell_destroy, remote_shell_get_remote_surface,
     remote_shell_get_notification_surface};
 
-const uint32_t remote_shell_version = 5;
+const uint32_t remote_shell_version = 7;
 
 void bind_remote_shell(wl_client* client,
                        void* data,
@@ -2833,9 +2861,11 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
 
   // Overridden from DataDeviceDelegate:
   void OnDataDeviceDestroying(DataDevice* device) override { delete this; }
-  class DataOffer* OnDataOffer(const std::vector<std::string>& mime_types,
-                               const base::flat_set<DndAction>& source_actions,
-                               DndAction dnd_action) override {
+  bool CanAcceptDataEventsForSurface(Surface* surface) override {
+    return surface &&
+           wl_resource_get_client(GetSurfaceResource(surface)) == client_;
+  }
+  DataOffer* OnDataOffer() override {
     wl_resource* data_offer_resource =
         wl_resource_create(client_, &wl_data_offer_interface, 1, 0);
     std::unique_ptr<DataOffer> data_offer = base::MakeUnique<DataOffer>(
@@ -2864,7 +2894,7 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
         wl_fixed_from_double(point.x()), wl_fixed_from_double(point.y()));
   }
   void OnDrop() override { wl_data_device_send_drop(data_device_resource_); }
-  void OnSelection(const class DataOffer& data_offer) override {
+  void OnSelection(const DataOffer& data_offer) override {
     wl_data_device_send_selection(data_device_resource_,
                                   GetDataOfferResource(&data_offer));
   }
@@ -2920,10 +2950,11 @@ void data_device_manager_get_data_device(wl_client* client,
                                          wl_resource* resource,
                                          uint32_t id,
                                          wl_resource* seat_resource) {
+  Display* display = GetUserDataAs<Display>(resource);
   wl_resource* data_device_resource =
       wl_resource_create(client, &wl_data_device_interface, 1, id);
   SetImplementation(data_device_resource, &data_device_implementation,
-                    base::MakeUnique<DataDevice>(new WaylandDataDeviceDelegate(
+                    display->CreateDataDevice(new WaylandDataDeviceDelegate(
                         client, data_device_resource)));
 }
 
@@ -2939,7 +2970,7 @@ void bind_data_device_manager(wl_client* client,
   wl_resource* resource =
       wl_resource_create(client, &wl_data_device_manager_interface, 1, id);
   wl_resource_set_implementation(resource, &data_device_manager_implementation,
-                                 nullptr, nullptr);
+                                 data, nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3093,7 +3124,7 @@ const struct wl_pointer_interface pointer_implementation = {pointer_set_cursor,
 class WaylandKeyboardDelegate
     : public KeyboardDelegate,
       public KeyboardObserver
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
     ,
       public chromeos::input_method::ImeKeyboard::Observer
 #endif
@@ -3102,7 +3133,7 @@ class WaylandKeyboardDelegate
   explicit WaylandKeyboardDelegate(wl_resource* keyboard_resource)
       : keyboard_resource_(keyboard_resource),
         xkb_context_(xkb_context_new(XKB_CONTEXT_NO_FLAGS)) {
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
     chromeos::input_method::ImeKeyboard* keyboard =
         chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
     if (keyboard) {
@@ -3113,7 +3144,7 @@ class WaylandKeyboardDelegate
     SendLayout(nullptr);
 #endif
   }
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
   ~WaylandKeyboardDelegate() override {
     chromeos::input_method::ImeKeyboard* keyboard =
         chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
@@ -3179,7 +3210,7 @@ class WaylandKeyboardDelegate
     wl_client_flush(client());
   }
 
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
   // Overridden from input_method::ImeKeyboard::Observer:
   void OnCapsLockChanged(bool enabled) override {}
   void OnLayoutChanging(const std::string& layout_name) override {
@@ -3224,8 +3255,7 @@ class WaylandKeyboardDelegate
     return xkb_modifiers;
   }
 
-
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
   // Send the named keyboard layout to the client.
   void SendNamedLayout(const std::string& layout_name) {
     std::string layout_id, layout_variant;

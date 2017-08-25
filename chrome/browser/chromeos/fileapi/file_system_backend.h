@@ -75,7 +75,6 @@ class FileSystemBackend : public storage::ExternalFileSystemBackend {
       std::unique_ptr<FileSystemBackendDelegate> arc_content_delegate,
       std::unique_ptr<FileSystemBackendDelegate>
           arc_documents_provider_delegate,
-      std::unique_ptr<FileSystemBackendDelegate> recent_delegate,
       scoped_refptr<storage::ExternalMountPoints> mount_points,
       storage::ExternalMountPoints* system_mount_points);
   ~FileSystemBackend() override;
@@ -94,7 +93,7 @@ class FileSystemBackend : public storage::ExternalFileSystemBackend {
   void Initialize(storage::FileSystemContext* context) override;
   void ResolveURL(const storage::FileSystemURL& url,
                   storage::OpenFileSystemMode mode,
-                  const OpenFileSystemCallback& callback) override;
+                  OpenFileSystemCallback callback) override;
   storage::AsyncFileUtil* GetAsyncFileUtil(
       storage::FileSystemType type) override;
   storage::WatcherManager* GetWatcherManager(
@@ -160,9 +159,6 @@ class FileSystemBackend : public storage::ExternalFileSystemBackend {
 
   // The delegate instance for the ARC documents provider related operations.
   std::unique_ptr<FileSystemBackendDelegate> arc_documents_provider_delegate_;
-
-  // The delegate instance for the Recent file system related operations.
-  std::unique_ptr<FileSystemBackendDelegate> recent_delegate_;
 
   // Mount points specific to the owning context (i.e. per-profile mount
   // points).

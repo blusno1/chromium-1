@@ -53,7 +53,6 @@ class Pasteboard;
 class SpellChecker;
 class StylePropertySet;
 class TextEvent;
-class TypingCommand;
 class UndoStack;
 class UndoStep;
 
@@ -79,7 +78,6 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   EditorClient& Client() const;
 
   CompositeEditCommand* LastEditCommand() { return last_edit_command_.Get(); }
-  TypingCommand* LastTypingCommandIfStillOpenForTyping() const;
 
   void HandleKeyboardEvent(KeyboardEvent*);
   bool HandleTextEvent(TextEvent*);
@@ -216,7 +214,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
 
   void Clear();
 
-  VisibleSelection SelectionForCommand(Event*);
+  SelectionInDOMTree SelectionForCommand(Event*);
 
   KillRing& GetKillRing() const { return *kill_ring_; }
 
@@ -355,7 +353,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
       const ScrollAlignment& = ScrollAlignment::kAlignCenterIfNeeded,
       RevealExtentOption = kDoNotRevealExtent);
   void ChangeSelectionAfterCommand(const SelectionInDOMTree&,
-                                   const SetSelectionData&);
+                                   const SetSelectionOptions&);
 
   SpellChecker& GetSpellChecker() const;
 

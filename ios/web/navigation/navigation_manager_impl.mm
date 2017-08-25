@@ -121,47 +121,134 @@ std::unique_ptr<NavigationItemImpl> NavigationManagerImpl::CreateNavigationItem(
     const Referrer& referrer,
     ui::PageTransition transition,
     NavigationInitiationType initiation_type) {
-  GURL loaded_url(url);
+  NavigationItem* last_committed_item = GetLastCommittedItem();
+  auto item = CreateNavigationItemWithRewriters(
+      url, referrer, transition, initiation_type,
+      last_committed_item ? last_committed_item->GetURL() : GURL::EmptyGURL(),
+      &transient_url_rewriters_);
+  RemoveTransientURLRewriters();
+  return item;
+}
 
-  bool url_was_rewritten = false;
-  if (!transient_url_rewriters_.empty()) {
-    url_was_rewritten = web::BrowserURLRewriter::RewriteURLWithWriters(
-        &loaded_url, browser_state_, transient_url_rewriters_);
+void NavigationManagerImpl::UpdatePendingItemUrl(const GURL& url) const {
+  // If there is no pending item, navigation is probably happening within the
+  // back forward history. Don't modify the item list.
+  NavigationItemImpl* pending_item = GetPendingItemImpl();
+  if (!pending_item || url == pending_item->GetURL())
+    return;
+
+  // UpdatePendingItemUrl is used to handle redirects after loading starts for
+  // the currenting pending item. No transient item should exists at this point.
+  DCHECK(!GetTransientItem());
+  pending_item->SetURL(url);
+  pending_item->SetVirtualURL(url);
+  // Redirects (3xx response code), or client side navigation must change POST
+  // requests to GETs.
+  pending_item->SetPostData(nil);
+  pending_item->ResetHttpRequestHeaders();
+}
+
+NavigationItemImpl* NavigationManagerImpl::GetCurrentItemImpl() const {
+  NavigationItemImpl* transient_item = GetTransientItemImpl();
+  if (transient_item)
+    return transient_item;
+
+  NavigationItemImpl* pending_item = GetPendingItemImpl();
+  if (pending_item)
+    return pending_item;
+
+  return GetLastCommittedItemImpl();
+}
+
+void NavigationManagerImpl::GoToIndex(int index) {
+  if (index < 0 || index > GetItemCount()) {
+    NOTREACHED();
+    return;
   }
 
-  if (!url_was_rewritten) {
-    web::BrowserURLRewriter::GetInstance()->RewriteURLIfNecessary(
-        &loaded_url, browser_state_);
+  if (!GetTransientItem()) {
+    delegate_->RecordPageStateInNavigationItem();
+  }
+  delegate_->ClearTransientContent();
+
+  // Notify delegate if the new navigation will use a different user agent.
+  UserAgentType to_item_user_agent_type =
+      GetItemAtIndex(index)->GetUserAgentType();
+  NavigationItem* pending_item = GetPendingItem();
+  NavigationItem* previous_item =
+      pending_item ? pending_item : GetLastCommittedItem();
+  UserAgentType previous_item_user_agent_type =
+      previous_item ? previous_item->GetUserAgentType() : UserAgentType::NONE;
+
+  if (to_item_user_agent_type != UserAgentType::NONE &&
+      to_item_user_agent_type != previous_item_user_agent_type) {
+    delegate_->WillChangeUserAgentType();
   }
 
-  if (initiation_type == web::NavigationInitiationType::RENDERER_INITIATED &&
-      loaded_url != url && web::GetWebClient()->IsAppSpecificURL(loaded_url)) {
-    const NavigationItem* last_committed_item = GetLastCommittedItem();
-    bool last_committed_url_is_app_specific =
-        last_committed_item &&
-        web::GetWebClient()->IsAppSpecificURL(last_committed_item->GetURL());
-    if (!last_committed_url_is_app_specific) {
-      // The URL should not be changed to app-specific URL if the load was
-      // renderer-initiated requested by non app-specific URL. Pages with
-      // app-specific urls have elevated previledges and should not be allowed
-      // to open app-specific URLs.
-      loaded_url = url;
+  FinishGoToIndex(index);
+}
+
+NavigationItem* NavigationManagerImpl::GetLastCommittedItem() const {
+  return GetLastCommittedItemImpl();
+}
+
+NavigationItem* NavigationManagerImpl::GetPendingItem() const {
+  return GetPendingItemImpl();
+}
+
+NavigationItem* NavigationManagerImpl::GetTransientItem() const {
+  return GetTransientItemImpl();
+}
+
+void NavigationManagerImpl::LoadURLWithParams(
+    const NavigationManager::WebLoadParams& params) {
+  DCHECK(!(params.transition_type & ui::PAGE_TRANSITION_FORWARD_BACK));
+  delegate_->ClearTransientContent();
+  delegate_->RecordPageStateInNavigationItem();
+
+  NavigationInitiationType initiation_type =
+      params.is_renderer_initiated
+          ? NavigationInitiationType::RENDERER_INITIATED
+          : NavigationInitiationType::USER_INITIATED;
+  AddPendingItem(params.url, params.referrer, params.transition_type,
+                 initiation_type, params.user_agent_override_option);
+
+  // Mark pending item as created from hash change if necessary. This is needed
+  // because window.hashchange message may not arrive on time.
+  NavigationItemImpl* pending_item = GetPendingItemImpl();
+  if (pending_item) {
+    NavigationItem* last_committed_item = GetLastCommittedItem();
+    GURL last_committed_url = last_committed_item
+                                  ? last_committed_item->GetVirtualURL()
+                                  : GURL::EmptyGURL();
+    GURL pending_url = pending_item->GetURL();
+    if (last_committed_url != pending_url &&
+        last_committed_url.EqualsIgnoringRef(pending_url)) {
+      pending_item->SetIsCreatedFromHashChange(true);
     }
   }
 
-  RemoveTransientURLRewriters();
-
-  auto item = base::MakeUnique<NavigationItemImpl>();
-  item->SetOriginalRequestURL(loaded_url);
-  item->SetURL(loaded_url);
-  item->SetReferrer(referrer);
-  item->SetTransitionType(transition);
-  item->SetNavigationInitiationType(initiation_type);
-  if (web::GetWebClient()->IsAppSpecificURL(loaded_url)) {
-    item->SetUserAgentType(web::UserAgentType::NONE);
+  // Add additional headers to the NavigationItem before loading it in the web
+  // view. This implementation must match CRWWebController's |currentNavItem|.
+  // However, to avoid introducing a GetCurrentItem() that is only used here,
+  // the logic in |currentNavItem| is inlined here with the small simplification
+  // since AddPendingItem() implies that any transient item would have been
+  // cleared.
+  DCHECK(!GetTransientItem());
+  NavigationItemImpl* added_item =
+      pending_item ? pending_item : GetLastCommittedItemImpl();
+  DCHECK(added_item);
+  if (params.extra_headers)
+    added_item->AddHttpRequestHeaders(params.extra_headers);
+  if (params.post_data) {
+    DCHECK([added_item->GetHttpRequestHeaders() objectForKey:@"Content-Type"])
+        << "Post data should have an associated content type";
+    added_item->SetPostData(params.post_data);
+    added_item->SetShouldSkipRepostFormConfirmation(true);
   }
 
-  return item;
+  delegate_->WillLoadCurrentItemWithUrl(params.url);
+  delegate_->LoadCurrentItem();
 }
 
 void NavigationManagerImpl::AddTransientURLRewriter(
@@ -197,6 +284,66 @@ void NavigationManagerImpl::Reload(ReloadType reload_type,
   }
 
   delegate_->Reload();
+}
+
+void NavigationManagerImpl::LoadIfNecessary() {
+  delegate_->LoadIfNecessary();
+}
+
+std::unique_ptr<NavigationItemImpl>
+NavigationManagerImpl::CreateNavigationItemWithRewriters(
+    const GURL& url,
+    const Referrer& referrer,
+    ui::PageTransition transition,
+    NavigationInitiationType initiation_type,
+    const GURL& previous_url,
+    const std::vector<BrowserURLRewriter::URLRewriter>* additional_rewriters)
+    const {
+  GURL loaded_url(url);
+
+  bool url_was_rewritten = false;
+  if (additional_rewriters && !additional_rewriters->empty()) {
+    url_was_rewritten = web::BrowserURLRewriter::RewriteURLWithWriters(
+        &loaded_url, browser_state_, *additional_rewriters);
+  }
+
+  if (!url_was_rewritten) {
+    web::BrowserURLRewriter::GetInstance()->RewriteURLIfNecessary(
+        &loaded_url, browser_state_);
+  }
+
+  if (initiation_type == web::NavigationInitiationType::RENDERER_INITIATED &&
+      loaded_url != url && web::GetWebClient()->IsAppSpecificURL(loaded_url) &&
+      !web::GetWebClient()->IsAppSpecificURL(previous_url)) {
+    // The URL should not be changed to app-specific URL if the load was
+    // renderer-initiated requested by non app-specific URL. Pages with
+    // app-specific urls have elevated previledges and should not be allowed
+    // to open app-specific URLs.
+    loaded_url = url;
+  }
+
+  auto item = base::MakeUnique<NavigationItemImpl>();
+  item->SetOriginalRequestURL(loaded_url);
+  item->SetURL(loaded_url);
+  item->SetReferrer(referrer);
+  item->SetTransitionType(transition);
+  item->SetNavigationInitiationType(initiation_type);
+  if (web::GetWebClient()->IsAppSpecificURL(loaded_url)) {
+    item->SetUserAgentType(web::UserAgentType::NONE);
+  }
+
+  return item;
+}
+
+NavigationItem* NavigationManagerImpl::GetLastCommittedNonAppSpecificItem()
+    const {
+  WebClient* client = GetWebClient();
+  for (int index = GetLastCommittedItemIndex(); index >= 0; index--) {
+    NavigationItem* item = GetItemAtIndex(index);
+    if (!client->IsAppSpecificURL(item->GetVirtualURL()))
+      return item;
+  }
+  return nullptr;
 }
 
 }  // namespace web

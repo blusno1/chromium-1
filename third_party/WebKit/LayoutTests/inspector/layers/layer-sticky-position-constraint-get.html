@@ -3,16 +3,14 @@
 <script src="../../http/tests/inspector/inspector-test.js"></script>
 <script src="../../http/tests/inspector/layers-test.js"></script>
 <script>
-function test()
-{
-    function onGotLayers()
-    {
-      InspectorTest.addResult("Sticky position constraint");
-      InspectorTest.dumpModelStickyPositionConstraint();
-      InspectorTest.completeTest();
-    }
+function test() {
+  function onGotLayers() {
+    TestRunner.addResult('Sticky position constraint');
+    LayersTestRunner.dumpModelStickyPositionConstraint();
+    TestRunner.completeTest();
+  }
 
-    InspectorTest.requestLayers(onGotLayers);
+  LayersTestRunner.requestLayers(onGotLayers);
 }
 </script>
 <style>

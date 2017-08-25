@@ -258,8 +258,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
           'back', this.onBackButtonClicked_.bind(this, null));
 
       $('signin-back-button')
-          .addEventListener(
-              'click', this.onBackButtonClicked_.bind(this, true));
+          .addEventListener('tap', this.onBackButtonClicked_.bind(this, true));
       $('offline-gaia')
           .addEventListener('offline-gaia-cancel', this.cancel.bind(this));
 
@@ -568,10 +567,26 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       Oobe.getInstance().headerHidden = false;
 
       // Re-enable navigation in case it was disabled before refresh.
-      this.navigation_.disabled = false;
+      this.navigationDisabled_ = false;
 
       this.lastBackMessageValue_ = false;
       this.updateControlsState();
+    },
+
+    get navigationDisabled_() {
+      return this.navigation_.disabled;
+    },
+
+    set navigationDisabled_(value) {
+      this.navigation_.disabled = value;
+
+      if (value)
+        $('navigation-buttons').setAttribute('disabled', null);
+      else
+        $('navigation-buttons').removeAttribute('disabled');
+
+      if ($('signin-back-button'))
+        $('signin-back-button').disabled = value;
     },
 
     getSigninFrame_: function() {
@@ -664,7 +679,8 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
           (this.screenMode_ == ScreenMode.SAML_INTERSTITIAL);
       params.menuGuestMode = data.guestSignin;
       params.menuKeyboardOptions = false;
-      params.menuEnterpriseEnrollment = true;
+      params.menuEnterpriseEnrollment =
+          !(data.enterpriseManagedDevice || data.hasDeviceOwner);
 
       this.gaiaAuthParams_ = params;
 
@@ -774,6 +790,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
 
       this.classList.toggle('full-width', isSAML);
       $('saml-notice-container').hidden = !isSAML;
+      this.classList.toggle('saml', isSAML);
 
       if (Oobe.getInstance().currentScreen === this) {
         Oobe.getInstance().updateScreenSize(this);
@@ -804,7 +821,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
      * @private
      */
     onDialogShown_: function() {
-      this.navigation_.disabled = true;
+      this.navigationDisabled_ = true;
     },
 
     /**
@@ -812,7 +829,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
      * @private
      */
     onDialogHidden_: function() {
-      this.navigation_.disabled = false;
+      this.navigationDisabled_ = false;
     },
 
     /**
@@ -1178,6 +1195,11 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
         var isManaged = opt_data && opt_data.enterpriseManaged;
         $('gaia-whitelist-error').textContent = loadTimeData.getValue(
             isManaged ? 'whitelistErrorEnterprise' : 'whitelistErrorConsumer');
+        // To make animations correct, we need to make sure Gaia is completely
+        // reloaded. Otherwise ChromeOS overlays hide and Gaia page is shown
+        // somewhere in the middle of animations.
+        if (this.screenMode_ == ScreenMode.DEFAULT)
+          this.gaiaAuthHost_.resetWebview();
       }
 
       this.classList.toggle('whitelist-error', show);
@@ -1197,6 +1219,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       var adAuthUI = this.getSigninFrame_();
       adAuthUI.setUser(username);
       adAuthUI.setInvalid(errorState);
+      this.authCompleted_ = false;
       this.loading = false;
       Oobe.getInstance().headerHidden = false;
     }

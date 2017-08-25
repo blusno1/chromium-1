@@ -190,6 +190,7 @@ dev_list="\
   libxss-dev
   libxt-dev
   libxtst-dev
+  locales
   openbox
   patch
   perl
@@ -208,6 +209,7 @@ dev_list="\
   subversion
   ttf-dejavu-core
   wdiff
+  x11-utils
   xcompmgr
   zip
   $chromeos_dev_list

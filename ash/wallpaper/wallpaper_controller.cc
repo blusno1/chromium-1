@@ -9,6 +9,9 @@
 
 #include "ash/ash_switches.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/login/ui/login_constants.h"
+#include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
@@ -22,8 +25,12 @@
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/values.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/wallpaper/wallpaper_color_calculator.h"
 #include "components/wallpaper/wallpaper_color_profile.h"
+#include "components/wallpaper/wallpaper_manager_base.h"
 #include "components/wallpaper/wallpaper_resizer.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
@@ -46,6 +53,49 @@ constexpr int kWallpaperReloadDelayMs = 100;
 
 // How long to wait for resizing of the the wallpaper.
 constexpr int kCompositorLockTimeoutMs = 750;
+
+// Caches color calculation results in local state pref service.
+void CacheProminentColors(const std::vector<SkColor>& colors,
+                          const std::string& current_location) {
+  // Local state can be null in tests.
+  // TODO(crbug.com/751191): Remove the check for Mash.
+  if (Shell::GetAshConfig() == Config::MASH ||
+      !Shell::Get()->GetLocalStatePrefService()) {
+    return;
+  }
+  DictionaryPrefUpdate wallpaper_colors_update(
+      Shell::Get()->GetLocalStatePrefService(), prefs::kWallpaperColors);
+  auto wallpaper_colors = base::MakeUnique<base::ListValue>();
+  for (SkColor color : colors)
+    wallpaper_colors->AppendDouble(static_cast<double>(color));
+  wallpaper_colors_update->SetWithoutPathExpansion(current_location,
+                                                   std::move(wallpaper_colors));
+}
+
+// Gets prominent color cache from local state pref service. Returns an empty
+// value if cache is not available.
+base::Optional<std::vector<SkColor>> GetCachedColors(
+    const std::string& current_location) {
+  base::Optional<std::vector<SkColor>> cached_colors_out;
+  const base::ListValue* prominent_colors = nullptr;
+  // Local state can be null in tests.
+  // TODO(crbug.com/751191): Remove the check for Mash.
+  if (Shell::GetAshConfig() == Config::MASH ||
+      !Shell::Get()->GetLocalStatePrefService() ||
+      !Shell::Get()
+           ->GetLocalStatePrefService()
+           ->GetDictionary(prefs::kWallpaperColors)
+           ->GetListWithoutPathExpansion(current_location, &prominent_colors)) {
+    return cached_colors_out;
+  }
+  cached_colors_out = std::vector<SkColor>();
+  for (base::ListValue::const_iterator iter = prominent_colors->begin();
+       iter != prominent_colors->end(); ++iter) {
+    cached_colors_out.value().push_back(
+        static_cast<SkColor>(iter->GetDouble()));
+  }
+  return cached_colors_out;
+}
 
 // Returns true if a color should be extracted from the wallpaper based on the
 // command kAshShelfColor line arg.
@@ -136,6 +186,12 @@ WallpaperController::~WallpaperController() {
   Shell::Get()->RemoveShellObserver(this);
 }
 
+// static
+void WallpaperController::RegisterLocalStatePrefs(
+    PrefRegistrySimple* registry) {
+  registry->RegisterDictionaryPref(prefs::kWallpaperColors);
+}
+
 void WallpaperController::BindRequest(
     mojom::WallpaperControllerRequest request) {
   bindings_.AddBinding(this, std::move(request));
@@ -174,8 +230,10 @@ wallpaper::WallpaperLayout WallpaperController::GetWallpaperLayout() const {
   return wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED;
 }
 
-void WallpaperController::SetWallpaperImage(const gfx::ImageSkia& image,
-                                            wallpaper::WallpaperLayout layout) {
+void WallpaperController::SetWallpaperImage(
+    const gfx::ImageSkia& image,
+    const wallpaper::WallpaperInfo& info) {
+  wallpaper::WallpaperLayout layout = info.layout;
   VLOG(1) << "SetWallpaper: image_id="
           << wallpaper::WallpaperResizer::GetImageId(image)
           << " layout=" << layout;
@@ -185,6 +243,12 @@ void WallpaperController::SetWallpaperImage(const gfx::ImageSkia& image,
     return;
   }
 
+  current_location_ = info.location;
+  // Cancel any in-flight color calculation because we have a new wallpaper.
+  if (color_calculator_) {
+    color_calculator_->RemoveObserver(this);
+    color_calculator_.reset();
+  }
   current_wallpaper_.reset(new wallpaper::WallpaperResizer(
       image, GetMaxDisplaySizeInNative(), layout, sequenced_task_runner_));
   current_wallpaper_->AddObserver(this);
@@ -238,6 +302,19 @@ void WallpaperController::OnRootWindowAdded(aura::Window* root_window) {
 void WallpaperController::OnSessionStateChanged(
     session_manager::SessionState state) {
   CalculateWallpaperColors();
+
+  // The wallpaper may be dimmed/blurred based on session state. The color of
+  // the dimming overlay depends on the prominent color cached from a previous
+  // calculation, or a default color if cache is not available. It should never
+  // depend on any in-flight color calculation.
+  if (wallpaper_mode_ == WALLPAPER_IMAGE &&
+      (state == session_manager::SessionState::ACTIVE ||
+       state == session_manager::SessionState::LOCKED ||
+       state == session_manager::SessionState::LOGIN_SECONDARY)) {
+    // TODO(crbug.com/753518): Reuse the existing WallpaperWidgetController for
+    // dimming/blur purpose.
+    InstallDesktopControllerForAllWindows();
+  }
 
   if (state == session_manager::SessionState::ACTIVE)
     MoveToUnlockedContainer();
@@ -309,11 +386,11 @@ void WallpaperController::SetWallpaperPicker(mojom::WallpaperPickerPtr picker) {
 }
 
 void WallpaperController::SetWallpaper(const SkBitmap& wallpaper,
-                                       wallpaper::WallpaperLayout layout) {
+                                       const wallpaper::WallpaperInfo& info) {
   if (wallpaper.isNull())
     return;
 
-  SetWallpaperImage(gfx::ImageSkia::CreateFrom1xBitmap(wallpaper), layout);
+  SetWallpaperImage(gfx::ImageSkia::CreateFrom1xBitmap(wallpaper), info);
 }
 
 void WallpaperController::GetWallpaperColors(
@@ -329,6 +406,8 @@ void WallpaperController::OnWallpaperResized() {
 void WallpaperController::OnColorCalculationComplete() {
   const std::vector<SkColor> colors = color_calculator_->prominent_colors();
   color_calculator_.reset();
+  if (!current_location_.empty())
+    CacheProminentColors(colors, current_location_);
   SetProminentColors(colors);
 }
 
@@ -346,6 +425,9 @@ void WallpaperController::InstallDesktopController(aura::Window* root_window) {
       NOTREACHED();
       return;
   }
+
+  if (Shell::Get()->session_controller()->IsUserSessionBlocked())
+    component->SetWallpaperBlur(login_constants::kBlurSigma);
 
   RootWindowController* controller =
       RootWindowController::ForWindow(root_window);
@@ -418,6 +500,18 @@ void WallpaperController::CalculateWallpaperColors() {
     color_calculator_.reset();
   }
 
+  if (!current_location_.empty()) {
+    base::Optional<std::vector<SkColor>> cached_colors =
+        GetCachedColors(current_location_);
+    if (cached_colors.has_value()) {
+      SetProminentColors(cached_colors.value());
+      return;
+    }
+  }
+
+  // Color calculation is only allowed during an active session for performance
+  // reasons. Observers outside an active session are notified of the cache, or
+  // an invalid color if a previous calculation during active session failed.
   if (!ShouldCalculateColors()) {
     SetProminentColors(
         std::vector<SkColor>(color_profiles_.size(), kInvalidColor));

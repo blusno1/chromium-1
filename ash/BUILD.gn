@@ -13,11 +13,6 @@ assert(is_chromeos)
 assert(use_aura)
 assert(enable_hidpi)
 
-# X11 CrOS is deprecated and will be deleted soon, see https://crbug.com/671355.
-# Make sure no one is building that configuration anymore.
-# TODO(kylechar): Remove this comment when X11 CrOS code has been removed.
-assert(use_ozone)
-
 component("ash") {
   sources = [
     "accelerators/accelerator_commands.cc",
@@ -130,6 +125,8 @@ component("ash") {
     "drag_drop/drag_drop_tracker.h",
     "drag_drop/drag_image_view.cc",
     "drag_drop/drag_image_view.h",
+    "fast_ink/fast_ink_pointer_controller.cc",
+    "fast_ink/fast_ink_pointer_controller.h",
     "fast_ink/fast_ink_points.cc",
     "fast_ink/fast_ink_points.h",
     "fast_ink/fast_ink_view.cc",
@@ -182,8 +179,6 @@ component("ash") {
     "host/ash_window_tree_host_platform.h",
     "host/ash_window_tree_host_unified.cc",
     "host/ash_window_tree_host_unified.h",
-    "host/ash_window_tree_host_x11.cc",
-    "host/ash_window_tree_host_x11.h",
     "host/root_window_transformer.h",
     "host/transformer_helper.cc",
     "host/transformer_helper.h",
@@ -217,6 +212,7 @@ component("ash") {
     "login/ui/lock_window.h",
     "login/ui/login_auth_user_view.cc",
     "login/ui/login_auth_user_view.h",
+    "login/ui/login_constants.h",
     "login/ui/login_data_dispatcher.cc",
     "login/ui/login_data_dispatcher.h",
     "login/ui/login_password_view.cc",
@@ -225,6 +221,10 @@ component("ash") {
     "login/ui/login_pin_view.h",
     "login/ui/login_user_view.cc",
     "login/ui/login_user_view.h",
+    "login/ui/pin_keyboard_animation.cc",
+    "login/ui/pin_keyboard_animation.h",
+    "login/ui/user_switch_flip_animation.cc",
+    "login/ui/user_switch_flip_animation.h",
     "login_status.h",
     "magnifier/magnification_controller.cc",
     "magnifier/magnification_controller.h",
@@ -287,8 +287,6 @@ component("ash") {
     "shelf/overflow_button.h",
     "shelf/shelf.cc",
     "shelf/shelf.h",
-    "shelf/shelf_alignment_menu.cc",
-    "shelf/shelf_alignment_menu.h",
     "shelf/shelf_application_menu_model.cc",
     "shelf/shelf_application_menu_model.h",
     "shelf/shelf_background_animator.cc",
@@ -301,6 +299,8 @@ component("ash") {
     "shelf/shelf_button_pressed_metric_tracker.cc",
     "shelf/shelf_button_pressed_metric_tracker.h",
     "shelf/shelf_constants.h",
+    "shelf/shelf_context_menu_model.cc",
+    "shelf/shelf_context_menu_model.h",
     "shelf/shelf_controller.cc",
     "shelf/shelf_controller.h",
     "shelf/shelf_layout_manager.cc",
@@ -367,8 +367,6 @@ component("ash") {
     "system/date/system_info_default_view.h",
     "system/date/tray_system_info.cc",
     "system/date/tray_system_info.h",
-    "system/devicetype_utils.cc",
-    "system/devicetype_utils.h",
     "system/display_scale/scale_detailed_view.cc",
     "system/display_scale/scale_detailed_view.h",
     "system/display_scale/scale_view.cc",
@@ -461,6 +459,8 @@ component("ash") {
     "system/power/battery_notification.h",
     "system/power/dual_role_notification.cc",
     "system/power/dual_role_notification.h",
+    "system/power/power_button_display_controller.cc",
+    "system/power/power_button_display_controller.h",
     "system/power/power_event_observer.cc",
     "system/power/power_event_observer.h",
     "system/power/power_status.cc",
@@ -485,7 +485,6 @@ component("ash") {
     "system/screen_security/screen_share_tray_item.h",
     "system/screen_security/screen_tray_item.cc",
     "system/screen_security/screen_tray_item.h",
-    "system/session/last_window_closed_observer.h",
     "system/session/logout_button_tray.cc",
     "system/session/logout_button_tray.h",
     "system/session/logout_confirmation_controller.cc",
@@ -533,8 +532,6 @@ component("ash") {
     "system/tray/system_tray_bubble.h",
     "system/tray/system_tray_controller.cc",
     "system/tray/system_tray_controller.h",
-    "system/tray/system_tray_delegate.cc",
-    "system/tray/system_tray_delegate.h",
     "system/tray/system_tray_item.cc",
     "system/tray/system_tray_item.h",
     "system/tray/system_tray_notifier.cc",
@@ -598,6 +595,8 @@ component("ash") {
     "system/virtual_keyboard/virtual_keyboard_tray.h",
     "system/web_notification/ash_popup_alignment_delegate.cc",
     "system/web_notification/ash_popup_alignment_delegate.h",
+    "system/web_notification/message_center_bubble.cc",
+    "system/web_notification/message_center_bubble.h",
     "system/web_notification/web_notification_tray.cc",
     "system/web_notification/web_notification_tray.h",
     "touch/ash_touch_transform_controller.cc",
@@ -632,8 +631,6 @@ component("ash") {
     "wm/always_on_top_controller.h",
     "wm/ash_focus_rules.cc",
     "wm/ash_focus_rules.h",
-    "wm/boot_splash_screen_chromeos.cc",
-    "wm/boot_splash_screen_chromeos.h",
     "wm/container_finder.cc",
     "wm/container_finder.h",
     "wm/cursor_manager_chromeos.cc",
@@ -687,6 +684,8 @@ component("ash") {
     "wm/overview/overview_animation_type.h",
     "wm/overview/overview_window_drag_controller.cc",
     "wm/overview/overview_window_drag_controller.h",
+    "wm/overview/scoped_hide_overview_windows.cc",
+    "wm/overview/scoped_hide_overview_windows.h",
     "wm/overview/scoped_overview_animation_settings.cc",
     "wm/overview/scoped_overview_animation_settings.h",
     "wm/overview/scoped_transform_overview_window.cc",
@@ -732,6 +731,8 @@ component("ash") {
     "wm/session_state_animator_impl.h",
     "wm/splitview/split_view_controller.cc",
     "wm/splitview/split_view_controller.h",
+    "wm/splitview/split_view_divider.cc",
+    "wm/splitview/split_view_divider.h",
     "wm/stacking_controller.cc",
     "wm/stacking_controller.h",
     "wm/switchable_windows.cc",
@@ -746,8 +747,10 @@ component("ash") {
     "wm/system_wallpaper_controller.cc",
     "wm/system_wallpaper_controller.h",
     "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard.h",
-    "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard_x11.cc",
-    "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard_x11.h",
+    "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard_ozone.cc",
+    "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard_ozone.h",
+    "wm/tablet_mode/scoped_skip_user_session_blocked_check.cc",
+    "wm/tablet_mode/scoped_skip_user_session_blocked_check.h",
     "wm/tablet_mode/tablet_mode_backdrop_delegate_impl.cc",
     "wm/tablet_mode/tablet_mode_backdrop_delegate_impl.h",
     "wm/tablet_mode/tablet_mode_controller.cc",
@@ -761,6 +764,8 @@ component("ash") {
     "wm/tablet_mode/tablet_mode_window_manager.h",
     "wm/tablet_mode/tablet_mode_window_state.cc",
     "wm/tablet_mode/tablet_mode_window_state.h",
+    "wm/tablet_mode/touchpad_and_keyboard_disabler.cc",
+    "wm/tablet_mode/touchpad_and_keyboard_disabler.h",
     "wm/toplevel_window_event_handler.cc",
     "wm/toplevel_window_event_handler.h",
     "wm/video_detector.cc",
@@ -855,10 +860,14 @@ component("ash") {
     "//chromeos:power_manager_proto",
     "//components/device_event_log",
     "//components/onc",
+    "//components/pref_registry",
+    "//components/prefs",
     "//components/quirks",
     "//components/session_manager:base",
     "//components/signin/core/account_id",
+    "//components/strings",
     "//components/user_manager",
+    "//components/vector_icons",
     "//components/viz/service",
     "//components/wallpaper",
     "//device/bluetooth",
@@ -874,7 +883,6 @@ component("ash") {
     "//skia",
 
     # TODO(msw): Remove this; only ash_with_content should depend on webkit.
-    "//components/vector_icons",
     "//third_party/WebKit/public:blink_headers",
     "//third_party/icu",
     "//third_party/qcms",
@@ -885,6 +893,7 @@ component("ash") {
     "//ui/base:ui_data_pack",
     "//ui/base/ime",
     "//ui/chromeos",
+    "//ui/chromeos/events",
     "//ui/chromeos/resources",
     "//ui/chromeos/strings",
     "//ui/compositor",
@@ -893,14 +902,17 @@ component("ash") {
     "//ui/display/types",
     "//ui/display/util",
     "//ui/events",
+    "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
     "//ui/events:gesture_detection",
     "//ui/events/devices",
+    "//ui/events/ozone:events_ozone",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/keyboard",
     "//ui/message_center",
     "//ui/native_theme",
+    "//ui/ozone",
     "//ui/platform_window",
     "//ui/platform_window/stub",
     "//ui/resources",
@@ -915,39 +927,6 @@ component("ash") {
   data = [
     "display/test_data/",
   ]
-
-  if (use_x11) {
-    configs += [
-      "//build/config/linux:x11",
-      "//build/config/linux:xfixes",
-    ]
-    deps += [
-      "//ui/events/devices/x11",
-      "//ui/events/platform",
-      "//ui/gfx/x",
-    ]
-  } else {
-    sources -= [
-      "host/ash_window_tree_host_x11.cc",
-      "host/ash_window_tree_host_x11.h",
-      "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard_x11.cc",
-      "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard_x11.h",
-    ]
-  }
-
-  if (use_ozone) {
-    deps += [
-      "//ui/events:dom_keycode_converter",
-      "//ui/events/ozone:events_ozone",
-      "//ui/ozone",
-    ]
-    sources += [
-      "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard_ozone.cc",
-      "wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard_ozone.h",
-      "wm/tablet_mode/touchpad_and_keyboard_disabler.cc",
-      "wm/tablet_mode/touchpad_and_keyboard_disabler.h",
-    ]
-  }
 
   # Usage of content should be in ash_content_unittests.
   assert_no_deps = [
@@ -1006,8 +985,6 @@ static_library("ash_shell_lib") {
     "../ui/views/test/test_views_delegate_aura.cc",
     "shell/app_list.cc",
     "shell/bubble.cc",
-    "shell/context_menu.cc",
-    "shell/context_menu.h",
     "shell/example_app_list_presenter.cc",
     "shell/example_app_list_presenter.h",
     "shell/example_factory.h",
@@ -1106,8 +1083,6 @@ test("ash_content_unittests") {
     "content/display/screen_orientation_controller_chromeos_unittest.cc",
     "content/keyboard_overlay/keyboard_overlay_delegate_unittest.cc",
     "content/keyboard_overlay/keyboard_overlay_view_unittest.cc",
-    "test/ash_test_suite.cc",
-    "test/ash_test_suite.h",
     "test/ash_unittests.cc",
   ]
   configs += [
@@ -1128,7 +1103,6 @@ test("ash_content_unittests") {
     "//components/quirks",
     "//components/signin/core/account_id",
     "//components/user_manager",
-    "//components/viz/test:test_support",
     "//content/public/browser",
     "//content/test:test_support",
     "//device/bluetooth",
@@ -1153,9 +1127,7 @@ test("ash_content_unittests") {
   ]
 
   data_deps = [
-    "//ash/strings:ash_test_strings",
     "//ash/resources:ash_test_resources_with_content_100_percent",
-    "//ash/resources:ash_test_resources_200_percent",
   ]
 }
 
@@ -1214,6 +1186,7 @@ source_set("common_unittests") {
     "shelf/shelf_application_menu_model_unittest.cc",
     "shelf/shelf_background_animator_unittest.cc",
     "shelf/shelf_button_pressed_metric_tracker_unittest.cc",
+    "shelf/shelf_context_menu_model_unittest.cc",
     "shelf/shelf_controller_unittest.cc",
     "shelf/shelf_layout_manager_unittest.cc",
     "shelf/shelf_locking_manager_unittest.cc",
@@ -1271,6 +1244,7 @@ source_set("common_unittests") {
     "system/tray/tray_event_filter_unittest.cc",
     "system/tray/tray_info_label_unittest.cc",
     "system/tray/tri_view_unittest.cc",
+    "system/tray_caps_lock_unittest.cc",
     "system/tray_tracing_unittest.cc",
     "system/update/tray_update_unittest.cc",
     "system/user/tray_user_unittest.cc",
@@ -1300,6 +1274,7 @@ source_set("common_unittests") {
     "wm/system_modal_container_layout_manager_unittest.cc",
     "wm/tablet_mode/accelerometer_test_data_literals.cc",
     "wm/tablet_mode/tablet_mode_window_manager_unittest.cc",
+    "wm/tablet_mode/touchpad_and_keyboard_disabler_unittest.cc",
     "wm/toplevel_window_event_handler_unittest.cc",
     "wm/video_detector_unittest.cc",
     "wm/window_animations_unittest.cc",
@@ -1340,6 +1315,7 @@ source_set("common_unittests") {
     "//ui/aura:test_support",
     "//ui/base",
     "//ui/base:test_support",
+    "//ui/chromeos/events",
     "//ui/compositor:test_support",
     "//ui/display",
     "//ui/events:test_support",
@@ -1357,10 +1333,6 @@ source_set("common_unittests") {
   public_deps = [
     ":test_support_without_content",
   ]
-
-  if (use_ozone) {
-    sources += [ "wm/tablet_mode/touchpad_and_keyboard_disabler_unittest.cc" ]
-  }
 }
 
 test("ash_unittests") {
@@ -1401,9 +1373,6 @@ test("ash_unittests") {
     # TODO: port to mash. http://crbug.com/695570.
     "extended_desktop_unittest.cc",
 
-    # Specific to X11.
-    "host/ash_window_tree_host_x11_unittest.cc",
-
     # TODO: magnifier not supported in mash. http://crbug.com/647438.
     "magnifier/magnification_controller_unittest.cc",
     "magnifier/partial_magnification_controller_unittest.cc",
@@ -1414,8 +1383,6 @@ test("ash_unittests") {
     # TODO: fails as ScreenLayoutObserver is not installed in mash,
     # http://crbug.com/696752.
     "system/screen_layout_observer_unittest.cc",
-    "test/ash_test_suite.cc",
-    "test/ash_test_suite.h",
     "test/ash_unittests.cc",
 
     # TODO(riajiang): port to work with mash. http://crbug.com/698032.
@@ -1483,13 +1450,11 @@ test("ash_unittests") {
     "//ash/touch_hud",
     "//base",
     "//base/test:test_support",
-    "//cc:test_support",
     "//chromeos",
     "//chromeos:test_support_without_gmock",
     "//components/quirks",
     "//components/signin/core/account_id",
     "//components/user_manager",
-    "//components/viz/test:test_support",
     "//device/bluetooth",
     "//mojo/edk/system",
     "//net:net",
@@ -1533,15 +1498,9 @@ test("ash_unittests") {
   ]
 
   data_deps = [
-    "//ash/strings:ash_test_strings",
     "//ash/resources:ash_test_resources_100_percent",
-    "//ash/resources:ash_test_resources_200_percent",
     "//testing/buildbot/filters:ash_unittests_filters",
   ]
-
-  if (!use_x11) {
-    sources -= [ "host/ash_window_tree_host_x11_unittest.cc" ]
-  }
 
   # Usage of content should be in ash_with_content.
   assert_no_deps = [
@@ -1554,17 +1513,13 @@ test("ash_perftests") {
   sources = [
     "perftests/ash_background_filter_blur_perftest.cc",
     "test/ash_perftests.cc",
-    "test/ash_test_suite.cc",
-    "test/ash_test_suite.h",
   ]
 
   deps = [
     ":test_support_without_content",
     "//ash/public/cpp:ash_public_cpp",
     "//base/test:test_support",
-    "//cc:test_support",
     "//cc/base",
-    "//components/viz/test:test_support",
     "//mojo/edk/embedder:headers",
     "//testing/gtest",
     "//testing/perf",
@@ -1593,9 +1548,7 @@ executable("ash_shell_with_content") {
   ]
 
   data_deps = [
-    "//ash/strings:ash_test_strings",
     "//ash/resources:ash_test_resources_with_content_100_percent",
-    "//ash/resources:ash_test_resources_200_percent",
   ]
 }
 
@@ -1644,8 +1597,8 @@ static_library("test_support_common") {
   testonly = true
   visibility = [ ":*" ]
   sources = [
-    "app_list/test_app_list_view_presenter_impl.cc",
-    "app_list/test_app_list_view_presenter_impl.h",
+    "app_list/test_app_list_presenter_impl.cc",
+    "app_list/test_app_list_presenter_impl.h",
     "display/display_configuration_controller_test_api.cc",
     "display/display_configuration_controller_test_api.h",
     "display/mirror_window_test_api.cc",
@@ -1696,6 +1649,8 @@ static_library("test_support_common") {
     "test/ash_test_environment.h",
     "test/ash_test_helper.cc",
     "test/ash_test_helper.h",
+    "test/ash_test_suite.cc",
+    "test/ash_test_suite.h",
     "test/ash_test_views_delegate.cc",
     "test/ash_test_views_delegate.h",
 
@@ -1747,10 +1702,12 @@ static_library("test_support_common") {
     "//base",
     "//base:i18n",
     "//base/test:test_support",
+    "//cc:test_support",
     "//chromeos",
     "//components/prefs:test_support",
     "//components/signin/core/account_id",
     "//components/user_manager:user_manager",
+    "//components/viz/test:test_support",
     "//device/bluetooth",
     "//services/ui/public/cpp/input_devices",
     "//services/ui/public/interfaces",
@@ -1779,9 +1736,11 @@ static_library("test_support_common") {
     "//ui/wm/public",
   ]
 
-  if (use_x11) {
-    deps += [ "//ui/gfx/x" ]
-  }
+  data_deps = [
+    "//ash/strings:ash_test_strings",
+    "//ash/resources:ash_test_resources_100_percent",
+    "//ash/resources:ash_test_resources_200_percent",
+  ]
 }
 
 static_library("interactive_ui_test_support") {

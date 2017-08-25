@@ -545,8 +545,8 @@ void RenderAccessibilityImpl::OnPerformAction(
       target.ScrollToGlobalPoint(
           WebPoint(data.target_point.x(), data.target_point.y()));
       break;
-    case ui::AX_ACTION_SET_ACCESSIBILITY_FOCUS:
-      OnSetAccessibilityFocus(target);
+    case ui::AX_ACTION_LOAD_INLINE_TEXT_BOXES:
+      OnLoadInlineTextBoxes(target);
       break;
     case ui::AX_ACTION_FOCUS:
       // By convention, calling SetFocus on the root of the tree should
@@ -576,6 +576,12 @@ void RenderAccessibilityImpl::OnPerformAction(
       break;
     case ui::AX_ACTION_CUSTOM_ACTION:
     case ui::AX_ACTION_REPLACE_SELECTED_TEXT:
+    case ui::AX_ACTION_SCROLL_BACKWARD:
+    case ui::AX_ACTION_SCROLL_FORWARD:
+    case ui::AX_ACTION_SCROLL_UP:
+    case ui::AX_ACTION_SCROLL_DOWN:
+    case ui::AX_ACTION_SCROLL_LEFT:
+    case ui::AX_ACTION_SCROLL_RIGHT:
     case ui::AX_ACTION_NONE:
       NOTREACHED();
       break;
@@ -627,13 +633,13 @@ void RenderAccessibilityImpl::OnHitTest(const gfx::Point& point,
   HandleAXEvent(obj, event_to_fire);
 }
 
-void RenderAccessibilityImpl::OnSetAccessibilityFocus(
+void RenderAccessibilityImpl::OnLoadInlineTextBoxes(
     const blink::WebAXObject& obj) {
   ScopedFreezeBlinkAXTreeSource freeze(&tree_source_);
-  if (tree_source_.accessibility_focus_id() == obj.AxID())
+  if (tree_source_.ShouldLoadInlineTextBoxes(obj))
     return;
 
-  tree_source_.set_accessibility_focus_id(obj.AxID());
+  tree_source_.SetLoadInlineTextBoxesForId(obj.AxID());
 
   const WebDocument& document = GetMainDocument();
   if (document.IsNull())

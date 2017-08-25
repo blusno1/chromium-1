@@ -9,6 +9,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/QualifiedName.h"
 #include "core/frame/Settings.h"
+#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -447,7 +448,7 @@ bool AccessibleNode::GetPropertyOrARIAAttribute(Element* element,
   QualifiedName attribute = GetCorrespondingARIAAttribute(property);
   AtomicString attr_value = element->FastGetAttribute(attribute);
   is_null = IsUndefinedAttrValue(attr_value);
-  return EqualIgnoringASCIICase(attr_value, "true");
+  return !is_null && !EqualIgnoringASCIICase(attr_value, "false");
 }
 
 // static
@@ -1004,6 +1005,14 @@ bool AccessibleNode::IsStringTokenProperty(AOMStringProperty property) {
   return false;
 }
 
+const AtomicString& AccessibleNode::InterfaceName() const {
+  return EventTargetNames::AccessibleNode;
+}
+
+ExecutionContext* AccessibleNode::GetExecutionContext() const {
+  return element_->GetExecutionContext();
+}
+
 void AccessibleNode::SetStringProperty(AOMStringProperty property,
                                        const AtomicString& value) {
   for (auto& item : string_properties_) {
@@ -1107,6 +1116,7 @@ DEFINE_TRACE(AccessibleNode) {
   visitor->Trace(element_);
   visitor->Trace(relation_properties_);
   visitor->Trace(relation_list_properties_);
+  EventTargetWithInlineData::Trace(visitor);
 }
 
 }  // namespace blink

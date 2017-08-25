@@ -43,7 +43,7 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionModifier.h"
-#include "core/editing/SetSelectionData.h"
+#include "core/editing/SetSelectionOptions.h"
 #include "core/editing/commands/CreateLinkCommand.h"
 #include "core/editing/commands/EditorCommandNames.h"
 #include "core/editing/commands/FormatBlockCommand.h"
@@ -411,7 +411,7 @@ static bool ExpandSelectionToGranularity(LocalFrame& frame,
     return false;
   frame.Selection().SetSelection(
       SelectionInDOMTree::Builder().SetBaseAndExtent(new_range).Build(),
-      SetSelectionData::Builder().SetShouldCloseTyping(true).Build());
+      SetSelectionOptions::Builder().SetShouldCloseTyping(true).Build());
   return true;
 }
 
@@ -818,7 +818,7 @@ static bool ExecuteDeleteToMark(LocalFrame& frame,
             .SetBaseAndExtent(
                 UnionEphemeralRanges(mark, frame.GetEditor().SelectedRange()))
             .Build(),
-        SetSelectionData::Builder().SetShouldCloseTyping(true).Build());
+        SetSelectionOptions::Builder().SetShouldCloseTyping(true).Build());
   }
   frame.GetEditor().PerformDelete();
   frame.GetEditor().SetMark(
@@ -1245,7 +1245,7 @@ bool ModifySelectionyWithPageGranularity(
 
   frame.Selection().SetSelection(
       selection_modifier.Selection().AsSelection(),
-      SetSelectionData::Builder()
+      SetSelectionOptions::Builder()
           .SetSetSelectionBy(SetSelectionBy::kUser)
           .SetShouldCloseTyping(true)
           .SetShouldClearTypingStyle(true)
@@ -1857,7 +1857,7 @@ static bool ExecuteSelectToMark(LocalFrame& frame,
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(UnionEphemeralRanges(mark, selection))
           .Build(),
-      SetSelectionData::Builder().SetShouldCloseTyping(true).Build());
+      SetSelectionOptions::Builder().SetShouldCloseTyping(true).Build());
   return true;
 }
 
@@ -2083,7 +2083,7 @@ static bool EnabledVisibleSelection(LocalFrame& frame,
   // The term "visible" here includes a caret in editable text or a range in any
   // text.
   const VisibleSelection& selection =
-      frame.GetEditor().SelectionForCommand(event);
+      CreateVisibleSelection(frame.GetEditor().SelectionForCommand(event));
   return (selection.IsCaret() && selection.IsContentEditable()) ||
          selection.IsRange();
 }
@@ -2098,7 +2098,7 @@ static bool EnabledVisibleSelectionAndMark(LocalFrame& frame,
     return false;
 
   const VisibleSelection& selection =
-      frame.GetEditor().SelectionForCommand(event);
+      CreateVisibleSelection(frame.GetEditor().SelectionForCommand(event));
   return ((selection.IsCaret() && selection.IsContentEditable()) ||
           selection.IsRange()) &&
          !frame.GetEditor().Mark().IsNone();
@@ -2113,7 +2113,7 @@ static bool EnableCaretInEditableText(LocalFrame& frame,
       !frame.Selection().SelectionHasFocus())
     return false;
   const VisibleSelection& selection =
-      frame.GetEditor().SelectionForCommand(event);
+      CreateVisibleSelection(frame.GetEditor().SelectionForCommand(event));
   return selection.IsCaret() && selection.IsContentEditable();
 }
 
@@ -2142,7 +2142,10 @@ static bool EnabledInEditableText(LocalFrame& frame,
   if (source == kCommandFromMenuOrKeyBinding &&
       !frame.Selection().SelectionHasFocus())
     return false;
-  return frame.GetEditor().SelectionForCommand(event).RootEditableElement();
+  const SelectionInDOMTree selection =
+      frame.GetEditor().SelectionForCommand(event);
+  return RootEditableElementOf(
+      CreateVisiblePosition(selection.Base()).DeepEquivalent());
 }
 
 static bool EnabledDelete(LocalFrame& frame,
@@ -2170,7 +2173,7 @@ static bool EnabledInRichlyEditableText(LocalFrame& frame,
     return false;
   const VisibleSelection& selection =
       frame.Selection().ComputeVisibleSelectionInDOMTree();
-  return !selection.IsNone() && selection.IsContentRichlyEditable() &&
+  return !selection.IsNone() && IsRichlyEditablePosition(selection.Base()) &&
          selection.RootEditableElement();
 }
 
@@ -2209,7 +2212,7 @@ static bool EnabledRangeInRichlyEditableText(LocalFrame& frame,
     return false;
   const VisibleSelection& selection =
       frame.Selection().ComputeVisibleSelectionInDOMTree();
-  return selection.IsRange() && selection.IsContentRichlyEditable();
+  return selection.IsRange() && IsRichlyEditablePosition(selection.Base());
 }
 
 static bool EnabledRedo(LocalFrame& frame, Event*, EditorCommandSource) {
@@ -2228,7 +2231,7 @@ static bool EnabledUnselect(LocalFrame& frame,
   // The term "visible" here includes a caret in editable text or a range in any
   // text.
   const VisibleSelection& selection =
-      frame.GetEditor().SelectionForCommand(event);
+      CreateVisibleSelection(frame.GetEditor().SelectionForCommand(event));
   return (selection.IsCaret() && selection.IsContentEditable()) ||
          selection.IsRange();
 }

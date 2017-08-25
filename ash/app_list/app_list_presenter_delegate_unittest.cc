@@ -4,7 +4,7 @@
 
 #include <memory>
 
-#include "ash/app_list/test_app_list_view_presenter_impl.h"
+#include "ash/app_list/test_app_list_presenter_impl.h"
 #include "ash/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_types.h"
@@ -46,6 +46,19 @@ void EnableTabletMode(bool enable) {
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(enable);
 }
 
+// Generates a fling.
+void FlingUpOrDown(ui::test::EventGenerator& generator,
+                   app_list::AppListView* view,
+                   bool up) {
+  int offset = up ? -100 : 100;
+  gfx::Point start_point = view->GetBoundsInScreen().origin();
+  gfx::Point target_point = start_point;
+  target_point.Offset(0, offset);
+
+  generator.GestureScrollSequence(start_point, target_point,
+                                  base::TimeDelta::FromMilliseconds(10), 2);
+}
+
 }  // namespace
 
 class AppListPresenterDelegateTest : public AshTestBase,
@@ -54,8 +67,8 @@ class AppListPresenterDelegateTest : public AshTestBase,
   AppListPresenterDelegateTest() {}
   ~AppListPresenterDelegateTest() override {}
 
-  app_list::AppListPresenterImpl* app_list_presenter_impl() {
-    return &app_list_presenter_impl_;
+  TestAppListPresenterImpl* app_list_presenter_impl() {
+    return app_list_presenter_impl_.get();
   }
 
   // testing::Test:
@@ -69,6 +82,8 @@ class AppListPresenterDelegateTest : public AshTestBase,
 
     // Make the display big enough to hold the app list.
     UpdateDisplay("1024x768");
+
+    app_list_presenter_impl_ = base::MakeUnique<TestAppListPresenterImpl>();
   }
 
   void EnableFullscreenAppList() {
@@ -77,7 +92,7 @@ class AppListPresenterDelegateTest : public AshTestBase,
   }
 
  private:
-  TestAppListViewPresenterImpl app_list_presenter_impl_;
+  std::unique_ptr<TestAppListPresenterImpl> app_list_presenter_impl_;
   base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListPresenterDelegateTest);
@@ -92,8 +107,8 @@ class FullscreenAppListPresenterDelegateTest
   FullscreenAppListPresenterDelegateTest() {}
   ~FullscreenAppListPresenterDelegateTest() override {}
 
-  app_list::AppListPresenterImpl* app_list_presenter_impl() {
-    return &app_list_presenter_impl_;
+  TestAppListPresenterImpl* app_list_presenter_impl() {
+    return app_list_presenter_impl_.get();
   }
 
   // testing::Test:
@@ -105,24 +120,26 @@ class FullscreenAppListPresenterDelegateTest
 
     // Make the display big enough to hold the app list.
     UpdateDisplay("1024x768");
+
+    app_list_presenter_impl_ = base::MakeUnique<TestAppListPresenterImpl>();
   }
 
   // Whether to run the test with mouse or gesture events.
   bool TestMouseEventParam() { return GetParam(); }
 
   gfx::Point GetPointOutsideSearchbox() {
-    return app_list_presenter_impl()->GetView()->GetBoundsInScreen().origin();
+    return app_list_presenter_impl_->GetView()->GetBoundsInScreen().origin();
   }
 
   gfx::Point GetPointInsideSearchbox() {
-    return app_list_presenter_impl_.GetView()
+    return app_list_presenter_impl_->GetView()
         ->search_box_view()
         ->GetBoundsInScreen()
-        .origin();
+        .CenterPoint();
   }
 
  private:
-  TestAppListViewPresenterImpl app_list_presenter_impl_;
+  std::unique_ptr<TestAppListPresenterImpl> app_list_presenter_impl_;
   base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(FullscreenAppListPresenterDelegateTest);
@@ -140,7 +157,7 @@ INSTANTIATE_TEST_CASE_P(,
 
 // Tests that app list hides when focus moves to a normal window.
 TEST_P(AppListPresenterDelegateTest, HideOnFocusOut) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl()->GetTargetVisibility());
 
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
@@ -152,7 +169,7 @@ TEST_P(AppListPresenterDelegateTest, HideOnFocusOut) {
 // window in kShellWindowId_AppListContainer.
 TEST_P(AppListPresenterDelegateTest,
        RemainVisibleWhenFocusingToApplistContainer) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl()->GetTargetVisibility());
 
   aura::Window* applist_container = Shell::GetContainer(
@@ -166,7 +183,7 @@ TEST_P(AppListPresenterDelegateTest,
 
 // Tests that clicking outside the app-list bubble closes it.
 TEST_F(AppListPresenterDelegateTest, ClickOutsideBubbleClosesBubble) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   aura::Window* app_window = app_list_presenter_impl()->GetWindow();
   ASSERT_TRUE(app_window);
   ui::test::EventGenerator& generator = GetEventGenerator();
@@ -188,7 +205,7 @@ TEST_F(AppListPresenterDelegateTest, ClickOutsideBubbleClosesBubble) {
 
 // Tests that tapping outside the app-list bubble closes it.
 TEST_F(AppListPresenterDelegateTest, TapOutsideBubbleClosesBubble) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   aura::Window* app_window = app_list_presenter_impl()->GetWindow();
   ASSERT_TRUE(app_window);
   gfx::Rect app_window_bounds = app_window->GetBoundsInRootWindow();
@@ -206,20 +223,16 @@ TEST_F(AppListPresenterDelegateTest, TapOutsideBubbleClosesBubble) {
   EXPECT_FALSE(app_list_presenter_impl()->GetTargetVisibility());
 }
 
-// Tests opening the app list on a non-primary display, then deleting the
-// display.
+// Tests opening the app list on a secondary display, then deleting the display.
 TEST_P(AppListPresenterDelegateTest, NonPrimaryDisplay) {
   // Set up a screen with two displays (horizontally adjacent).
   UpdateDisplay("1024x768,1024x768");
 
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   ASSERT_EQ(2u, root_windows.size());
-  aura::Window* secondary_root = root_windows[1];
-  EXPECT_EQ("1024,0 1024x768", secondary_root->GetBoundsInScreen().ToString());
+  ASSERT_EQ("1024,0 1024x768", root_windows[1]->GetBoundsInScreen().ToString());
 
-  app_list_presenter_impl()->Show(display::Screen::GetScreen()
-                                      ->GetDisplayNearestWindow(secondary_root)
-                                      .id());
+  app_list_presenter_impl()->ShowAndRunLoop(GetSecondaryDisplay().id());
   EXPECT_TRUE(app_list_presenter_impl()->GetTargetVisibility());
 
   // Remove the secondary display. Shouldn't crash (http://crbug.com/368990).
@@ -229,13 +242,12 @@ TEST_P(AppListPresenterDelegateTest, NonPrimaryDisplay) {
   EXPECT_FALSE(app_list_presenter_impl()->GetTargetVisibility());
 }
 
-// Tests opening the app list on a tiny display that is too small to contain
-// it.
+// Tests opening the app list on a tiny display that is too small to contain it.
 TEST_F(AppListPresenterDelegateTest, TinyDisplay) {
   // Set up a screen with a tiny display (height smaller than the app list).
   UpdateDisplay("400x300");
 
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl()->GetTargetVisibility());
 
   // The top of the app list should be on-screen (even if the bottom is not).
@@ -252,6 +264,30 @@ TEST_F(AppListPresenterDelegateTest, TinyDisplay) {
   EXPECT_GE(app_list_view_top, kMinimalAppListMargin);
 }
 
+// Tests that the app list is not draggable in side shelf alignment.
+TEST_F(FullscreenAppListPresenterDelegateTest, SideShelfAlignmentDragDisabled) {
+  SetShelfAlignment(ShelfAlignment::SHELF_ALIGNMENT_RIGHT);
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
+  const app_list::AppListView* app_list = app_list_presenter_impl()->GetView();
+  EXPECT_TRUE(app_list->is_fullscreen());
+  EXPECT_EQ(app_list::AppListView::FULLSCREEN_ALL_APPS,
+            app_list->app_list_state());
+
+  // Drag the widget across the screen over an arbitrary 100Ms, this would
+  // normally result in the app list transitioning to PEEKING but will now
+  // result in no state change.
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  generator.GestureScrollSequence(GetPointOutsideSearchbox(),
+                                  gfx::Point(10, 900),
+                                  base::TimeDelta::FromMilliseconds(100), 10);
+  EXPECT_EQ(app_list::AppListView::FULLSCREEN_ALL_APPS,
+            app_list->app_list_state());
+
+  // Tap the app list body. This should still close the app list.
+  generator.GestureTapAt(GetPointOutsideSearchbox());
+  EXPECT_EQ(app_list::AppListView::CLOSED, app_list->app_list_state());
+}
+
 // Tests that the app list initializes in fullscreen with side shelf alignment
 // and that the state transitions via text input act properly.
 TEST_F(FullscreenAppListPresenterDelegateTest,
@@ -261,7 +297,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest,
 
   // Open the app list with side shelf alignment, then check that it is in
   // fullscreen mode.
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list = app_list_presenter_impl()->GetView();
   EXPECT_TRUE(app_list->is_fullscreen());
   EXPECT_EQ(app_list->app_list_state(),
@@ -286,7 +322,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest,
 TEST_F(FullscreenAppListPresenterDelegateTest,
        BottomShelfAlignmentTextStateTransitions) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list = app_list_presenter_impl()->GetView();
   EXPECT_FALSE(app_list->is_fullscreen());
   EXPECT_EQ(app_list->app_list_state(), app_list::AppListView::PEEKING);
@@ -308,7 +344,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest,
 TEST_F(FullscreenAppListPresenterDelegateTest, TabletModeTextStateTransitions) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
   EnableTabletMode(true);
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list = app_list_presenter_impl()->GetView();
   EXPECT_EQ(app_list->app_list_state(),
             app_list::AppListView::FULLSCREEN_ALL_APPS);
@@ -332,7 +368,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest, TabletModeTextStateTransitions) {
 TEST_F(FullscreenAppListPresenterDelegateTest,
        PeekingToFullscreenWhenTabletModeIsActive) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list = app_list_presenter_impl()->GetView();
   EXPECT_EQ(app_list->app_list_state(), app_list::AppListView::PEEKING);
   // Enable tablet mode, this should force the app list to switch to the
@@ -363,7 +399,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest,
 TEST_F(FullscreenAppListPresenterDelegateTest,
        HalfToFullscreenWhenTabletModeIsActive) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list = app_list_presenter_impl()->GetView();
   EXPECT_EQ(app_list->app_list_state(), app_list::AppListView::PEEKING);
 
@@ -385,7 +421,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest,
 // Tests that the app list view handles drag properly in laptop mode.
 TEST_F(FullscreenAppListPresenterDelegateTest, AppListViewDragHandler) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list = app_list_presenter_impl()->GetView();
   EXPECT_EQ(app_list->app_list_state(), app_list::AppListView::PEEKING);
 
@@ -415,9 +451,9 @@ TEST_F(FullscreenAppListPresenterDelegateTest, AppListViewDragHandler) {
   EXPECT_EQ(app_list->app_list_state(),
             app_list::AppListView::FULLSCREEN_ALL_APPS);
 
-  // Execute a long downward drag, this should transition the app list.
-  generator.GestureScrollSequence(gfx::Point(10, 10), gfx::Point(10, 900),
-                                  base::TimeDelta::FromMilliseconds(100), 10);
+  // Execute a long and slow downward drag to switch to peeking.
+  generator.GestureScrollSequence(gfx::Point(10, 200), gfx::Point(10, 650),
+                                  base::TimeDelta::FromMilliseconds(1500), 100);
   EXPECT_EQ(app_list->app_list_state(), app_list::AppListView::PEEKING);
 
   // Transition to fullscreen.
@@ -467,7 +503,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest,
        AppListViewDragHandlerTabletModeFromSearch) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
   EnableTabletMode(true);
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list = app_list_presenter_impl()->GetView();
   EXPECT_EQ(app_list->app_list_state(),
             app_list::AppListView::FULLSCREEN_ALL_APPS);
@@ -487,12 +523,12 @@ TEST_F(FullscreenAppListPresenterDelegateTest,
 // in laptop mode.
 TEST_F(FullscreenAppListPresenterDelegateTest,
        ShelfBackgroundIsHiddenWhenAppListIsShown) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   ShelfLayoutManager* shelf_layout_manager =
       Shelf::ForWindow(Shell::GetRootWindowForDisplayId(GetPrimaryDisplayId()))
           ->shelf_layout_manager();
   EXPECT_TRUE(shelf_layout_manager->GetShelfBackgroundType() ==
-              ShelfBackgroundType::SHELF_BACKGROUND_DEFAULT);
+              ShelfBackgroundType::SHELF_BACKGROUND_APP_LIST);
 }
 
 // Tests that the peeking app list closes if the user taps or clicks outside
@@ -500,15 +536,18 @@ TEST_F(FullscreenAppListPresenterDelegateTest,
 TEST_P(FullscreenAppListPresenterDelegateTest,
        TapAndClickOutsideClosesPeekingAppList) {
   const bool test_mouse_event = TestMouseEventParam();
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
-  EXPECT_EQ(app_list_presenter_impl()->GetView()->app_list_state(),
-            app_list::AppListView::PEEKING);
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
+  EXPECT_EQ(app_list::AppListView::PEEKING,
+            app_list_presenter_impl()->GetView()->app_list_state());
   ui::test::EventGenerator& generator = GetEventGenerator();
 
   // Tapping outside the bounds closes the app list.
-  gfx::Point tap_point =
-      app_list_presenter_impl()->GetView()->bounds().origin();
-  tap_point.Offset(0, -10);
+  const gfx::Rect peeking_bounds =
+      app_list_presenter_impl()->GetView()->GetBoundsInScreen();
+  gfx::Point tap_point = peeking_bounds.origin();
+  tap_point.Offset(10, -10);
+  ASSERT_FALSE(peeking_bounds.Contains(tap_point));
+
   if (test_mouse_event) {
     generator.MoveMouseTo(tap_point);
     generator.ClickLeftButton();
@@ -519,10 +558,45 @@ TEST_P(FullscreenAppListPresenterDelegateTest,
   EXPECT_FALSE(app_list_presenter_impl()->IsVisible());
 }
 
+TEST_P(FullscreenAppListPresenterDelegateTest, LongPressOutsideCloseAppList) {
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
+  EXPECT_TRUE(app_list_presenter_impl()->IsVisible());
+
+  // |outside_point| is outside the bounds of app list.
+  gfx::Point outside_point =
+      app_list_presenter_impl()->GetView()->bounds().origin();
+  outside_point.Offset(0, -10);
+
+  // Dispatch LONG_PRESS to ash::AppListPresenterDelegate.
+  ui::TouchEvent long_press(
+      ui::ET_GESTURE_LONG_PRESS, outside_point, base::TimeTicks::Now(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH));
+  GetEventGenerator().Dispatch(&long_press);
+  EXPECT_FALSE(app_list_presenter_impl()->IsVisible());
+}
+
+TEST_P(FullscreenAppListPresenterDelegateTest,
+       TwoFingerTapOutsideCloseAppList) {
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
+  EXPECT_TRUE(app_list_presenter_impl()->IsVisible());
+
+  // |outside_point| is outside the bounds of app list.
+  gfx::Point outside_point =
+      app_list_presenter_impl()->GetView()->bounds().origin();
+  outside_point.Offset(0, -10);
+
+  // Dispatch TWO_FINGER_TAP to ash::AppListPresenterDelegate.
+  ui::TouchEvent two_finger_tap(
+      ui::ET_GESTURE_TWO_FINGER_TAP, outside_point, base::TimeTicks::Now(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH));
+  GetEventGenerator().Dispatch(&two_finger_tap);
+  EXPECT_FALSE(app_list_presenter_impl()->IsVisible());
+}
+
 // Tests that a keypress activates the searchbox and that clearing the
-// searchbox deactivates the searchbox.
+// searchbox, the searchbox remains active.
 TEST_F(FullscreenAppListPresenterDelegateTest, KeyPressEnablesSearchBox) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   ui::test::EventGenerator& generator = GetEventGenerator();
   app_list::SearchBoxView* search_box_view =
       app_list_presenter_impl()->GetView()->search_box_view();
@@ -534,7 +608,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest, KeyPressEnablesSearchBox) {
 
   // Delete the text, the search box should be inactive.
   search_box_view->ClearSearch();
-  EXPECT_FALSE(search_box_view->is_search_box_active());
+  EXPECT_TRUE(search_box_view->is_search_box_active());
 }
 
 // Tests that a tap/click on the AppListView from half launcher returns the
@@ -543,7 +617,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest, KeyPressEnablesSearchBox) {
 TEST_P(FullscreenAppListPresenterDelegateTest,
        StateTransitionsByTapAndClickingAppListBodyFromHalf) {
   const bool test_mouse_event = TestMouseEventParam();
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list_view = app_list_presenter_impl()->GetView();
   app_list::SearchBoxView* search_box_view = app_list_view->search_box_view();
   ui::test::EventGenerator& generator = GetEventGenerator();
@@ -586,7 +660,7 @@ TEST_P(FullscreenAppListPresenterDelegateTest,
 TEST_P(FullscreenAppListPresenterDelegateTest,
        StateTransitionsByTappingAppListBodyFromFullscreen) {
   const bool test_mouse_event = TestMouseEventParam();
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* app_list_view = app_list_presenter_impl()->GetView();
   app_list::SearchBoxView* search_box_view = app_list_view->search_box_view();
   ui::test::EventGenerator& generator = GetEventGenerator();
@@ -634,7 +708,7 @@ TEST_P(FullscreenAppListPresenterDelegateTest,
 // closed after tapping outside the searchbox.
 TEST_P(FullscreenAppListPresenterDelegateTest, TapAndClickEnablesSearchBox) {
   const bool test_mouse_event = TestMouseEventParam();
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::SearchBoxView* search_box_view =
       app_list_presenter_impl()->GetView()->search_box_view();
 
@@ -683,27 +757,27 @@ TEST_F(AppListPresenterDelegateTest,
   GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
 
   // Show the app list, the shelf background should be transparent.
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   ShelfLayoutManager* shelf_layout_manager =
       GetPrimaryShelf()->shelf_layout_manager();
   EXPECT_EQ(shelf_layout_manager->GetShelfBackgroundType(),
-            SHELF_BACKGROUND_DEFAULT);
-  app_list_presenter_impl()->Dismiss();
+            SHELF_BACKGROUND_APP_LIST);
+  app_list_presenter_impl()->DismissAndRunLoop();
 
   // Set the alignment to the side and show the app list. The background
   // should show.
   GetPrimaryShelf()->SetAlignment(ShelfAlignment::SHELF_ALIGNMENT_LEFT);
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list::features::IsFullscreenAppListEnabled());
   EXPECT_FALSE(GetPrimaryShelf()->IsHorizontalAlignment());
   EXPECT_EQ(GetPrimaryShelf()->shelf_layout_manager()->GetShelfBackgroundType(),
-            SHELF_BACKGROUND_OVERLAP);
+            SHELF_BACKGROUND_APP_LIST);
 }
 
 // Tests that the app list in HALF with an active search transitions to PEEKING
 // after the body is clicked/tapped.
 TEST_P(FullscreenAppListPresenterDelegateTest, HalfToPeekingByClickOrTap) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   ui::test::EventGenerator& generator = GetEventGenerator();
 
   // Transition to half app list by entering text.
@@ -736,7 +810,7 @@ TEST_P(FullscreenAppListPresenterDelegateTest, HalfToPeekingByClickOrTap) {
 TEST_P(FullscreenAppListPresenterDelegateTest,
        TapAndClickOutsideClosesHalfAppList) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   ui::test::EventGenerator& generator = GetEventGenerator();
 
   // Transition to half app list by entering text.
@@ -758,7 +832,7 @@ TEST_P(FullscreenAppListPresenterDelegateTest,
 TEST_P(FullscreenAppListPresenterDelegateTest,
        MouseWheelAndGestureScrollTransition) {
   const bool test_mouse_event = GetParam();
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* view = app_list_presenter_impl()->GetView();
   ui::test::EventGenerator& generator = GetEventGenerator();
   EXPECT_EQ(view->app_list_state(), app_list::AppListView::PEEKING);
@@ -774,9 +848,9 @@ TEST_P(FullscreenAppListPresenterDelegateTest,
   }
   EXPECT_EQ(view->app_list_state(), app_list::AppListView::FULLSCREEN_ALL_APPS);
 
-  // Swipe down, the app list should return to peeking mode.
-  generator.GestureScrollSequence(gfx::Point(0, 0), gfx::Point(0, 720),
-                                  base::TimeDelta::FromMilliseconds(100), 10);
+  // Swipe down slowly, the app list should return to peeking mode.
+  generator.GestureScrollSequence(gfx::Point(0, 0), gfx::Point(0, 650),
+                                  base::TimeDelta::FromMilliseconds(1500), 100);
   EXPECT_EQ(view->app_list_state(), app_list::AppListView::PEEKING);
 
   // Move mouse away from the searchbox, mousewheel scroll up.
@@ -794,7 +868,7 @@ TEST_P(FullscreenAppListPresenterDelegateTest,
 // Tests that the search box is set active with a whitespace query and that the
 // app list state doesn't transition with a whitespace query.
 TEST_F(FullscreenAppListPresenterDelegateTest, WhitespaceQuery) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* view = app_list_presenter_impl()->GetView();
   ui::test::EventGenerator& generator = GetEventGenerator();
   EXPECT_FALSE(view->search_box_view()->is_search_box_active());
@@ -822,7 +896,7 @@ TEST_F(FullscreenAppListPresenterDelegateTest, WhitespaceQuery) {
 // Tests that an unhandled tap/click in Peeking mode closes the app
 // list.
 TEST_P(FullscreenAppListPresenterDelegateTest, UnhandledEventOnPeeking) {
-  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list_presenter_impl()->ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::AppListView* view = app_list_presenter_impl()->GetView();
   ASSERT_EQ(view->app_list_state(), app_list::AppListView::PEEKING);
 
@@ -840,6 +914,50 @@ TEST_P(FullscreenAppListPresenterDelegateTest, UnhandledEventOnPeeking) {
     generator.GestureTapAt(empty_space);
   }
   EXPECT_EQ(view->app_list_state(), app_list::AppListView::CLOSED);
+}
+
+// Tests that a drag to the bezel from Fullscreen/Peeking will close the app
+// list.
+TEST_P(FullscreenAppListPresenterDelegateTest,
+       DragToBezelClosesAppListFromFullscreenAndPeeking) {
+  const bool test_fullscreen = GetParam();
+  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list::AppListView* view = app_list_presenter_impl()->GetView();
+  EXPECT_EQ(app_list::AppListView::PEEKING, view->app_list_state());
+
+  if (test_fullscreen) {
+    FlingUpOrDown(GetEventGenerator(), view, true /* up */);
+    EXPECT_EQ(app_list::AppListView::FULLSCREEN_ALL_APPS,
+              view->app_list_state());
+  }
+
+  // Drag the app list to 50 DIPs from the bottom bezel, relies on the test
+  // display set to 1024x768. Drag slowly in order to not trigger a fling.
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  generator.GestureScrollSequence(gfx::Point(0, 700), gfx::Point(0, 750),
+                                  base::TimeDelta::FromMilliseconds(1500), 100);
+
+  ASSERT_EQ(app_list::AppListView::CLOSED, view->app_list_state());
+}
+
+// Tests that a fling from Fullscreen/Peeking closes the app list.
+TEST_P(FullscreenAppListPresenterDelegateTest,
+       FlingDownClosesAppListFromFullscreenAndPeeking) {
+  const bool test_fullscreen = GetParam();
+  app_list_presenter_impl()->Show(GetPrimaryDisplayId());
+  app_list::AppListView* view = app_list_presenter_impl()->GetView();
+  EXPECT_EQ(app_list::AppListView::PEEKING, view->app_list_state());
+
+  if (test_fullscreen) {
+    FlingUpOrDown(GetEventGenerator(), view, true /* up */);
+    EXPECT_EQ(app_list::AppListView::FULLSCREEN_ALL_APPS,
+              view->app_list_state());
+  }
+
+  // Fling down, the app list should close.
+  FlingUpOrDown(GetEventGenerator(), view, false /* down */);
+
+  ASSERT_EQ(app_list::AppListView::CLOSED, view->app_list_state());
 }
 
 }  // namespace ash

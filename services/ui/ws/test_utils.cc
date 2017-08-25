@@ -16,8 +16,7 @@
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_creation_config.h"
 #include "services/ui/ws/display_manager.h"
-#include "services/ui/ws/frame_sink_manager_client_binding.h"
-#include "services/ui/ws/gpu_host.h"
+#include "services/ui/ws/test_gpu_host.h"
 #include "services/ui/ws/threaded_image_cursors.h"
 #include "services/ui/ws/threaded_image_cursors_factory.h"
 #include "services/ui/ws/window_manager_access_policy.h"
@@ -279,6 +278,8 @@ void TestWindowManager::OnAccelerator(uint32_t ack_id,
 }
 
 void TestWindowManager::OnCursorTouchVisibleChanged(bool enabled) {}
+
+void TestWindowManager::OnEventBlockedByModalWindow(uint32_t window_id) {}
 
 // TestWindowTreeClient -------------------------------------------------------
 
@@ -549,15 +550,8 @@ WindowServerTestHelper::WindowServerTestHelper()
     message_loop_ = base::MakeUnique<base::MessageLoop>();
   PlatformDisplay::set_factory_for_testing(&platform_display_factory_);
   window_server_ = base::MakeUnique<WindowServer>(&window_server_delegate_);
-  // TODO(staraz): Replace DefaultGpuHost and FrameSinkManagerClientBinding with
-  // test implementations.
-  std::unique_ptr<GpuHost> gpu_host =
-      base::MakeUnique<DefaultGpuHost>(window_server_.get());
+  std::unique_ptr<GpuHost> gpu_host = base::MakeUnique<TestGpuHost>();
   window_server_->SetGpuHost(std::move(gpu_host));
-  std::unique_ptr<FrameSinkManagerClientBinding> frame_sink_manager =
-      base::MakeUnique<FrameSinkManagerClientBinding>(
-          window_server_.get(), window_server_->gpu_host());
-  window_server_->SetFrameSinkManager(std::move(frame_sink_manager));
   window_server_delegate_.set_window_server(window_server_.get());
 }
 
@@ -624,7 +618,7 @@ void WindowEventTargetingHelper::CreateSecondaryTree(
   ASSERT_TRUE(child1);
   EXPECT_TRUE(tree1->AddWindow(ClientWindowIdForWindow(tree1, embed_window),
                                child1_id));
-  tree1->GetDisplay(embed_window)->AddActivationParent(embed_window);
+  embed_window->set_is_activation_parent(true);
 
   child1->SetVisible(true);
   child1->SetBounds(window_bounds, base::nullopt);
@@ -703,6 +697,9 @@ void TestPlatformDisplay::SetCursor(const ui::CursorData& cursor) {
   *cursor_storage_ = cursor;
 }
 void TestPlatformDisplay::SetCursorSize(const ui::CursorSize& cursor_size) {}
+void TestPlatformDisplay::ConfineCursorToBounds(const gfx::Rect& pixel_bounds) {
+  confine_cursor_bounds_ = pixel_bounds;
+}
 void TestPlatformDisplay::MoveCursorTo(
     const gfx::Point& window_pixel_location) {}
 void TestPlatformDisplay::UpdateTextInputState(
@@ -711,6 +708,9 @@ void TestPlatformDisplay::SetImeVisibility(bool visible) {}
 void TestPlatformDisplay::UpdateViewportMetrics(
     const display::ViewportMetrics& metrics) {
   metrics_ = metrics;
+}
+const display::ViewportMetrics& TestPlatformDisplay::GetViewportMetrics() {
+  return metrics_;
 }
 gfx::AcceleratedWidget TestPlatformDisplay::GetAcceleratedWidget() const {
   return gfx::kNullAcceleratedWidget;

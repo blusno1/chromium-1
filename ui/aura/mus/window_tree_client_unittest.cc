@@ -1167,7 +1167,7 @@ TEST_F(WindowTreeClientClientTest, InputMouseEventNoWindow) {
   uint32_t event_id = 1;
   window_delegate.set_event_id(event_id);
   ui::PointerEvent pointer_event_down(
-      ui::ET_POINTER_DOWN, event_location, gfx::Point(),
+      ui::ET_POINTER_DOWN, event_location, event_location,
       ui::EF_LEFT_MOUSE_BUTTON, 0,
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE, 0),
       ui::EventTimeForNow());
@@ -1187,7 +1187,7 @@ TEST_F(WindowTreeClientClientTest, InputMouseEventNoWindow) {
   event_id = 2;
   window_delegate.set_event_id(event_id);
   ui::PointerEvent pointer_event_up(
-      ui::ET_POINTER_UP, event_location1, gfx::Point(),
+      ui::ET_POINTER_UP, event_location1, event_location,
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON,
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE, 0),
       ui::EventTimeForNow());
@@ -1878,7 +1878,7 @@ class CloseWindowWindowTreeHostObserver : public aura::WindowTreeHostObserver {
   bool root_destroyed() const { return root_destroyed_; }
 
   // aura::WindowTreeHostObserver::
-  void OnHostCloseRequested(const aura::WindowTreeHost* host) override {
+  void OnHostCloseRequested(aura::WindowTreeHost* host) override {
     root_destroyed_ = true;
   }
 

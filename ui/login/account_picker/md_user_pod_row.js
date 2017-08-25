@@ -46,12 +46,27 @@ cr.define('login', function() {
   var USER_POD_KEYBOARD_MIN_PADDING = 20;
 
   /**
+   * Distance between the bubble and user pod.
+   * @type {number}
+   * @const
+   */
+  var BUBBLE_POD_OFFSET = 4;
+
+  /**
    * Maximum time for which the pod row remains hidden until all user images
    * have been loaded.
    * @type {number}
    * @const
    */
   var POD_ROW_IMAGES_LOAD_TIMEOUT_MS = 3000;
+
+  /**
+   * The duration of the animation for switching between main pod and small
+   * pod. It should be synced with CSS.
+   * @type {number}
+   * @const
+   */
+  var POD_SWITCH_ANIMATION_DURATION_MS = 180;
 
   /**
    * Public session help topic identifier.
@@ -697,8 +712,9 @@ cr.define('login', function() {
      * @private
      */
     updateTooltip_: function() {
-      if (this.hidden || !this.getParentPod_() ||
-          this.getParentPod_().getPodStyle() != UserPod.Style.LARGE ||
+      var parentPod = this.getParentPod_();
+      if (this.hidden || !parentPod ||
+          parentPod.getPodStyle() != UserPod.Style.LARGE ||
           !this.isParentPodFocused_()) {
         return;
       }
@@ -712,15 +728,7 @@ cr.define('login', function() {
       var bubbleContent = document.createElement('div');
       bubbleContent.textContent = this.tooltipState_.text;
 
-      /** @const */ var BUBBLE_OFFSET = CUSTOM_ICON_CONTAINER_SIZE / 2;
-      // TODO(tengs): Introduce a special reauth state for the account picker,
-      // instead of showing the tooltip bubble here (crbug.com/409427).
-      /** @const */ var BUBBLE_PADDING = 8 + (this.iconId_ ? 0 : 23);
-      $('bubble').showContentForElement(this,
-                                        cr.ui.Bubble.Attachment.LEFT,
-                                        bubbleContent,
-                                        BUBBLE_OFFSET,
-                                        BUBBLE_PADDING);
+      parentPod.showBubble(bubbleContent);
     },
 
     /**
@@ -887,6 +895,10 @@ cr.define('login', function() {
         element.disabled = value
       });
 
+      this.tabIndex = value ? -1 : UserPodTabOrder.POD_INPUT;
+      this.actionBoxAreaElement.tabIndex =
+          value ? -1 : UserPodTabOrder.POD_INPUT;
+
       // Special handling for submit button - the submit button should be
       // enabled only if there is the password value set.
       var submitButton = this.submitButton;
@@ -993,6 +1005,14 @@ cr.define('login', function() {
      */
     get smallPodImageElement() {
       return this.querySelector('.user-image.small-pod-image');
+    },
+
+    /**
+     * Gets animated image element.
+     * @type {!HTMLImageElement}
+     */
+    get smallPodAnimatedImageElement() {
+      return this.querySelector('.user-image.small-pod-image.animated-image');
     },
 
     /**
@@ -1250,6 +1270,7 @@ cr.define('login', function() {
       this.imageElement.src = imageSrc;
       this.animatedImageElement.src = animatedImageSrc;
       this.smallPodImageElement.src = imageSrc;
+      this.smallPodAnimatedImageElement.src = animatedImageSrc;
 
       this.nameElement.textContent = this.user_.displayName;
       this.smallPodNameElement.textContent = this.user_.displayName;
@@ -1656,6 +1677,77 @@ cr.define('login', function() {
 
         this.parentNode.showSigninUI(this.user.emailAddress);
       }
+    },
+
+    /**
+     * Shows a bubble under the auth-container of the user pod.
+     * @param {HTMLElement} content Content to show in bubble.
+     */
+    showBubble: function(content) {
+      /** @const */ var BUBBLE_OFFSET = 25;
+      // -8 = 4(BUBBLE_POD_OFFSET) - 2(bubble margin)
+      //      - 10(internal bubble adjustment)
+      var bubblePositioningPadding = -8;
+
+      var bubbleAnchor;
+      var attachment;
+      // Anchor the bubble to the input field.
+      bubbleAnchor = this.getElementsByClassName('auth-container')[0];
+      if (!bubbleAnchor) {
+        console.error('auth-container not found!');
+        bubbleAnchor = this.mainInput;
+      }
+      if (this.pinContainer && this.pinContainer.style.visibility == 'visible')
+        attachment = cr.ui.Bubble.Attachment.RIGHT;
+      else
+        attachment = cr.ui.Bubble.Attachment.BOTTOM;
+
+      var bubble = $('bubble');
+
+      // Cannot use cr.ui.LoginUITools.get* on bubble until it is attached to
+      // the element. getMaxHeight/Width rely on the correct up/left element
+      // side positioning that doesn't happen until bubble is attached.
+      var maxHeight =
+          cr.ui.LoginUITools.getMaxHeightBeforeShelfOverlapping(bubbleAnchor) -
+          bubbleAnchor.offsetHeight - BUBBLE_POD_OFFSET;
+      var maxWidth = cr.ui.LoginUITools.getMaxWidthToFit(bubbleAnchor) -
+          bubbleAnchor.offsetWidth - BUBBLE_POD_OFFSET;
+
+      // Change bubble visibility temporary to calculate height.
+      var bubbleVisibility = bubble.style.visibility;
+      bubble.style.visibility = 'hidden';
+      bubble.hidden = false;
+      // Now we need the bubble to have the new content before calculating
+      // size. Undefined |content| == reuse old content.
+      if (content !== undefined)
+        bubble.replaceContent(content);
+
+      // Get bubble size.
+      var bubbleOffsetHeight = parseInt(bubble.offsetHeight);
+      var bubbleOffsetWidth = parseInt(bubble.offsetWidth);
+      // Restore attributes.
+      bubble.style.visibility = bubbleVisibility;
+      bubble.hidden = true;
+
+      if (attachment == cr.ui.Bubble.Attachment.BOTTOM) {
+        // Move the bubble if it overlaps the shelf.
+        if (maxHeight < bubbleOffsetHeight)
+          attachment = cr.ui.Bubble.Attachment.TOP;
+      } else {
+        // Move the bubble if it doesn't fit screen.
+        if (maxWidth < bubbleOffsetWidth) {
+          bubblePositioningPadding = 2;
+          attachment = cr.ui.Bubble.Attachment.LEFT;
+        }
+      }
+      var showBubbleCallback = function() {
+        this.removeEventListener('transitionend', showBubbleCallback);
+        $('bubble').showContentForElement(
+            bubbleAnchor, attachment, content, BUBBLE_OFFSET,
+            bubblePositioningPadding, true);
+      };
+      this.addEventListener('transitionend', showBubbleCallback);
+      ensureTransitionEndEvent(this);
     },
 
     /**
@@ -2823,6 +2915,8 @@ cr.define('login', function() {
     // If testing mode is enabled.
     testingModeEnabled_: false,
 
+    // The color used by the scroll list when the user count exceeds
+    // LANDSCAPE_MODE_LIMIT or PORTRAIT_MODE_LIMIT.
     overlayColors_: {maskColor: undefined, scrollColor: undefined},
 
     /** @override */
@@ -3485,7 +3579,15 @@ cr.define('login', function() {
      * screen orientation and showing the virtual keyboard.
      */
     onWindowResize: function() {
-      this.placePods_();
+      var isAccountPicker =
+          $('login-header-bar').signinUIState == SIGNIN_UI_STATE.ACCOUNT_PICKER;
+      if (isAccountPicker) {
+        // Redo pod placement if account picker is the current screen.
+        this.placePods_();
+      } else {
+        // Postpone pod placement. |handleBeforeShow| will check this flag.
+        this.podPlacementPostponed_ = true;
+      }
     },
 
     /**
@@ -3516,11 +3618,6 @@ cr.define('login', function() {
         // the virtual keyboard.
         this.parentNode.setPreferredSize(
             this.screenSize.width, this.screenSize.height);
-        // Normally, |WebUILoginView::OnKeyboardBoundsChanging| toggles the
-        // visibility of the login header bar based on virtual keyboard status
-        // at a later time. As a result the login header bar may be seen for a
-        // short moment before being hidden, so here we hide it up front.
-        Oobe.getInstance().headerHidden = true;
       } else {
         // Make sure not to block the header bar when virtual keyboard is absent.
         this.parentNode.setPreferredSize(
@@ -3569,30 +3666,24 @@ cr.define('login', function() {
     },
 
     /**
-     * Makes inner container unscrollable and hides the bottom empty area
-     * when virtual keyboard is shown.
+     * Makes the screen unscrollable and hides the empty area underneath when
+     * virtual keyboard is shown.
      * @private
      */
     hideEmptyArea_: function() {
-      var screen = document.querySelector('#scroll-container');
-      var clientArea = document.querySelector('#inner-container');
-      if (this.isScreenShrinked_()) {
-        // When virtual keyboard is shown, although the screen size
-        // is reduced properly, the size of the outer container remains the
-        // same because its min-height is applied. Users can scroll the screen
-        // upward and see empty areas beyond the pod row and the scroll bar,
-        // which should be avoided.
-        // This is a hacky solution: we can make the scroll container hide
-        // the overflow area and manully position the client area.
-        screen.style.overflowY = 'hidden';
-        clientArea.style.position = 'absolute';
-        clientArea.style.left = cr.ui.toCssPx(0);
-        clientArea.style.top = cr.ui.toCssPx(0);
-      } else {
-        // Sets the values to default when virtual keyboard is not shown.
-        screen.style.overflowY = 'auto';
-        clientArea.style.position = 'relative';
-      }
+      // When virtual keyboard is shown, although the screen size is reduced
+      // properly, the size of #outer-container remains the same in order to
+      // make other screens (e.g. Add person) scrollable, but this shouldn't
+      // apply to account picker.
+      // This is a hacky solution: we can make #scroll-container hide the
+      // overflow area and manully position #inner-container.
+      var isScreenShrinked = this.isScreenShrinked_();
+      $('scroll-container')
+          .classList.toggle('disable-scroll', isScreenShrinked);
+      $('inner-container').classList.toggle('disable-scroll', isScreenShrinked);
+      $('inner-container').style.top = isScreenShrinked ?
+          cr.ui.toCssPx($('scroll-container').scrollTop) :
+          'unset';
     },
 
     /**
@@ -4025,7 +4116,6 @@ cr.define('login', function() {
         // to make sure that the styles of all the elements in the pod row are
         // updated before being shown.
         this.handleAfterPodPlacement_();
-        this.clearPodsAnimation_();
       }
     },
 
@@ -4048,16 +4138,19 @@ cr.define('login', function() {
     },
 
     /**
-     * Clears animation classes that may be added earlier to ensure a clean
-     * state.
+     * Toggles the animation for switching between main pod and small pod.
+     * @param {UserPod} pod Pod that needs to toggle the animation.
+     * @param {boolean} enabled Whether the switch animation is needed.
      * @private
      */
-    clearPodsAnimation_: function() {
-      var pods = this.pods;
-      for (var pod of pods) {
-        pod.imageElement.classList.remove('switch-image-animation');
-        pod.smallPodImageElement.classList.remove('switch-image-animation');
-      }
+    toggleSwitchAnimation_: function(pod, enabled) {
+      pod.imageElement.classList.toggle('switch-image-animation', enabled);
+      pod.animatedImageElement.classList.toggle(
+          'switch-image-animation', enabled);
+      pod.smallPodImageElement.classList.toggle(
+          'switch-image-animation', enabled);
+      pod.smallPodAnimatedImageElement.classList.toggle(
+          'switch-image-animation', enabled);
     },
 
     /**
@@ -4087,9 +4180,13 @@ cr.define('login', function() {
       this.mainPod_.setPodStyle(pod.getPodStyle());
       pod.setPodStyle(UserPod.Style.LARGE);
       // Add switch animation.
-      this.mainPod_.smallPodImageElement.classList.add(
-          'switch-image-animation');
-      pod.imageElement.classList.add('switch-image-animation');
+      this.toggleSwitchAnimation_(this.mainPod_, true);
+      this.toggleSwitchAnimation_(pod, true);
+      setTimeout(function() {
+        var pods = this.pods;
+        for (var pod of pods)
+          this.toggleSwitchAnimation_(pod, false);
+      }.bind(this), POD_SWITCH_ANIMATION_DURATION_MS);
 
       // Switch parent and position of the two pods.
       var left = pod.left;
@@ -4147,10 +4244,8 @@ cr.define('login', function() {
      * wallpaper.
      * @param {string} maskColor Color for the gradient mask.
      * @param {string} scrollColor Color for the small pods container.
-     * @param {string} backgroundColor Color for the whole background.
      */
-    setOverlayColors: function(maskColor, scrollColor, backgroundColor) {
-      $('login-shield').style.backgroundColor = backgroundColor;
+    setOverlayColors: function(maskColor, scrollColor) {
       if (this.smallPodsContainer.classList.contains('scroll'))
         this.smallPodsContainer.style.backgroundColor = scrollColor;
       if (!this.topMask.hidden) {
@@ -4668,6 +4763,8 @@ cr.define('login', function() {
             event, this.listeners_[event][0], this.listeners_[event][1]);
       }
       $('login-header-bar').buttonsTabIndex = UserPodTabOrder.HEADER_BAR;
+      // Header bar should be hidden when virtual keyboard is shown.
+      Oobe.getInstance().headerHidden = this.isScreenShrinked_();
 
       if (this.podPlacementPostponed_) {
         this.podPlacementPostponed_ = false;
@@ -4676,7 +4773,6 @@ cr.define('login', function() {
       }
 
       this.handleAfterPodPlacement_();
-      this.clearPodsAnimation_();
     },
 
     /**

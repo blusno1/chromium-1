@@ -36,6 +36,8 @@
 #include "core/dom/ElementData.h"
 #include "core/dom/SpaceSplitString.h"
 #include "core/dom/WhitespaceAttacher.h"
+#include "core/resize_observer/ResizeObserver.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "public/platform/WebFocusType.h"
@@ -65,7 +67,6 @@ class ElementIntersectionObserverData;
 class PseudoElement;
 class PseudoStyleRequest;
 class ResizeObservation;
-class ResizeObserver;
 class ScrollIntoViewOptions;
 class ScrollIntoViewOptionsOrBoolean;
 class ScrollState;
@@ -104,6 +105,14 @@ enum class SelectionBehaviorOnFocus {
   kNone,
 };
 
+// https://html.spec.whatwg.org/multipage/dom.html#dom-document-nameditem-filter
+enum class NamedItemType {
+  kNone,
+  kName,
+  kNameOrId,
+  kNameOrIdWithName,
+};
+
 struct FocusParams {
   STACK_ALLOCATED();
 
@@ -121,7 +130,7 @@ struct FocusParams {
   Member<InputDeviceCapabilities> source_capabilities = nullptr;
 };
 
-typedef HeapVector<Member<Attr>> AttrNodeList;
+typedef HeapVector<TraceWrapperMember<Attr>> AttrNodeList;
 
 class CORE_EXPORT Element : public ContainerNode {
   DEFINE_WRAPPERTYPEINFO();
@@ -471,7 +480,7 @@ class CORE_EXPORT Element : public ContainerNode {
                            ExceptionState&);
   ShadowRoot* CreateShadowRootInternal(ShadowRootType, ExceptionState&);
 
-  ShadowRoot* openShadowRoot() const;
+  ShadowRoot* OpenShadowRoot() const;
   ShadowRoot* ClosedShadowRoot() const;
   ShadowRoot* AuthorShadowRoot() const;
   ShadowRoot* UserAgentShadowRoot() const;
@@ -788,9 +797,9 @@ class CORE_EXPORT Element : public ContainerNode {
   ElementIntersectionObserverData* IntersectionObserverData() const;
   ElementIntersectionObserverData& EnsureIntersectionObserverData();
 
-  HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>*
+  HeapHashMap<TraceWrapperMember<ResizeObserver>, Member<ResizeObservation>>*
   ResizeObserverData() const;
-  HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>&
+  HeapHashMap<TraceWrapperMember<ResizeObserver>, Member<ResizeObservation>>&
   EnsureResizeObserverData();
   void SetNeedsResizeObserverUpdate();
 
@@ -823,8 +832,9 @@ class CORE_EXPORT Element : public ContainerNode {
   virtual void DidRecalcStyle();
   virtual RefPtr<ComputedStyle> CustomStyleForLayoutObject();
 
-  virtual bool ShouldRegisterAsNamedItem() const { return false; }
-  virtual bool ShouldRegisterAsExtraNamedItem() const { return false; }
+  virtual NamedItemType GetNamedItemType() const {
+    return NamedItemType::kNone;
+  }
 
   bool SupportsSpatialNavigationFocus() const;
 
@@ -962,10 +972,12 @@ class CORE_EXPORT Element : public ContainerNode {
 
   QualifiedName tag_name_;
 
-  void UpdateNamedItemRegistration(const AtomicString& old_name,
+  void UpdateNamedItemRegistration(NamedItemType,
+                                   const AtomicString& old_name,
                                    const AtomicString& new_name);
-  void UpdateExtraNamedItemRegistration(const AtomicString& old_name,
-                                        const AtomicString& new_name);
+  void UpdateIdNamedItemRegistration(NamedItemType,
+                                     const AtomicString& old_name,
+                                     const AtomicString& new_name);
 
   void CreateUniqueElementData();
 

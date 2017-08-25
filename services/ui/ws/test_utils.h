@@ -23,6 +23,7 @@
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/drag_controller.h"
 #include "services/ui/ws/event_dispatcher.h"
+#include "services/ui/ws/gpu_host.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_factory.h"
 #include "services/ui/ws/test_change_tracker.h"
@@ -133,7 +134,7 @@ class WindowTreeTestApi {
   void StopPointerWatcher();
 
   bool ProcessSetDisplayRoot(const display::Display& display_to_create,
-                             const mojom::WmViewportMetrics& viewport_metrics,
+                             const display::ViewportMetrics& viewport_metrics,
                              bool is_primary_display,
                              const ClientWindowId& client_window_id) {
     return tree_->ProcessSetDisplayRoot(display_to_create, viewport_metrics,
@@ -195,7 +196,7 @@ class ModalWindowControllerTestApi {
       : mwc_(mwc) {}
   ~ModalWindowControllerTestApi() {}
 
-  ServerWindow* GetActiveSystemModalWindow() const {
+  const ServerWindow* GetActiveSystemModalWindow() const {
     return mwc_->GetActiveSystemModalWindow();
   }
 
@@ -402,6 +403,7 @@ class TestWindowManager : public mojom::WindowManager {
                      uint32_t accelerator_id,
                      std::unique_ptr<ui::Event> event) override;
   void OnCursorTouchVisibleChanged(bool enabled) override;
+  void OnEventBlockedByModalWindow(uint32_t window_id) override;
 
   bool on_perform_move_loop_called_ = false;
   bool on_set_modal_type_called_ = false;
@@ -747,6 +749,10 @@ class TestPlatformDisplay : public PlatformDisplay {
   }
   float cursor_scale() const { return cursor_scale_; }
 
+  gfx::Rect confine_cursor_bounds() const { return confine_cursor_bounds_; }
+
+  const display::ViewportMetrics& metrics() const { return metrics_; }
+
   // PlatformDisplay:
   void Init(PlatformDisplayDelegate* delegate) override;
   void SetViewportSize(const gfx::Size& size) override;
@@ -755,10 +761,12 @@ class TestPlatformDisplay : public PlatformDisplay {
   void ReleaseCapture() override;
   void SetCursor(const ui::CursorData& cursor) override;
   void SetCursorSize(const ui::CursorSize& cursor_size) override;
+  void ConfineCursorToBounds(const gfx::Rect& pixel_bounds) override;
   void MoveCursorTo(const gfx::Point& window_pixel_location) override;
   void UpdateTextInputState(const ui::TextInputState& state) override;
   void SetImeVisibility(bool visible) override;
   void UpdateViewportMetrics(const display::ViewportMetrics& metrics) override;
+  const display::ViewportMetrics& GetViewportMetrics() override;
   gfx::AcceleratedWidget GetAcceleratedWidget() const override;
   FrameGenerator* GetFrameGenerator() override;
   EventSink* GetEventSink() override;
@@ -771,6 +779,7 @@ class TestPlatformDisplay : public PlatformDisplay {
   display::Display::Rotation cursor_rotation_ =
       display::Display::Rotation::ROTATE_0;
   float cursor_scale_ = 1.0f;
+  gfx::Rect confine_cursor_bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPlatformDisplay);
 };

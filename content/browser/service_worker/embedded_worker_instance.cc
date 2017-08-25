@@ -15,8 +15,10 @@
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
+#include "content/browser/service_worker/service_worker_content_settings_proxy_impl.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/common/content_switches_internal.h"
+#include "content/common/renderer.mojom.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/embedded_worker_settings.h"
 #include "content/common/service_worker/embedded_worker_start_params.h"
@@ -80,13 +82,14 @@ using SetupProcessCallback = base::OnceCallback<void(
 // registering with DevTools. Called on the UI thread. Calls |callback| on the
 // IO thread. |context| and |weak_context| are only for passing to DevTools and
 // must not be dereferenced here on the UI thread.
-void SetupOnUIThread(base::WeakPtr<ServiceWorkerProcessManager> process_manager,
-                     bool can_use_existing_process,
-                     std::unique_ptr<EmbeddedWorkerStartParams> params,
-                     mojom::EmbeddedWorkerInstanceClientRequest request,
-                     ServiceWorkerContextCore* context,
-                     base::WeakPtr<ServiceWorkerContextCore> weak_context,
-                     SetupProcessCallback callback) {
+void SetupOnUIThread(
+    base::WeakPtr<ServiceWorkerProcessManager> process_manager,
+    bool can_use_existing_process,
+    std::unique_ptr<EmbeddedWorkerStartParams> params,
+    mojom::EmbeddedWorkerInstanceClientAssociatedRequest request,
+    ServiceWorkerContextCore* context,
+    base::WeakPtr<ServiceWorkerContextCore> weak_context,
+    SetupProcessCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto process_info =
       base::MakeUnique<ServiceWorkerProcessManager::AllocatedProcessInfo>();
@@ -120,8 +123,10 @@ void SetupOnUIThread(base::WeakPtr<ServiceWorkerProcessManager> process_manager,
   // Bind |request|, which is attached to |EmbeddedWorkerInstance::client_|, to
   // the process. If the process dies, |client_|'s connection error callback
   // will be called on the IO thread.
-  if (request.is_pending())
-    BindInterface(rph, std::move(request));
+  if (request.is_pending()) {
+    rph->GetRendererInterface()->SetUpEmbeddedWorkerChannelForServiceWorker(
+        std::move(request));
+  }
 
   // Register to DevTools and update params accordingly.
   const int routing_id = rph->GetNextRoutingID();
@@ -194,32 +199,30 @@ class EmbeddedWorkerInstance::DevToolsProxy {
 
   ~DevToolsProxy() {
     DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-    BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(NotifyWorkerDestroyedOnUI,
-                   process_id_, agent_route_id_));
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(NotifyWorkerDestroyedOnUI,
+                                           process_id_, agent_route_id_));
   }
 
   void NotifyWorkerReadyForInspection() {
     DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(NotifyWorkerReadyForInspectionOnUI,
-                                       process_id_, agent_route_id_));
+                            base::BindOnce(NotifyWorkerReadyForInspectionOnUI,
+                                           process_id_, agent_route_id_));
   }
 
   void NotifyWorkerVersionInstalled() {
     DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(NotifyWorkerVersionInstalledOnUI,
-                                       process_id_, agent_route_id_));
+                            base::BindOnce(NotifyWorkerVersionInstalledOnUI,
+                                           process_id_, agent_route_id_));
   }
 
   void NotifyWorkerVersionDoomed() {
     DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(NotifyWorkerVersionDoomedOnUI,
-                                       process_id_, agent_route_id_));
+                            base::BindOnce(NotifyWorkerVersionDoomedOnUI,
+                                           process_id_, agent_route_id_));
   }
 
   bool ShouldNotifyWorkerStopIgnored() const {
@@ -286,7 +289,7 @@ class EmbeddedWorkerInstance::StartTask {
 
   StartTask(EmbeddedWorkerInstance* instance,
             const GURL& script_url,
-            mojom::EmbeddedWorkerInstanceClientRequest request)
+            mojom::EmbeddedWorkerInstanceClientAssociatedRequest request)
       : instance_(instance),
         request_(std::move(request)),
         state_(ProcessAllocationState::NOT_ALLOCATED),
@@ -446,9 +449,8 @@ class EmbeddedWorkerInstance::StartTask {
   // |instance_| must outlive |this|.
   EmbeddedWorkerInstance* instance_;
 
-  // Ownership is transferred by base::Passed() to a task after process
-  // allocation.
-  mojom::EmbeddedWorkerInstanceClientRequest request_;
+  // Ownership is transferred by a PostTask() call after process allocation.
+  mojom::EmbeddedWorkerInstanceClientAssociatedRequest request_;
 
   StatusCallback start_callback_;
   ProcessAllocationState state_;
@@ -510,10 +512,10 @@ void EmbeddedWorkerInstance::Start(
   params->wait_for_debugger = false;
   params->settings.v8_cache_options = GetV8CacheOptions();
 
-  mojom::EmbeddedWorkerInstanceClientRequest request =
+  mojom::EmbeddedWorkerInstanceClientAssociatedRequest request =
       mojo::MakeRequest(&client_);
   client_.set_connection_error_handler(
-      base::Bind(&CallDetach, base::Unretained(this)));
+      base::BindOnce(&CallDetach, base::Unretained(this)));
   pending_dispatcher_request_ = std::move(dispatcher_request);
   pending_installed_scripts_info_ = std::move(installed_scripts_info);
 
@@ -651,13 +653,19 @@ ServiceWorkerStatusCode EmbeddedWorkerInstance::SendStartWorker(
   mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo host_ptr_info;
   instance_host_binding_.Bind(mojo::MakeRequest(&host_ptr_info));
 
+  blink::mojom::WorkerContentSettingsProxyPtr content_settings_proxy_ptr_info;
+  content_settings_ = base::MakeUnique<ServiceWorkerContentSettingsProxyImpl>(
+      params->script_url, context_,
+      mojo::MakeRequest(&content_settings_proxy_ptr_info));
+
   const bool is_script_streaming = !pending_installed_scripts_info_.is_null();
   inflight_start_task_->set_start_worker_sent_time(base::TimeTicks::Now());
   mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info =
       std::move(provider_info_getter_).Run(process_id());
   client_->StartWorker(*params, std::move(pending_dispatcher_request_),
                        std::move(pending_installed_scripts_info_),
-                       std::move(host_ptr_info), std::move(provider_info));
+                       std::move(host_ptr_info), std::move(provider_info),
+                       std::move(content_settings_proxy_ptr_info));
   registry_->BindWorkerToProcess(process_id(), embedded_worker_id());
   OnStartWorkerMessageSent(is_script_streaming);
   return SERVICE_WORKER_OK;

@@ -45,8 +45,7 @@ class PaletteDelegateChromeOS
   void TakeScreenshot() override;
   void TakePartialScreenshot(const base::Closure& done) override;
   void CancelPartialScreenshot() override;
-  bool IsMetalayerSupported() override;
-  void ShowMetalayer(const base::Closure& closed) override;
+  void ShowMetalayer() override;
   void HideMetalayer() override;
 
   // user_manager::UserManager::UserSessionStateObserver:
@@ -73,7 +72,7 @@ class PaletteDelegateChromeOS
   content::NotificationRegistrar registrar_;
 
   std::unique_ptr<ash::HighlighterSelectionObserver>
-      highlighter_selection_observer;
+      highlighter_selection_observer_;
 
   base::WeakPtrFactory<PaletteDelegateChromeOS> weak_factory_;
 

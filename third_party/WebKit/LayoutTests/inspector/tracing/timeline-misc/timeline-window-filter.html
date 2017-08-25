@@ -5,52 +5,47 @@
 <script src="../resources/timeline-data.js"></script>
 <script>
 
-function test()
-{
-    var timeline = UI.panels.timeline;
-    var overviewPane = timeline._overviewPane;
+function test() {
+  var timeline = UI.panels.timeline;
+  var overviewPane = timeline._overviewPane;
 
-    InspectorTest.loadTimeline(InspectorTest.timelineData()).then(onTimelineLoaded);
+  PerformanceTestRunner.loadTimeline(PerformanceTestRunner.timelineData()).then(onTimelineLoaded);
 
-    function onTimelineLoaded()
-    {
-        overviewPane._update();
-        InspectorTest.addResult("OverviewPane:");
-        overviewPane._overviewCalculator.setDisplayWidth(450);
-        dumpDividers(overviewPane._overviewCalculator);
-        InspectorTest.addResult("");
+  function onTimelineLoaded() {
+    overviewPane._update();
+    TestRunner.addResult('OverviewPane:');
+    overviewPane._overviewCalculator.setDisplayWidth(450);
+    dumpDividers(overviewPane._overviewCalculator);
+    TestRunner.addResult('');
 
-        dumpFlameChartRecordsCountForRange(0, 1);
-        dumpFlameChartRecordsCountForRange(0.25, 0.75);
-        dumpFlameChartRecordsCountForRange(0.33, 0.66);
+    dumpFlameChartRecordsCountForRange(0, 1);
+    dumpFlameChartRecordsCountForRange(0.25, 0.75);
+    dumpFlameChartRecordsCountForRange(0.33, 0.66);
 
-        overviewPane._overviewGrid.setWindow(0.1, 0.9);
+    overviewPane._overviewGrid.setWindow(0.1, 0.9);
 
-        InspectorTest.addResult("--------------------------------------------------------");
-        var selectionData = timeline._currentModelSelectionData();
-        InspectorTest.addResult("time range = " + selectionData.windowStartTime + " - " + selectionData.windowEndTime);
-        InspectorTest.completeTest();
-    }
+    TestRunner.addResult('--------------------------------------------------------');
+    var selectionData = timeline._currentModelSelectionData();
+    TestRunner.addResult('time range = ' + selectionData.windowStartTime + ' - ' + selectionData.windowEndTime);
+    TestRunner.completeTest();
+  }
 
-    function dumpFlameChartRecordsCountForRange(windowLeft, windowRight)
-    {
-        var mainView = timeline._currentView._mainFlameChart;
-        mainView._muteAnimation = true;
-        overviewPane._overviewGrid.setWindow(windowLeft, windowRight);
-        mainView.update();
-        InspectorTest.addResult("range = " + windowLeft + " - " + windowRight);
-        var selectionData = timeline._currentModelSelectionData();
-        InspectorTest.addResult("time range = " + selectionData.windowStartTime + " - " + selectionData.windowEndTime);
-        InspectorTest.addResult("");
-    }
+  function dumpFlameChartRecordsCountForRange(windowLeft, windowRight) {
+    var mainView = timeline._currentView._mainFlameChart;
+    mainView._muteAnimation = true;
+    overviewPane._overviewGrid.setWindow(windowLeft, windowRight);
+    mainView.update();
+    TestRunner.addResult('range = ' + windowLeft + ' - ' + windowRight);
+    var selectionData = timeline._currentModelSelectionData();
+    TestRunner.addResult('time range = ' + selectionData.windowStartTime + ' - ' + selectionData.windowEndTime);
+    TestRunner.addResult('');
+  }
 
-    function dumpDividers(calculator)
-    {
-        var dividers = PerfUI.TimelineGrid.calculateDividerOffsets(calculator).offsets;
-        for (var i = 0; i < dividers.length; ++i)
-            dividers[i] -= calculator.zeroTime();
-        InspectorTest.addResult("divider offsets: [" + dividers.join(", ") + "]. We are expecting round numbers.");
-    }
+  function dumpDividers(calculator) {
+    var times = PerfUI.TimelineGrid.calculateDividerOffsets(calculator)
+                    .offsets.map(offset => offset.time - calculator.zeroTime());
+    TestRunner.addResult('divider offsets: [' + times.join(', ') + ']. We are expecting round numbers.');
+  }
 }
 
 </script>

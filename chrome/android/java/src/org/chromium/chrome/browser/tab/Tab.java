@@ -28,7 +28,6 @@ import android.widget.FrameLayout;
 import android.widget.FrameLayout.LayoutParams;
 import android.widget.PopupWindow.OnDismissListener;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
@@ -87,6 +86,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabReparentingParams;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.widget.textbubble.TextBubble;
 import org.chromium.chrome.browser.widget.textbubble.ViewAnchoredTextBubble;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.feature_engagement.EventConstants;
@@ -98,6 +98,7 @@ import org.chromium.components.sync.SyncConstants;
 import org.chromium.content.browser.ContentView;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.crypto.CipherFactory;
+import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.ImeEventObserver;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -302,6 +303,13 @@ public class Tab
      */
     private boolean mIsHidden = true;
 
+    /**
+     * Importance of the WebContents currently attached to this tab. Note the key difference from
+     * |mIsHidden| is that a tab is hidden when the application is hidden, but the importance is
+     * not affected by this signal.
+     */
+    private @ChildProcessImportance int mImportance = ChildProcessImportance.NORMAL;
+
     /** Whether the renderer is currently unresponsive. */
     private boolean mIsRendererUnresponsive;
 
@@ -381,6 +389,11 @@ public class Tab
     private int mThemeColor;
 
     private ChromeDownloadDelegate mDownloadDelegate;
+
+    /**
+     * The Text bubble used to display In Product help widget for download feature on videos.
+     */
+    private TextBubble mDownloadIPHBubble;
 
     /** Whether or not the tab closing the tab can send the user back to the app that opened it. */
     private boolean mIsAllowedToReturnToExternalApp;
@@ -463,7 +476,7 @@ public class Tab
      * @param window    An instance of a {@link WindowAndroid}.
      */
     public Tab(int id, boolean incognito, WindowAndroid window) {
-        this(id, INVALID_TAB_ID, incognito, null, window, null, null, null);
+        this(id, INVALID_TAB_ID, incognito, window, null, null, null);
     }
 
     /**
@@ -475,36 +488,31 @@ public class Tab
      * @param id          The id this tab should be identified with.
      * @param parentId    The id id of the tab that caused this tab to be opened.
      * @param incognito   Whether or not this tab is incognito.
-     * @param context     An instance of a {@link Context}.
      * @param window      An instance of a {@link WindowAndroid}.
      * @param creationState State in which the tab is created, needed to initialize TabUma
      *                      accounting. When null, TabUma will not be initialized.
      * @param frozenState State containing information about this Tab, if it was persisted.
      */
     @SuppressLint("HandlerLeak")
-    public Tab(int id, int parentId, boolean incognito, Context context,
-            WindowAndroid window, TabLaunchType type, TabCreationState creationState,
-            TabState frozenState) {
+    public Tab(int id, int parentId, boolean incognito, WindowAndroid window, TabLaunchType type,
+            TabCreationState creationState, TabState frozenState) {
         mId = TabIdManager.getInstance().generateValidId(id);
         mParentId = parentId;
         mIncognito = incognito;
-        mThemedApplicationContext = context != null ? new ContextThemeWrapper(
-                context.getApplicationContext(), ChromeActivity.getThemeId()) : null;
+        mThemedApplicationContext = new ContextThemeWrapper(
+                ContextUtils.getApplicationContext(), ChromeActivity.getThemeId());
         mWindowAndroid = window;
         mLaunchType = type;
         if (mLaunchType == TabLaunchType.FROM_DETACHED) mIsDetached = true;
-        if (mThemedApplicationContext != null) {
-            Resources resources = mThemedApplicationContext.getResources();
-            mIdealFaviconSize = resources.getDimensionPixelSize(R.dimen.default_favicon_size);
-            mDefaultThemeColor = mIncognito
-                    ? ApiCompatibilityUtils.getColor(resources, R.color.incognito_primary_color)
-                    : ApiCompatibilityUtils.getColor(resources, R.color.default_primary_color);
-            mThemeColor = calculateThemeColor(false);
-        } else {
-            mIdealFaviconSize = 16;
-            mDefaultThemeColor = 0;
-            mThemeColor = mDefaultThemeColor;
-        }
+
+        boolean useModernDesign = getActivity() != null && getActivity().getBottomSheet() != null
+                && FeatureUtilities.isChromeHomeModernEnabled();
+
+        Resources resources = mThemedApplicationContext.getResources();
+        mIdealFaviconSize = resources.getDimensionPixelSize(R.dimen.default_favicon_size);
+        mDefaultThemeColor =
+                ColorUtils.getDefaultThemeColor(resources, useModernDesign, mIncognito);
+        mThemeColor = calculateThemeColor(false);
 
         // Restore data from the TabState, if it existed.
         if (frozenState != null) {
@@ -940,7 +948,6 @@ public class Tab
         // Do not apply the theme color if there are any security issues on the page.
         int securityLevel = getSecurityLevel();
         if (securityLevel == ConnectionSecurityLevel.DANGEROUS
-                || securityLevel == ConnectionSecurityLevel.SECURITY_WARNING
                 || securityLevel == ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT) {
             themeColor = getDefaultThemeColor();
         }
@@ -1028,6 +1035,7 @@ public class Tab
     /**
      * @return Whether or not the {@link Tab} represents a {@link NativePage}.
      */
+    @CalledByNative
     public boolean isNativePage() {
         return mNativePage != null;
     }
@@ -1198,6 +1206,14 @@ public class Tab
         } finally {
             TraceEvent.end("Tab.hide");
         }
+    }
+
+    public final void setImportance(@ChildProcessImportance int importance) {
+        if (mImportance == importance) return;
+        mImportance = importance;
+        WebContents webContents = getWebContents();
+        if (webContents == null) return;
+        webContents.setImportance(mImportance);
     }
 
     /**
@@ -1656,9 +1672,11 @@ public class Tab
 
             if (mContentViewCore != null) {
                 mContentViewCore.setObscuredByAnotherView(false);
+                mContentViewCore.getWebContents().setImportance(ChildProcessImportance.NORMAL);
             }
 
             mContentViewCore = cvc;
+            mContentViewCore.getWebContents().setImportance(mImportance);
             cvc.getContainerView().setOnHierarchyChangeListener(this);
             cvc.getContainerView().setOnSystemUiVisibilityChangeListener(this);
 
@@ -1856,6 +1874,8 @@ public class Tab
 
         for (TabObserver observer : mObservers) observer.onDestroyed(this);
         mObservers.clear();
+
+        hideMediaDownloadInProductHelp();
 
         NativePage currentNativePage = mNativePage;
         mNativePage = null;
@@ -2887,11 +2907,10 @@ public class Tab
      * afterwards to complete the second level initialization.
      */
     public static Tab createFrozenTabFromState(
-            int id, ChromeActivity activity, boolean incognito,
-            WindowAndroid nativeWindow, int parentId, TabState state) {
+            int id, boolean incognito, WindowAndroid nativeWindow, int parentId, TabState state) {
         assert state != null;
-        return new Tab(id, parentId, incognito, activity, nativeWindow,
-                TabLaunchType.FROM_RESTORE, TabCreationState.FROZEN_ON_RESTORE, state);
+        return new Tab(id, parentId, incognito, nativeWindow, TabLaunchType.FROM_RESTORE,
+                TabCreationState.FROZEN_ON_RESTORE, state);
     }
 
     /**
@@ -2930,11 +2949,9 @@ public class Tab
      * that should be loaded when switched to. initialize() needs to be called afterwards to
      * complete the second level initialization.
      */
-    public static Tab createTabForLazyLoad(ChromeActivity activity, boolean incognito,
-            WindowAndroid nativeWindow, TabLaunchType type, int parentId,
-            LoadUrlParams loadUrlParams) {
-        Tab tab = new Tab(
-                INVALID_TAB_ID, parentId, incognito, activity, nativeWindow, type,
+    public static Tab createTabForLazyLoad(boolean incognito, WindowAndroid nativeWindow,
+            TabLaunchType type, int parentId, LoadUrlParams loadUrlParams) {
+        Tab tab = new Tab(INVALID_TAB_ID, parentId, incognito, nativeWindow, type,
                 TabCreationState.FROZEN_FOR_LAZY_LOAD, null);
         tab.setPendingLoadParams(loadUrlParams);
         return tab;
@@ -2945,11 +2962,12 @@ public class Tab
      * initialization.
      * @param initiallyHidden true iff the tab being created is initially in background
      */
-    public static Tab createLiveTab(int id, ChromeActivity activity, boolean incognito,
-            WindowAndroid nativeWindow, TabLaunchType type, int parentId, boolean initiallyHidden) {
-        return new Tab(id, parentId, incognito, activity, nativeWindow, type, initiallyHidden
-                ? TabCreationState.LIVE_IN_BACKGROUND
-                : TabCreationState.LIVE_IN_FOREGROUND, null);
+    public static Tab createLiveTab(int id, boolean incognito, WindowAndroid nativeWindow,
+            TabLaunchType type, int parentId, boolean initiallyHidden) {
+        return new Tab(id, parentId, incognito, nativeWindow, type,
+                initiallyHidden ? TabCreationState.LIVE_IN_BACKGROUND
+                                : TabCreationState.LIVE_IN_FOREGROUND,
+                null);
     }
 
     /**
@@ -2963,7 +2981,7 @@ public class Tab
     public static Tab createDetached(TabDelegateFactory delegateFactory) {
         Context context = ContextUtils.getApplicationContext();
         WindowAndroid windowAndroid = new WindowAndroid(context);
-        Tab tab = new Tab(INVALID_TAB_ID, INVALID_TAB_ID, false, context, windowAndroid,
+        Tab tab = new Tab(INVALID_TAB_ID, INVALID_TAB_ID, false, windowAndroid,
                 TabLaunchType.FROM_DETACHED, null, null);
         tab.initialize(null, null, delegateFactory, true, false);
 
@@ -3110,6 +3128,47 @@ public class Tab
         nativeEnableEmbeddedMediaExperience(mNativeTabAndroid, enabled);
     }
 
+    @CalledByNative
+    private void showMediaDownloadInProductHelp(int x, int y, int width, int height) {
+        // If we are not currently showing the widget, ask the tracker if we can show it.
+        if (mDownloadIPHBubble == null) {
+            Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+            tracker.notifyEvent(EventConstants.MEDIA_DOWNLOAD_BUTTON_DISPLAYED);
+            if (!tracker.shouldTriggerHelpUI(FeatureConstants.MEDIA_DOWNLOAD_FEATURE)) {
+                // Inform native that the button was dismissed to notify the renderer that the
+                // request was rejected.
+                nativeMediaDownloadInProductHelpDismissed(mNativeTabAndroid);
+                return;
+            }
+
+            mDownloadIPHBubble = new TextBubble(getApplicationContext(),
+                    mContentViewCore.getContainerView(), R.string.iph_media_download_text,
+                    R.string.iph_media_download_accessibility_text);
+            mDownloadIPHBubble.setDismissOnTouchInteraction(true);
+            mDownloadIPHBubble.addOnDismissListener(new OnDismissListener() {
+                @Override
+                public void onDismiss() {
+                    hideMediaDownloadInProductHelp();
+                }
+            });
+        }
+
+        Rect rect = new Rect(x, y, x + width, y + height);
+        mDownloadIPHBubble.setAnchorRect(rect);
+        mDownloadIPHBubble.show();
+    }
+
+    @CalledByNative
+    private void hideMediaDownloadInProductHelp() {
+        if (mDownloadIPHBubble == null) return;
+
+        mDownloadIPHBubble.dismiss();
+        mDownloadIPHBubble = null;
+        Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+        tracker.dismissed(FeatureConstants.MEDIA_DOWNLOAD_FEATURE);
+        nativeMediaDownloadInProductHelpDismissed(mNativeTabAndroid);
+    }
+
     private native void nativeInit();
     private native void nativeDestroy(long nativeTabAndroid);
     private native void nativeInitWebContents(long nativeTabAndroid, boolean incognito,
@@ -3144,4 +3203,5 @@ public class Tab
     private native void nativeSetWebappManifestScope(long nativeTabAndroid, String scope);
     private native void nativeEnableEmbeddedMediaExperience(long nativeTabAndroid, boolean enabled);
     private native void nativeAttachDetachedTab(long nativeTabAndroid);
+    private native void nativeMediaDownloadInProductHelpDismissed(long nativeTabAndroid);
 }

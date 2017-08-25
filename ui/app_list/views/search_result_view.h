@@ -17,7 +17,7 @@
 #include "ui/app_list/search_result_observer.h"
 #include "ui/app_list/views/search_result_actions_view_delegate.h"
 #include "ui/views/context_menu_controller.h"
-#include "ui/views/controls/button/custom_button.h"
+#include "ui/views/controls/button/button.h"
 
 namespace gfx {
 class RenderText;
@@ -40,11 +40,11 @@ class SearchResultActionsView;
 
 // SearchResultView displays a SearchResult.
 class APP_LIST_EXPORT SearchResultView
-    : public views::CustomButton,
+    : public views::Button,
       public views::ButtonListener,
       public views::ContextMenuController,
       public SearchResultObserver,
-      NON_EXPORTED_BASE(public SearchResultActionsViewDelegate) {
+      public SearchResultActionsViewDelegate {
  public:
   // Internal class name.
   static const char kViewClassName[];
@@ -73,6 +73,10 @@ class APP_LIST_EXPORT SearchResultView
   void UpdateTitleText();
   void UpdateDetailsText();
   void UpdateAccessibleName();
+
+  // Creates title/details render text.
+  void CreateTitleRenderText();
+  void CreateDetailsRenderText();
 
   // views::View overrides:
   const char* GetClassName() const override;
@@ -105,9 +109,9 @@ class APP_LIST_EXPORT SearchResultView
   // SearchResultActionsViewDelegate overrides:
   void OnSearchResultActionActivated(size_t index, int event_flags) override;
 
-  SearchResult* result_;  // Owned by AppListModel::SearchResults.
+  SearchResult* result_ = nullptr;  // Owned by AppListModel::SearchResults.
 
-  bool is_last_result_;
+  bool is_last_result_ = false;
 
   // Parent list view. Owned by views hierarchy.
   SearchResultListView* list_view_;

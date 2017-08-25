@@ -23,6 +23,10 @@
 #include "services/ui/ws/server_window_observer.h"
 #include "ui/gfx/geometry/rect_f.h"
 
+namespace viz {
+class HitTestQuery;
+}
+
 namespace ui {
 class Event;
 class KeyEvent;
@@ -58,6 +62,10 @@ class EventDispatcher : public ServerWindowObserver,
 
   explicit EventDispatcher(EventDispatcherDelegate* delegate);
   ~EventDispatcher() override;
+
+  ModalWindowController* modal_window_controller() {
+    return &modal_window_controller_;
+  }
 
   // Cancels capture and stops tracking any pointer events. This does not send
   // any events to the delegate.
@@ -105,10 +113,6 @@ class EventDispatcher : public ServerWindowObserver,
   // one that is visible and added most recently or shown most recently would be
   // the active one.
   void AddSystemModalWindow(ServerWindow* window);
-
-  // Checks if |modal_window| is a visible modal window that blocks current
-  // capture window and if that's the case, releases the capture.
-  void ReleaseCaptureBlockedByModalWindow(const ServerWindow* modal_window);
 
   // Checks if the current capture window is blocked by any visible modal window
   // and if that's the case, releases the capture.
@@ -164,6 +168,9 @@ class EventDispatcher : public ServerWindowObserver,
   ServerWindow* GetRootWindowContaining(gfx::Point* location_in_display,
                                         int64_t* display_id) override;
   void ProcessNextAvailableEvent() override;
+  viz::HitTestQuery* GetHitTestQueryForDisplay(int64_t display_id) override;
+  ServerWindow* GetWindowFromFrameSinkId(
+      const viz::FrameSinkId& frame_sink_id) override;
 
  private:
   friend class test::EventDispatcherTestApi;
@@ -188,6 +195,12 @@ class EventDispatcher : public ServerWindowObserver,
 
     bool is_pointer_down;
   };
+
+  // EventTargeter returns the deepest window based on hit-test data. If the
+  // target is blocked by a modal window this returns a different target,
+  // otherwise the supplied target is returned.
+  LocationTarget AdjustLocationTargetForModal(
+      const LocationTarget& location_target) const;
 
   void SetMouseCursorSourceWindow(ServerWindow* window);
 
@@ -222,17 +235,21 @@ class EventDispatcher : public ServerWindowObserver,
   //   when no buttons on the mouse are down.
   // This also generates exit events as appropriate. For example, if the mouse
   // moves between one window to another an exit is generated on the first.
-  // |pointer_target| is the PointerTarget for |event| based on the
-  // |deepest_window|, the deepest visible window for the root_location
-  // of the |event|. |location_in_display| and |display_id| are updated values
-  // for root_location and |event_display_id_| (e.g. during drag-n-drop).
-  void ProcessPointerEventOnFoundTarget(const ui::PointerEvent& event,
-                                        const LocationTarget& location_target);
+  void ProcessPointerEventOnFoundTarget(
+      const ui::PointerEvent& event,
+      const LocationTarget& found_location_target);
 
   void UpdateNonClientAreaForCurrentWindowOnFoundWindow(
-      const LocationTarget& location_target);
+      const LocationTarget& found_location_target);
+
+  // This callback is triggered by UpdateCursorProviderByLastKnownLocation().
+  // It calls UpdateCursorProvider() as appropriate.
   void UpdateCursorProviderByLastKnownLocationOnFoundWindow(
       const LocationTarget& location_target);
+
+  // Immediatley updates the cursor provider (|mouse_cursor_source_window_|)
+  // as appropriate.
+  void UpdateCursorProvider(const LocationTarget& location_target);
 
   // Adds |pointer_target| to |pointer_targets_|.
   void StartTrackingPointer(int32_t pointer_id,
@@ -306,6 +323,12 @@ class EventDispatcher : public ServerWindowObserver,
   bool mouse_button_down_;
   ServerWindow* mouse_cursor_source_window_;
   bool mouse_cursor_in_non_client_area_;
+
+  // We calculate out the button flags for any synthetic mouse events we need
+  // to create during SetMousePointerDisplayLocation(). We don't try to set
+  // this on a per-PointerTarget because modified PointerTargets aren't always
+  // committed back into |pointer_targets_|.
+  int next_mouse_button_flags_;
 
   // The location of the mouse pointer in display coordinates. This can be
   // outside the bounds of |mouse_cursor_source_window_|, which can capture the

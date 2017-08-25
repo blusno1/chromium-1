@@ -11,7 +11,9 @@ import android.os.Handler;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.PasswordUIView;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
@@ -35,8 +37,8 @@ public class MainPreferences extends PreferenceFragment
     public static final String PREF_SEARCH_ENGINE = "search_engine";
     public static final String PREF_SAVED_PASSWORDS = "saved_passwords";
     public static final String PREF_HOMEPAGE = "homepage";
-    public static final String PREF_SUGGESTIONS = "suggestions";
     public static final String PREF_DATA_REDUCTION = "data_reduction";
+    public static final String PREF_NOTIFICATIONS = "notifications";
 
     public static final String ACCOUNT_PICKER_DIALOG_TAG = "account_picker_dialog_tag";
     public static final String EXTRA_SHOW_SEARCH_ENGINE_PICKER = "show_search_engine_picker";
@@ -126,6 +128,37 @@ public class MainPreferences extends PreferenceFragment
 
         if (!SigninManager.get(getActivity()).isSigninSupported()) {
             getPreferenceScreen().removePreference(findPreference(PREF_SIGN_IN));
+        }
+
+        if (BuildInfo.isAtLeastO()) {
+            // If we are on Android O+ the Notifications preference should lead to the Android
+            // Settings notifications page, not to Chrome's notifications settings page.
+            Preference notifications = findPreference(PREF_NOTIFICATIONS);
+            notifications.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                @Override
+                public boolean onPreferenceClick(Preference preference) {
+                    // TODO(crbug.com/707804): Use Android O constants.
+                    Intent intent = new Intent();
+                    intent.setAction("android.settings.APP_NOTIFICATION_SETTINGS");
+                    intent.putExtra(
+                            "android.provider.extra.APP_PACKAGE", BuildInfo.getPackageName());
+                    startActivity(intent);
+                    // We handle the click so the default action (opening NotificationsPreference)
+                    // isn't triggered.
+                    return true;
+                }
+            });
+        } else if (!ChromeFeatureList.isEnabled(
+                           ChromeFeatureList.CONTENT_SUGGESTIONS_NOTIFICATIONS)) {
+            // The Notifications Preferences page currently only contains the Content Suggestions
+            // Notifications setting and a link to per-website notification settings. The latter can
+            // be access through Site Settings, so if the Content Suggestions Notifications feature
+            // isn't enabled we don't show the Notifications Preferences page.
+
+            // This checks whether the Content Suggestions Notifications *feature* is enabled on the
+            // user's device, not whether the user has Content Suggestions Notifications themselves
+            // enabled (which is what the user can toggle on the Notifications Preferences page).
+            getPreferenceScreen().removePreference(findPreference(PREF_NOTIFICATIONS));
         }
     }
 

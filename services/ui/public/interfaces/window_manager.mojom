@@ -246,6 +246,10 @@ interface WindowManager {
   // Whenever the visibility of the mouse cursor changes due to touch on the
   // server, the window manager gets notified of the change.
   OnCursorTouchVisibleChanged(bool enabled);
+
+  // Called when a pointer down event occurs on a window and the event is
+  // blocked by a modal window.
+  OnEventBlockedByModalWindow(uint32 window_id);
 };
 
 struct WmAccelerator {
@@ -318,6 +322,12 @@ interface WindowManagerClient {
   // Swaps the display roots of the two displays.
   SwapDisplayRoots(int64 display_id1, int64 display_id2) => (bool success);
 
+  // Sets the BlockingContainers; one per display. This should be called any
+  // time displays are added or removed. See description of BlockingContainers
+  // for details on what this does.
+  SetBlockingContainers(array<BlockingContainers> blocking_containers) =>
+      (bool success);
+
   // The window manager has completed a request with the specific change id.
   WmResponse(uint32 change_id, bool response);
 
@@ -354,6 +364,10 @@ interface WindowManagerClient {
   // Moves the cursor to the given location on the given display.
   WmMoveCursorToDisplayLocation(gfx.mojom.Point display_pixels,
                                 int64 display_id);
+
+  // Confines the cursor to a rectangle in pixels on |display_id|.
+  WmConfineCursorToBounds(gfx.mojom.Rect bounds_in_pixels,
+                          int64 display_id);
 
   // The cursor is hidden and shown by touch events naturally, but the
   // window manager also can manually show/hide it for features.

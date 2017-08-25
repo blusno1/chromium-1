@@ -59,12 +59,11 @@ class SurfaceReferencesTest : public testing::Test {
       const FrameSinkId& frame_sink_id) {
     auto& support_ptr = supports_[frame_sink_id];
     if (!support_ptr) {
+      manager_->RegisterFrameSinkId(frame_sink_id);
       constexpr bool is_root = false;
-      constexpr bool handles_frame_sink_id_invalidation = true;
       constexpr bool needs_sync_points = true;
       support_ptr = CompositorFrameSinkSupport::Create(
-          nullptr, manager_.get(), frame_sink_id, is_root,
-          handles_frame_sink_id_invalidation, needs_sync_points);
+          nullptr, manager_.get(), frame_sink_id, is_root, needs_sync_points);
     }
     return *support_ptr;
   }
@@ -73,6 +72,7 @@ class SurfaceReferencesTest : public testing::Test {
     auto support_ptr = supports_.find(frame_sink_id);
     ASSERT_NE(support_ptr, supports_.end());
     supports_.erase(support_ptr);
+    manager_->InvalidateFrameSinkId(frame_sink_id);
   }
 
   void RemoveSurfaceReference(const SurfaceId& parent_id,
@@ -112,9 +112,7 @@ class SurfaceReferencesTest : public testing::Test {
   // testing::Test:
   void SetUp() override {
     // Start each test with a fresh SurfaceManager instance.
-    manager_ = base::MakeUnique<FrameSinkManagerImpl>(
-        nullptr /* display_provider */,
-        SurfaceManager::LifetimeType::REFERENCES);
+    manager_ = std::make_unique<FrameSinkManagerImpl>();
   }
   void TearDown() override {
     for (auto& support : supports_)
@@ -268,6 +266,37 @@ TEST_F(SurfaceReferencesTest, GarbageCollectionWorksRecusively) {
   EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id1));
   EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id2));
   EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id3));
+}
+
+// Verify that surfaces marked as live are not garbage collected and amy
+// dependencies are also not garbage collected.
+TEST_F(SurfaceReferencesTest, LiveSurfaceStillReachable) {
+  SurfaceId id1 = CreateSurface(kFrameSink1, 1);
+  SurfaceId id2 = CreateSurface(kFrameSink2, 1);
+  SurfaceId id3 = CreateSurface(kFrameSink3, 1);
+
+  AddSurfaceReference(GetSurfaceManager().GetRootSurfaceId(), id1);
+  AddSurfaceReference(id1, id2);
+  AddSurfaceReference(id2, id3);
+  ASSERT_THAT(GetAllTempReferences(), IsEmpty());
+
+  // Marking |id3| for destruction shouldn't cause it be garbage collected
+  // because |id2| is still reachable from the root.
+  DestroySurface(id3);
+  EXPECT_NE(nullptr, GetSurfaceManager().GetSurfaceForId(id3));
+
+  // Removing the surface reference to |id2| makes it not reachable from the
+  // root, however it's not marked as destroyed and is still live. Make sure we
+  // also don't delete any dependencies, such as |id3|, as well.
+  RemoveSurfaceReference(id1, id2);
+  EXPECT_NE(nullptr, GetSurfaceManager().GetSurfaceForId(id3));
+  EXPECT_NE(nullptr, GetSurfaceManager().GetSurfaceForId(id2));
+
+  // |id2| is unreachable and destroyed. Garbage collection should delete both
+  // |id2| and |id3| now.
+  DestroySurface(id2);
+  EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id3));
+  EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id2));
 }
 
 TEST_F(SurfaceReferencesTest, TryAddReferenceSameReferenceTwice) {

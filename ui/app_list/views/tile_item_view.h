@@ -13,7 +13,6 @@
 #include "ui/app_list/app_list_export.h"
 #include "ui/app_list/views/image_shadow_animator.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/custom_button.h"
 
 namespace gfx {
 class ImageSkia;
@@ -27,7 +26,9 @@ class Label;
 namespace app_list {
 
 // The view for a tile in the app list on the start/search page.
-class APP_LIST_EXPORT TileItemView : public views::CustomButton,
+// TODO(warx): Merge this class to its subclass SearchResultTileItemView once
+// bubble launcher deprecates.
+class APP_LIST_EXPORT TileItemView : public views::Button,
                                      public views::ButtonListener,
                                      public ImageShadowAnimator::Delegate {
  public:
@@ -50,7 +51,7 @@ class APP_LIST_EXPORT TileItemView : public views::CustomButton,
   // Sets the behavior of the tile item on mouse hover.
   void SetHoverStyle(HoverStyle hover_style);
 
-  // Overridden from views::CustomButton:
+  // Overridden from views::Button:
   void StateChanged(ButtonState old_state) override;
   void PaintButtonContents(gfx::Canvas* canvas) override;
 
@@ -76,7 +77,9 @@ class APP_LIST_EXPORT TileItemView : public views::CustomButton,
   views::Label* title() const { return title_; }
   void SetTitle(const base::string16& title);
 
-  void EnableWhiteSelectedColor(bool enabled);
+  void set_is_recommendation(bool is_recommendation) {
+    is_recommendation_ = is_recommendation;
+  }
 
  private:
   void UpdateBackgroundColor();
@@ -90,10 +93,13 @@ class APP_LIST_EXPORT TileItemView : public views::CustomButton,
 
   bool selected_ = false;
 
-  // Indicates whether the white color background selected color should be used
-  // for this TileItemView. It is enabled for suggested apps only for new
-  // design.
-  bool white_selected_color_enabled_ = false;
+  // Indicates whether this view is the base class for recommendation display
+  // type SearchResultTileItemView.
+  // TODO(warx): It is not needed once TileItemView class is merged to
+  // SearchResultTileItemVIew.
+  bool is_recommendation_ = false;
+
+  const bool is_fullscreen_app_list_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(TileItemView);
 };

@@ -65,8 +65,7 @@ class SubresourceFilterSafeBrowsingActivationThrottle
   void CheckCurrentUrl();
   void NotifyResult();
 
-  ActivationDecision ComputeActivation(
-      Configuration::ActivationOptions* options);
+  ActivationDecision ComputeActivation(Configuration* configuration);
 
   // Returns whether a main-frame navigation to the given |url| satisfies the
   // activation |conditions| of a given configuration, except for |priority|.
@@ -75,8 +74,6 @@ class SubresourceFilterSafeBrowsingActivationThrottle
       bool scheme_is_http_or_https,
       const Configuration::ActivationConditions& conditions,
       ActivationList matched_list) const;
-
-  void RecordRedirectChainMatchPatternForList(ActivationList activation_list);
 
   std::vector<SubresourceFilterSafeBrowsingClient::CheckResult> check_results_;
 

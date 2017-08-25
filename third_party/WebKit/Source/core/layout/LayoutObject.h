@@ -39,11 +39,11 @@
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/layout/api/HitTestAction.h"
 #include "core/layout/api/SelectionState.h"
-#include "core/layout/compositing/CompositingState.h"
 #include "core/loader/resource/ImageResourceObserver.h"
 #include "core/paint/LayerHitTestRects.h"
 #include "core/paint/PaintPhase.h"
 #include "core/paint/RarePaintData.h"
+#include "core/paint/compositing/CompositingState.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/StyleDifference.h"
 #include "platform/geometry/FloatQuad.h"
@@ -2731,14 +2731,14 @@ inline LayoutUnit AdjustLayoutUnitForAbsoluteZoom(LayoutUnit value,
 }
 
 inline void AdjustFloatQuadForAbsoluteZoom(FloatQuad& quad,
-                                           LayoutObject& layout_object) {
+                                           const LayoutObject& layout_object) {
   float zoom = layout_object.StyleRef().EffectiveZoom();
   if (zoom != 1)
     quad.Scale(1 / zoom, 1 / zoom);
 }
 
 inline void AdjustFloatRectForAbsoluteZoom(FloatRect& rect,
-                                           LayoutObject& layout_object) {
+                                           const LayoutObject& layout_object) {
   float zoom = layout_object.StyleRef().EffectiveZoom();
   if (zoom != 1)
     rect.Scale(1 / zoom, 1 / zoom);
@@ -2748,6 +2748,9 @@ inline double AdjustScrollForAbsoluteZoom(double value,
                                           LayoutObject& layout_object) {
   return AdjustScrollForAbsoluteZoom(value, layout_object.StyleRef());
 }
+
+CORE_EXPORT const LayoutObject* AssociatedLayoutObjectOf(const Node&,
+                                                         int offset_in_node);
 
 #define DEFINE_LAYOUT_OBJECT_TYPE_CASTS(thisType, predicate)           \
   DEFINE_TYPE_CASTS(thisType, LayoutObject, object, object->predicate, \

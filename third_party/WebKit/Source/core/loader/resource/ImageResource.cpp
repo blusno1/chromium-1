@@ -247,13 +247,13 @@ DEFINE_TRACE(ImageResource) {
   MultipartImageResourceParser::Client::Trace(visitor);
 }
 
-void ImageResource::CheckNotify() {
+void ImageResource::NotifyFinished() {
   // Don't notify clients of completion if this ImageResource is
   // about to be reloaded.
   if (is_scheduling_reload_ || ShouldReloadBrokenPlaceholder())
     return;
 
-  Resource::CheckNotify();
+  Resource::NotifyFinished();
 }
 
 bool ImageResource::HasClientsOrObservers() const {
@@ -289,7 +289,14 @@ void ImageResource::DestroyDecodedDataIfPossible() {
 }
 
 void ImageResource::AllClientsAndObserversRemoved() {
-  CHECK(!GetContent()->HasImage() || !ErrorOccurred());
+  // After ErrorOccurred() is set true in Resource::FinishAsError() before
+  // the subsequent UpdateImage() in ImageResource::FinishAsError(),
+  // HasImage() is true and ErrorOccurred() is true.
+  // |is_during_finish_as_error_| is introduced to allow such cases.
+  // crbug.com/701723
+  // TODO(hiroshige): Make the CHECK condition cleaner.
+  CHECK(is_during_finish_as_error_ || !GetContent()->HasImage() ||
+        !ErrorOccurred());
   // If possible, delay the resetting until back at the event loop. Doing so
   // after a conservative GC prevents resetAnimation() from upsetting ongoing
   // animation updates (crbug.com/613709)
@@ -410,7 +417,9 @@ void ImageResource::FinishAsError(const ResourceError& error) {
   // TODO(hiroshige): Move setEncodedSize() call to Resource::error() if it
   // is really needed, or remove it otherwise.
   SetEncodedSize(0);
+  is_during_finish_as_error_ = true;
   Resource::FinishAsError(error);
+  is_during_finish_as_error_ = false;
   UpdateImage(nullptr, ImageResourceContent::kClearImageAndNotifyObservers,
               true);
 }
@@ -633,7 +642,7 @@ void ImageResource::OnePartInMultipartReceived(
     // We notify clients and observers of finish in checkNotify() and
     // updateImageAndClearBuffer(), respectively, and they will not be
     // notified again in Resource::finish()/error().
-    CheckNotify();
+    NotifyFinished();
     if (Loader())
       Loader()->DidFinishLoadingFirstPartInMultipart();
   }

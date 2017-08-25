@@ -5,13 +5,15 @@
 #include "ui/app_list/views/search_result_tile_item_view.h"
 
 #include "base/i18n/number_formatting.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/search_result.h"
 #include "ui/app_list/vector_icons/vector_icons.h"
 #include "ui/app_list/views/search_result_container_view.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -22,7 +24,9 @@ namespace {
 
 constexpr int kSearchTileWidth = 80;
 constexpr int kSearchTileTopPadding = 4;
-constexpr int kSearchTitleSpacing = 6;
+constexpr int kSearchTitleSpacing = 5;
+constexpr int kSearchPriceSize = 37;
+constexpr int kSearchRatingSize = 26;
 constexpr int kSearchRatingStarSize = 12;
 constexpr int kSearchRatingStarHorizontalSpacing = 1;
 constexpr int kSearchRatingStarVerticalSpacing = 2;
@@ -40,18 +44,19 @@ constexpr SkColor kSearchRatingStarColor =
 
 SearchResultTileItemView::SearchResultTileItemView(
     SearchResultContainerView* result_container,
-    AppListViewDelegate* view_delegate)
-    : result_container_(result_container),
+    AppListViewDelegate* view_delegate,
+    bool is_suggested_app,
+    bool is_fullscreen_app_list_enabled,
+    bool is_play_store_search_enabled)
+    : is_suggested_app_(is_suggested_app),
+      result_container_(result_container),
       view_delegate_(view_delegate),
-      is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
+      is_fullscreen_app_list_enabled_(is_fullscreen_app_list_enabled) {
   // When |item_| is null, the tile is invisible. Calling SetSearchResult with a
   // non-null item makes the tile visible.
   SetVisible(false);
 
-  SetPaintToLayer();
-  layer()->SetFillsBoundsOpaquely(false);
-
-  if (features::IsPlayStoreAppSearchEnabled()) {
+  if (is_play_store_search_enabled) {
     const gfx::FontList& base_font =
         ui::ResourceBundle::GetSharedInstance().GetFontList(
             ui::ResourceBundle::BaseFont);
@@ -59,7 +64,7 @@ SearchResultTileItemView::SearchResultTileItemView(
     rating_ = new views::Label;
     rating_->SetEnabledColor(kSearchAppRatingColor);
     rating_->SetFontList(base_font);
-    rating_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    rating_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
     rating_->SetVisible(false);
     AddChildView(rating_);
 
@@ -74,7 +79,7 @@ SearchResultTileItemView::SearchResultTileItemView(
     price_ = new views::Label;
     price_->SetEnabledColor(kSearchAppPriceColor);
     price_->SetFontList(base_font);
-    price_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
+    price_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     price_->SetVisible(false);
     AddChildView(price_);
   }
@@ -115,25 +120,51 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
             ui::ResourceBundle::BaseFont);
 
     if (item_->display_type() == SearchResult::DISPLAY_RECOMMENDATION) {
-      EnableWhiteSelectedColor(true);
+      set_is_recommendation(true);
 
       title()->SetFontList(base_font.DeriveWithSizeDelta(1));
       title()->SetEnabledColor(kGridTitleColorFullscreen);
     } else if (item_->display_type() == SearchResult::DISPLAY_TILE) {
+      // Set solid color background to avoid broken text. See crbug.com/746563.
+      if (rating_) {
+        rating_->SetBackground(
+            views::CreateSolidBackground(kCardBackgroundColorFullscreen));
+      }
+      if (price_) {
+        price_->SetBackground(
+            views::CreateSolidBackground(kCardBackgroundColorFullscreen));
+      }
+      title()->SetBackground(
+          views::CreateSolidBackground(kCardBackgroundColorFullscreen));
       title()->SetFontList(base_font.DeriveWithSizeDelta(1));
       title()->SetEnabledColor(kSearchTitleColor);
     }
+
+    title()->SetMaxLines(2);
+    title()->SetMultiLine(item_->display_type() == SearchResult::DISPLAY_TILE &&
+                          item_->result_type() ==
+                              SearchResult::RESULT_INSTALLED_APP);
   }
 
   // Only refresh the icon if it's different from the old one. This prevents
   // flickering.
-  if (!old_item || !item->icon().BackedBySameObjectAs(old_item->icon())) {
+  // If the new icon is null, it's being decoded asynchronously. Not updating it
+  // now to prevent flickering from showing an empty icon while decoding.
+  if (!item->icon().isNull() &&
+      (!old_item || !item->icon().BackedBySameObjectAs(old_item->icon()))) {
     OnIconChanged();
   }
   if (!old_item ||
       !item->badge_icon().BackedBySameObjectAs(old_item->badge_icon())) {
     OnBadgeIconChanged();
   }
+
+  base::string16 accessible_name = title()->text();
+  if (rating_ && rating_->visible())
+    accessible_name += base::UTF8ToUTF16(", ") + rating_->text();
+  if (price_ && price_->visible())
+    accessible_name += base::UTF8ToUTF16(", ") + price_->text();
+  SetAccessibleName(accessible_name);
 }
 
 void SearchResultTileItemView::SetRating(float rating) {
@@ -164,13 +195,26 @@ void SearchResultTileItemView::SetPrice(const base::string16& price) {
   price_->SetVisible(true);
 }
 
+void SearchResultTileItemView::LogAppLaunch() const {
+  // Only log the app launch if the class is being used as a suggested app.
+  if (!is_suggested_app_)
+    return;
+
+  UMA_HISTOGRAM_BOOLEAN(is_fullscreen_app_list_enabled_
+                            ? kAppListAppLaunchedFullscreen
+                            : kAppListAppLaunched,
+                        is_suggested_app_);
+}
+
 void SearchResultTileItemView::ButtonPressed(views::Button* sender,
                                              const ui::Event& event) {
+  LogAppLaunch();
   view_delegate_->OpenSearchResult(item_, false, event.flags());
 }
 
 bool SearchResultTileItemView::OnKeyPressed(const ui::KeyEvent& event) {
   if (event.key_code() == ui::VKEY_RETURN) {
+    LogAppLaunch();
     view_delegate_->OpenSearchResult(item_, false, event.flags());
     return true;
   }
@@ -267,26 +311,27 @@ void SearchResultTileItemView::Layout() {
     if (rating_) {
       gfx::Rect rating_rect(rect);
       rating_rect.Inset(0, title()->GetPreferredSize().height(), 0, 0);
-      rating_rect.set_height(rating_->GetPreferredSize().height());
+      rating_rect.set_size(rating_->GetPreferredSize());
+      rating_rect.set_width(kSearchRatingSize);
       rating_->SetBoundsRect(rating_rect);
     }
 
     if (rating_star_) {
       gfx::Rect rating_star_rect(rect);
-      rating_star_rect.Inset(rating_->GetPreferredSize().width() +
-                                 kSearchRatingStarHorizontalSpacing,
-                             title()->GetPreferredSize().height() +
-                                 kSearchRatingStarVerticalSpacing,
-                             0, 0);
-      rating_star_rect.set_height(rating_star_->GetPreferredSize().height());
-      rating_star_rect.set_width(rating_star_->GetPreferredSize().width());
+      rating_star_rect.Inset(
+          kSearchRatingSize + kSearchRatingStarHorizontalSpacing,
+          title()->GetPreferredSize().height() +
+              kSearchRatingStarVerticalSpacing,
+          0, 0);
+      rating_star_rect.set_size(rating_star_->GetPreferredSize());
       rating_star_->SetBoundsRect(rating_star_rect);
     }
 
     if (price_) {
       gfx::Rect price_rect(rect);
-      price_rect.Inset(0, title()->GetPreferredSize().height(), 0, 0);
-      price_rect.set_height(price_->GetPreferredSize().height());
+      price_rect.Inset(rect.width() - kSearchPriceSize,
+                       title()->GetPreferredSize().height(), 0, 0);
+      price_rect.set_size(price_->GetPreferredSize());
       price_->SetBoundsRect(price_rect);
     }
   } else {

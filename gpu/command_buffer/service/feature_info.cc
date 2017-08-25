@@ -236,13 +236,6 @@ FeatureInfo::FeatureInfo(
                            : nullptr);
 }
 
-FeatureInfo::FeatureInfo(
-    const base::CommandLine& command_line,
-    const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds)
-    : workarounds_(gpu_driver_bug_workarounds) {
-  InitializeBasicState(&command_line);
-}
-
 void FeatureInfo::InitializeBasicState(const base::CommandLine* command_line) {
   if (!command_line)
     return;
@@ -1040,6 +1033,7 @@ void FeatureInfo::InitializeFeatures() {
   // they should use ordinary non-power-of-two textures. However, for unit
   // testing purposes we expose it on all supported platforms.
   if (extensions.Contains("GL_ARB_texture_rectangle") ||
+      extensions.Contains("GL_ANGLE_texture_rectangle") ||
       gl_version_info_->is_desktop_core_profile) {
     AddExtensionString("GL_ARB_texture_rectangle");
     feature_flags_.arb_texture_rectangle = true;
@@ -1404,6 +1398,8 @@ void FeatureInfo::InitializeFeatures() {
   feature_flags_.ext_robustness = extensions.Contains("GL_EXT_robustness");
   feature_flags_.chromium_texture_filtering_hint =
       extensions.Contains("GL_CHROMIUM_texture_filtering_hint");
+  feature_flags_.ext_pixel_buffer_object =
+      extensions.Contains("GL_NV_pixel_buffer_object");
 }
 
 void FeatureInfo::InitializeFloatAndHalfFloatFeatures(

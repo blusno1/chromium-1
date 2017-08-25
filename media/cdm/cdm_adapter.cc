@@ -29,6 +29,7 @@
 #include "media/cdm/cdm_allocator.h"
 #include "media/cdm/cdm_file_io.h"
 #include "media/cdm/cdm_helpers.h"
+#include "media/cdm/cdm_module.h"
 #include "media/cdm/cdm_wrapper.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -95,17 +96,17 @@ cdm::InitDataType ToCdmInitDataType(EmeInitDataType init_data_type) {
 CdmPromise::Exception ToMediaExceptionType(cdm::Exception exception) {
   switch (exception) {
     case cdm::kExceptionTypeError:
-      return CdmPromise::INVALID_ACCESS_ERROR;
+      return CdmPromise::Exception::TYPE_ERROR;
     case cdm::kExceptionNotSupportedError:
-      return CdmPromise::NOT_SUPPORTED_ERROR;
+      return CdmPromise::Exception::NOT_SUPPORTED_ERROR;
     case cdm::kExceptionInvalidStateError:
-      return CdmPromise::INVALID_STATE_ERROR;
+      return CdmPromise::Exception::INVALID_STATE_ERROR;
     case cdm::kExceptionQuotaExceededError:
-      return CdmPromise::QUOTA_EXCEEDED_ERROR;
+      return CdmPromise::Exception::QUOTA_EXCEEDED_ERROR;
   }
 
   NOTREACHED() << "Unexpected cdm::Exception " << exception;
-  return CdmPromise::INVALID_STATE_ERROR;
+  return CdmPromise::Exception::INVALID_STATE_ERROR;
 }
 
 cdm::Exception ToCdmExceptionType(cdm::Error error) {
@@ -113,15 +114,18 @@ cdm::Exception ToCdmExceptionType(cdm::Error error) {
     case cdm::kNotSupportedError:
       return cdm::kExceptionNotSupportedError;
     case cdm::kInvalidStateError:
-      return cdm::kExceptionTypeError;
-    case cdm::kInvalidAccessError:
       return cdm::kExceptionInvalidStateError;
+    case cdm::kInvalidAccessError:
+      return cdm::kExceptionTypeError;
     case cdm::kQuotaExceededError:
       return cdm::kExceptionQuotaExceededError;
+
+    // TODO(jrummell): Remove these once CDM_8 is no longer supported.
+    // https://crbug.com/737296.
     case cdm::kUnknownError:
     case cdm::kClientError:
     case cdm::kOutputError:
-      break;
+      return cdm::kExceptionNotSupportedError;
   }
 
   NOTREACHED() << "Unexpected cdm::Error " << error;
@@ -377,7 +381,6 @@ void* GetCdmHost(int host_interface_version, void* user_data) {
 // static
 void CdmAdapter::Create(
     const std::string& key_system,
-    const base::FilePath& cdm_path,
     const CdmConfig& cdm_config,
     std::unique_ptr<CdmAllocator> allocator,
     const CreateCdmFileIOCB& create_cdm_file_io_cb,
@@ -398,10 +401,7 @@ void CdmAdapter::Create(
       session_expiration_update_cb);
 
   // |cdm| ownership passed to the promise.
-  std::unique_ptr<CdmInitializedPromise> cdm_created_promise(
-      new CdmInitializedPromise(cdm_created_cb, cdm));
-
-  cdm->Initialize(cdm_path, std::move(cdm_created_promise));
+  cdm->Initialize(base::MakeUnique<CdmInitializedPromise>(cdm_created_cb, cdm));
 }
 
 CdmAdapter::CdmAdapter(
@@ -436,41 +436,27 @@ CdmAdapter::CdmAdapter(
 
 CdmAdapter::~CdmAdapter() {}
 
-CdmWrapper* CdmAdapter::CreateCdmInstance(const std::string& key_system,
-                                          const base::FilePath& cdm_path) {
+CdmWrapper* CdmAdapter::CreateCdmInstance(const std::string& key_system) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  // TODO(jrummell): We need to call INITIALIZE_CDM_MODULE() and
-  // DeinitializeCdmModule(). However, that should only be done once for the
-  // library.
-  base::NativeLibraryLoadError error;
-  library_.Reset(base::LoadNativeLibrary(cdm_path, &error));
-  if (!library_.is_valid()) {
-    DVLOG(1) << "CDM instance for " + key_system + " could not be created. "
-             << error.ToString();
-    return nullptr;
-  }
-
-  CreateCdmFunc create_cdm_func = reinterpret_cast<CreateCdmFunc>(
-      library_.GetFunctionPointer("CreateCdmInstance"));
+  CreateCdmFunc create_cdm_func =
+      CdmModule::GetInstance()->GetCreateCdmFunc(key_system);
   if (!create_cdm_func) {
-    DVLOG(1) << "No CreateCdmInstance() in library for " + key_system;
+    DVLOG(1) << "Cannot get CreateCdmFunc for " + key_system;
     return nullptr;
   }
 
   CdmWrapper* cdm = CdmWrapper::Create(create_cdm_func, key_system.data(),
                                        key_system.size(), GetCdmHost, this);
-
   DVLOG(1) << "CDM instance for " + key_system + (cdm ? "" : " could not be") +
                   " created.";
   return cdm;
 }
 
-void CdmAdapter::Initialize(const base::FilePath& cdm_path,
-                            std::unique_ptr<media::SimpleCdmPromise> promise) {
-  cdm_.reset(CreateCdmInstance(key_system_, cdm_path));
+void CdmAdapter::Initialize(std::unique_ptr<media::SimpleCdmPromise> promise) {
+  cdm_.reset(CreateCdmInstance(key_system_));
   if (!cdm_) {
-    promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0,
+    promise->reject(CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "Unable to create CDM.");
     return;
   }
@@ -487,7 +473,7 @@ void CdmAdapter::SetServerCertificate(
 
   if (certificate.size() < limits::kMinCertificateLength ||
       certificate.size() > limits::kMaxCertificateLength) {
-    promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0,
+    promise->reject(CdmPromise::Exception::TYPE_ERROR, 0,
                     "Incorrect certificate.");
     return;
   }
@@ -504,9 +490,9 @@ void CdmAdapter::GetStatusForPolicy(
   uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));
   if (!cdm_->GetStatusForPolicy(promise_id,
                                 ToCdmHdcpVersion(min_hdcp_version))) {
-    cdm_promise_adapter_.RejectPromise(promise_id,
-                                       CdmPromise::NOT_SUPPORTED_ERROR, 0,
-                                       "GetStatusForPolicy not supported.");
+    cdm_promise_adapter_.RejectPromise(
+        promise_id, CdmPromise::Exception::NOT_SUPPORTED_ERROR, 0,
+        "GetStatusForPolicy not supported.");
   }
 }
 

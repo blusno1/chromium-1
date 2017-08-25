@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
-#include "ui/display/types/display_snapshot_mojo.h"
+#include "ui/display/types/display_snapshot.h"
 
 namespace display {
 
@@ -31,10 +31,6 @@ void ForwardingDisplayDelegate::Initialize() {
   delegate_->Initialize(std::move(observer), &snapshots_);
 }
 
-void ForwardingDisplayDelegate::GrabServer() {}
-
-void ForwardingDisplayDelegate::UngrabServer() {}
-
 void ForwardingDisplayDelegate::TakeDisplayControl(
     const DisplayControlCallback& callback) {
   delegate_->TakeDisplayControl(callback);
@@ -44,12 +40,6 @@ void ForwardingDisplayDelegate::RelinquishDisplayControl(
     const DisplayControlCallback& callback) {
   delegate_->TakeDisplayControl(callback);
 }
-
-void ForwardingDisplayDelegate::SyncWithServer() {}
-
-void ForwardingDisplayDelegate::SetBackgroundColor(uint32_t color_argb) {}
-
-void ForwardingDisplayDelegate::ForceDPMSOn() {}
 
 void ForwardingDisplayDelegate::GetDisplays(
     const GetDisplaysCallback& callback) {
@@ -99,18 +89,6 @@ void ForwardingDisplayDelegate::SetHDCPState(
   delegate_->SetHDCPState(snapshot.display_id(), state, callback);
 }
 
-std::vector<ColorCalibrationProfile>
-ForwardingDisplayDelegate::GetAvailableColorCalibrationProfiles(
-    const DisplaySnapshot& output) {
-  return std::vector<ColorCalibrationProfile>();
-}
-
-bool ForwardingDisplayDelegate::SetColorCalibrationProfile(
-    const DisplaySnapshot& output,
-    ColorCalibrationProfile new_profile) {
-  return false;
-}
-
 bool ForwardingDisplayDelegate::SetColorCorrection(
     const DisplaySnapshot& output,
     const std::vector<GammaRampRGBEntry>& degamma_lut,
@@ -148,7 +126,7 @@ void ForwardingDisplayDelegate::OnConfigurationChanged() {
 
 void ForwardingDisplayDelegate::StoreAndForwardDisplays(
     const GetDisplaysCallback& callback,
-    std::vector<std::unique_ptr<DisplaySnapshotMojo>> snapshots) {
+    std::vector<std::unique_ptr<DisplaySnapshot>> snapshots) {
   for (auto& observer : observers_)
     observer.OnDisplaySnapshotsInvalidated();
   snapshots_ = std::move(snapshots);

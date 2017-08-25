@@ -49,6 +49,9 @@ namespace subtle {
 class PropertyHelper;
 }
 
+// Counter-clockwise rotations.
+enum class Transform { NORMAL, ROTATE_90, ROTATE_180, ROTATE_270 };
+
 // The pointer class is currently the only cursor provider class but this can
 // change in the future when better hardware cursor support is added.
 using CursorProvider = Pointer;
@@ -101,6 +104,10 @@ class Surface : public ui::PropertyHandler {
   // dimension) than the desired surface size.
   void SetBufferScale(float scale);
 
+  // This sets the transformation used to interpret the contents of the buffer
+  // attached to the surface.
+  void SetBufferTransform(Transform transform);
+
   // Functions that control sub-surface state. All sub-surface state is
   // double-buffered and will be applied when Commit() is called.
   void AddSubSurface(Surface* sub_surface);
@@ -124,9 +131,6 @@ class Surface : public ui::PropertyHandler {
 
   // This sets the alpha value that will be applied to the whole surface.
   void SetAlpha(float alpha);
-
-  // This sets the device scale factor sent in CompositorFrames.
-  void SetDeviceScaleFactor(float device_scale_factor);
 
   // Surface state (damage regions, attached buffers, etc.) is double-buffered.
   // A Commit() call atomically applies all pending state, replacing the
@@ -222,6 +226,7 @@ class Surface : public ui::PropertyHandler {
     SkRegion opaque_region;
     SkRegion input_region;
     float buffer_scale = 1.0f;
+    Transform buffer_transform = Transform::NORMAL;
     gfx::Size viewport;
     gfx::RectF crop;
     bool only_visible_on_secure_output = false;
@@ -264,8 +269,8 @@ class Surface : public ui::PropertyHandler {
   // Puts the current surface into a draw quad, and appends the draw quads into
   // the |frame|.
   void AppendContentsToFrame(const gfx::Point& origin,
-                             FrameType frame_type,
-                             cc::CompositorFrame* frame);
+                             cc::CompositorFrame* frame,
+                             bool needs_full_damage);
 
   void UpdateContentSize();
 
@@ -287,9 +292,6 @@ class Surface : public ui::PropertyHandler {
 
   // The buffer that will become the content of surface when Commit() is called.
   BufferAttachment pending_buffer_;
-
-  // The device scale factor sent in CompositorFrames.
-  float device_scale_factor_ = 1.0f;
 
   // The damage region to schedule paint for when Commit() is called.
   SkRegion pending_damage_;

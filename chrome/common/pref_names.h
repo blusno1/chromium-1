@@ -30,6 +30,7 @@ extern const char kArcPolicyComplianceReported[];
 extern const char kArcTermsAccepted[];
 extern const char kArcLocationServiceEnabled[];
 extern const char kArcPackages[];
+extern const char kArcPaiStarted[];
 extern const char kArcSetNotificationsEnabledDeferred[];
 extern const char kArcSignedIn[];
 extern const char kArcCompatibleFilesystemChosen[];
@@ -51,13 +52,12 @@ extern const char kImportantSitesDialogHistory[];
 extern const char kLastProfileResetTimestamp[];
 extern const char kChromeCleanerResetPending[];
 #endif
-extern const char kNewTabInProductHelp[];
 extern const char kNewTabPageLocationOverride[];
 extern const char kProfileIconVersion[];
 extern const char kRestoreOnStartup[];
 extern const char kSessionExitedCleanly[];
 extern const char kSessionExitType[];
-extern const char kSessionTimeTotal[];
+extern const char kObservedSessionTime[];
 extern const char kSiteEngagementLastUpdateTime[];
 extern const char kSupervisedUserApprovedExtensions[];
 extern const char kSupervisedUserCustodianEmail[];
@@ -209,6 +209,7 @@ extern const char kPrimaryMouseButtonRight[];
 extern const char kMouseSensitivity[];
 extern const char kTouchpadSensitivity[];
 extern const char kUse24HourClock[];
+extern const char kUserTimezone[];
 extern const char kResolveTimezoneByGeolocation[];
 // TODO(yusukes): Change "kLanguageABC" to "kABC". The current form is too long
 // to remember and confusing. The prefs are actually for input methods and i18n
@@ -228,28 +229,6 @@ extern const char kLanguageXkbAutoRepeatEnabled[];
 extern const char kLanguageXkbAutoRepeatDelay[];
 extern const char kLanguageXkbAutoRepeatInterval[];
 
-// TODO(dmazzoni): move accessibility prefs out of chrome/.
-// http://crbug.com/594887
-extern const char kAccessibilityLargeCursorEnabled[];
-extern const char kAccessibilityLargeCursorDipSize[];
-extern const char kAccessibilityStickyKeysEnabled[];
-extern const char kAccessibilitySpokenFeedbackEnabled[];
-extern const char kAccessibilityHighContrastEnabled[];
-extern const char kAccessibilityScreenMagnifierCenterFocus[];
-extern const char kAccessibilityScreenMagnifierEnabled[];
-extern const char kAccessibilityScreenMagnifierType[];
-extern const char kAccessibilityScreenMagnifierScale[];
-extern const char kAccessibilityVirtualKeyboardEnabled[];
-extern const char kAccessibilityMonoAudioEnabled[];
-extern const char kAccessibilityAutoclickEnabled[];
-extern const char kAccessibilityAutoclickDelayMs[];
-extern const char kAccessibilityCaretHighlightEnabled[];
-extern const char kAccessibilityCursorHighlightEnabled[];
-extern const char kAccessibilityFocusHighlightEnabled[];
-extern const char kAccessibilitySelectToSpeakEnabled[];
-extern const char kAccessibilitySwitchAccessEnabled[];
-extern const char kShouldAlwaysShowAccessibilityMenu[];
-
 extern const char kLabsAdvancedFilesystemEnabled[];
 extern const char kLabsMediaplayerEnabled[];
 extern const char kEnableAutoScreenLock[];
@@ -265,6 +244,7 @@ extern const char kLaunchPaletteOnEjectEvent[];
 extern const char kNoteTakingAppId[];
 extern const char kNoteTakingAppEnabledOnLockScreen[];
 extern const char kNoteTakingAppsLockScreenWhitelist[];
+extern const char kRestoreLastLockScreenNote[];
 extern const char kSessionUserActivitySeen[];
 extern const char kSessionStartTime[];
 extern const char kSessionLengthLimit[];
@@ -333,6 +313,9 @@ extern const char kPinUnlockWeakPinsAllowed[];
 extern const char kEnableQuickUnlockFingerprint[];
 extern const char kInstantTetheringAllowed[];
 extern const char kInstantTetheringEnabled[];
+extern const char kInstantTetheringBleAdvertisingSupported[];
+extern const char kCastReceiverEnabled[];
+extern const char kCastReceiverName[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
@@ -456,6 +439,7 @@ extern const char kLocalDiscoveryNotificationsEnabled[];
 
 #if defined(OS_ANDROID)
 extern const char kNotificationsVibrateEnabled[];
+extern const char kMigratedToSiteNotificationChannels[];
 #endif
 
 extern const char kPushMessagingAppIdentifierMap[];
@@ -755,6 +739,7 @@ extern const char kFactoryResetRequested[];
 extern const char kDebuggingFeaturesRequested[];
 
 #if defined(OS_CHROMEOS)
+extern const char kSigninScreenTimezone[];
 extern const char kResolveDeviceTimezoneByGeolocation[];
 extern const char kSystemTimezoneAutomaticDetectionPolicy[];
 #endif  // defined(OS_CHROMEOS)
@@ -772,13 +757,7 @@ extern const char kMediaGalleriesRememberedGalleries[];
 #endif  // !defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
-extern const char kShelfAlignment[];
-extern const char kShelfAlignmentLocal[];
-extern const char kShelfAutoHideBehavior[];
-extern const char kShelfAutoHideBehaviorLocal[];
 extern const char kShelfChromeIconIndex[];
-extern const char kShelfPreferences[];
-
 extern const char kPinnedLauncherApps[];
 extern const char kPolicyPinnedLauncherApps[];
 #endif  // defined(OS_CHROMEOS)
@@ -839,6 +818,8 @@ extern const char kEasyUnlockLocalStateUserPrefs[];
 extern const char kRecoveryComponentNeedsElevation[];
 
 extern const char kRegisteredSupervisedUserWhitelists[];
+
+extern const char kCloudPolicyOverridesMachinePolicy[];
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
 extern const char kRestartInBackground[];

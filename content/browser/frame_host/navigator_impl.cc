@@ -826,10 +826,6 @@ void NavigatorImpl::RequestTransferURL(
     post_body = nullptr;
   }
 
-  // This call only makes sense for subframes if OOPIFs are possible.
-  DCHECK(!render_frame_host->GetParent() ||
-         SiteIsolationPolicy::AreCrossProcessFramesPossible());
-
   // Allow the delegate to cancel the transfer.
   if (!delegate_->ShouldTransferNavigation(
           render_frame_host->frame_tree_node()->IsMainFrame()))
@@ -995,11 +991,10 @@ void NavigatorImpl::OnBeginNavigation(
   }
 
   // The renderer-initiated navigation request is ignored iff a) there is an
-  // ongoing request b) which is browser or user-initiated and c) the renderer
-  // request is not user-initiated.
+  // ongoing request b) which is browser initiated and c) the renderer request
+  // is not user-initiated.
   if (ongoing_navigation_request &&
-      (ongoing_navigation_request->browser_initiated() ||
-       ongoing_navigation_request->begin_params().has_user_gesture) &&
+      ongoing_navigation_request->browser_initiated() &&
       !begin_params.has_user_gesture) {
     RenderFrameHost* current_frame_host =
         frame_tree_node->render_manager()->current_frame_host();

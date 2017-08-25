@@ -5,6 +5,7 @@
 #include "modules/offscreencanvas2d/OffscreenCanvasRenderingContext2D.h"
 
 #include "bindings/modules/v8/OffscreenRenderingContext.h"
+#include "core/css/OffscreenFontSelector.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/css/resolver/FontStyleResolver.h"
 #include "core/dom/ExecutionContext.h"
@@ -31,9 +32,8 @@ OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(
     : CanvasRenderingContext(canvas, attrs) {
   ExecutionContext* execution_context = canvas->GetTopExecutionContext();
   if (execution_context->IsDocument()) {
-    if (ToDocument(execution_context)
-            ->GetSettings()
-            ->GetDisableReadingFromCanvas())
+    Settings* settings = ToDocument(execution_context)->GetSettings();
+    if (settings->GetDisableReadingFromCanvas())
       canvas->SetDisableReadingFromCanvasTrue();
     return;
   }
@@ -293,7 +293,7 @@ void OffscreenCanvasRenderingContext2D::setFont(const String& new_font) {
   FontDescription desc = FontStyleResolver::ComputeFont(*style);
 
   Font font = Font(desc);
-  ModifiableState().SetFont(font, nullptr);
+  ModifiableState().SetFont(font, host()->GetFontSelector());
   ModifiableState().SetUnparsedFont(new_font);
 }
 
@@ -481,8 +481,7 @@ TextMetrics* OffscreenCanvasRenderingContext2D::measureText(
       direction, false);
   text_run.SetNormalizeSpace(true);
   FloatRect text_bounds = font.SelectionRectForText(
-      text_run, FloatPoint(), font.GetFontDescription().ComputedSize(), 0, -1,
-      true);
+      text_run, FloatPoint(), font.GetFontDescription().ComputedSize(), 0, -1);
 
   // x direction
   metrics->SetWidth(font.Width(text_run));

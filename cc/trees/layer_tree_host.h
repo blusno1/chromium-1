@@ -42,7 +42,7 @@
 #include "cc/trees/proxy.h"
 #include "cc/trees/swap_promise_manager.h"
 #include "cc/trees/target_property.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/surfaces/surface_reference_owner.h"
 #include "components/viz/common/surfaces/surface_sequence_generator.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -65,9 +65,8 @@ class UIResourceManager;
 struct RenderingStats;
 struct ScrollAndScaleSet;
 
-class CC_EXPORT LayerTreeHost
-    : public NON_EXPORTED_BASE(viz::SurfaceReferenceOwner),
-      public NON_EXPORTED_BASE(MutatorHostClient) {
+class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
+                                public MutatorHostClient {
  public:
   struct CC_EXPORT InitParams {
     LayerTreeHostClient* client = nullptr;
@@ -285,7 +284,9 @@ class CC_EXPORT LayerTreeHost
     return event_listener_properties_[static_cast<size_t>(event_class)];
   }
 
-  void SetViewportSize(const gfx::Size& device_viewport_size);
+  void SetViewportSize(
+      const gfx::Size& device_viewport_size,
+      const viz::LocalSurfaceId& local_surface_id = viz::LocalSurfaceId());
   gfx::Size device_viewport_size() const { return device_viewport_size_; }
 
   void SetBrowserControlsHeight(float top_height,
@@ -319,6 +320,8 @@ class CC_EXPORT LayerTreeHost
   void SetDeviceScaleFactor(float device_scale_factor);
   float device_scale_factor() const { return device_scale_factor_; }
 
+  void SetRecordingScaleFactor(float recording_scale_factor);
+
   void SetPaintedDeviceScaleFactor(float painted_device_scale_factor);
   float painted_device_scale_factor() const {
     return painted_device_scale_factor_;
@@ -340,7 +343,8 @@ class CC_EXPORT LayerTreeHost
   }
 
   // Used externally by blink for setting the PropertyTrees when
-  // |settings_.use_layer_lists| is true. This is a SPV2 setting.
+  // UseLayerLists() is true, which also implies that Slimming Paint
+  // v2 is enabled.
   PropertyTrees* property_trees() { return &property_trees_; }
 
   void SetNeedsDisplayOnAllLayers();
@@ -397,9 +401,7 @@ class CC_EXPORT LayerTreeHost
   void RegisterElement(ElementId element_id,
                        ElementListType list_type,
                        Layer* layer);
-  void UnregisterElement(ElementId element_id,
-                         ElementListType list_type,
-                         Layer* layer);
+  void UnregisterElement(ElementId element_id, ElementListType list_type);
   void SetElementIdsForTesting();
 
   void BuildPropertyTreesForTesting();
@@ -459,6 +461,11 @@ class CC_EXPORT LayerTreeHost
   bool IsSingleThreaded() const;
   bool IsThreaded() const;
 
+  // Indicates whether this host is configured to use layer lists
+  // rather than layer trees. This also implies that property trees
+  // are always already built and so cc doesn't have to build them.
+  bool IsUsingLayerLists() const;
+
   // viz::SurfaceReferenceOwner implementation.
   viz::SurfaceSequenceGenerator* GetSurfaceSequenceGenerator() override;
 
@@ -494,6 +501,8 @@ class CC_EXPORT LayerTreeHost
                         const base::Callback<void(bool)>& callback);
 
   void RequestBeginMainFrameNotExpected(bool new_state);
+
+  float recording_scale_factor() const { return recording_scale_factor_; }
 
  protected:
   LayerTreeHost(InitParams* params, CompositorMode mode);
@@ -602,6 +611,7 @@ class CC_EXPORT LayerTreeHost
 
   float device_scale_factor_ = 1.f;
   float painted_device_scale_factor_ = 1.f;
+  float recording_scale_factor_ = 1.f;
   float page_scale_factor_ = 1.f;
   float min_page_scale_factor_ = 1.f;
   float max_page_scale_factor_ = 1.f;

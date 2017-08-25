@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/atomicops.h"
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -18,6 +19,10 @@
 #include "ui/gl/gl_state_restorer.h"
 #include "ui/gl/gl_workarounds.h"
 #include "ui/gl/gpu_preference.h"
+
+namespace gfx {
+class ColorSpace;
+}  // namespace gfx
 
 namespace gl {
 class YUVToRGBConverter;
@@ -74,6 +79,19 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
  public:
   explicit GLContext(GLShareGroup* share_group);
 
+  static int32_t TotalGLContexts();
+
+  static bool SwitchableGPUsSupported();
+  // This should be called at most once at GPU process startup time.
+  // By default, GPU switching is not supported unless this is called.
+  static void SetSwitchableGPUsSupported();
+
+  // This should be called at most once at GPU process startup time.
+  static void SetForcedGpuPreference(GpuPreference gpu_preference);
+  // If a gpu preference is forced (by GPU driver bug workaround, etc), return
+  // it. Otherwise, return the original input preference.
+  static GpuPreference AdjustGpuPreference(GpuPreference gpu_preference);
+
   // Initializes the GL context to be compatible with the given surface. The GL
   // context can be made with other surface's of the same type. The compatible
   // surface is only needed for certain platforms like WGL, OSMesa and GLX. It
@@ -99,6 +117,8 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
 
   // Set the GL workarounds.
   void SetGLWorkarounds(const GLWorkarounds& workarounds);
+
+  void SetDisabledGLExtensions(const std::string& disabled_gl_extensions);
 
   // Gets the GLStateRestorer for the context.
   GLStateRestorer* GetGLStateRestorer();
@@ -167,8 +187,10 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
   // Returns the GL renderer string. The context must be current.
   virtual std::string GetGLRenderer();
 
-  // Returns a helper structure to convert YUV textures to RGB textures.
-  virtual YUVToRGBConverter* GetYUVToRGBConverter();
+  // Returns a helper structure to convert the YUV color space |color_space|
+  // to its associated full-range RGB color space.
+  virtual YUVToRGBConverter* GetYUVToRGBConverter(
+      const gfx::ColorSpace& color_space);
 
   // Get the CurrentGL object for this context containing the driver, version
   // and API.
@@ -226,7 +248,14 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
 
   std::unique_ptr<GLVersionInfo> GenerateGLVersionInfo();
 
+  static base::subtle::Atomic32 total_gl_contexts_;
+
+  static bool switchable_gpus_supported_;
+
+  static GpuPreference forced_gpu_preference_;
+
   GLWorkarounds gl_workarounds_;
+  std::string disabled_gl_extensions_;
 
   bool static_bindings_initialized_ = false;
   bool dynamic_bindings_initialized_ = false;

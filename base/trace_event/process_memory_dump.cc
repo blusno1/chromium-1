@@ -16,7 +16,6 @@
 #include "base/trace_event/heap_profiler_heap_dump_writer.h"
 #include "base/trace_event/heap_profiler_serialization_state.h"
 #include "base/trace_event/memory_infra_background_whitelist.h"
-#include "base/trace_event/process_memory_totals.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
@@ -185,29 +184,30 @@ base::Optional<size_t> ProcessMemoryDump::CountResidentBytesInSharedMemory(
 
 #endif  // defined(COUNT_RESIDENT_BYTES_SUPPORTED)
 
+ProcessMemoryDump::ProcessMemoryDump() {}
 ProcessMemoryDump::ProcessMemoryDump(
     scoped_refptr<HeapProfilerSerializationState>
         heap_profiler_serialization_state,
     const MemoryDumpArgs& dump_args)
-    : has_process_totals_(false),
-      has_process_mmaps_(false),
-      heap_profiler_serialization_state_(
+    : heap_profiler_serialization_state_(
           std::move(heap_profiler_serialization_state)),
       dump_args_(dump_args) {}
-
 ProcessMemoryDump::~ProcessMemoryDump() {}
+ProcessMemoryDump::ProcessMemoryDump(ProcessMemoryDump&& other) = default;
+ProcessMemoryDump& ProcessMemoryDump::operator=(ProcessMemoryDump&& other) =
+    default;
 
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string& absolute_name) {
   return AddAllocatorDumpInternal(
-      MakeUnique<MemoryAllocatorDump>(absolute_name, this));
+      std::make_unique<MemoryAllocatorDump>(absolute_name, this));
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string& absolute_name,
     const MemoryAllocatorDumpGuid& guid) {
   return AddAllocatorDumpInternal(
-      MakeUnique<MemoryAllocatorDump>(absolute_name, this, guid));
+      std::make_unique<MemoryAllocatorDump>(absolute_name, this, guid));
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::AddAllocatorDumpInternal(
@@ -306,24 +306,12 @@ void ProcessMemoryDump::DumpHeapUsage(
 }
 
 void ProcessMemoryDump::Clear() {
-  if (has_process_totals_) {
-    process_totals_.Clear();
-    has_process_totals_ = false;
-  }
-
-  if (has_process_mmaps_) {
-    process_mmaps_.Clear();
-    has_process_mmaps_ = false;
-  }
-
   allocator_dumps_.clear();
   allocator_dumps_edges_.clear();
   heap_dumps_.clear();
 }
 
 void ProcessMemoryDump::TakeAllDumpsFrom(ProcessMemoryDump* other) {
-  DCHECK(!other->has_process_totals() && !other->has_process_mmaps());
-
   // Moves the ownership of all MemoryAllocatorDump(s) contained in |other|
   // into this ProcessMemoryDump, checking for duplicates.
   for (auto& it : other->allocator_dumps_)
@@ -406,66 +394,51 @@ void ProcessMemoryDump::AddOverridableOwnershipEdge(
 
 void ProcessMemoryDump::CreateSharedMemoryOwnershipEdge(
     const MemoryAllocatorDumpGuid& client_local_dump_guid,
-    const MemoryAllocatorDumpGuid& client_global_dump_guid,
     const UnguessableToken& shared_memory_guid,
     int importance) {
-  CreateSharedMemoryOwnershipEdgeInternal(
-      client_local_dump_guid, client_global_dump_guid, shared_memory_guid,
-      importance, false /*is_weak*/);
+  CreateSharedMemoryOwnershipEdgeInternal(client_local_dump_guid,
+                                          shared_memory_guid, importance,
+                                          false /*is_weak*/);
 }
 
 void ProcessMemoryDump::CreateWeakSharedMemoryOwnershipEdge(
     const MemoryAllocatorDumpGuid& client_local_dump_guid,
-    const MemoryAllocatorDumpGuid& client_global_dump_guid,
     const UnguessableToken& shared_memory_guid,
     int importance) {
   CreateSharedMemoryOwnershipEdgeInternal(
-      client_local_dump_guid, client_global_dump_guid, shared_memory_guid,
-      importance, true /*is_weak*/);
+      client_local_dump_guid, shared_memory_guid, importance, true /*is_weak*/);
 }
 
 void ProcessMemoryDump::CreateSharedMemoryOwnershipEdgeInternal(
     const MemoryAllocatorDumpGuid& client_local_dump_guid,
-    const MemoryAllocatorDumpGuid& client_global_dump_guid,
     const UnguessableToken& shared_memory_guid,
     int importance,
     bool is_weak) {
-  if (MemoryAllocatorDumpGuid::UseSharedMemoryBasedGUIDs()) {
-    DCHECK(!shared_memory_guid.is_empty());
-    // New model where the global dumps created by SharedMemoryTracker are used
-    // for the clients.
+  DCHECK(!shared_memory_guid.is_empty());
+  // New model where the global dumps created by SharedMemoryTracker are used
+  // for the clients.
 
-    // The guid of the local dump created by SharedMemoryTracker for the memory
-    // segment.
-    auto local_shm_guid =
-        SharedMemoryTracker::GetDumpIdForTracing(shared_memory_guid);
+  // The guid of the local dump created by SharedMemoryTracker for the memory
+  // segment.
+  auto local_shm_guid = MemoryAllocatorDump::GetDumpIdFromName(
+      SharedMemoryTracker::GetDumpNameForTracing(shared_memory_guid));
 
-    // The dump guid of the global dump created by the tracker for the memory
-    // segment.
-    auto global_shm_guid =
-        SharedMemoryTracker::GetGlobalDumpIdForTracing(shared_memory_guid);
+  // The dump guid of the global dump created by the tracker for the memory
+  // segment.
+  auto global_shm_guid =
+      SharedMemoryTracker::GetGlobalDumpIdForTracing(shared_memory_guid);
 
-    // Create an edge between local dump of the client and the local dump of the
-    // SharedMemoryTracker. Do not need to create the dumps here since the
-    // tracker would create them. The importance is also required here for the
-    // case of single process mode.
-    AddOwnershipEdge(client_local_dump_guid, local_shm_guid, importance);
+  // Create an edge between local dump of the client and the local dump of the
+  // SharedMemoryTracker. Do not need to create the dumps here since the tracker
+  // would create them. The importance is also required here for the case of
+  // single process mode.
+  AddOwnershipEdge(client_local_dump_guid, local_shm_guid, importance);
 
-    // TODO(ssid): Handle the case of weak dumps here. This needs a new function
-    // GetOrCreaetGlobalDump() in PMD since we need to change the behavior of
-    // the created global dump.
-    // Create an edge that overrides the edge created by SharedMemoryTracker.
-    AddOwnershipEdge(local_shm_guid, global_shm_guid, importance);
-  } else {
-    // This is the old model where the clients create global dumps for
-    // themselves.
-    if (is_weak)
-      CreateWeakSharedGlobalAllocatorDump(client_global_dump_guid);
-    else
-      CreateSharedGlobalAllocatorDump(client_global_dump_guid);
-    AddOwnershipEdge(client_local_dump_guid, client_global_dump_guid,
-                     importance);
-  }
+  // TODO(ssid): Handle the case of weak dumps here. This needs a new function
+  // GetOrCreaetGlobalDump() in PMD since we need to change the behavior of the
+  // created global dump.
+  // Create an edge that overrides the edge created by SharedMemoryTracker.
+  AddOwnershipEdge(local_shm_guid, global_shm_guid, importance);
 }
 
 void ProcessMemoryDump::AddSuballocation(const MemoryAllocatorDumpGuid& source,

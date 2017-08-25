@@ -13,7 +13,6 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
@@ -186,6 +185,15 @@ void TrayUpdate::SetUpdateOverCellularAvailableIconVisible(bool visible) {
     SetIconColor(IconColorForUpdateSeverity(mojom::UpdateSeverity::LOW, false));
   update_over_cellular_available_ = visible;
   tray_view()->SetVisible(visible);
+}
+
+// static
+void TrayUpdate::ResetForTesting() {
+  update_required_ = false;
+  severity_ = mojom::UpdateSeverity::NONE;
+  factory_reset_required_ = false;
+  update_over_cellular_available_ = false;
+  update_type_ = mojom::UpdateType::SYSTEM;
 }
 
 }  // namespace ash

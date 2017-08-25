@@ -81,6 +81,8 @@ const int64_t kMaxTimerDelayMs = 1 * kSecondsPerMinute * kMsPerSecond;
 // media/test/data/eme_player_js/globals.js.
 const char kUnitTestResultHeader[] = "UNIT_TEST_RESULT";
 
+static bool g_is_cdm_module_initialized = false;
+
 // Copies |input_buffer| into a media::DecoderBuffer. If the |input_buffer| is
 // empty, an empty (end-of-stream) media::DecoderBuffer is returned.
 static scoped_refptr<media::DecoderBuffer> CopyDecoderBufferFrom(
@@ -130,21 +132,17 @@ static std::string GetUnitTestResultMessage(bool success) {
 static cdm::Exception ConvertException(
     media::CdmPromise::Exception exception_code) {
   switch (exception_code) {
-    case media::CdmPromise::NOT_SUPPORTED_ERROR:
-      return cdm::Exception::kExceptionNotSupportedError;
-    case media::CdmPromise::INVALID_STATE_ERROR:
-      return cdm::Exception::kExceptionInvalidStateError;
-    case media::CdmPromise::INVALID_ACCESS_ERROR:
-      return cdm::Exception::kExceptionTypeError;
-    case media::CdmPromise::QUOTA_EXCEEDED_ERROR:
-      return cdm::Exception::kExceptionQuotaExceededError;
-    case media::CdmPromise::UNKNOWN_ERROR:
-    case media::CdmPromise::CLIENT_ERROR:
-    case media::CdmPromise::OUTPUT_ERROR:
-      break;
+    case media::CdmPromise::Exception::NOT_SUPPORTED_ERROR:
+      return cdm::kExceptionNotSupportedError;
+    case media::CdmPromise::Exception::INVALID_STATE_ERROR:
+      return cdm::kExceptionInvalidStateError;
+    case media::CdmPromise::Exception::TYPE_ERROR:
+      return cdm::kExceptionTypeError;
+    case media::CdmPromise::Exception::QUOTA_EXCEEDED_ERROR:
+      return cdm::kExceptionQuotaExceededError;
   }
   NOTREACHED();
-  return cdm::Exception::kExceptionNotSupportedError;
+  return cdm::kExceptionInvalidStateError;
 }
 
 static media::CdmSessionType ConvertSessionType(cdm::SessionType session_type) {
@@ -231,6 +229,8 @@ void INITIALIZE_CDM_MODULE() {
   media::InitializeMediaLibrary();
   av_register_all();
 #endif  // CLEAR_KEY_CDM_USE_FFMPEG_DECODER
+
+  g_is_cdm_module_initialized = true;
 }
 
 void DeinitializeCdmModule() {
@@ -243,6 +243,11 @@ void* CreateCdmInstance(int cdm_interface_version,
                         void* user_data) {
   DVLOG(1) << "CreateCdmInstance()";
 
+  if (!g_is_cdm_module_initialized) {
+    DVLOG(1) << "CDM module not initialized.";
+    return nullptr;
+  }
+
   std::string key_system_string(key_system, key_system_size);
   if (key_system_string != kExternalClearKeyKeySystem &&
       key_system_string != kExternalClearKeyDecryptOnlyKeySystem &&
@@ -254,16 +259,16 @@ void* CreateCdmInstance(int cdm_interface_version,
       key_system_string != kExternalClearKeyVerifyCdmHostTestKeySystem &&
       key_system_string != kExternalClearKeyStorageIdTestKeySystem) {
     DVLOG(1) << "Unsupported key system:" << key_system_string;
-    return NULL;
+    return nullptr;
   }
 
   if (cdm_interface_version != media::ClearKeyCdmInterface::kVersion)
-    return NULL;
+    return nullptr;
 
   media::ClearKeyCdmHost* host = static_cast<media::ClearKeyCdmHost*>(
       get_cdm_host_func(media::ClearKeyCdmHost::kVersion, user_data));
   if (!host)
-    return NULL;
+    return nullptr;
 
   // TODO(jrummell): Obtain the proper origin for this instance.
   GURL empty_origin;
@@ -349,6 +354,8 @@ ClearKeyCdm::ClearKeyCdm(ClearKeyCdmHost* host,
       is_running_output_protection_test_(false),
       is_running_platform_verification_test_(false),
       is_running_storage_id_test_(false) {
+  DCHECK(g_is_cdm_module_initialized);
+
 #if defined(CLEAR_KEY_CDM_USE_FAKE_AUDIO_DECODER)
   channel_count_ = 0;
   bits_per_channel_ = 0;
@@ -389,7 +396,7 @@ void ClearKeyCdm::CreateSessionAndGenerateRequest(
   DVLOG(1) << __func__;
 
   if (session_type != cdm::kTemporary && !allow_persistent_state_) {
-    OnPromiseFailed(promise_id, CdmPromise::INVALID_STATE_ERROR, 0,
+    OnPromiseFailed(promise_id, CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "Persistent state not allowed.");
     return;
   }
@@ -688,8 +695,12 @@ cdm::Status ClearKeyCdm::DecryptAndDecodeSamples(
   DVLOG(1) << __func__;
 
   // Trigger a crash on purpose for testing purpose.
-  if (key_system_ == kExternalClearKeyCrashKeySystem)
+  // Only do this after a session has been created since the test also checks
+  // that the session is properly closed.
+  if (!last_session_id_.empty() &&
+      key_system_ == kExternalClearKeyCrashKeySystem) {
     CHECK(false);
+  }
 
   scoped_refptr<media::DecoderBuffer> buffer;
   cdm::Status status = DecryptToMediaDecoderBuffer(encrypted_buffer, &buffer);

@@ -29,6 +29,8 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
+#include "base/metrics/histogram_macros.h"
+#include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/base/ui_base_switches.h"
@@ -73,9 +75,10 @@ constexpr int kNotificationBubbleGapHeight = 6;
 // the auto hidden shelf when the shelf is on the boundary between displays.
 constexpr int kMaxAutoHideShowShelfRegionSize = 10;
 
+// TODO(minch): Add unit tests for this value. http://crbug.com/755185.
 // The velocity the app list must be dragged in order to change the state of the
 // app list for fling event, measured in DIPs/event.
-constexpr int kAppListDragVelocityThreshold = 25;
+constexpr int kAppListDragVelocityThreshold = 100;
 
 ui::Layer* GetLayer(views::Widget* widget) {
   return widget->GetNativeView()->layer();
@@ -159,6 +162,8 @@ ShelfLayoutManager::ShelfLayoutManager(ShelfWidget* shelf_widget, Shelf* shelf)
       update_shelf_observer_(nullptr),
       chromevox_panel_height_(0),
       duration_override_in_ms_(0),
+      is_background_blur_enabled_(
+          app_list::features::IsBackgroundBlurEnabled()),
       shelf_background_type_(SHELF_BACKGROUND_OVERLAP),
       keyboard_observer_(this),
       scoped_session_observer_(this) {
@@ -446,7 +451,7 @@ void ShelfLayoutManager::OnVirtualKeyboardStateChanged(
 
 void ShelfLayoutManager::OnAppListVisibilityChanged(bool shown,
                                                     aura::Window* root_window) {
-  if (shelf_ != Shelf::ForWindow(root_window))
+  if (shelf_widget_->GetNativeWindow()->GetRootWindow() != root_window)
     return;
 
   is_app_list_visible_ = shown;
@@ -500,15 +505,9 @@ ShelfBackgroundType ShelfLayoutManager::GetShelfBackgroundType() const {
   if (state_.session_state != session_manager::SessionState::ACTIVE)
     return SHELF_BACKGROUND_OVERLAP;
 
-  // If the app list is active and the shelf is oriented vertically, enable the
-  // shelf background.
-  if (is_app_list_visible_ && !shelf_->IsHorizontalAlignment() &&
-      is_fullscreen_app_list_enabled)
-    return SHELF_BACKGROUND_OVERLAP;
-
   // If the app list is active, hide the shelf background to prevent overlap.
   if (is_app_list_visible_ && is_fullscreen_app_list_enabled)
-    return SHELF_BACKGROUND_DEFAULT;
+    return SHELF_BACKGROUND_APP_LIST;
 
   if (state_.visibility_state != SHELF_AUTO_HIDE &&
       state_.window_state == wm::WORKSPACE_WINDOW_STATE_MAXIMIZED) {
@@ -747,8 +746,9 @@ void ShelfLayoutManager::CalculateTargetBounds(const State& state,
     status_size.set_width(kShelfSize);
 
   gfx::Point status_origin = SelectValueForShelfAlignment(
-      gfx::Point(0, 0), gfx::Point(shelf_width - status_size.width(),
-                                   shelf_height - status_size.height()),
+      gfx::Point(0, 0),
+      gfx::Point(shelf_width - status_size.width(),
+                 shelf_height - status_size.height()),
       gfx::Point(0, shelf_height - status_size.height()));
   if (shelf_->IsHorizontalAlignment() && !base::i18n::IsRTL())
     status_origin.set_x(shelf_width - status_size.width());
@@ -1117,7 +1117,7 @@ void ShelfLayoutManager::StartGestureDrag(
   if (CanStartFullscreenAppListDrag(
           gesture_in_screen.details().scroll_y_hint())) {
     gesture_drag_status_ = GESTURE_DRAG_APPLIST_IN_PROGRESS;
-    Shell::Get()->ShowAppList();
+    Shell::Get()->ShowAppList(app_list::kSwipeFromShelf);
     Shell::Get()->UpdateAppListYPositionAndOpacity(
         gesture_in_screen.location().y(),
         GetAppListBackgroundOpacityOnShelfOpacity(),
@@ -1227,9 +1227,9 @@ void ShelfLayoutManager::CompleteAppListDrag(
     // it.
     should_show_app_list = gesture_in_screen.details().velocity_y() < 0;
   } else {
-    // Show the app list if it is already at least one-third visible.
+    // Show the app list if the drag amount exceeds a constant threshold.
     should_show_app_list =
-        -gesture_drag_amount_ >= shelf_->GetUserWorkAreaBounds().height() / 3.0;
+        -gesture_drag_amount_ > kAppListDragDistanceThreshold;
   }
 
   if (should_show_app_list) {
@@ -1239,6 +1239,10 @@ void ShelfLayoutManager::CompleteAppListDrag(
             .work_area()
             .y(),
         GetAppListBackgroundOpacityOnShelfOpacity(), true /* is_end_gesture */);
+    UMA_HISTOGRAM_ENUMERATION(app_list::kAppListToggleMethodHistogram,
+                              app_list::kSwipeFromShelf,
+                              app_list::kMaxAppListToggleMethod);
+
   } else {
     Shell::Get()->DismissAppList();
   }
@@ -1293,7 +1297,11 @@ float ShelfLayoutManager::GetAppListBackgroundOpacityOnShelfOpacity() {
       std::min(std::abs(gesture_drag_amount_) /
                    ((app_list::AppListView::kNumOfShelfSize + 1) * kShelfSize),
                1.0f);
-  return app_list::AppListView::kAppListOpacity * coefficient +
+  float app_list_view_opacity =
+      is_background_blur_enabled_
+          ? app_list::AppListView::kAppListOpacityWithBlur
+          : app_list::AppListView::kAppListOpacity;
+  return app_list_view_opacity * coefficient +
          (1 - coefficient) * shelf_opacity;
 }
 

@@ -21,11 +21,11 @@
 #include "ui/gfx/transform.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
-#include "ui/message_center/views/toast_contents_view.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/window_util.h"
 
 namespace arc {
@@ -41,6 +41,30 @@ SkColor GetControlButtonBackgroundColor(
 }
 
 }  // namespace
+
+class ArcNotificationContentView::MouseEnterExitHandler
+    : public ui::EventHandler {
+ public:
+  explicit MouseEnterExitHandler(ArcNotificationContentView* owner)
+      : owner_(owner) {
+    DCHECK(owner);
+  }
+  ~MouseEnterExitHandler() override = default;
+
+  // ui::EventHandler
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    ui::EventHandler::OnMouseEvent(event);
+    if (event->type() == ui::ET_MOUSE_ENTERED ||
+        event->type() == ui::ET_MOUSE_EXITED) {
+      owner_->UpdateControlButtonsVisibility();
+    }
+  }
+
+ private:
+  ArcNotificationContentView* const owner_;
+
+  DISALLOW_COPY_AND_ASSIGN(MouseEnterExitHandler);
+};
 
 class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
  public:
@@ -61,7 +85,7 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
     // TODO(yoshiki): Use a better tigger (eg. focusing EditText on
     // notification) than clicking (crbug.com/697379).
     if (event->type() == ui::ET_MOUSE_PRESSED)
-      owner_->ActivateToast();
+      owner_->Activate();
 
     views::Widget* widget = owner_->GetWidget();
     if (!widget)
@@ -225,7 +249,8 @@ ArcNotificationContentView::ArcNotificationContentView(
     ArcNotificationItem* item)
     : item_(item),
       notification_key_(item->GetNotificationKey()),
-      event_forwarder_(new EventForwarder(this)) {
+      event_forwarder_(new EventForwarder(this)),
+      mouse_enter_exit_handler_(new MouseEnterExitHandler(this)) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
   set_notify_enter_exit_on_child(true);
 
@@ -291,7 +316,7 @@ void ArcNotificationContentView::MaybeCreateFloatingControlButtons() {
       GetControlButtonBackgroundColor(item_->GetShownContents()));
   control_buttons_view_->ShowSettingsButton(
       item_->IsOpeningSettingsSupported());
-  control_buttons_view_->ShowCloseButton(!item_->GetPinned());
+  control_buttons_view_->ShowCloseButton(!notification_view->GetPinned());
 
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_CONTROL);
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
@@ -301,6 +326,8 @@ void ArcNotificationContentView::MaybeCreateFloatingControlButtons() {
   floating_control_buttons_widget_.reset(new views::Widget);
   floating_control_buttons_widget_->Init(params);
   floating_control_buttons_widget_->SetContentsView(control_buttons_view_);
+  floating_control_buttons_widget_->GetNativeWindow()->AddPreTargetHandler(
+      mouse_enter_exit_handler_.get());
 
   // Put the close button into the focus chain.
   floating_control_buttons_widget_->SetFocusTraversableParent(
@@ -314,9 +341,11 @@ void ArcNotificationContentView::SetSurface(ArcNotificationSurface* surface) {
   if (surface_ == surface)
     return;
 
+  // Put null to |control_buttos|view_| before deleting the widget, since it may
+  // be referred while deletion.
+  control_buttons_view_ = nullptr;
   // Reset |floating_control_buttons_widget_| when |surface_| is changed.
   floating_control_buttons_widget_.reset();
-  control_buttons_view_ = nullptr;
 
   if (surface_) {
     DCHECK(surface_->GetWindow());
@@ -324,7 +353,7 @@ void ArcNotificationContentView::SetSurface(ArcNotificationSurface* surface) {
     surface_->GetContentWindow()->RemoveObserver(this);
     surface_->GetWindow()->RemovePreTargetHandler(event_forwarder_.get());
 
-    if (surface_->IsAttached()) {
+    if (surface_->GetAttachedHost() == this) {
       DCHECK_EQ(this, surface_->GetAttachedHost());
       surface_->Detach();
     }
@@ -338,8 +367,16 @@ void ArcNotificationContentView::SetSurface(ArcNotificationSurface* surface) {
     surface_->GetContentWindow()->AddObserver(this);
     surface_->GetWindow()->AddPreTargetHandler(event_forwarder_.get());
 
-    if (GetWidget())
+    if (GetWidget()) {
+      // Force to detach the surface.
+      if (surface_->IsAttached()) {
+        // The attached host must not be this. Since if it is, this should
+        // already be detached above.
+        DCHECK_NE(this, surface_->GetAttachedHost());
+        surface_->Detach();
+      }
       AttachSurface();
+    }
   }
 }
 
@@ -380,18 +417,6 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
     floating_control_buttons_widget_->Show();
   else
     floating_control_buttons_widget_->Hide();
-}
-
-void ArcNotificationContentView::UpdatePinnedState() {
-  if (!item_)
-    return;
-
-  // Surface is not attached yet.
-  if (!control_buttons_view_)
-    return;
-
-  control_buttons_view_->ShowCloseButton(!item_->GetPinned());
-  Layout();
 }
 
 void ArcNotificationContentView::UpdateSnapshot() {
@@ -475,11 +500,11 @@ void ArcNotificationContentView::Layout() {
   // Scale notification surface if necessary.
   gfx::Transform transform;
   const gfx::Size surface_size = surface_->GetSize();
-  const gfx::Size contents_size = contents_bounds.size();
-  if (!surface_size.IsEmpty() && !contents_size.IsEmpty()) {
-    transform.Scale(
-        static_cast<float>(contents_size.width()) / surface_size.width(),
-        static_cast<float>(contents_size.height()) / surface_size.height());
+  if (!surface_size.IsEmpty()) {
+    const float factor =
+        static_cast<float>(message_center::kNotificationWidth) /
+        surface_size.width();
+    transform.Scale(factor, factor);
   }
 
   // Apply the transform to the surface content so that close button can
@@ -547,12 +572,18 @@ void ArcNotificationContentView::OnBlur() {
   static_cast<ArcNotificationView*>(parent())->OnContentBlured();
 }
 
-void ArcNotificationContentView::ActivateToast() {
-  if (message_center::ToastContentsView::kViewClassName ==
-      parent()->parent()->GetClassName()) {
-    static_cast<message_center::ToastContentsView*>(parent()->parent())
-        ->ActivateToast();
+void ArcNotificationContentView::Activate() {
+  if (!GetWidget())
+    return;
+
+  // Make the widget active.
+  if (!GetWidget()->IsActive()) {
+    GetWidget()->widget_delegate()->set_can_activate(true);
+    GetWidget()->Activate();
   }
+
+  // Focus the surface window.
+  surface_->FocusSurfaceWindow();
 }
 
 views::FocusTraversable* ArcNotificationContentView::GetFocusTraversable() {
@@ -607,7 +638,6 @@ void ArcNotificationContentView::OnItemDestroying() {
 
 void ArcNotificationContentView::OnItemUpdated() {
   UpdateAccessibleName();
-  UpdatePinnedState();
   UpdateSnapshot();
   if (control_buttons_view_) {
     DCHECK(floating_control_buttons_widget_);

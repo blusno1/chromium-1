@@ -136,6 +136,8 @@ TEST_F(SurfaceTest, SetOpaqueRegion) {
     EXPECT_FALSE(frame.render_pass_list.back()
                      ->quad_list.back()
                      ->ShouldDrawWithBlending());
+    EXPECT_EQ(gfx::Rect(0, 0, 1, 1),
+              frame.render_pass_list.back()->damage_rect);
   }
 
   // Setting an empty opaque region requires draw with blending.
@@ -150,6 +152,8 @@ TEST_F(SurfaceTest, SetOpaqueRegion) {
     EXPECT_TRUE(frame.render_pass_list.back()
                     ->quad_list.back()
                     ->ShouldDrawWithBlending());
+    EXPECT_EQ(gfx::Rect(0, 0, 1, 1),
+              frame.render_pass_list.back()->damage_rect);
   }
 
   std::unique_ptr<Buffer> buffer_without_alpha(
@@ -169,6 +173,8 @@ TEST_F(SurfaceTest, SetOpaqueRegion) {
     EXPECT_FALSE(frame.render_pass_list.back()
                      ->quad_list.back()
                      ->ShouldDrawWithBlending());
+    EXPECT_EQ(gfx::Rect(0, 0, 0, 0),
+              frame.render_pass_list.back()->damage_rect);
   }
 }
 
@@ -201,6 +207,38 @@ TEST_F(SurfaceTest, SetBufferScale) {
   EXPECT_EQ(
       gfx::ScaleToFlooredSize(buffer_size, 1.0f / kBufferScale).ToString(),
       surface->content_size().ToString());
+
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, 256, 256),
+            frame.render_pass_list.back()->damage_rect);
+}
+
+TEST_F(SurfaceTest, SetBufferTransform) {
+  gfx::Size buffer_size(256, 512);
+  auto buffer = base::MakeUnique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
+  auto surface = base::MakeUnique<Surface>();
+  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+
+  // This will update the bounds of the surface and take the buffer transform
+  // into account.
+  surface->Attach(buffer.get());
+  surface->SetBufferTransform(Transform::ROTATE_90);
+  surface->Commit();
+  EXPECT_EQ(gfx::Size(buffer_size.height(), buffer_size.width()).ToString(),
+            surface->window()->bounds().size().ToString());
+  EXPECT_EQ(gfx::Size(buffer_size.height(), buffer_size.width()).ToString(),
+            surface->content_size().ToString());
+
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, buffer_size.height(), buffer_size.width()),
+            frame.render_pass_list.back()->damage_rect);
 }
 
 TEST_F(SurfaceTest, MirrorLayers) {
@@ -247,6 +285,13 @@ TEST_F(SurfaceTest, SetViewport) {
   EXPECT_EQ(viewport2.ToString(),
             surface->window()->bounds().size().ToString());
   EXPECT_EQ(viewport2.ToString(), surface->content_size().ToString());
+
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, 512, 512),
+            frame.render_pass_list.back()->damage_rect);
 }
 
 TEST_F(SurfaceTest, SetCrop) {
@@ -263,6 +308,13 @@ TEST_F(SurfaceTest, SetCrop) {
   EXPECT_EQ(crop_size.ToString(),
             surface->window()->bounds().size().ToString());
   EXPECT_EQ(crop_size.ToString(), surface->content_size().ToString());
+
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, 12, 12),
+            frame.render_pass_list.back()->damage_rect);
 }
 
 TEST_F(SurfaceTest, SetBlendMode) {
@@ -319,6 +371,11 @@ TEST_F(SurfaceTest, SetAlpha) {
   surface->Attach(buffer.get());
   surface->SetAlpha(0.5f);
   surface->Commit();
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, 1, 1), frame.render_pass_list.back()->damage_rect);
 }
 
 TEST_F(SurfaceTest, Commit) {

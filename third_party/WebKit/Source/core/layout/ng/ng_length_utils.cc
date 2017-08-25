@@ -4,10 +4,9 @@
 
 #include "core/layout/ng/ng_length_utils.h"
 
+#include "core/layout/LayoutBox.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
-#include "core/layout/ng/ng_fragment.h"
-#include "core/layout/ng/ng_layout_result.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/LayoutUnit.h"
 #include "platform/Length.h"
@@ -49,6 +48,9 @@ LayoutUnit ResolveInlineLength(const NGConstraintSpace& constraint_space,
             LayoutUnit());
   DCHECK_EQ(constraint_space.WritingMode(),
             FromPlatformWritingMode(style.GetWritingMode()));
+
+  if (constraint_space.IsAnonymous())
+    return constraint_space.AvailableSize().inline_size;
 
   if (type == LengthResolveType::kMinSize && length.IsAuto())
     return LayoutUnit();
@@ -130,6 +132,9 @@ LayoutUnit ResolveBlockLength(const NGConstraintSpace& constraint_space,
   DCHECK_EQ(constraint_space.WritingMode(),
             FromPlatformWritingMode(style.GetWritingMode()));
 
+  if (constraint_space.IsAnonymous())
+    return content_size;
+
   if (type == LengthResolveType::kMinSize && length.IsAuto())
     return LayoutUnit();
 
@@ -195,9 +200,9 @@ MinMaxSize ComputeMinAndMaxContentContribution(
   // Synthesize a zero-sized constraint space for passing to
   // ResolveInlineLength.
   NGWritingMode writing_mode = FromPlatformWritingMode(style.GetWritingMode());
-  NGConstraintSpaceBuilder builder(writing_mode);
-  builder.SetInitialContainingBlockSize(
-      NGPhysicalSize{LayoutUnit(), LayoutUnit()});
+  NGConstraintSpaceBuilder builder(
+      writing_mode,
+      /* icb_size */ {NGSizeIndefinite, NGSizeIndefinite});
   RefPtr<NGConstraintSpace> space = builder.ToConstraintSpace(writing_mode);
 
   MinMaxSize computed_sizes;

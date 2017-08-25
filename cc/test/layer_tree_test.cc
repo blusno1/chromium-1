@@ -824,9 +824,12 @@ void LayerTreeTest::RunTest(CompositorMode mode) {
   ASSERT_TRUE(image_worker_->Start());
 
   shared_bitmap_manager_.reset(new TestSharedBitmapManager);
-  gpu_memory_buffer_manager_.reset(new TestGpuMemoryBufferManager);
+  gpu_memory_buffer_manager_ =
+      std::make_unique<viz::TestGpuMemoryBufferManager>();
   task_graph_runner_.reset(new TestTaskGraphRunner);
 
+  if (mode == CompositorMode::THREADED)
+    settings_.commit_to_active_tree = false;
   // Spend less time waiting for BeginFrame because the output is
   // mocked out.
   settings_.background_animation_rate = 200.0;

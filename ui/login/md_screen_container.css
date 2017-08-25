@@ -45,6 +45,10 @@
   top: 0;
 }
 
+#scroll-container.disable-scroll {
+  overflow-y: hidden;
+}
+
 #scroll-container::-webkit-scrollbar {
   display: none;
 }
@@ -63,14 +67,9 @@
   pointer-events: none;
 }
 
-#login-shield {
-  background-color: rgba(0, 0, 0, 0.6);
-  display: block;
-  height: 100%;
+#inner-container.disable-scroll {
   left: 0;
   position: absolute;
-  top: 0;
-  width: 100%;
 }
 
 #oobe[md-mode] #progress-dots {

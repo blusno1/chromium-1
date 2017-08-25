@@ -3,130 +3,71 @@
 // found in the LICENSE file.
 
 cr.define('settings_people_page', function() {
-  /** @implements {settings.ProfileInfoBrowserProxy} */
-  class TestProfileInfoBrowserProxy extends TestBrowserProxy {
-    constructor() {
-      super([
-        'getProfileInfo',
-        'getProfileStatsCount',
-        'getProfileManagesSupervisedUsers',
-      ]);
+  suite('ProfileInfoTests', function() {
+    var peoplePage = null;
+    var browserProxy = null;
+    var syncBrowserProxy = null;
 
-      this.fakeProfileInfo = {
-        name: 'fakeName',
-        iconUrl: 'http://fake-icon-url.com/',
-      };
-    }
-
-    /** @override */
-    getProfileInfo() {
-      this.methodCalled('getProfileInfo');
-      return Promise.resolve(this.fakeProfileInfo);
-    }
-
-    /** @override */
-    getProfileStatsCount() {
-      this.methodCalled('getProfileStatsCount');
-    }
-
-    /** @override */
-    getProfileManagesSupervisedUsers() {
-      this.methodCalled('getProfileManagesSupervisedUsers');
-      return Promise.resolve(false);
-    }
-  }
-
-  /** @implements {settings.SyncBrowserProxy} */
-  class TestSyncBrowserProxy extends TestBrowserProxy {
-    constructor() {
-      super([
-        'getSyncStatus',
-        'signOut',
-      ]);
-    }
-
-    /** @override */
-    getSyncStatus() {
-      this.methodCalled('getSyncStatus');
-      return Promise.resolve({
-        signedIn: true,
-        signedInUsername: 'fakeUsername'
-      });
-    }
-
-    /** @override */
-    signOut(deleteProfile) {
-      this.methodCalled('signOut', deleteProfile);
-    }
-  }
-
-  function registerProfileInfoTests() {
-    suite('ProfileInfoTests', function() {
-      var peoplePage = null;
-      var browserProxy = null;
-      var syncBrowserProxy = null;
-
-      suiteSetup(function() {
-        // Force easy unlock off. Those have their own ChromeOS-only tests.
-        loadTimeData.overrideValues({
-          easyUnlockAllowed: false,
-        });
-      });
-
-      setup(function() {
-        browserProxy = new TestProfileInfoBrowserProxy();
-        settings.ProfileInfoBrowserProxyImpl.instance_ = browserProxy;
-
-        syncBrowserProxy = new TestSyncBrowserProxy();
-        settings.SyncBrowserProxyImpl.instance_ = syncBrowserProxy;
-
-        PolymerTest.clearBody();
-        peoplePage = document.createElement('settings-people-page');
-        document.body.appendChild(peoplePage);
-      });
-
-      teardown(function() { peoplePage.remove(); });
-
-      test('GetProfileInfo', function() {
-        return Promise.all([browserProxy.whenCalled('getProfileInfo'),
-                            syncBrowserProxy.whenCalled('getSyncStatus')])
-            .then(function() {
-          Polymer.dom.flush();
-          assertEquals(browserProxy.fakeProfileInfo.name,
-                       peoplePage.$$('#profile-name').textContent.trim());
-          var bg = peoplePage.$$('#profile-icon').style.backgroundImage;
-          assertTrue(bg.includes(browserProxy.fakeProfileInfo.iconUrl));
-
-          cr.webUIListenerCallback(
-            'profile-info-changed',
-            {name: 'pushedName', iconUrl: 'http://pushed-url/'});
-
-          Polymer.dom.flush();
-          assertEquals('pushedName',
-                       peoplePage.$$('#profile-name').textContent.trim());
-          var newBg = peoplePage.$$('#profile-icon').style.backgroundImage;
-          assertTrue(newBg.includes('http://pushed-url/'));
-        });
-      });
-
-      test('GetProfileManagesSupervisedUsers', function() {
-        return browserProxy.whenCalled('getProfileManagesSupervisedUsers').then(
-            function() {
-              Polymer.dom.flush();
-              assertFalse(!!peoplePage.$$('#manageSupervisedUsersContainer'));
-
-              cr.webUIListenerCallback(
-                'profile-manages-supervised-users-changed',
-                true);
-
-              Polymer.dom.flush();
-              assertTrue(!!peoplePage.$$('#manageSupervisedUsersContainer'));
-            });
+    suiteSetup(function() {
+      // Force easy unlock off. Those have their own ChromeOS-only tests.
+      loadTimeData.overrideValues({
+        easyUnlockAllowed: false,
       });
     });
-  }
 
-  function registerSyncStatusTests() {
+    setup(function() {
+      browserProxy = new TestProfileInfoBrowserProxy();
+      settings.ProfileInfoBrowserProxyImpl.instance_ = browserProxy;
+
+      syncBrowserProxy = new TestSyncBrowserProxy();
+      settings.SyncBrowserProxyImpl.instance_ = syncBrowserProxy;
+
+      PolymerTest.clearBody();
+      peoplePage = document.createElement('settings-people-page');
+      document.body.appendChild(peoplePage);
+    });
+
+    teardown(function() { peoplePage.remove(); });
+
+    test('GetProfileInfo', function() {
+      return Promise.all([browserProxy.whenCalled('getProfileInfo'),
+                          syncBrowserProxy.whenCalled('getSyncStatus')])
+          .then(function() {
+        Polymer.dom.flush();
+        assertEquals(browserProxy.fakeProfileInfo.name,
+                     peoplePage.$$('#profile-name').textContent.trim());
+        var bg = peoplePage.$$('#profile-icon').style.backgroundImage;
+        assertTrue(bg.includes(browserProxy.fakeProfileInfo.iconUrl));
+
+        cr.webUIListenerCallback(
+          'profile-info-changed',
+          {name: 'pushedName', iconUrl: 'http://pushed-url/'});
+
+        Polymer.dom.flush();
+        assertEquals('pushedName',
+                     peoplePage.$$('#profile-name').textContent.trim());
+        var newBg = peoplePage.$$('#profile-icon').style.backgroundImage;
+        assertTrue(newBg.includes('http://pushed-url/'));
+      });
+    });
+
+    test('GetProfileManagesSupervisedUsers', function() {
+      return browserProxy.whenCalled('getProfileManagesSupervisedUsers').then(
+          function() {
+            Polymer.dom.flush();
+            assertFalse(!!peoplePage.$$('#manageSupervisedUsersContainer'));
+
+            cr.webUIListenerCallback(
+              'profile-manages-supervised-users-changed',
+              true);
+
+            Polymer.dom.flush();
+            assertTrue(!!peoplePage.$$('#manageSupervisedUsersContainer'));
+          });
+    });
+  });
+
+  if (!cr.isChromeOS) {
     suite('SyncStatusTests', function() {
       var peoplePage = null;
       var browserProxy = null;
@@ -384,12 +325,4 @@ cr.define('settings_people_page', function() {
       });
     });
   }
-
-  return {
-    registerTests: function() {
-      registerProfileInfoTests();
-      if (!cr.isChromeOS)
-        registerSyncStatusTests();
-    },
-  };
 });

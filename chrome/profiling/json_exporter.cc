@@ -6,7 +6,13 @@
 
 #include <map>
 
+#include "base/format_macros.h"
+#include "base/json/json_writer.h"
+#include "base/json/string_escape.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
+#include "base/trace_event/trace_event_argument.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/tracing_observer.h"
 
 namespace profiling {
 
@@ -20,11 +26,19 @@ struct BacktraceNode {
 
   static constexpr size_t kNoParent = static_cast<size_t>(-1);
 
+  bool operator<(const BacktraceNode& other) const {
+    if (string_id == other.string_id)
+      return parent < other.parent;
+    return string_id < other.string_id;
+  }
+
   size_t string_id;
   size_t parent;  // kNoParent indicates no parent.
 };
 
-// Used as a map kep to uniquify an allocation with a given size and stack.
+using BacktraceTable = std::map<BacktraceNode, size_t>;
+
+// Used as a map key to uniquify an allocation with a given size and stack.
 // Since backtraces are uniquified, this does pointer comparisons on the
 // backtrace to give a stable ordering, even if that ordering has no
 // intrinsic meaning.
@@ -54,21 +68,38 @@ void WriteProcessName(int pid, std::ostream& out) {
       << "\"args\":{\"name\":\"Browser process\"}}";
 }
 
-// Writes the dictionary keys to preceed a "heaps_v2" trace argument. This is
-// "v2" heap dump format.
-void WriteHeapsV2Header(int pid, std::ostream& out) {
+// Writes the dictionary keys to preceed a "dumps" trace argument.
+void WriteDumpsHeader(int pid, std::ostream& out) {
   out << "{ \"pid\":" << pid << ",";
   out << "\"ph\":\"v\",";
   out << "\"name\":\"periodic_interval\",";
   out << "\"args\":{";
-  out << "\"dumps\":{";
-  out << "\"level_of_detail\":\"detailed\",";
+  out << "\"dumps\":{\n";
+}
+
+void WriteDumpsFooter(std::ostream& out) {
+  out << "}}}";  // dumps, args, event
+}
+
+// Writes the dictionary keys to preceed a "heaps_v2" trace argument inside a
+// "dumps". This is "v2" heap dump format.
+void WriteHeapsV2Header(std::ostream& out) {
+  out << "\"level_of_detail\":\"detailed\",\n";
   out << "\"heaps_v2\": {\n";
 }
 
 // Closes the dictionaries from the WriteHeapsV2Header function above.
 void WriteHeapsV2Footer(std::ostream& out) {
-  out << "}}}}";  // heaps_v2, dumps, args, event
+  out << "}";  // heaps_v2
+}
+
+void WriteMemoryMaps(
+    const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
+    std::ostream& out) {
+  base::trace_event::TracedValue traced_value;
+  memory_instrumentation::TracingObserver::MemoryMapsAsValueInto(maps,
+                                                                 &traced_value);
+  out << "\"process_mmaps\":" << traced_value.ToString();
 }
 
 // Inserts or retrieves the ID for a string in the string table.
@@ -78,20 +109,36 @@ size_t AddOrGetString(std::string str, StringTable* string_table) {
   return result.first->second;
 }
 
+size_t AddOrGetBacktraceNode(BacktraceNode node,
+                             BacktraceTable* backtrace_table) {
+  auto result =
+      backtrace_table->emplace(std::move(node), backtrace_table->size());
+  // "result.first" is an iterator into the map.
+  return result.first->second;
+}
+
 // Returns the index into nodes of the node to reference for this stack. That
 // node will reference its parent node, etc. to allow the full stack to
 // be represented.
 size_t AppendBacktraceStrings(const Backtrace& backtrace,
-                              std::vector<BacktraceNode>* nodes,
+                              BacktraceTable* backtrace_table,
                               StringTable* string_table) {
   int parent = -1;
   for (const Address& addr : backtrace.addrs()) {
-    size_t sid =
-        AddOrGetString("pc:" + base::Uint64ToString(addr.value), string_table);
-    nodes->emplace_back(sid, parent);
-    parent = nodes->size() - 1;
+    static constexpr char kPcPrefix[] = "pc:";
+    // std::numeric_limits<>::digits gives the number of bits in the value.
+    // Dividing by 4 gives the number of hex digits needed to store the value.
+    // Adding to sizeof(kPcPrefix) yields the buffer size needed including the
+    // null terminator.
+    static constexpr int kBufSize =
+        sizeof(kPcPrefix) +
+        (std::numeric_limits<decltype(addr.value)>::digits / 4);
+    char buf[kBufSize];
+    snprintf(buf, kBufSize, "%s%" PRIx64, kPcPrefix, addr.value);
+    size_t sid = AddOrGetString(buf, string_table);
+    parent = AddOrGetBacktraceNode(BacktraceNode(sid, parent), backtrace_table);
   }
-  return nodes->size() - 1;  // Last item is the end of this stack.
+  return parent;  // Last item is the end of this stack.
 }
 
 // Writes the string table which looks like:
@@ -116,29 +163,32 @@ void WriteStrings(const StringTable& string_table, std::ostream& out) {
 }
 
 // Writes the nodes array in the maps section. These are all the backtrace
-// entries and are indexed by the allocator nodes arra.
+// entries and are indexed by the allocator nodes array.
 //   "nodes":[
 //     {"id":1, "name_sid":123, "parent":17},
 //     ...
 //   ]
-void WriteMapNodes(const std::vector<BacktraceNode>& nodes, std::ostream& out) {
+void WriteMapNodes(const BacktraceTable& nodes, std::ostream& out) {
   out << "\"nodes\":[";
 
-  for (size_t i = 0; i < nodes.size(); i++) {
-    if (i != 0)
+  bool first_time = true;
+  for (const auto& node : nodes) {
+    if (!first_time)
       out << ",\n";
+    else
+      first_time = false;
 
-    out << "{\"id\":" << i;
-    out << ",\"name_sid\":" << nodes[i].string_id;
-    if (nodes[i].parent != BacktraceNode::kNoParent)
-      out << ",\"parent\":" << nodes[i].parent;
+    out << "{\"id\":" << node.second;
+    out << ",\"name_sid\":" << node.first.string_id;
+    if (node.first.parent != BacktraceNode::kNoParent)
+      out << ",\"parent\":" << node.first.parent;
     out << "}";
   }
   out << "]";
 }
 
 // Writes the number of matching allocations array which looks like:
-//   "counts":[1, 1, 2 ]
+//   "counts":[1, 1, 2]
 void WriteCounts(const UniqueAllocCount& alloc_counts, std::ostream& out) {
   out << "\"counts\":[";
   bool first_time = true;
@@ -168,7 +218,7 @@ void WriteSizes(const UniqueAllocCount& alloc_counts, std::ostream& out) {
 }
 
 // Writes the types array of integers which looks like:
-//   "types":[ 0, 0, 0, ]
+//   "types":[0, 0, 0]
 void WriteTypes(const UniqueAllocCount& alloc_counts, std::ostream& out) {
   out << "\"types\":[";
   for (size_t i = 0; i < alloc_counts.size(); i++) {
@@ -200,14 +250,24 @@ void WriteAllocatorNodes(const UniqueAllocCount& alloc_counts,
 
 }  // namespace
 
-void ExportAllocationEventSetToJSON(int pid,
-                                    const BacktraceStorage* backtrace_storage,
-                                    const AllocationEventSet& event_set,
-                                    std::ostream& out) {
+void ExportAllocationEventSetToJSON(
+    int pid,
+    const AllocationEventSet& event_set,
+    const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
+    std::ostream& out,
+    std::unique_ptr<base::DictionaryValue> metadata_dict) {
   out << "{ \"traceEvents\": [";
   WriteProcessName(pid, out);
   out << ",\n";
-  WriteHeapsV2Header(pid, out);
+  WriteDumpsHeader(pid, out);
+
+  WriteMemoryMaps(maps, out);
+  out << ",\n";
+
+  WriteHeapsV2Header(out);
+
+  // Output Heaps_V2 format version. Currently "1" is the only valid value.
+  out << "\"version\": 1,\n";
 
   StringTable string_table;
 
@@ -225,11 +285,8 @@ void ExportAllocationEventSetToJSON(int pid,
 
   // Write each backtrace, converting the string for the stack entry to string
   // IDs. The backtrace -> node ID will be filled in at this time.
-  //
-  // As a future optimization, compute when a stack is a superset of another
-  // one and share the common nodes.
-  std::vector<BacktraceNode> nodes;
-  nodes.reserve(backtraces.size() * 10);  // Guesstimate for end size.
+  BacktraceTable nodes;
+  VLOG(1) << "Number of backtraces " << backtraces.size();
   for (auto& bt : backtraces)
     bt.second = AppendBacktraceStrings(*bt.first, &nodes, &string_table);
 
@@ -262,7 +319,17 @@ void ExportAllocationEventSetToJSON(int pid,
   out << "}}\n";  // End of allocators section.
 
   WriteHeapsV2Footer(out);
-  out << "]}\n";
+  WriteDumpsFooter(out);
+  out << "]";
+
+  // Append metadata.
+  if (metadata_dict) {
+    std::string metadata;
+    base::JSONWriter::Write(*metadata_dict, &metadata);
+    out << ",\"metadata\": " << metadata;
+  }
+
+  out << "}\n";
 }
 
 }  // namespace profiling

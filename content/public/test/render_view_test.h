@@ -64,6 +64,7 @@ class RenderViewTest : public testing::Test, blink::WebLeakDetectorClient {
     RendererBlinkPlatformImplTestOverride();
     ~RendererBlinkPlatformImplTestOverride();
     RendererBlinkPlatformImpl* Get() const;
+    void Initialize(base::WeakPtr<service_manager::Connector> connector);
     void Shutdown();
 
    private:
@@ -146,9 +147,6 @@ class RenderViewTest : public testing::Test, blink::WebLeakDetectorClient {
 
   // Simulates a navigation with a type of reload to the given url.
   void Reload(const GURL& url);
-
-  // Returns the IPC message ID of the navigation message.
-  uint32_t GetNavigationIPCType();
 
   // Resize the view.
   void Resize(gfx::Size new_size, bool is_fullscreen);

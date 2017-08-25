@@ -1665,8 +1665,8 @@ void TestRunner::Reset() {
 #endif
 
   if (delegate_) {
-    // Reset the default quota for each origin to 5MB
-    delegate_->SetDatabaseQuota(5 * 1024 * 1024);
+    // Reset the default quota for each origin.
+    delegate_->SetDatabaseQuota(kDefaultDatabaseQuota);
     delegate_->SetDeviceColorSpace("reset");
     delegate_->SetDeviceScaleFactor(GetDefaultDeviceScaleFactor());
     delegate_->SetBlockThirdPartyCookies(true);
@@ -1846,7 +1846,9 @@ void TestRunner::setShouldEnableViewSource(bool value) {
   // is guaranteed to exist at this point.
   DCHECK(main_view_);
 
-  main_view_->MainFrame()->EnableViewSourceMode(value);
+  CHECK(main_view_->MainFrame()->IsWebLocalFrame())
+      << "This function requires that the main frame is a local frame.";
+  main_view_->MainFrame()->ToWebLocalFrame()->EnableViewSourceMode(value);
 }
 
 bool TestRunner::shouldDumpUserGestureInFrameLoadCallbacks() const {

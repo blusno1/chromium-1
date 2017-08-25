@@ -87,17 +87,10 @@ AutoscrollController* ScrollManager::GetAutoscrollController() const {
 
 static bool CanPropagate(const ScrollState& scroll_state,
                          const Element& element) {
-  // ScrollBoundaryBehavior may have different values on x-axis and y-axis.
-  // We need to find out the dominant axis of user's intended scroll to decide
-  // which node's ScrollBoundaryBehavior should be applied, i.e. which the
-  // scroll should be propagated from this node given its relevant*
-  // ScrollBoundaryBehavior value. * relevant here depends on the dominant
-  // axis of scroll gesture.
-  bool x_dominant =
-      std::abs(scroll_state.deltaXHint()) > std::abs(scroll_state.deltaYHint());
-  return (x_dominant && element.GetComputedStyle()->ScrollBoundaryBehaviorX() ==
-                            EScrollBoundaryBehavior::kAuto) ||
-         (!x_dominant &&
+  return (scroll_state.deltaXHint() == 0 ||
+          element.GetComputedStyle()->ScrollBoundaryBehaviorX() ==
+              EScrollBoundaryBehavior::kAuto) &&
+         (scroll_state.deltaYHint() == 0 ||
           element.GetComputedStyle()->ScrollBoundaryBehaviorY() ==
               EScrollBoundaryBehavior::kAuto);
 }
@@ -153,16 +146,23 @@ bool ScrollManager::CanScroll(const ScrollState& scroll_state,
   if (!delta_x && !delta_y)
     return true;
 
-  if (IsViewportScrollingElement(current_element))
-    return true;
+  ScrollableArea* scrollable_area = nullptr;
 
-  if (current_element == *(frame_->GetDocument()->documentElement()))
-    return true;
+  if (IsViewportScrollingElement(current_element) ||
+      current_element == *(frame_->GetDocument()->documentElement())) {
+    if (!frame_->Tree().Parent() || frame_->Tree().Parent()->IsLocalFrame())
+      return true;
 
-  ScrollableArea* scrollable_area =
-      current_element.GetLayoutBox()
-          ? current_element.GetLayoutBox()->GetScrollableArea()
-          : nullptr;
+    // For oopif the viewport is added to scroll chain only if it can actually
+    // consume some delta hints.
+    DCHECK(frame_->Tree().Parent()->IsRemoteFrame());
+    scrollable_area =
+        frame_->View() ? frame_->View()->GetScrollableArea() : nullptr;
+  }
+
+  if (!scrollable_area && current_element.GetLayoutBox())
+    scrollable_area = current_element.GetLayoutBox()->GetScrollableArea();
+
   if (!scrollable_area)
     return false;
 
@@ -551,9 +551,6 @@ WebInputEventResult ScrollManager::HandleGestureScrollEvent(
   if (!frame_->View())
     return WebInputEventResult::kNotHandled;
 
-  bool enable_touchpad_scroll_latching =
-      RuntimeEnabledFeatures::TouchpadAndWheelScrollLatchingEnabled();
-
   Node* event_target = nullptr;
   Scrollbar* scrollbar = nullptr;
   if (gesture_event.GetType() != WebInputEvent::kGestureScrollBegin) {
@@ -587,21 +584,10 @@ WebInputEventResult ScrollManager::HandleGestureScrollEvent(
 
   if (scrollbar) {
     bool should_update_capture = false;
-    // scrollbar->gestureEvent always returns true for touchpad based GSB
-    // events. Therefore, while mouse is over a fully scrolled scrollbar, GSB
-    // won't propagate to the next scrollable layer.
     if (scrollbar->GestureEvent(gesture_event, &should_update_capture)) {
       if (should_update_capture)
         scrollbar_handling_scroll_gesture_ = scrollbar;
       return WebInputEventResult::kHandledSuppressed;
-    }
-
-    // When touchpad scroll latching is enabled and mouse is over a scrollbar,
-    // GSU events will always latch to the scrollbar even when it hits the
-    // scroll content.
-    if (enable_touchpad_scroll_latching &&
-        gesture_event.GetType() == WebInputEvent::kGestureScrollUpdate) {
-      return WebInputEventResult::kNotHandled;
     }
 
     scrollbar_handling_scroll_gesture_ = nullptr;

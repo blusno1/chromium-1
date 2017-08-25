@@ -90,13 +90,12 @@ class TestDisplayScheduler : public DisplayScheduler {
 class DisplayTest : public testing::Test {
  public:
   DisplayTest()
-      : support_(CompositorFrameSinkSupport::Create(
-            nullptr,
-            &manager_,
-            kArbitraryFrameSinkId,
-            true /* is_root */,
-            true /* handles_frame_sink_id_invalidation */,
-            true /* needs_sync_points */)),
+      : support_(
+            CompositorFrameSinkSupport::Create(nullptr,
+                                               &manager_,
+                                               kArbitraryFrameSinkId,
+                                               true /* is_root */,
+                                               true /* needs_sync_points */)),
         task_runner_(new base::NullTaskRunner) {}
 
   ~DisplayTest() override { support_->EvictCurrentSurface(); }
@@ -613,7 +612,6 @@ TEST_F(DisplayTest, CompositorFrameDamagesCorrectDisplay) {
   // Set up second frame sink + display.
   auto support2 = CompositorFrameSinkSupport::Create(
       nullptr, &manager_, kAnotherFrameSinkId, true /* is_root */,
-      true /* handles_frame_sink_id_invalidation */,
       true /* needs_sync_points */);
   auto begin_frame_source2 = base::MakeUnique<StubBeginFrameSource>();
   auto scheduler_for_display2 = base::MakeUnique<TestDisplayScheduler>(

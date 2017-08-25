@@ -5,6 +5,7 @@
 #include "chrome/common/chrome_features.h"
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "extensions/features/features.h"
 #include "ppapi/features/features.h"
@@ -24,12 +25,18 @@ const base::Feature kAllowAutoplayUnmutedInWebappManifestScope{
 const base::Feature kAppleScriptExecuteJavaScript{
     "AppleScriptExecuteJavaScript", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables the fullscreen toolbar to reveal itself if it's hidden.
+const base::Feature kFullscreenToolbarReveal{"FullscreenToolbarReveal",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Use the Toolkit-Views Task Manager window.
 const base::Feature kViewsTaskManager{"ViewsTaskManager",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
 
 #if !defined(OS_ANDROID)
+const base::Feature kAnimatedAppMenuIcon{"AnimatedAppMenuIcon",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAppBanners {
   "AppBanners",
 #if defined(OS_CHROMEOS)
@@ -91,6 +98,10 @@ const base::Feature kBrowserHangFixesExperiment{
 const base::Feature kBrowserTouchBar{"BrowserTouchBar",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables or disables touch bar support for dialogs.
+const base::Feature kDialogTouchBar{"DialogTouchBar",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables or disables keyboard focus for the tab strip.
 const base::Feature kTabStripKeyboardFocus{"TabStripKeyboardFocus",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
@@ -137,6 +148,11 @@ const base::Feature kConsistentOmniboxGeolocation{
     "ConsistentOmniboxGeolocation", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
+#if defined(OS_MACOSX)
+const base::Feature kContentFullscreen{"ContentFullscreen",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined(OS_ANDROID)
 // Experiment to extract structured metadata for app indexing.
 const base::Feature kCopylessPaste{"CopylessPaste",
@@ -159,6 +175,11 @@ const base::Feature kDesktopPWAWindowing{"DesktopPWAWindowing",
 const base::Feature kDisplayPersistenceToggleInPermissionPrompts{
     "DisplayPersistenceToggleInPermissionPrompts",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if !defined(OS_ANDROID)
+const base::Feature kDoodlesOnLocalNtp{"DoodlesOnLocalNtp",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Enables Expect CT reporting, which sends reports for opted-in sites
 // that don't serve sufficient Certificate Transparency information.
@@ -207,7 +228,7 @@ const base::Feature kLinuxObsoleteSystemIsEndOfTheLine{
 // Enables or disables the Location Settings Dialog (LSD). The LSD is an Android
 // system-level geolocation permission prompt.
 const base::Feature kLsdPermissionPrompt{"LsdPermissionPrompt",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(OS_MACOSX)
 // Enables RTL layout in macOS top chrome.
@@ -286,6 +307,11 @@ const base::Feature kNativeNotifications{"NativeNotifications",
 #endif
 #endif  // BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
 
+#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
+const base::Feature kNativeWindowNavButtons{"NativeWindowNavButtons",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
+
 const base::Feature kNetworkPrediction{"NetworkPrediction",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -315,7 +341,7 @@ const base::Feature kDisablePostScriptPrinting{
 // Prefer HTML content by hiding Flash from the list of plugins.
 // https://crbug.com/626728
 const base::Feature kPreferHtmlOverPlugins{"PreferHtmlOverPlugins",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -335,6 +361,10 @@ const base::Feature kPrintPdfAsImage{"PrintPdfAsImage",
 // background when closed.
 const base::Feature kPushMessagingBackgroundMode{
     "PushMessagingBackgroundMode", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables support for Minimal-UI PWA display mode.
+const base::Feature kPwaMinimalUi{"PwaMinimalUi",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_CHROMEOS)
 // Runtime flag that indicates whether this leak detector should be enabled in
@@ -361,13 +391,24 @@ const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
 // Enables or disables UI in MD Settings to view content settings grouped by
 // origin.
 const base::Feature kSiteDetails{"SiteDetails",
-                                 base::FEATURE_DISABLED_BY_DEFAULT};
+                                 base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables or disables the ability to use the sound content setting to mute a
+// website.
+const base::Feature kSoundContentSetting{"SoundContentSetting",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if !defined(OS_ANDROID)
 // Enables delaying the navigation of background tabs in order to improve
 // foreground tab's user experience.
 const base::Feature kStaggeredBackgroundTabOpen{
     "StaggeredBackgroundTabOpen", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// This controls whether we are running experiment with staggered background
+// tab open. For control group, this should be disabled. This depends on
+// |kStaggeredBackgroundTabOpen| above.
+const base::Feature kStaggeredBackgroundTabOpenExperiment{
+    "StaggeredBackgroundTabOpenExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables or disables the creation of (legacy) supervised users. Does not
@@ -396,6 +437,12 @@ const base::Feature kUseGroupedPermissionInfobars{
 // requests.
 const base::Feature kUsePermissionManagerForMediaRequests{
     "UsePermissionManagerForMediaRequests", base::FEATURE_ENABLED_BY_DEFAULT};
+
+#if !defined(OS_ANDROID)
+// Enables or disables Voice Search on the local NTP.
+const base::Feature kVoiceSearchOnLocalNtp{"VoiceSearchOnLocalNtp",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 #if defined(OS_CHROMEOS)
 // Enables or disables the opt-in IME menu in the language settings page.

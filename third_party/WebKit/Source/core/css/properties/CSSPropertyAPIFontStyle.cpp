@@ -4,15 +4,17 @@
 
 #include "core/css/properties/CSSPropertyAPIFontStyle.h"
 
+#include "core/css/parser/CSSParserContext.h"
 #include "core/css/properties/CSSPropertyFontUtils.h"
 
 namespace blink {
 
-const CSSValue* CSSPropertyAPIFontStyle::parseSingleValue(
+const CSSValue* CSSPropertyAPIFontStyle::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
-    const CSSParserContext&,
-    const CSSParserLocalContext&) {
-  return CSSPropertyFontUtils::ConsumeFontStyle(range);
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return CSSPropertyFontUtils::ConsumeFontStyle(range, context.Mode());
 }
 
 }  // namespace blink

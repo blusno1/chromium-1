@@ -17,17 +17,15 @@ function performActions()
     return promise;
 }
 
-function test()
-{
-    InspectorTest.invokeAsyncWithTimeline("performActions", finish);
+function test() {
+  PerformanceTestRunner.invokeAsyncWithTimeline('performActions', finish);
 
-    function finish()
-    {
-        InspectorTest.printTimelineRecordsWithDetails("RequestAnimationFrame");
-        InspectorTest.printTimelineRecordsWithDetails("FireAnimationFrame");
-        InspectorTest.printTimelineRecordsWithDetails("CancelAnimationFrame");
-        InspectorTest.completeTest();
-    }
+  function finish() {
+    PerformanceTestRunner.printTimelineRecordsWithDetails('RequestAnimationFrame');
+    PerformanceTestRunner.printTimelineRecordsWithDetails('FireAnimationFrame');
+    PerformanceTestRunner.printTimelineRecordsWithDetails('CancelAnimationFrame');
+    TestRunner.completeTest();
+  }
 }
 
 if (!window.testRunner)

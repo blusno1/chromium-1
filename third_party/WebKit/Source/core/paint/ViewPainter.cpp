@@ -8,7 +8,6 @@
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/BackgroundImageGeometry.h"
 #include "core/paint/BlockPainter.h"
 #include "core/paint/BoxModelObjectPainter.h"
@@ -17,6 +16,7 @@
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ScrollRecorder.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
@@ -60,7 +60,8 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   GraphicsContext& context = paint_info.context;
 
   // The background rect always includes at least the visible content size.
-  IntRect background_rect(IntRect(layout_view_.ViewRect()));
+  IntRect background_rect(
+      IntRect(layout_view_.OverflowClipRect(LayoutPoint())));
 
   if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled())
     background_rect.Unite(layout_view_.DocumentRect());

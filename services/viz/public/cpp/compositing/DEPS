@@ -1,0 +1,8 @@
+include_rules = [
+  "+cc",
+  "+gpu/ipc",
+  "+gpu/ipc/common",
+  "+skia/public/interfaces",
+  "+ui/gfx",
+  "+ui/latency/mojo",
+]

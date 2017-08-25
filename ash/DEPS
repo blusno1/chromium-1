@@ -2,10 +2,12 @@ include_rules = [
   "+device/bluetooth",
   "+cc/debug",
   "+cc/output",
+  "+components/pref_registry",
   "+components/prefs",
   "+components/quirks",
   "+components/session_manager",
   "+components/signin/core/account_id",
+  "+components/strings",
   "+components/ui_devtools",
   "+components/user_manager",
   "+components/vector_icons",
@@ -63,15 +65,12 @@ include_rules = [
   "+ui/events/devices/input_device.h",
   "+ui/events/devices/input_device_event_observer.h",
   "+ui/events/devices/stylus_state.h",
+  "+ui/events/devices/touch_device_transform.h",
   "+ui/events/devices/touchscreen_device.h",
 
   # TODO: This is temporary, ash should not use these. http://crbug.com/747415.
   "+ui/events/devices/device_data_manager.h",
   "+ui/events/devices/input_device_manager.h",
-
-  # X11 support isn't used in production and will go away soon.
-  # http://crbug.com/671355.
-  "+ui/events/devices/x11",
 ]
 
 specific_include_rules = {

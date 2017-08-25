@@ -188,13 +188,22 @@ public class PrintingControllerImpl implements PrintingController, PdfGenerator 
 
     @Override
     public void startPendingPrint(PrintingContextInterface printingContext) {
-        if (mIsBusy || mPrintManager == null) {
-            if (mIsBusy) Log.d(TAG, "Pending print can't be started. PrintingController is busy.");
-            else Log.d(TAG, "Pending print can't be started. No PrintManager provided.");
+        boolean canStartPrint = false;
+        if (mIsBusy) {
+            Log.d(TAG, "Pending print can't be started. PrintingController is busy.");
+        } else if (mPrintManager == null) {
+            Log.d(TAG, "Pending print can't be started. No PrintManager provided.");
+        } else if (!mPrintable.canPrint()) {
+            Log.d(TAG, "Pending print can't be started. Printable can't perform printing.");
+        } else {
+            canStartPrint = true;
+        }
 
+        if (!canStartPrint) {
             if (printingContext != null) printingContext.showSystemDialogDone();
             return;
         }
+
         mContextFromScriptInitiation = printingContext;
         mIsBusy = true;
         mPrintDocumentAdapterWrapper.print(mPrintManager, mPrintable.getTitle());
@@ -268,6 +277,11 @@ public class PrintingControllerImpl implements PrintingController, PdfGenerator 
             final CancellationSignal cancellationSignal,
             final PrintDocumentAdapterWrapper.WriteResultCallbackWrapper callback) {
         // TODO(cimamoglu): Make use of CancellationSignal.
+        if (ranges == null || ranges.length == 0) {
+            callback.onWriteFailed(null);
+            return;
+        }
+
         mOnWriteCallback = callback;
 
         assert mPrintingState == PRINTING_STATE_READY;

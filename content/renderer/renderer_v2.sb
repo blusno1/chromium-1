@@ -135,6 +135,10 @@
 (if (< os-version 1012)
   (allow mach-lookup (global-name "com.apple.FontServer")))
 
+; crbug.com/756145
+(if (= os-version 1011)
+  (allow mach-lookup (global-name "com.apple.FontObjectsServer")))
+
 ; sysctl
 (if (= os-version 1009)
   (allow sysctl-read)
@@ -159,4 +163,5 @@
     (sysctl-name "kern.osversion")
     (sysctl-name (string-append "kern.proc.pid." (param current-pid)))
     (sysctl-name "kern.usrstack64")
-    (sysctl-name "kern.version")))
+    (sysctl-name "kern.version")
+    (sysctl-name "sysctl.proc_cputype")))

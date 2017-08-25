@@ -65,17 +65,53 @@ Privacy bugs, such as leaking information from Incognito, fingerprinting, and
 bugs related to deleting browsing data are not considered under the security
 VRP. The Chrome Privacy team tracks them as functional bugs.
 
+<a name="TOC-Timing-Attacks"></a>
+## Are timing attacks considered security vulnerabilities?
+
+Some timing attacks are considered security vulnerabilities, and some are
+considered privacy vulnerabilities. Timing attacks vary significantly in terms
+of impact, reliability, and exploitability.
+
+Some timing attacks weaken mitigations like ASLR (e.g.
+[Issue 665930](https://crbug.com/665930)). Others attempt to circumvent the same
+origin policy, for instance, by using SVG filters to read pixels
+cross-origin (e.g. [Issue 686253](https://crbug.com/686253) and
+[Issue 615851](https://crbug.com/615851)).
+
+Many timing attacks rely upon the availability of high-resolution timing
+information [Issue 508166](https://crbug.com/508166); such timing data often has
+legitimate usefulness in non-attack scenarios making it unappealing to remove.
+
+Timing attacks against the browser's HTTP Cache (like
+[Issue 74987](https://crbug.com/74987)) can potentially leak information about
+which sites the user has previously loaded. The browser could attempt to protect
+against such attacks (e.g. by bypassing the cache) at the cost of performance
+and thus user-experience. To mitigate against such timing attacks, end-users can
+delete browsing history and/or browse sensitive sites using Chrome's Incognito
+or Guest browsing modes.
+
+Other timing attacks can be mitigated via clever design changes. For instance,
+[Issue 544765](https://crbug.com/544765) describes an attack whereby an attacker
+can probe for the presence of HSTS rules (set by prior site visits) by timing
+the load of resources with URLs "fixed-up" by HSTS. HSTS rules are shared
+between regular browsing and Incognito mode, making the attack more interesting.
+The attack was mitigated by changing Content-Security-Policy such that secure
+URLs will match rules demanding non-secure HTTP urls, a fix that has also proven
+useful to help to unblock migrations to HTTPS. Similarly,
+[Issue 707071](https://crbug.com/707071) describes a timing attack in which an
+attacker could determine what Android applications are installed; the attack was
+mitigated by introducing randomness in the execution time of the affected API.
+
 <a name="TOC-What-are-the-security-and-privacy-guarantees-of-Incognito-mode-"></a>
 ## What are the security and privacy guarantees of Incognito mode?
 
 Bugs in Incognito mode are tracked as privacy bugs, not security bugs.
 
-The [Help
-Center](https://support.google.com/chrome/answer/95464?hl=en&p=cpn_incognito)
-explains what privacy protections Incognito mode attempts to enforce. In
-particular, please note that Incognito is not a “do not track” mode, and it does
-not hide aspects of your identity from web sites. Chrome does offer a way to
-send Do Not Track request to servers; see chrome://settings/?search=do+not+track
+The [Help Center](https://support.google.com/chrome/?p=cpn_incognito) explains
+what privacy protections Incognito mode attempts to enforce. In particular,
+please note that Incognito is not a “do not track” mode, and it does not hide
+aspects of your identity from web sites. Chrome does offer a way to send Do Not
+Track request to servers; see chrome://settings/?search=do+not+track
 
 When in Incognito mode, Chrome does not store any new history, cookies, or other
 state in non-volatile storage. However, Incognito windows will be able to access
@@ -94,9 +130,8 @@ rather than security vulnerabilities.
      it](https://crbug.com/new).
 
 DoS issues are not considered under the security vulnerability rewards program;
-the [severity
-guidelines](https://www.chromium.org/developers/severity-guidelines) outline the
-types of bugs that are considered security vulnerabilities in more detail.
+the [severity guidelines](severity-guidelines.md) outline the types of bugs that
+are considered security vulnerabilities in more detail.
 
 <a name="TOC-Are-XSS-filter-bypasses-considered-security-bugs-"></a>
 ## Are XSS filter bypasses considered security bugs?
@@ -363,6 +398,15 @@ controls the proxy (e.g. the enterprise’s IT administrator). If the client doe
 not trust the private trust anchor, the proxy’s attempt to mediate the
 connection will fail as it should.
 
+<a name="TOC-How-does-certificate-transparency-interact-with-local-proxies-and-filters-"></a>
+## How does Certificate Transparency interact with local proxies and filters?
+
+Just as [pinning only applies to publicly-trusted trust
+anchors](#TOC-How-does-key-pinning-interact-with-local-proxies-and-filters-),
+Chrome only evaluates Certificate Transparency (CT) for publicly-trusted trust
+anchors. Thus private trust anchors, such as for enterprise middle-boxes and AV
+proxies, do not need to be publicly logged in a CT log.
+
 <a name="TOC-Can-I-use-EMET-to-help-protect-Chrome-against-attack-on-Microsoft-Windows-"></a>
 ## Can I use EMET to help protect Chrome against attack on Microsoft Windows?
 
@@ -540,13 +584,8 @@ vulnerability in the relevant feature, not Safe Browsing itself.
 ## What is the security story for Service Workers?
 
 See our dedicated [Service Worker Security
-FAQ](https://sites.google.com/a/chromium.org/dev/Home/chromium-security/security-faq/service-worker-security-faq).
+FAQ](https://chromium.googlesource.com/chromium/src/+/master/docs/security/service-worker-security-faq.md).
 
 ## TODO
 
-*    Move https://www.chromium.org/developers/severity-guidelines into MD as
-     well, and change links here to point to it.
 *    https://dev.chromium.org/Home/chromium-security/client-identification-mechanisms
-     also
-*    https://sites.google.com/a/chromium.org/dev/Home/chromium-security/security-faq/service-worker-security-faq
-     also

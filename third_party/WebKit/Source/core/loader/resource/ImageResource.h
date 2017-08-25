@@ -130,7 +130,7 @@ class CORE_EXPORT ImageResource final
                    ImageResourceContent::UpdateImageOption,
                    bool all_data_received);
 
-  void CheckNotify() override;
+  void NotifyFinished() override;
 
   void DestroyDecodedDataIfPossible() override;
   void DestroyDecodedDataForFailedRevalidation() override;
@@ -176,6 +176,8 @@ class CORE_EXPORT ImageResource final
 
   Timer<ImageResource> flush_timer_;
   double last_flush_time_ = 0.;
+
+  bool is_during_finish_as_error_ = false;
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(Image);

@@ -11,8 +11,8 @@
 
 namespace blink {
 
-class WebLocalFrameBase;
-class WebViewBase;
+class WebLocalFrameImpl;
+class WebViewImpl;
 
 namespace protocol {
 namespace DOM {
@@ -21,8 +21,7 @@ class RGBA;
 }  // namespace protocol
 
 class CORE_EXPORT InspectorEmulationAgent final
-    : public NON_EXPORTED_BASE(
-          InspectorBaseAgent<protocol::Emulation::Metainfo>) {
+    : public InspectorBaseAgent<protocol::Emulation::Metainfo> {
   WTF_MAKE_NONCOPYABLE(InspectorEmulationAgent);
 
  public:
@@ -33,7 +32,7 @@ class CORE_EXPORT InspectorEmulationAgent final
     virtual void SetCPUThrottlingRate(double rate) {}
   };
 
-  static InspectorEmulationAgent* Create(WebLocalFrameBase*, Client*);
+  static InspectorEmulationAgent* Create(WebLocalFrameImpl*, Client*);
   ~InspectorEmulationAgent() override;
 
   // protocol::Dispatcher::EmulationCommandHandler implementation.
@@ -42,7 +41,7 @@ class CORE_EXPORT InspectorEmulationAgent final
   protocol::Response setScriptExecutionDisabled(bool value) override;
   protocol::Response setTouchEmulationEnabled(
       bool enabled,
-      protocol::Maybe<String> configuration) override;
+      protocol::Maybe<int> max_touch_points) override;
   protocol::Response setEmulatedMedia(const String&) override;
   protocol::Response setCPUThrottlingRate(double) override;
   protocol::Response setVirtualTimePolicy(
@@ -58,11 +57,11 @@ class CORE_EXPORT InspectorEmulationAgent final
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  InspectorEmulationAgent(WebLocalFrameBase*, Client*);
-  WebViewBase* GetWebViewBase();
+  InspectorEmulationAgent(WebLocalFrameImpl*, Client*);
+  WebViewImpl* GetWebViewImpl();
   void VirtualTimeBudgetExpired();
 
-  Member<WebLocalFrameBase> web_local_frame_;
+  Member<WebLocalFrameImpl> web_local_frame_;
   Client* client_;
 };
 

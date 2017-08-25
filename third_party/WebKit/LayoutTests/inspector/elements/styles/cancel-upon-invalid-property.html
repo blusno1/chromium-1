@@ -9,40 +9,35 @@
 </style>
 <script>
 
-function test()
-{
-    var treeElement;
-    InspectorTest.selectNodeAndWaitForStyles("inspected", editProperty);
+function test() {
+  var treeElement;
+  ElementsTestRunner.selectNodeAndWaitForStyles('inspected', editProperty);
 
-    function editProperty()
-    {
-        treeElement = InspectorTest.getMatchedStylePropertyTreeItem("color");
-        InspectorTest.dumpSelectedElementStyles(true, false, true);
-        treeElement.startEditing();
-        treeElement.nameElement.textContent = "color";
-        treeElement.nameElement.dispatchEvent(InspectorTest.createKeyEvent("Enter"));
-        treeElement.valueElement.textContent = "red";
-        InspectorTest.waitForStyleApplied(commitInvalidProperty);
-        treeElement.kickFreeFlowStyleEditForTest();
-    }
+  function editProperty() {
+    treeElement = ElementsTestRunner.getMatchedStylePropertyTreeItem('color');
+    ElementsTestRunner.dumpSelectedElementStyles(true, false, true);
+    treeElement.startEditing();
+    treeElement.nameElement.textContent = 'color';
+    treeElement.nameElement.dispatchEvent(TestRunner.createKeyEvent('Enter'));
+    treeElement.valueElement.textContent = 'red';
+    ElementsTestRunner.waitForStyleApplied(commitInvalidProperty);
+    treeElement.kickFreeFlowStyleEditForTest();
+  }
 
-    function commitInvalidProperty()
-    {
-        treeElement.valueElement.textContent = "red/*";
-        treeElement.valueElement.dispatchEvent(InspectorTest.createKeyEvent("Enter"));
-        InspectorTest.waitForStyleApplied(invalidCommitted);
-    }
+  function commitInvalidProperty() {
+    treeElement.valueElement.textContent = 'red/*';
+    treeElement.valueElement.dispatchEvent(TestRunner.createKeyEvent('Enter'));
+    ElementsTestRunner.waitForStyleApplied(invalidCommitted);
+  }
 
-    function invalidCommitted()
-    {
-        InspectorTest.waitForStyleApplied(dumpAndExit);
-    }
+  function invalidCommitted() {
+    ElementsTestRunner.waitForStyleApplied(dumpAndExit);
+  }
 
-    function dumpAndExit()
-    {
-        InspectorTest.dumpSelectedElementStyles(true, false, true);
-        InspectorTest.completeTest();
-    }
+  function dumpAndExit() {
+    ElementsTestRunner.dumpSelectedElementStyles(true, false, true);
+    TestRunner.completeTest();
+  }
 }
 
 </script>

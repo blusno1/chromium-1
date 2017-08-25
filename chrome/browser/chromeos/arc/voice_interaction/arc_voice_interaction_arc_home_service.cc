@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/public/cpp/scale_utility.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/logging.h"
@@ -31,6 +32,8 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/accessibility/platform/ax_snapshot_node_android_platform.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/snapshot/snapshot.h"
 #include "ui/wm/public/activation_client.h"
 #include "url/gurl.h"
@@ -38,6 +41,11 @@
 namespace arc {
 
 namespace {
+
+constexpr base::TimeDelta kAssistantStartedTimeout =
+    base::TimeDelta::FromMinutes(1);
+constexpr base::TimeDelta kWizardCompletedTimeout =
+    base::TimeDelta::FromMinutes(1);
 
 mojom::VoiceInteractionStructurePtr CreateVoiceInteractionStructure(
     const ui::AXSnapshotNodeAndroid& view_structure) {
@@ -51,6 +59,8 @@ mojom::VoiceInteractionStructurePtr CreateVoiceInteractionStructure(
   structure->line_through = view_structure.line_through;
   structure->color = view_structure.color;
   structure->bgcolor = view_structure.bgcolor;
+
+  structure->role = view_structure.role;
 
   structure->class_name = view_structure.class_name;
   structure->rect = view_structure.rect;
@@ -118,6 +128,10 @@ class ArcVoiceInteractionArcHomeServiceFactory
 }  // namespace
 
 // static
+const char ArcVoiceInteractionArcHomeService::kAssistantPackageName[] =
+    "com.google.android.googlequicksearchbox";
+
+// static
 ArcVoiceInteractionArcHomeService*
 ArcVoiceInteractionArcHomeService::GetForBrowserContext(
     content::BrowserContext* context) {
@@ -128,12 +142,107 @@ ArcVoiceInteractionArcHomeService::GetForBrowserContext(
 ArcVoiceInteractionArcHomeService::ArcVoiceInteractionArcHomeService(
     content::BrowserContext* context,
     ArcBridgeService* bridge_service)
-    : context_(context), arc_bridge_service_(bridge_service), binding_(this) {
+    : context_(context),
+      arc_bridge_service_(bridge_service),
+      assistant_started_timeout_(kAssistantStartedTimeout),
+      wizard_completed_timeout_(kWizardCompletedTimeout),
+      binding_(this) {
   arc_bridge_service_->voice_interaction_arc_home()->AddObserver(this);
 }
 
 ArcVoiceInteractionArcHomeService::~ArcVoiceInteractionArcHomeService() {
   arc_bridge_service_->voice_interaction_arc_home()->RemoveObserver(this);
+  ResetTimeouts();
+}
+
+void ArcVoiceInteractionArcHomeService::LockPai() {
+  ResetTimeouts();
+  arc::ArcPaiStarter* pai_starter =
+      arc::ArcSessionManager::Get()->pai_starter();
+  if (!pai_starter) {
+    DLOG(ERROR) << "There is no PAI starter.";
+    return;
+  }
+  pai_starter->AcquireLock();
+}
+
+void ArcVoiceInteractionArcHomeService::UnlockPai() {
+  ResetTimeouts();
+  arc::ArcPaiStarter* pai_starter =
+      arc::ArcSessionManager::Get()->pai_starter();
+  if (!pai_starter || !pai_starter->locked())
+    return;
+  pai_starter->ReleaseLock();
+}
+
+void ArcVoiceInteractionArcHomeService::OnAssistantStarted() {
+  VLOG(1) << "Assistant flow started";
+  LockPai();
+}
+
+void ArcVoiceInteractionArcHomeService::OnAssistantAppRequested() {
+  VLOG(1) << "Assistant app start request";
+
+  ResetTimeouts();
+
+  ArcAppListPrefs::Get(context_)->AddObserver(this);
+
+  assistant_started_timer_.Start(
+      FROM_HERE, assistant_started_timeout_,
+      base::Bind(&ArcVoiceInteractionArcHomeService::OnAssistantStartTimeout,
+                 base::Unretained(this)));
+}
+
+void ArcVoiceInteractionArcHomeService::OnAssistantCanceled() {
+  VLOG(1) << "Assistant flow canceled";
+  UnlockPai();
+}
+
+void ArcVoiceInteractionArcHomeService::OnTaskCreated(
+    int32_t task_id,
+    const std::string& package_name,
+    const std::string& activity,
+    const std::string& intent) {
+  if (package_name != kAssistantPackageName)
+    return;
+
+  VLOG(1) << "Assistant app created";
+
+  DCHECK_EQ(-1, assistant_task_id_);
+  assistant_task_id_ = task_id;
+  assistant_started_timer_.Stop();
+}
+
+void ArcVoiceInteractionArcHomeService::OnTaskDestroyed(int32_t task_id) {
+  if (task_id != assistant_task_id_)
+    return;
+
+  VLOG(1) << "Assistant app exited";
+
+  ResetTimeouts();
+  wizard_completed_timer_.Start(
+      FROM_HERE, wizard_completed_timeout_,
+      base::Bind(&ArcVoiceInteractionArcHomeService::OnWizardCompleteTimeout,
+                 base::Unretained(this)));
+}
+
+void ArcVoiceInteractionArcHomeService::ResetTimeouts() {
+  ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(context_);
+  if (arc_prefs)
+    arc_prefs->RemoveObserver(this);
+
+  assistant_started_timer_.Stop();
+  wizard_completed_timer_.Stop();
+}
+
+void ArcVoiceInteractionArcHomeService::OnAssistantStartTimeout() {
+  LOG(WARNING) << "Failed to start Assistant app.";
+  UnlockPai();
+}
+
+void ArcVoiceInteractionArcHomeService::OnWizardCompleteTimeout() {
+  LOG(WARNING) << "Assistant app was not completed successfully.";
+  UnlockPai();
 }
 
 void ArcVoiceInteractionArcHomeService::OnInstanceReady() {
@@ -145,6 +254,11 @@ void ArcVoiceInteractionArcHomeService::OnInstanceReady() {
   mojom::VoiceInteractionArcHomeHostPtr host_proxy;
   binding_.Bind(mojo::MakeRequest(&host_proxy));
   home_instance->Init(std::move(host_proxy));
+}
+
+void ArcVoiceInteractionArcHomeService::OnInstanceClosed() {
+  VLOG(1) << "Voice interaction instance is closed.";
+  UnlockPai();
 }
 
 void ArcVoiceInteractionArcHomeService::GetVoiceInteractionStructure(
@@ -173,21 +287,27 @@ void ArcVoiceInteractionArcHomeService::GetVoiceInteractionStructure(
     return;
   }
 
-  web_contents->RequestAXTreeSnapshot(
-      base::Bind(&RequestVoiceInteractionStructureCallback, callback,
-                 browser->window()->GetBounds(),
-                 web_contents->GetLastCommittedURL().spec()));
+  auto transform = browser->window()
+                       ->GetNativeWindow()
+                       ->GetRootWindow()
+                       ->GetHost()
+                       ->GetRootTransform();
+  float scale_factor = ash::GetScaleFactorForTransform(transform);
+  web_contents->RequestAXTreeSnapshot(base::Bind(
+      &RequestVoiceInteractionStructureCallback, callback,
+      gfx::ConvertRectToPixel(scale_factor, browser->window()->GetBounds()),
+      web_contents->GetLastCommittedURL().spec()));
 }
 
 void ArcVoiceInteractionArcHomeService::OnVoiceInteractionOobeSetupComplete() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  arc::ArcPaiStarter* pai_starter =
-      arc::ArcSessionManager::Get()->pai_starter();
-  if (pai_starter)
-    pai_starter->ReleaseLock();
+  VLOG(1) << "Assistant wizard is completed.";
+  UnlockPai();
   chromeos::first_run::MaybeLaunchDialogImmediately();
-  arc::ArcVoiceInteractionFrameworkService::GetForBrowserContext(context_)
-      ->UpdateVoiceInteractionPrefs();
+  arc::ArcVoiceInteractionFrameworkService* framework_service =
+      arc::ArcVoiceInteractionFrameworkService::GetForBrowserContext(context_);
+  if (!framework_service)
+    return;  // Happens in unit tests.
+  framework_service->UpdateVoiceInteractionPrefs();
 }
 
 // static

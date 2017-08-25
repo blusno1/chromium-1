@@ -26,6 +26,7 @@
 #include "content/public/common/page_state.h"
 #include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/test/test_render_view_host.h"
 #include "ui/base/page_transition_types.h"
 
@@ -66,26 +67,6 @@ TestRenderFrameHost* TestWebContents::GetPendingMainFrame() const {
   }
   return static_cast<TestRenderFrameHost*>(
       GetRenderManager()->pending_frame_host());
-}
-
-void TestWebContents::StartNavigation(const GURL& url) {
-  GetController().LoadURL(url, Referrer(), ui::PAGE_TRANSITION_LINK,
-                          std::string());
-  GURL loaded_url(url);
-  bool reverse_on_redirect = false;
-  BrowserURLHandlerImpl::GetInstance()->RewriteURLIfNecessary(
-      &loaded_url, GetBrowserContext(), &reverse_on_redirect);
-
-  if (GetMainFrame()->is_waiting_for_beforeunload_ack())
-    GetMainFrame()->SendBeforeUnloadACK(true);
-
-  // This will simulate receiving the DidStartProvisionalLoad IPC from the
-  // renderer.
-  if (!IsBrowserSideNavigationEnabled()) {
-    TestRenderFrameHost* rfh =
-        GetPendingMainFrame() ? GetPendingMainFrame() : GetMainFrame();
-    rfh->SimulateNavigationStart(url);
-  }
 }
 
 int TestWebContents::DownloadImage(const GURL& url,
@@ -246,15 +227,15 @@ WebContents* TestWebContents::Clone() {
 }
 
 void TestWebContents::NavigateAndCommit(const GURL& url) {
-  GetController().LoadURL(url, Referrer(), ui::PAGE_TRANSITION_LINK,
-                          std::string());
-  GURL loaded_url(url);
-  bool reverse_on_redirect = false;
-  BrowserURLHandlerImpl::GetInstance()->RewriteURLIfNecessary(
-      &loaded_url, GetBrowserContext(), &reverse_on_redirect);
-  // LoadURL created a navigation entry, now simulate the RenderView sending
-  // a notification that it actually navigated.
-  CommitPendingNavigation();
+  std::unique_ptr<NavigationSimulator> navigation =
+      NavigationSimulator::CreateBrowserInitiated(url, this);
+  // TODO(clamy): Browser-initiated navigations should not have a transition of
+  // type ui::PAGE_TRANSITION_LINK however several tests expect this. They
+  // should be rewritten to simulate renderer-initiated navigations in these
+  // cases. Once that's done, the transtion can be set to
+  // ui::PAGE_TRANSITION_TYPED which makes more sense in this context.
+  navigation->SetTransition(ui::PAGE_TRANSITION_LINK);
+  navigation->Commit();
 }
 
 void TestWebContents::TestSetIsLoading(bool value) {

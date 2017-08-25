@@ -57,6 +57,7 @@
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
 #include "core/style/ComputedStyle.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/wtf/AutoReset.h"
@@ -331,6 +332,8 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
 
   switch (relation) {
     case CSSSelector::kShadowDeepAsDescendant:
+      DCHECK(
+          !RuntimeEnabledFeatures::DeepCombinatorInCSSDynamicProfileEnabled());
       Deprecation::CountDeprecation(context.element->GetDocument(),
                                     WebFeature::kCSSDeepCombinator);
     // fall through
@@ -411,6 +414,14 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
       return kSelectorFailsAllSiblings;
 
     case CSSSelector::kShadowPseudo: {
+      if (RuntimeEnabledFeatures::
+              ShadowPseudoElementInCSSDynamicProfileEnabled()) {
+        if (!is_ua_rule_ && mode_ != kQueryingRules &&
+            context.selector->GetPseudoType() == CSSSelector::kPseudoShadow) {
+          Deprecation::CountDeprecation(context.element->GetDocument(),
+                                        WebFeature::kCSSSelectorPseudoShadow);
+        }
+      }
       // If we're in the same tree-scope as the scoping element, then following
       // a shadow descendant combinator would escape that and thus the scope.
       if (context.scope && context.scope->OwnerShadowHost() &&
@@ -761,9 +772,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         element.SetStyleAffectedByEmpty();
         if (context.in_rightmost_compound)
           element_style_->SetEmptyState(result);
-        else if (element.GetComputedStyle() &&
-                 (element.GetDocument().GetStyleEngine().UsesSiblingRules() ||
-                  element.GetComputedStyle()->Unique()))
+        else if (element.GetComputedStyle())
           element.MutableComputedStyle()->SetEmptyState(result);
       }
       return result;

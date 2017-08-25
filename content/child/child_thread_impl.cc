@@ -52,6 +52,7 @@
 #include "content/common/field_trial_recorder.mojom.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/public/common/connection_filter.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/service_manager_connection.h"
@@ -259,6 +260,10 @@ InitializeMojoIPCChannel() {
         mojo::edk::NamedPlatformChannelPair::PassClientHandleFromParentProcess(
             *base::CommandLine::ForCurrentProcess());
   }
+#elif defined(OS_FUCHSIA)
+  platform_channel =
+      mojo::edk::PlatformChannelPair::PassClientHandleFromParentProcess(
+          *base::CommandLine::ForCurrentProcess());
 #elif defined(OS_POSIX)
   platform_channel.reset(mojo::edk::PlatformHandle(
       base::GlobalDescriptors::GetInstance()->Get(kMojoIPCChannel)));
@@ -579,8 +584,9 @@ void ChildThreadImpl::Init(const Options& options) {
 #endif
 
   message_loop_->task_runner()->PostDelayedTask(
-      FROM_HERE, base::Bind(&ChildThreadImpl::EnsureConnected,
-                            channel_connected_factory_->GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&ChildThreadImpl::EnsureConnected,
+                     channel_connected_factory_->GetWeakPtr()),
       base::TimeDelta::FromSeconds(connection_timeout));
 
 #if defined(OS_ANDROID)
@@ -774,6 +780,8 @@ void ChildThreadImpl::OnAssociatedInterfaceRequest(
 void ChildThreadImpl::StartServiceManagerConnection() {
   DCHECK(service_manager_connection_);
   service_manager_connection_->Start();
+  GetContentClient()->OnServiceManagerConnected(
+      service_manager_connection_.get());
 }
 
 bool ChildThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {

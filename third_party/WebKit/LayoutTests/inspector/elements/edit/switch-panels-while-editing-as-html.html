@@ -5,40 +5,32 @@
 <script src="edit-dom-test.js"></script>
 <script>
 
-function test()
-{
-    InspectorTest.runTestSuite([
-        function testSetUp(next)
-        {
-            InspectorTest.expandElementsTree(next);
-        },
+function test() {
+  TestRunner.runTestSuite([
+    function testSetUp(next) {
+      ElementsTestRunner.expandElementsTree(next);
+    },
 
-        function selectNode(next)
-        {
-            InspectorTest.selectNodeWithId("inspected", onNodeSelected)
+    function selectNode(next) {
+      ElementsTestRunner.selectNodeWithId('inspected', onNodeSelected);
 
-            function onNodeSelected(node)
-            {
-                var treeOutline = InspectorTest.firstElementsTreeOutline();
-                var treeElement = treeOutline.findTreeElement(node);
-                treeElement.toggleEditAsHTML();
-                InspectorTest.addSniffer(Elements.ElementsTreeOutline.prototype, "setMultilineEditing", next);
-            }
-        },
+      function onNodeSelected(node) {
+        var treeOutline = ElementsTestRunner.firstElementsTreeOutline();
+        var treeElement = treeOutline.findTreeElement(node);
+        treeElement.toggleEditAsHTML();
+        TestRunner.addSniffer(Elements.ElementsTreeOutline.prototype, 'setMultilineEditing', next);
+      }
+    },
 
-        function switchPanels(next)
-        {
-            UI.inspectorView.showPanel("sources")
-                .then(next)
-                .catch(onError);
+    function switchPanels(next) {
+      UI.inspectorView.showPanel('sources').then(next).catch(onError);
 
-            function onError(error)
-            {
-                InspectorTest.addResult("FAILURE: exception caught while switching panels.");
-                InspectorTest.completeTest();
-            }
-        }
-    ]);
+      function onError(error) {
+        TestRunner.addResult('FAILURE: exception caught while switching panels.');
+        TestRunner.completeTest();
+      }
+    }
+  ]);
 }
 
 </script>

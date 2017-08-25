@@ -4,8 +4,12 @@
 
 #include "chrome/installer/zucchini/buffer_view.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <iterator>
 #include <type_traits>
+#include <vector>
 
 #include "base/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -66,6 +70,14 @@ TEST_F(BufferViewTest, Subscript) {
   EXPECT_EQ(42, mutable_view[0]);
 }
 
+TEST_F(BufferViewTest, SubRegion) {
+  ConstBufferView view(std::begin(bytes_), kLen);
+
+  ConstBufferView sub_view = view[{2, 4}];
+  EXPECT_EQ(view.begin() + 2, sub_view.begin());
+  EXPECT_EQ(size_t(4), sub_view.size());
+}
+
 TEST_F(BufferViewTest, Shrink) {
   ConstBufferView buffer =
       ConstBufferView::FromRange(std::begin(bytes_), std::end(bytes_));
@@ -114,6 +126,37 @@ TEST_F(BufferViewTest, Write) {
 
   buffer.write<uint32_t>(6, 0xFFFFFFFF);
   EXPECT_DEATH(buffer.write<uint32_t>(7, 0xFFFFFFFF), "");
+}
+
+TEST_F(BufferViewTest, Region) {
+  ConstBufferView view(std::begin(bytes_), kLen);
+
+  BufferRegion region = view.region();
+  EXPECT_EQ(0U, region.offset);
+  EXPECT_EQ(kLen, region.size);
+}
+
+TEST_F(BufferViewTest, Covers) {
+  EXPECT_FALSE(ConstBufferView().covers({0, 0}));
+  EXPECT_FALSE(ConstBufferView().covers({0, 1}));
+
+  ConstBufferView view(std::begin(bytes_), kLen);
+
+  EXPECT_TRUE(view.covers({0, 0}));
+  EXPECT_TRUE(view.covers({0, 1}));
+  EXPECT_TRUE(view.covers({0, kLen}));
+  EXPECT_FALSE(view.covers({0, kLen + 1}));
+  EXPECT_FALSE(view.covers({1, kLen}));
+
+  EXPECT_TRUE(view.covers({kLen - 1, 0}));
+  EXPECT_TRUE(view.covers({kLen - 1, 1}));
+  EXPECT_FALSE(view.covers({kLen - 1, 2}));
+  EXPECT_FALSE(view.covers({kLen, 0}));
+  EXPECT_FALSE(view.covers({kLen, 1}));
+
+  EXPECT_FALSE(view.covers({1, size_t(-1)}));
+  EXPECT_FALSE(view.covers({size_t(-1), 1}));
+  EXPECT_FALSE(view.covers({size_t(-1), size_t(-1)}));
 }
 
 }  // namespace zucchini

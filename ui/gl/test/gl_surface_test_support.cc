@@ -50,8 +50,10 @@ void GLSurfaceTestSupport::InitializeOneOff() {
     use_software_gl = false;
   }
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
   // On Android we always use hardware GL.
+  // On Fuchsia, we always use fake GL, but we don't want Mesa or other software
+  // GLs, but rather a stub implementation.
   use_software_gl = false;
 #endif
 
@@ -61,7 +63,10 @@ void GLSurfaceTestSupport::InitializeOneOff() {
 
   GLImplementation impl = allowed_impls[0];
   if (use_software_gl)
-    impl = gl::GetSoftwareGLImplementation();
+    impl = kGLImplementationOSMesaGL;  // FIXME(sugoi): change to
+                                       // gl::GetSoftwareGLImplementation() when
+                                       // SwiftShader is used for Layout Tests
+                                       // on all platforms
 
   DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kUseGL))
       << "kUseGL has not effect in tests";

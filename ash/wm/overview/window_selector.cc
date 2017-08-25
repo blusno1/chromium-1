@@ -12,7 +12,6 @@
 
 #include "ash/accessibility_delegate.h"
 #include "ash/accessibility_types.h"
-#include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
@@ -30,6 +29,7 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -258,7 +258,10 @@ WindowSelector::~WindowSelector() {
 // NOTE: The work done in Init() is not done in the constructor because it may
 // cause other, unrelated classes, (ie PanelLayoutManager) to make indirect
 // calls to restoring_minimized_windows() on a partially constructed object.
-void WindowSelector::Init(const WindowList& windows) {
+void WindowSelector::Init(const WindowList& windows,
+                          const WindowList& hide_windows) {
+  hide_overview_windows_ =
+      base::MakeUnique<ScopedHideOverviewWindows>(std::move(hide_windows));
   if (restore_focus_window_)
     restore_focus_window_->AddObserver(this);
 
@@ -328,7 +331,7 @@ void WindowSelector::Init(const WindowList& windows) {
   Shell::Get()->split_view_controller()->AddObserver(this);
 
   display::Screen::GetScreen()->AddObserver(this);
-  Shell::Get()->metrics()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW);
+  base::RecordAction(base::UserMetricsAction("WindowSelector_Overview"));
   // Send an a11y alert.
   Shell::Get()->accessibility_delegate()->TriggerAccessibilityAlert(
       A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED);
@@ -447,12 +450,14 @@ void WindowSelector::SelectWindow(WindowSelectorItem* item) {
   aura::Window::Windows window_list =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList();
   if (!window_list.empty()) {
-    // Record UMA_WINDOW_OVERVIEW_ACTIVE_WINDOW_CHANGED if the user is selecting
-    // a window other than the window that was active prior to entering overview
+    // Record WindowSelector_ActiveWindowChanged if the user is selecting a
+    // window other than the window that was active prior to entering overview
     // mode (i.e., the window at the front of the MRU list).
     if (window_list[0] != window) {
-      Shell::Get()->metrics()->RecordUserMetricsAction(
-          UMA_WINDOW_OVERVIEW_ACTIVE_WINDOW_CHANGED);
+      base::RecordAction(
+          base::UserMetricsAction("WindowSelector_ActiveWindowChanged"));
+      Shell::Get()->metrics()->task_switch_metrics_recorder().OnTaskSwitch(
+          TaskSwitchSource::OVERVIEW_MODE);
     }
     const auto it = std::find(window_list.begin(), window_list.end(), window);
     if (it != window_list.end()) {
@@ -472,6 +477,13 @@ void WindowSelector::WindowClosing(WindowSelectorItem* window) {
 void WindowSelector::SetBoundsForWindowGridsInScreen(const gfx::Rect& bounds) {
   for (std::unique_ptr<WindowGrid>& grid : grid_list_)
     grid->SetBoundsAndUpdatePositions(bounds);
+}
+
+void WindowSelector::SetBoundsForWindowGridsInScreenIgnoringWindow(
+    const gfx::Rect& bounds,
+    WindowSelectorItem* ignored_item) {
+  for (std::unique_ptr<WindowGrid>& grid : grid_list_)
+    grid->SetBoundsAndUpdatePositionsIgnoringWindow(bounds, ignored_item);
 }
 
 void WindowSelector::RemoveWindowSelectorItem(WindowSelectorItem* item) {
@@ -550,8 +562,8 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
         // Allow the textfield to handle 'W' key when not used with Ctrl.
         return false;
       }
-      Shell::Get()->metrics()->RecordUserMetricsAction(
-          UMA_WINDOW_OVERVIEW_CLOSE_KEY);
+      base::RecordAction(
+          base::UserMetricsAction("WindowSelector_OverviewCloseKey"));
       grid_list_[selected_grid_index_]->SelectedWindow()->CloseWindow();
       break;
     case ui::VKEY_RETURN:
@@ -563,8 +575,8 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
       UMA_HISTOGRAM_CUSTOM_COUNTS("Ash.WindowSelector.KeyPressesOverItemsRatio",
                                   (num_key_presses_ * 100) / num_items_, 1, 300,
                                   30);
-      Shell::Get()->metrics()->RecordUserMetricsAction(
-          UMA_WINDOW_OVERVIEW_ENTER_KEY);
+      base::RecordAction(
+          base::UserMetricsAction("WindowSelector_OverviewEnterKey"));
       SelectWindow(grid_list_[selected_grid_index_]->SelectedWindow());
       break;
     default:
@@ -713,23 +725,8 @@ void WindowSelector::OnSplitViewStateChanged(
     ResetFocusRestoreWindow(false);
   }
 
-  if (state == SplitViewController::LEFT_SNAPPED) {
-    aura::Window* snapped_window =
-        Shell::Get()->split_view_controller()->left_window();
-    const gfx::Rect bounds_in_screen =
-        Shell::Get()->split_view_controller()->GetSnappedWindowBoundsInScreen(
-            snapped_window, SplitViewController::RIGHT);
-    SetBoundsForWindowGridsInScreen(bounds_in_screen);
-  } else if (state == SplitViewController::RIGHT_SNAPPED) {
-    aura::Window* snapped_window =
-        Shell::Get()->split_view_controller()->right_window();
-    const gfx::Rect bounds_in_screen =
-        Shell::Get()->split_view_controller()->GetSnappedWindowBoundsInScreen(
-            snapped_window, SplitViewController::LEFT);
-    SetBoundsForWindowGridsInScreen(bounds_in_screen);
-  } else {
-    DCHECK(state == SplitViewController::BOTH_SNAPPED ||
-           state == SplitViewController::NO_SNAP);
+  if (state == SplitViewController::BOTH_SNAPPED ||
+      state == SplitViewController::NO_SNAP) {
     // If two windows were snapped to both sides of the screen, end overview
     // mode. If split view mode was ended (e.g., one of the snapped window was
     // closed or minimized / fullscreened / maximized), also end overview mode

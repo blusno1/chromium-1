@@ -281,26 +281,18 @@ void PaintLayerClipper::CalculateRectsWithGeometryMapper(
     layer_.ConvertToLayerCoords(context.root_layer, offset);
   layer_bounds = LayoutRect(offset, LayoutSize(layer_.size()));
 
-  // TODO(chrishtr): fix the underlying bug that causes this situation.
-  if (!layer_.GetLayoutObject().FirstFragment()->PaintProperties() &&
-      !layer_.GetLayoutObject().FirstFragment()->LocalBorderBoxProperties()) {
-    background_rect = ClipRect(LayoutRect(LayoutRect::InfiniteIntRect()));
-    foreground_rect = ClipRect(LayoutRect(LayoutRect::InfiniteIntRect()));
-  } else {
-    CalculateBackgroundClipRectWithGeometryMapper(context, background_rect);
-    background_rect.Intersect(paint_dirty_rect);
+  CalculateBackgroundClipRectWithGeometryMapper(context, background_rect);
+  background_rect.Intersect(paint_dirty_rect);
 
-    foreground_rect = background_rect;
-    if (ShouldClipOverflow(context)) {
-      LayoutBoxModelObject& layout_object = layer_.GetLayoutObject();
-      LayoutRect overflow_and_clip_rect =
-          ToLayoutBox(layout_object)
-              .OverflowClipRect(offset,
-                                context.overlay_scrollbar_clip_behavior);
-      foreground_rect.Intersect(overflow_and_clip_rect);
-      if (layout_object.StyleRef().HasBorderRadius())
-        foreground_rect.SetHasRadius(true);
-    }
+  foreground_rect = background_rect;
+  if (ShouldClipOverflow(context)) {
+    LayoutBoxModelObject& layout_object = layer_.GetLayoutObject();
+    LayoutRect overflow_and_clip_rect =
+        ToLayoutBox(layout_object)
+            .OverflowClipRect(offset, context.overlay_scrollbar_clip_behavior);
+    foreground_rect.Intersect(overflow_and_clip_rect);
+    if (layout_object.StyleRef().HasBorderRadius())
+      foreground_rect.SetHasRadius(true);
   }
 }
 
@@ -535,13 +527,6 @@ void PaintLayerClipper::CalculateBackgroundClipRect(
     const ClipRectsContext& context,
     ClipRect& output) const {
   if (use_geometry_mapper_) {
-    // TODO(chrishtr): fix the underlying bug that causes this situation.
-    if (!layer_.GetLayoutObject().FirstFragment()->PaintProperties() &&
-        !layer_.GetLayoutObject().FirstFragment()->LocalBorderBoxProperties()) {
-      output.SetRect(FloatClipRect());
-      return;
-    }
-
     CalculateBackgroundClipRectWithGeometryMapper(context, output);
     return;
   }
@@ -583,19 +568,6 @@ bool PaintLayerClipper::ShouldClipOverflow(
   if (&layer_ == context.root_layer && !context.ShouldRespectRootLayerClip())
     return false;
   return HasOverflowClip(layer_);
-}
-
-ClipRects& PaintLayerClipper::PaintingClipRects(
-    const PaintLayer* root_layer,
-    ShouldRespectOverflowClipType respect_overflow_clip,
-    const LayoutSize& subpixel_accumulation) const {
-  DCHECK(!use_geometry_mapper_);
-  ClipRectsContext context(root_layer, kPaintingClipRects,
-                           kIgnorePlatformOverlayScrollbarSize,
-                           subpixel_accumulation);
-  if (respect_overflow_clip == kIgnoreOverflowClip)
-    context.SetIgnoreOverflowClip();
-  return GetClipRects(context);
 }
 
 }  // namespace blink

@@ -35,12 +35,12 @@
 #include "core/frame/RootFrameViewport.h"
 #include "core/layout/MapCoordinatesFlags.h"
 #include "core/layout/ScrollAnchor.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/FirstMeaningfulPaintDetector.h"
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintInvalidationCapableScrollableArea.h"
 #include "core/paint/PaintPhase.h"
 #include "core/paint/ScrollbarManager.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "platform/PlatformFrameView.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimationHost.h"
@@ -182,6 +182,10 @@ class CORE_EXPORT LocalFrameView final
   void SetNeedsUpdateGeometries() { needs_update_geometries_ = true; }
   void UpdateGeometry() override;
 
+  // Marks this frame, and ancestor frames, as needing one intersection
+  // observervation. This overrides throttling for one frame.
+  void SetNeedsIntersectionObservation();
+
   // Methods for getting/setting the size Blink should use to layout the
   // contents.
   // NOTE: Scrollbar exclusion is based on the LocalFrameView's scrollbars. To
@@ -283,6 +287,10 @@ class CORE_EXPORT LocalFrameView final
   void AddPartToUpdate(LayoutEmbeddedObject&);
 
   Color DocumentBackgroundColor() const;
+
+  // Called when this view is going to be removed from its owning
+  // LocalFrame.
+  void WillBeRemovedFromFrame();
 
   // Run all needed lifecycle stages. After calling this method, all frames will
   // be in the lifecycle state PaintClean.  If lifecycle throttling is allowed
@@ -435,6 +443,7 @@ class CORE_EXPORT LocalFrameView final
   // ScrollableArea interface
   void GetTickmarks(Vector<IntRect>&) const override;
   IntRect ScrollableAreaBoundingBox() const override;
+  CompositorElementId GetCompositorElementId() const override;
   bool ScrollAnimatorEnabled() const override;
   bool UsesCompositedScrolling() const override;
   bool ShouldScrollOnMainThread() const override;
@@ -706,7 +715,10 @@ class CORE_EXPORT LocalFrameView final
   TransformPaintPropertyNode* PreTranslation() const {
     return pre_translation_.Get();
   }
-
+  void SetScrollNode(RefPtr<ScrollPaintPropertyNode> scroll_node) {
+    scroll_node_ = std::move(scroll_node);
+  }
+  ScrollPaintPropertyNode* ScrollNode() const { return scroll_node_.Get(); }
   void SetScrollTranslation(
       RefPtr<TransformPaintPropertyNode> scroll_translation) {
     scroll_translation_ = std::move(scroll_translation);
@@ -714,7 +726,6 @@ class CORE_EXPORT LocalFrameView final
   TransformPaintPropertyNode* ScrollTranslation() const {
     return scroll_translation_.Get();
   }
-
   void SetContentClip(RefPtr<ClipPaintPropertyNode> content_clip) {
     content_clip_ = std::move(content_clip);
   }
@@ -834,6 +845,8 @@ class CORE_EXPORT LocalFrameView final
   void VisualViewportScrollbarsChanged();
 
   LayoutUnit CaretWidth() const;
+
+  size_t PaintFrameCount() const { return paint_frame_count_; };
 
  protected:
   // Scroll the content via the compositor.
@@ -1160,6 +1173,7 @@ class CORE_EXPORT LocalFrameView final
   // enabled.
   RefPtr<TransformPaintPropertyNode> pre_translation_;
   RefPtr<TransformPaintPropertyNode> scroll_translation_;
+  RefPtr<ScrollPaintPropertyNode> scroll_node_;
   // The content clip clips the document (= LayoutView) but not the scrollbars.
   // TODO(trchen): This will not be needed once settings->rootLayerScrolls() is
   // enabled.
@@ -1175,11 +1189,16 @@ class CORE_EXPORT LocalFrameView final
   // This is set on the local root frame view only.
   DocumentLifecycle::LifecycleState
       current_update_lifecycle_phases_target_state_;
+  bool past_layout_lifecycle_update_;
 
   ScrollAnchor scroll_anchor_;
   using AnchoringAdjustmentQueue =
       HeapLinkedHashSet<WeakMember<ScrollableArea>>;
   AnchoringAdjustmentQueue anchoring_adjustment_queue_;
+
+  // TODO(bokan): Temporary to get more information about crash in
+  // crbug.com/745686.
+  bool in_perform_scroll_anchoring_adjustments_;
 
   // ScrollbarManager holds the Scrollbar instances.
   ScrollbarManager scrollbar_manager_;
@@ -1188,6 +1207,7 @@ class CORE_EXPORT LocalFrameView final
   bool suppress_adjust_view_size_;
   bool allows_layout_invalidation_after_layout_clean_;
   bool forcing_layout_parent_view_;
+  bool needs_intersection_observation_;
 
   Member<ElementVisibilityObserver> visibility_observer_;
 
@@ -1212,6 +1232,9 @@ class CORE_EXPORT LocalFrameView final
   std::unique_ptr<CompositorAnimationHost> animation_host_;
 
   Member<PrintContext> print_context_;
+
+  // From the beginning of the document, how many frames have painted.
+  size_t paint_frame_count_;
 
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, DeviceEmulationResetScrollbars);
 };

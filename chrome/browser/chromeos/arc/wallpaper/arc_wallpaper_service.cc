@@ -22,7 +22,7 @@
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "components/wallpaper/wallpaper_files_id.h"
-#include "components/wallpaper/wallpaper_layout.h"
+#include "components/wallpaper/wallpaper_info.h"
 #include "components/wallpaper/wallpaper_resizer.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -124,9 +124,8 @@ class ArcWallpaperService::DecodeRequest : public ImageDecoder::ImageRequest {
     // TODO(crbug.com/618922): Allow specifying layout.
     wallpaper_manager->SetCustomWallpaper(
         account.id, wallpaper_files_id, kAndroidWallpaperFilename,
-        wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED,
-        user_manager::User::CUSTOMIZED, image,
-        account.is_active /*update_wallpaper*/);
+        wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED, wallpaper::CUSTOMIZED,
+        image, account.is_active /*update_wallpaper*/);
     // When kiosk app is running, or wallpaper cannot be changed due to policy,
     // or we are running child profile, WallpaperManager don't submit wallpaper
     // change requests.

@@ -56,12 +56,6 @@ void WKBasedNavigationManagerImpl::SetSessionController(
 
 void WKBasedNavigationManagerImpl::InitializeSession() {}
 
-void WKBasedNavigationManagerImpl::ReplaceSessionHistory(
-    std::vector<std::unique_ptr<NavigationItem>> items,
-    int current_index) {
-  DLOG(WARNING) << "Not yet implemented.";
-}
-
 void WKBasedNavigationManagerImpl::OnNavigationItemsPruned(
     size_t pruned_item_count) {
   delegate_->OnNavigationItemsPruned(pruned_item_count);
@@ -96,16 +90,20 @@ CRWSessionController* WKBasedNavigationManagerImpl::GetSessionController()
 }
 
 void WKBasedNavigationManagerImpl::AddTransientItem(const GURL& url) {
-  transient_item_ =
-      CreateNavigationItem(url, Referrer(), ui::PAGE_TRANSITION_CLIENT_REDIRECT,
-                           NavigationInitiationType::USER_INITIATED);
+  NavigationItem* last_committed_item = GetLastCommittedItem();
+  transient_item_ = CreateNavigationItemWithRewriters(
+      url, Referrer(), ui::PAGE_TRANSITION_CLIENT_REDIRECT,
+      NavigationInitiationType::USER_INITIATED,
+      last_committed_item ? last_committed_item->GetURL() : GURL::EmptyGURL(),
+      nullptr /* use default rewriters only */);
   transient_item_->SetTimestamp(
       time_smoother_.GetSmoothedTime(base::Time::Now()));
 
   // Transient item is only supposed to be added for pending non-app-specific
   // navigations.
-  DCHECK(pending_item_->GetUserAgentType() != UserAgentType::NONE);
-  transient_item_->SetUserAgentType(pending_item_->GetUserAgentType());
+  NavigationItem* pending_item = GetPendingItem();
+  DCHECK(pending_item->GetUserAgentType() != UserAgentType::NONE);
+  transient_item_->SetUserAgentType(pending_item->GetUserAgentType());
 }
 
 void WKBasedNavigationManagerImpl::AddPendingItem(
@@ -116,17 +114,15 @@ void WKBasedNavigationManagerImpl::AddPendingItem(
     UserAgentOverrideOption user_agent_override_option) {
   DiscardNonCommittedItems();
 
-  pending_item_ =
-      CreateNavigationItem(url, referrer, navigation_type, initiation_type);
-
-  // WKBasedNavigationManagerImpl does not track
-  // native URLs yet so just inherit from the
-  // last committed item.
-  // TODO(crbug.com/734150): Change GetLastCommittedItem() to
-  // GetLastCommittedNonAppSpecificItem() after
-  // integrating with native URLs.
+  NavigationItem* last_committed_item = GetLastCommittedItem();
+  pending_item_ = CreateNavigationItemWithRewriters(
+      url, referrer, navigation_type, initiation_type,
+      last_committed_item ? last_committed_item->GetURL() : GURL::EmptyGURL(),
+      &transient_url_rewriters_);
+  RemoveTransientURLRewriters();
   UpdatePendingItemUserAgentType(user_agent_override_option,
-                                 GetLastCommittedItem(), pending_item_.get());
+                                 GetLastCommittedNonAppSpecificItem(),
+                                 pending_item_.get());
 
   // AddPendingItem is called no later than |didCommitNavigation|. The only time
   // when all three of WKWebView's URL, the pending URL and WKBackForwardList's
@@ -173,12 +169,11 @@ void WKBasedNavigationManagerImpl::CommitPendingItem() {
   pending_item_index_ = -1;
   previous_item_index_ = last_committed_item_index_;
   last_committed_item_index_ = GetWKCurrentItemIndex();
-
   OnNavigationItemCommitted();
 }
 
 int WKBasedNavigationManagerImpl::GetIndexForOffset(int offset) const {
-  int result = (pending_item_index_ == -1) ? GetLastCommittedItemIndex()
+  int result = (pending_item_index_ == -1) ? GetWKCurrentItemIndex()
                                            : pending_item_index_;
 
   if (offset < 0 && GetTransientItem() && pending_item_index_ == -1) {
@@ -207,34 +202,29 @@ WebState* WKBasedNavigationManagerImpl::GetWebState() const {
 }
 
 NavigationItem* WKBasedNavigationManagerImpl::GetVisibleItem() const {
-  DLOG(WARNING) << "Not yet implemented.";
-  return nullptr;
-}
+  NavigationItem* transient_item = GetTransientItem();
+  if (transient_item) {
+    return transient_item;
+  }
 
-NavigationItem* WKBasedNavigationManagerImpl::GetLastCommittedItem() const {
-  int index = GetLastCommittedItemIndex();
-  return index == -1 ? nullptr : GetItemAtIndex(static_cast<size_t>(index));
-}
-
-NavigationItem* WKBasedNavigationManagerImpl::GetPendingItem() const {
-  return (pending_item_index_ == -1) ? pending_item_.get()
-                                     : GetItemAtIndex(pending_item_index_);
-}
-
-NavigationItem* WKBasedNavigationManagerImpl::GetTransientItem() const {
-  return transient_item_.get();
+  // Only return pending_item_ for new (non-history), user-initiated
+  // navigations in order to prevent URL spoof attacks.
+  NavigationItemImpl* pending_item = GetPendingItemImpl();
+  if (pending_item) {
+    bool is_user_initiated = pending_item->NavigationInitiationType() ==
+                             NavigationInitiationType::USER_INITIATED;
+    bool safe_to_show_pending = is_user_initiated && pending_item_index_ == -1;
+    if (safe_to_show_pending) {
+      return pending_item;
+    }
+  }
+  return GetLastCommittedItem();
 }
 
 void WKBasedNavigationManagerImpl::DiscardNonCommittedItems() {
   pending_item_.reset();
   transient_item_.reset();
 }
-
-void WKBasedNavigationManagerImpl::LoadURLWithParams(
-    const NavigationManager::WebLoadParams&) {
-  DLOG(WARNING) << "Not yet implemented.";
-}
-
 
 int WKBasedNavigationManagerImpl::GetItemCount() const {
   id<CRWWebViewNavigationProxy> proxy = delegate_->GetWebViewNavigationProxy();
@@ -256,7 +246,11 @@ NavigationItem* WKBasedNavigationManagerImpl::GetItemAtIndex(
 
 int WKBasedNavigationManagerImpl::GetIndexOfItem(
     const NavigationItem* item) const {
-  DLOG(WARNING) << "Not yet implemented.";
+  for (int index = 0; index < GetItemCount(); index++) {
+    if (GetNavigationItemFromWKItem(GetWKItemAtIndex(index)) == item) {
+      return index;
+    }
+  }
   return -1;
 }
 
@@ -273,6 +267,15 @@ int WKBasedNavigationManagerImpl::GetPendingItemIndex() const {
 }
 
 int WKBasedNavigationManagerImpl::GetLastCommittedItemIndex() const {
+  // WKBackForwardList's |currentItem| is usually the last committed item,
+  // except when the pending navigation is a back-forward navigation, in which
+  // case it is actually the pending item. As a workaround, fall back to
+  // last_committed_item_index_. This is not 100% correct (since
+  // last_committed_item_index_ is only updated for main frame navigations),
+  // but is the best possible answer.
+  if (pending_item_index_ >= 0) {
+    return last_committed_item_index_;
+  }
   return GetWKCurrentItemIndex();
 }
 
@@ -307,18 +310,30 @@ void WKBasedNavigationManagerImpl::GoForward() {
   [delegate_->GetWebViewNavigationProxy() goForward];
 }
 
-void WKBasedNavigationManagerImpl::GoToIndex(int index) {
-  DLOG(WARNING) << "Not yet implemented.";
-}
-
 NavigationItemList WKBasedNavigationManagerImpl::GetBackwardItems() const {
-  DLOG(WARNING) << "Not yet implemented.";
-  return NavigationItemList();
+  NavigationItemList items;
+
+  // If the current navigation item is a transient item (e.g. SSL
+  // interstitial), the last committed item should also be considered part of
+  // the backward history.
+  int wk_current_item_index = GetWKCurrentItemIndex();
+  if (GetTransientItem() && wk_current_item_index >= 0) {
+    items.push_back(GetItemAtIndex(wk_current_item_index));
+  }
+
+  for (int index = wk_current_item_index - 1; index >= 0; index--) {
+    items.push_back(GetItemAtIndex(index));
+  }
+  return items;
 }
 
 NavigationItemList WKBasedNavigationManagerImpl::GetForwardItems() const {
-  DLOG(WARNING) << "Not yet implemented.";
-  return NavigationItemList();
+  NavigationItemList items;
+  for (int index = GetWKCurrentItemIndex() + 1; index < GetItemCount();
+       index++) {
+    items.push_back(GetItemAtIndex(index));
+  }
+  return items;
 }
 
 void WKBasedNavigationManagerImpl::CopyStateFromAndPrune(
@@ -329,6 +344,12 @@ void WKBasedNavigationManagerImpl::CopyStateFromAndPrune(
 bool WKBasedNavigationManagerImpl::CanPruneAllButLastCommittedItem() const {
   DLOG(WARNING) << "Not yet implemented.";
   return true;
+}
+
+void WKBasedNavigationManagerImpl::Restore(
+    int last_committed_item_index,
+    std::vector<std::unique_ptr<NavigationItem>> items) {
+  DLOG(WARNING) << "Not yet implemented.";
 }
 
 NavigationItemImpl* WKBasedNavigationManagerImpl::GetNavigationItemImplAtIndex(
@@ -343,20 +364,46 @@ NavigationItemImpl* WKBasedNavigationManagerImpl::GetNavigationItemImplAtIndex(
   // TODO(crbug.com/734150): Add a stat counter to track rebuilding frequency.
   WKBackForwardListItem* prev_wk_item =
       index == 0 ? nil : GetWKItemAtIndex(index - 1);
-  // TODO(crbug.com/734150): CreateNavigationItem is not const because it clears
-  // transient rewriters. Perhaps transient rewriters should not be used for
-  // lazily created items. Investigate and make a decision before this code goes
-  // live.
   std::unique_ptr<web::NavigationItemImpl> new_item =
-      const_cast<WKBasedNavigationManagerImpl*>(this)->CreateNavigationItem(
+      CreateNavigationItemWithRewriters(
           net::GURLWithNSURL(wk_item.URL),
           (prev_wk_item ? web::Referrer(net::GURLWithNSURL(prev_wk_item.URL),
                                         web::ReferrerPolicyAlways)
                         : web::Referrer()),
           ui::PageTransition::PAGE_TRANSITION_LINK,
-          NavigationInitiationType::RENDERER_INITIATED);
+          NavigationInitiationType::RENDERER_INITIATED,
+          // Not using GetLastCommittedItem()->GetURL() in case the last
+          // committed item in the WKWebView hasn't been linked to a
+          // NavigationItem and this method is called in that code path to avoid
+          // an infinite cycle.
+          net::GURLWithNSURL(prev_wk_item.URL),
+          nullptr /* use default rewriters only */);
+  new_item->SetTimestamp(time_smoother_.GetSmoothedTime(base::Time::Now()));
   SetNavigationItemInWKItem(wk_item, std::move(new_item));
   return GetNavigationItemFromWKItem(wk_item);
+}
+
+NavigationItemImpl* WKBasedNavigationManagerImpl::GetLastCommittedItemImpl()
+    const {
+  int index = GetLastCommittedItemIndex();
+  return index == -1 ? nullptr
+                     : GetNavigationItemImplAtIndex(static_cast<size_t>(index));
+}
+
+NavigationItemImpl* WKBasedNavigationManagerImpl::GetPendingItemImpl() const {
+  return (pending_item_index_ == -1)
+             ? pending_item_.get()
+             : GetNavigationItemImplAtIndex(pending_item_index_);
+}
+
+NavigationItemImpl* WKBasedNavigationManagerImpl::GetTransientItemImpl() const {
+  return transient_item_.get();
+}
+
+void WKBasedNavigationManagerImpl::FinishGoToIndex(int index) {
+  WKBackForwardListItem* wk_item = GetWKItemAtIndex(index);
+  DCHECK(wk_item);
+  [delegate_->GetWebViewNavigationProxy() goToBackForwardListItem:wk_item];
 }
 
 int WKBasedNavigationManagerImpl::GetWKCurrentItemIndex() const {

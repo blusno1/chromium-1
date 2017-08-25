@@ -24,15 +24,13 @@ function doActions()
     return promise;
 }
 
-function test()
-{
-    InspectorTest.invokeAsyncWithTimeline("doActions", onRecordingDone);
+function test() {
+  PerformanceTestRunner.invokeAsyncWithTimeline('doActions', onRecordingDone);
 
-    function onRecordingDone()
-    {
-        InspectorTest.addResult("DONE");
-        InspectorTest.completeTest();
-    }
+  function onRecordingDone() {
+    TestRunner.addResult('DONE');
+    TestRunner.completeTest();
+  }
 }
 </script>
 </head>

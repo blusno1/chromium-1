@@ -56,6 +56,7 @@ class ArcNotificationContentView
 
   class ContentViewDelegate;
   class EventForwarder;
+  class MouseEnterExitHandler;
   class SettingsButton;
   class SlideHelper;
 
@@ -65,10 +66,9 @@ class ArcNotificationContentView
   void SetSurface(ArcNotificationSurface* surface);
   void UpdatePreferredSize();
   void UpdateControlButtonsVisibility();
-  void UpdatePinnedState();
   void UpdateSnapshot();
   void AttachSurface();
-  void ActivateToast();
+  void Activate();
   void UpdateAccessibleName();
 
   // views::NativeViewHost
@@ -111,6 +111,10 @@ class ArcNotificationContentView
   // to be handled as well.
   // TODO(xiyuan): Revisit after exo::Surface no longer has an aura::Window.
   std::unique_ptr<EventForwarder> event_forwarder_;
+
+  // A handler which observes mouse entered and exited events for the floating
+  // control buttons widget.
+  std::unique_ptr<ui::EventHandler> mouse_enter_exit_handler_;
 
   // A helper to observe slide transform/animation and use surface layer copy
   // when a slide is in progress and restore the surface when it finishes.

@@ -45,6 +45,8 @@ const char kArcTermsAccepted[] = "arc.terms.accepted";
 const char kArcLocationServiceEnabled[] = "arc.location_service.enabled";
 // A preference to keep list of Android packages and their infomation.
 const char kArcPackages[] = "arc.packages";
+// A preference that indicates that Play Auto Install flow was already started.
+const char kArcPaiStarted[] = "arc.pai.started";
 // A preference to keep deferred requests of setting notifications enabled flag.
 const char kArcSetNotificationsEnabledDeferred[] =
     "arc.set_notifications_enabled_deferred";
@@ -59,8 +61,9 @@ const char kArcVoiceInteractionValuePropAccepted[] =
     "arc.voice_interaction_value_prop.accepted";
 // A preference that indicates the user has enabled voice interaction services.
 const char kVoiceInteractionEnabled[] = "settings.voice_interaction.enabled";
-// A preference that indicates the user has enabled providing context to
-// voice interaction services.
+// A preference that indicates the user has allowed voice interaction services
+// to access the "context" (text and graphic content that is currently on
+// screen).
 const char kVoiceInteractionContextEnabled[] =
     "settings.voice_interaction.context.enabled";
 // A preference indicating whether voice interaction settings have been read
@@ -124,9 +127,6 @@ const char kLastProfileResetTimestamp[] = "profile.last_reset_timestamp";
 const char kChromeCleanerResetPending[] = "chrome_cleaner.reset_pending";
 #endif
 
-// Used to determine if the New Tab in-product help has been shown or not.
-extern const char kNewTabInProductHelp[] = "newtab_in_product_help";
-
 // The URL to open the new tab page to. Only set by Group Policy.
 const char kNewTabPageLocationOverride[] = "newtab_page_location_override";
 
@@ -147,8 +147,9 @@ const char kSessionExitedCleanly[] = "profile.exited_cleanly";
 // shutdown. Used to determine the exit type the last time the profile was open.
 const char kSessionExitType[] = "profile.exit_type";
 
-// Stores the total amount of active session time for the user.
-const char kSessionTimeTotal[] = "profile.total_time";
+// Stores the total amount of observed active session time for the user.
+// Observed time is active session time.
+const char kObservedSessionTime[] = "profile.observed_time";
 
 // The last time that the site engagement service recorded an engagement event
 // for this profile for any URL. Recorded only during shutdown. Used to prevent
@@ -547,6 +548,9 @@ const char kTouchpadSensitivity[] = "settings.touchpad.sensitivity2";
 // A boolean pref set to true if time should be displayed in 24-hour clock.
 const char kUse24HourClock[] = "settings.clock.use_24hour_clock";
 
+// A string pref containing Timezone ID for this user.
+const char kUserTimezone[] = "settings.timezone";
+
 // This setting disables manual timezone selection and starts periodic timezone
 // refresh.
 const char kResolveTimezoneByGeolocation[] =
@@ -605,71 +609,6 @@ const char kLanguageXkbAutoRepeatInterval[] =
 // preferences to not be user-configurable or sync with the cloud. The prefs are
 // now user-configurable and syncable again, but we don't want to overwrite the
 // current values with the old synced values, so we continue to use this suffix.
-
-// A boolean pref which determines whether the large cursor feature is enabled.
-const char kAccessibilityLargeCursorEnabled[] =
-    "settings.a11y.large_cursor_enabled";
-
-// A integer pref that specifies the size of large cursor for accessibility.
-const char kAccessibilityLargeCursorDipSize[] =
-    "settings.a11y.large_cursor_dip_size";
-
-// A boolean pref which determines whether the sticky keys feature is enabled.
-const char kAccessibilityStickyKeysEnabled[] =
-    "settings.a11y.sticky_keys_enabled";
-// A boolean pref which determines whether spoken feedback is enabled.
-const char kAccessibilitySpokenFeedbackEnabled[] = "settings.accessibility";
-// A boolean pref which determines whether high conrast is enabled.
-const char kAccessibilityHighContrastEnabled[] =
-    "settings.a11y.high_contrast_enabled";
-// A boolean pref which determines whether screen magnifier is enabled.
-const char kAccessibilityScreenMagnifierEnabled[] =
-    "settings.a11y.screen_magnifier";
-// A boolean pref which determines whether screen magnifier should center
-// the text input focus.
-const char kAccessibilityScreenMagnifierCenterFocus[] =
-    "settings.a11y.screen_magnifier_center_focus";
-// A integer pref which determines what type of screen magnifier is enabled.
-// Note that: 'screen_magnifier_type' had been used as string pref. Hence,
-// we are using another name pref here.
-const char kAccessibilityScreenMagnifierType[] =
-    "settings.a11y.screen_magnifier_type2";
-// A double pref which determines a zooming scale of the screen magnifier.
-const char kAccessibilityScreenMagnifierScale[] =
-    "settings.a11y.screen_magnifier_scale";
-// A boolean pref which determines whether the virtual keyboard is enabled for
-// accessibility.  This feature is separate from displaying an onscreen keyboard
-// due to lack of a physical keyboard.
-const char kAccessibilityVirtualKeyboardEnabled[] =
-    "settings.a11y.virtual_keyboard";
-// A boolean pref which determines whether the mono audio output is enabled for
-// accessibility.
-const char kAccessibilityMonoAudioEnabled[] =
-    "settings.a11y.mono_audio";
-// A boolean pref which determines whether autoclick is enabled.
-const char kAccessibilityAutoclickEnabled[] = "settings.a11y.autoclick";
-// An integer pref which determines time in ms between when the mouse cursor
-// stops and when an autoclick is triggered.
-const char kAccessibilityAutoclickDelayMs[] =
-    "settings.a11y.autoclick_delay_ms";
-// A boolean pref which determines whether caret highlighting is enabled.
-const char kAccessibilityCaretHighlightEnabled[] =
-    "settings.a11y.caret_highlight";
-// A boolean pref which determines whether cursor highlighting is enabled.
-const char kAccessibilityCursorHighlightEnabled[] =
-    "settings.a11y.cursor_highlight";
-// A boolean pref which determines whether focus highlighting is enabled.
-const char kAccessibilityFocusHighlightEnabled[] =
-    "settings.a11y.focus_highlight";
-// A boolean pref which determines whether select-to-speak is enabled.
-const char kAccessibilitySelectToSpeakEnabled[] =
-    "settings.a11y.select_to_speak";
-// A boolean pref which determines whether switch access is enabled.
-const char kAccessibilitySwitchAccessEnabled[] =
-    "settings.a11y.switch_access";
-// A boolean pref which determines whether the accessibility menu shows
-// regardless of the state of a11y features.
-const char kShouldAlwaysShowAccessibilityMenu[] = "settings.a11y.enable_menu";
 
 // A boolean pref which turns on Advanced Filesystem
 // (USB support, SD card, etc).
@@ -732,6 +671,11 @@ const char kNoteTakingAppEnabledOnLockScreen[] =
 // to run on lock screen, not to actually enable the apps to run on lock screen.
 const char kNoteTakingAppsLockScreenWhitelist[] =
     "settings.note_taking_apps_lock_screen_whitelist";
+
+// Whether the preferred note taking app should be requested to restore the last
+// note created on lock screen when launched on lock screen.
+const char kRestoreLastLockScreenNote[] =
+    "settings.restore_last_lock_screen_note";
 
 // A boolean pref indicating whether user activity has been observed in the
 // current session already. The pref is used to restore information about user
@@ -998,6 +942,17 @@ const char kInstantTetheringAllowed[] = "tether.allowed";
 
 // Boolean pref indicating whether a user has enabled Tether.
 const char kInstantTetheringEnabled[] = "tether.enabled";
+
+// Boolean pref indicating whether this device supports BLE advertising.
+const char kInstantTetheringBleAdvertisingSupported[] =
+    "tether.ble_advertising_supported";
+
+// Boolean pref indicating whether someone can cast to the device.
+const char kCastReceiverEnabled[] = "cast_receiver.enabled";
+
+// String pref indicating what name should be advertised for casting to.
+// If the string is empty or blank the system name will be used.
+const char kCastReceiverName[] = "cast_receiver.name";
 #endif  // defined(OS_CHROMEOS)
 
 // A boolean pref set to true if a Home button to open the Home pages should be
@@ -1323,6 +1278,12 @@ const char kLocalDiscoveryNotificationsEnabled[] =
 #if defined(OS_ANDROID)
 // Enable vibration for web notifications.
 const char kNotificationsVibrateEnabled[] = "notifications.vibrate_enabled";
+
+// Boolean pref indicating whether notification permissions were migrated to
+// notification channels (on Android O+ we use channels to store notification
+// permission, so any existing permissions must be migrated).
+const char kMigratedToSiteNotificationChannels[] =
+    "notifications.migrated_to_channels";
 
 // Cached information about GPU driver.
 const char kGLExtensionsString[] = "gl_extensions_string";
@@ -2021,6 +1982,10 @@ const char kFactoryResetRequested[] = "FactoryResetRequested";
 const char kDebuggingFeaturesRequested[] = "DebuggingFeaturesRequested";
 
 #if defined(OS_CHROMEOS)
+// This setting controls initial device timezone that is used before user
+// session started. It is controlled by device owner.
+const char kSigninScreenTimezone[] = "settings.signin_screen_timezone";
+
 // This setting starts periodic timezone refresh when not in user session.
 // (user session is controlled by user profile preference
 // kResolveTimezoneByGeolocation
@@ -2155,30 +2120,12 @@ const char kMediaGalleriesRememberedGalleries[] =
 #endif  // !defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
-// |kShelfAlignment| and |kShelfAutoHideBehavior| have a local variant. The
-// local variant is not synced and is used if set. If the local variant is not
-// set its value is set from the synced value (once prefs have been
-// synced). This gives a per-machine setting that is initialized from the last
-// set value.
-// These values are default on the machine but can be overridden by per-display
-// values in kShelfPreferences (unless overridden by managed policy).
-// String value corresponding to ash::Shell::ShelfAlignment.
-const char kShelfAlignment[] = "shelf_alignment";
-const char kShelfAlignmentLocal[] = "shelf_alignment_local";
-// String value corresponding to ash::Shell::ShelfAutoHideBehavior.
-const char kShelfAutoHideBehavior[] = "auto_hide_behavior";
-const char kShelfAutoHideBehaviorLocal[] = "auto_hide_behavior_local";
 // This value stores chrome icon's index in the launcher. This should be handled
 // separately with app shortcut's index because of ShelfModel's backward
 // compatibility. If we add chrome icon index to |kPinnedLauncherApps|, its
 // index is also stored in the |kPinnedLauncherApp| pref. It may causes
 // creating two chrome icons.
 const char kShelfChromeIconIndex[] = "shelf_chrome_icon_index";
-// Dictionary value that holds per-display preference of shelf alignment and
-// auto-hide behavior. Key of the dictionary is the id of the display, and
-// its value is a dictionary whose keys are kShelfAlignment and
-// kShelfAutoHideBehavior.
-const char kShelfPreferences[] = "shelf_preferences";
 
 const char kPinnedLauncherApps[] = "pinned_launcher_apps";
 const char kPolicyPinnedLauncherApps[] = "policy_pinned_launcher_apps";
@@ -2352,6 +2299,10 @@ const char kRecoveryComponentNeedsElevation[] =
 // (name and a list of clients that registered the whitelist).
 const char kRegisteredSupervisedUserWhitelists[] =
     "supervised_users.whitelists";
+
+// Boolean that specifies whether the cloud policy will override conflicting
+// machine policy.
+const char kCloudPolicyOverridesMachinePolicy[] = "policy.cloud_override";
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Policy that indicates how to handle animated images.

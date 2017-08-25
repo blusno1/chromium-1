@@ -103,7 +103,7 @@
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
 #include "media/renderers/audio_renderer_impl.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
+#include "media/video/gpu_video_accelerator_factories.h"
 #include "net/base/data_url.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
@@ -334,10 +334,6 @@ static bool DeviceScaleEnsuresTextQuality(float device_scale_factor) {
 
 static bool PreferCompositingToLCDText(CompositorDependencies* compositor_deps,
                                        float device_scale_factor) {
-  if (base::FeatureList::IsEnabled(
-          features::kDisablePreferCompositingToLCDTextOnLowEndAndroid) &&
-      base::SysInfo::AmountOfPhysicalMemoryMB() <= 512)
-    return false;
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(switches::kDisablePreferCompositingToLCDText))
@@ -829,8 +825,6 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   // Disable antialiasing for 2d canvas if requested on the command line.
   settings->SetAntialiased2dCanvasEnabled(
       !prefs.antialiased_2d_canvas_disabled);
-  WebRuntimeFeatures::ForceDisable2dCanvasCopyOnWrite(
-      prefs.disable_2d_canvas_copy_on_write);
 
   // Disable antialiasing of clips for 2d canvas if requested on the command
   // line.
@@ -877,6 +871,7 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->SetPrimaryHoverType(
       static_cast<blink::HoverType>(prefs.primary_hover_type));
   settings->SetEnableTouchAdjustment(prefs.touch_adjustment_enabled);
+  settings->SetBarrelButtonForDragEnabled(prefs.barrel_button_for_drag_enabled);
 
   WebRuntimeFeatures::EnableColorCorrectRendering(
       prefs.color_correct_rendering_enabled);
@@ -974,6 +969,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->SetEmbeddedMediaExperienceEnabled(
       prefs.embedded_media_experience_enabled);
   settings->SetPagePopupsSuppressed(prefs.page_popups_suppressed);
+  settings->SetMediaDownloadInProductHelpEnabled(
+      prefs.enable_media_download_in_product_help);
   settings->SetDoNotUpdateSelectionOnMutatingSelectionRange(
       prefs.do_not_update_selection_on_mutating_selection_range);
   WebRuntimeFeatures::EnableCSSHexAlphaColor(prefs.css_hex_alpha_color_enabled);

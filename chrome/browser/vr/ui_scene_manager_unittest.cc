@@ -7,10 +7,12 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
+#include "cc/base/math_util.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/elements/ui_element_debug_id.h"
 #include "chrome/browser/vr/target_property.h"
 #include "chrome/browser/vr/test/animation_utils.h"
+#include "chrome/browser/vr/test/constants.h"
 #include "chrome/browser/vr/test/mock_browser_interface.h"
 #include "chrome/browser/vr/test/ui_scene_manager_test.h"
 #include "chrome/browser/vr/ui_scene.h"
@@ -32,13 +34,24 @@ std::set<UiElementDebugId> kFloorCeilingBackgroundElements = {
     kBackgroundFront, kBackgroundLeft,   kBackgroundBack, kBackgroundRight,
     kBackgroundTop,   kBackgroundBottom, kCeiling,        kFloor};
 std::set<UiElementDebugId> kElementsVisibleInBrowsing = {
-    kBackgroundFront, kBackgroundLeft,   kBackgroundBack, kBackgroundRight,
-    kBackgroundTop,   kBackgroundBottom, kCeiling,        kFloor,
-    kContentQuad,     kBackplane,        kUrlBar};
+    kBackgroundFront, kBackgroundLeft, kBackgroundBack,
+    kBackgroundRight, kBackgroundTop,  kBackgroundBottom,
+    kCeiling,         kFloor,          kContentQuad,
+    kBackplane,       kUrlBar,         kUnderDevelopmentNotice};
 std::set<UiElementDebugId> kElementsVisibleWithExitPrompt = {
     kBackgroundFront, kBackgroundLeft,     kBackgroundBack, kBackgroundRight,
     kBackgroundTop,   kBackgroundBottom,   kCeiling,        kFloor,
     kExitPrompt,      kExitPromptBackplane};
+
+static constexpr float kTolerance = 1e-5;
+
+MATCHER_P2(SizeFsAreApproximatelyEqual, other, tolerance, "") {
+  return cc::MathUtil::ApproximatelyEqual(arg.width(), other.width(),
+                                          tolerance) &&
+         cc::MathUtil::ApproximatelyEqual(arg.height(), other.height(),
+                                          tolerance);
+}
+
 }  // namespace
 
 TEST_F(UiSceneManagerTest, ExitPresentAndFullscreenOnAppButtonClick) {
@@ -101,27 +114,35 @@ TEST_F(UiSceneManagerTest, ToastStateTransitions) {
   // presentation.
   MakeManager(kNotInCct, kInWebVr);
   EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 
   MakeManager(kNotInCct, kNotInWebVr);
   EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 
   manager_->SetFullscreen(true);
   EXPECT_TRUE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 
   manager_->SetWebVrMode(true, true);
-  EXPECT_TRUE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_TRUE(IsVisible(kExclusiveScreenToastViewportAware));
 
   manager_->SetWebVrMode(false, false);
   EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 
   manager_->SetFullscreen(false);
   EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 
   manager_->SetWebVrMode(true, false);
   EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 
   manager_->SetWebVrMode(false, true);
   EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 }
 
 TEST_F(UiSceneManagerTest, ToastTransience) {
@@ -136,12 +157,12 @@ TEST_F(UiSceneManagerTest, ToastTransience) {
   EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
 
   manager_->SetWebVrMode(true, true);
-  EXPECT_TRUE(IsVisible(kExclusiveScreenToast));
+  EXPECT_TRUE(IsVisible(kExclusiveScreenToastViewportAware));
   task_runner_->FastForwardUntilNoTasksRemain();
-  EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 
   manager_->SetWebVrMode(false, false);
-  EXPECT_FALSE(IsVisible(kExclusiveScreenToast));
+  EXPECT_FALSE(IsVisible(kExclusiveScreenToastViewportAware));
 }
 
 TEST_F(UiSceneManagerTest, CloseButtonVisibleInCctFullscreen) {
@@ -216,19 +237,18 @@ TEST_F(UiSceneManagerTest, WebVrAutopresentedInsecureOrigin) {
   // Initially, the security warnings should not be visible since the first
   // WebVR frame is not received.
   auto initial_elements = kBackgroundElements;
-  initial_elements.insert(kSplashScreenIcon);
+  initial_elements.insert(kSplashScreenText);
 
   VerifyElementsVisible("Initial", initial_elements);
   manager_->OnWebVrFrameAvailable();
-  VerifyElementsVisible("Autopresented", std::set<UiElementDebugId>{
-                                             kWebVrPermanentHttpSecurityWarning,
-                                             kWebVrTransientHttpSecurityWarning,
-                                             kTransientUrlBar});
+  VerifyElementsVisible(
+      "Autopresented", std::set<UiElementDebugId>{
+                           kWebVrPermanentHttpSecurityWarning,
+                           kWebVrTransientHttpSecurityWarning, kWebVrUrlToast});
 
   // Make sure the transient elements go away.
   task_runner_->FastForwardUntilNoTasksRemain();
-  UiElement* transient_url_bar =
-      scene_->GetUiElementByDebugId(kTransientUrlBar);
+  UiElement* transient_url_bar = scene_->GetUiElementByDebugId(kWebVrUrlToast);
   EXPECT_TRUE(IsAnimating(transient_url_bar, {OPACITY, VISIBILITY}));
   // Finish the transition.
   AnimateBy(MsToDelta(1000));
@@ -245,24 +265,32 @@ TEST_F(UiSceneManagerTest, WebVrAutopresented) {
 
   // Initially, we should only show the splash screen.
   auto initial_elements = kBackgroundElements;
-  initial_elements.insert(kSplashScreenIcon);
+  initial_elements.insert(kSplashScreenText);
   VerifyElementsVisible("Initial", initial_elements);
 
   // Enter WebVR with autopresentation.
   manager_->SetWebVrMode(true, false);
   manager_->OnWebVrFrameAvailable();
   VerifyElementsVisible("Autopresented",
-                        std::set<UiElementDebugId>{kTransientUrlBar});
+                        std::set<UiElementDebugId>{kWebVrUrlToast});
 
   // Make sure the transient URL bar times out.
   task_runner_->FastForwardUntilNoTasksRemain();
-  UiElement* transient_url_bar =
-      scene_->GetUiElementByDebugId(kTransientUrlBar);
+  UiElement* transient_url_bar = scene_->GetUiElementByDebugId(kWebVrUrlToast);
   EXPECT_TRUE(IsAnimating(transient_url_bar, {OPACITY, VISIBILITY}));
   // Finish the transition.
   AnimateBy(MsToDelta(1000));
   EXPECT_FALSE(IsAnimating(transient_url_bar, {OPACITY, VISIBILITY}));
-  EXPECT_FALSE(IsVisible(kTransientUrlBar));
+  EXPECT_FALSE(IsVisible(kWebVrUrlToast));
+}
+
+TEST_F(UiSceneManagerTest, AppButtonClickForAutopresentation) {
+  MakeAutoPresentedManager();
+
+  // Clicking app button should be a no-op.
+  EXPECT_CALL(*browser_, ExitPresent()).Times(0);
+  EXPECT_CALL(*browser_, ExitFullscreen()).Times(0);
+  manager_->OnAppButtonClicked();
 }
 
 TEST_F(UiSceneManagerTest, UiUpdatesForFullscreenChanges) {
@@ -488,6 +516,53 @@ TEST_F(UiSceneManagerTest, CaptureIndicatorsVisibility) {
   manager_->SetLocationAccessIndicator(false);
   manager_->SetBluetoothConnectedIndicator(false);
   EXPECT_TRUE(VerifyVisibility(indicators, false));
+}
+
+TEST_F(UiSceneManagerTest, PropagateContentBoundsOnStart) {
+  MakeManager(kNotInCct, kNotInWebVr);
+
+  // Calculate the inheritable transforms.
+  AnimateBy(MsToDelta(0));
+
+  gfx::SizeF expected_bounds(0.495922f, 0.330614f);
+  EXPECT_CALL(*browser_,
+              OnContentScreenBoundsChanged(
+                  SizeFsAreApproximatelyEqual(expected_bounds, kTolerance)));
+
+  manager_->OnProjMatrixChanged(kProjMatrix);
+}
+
+TEST_F(UiSceneManagerTest, PropagateContentBoundsOnFullscreen) {
+  MakeManager(kNotInCct, kNotInWebVr);
+
+  AnimateBy(MsToDelta(0));
+  manager_->OnProjMatrixChanged(kProjMatrix);
+  manager_->SetFullscreen(true);
+  AnimateBy(MsToDelta(0));
+
+  gfx::SizeF expected_bounds(0.705449f, 0.396737f);
+  EXPECT_CALL(*browser_,
+              OnContentScreenBoundsChanged(
+                  SizeFsAreApproximatelyEqual(expected_bounds, kTolerance)));
+
+  manager_->OnProjMatrixChanged(kProjMatrix);
+}
+
+TEST_F(UiSceneManagerTest, DontPropagateContentBoundsOnNegligibleChange) {
+  MakeManager(kNotInCct, kNotInWebVr);
+
+  AnimateBy(MsToDelta(0));
+  manager_->OnProjMatrixChanged(kProjMatrix);
+
+  UiElement* content_quad = scene_->GetUiElementByDebugId(kContentQuad);
+  gfx::SizeF content_quad_size = content_quad->size();
+  content_quad_size.Scale(1.2f);
+  content_quad->SetSize(content_quad_size.width(), content_quad_size.height());
+  AnimateBy(MsToDelta(0));
+
+  EXPECT_CALL(*browser_, OnContentScreenBoundsChanged(testing::_)).Times(0);
+
+  manager_->OnProjMatrixChanged(kProjMatrix);
 }
 
 }  // namespace vr

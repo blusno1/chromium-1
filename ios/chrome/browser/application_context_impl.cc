@@ -63,7 +63,7 @@ ApplicationContextImpl::ApplicationContextImpl(
     const std::string& locale)
     : local_state_task_runner_(local_state_task_runner),
       was_last_shutdown_clean_(false),
-      created_local_state_(false) {
+      is_shutting_down_(false) {
   DCHECK(!GetApplicationContext());
   SetApplicationContext(this);
 
@@ -184,9 +184,19 @@ bool ApplicationContextImpl::WasLastShutdownClean() {
   return was_last_shutdown_clean_;
 }
 
+void ApplicationContextImpl::SetIsShuttingDown() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  is_shutting_down_ = true;
+}
+
+bool ApplicationContextImpl::IsShuttingDown() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return is_shutting_down_;
+}
+
 PrefService* ApplicationContextImpl::GetLocalState() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (!created_local_state_)
+  if (!local_state_)
     CreateLocalState();
   return local_state_.get();
 }
@@ -316,8 +326,7 @@ void ApplicationContextImpl::SetApplicationLocale(const std::string& locale) {
 
 void ApplicationContextImpl::CreateLocalState() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!created_local_state_ && !local_state_);
-  created_local_state_ = true;
+  DCHECK(!local_state_);
 
   base::FilePath local_state_path;
   CHECK(PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
@@ -328,6 +337,7 @@ void ApplicationContextImpl::CreateLocalState() {
 
   local_state_ = ::CreateLocalState(
       local_state_path, local_state_task_runner_.get(), pref_registry);
+  DCHECK(local_state_);
 
   net::ClientSocketPoolManager::set_max_sockets_per_proxy_server(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,

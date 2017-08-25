@@ -15,8 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
-#include "base/id_map.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
@@ -111,11 +111,10 @@ class CreateViewParams;
 //
 // For context, please see https://crbug.com/467770 and
 // http://www.chromium.org/developers/design-documents/site-isolation.
-class CONTENT_EXPORT RenderViewImpl
-    : public RenderWidget,
-      NON_EXPORTED_BASE(public blink::WebViewClient),
-      public RenderWidgetOwnerDelegate,
-      public RenderView {
+class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
+                                      public blink::WebViewClient,
+                                      public RenderWidgetOwnerDelegate,
+                                      public RenderView {
  public:
   // Creates a new RenderView. Note that if the original opener has been closed,
   // |params.window_was_created_with_opener| will be true and

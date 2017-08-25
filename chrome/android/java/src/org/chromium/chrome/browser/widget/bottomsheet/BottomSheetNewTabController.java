@@ -12,6 +12,7 @@ import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.Overv
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.BottomToolbarPhone;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -107,6 +108,15 @@ public class BottomSheetNewTabController extends EmptyBottomSheetObserver {
      * @param isIncognito Whether to display the incognito new tab UI.
      */
     public void displayNewTabUi(boolean isIncognito) {
+        displayNewTabUi(isIncognito, R.id.action_home);
+    }
+
+    /**
+     * Shows the new tab UI with the specified content.
+     * @param isIncognito Whether to display the incognito new tab UI.
+     * @param actionId The action id of the bottom sheet content to be displayed.
+     */
+    public void displayNewTabUi(boolean isIncognito, int actionId) {
         mIsShowingNewTabUi = true;
         mHideOverviewOnClose = !mLayoutManager.overviewVisible();
         mSelectIncognitoModelOnClose = mTabModelSelector.isIncognitoSelected()
@@ -138,11 +148,12 @@ public class BottomSheetNewTabController extends EmptyBottomSheetObserver {
 
         // Select the correct sheet content, immediately ending animations so that the sheet content
         // is not in transition while the sheet is opening.
-        mActivity.getBottomSheetContentController().selectItem(R.id.action_home);
+        mActivity.getBottomSheetContentController().selectItem(actionId);
         mBottomSheet.endTransitionAnimations();
 
         // Open the sheet if it isn't already open to the desired height.
-        int sheetState = mTabModelSelector.getCurrentModel().getCount() == 0
+        int sheetState =
+                actionId != R.id.action_home || mTabModelSelector.getCurrentModel().getCount() == 0
                 ? BottomSheet.SHEET_STATE_FULL
                 : BottomSheet.SHEET_STATE_HALF;
         if (mBottomSheet.getSheetState() != sheetState) {
@@ -168,7 +179,8 @@ public class BottomSheetNewTabController extends EmptyBottomSheetObserver {
         return mIsShowingNewTabUi
                 && mBottomSheet.getTargetSheetState() != BottomSheet.SHEET_STATE_PEEK
                 && !mTabModelSelector.isIncognitoSelected()
-                && TemplateUrlService.getInstance().isDefaultSearchEngineGoogle();
+                && TemplateUrlService.getInstance().isDefaultSearchEngineGoogle()
+                && !FeatureUtilities.isChromeHomeDoodleEnabled();
     }
 
     @Override

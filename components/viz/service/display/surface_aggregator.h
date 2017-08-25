@@ -22,7 +22,7 @@
 namespace cc {
 class BlockingTaskRunner;
 class CompositorFrame;
-class ResourceProvider;
+class DisplayResourceProvider;
 class SurfaceDrawQuad;
 }  // namespace cc
 
@@ -37,7 +37,7 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
   using SurfaceIndexMap = base::flat_map<SurfaceId, uint64_t>;
 
   SurfaceAggregator(SurfaceManager* manager,
-                    cc::ResourceProvider* provider,
+                    cc::DisplayResourceProvider* provider,
                     bool aggregate_only_damaged);
   ~SurfaceAggregator();
 
@@ -110,11 +110,10 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
                          gfx::Rect* damage_rect_in_quad_space,
                          bool* damage_rect_in_quad_space_valid);
 
-  cc::SharedQuadState* CopySharedQuadState(
-      const cc::SharedQuadState* source_sqs,
-      const gfx::Transform& target_transform,
-      const ClipData& clip_rect,
-      cc::RenderPass* dest_render_pass);
+  SharedQuadState* CopySharedQuadState(const SharedQuadState* source_sqs,
+                                       const gfx::Transform& target_transform,
+                                       const ClipData& clip_rect,
+                                       cc::RenderPass* dest_render_pass);
   void CopyQuadsToPass(
       const cc::QuadList& source_quad_list,
       const cc::SharedQuadStateList& source_shared_quad_state_list,
@@ -149,7 +148,7 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
                              cc::BlockingTaskRunner* main_thread_task_runner);
 
   SurfaceManager* manager_;
-  cc::ResourceProvider* provider_;
+  cc::DisplayResourceProvider* provider_;
 
   // Every Surface has its own cc::RenderPass ID namespace. This structure maps
   // each source (SurfaceId, cc::RenderPass id) to a unified ID namespace that's

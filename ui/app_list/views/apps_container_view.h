@@ -71,7 +71,13 @@ class AppsContainerView : public AppListPage, public TopIconAnimationObserver {
 
   // AppListPage overrides:
   void OnWillBeShown() override;
+  gfx::Rect GetSearchBoxBounds() const override;
+  gfx::Rect GetSearchBoxBoundsForState(
+      AppListModel::State state) const override;
   gfx::Rect GetPageBoundsForState(AppListModel::State state) const override;
+  gfx::Rect GetPageBoundsDuringDragging(
+      AppListModel::State state) const override;
+  views::View* GetSelectedView() const override;
 
   // TopIconAnimationObserver overrides:
   void OnTopIconAnimationsComplete() override;
@@ -104,6 +110,12 @@ class AppsContainerView : public AppListPage, public TopIconAnimationObserver {
                                              bool open_folder);
 
   void PrepareToShowApps(AppListFolderItem* folder_item);
+
+  // Gets the final top padding of search box.
+  int GetSearchBoxFinalTopPadding() const;
+
+  // Gets the top padding of search box during dragging.
+  int GetSearchBoxTopPaddingDuringDragging() const;
 
   // The views below are owned by views hierarchy.
   AppsGridView* apps_grid_view_ = nullptr;

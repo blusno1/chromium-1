@@ -137,6 +137,42 @@ class NET_EXPORT NetworkQualityEstimatorParams {
     effective_connection_type_algorithm_ = algorithm;
   }
 
+  // Returns the multiplier by which the transport RTT should be multipled when
+  // computing the HTTP RTT. The multiplied value of the transport RTT serves
+  // as a lower bound to the HTTP RTT estimate. e.g., if the multiplied
+  // transport RTT is 100 msec., then HTTP RTT estimate can't be lower than
+  // 100 msec. Returns a negative value if the param is not set.
+  double lower_bound_http_rtt_transport_rtt_multiplier() const {
+    return lower_bound_http_rtt_transport_rtt_multiplier_;
+  }
+
+  // Returns the multiplier by which the transport RTT should be multipled when
+  // computing the HTTP RTT. The multiplied value of the transport RTT serves
+  // as an upper bound to the HTTP RTT estimate. e.g., if the multiplied
+  // transport RTT is 100 msec., then HTTP RTT estimate can't be more than
+  // 100 msec. Returns a negative value if the param is not set.
+  double upper_bound_http_rtt_transport_rtt_multiplier() const {
+    return upper_bound_http_rtt_transport_rtt_multiplier_;
+  }
+
+  // Returns the minimum interval between successive computations of the
+  // increase in transport RTT.
+  base::TimeDelta increase_in_transport_rtt_logging_interval() const {
+    return increase_in_transport_rtt_logging_interval_;
+  }
+
+  // The maximum age of RTT observations for them to be considered recent for
+  // the computation of the increase in RTT.
+  base::TimeDelta recent_time_threshold() const {
+    return recent_time_threshold_;
+  }
+
+  // The maximum age of observations for them to be considered useful for
+  // calculating the minimum transport RTT from the historical data.
+  base::TimeDelta historical_time_threshold() const {
+    return historical_time_threshold_;
+  }
+
  private:
   // Map containing all field trial parameters related to
   // NetworkQualityEstimator field trial.
@@ -149,6 +185,11 @@ class NET_EXPORT NetworkQualityEstimatorParams {
   base::Optional<EffectiveConnectionType> forced_effective_connection_type_;
   bool persistent_cache_reading_enabled_;
   const base::TimeDelta min_socket_watcher_notification_interval_;
+  const double lower_bound_http_rtt_transport_rtt_multiplier_;
+  const double upper_bound_http_rtt_transport_rtt_multiplier_;
+  const base::TimeDelta increase_in_transport_rtt_logging_interval_;
+  const base::TimeDelta recent_time_threshold_;
+  const base::TimeDelta historical_time_threshold_;
 
   EffectiveConnectionTypeAlgorithm effective_connection_type_algorithm_;
 

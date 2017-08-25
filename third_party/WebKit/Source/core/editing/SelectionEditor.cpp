@@ -113,14 +113,14 @@ void SelectionEditor::MarkCacheDirty() {
 
 void SelectionEditor::SetSelection(const SelectionInDOMTree& new_selection) {
   new_selection.AssertValidFor(GetDocument());
-  if (selection_ == new_selection)
-    return;
+  DCHECK_NE(selection_, new_selection);
   ClearDocumentCachedRange();
   MarkCacheDirty();
   selection_ = new_selection;
 }
 
 void SelectionEditor::DidChangeChildren(const ContainerNode&) {
+  selection_.ResetDirectionCache();
   MarkCacheDirty();
   DidFinishDOMMutation();
 }
@@ -133,6 +133,7 @@ void SelectionEditor::DidFinishTextChange(const Position& new_base,
   }
   selection_.base_ = new_base;
   selection_.extent_ = new_extent;
+  selection_.ResetDirectionCache();
   MarkCacheDirty();
   DidFinishDOMMutation();
 }
@@ -182,7 +183,6 @@ void SelectionEditor::NodeChildrenWillBeRemoved(ContainerNode& container) {
     return;
   selection_ = SelectionInDOMTree::Builder()
                    .SetBaseAndExtent(new_base, new_extent)
-                   .SetIsHandleVisible(selection_.IsHandleVisible())
                    .Build();
   MarkCacheDirty();
 }
@@ -200,7 +200,6 @@ void SelectionEditor::NodeWillBeRemoved(Node& node_to_be_removed) {
     return;
   selection_ = SelectionInDOMTree::Builder()
                    .SetBaseAndExtent(new_base, new_extent)
-                   .SetIsHandleVisible(selection_.IsHandleVisible())
                    .Build();
   MarkCacheDirty();
 }

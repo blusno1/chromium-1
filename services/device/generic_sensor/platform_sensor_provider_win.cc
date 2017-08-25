@@ -23,11 +23,6 @@ PlatformSensorProviderWin* PlatformSensorProviderWin::GetInstance() {
       base::LeakySingletonTraits<PlatformSensorProviderWin>>::get();
 }
 
-#if defined(__clang__)
-// Disable optimization to work around a Clang miscompile (crbug.com/749826).
-// TODO(hans): Remove once we roll past the Clang fix in r309343.
-[[clang::optnone]]
-#endif
 void PlatformSensorProviderWin::SetSensorManagerForTesting(
     base::win::ScopedComPtr<ISensorManager> sensor_manager) {
   sensor_manager_ = sensor_manager;
@@ -49,12 +44,12 @@ void PlatformSensorProviderWin::CreateSensorInternal(
   switch (type) {
     // Fusion sensor.
     case mojom::SensorType::LINEAR_ACCELERATION: {
-      std::vector<mojom::SensorType> source_sensor_types = {
-          mojom::SensorType::ACCELEROMETER};
       auto linear_acceleration_fusion_algorithm = base::MakeUnique<
           LinearAccelerationFusionAlgorithmUsingAccelerometer>();
+      // If this PlatformSensorFusion object is successfully initialized,
+      // |callback| will be run with a reference to this object.
       base::MakeRefCounted<PlatformSensorFusion>(
-          std::move(mapping), this, callback, source_sensor_types, type,
+          std::move(mapping), this, callback,
           std::move(linear_acceleration_fusion_algorithm));
       break;
     }

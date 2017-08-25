@@ -4,32 +4,48 @@
 
 #include "components/offline_pages/core/renovations/page_renovation_loader.h"
 
+#include <algorithm>
+#include <string>
 #include <utility>
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/grit/components_resources.h"
+#include "ui/base/resource/resource_bundle.h"
 
 namespace offline_pages {
 
 namespace {
 
-// Construct list of implemented renovations
-std::vector<std::unique_ptr<PageRenovation>> makeRenovationList() {
-  // TODO(collinbaker): Create PageRenovation instances and put them
-  // in this list.
-  return std::vector<std::unique_ptr<PageRenovation>>();
+// Helper function used in WikipediaPageRenovation::ShouldRun.
+bool EndsWith(const std::string& host, const std::string& suffix) {
+  if (suffix.size() > host.size())
+    return false;
+
+  return std::equal(suffix.rbegin(), suffix.rend(), host.rbegin());
 }
 
-// "Null" script placeholder until we load scripts from storage.
-// TODO(collinbaker): remove this after implmenting loading.
-const char kEmptyScript[] = "function run_renovations(flist){}";
+// Concrete PageRenovation instances
+class WikipediaPageRenovation : public PageRenovation {
+ public:
+  bool ShouldRun(const GURL& url) const override {
+    return EndsWith(url.host(), "m.wikipedia.org");
+  }
+
+  std::string GetID() const override { return "wikipedia"; }
+};
+
+// Construct list of implemented renovations
+std::vector<std::unique_ptr<PageRenovation>> MakeRenovationList() {
+  std::vector<std::unique_ptr<PageRenovation>> list;
+  list.emplace_back(new WikipediaPageRenovation);
+  return list;
+}
 
 }  // namespace
 
 PageRenovationLoader::PageRenovationLoader()
-    : renovations_(makeRenovationList()),
-      is_loaded_(false),
-      combined_source_(base::UTF8ToUTF16(kEmptyScript)) {}
+    : renovations_(MakeRenovationList()), is_loaded_(false) {}
 
 PageRenovationLoader::~PageRenovationLoader() {}
 
@@ -66,10 +82,14 @@ bool PageRenovationLoader::LoadSource() {
     return true;
   }
 
-  // TODO(collinbaker): Load file with renovations using
-  // ui::ResourceBundle. For now, using temporary script that does
-  // nothing.
-  combined_source_ = base::UTF8ToUTF16(kEmptyScript);
+  // Our script file is stored in the resource bundle. Get this script.
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  combined_source_ = base::UTF8ToUTF16(
+      rb.GetRawDataResource(IDR_OFFLINE_PAGES_RENOVATIONS_JS).as_string());
+
+  // If built correctly, IDR_OFFLINE_PAGES_RENOVATIONS_JS should
+  // always exist in the resource pack and loading should never fail.
+  DCHECK_GT(combined_source_.size(), 0U);
 
   is_loaded_ = true;
   return true;

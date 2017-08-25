@@ -137,6 +137,16 @@ bool AreAllFieldsEmpty(const PasswordForm& form) {
          form.new_password_value.empty();
 }
 
+// Helper function that determines whether update or save prompt should be
+// shown for credentials in |provisional_save_manager|.
+bool IsPasswordUpdate(const PasswordFormManager& provisional_save_manager) {
+  return (!provisional_save_manager.best_matches().empty() &&
+          provisional_save_manager
+              .is_possible_change_password_form_without_username()) ||
+         provisional_save_manager.password_overridden() ||
+         provisional_save_manager.retry_password_form_password_update();
+}
+
 // Finds the matched form manager for |form| in |pending_login_managers|.
 PasswordFormManager* FindMatchedManager(
     const autofill::PasswordForm& form,
@@ -155,9 +165,6 @@ PasswordFormManager* FindMatchedManager(
     PasswordFormManager::MatchResultMask result =
         (*iter)->DoesManage(form, driver);
 
-    if (result == PasswordFormManager::RESULT_NO_MATCH)
-      continue;
-
     if (result == PasswordFormManager::RESULT_COMPLETE_MATCH) {
       // If we find a manager that exactly matches the submitted form including
       // the action URL, exit the loop.
@@ -165,30 +172,19 @@ PasswordFormManager* FindMatchedManager(
         logger->LogMessage(Logger::STRING_EXACT_MATCH);
       matched_manager_it = iter;
       break;
-    } else if (result == (PasswordFormManager::RESULT_COMPLETE_MATCH &
-                          ~PasswordFormManager::RESULT_ACTION_MATCH) &&
-               result > current_match_result) {
-      // If the current manager matches the submitted form excluding the action
-      // URL, remember it as a candidate and continue searching for an exact
-      // match. See http://crbug.com/27246 for an example where actions can
-      // change.
-      if (logger)
-        logger->LogMessage(Logger::STRING_MATCH_WITHOUT_ACTION);
-      matched_manager_it = iter;
+    }
+
+    if (result > current_match_result) {
       current_match_result = result;
-    } else if (IsSignupForm(form) && result > current_match_result) {
-      // Signup forms don't require HTML attributes to match because we don't
-      // need to fill these saved passwords on the same form in the future.
-      // Prefer the best possible match (e.g. action and origins match instead
-      // or just origin matching). Don't break in case there exists a better
-      // match.
-      // TODO(gcasto): Matching in this way is very imprecise. Having some
-      // better way to match the same form when the HTML elements change (e.g.
-      // text element changed to password element) would be useful.
-      if (logger)
-        logger->LogMessage(Logger::STRING_ORIGINS_MATCH);
       matched_manager_it = iter;
-      current_match_result = result;
+
+      if (logger) {
+        if (result == (PasswordFormManager::RESULT_COMPLETE_MATCH &
+                       ~PasswordFormManager::RESULT_ACTION_MATCH))
+          logger->LogMessage(Logger::STRING_MATCH_WITHOUT_ACTION);
+        if (IsSignupForm(form))
+          logger->LogMessage(Logger::STRING_ORIGINS_MATCH);
+      }
     }
   }
 
@@ -202,13 +198,6 @@ PasswordFormManager* FindMatchedManager(
 // static
 void PasswordManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-#if defined(OS_IOS) || defined(OS_ANDROID)
-  uint32_t flags = PrefRegistry::NO_REGISTRATION_FLAGS;
-#else
-  uint32_t flags = user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
-#endif
-  registry->RegisterBooleanPref(prefs::kPasswordManagerSavingEnabled, true,
-                                flags);
   registry->RegisterBooleanPref(
       prefs::kCredentialsEnableService, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
@@ -465,6 +454,37 @@ void PasswordManager::OnPasswordFormForceSaveRequested(
   ProvisionallySavePassword(password_form, driver);
   if (provisional_save_manager_)
     OnLoginSuccessful();
+}
+
+void PasswordManager::ShowManualFallbackForSaving(
+    password_manager::PasswordManagerDriver* driver,
+    const PasswordForm& password_form) {
+  if (!client_->IsSavingAndFillingEnabledForCurrentPage() ||
+      ShouldBlockPasswordForSameOriginButDifferentScheme(password_form))
+    return;
+
+  PasswordFormManager* matched_manager = FindMatchedManager(
+      password_form, pending_login_managers_, driver, nullptr);
+  if (!matched_manager)
+    return;
+  // TODO(crbug.com/741537): Process manual saving request even if there is
+  // still no response from the store.
+  if (matched_manager->form_fetcher()->GetState() ==
+      FormFetcher::State::WAITING) {
+    return;
+  }
+  ProvisionallySaveManager(password_form, matched_manager, nullptr);
+
+  DCHECK(provisional_save_manager_);
+  bool is_update = IsPasswordUpdate(*provisional_save_manager_);
+  bool has_generated_password =
+      provisional_save_manager_->has_generated_password();
+  client_->ShowManualFallbackForSaving(std::move(provisional_save_manager_),
+                                       has_generated_password, is_update);
+}
+
+void PasswordManager::HideManualFallbackForSaving() {
+  client_->HideManualFallbackForSaving();
 }
 
 void PasswordManager::OnPasswordFormsParsed(
@@ -780,12 +800,7 @@ void PasswordManager::OnLoginSuccessful() {
                           empty_password);
     if (logger)
       logger->LogMessage(Logger::STRING_DECISION_ASK);
-    bool update_password =
-        (!provisional_save_manager_->best_matches().empty() &&
-         provisional_save_manager_
-             ->is_possible_change_password_form_without_username()) ||
-        provisional_save_manager_->password_overridden() ||
-        provisional_save_manager_->retry_password_form_password_update();
+    bool update_password = IsPasswordUpdate(*provisional_save_manager_);
     if (client_->PromptUserToSaveOrUpdatePassword(
             std::move(provisional_save_manager_), update_password)) {
       if (logger)

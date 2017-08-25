@@ -27,7 +27,6 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerBase {
   // AudioManager implementation.
   bool HasAudioOutputDevices() override;
   bool HasAudioInputDevices() override;
-  void ShowAudioInputSettings() override;
   void GetAudioInputDeviceNames(AudioDeviceNames* device_names) override;
   void GetAudioOutputDeviceNames(AudioDeviceNames* device_names) override;
   AudioParameters GetInputStreamParameters(
@@ -74,8 +73,8 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerBase {
   AudioInputStream* MakeInputStream(const AudioParameters& params,
                                     const std::string& device_id);
 
-  // Get minimum output buffer size for this board.
-  int GetMinimumOutputBufferSizePerBoard();
+  // Get default output buffer size for this board.
+  int GetDefaultOutputBufferSizePerBoard();
 
   void GetAudioDeviceNamesImpl(bool is_input, AudioDeviceNames* device_names);
 

@@ -98,20 +98,16 @@ const String ComputeTextForInsertion(const String& new_text,
       new_text.length() - common_prefix_length - common_suffix_length);
 }
 
-VisibleSelection ComputeSelectionForInsertion(
+SelectionInDOMTree ComputeSelectionForInsertion(
     const EphemeralRange& selection_range,
     const int offset,
-    const int length,
-    const bool is_directional) {
+    const int length) {
   CharacterIterator char_it(selection_range);
   const EphemeralRange& range_for_insertion =
       char_it.CalculateCharacterSubrange(offset, length);
-  const VisibleSelection& selection =
-      CreateVisibleSelection(SelectionInDOMTree::Builder()
-                                 .SetBaseAndExtent(range_for_insertion)
-                                 .SetIsDirectional(is_directional)
-                                 .Build());
-  return selection;
+  return SelectionInDOMTree::Builder()
+      .SetBaseAndExtent(range_for_insertion)
+      .Build();
 }
 
 }  // anonymous namespace
@@ -133,7 +129,8 @@ InsertIncrementalTextCommand::InsertIncrementalTextCommand(
     : InsertTextCommand(document, text, select_inserted_text, rebalance_type) {}
 
 void InsertIncrementalTextCommand::DoApply(EditingState* editing_state) {
-  const Element* element = EndingVisibleSelection().RootEditableElement();
+  DCHECK(!GetDocument().NeedsLayoutTreeUpdate());
+  const Element* element = RootEditableElementOf(EndingSelection().Base());
   DCHECK(element);
 
   const EphemeralRange selection_range(EndingVisibleSelection().Start(),
@@ -158,9 +155,8 @@ void InsertIncrementalTextCommand::DoApply(EditingState* editing_state) {
   const int offset = static_cast<int>(common_prefix_length);
   const int length = static_cast<int>(old_text_length - common_prefix_length -
                                       common_suffix_length);
-  const VisibleSelection& selection_for_insertion =
-      ComputeSelectionForInsertion(selection_range, offset, length,
-                                   EndingVisibleSelection().IsDirectional());
+  const VisibleSelection& selection_for_insertion = CreateVisibleSelection(
+      ComputeSelectionForInsertion(selection_range, offset, length));
 
   SetEndingSelectionWithoutValidation(selection_for_insertion.Start(),
                                       selection_for_insertion.End());

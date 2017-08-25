@@ -7,7 +7,9 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -25,6 +27,10 @@ namespace views {
 typedef ViewsTestBase BubbleFrameViewTest;
 
 namespace {
+
+bool UseMd() {
+  return ui::MaterialDesignController::IsSecondaryUiMaterial();
+}
 
 const BubbleBorder::Arrow kArrow = BubbleBorder::TOP_LEFT;
 const SkColor kColor = SK_ColorRED;
@@ -166,6 +172,20 @@ TEST_F(BubbleFrameViewTest, GetBoundsForClientViewWithClose) {
             frame.GetBoundsForClientView().x());
   EXPECT_EQ(border_insets.top() + frame_insets.top(),
             frame.GetBoundsForClientView().y());
+}
+
+TEST_F(BubbleFrameViewTest,
+       FootnoteContainerViewShouldMatchVisibilityOfFirstChild) {
+  TestBubbleFrameView frame(this);
+  View* footnote_dummy_view = new StaticSizedView(gfx::Size(200, 200));
+  footnote_dummy_view->SetVisible(false);
+  frame.SetFootnoteView(footnote_dummy_view);
+  View* footnote_container_view = footnote_dummy_view->parent();
+  EXPECT_FALSE(footnote_container_view->visible());
+  footnote_dummy_view->SetVisible(true);
+  EXPECT_TRUE(footnote_container_view->visible());
+  footnote_dummy_view->SetVisible(false);
+  EXPECT_FALSE(footnote_container_view->visible());
 }
 
 // Tests that the arrow is mirrored as needed to better fit the screen.
@@ -345,15 +365,25 @@ TEST_F(BubbleFrameViewTest, GetUpdatedWindowBoundsDontTryMirror) {
 TEST_F(BubbleFrameViewTest, GetUpdatedWindowBoundsCenterArrows) {
   TestBubbleFrameView frame(this);
   gfx::Rect window_bounds;
+  // Bubbles have a thicker shadow on the bottom in MD.
+  // Match definition of kLargeShadowVerticalOffset in bubble_border.cc.
+  const int kLargeShadowVerticalOffset = UseMd() ? 2 : 0;
+
+  // Some of these tests may go away once --secondary-ui-md becomes the
+  // default. Under Material Design mode, the BubbleBorder doesn't support all
+  // "arrow" positions. If this changes, then the tests should be updated or
+  // added for MD mode.
 
   // Test that the bubble displays normally when it fits.
-  frame.bubble_border()->set_arrow(BubbleBorder::TOP_CENTER);
-  window_bounds = frame.GetUpdatedWindowBounds(
-      gfx::Rect(500, 100, 50, 50),  // |anchor_rect|
-      gfx::Size(500, 500),          // |client_size|
-      true);                        // |adjust_if_offscreen|
-  EXPECT_EQ(BubbleBorder::TOP_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.x() + window_bounds.width() / 2, 525);
+  if (!UseMd()) {  // TOP_CENTER isn't supported by the bubble_border() in MD.
+    frame.bubble_border()->set_arrow(BubbleBorder::TOP_CENTER);
+    window_bounds = frame.GetUpdatedWindowBounds(
+        gfx::Rect(500, 100, 50, 50),  // |anchor_rect|
+        gfx::Size(500, 500),          // |client_size|
+        true);                        // |adjust_if_offscreen|
+    EXPECT_EQ(BubbleBorder::TOP_CENTER, frame.bubble_border()->arrow());
+    EXPECT_EQ(window_bounds.x() + window_bounds.width() / 2, 525);
+  }
 
   frame.bubble_border()->set_arrow(BubbleBorder::BOTTOM_CENTER);
   window_bounds = frame.GetUpdatedWindowBounds(
@@ -369,7 +399,8 @@ TEST_F(BubbleFrameViewTest, GetUpdatedWindowBoundsCenterArrows) {
       gfx::Size(500, 500),          // |client_size|
       true);                        // |adjust_if_offscreen|
   EXPECT_EQ(BubbleBorder::LEFT_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.y() + window_bounds.height() / 2, 425);
+  EXPECT_EQ(window_bounds.y() + window_bounds.height() / 2,
+            425 + kLargeShadowVerticalOffset);
 
   frame.bubble_border()->set_arrow(BubbleBorder::RIGHT_CENTER);
   window_bounds = frame.GetUpdatedWindowBounds(
@@ -377,18 +408,22 @@ TEST_F(BubbleFrameViewTest, GetUpdatedWindowBoundsCenterArrows) {
       gfx::Size(500, 500),          // |client_size|
       true);                        // |adjust_if_offscreen|
   EXPECT_EQ(BubbleBorder::RIGHT_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.y() + window_bounds.height() / 2, 425);
+  EXPECT_EQ(window_bounds.y() + window_bounds.height() / 2,
+            425 + kLargeShadowVerticalOffset);
 
   // Test bubble not fitting left screen edge.
-  frame.bubble_border()->set_arrow(BubbleBorder::TOP_CENTER);
-  window_bounds = frame.GetUpdatedWindowBounds(
-      gfx::Rect(100, 100, 50, 50),  // |anchor_rect|
-      gfx::Size(500, 500),          // |client_size|
-      true);                        // |adjust_if_offscreen|
-  EXPECT_EQ(BubbleBorder::TOP_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.x(), 0);
-  EXPECT_EQ(window_bounds.x() +
-            frame.bubble_border()->GetArrowOffset(window_bounds.size()), 125);
+  if (!UseMd()) {  // TOP_CENTER isn't supported by the bubble_border() in MD.
+    frame.bubble_border()->set_arrow(BubbleBorder::TOP_CENTER);
+    window_bounds = frame.GetUpdatedWindowBounds(
+        gfx::Rect(100, 100, 50, 50),  // |anchor_rect|
+        gfx::Size(500, 500),          // |client_size|
+        true);                        // |adjust_if_offscreen|
+    EXPECT_EQ(BubbleBorder::TOP_CENTER, frame.bubble_border()->arrow());
+    EXPECT_EQ(window_bounds.x(), 0);
+    EXPECT_EQ(window_bounds.x() +
+                  frame.bubble_border()->GetArrowOffset(window_bounds.size()),
+              125);
+  }
 
   frame.bubble_border()->set_arrow(BubbleBorder::BOTTOM_CENTER);
   window_bounds = frame.GetUpdatedWindowBounds(
@@ -397,19 +432,25 @@ TEST_F(BubbleFrameViewTest, GetUpdatedWindowBoundsCenterArrows) {
       true);                        // |adjust_if_offscreen|
   EXPECT_EQ(BubbleBorder::BOTTOM_CENTER, frame.bubble_border()->arrow());
   EXPECT_EQ(window_bounds.x(), 0);
-  EXPECT_EQ(window_bounds.x() +
-            frame.bubble_border()->GetArrowOffset(window_bounds.size()), 125);
+  if (!UseMd()) {  // There is no arrow offset in MD mode.
+    EXPECT_EQ(window_bounds.x() +
+                  frame.bubble_border()->GetArrowOffset(window_bounds.size()),
+              125);
+  }
 
   // Test bubble not fitting right screen edge.
-  frame.bubble_border()->set_arrow(BubbleBorder::TOP_CENTER);
-  window_bounds = frame.GetUpdatedWindowBounds(
-      gfx::Rect(900, 100, 50, 50),  // |anchor_rect|
-      gfx::Size(500, 500),          // |client_size|
-      true);                        // |adjust_if_offscreen|
-  EXPECT_EQ(BubbleBorder::TOP_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.right(), 1000);
-  EXPECT_EQ(window_bounds.x() +
-            frame.bubble_border()->GetArrowOffset(window_bounds.size()), 925);
+  if (!UseMd()) {  // TOP_CENTER isn't supported by the bubble_border() in MD.
+    frame.bubble_border()->set_arrow(BubbleBorder::TOP_CENTER);
+    window_bounds = frame.GetUpdatedWindowBounds(
+        gfx::Rect(900, 100, 50, 50),  // |anchor_rect|
+        gfx::Size(500, 500),          // |client_size|
+        true);                        // |adjust_if_offscreen|
+    EXPECT_EQ(BubbleBorder::TOP_CENTER, frame.bubble_border()->arrow());
+    EXPECT_EQ(window_bounds.right(), 1000);
+    EXPECT_EQ(window_bounds.x() +
+                  frame.bubble_border()->GetArrowOffset(window_bounds.size()),
+              925);
+  }
 
   frame.bubble_border()->set_arrow(BubbleBorder::BOTTOM_CENTER);
   window_bounds = frame.GetUpdatedWindowBounds(
@@ -418,53 +459,64 @@ TEST_F(BubbleFrameViewTest, GetUpdatedWindowBoundsCenterArrows) {
       true);                        // |adjust_if_offscreen|
   EXPECT_EQ(BubbleBorder::BOTTOM_CENTER, frame.bubble_border()->arrow());
   EXPECT_EQ(window_bounds.right(), 1000);
-  EXPECT_EQ(window_bounds.x() +
-            frame.bubble_border()->GetArrowOffset(window_bounds.size()), 925);
+  if (!UseMd()) {  // There is no arrow offset in MD mode.
+    EXPECT_EQ(window_bounds.x() +
+                  frame.bubble_border()->GetArrowOffset(window_bounds.size()),
+              925);
+  }
 
   // Test bubble not fitting top screen edge.
-  frame.bubble_border()->set_arrow(BubbleBorder::LEFT_CENTER);
-  window_bounds = frame.GetUpdatedWindowBounds(
-      gfx::Rect(100, 100, 50, 50),  // |anchor_rect|
-      gfx::Size(500, 500),          // |client_size|
-      true);                        // |adjust_if_offscreen|
-  EXPECT_EQ(BubbleBorder::LEFT_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.y(), 0);
-  EXPECT_EQ(window_bounds.y() +
-            frame.bubble_border()->GetArrowOffset(window_bounds.size()), 125);
+  if (!UseMd()) {  // Moving the bubble by setting the arrow offset doesn't work
+                   // in MD mode since there is no arrow displayed.
+    frame.bubble_border()->set_arrow(BubbleBorder::LEFT_CENTER);
+    window_bounds = frame.GetUpdatedWindowBounds(
+        gfx::Rect(100, 100, 50, 50),  // |anchor_rect|
+        gfx::Size(500, 500),          // |client_size|
+        true);                        // |adjust_if_offscreen|
+    EXPECT_EQ(BubbleBorder::LEFT_CENTER, frame.bubble_border()->arrow());
+    EXPECT_EQ(window_bounds.y(), 0);
+    EXPECT_EQ(window_bounds.y() +
+                  frame.bubble_border()->GetArrowOffset(window_bounds.size()),
+              125);
 
-  frame.bubble_border()->set_arrow(BubbleBorder::RIGHT_CENTER);
-  window_bounds = frame.GetUpdatedWindowBounds(
-      gfx::Rect(900, 100, 50, 50),  // |anchor_rect|
-      gfx::Size(500, 500),          // |client_size|
-      true);                        // |adjust_if_offscreen|
-  EXPECT_EQ(BubbleBorder::RIGHT_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.y(), 0);
-  EXPECT_EQ(window_bounds.y() +
-            frame.bubble_border()->GetArrowOffset(window_bounds.size()), 125);
+    frame.bubble_border()->set_arrow(BubbleBorder::RIGHT_CENTER);
+    window_bounds = frame.GetUpdatedWindowBounds(
+        gfx::Rect(900, 100, 50, 50),  // |anchor_rect|
+        gfx::Size(500, 500),          // |client_size|
+        true);                        // |adjust_if_offscreen|
+    EXPECT_EQ(BubbleBorder::RIGHT_CENTER, frame.bubble_border()->arrow());
+    EXPECT_EQ(window_bounds.y(), 0);
+    EXPECT_EQ(window_bounds.y() +
+                  frame.bubble_border()->GetArrowOffset(window_bounds.size()),
+              125);
 
-  // Test bubble not fitting bottom screen edge.
-  frame.bubble_border()->set_arrow(BubbleBorder::LEFT_CENTER);
-  window_bounds = frame.GetUpdatedWindowBounds(
-      gfx::Rect(100, 900, 50, 50),  // |anchor_rect|
-      gfx::Size(500, 500),          // |client_size|
-      true);                        // |adjust_if_offscreen|
-  EXPECT_EQ(BubbleBorder::LEFT_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.bottom(), 1000);
-  EXPECT_EQ(window_bounds.y() +
-            frame.bubble_border()->GetArrowOffset(window_bounds.size()), 925);
+    // Test bubble not fitting bottom screen edge.
+    frame.bubble_border()->set_arrow(BubbleBorder::LEFT_CENTER);
+    window_bounds = frame.GetUpdatedWindowBounds(
+        gfx::Rect(100, 900, 50, 50),  // |anchor_rect|
+        gfx::Size(500, 500),          // |client_size|
+        true);                        // |adjust_if_offscreen|
+    EXPECT_EQ(BubbleBorder::LEFT_CENTER, frame.bubble_border()->arrow());
+    EXPECT_EQ(window_bounds.bottom(), 1000);
+    EXPECT_EQ(window_bounds.y() +
+                  frame.bubble_border()->GetArrowOffset(window_bounds.size()),
+              925);
 
-  frame.bubble_border()->set_arrow(BubbleBorder::RIGHT_CENTER);
-  window_bounds = frame.GetUpdatedWindowBounds(
-      gfx::Rect(900, 900, 50, 50),  // |anchor_rect|
-      gfx::Size(500, 500),          // |client_size|
-      true);                        // |adjust_if_offscreen|
-  EXPECT_EQ(BubbleBorder::RIGHT_CENTER, frame.bubble_border()->arrow());
-  EXPECT_EQ(window_bounds.bottom(), 1000);
-  EXPECT_EQ(window_bounds.y() +
-            frame.bubble_border()->GetArrowOffset(window_bounds.size()), 925);
+    frame.bubble_border()->set_arrow(BubbleBorder::RIGHT_CENTER);
+    window_bounds = frame.GetUpdatedWindowBounds(
+        gfx::Rect(900, 900, 50, 50),  // |anchor_rect|
+        gfx::Size(500, 500),          // |client_size|
+        true);                        // |adjust_if_offscreen|
+    EXPECT_EQ(BubbleBorder::RIGHT_CENTER, frame.bubble_border()->arrow());
+    EXPECT_EQ(window_bounds.bottom(), 1000);
+    EXPECT_EQ(window_bounds.y() +
+                  frame.bubble_border()->GetArrowOffset(window_bounds.size()),
+              925);
+  }
 }
 
 TEST_F(BubbleFrameViewTest, GetPreferredSize) {
+  // Test border/insets.
   TestBubbleFrameView frame(this);
   gfx::Rect preferred_rect(frame.GetPreferredSize());
   // Expect that a border has been added to the preferred size.
@@ -473,6 +525,29 @@ TEST_F(BubbleFrameViewTest, GetPreferredSize) {
   gfx::Size expected_size(kPreferredClientWidth + kExpectedAdditionalWidth,
                           kPreferredClientHeight + kExpectedAdditionalHeight);
   EXPECT_EQ(expected_size, preferred_rect.size());
+}
+
+TEST_F(BubbleFrameViewTest, GetPreferredSizeWithFootnote) {
+  // Test footnote view: adding a footnote should increase the preferred size,
+  // but only when the footnote is visible.
+  TestBubbleFrameView frame(this);
+
+  constexpr int kFootnoteHeight = 20;
+  const gfx::Size no_footnote_size = frame.GetPreferredSize();
+  View* footnote = new StaticSizedView(gfx::Size(10, kFootnoteHeight));
+  footnote->SetVisible(false);
+  frame.SetFootnoteView(footnote);
+  EXPECT_EQ(no_footnote_size, frame.GetPreferredSize());  // No change.
+
+  footnote->SetVisible(true);
+  gfx::Size with_footnote_size = no_footnote_size;
+  constexpr int kFootnoteTopBorderThickness = 1;
+  with_footnote_size.Enlarge(0, kFootnoteHeight + kFootnoteTopBorderThickness +
+                                    frame.content_margins().height());
+  EXPECT_EQ(with_footnote_size, frame.GetPreferredSize());
+
+  footnote->SetVisible(false);
+  EXPECT_EQ(no_footnote_size, frame.GetPreferredSize());
 }
 
 TEST_F(BubbleFrameViewTest, GetMinimumSize) {
@@ -514,11 +589,26 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
   }
   ~TestBubbleDialogDelegateView() override {}
 
-  using BubbleDialogDelegateView::SetAnchorView;
+  void ChangeTitle(const base::string16& title) {
+    title_ = title;
+    // Note UpdateWindowTitle() always does a layout, which will be invalid if
+    // the Widget needs to change size. But also SizeToContents() _only_ does a
+    // layout if the size is actually changing.
+    GetWidget()->UpdateWindowTitle();
+    SizeToContents();
+  }
 
   void set_override_snap(bool value) { override_snap_ = value; }
+  void set_icon(const gfx::ImageSkia& icon) { icon_ = icon; }
 
   // BubbleDialogDelegateView:
+  using BubbleDialogDelegateView::SetAnchorView;
+  using BubbleDialogDelegateView::SizeToContents;
+  gfx::ImageSkia GetWindowIcon() override { return icon_; }
+  bool ShouldShowWindowIcon() const override { return !icon_.isNull(); }
+  base::string16 GetWindowTitle() const override { return title_; }
+  bool ShouldShowWindowTitle() const override { return !title_.empty(); }
+
   void DeleteDelegate() override {
     // This delegate is owned by the test case itself, so it should not delete
     // itself here.
@@ -528,14 +618,38 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
     return override_snap_.value_or(
         BubbleDialogDelegateView::ShouldSnapFrameWidth());
   }
+  gfx::Size GetMinimumSize() const override { return gfx::Size(); }
   gfx::Size CalculatePreferredSize() const override {
     return gfx::Size(200, 200);
   }
 
+  BubbleFrameView* GetBubbleFrameView() const {
+    return static_cast<BubbleFrameView*>(
+        GetWidget()->non_client_view()->frame_view());
+  }
+
  private:
+  gfx::ImageSkia icon_;
+  base::string16 title_;
   base::Optional<bool> override_snap_;
 
   DISALLOW_COPY_AND_ASSIGN(TestBubbleDialogDelegateView);
+};
+
+class TestAnchor {
+ public:
+  explicit TestAnchor(Widget::InitParams params) {
+    params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+    widget_.Init(params);
+    widget_.Show();
+  }
+
+  Widget& widget() { return widget_; }
+
+ private:
+  Widget widget_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestAnchor);
 };
 
 }  // namespace
@@ -545,14 +659,9 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
 TEST_F(BubbleFrameViewTest, WidthSnaps) {
   test::TestLayoutProvider provider;
   TestBubbleDialogDelegateView delegate;
+  TestAnchor anchor(CreateParams(Widget::InitParams::TYPE_WINDOW));
 
-  Widget anchor;
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  anchor.Init(params);
-  anchor.Show();
-
-  delegate.SetAnchorView(anchor.GetContentsView());
+  delegate.SetAnchorView(anchor.widget().GetContentsView());
   delegate.set_margins(gfx::Insets());
 
   Widget* w0 = BubbleDialogDelegateView::CreateBubble(&delegate);
@@ -578,6 +687,110 @@ TEST_F(BubbleFrameViewTest, WidthSnaps) {
   EXPECT_EQ(delegate.GetPreferredSize().width(),
             w2->GetWindowBoundsInScreen().width());
   w2->CloseNow();
+}
+
+// Tests edge cases when the frame's title view starts to wrap text. This is to
+// ensure that the calculations BubbleFrameView does to determine the Widget
+// size for a given client view are consistent with the eventual size that the
+// client view takes after Layout().
+TEST_F(BubbleFrameViewTest, LayoutEdgeCases) {
+  test::TestLayoutProvider provider;
+  TestBubbleDialogDelegateView delegate;
+  TestAnchor anchor(CreateParams(Widget::InitParams::TYPE_WINDOW));
+  delegate.SetAnchorView(anchor.widget().GetContentsView());
+
+  Widget* bubble = BubbleDialogDelegateView::CreateBubble(&delegate);
+  bubble->Show();
+
+  // Even though the bubble has default margins, the dialog view should have
+  // been given its preferred size.
+  EXPECT_FALSE(delegate.margins().IsEmpty());
+  EXPECT_EQ(delegate.size(), delegate.GetPreferredSize());
+
+  // Starting with a short title.
+  base::string16 title(1, 'i');
+  delegate.ChangeTitle(title);
+  const int min_bubble_height = bubble->GetWindowBoundsInScreen().height();
+  EXPECT_LT(delegate.GetPreferredSize().height(), min_bubble_height);
+
+  // Grow the title incrementally until word wrap is required. There should
+  // never be a point where the BubbleFrameView over- or under-estimates the
+  // size required for the title. If it did, it would cause SizeToContents() to
+  // Widget size requiring the subsequent Layout() to fill the remaining client
+  // area with something other than |delegate|'s preferred size.
+  while (bubble->GetWindowBoundsInScreen().height() == min_bubble_height) {
+    title += ' ';
+    title += 'i';
+    delegate.ChangeTitle(title);
+    EXPECT_EQ(delegate.GetPreferredSize(), delegate.size()) << title;
+  }
+
+  // Sanity check that something interesting happened. The bubble should have
+  // grown by "a line" for the wrapped title, and the title should have reached
+  // a length that would have likely caused word wrap. A typical result would be
+  // a +17-20 change in height and title length of 53 characters.
+  const int two_line_height = bubble->GetWindowBoundsInScreen().height();
+  EXPECT_LT(12, two_line_height - min_bubble_height);
+  EXPECT_GT(25, two_line_height - min_bubble_height);
+  EXPECT_LT(30u, title.size());
+  EXPECT_GT(80u, title.size());
+
+  // Now add dialog snapping.
+  provider.SetSnappedDialogWidth(300);
+  delegate.SizeToContents();
+
+  // Height should go back to |min_bubble_height| since the window is wider:
+  // word wrapping should no longer happen.
+  EXPECT_EQ(min_bubble_height, bubble->GetWindowBoundsInScreen().height());
+  EXPECT_EQ(300, bubble->GetWindowBoundsInScreen().width());
+
+  // Now we are allowed to diverge from the client view width, but not height.
+  EXPECT_EQ(delegate.GetPreferredSize().height(), delegate.height());
+  EXPECT_LT(delegate.GetPreferredSize().width(), delegate.width());
+  EXPECT_GT(300, delegate.width());  // Greater, since there are margins.
+
+  const gfx::Size snapped_size = delegate.size();
+  const size_t old_title_size = title.size();
+
+  // Grow the title again with width snapping until word wrapping occurs.
+  while (bubble->GetWindowBoundsInScreen().height() == min_bubble_height) {
+    title += ' ';
+    title += 'i';
+    delegate.ChangeTitle(title);
+    EXPECT_EQ(snapped_size, delegate.size()) << title;
+  }
+  // Change to the height should have been the same as before. Title should
+  // have grown about 50%.
+  EXPECT_EQ(two_line_height, bubble->GetWindowBoundsInScreen().height());
+  EXPECT_LT(15u, title.size() - old_title_size);
+  EXPECT_GT(40u, title.size() - old_title_size);
+
+  // When |anchor| goes out of scope it should take |bubble| with it.
+}
+
+TEST_F(BubbleFrameViewTest, LayoutWithIcon) {
+  TestBubbleDialogDelegateView delegate;
+  TestAnchor anchor(CreateParams(Widget::InitParams::TYPE_WINDOW));
+  delegate.SetAnchorView(anchor.widget().GetContentsView());
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(20, 80);
+  delegate.set_icon(gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
+
+  Widget* widget = BubbleDialogDelegateView::CreateBubble(&delegate);
+  widget->Show();
+
+  delegate.ChangeTitle(base::ASCIIToUTF16("test title"));
+  BubbleFrameView* frame = delegate.GetBubbleFrameView();
+  View* icon = frame->title_icon_;
+  View* title = frame->title();
+
+  // There should be equal amounts of space on the left and right of the icon.
+  EXPECT_EQ(icon->x() * 2 + icon->width(), title->x());
+
+  // The title should be vertically centered relative to the icon.
+  EXPECT_LT(title->height(), icon->height());
+  const int title_offset_y = (icon->height() - title->height()) / 2;
+  EXPECT_EQ(icon->y() + title_offset_y, title->y());
 }
 
 }  // namespace views

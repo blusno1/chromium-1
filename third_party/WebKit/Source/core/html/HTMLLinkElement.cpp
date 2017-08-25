@@ -53,7 +53,7 @@ inline HTMLLinkElement::HTMLLinkElement(Document& document,
     : HTMLElement(linkTag, document),
       link_loader_(LinkLoader::Create(this)),
       sizes_(DOMTokenList::Create(*this, HTMLNames::sizesAttr)),
-      rel_list_(this, RelList::Create(this)),
+      rel_list_(RelList::Create(this)),
       created_by_parser_(created_by_parser) {}
 
 HTMLLinkElement* HTMLLinkElement::Create(Document& document,
@@ -118,7 +118,10 @@ void HTMLLinkElement::ParseAttribute(
 }
 
 bool HTMLLinkElement::ShouldLoadLink() {
-  return IsInDocumentTree() || (isConnected() && rel_attribute_.IsStyleSheet());
+  const KURL& href = GetNonEmptyURLAttribute(hrefAttr);
+  return (IsInDocumentTree() ||
+          (isConnected() && rel_attribute_.IsStyleSheet())) &&
+         !href.PotentiallyDanglingMarkup();
 }
 
 bool HTMLLinkElement::LoadLink(const String& type,
@@ -136,6 +139,7 @@ bool HTMLLinkElement::LoadLink(const String& type,
 LinkResource* HTMLLinkElement::LinkResourceToProcess() {
   if (!ShouldLoadLink()) {
     DCHECK(!GetLinkStyle() || !GetLinkStyle()->HasSheet());
+    // TODO(yoav): Ideally, the element's error event would be fired here.
     return nullptr;
   }
 
@@ -193,8 +197,7 @@ Node::InsertionNotificationRequest HTMLLinkElement::InsertedInto(
   if (!insertion_point->isConnected())
     return kInsertionDone;
   DCHECK(isConnected());
-  if (!ShouldLoadLink()) {
-    DCHECK(IsInShadowTree());
+  if (!ShouldLoadLink() && IsInShadowTree()) {
     String message = "HTML element <link> is ignored in shadow tree.";
     GetDocument().AddConsoleMessage(ConsoleMessage::Create(
         kJSMessageSource, kWarningMessageLevel, message));

@@ -5,18 +5,16 @@
 #import <EarlGrey/EarlGrey.h>
 #import <XCTest/XCTest.h>
 
-#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
-#import "ios/chrome/browser/ui/settings/accounts_collection_view_controller.h"
-#import "ios/chrome/browser/ui/settings/import_data_collection_view_controller.h"
-#import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -32,6 +30,7 @@
 #endif
 
 using chrome_test_util::NavigationBarDoneButton;
+using chrome_test_util::SecondarySignInButton;
 
 namespace {
 
@@ -62,16 +61,6 @@ void SetEarlGreySynchronizationEnabled(BOOL enabled) {
       forConfigKey:kGREYConfigKeySynchronizationEnabled];
 }
 
-// Taps the view with acessibility identifier |accessibility_id|.
-void TapViewWithAccessibilityId(NSString* accessiblity_id) {
-  // grey_sufficientlyVisible() is necessary because reloading a cell in a
-  // collection view might duplicate it (with the old one being hidden but
-  // EarlGrey can find it).
-  id<GREYMatcher> matcher = grey_allOf(grey_accessibilityID(accessiblity_id),
-                                       grey_sufficientlyVisible(), nil);
-  [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
-}
-
 // Taps the button with accessibility label |label|.
 void TapButtonWithAccessibilityLabel(NSString* label) {
   id<GREYMatcher> matcher =
@@ -84,13 +73,6 @@ void TapButtonWithLabelId(int message_id) {
   id<GREYMatcher> matcher =
       chrome_test_util::ButtonWithAccessibilityLabelId(message_id);
   [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
-}
-
-// Opens the signin screen from the settings page. Must be called from the NTP.
-// User must not be signed in.
-void OpenSignInFromSettings() {
-  [ChromeEarlGreyUI openSettingsMenu];
-  TapViewWithAccessibilityId(kSettingsSignInCellId);
 }
 
 // Wait until |matcher| is accessible (not nil)
@@ -131,26 +113,15 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 // Tests that opening the sign-in screen from the Settings and signing in works
 // correctly when there is already an identity on the device.
 - (void)testSignInOneUser {
-  // TODO(crbug.com/747444): Re-enable this test on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
-
   // Set up a fake identity.
   ChromeIdentity* identity = GetFakeIdentity1();
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
-  // Open the sign in screen.
-  OpenSignInFromSettings();
-
-  // Select the user.
-  TapButtonWithAccessibilityLabel(identity.userEmail);
-
-  // Sign in and confirm.
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON);
-
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity.userEmail];
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
   [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 
@@ -161,11 +132,6 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 // Tests signing in with one account, switching sync account to a second and
 // choosing to keep the browsing data separate during the switch.
 - (void)testSignInSwitchAccountsAndKeepDataSeparate {
-  // TODO(crbug.com/747444): Re-enable this test on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
-
   // Set up the fake identities.
   ios::FakeChromeIdentityService* identity_service =
       ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
@@ -174,26 +140,24 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   identity_service->AddIdentity(identity1);
   identity_service->AddIdentity(identity2);
 
-  // Sign in to |identity1|.
-  OpenSignInFromSettings();
-  TapButtonWithAccessibilityLabel(identity1.userEmail);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON);
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity1.userEmail];
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
   AssertAuthenticatedIdentityInActiveProfile(identity1);
 
   // Open accounts settings, then sync settings.
-  TapViewWithAccessibilityId(kSettingsAccountCellId);
-  TapViewWithAccessibilityId(kSettingsAccountsSyncCellId);
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::SettingsAccountButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::AccountsSyncButton()]
+      performAction:grey_tap()];
 
   // Switch Sync account to |identity2|.
   TapButtonWithAccessibilityLabel(identity2.userEmail);
-
-  // Keep data separate, with synchronization off due to an infinite spinner.
-  SetEarlGreySynchronizationEnabled(NO);
-  WaitForMatcher(grey_accessibilityID(kImportDataKeepSeparateCellId));
-  TapViewWithAccessibilityId(kImportDataKeepSeparateCellId);
+  [[EarlGrey selectElementWithMatcher:
+                 chrome_test_util::SettingsImportDataKeepSeparateButton()]
+      performAction:grey_tap()];
   TapButtonWithLabelId(IDS_IOS_OPTIONS_IMPORT_DATA_CONTINUE_BUTTON);
-  SetEarlGreySynchronizationEnabled(YES);
 
   // Check the signed-in user did change.
   AssertAuthenticatedIdentityInActiveProfile(identity2);
@@ -205,11 +169,6 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 // Tests signing in with one account, switching sync account to a second and
 // choosing to import the browsing data during the switch.
 - (void)testSignInSwitchAccountsAndImportData {
-  // TODO(crbug.com/747444): Re-enable this test on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
-
   // Set up the fake identities.
   ios::FakeChromeIdentityService* identity_service =
       ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
@@ -219,25 +178,24 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   identity_service->AddIdentity(identity2);
 
   // Sign in to |identity1|.
-  OpenSignInFromSettings();
-  TapButtonWithAccessibilityLabel(identity1.userEmail);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON);
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity1.userEmail];
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
   AssertAuthenticatedIdentityInActiveProfile(identity1);
 
   // Open accounts settings, then sync settings.
-  TapViewWithAccessibilityId(kSettingsAccountCellId);
-  TapViewWithAccessibilityId(kSettingsAccountsSyncCellId);
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::SettingsAccountButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::AccountsSyncButton()]
+      performAction:grey_tap()];
 
   // Switch Sync account to |identity2|.
   TapButtonWithAccessibilityLabel(identity2.userEmail);
-
-  // Import data, with synchronization off due to an infinite spinner.
-  SetEarlGreySynchronizationEnabled(NO);
-  WaitForMatcher(grey_accessibilityID(kImportDataImportCellId));
-  TapViewWithAccessibilityId(kImportDataImportCellId);
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          SettingsImportDataImportButton()]
+      performAction:grey_tap()];
   TapButtonWithLabelId(IDS_IOS_OPTIONS_IMPORT_DATA_CONTINUE_BUTTON);
-  SetEarlGreySynchronizationEnabled(YES);
 
   // Check the signed-in user did change.
   AssertAuthenticatedIdentityInActiveProfile(identity2);
@@ -249,15 +207,6 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 // Tests that switching from a managed account to a non-managed account works
 // correctly and displays the expected warnings.
 - (void)testSignInSwitchManagedAccount {
-  // TODO(crbug.com/747444): Re-enable this test on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
-
-  if (!experimental_flags::IsMDMIntegrationEnabled()) {
-    EARL_GREY_TEST_SKIPPED(@"Only enabled with MDM integration.");
-  }
-
   // Set up the fake identities.
   ios::FakeChromeIdentityService* identity_service =
       ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
@@ -266,10 +215,9 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   identity_service->AddIdentity(managed_identity);
   identity_service->AddIdentity(identity);
 
-  // Sign in to |managed_identity|.
-  OpenSignInFromSettings();
-  TapButtonWithAccessibilityLabel(managed_identity.userEmail);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:managed_identity.userEmail];
 
   // Accept warning for signing into a managed identity, with synchronization
   // off due to an infinite spinner.
@@ -279,16 +227,17 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   TapButtonWithLabelId(IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON);
   SetEarlGreySynchronizationEnabled(YES);
 
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON);
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
   AssertAuthenticatedIdentityInActiveProfile(managed_identity);
 
   // Switch Sync account to |identity|.
-  TapViewWithAccessibilityId(kSettingsAccountCellId);
-  TapViewWithAccessibilityId(kSettingsAccountsSyncCellId);
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::SettingsAccountButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::AccountsSyncButton()]
+      performAction:grey_tap()];
+
   TapButtonWithAccessibilityLabel(identity.userEmail);
 
-  // Accept warning for signout out of a managed identity, with synchronization
-  // off due to an infinite spinner.
   SetEarlGreySynchronizationEnabled(NO);
   WaitForMatcher(chrome_test_util::ButtonWithAccessibilityLabelId(
       IDS_IOS_MANAGED_SWITCH_ACCEPT_BUTTON));
@@ -303,36 +252,31 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 
 // Tests that signing out from the Settings works correctly.
 - (void)testSignInDisconnectFromChrome {
-  // TODO(crbug.com/747444): Re-enable this test on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
-
   ChromeIdentity* identity = GetFakeIdentity1();
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
   // Sign in to |identity|.
-  OpenSignInFromSettings();
-  TapButtonWithAccessibilityLabel(identity.userEmail);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON);
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity.userEmail];
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
   AssertAuthenticatedIdentityInActiveProfile(identity);
 
   // Go to Accounts Settings and tap the sign out button.
-  TapViewWithAccessibilityId(kSettingsAccountCellId);
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::SettingsAccountButton()]
+      performAction:grey_tap()];
+
   const CGFloat scroll_displacement = 100.0;
-  [[[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                           kSettingsAccountsSignoutCellId)]
+  [[[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   chrome_test_util::SignOutAccountsButton(),
+                                   grey_interactable(), nil)]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
                                                   scroll_displacement)
-      onElementWithMatcher:grey_accessibilityID(kSettingsAccountsId)]
+      onElementWithMatcher:chrome_test_util::SettingsAccountsCollectionView()]
       performAction:grey_tap()];
   TapButtonWithLabelId(IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE);
-
-  // Check that the settings home screen is shown.
-  WaitForMatcher(grey_accessibilityID(kSettingsSignInCellId));
-
   [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 
@@ -343,46 +287,38 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 // Tests that signing out of a managed account from the Settings works
 // correctly.
 - (void)testSignInDisconnectFromChromeManaged {
-  // TODO(crbug.com/747444): Re-enable this test on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
-
-  if (!experimental_flags::IsMDMIntegrationEnabled()) {
-    EARL_GREY_TEST_SKIPPED(@"Only enabled with MDM integration.");
-  }
-
   ChromeIdentity* identity = GetFakeManagedIdentity();
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
-  // Sign in to |identity|.
-  OpenSignInFromSettings();
-  TapButtonWithAccessibilityLabel(identity.userEmail);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity.userEmail];
+
   // Synchronization off due to an infinite spinner.
   SetEarlGreySynchronizationEnabled(NO);
   WaitForMatcher(chrome_test_util::ButtonWithAccessibilityLabelId(
       IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON));
   TapButtonWithLabelId(IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON);
   SetEarlGreySynchronizationEnabled(YES);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON);
+
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
   AssertAuthenticatedIdentityInActiveProfile(identity);
 
   // Go to Accounts Settings and tap the sign out button.
-  TapViewWithAccessibilityId(kSettingsAccountCellId);
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::SettingsAccountButton()]
+      performAction:grey_tap()];
+
   const CGFloat scroll_displacement = 100.0;
-  [[[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                           kSettingsAccountsSignoutCellId)]
+  [[[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   chrome_test_util::SignOutAccountsButton(),
+                                   grey_interactable(), nil)]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
                                                   scroll_displacement)
-      onElementWithMatcher:grey_accessibilityID(kSettingsAccountsId)]
+      onElementWithMatcher:chrome_test_util::SettingsAccountsCollectionView()]
       performAction:grey_tap()];
   TapButtonWithLabelId(IDS_IOS_MANAGED_DISCONNECT_DIALOG_ACCEPT);
-
-  // Check that the settings home screen is shown.
-  WaitForMatcher(grey_accessibilityID(kSettingsSignInCellId));
-
   [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
 
@@ -398,15 +334,13 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
-  // Sign in to |identity|.
-  OpenSignInFromSettings();
-  TapButtonWithAccessibilityLabel(identity.userEmail);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity.userEmail];
 
   // Tap Settings link.
   id<GREYMatcher> settings_link_matcher = grey_allOf(
       grey_accessibilityLabel(@"Settings"), grey_sufficientlyVisible(), nil);
-  WaitForMatcher(settings_link_matcher);
   [[EarlGrey selectElementWithMatcher:settings_link_matcher]
       performAction:grey_tap()];
 
@@ -431,7 +365,8 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
-  OpenSignInFromSettings();
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
 
   // Open new tab to cancel sign-in.
   OpenUrlCommand* command =
@@ -440,7 +375,8 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
-  OpenSignInFromSettings();
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
   id<GREYMatcher> signin_matcher =
       chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_DESCRIPTION);
@@ -462,7 +398,8 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
-  OpenSignInFromSettings();
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
 
   // Open Add Account screen.
   id<GREYMatcher> add_account_matcher =
@@ -479,7 +416,8 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
-  OpenSignInFromSettings();
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
   id<GREYMatcher> signin_matcher =
       chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_DESCRIPTION);
@@ -496,11 +434,6 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 // that the authentication flow is correctly canceled and dismissed.
 // crbug.com/462202
 - (void)testSignInCancelAuthenticationFlow {
-  // TODO(crbug.com/747444): Re-enable this test on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
-
   // Set up the fake identities.
   ios::FakeChromeIdentityService* identity_service =
       ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
@@ -513,29 +446,30 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   // Syncing" dialog is shown during the second sign-in. This dialog will
   // effectively block the authentication flow, ensuring that the authentication
   // flow is always still running when the sign-in is being cancelled.
-  OpenSignInFromSettings();
-  TapButtonWithAccessibilityLabel(identity2.userEmail);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON);
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity2.userEmail];
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
   AssertAuthenticatedIdentityInActiveProfile(identity2);
 
   // Go to Accounts Settings and tap the sign out button.
-  TapViewWithAccessibilityId(kSettingsAccountCellId);
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::SettingsAccountButton()]
+      performAction:grey_tap()];
+
   const CGFloat scroll_displacement = 100.0;
-  [[[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                           kSettingsAccountsSignoutCellId)]
+  [[[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   chrome_test_util::SignOutAccountsButton(),
+                                   grey_interactable(), nil)]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
                                                   scroll_displacement)
-      onElementWithMatcher:grey_accessibilityID(kSettingsAccountsId)]
+      onElementWithMatcher:chrome_test_util::SettingsAccountsCollectionView()]
       performAction:grey_tap()];
   TapButtonWithLabelId(IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE);
   AssertAuthenticatedIdentityInActiveProfile(nil);
-
-  // Start sign-in with |identity1|.
-  WaitForMatcher(grey_accessibilityID(kSettingsSignInCellId));
-  TapViewWithAccessibilityId(kSettingsSignInCellId);
-  TapButtonWithAccessibilityLabel(identity1.userEmail);
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
+  [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
+      performAction:grey_tap()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:identity1.userEmail];
 
   // Open new tab to cancel sign-in.
   OpenUrlCommand* command =
@@ -544,7 +478,8 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
-  OpenSignInFromSettings();
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
   id<GREYMatcher> signin_matcher =
       chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_DESCRIPTION);
@@ -562,6 +497,10 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 // new tab. Ensures that the sign in screen is correctly dismissed.
 // Regression test for crbug.com/596029.
 - (void)testSignInCancelFromBookmarks {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    EARL_GREY_TEST_SKIPPED(@"Only enabled with old Bookmarks UI.");
+  }
   ChromeIdentity* identity = GetFakeIdentity1();
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
@@ -573,7 +512,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
       selectElementWithMatcher:grey_accessibilityID(kToolsMenuBookmarksId)]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
                                                   scroll_displacement)
-      onElementWithMatcher:grey_accessibilityID(kToolsMenuTableViewId)]
+      onElementWithMatcher:chrome_test_util::ToolsMenuView()]
       performAction:grey_tap()];
 
   if (!IsIPadIdiom()) {
@@ -589,8 +528,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
                  grey_descendant(grey_text(topLevelFolderTitle)), nil);
   [[EarlGrey selectElementWithMatcher:all_bookmarks_matcher]
       performAction:grey_tap()];
-
-  TapButtonWithLabelId(IDS_IOS_BOOKMARK_PROMO_SIGN_IN_BUTTON);
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
 
   // Assert sign-in screen was shown.
   id<GREYMatcher> signin_matcher =
@@ -611,7 +549,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
       selectElementWithMatcher:grey_accessibilityID(kToolsMenuBookmarksId)]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
                                                   scroll_displacement)
-      onElementWithMatcher:grey_accessibilityID(kToolsMenuTableViewId)]
+      onElementWithMatcher:chrome_test_util::ToolsMenuView()]
       performAction:grey_tap()];
   if (!IsIPadIdiom()) {
     [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Menu")]
@@ -619,13 +557,20 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   }
   [[EarlGrey selectElementWithMatcher:all_bookmarks_matcher]
       performAction:grey_tap()];
-  TapButtonWithLabelId(IDS_IOS_BOOKMARK_PROMO_SIGN_IN_BUTTON);
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
   [[EarlGrey selectElementWithMatcher:signin_matcher]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Close sign-in screen and Bookmarks.
   TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON);
-  if (!IsIPadIdiom()) {
+  if (IsIPadIdiom()) {
+    // Switch back to the Home Panel.  This is to prevent Bookmarks Panel, which
+    // has an infinite spinner, from appearing in the coming tests and causing
+    // timeouts.
+    [chrome_test_util::GetCurrentNewTabPageController()
+        selectPanel:NewTabPage::kHomePanel];
+    [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  } else {
     [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
         performAction:grey_tap()];
   }

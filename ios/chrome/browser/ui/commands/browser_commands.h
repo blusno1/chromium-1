@@ -7,15 +7,19 @@
 
 #import <Foundation/Foundation.h>
 
+#import "ios/chrome/browser/ui/commands/activity_service_commands.h"
+#import "ios/chrome/browser/ui/commands/history_popup_commands.h"
+#import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
+
 @class OpenNewTabCommand;
 @class ReadingListAddCommand;
-namespace web {
-class NavigationItem;
-}
 
 // Protocol for commands that will generally be handled by the "current tab",
 // which in practice is the BrowserViewController instance displaying the tab.
-@protocol BrowserCommands<NSObject>
+@protocol BrowserCommands<NSObject,
+                          ActivityServiceCommands,
+                          QRScannerCommands,
+                          TabHistoryPopupCommands>
 
 // Closes the current tab.
 - (void)closeCurrentTab;
@@ -32,9 +36,6 @@ class NavigationItem;
 // Reloads the current web page
 - (void)reload;
 
-// Shows the share sheet for the current page.
-- (void)sharePage;
-
 // Bookmarks the current page.
 - (void)bookmarkPage;
 
@@ -50,24 +51,25 @@ class NavigationItem;
 // Adds a page to the reading list using data in |command|.
 - (void)addToReadingList:(ReadingListAddCommand*)command;
 
-// Shows the QR scanner UI.
-- (void)showQRScanner;
-
-// Shows the tab history popup containing the tab's backward history.
-- (void)showTabHistoryPopupForBackwardHistory;
-
-// Shows the tab history popup containing the tab's forward history.
-- (void)showTabHistoryPopupForForwardHistory;
-
-// Navigate back/forward to the selected entry in the tab's history.
-- (void)navigateToHistoryItem:(const web::NavigationItem*)item;
-
 // Shows the Reading List UI.
 - (void)showReadingList;
 
-// Asks the active tab to enter into reader mode, presenting a streamlined view
-// of the current content.
-- (void)switchToReaderMode;
+// Preloads voice search on the current BVC.
+- (void)preloadVoiceSearch;
+
+// Closes all tabs.
+- (void)closeAllTabs;
+
+// Closes all incognito tabs.
+- (void)closeAllIncognitoTabs;
+
+#if !defined(NDEBUG)
+// Shows the source of the current page.
+- (void)viewSource;
+#endif
+
+// Shows the "rate this app" dialog.
+- (void)showRateThisAppDialog;
 
 @end
 

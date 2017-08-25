@@ -81,6 +81,11 @@ Polymer({
         /** @type {CrPictureListElement} */ (this.$.pictureList);
   },
 
+  /** Called when the screen is shown. */
+  focus: function() {
+    this.$.pictureList.setFocus();
+  },
+
   /**
    * @return {string}
    * @private
@@ -171,22 +176,12 @@ Polymer({
     announceAccessibleMessage(loadTimeData.getString(flipMessageId));
   },
 
-  /**
-   * Discard currently selected image. Selects the first default icon.
-   * Returns to the camera stream if the user had just taken a picture.
-   * @private
-   */
+  /** @private */
   onDiscardImage_: function() {
-    this.pictureList_.setOldImageUrl('');
-
-    chrome.send('discardPhoto');
-
-    // If the user has not chosen an image since opening the subpage and
-    // discards the current photo, select the first default image.
-    assert(this.defaultImages.length > 0);
-    this.sendSelectImage_(
-        CrPicture.SelectionTypes.DEFAULT, this.defaultImages[0].url);
-
+    this.pictureList_.setOldImageUrl(CrPicture.kDefaultImageUrl);
+    // Revert to profile image as we don't know what last used default image is.
+    this.sendSelectImage_(CrPicture.SelectionTypes.PROFILE, '');
+    chrome.send('discardPhoto');  // Plays 'SOUND_OBJECT_DELETE'.
     announceAccessibleMessage(this.i18n('photoDiscardAccessibleText'));
   },
 

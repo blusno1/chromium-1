@@ -4,10 +4,12 @@
 
 #include "chrome/browser/chromeos/net/tether_notification_presenter.h"
 
+#include "ash/system/system_notifier.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -15,6 +17,9 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icon_types.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification_types.h"
 #include "ui/message_center/notifier_settings.h"
@@ -54,11 +59,55 @@ int GetNormalizedSignalStrength(int signal_strength) {
   return std::min(std::max(normalized_signal_strength, 0), 4);
 }
 
-}  // namespace
+std::unique_ptr<message_center::Notification> CreateNotificationWithBadge(
+    const std::string& id,
+    const base::string16& title,
+    const base::string16& message,
+    const message_center::RichNotificationData& rich_notification_data,
+    int signal_strength,
+    const gfx::VectorIcon& badge) {
+  gfx::ImageSkia icon = gfx::CanvasImageSource::MakeImageSkia<
+      ash::network_icon::SignalStrengthImageSource>(
+      ash::network_icon::BARS, gfx::kGoogleBlue500, kTetherSignalIconSize,
+      GetNormalizedSignalStrength(signal_strength));
 
-// static
-constexpr const char TetherNotificationPresenter::kTetherNotifierId[] =
-    "cros_tether_notification_ids.notifier_id";
+  if (!badge.is_empty()) {
+    gfx::ImageSkia badge_icon = gfx::CreateVectorIcon(
+        badge, kTetherSignalIconSize.height(), gfx::kGoogleRed700);
+    icon = gfx::ImageSkiaOperations::CreateIconWithBadge(icon, badge_icon);
+  }
+
+  auto notification = base::MakeUnique<message_center::Notification>(
+      message_center::NotificationType::NOTIFICATION_TYPE_SIMPLE, id, title,
+      message, gfx::Image(icon), base::string16() /* display_source */,
+      GURL() /* origin_url */,
+      message_center::NotifierId(
+          message_center::NotifierId::NotifierType::SYSTEM_COMPONENT,
+          ash::system_notifier::kNotifierTether),
+      rich_notification_data, nullptr);
+  notification->SetSystemPriority();
+  return notification;
+}
+
+std::unique_ptr<message_center::Notification> CreateNotification(
+    const std::string& id,
+    const base::string16& title,
+    const base::string16& message,
+    const message_center::RichNotificationData& rich_notification_data,
+    int signal_strength) {
+  return CreateNotificationWithBadge(id, title, message, rich_notification_data,
+                                     signal_strength, gfx::VectorIcon());
+}
+
+std::unique_ptr<message_center::Notification>
+CreateNotificationWithMediumSignalStrengthIcon(const std::string& id,
+                                               const base::string16& title,
+                                               const base::string16& message) {
+  return CreateNotification(id, title, message, {} /* rich_notification_data */,
+                            kMediumSignalStrength);
+}
+
+}  // namespace
 
 // static
 constexpr const char TetherNotificationPresenter::kActiveHostNotificationId[] =
@@ -82,43 +131,9 @@ constexpr const char
 // static
 constexpr const char* const
     TetherNotificationPresenter::kIdsWhichOpenTetherSettingsOnClick[] = {
-        TetherNotificationPresenter::kTetherNotifierId,
         TetherNotificationPresenter::kActiveHostNotificationId,
         TetherNotificationPresenter::kPotentialHotspotNotificationId,
         TetherNotificationPresenter::kSetupRequiredNotificationId};
-
-// static
-std::unique_ptr<message_center::Notification>
-TetherNotificationPresenter::CreateNotificationWithMediumSignalStrengthIcon(
-    const std::string& id,
-    const base::string16& title,
-    const base::string16& message) {
-  return CreateNotification(id, title, message,
-                            message_center::RichNotificationData(),
-                            kMediumSignalStrength);
-}
-
-// static
-std::unique_ptr<message_center::Notification>
-TetherNotificationPresenter::CreateNotification(
-    const std::string& id,
-    const base::string16& title,
-    const base::string16& message,
-    const message_center::RichNotificationData rich_notification_data,
-    int signal_strength) {
-  auto source = base::MakeUnique<ash::network_icon::SignalStrengthImageSource>(
-      ash::network_icon::BARS, gfx::kGoogleBlue500, kTetherSignalIconSize,
-      GetNormalizedSignalStrength(signal_strength));
-  return base::MakeUnique<message_center::Notification>(
-      message_center::NotificationType::NOTIFICATION_TYPE_SIMPLE, id, title,
-      message,
-      gfx::Image(gfx::ImageSkia(std::move(source), kTetherSignalIconSize)),
-      base::string16() /* display_source */, GURL() /* origin_url */,
-      message_center::NotifierId(
-          message_center::NotifierId::NotifierType::SYSTEM_COMPONENT,
-          kTetherNotifierId),
-      rich_notification_data, nullptr);
-}
 
 TetherNotificationPresenter::TetherNotificationPresenter(
     Profile* profile,
@@ -197,12 +212,14 @@ void TetherNotificationPresenter::NotifyConnectionToHostFailed() {
   PA_LOG(INFO) << "Displaying \"connection attempt failed\" notification. "
                << "Notification ID = " << kActiveHostNotificationId;
 
-  ShowNotification(CreateNotificationWithMediumSignalStrengthIcon(
+  ShowNotification(CreateNotificationWithBadge(
       kActiveHostNotificationId,
       l10n_util::GetStringUTF16(
           IDS_TETHER_NOTIFICATION_CONNECTION_FAILED_TITLE),
       l10n_util::GetStringUTF16(
-          IDS_TETHER_NOTIFICATION_CONNECTION_FAILED_MESSAGE)));
+          IDS_TETHER_NOTIFICATION_CONNECTION_FAILED_MESSAGE),
+      {} /* rich_notification_data */, kMediumSignalStrength,
+      kWarningBadgeCircleIcon));
 }
 
 void TetherNotificationPresenter::RemoveConnectionToHostFailedNotification() {

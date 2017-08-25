@@ -159,7 +159,8 @@ OmniboxResult::OmniboxResult(Profile* profile,
       list_controller_(list_controller),
       autocomplete_controller_(autocomplete_controller),
       is_voice_query_(is_voice_query),
-      match_(match) {
+      match_(match),
+      is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
   if (match_.search_terms_args && autocomplete_controller_) {
     match_.search_terms_args->from_app_list = true;
     autocomplete_controller_->UpdateMatchDestinationURL(
@@ -172,6 +173,9 @@ OmniboxResult::OmniboxResult(Profile* profile,
   // The magic number 1500 is the highest score of an omnibox result.
   // See comments in autocomplete_provider.h.
   set_relevance(match_.relevance / 1500.0);
+
+  if (AutocompleteMatch::IsSearchType(match_.type))
+    set_is_omnibox_search(true);
 
   UpdateIcon();
   UpdateTitleAndDetails();
@@ -213,7 +217,7 @@ void OmniboxResult::UpdateIcon() {
   bool is_bookmarked =
       bookmark_model && bookmark_model->IsBookmarked(match_.destination_url);
 
-  if (features::IsFullscreenAppListEnabled()) {
+  if (is_fullscreen_app_list_enabled_) {
     const gfx::VectorIcon& icon =
         is_bookmarked ? kIcBookmarkIcon : TypeToVectorIcon(match_.type);
     SetIcon(
@@ -227,17 +231,39 @@ void OmniboxResult::UpdateIcon() {
 }
 
 void OmniboxResult::UpdateTitleAndDetails() {
-  set_title(match_.contents);
+  // For url result with non-empty description, swap title and details. Thus,
+  // the url description is presented as title, and url itself is presented as
+  // details.
+  const bool use_directly =
+      !is_fullscreen_app_list_enabled_ || !IsUrlResultWithDescription();
   SearchResult::Tags title_tags;
-  ACMatchClassificationsToTags(match_.contents, match_.contents_class,
-                               &title_tags);
+  if (use_directly) {
+    set_title(match_.contents);
+    ACMatchClassificationsToTags(match_.contents, match_.contents_class,
+                                 &title_tags);
+  } else {
+    set_title(match_.description);
+    ACMatchClassificationsToTags(match_.description, match_.description_class,
+                                 &title_tags);
+  }
   set_title_tags(title_tags);
 
-  set_details(match_.description);
   SearchResult::Tags details_tags;
-  ACMatchClassificationsToTags(match_.description, match_.description_class,
-                               &details_tags);
+  if (use_directly) {
+    set_details(match_.description);
+    ACMatchClassificationsToTags(match_.description, match_.description_class,
+                                 &details_tags);
+  } else {
+    set_details(match_.contents);
+    ACMatchClassificationsToTags(match_.contents, match_.contents_class,
+                                 &details_tags);
+  }
   set_details_tags(details_tags);
+}
+
+bool OmniboxResult::IsUrlResultWithDescription() const {
+  return !AutocompleteMatch::IsSearchType(match_.type) &&
+         !match_.description.empty();
 }
 
 }  // namespace app_list

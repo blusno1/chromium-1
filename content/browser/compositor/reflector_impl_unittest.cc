@@ -99,6 +99,9 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
   uint32_t GetFramebufferCopyTextureFormat() override { return GL_RGB; }
   bool IsDisplayedAsOverlayPlane() const override { return false; }
   unsigned GetOverlayTextureId() const override { return 0; }
+  gfx::BufferFormat GetOverlayBufferFormat() const override {
+    return gfx::BufferFormat::RGBX_8888;
+  }
   bool SurfaceIsSuspendForRecycle() const override { return false; }
 
   void OnReflectorChanged() override {
@@ -143,7 +146,8 @@ class ReflectorImplTest : public testing::Test {
     compositor_.reset(new ui::Compositor(
         context_factory_private->AllocateFrameSinkId(), context_factory,
         context_factory_private, compositor_task_runner_.get(),
-        false /* enable_surface_synchronization */));
+        false /* enable_surface_synchronization */,
+        false /* enable_pixel_canvas */));
     compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
 
     auto context_provider = cc::TestContextProvider::Create();

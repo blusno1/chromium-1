@@ -249,15 +249,12 @@ static void UntrackAllBeforeUnloadEventListeners(LocalDOMWindow* dom_window) {
 
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
     : DOMWindow(frame),
-      document_(this, nullptr),
       visualViewport_(DOMVisualViewport::Create(this)),
       unused_preloads_timer_(
           TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &frame),
           this,
           &LocalDOMWindow::WarnUnusedPreloads),
-      should_print_when_finished_loading_(false),
-      custom_elements_(this, nullptr),
-      modulator_(this, nullptr) {}
+      should_print_when_finished_loading_(false) {}
 
 void LocalDOMWindow::ClearDocument() {
   if (!document_)
@@ -627,8 +624,10 @@ void LocalDOMWindow::PostMessageTimerFired(PostMessageTimer* timer) {
 
   MessageEvent* event = timer->Event();
 
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Adopt(document(), timer->GetUserGestureToken()));
+  UserGestureToken* token = timer->GetUserGestureToken();
+  UserGestureIndicator gesture_indicator(token);
+  if (token && token->HasGestures() && document() && document()->GetFrame())
+    document()->GetFrame()->NotifyUserActivation();
 
   event->EntangleMessagePorts(document());
 

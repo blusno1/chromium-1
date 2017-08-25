@@ -14,7 +14,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/display/types/display_mode.h"
-#include "ui/display/types/display_snapshot_mojo.h"
+#include "ui/display/types/display_snapshot.h"
 #include "ui/ozone/common/display_snapshot_proxy.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_buffer.h"
@@ -77,7 +77,7 @@ class GbmDeviceGenerator : public DrmDeviceGenerator {
 
 }  // namespace
 
-DrmThread::DrmThread() : base::Thread("DrmThread") {}
+DrmThread::DrmThread() : base::Thread("DrmThread"), binding_(this) {}
 
 DrmThread::~DrmThread() {
   Stop();
@@ -122,8 +122,15 @@ void DrmThread::CreateBuffer(gfx::AcceleratedWidget widget,
     case gfx::BufferUsage::SCANOUT:
       flags = GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT | GBM_BO_USE_TEXTURING;
       break;
+    case gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE:
+      flags = GBM_BO_USE_LINEAR | GBM_BO_USE_CAMERA_WRITE | GBM_BO_USE_SCANOUT |
+              GBM_BO_USE_TEXTURING;
+      break;
     case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
       flags = GBM_BO_USE_LINEAR | GBM_BO_USE_SCANOUT | GBM_BO_USE_TEXTURING;
+      break;
+    case gfx::BufferUsage::SCANOUT_VDA_WRITE:
+      flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_TEXTURING;
       break;
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
@@ -141,11 +148,21 @@ void DrmThread::CreateBuffer(gfx::AcceleratedWidget widget,
   if (window && window->GetController())
     modifiers = window->GetController()->GetFormatModifiers(fourcc_format);
 
-  if (modifiers.size() > 0 && !(flags & GBM_BO_USE_LINEAR))
-    *buffer = GbmBuffer::CreateBufferWithModifiers(gbm, fourcc_format, size,
-                                                   flags, modifiers);
-  else
-    *buffer = GbmBuffer::CreateBuffer(gbm, fourcc_format, size, flags);
+  // NOTE: BufferUsage::SCANOUT is used to create buffers that will be
+  // explicitly set via kms on a CRTC (e.g: BufferQueue buffers), therefore
+  // allocation should fail if it's not possible to allocate a BO_USE_SCANOUT
+  // buffer in that case.
+  bool retry_without_scanout = usage != gfx::BufferUsage::SCANOUT;
+  do {
+    if (modifiers.size() > 0 && !(flags & GBM_BO_USE_LINEAR))
+      *buffer = GbmBuffer::CreateBufferWithModifiers(gbm, fourcc_format, size,
+                                                     flags, modifiers);
+    else
+      *buffer = GbmBuffer::CreateBuffer(gbm, fourcc_format, size, flags);
+    retry_without_scanout =
+        retry_without_scanout && !*buffer && (flags & GBM_BO_USE_SCANOUT);
+    flags &= ~GBM_BO_USE_SCANOUT;
+  } while (retry_without_scanout);
 }
 
 void DrmThread::CreateBufferFromFds(
@@ -190,19 +207,19 @@ void DrmThread::GetVSyncParameters(
     window->GetVSyncParameters(callback);
 }
 
-void DrmThread::CreateWindow(gfx::AcceleratedWidget widget) {
+void DrmThread::CreateWindow(const gfx::AcceleratedWidget& widget) {
   std::unique_ptr<DrmWindow> window(
       new DrmWindow(widget, device_manager_.get(), screen_manager_.get()));
   window->Initialize(buffer_generator_.get());
   screen_manager_->AddWindow(widget, std::move(window));
 }
 
-void DrmThread::DestroyWindow(gfx::AcceleratedWidget widget) {
+void DrmThread::DestroyWindow(const gfx::AcceleratedWidget& widget) {
   std::unique_ptr<DrmWindow> window = screen_manager_->RemoveWindow(widget);
   window->Shutdown();
 }
 
-void DrmThread::SetWindowBounds(gfx::AcceleratedWidget widget,
+void DrmThread::SetWindowBounds(const gfx::AcceleratedWidget& widget,
                                 const gfx::Rect& bounds) {
   screen_manager_->GetWindow(widget)->SetBounds(bounds);
 }
@@ -267,9 +284,8 @@ void DrmThread::RelinquishDisplayControl(
   std::move(callback).Run(true);
 }
 
-void DrmThread::AddGraphicsDevice(const base::FilePath& path,
-                                  const base::FileDescriptor& fd) {
-  device_manager_->AddDrmDevice(path, fd);
+void DrmThread::AddGraphicsDevice(const base::FilePath& path, base::File file) {
+  device_manager_->AddDrmDevice(path, std::move(file));
 }
 
 void DrmThread::RemoveGraphicsDevice(const base::FilePath& path) {
@@ -304,6 +320,11 @@ void DrmThread::SetColorCorrection(
 // be used from multiple threads in multiple processes.
 void DrmThread::AddBinding(ozone::mojom::DeviceCursorRequest request) {
   bindings_.AddBinding(this, std::move(request));
+}
+
+void DrmThread::AddBindingGpu(ozone::mojom::GpuAdapterRequest request) {
+  TRACE_EVENT0("drm", "DrmThread::AddBindingGpu");
+  binding_.Bind(std::move(request));
 }
 
 }  // namespace ui

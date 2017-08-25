@@ -117,8 +117,8 @@ void HTMLIFrameElement::ParseAttribute(
   if (name == nameAttr) {
     if (IsInDocumentTree() && GetDocument().IsHTMLDocument()) {
       HTMLDocument& document = ToHTMLDocument(this->GetDocument());
-      document.RemoveExtraNamedItem(name_);
-      document.AddExtraNamedItem(value);
+      document.RemoveNamedItem(name_);
+      document.AddNamedItem(value);
     }
     AtomicString old_name = name_;
     name_ = value;
@@ -189,7 +189,6 @@ void HTMLIFrameElement::ParseAttribute(
           kOtherMessageSource, kErrorMessageLevel,
           "Error while parsing the 'allow' attribute: " + invalid_tokens));
     }
-    FrameOwnerPropertiesChanged();
     UpdateContainerPolicy();
     UseCounter::Count(GetDocument(), WebFeature::kFeaturePolicyAllowAttribute);
   } else {
@@ -205,7 +204,7 @@ HTMLIFrameElement::ConstructContainerPolicy() const {
   Vector<WebParsedFeaturePolicyDeclaration> container_policy;
 
   // Populate the initial container policy from the allow attribute.
-  for (const WebFeaturePolicyFeature feature : AllowedFeatures()) {
+  for (const WebFeaturePolicyFeature feature : allowed_features_) {
     WebParsedFeaturePolicyDeclaration whitelist;
     whitelist.feature = feature;
     whitelist.origins = Vector<WebSecurityOrigin>(1UL, {origin});
@@ -266,7 +265,7 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
   InsertionNotificationRequest result =
       HTMLFrameElementBase::InsertedInto(insertion_point);
   if (insertion_point->IsInDocumentTree() && GetDocument().IsHTMLDocument())
-    ToHTMLDocument(GetDocument()).AddExtraNamedItem(name_);
+    ToHTMLDocument(GetDocument()).AddNamedItem(name_);
   LogAddElementIfIsolatedWorldAndInDocument("iframe", srcAttr);
   return result;
 }
@@ -274,7 +273,7 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
 void HTMLIFrameElement::RemovedFrom(ContainerNode* insertion_point) {
   HTMLFrameElementBase::RemovedFrom(insertion_point);
   if (insertion_point->IsInDocumentTree() && GetDocument().IsHTMLDocument())
-    ToHTMLDocument(GetDocument()).RemoveExtraNamedItem(name_);
+    ToHTMLDocument(GetDocument()).RemoveNamedItem(name_);
 }
 
 bool HTMLIFrameElement::IsInteractiveContent() const {

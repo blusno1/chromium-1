@@ -61,6 +61,7 @@
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/updater/chromeos_extension_cache_delegate.h"
@@ -833,6 +834,9 @@ class ExtensionInstallObserver : public content::NotificationObserver,
     DCHECK_EQ(chrome::NOTIFICATION_PROFILE_CREATED, type);
 
     Profile* profile = content::Source<Profile>(source).ptr();
+    // Ignore lock screen apps profile.
+    if (chromeos::ProfileHelper::IsLockScreenAppProfile(profile))
+      return;
     registry_ = extensions::ExtensionRegistry::Get(profile);
 
     // Check if extension is already installed with newly created profile.
@@ -1043,7 +1047,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, StartSession) {
       SigninManagerFactory::GetForProfile(profile)->IsAuthenticated());
 }
 
-IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenDisallowed) {
+IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenAllowed) {
   UploadAndInstallDeviceLocalAccountPolicy();
   AddPublicSessionToDevicePolicy(kAccountId1);
 
@@ -1059,10 +1063,10 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenDisallowed) {
   BrowserWindow* browser_window = browser->window();
   ASSERT_TRUE(browser_window);
 
-  // Verify that an attempt to enter fullscreen mode is denied.
+  // Verify that an attempt to enter fullscreen mode is allowed.
   EXPECT_FALSE(browser_window->IsFullscreen());
   chrome::ToggleFullscreenMode(browser);
-  EXPECT_FALSE(browser_window->IsFullscreen());
+  EXPECT_TRUE(browser_window->IsFullscreen());
 }
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsUncached) {
@@ -1703,7 +1707,9 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, NoRecommendedLocaleSwitch) {
           "domAutomationController.send(pod.classList.contains('advanced'));",
           account_id_1_.Serialize().c_str()),
       &advanced));
-  EXPECT_FALSE(advanced);
+  // Public session pods switch to advanced form immediately upon being
+  // clicked, instead of waiting for animation to end which were in the old UI.
+  EXPECT_TRUE(advanced);
 
   // Manually select a different locale.
   ASSERT_TRUE(content::ExecuteScript(

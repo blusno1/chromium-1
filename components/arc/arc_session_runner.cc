@@ -142,6 +142,11 @@ bool ArcSessionRunner::IsStopped() const {
   return state_ == State::STOPPED;
 }
 
+bool ArcSessionRunner::IsLoginScreenInstanceStarting() const {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  return state_ == State::STARTING_FOR_LOGIN_SCREEN;
+}
+
 void ArcSessionRunner::SetRestartDelayForTesting(
     const base::TimeDelta& restart_delay) {
   DCHECK_EQ(state_, State::STOPPED);
@@ -163,6 +168,14 @@ void ArcSessionRunner::StartArcSession() {
   }
   state_ = State::STARTING;
   arc_session_->Start();
+}
+
+void ArcSessionRunner::RestartArcSession() {
+  VLOG(0) << "Restarting ARC instance";
+  // The order is important here. Call StartArcSession(), then notify observers.
+  StartArcSession();
+  for (auto& observer : observer_list_)
+    observer.OnSessionRestarting();
 }
 
 void ArcSessionRunner::OnSessionReady() {
@@ -211,7 +224,7 @@ void ArcSessionRunner::OnSessionStopped(ArcStopReason stop_reason) {
     // PostTask, because observer callback may call RequestStart()/Stop().
     VLOG(0) << "ARC restarting";
     restart_timer_.Start(FROM_HERE, restart_delay_,
-                         base::Bind(&ArcSessionRunner::StartArcSession,
+                         base::Bind(&ArcSessionRunner::RestartArcSession,
                                     weak_ptr_factory_.GetWeakPtr()));
   }
 
@@ -228,12 +241,10 @@ void ArcSessionRunner::EmitLoginPromptVisibleCalled() {
   // safe place to start the container for login screen.
   DCHECK(!arc_session_);
   DCHECK_EQ(state_, State::STOPPED);
-
-  // TODO(yusukes): Once Chrome OS side is ready, uncomment the following:
-  // arc_session_ = factory_.Run();
-  // arc_session_->AddObserver(this);
-  // state_ = State::STARTING_FOR_LOGIN_SCREEN;
-  // arc_session_->StartForLoginScreen();
+  arc_session_ = factory_.Run();
+  arc_session_->AddObserver(this);
+  state_ = State::STARTING_FOR_LOGIN_SCREEN;
+  arc_session_->StartForLoginScreen();
 }
 
 }  // namespace arc

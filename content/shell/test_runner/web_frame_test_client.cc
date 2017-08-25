@@ -181,14 +181,6 @@ WebFrameTestClient::WebFrameTestClient(
 
 WebFrameTestClient::~WebFrameTestClient() {}
 
-void WebFrameTestClient::FrameDetached(blink::WebLocalFrame* frame,
-                                       DetachType type) {
-  if (frame->FrameWidget())
-    frame->FrameWidget()->Close();
-
-  frame->Close();
-}
-
 blink::WebColorChooser* WebFrameTestClient::CreateColorChooser(
     blink::WebColorChooserClient* client,
     const blink::WebColor& color,
@@ -405,19 +397,6 @@ void WebFrameTestClient::DownloadURL(const blink::WebURLRequest& request,
   }
 }
 
-void WebFrameTestClient::LoadURLExternally(
-    const blink::WebURLRequest& request,
-    blink::WebNavigationPolicy policy,
-    blink::WebTriggeringEventInfo triggering_event_info,
-    bool replaces_current_history_item) {
-  DCHECK_NE(policy, blink::kWebNavigationPolicyDownload);
-  if (test_runner()->shouldWaitUntilExternalURLLoad()) {
-    delegate_->PrintMessage(std::string("Loading URL externally - \"") +
-                            URLDescription(request.Url()) + "\"\n");
-    delegate_->TestFinished();
-  }
-}
-
 void WebFrameTestClient::LoadErrorPage(int reason) {
   if (test_runner()->shouldDumpFrameLoadCallbacks()) {
     delegate_->PrintMessage(base::StringPrintf(
@@ -563,7 +542,7 @@ void WebFrameTestClient::WillSendRequest(blink::WebURLRequest& request) {
   GURL url = request.Url();
   std::string request_url = url.possibly_invalid_spec();
 
-  GURL main_document_url = request.FirstPartyForCookies();
+  GURL main_document_url = request.SiteForCookies();
 
   if (test_runner()->shouldDumpResourceLoadCallbacks()) {
     delegate_->PrintMessage(DescriptionSuitableForTestResult(request_url));

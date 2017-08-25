@@ -5,6 +5,27 @@
 import("//components/viz/viz.gni")
 import("//testing/test.gni")
 
+viz_component("resource_format") {
+  output_name = "viz_resource_format"
+
+  defines = [ "VIZ_RESOURCE_FORMAT_IMPLEMENTATION" ]
+
+  sources = [
+    "resources/resource_format.h",
+    "resources/resource_format_utils.cc",
+    "resources/resource_format_utils.h",
+    "viz_resource_format_export.h",
+  ]
+
+  configs = [ "//third_party/khronos:khronos_headers" ]
+
+  deps = [
+    "//base",
+    "//skia",
+    "//ui/gfx:buffer_types",
+  ]
+}
+
 viz_component("common") {
   output_name = "viz_common"
 
@@ -31,15 +52,19 @@ viz_component("common") {
     "gpu/context_provider.h",
     "gpu/in_process_context_provider.cc",
     "gpu/in_process_context_provider.h",
+    "gpu/vulkan_context_provider.h",
+    "gpu/vulkan_in_process_context_provider.cc",
+    "gpu/vulkan_in_process_context_provider.h",
     "hit_test/aggregated_hit_test_region.h",
     "quads/copy_output_request.cc",
     "quads/copy_output_request.h",
     "quads/copy_output_result.cc",
     "quads/copy_output_result.h",
     "quads/release_callback.h",
-    "quads/resource_format.h",
     "quads/shared_bitmap.cc",
     "quads/shared_bitmap.h",
+    "quads/shared_quad_state.cc",
+    "quads/shared_quad_state.h",
     "quads/single_release_callback.cc",
     "quads/single_release_callback.h",
     "quads/texture_mailbox.cc",
@@ -47,8 +72,6 @@ viz_component("common") {
     "resources/buffer_to_texture_target_map.cc",
     "resources/buffer_to_texture_target_map.h",
     "resources/platform_color.h",
-    "resources/resource_format_utils.cc",
-    "resources/resource_format_utils.h",
     "resources/resource_id.h",
     "resources/resource_settings.cc",
     "resources/resource_settings.h",
@@ -77,10 +100,16 @@ viz_component("common") {
     "surfaces/surface_sequence_generator.h",
     "switches.cc",
     "switches.h",
+    "traced_value.cc",
+    "traced_value.h",
     "viz_common_export.h",
   ]
 
   deps = [
+    # TODO(staraz): cc/base was added because SharedQuadState includes
+    # cc::MathUtil. Remove it once cc/base/math_util* are moved to viz.
+    "//cc/base",
+
     "//base",
     "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
@@ -88,6 +117,7 @@ viz_component("common") {
     "//gpu/command_buffer/service",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/skia_bindings:skia_bindings",
+    "//gpu/vulkan:features",
     "//mojo/public/cpp/bindings",
     "//skia",
     "//ui/gfx:color_space",
@@ -96,6 +126,7 @@ viz_component("common") {
   ]
 
   public_deps = [
+    ":resource_format",
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/common",
     "//mojo/public/cpp/bindings",

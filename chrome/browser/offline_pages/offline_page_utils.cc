@@ -147,7 +147,7 @@ void DoCalculateSizeBetween(
 void OfflinePageUtils::SelectPageForURL(
     content::BrowserContext* browser_context,
     const GURL& url,
-    OfflinePageModel::URLSearchMode url_search_mode,
+    URLSearchMode url_search_mode,
     int tab_id,
     const base::Callback<void(const OfflinePageItem*)>& callback) {
   OfflinePageModel* offline_page_model =
@@ -275,7 +275,7 @@ void OfflinePageUtils::CheckDuplicateDownloads(
   };
 
   offline_page_model->GetPagesByURL(
-      url, OfflinePageModel::URLSearchMode::SEARCH_BY_ALL_URLS,
+      url, URLSearchMode::SEARCH_BY_ALL_URLS,
       base::Bind(continuation, browser_context, url, callback));
 }
 
@@ -283,14 +283,24 @@ void OfflinePageUtils::CheckDuplicateDownloads(
 void OfflinePageUtils::ScheduleDownload(content::WebContents* web_contents,
                                         const std::string& name_space,
                                         const GURL& url,
-                                        DownloadUIActionFlags ui_action) {
+                                        DownloadUIActionFlags ui_action,
+                                        const std::string& request_origin) {
   DCHECK(web_contents);
 
   OfflinePageTabHelper* tab_helper =
       OfflinePageTabHelper::FromWebContents(web_contents);
   if (!tab_helper)
     return;
-  tab_helper->ScheduleDownloadHelper(web_contents, name_space, url, ui_action);
+  tab_helper->ScheduleDownloadHelper(web_contents, name_space, url, ui_action,
+                                     request_origin);
+}
+
+// static
+void OfflinePageUtils::ScheduleDownload(content::WebContents* web_contents,
+                                        const std::string& name_space,
+                                        const GURL& url,
+                                        DownloadUIActionFlags ui_action) {
+  ScheduleDownload(web_contents, name_space, url, ui_action, "");
 }
 
 // static

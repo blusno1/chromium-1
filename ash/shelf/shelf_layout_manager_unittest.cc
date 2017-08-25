@@ -6,7 +6,7 @@
 
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/accelerators/accelerator_table.h"
-#include "ash/app_list/test_app_list_view_presenter_impl.h"
+#include "ash/app_list/test_app_list_presenter_impl.h"
 #include "ash/focus_cycler.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -346,12 +346,10 @@ TEST_F(ShelfLayoutManagerTest, SwipingUpOnShelfForFullscreenAppList) {
   constexpr int kNumScrollSteps = 4;
 
   gfx::Point start = GetShelfWidget()->GetWindowBoundsInScreen().CenterPoint();
-  gfx::Rect work_area_bounds = shelf->GetUserWorkAreaBounds();
   gfx::Vector2d delta;
 
-  // Swiping up more than one third of the work area's height should show the
-  // app list.
-  delta.set_y(work_area_bounds.height() / 2.0);
+  // Swiping up more than the threshold should show the app list.
+  delta.set_y(ShelfLayoutManager::kAppListDragDistanceThreshold + 10);
   gfx::Point end = start - delta;
   generator.GestureScrollSequence(start, end, kTimeDelta, kNumScrollSteps);
   RunAllPendingInMessageLoop();
@@ -360,9 +358,8 @@ TEST_F(ShelfLayoutManagerTest, SwipingUpOnShelfForFullscreenAppList) {
   EXPECT_EQ(0u, test_app_list_presenter.dismiss_count());
   EXPECT_GE(test_app_list_presenter.set_y_position_count(), 1u);
 
-  // Swiping up less than one third of the works area's height should begin to
-  // show, but then ultimately dismiss the app list.
-  delta.set_y(work_area_bounds.height() / 4.0);
+  // Swiping up less or equal to the threshold should dismiss the app list.
+  delta.set_y(ShelfLayoutManager::kAppListDragDistanceThreshold - 10);
   end = start - delta;
   // TODO(minch): investigate failure without EnableMaximizeMode again here.
   // http://crbug.com/746481.
@@ -404,7 +401,7 @@ TEST_F(ShelfLayoutManagerTest, SwipingUpOnShelfForFullscreenAppList) {
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
 
   // Swiping up on the shelf in this state should open the app list.
-  delta.set_y(work_area_bounds.height() / 2.0);
+  delta.set_y(ShelfLayoutManager::kAppListDragDistanceThreshold + 10);
   end = start - delta;
   generator.GestureScrollSequence(start, end, kTimeDelta, kNumScrollSteps);
   RunAllPendingInMessageLoop();
@@ -1100,7 +1097,7 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfVisibleState) {
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
 
   // The tested behavior relies on the app list presenter implementation.
-  TestAppListViewPresenterImpl app_list_presenter_impl;
+  TestAppListPresenterImpl app_list_presenter_impl;
 
   // Create a normal unmaximized window; the shelf should be visible.
   aura::Window* window = CreateTestWindow();
@@ -1109,17 +1106,13 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfVisibleState) {
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
-  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   // Show the app list and the shelf stays visible.
-  app_list_presenter_impl.Show(GetPrimaryDisplayId());
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
   // Hide the app list and the shelf stays visible.
-  app_list_presenter_impl.Dismiss();
+  app_list_presenter_impl.DismissAndRunLoop();
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 }
@@ -1131,7 +1124,7 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfAutoHideState) {
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
 
   // The tested behavior relies on the app list presenter implementation.
-  TestAppListViewPresenterImpl app_list_presenter_impl;
+  TestAppListPresenterImpl app_list_presenter_impl;
 
   // Create a normal unmaximized window; the shelf should be hidden.
   aura::Window* window = CreateTestWindow();
@@ -1141,12 +1134,8 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 
-  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   // Show the app list and the shelf should be temporarily visible.
-  app_list_presenter_impl.Show(GetPrimaryDisplayId());
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplayId());
   // The shelf's auto hide state won't be changed until the timer fires, so
   // force it to update now.
   GetShelfLayoutManager()->UpdateVisibilityState();
@@ -1155,7 +1144,7 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
 
   // Hide the app list and the shelf should be hidden again.
-  app_list_presenter_impl.Dismiss();
+  app_list_presenter_impl.DismissAndRunLoop();
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
@@ -1198,7 +1187,7 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
   wm::ActivateWindow(window_1);
 
   // The tested behavior relies on the app list presenter implementation.
-  TestAppListViewPresenterImpl app_list_presenter_impl;
+  TestAppListPresenterImpl app_list_presenter_impl;
 
   Shell::Get()->UpdateShelfVisibility();
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
@@ -1207,12 +1196,8 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_1->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_2->GetAutoHideState());
 
-  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   // Show the app list; only the shelf on the same display should be shown.
-  app_list_presenter_impl.Show(GetPrimaryDisplayId());
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplayId());
   Shell::Get()->UpdateShelfVisibility();
   EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
@@ -1221,7 +1206,7 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_2->GetAutoHideState());
 
   // Hide the app list, both shelves should be hidden.
-  app_list_presenter_impl.Dismiss();
+  app_list_presenter_impl.DismissAndRunLoop();
   Shell::Get()->UpdateShelfVisibility();
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
@@ -1236,7 +1221,7 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfHiddenState) {
   Shelf* shelf = GetPrimaryShelf();
 
   // The tested behavior relies on the app list presenter implementation.
-  TestAppListViewPresenterImpl app_list_presenter_impl;
+  TestAppListPresenterImpl app_list_presenter_impl;
 
   // Create a window and make it full screen; the shelf should be hidden.
   aura::Window* window = CreateTestWindow();
@@ -1247,17 +1232,13 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfHiddenState) {
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 
-  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   // Show the app list and the shelf should be temporarily visible.
-  app_list_presenter_impl.Show(GetPrimaryDisplayId());
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
   // Hide the app list and the shelf should be hidden again.
-  app_list_presenter_impl.Dismiss();
+  app_list_presenter_impl.DismissAndRunLoop();
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 }
@@ -1962,12 +1943,15 @@ class ShelfLayoutManagerKeyboardTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
     UpdateDisplay("800x600");
+    keyboard::SetTouchKeyboardEnabled(true);
     keyboard::SetAccessibilityKeyboardEnabled(true);
+    Shell::Get()->CreateKeyboard();
   }
 
   // AshTestBase:
   void TearDown() override {
     keyboard::SetAccessibilityKeyboardEnabled(false);
+    keyboard::SetTouchKeyboardEnabled(false);
     AshTestBase::TearDown();
   }
 
@@ -1993,9 +1977,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest, ShelfChangeWorkAreaInNonStickyMode) {
   command_line->AppendSwitch(::switches::kDisableNewVirtualKeyboardBehavior);
 
   ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
-  keyboard::SetAccessibilityKeyboardEnabled(true);
   InitKeyboardBounds();
-  Shell::Get()->CreateKeyboard();
   keyboard::KeyboardController* kb_controller =
       keyboard::KeyboardController::GetInstance();
   gfx::Rect orig_work_area(
@@ -2004,6 +1986,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest, ShelfChangeWorkAreaInNonStickyMode) {
   // Open keyboard in non-sticky mode.
   kb_controller->ShowKeyboard(false);
   layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
+  layout_manager->LayoutShelf();
 
   // Work area should be changed.
   EXPECT_NE(orig_work_area,
@@ -2012,12 +1995,14 @@ TEST_F(ShelfLayoutManagerKeyboardTest, ShelfChangeWorkAreaInNonStickyMode) {
   kb_controller->HideKeyboard(
       keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
   layout_manager->OnKeyboardBoundsChanging(gfx::Rect());
+  layout_manager->LayoutShelf();
   EXPECT_EQ(orig_work_area,
             display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
 
   // Open keyboard in sticky mode.
   kb_controller->ShowKeyboard(true);
   layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
+  layout_manager->LayoutShelf();
 
   // Work area should be changed.
   EXPECT_NE(orig_work_area,
@@ -2030,7 +2015,6 @@ TEST_F(ShelfLayoutManagerKeyboardTest,
        ShelfIgnoreWorkAreaChangeInNonStickyMode) {
   ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
   InitKeyboardBounds();
-  Shell::Get()->CreateKeyboard();
   keyboard::KeyboardController* kb_controller =
       keyboard::KeyboardController::GetInstance();
   gfx::Rect orig_work_area(
@@ -2039,6 +2023,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest,
   // Open keyboard in non-sticky mode.
   kb_controller->ShowKeyboard(false);
   layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
+  layout_manager->LayoutShelf();
 
   // Work area should not be changed.
   EXPECT_EQ(orig_work_area,
@@ -2047,12 +2032,14 @@ TEST_F(ShelfLayoutManagerKeyboardTest,
   kb_controller->HideKeyboard(
       keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
   layout_manager->OnKeyboardBoundsChanging(gfx::Rect());
+  layout_manager->LayoutShelf();
   EXPECT_EQ(orig_work_area,
             display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
 
   // Open keyboard in sticky mode.
   kb_controller->ShowKeyboard(true);
   layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
+  layout_manager->LayoutShelf();
 
   // Work area should be changed.
   EXPECT_NE(orig_work_area,

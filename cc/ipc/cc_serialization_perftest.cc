@@ -6,16 +6,8 @@
 
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
-#include "cc/ipc/begin_frame_args_struct_traits.h"
 #include "cc/ipc/cc_param_traits.h"
-#include "cc/ipc/compositor_frame.mojom.h"
-#include "cc/ipc/compositor_frame_metadata_struct_traits.h"
-#include "cc/ipc/compositor_frame_struct_traits.h"
-#include "cc/ipc/render_pass_struct_traits.h"
-#include "cc/ipc/selection_struct_traits.h"
-#include "cc/ipc/shared_quad_state_struct_traits.h"
 #include "cc/ipc/surface_id_struct_traits.h"
-#include "cc/ipc/transferable_resource_struct_traits.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/picture_draw_quad.h"
 #include "gpu/ipc/common/mailbox_holder_struct_traits.h"
@@ -23,6 +15,12 @@
 #include "gpu/ipc/common/sync_token_struct_traits.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/message.h"
+#include "services/viz/public/cpp/compositing/compositor_frame_metadata_struct_traits.h"
+#include "services/viz/public/cpp/compositing/compositor_frame_struct_traits.h"
+#include "services/viz/public/cpp/compositing/render_pass_struct_traits.h"
+#include "services/viz/public/cpp/compositing/selection_struct_traits.h"
+#include "services/viz/public/cpp/compositing/shared_quad_state_struct_traits.h"
+#include "services/viz/public/interfaces/compositing/compositor_frame.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
 #include "third_party/skia/include/effects/SkBlurImageFilter.h"
@@ -141,10 +139,11 @@ class CCSerializationPerfTest : public testing::Test {
       const std::string& test_name,
       const CompositorFrame& frame,
       UseSingleSharedQuadState single_sqs) {
-    mojo::Message message = mojom::CompositorFrame::SerializeAsMessage(&frame);
+    mojo::Message message =
+        viz::mojom::CompositorFrame::SerializeAsMessage(&frame);
     for (int i = 0; i < kNumWarmupRuns; ++i) {
       CompositorFrame compositor_frame;
-      mojom::CompositorFrame::Deserialize(
+      viz::mojom::CompositorFrame::Deserialize(
           message.payload(), message.payload_num_bytes(), &compositor_frame);
     }
 
@@ -157,7 +156,7 @@ class CCSerializationPerfTest : public testing::Test {
     while (start < end) {
       for (int i = 0; i < kTimeCheckInterval; ++i) {
         CompositorFrame compositor_frame;
-        mojom::CompositorFrame::Deserialize(
+        viz::mojom::CompositorFrame::Deserialize(
             message.payload(), message.payload_num_bytes(), &compositor_frame);
         now = base::TimeTicks::Now();
         // We don't count iterations after the end time.
@@ -191,7 +190,7 @@ class CCSerializationPerfTest : public testing::Test {
       UseSingleSharedQuadState single_sqs) {
     for (int i = 0; i < kNumWarmupRuns; ++i) {
       mojo::Message message =
-          mojom::CompositorFrame::SerializeAsMessage(&frame);
+          viz::mojom::CompositorFrame::SerializeAsMessage(&frame);
     }
 
     base::TimeTicks start = base::TimeTicks::Now();
@@ -203,7 +202,7 @@ class CCSerializationPerfTest : public testing::Test {
     while (start < end) {
       for (int i = 0; i < kTimeCheckInterval; ++i) {
         mojo::Message message =
-            mojom::CompositorFrame::SerializeAsMessage(&frame);
+            viz::mojom::CompositorFrame::SerializeAsMessage(&frame);
         now = base::TimeTicks::Now();
         // We don't count iterations after the end time.
         if (now < end)
@@ -310,7 +309,7 @@ class CCSerializationPerfTest : public testing::Test {
 
     // Texture quads
     for (uint32_t i = 0; i < 10; ++i) {
-      SharedQuadState* shared_state1_in =
+      viz::SharedQuadState* shared_state1_in =
           pass_in->CreateAndAppendSharedQuadState();
       shared_state1_in->SetAll(arbitrary_matrix1, arbitrary_rect1,
                                arbitrary_rect1, arbitrary_rect2,
@@ -356,7 +355,7 @@ class CCSerializationPerfTest : public testing::Test {
 
     // Tiled quads
     for (uint32_t i = 0; i < 10; ++i) {
-      SharedQuadState* shared_state2_in =
+      viz::SharedQuadState* shared_state2_in =
           pass_in->CreateAndAppendSharedQuadState();
       shared_state2_in->SetAll(arbitrary_matrix2, arbitrary_rect2,
                                arbitrary_rect2, arbitrary_rect3,
@@ -375,7 +374,7 @@ class CCSerializationPerfTest : public testing::Test {
 
     // Solid color quads
     for (uint32_t i = 0; i < 5; ++i) {
-      SharedQuadState* shared_state3_in =
+      viz::SharedQuadState* shared_state3_in =
           pass_in->CreateAndAppendSharedQuadState();
       shared_state3_in->SetAll(arbitrary_matrix1, arbitrary_rect3,
                                arbitrary_rect3, arbitrary_rect1,

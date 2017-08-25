@@ -58,8 +58,10 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/text/TextCheckerClient.h"
+#include "platform/wtf/Assertions.h"
 #include "public/platform/WebSpellCheckPanelHostClient.h"
 #include "public/platform/WebString.h"
+#include "public/web/WebTextDecorationType.h"
 
 namespace blink {
 
@@ -280,7 +282,7 @@ void SpellChecker::AdvanceToNextMisspelling(bool start_before_selection) {
     VisiblePosition one_before_start =
         PreviousPositionOf(CreateVisiblePosition(spelling_search_start));
     if (one_before_start.IsNotNull() &&
-        RootEditableElementOf(one_before_start) ==
+        RootEditableElementOf(one_before_start.DeepEquivalent()) ==
             RootEditableElementOf(spelling_search_start))
       spelling_search_start =
           EndOfWord(one_before_start).ToParentAnchoredPosition();
@@ -500,7 +502,7 @@ void SpellChecker::MarkMisspellingsAfterReplaceSelectionCommand(
   if (inserted_range.IsNull())
     return;
 
-  Node* node = cmd.EndingVisibleSelection().RootEditableElement();
+  Node* node = RootEditableElementOf(cmd.EndingSelection().Base());
   if (!node)
     return;
 
@@ -1127,9 +1129,6 @@ void SpellChecker::RemoveMarkers(const EphemeralRange& range,
   GetFrame().GetDocument()->Markers().RemoveMarkersInRange(range, marker_types);
 }
 
-// TODO(xiaochengh): This function is only used by unit tests. We should move it
-// to IdleSpellCheckCallback and modify unit tests to cope with idle time spell
-// checker.
 void SpellChecker::CancelCheck() {
   spell_check_requester_->CancelCheck();
 }
@@ -1297,5 +1296,8 @@ bool SpellChecker::IsSpellCheckingEnabledAt(const Position& position) {
       Traversal<HTMLElement>::FirstAncestorOrSelf(*position.AnchorNode());
   return element && element->IsSpellCheckingEnabled();
 }
+
+STATIC_ASSERT_ENUM(kWebTextDecorationTypeSpelling, kTextDecorationTypeSpelling);
+STATIC_ASSERT_ENUM(kWebTextDecorationTypeGrammar, kTextDecorationTypeGrammar);
 
 }  // namespace blink
