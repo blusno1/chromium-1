@@ -30,11 +30,13 @@
 #include "core/CoreExport.h"
 #include "core/paint/LayerHitTestRects.h"
 #include "platform/geometry/IntRect.h"
+#include "platform/graphics/CompositorElementId.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/MainThreadScrollingReason.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebLayerScrollClient.h"
 
 namespace blink {
 using MainThreadScrollingReasons = uint32_t;
@@ -63,7 +65,8 @@ using ScrollbarId = uint64_t;
 // compositor, as well as creating and managing scrollbar layers.
 
 class CORE_EXPORT ScrollingCoordinator final
-    : public GarbageCollectedFinalized<ScrollingCoordinator> {
+    : public GarbageCollectedFinalized<ScrollingCoordinator>,
+      public WebLayerScrollClient {
   WTF_MAKE_NONCOPYABLE(ScrollingCoordinator);
 
  public:
@@ -119,7 +122,13 @@ class CORE_EXPORT ScrollingCoordinator final
       bool is_left_side_vertical_scrollbar);
 
   void WillDestroyScrollableArea(ScrollableArea*);
-  // Returns true if the coordinator handled this change.
+  // Updates the compositor layers and returns true if the scrolling coordinator
+  // handled this change.
+  // TODO(pdr): Factor the container bounds change out of this function. The
+  // compositor tracks scroll container bounds on the scroll layer whereas
+  // blink uses a separate layer. To ensure the compositor scroll layer has the
+  // updated scroll container bounds, this needs to be called when the scrolling
+  // contents layer is resized.
   bool ScrollableAreaScrollLayerDidChange(ScrollableArea*);
   void ScrollableAreaScrollbarLayerDidChange(ScrollableArea*,
                                              ScrollbarOrientation);
@@ -145,6 +154,9 @@ class CORE_EXPORT ScrollingCoordinator final
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() {
     return programmatic_scroll_animator_timeline_.get();
   }
+
+  // Callback for compositor-side layer scrolls.
+  void DidScroll(const gfx::ScrollOffset&, const CompositorElementId&) final;
 
   // For testing purposes only. This ScrollingCoordinator is reused between
   // layout test, and must be reset for the results to be valid.

@@ -539,6 +539,10 @@ const char kNaturalScroll[] = "settings.touchpad.natural_scroll";
 // A boolean pref set to true if primary mouse button is the left button.
 const char kPrimaryMouseButtonRight[] = "settings.mouse.primary_right";
 
+// A boolean pref set to true if turning the mouse wheel toward the user should
+// result in scrolling up instead of the more common scrolling down.
+const char kMouseReverseScroll[] = "settings.mouse.reverse_scroll";
+
 // A integer pref for the touchpad sensitivity.
 const char kMouseSensitivity[] = "settings.mouse.sensitivity2";
 
@@ -953,6 +957,10 @@ const char kCastReceiverEnabled[] = "cast_receiver.enabled";
 // String pref indicating what name should be advertised for casting to.
 // If the string is empty or blank the system name will be used.
 const char kCastReceiverName[] = "cast_receiver.name";
+
+// Integer pref indicating the ecryptfs to ext4 migration strategy. One of
+// options: forbidden = 0, migrate = 1, wipe = 2 or ask the user = 3.
+const char kEcryptfsMigrationStrategy[] = "ecryptfs_migration_strategy";
 #endif  // defined(OS_CHROMEOS)
 
 // A boolean pref set to true if a Home button to open the Home pages should be
@@ -1399,29 +1407,6 @@ const char kStabilityKernelCrashCount[] =
 // last report.
 const char kStabilitySystemUncleanShutdownCount[] =
     "user_experience_metrics.stability.system_unclean_shutdowns";
-
-#if defined(OS_ANDROID)
-// Activity type that is currently in the foreground for the UMA session.
-// Uses the ActivityTypeIds::Type enum.
-const char kStabilityForegroundActivityType[] =
-    "user_experience_metrics.stability.current_foreground_activity_type";
-
-// Tracks which Activities were launched during the last session.
-// See |metrics_service_android.cc| for its usage.
-const char kStabilityLaunchedActivityFlags[] =
-    "user_experience_metrics.stability.launched_activity_flags";
-
-// List pref: Counts how many times each Activity was launched.
-// Indexed into by ActivityTypeIds::Type.
-const char kStabilityLaunchedActivityCounts[] =
-    "user_experience_metrics.stability.launched_activity_counts";
-
-// List pref: Counts how many times each Activity type was in the foreground
-// when a UMA session failed to be shut down properly.
-// Indexed into by ActivityTypeIds::Type.
-const char kStabilityCrashedActivityCounts[] =
-    "user_experience_metrics.stability.crashed_activity_counts";
-#endif  // defined(OS_ANDROID)
 
 // The keys below are used for the dictionaries in the
 // kStabilityPluginStats list.

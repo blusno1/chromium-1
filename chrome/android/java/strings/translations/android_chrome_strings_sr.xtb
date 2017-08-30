@@ -332,7 +332,6 @@
 <translation id="4278390842282768270">Дозвољено</translation>
 <translation id="42981349822642051">Прошири</translation>
 <translation id="4307992518367153382">Основна</translation>
-<translation id="4334425495413014985">Да бисте први пут користили <ph name="APP_NAME" />, повежите се на интернет</translation>
 <translation id="4351244548802238354">Затвори дијалог</translation>
 <translation id="4378154925671717803">Телефон</translation>
 <translation id="4384468725000734951">Користите Sogou за претрагу</translation>
@@ -656,7 +655,7 @@
 <translation id="7352939065658542140">ВИДЕО</translation>
 <translation id="7353894246028566792">{NUM_SELECTED,plural, =1{Дели 1 изабрану ставку}one{Дели # изабрану ставку}few{Дели # изабране ставке}other{Дели # изабраних ставки}}</translation>
 <translation id="7366340029385295517">Пребацивање на <ph name="SCREEN_NAME" /></translation>
-<translation id="7374228672268453233">Потрошени подаци:</translation>
+<translation id="7374228672268453233">Искоришћени подаци:</translation>
 <translation id="7375125077091615385">Тип:</translation>
 <translation id="7378627244592794276">Не</translation>
 <translation id="7400418766976504921">URL адреса</translation>

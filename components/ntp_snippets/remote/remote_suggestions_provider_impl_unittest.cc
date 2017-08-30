@@ -502,8 +502,7 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
         .RetiresOnSaturation();
     provider->FetchSuggestions(
         interactive_request, RemoteSuggestionsProvider::FetchStatusCallback());
-    std::move(snippets_callback)
-        .Run(Status::Success(), std::move(fetched_categories));
+    std::move(snippets_callback).Run(status, std::move(fetched_categories));
   }
 
   void FetchMoreTheseSuggestions(
@@ -522,8 +521,7 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
         .RetiresOnSaturation();
     provider->Fetch(category, known_suggestion_ids,
                     std::move(fetch_done_callback));
-    std::move(snippets_callback)
-        .Run(Status::Success(), std::move(fetched_categories));
+    std::move(snippets_callback).Run(status, std::move(fetched_categories));
   }
 
   void PushArticleSuggestionToTheFront(
@@ -607,17 +605,6 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
         {kNotificationsFeature.name});
   }
 
-  void EnableDeletingRemoteCategoriesNotPresentInLastFetchResponse() {
-    // VariationParamsManager supports only one
-    // |SetVariationParamsWithFeatureAssociations| at a time, so we clear
-    // previous settings first to make this explicit.
-    params_manager_.ClearAllVariationParams();
-    params_manager_.SetVariationParamsWithFeatureAssociations(
-        kDeleteRemoteCategoriesNotPresentInLastFetch.name,
-        /*param_values=*/std::map<std::string, std::string>(),
-        {kDeleteRemoteCategoriesNotPresentInLastFetch.name});
-  }
-
  private:
   variations::testing::VariationParamsManager params_manager_;
   test::RemoteSuggestionsTestUtils utils_;
@@ -647,7 +634,6 @@ TEST_F(RemoteSuggestionsProviderImplTest, Full) {
       /*use_fake_breaking_news_listener=*/false,
       /*use_mock_remote_suggestions_status_service=*/false);
 
-  // TODO(vitaliii): Inline the vector creation in FetchTheseSuggestions.
   std::vector<FetchedCategory> fetched_categories;
   fetched_categories.push_back(
       FetchedCategoryBuilder()
@@ -1844,17 +1830,23 @@ TEST_F(RemoteSuggestionsProviderImplTest, LogNumArticlesHistogram) {
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status(StatusCode::TEMPORARY_ERROR, "message"),
                         base::nullopt);
+  // Error responses don't update the list of suggestions and shouldn't
+  // influence these metrics.
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticles"),
-              ElementsAre(base::Bucket(/*min=*/0, /*count=*/1)));
+              IsEmpty());
   // Fetch error shouldn't contribute to NumArticlesFetched.
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticlesFetched"),
               IsEmpty());
 
-  // Emptry categories list.
+  // TODO(tschumann): The expectations in these tests have high dependencies on
+  // the sequence of unrelated events. This test should be split up into
+  // multiple tests.
+
+  // Empty categories list.
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status::Success(), std::vector<FetchedCategory>());
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticles"),
-              ElementsAre(base::Bucket(/*min=*/0, /*count=*/2)));
+              ElementsAre(base::Bucket(/*min=*/0, /*count=*/1)));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticlesFetched"),
               IsEmpty());
 
@@ -1865,7 +1857,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, LogNumArticlesHistogram) {
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status::Success(), std::move(fetched_categories));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticles"),
-              ElementsAre(base::Bucket(/*min=*/0, /*count=*/3)));
+              ElementsAre(base::Bucket(/*min=*/0, /*count=*/2)));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticlesFetched"),
               ElementsAre(base::Bucket(/*min=*/0, /*count=*/1)));
 
@@ -1880,7 +1872,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, LogNumArticlesHistogram) {
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status::Success(), std::move(fetched_categories));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticles"),
-              ElementsAre(base::Bucket(/*min=*/0, /*count=*/3),
+              ElementsAre(base::Bucket(/*min=*/0, /*count=*/2),
                           base::Bucket(/*min=*/1, /*count=*/1)));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticlesFetched"),
               ElementsAre(base::Bucket(/*min=*/0, /*count=*/1),
@@ -1892,7 +1884,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, LogNumArticlesHistogram) {
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status::Success(), std::move(fetched_categories));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticles"),
-              ElementsAre(base::Bucket(/*min=*/0, /*count=*/3),
+              ElementsAre(base::Bucket(/*min=*/0, /*count=*/2),
                           base::Bucket(/*min=*/1, /*count=*/2)));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticlesFetched"),
               ElementsAre(base::Bucket(/*min=*/0, /*count=*/1),
@@ -1909,7 +1901,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, LogNumArticlesHistogram) {
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status::Success(), std::move(fetched_categories));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticles"),
-              ElementsAre(base::Bucket(/*min=*/0, /*count=*/4),
+              ElementsAre(base::Bucket(/*min=*/0, /*count=*/3),
                           base::Bucket(/*min=*/1, /*count=*/2)));
   // Dismissed suggestions shouldn't influence NumArticlesFetched.
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticlesFetched"),
@@ -3709,8 +3701,6 @@ TEST_F(RemoteSuggestionsProviderImplTest,
 
 TEST_F(RemoteSuggestionsProviderImplTest,
        ShouldDeleteNotFetchedCategoryWhenDeletionEnabled) {
-  EnableDeletingRemoteCategoriesNotPresentInLastFetchResponse();
-
   // Initialize the provider with two categories.
   auto provider = MakeSuggestionsProvider(
       /*use_mock_prefetched_pages_tracker=*/false,
@@ -3750,8 +3740,6 @@ TEST_F(RemoteSuggestionsProviderImplTest,
 
 TEST_F(RemoteSuggestionsProviderImplTest,
        ShouldKeepFetchedCategoryWhenDeletionEnabled) {
-  EnableDeletingRemoteCategoriesNotPresentInLastFetchResponse();
-
   // Initialize the provider with two categories.
   auto provider = MakeSuggestionsProvider(
       /*use_mock_prefetched_pages_tracker=*/false,
@@ -3791,8 +3779,6 @@ TEST_F(RemoteSuggestionsProviderImplTest,
 
 TEST_F(RemoteSuggestionsProviderImplTest,
        ShouldKeepArticleCategoryEvenWhenNotFetchedAndDeletionEnabled) {
-  EnableDeletingRemoteCategoriesNotPresentInLastFetchResponse();
-
   // Initialize the provider with two categories.
   auto provider = MakeSuggestionsProvider(
       /*use_mock_prefetched_pages_tracker=*/false,
@@ -3832,42 +3818,134 @@ TEST_F(RemoteSuggestionsProviderImplTest,
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest,
-       ShouldKeepNotFetchedCategoryWhenDeletionDisabled) {
+       EmptySectionResponseShouldClearSection) {
   // Initialize the provider with two categories.
   auto provider = MakeSuggestionsProvider(
       /*use_mock_prefetched_pages_tracker=*/false,
       /*use_fake_breaking_news_listener=*/false,
       /*use_mock_remote_suggestions_status_service=*/false);
+
+  // Set up state with present suggestions.
+  // Unfortunately, we cannot create the fetched_categories inline, as some part
+  // requires a copy of FetchedCategory which is not supported :-/.
   std::vector<FetchedCategory> fetched_categories;
-  const FetchedCategoryBuilder articles_category_builder =
-      FetchedCategoryBuilder()
-          .SetCategory(articles_category())
-          .AddSuggestionViaBuilder(
-              RemoteSuggestionBuilder().SetUrl("http://articles.com"));
-  fetched_categories.push_back(articles_category_builder.Build());
   fetched_categories.push_back(
       FetchedCategoryBuilder()
-          .SetCategory(other_category())
-          .AddSuggestionViaBuilder(
-              RemoteSuggestionBuilder().SetUrl("http://not_articles.com"))
+          .SetCategory(articles_category())
+          .AddSuggestionViaBuilder(RemoteSuggestionBuilder()
+                                       .SetUrl("http://articles.com")
+                                       .SetAmpUrl(""))
           .Build());
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status::Success(), std::move(fetched_categories));
-  fetched_categories.clear();
 
   ASSERT_EQ(CategoryStatus::AVAILABLE,
-            observer().StatusForCategory(other_category()));
+            observer().StatusForCategory(articles_category()));
+  ASSERT_THAT(observer().SuggestionsForCategory(articles_category()),
+              SizeIs(1));
 
-  // Fetch only one category - articles.
-  fetched_categories.push_back(articles_category_builder.Build());
+  // Next fetch returns an empty article section.
+  fetched_categories.clear();
+  fetched_categories.push_back(
+      FetchedCategoryBuilder().SetCategory(articles_category()).Build());
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status::Success(), std::move(fetched_categories));
-  fetched_categories.clear();
 
-  // The other category still must be provided even though it was not included
-  // in the last fetch, because the deletion is disabled via feature params.
+  // Articles category still must be provided, but empty.
   EXPECT_EQ(CategoryStatus::AVAILABLE,
-            observer().StatusForCategory(other_category()));
+            observer().StatusForCategory(articles_category()));
+  EXPECT_THAT(observer().SuggestionsForCategory(articles_category()),
+              IsEmpty());
+}
+
+TEST_F(RemoteSuggestionsProviderImplTest,
+       FetchErrorShouldLeaveSuggestionsUnchangedEmptySection) {
+  // Tests that we don't interpret the response value in error cases.
+  // Note, that the contract of the callback guarantees that we always send
+  // a null value in error cases. However, such a contract is brittle and the
+  // code is not too clear on the receiving side.
+  // TODO(tschumann): Establish and enforce a clear and robust error handling
+  // contract.
+
+  // Initialize the provider with two categories.
+  auto provider = MakeSuggestionsProvider(
+      /*use_mock_prefetched_pages_tracker=*/false,
+      /*use_fake_breaking_news_listener=*/false,
+      /*use_mock_remote_suggestions_status_service=*/false);
+
+  // Set up state with present suggestions.
+  std::vector<FetchedCategory> fetched_categories;
+  fetched_categories.push_back(
+      FetchedCategoryBuilder()
+          .SetCategory(articles_category())
+          .AddSuggestionViaBuilder(RemoteSuggestionBuilder()
+                                       .SetUrl("http://articles.com")
+                                       .SetAmpUrl(""))
+          .Build());
+
+  FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
+                        Status::Success(), std::move(fetched_categories));
+
+  ASSERT_EQ(CategoryStatus::AVAILABLE,
+            observer().StatusForCategory(articles_category()));
+  ASSERT_THAT(observer().SuggestionsForCategory(articles_category()),
+              SizeIs(1));
+
+  // Next fetch returns an error (with an empty section).
+  fetched_categories.clear();
+  fetched_categories.push_back(
+      FetchedCategoryBuilder().SetCategory(articles_category()).Build());
+  FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
+                        Status(StatusCode::TEMPORARY_ERROR, "some error"),
+                        std::move(fetched_categories));
+
+  // Articles category should stay unchanged.
+  EXPECT_EQ(CategoryStatus::AVAILABLE,
+            observer().StatusForCategory(articles_category()));
+  ASSERT_THAT(observer().SuggestionsForCategory(articles_category()),
+              SizeIs(1));
+  EXPECT_THAT(observer().SuggestionsForCategory(articles_category())[0].url(),
+              GURL("http://articles.com"));
+}
+
+TEST_F(RemoteSuggestionsProviderImplTest,
+       FetchErrorShouldLeaveSuggestionsUnchangedNullResponse) {
+  // Initialize the provider with two categories.
+  auto provider = MakeSuggestionsProvider(
+      /*use_mock_prefetched_pages_tracker=*/false,
+      /*use_fake_breaking_news_listener=*/false,
+      /*use_mock_remote_suggestions_status_service=*/false);
+
+  // Set up state with present suggestions.
+  std::vector<FetchedCategory> fetched_categories;
+  fetched_categories.push_back(
+      FetchedCategoryBuilder()
+          .SetCategory(articles_category())
+          .AddSuggestionViaBuilder(RemoteSuggestionBuilder()
+                                       .SetUrl("http://articles.com")
+                                       .SetAmpUrl(""))
+          .Build());
+
+  FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
+                        Status::Success(), std::move(fetched_categories));
+
+  ASSERT_EQ(CategoryStatus::AVAILABLE,
+            observer().StatusForCategory(articles_category()));
+  ASSERT_THAT(observer().SuggestionsForCategory(articles_category()),
+              SizeIs(1));
+
+  // Next fetch returns an error (with an empty section).
+  FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
+                        Status(StatusCode::TEMPORARY_ERROR, "some error"),
+                        base::nullopt);
+
+  // Articles category should stay unchanged.
+  EXPECT_EQ(CategoryStatus::AVAILABLE,
+            observer().StatusForCategory(articles_category()));
+  ASSERT_THAT(observer().SuggestionsForCategory(articles_category()),
+              SizeIs(1));
+  EXPECT_THAT(observer().SuggestionsForCategory(articles_category())[0].url(),
+              GURL("http://articles.com"));
 }
 
 }  // namespace ntp_snippets

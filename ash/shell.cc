@@ -67,6 +67,7 @@
 #include "ash/shutdown_controller.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/system/bluetooth/bluetooth_notification_controller.h"
+#include "ash/system/bluetooth/bluetooth_power_controller.h"
 #include "ash/system/bluetooth/tray_bluetooth_helper.h"
 #include "ash/system/brightness/brightness_controller_chromeos.h"
 #include "ash/system/brightness_control_delegate.h"
@@ -333,6 +334,7 @@ bool Shell::ShouldUseIMEService() {
 void Shell::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   PaletteTray::RegisterLocalStatePrefs(registry);
   WallpaperController::RegisterLocalStatePrefs(registry);
+  BluetoothPowerController::RegisterLocalStatePrefs(registry);
 }
 
 // static
@@ -340,10 +342,10 @@ void Shell::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   LogoutButtonTray::RegisterProfilePrefs(registry);
   NightLightController::RegisterProfilePrefs(registry);
   ShelfController::RegisterProfilePrefs(registry);
-
   // Request access to prefs used by ash but owned by chrome.
   // See //services/preferences/README.md
   TrayCapsLock::RegisterForeignPrefs(registry);
+  BluetoothPowerController::RegisterProfilePrefs(registry);
 }
 
 views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
@@ -429,10 +431,7 @@ void Shell::UpdateShelfVisibility() {
 }
 
 PrefService* Shell::GetLocalStatePrefService() const {
-  if (shell_port_->GetAshConfig() == Config::MASH)
-    return local_state_mash_.get();
-
-  return local_state_non_mash_;
+  return local_state_.get();
 }
 
 WebNotificationTray* Shell::GetWebNotificationTray() {
@@ -503,13 +502,6 @@ void Shell::ShowAppList(app_list::AppListShowSource toggle_method) {
   app_list_->Show(display::Screen::GetScreen()
                       ->GetDisplayNearestWindow(GetRootWindowForNewWindows())
                       .id());
-}
-
-void Shell::UpdateAppListYPositionAndOpacity(int y_position_in_screen,
-                                             float app_list_background_opacity,
-                                             bool is_end_gesture) {
-  app_list_->UpdateYPositionAndOpacity(
-      y_position_in_screen, app_list_background_opacity, is_end_gesture);
 }
 
 void Shell::DismissAppList() {
@@ -598,15 +590,6 @@ void Shell::SetIsBrowserProcessWithMash() {
   g_is_browser_process_with_mash = true;
 }
 
-void Shell::SetLocalStatePrefService(PrefService* local_state) {
-  DCHECK(GetAshConfig() != Config::MASH);
-  DCHECK(local_state);
-  local_state_non_mash_ = local_state;
-
-  for (auto& observer : shell_observers_)
-    observer.OnLocalStatePrefServiceInitialized(local_state_non_mash_);
-}
-
 void Shell::NotifyAppListVisibilityChanged(bool visible,
                                            aura::Window* root_window) {
   for (auto& observer : shell_observers_)
@@ -626,6 +609,11 @@ void Shell::NotifyVoiceInteractionEnabled(bool enabled) {
 void Shell::NotifyVoiceInteractionContextEnabled(bool enabled) {
   for (auto& observer : shell_observers_)
     observer.OnVoiceInteractionContextEnabled(enabled);
+}
+
+void Shell::NotifyVoiceInteractionSetupCompleted() {
+  for (auto& observer : shell_observers_)
+    observer.OnVoiceInteractionSetupCompleted();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -695,8 +683,6 @@ Shell::~Shell() {
   aura::client::GetFocusClient(GetPrimaryRootWindow())->FocusWindow(nullptr);
 
   // Please keep in reverse order as in Init() because it's easy to miss one.
-  split_view_controller_.reset();
-
   if (window_modality_controller_)
     window_modality_controller_.reset();
 
@@ -764,6 +750,10 @@ Shell::~Shell() {
   // Has to happen before ~MruWindowTracker.
   window_cycle_controller_.reset();
   window_selector_controller_.reset();
+
+  // |split_view_controller_| needs to be deleted after
+  // |window_selector_controller_|.
+  split_view_controller_.reset();
 
   CloseAllRootWindowChildWindows();
 
@@ -862,11 +852,13 @@ Shell::~Shell() {
   shell_port_.reset();
   session_controller_->RemoveObserver(this);
   wallpaper_delegate_.reset();
+  // BluetoothPowerController depends on the PrefService and must be destructed
+  // before it.
+  bluetooth_power_controller_ = nullptr;
   // NightLightController depeneds on the PrefService and must be destructed
   // before it. crbug.com/724231.
   night_light_controller_ = nullptr;
-  local_state_mash_.reset();
-  local_state_non_mash_ = nullptr;
+  local_state_.reset();
   shell_delegate_.reset();
 
   for (auto& observer : shell_observers_)
@@ -879,15 +871,15 @@ Shell::~Shell() {
 void Shell::Init(const ShellInitParams& init_params) {
   const Config config = shell_port_->GetAshConfig();
 
-  shelf_controller_ = base::MakeUnique<ShelfController>();
-
   if (NightLightController::IsFeatureEnabled())
     night_light_controller_ = base::MakeUnique<NightLightController>();
+
+  bluetooth_power_controller_ = base::MakeUnique<BluetoothPowerController>();
 
   wallpaper_delegate_ = shell_delegate_->CreateWallpaperDelegate();
 
   // Connector can be null in tests.
-  if (config == Config::MASH && shell_delegate_->GetShellConnector()) {
+  if (shell_delegate_->GetShellConnector()) {
     // Connect to local state prefs now, but wait for an active user before
     // connecting to the profile pref service. The login screen has a temporary
     // user profile that is not associated with a real user.
@@ -1018,6 +1010,7 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   accelerator_controller_ = shell_port_->CreateAcceleratorController();
   tablet_mode_controller_ = base::MakeUnique<TabletModeController>();
+  shelf_controller_ = base::MakeUnique<ShelfController>();
 
   magnifier_key_scroll_handler_ = MagnifierKeyScroller::CreateHandler();
   AddPreTargetHandler(magnifier_key_scroll_handler_.get());
@@ -1310,13 +1303,16 @@ void Shell::InitializeShelf() {
 
 void Shell::OnLocalStatePrefServiceInitialized(
     std::unique_ptr<::PrefService> pref_service) {
-  DCHECK(GetAshConfig() == Config::MASH);
+  DCHECK(!local_state_);
   // |pref_service| is null if can't connect to Chrome (as happens when
   // running mash outside of chrome --mash and chrome isn't built).
-  local_state_mash_ = std::move(pref_service);
+  if (!pref_service)
+    return;
+
+  local_state_ = std::move(pref_service);
 
   for (auto& observer : shell_observers_)
-    observer.OnLocalStatePrefServiceInitialized(local_state_mash_.get());
+    observer.OnLocalStatePrefServiceInitialized(local_state_.get());
 }
 
 }  // namespace ash

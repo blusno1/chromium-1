@@ -121,6 +121,7 @@
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/ui/commands/show_mail_composer_command.h"
 #import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
 #import "ios/chrome/browser/ui/dialogs/dialog_presenter.h"
 #import "ios/chrome/browser/ui/dialogs/java_script_dialog_presenter_impl.h"
@@ -134,7 +135,7 @@
 #import "ios/chrome/browser/ui/history_popup/tab_history_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/key_commands_provider.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
-#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_panel_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_handset_coordinator.h"
 #include "ios/chrome/browser/ui/omnibox/page_info_model.h"
 #import "ios/chrome/browser/ui/omnibox/page_info_view_controller.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
@@ -519,7 +520,7 @@ bool IsURLAllowedInIncognito(const GURL& url) {
   id<AppRatingPrompt> _rateThisAppDialog;
 
   // Native controller vended to tab before Tab is added to the tab model.
-  id _temporaryNativeController;
+  __weak id _temporaryNativeController;
 
   // Notifies the toolbar menu of reading list changes.
   ReadingListMenuNotifier* _readingListMenuNotifier;
@@ -578,6 +579,9 @@ bool IsURLAllowedInIncognito(const GURL& url) {
 // for the presentation of a new tab. Can be used to record performance metrics.
 @property(nonatomic, strong, nullable)
     ProceduralBlock foregroundTabWasAddedCompletionBlock;
+// Coordinator for Recent Tabs.
+@property(nonatomic, strong)
+    RecentTabsHandsetCoordinator* recentTabsCoordinator;
 
 // The user agent type used to load the currently visible page. User agent type
 // is NONE if there is no visible page or visible page is a native page.
@@ -662,7 +666,7 @@ bool IsURLAllowedInIncognito(const GURL& url) {
 // Show the bookmarks page.
 - (void)showAllBookmarks;
 // Shows a panel within the New Tab Page.
-- (void)showNTPPanel:(NewTabPage::PanelIdentifier)panel;
+- (void)showNTPPanel:(ntp_home::PanelIdentifier)panel;
 // Dismisses the "rate this app" dialog.
 - (void)dismissRateThisAppDialog;
 // Whether the given tab's URL is an application specific URL.
@@ -717,15 +721,9 @@ bubblePresenterForFeature:(const base::Feature&)feature
 // promotion.
 - (void)presentNewIncognitoTabTipBubble;
 
-// Create and show the find bar.
-- (void)initFindBarForTab;
-// Search for find bar query string.
-- (void)searchFindInPage;
 // Update find bar with model data. If |shouldFocus| is set to YES, the text
 // field will become first responder.
 - (void)updateFindBar:(BOOL)initialUpdate shouldFocus:(BOOL)shouldFocus;
-// Close and disable find in page bar.
-- (void)closeFindInPage;
 // Hide find bar.
 - (void)hideFindBarWithAnimation:(BOOL)animate;
 // Shows find bar. If |selectText| is YES, all text inside the Find Bar
@@ -960,6 +958,7 @@ class BrowserBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
     _foregroundTabWasAddedCompletionBlock;
 @synthesize tabTipBubblePresenter = _tabTipBubblePresenter;
 @synthesize incognitoTabTipBubblePresenter = _incognitoTabTipBubblePresenter;
+@synthesize recentTabsCoordinator = _recentTabsCoordinator;
 
 #pragma mark - Object lifecycle
 
@@ -1357,6 +1356,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
     if (_voiceSearchController)
       _voiceSearchController->SetDelegate(nil);
     _readingListCoordinator = nil;
+    self.recentTabsCoordinator = nil;
     _toolbarController = nil;
     _toolbarModelDelegate = nil;
     _toolbarModelIOS = nil;
@@ -3272,7 +3272,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
     pageController.swipeRecognizerProvider = self.sideSwipeController;
 
     // Panel is always NTP for iPhone.
-    NewTabPage::PanelIdentifier panelType = NewTabPage::kHomePanel;
+    ntp_home::PanelIdentifier panelType = ntp_home::HOME_PANEL;
 
     if (IsIPadIdiom()) {
       // New Tab Page can have multiple panels. Each panel is addressable
@@ -3286,7 +3286,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
       // If the URL is chrome://newtab/, pre-select the panel based on the
       // #fragment.
       panelType = url_host == kChromeUIBookmarksHost
-                      ? NewTabPage::kBookmarksPanel
+                      ? ntp_home::BOOKMARKS_PANEL
                       : NewTabPage::IdentifierFromFragment(url.ref());
     }
     [pageController selectPanel:panelType];
@@ -4342,6 +4342,71 @@ bubblePresenterForFeature:(const base::Feature&)feature
   [_rateThisAppDialog show];
 }
 
+- (void)showFindInPage {
+  if (!self.canShowFindBar)
+    return;
+
+  if (!_findBarController) {
+    _findBarController =
+        [[FindBarControllerIOS alloc] initWithIncognito:_isOffTheRecord];
+    _findBarController.dispatcher = self.dispatcher;
+  }
+
+  Tab* tab = [_model currentTab];
+  DCHECK(tab);
+  auto* helper = FindTabHelper::FromWebState(tab.webState);
+  DCHECK(!helper->IsFindUIActive());
+  helper->SetFindUIActive(true);
+  [self showFindBarWithAnimation:YES selectText:YES shouldFocus:YES];
+}
+
+- (void)closeFindInPage {
+  __weak BrowserViewController* weakSelf = self;
+  Tab* currentTab = [_model currentTab];
+  if (currentTab) {
+    FindTabHelper::FromWebState(currentTab.webState)->StopFinding(^{
+      [weakSelf updateFindBar:NO shouldFocus:NO];
+    });
+  }
+}
+
+- (void)searchFindInPage {
+  DCHECK([_model currentTab]);
+  auto* helper = FindTabHelper::FromWebState([_model currentTab].webState);
+  __weak BrowserViewController* weakSelf = self;
+  helper->StartFinding(
+      [_findBarController searchTerm], ^(FindInPageModel* model) {
+        BrowserViewController* strongSelf = weakSelf;
+        if (!strongSelf) {
+          return;
+        }
+        [strongSelf->_findBarController updateResultsCount:model];
+      });
+
+  if (!_isOffTheRecord)
+    helper->PersistSearchTerm();
+}
+
+- (void)findNextStringInPage {
+  Tab* currentTab = [_model currentTab];
+  DCHECK(currentTab);
+  // TODO(crbug.com/603524): Reshow find bar if necessary.
+  FindTabHelper::FromWebState(currentTab.webState)
+      ->ContinueFinding(FindTabHelper::FORWARD, ^(FindInPageModel* model) {
+        [_findBarController updateResultsCount:model];
+      });
+}
+
+- (void)findPreviousStringInPage {
+  Tab* currentTab = [_model currentTab];
+  DCHECK(currentTab);
+  // TODO(crbug.com/603524): Reshow find bar if necessary.
+  FindTabHelper::FromWebState(currentTab.webState)
+      ->ContinueFinding(FindTabHelper::REVERSE, ^(FindInPageModel* model) {
+        [_findBarController updateResultsCount:model];
+      });
+}
+
 #pragma mark - Command Handling
 
 - (IBAction)chromeExecuteCommand:(id)sender {
@@ -4349,36 +4414,8 @@ bubblePresenterForFeature:(const base::Feature&)feature
 
   if (!_model || !_browserState)
     return;
-  Tab* currentTab = [_model currentTab];
 
   switch (command) {
-    case IDC_FIND:
-      [self initFindBarForTab];
-      break;
-    case IDC_FIND_NEXT: {
-      DCHECK(currentTab);
-      // TODO(crbug.com/603524): Reshow find bar if necessary.
-      FindTabHelper::FromWebState(currentTab.webState)
-          ->ContinueFinding(FindTabHelper::FORWARD, ^(FindInPageModel* model) {
-            [_findBarController updateResultsCount:model];
-          });
-      break;
-    }
-    case IDC_FIND_PREVIOUS: {
-      DCHECK(currentTab);
-      // TODO(crbug.com/603524): Reshow find bar if necessary.
-      FindTabHelper::FromWebState(currentTab.webState)
-          ->ContinueFinding(FindTabHelper::REVERSE, ^(FindInPageModel* model) {
-            [_findBarController updateResultsCount:model];
-          });
-      break;
-    }
-    case IDC_FIND_CLOSE:
-      [self closeFindInPage];
-      break;
-    case IDC_FIND_UPDATE:
-      [self searchFindInPage];
-      break;
     case IDC_HELP_PAGE_VIA_MENU:
       [self showHelpPage];
       break;
@@ -4402,15 +4439,16 @@ bubblePresenterForFeature:(const base::Feature&)feature
     }
     case IDC_SHOW_OTHER_DEVICES: {
       if (IsIPadIdiom()) {
-        [self showNTPPanel:NewTabPage::kOpenTabsPanel];
+        [self showNTPPanel:ntp_home::RECENT_TABS_PANEL];
       } else {
-        UIViewController* controller = [RecentTabsPanelViewController
-            controllerToPresentForBrowserState:_browserState
-                                        loader:self
-                                    dispatcher:self.dispatcher];
-        controller.modalPresentationStyle = UIModalPresentationFormSheet;
-        controller.modalPresentationCapturesStatusBarAppearance = YES;
-        [self presentViewController:controller animated:YES completion:nil];
+        if (!self.recentTabsCoordinator) {
+          self.recentTabsCoordinator = [[RecentTabsHandsetCoordinator alloc]
+              initWithBaseViewController:self];
+          self.recentTabsCoordinator.loader = self;
+          self.recentTabsCoordinator.dispatcher = self.dispatcher;
+          self.recentTabsCoordinator.browserState = _browserState;
+        }
+        [self.recentTabsCoordinator start];
       }
       break;
     }
@@ -4556,50 +4594,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
   [self updateFindBar:YES shouldFocus:shouldFocus];
 }
 
-// Create find bar controller and pass it to the web controller.
-- (void)initFindBarForTab {
-  if (!self.canShowFindBar)
-    return;
-
-  if (!_findBarController)
-    _findBarController =
-        [[FindBarControllerIOS alloc] initWithIncognito:_isOffTheRecord];
-
-  Tab* tab = [_model currentTab];
-  DCHECK(tab);
-  auto* helper = FindTabHelper::FromWebState(tab.webState);
-  DCHECK(!helper->IsFindUIActive());
-  helper->SetFindUIActive(true);
-  [self showFindBarWithAnimation:YES selectText:YES shouldFocus:YES];
-}
-
-- (void)searchFindInPage {
-  DCHECK([_model currentTab]);
-  auto* helper = FindTabHelper::FromWebState([_model currentTab].webState);
-  __weak BrowserViewController* weakSelf = self;
-  helper->StartFinding(
-      [_findBarController searchTerm], ^(FindInPageModel* model) {
-        BrowserViewController* strongSelf = weakSelf;
-        if (!strongSelf) {
-          return;
-        }
-        [strongSelf->_findBarController updateResultsCount:model];
-      });
-
-  if (!_isOffTheRecord)
-    helper->PersistSearchTerm();
-}
-
-- (void)closeFindInPage {
-  __weak BrowserViewController* weakSelf = self;
-  Tab* currentTab = [_model currentTab];
-  if (currentTab) {
-    FindTabHelper::FromWebState(currentTab.webState)->StopFinding(^{
-      [weakSelf updateFindBar:NO shouldFocus:NO];
-    });
-  }
-}
-
 - (void)updateFindBar:(BOOL)initialUpdate shouldFocus:(BOOL)shouldFocus {
   // TODO(crbug.com/731045): This early return temporarily replaces a DCHECK.
   // For unknown reasons, this DCHECK sometimes was hit in the wild, resulting
@@ -4632,7 +4626,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   [tab navigationManager]->LoadURLWithParams(params);
 }
 
-- (void)showNTPPanel:(NewTabPage::PanelIdentifier)panel {
+- (void)showNTPPanel:(ntp_home::PanelIdentifier)panel {
   DCHECK(self.visible || self.dismissingModal);
   GURL url(kChromeUINewTabURL);
   std::string fragment(NewTabPage::FragmentFromIdentifier(panel));
@@ -5092,9 +5086,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
 - (void)userTappedSendFeedback:(UIView*)view {
   base::RecordAction(base::UserMetricsAction("IOSRateThisAppFeedbackChosen"));
   _rateThisAppDialog = nil;
-  GenericChromeCommand* command =
-      [[GenericChromeCommand alloc] initWithTag:IDC_REPORT_AN_ISSUE];
-  [self chromeExecuteCommand:command];
+  [self.dispatcher showReportAnIssue];
 }
 
 - (void)userTappedDismiss:(UIView*)view {

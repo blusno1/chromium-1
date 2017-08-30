@@ -40,7 +40,6 @@
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "content/child/appcache/appcache_dispatcher.h"
-#include "content/child/child_url_loader_factory_getter.h"
 #include "content/child/feature_policy/feature_policy_platform.h"
 #include "content/child/quota_dispatcher.h"
 #include "content/child/request_extra_data.h"
@@ -75,6 +74,7 @@
 #include "content/common/site_isolation_policy.h"
 #include "content/common/swapped_out_messages.h"
 #include "content/common/view_messages.h"
+#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/appcache_info.h"
 #include "content/public/common/associated_interface_provider.h"
 #include "content/public/common/bindings_policy.h"
@@ -768,6 +768,7 @@ NOINLINE void MaybeTriggerAsanError(const GURL& url) {
 #if defined(SYZYASAN)
   const char kCorruptHeapBlock[] = "/corrupt-heap-block";
   const char kCorruptHeap[] = "/corrupt-heap";
+  const char kDcheck[] = "/dcheck";
 #endif
 
   if (!url.DomainIs(kCrashDomain))
@@ -798,6 +799,11 @@ NOINLINE void MaybeTriggerAsanError(const GURL& url) {
     LOG(ERROR) << "Intentionally causing ASAN corrupt heap"
                << " because user navigated to " << url.spec();
     base::debug::AsanCorruptHeap();
+  } else if (crash_type == kDcheck) {
+    LOG(ERROR) << "Intentionally DCHECKING because user navigated to "
+               << url.spec();
+
+    DCHECK(false) << "Intentional DCHECK.";
 #endif
   }
 }
@@ -3006,15 +3012,21 @@ RenderFrameImpl::CreateWorkerFetchContext() {
   ServiceWorkerNetworkProvider* provider =
       ServiceWorkerNetworkProvider::FromWebServiceWorkerNetworkProvider(
           web_provider);
-  mojom::ServiceWorkerWorkerClientRequest request =
-      provider->context()->CreateWorkerClientRequest();
+  mojom::ServiceWorkerWorkerClientRequest service_worker_client_request;
+  // Some sandboxed iframes are not allowed to use service worker so don't have
+  // a real service worker provider, so the provider context is null.
+  if (provider->context()) {
+    service_worker_client_request =
+        provider->context()->CreateWorkerClientRequest();
+  }
 
   ChildURLLoaderFactoryGetter* url_loader_factory_getter =
       GetDefaultURLLoaderFactoryGetter();
   DCHECK(url_loader_factory_getter);
   std::unique_ptr<WorkerFetchContextImpl> worker_fetch_context =
       base::MakeUnique<WorkerFetchContextImpl>(
-          std::move(request), url_loader_factory_getter->GetClonedInfo());
+          std::move(service_worker_client_request),
+          url_loader_factory_getter->GetClonedInfo());
 
   worker_fetch_context->set_parent_frame_id(routing_id_);
   worker_fetch_context->set_site_for_cookies(
@@ -3811,7 +3823,7 @@ void RenderFrameImpl::DidClearWindowObject() {
       *base::CommandLine::ForCurrentProcess();
 
   if (command_line.HasSwitch(cc::switches::kEnableGpuBenchmarking))
-    GpuBenchmarking::Install(frame_);
+    GpuBenchmarking::Install(this);
 
   if (command_line.HasSwitch(switches::kEnableSkiaBenchmarking))
     SkiaBenchmarking::Install(frame_);
@@ -4281,6 +4293,20 @@ void RenderFrameImpl::ShowContextMenu(const blink::WebContextMenuData& data) {
   blink::WebRect selection_in_window(data.selection_rect);
   GetRenderWidget()->ConvertViewportToWindow(&selection_in_window);
   params.selection_rect = selection_in_window;
+
+#if defined(OS_ANDROID)
+  // The Samsung Email app relies on the context menu being shown after the
+  // javascript onselectionchanged is triggered.
+  // See crbug.com/729488
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&RenderFrameImpl::ShowDeferredContextMenu,
+                            weak_factory_.GetWeakPtr(), params));
+#else
+  ShowDeferredContextMenu(params);
+#endif
+}
+
+void RenderFrameImpl::ShowDeferredContextMenu(const ContextMenuParams& params) {
   Send(new FrameHostMsg_ContextMenu(routing_id_, params));
 }
 
@@ -6825,17 +6851,6 @@ void RenderFrameImpl::DraggableRegionsChanged() {
     observer.DraggableRegionsChanged();
 }
 
-ChildURLLoaderFactoryGetter*
-RenderFrameImpl::GetDefaultURLLoaderFactoryGetter() {
-  RenderThreadImpl* render_thread = RenderThreadImpl::current();
-  DCHECK(render_thread);
-  if (!url_loader_factory_getter_) {
-    url_loader_factory_getter_ = render_thread->blink_platform_impl()
-                                     ->CreateDefaultURLLoaderFactoryGetter();
-  }
-  return url_loader_factory_getter_.get();
-}
-
 blink::WebPageVisibilityState RenderFrameImpl::GetVisibilityState() const {
   return VisibilityState();
 }
@@ -6858,6 +6873,17 @@ base::SingleThreadTaskRunner* RenderFrameImpl::GetUnthrottledTaskRunner() {
 
 int RenderFrameImpl::GetEnabledBindings() const {
   return enabled_bindings_;
+}
+
+ChildURLLoaderFactoryGetter*
+RenderFrameImpl::GetDefaultURLLoaderFactoryGetter() {
+  RenderThreadImpl* render_thread = RenderThreadImpl::current();
+  DCHECK(render_thread);
+  if (!url_loader_factory_getter_) {
+    url_loader_factory_getter_ = render_thread->blink_platform_impl()
+                                     ->CreateDefaultURLLoaderFactoryGetter();
+  }
+  return url_loader_factory_getter_.get();
 }
 
 blink::WebPlugin* RenderFrameImpl::GetWebPluginForFind() {

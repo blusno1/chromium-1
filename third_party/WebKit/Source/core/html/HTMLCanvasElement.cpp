@@ -1236,7 +1236,8 @@ void HTMLCanvasElement::DidMoveToNewDocument(Document& old_document) {
 void HTMLCanvasElement::WillDrawImageTo2DContext(CanvasImageSource* source) {
   if (CanvasHeuristicParameters::kEnableAccelerationToAvoidReadbacks &&
       SharedGpuContext::AllowSoftwareToAcceleratedCanvasUpgrade() &&
-      source->IsAccelerated() && !GetOrCreateImageBuffer()->IsAccelerated() &&
+      source->IsAccelerated() && GetOrCreateImageBuffer() &&
+      !GetImageBuffer()->IsAccelerated() &&
       ShouldAccelerate(kIgnoreResourceLimitCriteria)) {
     OpacityMode opacity_mode =
         context_->CreationAttributes().alpha() ? kNonOpaque : kOpaque;
@@ -1346,21 +1347,11 @@ ScriptPromise HTMLCanvasElement::CreateImageBitmap(
     ScriptState* script_state,
     EventTarget& event_target,
     Optional<IntRect> crop_rect,
-    const ImageBitmapOptions& options,
-    ExceptionState& exception_state) {
+    const ImageBitmapOptions& options) {
   DCHECK(event_target.ToLocalDOMWindow());
-  if ((crop_rect &&
-       !ImageBitmap::IsSourceSizeValid(crop_rect->Width(), crop_rect->Height(),
-                                       exception_state)) ||
-      !ImageBitmap::IsSourceSizeValid(BitmapSourceSize().Width(),
-                                      BitmapSourceSize().Height(),
-                                      exception_state))
-    return ScriptPromise();
-  if (!ImageBitmap::IsResizeOptionValid(options, exception_state))
-    return ScriptPromise();
+
   return ImageBitmapSource::FulfillImageBitmap(
-      script_state,
-      IsPaintable() ? ImageBitmap::Create(this, crop_rect, options) : nullptr);
+      script_state, ImageBitmap::Create(this, crop_rect, options));
 }
 
 void HTMLCanvasElement::SetPlaceholderFrame(

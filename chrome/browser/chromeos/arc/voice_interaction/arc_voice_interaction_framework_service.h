@@ -105,9 +105,15 @@ class ArcVoiceInteractionFrameworkService
   // Start the voice interaction setup wizard in container.
   void StartVoiceInteractionSetupWizard();
 
+  // Show the voice interaction settings in container.
+  void ShowVoiceInteractionSettings();
+
   // Updates voice interaction flags. These flags are set only once when ARC
   // container is enabled.
   void UpdateVoiceInteractionPrefs();
+
+  // Set voice interaction setup completed flag and notify the change.
+  void SetVoiceInteractionSetupCompleted();
 
   // For supporting ArcServiceManager::GetService<T>().
   static const char kArcServiceName[];
@@ -123,6 +129,9 @@ class ArcVoiceInteractionFrameworkService
 
   // Whether there is a pending request to start voice interaction.
   bool is_request_pending_ = false;
+
+  // Whether we should launch runtime setup flow for voice interaction.
+  bool should_start_runtime_flow_ = false;
 
   // The current state voice interaction service is. There is usually a long
   // delay after boot before the service is ready. We wait for the container

@@ -13,7 +13,7 @@ public class NetworkExceptionImpl extends NetworkException {
     // Error code, one of ERROR_*
     protected final int mErrorCode;
     // Cronet internal error code.
-    private final int mCronetInternalErrorCode;
+    protected final int mCronetInternalErrorCode;
 
     /**
      * Constructs an exception with a specific error.
@@ -26,6 +26,8 @@ public class NetworkExceptionImpl extends NetworkException {
      */
     public NetworkExceptionImpl(String message, int errorCode, int cronetInternalErrorCode) {
         super(message, null);
+        assert errorCode > 0 && errorCode < 12;
+        assert cronetInternalErrorCode < 0;
         mErrorCode = errorCode;
         mCronetInternalErrorCode = cronetInternalErrorCode;
     }

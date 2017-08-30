@@ -1298,6 +1298,9 @@ void AXObjectCacheImpl::SetCanvasObjectBounds(HTMLCanvasElement* canvas,
 }
 
 void AXObjectCacheImpl::AddPermissionStatusListener() {
+  if (!document_->GetExecutionContext())
+    return;
+
   ConnectToPermissionService(document_->GetExecutionContext(),
                              mojo::MakeRequest(&permission_service_));
 

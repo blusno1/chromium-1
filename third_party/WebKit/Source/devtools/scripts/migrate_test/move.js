@@ -14,11 +14,14 @@ const migrateUtils = require('./migrate_utils');
 const utils = require('../utils');
 
 const LAYOUT_TESTS_PATH = path.resolve(__dirname, '..', '..', '..', '..', 'LayoutTests');
-const TEST_EXPECTATIONS_PATH = path.resolve(LAYOUT_TESTS_PATH, 'TestExpectations');
 const FLAG_EXPECTATIONS_PATH = path.resolve(LAYOUT_TESTS_PATH, 'FlagExpectations');
 
 function main() {
-  const originalTests = scanForTests('../../../../LayoutTests/inspector/console');
+  const originalTests = scanForTests([
+    '../../../../LayoutTests/inspector/tracing',
+    '../../../../LayoutTests/inspector/profiler',
+  ]);
+
   console.log(originalTests);
   const oldToNewResourcesPath = new Map();
   const oldToNewTestPath = new Map(originalTests.map(t => [t, '']));
@@ -46,8 +49,8 @@ function main() {
     oldToNewTestPath.set(inputRelativePath, outRelativePath);
 
     // Move expectation file
-    const inputExpectationsPath = inputPath.replace('.html', '-expected.txt');
-    const outExpectationsPath = outPath.replace('.html', '-expected.txt');
+    const inputExpectationsPath = inputPath.replace(/\.x?html/, '-expected.txt');
+    const outExpectationsPath = outPath.replace(/\.x?html/, '-expected.txt');
     fs.writeFileSync(outExpectationsPath, fs.readFileSync(inputExpectationsPath, 'utf-8'));
     fs.unlinkSync(inputExpectationsPath);
   }
@@ -57,47 +60,10 @@ function main() {
   const TestExpectationFailureTypes =
       ['Crash', 'Failure', 'Rebaseline', 'Skip', 'Timeout', 'WontFix', 'Missing', 'NeedsManualRebaseline'];
 
-  const testsAlreadyExempted = new Set();
-
-  // Update TestExpectations
-  const testExpectations = fs.readFileSync(TEST_EXPECTATIONS_PATH, 'utf-8');
-  let updatedTestExpecations = testExpectations.split('\n').map(line => {
-    for (const [oldTestPath, newTestPath] of oldToNewTestPath) {
-      if (!newTestPath)
-        continue;
-      if (line.indexOf(oldTestPath) !== -1) {
-        if (TestExpectationFailureTypes.some(x => line.indexOf(x) !== -1)) {
-          testsAlreadyExempted.add(newTestPath);
-        }
-        return line.replace(oldTestPath, newTestPath);
-      }
-    }
-    return line;
-  });
-
-  updatedTestExpecations = updatedTestExpecations.map(line => {
-    for (const [oldTestPath, newTestPath] of oldToNewTestPath) {
-      if (!newTestPath)
-        continue;
-
-      // Put mojo tests here so we don't re-enable the test after migrating
-      if (line === '### Manually fix after migration') {
-        const newLines = Array.from(newTestPaths)
-                             .filter(t => testsAlreadyExempted.has(t))
-                             .map(x => `crbug.com/667560 virtual/mojo-loading/${x} [ Skip ]`)
-                             .join('\n');
-        if (newLines.length)
-          return line + '\n' + newLines;
-      }
-    }
-    return line;
-  });
-  fs.writeFileSync(TEST_EXPECTATIONS_PATH, updatedTestExpecations.join('\n'));
-
   // Update additional test expectations
   for (const filename
-           of ['ASANExpectations', 'LeakExpectations', 'MSANExpectations', 'NeverFixTests', 'SlowTests', 'SmokeTests',
-               'StaleTestExpectations']) {
+           of ['TestExpectations', 'ASANExpectations', 'LeakExpectations', 'MSANExpectations', 'NeverFixTests',
+               'SlowTests', 'SmokeTests', 'StaleTestExpectations']) {
     const filePath = path.resolve(LAYOUT_TESTS_PATH, filename);
     updateExpectationsFile(filePath);
   }
@@ -118,7 +84,10 @@ function main() {
         if (!newTestPath)
           continue;
         if (line.indexOf(oldTestPath) !== -1) {
-          return line.replace(oldTestPath, newTestPath);
+          const newLine = line.replace(oldTestPath, newTestPath);
+          return newLine + '\n' +
+              newLine.replace(newTestPath, `virtual/mojo-loading/${newTestPath}`)
+                  .replace(/crbug.com\/\d+/, 'crbug.com/667560');
         }
       }
       return line;
@@ -129,10 +98,11 @@ function main() {
 
 main();
 
-function scanForTests(dirPath) {
-  const absolutePath = path.resolve(__dirname, dirPath);
+function scanForTests(dirPaths) {
+  const absolutePaths = dirPaths.map(dirPath => path.resolve(__dirname, dirPath));
   let globbedPaths = [];
-  glob(absolutePath);
+  for (const absolutePath of absolutePaths)
+    glob(absolutePath);
   return globbedPaths.map(p => p.slice(p.indexOf('LayoutTests') + 'LayoutTests'.length + 1));
 
   function glob(globPath) {
@@ -141,7 +111,7 @@ function scanForTests(dirPath) {
       if (utils.isDir(p) && filename !== 'resources') {
         glob(p);
       }
-      if (utils.isFile(p) && p.endsWith('.html')) {
+      if (utils.isFile(p) && (p.endsWith('.html') || p.endsWith('.xhtml'))) {
         globbedPaths.push(p);
       }
     }

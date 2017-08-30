@@ -7,9 +7,6 @@
 
 #include "base/containers/span.h"
 #include "base/logging.h"
-#include "cc/ipc/filter_operation_struct_traits.h"
-#include "cc/ipc/filter_operations_struct_traits.h"
-#include "cc/ipc/surface_id_struct_traits.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/picture_draw_quad.h"
 #include "cc/quads/render_pass_draw_quad.h"
@@ -19,7 +16,10 @@
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
+#include "services/viz/public/cpp/compositing/filter_operation_struct_traits.h"
+#include "services/viz/public/cpp/compositing/filter_operations_struct_traits.h"
 #include "services/viz/public/cpp/compositing/shared_quad_state_struct_traits.h"
+#include "services/viz/public/cpp/compositing/surface_id_struct_traits.h"
 #include "services/viz/public/interfaces/compositing/quads.mojom-shared.h"
 #include "ui/gfx/geometry/mojo/geometry_struct_traits.h"
 #include "ui/gfx/ipc/color/gfx_param_traits.h"
@@ -442,11 +442,6 @@ template <>
 struct StructTraits<viz::mojom::DrawQuadDataView, DrawQuadWithSharedQuadState> {
   static const gfx::Rect& rect(const DrawQuadWithSharedQuadState& input) {
     return input.quad->rect;
-  }
-
-  static const gfx::Rect& opaque_rect(
-      const DrawQuadWithSharedQuadState& input) {
-    return input.quad->opaque_rect;
   }
 
   static const gfx::Rect& visible_rect(

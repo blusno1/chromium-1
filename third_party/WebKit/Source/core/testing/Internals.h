@@ -167,6 +167,7 @@ class Internals final : public GarbageCollected<Internals>,
   void clearHitTestCache(Document*, ExceptionState&) const;
 
   String visiblePlaceholder(Element*);
+  bool isValidationMessageVisible(Element*);
   void selectColorInColorChooser(Element*, const String& color_value);
   void endColorChooser(Element*);
   bool hasAutofocusRequest(Document*);
@@ -203,6 +204,13 @@ class Internals final : public GarbageCollected<Internals>,
                                  const String& thickness_value,
                                  const String& background_color_value,
                                  ExceptionState&);
+  void addSuggestionMarker(const Range*,
+                           const Vector<String>& suggestions,
+                           const String& suggestion_highlight_color_value,
+                           const String& underline_color_value,
+                           const String& thickness_value,
+                           const String& background_color_value,
+                           ExceptionState&);
   void setTextMatchMarkersActive(Node*,
                                  unsigned start_offset,
                                  unsigned end_offset,

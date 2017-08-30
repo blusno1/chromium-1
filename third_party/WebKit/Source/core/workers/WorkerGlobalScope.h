@@ -31,8 +31,8 @@
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/events/EventListener.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventListener.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/frame/DOMWindowBase64.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -86,8 +86,6 @@ class CORE_EXPORT WorkerGlobalScope
                              V8CacheOptions) final;
   bool IsClosing() const final { return closing_; }
   virtual void Dispose();
-  void ReportFeature(WebFeature) final;
-  void ReportDeprecation(WebFeature) final;
   WorkerThread* GetThread() const final { return thread_; }
 
   void ExceptionUnhandled(int exception_id);

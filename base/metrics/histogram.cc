@@ -546,7 +546,7 @@ void Histogram::WriteAscii(std::string* output) const {
 }
 
 bool Histogram::ValidateHistogramContents(bool crash_if_invalid,
-                                          int corrupted_count) const {
+                                          int identifier) const {
   enum Fields : int {
     kUnloggedBucketRangesField,
     kUnloggedSamplesField,
@@ -559,10 +559,22 @@ bool Histogram::ValidateHistogramContents(bool crash_if_invalid,
   };
 
   uint32_t bad_fields = 0;
-  if (histogram_name().length() > 20 && histogram_name().at(20) == '\0')
+  if (!unlogged_samples_)
+    bad_fields |= 1 << kUnloggedSamplesField;
+  else if (!unlogged_samples_->bucket_ranges())
+    bad_fields |= 1 << kUnloggedBucketRangesField;
+  if (!logged_samples_)
+    bad_fields |= 1 << kLoggedSamplesField;
+  else if (!logged_samples_->bucket_ranges())
+    bad_fields |= 1 << kLoggedBucketRangesField;
+  else if (logged_samples_->id() == 0)
+    bad_fields |= 1 << kIdField;
+  else if (histogram_name().length() > 20 && histogram_name().at(20) == '\0')
     bad_fields |= 1 << kHistogramNameField;
   else if (histogram_name().length() > 40 && histogram_name().at(40) == '\0')
     bad_fields |= 1 << kHistogramNameField;
+  if (flags() == 0)
+    bad_fields |= 1 << kFlagsField;
   if (dummy_ != kDummyValue)
     bad_fields |= 1 << kDummyField;
 
@@ -571,14 +583,13 @@ bool Histogram::ValidateHistogramContents(bool crash_if_invalid,
     return is_valid;
 
   // Abort if a problem is found (except "flags", which could legally be zero).
-  const std::string debug_string =
-      base::StringPrintf("%s/%" PRIu32 "/%d", histogram_name().c_str(),
-                         bad_fields, corrupted_count);
+  const std::string debug_string = base::StringPrintf(
+      "%s/%" PRIu32 "#%d", histogram_name().c_str(), bad_fields, identifier);
 #if !defined(OS_NACL)
   // Temporary for https://crbug.com/736675.
   base::debug::ScopedCrashKey crash_key("bad_histogram", debug_string);
 #endif
-  CHECK(false) << debug_string;
+  // CHECK(false) << debug_string;
   debug::Alias(&bad_fields);
   return false;
 }

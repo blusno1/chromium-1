@@ -20,7 +20,6 @@
 #include "base/process/process.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "content/browser/child_process_importance.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigation_controller_delegate.h"
@@ -58,6 +57,7 @@
 
 #if defined(OS_ANDROID)
 #include "content/browser/android/nfc_host.h"
+#include "content/public/browser/android/child_process_importance.h"
 #endif
 
 struct ViewHostMsg_DateTimeDialogValue_Params;
@@ -232,12 +232,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
   bool should_normally_be_visible() { return should_normally_be_visible_; }
 
-  // Indicate if the window has been occluded, and pass this to the views, only
-  // if there is no active capture going on (otherwise it is dropped on the
-  // floor).
-  void WasOccluded();
-  void WasUnOccluded();
-
   // Broadcasts the mode change to all frames.
   void SetAccessibilityMode(ui::AXMode mode);
 
@@ -296,12 +290,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
   void NotifyManifestUrlChanged(const base::Optional<GURL>& manifest_url);
 
-  // Set importance of WebContents that's independent from visibility.
-  //
-  // Note this is only used by and implemented on Android which exposes this API
-  // through public java code. If this is useful on other platforms, then this
-  // can be moved to the public class.
+#if defined(OS_ANDROID)
   void SetImportance(ChildProcessImportance importance);
+#endif
 
   // WebContents ------------------------------------------------------
   WebContentsDelegate* GetDelegate() override;
@@ -374,6 +365,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void WasShown() override;
   void WasHidden() override;
   bool IsVisible() const override;
+  void WasOccluded() override;
+  void WasUnOccluded() override;
   bool NeedToFireBeforeUnload() override;
   void DispatchBeforeUnload() override;
   void AttachToOuterWebContentsFrame(
@@ -556,6 +549,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void OnFocusedElementChangedInFrame(
       RenderFrameHostImpl* frame,
       const gfx::Rect& bounds_in_root_view) override;
+  void OnAdvanceFocus(RenderFrameHostImpl* source_rfh) override;
   void CreateNewWindow(
       RenderFrameHost* opener,
       int32_t render_view_route_id,
@@ -944,6 +938,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                            JavaScriptDialogsInMainAndSubframes);
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
                            DialogsFromJavaScriptEndFullscreen);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
+                           PopupsFromJavaScriptEndFullscreen);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
                            IframeBeforeUnloadParentHang);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
@@ -1042,6 +1038,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Traverses all the RenderFrameHosts in the FrameTree and creates a set
   // all the unique RenderWidgetHostViews.
   std::set<RenderWidgetHostView*> GetRenderWidgetHostViewsInTree();
+
+  // Calls WasUnOccluded() on all RenderWidgetHostViews in the frame tree.
+  void DoWasUnOccluded();
 
   // Called with the result of a DownloadImage() request.
   void OnDidDownloadImage(const ImageDownloadCallback& callback,
@@ -1454,6 +1453,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
   // Tracks whether RWHV should be visible once capturer_count_ becomes zero.
   bool should_normally_be_visible_;
+
+  // Tracks whether RWHV should be occluded once |capturer_count_| becomes zero.
+  bool should_normally_be_occluded_;
 
   // Tracks whether this WebContents was ever set to be visible. Used to
   // facilitate WebContents being loaded in the background by setting

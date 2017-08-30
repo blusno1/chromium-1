@@ -662,16 +662,12 @@ public class ChromeTabbedActivity
 
     @Override
     public ChromeTabCreator getTabCreator(boolean incognito) {
-        TabCreator tabCreator = super.getTabCreator(incognito);
-        assert tabCreator instanceof ChromeTabCreator;
-        return (ChromeTabCreator) tabCreator;
+        return (ChromeTabCreator) super.getTabCreator(incognito);
     }
 
     @Override
     public ChromeTabCreator getCurrentTabCreator() {
-        TabCreator tabCreator = super.getCurrentTabCreator();
-        assert tabCreator instanceof ChromeTabCreator;
-        return (ChromeTabCreator) tabCreator;
+        return (ChromeTabCreator) super.getCurrentTabCreator();
     }
 
     @Override
@@ -784,7 +780,8 @@ public class ChromeTabbedActivity
             @StringRes int stringId, @StringRes int accessibilityStringId) {
         // Don't show the IPH, if bottom sheet is already open.
         if (FeatureUtilities.isChromeHomeEnabled()
-                && getBottomSheet().getSheetState() != BottomSheet.SHEET_STATE_PEEK) {
+                && (getBottomSheet() == null
+                           || getBottomSheet().getSheetState() != BottomSheet.SHEET_STATE_PEEK)) {
             return;
         }
 
@@ -1154,7 +1151,6 @@ public class ChromeTabbedActivity
                     if (tabToBeClobbered != null) {
                         TabModelUtils.setIndex(tabModel, tabToBeClobberedIndex);
                         tabToBeClobbered.reload();
-                        RecordUserAction.record("MobileTabClobbered");
                     } else {
                         launchIntent(url, referer, headers, externalAppId, true, intent);
                     }
@@ -1202,11 +1198,10 @@ public class ChromeTabbedActivity
                         loadUrlParams.setTransitionType(IntentHandler.getTransitionTypeFromIntent(
                                 intent, transitionType));
                         if (referer != null) {
-                            loadUrlParams.setReferrer(
-                                    new Referrer(referer, Referrer.REFERRER_POLICY_DEFAULT));
+                            loadUrlParams.setReferrer(new Referrer(
+                                    referer, IntentHandler.getReferrerPolicyFromIntent(intent)));
                         }
                         currentTab.loadUrl(loadUrlParams);
-                        RecordUserAction.record("MobileTabClobbered");
                     } else {
                         launchIntent(url, referer, headers, externalAppId, true, intent);
                     }
@@ -1481,12 +1476,35 @@ public class ChromeTabbedActivity
 
             @Override
             public int getFooterResourceId() {
-                if (getBottomSheet() != null) {
-                    boolean isPageMenu = !isTablet() && !isInOverviewMode();
-                    return isPageMenu ? R.layout.icon_row_menu_footer : 0;
+                if (getBottomSheet() != null
+                        && getAppMenuPropertiesDelegate().shouldShowPageMenu()) {
+                    return R.layout.icon_row_menu_footer;
                 }
 
                 return showDataSaverFooter() ? R.layout.data_reduction_main_menu_footer : 0;
+            }
+
+            @Override
+            public int getHeaderResourceId() {
+                if (getBottomSheet() != null
+                        && getAppMenuPropertiesDelegate().shouldShowPageMenu()) {
+                    return R.layout.chrome_home_iph_header;
+                }
+
+                return 0;
+            }
+
+            @Override
+            public OnClickListener getHeaderOnClickListener() {
+                return new OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        getBottomSheet()
+                                .getBottomSheetMetrics()
+                                .recordInProductHelpMenuItemClicked();
+                        getBottomSheet().showHelpBubble(true);
+                    }
+                };
             }
 
             @Override
@@ -1706,7 +1724,6 @@ public class ChromeTabbedActivity
 
         if (getToolbarManager().back()) {
             recordBackPressedUma("Navigating backward", BACK_PRESSED_NAVIGATED_BACK);
-            RecordUserAction.record("MobileTabClobbered");
             return true;
         }
 

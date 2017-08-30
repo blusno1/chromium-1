@@ -32,6 +32,7 @@ const char kAccessibilityScreenMagnifierCenterFocus[] =
 // An integer pref which determines what type of screen magnifier is enabled.
 // Note that: 'screen_magnifier_type' had been used as string pref. Hence,
 // we are using another name pref here.
+// NOTE: We only shipped one type (full). http://crbug.com/170850
 const char kAccessibilityScreenMagnifierType[] =
     "settings.a11y.screen_magnifier_type2";
 // A double pref which determines a zooming scale of the screen magnifier.
@@ -128,6 +129,14 @@ const char kLogoutDialogDurationMs[] = "logout_dialog_duration_ms";
 
 // A dictionary pref that maps wallpaper file paths to their prominent colors.
 const char kWallpaperColors[] = "ash.wallpaper.prominent_colors";
+
+// Boolean pref indicating whether a user has enabled the bluetooth adapter.
+const char kUserBluetoothAdapterEnabled[] =
+    "ash.user.bluetooth.adapter_enabled";
+
+// Boolean pref indicating system-wide setting for bluetooth adapter power.
+const char kSystemBluetoothAdapterEnabled[] =
+    "ash.system.bluetooth.adapter_enabled";
 
 // NOTE: New prefs should start with the "ash." prefix. Existing prefs moved
 // into this file should not be renamed, since they may be synced.

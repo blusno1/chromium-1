@@ -41,6 +41,7 @@
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/blink/texttrack_impl.h"
+#include "media/blink/video_decode_stats_reporter.h"
 #include "media/blink/watch_time_reporter.h"
 #include "media/blink/webaudiosourceprovider_impl.h"
 #include "media/blink/webcontentdecryptionmodule_impl.h"
@@ -183,7 +184,9 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       network_state_(WebMediaPlayer::kNetworkStateEmpty),
       ready_state_(WebMediaPlayer::kReadyStateHaveNothing),
       highest_ready_state_(WebMediaPlayer::kReadyStateHaveNothing),
-      preload_(MultibufferDataSource::AUTO),
+      preload_(base::FeatureList::IsEnabled(kPreloadDefaultIsMetadata)
+                   ? MultibufferDataSource::METADATA
+                   : MultibufferDataSource::AUTO),
       main_task_runner_(frame->LoadingTaskRunner()),
       media_task_runner_(params->media_task_runner()),
       worker_task_runner_(params->worker_task_runner()),
@@ -252,7 +255,9 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
           base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo)),
       request_routing_token_cb_(params->request_routing_token_cb()),
       overlay_routing_token_(OverlayInfo::RoutingToken()),
-      watch_time_recorder_provider_(params->watch_time_recorder_provider()) {
+      watch_time_recorder_provider_(params->watch_time_recorder_provider()),
+      create_decode_stats_recorder_cb_(
+          params->create_capabilities_recorder_cb()) {
   DVLOG(1) << __func__;
   DCHECK(!adjust_allocated_memory_cb_.is_null());
   DCHECK(renderer_factory_selector_);
@@ -262,7 +267,9 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
   if (surface_layer_for_video_enabled_)
     bridge_ = base::WrapUnique(blink::WebSurfaceLayerBridge::Create());
 
-  force_video_overlays_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
+  // If we're supposed to force video overlays, then make sure that they're
+  // enabled all the time.
+  always_enable_overlays_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kForceVideoOverlays);
 
   if (base::FeatureList::IsEnabled(media::kOverlayFullscreenVideo)) {
@@ -403,10 +410,10 @@ void WebMediaPlayerImpl::DisableOverlay() {
 void WebMediaPlayerImpl::EnteredFullscreen() {
   overlay_info_.is_fullscreen = true;
 
-  // |force_video_overlays_| implies that we're already in overlay mode, so take
-  // no action here.  Otherwise, switch to an overlay if it's allowed and if
-  // it will display properly.
-  if (!force_video_overlays_ && overlay_mode_ != OverlayMode::kNoOverlays &&
+  // |always_enable_overlays_| implies that we're already in overlay mode, so
+  // take no action here.  Otherwise, switch to an overlay if it's allowed and
+  // if it will display properly.
+  if (!always_enable_overlays_ && overlay_mode_ != OverlayMode::kNoOverlays &&
       DoesOverlaySupportMetadata()) {
     EnableOverlay();
   }
@@ -425,9 +432,9 @@ void WebMediaPlayerImpl::EnteredFullscreen() {
 void WebMediaPlayerImpl::ExitedFullscreen() {
   overlay_info_.is_fullscreen = false;
 
-  // If we're in overlay mode, then exit it unless we're supposed to be in
-  // overlay mode all the time.
-  if (!force_video_overlays_ && overlay_enabled_)
+  // If we're in overlay mode, then exit it unless we're supposed to allow
+  // overlays all the time.
+  if (!always_enable_overlays_ && overlay_enabled_)
     DisableOverlay();
 
   // See EnteredFullscreen for why we do this.
@@ -548,6 +555,9 @@ void WebMediaPlayerImpl::Play() {
     watch_time_reporter_->OnPlaying();
   }
 
+  if (video_decode_stats_reporter_)
+    video_decode_stats_reporter_->OnPlaying();
+
   media_log_->AddEvent(media_log_->CreateEvent(MediaLogEvent::PLAY));
   UpdatePlayState();
 }
@@ -583,6 +593,10 @@ void WebMediaPlayerImpl::Pause() {
 
   DCHECK(watch_time_reporter_);
   watch_time_reporter_->OnPaused();
+
+  if (video_decode_stats_reporter_)
+    video_decode_stats_reporter_->OnPaused();
+
   media_log_->AddEvent(media_log_->CreateEvent(MediaLogEvent::PAUSE));
 
   UpdatePlayState();
@@ -1101,6 +1115,9 @@ void WebMediaPlayerImpl::SetContentDecryptionModule(
   if (!was_encrypted && watch_time_reporter_)
     CreateWatchTimeReporter();
 
+  // For now MediaCapabilities only handles clear content.
+  video_decode_stats_reporter_.reset();
+
   SetCdm(cdm);
 }
 
@@ -1117,6 +1134,9 @@ void WebMediaPlayerImpl::OnEncryptedMediaInitData(
   is_encrypted_ = true;
   if (!was_encrypted && watch_time_reporter_)
     CreateWatchTimeReporter();
+
+  // For now MediaCapabilities only handles clear content.
+  video_decode_stats_reporter_.reset();
 
   encrypted_client_->Encrypted(
       ConvertToWebInitDataType(init_data_type), init_data.data(),
@@ -1385,9 +1405,11 @@ void WebMediaPlayerImpl::OnMetadata(PipelineMetadata metadata) {
   if (HasVideo()) {
     if (overlay_enabled_) {
       // SurfaceView doesn't support rotated video, so transition back if
-      // the video is now rotated.  If |force_video_overlays_|, we keep the
+      // the video is now rotated.  If |always_enable_overlays_|, we keep the
       // overlay anyway so that the state machine keeps working.
-      if (!force_video_overlays_ && !DoesOverlaySupportMetadata())
+      // TODO(liberato): verify if compositor feedback catches this.  If so,
+      // then we don't need this check.
+      if (!always_enable_overlays_ && !DoesOverlaySupportMetadata())
         DisableOverlay();
       else if (surface_manager_)
         surface_manager_->NaturalSizeChanged(pipeline_metadata_.natural_size);
@@ -1413,7 +1435,42 @@ void WebMediaPlayerImpl::OnMetadata(PipelineMetadata metadata) {
     observer_->OnMetadataChanged(pipeline_metadata_);
 
   CreateWatchTimeReporter();
+  CreateVideoDecodeStatsReporter();
   UpdatePlayState();
+}
+
+void WebMediaPlayerImpl::CreateVideoDecodeStatsReporter() {
+  // TODO(chcunningham): destroy reporter if we initially have video but the
+  // track gets disabled. Currently not possible in default desktop Chrome.
+  if (!HasVideo())
+    return;
+
+  // Stats reporter requires a valid config. We may not have one for HLS cases
+  // where URL demuxer doesn't know details of the stream.
+  if (!pipeline_metadata_.video_decoder_config.IsValidConfig())
+    return;
+
+  // For now MediaCapabilities only handles clear content.
+  // TODO(chcunningham): Report encrypted stats.
+  if (is_encrypted_)
+    return;
+
+  // Create capabilities reporter and synchronize its initial state.
+  video_decode_stats_reporter_.reset(new VideoDecodeStatsReporter(
+      create_decode_stats_recorder_cb_.Run(),
+      base::Bind(&WebMediaPlayerImpl::GetPipelineStatistics,
+                 base::Unretained(this)),
+      pipeline_metadata_.video_decoder_config));
+
+  if (delegate_->IsFrameHidden())
+    video_decode_stats_reporter_->OnHidden();
+  else
+    video_decode_stats_reporter_->OnShown();
+
+  if (paused_)
+    video_decode_stats_reporter_->OnPaused();
+  else
+    video_decode_stats_reporter_->OnPlaying();
 }
 
 void WebMediaPlayerImpl::OnProgress() {
@@ -1574,6 +1631,9 @@ void WebMediaPlayerImpl::OnVideoNaturalSizeChange(const gfx::Size& size) {
   if (!watch_time_reporter_->IsSizeLargeEnoughToReportWatchTime())
     CreateWatchTimeReporter();
 
+  if (video_decode_stats_reporter_)
+    video_decode_stats_reporter_->OnNaturalSizeChanged(rotated_size);
+
   if (overlay_enabled_ && surface_manager_ &&
       overlay_mode_ == OverlayMode::kUseContentVideoView) {
     surface_manager_->NaturalSizeChanged(rotated_size);
@@ -1622,6 +1682,9 @@ void WebMediaPlayerImpl::OnVideoConfigChange(const VideoDecoderConfig& config) {
 
   if (observer_)
     observer_->OnMetadataChanged(pipeline_metadata_);
+
+  if (video_decode_stats_reporter_)
+    video_decode_stats_reporter_->OnVideoConfigChanged(config);
 }
 
 void WebMediaPlayerImpl::OnVideoAverageKeyframeDistanceUpdate() {
@@ -1640,6 +1703,9 @@ void WebMediaPlayerImpl::OnFrameHidden() {
 
   if (watch_time_reporter_)
     watch_time_reporter_->OnHidden();
+
+  if (video_decode_stats_reporter_)
+    video_decode_stats_reporter_->OnHidden();
 
   UpdateBackgroundVideoOptimizationState();
   UpdatePlayState();
@@ -1671,6 +1737,9 @@ void WebMediaPlayerImpl::OnFrameShown() {
 
   if (watch_time_reporter_)
     watch_time_reporter_->OnShown();
+
+  if (video_decode_stats_reporter_)
+    video_decode_stats_reporter_->OnShown();
 
   // Only track the time to the first frame if playing or about to play because
   // of being shown and only for videos we would optimize background playback
@@ -1776,6 +1845,9 @@ void WebMediaPlayerImpl::OnRemotePlaybackEnded() {
 void WebMediaPlayerImpl::OnDisconnectedFromRemoteDevice(double t) {
   DoSeek(base::TimeDelta::FromSecondsD(t), false);
 
+  // Capabilities reporting can resume now that playback is local.
+  CreateVideoDecodeStatsReporter();
+
   // |client_| might destroy us in methods below.
   UpdatePlayState();
 
@@ -1785,6 +1857,9 @@ void WebMediaPlayerImpl::OnDisconnectedFromRemoteDevice(double t) {
 }
 
 void WebMediaPlayerImpl::SuspendForRemote() {
+  // Capabilities reporting should only be performed for local playbacks.
+  video_decode_stats_reporter_.reset();
+
   if (pipeline_controller_.IsPipelineSuspended() &&
       !IsNewRemotePlaybackPipelineEnabled()) {
     scoped_refptr<VideoFrame> frame = cast_impl_.GetCastingBanner();
@@ -1883,7 +1958,7 @@ void WebMediaPlayerImpl::OnOverlayInfoRequested(
 
   // For encrypted video on pre-M, we pretend that the decoder doesn't require a
   // restart.  This is because it needs an overlay all the time anyway.  We'll
-  // switch into |force_video_overlays_| mode below.
+  // switch into |always_enable_overlays_| mode below.
   if (overlay_mode_ == OverlayMode::kUseAndroidOverlay && is_encrypted_)
     decoder_requires_restart_for_overlay = false;
 
@@ -1897,12 +1972,12 @@ void WebMediaPlayerImpl::OnOverlayInfoRequested(
   decoder_requires_restart_for_overlay_ = decoder_requires_restart_for_overlay;
   provide_overlay_info_cb_ = provide_overlay_info_cb;
 
-  // We always force (allow, actually) video overlays in AndroidOverlayMode.
-  // AVDA figures out when to use them.  If the decoder requires restart, then
-  // we still want to restart the decoder on the fullscreen transitions anyway.
+  // We always allow video overlays in AndroidOverlayMode.  AVDA figures out
+  // when to use them.  If the decoder requires restart, then we still want to
+  // restart the decoder on the fullscreen transitions anyway.
   if (overlay_mode_ == OverlayMode::kUseAndroidOverlay &&
       !decoder_requires_restart_for_overlay) {
-    force_video_overlays_ = true;
+    always_enable_overlays_ = true;
     if (!overlay_enabled_)
       EnableOverlay();
   }
@@ -1955,11 +2030,8 @@ void WebMediaPlayerImpl::MaybeSendOverlayInfoToDecoder() {
 std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer() {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
-  // TODO(liberato): Re-evaluate this as AndroidVideoSurfaceChooser gets smarter
-  // about turning off overlays.  Either we should verify that it is not
-  // breaking this use-case if it does so, or we should notify it that using
-  // the overlay is required.
-  if (force_video_overlays_)
+  // Make sure that overlays are enabled if they're always allowed.
+  if (always_enable_overlays_)
     EnableOverlay();
 
   RequestOverlayInfoCB request_overlay_info_cb;
@@ -1990,6 +2062,10 @@ void WebMediaPlayerImpl::StartPipeline() {
     //
     // TODO(tguilbert/avayvod): Update this flag when removing |cast_impl_|.
     using_media_player_renderer_ = true;
+
+    // MediaPlayerRenderer does not provide pipeline stats, so nuke capabilities
+    // reporter.
+    video_decode_stats_reporter_.reset();
 
     demuxer_.reset(new MediaUrlDemuxer(media_task_runner_, loaded_url_,
                                        frame_->GetDocument().SiteForCookies()));
@@ -2668,6 +2744,10 @@ void WebMediaPlayerImpl::SwitchToRemoteRenderer(
     const std::string& remote_device_friendly_name) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   disable_pipeline_auto_suspend_ = true;
+
+  // Capabilities reporting should only be performed for local playbacks.
+  video_decode_stats_reporter_.reset();
+
   // Requests to restart media pipeline. A remote renderer will be created via
   // the |renderer_factory_selector_|.
   ScheduleRestart();
@@ -2680,6 +2760,10 @@ void WebMediaPlayerImpl::SwitchToRemoteRenderer(
 void WebMediaPlayerImpl::SwitchToLocalRenderer() {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   disable_pipeline_auto_suspend_ = false;
+
+  // Capabilities reporting may resume now that playback is local.
+  CreateVideoDecodeStatsReporter();
+
   // Requests to restart media pipeline. A local renderer will be created via
   // the |renderer_factory_selector_|.
   ScheduleRestart();

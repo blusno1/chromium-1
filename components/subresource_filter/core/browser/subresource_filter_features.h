@@ -62,6 +62,9 @@ struct Configuration {
     // otherwise satisfied. A greater value indicates higher priority.
     int priority = 0;
 
+    // Whether to activate on SafeBrowsing lists with experimental metadata.
+    bool experimental = false;
+
     std::unique_ptr<base::trace_event::TracedValue> ToTracedValue() const;
   };
 
@@ -201,8 +204,12 @@ extern const char kActivationListsParameterName[];
 extern const char kActivationListSocialEngineeringAdsInterstitial[];
 extern const char kActivationListPhishingInterstitial[];
 extern const char kActivationListSubresourceFilter[];
+extern const char kActivationListBetterAds[];
+extern const char kActivationListAbusiveAds[];
+extern const char kActivationListAllAds[];
 
 extern const char kActivationPriorityParameterName[];
+extern const char kActivationExperimentalParameterName[];
 
 extern const char kPerformanceMeasurementRateParameterName[];
 

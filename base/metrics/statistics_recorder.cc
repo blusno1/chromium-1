@@ -7,10 +7,8 @@
 #include <memory>
 
 #include "base/at_exit.h"
-#include "base/debug/crash_logging.h"  // crbug/744734
 #include "base/debug/leak_annotations.h"
 #include "base/json/string_escape.h"
-#include "base/location.h"  // crbug/744734
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
@@ -20,7 +18,6 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
-#include "build/build_config.h"  // crbug/744734
 
 namespace {
 
@@ -302,26 +299,13 @@ void StatisticsRecorder::PrepareDeltas(
 }
 
 // static
-void StatisticsRecorder::ValidateAllHistograms(
-    tracked_objects::Location* location) {
+void StatisticsRecorder::ValidateAllHistograms(int identifier) {
   ImportGlobalPersistentHistograms();
 
   auto known = GetKnownHistograms(/*include_persistent=*/true);
 
-  for (HistogramBase* h : known) {
-    const bool is_valid = h->ValidateHistogramContents(!location, 0);
-    if (!is_valid) {
-#if !defined(OS_NACL)
-      // CrashKey is scoped so can't be inside "if (location)" block so the
-      // "!location" parameter to ValidatehistogramContents causes it to
-      // crash there if location is passed as null.
-      const std::string debug_string = base::StringPrintf(
-          "%s:%d", location->file_name(), location->line_number());
-      base::debug::ScopedCrashKey crash_key("from_location", debug_string);
-      h->ValidateHistogramContents(true, 0);
-#endif
-    }
-  }
+  for (HistogramBase* h : known)
+    h->ValidateHistogramContents(true, identifier);
 }
 
 // static
@@ -455,7 +439,7 @@ std::vector<HistogramBase*> StatisticsRecorder::GetKnownHistograms(
     bool include_persistent) {
   std::vector<HistogramBase*> known;
   base::AutoLock auto_lock(lock_.Get());
-  if (!histograms_)
+  if (!histograms_ || histograms_->empty())
     return known;
 
   known.reserve(histograms_->size());

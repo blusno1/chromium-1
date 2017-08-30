@@ -243,7 +243,7 @@ const base::Feature kMacFullSizeContentView{"MacFullSizeContentView",
 
 // Enables or disables the Material Design version of chrome://bookmarks.
 const base::Feature kMaterialDesignBookmarks{"MaterialDesignBookmarks",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Enabled or disabled the Material Design version of chrome://extensions.
@@ -309,7 +309,7 @@ const base::Feature kNativeNotifications{"NativeNotifications",
 
 #if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
 const base::Feature kNativeWindowNavButtons{"NativeWindowNavButtons",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
 
 const base::Feature kNetworkPrediction{"NetworkPrediction",
@@ -379,8 +379,8 @@ const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
 #if defined(OS_ANDROID)
 // Enables separate notification channels in Android O for notifications from
 // different origins, instead of sending them all to a single 'Sites' channel.
-const base::Feature kSiteNotificationChannels{
-    "SiteNotificationChannels", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kSiteNotificationChannels{"SiteNotificationChannels",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined (OS_ANDROID)
 
 // A new user experience for transitioning into fullscreen and mouse pointer
@@ -401,14 +401,15 @@ const base::Feature kSoundContentSetting{"SoundContentSetting",
 #if !defined(OS_ANDROID)
 // Enables delaying the navigation of background tabs in order to improve
 // foreground tab's user experience.
-const base::Feature kStaggeredBackgroundTabOpen{
-    "StaggeredBackgroundTabOpen", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kStaggeredBackgroundTabOpening{
+    "StaggeredBackgroundTabOpening", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // This controls whether we are running experiment with staggered background
-// tab open. For control group, this should be disabled. This depends on
-// |kStaggeredBackgroundTabOpen| above.
-const base::Feature kStaggeredBackgroundTabOpenExperiment{
-    "StaggeredBackgroundTabOpenExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
+// tab opening feature. For control group, this should be disabled. This depends
+// on |kStaggeredBackgroundTabOpening| above.
+const base::Feature kStaggeredBackgroundTabOpeningExperiment{
+    "StaggeredBackgroundTabOpeningExperiment",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables or disables the creation of (legacy) supervised users. Does not

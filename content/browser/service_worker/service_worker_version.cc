@@ -44,6 +44,7 @@
 #include "content/public/common/result_codes.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 
 namespace content {
@@ -479,13 +480,9 @@ void ServiceWorkerVersion::StopWorker(const StatusCallback& callback) {
   switch (running_status()) {
     case EmbeddedWorkerStatus::STARTING:
     case EmbeddedWorkerStatus::RUNNING:
-      // Stop() returns false when it's called before StartWorker message hasn't
-      // been sent to the renderer process even though EmbeddedWorkerInstance is
-      // stopped properly.
-      // TODO(shimazu): Remove this check after Stop() hides the IPC behavior.
-      // See also a TODO on EmbeddedWorkerInstance::Stop.
-      if (!embedded_worker_->Stop()) {
-        RunSoon(base::BindOnce(callback, SERVICE_WORKER_ERROR_IPC_FAILED));
+      embedded_worker_->Stop();
+      if (running_status() == EmbeddedWorkerStatus::STOPPED) {
+        RunSoon(base::BindOnce(callback, SERVICE_WORKER_OK));
         return;
       }
       stop_callbacks_.push_back(callback);
@@ -497,6 +494,7 @@ void ServiceWorkerVersion::StopWorker(const StatusCallback& callback) {
       RunSoon(base::BindOnce(callback, SERVICE_WORKER_OK));
       return;
   }
+  NOTREACHED();
 }
 
 void ServiceWorkerVersion::ScheduleUpdate() {
@@ -1352,7 +1350,7 @@ void ServiceWorkerVersion::DidSkipWaiting(int request_id) {
 void ServiceWorkerVersion::OnClaimClients(int request_id) {
   if (status_ != ACTIVATING && status_ != ACTIVATED) {
     embedded_worker_->SendMessage(ServiceWorkerMsg_ClaimClientsError(
-        request_id, blink::WebServiceWorkerError::kErrorTypeState,
+        request_id, blink::mojom::ServiceWorkerErrorType::kState,
         base::ASCIIToUTF16(kClaimClientsStateErrorMesage)));
     return;
   }
@@ -1367,7 +1365,7 @@ void ServiceWorkerVersion::OnClaimClients(int request_id) {
   }
 
   embedded_worker_->SendMessage(ServiceWorkerMsg_ClaimClientsError(
-      request_id, blink::WebServiceWorkerError::kErrorTypeAbort,
+      request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
       base::ASCIIToUTF16(kClaimClientsShutdownErrorMesage)));
 }
 
@@ -1516,13 +1514,18 @@ void ServiceWorkerVersion::StartWorkerInternal() {
     installed_scripts_sender_->Start();
   }
 
+  auto event_dispatcher_request = mojo::MakeRequest(&event_dispatcher_);
+  // TODO(horo): These CHECKs are for debugging crbug.com/759938.
+  CHECK(event_dispatcher_.is_bound());
+  CHECK(event_dispatcher_request.is_pending());
+
   embedded_worker_->Start(
       std::move(params),
       // Unretained is used here because the callback will be owned by
       // |embedded_worker_| whose owner is |this|.
       base::BindOnce(&CompleteProviderHostPreparation, base::Unretained(this),
                      base::Passed(&pending_provider_host), context()),
-      mojo::MakeRequest(&event_dispatcher_), std::move(installed_scripts_info),
+      std::move(event_dispatcher_request), std::move(installed_scripts_info),
       base::Bind(&ServiceWorkerVersion::OnStartSentAndScriptEvaluated,
                  weak_factory_.GetWeakPtr()));
   event_dispatcher_.set_connection_error_handler(base::BindOnce(
@@ -1852,8 +1855,9 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
     // This worker is unresponsive and restart may fail.
     should_restart = false;
   } else if (old_status == EmbeddedWorkerStatus::STARTING) {
-    // This worker unexpectedly stopped because of start failure (e.g., process
-    // allocation failure) and restart is likely to fail again.
+    // This worker unexpectedly stopped because start failed.  Attempting to
+    // restart on start failure could cause an endless loop of start attempts,
+    // so don't try to restart now.
     should_restart = false;
   }
 

@@ -110,18 +110,18 @@
 #include "core/dom/VisitedLinkState.h"
 #include "core/dom/WhitespaceAttacher.h"
 #include "core/dom/XMLDocument.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/EventListener.h"
+#include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/events/BeforeUnloadEvent.h"
-#include "core/events/Event.h"
 #include "core/events/EventFactory.h"
-#include "core/events/EventListener.h"
 #include "core/events/HashChangeEvent.h"
 #include "core/events/PageTransitionEvent.h"
-#include "core/events/ScopedEventQueue.h"
 #include "core/events/VisualViewportResizeEvent.h"
 #include "core/events/VisualViewportScrollEvent.h"
 #include "core/frame/ContentSettingsClient.h"
@@ -1111,6 +1111,19 @@ HTMLImportLoader* Document::ImportLoader() const {
   return imports_controller_->LoaderFor(*this);
 }
 
+bool Document::IsHTMLImport() const {
+  return imports_controller_ && imports_controller_->Master() != this;
+}
+
+Document& Document::MasterDocument() const {
+  if (!imports_controller_)
+    return *const_cast<Document*>(this);
+
+  Document* master = imports_controller_->Master();
+  DCHECK(master);
+  return *master;
+}
+
 bool Document::HaveImportsLoaded() const {
   if (!imports_controller_)
     return true;
@@ -1791,6 +1804,14 @@ LocalFrameView* Document::View() const {
 
 Page* Document::GetPage() const {
   return frame_ ? frame_->GetPage() : nullptr;
+}
+
+LocalFrame* Document::GetFrameOfMasterDocument() const {
+  if (frame_)
+    return frame_;
+  if (imports_controller_)
+    return imports_controller_->Master()->GetFrame();
+  return nullptr;
 }
 
 Settings* Document::GetSettings() const {
@@ -2926,12 +2947,14 @@ void Document::CancelParsing() {
   SuppressLoadEvent();
 }
 
-void Document::OpenForNavigation(ParserSynchronizationPolicy parser_sync_policy,
-                                 const AtomicString& mime_type,
-                                 const AtomicString& encoding) {
-  ImplicitOpen(parser_sync_policy);
-  if (parser_->NeedsDecoder())
-    parser_->SetDecoder(BuildTextResourceDecoderFor(this, mime_type, encoding));
+DocumentParser* Document::OpenForNavigation(
+    ParserSynchronizationPolicy parser_sync_policy,
+    const AtomicString& mime_type,
+    const AtomicString& encoding) {
+  DocumentParser* parser = ImplicitOpen(parser_sync_policy);
+  if (parser->NeedsDecoder())
+    parser->SetDecoder(BuildTextResourceDecoderFor(this, mime_type, encoding));
+  return parser;
 }
 
 DocumentParser* Document::ImplicitOpen(
@@ -4893,9 +4916,11 @@ void Document::WillChangeFrameOwnerProperties(int margin_width,
   DCHECK(GetFrame() && GetFrame()->Owner());
   FrameOwner* owner = GetFrame()->Owner();
 
-  if (documentElement()) {
-    if (is_display_none != owner->IsDisplayNone())
-      documentElement()->LazyReattachIfAttached();
+  if (RuntimeEnabledFeatures::DisplayNoneIFrameCreatesNoLayoutObjectEnabled()) {
+    if (documentElement()) {
+      if (is_display_none != owner->IsDisplayNone())
+        documentElement()->LazyReattachIfAttached();
+    }
   }
 
   if (!body())
@@ -5099,8 +5124,7 @@ const KURL Document::SiteForCookies() const {
   // TODO(mkwst): This doesn't properly handle HTML Import documents.
 
   // If this is an imported document, grab its master document's first-party:
-  if (ImportsController() && ImportsController()->Master() &&
-      ImportsController()->Master() != this)
+  if (IsHTMLImport())
     return ImportsController()->Master()->SiteForCookies();
 
   if (!GetFrame())
@@ -5800,8 +5824,8 @@ void Document::SetFeaturePolicy(const String& feature_policy_header) {
   WebFeaturePolicy* parent_feature_policy = nullptr;
   WebParsedFeaturePolicy container_policy;
   Vector<String> messages;
-  const WebParsedFeaturePolicy& parsed_header =
-      ParseFeaturePolicy(feature_policy_header, GetSecurityOrigin(), &messages);
+  const WebParsedFeaturePolicy& parsed_header = ParseFeaturePolicyHeader(
+      feature_policy_header, GetSecurityOrigin(), &messages);
 
   // If this frame is not the main frame, then get the appropriate parent policy
   // and container policy to construct the policy for this frame.

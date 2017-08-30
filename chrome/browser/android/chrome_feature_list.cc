@@ -89,6 +89,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kPayWithGoogleV1,
     &kPhysicalWebFeature,
     &kPhysicalWebSharing,
+    &kPwaImprovedSplashScreen,
     &kPwaPersistentNotification,
     &kReaderModeInCCT,
     &kSearchEnginePromoExistingDevice,
@@ -113,7 +114,8 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &ntp_tiles::kLowerResolutionFaviconsFeature,
     &ntp_tiles::kSiteExplorationUiFeature,
     &offline_pages::kBackgroundLoaderForDownloadsFeature,
-    &offline_pages::kOfflinePagesCTFeature,  // See crbug.com/620421.
+    &offline_pages::kOfflinePagesCTFeature,    // See crbug.com/620421.
+    &offline_pages::kOfflinePagesCTV2Feature,  // See crbug.com/734753.
     &offline_pages::kOfflinePagesSharingFeature,
     &password_manager::features::kViewPasswords,
     &subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI,
@@ -211,7 +213,7 @@ const base::Feature kDownloadHomeShowStorageInfo{
     "DownloadHomeShowStorageInfo", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kFullscreenActivity{"FullscreenActivity",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Makes "Add to Home screen" in the app menu generate an APK for the shortcut
 // URL which opens Chrome in fullscreen.
@@ -258,6 +260,9 @@ const base::Feature kPhysicalWebFeature{"PhysicalWeb",
 
 const base::Feature kPhysicalWebSharing{"PhysicalWebSharing",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPwaImprovedSplashScreen{"PwaImprovedSplashScreen",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPwaPersistentNotification{
     "PwaPersistentNotification", base::FEATURE_DISABLED_BY_DEFAULT};

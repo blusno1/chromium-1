@@ -32,6 +32,7 @@
 #include "media/base/bitstream_buffer.h"
 #include "media/base/limits.h"
 #include "media/base/media.h"
+#include "media/base/media_switches.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_decoder_config.h"
 #include "media/gpu/android/device_info.h"
@@ -359,6 +360,13 @@ bool AndroidVideoDecodeAccelerator::Initialize(const Config& config,
   if (!codec_allocator_->StartThread(this)) {
     LOG(ERROR) << "Unable to start thread";
     return false;
+  }
+
+  // If we're supposed to use overlays all the time, then they should always
+  // be marked as required.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kForceVideoOverlays)) {
+    surface_chooser_state_.is_required = is_overlay_required_ = true;
   }
 
   // For encrypted media, start by initializing the CDM.  Otherwise, start with
@@ -1502,10 +1510,12 @@ void AndroidVideoDecodeAccelerator::OnMediaCryptoReady(
 
   codec_config_->media_crypto = std::move(media_crypto);
   codec_config_->requires_secure_codec = requires_secure_video_codec;
-  // Require a secure surface in all cases, even if we don't require a secure
-  // video codec.  This will send L3 content to a secure surface, if one is
-  // available, as well as L1.
+  // Request a secure surface in all cases.  For L3, it's okay if we fall back
+  // to SurfaceTexture rather than fail composition.  For L1, it's required.
+  // It's also required if the command line says so.
   surface_chooser_state_.is_secure = true;
+  surface_chooser_state_.is_required =
+      requires_secure_video_codec || is_overlay_required_;
 
   // After receiving |media_crypto_| we can start with surface creation.
   StartSurfaceChooser();

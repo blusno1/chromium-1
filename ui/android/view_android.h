@@ -11,7 +11,9 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
+#include "base/observer_list.h"
 #include "ui/android/ui_android_export.h"
+#include "ui/android/view_android_observer.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 class SkBitmap;
@@ -30,6 +32,7 @@ class EventForwarder;
 class MotionEventAndroid;
 class ViewClient;
 class WindowAndroid;
+class ViewAndroidObserver;
 
 // View-related parameters from frame updates.
 struct FrameInfo {
@@ -170,7 +173,11 @@ class UI_ANDROID_EXPORT ViewAndroid {
   base::android::ScopedJavaLocalRef<jobject> GetContainerView();
 
   // Return the location of the container view in physical pixels.
-  gfx::Point GetLocationOfContainerViewOnScreen();
+  gfx::Point GetLocationOfContainerViewInWindow();
+
+  // ViewAndroid does not own |observer|s.
+  void AddObserver(ViewAndroidObserver* observer);
+  void RemoveObserver(ViewAndroidObserver* observer);
 
   float GetDipScale();
 
@@ -182,11 +189,14 @@ class UI_ANDROID_EXPORT ViewAndroid {
   friend class ViewAndroidBoundsTest;
 
   bool OnDragEvent(const DragEventAndroid& event);
-  bool OnTouchEvent(const MotionEventAndroid& event, bool for_touch_handle);
+  bool OnTouchEvent(const MotionEventAndroid& event);
   bool OnMouseEvent(const MotionEventAndroid& event);
   bool OnMouseWheelEvent(const MotionEventAndroid& event);
 
   void RemoveChild(ViewAndroid* child);
+
+  void OnAttachedToWindow();
+  void OnDetachedFromWindow();
 
   template <typename E>
   using ViewClientCallback =
@@ -200,8 +210,7 @@ class UI_ANDROID_EXPORT ViewAndroid {
   static bool SendDragEventToClient(ViewClient* client,
                                     const DragEventAndroid& event,
                                     const gfx::PointF& point);
-  static bool SendTouchEventToClient(bool for_touch_handle,
-                                     ViewClient* client,
+  static bool SendTouchEventToClient(ViewClient* client,
                                      const MotionEventAndroid& event,
                                      const gfx::PointF& point);
   static bool SendMouseEventToClient(ViewClient* client,
@@ -227,6 +236,7 @@ class UI_ANDROID_EXPORT ViewAndroid {
       GetViewAndroidDelegate() const;
 
   std::list<ViewAndroid*> children_;
+  base::ObserverList<ViewAndroidObserver> observer_list_;
   scoped_refptr<cc::Layer> layer_;
   JavaObjectWeakGlobalRef delegate_;
 

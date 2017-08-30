@@ -450,6 +450,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_VOICE_INTERACTION_LOCALE_UNSUPPORTED_TOAST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the locale is unsupported.">
         The Google Assistant doesn’t speak this language.
       </message>
+      <message name="IDS_ASH_VOICE_INTERACTION_SECONDARY_USER_TOAST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the active user profile is not the primary user profile.">
+        Assistant is only available for primary profile.
+      </message>
 
       <message name="IDS_ASH_TOAST_DISMISS_BUTTON" desc="The text button shown in toasts to close the toast immediately without waiting timeout.">
         DISMISS
@@ -1063,8 +1066,15 @@ This file contains the strings for ash.
       <message name="IDS_DEPRECATED_TOGGLE_HIGH_CONTRAST_MSG" desc="Notification message to tell users about the deprecation of Search+Shift+H shortcut to toggle the high contrast display mode.">
         The shortcut to toggle High Contrast Mode has changed. Please use <ph name="NEW_SHORTCUT">$1<ex>Ctrl+Search+H</ex></ph> instead of <ph name="OLD_SHORTCUT">$2<ex>Search+Shift+H</ex></ph>.
       </message>
+      <message name="IDS_DEPRECATED_SHORTCUT_TITLE" desc="Notification title to tell users that the keyboard accelerator is deprecated.">
+        Shortcut change
+      </message>
 
       <!-- Notification that an accelerator was pressed, so the user knows how to toggle it back -->
+      <message name="IDS_HIGH_CONTRAST_ACCEL_TITLE"
+               desc="Notification title to tell users that they just pressed the Search+Shift+H shortcut to toggle High Contrast Mode, and that pressing it again will toggle it off.">
+        High Contrast Mode
+      </message>
       <message name="IDS_HIGH_CONTRAST_ACCEL_MSG"
                desc="Notification message to tell users that they just pressed the Search+Shift+H shortcut to toggle High Contrast Mode, and that pressing it again will toggle it off.">
         High Contrast Mode enabled. Press Ctrl+Search+H again to toggle it off.

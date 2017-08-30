@@ -87,6 +87,7 @@ ViewAndroid::ViewAndroid(ViewClient* view_client)
 ViewAndroid::ViewAndroid() : ViewAndroid(nullptr) {}
 
 ViewAndroid::~ViewAndroid() {
+  observer_list_.Clear();
   RemoveFromParent();
 
   for (std::list<ViewAndroid*>::iterator it = children_.begin();
@@ -139,6 +140,8 @@ void ViewAndroid::AddChild(ViewAndroid* child) {
   // accidentally overwrite the valid ones in the children.
   if (!physical_size_.IsEmpty())
     child->OnPhysicalBackingSizeChanged(physical_size_);
+  if (GetWindowAndroid())
+    child->OnAttachedToWindow();
 }
 
 // static
@@ -213,16 +216,16 @@ ScopedJavaLocalRef<jobject> ViewAndroid::GetContainerView() {
   return Java_ViewAndroidDelegate_getContainerView(env, delegate);
 }
 
-gfx::Point ViewAndroid::GetLocationOfContainerViewOnScreen() {
+gfx::Point ViewAndroid::GetLocationOfContainerViewInWindow() {
   ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
   if (delegate.is_null())
     return gfx::Point();
 
   JNIEnv* env = base::android::AttachCurrentThread();
   gfx::Point result(
-      Java_ViewAndroidDelegate_getXLocationOfContainerViewOnScreen(env,
+      Java_ViewAndroidDelegate_getXLocationOfContainerViewInWindow(env,
                                                                    delegate),
-      Java_ViewAndroidDelegate_getYLocationOfContainerViewOnScreen(env,
+      Java_ViewAndroidDelegate_getYLocationOfContainerViewInWindow(env,
                                                                    delegate));
 
   return result;
@@ -232,11 +235,35 @@ void ViewAndroid::RemoveChild(ViewAndroid* child) {
   DCHECK(child);
   DCHECK_EQ(child->parent_, this);
 
+  if (GetWindowAndroid())
+    child->OnDetachedFromWindow();
   std::list<ViewAndroid*>::iterator it =
       std::find(children_.begin(), children_.end(), child);
   DCHECK(it != children_.end());
   children_.erase(it);
   child->parent_ = nullptr;
+}
+
+void ViewAndroid::AddObserver(ViewAndroidObserver* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void ViewAndroid::RemoveObserver(ViewAndroidObserver* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
+void ViewAndroid::OnAttachedToWindow() {
+  for (auto& observer : observer_list_)
+    observer.OnAttachedToWindow();
+  for (auto* child : children_)
+    child->OnAttachedToWindow();
+}
+
+void ViewAndroid::OnDetachedFromWindow() {
+  for (auto& observer : observer_list_)
+    observer.OnDetachedFromWindow();
+  for (auto* child : children_)
+    child->OnDetachedFromWindow();
 }
 
 WindowAndroid* ViewAndroid::GetWindowAndroid() const {
@@ -376,20 +403,17 @@ bool ViewAndroid::SendDragEventToClient(ViewClient* client,
   return client->OnDragEvent(*e);
 }
 
-bool ViewAndroid::OnTouchEvent(const MotionEventAndroid& event,
-                               bool for_touch_handle) {
-  return HitTest(
-      base::Bind(&ViewAndroid::SendTouchEventToClient, for_touch_handle), event,
-      event.GetPoint());
+bool ViewAndroid::OnTouchEvent(const MotionEventAndroid& event) {
+  return HitTest(base::Bind(&ViewAndroid::SendTouchEventToClient), event,
+                 event.GetPoint());
 }
 
 // static
-bool ViewAndroid::SendTouchEventToClient(bool for_touch_handle,
-                                         ViewClient* client,
+bool ViewAndroid::SendTouchEventToClient(ViewClient* client,
                                          const MotionEventAndroid& event,
                                          const gfx::PointF& point) {
   std::unique_ptr<MotionEventAndroid> e(event.CreateFor(point));
-  return client->OnTouchEvent(*e, for_touch_handle);
+  return client->OnTouchEvent(*e);
 }
 
 bool ViewAndroid::OnMouseEvent(const MotionEventAndroid& event) {

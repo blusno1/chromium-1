@@ -73,12 +73,14 @@ void WriteDumpsHeader(int pid, std::ostream& out) {
   out << "{ \"pid\":" << pid << ",";
   out << "\"ph\":\"v\",";
   out << "\"name\":\"periodic_interval\",";
+  out << "\"ts\": 1,";
+  out << "\"id\": \"1\",";
   out << "\"args\":{";
-  out << "\"dumps\":{\n";
+  out << "\"dumps\":";
 }
 
 void WriteDumpsFooter(std::ostream& out) {
-  out << "}}}";  // dumps, args, event
+  out << "}}";  // args, event
 }
 
 // Writes the dictionary keys to preceed a "heaps_v2" trace argument inside a
@@ -255,14 +257,66 @@ void ExportAllocationEventSetToJSON(
     const AllocationEventSet& event_set,
     const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
     std::ostream& out,
-    std::unique_ptr<base::DictionaryValue> metadata_dict) {
+    std::unique_ptr<base::DictionaryValue> metadata_dict,
+    size_t min_size_threshold,
+    size_t min_count_threshold) {
   out << "{ \"traceEvents\": [";
   WriteProcessName(pid, out);
   out << ",\n";
   WriteDumpsHeader(pid, out);
+  ExportMemoryMapsAndV2StackTraceToJSON(
+      event_set, maps, out, min_size_threshold, min_count_threshold);
+  WriteDumpsFooter(out);
+  out << "]";
+
+  // Append metadata.
+  if (metadata_dict) {
+    std::string metadata;
+    base::JSONWriter::Write(*metadata_dict, &metadata);
+    out << ",\"metadata\": " << metadata;
+  }
+
+  out << "}\n";
+}
+
+void ExportMemoryMapsAndV2StackTraceToJSON(
+    const AllocationEventSet& event_set,
+    const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
+    std::ostream& out,
+    size_t min_size_threshold,
+    size_t min_count_threshold) {
+  // Start dictionary.
+  out << "{\n";
 
   WriteMemoryMaps(maps, out);
   out << ",\n";
+
+  // Write level of detail.
+  out << R"("level_of_detail": "detailed")"
+      << ",\n";
+
+  // Write the top-level allocators section. This section is used by the tracing
+  // UI to show a small summary for each allocator. It's necessary as a
+  // placeholder to allow the stack-viewing UI to be shown.
+  // TODO: Fill in placeholders for "value". https://crbug.com/758434.
+  out << R"(
+  "allocators": {
+    "malloc": {
+      "attrs": {
+        "virtual_size": {
+          "type": "scalar",
+          "units": "bytes",
+          "value": "1234"
+        },
+        "size": {
+          "type": "scalar",
+          "units": "bytes",
+          "value": "1234"
+        }
+      }
+    }
+  },
+  )";
 
   WriteHeapsV2Header(out);
 
@@ -274,14 +328,35 @@ void ExportAllocationEventSetToJSON(
   // We hardcode one type, "[unknown]".
   size_t type_string_id = AddOrGetString("[unknown]", &string_table);
 
-  // Find all backtraces referenced by the set. The backtrace storage will
-  // contain more stacks than we want to write out (it will refer to all
-  // processes, while we're only writing one). So do those only on demand.
+  // Aggregate allocations. Allocations of the same size and stack get grouped.
+  UniqueAllocCount alloc_counts;
+  for (const auto& alloc : event_set) {
+    UniqueAlloc unique_alloc(alloc.backtrace(), alloc.size());
+    alloc_counts[unique_alloc]++;
+  }
+
+  // Filter irrelevant allocations.
+  for (auto alloc = alloc_counts.begin(); alloc != alloc_counts.end();) {
+    size_t alloc_count = alloc->second;
+    size_t alloc_size = alloc->first.size;
+    size_t alloc_total_size = alloc_size * alloc_count;
+    if (alloc_total_size < min_size_threshold &&
+        alloc_count < min_count_threshold) {
+      alloc = alloc_counts.erase(alloc);
+    } else {
+      ++alloc;
+    }
+  }
+
+  // Find all backtraces referenced by the set and not filtered. The backtrace
+  // storage will contain more stacks than we want to write out (it will refer
+  // to all processes, while we're only writing one). So do those only on
+  // demand.
   //
   // The map maps backtrace keys to node IDs (computed below).
   std::map<const Backtrace*, size_t> backtraces;
-  for (const auto& event : event_set)
-    backtraces.emplace(event.backtrace(), 0);
+  for (const auto& alloc : alloc_counts)
+    backtraces.emplace(alloc.first.backtrace, 0);
 
   // Write each backtrace, converting the string for the stack entry to string
   // IDs. The backtrace -> node ID will be filled in at this time.
@@ -300,13 +375,6 @@ void ExportAllocationEventSetToJSON(
       << "}]";
   out << "},\n";  // End of maps section.
 
-  // Aggregate allocations. Allocations of the same size and stack get grouped.
-  UniqueAllocCount alloc_counts;
-  for (const auto& alloc : event_set) {
-    UniqueAlloc unique_alloc(alloc.backtrace(), alloc.size());
-    alloc_counts[unique_alloc]++;
-  }
-
   // Allocators section.
   out << "\"allocators\":{\"malloc\":{\n";
   WriteCounts(alloc_counts, out);
@@ -319,16 +387,8 @@ void ExportAllocationEventSetToJSON(
   out << "}}\n";  // End of allocators section.
 
   WriteHeapsV2Footer(out);
-  WriteDumpsFooter(out);
-  out << "]";
 
-  // Append metadata.
-  if (metadata_dict) {
-    std::string metadata;
-    base::JSONWriter::Write(*metadata_dict, &metadata);
-    out << ",\"metadata\": " << metadata;
-  }
-
+  // End dictionary.
   out << "}\n";
 }
 

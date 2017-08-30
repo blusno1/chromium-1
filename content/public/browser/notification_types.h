@@ -65,12 +65,6 @@ enum NotificationType {
   // DEPRECATED: Use WebContentsObserver::DidStopLoading()
   NOTIFICATION_LOAD_STOP,
 
-  // A redirect was received while requesting a resource.  The source will be
-  // a Source<WebContents> corresponding to the tab in which the request was
-  // issued.  Details in the form of a ResourceRedirectDetails are provided.
-  // DEPRECATED: Use WebContentsObserver::DidGetRedirectForResourceRequest()
-  NOTIFICATION_RESOURCE_RECEIVED_REDIRECT,
-
   // WebContents ---------------------------------------------------------------
 
   // This notification is sent when a render view host has connected to a
@@ -129,14 +123,6 @@ enum NotificationType {
   // Sent after the backing store has been updated but before the widget has
   // painted. The source is the RenderWidgetHost, the details are not used.
   NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE,
-
-  // Sent from RenderViewHost::ClosePage.  The hosted RenderView has
-  // processed the onbeforeunload handler and is about to be sent a
-  // ViewMsg_ClosePage message to complete the tear-down process.  The source
-  // is the RenderViewHost sending the message, and no details are provided.
-  // Note:  This message is not sent in response to RenderView closure
-  // initiated by window.close().
-  NOTIFICATION_RENDER_VIEW_HOST_WILL_CLOSE_RENDER_VIEW,
 
   // Indicates a RenderWidgetHost has been hidden or restored. The source is
   // the RWH whose visibility changed, the details is a bool set to true if

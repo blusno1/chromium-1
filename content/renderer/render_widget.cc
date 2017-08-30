@@ -32,7 +32,6 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/common/drag_messages.h"
-#include "content/common/input/synthetic_gesture_packet.h"
 #include "content/common/input_messages.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/swapped_out_messages.h"
@@ -89,6 +88,7 @@
 #include "third_party/WebKit/public/web/WebPagePopup.h"
 #include "third_party/WebKit/public/web/WebPopupMenuInfo.h"
 #include "third_party/WebKit/public/web/WebRange.h"
+#include "third_party/WebKit/public/web/WebTappedInfo.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/WebKit/public/web/WebWidget.h"
 #include "third_party/skia/include/core/SkShader.h"
@@ -144,6 +144,7 @@ using blink::WebRange;
 using blink::WebRect;
 using blink::WebSize;
 using blink::WebString;
+using blink::WebTappedInfo;
 using blink::WebTextDirection;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
@@ -628,8 +629,6 @@ bool RenderWidget::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(InputMsg_SetEditCommandsForNextKeyEvent,
                         OnSetEditCommandsForNextKeyEvent)
     IPC_MESSAGE_HANDLER(InputMsg_SetFocus, OnSetFocus)
-    IPC_MESSAGE_HANDLER(InputMsg_SyntheticGestureCompleted,
-                        OnSyntheticGestureCompleted)
     IPC_MESSAGE_HANDLER(ViewMsg_ShowContextMenu, OnShowContextMenu)
     IPC_MESSAGE_HANDLER(ViewMsg_Close, OnClose)
     IPC_MESSAGE_HANDLER(ViewMsg_Resize, OnResize)
@@ -859,9 +858,11 @@ void RenderWidget::SendInputEventAck(
     uint32_t touch_event_id,
     InputEventAckState ack_state,
     const ui::LatencyInfo& latency_info,
-    std::unique_ptr<ui::DidOverscrollParams> overscroll_params) {
+    std::unique_ptr<ui::DidOverscrollParams> overscroll_params,
+    base::Optional<cc::TouchAction> touch_action) {
   InputEventAck ack(InputEventAckSource::MAIN_THREAD, type, ack_state,
-                    latency_info, std::move(overscroll_params), touch_event_id);
+                    latency_info, std::move(overscroll_params), touch_event_id,
+                    touch_action);
   Send(new InputHostMsg_HandleInputEvent_ACK(routing_id_, ack));
 }
 
@@ -1551,19 +1552,6 @@ void RenderWidget::CloseWidgetSoon() {
       FROM_HERE, base::Bind(&RenderWidget::DoDeferredClose, this));
 }
 
-void RenderWidget::QueueSyntheticGesture(
-    std::unique_ptr<SyntheticGestureParams> gesture_params,
-    const SyntheticGestureCompletionCallback& callback) {
-  DCHECK(!callback.is_null());
-
-  pending_synthetic_gesture_callbacks_.push(callback);
-
-  SyntheticGesturePacket gesture_packet;
-  gesture_packet.set_gesture_params(std::move(gesture_params));
-
-  Send(new InputHostMsg_QueueSyntheticGesture(routing_id_, gesture_packet));
-}
-
 void RenderWidget::Close() {
   screen_metrics_emulator_.reset();
   WillCloseLayerTreeView();
@@ -1776,13 +1764,6 @@ void RenderWidget::OnRepaint(gfx::Size size_to_paint) {
   set_next_paint_is_repaint_ack();
   if (compositor_)
     compositor_->SetNeedsRedrawRect(gfx::Rect(size_to_paint));
-}
-
-void RenderWidget::OnSyntheticGestureCompleted() {
-  DCHECK(!pending_synthetic_gesture_callbacks_.empty());
-
-  pending_synthetic_gesture_callbacks_.front().Run();
-  pending_synthetic_gesture_callbacks_.pop();
 }
 
 void RenderWidget::OnSetTextDirection(WebTextDirection direction) {
@@ -2252,15 +2233,18 @@ blink::WebScreenInfo RenderWidget::GetScreenInfo() {
 }
 
 #if defined(OS_ANDROID)
-void RenderWidget::ShowUnhandledTapUIIfNeeded(const WebPoint& tapped_position,
-                                              const WebNode& tapped_node,
-                                              bool page_changed) {
+void RenderWidget::ShowUnhandledTapUIIfNeeded(
+    const WebTappedInfo& tapped_info) {
+  // Unpack tapped_info. TODO(donnd): inline unpacking.
+  bool page_changed = tapped_info.PageChanged();
+  const WebNode& tapped_node = tapped_info.GetNode();
+  const WebPoint& tapped_position = tapped_info.Position();
   bool should_trigger = !page_changed && tapped_node.IsTextNode() &&
                         !tapped_node.IsContentEditable() &&
                         !tapped_node.IsInsideFocusableElementOrARIAWidget();
   if (should_trigger) {
-    Send(new ViewHostMsg_ShowUnhandledTapUIIfNeeded(routing_id_,
-        tapped_position.x, tapped_position.y));
+    Send(new ViewHostMsg_ShowUnhandledTapUIIfNeeded(
+        routing_id_, tapped_position.x, tapped_position.y));
   }
 }
 #endif
@@ -2339,9 +2323,7 @@ void RenderWidget::SetNeedsLowLatencyInput(bool needs_low_latency) {
 }
 
 void RenderWidget::SetTouchAction(cc::TouchAction touch_action) {
-  // Ignore setTouchAction calls that result from synthetic touch events (eg.
-  // when blink is emulating touch with mouse).
-  if (input_handler_->handling_event_type() != WebInputEvent::kTouchStart)
+  if (!input_handler_->ProcessTouchAction(touch_action))
     return;
 
   Send(new InputHostMsg_SetTouchAction(routing_id_, touch_action));

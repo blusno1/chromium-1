@@ -119,9 +119,8 @@ class RendererBlinkPlatformImplTestOverrideImpl
     : public RendererBlinkPlatformImpl {
  public:
   RendererBlinkPlatformImplTestOverrideImpl(
-      blink::scheduler::RendererScheduler* scheduler,
-      base::WeakPtr<service_manager::Connector> connector)
-      : RendererBlinkPlatformImpl(scheduler, std::move(connector)) {}
+      blink::scheduler::RendererScheduler* scheduler)
+      : RendererBlinkPlatformImpl(scheduler) {}
 
   // Get rid of the dependency to the sandbox, which is not available in
   // RenderViewTest.
@@ -142,11 +141,10 @@ RenderViewTest::RendererBlinkPlatformImplTestOverride::Get() const {
   return blink_platform_impl_.get();
 }
 
-void RenderViewTest::RendererBlinkPlatformImplTestOverride::Initialize(
-    base::WeakPtr<service_manager::Connector> connector) {
+void RenderViewTest::RendererBlinkPlatformImplTestOverride::Initialize() {
   renderer_scheduler_ = blink::scheduler::RendererScheduler::Create();
-  blink_platform_impl_.reset(new RendererBlinkPlatformImplTestOverrideImpl(
-      renderer_scheduler_.get(), std::move(connector)));
+  blink_platform_impl_.reset(
+      new RendererBlinkPlatformImplTestOverrideImpl(renderer_scheduler_.get()));
 }
 
 void RenderViewTest::RendererBlinkPlatformImplTestOverride::Shutdown() {
@@ -247,7 +245,7 @@ void RenderViewTest::SetUp() {
 
   // Blink needs to be initialized before calling CreateContentRendererClient()
   // because it uses blink internally.
-  blink_platform_impl_.Initialize(render_thread_->GetConnector()->GetWeakPtr());
+  blink_platform_impl_.Initialize();
   blink::Initialize(blink_platform_impl_.Get());
 
   content_client_.reset(CreateContentClient());
@@ -332,10 +330,10 @@ void RenderViewTest::TearDown() {
 
   render_thread_->SendCloseMessage();
 
-  std::unique_ptr<blink::WebLeakDetector> leak_detector = base::WrapUnique(
-      blink::WebLeakDetector::Create(this, view_->GetWebView()->MainFrame()));
+  std::unique_ptr<blink::WebLeakDetector> leak_detector =
+      base::WrapUnique(blink::WebLeakDetector::Create(this));
 
-  leak_detector->PrepareForLeakDetection();
+  leak_detector->PrepareForLeakDetection(view_->GetWebView()->MainFrame());
 
   view_ = NULL;
   mock_process_.reset();
@@ -381,20 +379,26 @@ void RenderViewTest::SendNativeKeyEvent(
   SendWebKeyboardEvent(key_event);
 }
 
-void RenderViewTest::SendWebKeyboardEvent(
-    const blink::WebKeyboardEvent& key_event) {
+void RenderViewTest::SendInputEvent(const blink::WebInputEvent& input_event) {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   impl->OnMessageReceived(InputMsg_HandleInputEvent(
-      0, &key_event, std::vector<const WebInputEvent*>(), ui::LatencyInfo(),
+      0, &input_event, std::vector<const WebInputEvent*>(), ui::LatencyInfo(),
       InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
+}
+
+void RenderViewTest::SendWebKeyboardEvent(
+    const blink::WebKeyboardEvent& key_event) {
+  SendInputEvent(key_event);
 }
 
 void RenderViewTest::SendWebMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
-  RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  impl->OnMessageReceived(InputMsg_HandleInputEvent(
-      0, &mouse_event, std::vector<const WebInputEvent*>(), ui::LatencyInfo(),
-      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
+  SendInputEvent(mouse_event);
+}
+
+void RenderViewTest::SendWebGestureEvent(
+    const blink::WebGestureEvent& gesture_event) {
+  SendInputEvent(gesture_event);
 }
 
 const char* const kGetCoordinatesScript =

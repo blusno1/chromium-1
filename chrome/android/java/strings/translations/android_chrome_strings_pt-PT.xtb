@@ -332,7 +332,6 @@ Para ajustar o termo de pesquisa, prima continuamente para selecionar. Para refi
 <translation id="4278390842282768270">Permitidos:</translation>
 <translation id="42981349822642051">Expandir</translation>
 <translation id="4307992518367153382">Noções básicas</translation>
-<translation id="4334425495413014985">Para utilizar a aplicação <ph name="APP_NAME" /> pela primeira vez, ligue-se à Internet.</translation>
 <translation id="4351244548802238354">Fechar caixa de diálogo</translation>
 <translation id="4378154925671717803">Telefone</translation>
 <translation id="4384468725000734951">A utilizar o Sogou para pesquisa</translation>
@@ -656,7 +655,7 @@ Por exemplo, alguns Sites podem responder a este pedido ao mostrar-lhe anúncios
 <translation id="7352939065658542140">VÍDEO</translation>
 <translation id="7353894246028566792">{NUM_SELECTED,plural, =1{Partilhar 1 item selecionado}one{Share # selected items}other{Partilhar # itens selecionados}}</translation>
 <translation id="7366340029385295517">A transmitir para <ph name="SCREEN_NAME" /></translation>
-<translation id="7374228672268453233">Dados utilizados</translation>
+<translation id="7374228672268453233">Dados utilizados:</translation>
 <translation id="7375125077091615385">Tipo:</translation>
 <translation id="7378627244592794276">Não</translation>
 <translation id="7400418766976504921">URL</translation>

@@ -932,15 +932,22 @@ TEST_P(AppsGridViewTest, SelectionInStateApps) {
   // Moves selection to the first app in the suggestions container.
   SimulateKeyPress(ui::VKEY_DOWN);
 
-  // Tests moving to previous page and moving up.
+  // Tests moving to previous page.
   SimulateKeyPress(ui::VKEY_PRIOR);
   CheckSelectionAtSuggestionsContainer(0);
+
+  // Tests moving up.
   SimulateKeyPress(ui::VKEY_UP);
+  CheckNoSelection();
+  SimulateKeyPress(ui::VKEY_DOWN);
+
+  // Tests moving left and right.
+  SimulateKeyPress(ui::VKEY_LEFT);
+  CheckNoSelection();
+  SimulateKeyPress(ui::VKEY_RIGHT);
   CheckSelectionAtSuggestionsContainer(0);
 
-  // Tests moving left, moving right and moving right out of suggestions.
-  SimulateKeyPress(ui::VKEY_LEFT);
-  CheckSelectionAtSuggestionsContainer(0);
+  // Tests moving right out of suggestions.
   SimulateKeyPress(ui::VKEY_RIGHT);
   SimulateKeyPress(ui::VKEY_RIGHT);
   CheckSelectionAtSuggestionsContainer(kNumOfSuggestedApps - 1);
@@ -1042,10 +1049,10 @@ TEST_P(AppsGridViewTest, ExpandArrowSelectionInStateStart) {
 }
 
 // Tests that in state start when selection is on app in suggestions container,
-// hitting up key does nothing. Hitting left/right key moves the selection to
-// app on the left/right if index is valid. Hitting right key when selection is
-// on the last app in suggestions container or hitting down key move the
-// selection to the expand arrow.
+// hitting up key moves clear selection. Hitting left/right key moves the
+// selection to app on the left/right if index is valid. Hitting right key when
+// selection is on the last app in suggestions container or hitting down key
+// move the selection to the expand arrow.
 TEST_P(AppsGridViewTest, SuggestionsContainerSelectionInStateStart) {
   if (!test_with_fullscreen_)
     return;
@@ -1055,15 +1062,20 @@ TEST_P(AppsGridViewTest, SuggestionsContainerSelectionInStateStart) {
   model_->PopulateApps(GetTilesPerPage(0));
   SimulateKeyPress(ui::VKEY_DOWN);
 
+  // Tests moving up.
   SimulateKeyPress(ui::VKEY_UP);
-  CheckSelectionAtSuggestionsContainer(0);
+  CheckNoSelection();
+  SimulateKeyPress(ui::VKEY_DOWN);
 
+  // Tests moving right.
   SimulateKeyPress(ui::VKEY_RIGHT);
   CheckSelectionAtSuggestionsContainer(1);
 
+  // Tests moving left.
   SimulateKeyPress(ui::VKEY_LEFT);
   CheckSelectionAtSuggestionsContainer(0);
 
+  // Tests moving down.
   SimulateKeyPress(ui::VKEY_DOWN);
   CheckSelectionAtExpandArrow();
 
@@ -1106,6 +1118,59 @@ TEST_P(AppsGridViewTest, ItemLabelNoShortName) {
   EXPECT_FALSE(title_label->GetTooltipText(title_label->bounds().CenterPoint(),
                                            &actual_tooltip));
   EXPECT_EQ(title, base::UTF16ToUTF8(title_label->text()));
+}
+
+TEST_P(AppsGridViewTest, ScrollSequenceHandledByAppListView) {
+  if (!test_with_fullscreen_)
+    return;
+
+  model_->PopulateApps(GetTilesPerPage(0) + 1);
+  EXPECT_EQ(2, GetPaginationModel()->total_pages());
+
+  gfx::Point apps_grid_view_origin =
+      apps_grid_view_->GetBoundsInScreen().origin();
+  ui::GestureEvent scroll_begin(
+      apps_grid_view_origin.x(), apps_grid_view_origin.y(), 0,
+      base::TimeTicks(),
+      ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN, 0, 0));
+  ui::GestureEvent scroll_update(
+      apps_grid_view_origin.x(), apps_grid_view_origin.y(), 0,
+      base::TimeTicks(),
+      ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE, 0, 10));
+
+  // Drag down on the app grid when on page 1, this should move the AppListView
+  // and not move the AppsGridView.
+  apps_grid_view_->OnGestureEvent(&scroll_begin);
+  apps_grid_view_->OnGestureEvent(&scroll_update);
+  ASSERT_TRUE(app_list_view_->is_in_drag());
+  ASSERT_EQ(0, GetPaginationModel()->transition().progress);
+}
+
+TEST_P(AppsGridViewTest,
+       OnGestureEventScrollSequenceHandleByPaginationController) {
+  if (!test_with_fullscreen_)
+    return;
+
+  model_->PopulateApps(GetTilesPerPage(0) + 1);
+  EXPECT_EQ(2, GetPaginationModel()->total_pages());
+
+  gfx::Point apps_grid_view_origin =
+      apps_grid_view_->GetBoundsInScreen().origin();
+  ui::GestureEvent scroll_begin(
+      apps_grid_view_origin.x(), apps_grid_view_origin.y(), 0,
+      base::TimeTicks(),
+      ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN, 0, 0));
+  ui::GestureEvent scroll_update(
+      apps_grid_view_origin.x(), apps_grid_view_origin.y(), 0,
+      base::TimeTicks(),
+      ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE, 0, -10));
+
+  // Drag up on the app grid when on page 1, this should move the AppsGridView
+  // but not the AppListView.
+  apps_grid_view_->OnGestureEvent(&scroll_begin);
+  apps_grid_view_->OnGestureEvent(&scroll_update);
+  ASSERT_FALSE(app_list_view_->is_in_drag());
+  ASSERT_NE(0, GetPaginationModel()->transition().progress);
 }
 
 }  // namespace test

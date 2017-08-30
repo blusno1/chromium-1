@@ -8,7 +8,7 @@
 #include <memory>
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/DOMNodeIds.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasImageSource.h"
 #include "core/html/canvas/CanvasRenderingContextHost.h"
@@ -129,8 +129,7 @@ class CORE_EXPORT OffscreenCanvas final
   ScriptPromise CreateImageBitmap(ScriptState*,
                                   EventTarget&,
                                   Optional<IntRect>,
-                                  const ImageBitmapOptions&,
-                                  ExceptionState&) final;
+                                  const ImageBitmapOptions&) final;
 
   // CanvasImageSource implementation
   RefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,

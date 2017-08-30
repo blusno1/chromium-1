@@ -53,6 +53,14 @@ constexpr base::TimeDelta kThrottlingDelayAfterAudioIsPlayed =
 constexpr base::TimeDelta kQueueingTimeWindowDuration =
     base::TimeDelta::FromSeconds(1);
 
+const char* BackgroundStateToString(bool is_backgrounded) {
+  if (is_backgrounded) {
+    return "backgrounded";
+  } else {
+    return "foregrounded";
+  }
+}
+
 }  // namespace
 
 RendererSchedulerImpl::RendererSchedulerImpl(
@@ -111,7 +119,6 @@ RendererSchedulerImpl::RendererSchedulerImpl(
       this);
 
   helper_.SetObserver(this);
-  helper_.AddTaskTimeObserver(this);
 
   // Register a tracing state observer unless we're running in a test without a
   // task runner. Note that it's safe to remove a non-existent observer.
@@ -145,8 +152,6 @@ RendererSchedulerImpl::~RendererSchedulerImpl() {
 
   if (virtual_time_domain_)
     UnregisterTimeDomain(virtual_time_domain_.get());
-
-  helper_.RemoveTaskTimeObserver(this);
 
   base::trace_event::TraceLog::GetInstance()->RemoveAsyncEnabledStateObserver(
       this);
@@ -200,7 +205,10 @@ RendererSchedulerImpl::MainThreadOnly::MainThreadOnly(
       rail_mode_observer(nullptr),
       wake_up_budget_pool(nullptr),
       metrics_helper(renderer_scheduler_impl, now, renderer_backgrounded),
-      process_type(RendererProcessType::kRenderer) {}
+      process_type(RendererProcessType::kRenderer),
+      use_case_tracer("RendererScheduler.UseCase", renderer_scheduler_impl),
+      backgrounding_tracer("RendererScheduler.Backgrounded",
+                           renderer_scheduler_impl) {}
 
 RendererSchedulerImpl::MainThreadOnly::~MainThreadOnly() {}
 
@@ -537,6 +545,8 @@ void RendererSchedulerImpl::SetRendererBackgrounded(bool backgrounded) {
   if (helper_.IsShutdown() ||
       main_thread_only().renderer_backgrounded == backgrounded)
     return;
+  main_thread_only().backgrounding_tracer.SetState(
+      BackgroundStateToString(main_thread_only().renderer_backgrounded));
 
   main_thread_only().renderer_backgrounded = backgrounded;
   if (!backgrounded)
@@ -930,6 +940,8 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
 
   base::TimeDelta expected_use_case_duration;
   UseCase use_case = ComputeCurrentUseCase(now, &expected_use_case_duration);
+  if (main_thread_only().current_use_case != use_case)
+    main_thread_only().use_case_tracer.SetState(UseCaseToString(use_case));
   main_thread_only().current_use_case = use_case;
 
   base::TimeDelta touchstart_expected_flag_valid_for_duration;
@@ -1879,24 +1891,12 @@ void RendererSchedulerImpl::OnTriedToExecuteBlockedTask() {
   }
 }
 
-void RendererSchedulerImpl::WillProcessTask(double start_time) {
-  base::TimeTicks start_time_ticks =
-      MonotonicTimeInSecondsToTimeTicks(start_time);
-  main_thread_only().current_task_start_time = start_time_ticks;
-
+void RendererSchedulerImpl::OnTaskStarted(MainThreadTaskQueue* queue,
+                                          const TaskQueue::Task& task,
+                                          base::TimeTicks start) {
+  main_thread_only().current_task_start_time = start;
   seqlock_queueing_time_estimator_.seqlock.WriteBegin();
-  seqlock_queueing_time_estimator_.data.OnTopLevelTaskStarted(start_time_ticks);
-  seqlock_queueing_time_estimator_.seqlock.WriteEnd();
-}
-
-void RendererSchedulerImpl::DidProcessTask(double start_time, double end_time) {
-  DCHECK_LE(start_time, end_time);
-  // TODO(scheduler-dev): Remove conversions when Blink starts using
-  // base::TimeTicks instead of doubles for time.
-  base::TimeTicks end_time_ticks = MonotonicTimeInSecondsToTimeTicks(end_time);
-
-  seqlock_queueing_time_estimator_.seqlock.WriteBegin();
-  seqlock_queueing_time_estimator_.data.OnTopLevelTaskCompleted(end_time_ticks);
+  seqlock_queueing_time_estimator_.data.OnTopLevelTaskStarted(start);
   seqlock_queueing_time_estimator_.seqlock.WriteEnd();
 }
 
@@ -1904,6 +1904,11 @@ void RendererSchedulerImpl::OnTaskCompleted(MainThreadTaskQueue* queue,
                                             const TaskQueue::Task& task,
                                             base::TimeTicks start,
                                             base::TimeTicks end) {
+  DCHECK_LE(start, end);
+  seqlock_queueing_time_estimator_.seqlock.WriteBegin();
+  seqlock_queueing_time_estimator_.data.OnTopLevelTaskCompleted(end);
+  seqlock_queueing_time_estimator_.seqlock.WriteEnd();
+
   task_queue_throttler()->OnTaskRunTimeReported(queue, start, end);
 
   // TODO(altimin): Per-page metrics should also be considered.
@@ -2029,6 +2034,11 @@ TimeDomain* RendererSchedulerImpl::GetActiveTimeDomain() {
 
 void RendererSchedulerImpl::OnTraceLogEnabled() {
   CreateTraceEventObjectSnapshot();
+
+  main_thread_only().use_case_tracer.Start(
+      UseCaseToString(main_thread_only().current_use_case));
+  main_thread_only().backgrounding_tracer.Start(
+      BackgroundStateToString(main_thread_only().renderer_backgrounded));
 }
 
 void RendererSchedulerImpl::OnTraceLogDisabled() {}

@@ -24,6 +24,7 @@ import android.os.StrictMode;
 import android.provider.Browser;
 import android.support.customtabs.CustomTabsCallback;
 import android.support.customtabs.CustomTabsIntent;
+import android.support.customtabs.CustomTabsService;
 import android.support.customtabs.CustomTabsSessionToken;
 import android.support.v4.app.ActivityOptionsCompat;
 import android.text.TextUtils;
@@ -103,6 +104,13 @@ public class CustomTabActivity extends ChromeActivity {
     private static final int WEBCONTENTS_STATE_TRANSFERRED_WEBCONTENTS = 3;
     private static final int WEBCONTENTS_STATE_MAX = 4;
 
+    // For CustomTabs.ConnectionStatusOnReturn, see histograms.xml. Append only.
+    private static final int CONNECTION_STATUS_DISCONNECTED = 0;
+    private static final int CONNECTION_STATUS_DISCONNECTED_KEEP_ALIVE = 1;
+    private static final int CONNECTION_STATUS_CONNECTED = 2;
+    private static final int CONNECTION_STATUS_CONNECTED_KEEP_ALIVE = 3;
+    private static final int CONNECTION_STATUS_MAX = 4;
+
     private static CustomTabContentHandler sActiveContentHandler;
 
     private CustomTabIntentDataProvider mIntentDataProvider;
@@ -130,6 +138,7 @@ public class CustomTabActivity extends ChromeActivity {
     private boolean mUsingHiddenTab;
 
     private boolean mIsClosing;
+    private boolean mIsKeepAlive;
 
     // This boolean is used to do a hack in navigation history for
     // prerender and hidden tab loads with unmatching fragments.
@@ -257,6 +266,41 @@ public class CustomTabActivity extends ChromeActivity {
     }
 
     /**
+     * Checks whether the given referrer can be used as valid within the Activity launched by the
+     * given intent. For this to be true, the intent should be for a {@link CustomTabsSessionToken}
+     * that is the currently in focus custom tab and also the related client should have a verified
+     * relationship with the referrer origin. This can only be true for https:// origins.
+     *
+     * @param intent The intent that was used to launch the Activity in question.
+     * @param referrer The referrer url that is to be used.
+     * @return Whether the given referrer is a valid first party url to the client that launched
+     *         the activity.
+     */
+    public static boolean canActiveContentHandlerUseReferrer(Intent intent, Uri referrer) {
+        if (sActiveContentHandler == null) return false;
+        CustomTabsSessionToken session = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        if (session == null || !session.equals(sActiveContentHandler.getSession())) return false;
+        String packageName =
+                CustomTabsConnection.getInstance().getClientPackageNameForSession(session);
+        if (TextUtils.isEmpty(packageName)) return false;
+        boolean valid = OriginVerifier.isValidOrigin(
+                packageName, referrer, CustomTabsService.RELATION_USE_AS_ORIGIN);
+
+        // OriginVerifier should only be allowing https schemes.
+        assert valid == UrlConstants.HTTPS_SCHEME.equals(referrer.getScheme());
+
+        return valid;
+    }
+
+    /**
+     * @return The url for the page displayed using the current {@link CustomTabContentHandler}.
+     */
+    public static String getCurrentUrlForActiveCustomTabSession() {
+        if (sActiveContentHandler == null) return null;
+        return sActiveContentHandler.getCurrentUrl();
+    }
+
+    /**
      * Checks whether the active {@link CustomTabContentHandler} belongs to the given session, and
      * if true, update toolbar's custom button.
      * @param session     The {@link IBinder} that the calling client represents.
@@ -317,7 +361,7 @@ public class CustomTabActivity extends ChromeActivity {
     public void onStart() {
         super.onStart();
         mIsClosing = false;
-        mConnection.keepAliveForSession(
+        mIsKeepAlive = mConnection.keepAliveForSession(
                 mIntentDataProvider.getSession(), mIntentDataProvider.getKeepAliveServiceIntent());
     }
 
@@ -325,6 +369,7 @@ public class CustomTabActivity extends ChromeActivity {
     public void onStop() {
         super.onStop();
         mConnection.dontKeepAliveForSession(mIntentDataProvider.getSession());
+        mIsKeepAlive = false;
     }
 
     @Override
@@ -469,6 +514,7 @@ public class CustomTabActivity extends ChromeActivity {
                         if (mIntentDataProvider.shouldEnableEmbeddedMediaExperience()) {
                             RecordUserAction.record("CustomTabs.CloseButtonClicked.DownloadsUI");
                         }
+                        recordClientConnectionStatus();
                         finishAndClose(false);
                     }
                 });
@@ -518,6 +564,11 @@ public class CustomTabActivity extends ChromeActivity {
                 if (mBottomBarDelegate == null) return false;
                 return mBottomBarDelegate.updateRemoteViews(remoteViews, clickableIDs,
                         pendingIntent);
+            }
+
+            @Override
+            public String getCurrentUrl() {
+                return getActivityTab() == null ? null : getActivityTab().getUrl();
             }
         };
         recordClientPackageName();
@@ -886,7 +937,6 @@ public class CustomTabActivity extends ChromeActivity {
     @Override
     protected boolean handleBackPressed() {
         RecordUserAction.record("CustomTabs.SystemBack");
-
         if (getActivityTab() == null) return false;
 
         if (exitFullscreenIfShowing()) return true;
@@ -895,10 +945,42 @@ public class CustomTabActivity extends ChromeActivity {
             if (getCurrentTabModel().getCount() > 1) {
                 getCurrentTabModel().closeTab(getActivityTab(), false, false, false);
             } else {
+                recordClientConnectionStatus();
                 finishAndClose(false);
             }
         }
         return true;
+    }
+
+    private void recordClientConnectionStatus() {
+        String packageName = getActivityTab().getAppAssociatedWith();
+        if (packageName == null) return; // No associated package
+
+        boolean isConnected = packageName.equals(
+                CustomTabsConnection.getInstance().getClientPackageNameForSession(mSession));
+        int status = -1;
+        if (isConnected) {
+            if (mIsKeepAlive) {
+                status = CONNECTION_STATUS_CONNECTED_KEEP_ALIVE;
+            } else {
+                status = CONNECTION_STATUS_CONNECTED;
+            }
+        } else {
+            if (mIsKeepAlive) {
+                status = CONNECTION_STATUS_DISCONNECTED_KEEP_ALIVE;
+            } else {
+                status = CONNECTION_STATUS_DISCONNECTED;
+            }
+        }
+        assert status >= 0;
+
+        if (GSAState.isGsaPackageName(packageName)) {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "CustomTabs.ConnectionStatusOnReturn.GSA", status, CONNECTION_STATUS_MAX);
+        } else {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "CustomTabs.ConnectionStatusOnReturn.NonGSA", status, CONNECTION_STATUS_MAX);
+        }
     }
 
     /**

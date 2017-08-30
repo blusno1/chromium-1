@@ -80,19 +80,26 @@ ActivationScope ParseActivationScope(const base::StringPiece activation_scope) {
 }
 
 ActivationList ParseActivationList(std::string activation_lists_string) {
-  ActivationList activation_list_type = ActivationList::NONE;
   CommaSeparatedStrings activation_lists(std::move(activation_lists_string));
   if (activation_lists.CaseInsensitiveContains(
           kActivationListPhishingInterstitial)) {
     return ActivationList::PHISHING_INTERSTITIAL;
   } else if (activation_lists.CaseInsensitiveContains(
                  kActivationListSocialEngineeringAdsInterstitial)) {
-    activation_list_type = ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL;
+    return ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL;
   } else if (activation_lists.CaseInsensitiveContains(
                  kActivationListSubresourceFilter)) {
-    activation_list_type = ActivationList::SUBRESOURCE_FILTER;
+    return ActivationList::SUBRESOURCE_FILTER;
+  } else if (activation_lists.CaseInsensitiveContains(
+                 kActivationListBetterAds)) {
+    return ActivationList::BETTER_ADS;
+  } else if (activation_lists.CaseInsensitiveContains(
+                 kActivationListAbusiveAds)) {
+    return ActivationList::ABUSIVE_ADS;
+  } else if (activation_lists.CaseInsensitiveContains(kActivationListAllAds)) {
+    return ActivationList::ALL_ADS;
   }
-  return activation_list_type;
+  return ActivationList::NONE;
 }
 
 double ParsePerformanceMeasurementRate(const std::string& rate) {
@@ -155,6 +162,10 @@ Configuration ParseExperimentalConfiguration(
   configuration.activation_conditions.priority =
       ParseInt(TakeVariationParamOrReturnEmpty(
           params, kActivationPriorityParameterName));
+
+  configuration.activation_conditions.experimental =
+      ParseBool(TakeVariationParamOrReturnEmpty(
+          params, kActivationExperimentalParameterName));
 
   // ActivationOptions:
   configuration.activation_options.activation_level = ParseActivationLevel(
@@ -259,8 +270,12 @@ const char kActivationListSocialEngineeringAdsInterstitial[] =
     "social_engineering_ads_interstitial";
 const char kActivationListPhishingInterstitial[] = "phishing_interstitial";
 const char kActivationListSubresourceFilter[] = "subresource_filter";
+const char kActivationListBetterAds[] = "better_ads";
+const char kActivationListAbusiveAds[] = "abusive_ads";
+const char kActivationListAllAds[] = "all_ads";
 
 const char kActivationPriorityParameterName[] = "activation_priority";
+const char kActivationExperimentalParameterName[] = "experimental";
 
 const char kPerformanceMeasurementRateParameterName[] =
     "performance_measurement_rate";
@@ -315,6 +330,7 @@ bool Configuration::operator==(const Configuration& rhs) const {
     return std::tie(config.activation_conditions.activation_scope,
                     config.activation_conditions.activation_list,
                     config.activation_conditions.priority,
+                    config.activation_conditions.experimental,
                     config.activation_options.activation_level,
                     config.activation_options.performance_measurement_rate,
                     config.activation_options.should_whitelist_site_on_reload,
@@ -336,6 +352,7 @@ Configuration::ActivationConditions::ToTracedValue() const {
   value->SetString("activation_scope", StreamToString(activation_scope));
   value->SetString("activation_list", StreamToString(activation_list));
   value->SetInteger("priority", priority);
+  value->SetBoolean("experimental", experimental);
   return value;
 }
 

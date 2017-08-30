@@ -8,8 +8,9 @@
 #include "base/message_loop/message_loop.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "cc/base/math_util.h"
+#include "chrome/browser/vr/color_scheme.h"
 #include "chrome/browser/vr/elements/ui_element.h"
-#include "chrome/browser/vr/elements/ui_element_debug_id.h"
+#include "chrome/browser/vr/elements/ui_element_name.h"
 #include "chrome/browser/vr/target_property.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
@@ -23,22 +24,21 @@ namespace vr {
 
 using TargetProperty::BOUNDS;
 using TargetProperty::TRANSFORM;
-using TargetProperty::VISIBILITY;
 using TargetProperty::OPACITY;
 
 namespace {
-std::set<UiElementDebugId> kBackgroundElements = {
+std::set<UiElementName> kBackgroundElements = {
     kBackgroundFront, kBackgroundLeft, kBackgroundBack,
     kBackgroundRight, kBackgroundTop,  kBackgroundBottom};
-std::set<UiElementDebugId> kFloorCeilingBackgroundElements = {
+std::set<UiElementName> kFloorCeilingBackgroundElements = {
     kBackgroundFront, kBackgroundLeft,   kBackgroundBack, kBackgroundRight,
     kBackgroundTop,   kBackgroundBottom, kCeiling,        kFloor};
-std::set<UiElementDebugId> kElementsVisibleInBrowsing = {
+std::set<UiElementName> kElementsVisibleInBrowsing = {
     kBackgroundFront, kBackgroundLeft, kBackgroundBack,
     kBackgroundRight, kBackgroundTop,  kBackgroundBottom,
     kCeiling,         kFloor,          kContentQuad,
     kBackplane,       kUrlBar,         kUnderDevelopmentNotice};
-std::set<UiElementDebugId> kElementsVisibleWithExitPrompt = {
+std::set<UiElementName> kElementsVisibleWithExitPrompt = {
     kBackgroundFront, kBackgroundLeft,     kBackgroundBack, kBackgroundRight,
     kBackgroundTop,   kBackgroundBottom,   kCeiling,        kFloor,
     kExitPrompt,      kExitPromptBackplane};
@@ -238,23 +238,25 @@ TEST_F(UiSceneManagerTest, WebVrAutopresentedInsecureOrigin) {
   // WebVR frame is not received.
   auto initial_elements = kBackgroundElements;
   initial_elements.insert(kSplashScreenText);
-
   VerifyElementsVisible("Initial", initial_elements);
+
   manager_->OnWebVrFrameAvailable();
+  // Start the transition, but don't finish it.
+  AnimateBy(MsToDelta(50));
   VerifyElementsVisible(
-      "Autopresented", std::set<UiElementDebugId>{
+      "Autopresented", std::set<UiElementName>{
                            kWebVrPermanentHttpSecurityWarning,
                            kWebVrTransientHttpSecurityWarning, kWebVrUrlToast});
 
   // Make sure the transient elements go away.
   task_runner_->FastForwardUntilNoTasksRemain();
-  UiElement* transient_url_bar = scene_->GetUiElementByDebugId(kWebVrUrlToast);
-  EXPECT_TRUE(IsAnimating(transient_url_bar, {OPACITY, VISIBILITY}));
+  UiElement* transient_url_bar = scene_->GetUiElementByName(kWebVrUrlToast);
+  EXPECT_TRUE(IsAnimating(transient_url_bar, {OPACITY}));
   // Finish the transition.
   AnimateBy(MsToDelta(1000));
-  EXPECT_FALSE(IsAnimating(transient_url_bar, {OPACITY, VISIBILITY}));
-  VerifyElementsVisible("End state", std::set<UiElementDebugId>{
-                                         kWebVrPermanentHttpSecurityWarning});
+  EXPECT_FALSE(IsAnimating(transient_url_bar, {OPACITY}));
+  VerifyElementsVisible(
+      "End state", std::set<UiElementName>{kWebVrPermanentHttpSecurityWarning});
 }
 
 TEST_F(UiSceneManagerTest, WebVrAutopresented) {
@@ -267,20 +269,25 @@ TEST_F(UiSceneManagerTest, WebVrAutopresented) {
   auto initial_elements = kBackgroundElements;
   initial_elements.insert(kSplashScreenText);
   VerifyElementsVisible("Initial", initial_elements);
+  EXPECT_EQ(ColorScheme::GetColorScheme(ColorScheme::kModeNormal)
+                .splash_screen_background,
+            GetBackgroundColor());
 
   // Enter WebVR with autopresentation.
   manager_->SetWebVrMode(true, false);
   manager_->OnWebVrFrameAvailable();
+  // Start the transition, but don't finish it.
+  AnimateBy(MsToDelta(50));
   VerifyElementsVisible("Autopresented",
-                        std::set<UiElementDebugId>{kWebVrUrlToast});
+                        std::set<UiElementName>{kWebVrUrlToast});
 
   // Make sure the transient URL bar times out.
   task_runner_->FastForwardUntilNoTasksRemain();
-  UiElement* transient_url_bar = scene_->GetUiElementByDebugId(kWebVrUrlToast);
-  EXPECT_TRUE(IsAnimating(transient_url_bar, {OPACITY, VISIBILITY}));
-  // Finish the transition.
+  UiElement* transient_url_bar = scene_->GetUiElementByName(kWebVrUrlToast);
+  EXPECT_TRUE(
+      IsAnimating(transient_url_bar, {OPACITY}));  // Finish the transition.
   AnimateBy(MsToDelta(1000));
-  EXPECT_FALSE(IsAnimating(transient_url_bar, {OPACITY, VISIBILITY}));
+  EXPECT_FALSE(IsAnimating(transient_url_bar, {OPACITY}));
   EXPECT_FALSE(IsVisible(kWebVrUrlToast));
 }
 
@@ -305,9 +312,11 @@ TEST_F(UiSceneManagerTest, UiUpdatesForFullscreenChanges) {
   // Hold onto the background color to make sure it changes.
   SkColor initial_background = GetBackgroundColor();
   VerifyElementsVisible("Initial", kElementsVisibleInBrowsing);
-  UiElement* content_quad = scene_->GetUiElementByDebugId(kContentQuad);
+  UiElement* content_quad = scene_->GetUiElementByName(kContentQuad);
+  UiElement* content_group =
+      scene_->GetUiElementByName(k2dBrowsingContentGroup);
   gfx::SizeF initial_content_size = content_quad->size();
-  gfx::Transform initial_position = content_quad->LocalTransform();
+  gfx::Transform initial_position = content_group->LocalTransform();
 
   // In fullscreen mode, content elements should be visible, control elements
   // should be hidden.
@@ -316,24 +325,28 @@ TEST_F(UiSceneManagerTest, UiUpdatesForFullscreenChanges) {
   // Make sure background has changed for fullscreen.
   EXPECT_NE(initial_background, GetBackgroundColor());
   // Should have started transition.
-  EXPECT_TRUE(IsAnimating(content_quad, {TRANSFORM, BOUNDS}));
+  EXPECT_TRUE(IsAnimating(content_quad, {BOUNDS}));
+  EXPECT_TRUE(IsAnimating(content_group, {TRANSFORM}));
   // Finish the transition.
   AnimateBy(MsToDelta(1000));
-  EXPECT_FALSE(IsAnimating(content_quad, {TRANSFORM, BOUNDS}));
+  EXPECT_FALSE(IsAnimating(content_quad, {BOUNDS}));
+  EXPECT_FALSE(IsAnimating(content_group, {TRANSFORM}));
   EXPECT_NE(initial_content_size, content_quad->size());
-  EXPECT_NE(initial_position, content_quad->LocalTransform());
+  EXPECT_NE(initial_position, content_group->LocalTransform());
 
   // Everything should return to original state after leaving fullscreen.
   manager_->SetFullscreen(false);
   VerifyElementsVisible("Restore initial", kElementsVisibleInBrowsing);
   EXPECT_EQ(initial_background, GetBackgroundColor());
   // Should have started transition.
-  EXPECT_TRUE(IsAnimating(content_quad, {TRANSFORM, BOUNDS}));
+  EXPECT_TRUE(IsAnimating(content_quad, {BOUNDS}));
+  EXPECT_TRUE(IsAnimating(content_group, {TRANSFORM}));
   // Finish the transition.
   AnimateBy(MsToDelta(1000));
-  EXPECT_FALSE(IsAnimating(content_quad, {TRANSFORM, BOUNDS}));
+  EXPECT_FALSE(IsAnimating(content_quad, {BOUNDS}));
+  EXPECT_FALSE(IsAnimating(content_group, {TRANSFORM}));
   EXPECT_EQ(initial_content_size, content_quad->size());
-  EXPECT_EQ(initial_position, content_quad->LocalTransform());
+  EXPECT_EQ(initial_position, content_group->LocalTransform());
 }
 
 TEST_F(UiSceneManagerTest, SecurityIconClickTriggersUnsupportedMode) {
@@ -392,8 +405,7 @@ TEST_F(UiSceneManagerTest, BackplaneClickTriggersOnExitPrompt) {
   EXPECT_CALL(*browser_,
               OnExitVrPromptResult(UiUnsupportedMode::kUnhandledPageInfo,
                                    ExitVrPromptChoice::CHOICE_NONE));
-  scene_->GetUiElementByDebugId(kExitPromptBackplane)
-      ->OnButtonUp(gfx::PointF());
+  scene_->GetUiElementByName(kExitPromptBackplane)->OnButtonUp(gfx::PointF());
   VerifyElementsVisible("Prompt still visible", kElementsVisibleWithExitPrompt);
 }
 
@@ -462,7 +474,7 @@ TEST_F(UiSceneManagerTest, UiUpdatesForWebVR) {
   manager_->SetBluetoothConnectedIndicator(true);
 
   // All elements should be hidden.
-  VerifyElementsVisible("Elements hidden", std::set<UiElementDebugId>{});
+  VerifyElementsVisible("Elements hidden", std::set<UiElementName>{});
 }
 
 TEST_F(UiSceneManagerTest, UiUpdateTransitionToWebVR) {
@@ -478,11 +490,11 @@ TEST_F(UiSceneManagerTest, UiUpdateTransitionToWebVR) {
   manager_->SetWebVrSecureOrigin(true);
 
   // All elements should be hidden.
-  VerifyElementsVisible("Elements hidden", std::set<UiElementDebugId>{});
+  VerifyElementsVisible("Elements hidden", std::set<UiElementName>{});
 }
 
 TEST_F(UiSceneManagerTest, CaptureIndicatorsVisibility) {
-  const std::set<UiElementDebugId> indicators = {
+  const std::set<UiElementName> indicators = {
       kAudioCaptureIndicator,       kVideoCaptureIndicator,
       kScreenCaptureIndicator,      kLocationAccessIndicator,
       kBluetoothConnectedIndicator,
@@ -554,7 +566,7 @@ TEST_F(UiSceneManagerTest, DontPropagateContentBoundsOnNegligibleChange) {
   AnimateBy(MsToDelta(0));
   manager_->OnProjMatrixChanged(kProjMatrix);
 
-  UiElement* content_quad = scene_->GetUiElementByDebugId(kContentQuad);
+  UiElement* content_quad = scene_->GetUiElementByName(kContentQuad);
   gfx::SizeF content_quad_size = content_quad->size();
   content_quad_size.Scale(1.2f);
   content_quad->SetSize(content_quad_size.width(), content_quad_size.height());

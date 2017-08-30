@@ -120,7 +120,6 @@ void UIResourceLayerImpl::AppendQuads(
                 contents_opaque();
 
   gfx::Rect quad_rect(bounds());
-  gfx::Rect opaque_rect(opaque ? quad_rect : gfx::Rect());
   bool needs_blending = opaque ? false : true;
   gfx::Rect visible_quad_rect =
       draw_properties().occlusion_in_content_space.GetUnoccludedContentRect(
@@ -130,10 +129,10 @@ void UIResourceLayerImpl::AppendQuads(
 
   TextureDrawQuad* quad =
       render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
-  quad->SetNew(shared_quad_state, quad_rect, opaque_rect, visible_quad_rect,
-               needs_blending, resource, premultiplied_alpha, uv_top_left_,
-               uv_bottom_right_, SK_ColorTRANSPARENT, vertex_opacity_, flipped,
-               nearest_neighbor, false);
+  quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect, needs_blending,
+               resource, premultiplied_alpha, uv_top_left_, uv_bottom_right_,
+               SK_ColorTRANSPARENT, vertex_opacity_, flipped, nearest_neighbor,
+               false);
   ValidateQuadResources(quad);
 }
 
@@ -146,7 +145,7 @@ std::unique_ptr<base::DictionaryValue> UIResourceLayerImpl::LayerTreeAsJson() {
 
   result->Set("ImageBounds", MathUtil::AsValue(image_bounds_));
 
-  auto list = base::MakeUnique<base::ListValue>();
+  auto list = std::make_unique<base::ListValue>();
   list->AppendDouble(vertex_opacity_[0]);
   list->AppendDouble(vertex_opacity_[1]);
   list->AppendDouble(vertex_opacity_[2]);

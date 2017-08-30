@@ -39,6 +39,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/http/http_util.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
 #include "url/gurl.h"
 
 using blink::WebServiceWorkerError;
@@ -90,7 +91,8 @@ ServiceWorkerDispatcherHost::ServiceWorkerDispatcherHost(
                                                                      this),
       render_process_id_(render_process_id),
       resource_context_(resource_context),
-      channel_ready_(false) {}
+      channel_ready_(false),
+      weak_ptr_factory_(this) {}
 
 ServiceWorkerDispatcherHost::~ServiceWorkerDispatcherHost() {
   // Temporary CHECK for debugging https://crbug.com/736203.
@@ -139,8 +141,10 @@ void ServiceWorkerDispatcherHost::OnFilterRemoved() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   // Don't wait until the destructor to teardown since a new dispatcher host
   // for this process might be created before then.
-  if (GetContext() && phase_ == Phase::kAddedToContext)
+  if (GetContext() && phase_ == Phase::kAddedToContext) {
     GetContext()->RemoveDispatcherHost(render_process_id_);
+    weak_ptr_factory_.InvalidateWeakPtrs();
+  }
   phase_ = Phase::kRemovedFromContext;
   context_wrapper_ = nullptr;
   channel_ready_ = false;
@@ -258,6 +262,11 @@ ServiceWorkerDispatcherHost::GetOrCreateRegistrationHandle(
   return new_handle_ptr;
 }
 
+base::WeakPtr<ServiceWorkerDispatcherHost>
+ServiceWorkerDispatcherHost::AsWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
     int thread_id,
     int request_id,
@@ -273,7 +282,7 @@ void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
     case ProviderStatus::NO_CONTEXT:  // fallthrough
     case ProviderStatus::DEAD_HOST:
       Send(new ServiceWorkerMsg_ServiceWorkerRegistrationError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeAbort,
+          thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
           base::ASCIIToUTF16(kServiceWorkerRegisterErrorPrefix) +
               base::ASCIIToUTF16(kShutdownErrorMessage)));
       return;
@@ -282,7 +291,8 @@ void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
       return;
     case ProviderStatus::NO_URL:
       Send(new ServiceWorkerMsg_ServiceWorkerRegistrationError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeSecurity,
+          thread_id, request_id,
+          blink::mojom::ServiceWorkerErrorType::kSecurity,
           base::ASCIIToUTF16(kServiceWorkerRegisterErrorPrefix) +
               base::ASCIIToUTF16(kNoDocumentURLErrorMessage)));
       return;
@@ -314,7 +324,7 @@ void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
           base::Bind(&GetWebContents, render_process_id_,
                      provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_ServiceWorkerRegistrationError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeDisabled,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kDisabled,
         base::ASCIIToUTF16(kServiceWorkerRegisterErrorPrefix) +
             base::ASCIIToUTF16(kUserDeniedPermissionMessage)));
     return;
@@ -344,7 +354,7 @@ void ServiceWorkerDispatcherHost::OnUpdateServiceWorker(
     case ProviderStatus::NO_CONTEXT:  // fallthrough
     case ProviderStatus::DEAD_HOST:
       Send(new ServiceWorkerMsg_ServiceWorkerUpdateError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeAbort,
+          thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
           base::ASCIIToUTF16(kServiceWorkerUpdateErrorPrefix) +
               base::ASCIIToUTF16(kShutdownErrorMessage)));
       return;
@@ -353,7 +363,8 @@ void ServiceWorkerDispatcherHost::OnUpdateServiceWorker(
       return;
     case ProviderStatus::NO_URL:
       Send(new ServiceWorkerMsg_ServiceWorkerUpdateError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeSecurity,
+          thread_id, request_id,
+          blink::mojom::ServiceWorkerErrorType::kSecurity,
           base::ASCIIToUTF16(kServiceWorkerUpdateErrorPrefix) +
               base::ASCIIToUTF16(kNoDocumentURLErrorMessage)));
       return;
@@ -383,7 +394,7 @@ void ServiceWorkerDispatcherHost::OnUpdateServiceWorker(
           resource_context_, base::Bind(&GetWebContents, render_process_id_,
                                         provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_ServiceWorkerUpdateError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeDisabled,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kDisabled,
         base::ASCIIToUTF16(kServiceWorkerUpdateErrorPrefix) +
             base::ASCIIToUTF16(kUserDeniedPermissionMessage)));
     return;
@@ -393,7 +404,7 @@ void ServiceWorkerDispatcherHost::OnUpdateServiceWorker(
     // This can happen if update() is called during initial script evaluation.
     // Abort the following steps according to the spec.
     Send(new ServiceWorkerMsg_ServiceWorkerUpdateError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeState,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kState,
         base::ASCIIToUTF16(kServiceWorkerUpdateErrorPrefix) +
             base::ASCIIToUTF16(kInvalidStateErrorMessage)));
     return;
@@ -423,7 +434,7 @@ void ServiceWorkerDispatcherHost::OnUnregisterServiceWorker(
     case ProviderStatus::NO_CONTEXT:  // fallthrough
     case ProviderStatus::DEAD_HOST:
       Send(new ServiceWorkerMsg_ServiceWorkerUnregistrationError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeAbort,
+          thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
           base::ASCIIToUTF16(kServiceWorkerUpdateErrorPrefix) +
               base::ASCIIToUTF16(kShutdownErrorMessage)));
       return;
@@ -433,7 +444,8 @@ void ServiceWorkerDispatcherHost::OnUnregisterServiceWorker(
       return;
     case ProviderStatus::NO_URL:
       Send(new ServiceWorkerMsg_ServiceWorkerUnregistrationError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeSecurity,
+          thread_id, request_id,
+          blink::mojom::ServiceWorkerErrorType::kSecurity,
           base::ASCIIToUTF16(kServiceWorkerUnregisterErrorPrefix) +
               base::ASCIIToUTF16(kNoDocumentURLErrorMessage)));
       return;
@@ -463,7 +475,7 @@ void ServiceWorkerDispatcherHost::OnUnregisterServiceWorker(
           resource_context_, base::Bind(&GetWebContents, render_process_id_,
                                         provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_ServiceWorkerUnregistrationError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeDisabled,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kDisabled,
         base::ASCIIToUTF16(kUserDeniedPermissionMessage)));
     return;
   }
@@ -493,7 +505,7 @@ void ServiceWorkerDispatcherHost::OnGetRegistration(
     case ProviderStatus::NO_CONTEXT:  // fallthrough
     case ProviderStatus::DEAD_HOST:
       Send(new ServiceWorkerMsg_ServiceWorkerGetRegistrationError(
-          thread_id, request_id, blink::WebServiceWorkerError::kErrorTypeAbort,
+          thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
           base::ASCIIToUTF16(kServiceWorkerGetRegistrationErrorPrefix) +
               base::ASCIIToUTF16(kShutdownErrorMessage)));
       return;
@@ -503,7 +515,8 @@ void ServiceWorkerDispatcherHost::OnGetRegistration(
       return;
     case ProviderStatus::NO_URL:
       Send(new ServiceWorkerMsg_ServiceWorkerGetRegistrationError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeSecurity,
+          thread_id, request_id,
+          blink::mojom::ServiceWorkerErrorType::kSecurity,
           base::ASCIIToUTF16(kServiceWorkerGetRegistrationErrorPrefix) +
               base::ASCIIToUTF16(kNoDocumentURLErrorMessage)));
       return;
@@ -529,7 +542,7 @@ void ServiceWorkerDispatcherHost::OnGetRegistration(
           resource_context_, base::Bind(&GetWebContents, render_process_id_,
                                         provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_ServiceWorkerGetRegistrationError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeDisabled,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kDisabled,
         base::ASCIIToUTF16(kServiceWorkerGetRegistrationErrorPrefix) +
             base::ASCIIToUTF16(kUserDeniedPermissionMessage)));
     return;
@@ -561,7 +574,7 @@ void ServiceWorkerDispatcherHost::OnGetRegistrations(int thread_id,
     case ProviderStatus::NO_CONTEXT:  // fallthrough
     case ProviderStatus::DEAD_HOST:
       Send(new ServiceWorkerMsg_ServiceWorkerGetRegistrationsError(
-          thread_id, request_id, blink::WebServiceWorkerError::kErrorTypeAbort,
+          thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
           base::ASCIIToUTF16(kServiceWorkerGetRegistrationsErrorPrefix) +
               base::ASCIIToUTF16(kShutdownErrorMessage)));
       return;
@@ -571,7 +584,8 @@ void ServiceWorkerDispatcherHost::OnGetRegistrations(int thread_id,
       return;
     case ProviderStatus::NO_URL:
       Send(new ServiceWorkerMsg_ServiceWorkerGetRegistrationsError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeSecurity,
+          thread_id, request_id,
+          blink::mojom::ServiceWorkerErrorType::kSecurity,
           base::ASCIIToUTF16(kServiceWorkerGetRegistrationsErrorPrefix) +
               base::ASCIIToUTF16(kNoDocumentURLErrorMessage)));
       return;
@@ -590,7 +604,7 @@ void ServiceWorkerDispatcherHost::OnGetRegistrations(int thread_id,
           resource_context_, base::Bind(&GetWebContents, render_process_id_,
                                         provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_ServiceWorkerGetRegistrationsError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeDisabled,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kDisabled,
         base::ASCIIToUTF16(kServiceWorkerGetRegistrationsErrorPrefix) +
             base::ASCIIToUTF16(kUserDeniedPermissionMessage)));
     return;
@@ -647,7 +661,7 @@ void ServiceWorkerDispatcherHost::OnEnableNavigationPreload(
     case ProviderStatus::NO_CONTEXT:  // fallthrough
     case ProviderStatus::DEAD_HOST:
       Send(new ServiceWorkerMsg_EnableNavigationPreloadError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeAbort,
+          thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
           std::string(kEnableNavigationPreloadErrorPrefix) +
               std::string(kShutdownErrorMessage)));
       return;
@@ -657,7 +671,8 @@ void ServiceWorkerDispatcherHost::OnEnableNavigationPreload(
       return;
     case ProviderStatus::NO_URL:
       Send(new ServiceWorkerMsg_EnableNavigationPreloadError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeSecurity,
+          thread_id, request_id,
+          blink::mojom::ServiceWorkerErrorType::kSecurity,
           std::string(kEnableNavigationPreloadErrorPrefix) +
               std::string(kNoDocumentURLErrorMessage)));
       return;
@@ -676,7 +691,7 @@ void ServiceWorkerDispatcherHost::OnEnableNavigationPreload(
   }
   if (!registration->active_version()) {
     Send(new ServiceWorkerMsg_EnableNavigationPreloadError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeState,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kState,
         std::string(kEnableNavigationPreloadErrorPrefix) +
             std::string(kNoActiveWorkerErrorMessage)));
     return;
@@ -695,7 +710,7 @@ void ServiceWorkerDispatcherHost::OnEnableNavigationPreload(
           resource_context_, base::Bind(&GetWebContents, render_process_id_,
                                         provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_EnableNavigationPreloadError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeDisabled,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kDisabled,
         std::string(kEnableNavigationPreloadErrorPrefix) +
             std::string(kUserDeniedPermissionMessage)));
     return;
@@ -720,7 +735,7 @@ void ServiceWorkerDispatcherHost::OnGetNavigationPreloadState(
     case ProviderStatus::NO_CONTEXT:  // fallthrough
     case ProviderStatus::DEAD_HOST:
       Send(new ServiceWorkerMsg_GetNavigationPreloadStateError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeAbort,
+          thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
           std::string(kGetNavigationPreloadStateErrorPrefix) +
               std::string(kShutdownErrorMessage)));
       return;
@@ -730,7 +745,8 @@ void ServiceWorkerDispatcherHost::OnGetNavigationPreloadState(
       return;
     case ProviderStatus::NO_URL:
       Send(new ServiceWorkerMsg_GetNavigationPreloadStateError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeSecurity,
+          thread_id, request_id,
+          blink::mojom::ServiceWorkerErrorType::kSecurity,
           std::string(kGetNavigationPreloadStateErrorPrefix) +
               std::string(kNoDocumentURLErrorMessage)));
       return;
@@ -762,7 +778,7 @@ void ServiceWorkerDispatcherHost::OnGetNavigationPreloadState(
           resource_context_, base::Bind(&GetWebContents, render_process_id_,
                                         provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_GetNavigationPreloadStateError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeDisabled,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kDisabled,
         std::string(kGetNavigationPreloadStateErrorPrefix) +
             std::string(kUserDeniedPermissionMessage)));
     return;
@@ -785,7 +801,7 @@ void ServiceWorkerDispatcherHost::OnSetNavigationPreloadHeader(
     case ProviderStatus::NO_CONTEXT:  // fallthrough
     case ProviderStatus::DEAD_HOST:
       Send(new ServiceWorkerMsg_SetNavigationPreloadHeaderError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeAbort,
+          thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kAbort,
           std::string(kSetNavigationPreloadHeaderErrorPrefix) +
               std::string(kShutdownErrorMessage)));
       return;
@@ -795,7 +811,8 @@ void ServiceWorkerDispatcherHost::OnSetNavigationPreloadHeader(
       return;
     case ProviderStatus::NO_URL:
       Send(new ServiceWorkerMsg_SetNavigationPreloadHeaderError(
-          thread_id, request_id, WebServiceWorkerError::kErrorTypeSecurity,
+          thread_id, request_id,
+          blink::mojom::ServiceWorkerErrorType::kSecurity,
           std::string(kSetNavigationPreloadHeaderErrorPrefix) +
               std::string(kNoDocumentURLErrorMessage)));
       return;
@@ -815,7 +832,7 @@ void ServiceWorkerDispatcherHost::OnSetNavigationPreloadHeader(
   }
   if (!registration->active_version()) {
     Send(new ServiceWorkerMsg_SetNavigationPreloadHeaderError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeState,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kState,
         std::string(kSetNavigationPreloadHeaderErrorPrefix) +
             std::string(kNoActiveWorkerErrorMessage)));
     return;
@@ -842,7 +859,7 @@ void ServiceWorkerDispatcherHost::OnSetNavigationPreloadHeader(
           resource_context_, base::Bind(&GetWebContents, render_process_id_,
                                         provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_SetNavigationPreloadHeaderError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeDisabled,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kDisabled,
         std::string(kSetNavigationPreloadHeaderErrorPrefix) +
             std::string(kUserDeniedPermissionMessage)));
     return;
@@ -953,9 +970,9 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
 
     // If no host is found, create one.
     if (provider_host == nullptr) {
-      GetContext()->AddProviderHost(
-          ServiceWorkerProviderHost::Create(render_process_id_, std::move(info),
-                                            GetContext()->AsWeakPtr(), this));
+      GetContext()->AddProviderHost(ServiceWorkerProviderHost::Create(
+          render_process_id_, std::move(info), GetContext()->AsWeakPtr(),
+          AsWeakPtr()));
       return;
     }
 
@@ -966,7 +983,7 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
       return;
     }
     provider_host->CompleteNavigationInitialized(render_process_id_,
-                                                 std::move(info), this);
+                                                 std::move(info), AsWeakPtr());
     GetContext()->AddProviderHost(std::move(provider_host));
   } else {
     // Provider host for controller should be pre-created on StartWorker in
@@ -982,7 +999,8 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
       return;
     }
     GetContext()->AddProviderHost(ServiceWorkerProviderHost::Create(
-        render_process_id_, std::move(info), GetContext()->AsWeakPtr(), this));
+        render_process_id_, std::move(info), GetContext()->AsWeakPtr(),
+        AsWeakPtr()));
   }
 }
 
@@ -1137,7 +1155,7 @@ void ServiceWorkerDispatcherHost::RegistrationComplete(
 
   if (status != SERVICE_WORKER_OK) {
     base::string16 error_message;
-    blink::WebServiceWorkerError::ErrorType error_type;
+    blink::mojom::ServiceWorkerErrorType error_type;
     GetServiceWorkerRegistrationStatusResponse(status, status_message,
                                                &error_type, &error_message);
     Send(new ServiceWorkerMsg_ServiceWorkerRegistrationError(
@@ -1179,7 +1197,7 @@ void ServiceWorkerDispatcherHost::UpdateComplete(
 
   if (status != SERVICE_WORKER_OK) {
     base::string16 error_message;
-    blink::WebServiceWorkerError::ErrorType error_type;
+    blink::mojom::ServiceWorkerErrorType error_type;
     GetServiceWorkerRegistrationStatusResponse(status, status_message,
                                                &error_type, &error_message);
     Send(new ServiceWorkerMsg_ServiceWorkerUpdateError(
@@ -1277,7 +1295,7 @@ void ServiceWorkerDispatcherHost::UnregistrationComplete(
                          request_id, "Status", status);
   if (status != SERVICE_WORKER_OK && status != SERVICE_WORKER_ERROR_NOT_FOUND) {
     base::string16 error_message;
-    blink::WebServiceWorkerError::ErrorType error_type;
+    blink::mojom::ServiceWorkerErrorType error_type;
     GetServiceWorkerRegistrationStatusResponse(status, std::string(),
                                                &error_type, &error_message);
     Send(new ServiceWorkerMsg_ServiceWorkerUnregistrationError(
@@ -1312,7 +1330,7 @@ void ServiceWorkerDispatcherHost::GetRegistrationComplete(
 
   if (status != SERVICE_WORKER_OK && status != SERVICE_WORKER_ERROR_NOT_FOUND) {
     base::string16 error_message;
-    blink::WebServiceWorkerError::ErrorType error_type;
+    blink::mojom::ServiceWorkerErrorType error_type;
     GetServiceWorkerRegistrationStatusResponse(status, std::string(),
                                                &error_type, &error_message);
     Send(new ServiceWorkerMsg_ServiceWorkerGetRegistrationError(
@@ -1357,7 +1375,7 @@ void ServiceWorkerDispatcherHost::GetRegistrationsComplete(
 
   if (status != SERVICE_WORKER_OK) {
     base::string16 error_message;
-    blink::WebServiceWorkerError::ErrorType error_type;
+    blink::mojom::ServiceWorkerErrorType error_type;
     GetServiceWorkerRegistrationStatusResponse(status, std::string(),
                                                &error_type, &error_message);
     Send(new ServiceWorkerMsg_ServiceWorkerGetRegistrationsError(
@@ -1454,7 +1472,7 @@ void ServiceWorkerDispatcherHost::DidUpdateNavigationPreloadEnabled(
     ServiceWorkerStatusCode status) {
   if (status != SERVICE_WORKER_OK) {
     Send(new ServiceWorkerMsg_EnableNavigationPreloadError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeUnknown,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kUnknown,
         std::string(kEnableNavigationPreloadErrorPrefix) +
             std::string(kDatabaseErrorMessage)));
     return;
@@ -1476,7 +1494,7 @@ void ServiceWorkerDispatcherHost::DidUpdateNavigationPreloadHeader(
     ServiceWorkerStatusCode status) {
   if (status != SERVICE_WORKER_OK) {
     Send(new ServiceWorkerMsg_SetNavigationPreloadHeaderError(
-        thread_id, request_id, WebServiceWorkerError::kErrorTypeUnknown,
+        thread_id, request_id, blink::mojom::ServiceWorkerErrorType::kUnknown,
         std::string(kSetNavigationPreloadHeaderErrorPrefix) +
             std::string(kDatabaseErrorMessage)));
     return;

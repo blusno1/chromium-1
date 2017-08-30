@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
@@ -99,7 +100,8 @@ class MockSubresourceFilterClient : public SubresourceFilterClient {
     return ruleset_dealer_.get();
   }
 
-  MOCK_METHOD1(ToggleNotificationVisibility, void(bool));
+  MOCK_METHOD0(ShowNotification, void());
+  MOCK_METHOD0(OnNewNavigationStarted, void());
   MOCK_METHOD0(ForceActivationInCurrentWebContents, bool());
 
   void ClearWhitelist() { whitelisted_hosts_.clear(); }
@@ -120,6 +122,12 @@ std::string GetSuffixForList(const ActivationList& type) {
       return "PhishingInterstitial";
     case ActivationList::SUBRESOURCE_FILTER:
       return "SubresourceFilterOnly";
+    case ActivationList::BETTER_ADS:
+      return "BetterAds";
+    case ActivationList::ABUSIVE_ADS:
+      return "AbusiveAds";
+    case ActivationList::ALL_ADS:
+      return "AllAds";
     case ActivationList::NONE:
       return std::string();
   }
@@ -134,18 +142,25 @@ struct ActivationListTestData {
 };
 
 const ActivationListTestData kActivationListTestData[] = {
-    {subresource_filter::kActivationListSocialEngineeringAdsInterstitial,
+    {kActivationListSocialEngineeringAdsInterstitial,
      ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
      safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
      safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-    {subresource_filter::kActivationListPhishingInterstitial,
-     ActivationList::PHISHING_INTERSTITIAL,
+    {kActivationListPhishingInterstitial, ActivationList::PHISHING_INTERSTITIAL,
      safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
      safe_browsing::ThreatPatternType::NONE},
-    {subresource_filter::kActivationListSubresourceFilter,
-     ActivationList::SUBRESOURCE_FILTER,
+    {kActivationListSubresourceFilter, ActivationList::SUBRESOURCE_FILTER,
      safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER,
      safe_browsing::ThreatPatternType::NONE},
+    {kActivationListBetterAds, ActivationList::BETTER_ADS,
+     safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER,
+     safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_BETTER_ADS},
+    {kActivationListAbusiveAds, ActivationList::ABUSIVE_ADS,
+     safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER,
+     safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_ABUSIVE_ADS},
+    {kActivationListAllAds, ActivationList::ALL_ADS,
+     safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER,
+     safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_ALL_ADS},
 };
 
 }  //  namespace
@@ -584,10 +599,10 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
        NotificationVisibility) {
   GURL url(kURL);
   ConfigureForMatch(url);
-  EXPECT_CALL(*client(), ToggleNotificationVisibility(false)).Times(1);
+  EXPECT_CALL(*client(), OnNewNavigationStarted()).Times(1);
   content::RenderFrameHost* rfh = SimulateNavigateAndCommit({url}, main_rfh());
 
-  EXPECT_CALL(*client(), ToggleNotificationVisibility(true)).Times(1);
+  EXPECT_CALL(*client(), ShowNotification()).Times(1);
   EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(rfh));
 }
 
@@ -599,7 +614,8 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
 
   GURL url(kURL);
   content::RenderFrameHost* rfh = SimulateNavigateAndCommit({url}, main_rfh());
-  EXPECT_CALL(*client(), ToggleNotificationVisibility(::testing::_)).Times(0);
+  EXPECT_CALL(*client(), ShowNotification()).Times(0);
+  EXPECT_CALL(*client(), OnNewNavigationStarted()).Times(0);
   EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(rfh));
 }
 
@@ -779,6 +795,34 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
   SimulateCommitAndExpectProceed();
   tester().ExpectTotalCount(kMatchesPatternHistogramNameSubresourceFilterSuffix,
                             0);
+}
+
+TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
+       ExperimentalMetadata) {
+  const GURL url("https://example.test/");
+
+  // Set the list metadata for |url| to be experimental.
+  safe_browsing::ThreatMetadata metadata;
+  metadata.experimental = true;
+  fake_safe_browsing_database()->AddBlacklistedUrl(
+      url, safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER, metadata);
+
+  // Navigate without an experimental config.
+  SimulateStartAndExpectProceed(url);
+  SimulateCommitAndExpectProceed();
+  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+            *observer()->GetPageActivationForLastCommittedLoad());
+
+  // Navigate with an experimental config.
+  Configuration config(ActivationLevel::ENABLED,
+                       ActivationScope::ACTIVATION_LIST,
+                       ActivationList::SUBRESOURCE_FILTER);
+  config.activation_conditions.experimental = true;
+  scoped_configuration()->ResetConfiguration(std::move(config));
+  SimulateStartAndExpectProceed(url);
+  SimulateCommitAndExpectProceed();
+  EXPECT_EQ(ActivationDecision::ACTIVATED,
+            *observer()->GetPageActivationForLastCommittedLoad());
 }
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,

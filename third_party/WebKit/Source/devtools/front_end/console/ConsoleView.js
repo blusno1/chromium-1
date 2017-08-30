@@ -447,6 +447,7 @@ Console.ConsoleView = class extends UI.VBox {
       this._needsFullUpdate = true;
     }
 
+    this._sidebar.onMessageAdded(message);
     this._scheduleViewportRefresh();
     this._consoleMessageAddedForTest(viewMessage);
 
@@ -482,10 +483,6 @@ Console.ConsoleView = class extends UI.VBox {
    * @param {!Console.ConsoleViewMessage} viewMessage
    */
   _appendMessageToEnd(viewMessage) {
-    var context = viewMessage.consoleMessage().context;
-    if (context)
-      this._sidebar.addGroup({name: context, context: context});
-
     if (!this._filter.shouldBeVisible(viewMessage)) {
       this._hiddenByFilterCount++;
       return;
@@ -1022,8 +1019,8 @@ Console.ConsoleViewFilter = class {
     this._filterByExecutionContextSetting.addChangeListener(this._filterChanged);
     this._filterByConsoleAPISetting.addChangeListener(this._filterChanged);
 
-    this._textFilterUI = new UI.ToolbarInput(Common.UIString('e.g. /event\\d/ -cdn url:a.com'), 0.2, 1, true);
-    this._textFilterUI.element.title = Common.UIString('Filter');
+    this._textFilterUI = new UI.ToolbarInput(Common.UIString('Filter'), 0.2, 1, true);
+    this._textFilterUI.element.title = Common.UIString('e.g. /event\\d/ -cdn url:a.com');
     this._textFilterUI.addEventListener(UI.ToolbarInput.Event.TextChanged, this._textFilterChanged, this);
     this._filterParser = new TextUtils.FilterParser(Object.values(Console.ConsoleViewFilter._filterType));
     /** @type {!Array<!TextUtils.FilterParser.ParsedFilter>} */

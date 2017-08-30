@@ -15,7 +15,6 @@
 #include "base/trace_event/trace_event.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
-#include "ui/ozone/common/display_snapshot_proxy.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_buffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
@@ -318,12 +317,13 @@ void DrmThread::SetColorCorrection(
 
 // DrmThread requires a BindingSet instead of a simple Binding because it will
 // be used from multiple threads in multiple processes.
-void DrmThread::AddBinding(ozone::mojom::DeviceCursorRequest request) {
+void DrmThread::AddBindingCursorDevice(
+    ozone::mojom::DeviceCursorRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 
-void DrmThread::AddBindingGpu(ozone::mojom::GpuAdapterRequest request) {
-  TRACE_EVENT0("drm", "DrmThread::AddBindingGpu");
+void DrmThread::AddBindingDrmDevice(ozone::mojom::DrmDeviceRequest request) {
+  TRACE_EVENT0("drm", "DrmThread::AddBindingDrmDevice");
   binding_.Bind(std::move(request));
 }
 

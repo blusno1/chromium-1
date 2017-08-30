@@ -67,6 +67,8 @@ TrackRunInfo::TrackRunInfo()
 TrackRunInfo::~TrackRunInfo() {}
 
 base::TimeDelta TimeDeltaFromRational(int64_t numer, int64_t denom) {
+  DCHECK_NE(denom, 0);
+
   // To avoid overflow, split the following calculation:
   // (numer * base::Time::kMicrosecondsPerSecond) / denom
   // into:
@@ -212,7 +214,6 @@ static const CencSampleEncryptionInfoEntry* GetSampleEncryptionInfoEntry(
   }
 
   // |group_description_index| is 1-based.
-  DCHECK_LE(group_description_index, entries->size());
   return (group_description_index > entries->size())
              ? nullptr
              : &(*entries)[group_description_index - 1];
@@ -326,13 +327,13 @@ bool TrackRunIterator::Init(const MovieFragment& moof) {
       tri.is_audio = (stsd.type == kAudio);
       if (tri.is_audio) {
         RCHECK(!stsd.audio_entries.empty());
-        if (desc_idx > stsd.audio_entries.size())
+        if (desc_idx >= stsd.audio_entries.size())
           desc_idx = 0;
         tri.audio_description = &stsd.audio_entries[desc_idx];
         track_encryption = &tri.audio_description->sinf.info.track_encryption;
       } else {
         RCHECK(!stsd.video_entries.empty());
-        if (desc_idx > stsd.video_entries.size())
+        if (desc_idx >= stsd.video_entries.size())
           desc_idx = 0;
         tri.video_description = &stsd.video_entries[desc_idx];
         track_encryption = &tri.video_description->sinf.info.track_encryption;

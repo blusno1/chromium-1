@@ -51,21 +51,6 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
     std::move(callback).Run(std::move(c));
   }
 
-  void EchoFilterOperation(const FilterOperation& f,
-                           EchoFilterOperationCallback callback) override {
-    std::move(callback).Run(f);
-  }
-
-  void EchoFilterOperations(const FilterOperations& f,
-                            EchoFilterOperationsCallback callback) override {
-    std::move(callback).Run(f);
-  }
-
-  void EchoSurfaceId(const viz::SurfaceId& s,
-                     EchoSurfaceIdCallback callback) override {
-    std::move(callback).Run(s);
-  }
-
   void EchoTextureMailbox(const viz::TextureMailbox& t,
                           EchoTextureMailboxCallback callback) override {
     std::move(callback).Run(t);
@@ -112,7 +97,7 @@ TEST_F(StructTraitsTest, CopyOutputRequest_BitmapRequest) {
   const auto source =
       base::UnguessableToken::Deserialize(0xdeadbeef, 0xdeadf00d);
   gfx::Size size(9, 8);
-  auto bitmap = base::MakeUnique<SkBitmap>();
+  auto bitmap = std::make_unique<SkBitmap>();
   bitmap->allocN32Pixels(size.width(), size.height());
   base::RunLoop run_loop;
   std::unique_ptr<viz::CopyOutputRequest> input =
@@ -191,10 +176,10 @@ TEST_F(StructTraitsTest, CopyOutputRequest_MessagePipeBroken) {
 }
 
 TEST_F(StructTraitsTest, CopyOutputResult_Bitmap) {
-  auto bitmap = base::MakeUnique<SkBitmap>();
+  auto bitmap = std::make_unique<SkBitmap>();
   bitmap->allocN32Pixels(7, 8);
   bitmap->eraseARGB(123, 213, 77, 33);
-  auto in_bitmap = base::MakeUnique<SkBitmap>();
+  auto in_bitmap = std::make_unique<SkBitmap>();
   in_bitmap->allocN32Pixels(7, 8);
   in_bitmap->eraseARGB(123, 213, 77, 33);
   auto input = viz::CopyOutputResult::CreateBitmapResult(std::move(bitmap));
@@ -251,87 +236,6 @@ TEST_F(StructTraitsTest, CopyOutputResult_Texture) {
   // In CopyOutputResultCallback we verify that the given sync_token and is_lost
   // have their intended values.
   run_loop.Run();
-}
-
-TEST_F(StructTraitsTest, FilterOperation) {
-  const FilterOperation inputs[] = {
-      FilterOperation::CreateBlurFilter(20),
-      FilterOperation::CreateDropShadowFilter(gfx::Point(4, 4), 4.0f,
-                                              SkColorSetARGB(255, 40, 0, 0)),
-      FilterOperation::CreateReferenceFilter(SkDropShadowImageFilter::Make(
-          SkIntToScalar(3), SkIntToScalar(8), SkIntToScalar(4),
-          SkIntToScalar(9), SK_ColorBLACK,
-          SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
-          nullptr))};
-  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  for (const auto& input : inputs) {
-    FilterOperation output;
-    proxy->EchoFilterOperation(input, &output);
-    EXPECT_EQ(input.type(), output.type());
-    switch (input.type()) {
-      case FilterOperation::GRAYSCALE:
-      case FilterOperation::SEPIA:
-      case FilterOperation::SATURATE:
-      case FilterOperation::HUE_ROTATE:
-      case FilterOperation::INVERT:
-      case FilterOperation::BRIGHTNESS:
-      case FilterOperation::SATURATING_BRIGHTNESS:
-      case FilterOperation::CONTRAST:
-      case FilterOperation::OPACITY:
-      case FilterOperation::BLUR:
-        EXPECT_EQ(input.amount(), output.amount());
-        break;
-      case FilterOperation::DROP_SHADOW:
-        EXPECT_EQ(input.amount(), output.amount());
-        EXPECT_EQ(input.drop_shadow_offset(), output.drop_shadow_offset());
-        EXPECT_EQ(input.drop_shadow_color(), output.drop_shadow_color());
-        break;
-      case FilterOperation::COLOR_MATRIX:
-        EXPECT_EQ(0, memcmp(input.matrix(), output.matrix(), 20));
-        break;
-      case FilterOperation::ZOOM:
-        EXPECT_EQ(input.amount(), output.amount());
-        EXPECT_EQ(input.zoom_inset(), output.zoom_inset());
-        break;
-      case FilterOperation::REFERENCE: {
-        SkString input_str;
-        input.image_filter()->toString(&input_str);
-        SkString output_str;
-        output.image_filter()->toString(&output_str);
-        EXPECT_EQ(input_str, output_str);
-        break;
-      }
-      case FilterOperation::ALPHA_THRESHOLD:
-        NOTREACHED();
-        break;
-    }
-  }
-}
-
-TEST_F(StructTraitsTest, FilterOperations) {
-  FilterOperations input;
-  input.Append(FilterOperation::CreateBlurFilter(0.f));
-  input.Append(FilterOperation::CreateSaturateFilter(4.f));
-  input.Append(FilterOperation::CreateZoomFilter(2.0f, 1));
-  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  FilterOperations output;
-  proxy->EchoFilterOperations(input, &output);
-  EXPECT_EQ(input.size(), output.size());
-  for (size_t i = 0; i < input.size(); ++i) {
-    EXPECT_EQ(input.at(i), output.at(i));
-  }
-}
-
-TEST_F(StructTraitsTest, SurfaceId) {
-  static constexpr viz::FrameSinkId frame_sink_id(1337, 1234);
-  static viz::LocalSurfaceId local_surface_id(0xfbadbeef,
-                                              base::UnguessableToken::Create());
-  viz::SurfaceId input(frame_sink_id, local_surface_id);
-  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  viz::SurfaceId output;
-  proxy->EchoSurfaceId(input, &output);
-  EXPECT_EQ(frame_sink_id, output.frame_sink_id());
-  EXPECT_EQ(local_surface_id, output.local_surface_id());
 }
 
 TEST_F(StructTraitsTest, TextureMailbox) {

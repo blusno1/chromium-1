@@ -101,6 +101,7 @@
 #include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "services/device/public/cpp/device_features.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/display/display_switches.h"
@@ -1532,12 +1533,12 @@ const FeatureEntry kFeatureEntries[] = {
         "enable-fullscreen-app-list",
         flag_descriptions::kEnableFullscreenAppListName,
         flag_descriptions::kEnableFullscreenAppListDescription, kOsCrOS,
-        SINGLE_VALUE_TYPE(app_list::switches::kEnableFullscreenAppList),
+        FEATURE_VALUE_TYPE(app_list::features::kEnableFullscreenAppList),
     },
     {
         "enable-background-blur", flag_descriptions::kEnableBackgroundBlurName,
         flag_descriptions::kEnableBackgroundBlurDescription, kOsCrOS,
-        SINGLE_VALUE_TYPE(app_list::switches::kEnableBackgroundBlur),
+        FEATURE_VALUE_TYPE(app_list::features::kEnableBackgroundBlur),
     },
     {"instant-tethering", flag_descriptions::kTetherName,
      flag_descriptions::kTetherDescription, kOsCrOS,
@@ -3342,6 +3343,13 @@ const FeatureEntry kFeatureEntries[] = {
 #endif  // OS_ANDROID
 
 #if defined(OS_ANDROID)
+    {"pwa-improved-splash-screen",
+     flag_descriptions::kPwaImprovedSplashScreenName,
+     flag_descriptions::kPwaImprovedSplashScreenDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kPwaImprovedSplashScreen)},
+#endif  // OS_ANDROID
+
+#if defined(OS_ANDROID)
     {"pwa-persistent-notification",
      flag_descriptions::kPwaPersistentNotificationName,
      flag_descriptions::kPwaPersistentNotificationDescription, kOsAndroid,
@@ -3400,6 +3408,18 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kDoodlesOnLocalNtpDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kDoodlesOnLocalNtp)},
 #endif  // !defined(OS_ANDROID)
+
+#if !defined(OS_ANDROID)
+    {"sound-content-setting", flag_descriptions::kSoundContentSettingName,
+     flag_descriptions::kSoundContentSettingDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kSoundContentSetting)},
+#endif  // !defined(OS_ANDROID)
+
+#if DCHECK_IS_ON() && defined(SYZYASAN)
+    {"dcheck-is-fatal", flag_descriptions::kSyzyAsanDcheckIsFatalName,
+     flag_descriptions::kSyzyAsanDcheckIsFatalDescription, kOsWin,
+     FEATURE_VALUE_TYPE(base::kSyzyAsanDCheckIsFatalFeature)},
+#endif  // DCHECK_IS_ON() && defined(SYZYASAN)
 
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms/enums.xml. See note in

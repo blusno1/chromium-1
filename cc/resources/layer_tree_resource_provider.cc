@@ -6,6 +6,7 @@
 
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 
@@ -84,6 +85,9 @@ void LayerTreeResourceProvider::PrepareSendToParent(
     unverified_sync_tokens.push_back(new_sync_token.GetData());
   }
 
+  if (compositor_context_provider_)
+    compositor_context_provider_->ContextSupport()->FlushPendingWork();
+
   if (!unverified_sync_tokens.empty()) {
     DCHECK(settings_.delegated_sync_points_required);
     DCHECK(gl);
@@ -122,8 +126,6 @@ void LayerTreeResourceProvider::ReceiveReturnsFromParent(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   GLES2Interface* gl = ContextGL();
 
-  std::unordered_map<int, ResourceIdArray> resources_for_child;
-
   for (const viz::ReturnedResource& returned : resources) {
     viz::ResourceId local_id = returned.id;
     ResourceMap::iterator map_iterator = resources_.find(local_id);
@@ -155,21 +157,9 @@ void LayerTreeResourceProvider::ReceiveReturnsFromParent(
     if (!resource->marked_for_deletion)
       continue;
 
-    if (!resource->child_id) {
-      // The resource belongs to this LayerTreeResourceProvider, so it can be
-      // destroyed.
-      DeleteResourceInternal(map_iterator, NORMAL);
-      continue;
-    }
-
-    DCHECK(resource->origin == Resource::DELEGATED);
-    resources_for_child[resource->child_id].push_back(local_id);
-  }
-
-  for (const auto& children : resources_for_child) {
-    ChildMap::iterator child_it = children_.find(children.first);
-    DCHECK(child_it != children_.end());
-    DeleteAndReturnUnusedResourcesToChild(child_it, NORMAL, children.second);
+    // The resource belongs to this LayerTreeResourceProvider, so it can be
+    // destroyed.
+    DeleteResourceInternal(map_iterator, NORMAL);
   }
 }
 

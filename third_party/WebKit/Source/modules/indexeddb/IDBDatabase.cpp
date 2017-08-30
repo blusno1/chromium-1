@@ -32,7 +32,7 @@
 #include "bindings/modules/v8/V8BindingForModules.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/events/EventQueue.h"
+#include "core/dom/events/EventQueue.h"
 #include "modules/indexeddb/IDBAny.h"
 #include "modules/indexeddb/IDBEventDispatcher.h"
 #include "modules/indexeddb/IDBIndex.h"
@@ -124,6 +124,13 @@ DEFINE_TRACE(IDBDatabase) {
   visitor->Trace(database_callbacks_);
   EventTargetWithInlineData::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(IDBDatabase) {
+  for (const auto& observer : observers_.Values()) {
+    visitor->TraceWrappers(observer);
+  }
+  EventTargetWithInlineData::TraceWrappers(visitor);
 }
 
 int64_t IDBDatabase::NextTransactionId() {

@@ -234,6 +234,10 @@ const base::Feature kMseFlacInIsobmff{"MseFlacInIsobmff",
 const base::Feature kNewRemotePlaybackPipeline{
     "NewRemotePlaybackPipeline", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Set preload to "metadata" by default for <video> and <audio>.
+const base::Feature kPreloadDefaultIsMetadata{
+    "PreloadDefaultIsMetadata", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // CanPlayThrough issued according to standard.
 const base::Feature kSpecCompliantCanPlayThrough{
     "SpecCompliantCanPlayThrough", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -271,7 +275,7 @@ const base::Feature kLowDelayVideoRenderingOnLiveStream{
 // Enables Media Engagement Index recording. The data from which will
 // be used to bypass autoplay policies.
 const base::Feature kRecordMediaEngagementScores{
-    "RecordMediaEngagementScores", base::FEATURE_DISABLED_BY_DEFAULT};
+    "RecordMediaEngagementScores", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the Media Engagement Index to override autoplay policies if an
 // origins engagement score is high enough.

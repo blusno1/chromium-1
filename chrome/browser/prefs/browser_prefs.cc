@@ -27,6 +27,7 @@
 #include "chrome/browser/intranet_redirect_detector.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/media/media_device_id_salt.h"
+#include "chrome/browser/media/media_storage_id_salt.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
 #include "chrome/browser/metrics/chrome_metrics_service_client.h"
@@ -313,6 +314,18 @@ constexpr char kDistroRlzPingDelay[] = "ping_delay";
 // Preferences files added here 2/2017.
 constexpr char kDistroDict[] = "distribution";
 
+#if defined(OS_ANDROID)
+// Deprecated 8/2017.
+const char kStabilityForegroundActivityType[] =
+    "user_experience_metrics.stability.current_foreground_activity_type";
+const char kStabilityLaunchedActivityFlags[] =
+    "user_experience_metrics.stability.launched_activity_flags";
+const char kStabilityLaunchedActivityCounts[] =
+    "user_experience_metrics.stability.launched_activity_counts";
+const char kStabilityCrashedActivityCounts[] =
+    "user_experience_metrics.stability.crashed_activity_counts";
+#endif  // defined(OS_ANDROID)
+
 }  // namespace
 
 namespace chrome {
@@ -361,6 +374,12 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
 
 #if defined(OS_ANDROID)
   ::android::RegisterPrefs(registry);
+
+  // Obsolete activity prefs. See MigrateObsoleteBrowserPrefs().
+  registry->RegisterIntegerPref(kStabilityForegroundActivityType, 0);
+  registry->RegisterIntegerPref(kStabilityLaunchedActivityFlags, 0);
+  registry->RegisterListPref(kStabilityLaunchedActivityCounts);
+  registry->RegisterListPref(kStabilityCrashedActivityCounts);
 #endif
 
 #if !defined(OS_ANDROID)
@@ -470,6 +489,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   language::UrlLanguageHistogram::RegisterProfilePrefs(registry);
   MediaCaptureDevicesDispatcher::RegisterProfilePrefs(registry);
   MediaDeviceIDSalt::RegisterProfilePrefs(registry);
+  MediaStorageIdSalt::RegisterProfilePrefs(registry);
   MediaStreamDevicesController::RegisterProfilePrefs(registry);
   NavigationCorrectionTabObserver::RegisterProfilePrefs(registry);
   NotifierStateTracker::RegisterProfilePrefs(registry);
@@ -700,6 +720,14 @@ void MigrateObsoleteBrowserPrefs(Profile* profile, PrefService* local_state) {
   local_state->ClearPref(prefs::kTouchscreenEnabled);
   local_state->ClearPref(prefs::kTouchpadEnabled);
 #endif  // defined(OS_CHROMEOS)
+
+#if defined(OS_ANDROID)
+  // Added 8/2017.
+  local_state->ClearPref(kStabilityForegroundActivityType);
+  local_state->ClearPref(kStabilityLaunchedActivityFlags);
+  local_state->ClearPref(kStabilityLaunchedActivityCounts);
+  local_state->ClearPref(kStabilityCrashedActivityCounts);
+#endif  // defined(OS_ANDROID)
 }
 
 // This method should be periodically pruned of year+ old migrations.

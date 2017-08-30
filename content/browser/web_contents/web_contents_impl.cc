@@ -519,6 +519,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
       did_first_visually_non_empty_paint_(false),
       capturer_count_(0),
       should_normally_be_visible_(true),
+      should_normally_be_occluded_(false),
       did_first_set_visible_(false),
       is_being_destroyed_(false),
       is_notifying_observers_(false),
@@ -778,8 +779,9 @@ bool WebContentsImpl::OnMessageReceived(RenderViewHostImpl* render_view_host,
   }
 
   for (auto& observer : observers_) {
-    // TODO(nick, creis): Replace all uses of this variant of OnMessageReceived
-    // with the version that takes a RenderFrameHost, and delete it.
+    // TODO(nick, creis): https://crbug.com/758026: Replace all uses of this
+    // variant of OnMessageReceived with the version that takes a
+    // RenderFrameHost, and then delete it.
     if (observer.OnMessageReceived(message))
       return true;
   }
@@ -1358,7 +1360,7 @@ void WebContentsImpl::IncrementCapturerCount(const gfx::Size& capture_size) {
   }
 
   // Ensure that all views are un-occluded before capture begins.
-  WasUnOccluded();
+  DoWasUnOccluded();
 }
 
 void WebContentsImpl::DecrementCapturerCount() {
@@ -1374,11 +1376,14 @@ void WebContentsImpl::DecrementCapturerCount() {
     const gfx::Size old_size = preferred_size_for_capture_;
     preferred_size_for_capture_ = gfx::Size();
     OnPreferredSizeChanged(old_size);
-  }
 
-  if (IsHidden()) {
-    DVLOG(1) << "Executing delayed WasHidden().";
-    WasHidden();
+    if (IsHidden()) {
+      DVLOG(1) << "Executing delayed WasHidden().";
+      WasHidden();
+    }
+
+    if (should_normally_be_occluded_)
+      WasOccluded();
   }
 }
 
@@ -1545,6 +1550,7 @@ void WebContentsImpl::WasHidden() {
   should_normally_be_visible_ = false;
 }
 
+#if defined(OS_ANDROID)
 void WebContentsImpl::SetImportance(ChildProcessImportance importance) {
   // Not calling GetRenderWidgetHostView since importance should be set on both
   // the interstitial and underlying page.
@@ -1563,20 +1569,30 @@ void WebContentsImpl::SetImportance(ChildProcessImportance importance) {
   // TODO(boliu): If this is ever used on platforms other than Android, make
   // sure to also update inner WebContents.
 }
+#endif
 
 bool WebContentsImpl::IsVisible() const {
   return should_normally_be_visible_;
 }
 
 void WebContentsImpl::WasOccluded() {
-  if (capturer_count_ > 0)
-    return;
+  if (capturer_count_ == 0) {
+    for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree())
+      view->WasOccluded();
+  }
 
-  for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree())
-    view->WasOccluded();
+  should_normally_be_occluded_ = true;
 }
 
 void WebContentsImpl::WasUnOccluded() {
+  if (capturer_count_ == 0)
+    DoWasUnOccluded();
+
+  should_normally_be_occluded_ = false;
+}
+
+void WebContentsImpl::DoWasUnOccluded() {
+  // TODO(fdoray): Only call WasUnOccluded on frames in the active viewport.
   for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree())
     view->WasUnOccluded();
 }
@@ -1634,7 +1650,8 @@ void WebContentsImpl::AttachToOuterWebContentsFrame(
 
   if (outer_web_contents_impl->frame_tree_.GetFocusedFrame() ==
       outer_contents_frame_impl->frame_tree_node()) {
-    SetFocusedFrame(frame_tree_.root(), nullptr);
+    SetFocusedFrame(frame_tree_.root(),
+                    outer_contents_frame->GetSiteInstance());
   }
 
   // Set up the the guest's AX tree to point back at the embedder's AX tree.
@@ -2381,6 +2398,11 @@ void WebContentsImpl::CreateNewWindow(
     }
   }
 
+  // Any new WebContents opened while this WebContents is in fullscreen can be
+  // used to confuse the user, so drop fullscreen.
+  if (IsFullscreenForCurrentTab())
+    ExitFullscreen(true);
+
   if (params.opener_suppressed) {
     // When the opener is suppressed, the original renderer cannot access the
     // new window.  As a result, we need to show and navigate the window here.
@@ -2980,10 +3002,12 @@ void WebContentsImpl::AttachInterstitialPage(
     }
   }
 
+#if defined(OS_ANDROID)
   // Update importance of the interstitial.
   static_cast<RenderFrameHostImpl*>(interstitial_page_->GetMainFrame())
       ->GetRenderWidgetHost()
       ->SetImportance(GetMainFrame()->GetRenderWidgetHost()->importance());
+#endif
 }
 
 void WebContentsImpl::DidProceedOnInterstitial() {
@@ -3442,12 +3466,6 @@ void WebContentsImpl::DidGetRedirectForResourceRequest(
   const ResourceRedirectDetails& details) {
   for (auto& observer : observers_)
     observer.DidGetRedirectForResourceRequest(details);
-
-  // TODO(avi): Remove. http://crbug.com/170921
-  NotificationService::current()->Notify(
-      NOTIFICATION_RESOURCE_RECEIVED_REDIRECT,
-      Source<WebContents>(this),
-      Details<const ResourceRedirectDetails>(&details));
 }
 
 void WebContentsImpl::NotifyWebContentsFocused(
@@ -4473,6 +4491,7 @@ void WebContentsImpl::NotifyViewSwapped(RenderViewHost* old_host,
 
 void WebContentsImpl::NotifyFrameSwapped(RenderFrameHost* old_host,
                                          RenderFrameHost* new_host) {
+#if defined(OS_ANDROID)
   // Try to copy importance from either |old_host| or parent of |new_host|.
   // If both are null, then this is the very first frame host created from Init.
   // There is no need to pass importance in this case because there is no chance
@@ -4484,6 +4503,7 @@ void WebContentsImpl::NotifyFrameSwapped(RenderFrameHost* old_host,
         ->GetRenderWidgetHost()
         ->SetImportance(importance_host->GetRenderWidgetHost()->importance());
   }
+#endif
   for (auto& observer : observers_)
     observer.RenderFrameHostChanged(old_host, new_host);
 }
@@ -5244,14 +5264,36 @@ void WebContentsImpl::SetAsFocusedWebContentsIfNecessary() {
 
 void WebContentsImpl::SetFocusedFrame(FrameTreeNode* node,
                                       SiteInstance* source) {
-  SetAsFocusedWebContentsIfNecessary();
-
   frame_tree_.SetFocusedFrame(node, source);
 
-  WebContentsImpl* inner_contents = node_.GetInnerWebContentsInFrame(node);
-
-  WebContentsImpl* contents_to_focus = inner_contents ? inner_contents : this;
-  contents_to_focus->SetAsFocusedWebContentsIfNecessary();
+  if (auto* inner_contents = node_.GetInnerWebContentsInFrame(node)) {
+    // |this| is an outer WebContents and |node| represents an inner
+    // WebContents. Transfer the focus to the inner contents if |this| is
+    // focused.
+    if (GetFocusedWebContents() == this)
+      inner_contents->SetAsFocusedWebContentsIfNecessary();
+  } else if (node_.OuterContentsFrameTreeNode() &&
+             node_.OuterContentsFrameTreeNode()
+                     ->current_frame_host()
+                     ->GetSiteInstance() == source) {
+    // |this| is an inner WebContents, |node| is its main FrameTreeNode and
+    // the outer WebContents FrameTreeNode is at |source|'s SiteInstance.
+    // Transfer the focus to the inner WebContents if the outer WebContents is
+    // focused. This branch is used when an inner WebContents is focused through
+    // its RenderFrameProxyHost (via FrameHostMsg_FrameFocused IPC, used to
+    // implement the window.focus() API).
+    if (GetFocusedWebContents() == GetOuterWebContents())
+      SetAsFocusedWebContentsIfNecessary();
+  } else if (!GetOuterWebContents()) {
+    // This is an outermost WebContents.
+    SetAsFocusedWebContentsIfNecessary();
+  } else if (!GuestMode::IsCrossProcessFrameGuest(this) &&
+             GetOuterWebContents()) {
+    // TODO(lfg, paulmeyer): Allows BrowserPlugins to set themselves as the
+    // focused WebContents. This works around a bug in FindRequestManager that
+    // doesn't support properly traversing BrowserPlugins.
+    SetAsFocusedWebContentsIfNecessary();
+  }
 }
 
 RenderFrameHost* WebContentsImpl::GetFocusedFrameIncludingInnerWebContents() {
@@ -5275,6 +5317,18 @@ RenderFrameHost* WebContentsImpl::GetFocusedFrameIncludingInnerWebContents() {
     focused_node = contents->frame_tree_.GetFocusedFrame();
     if (!focused_node)
       return contents->GetMainFrame();
+  }
+}
+
+void WebContentsImpl::OnAdvanceFocus(RenderFrameHostImpl* source_rfh) {
+  // When a RenderFrame needs to advance focus to a RenderFrameProxy (by hitting
+  // TAB), the RenderFrameProxy sends an IPC to RenderFrameProxyHost. When this
+  // RenderFrameProxyHost represents an inner WebContents, the outer WebContents
+  // needs to focus the inner WebContents.
+  if (GetOuterWebContents() &&
+      GetOuterWebContents() == source_rfh->delegate()->GetAsWebContents() &&
+      GetFocusedWebContents() == GetOuterWebContents()) {
+    SetAsFocusedWebContentsIfNecessary();
   }
 }
 

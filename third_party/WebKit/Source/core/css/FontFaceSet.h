@@ -8,8 +8,8 @@
 #include "bindings/core/v8/Iterable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/css/FontFace.h"
-#include "core/events/EventListener.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventListener.h"
+#include "core/dom/events/EventTarget.h"
 #include "platform/bindings/ScriptWrappable.h"
 
 // Mac OS X 10.6 SDK defines check() macro that interferes with our check()
@@ -60,7 +60,7 @@ class CORE_EXPORT FontFaceSet : public EventTargetWithInlineData,
   virtual size_t size() const = 0;
   virtual AtomicString status() const = 0;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  DEFINE_INLINE_VIRTUAL_TRACE() { EventTargetWithInlineData::Trace(visitor); }
 
  protected:
   // Iterable overrides.

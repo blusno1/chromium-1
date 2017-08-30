@@ -11,7 +11,6 @@
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/child/child_thread_impl.h"
-#include "content/child/child_url_loader_factory_getter.h"
 #include "content/child/service_worker/service_worker_dispatcher.h"
 #include "content/child/service_worker/service_worker_event_dispatcher_holder.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
@@ -19,6 +18,8 @@
 #include "content/child/service_worker/service_worker_subresource_loader.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/worker_thread_registry.h"
+#include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/url_loader_factory.mojom.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -71,14 +72,14 @@ struct ServiceWorkerProviderContext::ControllerState {
 ServiceWorkerProviderContext::ServiceWorkerProviderContext(
     int provider_id,
     ServiceWorkerProviderType provider_type,
-    mojom::ServiceWorkerProviderAssociatedRequest request,
-    mojom::ServiceWorkerProviderHostAssociatedPtrInfo host_ptr_info,
+    mojom::ServiceWorkerContainerAssociatedRequest request,
+    mojom::ServiceWorkerContainerHostAssociatedPtrInfo host_ptr_info,
     ServiceWorkerDispatcher* dispatcher,
     scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter)
     : provider_id_(provider_id),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       binding_(this, std::move(request)) {
-  provider_host_.Bind(std::move(host_ptr_info));
+  container_host_.Bind(std::move(host_ptr_info));
   if (provider_type == SERVICE_WORKER_PROVIDER_FOR_CONTROLLER) {
     controller_state_ = base::MakeUnique<ControllerState>();
   } else {
@@ -152,6 +153,7 @@ void ServiceWorkerProviderContext::SetController(
   state->controller = std::move(controller);
   state->used_features = used_features;
   if (event_dispatcher_ptr_info.is_valid()) {
+    CHECK(ServiceWorkerUtils::IsServicificationEnabled());
     state->event_dispatcher =
         base::MakeRefCounted<ServiceWorkerEventDispatcherHolder>(
             std::move(event_dispatcher_ptr_info));
@@ -213,7 +215,7 @@ void ServiceWorkerProviderContext::UnregisterWorkerFetchContext(
 }
 
 void ServiceWorkerProviderContext::OnNetworkProviderDestroyed() {
-  provider_host_.reset();
+  container_host_.reset();
 }
 
 void ServiceWorkerProviderContext::DestructOnMainThread() const {

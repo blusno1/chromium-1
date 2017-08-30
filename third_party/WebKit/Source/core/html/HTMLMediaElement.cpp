@@ -39,7 +39,7 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
@@ -2223,11 +2223,10 @@ WebMediaPlayer::Preload HTMLMediaElement::PreloadType() const {
 
   // The spec does not define an invalid value default:
   // https://www.w3.org/Bugs/Public/show_bug.cgi?id=28950
-
-  // TODO(foolip): Try to make "metadata" the default preload state:
-  // https://crbug.com/310450
   UseCounter::Count(GetDocument(), WebFeature::kHTMLMediaElementPreloadDefault);
-  return WebMediaPlayer::kPreloadAuto;
+  return RuntimeEnabledFeatures::PreloadDefaultIsMetadataEnabled()
+             ? WebMediaPlayer::kPreloadMetaData
+             : WebMediaPlayer::kPreloadAuto;
 }
 
 String HTMLMediaElement::EffectivePreload() const {

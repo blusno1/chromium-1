@@ -47,13 +47,13 @@
 #include "core/dom/SinkDocument.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/UserGestureIndicator.h"
+#include "core/dom/events/DOMWindowEventQueue.h"
+#include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/Editor.h"
-#include "core/events/DOMWindowEventQueue.h"
 #include "core/events/HashChangeEvent.h"
 #include "core/events/MessageEvent.h"
 #include "core/events/PageTransitionEvent.h"
 #include "core/events/PopStateEvent.h"
-#include "core/events/ScopedEventQueue.h"
 #include "core/frame/BarProp.h"
 #include "core/frame/DOMVisualViewport.h"
 #include "core/frame/EventHandlerRegistry.h"
@@ -1085,19 +1085,7 @@ void LocalDOMWindow::setName(const AtomicString& name) {
   if (!IsCurrentlyDisplayedInFrame())
     return;
 
-  // Avoid calling out to notify the embedder if the browsing context name
-  // didn't change. This is important to avoid violating the browser assumption
-  // that the unique name doesn't change if the browsing context name doesn't
-  // change.
-  // TODO(dcheng): This comment is indicative of a problematic layering
-  // violation. The browser should not be relying on the renderer to get this
-  // correct; unique name calculation should be moved up into the browser.
-  if (name == GetFrame()->Tree().GetName())
-    return;
-
-  GetFrame()->Tree().SetName(name);
-  DCHECK(GetFrame()->Client());
-  GetFrame()->Client()->DidChangeName(name);
+  GetFrame()->Tree().SetName(name, FrameTree::kReplicate);
 }
 
 void LocalDOMWindow::setStatus(const String& string) {

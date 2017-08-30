@@ -37,6 +37,7 @@
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/NodeWithIndex.h"
 #include "core/dom/Text.h"
+#include "core/dom/events/Event.h"
 #include "core/editing/CaretDisplayItemClient.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
@@ -53,7 +54,6 @@
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
-#include "core/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
@@ -1163,10 +1163,6 @@ Range* FrameSelection::DocumentCachedRange() const {
 
 void FrameSelection::ClearDocumentCachedRange() {
   selection_editor_->ClearDocumentCachedRange();
-}
-
-std::pair<int, int> FrameSelection::LayoutSelectionStartEnd() {
-  return layout_selection_->SelectionStartEnd();
 }
 
 base::Optional<int> FrameSelection::LayoutSelectionStart() const {

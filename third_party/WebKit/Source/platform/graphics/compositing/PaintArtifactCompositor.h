@@ -31,6 +31,7 @@ class JSONObject;
 class PaintArtifact;
 class SynthesizedClip;
 class WebLayer;
+class WebLayerScrollClient;
 struct PaintChunk;
 
 // Responsible for managing compositing in terms of a PaintArtifact.
@@ -40,7 +41,7 @@ struct PaintChunk;
 //
 // PaintArtifactCompositor is the successor to PaintLayerCompositor, reflecting
 // the new home of compositing decisions after paint in Slimming Paint v2.
-class PLATFORM_EXPORT PaintArtifactCompositor
+class PLATFORM_EXPORT PaintArtifactCompositor final
     : private PropertyTreeManagerClient {
   USING_FAST_MALLOC(PaintArtifactCompositor);
   WTF_MAKE_NONCOPYABLE(PaintArtifactCompositor);
@@ -48,8 +49,9 @@ class PLATFORM_EXPORT PaintArtifactCompositor
  public:
   ~PaintArtifactCompositor();
 
-  static std::unique_ptr<PaintArtifactCompositor> Create() {
-    return WTF::WrapUnique(new PaintArtifactCompositor());
+  static std::unique_ptr<PaintArtifactCompositor> Create(
+      WebLayerScrollClient& client) {
+    return WTF::WrapUnique(new PaintArtifactCompositor(client));
   }
 
   // Updates the layer tree to match the provided paint artifact.
@@ -74,7 +76,10 @@ class PLATFORM_EXPORT PaintArtifactCompositor
   // While not part of the normal output of this class, this provides a simple
   // way of locating the layers of interest, since there are still a slew of
   // placeholder layers required.
-  struct ExtraDataForTesting {
+  struct PLATFORM_EXPORT ExtraDataForTesting {
+    std::unique_ptr<WebLayer> ContentWebLayerAt(unsigned index);
+    std::unique_ptr<WebLayer> ScrollHitTestWebLayerAt(unsigned index);
+
     Vector<scoped_refptr<cc::Layer>> content_layers;
     Vector<scoped_refptr<cc::Layer>> synthesized_clip_layers;
     Vector<scoped_refptr<cc::Layer>> scroll_hit_test_layers;
@@ -122,7 +127,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor
     bool requires_own_layer;
   };
 
-  PaintArtifactCompositor();
+  PaintArtifactCompositor(WebLayerScrollClient&);
 
   void RemoveChildLayers();
 
@@ -196,6 +201,9 @@ class PLATFORM_EXPORT PaintArtifactCompositor
       const ClipPaintPropertyNode*,
       CompositorElementId& mask_isolation_id,
       CompositorElementId& mask_effect_id) final;
+
+  // Provides a callback for notifying blink of composited scrolling.
+  WebLayerScrollClient& scroll_client_;
 
   bool tracks_raster_invalidations_;
 

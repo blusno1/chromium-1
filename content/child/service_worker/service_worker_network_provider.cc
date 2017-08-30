@@ -6,7 +6,6 @@
 
 #include "base/atomic_sequence_num.h"
 #include "content/child/child_thread_impl.h"
-#include "content/child/child_url_loader_factory_getter.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/service_worker/service_worker_dispatcher.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
@@ -17,6 +16,7 @@
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_provider_host_info.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "ipc/ipc_sync_channel.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
@@ -268,9 +268,9 @@ ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
 
   ServiceWorkerProviderHostInfo host_info(
       browser_provider_id, route_id, provider_type, is_parent_frame_secure);
-  mojom::ServiceWorkerProviderAssociatedRequest client_request =
+  mojom::ServiceWorkerContainerAssociatedRequest client_request =
       mojo::MakeRequest(&host_info.client_ptr_info);
-  mojom::ServiceWorkerProviderHostAssociatedPtrInfo host_ptr_info;
+  mojom::ServiceWorkerContainerHostAssociatedPtrInfo host_ptr_info;
   host_info.host_request = mojo::MakeRequest(&host_ptr_info);
   DCHECK(host_info.host_request.is_pending());
   DCHECK(host_info.host_request.handle().is_valid());

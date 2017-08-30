@@ -41,11 +41,8 @@ mojom("interfaces") {
   sources = [
     "copy_output_request.mojom",
     "copy_output_result.mojom",
-    "filter_operation.mojom",
-    "filter_operations.mojom",
     "frame_sink_id.mojom",
     "local_surface_id.mojom",
-    "surface_id.mojom",
     "texture_mailbox.mojom",
     "texture_mailbox_releaser.mojom",
   ]

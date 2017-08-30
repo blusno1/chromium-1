@@ -27,7 +27,7 @@
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/child/blob_storage/webblobregistry_impl.h"
-#include "content/child/child_url_loader_factory_getter.h"
+#include "content/child/child_url_loader_factory_getter_impl.h"
 #include "content/child/database_util.h"
 #include "content/child/file_info_util.h"
 #include "content/child/fileapi/webfilesystem_impl.h"
@@ -253,8 +253,7 @@ class RendererBlinkPlatformImpl::SandboxSupport
 //------------------------------------------------------------------------------
 
 RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
-    blink::scheduler::RendererScheduler* renderer_scheduler,
-    base::WeakPtr<service_manager::Connector> connector)
+    blink::scheduler::RendererScheduler* renderer_scheduler)
     : BlinkPlatformImpl(renderer_scheduler->DefaultTaskRunner()),
       main_thread_(renderer_scheduler->CreateMainThread()),
       clipboard_delegate_(new RendererClipboardDelegate),
@@ -264,8 +263,7 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
       default_task_runner_(renderer_scheduler->DefaultTaskRunner()),
       loading_task_runner_(renderer_scheduler->LoadingTaskRunner()),
       web_scrollbar_behavior_(new WebScrollbarBehaviorImpl),
-      renderer_scheduler_(renderer_scheduler),
-      blink_interface_provider_(new BlinkInterfaceProviderImpl(connector)) {
+      renderer_scheduler_(renderer_scheduler) {
 #if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
   if (g_sandbox_enabled && sandboxEnabled()) {
     sandbox_support_.reset(new RendererBlinkPlatformImpl::SandboxSupport);
@@ -298,6 +296,8 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     connector_ = service_manager::Connector::Create(&request);
   }
 
+  blink_interface_provider_.reset(
+      new BlinkInterfaceProviderImpl(connector_.get()));
   top_level_blame_context_.Initialize();
   renderer_scheduler_->SetTopLevelBlameContext(&top_level_blame_context_);
 }
@@ -337,11 +337,11 @@ std::unique_ptr<blink::WebURLLoader> RendererBlinkPlatformImpl::CreateURLLoader(
 
 scoped_refptr<ChildURLLoaderFactoryGetter>
 RendererBlinkPlatformImpl::CreateDefaultURLLoaderFactoryGetter() {
-  return base::MakeRefCounted<ChildURLLoaderFactoryGetter>(
+  return base::MakeRefCounted<ChildURLLoaderFactoryGetterImpl>(
       CreateNetworkURLLoaderFactory(),
       base::FeatureList::IsEnabled(features::kNetworkService)
           ? base::BindOnce(&GetBlobURLLoaderFactoryGetter)
-          : ChildURLLoaderFactoryGetter::URLLoaderFactoryGetterCallback());
+          : ChildURLLoaderFactoryGetterImpl::URLLoaderFactoryGetterCallback());
 }
 
 PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
@@ -360,11 +360,15 @@ RendererBlinkPlatformImpl::CreateNetworkURLLoaderFactory() {
     url_loader_factory = std::move(factory_ptr);
   }
 
-  // Attach the CORS-enabled URLLoader for the network URLLoaderFactory.
+  // Attach the CORS-enabled URLLoader for the network URLLoaderFactory. To
+  // avoid thread hops and prevent jank on the main thread from affecting
+  // requests from other threads this object should live on the IO thread.
   if (base::FeatureList::IsEnabled(features::kOutOfBlinkCORS)) {
     mojom::URLLoaderFactoryPtr factory_ptr;
-    CORSURLLoaderFactory::CreateAndBind(std::move(url_loader_factory),
-                                        mojo::MakeRequest(&factory_ptr));
+    RenderThreadImpl::current()->GetIOTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(&CORSURLLoaderFactory::CreateAndBind,
+                                  url_loader_factory.PassInterface(),
+                                  mojo::MakeRequest(&factory_ptr)));
     url_loader_factory = std::move(factory_ptr);
   }
   return url_loader_factory;

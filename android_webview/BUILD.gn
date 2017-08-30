@@ -58,7 +58,6 @@ generate_jni("native_jni") {
     "java/src/org/chromium/android_webview/AwPdfExporter.java",
     "java/src/org/chromium/android_webview/AwPicture.java",
     "java/src/org/chromium/android_webview/AwQuotaManagerBridge.java",
-    "java/src/org/chromium/android_webview/AwRendererPriorityManager.java",
     "java/src/org/chromium/android_webview/AwResource.java",
     "java/src/org/chromium/android_webview/AwSettings.java",
     "java/src/org/chromium/android_webview/AwTokenBindingManager.java",
@@ -87,9 +86,9 @@ java_cpp_enum("aw_permission_request_resource") {
   ]
 }
 
-java_cpp_enum("aw_renderer_priority_manager_renderer_priority") {
+java_cpp_enum("android_webview_java_enums_srcjar") {
   sources = [
-    "browser/aw_renderer_priority_manager.h",
+    "browser/aw_renderer_priority.h",
   ]
 }
 
@@ -502,8 +501,7 @@ source_set("common") {
     "browser/aw_render_process_gone_delegate.h",
     "browser/aw_render_thread_context_provider.cc",
     "browser/aw_render_thread_context_provider.h",
-    "browser/aw_renderer_priority_manager.cc",
-    "browser/aw_renderer_priority_manager.h",
+    "browser/aw_renderer_priority.h",
     "browser/aw_resource_context.cc",
     "browser/aw_resource_context.h",
     "browser/aw_result_codes.h",
@@ -687,6 +685,7 @@ source_set("common") {
     "//components/cdm/renderer",
     "//components/crash/content/app",
     "//components/crash/content/browser",
+    "//components/google/core/browser",
     "//components/metrics",
     "//components/metrics:gpu",
     "//components/metrics:net",
@@ -769,6 +768,8 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/AutofillActionModeCallback.java",
     "java/src/org/chromium/android_webview/AwActionModeCallback.java",
     "java/src/org/chromium/android_webview/AwAutofillClient.java",
+    "java/src/org/chromium/android_webview/AwAutofillManager.java",
+    "java/src/org/chromium/android_webview/AwAutofillProvider.java",
     "java/src/org/chromium/android_webview/AwBrowserContext.java",
     "java/src/org/chromium/android_webview/AwBrowserProcess.java",
     "java/src/org/chromium/android_webview/AwContentVideoViewEmbedder.java",
@@ -797,7 +798,6 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/AwSafeBrowsingConfigHelper.java",
     "java/src/org/chromium/android_webview/AwSafeBrowsingResponse.java",
     "java/src/org/chromium/android_webview/AwQuotaManagerBridge.java",
-    "java/src/org/chromium/android_webview/AwRendererPriorityManager.java",
     "java/src/org/chromium/android_webview/AwRenderProcessGoneDetail.java",
     "java/src/org/chromium/android_webview/AwResource.java",
     "java/src/org/chromium/android_webview/AwSafeBrowsingConversionHelper.java",
@@ -863,6 +863,7 @@ android_library("android_webview_java") {
     "//device/gamepad:java",
     "//device/geolocation:geolocation_java",
     "//net/android:net_java",
+    "//third_party/WebKit/public:blink_headers_java",
     "//third_party/android_tools:android_support_annotations_java",
     "//ui/android:ui_java",
   ]
@@ -873,7 +874,7 @@ android_library("android_webview_java") {
 
   srcjar_deps = [
     ":aw_permission_request_resource",
-    ":aw_renderer_priority_manager_renderer_priority",
+    ":android_webview_java_enums_srcjar",
     ":aw_error_ui",
     ":aw_safe_browsing_action",
     "//components/safe_browsing_db:sb_threat_values",

@@ -16,6 +16,7 @@
 #include "components/payments/core/payment_address.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_request_data_util.h"
+#include "components/payments/core/payment_shipping_option.h"
 #include "components/payments/core/payments_test_util.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
 #import "ios/chrome/browser/ui/payments/payment_request_unittest_base.h"
@@ -43,7 +44,7 @@ typedef void (^mock_coordinator_select_shipping_address)(
     const autofill::AutofillProfile&);
 typedef void (^mock_coordinator_select_shipping_option)(
     PaymentRequestCoordinator*,
-    const web::PaymentShippingOption&);
+    const payments::PaymentShippingOption&);
 
 - (void)paymentRequestCoordinatorDidConfirm:
     (PaymentRequestCoordinator*)coordinator {
@@ -66,7 +67,7 @@ typedef void (^mock_coordinator_select_shipping_option)(
 
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
           didSelectShippingOption:
-              (const web::PaymentShippingOption&)shippingOption {
+              (const payments::PaymentShippingOption&)shippingOption {
   return static_cast<mock_coordinator_select_shipping_option>(
       [self blockForSelector:_cmd])(coordinator, shippingOption);
 }
@@ -104,6 +105,18 @@ TEST_F(PaymentRequestCoordinatorTest, StartAndStop) {
   [coordinator setPaymentRequest:payment_request()];
   [coordinator setBrowserState:browser_state()];
 
+  // Mock the coordinator delegate.
+  id check_block = ^BOOL(id value) {
+    EXPECT_TRUE(value == coordinator);
+    return YES;
+  };
+  id delegate = [OCMockObject
+      mockForProtocol:@protocol(PaymentRequestCoordinatorDelegate)];
+  [[delegate expect]
+      paymentRequestCoordinatorDidStop:[OCMArg checkWithBlock:check_block]];
+
+  [coordinator setDelegate:delegate];
+
   [coordinator start];
   // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1));
@@ -123,6 +136,8 @@ TEST_F(PaymentRequestCoordinatorTest, StartAndStop) {
     return !base_view_controller.presentedViewController;
   });
   EXPECT_EQ(nil, base_view_controller.presentedViewController);
+
+  EXPECT_OCMOCK_VERIFY(delegate);
 }
 
 // Tests that calling the ShippingAddressSelectionCoordinator delegate method
@@ -169,11 +184,11 @@ TEST_F(PaymentRequestCoordinatorTest, DidSelectShippingOption) {
       initWithBaseViewController:base_view_controller];
   [coordinator setPaymentRequest:payment_request()];
 
-  web::PaymentShippingOption shipping_option;
-  shipping_option.id = base::ASCIIToUTF16("123456");
-  shipping_option.label = base::ASCIIToUTF16("1-Day");
-  shipping_option.amount.value = base::ASCIIToUTF16("0.99");
-  shipping_option.amount.currency = base::ASCIIToUTF16("USD");
+  payments::PaymentShippingOption shipping_option;
+  shipping_option.id = "123456";
+  shipping_option.label = "1-Day";
+  shipping_option.amount.value = "0.99";
+  shipping_option.amount.currency = "USD";
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
@@ -181,13 +196,13 @@ TEST_F(PaymentRequestCoordinatorTest, DidSelectShippingOption) {
   id delegate_mock([[PaymentRequestCoordinatorDelegateMock alloc]
       initWithRepresentedObject:delegate]);
   SEL selector = @selector(paymentRequestCoordinator:didSelectShippingOption:);
-  [delegate_mock
-                onSelector:selector
-      callBlockExpectation:^(PaymentRequestCoordinator* callerCoordinator,
-                             const web::PaymentShippingOption& shippingOption) {
-        EXPECT_EQ(shipping_option, shippingOption);
-        EXPECT_EQ(coordinator, callerCoordinator);
-      }];
+  [delegate_mock onSelector:selector
+       callBlockExpectation:^(
+           PaymentRequestCoordinator* callerCoordinator,
+           const payments::PaymentShippingOption& shippingOption) {
+         EXPECT_EQ(shipping_option, shippingOption);
+         EXPECT_EQ(coordinator, callerCoordinator);
+       }];
   [coordinator setDelegate:delegate_mock];
 
   // Call the ShippingOptionSelectionCoordinator delegate method.

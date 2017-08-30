@@ -230,6 +230,8 @@ _BANNED_CPP_FUNCTIONS = (
         r"^net[\\\/]test[\\\/]embedded_test_server[\\\/]" +
             r"embedded_test_server\.cc$",
         r"^net[\\\/]test[\\\/]spawned_test_server[\\\/]local_test_server\.cc$",
+        r"^net[\\\/]test[\\\/]spawned_test_server[\\\/]" +
+            r"remote_test_server_config\.cc$",
         r"^net[\\\/]test[\\\/]test_data_directory\.cc$",
         r"^net[\\\/]url_request[\\\/]test_url_fetcher_factory\.cc$",
         r"^remoting[\\\/]protocol[\\\/]webrtc_transport\.cc$",
@@ -433,6 +435,15 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       True,
       (),
+    ),
+    (
+      r'std::regex',
+      (
+        'Using std::regex adds unnecessary binary size to Chrome. Please use',
+        're2::RE2 instead (crbug/755321)',
+      ),
+      True,
+      (),
     )
 )
 
@@ -440,6 +451,14 @@ _BANNED_CPP_FUNCTIONS = (
 _IPC_ENUM_TRAITS_DEPRECATED = (
     'You are using IPC_ENUM_TRAITS() in your code. It has been deprecated.\n'
     'See http://www.chromium.org/Home/chromium-security/education/security-tips-for-ipc')
+
+
+# These paths contain test data and other known invalid JSON files.
+_KNOWN_INVALID_JSON_FILE_PATTERNS = [
+    r'test[\\\/]data[\\\/]',
+    r'^components[\\\/]policy[\\\/]resources[\\\/]policy_templates\.json$',
+    r'^third_party[\\\/]protobuf[\\\/]',
+]
 
 
 _VALID_OS_MACROS = (
@@ -1393,12 +1412,6 @@ def _CheckParseErrors(input_api, output_api):
     '.idl': _GetIDLParseError,
     '.json': _GetJSONParseError,
   }
-  # These paths contain test data and other known invalid JSON files.
-  excluded_patterns = [
-    r'test[\\\/]data[\\\/]',
-    r'^components[\\\/]policy[\\\/]resources[\\\/]policy_templates\.json$',
-    r'^third_party[\\\/]protobuf[\\\/]',
-  ]
   # Most JSON files are preprocessed and support comments, but these do not.
   json_no_comments_patterns = [
     r'^testing[\\\/]',
@@ -1413,23 +1426,17 @@ def _CheckParseErrors(input_api, output_api):
     filename = affected_file.LocalPath()
     return actions.get(input_api.os_path.splitext(filename)[1])
 
-  def MatchesFile(patterns, path):
-    for pattern in patterns:
-      if input_api.re.search(pattern, path):
-        return True
-    return False
-
   def FilterFile(affected_file):
     action = get_action(affected_file)
     if not action:
       return False
     path = affected_file.LocalPath()
 
-    if MatchesFile(excluded_patterns, path):
+    if _MatchesFile(input_api, _KNOWN_INVALID_JSON_FILE_PATTERNS, path):
       return False
 
     if (action == _GetIDLParseError and
-        not MatchesFile(idl_included_patterns, path)):
+        not _MatchesFile(input_api, idl_included_patterns, path)):
       return False
     return True
 
@@ -1439,7 +1446,8 @@ def _CheckParseErrors(input_api, output_api):
     action = get_action(affected_file)
     kwargs = {}
     if (action == _GetJSONParseError and
-        MatchesFile(json_no_comments_patterns, affected_file.LocalPath())):
+        _MatchesFile(input_api, json_no_comments_patterns,
+                     affected_file.LocalPath())):
       kwargs['eat_comments'] = False
     parse_error = action(input_api,
                          affected_file.AbsoluteLocalPath(),
@@ -1465,6 +1473,13 @@ def _CheckJavaStyle(input_api, output_api):
   return checkstyle.RunCheckstyle(
       input_api, output_api, 'tools/android/checkstyle/chromium-style-5.0.xml',
       black_list=_EXCLUDED_PATHS + input_api.DEFAULT_BLACK_LIST)
+
+
+def _MatchesFile(input_api, patterns, path):
+  for pattern in patterns:
+    if input_api.re.search(pattern, path):
+      return True
+  return False
 
 
 def _CheckIpcOwners(input_api, output_api):
@@ -1545,7 +1560,9 @@ def _CheckIpcOwners(input_api, output_api):
   for f in input_api.AffectedFiles(include_deletes=False):
     # Manifest files don't have a strong naming convention. Instead, scan
     # affected files for .json files and see if they look like a manifest.
-    if f.LocalPath().endswith('.json'):
+    if (f.LocalPath().endswith('.json') and
+        not _MatchesFile(input_api, _KNOWN_INVALID_JSON_FILE_PATTERNS,
+                         f.LocalPath())):
       json_comment_eater = _ImportJSONCommentEater(input_api)
       mostly_json_lines = '\n'.join(f.NewContents())
       # Comments aren't allowed in strict JSON, so filter them out.
@@ -1795,6 +1812,58 @@ def _CheckAndroidCrLogUsage(input_api, output_api):
 
   return results
 
+
+def _CheckAndroidTestJUnitFrameworkImport(input_api, output_api):
+  """Checks that junit.framework.* is no longer used."""
+  deprecated_junit_framework_pattern = input_api.re.compile(
+      r'^import junit\.framework\..*;',
+      input_api.re.MULTILINE)
+  sources = lambda x: input_api.FilterSourceFile(
+      x, white_list=(r'.*\.java$',), black_list=None)
+  errors = []
+  for f in input_api.AffectedFiles(sources):
+    for line_num, line in f.ChangedContents():
+      if deprecated_junit_framework_pattern.search(line):
+        errors.append("%s:%d" % (f.LocalPath(), line_num))
+
+  results = []
+  if errors:
+    results.append(output_api.PresubmitError(
+      'APIs from junit.framework.* are deprecated, please use JUnit4 framework'
+      '(org.junit.*) from //third_party/junit. Contact yolandyan@chromium.org'
+      ' if you have any question.', errors))
+  return results
+
+
+def _CheckAndroidTestJUnitInheritance(input_api, output_api):
+  """Checks that if new Java test classes have inheritance.
+     Either the new test class is JUnit3 test or it is a JUnit4 test class
+     with a base class, either case is undesirable.
+  """
+  class_declaration_pattern = input_api.re.compile(r'^public class \w*Test ')
+
+  sources = lambda x: input_api.FilterSourceFile(
+      x, white_list=(r'.*Test\.java$',), black_list=None)
+  errors = []
+  for f in input_api.AffectedFiles(sources):
+    if not f.OldContents():
+      class_declaration_start_flag = False
+      for line_num, line in f.ChangedContents():
+        if class_declaration_pattern.search(line):
+          class_declaration_start_flag = True
+        if class_declaration_start_flag and ' extends ' in line:
+          errors.append('%s:%d' % (f.LocalPath(), line_num))
+        if '{' in line:
+          class_declaration_start_flag = False
+
+  results = []
+  if errors:
+    results.append(output_api.PresubmitPromptWarning(
+      'The newly created files include Test classes that inherits from base'
+      ' class. Please do not use inheritance in JUnit4 tests or add new'
+      ' JUnit3 tests. Contact yolandyan@chromium.org if you have any'
+      ' questions.', errors))
+  return results
 
 def _CheckAndroidTestAnnotationUsage(input_api, output_api):
   """Checks that android.test.suitebuilder.annotation.* is no longer used."""
@@ -2286,6 +2355,8 @@ def _AndroidSpecificOnUploadChecks(input_api, output_api):
   results.extend(_CheckAndroidCrLogUsage(input_api, output_api))
   results.extend(_CheckAndroidNewMdpiAssetLocation(input_api, output_api))
   results.extend(_CheckAndroidToastUsage(input_api, output_api))
+  results.extend(_CheckAndroidTestJUnitInheritance(input_api, output_api))
+  results.extend(_CheckAndroidTestJUnitFrameworkImport(input_api, output_api))
   results.extend(_CheckAndroidTestAnnotationUsage(input_api, output_api))
   return results
 

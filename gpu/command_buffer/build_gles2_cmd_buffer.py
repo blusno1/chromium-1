@@ -2817,6 +2817,7 @@ _FUNCTION_INFO = {
   'DisableVertexAttribArray': {
     'decoder_func': 'DoDisableVertexAttribArray',
     'impl_func': False,
+    'unit_test': False,
   },
   'DrawArrays': {
     'type': 'Custom',
@@ -2846,6 +2847,7 @@ _FUNCTION_INFO = {
   'EnableVertexAttribArray': {
     'decoder_func': 'DoEnableVertexAttribArray',
     'impl_func': False,
+    'unit_test': False,
   },
   'FenceSync': {
     'type': 'Create',
@@ -4589,6 +4591,30 @@ _FUNCTION_INFO = {
     'impl_func': False,
     'client_test': False,
     'extension': True,
+  },
+  'BeginRasterCHROMIUM': {
+    'decoder_func': 'DoBeginRasterCHROMIUM',
+    'impl_func': True,
+    'unit_test': False,
+    'extension': 'CHROMIUM_raster_transport',
+    'extension_flag': 'chromium_raster_transport',
+  },
+  'RasterCHROMIUM': {
+    'type': 'Custom',
+    'decoder_func': 'DoRasterCHROMIUM',
+    'impl_func': False,
+    'immediate': False,
+    'data_transfer_methods': ['shm'],
+    'needs_size': True,
+    'extension': 'CHROMIUM_raster_transport',
+    'extension_flag': 'chromium_raster_transport',
+  },
+  'EndRasterCHROMIUM': {
+    'decoder_func': 'DoEndRasterCHROMIUM',
+    'impl_func': True,
+    'unit_test': False,
+    'extension': 'CHROMIUM_raster_transport',
+    'extension_flag': 'chromium_raster_transport',
   },
 }
 

@@ -1,0 +1,59 @@
+Even though the fixed-position element's container is nonscrollable, it should still be composited because one of its ancestors is scrolling.
+
+{
+  "layers": [
+    {
+      "name": "LayoutView #document",
+      "bounds": [800, 600],
+      "contentsOpaque": true,
+      "drawsContent": true
+    },
+    {
+      "name": "LayoutBlockFlow DIV class='scrollable bigBox'",
+      "position": [8, 68],
+      "bounds": [302, 302],
+      "drawsContent": true
+    },
+    {
+      "name": "Scrolling Layer",
+      "position": [9, 69],
+      "bounds": [285, 285]
+    },
+    {
+      "name": "Scrolling Contents Layer",
+      "position": [9, 69],
+      "bounds": [285, 800],
+      "drawsContent": true
+    },
+    {
+      "name": "Overflow Controls Host Layer",
+      "position": [8, 68],
+      "bounds": [302, 302]
+    },
+    {
+      "name": "Horizontal Scrollbar Layer",
+      "position": [9, 354],
+      "bounds": [285, 15]
+    },
+    {
+      "name": "Vertical Scrollbar Layer",
+      "position": [294, 69],
+      "bounds": [15, 285]
+    },
+    {
+      "name": "Scroll Corner Layer",
+      "position": [294, 354],
+      "bounds": [15, 15],
+      "drawsContent": true
+    },
+    {
+      "name": "LayoutBlockFlow (positioned) DIV class='fixed lime box'",
+      "position": [10, 100],
+      "bounds": [100, 100],
+      "contentsOpaque": true,
+      "drawsContent": true,
+      "backgroundColor": "#00FF00"
+    }
+  ]
+}
+

@@ -19,8 +19,6 @@ ViewportAwareRoot::~ViewportAwareRoot() = default;
 
 void ViewportAwareRoot::AdjustRotationForHeadPose(
     const gfx::Vector3dF& look_at) {
-  // This must be a top level element.
-  DCHECK(!parent());
   DCHECK(viewport_aware());
 
   gfx::Vector3dF rotated_center_vector{0.f, 0.f, -1.0f};
@@ -37,6 +35,11 @@ void ViewportAwareRoot::AdjustRotationForHeadPose(
       viewport_aware_total_rotation_ += 360.0f;
     SetRotate(0.f, 1.f, 0.f, viewport_aware_total_rotation_ / 180 * M_PI);
   }
+}
+
+void ViewportAwareRoot::OnUpdatedInheritedProperties() {
+  // We must not inherit a transform.
+  DCHECK(parent()->world_space_transform().IsIdentity());
 }
 
 }  // namespace vr

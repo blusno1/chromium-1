@@ -119,10 +119,6 @@
       status: "stable",
     },
     {
-      name: "BlockLegacySubresources",
-      status: "stable",
-    },
-    {
       name: "BroadcastChannel",
       status: "stable",
     },
@@ -704,7 +700,7 @@
     },
     {
       name: "NavigatorDeviceMemory",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "NetInfoDownlink",
@@ -851,6 +847,10 @@
     {
       name: "PrefixedVideoFullscreen",
       status: "stable",
+    },
+    {
+      name: "PreloadDefaultIsMetadata",
+      status: "experimental",
     },
     {
       name: "Presentation",

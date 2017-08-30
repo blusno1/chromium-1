@@ -97,7 +97,7 @@ enum EffectiveConnectionType {
     [RaisesException] Node previousInFlatTree(Node node);
 
     DOMString visiblePlaceholder(Element element);
-
+    boolean isValidationMessageVisible(Element element);
     void selectColorInColorChooser(Element element, DOMString colorValue);
     void endColorChooser(Element element);
 
@@ -119,6 +119,7 @@ enum EffectiveConnectionType {
     [RaisesException] void addTextMatchMarker(Range range, DOMString matchStatus);
     [RaisesException] void addCompositionMarker(Range range, DOMString underlineColorValue, DOMString thicknessValue, DOMString backgroundColorValue);
     [RaisesException] void addActiveSuggestionMarker(Range range, DOMString underlineColorValue, DOMString thicknessValue, DOMString backgroundColorValue);
+    [RaisesException] void addSuggestionMarker(Range range, sequence<DOMString> suggestions, DOMString suggestionHighlightColorValue, DOMString underlineColorValue, DOMString thicknessValue, DOMString backgroundColorValue);
     void setTextMatchMarkersActive(Node node, unsigned long startOffset, unsigned long endOffset, boolean active);
     void setMarkedTextMatchesAreHighlighted(Document document, boolean highlight);
 

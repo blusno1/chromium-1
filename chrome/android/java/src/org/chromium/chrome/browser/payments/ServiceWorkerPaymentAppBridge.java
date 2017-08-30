@@ -63,6 +63,18 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
                 modifiers.toArray(new PaymentDetailsModifier[0]), callback);
     }
 
+    /**
+     * Abort invocation of the payment app.
+     *
+     * @param webContents      The web contents that invoked PaymentRequest.
+     * @param registrationId   The service worker registration ID of the Payment App.
+     * @param callback         Called after abort invoke payment app is finished running.
+     */
+    public static void abortPaymentApp(WebContents webContents, long registrationId,
+            PaymentInstrument.AbortCallback callback) {
+        nativeAbortPaymentApp(webContents, registrationId, callback);
+    }
+
     @CalledByNative
     private static String[] getSupportedMethodsFromMethodData(PaymentMethodData data) {
         return data.supportedMethods;
@@ -107,7 +119,6 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
     private static void onPaymentAppCreated(long registrationId, String scope, String label,
             @Nullable String sublabel, @Nullable Bitmap icon, String[] methodNameArray,
             String[] preferredRelatedApplications, WebContents webContents, Object callback) {
-        assert callback instanceof PaymentAppFactory.PaymentAppCreatedCallback;
         Context context = ChromeActivity.fromWebContents(webContents);
         if (context == null) return;
         URI scopeUri = UriUtils.parseUriFromString(scope);
@@ -124,20 +135,23 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
 
     @CalledByNative
     private static void onAllPaymentAppsCreated(Object callback) {
-        assert callback instanceof PaymentAppFactory.PaymentAppCreatedCallback;
         ((PaymentAppFactory.PaymentAppCreatedCallback) callback).onAllPaymentAppsCreated();
     }
 
     @CalledByNative
     private static void onPaymentAppInvoked(
             Object callback, String methodName, String stringifiedDetails) {
-        assert callback instanceof PaymentInstrument.InstrumentDetailsCallback;
         if (TextUtils.isEmpty(methodName)) {
             ((PaymentInstrument.InstrumentDetailsCallback) callback).onInstrumentDetailsError();
         } else {
             ((PaymentInstrument.InstrumentDetailsCallback) callback)
                     .onInstrumentDetailsReady(methodName, stringifiedDetails);
         }
+    }
+
+    @CalledByNative
+    private static void onPaymentAppAborted(Object callback, boolean result) {
+        ((PaymentInstrument.AbortCallback) callback).onInstrumentAbortResult(result);
     }
 
     /*
@@ -156,4 +170,12 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
             String topLevelOrigin, String paymentRequestOrigin, String paymentRequestId,
             PaymentMethodData[] methodData, PaymentItem total, PaymentDetailsModifier[] modifiers,
             Object callback);
+
+    /*
+     * TODO(tommyt): crbug.com/505554. Change the |callback| parameter below to
+     * be of type PaymentInstrument.InstrumentDetailsCallback, once this JNI bug
+     * has been resolved.
+     */
+    private static native void nativeAbortPaymentApp(
+            WebContents webContents, long registrationId, Object callback);
 }

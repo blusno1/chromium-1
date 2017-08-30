@@ -1190,6 +1190,10 @@ const char kSoftwareRasterizerName[] = "3D software rasterizer";
 const char kSoftwareRasterizerDescription[] =
     "Fall back to a 3D software rasterizer when the GPU cannot be used.";
 
+const char kSoundContentSettingName[] = "Sound content setting";
+const char kSoundContentSettingDescription[] =
+    "Enable site-wide muting in content settings and tab strip context menu.";
+
 const char kSpeculativePrefetchName[] = "Speculative Prefetch";
 const char kSpeculativePrefetchDescription[] =
     R"*("Speculative Prefetch" fetches likely resources early to improve )*"
@@ -1886,6 +1890,11 @@ const char kPullToRefreshEffectName[] = "The pull-to-refresh effect";
 const char kPullToRefreshEffectDescription[] =
     "Page reloads triggered by vertically overscrolling content.";
 
+const char kPwaImprovedSplashScreenName[] =
+    "Improved Splash Screen for standalone PWAs";
+const char kPwaImprovedSplashScreenDescription[] =
+    "Enables the Improved Splash Screen UX for standalone PWAs based on new "
+    "Web App Manifest attributes";
 const char kPwaPersistentNotificationName[] =
     "Persistent notification in standalone PWA";
 const char kPwaPersistentNotificationDescription[] =
@@ -2089,6 +2098,13 @@ const char kWindows10CustomTitlebarName[] = "Custom-drawn Windows 10 Titlebar";
 const char kWindows10CustomTitlebarDescription[] =
     "If enabled, Chrome will draw the titlebar and caption buttons instead of "
     "deferring to Windows.";
+
+#if DCHECK_IS_ON() && defined(SYZYASAN)
+extern const char kSyzyAsanDcheckIsFatalName[] = "DCHECKs are fatal";
+extern const char kSyzyAsanDcheckIsFatalDescription[] =
+    "By default Chrome will evaluate DCHECKs in SyzyASAN builds, but only log "
+    "failed DCHECKs. If enabled, DCHECKs will crash the calling process.";
+#endif  // DCHECK_IS_ON() && defined(SYZYASAN)
 
 #endif  // defined(OS_WIN)
 

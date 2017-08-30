@@ -255,7 +255,7 @@ class MediaStreamDevicesController::PermissionPromptDelegateImpl
     PermissionUmaUtil::RecordPermissionPromptShown(
         request->GetPermissionRequestType(),
         PermissionUtil::GetGestureType(user_gesture));
-    if (PermissionDialogDelegate::ShouldShowDialog(user_gesture)) {
+    if (PermissionDialogDelegate::ShouldShowDialog()) {
       PermissionDialogDelegate::CreateMediaStreamDialog(
           web_contents, user_gesture, std::move(request));
     } else {
@@ -394,6 +394,7 @@ void MediaStreamDevicesController::RequestPermissionsWithDelegate(
     callback.Run(content::MediaStreamDevices(),
                  content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
                  std::unique_ptr<content::MediaStreamUI>());
+    return;
   }
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(rfh);

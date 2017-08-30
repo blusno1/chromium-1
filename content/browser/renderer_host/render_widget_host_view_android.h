@@ -70,6 +70,7 @@ struct ContextMenuParams;
 class CONTENT_EXPORT RenderWidgetHostViewAndroid
     : public RenderWidgetHostViewBase,
       public ui::GestureProviderClient,
+      public ui::ViewAndroidObserver,
       public ui::ViewClient,
       public ui::WindowAndroidObserver,
       public viz::FrameEvictorClient,
@@ -193,11 +194,14 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   GetTouchSelectionControllerClientManager() override;
 
   // ui::ViewClient implementation.
-  bool OnTouchEvent(const ui::MotionEventAndroid& m,
-                    bool for_touch_handle) override;
+  bool OnTouchEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseWheelEvent(const ui::MotionEventAndroid& event) override;
   void OnPhysicalBackingSizeChanged() override;
+
+  // ui::ViewAndroidObserver implementation:
+  void OnAttachedToWindow() override;
+  void OnDetachedFromWindow() override;
 
   // ui::GestureProviderClient implementation.
   void OnGestureEvent(const ui::GestureEventData& gesture) override;
@@ -213,8 +217,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // content::ContentViewCoreObserver implementation.
   void OnContentViewCoreDestroyed() override;
-  void OnAttachedToWindow() override;
-  void OnDetachedFromWindow() override;
 
   // viz::FrameEvictor implementation
   void EvictDelegatedFrame() override;
@@ -273,7 +275,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   base::WeakPtr<RenderWidgetHostViewAndroid> GetWeakPtrAndroid();
 
-  bool OnTouchEvent(const ui::MotionEvent& event);
   bool OnTouchHandleEvent(const ui::MotionEvent& event);
   int GetTouchHandleHeight();
   void ResetGestureDetection();

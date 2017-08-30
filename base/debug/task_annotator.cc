@@ -8,11 +8,9 @@
 
 #include "base/debug/activity_tracker.h"
 #include "base/debug/alias.h"
-#include "base/metrics/statistics_recorder.h"  // crbug/744734
 #include "base/pending_task.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
-#include "build/build_config.h"  // crbug/744734
 
 namespace base {
 namespace debug {
@@ -35,13 +33,6 @@ void TaskAnnotator::RunTask(const char* queue_function,
                             PendingTask* pending_task) {
   ScopedTaskRunActivity task_activity(*pending_task);
 
-#if defined(OS_ANDROID)
-  // Try to find the source of heap object corruption by validating all
-  // histogram objects before and after each posted task.
-  // TODO(bcwhite): Remove this after successful canary build.
-  base::StatisticsRecorder::ValidateAllHistograms(nullptr);
-#endif
-
   tracked_objects::TaskStopwatch stopwatch;
   stopwatch.Start();
   base::TimeDelta queue_duration =
@@ -58,11 +49,17 @@ void TaskAnnotator::RunTask(const char* queue_function,
   // variable itself will have the expected value when displayed by the
   // optimizer in an optimized build. Look at a memory dump of the stack.
   static constexpr int kStackTaskTraceSnapshotSize =
-      std::tuple_size<decltype(pending_task->task_backtrace)>::value + 1;
+      std::tuple_size<decltype(pending_task->task_backtrace)>::value + 3;
   std::array<const void*, kStackTaskTraceSnapshotSize> task_backtrace;
-  task_backtrace[0] = pending_task->posted_from.program_counter();
+
+  // Store a marker to locate |task_backtrace| content easily on a memory
+  // dump.
+  task_backtrace.front() = reinterpret_cast<void*>(0xefefefefefefefef);
+  task_backtrace.back() = reinterpret_cast<void*>(0xfefefefefefefefe);
+
+  task_backtrace[1] = pending_task->posted_from.program_counter();
   std::copy(pending_task->task_backtrace.begin(),
-            pending_task->task_backtrace.end(), task_backtrace.begin() + 1);
+            pending_task->task_backtrace.end(), task_backtrace.begin() + 2);
   debug::Alias(&task_backtrace);
 
   std::move(pending_task->task).Run();
@@ -70,13 +67,6 @@ void TaskAnnotator::RunTask(const char* queue_function,
   stopwatch.Stop();
   tracked_objects::ThreadData::TallyRunOnNamedThreadIfTracking(*pending_task,
                                                                stopwatch);
-
-#if defined(OS_ANDROID)
-  // Try to find the source of heap object corruption by validating all
-  // histogram objects before and after each posted task.
-  // TODO(bcwhite): Remove this after successful canary build.
-  base::StatisticsRecorder::ValidateAllHistograms(&pending_task->posted_from);
-#endif
 }
 
 uint64_t TaskAnnotator::GetTaskTraceID(const PendingTask& task) const {

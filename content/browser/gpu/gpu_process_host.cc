@@ -132,10 +132,10 @@ static const char* const kSwitchNames[] = {
     switches::kEnableGpuRasterization,
     switches::kEnableHeapProfiling,
     switches::kEnableLogging,
+    switches::kEnableOOPRasterization,
 #if defined(OS_CHROMEOS)
     switches::kDisableVaapiAcceleratedVideoEncode,
 #endif
-    switches::kGpuDriverBugWorkarounds,
     switches::kGpuStartupDialog,
     switches::kGpuSandboxAllowSysVShm,
     switches::kGpuSandboxFailuresFatal,
@@ -171,7 +171,9 @@ static const char* const kSwitchNames[] = {
     switches::kGpuTestingGLVersion,
     switches::kDisableGpuDriverBugWorkarounds,
     switches::kUsePassthroughCmdDecoder,
-    switches::kIgnoreGpuBlacklist};
+    switches::kIgnoreGpuBlacklist,
+    switches::kForceVideoOverlays,
+};
 
 enum GPUProcessLifetimeEvent {
   LAUNCHED,

@@ -312,11 +312,8 @@ ServiceWorkerDispatcherHost* ServiceWorkerContextCore::GetDispatcherHost(
 }
 
 void ServiceWorkerContextCore::RemoveDispatcherHost(int process_id) {
-  // Temporary CHECKs for debugging https://crbug.com/750267.
+  // Temporary CHECK for debugging https://crbug.com/750267.
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-  CHECK(dispatcher_hosts_.find(process_id) != dispatcher_hosts_.end());
-  RemoveAllProviderHostsForProcess(process_id);
-  embedded_worker_registry_->RemoveProcess(process_id);
   dispatcher_hosts_.erase(process_id);
 }
 

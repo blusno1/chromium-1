@@ -8,10 +8,10 @@
 #include "base/callback.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/child/child_url_loader_factory_getter.h"
 #include "content/child/service_worker/service_worker_event_dispatcher_holder.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/content_features.h"
 #include "net/base/io_buffer.h"
 #include "net/http/http_util.h"
@@ -56,7 +56,7 @@ ServiceWorkerSubresourceLoader::ServiceWorkerSubresourceLoader(
       blob_client_binding_(this),
       default_loader_factory_getter_(std::move(default_loader_factory_getter)),
       weak_factory_(this) {
-  DCHECK(event_dispatcher_);
+  DCHECK(event_dispatcher_ && event_dispatcher_->get());
   url_loader_binding_.set_connection_error_handler(base::BindOnce(
       &ServiceWorkerSubresourceLoader::DeleteSoon, weak_factory_.GetWeakPtr()));
   StartRequest(resource_request);

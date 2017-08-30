@@ -96,6 +96,8 @@
 -RequestDataResourceDispatcherHostBrowserTest.CrossOriginAuxiliary
 -RequestDataResourceDispatcherHostBrowserTest.CrossOriginNested
 -RequestDataResourceDispatcherHostBrowserTest.FailedNavigation
+-RequestDataResourceDispatcherHostBrowserTest.LinkRelPrefetch
+-RequestDataResourceDispatcherHostBrowserTest.LinkRelPrefetchReferrerPolicy
 -RequestDataResourceDispatcherHostBrowserTest.SameOriginAuxiliary
 -RequestDataResourceDispatcherHostBrowserTest.SameOriginNested
 -ResourceDispatcherHostBrowserTest.ContentDispositionEmpty
@@ -108,7 +110,6 @@
 -ResourceDispatcherHostBrowserTest.PageTransitionClientRedirect
 -ResourceDispatcherHostBrowserTest.SniffHTMLWithNoContentType
 -ResourceDispatcherHostBrowserTest.SniffNoContentTypeNoData
--ResourceDispatcherHostBrowserTest.SyncXMLHttpRequest
 -SessionHistoryTest.HistoryLength
 -SitePerProcessBrowserTest.CrossProcessFocusChangeFiresBlurEvents
 -SitePerProcessBrowserTest.CrossSiteIframeBlockedByCSPInheritedBySrcDocParent
@@ -132,11 +133,21 @@
 -WebContentsImplBrowserTest.UserAgentOverride
 -WorkerFetchTest.*
 
+# crbug.com/760581
+-ResourceFetcherTests.ResourceFetcherTimeout
+-ResourceFetcherTests.ResourceFetcherDeletedInCallback
+
 # content/network/url_loader_impl.cc should handle failure in
 # URLLoaderImpl::OnResponseBodyStreamRead(). Note this is flaky, so it will pass
 # sometimes.
 -SRC_ClearKey/EncryptedMediaTest.FrameSizeChangeVideo/0
 
-# https://crbug.com/754827
--ResourceDispatcherHostBrowserTest.SyncXMLHttpRequest_Cancelled
+# Cross-origin request to file:// URL should be blocked. crbug.com/759230
 -BrowserSideNavigationBrowserDisableWebSecurityTest.ValidateBaseUrlForDataUrl
+
+# This test validates that the renderer does not hang indefinitely in a sync
+# XMLHttpRequest when ResourceDispatcherHostImpl::CancelRequestsForProcess is
+# called to tear down the browser-side request state without signaling
+# completion. With the network service this will be equivalent to a network
+# service process crash.
+-ResourceDispatcherHostBrowserTest.SyncXMLHttpRequest_Cancelled

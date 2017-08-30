@@ -148,8 +148,9 @@ SkColor GetBackgroundShieldColor(const std::vector<SkColor>& prominent_colors) {
       prominent_colors[static_cast<int>(ColorProfileType::DARK_MUTED)];
   if (SK_ColorTRANSPARENT == dark_muted)
     return app_list::AppListView::kDefaultBackgroundColor;
-  return color_utils::AlphaBlend(SK_ColorBLACK, dark_muted,
-                                 app_list::AppListView::kDarkMutedBlendAlpha);
+  return color_utils::GetResultingPaintColor(
+      SkColorSetA(SK_ColorBLACK, AppListView::kAppListColorDarkenAlpha),
+      dark_muted);
 }
 
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kExcludeWindowFromEventHandling, false);
@@ -593,6 +594,13 @@ void AppListView::StartDrag(const gfx::Point& location) {
 }
 
 void AppListView::UpdateDrag(const gfx::Point& location) {
+  if (initial_drag_point_ == gfx::Point()) {
+    // When the app grid view redirects the event to the app list view, we
+    // detect this by seeing that StartDrag was not called. This sets up the
+    // drag.
+    StartDrag(location);
+    return;
+  }
   // Update the widget bounds based on the initial widget bounds and drag delta.
   gfx::Point location_in_screen_coordinates = location;
   ConvertPointToScreen(this, &location_in_screen_coordinates);
@@ -600,8 +608,7 @@ void AppListView::UpdateDrag(const gfx::Point& location) {
                        initial_drag_point_.y() + initial_window_bounds_.y();
 
   UpdateYPositionAndOpacity(new_y_position,
-                            GetAppListBackgroundOpacityDuringDragging(),
-                            false /* is_end_gesture */);
+                            GetAppListBackgroundOpacityDuringDragging());
 }
 
 void AppListView::EndDrag(const gfx::Point& location) {
@@ -717,9 +724,9 @@ void AppListView::EndDrag(const gfx::Point& location) {
         break;
     }
   }
-
   drag_started_from_peeking_ = false;
   DraggingLayout();
+  initial_drag_point_ = gfx::Point();
 }
 
 void AppListView::RecordStateTransitionForUma(AppListState new_state) {
@@ -1107,6 +1114,9 @@ void AppListView::SetState(AppListState new_state) {
     case HALF:
       break;
     case FULLSCREEN_ALL_APPS: {
+      // Set timer to ignore further scroll events for this transition.
+      GetAppsGridView()->StartTimerToIgnoreScrollEvents();
+
       AppsContainerView* apps_container_view =
           app_list_main_view_->contents_view()->apps_container_view();
 
@@ -1220,21 +1230,16 @@ void AppListView::SetStateFromSearchBoxView(bool search_box_is_empty) {
 }
 
 void AppListView::UpdateYPositionAndOpacity(int y_position_in_screen,
-                                            float background_opacity,
-                                            bool is_end_gesture) {
-  SetIsInDrag(!is_end_gesture);
+                                            float background_opacity) {
+  SetIsInDrag(true);
   background_opacity_ = background_opacity;
-  if (is_end_gesture) {
-    SetState(FULLSCREEN_ALL_APPS);
-  } else {
-    gfx::Rect new_widget_bounds = fullscreen_widget_->GetWindowBoundsInScreen();
-    app_list_y_position_in_screen_ =
-        std::max(y_position_in_screen, GetDisplayNearestView().bounds().y());
-    new_widget_bounds.set_y(app_list_y_position_in_screen_);
-    gfx::NativeView native_view = fullscreen_widget_->GetNativeView();
-    ::wm::ConvertRectFromScreen(native_view->parent(), &new_widget_bounds);
-    native_view->SetBounds(new_widget_bounds);
-  }
+  gfx::Rect new_widget_bounds = fullscreen_widget_->GetWindowBoundsInScreen();
+  app_list_y_position_in_screen_ =
+      std::max(y_position_in_screen, GetDisplayNearestView().bounds().y());
+  new_widget_bounds.set_y(app_list_y_position_in_screen_);
+  gfx::NativeView native_view = fullscreen_widget_->GetNativeView();
+  ::wm::ConvertRectFromScreen(native_view->parent(), &new_widget_bounds);
+  native_view->SetBounds(new_widget_bounds);
 
   DraggingLayout();
 }
@@ -1265,6 +1270,19 @@ void AppListView::SetIsInDrag(bool is_in_drag) {
 
 int AppListView::GetWorkAreaBottom() {
   return fullscreen_widget_->GetWorkAreaBoundsInScreen().bottom();
+}
+
+void AppListView::DraggingLayout() {
+  float shield_opacity =
+      is_background_blur_enabled_ ? kAppListOpacityWithBlur : kAppListOpacity;
+  app_list_background_shield_->layer()->SetOpacity(
+      is_in_drag_ ? background_opacity_ : shield_opacity);
+
+  // Updates the opacity of the items in the app list.
+  search_box_view_->UpdateOpacity();
+  GetAppsGridView()->UpdateOpacity();
+
+  Layout();
 }
 
 void AppListView::OnSpeechRecognitionStateChanged(
@@ -1348,19 +1366,6 @@ void AppListView::OnDisplayMetricsChanged(const display::Display& display,
   // Update the |fullscreen_widget_| bounds to accomodate the new work
   // area.
   SetState(app_list_state_);
-}
-
-void AppListView::DraggingLayout() {
-  float shield_opacity =
-      is_background_blur_enabled_ ? kAppListOpacityWithBlur : kAppListOpacity;
-  app_list_background_shield_->layer()->SetOpacity(
-      is_in_drag_ ? background_opacity_ : shield_opacity);
-
-  // Updates the opacity of the items in the app list.
-  search_box_view_->UpdateOpacity();
-  GetAppsGridView()->UpdateOpacity();
-
-  Layout();
 }
 
 float AppListView::GetAppListBackgroundOpacityDuringDragging() {

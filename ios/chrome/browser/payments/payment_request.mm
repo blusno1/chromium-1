@@ -20,7 +20,9 @@
 #include "components/payments/core/autofill_payment_instrument.h"
 #include "components/payments/core/currency_formatter.h"
 #include "components/payments/core/features.h"
+#include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_request_data_util.h"
+#include "components/payments/core/payment_shipping_option.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "ios/chrome/browser/application_context.h"
@@ -124,6 +126,8 @@ PaymentRequest::PaymentRequest(
       address_normalizer_.LoadRulesForRegion(countryCode);
     }
   }
+
+  RecordNumberOfSuggestionsShown();
 }
 
 PaymentRequest::~PaymentRequest() {}
@@ -194,7 +198,7 @@ PrefService* PaymentRequest::GetPrefService() {
   return browser_state_->GetPrefs();
 }
 
-void PaymentRequest::UpdatePaymentDetails(const web::PaymentDetails& details) {
+void PaymentRequest::UpdatePaymentDetails(const PaymentDetails& details) {
   web_payment_request_.details = details;
   PopulateAvailableShippingOptions();
   SetSelectedShippingOption();
@@ -223,9 +227,8 @@ PaymentShippingType PaymentRequest::shipping_type() const {
 CurrencyFormatter* PaymentRequest::GetOrCreateCurrencyFormatter() {
   if (!currency_formatter_) {
     currency_formatter_.reset(new CurrencyFormatter(
-        base::UTF16ToASCII(web_payment_request_.details.total.amount.currency),
-        base::UTF16ToASCII(
-            web_payment_request_.details.total.amount.currency_system),
+        web_payment_request_.details.total.amount.currency,
+        web_payment_request_.details.total.amount.currency_system,
         GetApplicationLocale()));
   }
   return currency_formatter_.get();
@@ -466,7 +469,7 @@ void PaymentRequest::PopulateAvailableShippingOptions() {
   std::transform(std::begin(web_payment_request_.details.shipping_options),
                  std::end(web_payment_request_.details.shipping_options),
                  std::back_inserter(shipping_options_),
-                 [](web::PaymentShippingOption& option) { return &option; });
+                 [](PaymentShippingOption& option) { return &option; });
 }
 
 void PaymentRequest::SetSelectedShippingOption() {
@@ -478,6 +481,27 @@ void PaymentRequest::SetSelectedShippingOption() {
       break;
     }
   }
+}
+
+void PaymentRequest::RecordNumberOfSuggestionsShown() {
+  if (request_payer_name() || request_payer_phone() || request_payer_email()) {
+    const bool has_complete_contact = (selected_contact_profile_ != nullptr);
+    journey_logger().SetNumberOfSuggestionsShown(
+        payments::JourneyLogger::Section::SECTION_CONTACT_INFO,
+        contact_profiles().size(), has_complete_contact);
+  }
+
+  if (request_shipping()) {
+    const bool has_complete_shipping = (selected_shipping_profile_ != nullptr);
+    journey_logger().SetNumberOfSuggestionsShown(
+        payments::JourneyLogger::Section::SECTION_SHIPPING_ADDRESS,
+        shipping_profiles().size(), has_complete_shipping);
+  }
+
+  const bool has_complete_instrument = (selected_payment_method_ != nullptr);
+  journey_logger().SetNumberOfSuggestionsShown(
+      payments::JourneyLogger::Section::SECTION_PAYMENT_METHOD,
+      payment_methods().size(), has_complete_instrument);
 }
 
 }  // namespace payments

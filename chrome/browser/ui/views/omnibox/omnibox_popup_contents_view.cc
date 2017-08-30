@@ -81,7 +81,6 @@ OmniboxPopupContentsView::OmniboxPopupContentsView(
       omnibox_view_(omnibox_view),
       location_bar_view_(location_bar_view),
       font_list_(font_list),
-      ignore_mouse_drag_(false),
       size_animation_(this),
       start_margin_(0),
       end_margin_(0) {
@@ -319,6 +318,12 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
   Layout();
 }
 
+void OmniboxPopupContentsView::SetMatchIcon(size_t match_index,
+                                            const gfx::Image& icon) {
+  OmniboxResultView* view = result_view_at(match_index);
+  view->SetCustomIcon(icon.AsImageSkia());
+}
+
 gfx::Rect OmniboxPopupContentsView::GetTargetBounds() {
   return target_bounds_;
 }
@@ -328,7 +333,7 @@ void OmniboxPopupContentsView::PaintUpdatesNow() {
 }
 
 void OmniboxPopupContentsView::OnDragCanceled() {
-  ignore_mouse_drag_ = true;
+  SetMouseHandler(nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -378,33 +383,23 @@ views::View* OmniboxPopupContentsView::GetTooltipHandlerForPoint(
 }
 
 bool OmniboxPopupContentsView::OnMousePressed(const ui::MouseEvent& event) {
-  ignore_mouse_drag_ = false;  // See comment on |ignore_mouse_drag_| in header.
   if (event.IsLeftMouseButton())
     SetSelectedLine(event);
   return true;
 }
 
 bool OmniboxPopupContentsView::OnMouseDragged(const ui::MouseEvent& event) {
-  if (event.IsLeftMouseButton() && !ignore_mouse_drag_)
+  if (event.IsLeftMouseButton())
     SetSelectedLine(event);
   return true;
 }
 
 void OmniboxPopupContentsView::OnMouseReleased(const ui::MouseEvent& event) {
-  if (ignore_mouse_drag_) {
-    OnMouseCaptureLost();
-    return;
-  }
-
   if (event.IsOnlyMiddleMouseButton() || event.IsOnlyLeftMouseButton()) {
     OpenSelectedLine(event, event.IsOnlyLeftMouseButton()
                                 ? WindowOpenDisposition::CURRENT_TAB
                                 : WindowOpenDisposition::NEW_BACKGROUND_TAB);
   }
-}
-
-void OmniboxPopupContentsView::OnMouseCaptureLost() {
-  ignore_mouse_drag_ = false;
 }
 
 void OmniboxPopupContentsView::OnGestureEvent(ui::GestureEvent* event) {

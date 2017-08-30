@@ -243,6 +243,7 @@ using blink::WebStorageQuotaCallbacks;
 using blink::WebStorageQuotaError;
 using blink::WebStorageQuotaType;
 using blink::WebString;
+using blink::WebTappedInfo;
 using blink::WebTextDirection;
 using blink::WebTouchEvent;
 using blink::WebURL;
@@ -1017,6 +1018,9 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
       prefs.background_video_track_optimization_enabled);
   WebRuntimeFeatures::EnableNewRemotePlaybackPipeline(
       base::FeatureList::IsEnabled(media::kNewRemotePlaybackPipeline));
+
+  WebRuntimeFeatures::EnablePreloadDefaultIsMetadata(
+      base::FeatureList::IsEnabled(media::kPreloadDefaultIsMetadata));
 
   settings->SetPresentationReceiver(prefs.presentation_receiver);
 
@@ -1793,11 +1797,8 @@ void RenderViewImpl::SetTouchAction(blink::WebTouchAction touchAction) {
 }
 
 void RenderViewImpl::ShowUnhandledTapUIIfNeeded(
-    const blink::WebPoint& tappedPosition,
-    const blink::WebNode& tappedNode,
-    bool pageChanged) {
-  RenderWidget::ShowUnhandledTapUIIfNeeded(tappedPosition, tappedNode,
-                                           pageChanged);
+    const blink::WebTappedInfo& tappedInfo) {
+  RenderWidget::ShowUnhandledTapUIIfNeeded(tappedInfo);
 }
 
 blink::WebWidgetClient* RenderViewImpl::WidgetClient() {
@@ -2527,7 +2528,7 @@ void RenderViewImpl::HandleInputEvent(
     HandledEventCallback callback) {
   if (is_swapped_out_) {
     std::move(callback).Run(INPUT_EVENT_ACK_STATE_NOT_CONSUMED, latency_info,
-                            nullptr);
+                            nullptr, base::nullopt);
     return;
   }
   idle_user_detector_->ActivityDetected();

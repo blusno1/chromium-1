@@ -31,7 +31,6 @@
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/debug/debugger.h"
-#include "base/debug/leak_annotations.h"
 #include "base/debug/stack_trace.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -1044,13 +1043,6 @@ class HostResolverImpl::LoopbackProbeJob {
       : resolver_(resolver), result_(false) {
     DCHECK(resolver.get());
 
-    // |worker_task_runner| may posts tasks to the WorkerPool, so need this to
-    // avoid reporting worker pool leaks in tests. The WorkerPool doesn't have a
-    // flushing API, so can't do anything about them, other than using another
-    // task runner.
-    // http://crbug.com/248513
-    ANNOTATE_SCOPED_MEMORY_LEAK;
-
     worker_task_runner->PostTaskAndReply(
         FROM_HERE,
         base::Bind(&LoopbackProbeJob::DoProbe, base::Unretained(this)),
@@ -1994,7 +1986,7 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
   }
 
   // Can't complete synchronously. Create and attach request.
-  auto req = base::MakeUnique<RequestImpl>(source_net_log, info, priority,
+  auto req = std::make_unique<RequestImpl>(source_net_log, info, priority,
                                            callback, addresses, job);
   job->AddRequest(req.get());
   *out_req = std::move(req);
@@ -2167,7 +2159,7 @@ std::unique_ptr<base::Value> HostResolverImpl::GetDnsConfigAsValue() const {
   // for it.
   const DnsConfig* dns_config = dns_client_->GetConfig();
   if (!dns_config)
-    return base::MakeUnique<base::DictionaryValue>();
+    return std::make_unique<base::DictionaryValue>();
 
   return dns_config->ToValue();
 }
@@ -2189,6 +2181,18 @@ int HostResolverImpl::ResolveStaleFromCache(
       ResolveHelper(info, true, stale_info, source_net_log, addresses, &key);
   LogFinishRequest(source_net_log, info, rv);
   return rv;
+}
+
+size_t HostResolverImpl::LastRestoredCacheSize() const {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  return cache_ ? cache_->last_restore_size() : 0;
+}
+
+size_t HostResolverImpl::CacheSize() const {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  return cache_ ? cache_->size() : 0;
 }
 
 void HostResolverImpl::SetNoIPv6OnWifi(bool no_ipv6_on_wifi) {

@@ -121,7 +121,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) override;
-  void OnSurfaceChanged(const viz::SurfaceInfo& surface_info) override;
   // Since the URL of content rendered by this class is not displayed in
   // the URL bar, this method does not need an implementation.
   void ClearCompositorFrame() override {}
@@ -131,6 +130,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   bool LockMouse() override;
   void UnlockMouse() override;
   viz::FrameSinkId GetFrameSinkId() override;
+  viz::LocalSurfaceId GetLocalSurfaceId() const override;
   void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event,
                             const ui::LatencyInfo& latency) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
@@ -226,6 +226,10 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   explicit RenderWidgetHostViewChildFrame(RenderWidgetHost* widget);
   void Init();
 
+  // Sets |parent_frame_sink_id_| and registers frame sink hierarchy. If the
+  // parent was already set then it also unregisters hierarchy.
+  void SetParentFrameSinkId(const viz::FrameSinkId& parent_frame_sink_id);
+
   void ProcessCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                               cc::CompositorFrame frame);
 
@@ -248,7 +252,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // Surface-related state.
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
-  viz::LocalSurfaceId local_surface_id_;
+  viz::LocalSurfaceId last_received_local_surface_id_;
   uint32_t next_surface_sequence_;
   gfx::Size current_surface_size_;
   float current_surface_scale_factor_;
@@ -313,4 +317,4 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
 }  // namespace content
 
-#endif  // CONTENT_BROWSER_FRAME_HOST_RENDER_WIDGET_HOST_VIEW_CHILD_FRAME_H_
+#endif  // CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_VIEW_CHILD_FRAME_H_

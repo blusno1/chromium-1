@@ -36,6 +36,9 @@
     <message name="IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_BETA" desc="The beta label in the message about current channel.">
       beta
     </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_CANARY" desc="The canary label in the message about current channel.">
+      canary
+    </message>
     <message name="IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_DEV" desc="The dev label in the message about current channel.">
       dev
     </message>
@@ -2397,8 +2400,11 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE" desc="Label for the trashcan icon used to delete storage on the Site Details page.">
     Delete
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER" desc="A header for the list of showing all sites and their data.">
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER" desc="A header for the list of showing all cookies and site data.">
     All cookies and site data
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_LINK" desc="Label for link showing all cookies and site data.">
+    See all cookies and site data
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE" desc="Label for the button to delete a single site cookie.">
     Remove
@@ -3102,6 +3108,9 @@
     </message>
     <message name="IDS_SETTINGS_MOUSE_SWAP_BUTTONS_LABEL" desc="In Device Settings, the text next to the checkbox to set the primary mouse button to the right button instead of the left button.">
       Swap primary mouse button
+    </message>
+    <message name="IDS_SETTINGS_MOUSE_REVERSE_SCROLL_LABEL" desc="In Device Settings, the text next to the checkbox to set reverse scrolling.">
+      Reverse scrolling
     </message>
     <!-- Keyboard -->
     <message name="IDS_SETTINGS_KEYBOARD_KEY_SEARCH" desc="In Device Settings, the label and dropdown list item for the Search key.">

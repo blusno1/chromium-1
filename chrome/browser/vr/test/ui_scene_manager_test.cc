@@ -33,29 +33,35 @@ void UiSceneManagerTest::MakeAutoPresentedManager() {
       kNotInWebVr, kAutopresented);
 }
 
-bool UiSceneManagerTest::IsVisible(UiElementDebugId debug_id) const {
-  UiElement* element = scene_->GetUiElementByDebugId(debug_id);
-  return element ? element->visible() : false;
+bool UiSceneManagerTest::IsVisible(UiElementName name) const {
+  scene_->root_element().UpdateInheritedProperties();
+  UiElement* element = scene_->GetUiElementByName(name);
+  return element ? element->IsVisible() : false;
 }
 
 void UiSceneManagerTest::VerifyElementsVisible(
-    const std::string& debug_name,
-    const std::set<UiElementDebugId>& debug_ids) const {
-  SCOPED_TRACE(debug_name);
-  for (const auto& element : scene_->GetUiElements()) {
-    SCOPED_TRACE(element->debug_id());
-    bool should_be_visible =
-        debug_ids.find(element->debug_id()) != debug_ids.end();
-    EXPECT_EQ(should_be_visible, element->visible());
+    const std::string& trace_context,
+    const std::set<UiElementName>& names) const {
+  scene_->root_element().UpdateInheritedProperties();
+  SCOPED_TRACE(trace_context);
+  for (auto name : names) {
+    SCOPED_TRACE(name);
+    auto* element = scene_->GetUiElementByName(name);
+    EXPECT_NE(nullptr, element);
+    EXPECT_TRUE(element->IsVisible());
   }
 }
 
-bool UiSceneManagerTest::VerifyVisibility(
-    const std::set<UiElementDebugId>& debug_ids,
-    bool visible) const {
-  for (const auto& element : scene_->GetUiElements()) {
-    if (debug_ids.find(element->debug_id()) != debug_ids.end() &&
-        element->visible() != visible) {
+bool UiSceneManagerTest::VerifyVisibility(const std::set<UiElementName>& names,
+                                          bool visible) const {
+  scene_->root_element().UpdateInheritedProperties();
+  for (auto name : names) {
+    SCOPED_TRACE(name);
+    auto* element = scene_->GetUiElementByName(name);
+    if (!element && visible) {
+      return false;
+    }
+    if (element && element->IsVisible() != visible) {
       return false;
     }
   }
@@ -72,8 +78,9 @@ void UiSceneManagerTest::AnimateBy(base::TimeDelta delta) {
   scene_->OnBeginFrame(current_time_, gfx::Vector3dF());
 }
 
-bool UiSceneManagerTest::IsAnimating(UiElement* element,
-                                     const std::vector<int>& properties) const {
+bool UiSceneManagerTest::IsAnimating(
+    UiElement* element,
+    const std::vector<TargetProperty>& properties) const {
   for (auto property : properties) {
     if (!element->animation_player().IsAnimatingProperty(property))
       return false;
@@ -83,7 +90,7 @@ bool UiSceneManagerTest::IsAnimating(UiElement* element,
 
 SkColor UiSceneManagerTest::GetBackgroundColor() const {
   Rect* front =
-      static_cast<Rect*>(scene_->GetUiElementByDebugId(kBackgroundFront));
+      static_cast<Rect*>(scene_->GetUiElementByName(kBackgroundFront));
   EXPECT_NE(nullptr, front);
   if (!front)
     return SK_ColorBLACK;
@@ -92,10 +99,9 @@ SkColor UiSceneManagerTest::GetBackgroundColor() const {
 
   // While returning background color, ensure that all background panel elements
   // share the same color.
-  for (auto debug_id : {kBackgroundFront, kBackgroundLeft, kBackgroundBack,
-                        kBackgroundRight, kBackgroundTop, kBackgroundBottom}) {
-    const Rect* panel =
-        static_cast<Rect*>(scene_->GetUiElementByDebugId(debug_id));
+  for (auto name : {kBackgroundFront, kBackgroundLeft, kBackgroundBack,
+                    kBackgroundRight, kBackgroundTop, kBackgroundBottom}) {
+    const Rect* panel = static_cast<Rect*>(scene_->GetUiElementByName(name));
     EXPECT_NE(nullptr, panel);
     if (!panel)
       return SK_ColorBLACK;

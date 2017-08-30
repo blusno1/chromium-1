@@ -108,7 +108,7 @@ OneCopyRasterBufferProvider::AcquireBufferForRaster(
     uint64_t previous_content_id) {
   // TODO(danakj): If resource_content_id != 0, we only need to copy/upload
   // the dirty rect.
-  return base::MakeUnique<RasterBufferImpl>(this, resource_provider_, resource,
+  return std::make_unique<RasterBufferImpl>(this, resource_provider_, resource,
                                             previous_content_id);
 }
 
@@ -132,13 +132,8 @@ void OneCopyRasterBufferProvider::OrderingBarrier() {
 }
 
 void OneCopyRasterBufferProvider::Flush() {
-  if (async_worker_context_enabled_) {
-    int32_t worker_stream_id =
-        worker_context_provider_->ContextSupport()->GetStreamId();
-
-    compositor_context_provider_->ContextSupport()
-        ->FlushOrderingBarrierOnStream(worker_stream_id);
-  }
+  if (async_worker_context_enabled_)
+    compositor_context_provider_->ContextSupport()->FlushPendingWork();
 }
 
 viz::ResourceFormat OneCopyRasterBufferProvider::GetResourceFormat(

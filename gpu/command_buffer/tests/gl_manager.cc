@@ -265,7 +265,6 @@ void GLManager::InitializeWithWorkaroundsImpl(
   const SharedMemoryLimits limits;
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
-  DCHECK(!command_line.HasSwitch(switches::kGpuDriverBugWorkarounds));
   DCHECK(!command_line.HasSwitch(switches::kDisableGLExtensions));
   InitializeGpuPreferencesForTestingFromCommandLine(command_line,
                                                     &gpu_preferences_);
@@ -532,11 +531,7 @@ CommandBufferId GLManager::GetCommandBufferID() const {
   return command_buffer_->GetCommandBufferID();
 }
 
-int32_t GLManager::GetStreamId() const {
-  return 0;
-}
-
-void GLManager::FlushOrderingBarrierOnStream(int32_t stream_id) {
+void GLManager::FlushPendingWork() {
   // This is only relevant for out-of-process command buffers.
 }
 

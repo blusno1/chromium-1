@@ -216,7 +216,7 @@ void PaletteTray::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 }
 
 bool PaletteTray::ContainsPointInScreen(const gfx::Point& point) {
-  if (icon_ && icon_->GetBoundsInScreen().Contains(point))
+  if (GetBoundsInScreen().Contains(point))
     return true;
 
   return bubble_ && bubble_->bubble_view()->GetBoundsInScreen().Contains(point);
@@ -241,10 +241,6 @@ void PaletteTray::OnLockStateChanged(bool locked) {
 void PaletteTray::OnLocalStatePrefServiceInitialized(
     PrefService* pref_service) {
   local_state_pref_service_ = pref_service;
-
-  // May be null in mash_unittests where there is no mojo pref service.
-  if (!local_state_pref_service_)
-    return;
 
   // If a device has an internal stylus or the flag to force stylus is set, mark
   // the has seen stylus flag as true since we know the user has a stylus.
@@ -405,8 +401,10 @@ aura::Window* PaletteTray::GetWindow() {
 }
 
 void PaletteTray::AnchorUpdated() {
-  if (bubble_)
+  if (bubble_) {
+    UpdateClippingWindowBounds();
     bubble_->bubble_view()->UpdateBubble();
+  }
 }
 
 void PaletteTray::Initialize() {

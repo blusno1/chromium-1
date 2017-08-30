@@ -166,6 +166,7 @@ source_set("eg_tests") {
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/authentication:authentication_ui",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",
     "//ios/chrome/browser/ui/ntp:ntp_controller",
     "//ios/chrome/browser/ui/settings",
     "//ios/chrome/browser/ui/tools_menu",
@@ -177,4 +178,18 @@ source_set("eg_tests") {
     "//ios/third_party/earl_grey",
   ]
   libs = [ "XCTest.framework" ]
+}
+
+source_set("eg_test_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "signin_promo_view_earlgrey_utils.h",
+    "signin_promo_view_earlgrey_utils.mm",
+  ]
+  deps = [
+    ":authentication_ui",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ios/third_party/earl_grey",
+  ]
 }

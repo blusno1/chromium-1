@@ -4245,6 +4245,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="9"
       label="Vetoed because checkering of images is force disabled (used with
              software raster)."/>
+  <int value="10" label="Image was not required for activation."/>
 </enum>
 
 <enum name="ChromeChannelForHistogram">
@@ -5938,6 +5939,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="3" label="https"/>
   <int value="4" label="file"/>
   <int value="5" label="chrome-extension"/>
+  <int value="6" label="chrome-search"/>
 </enum>
 
 <enum name="ContentSuggestionsCategory">
@@ -7194,6 +7196,13 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="0" label="Not Compliant"/>
   <int value="1" label="Whitelisted"/>
   <int value="2" label="Has enough SCTs"/>
+</enum>
+
+<enum name="CustomTabsConnection">
+  <int value="0" label="Disconnected from service w/o KeepAlive connection"/>
+  <int value="1" label="Disconnected from service with KeepAlive connection"/>
+  <int value="2" label="Connected to service w/o KeepAlive connection"/>
+  <int value="3" label="Connected to service with KeepAlive connection"/>
 </enum>
 
 <enum name="CustomTabsSpeculationStatusOnStart">
@@ -12038,7 +12047,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="340" label="SCREENLOCK_PRIVATE_ON_CHANGED"/>
   <int value="341" label="SCREENLOCK_PRIVATE_ON_AUTH_ATTEMPTED"/>
   <int value="342" label="TYPES_CHROME_SETTING_ON_CHANGE"/>
-  <int value="343" label="TYPES_PRIVATE_CHROME_DIRECT_SETTING_ON_CHANGE"/>
+  <int value="343"
+      label="DELETED_TYPES_PRIVATE_CHROME_DIRECT_SETTING_ON_CHANGE"/>
   <int value="344" label="WEB_VIEW_INTERNAL_ON_MESSAGE"/>
   <int value="345" label="EXTENSION_VIEW_INTERNAL_ON_LOAD_COMMIT"/>
   <int value="346" label="RUNTIME_ON_REQUEST"/>
@@ -13351,6 +13361,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1188" label="WEBVIEWINTERNAL_GETAUDIOSTATE"/>
   <int value="1189" label="FILEMANAGERPRIVATE_GETRECENTFILES"/>
   <int value="1190" label="FILEMANAGERPRIVATE_RENAMEVOLUME"/>
+  <int value="1191" label="AUTOTESTPRIVATE_SETMOUSEREVERSESCROLL"/>
 </enum>
 
 <enum name="ExtensionIconState">
@@ -19922,6 +19933,14 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="3" label="Failed to extract transfer function"/>
   <int value="4" label="Failed to extract primary matrix"/>
   <int value="5" label="Failed to parse"/>
+  <int value="6" label="Parsed, but failed to extract SkColorSpace"/>
+  <int value="7"
+      label="Parsed and extracteed SkColorSpace, but failed to create
+             SkColorSpaceXform to this space"/>
+  <int value="8"
+      label="Converged to an insufficiently accurate approximation of
+             transfer function"/>
+  <int value="9" label="Extracted an sRGB profile directly"/>
 </enum>
 
 <enum name="IceCandidatePairTypes">
@@ -21077,6 +21096,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="14" label="Invalid timing IPC (invalid timing)"/>
   <int value="15"
       label="Subframe navigation start before main frame navigation start"/>
+  <int value="16"
+      label="IPC received from subframe while not tracking a committed load"/>
 </enum>
 
 <enum name="InterruptReason">
@@ -22944,6 +22965,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-1948540128" label="disable-webrtc-hw-encoding (deprecated)"/>
   <int value="-1946595906" label="enable-push-api-background-mode"/>
   <int value="-1946522787" label="VrCustomTabBrowsing:disabled"/>
+  <int value="-1945524394" label="EnableBackgroundBlur:disabled"/>
   <int value="-1943507605" label="enable-new-video-renderer"/>
   <int value="-1941852572" label="floating-virtual-keyboard"/>
   <int value="-1940806558" label="enable-syncfs-directory-operation"/>
@@ -23022,6 +23044,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-1749176684" label="PauseBackgroundTabs:disabled"/>
   <int value="-1746767834" label="ssl-interstitial-v2-gray"/>
   <int value="-1740519217" label="disable-software-rasterizer"/>
+  <int value="-1736075054" label="EnableFullscreenAppList:enabled"/>
   <int value="-1735643253" label="enable-display-list-2d-canvas"/>
   <int value="-1734254845" label="ash-enable-night-light"/>
   <int value="-1732561795" label="ConsistentOmniboxGeolocation:enabled"/>
@@ -23181,6 +23204,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-1241747717" label="enable-android-password-link"/>
   <int value="-1235586511" label="enable-datasaver-prompt"/>
   <int value="-1225198073" label="ReaderModeInCCT:disabled"/>
+  <int value="-1224962996" label="PwaImprovedSplashScreen:disabled"/>
   <int value="-1218608640" label="disable-offline-load-stale-cache"/>
   <int value="-1216837777" label="clear-data-reduction-proxy-data-savings"/>
   <int value="-1212855900" label="enable-all-bookmarks-view"/>
@@ -23405,6 +23429,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-531651776" label="NewRemotePlaybackPipeline:enabled"/>
   <int value="-528927088" label="AutofillCreditCardPopupLayout:disabled"/>
   <int value="-528149352" label="WebRtcUseEchoCanceller3:enabled"/>
+  <int value="-523030434" label="EnableBackgroundBlur:enabled"/>
   <int value="-519960638" label="enable-site-engagement-service"/>
   <int value="-518104091" label="NewAudioRenderingMixingStrategy:enabled"/>
   <int value="-516845951" label="enable-embedded-extension-options"/>
@@ -23495,6 +23520,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-275164173" label="QuickUnlockPinSignin:enabled"/>
   <int value="-268357961" label="enable-feature-policy"/>
   <int value="-254887599" label="google-profile-info"/>
+  <int value="-250822813" label="PwaImprovedSplashScreen:enabled"/>
   <int value="-250721831" label="AndroidAutofillAccessibility:disabled"/>
   <int value="-248223420" label="AutofillKeyboardAccessory:disabled"/>
   <int value="-241353344" label="MidiManagerWinrt:disabled"/>
@@ -23567,6 +23593,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-10709540"
       label="OmniboxUIExperimentHideSuggestionUrlScheme:enabled"/>
   <int value="-5052940" label="enable-simplified-fullscreen"/>
+  <int value="-3093629" label="DcheckIsFatal:disabled"/>
   <int value="-2953333" label="AndroidHistoryManager:disabled"/>
   <int value="-2371418" label="disable-display-list-2d-canvas"/>
   <int value="0" label="BAD_FLAG_FORMAT">
@@ -23595,6 +23622,7 @@ from previous Chrome versions.
   <int value="48159177" label="reduced-referrer-granularity"/>
   <int value="51793504" label="protect-sync-credential-on-reauth:disabled"/>
   <int value="56723110" label="enable-webfonts-intervention"/>
+  <int value="57639188" label="SoundContentSetting:disabled"/>
   <int value="57791920" label="MemoryCoordinator:enabled"/>
   <int value="59784035" label="ImeThread:disabled"/>
   <int value="59964519" label="OmniboxEnableClipboardProvider:disabled"/>
@@ -23662,6 +23690,7 @@ from previous Chrome versions.
   <int value="332391072" label="cs-contextual-cards-bar-integration"/>
   <int value="334802038" label="OfflinePreviews:disabled"/>
   <int value="339671131" label="disable-per-user-timezone"/>
+  <int value="341152650" label="SoundContentSetting:enabled"/>
   <int value="346711293" label="enable-save-password-bubble"/>
   <int value="348854923" label="v8-cache-strategies-for-cache-storage"/>
   <int value="352191859" label="disabled-new-style-notification"/>
@@ -23780,6 +23809,7 @@ from previous Chrome versions.
   <int value="651844675" label="EasyUnlockPromotions:enabled"/>
   <int value="652561231" label="CustomContextMenu:enabled"/>
   <int value="659086147" label="OverlayScrollbarFlashWhenMouseEnter:enabled"/>
+  <int value="679931272" label="DcheckIsFatal:enabled"/>
   <int value="684806628" label="TranslateLanguageByULP:disabled"/>
   <int value="685916283" label="enable-zip-archiver-on-file-manager"/>
   <int value="687838135" label="ThirdPartyDoodles:disabled"/>
@@ -23900,6 +23930,7 @@ from previous Chrome versions.
   <int value="1081546525" label="ash-enable-docked-windows"/>
   <int value="1087235172" label="file-manager-enable-new-audio-player"/>
   <int value="1090377940" label="enable-quic-https"/>
+  <int value="1092896354" label="EnableFullscreenAppList:disabled"/>
   <int value="1094506652" label="UseGoogleLocalNtp:enabled"/>
   <int value="1095061640" label="enable-prominent-url-app-flow"/>
   <int value="1098823967" label="ash-enable-window-cycle-ui"/>
@@ -24445,6 +24476,42 @@ from previous Chrome versions.
   <int value="20" label="MacBookPro7,X"/>
   <int value="21" label="MacBookPro6,X"/>
   <int value="22" label="MacBookPro5,X"/>
+</enum>
+
+<enum name="MacOSBluetoothOperationsResult">
+  <int value="-2" label="Unknown error domain"/>
+  <int value="-1" label="No error"/>
+  <int value="0" label="CBATTErrorSuccess"/>
+  <int value="1" label="CBATTErrorInvalidHandle"/>
+  <int value="2" label="CBATTErrorReadNotPermitted"/>
+  <int value="3" label="CBATTErrorWriteNotPermitted"/>
+  <int value="4" label="CBATTErrorInvalidPdu"/>
+  <int value="5" label="CBATTErrorInsufficientAuthentication"/>
+  <int value="6" label="CBATTErrorRequestNotSupported"/>
+  <int value="7" label="CBATTErrorInvalidOffset"/>
+  <int value="8" label="CBATTErrorInsufficientAuthorization"/>
+  <int value="9" label="CBATTErrorPrepareQueueFull"/>
+  <int value="10" label="CBATTErrorAttributeNotFound"/>
+  <int value="11" label="CBATTErrorAttributeNotLong"/>
+  <int value="12" label="CBATTErrorInsufficientEncryptionKeySize"/>
+  <int value="13" label="CBATTErrorInvalidAttributeValueLength"/>
+  <int value="14" label="CBATTErrorUnlikelyError"/>
+  <int value="15" label="CBATTErrorInsufficientEncryption"/>
+  <int value="16" label="CBATTErrorUnsupportedGroupType"/>
+  <int value="17" label="CBATTErrorInsufficientResources"/>
+  <int value="999" label="Unknown CBATTError code"/>
+  <int value="1000" label="CBErrorUnknown"/>
+  <int value="1001" label="CBErrorInvalidParameters"/>
+  <int value="1002" label="CBErrorInvalidHandle"/>
+  <int value="1003" label="CBErrorNotConnected"/>
+  <int value="1004" label="CBErrorOutOfSpace"/>
+  <int value="1005" label="CBErrorOperationCancelled"/>
+  <int value="1006" label="CBErrorConnectionTimeout"/>
+  <int value="1007" label="CBErrorPeripheralDisconnected"/>
+  <int value="1008" label="CBErrorUUIDNotAllowed"/>
+  <int value="1009" label="CBErrorAlreadyAdvertising"/>
+  <int value="1010" label="CBErrorMaxConnection"/>
+  <int value="1999" label="Unknown CBError code"/>
 </enum>
 
 <enum name="MainFrameStorable">
@@ -28079,6 +28146,21 @@ from previous Chrome versions.
   <int value="1400" label="DOWNLOAD_MAX_ATTEMPTS_REACHED">
     Exceeded maximum retries for download.
   </int>
+  <int value="1500" label="MAXIMUM_CLOCK_BACKWARD_SKEW_EXCEEDED">
+    The clock was set backwards too far in time.
+  </int>
+</enum>
+
+<enum name="OfflinePrefetchPageImportResult">
+  <summary>
+    All possible outcomes of an attempt to import a prefetched page archive into
+    the offline page model.
+  </summary>
+  <int value="0" label="Success"/>
+  <int value="1" label="Unknown error"/>
+  <int value="2" label="File move error"/>
+  <int value="3" label="Offline store failure"/>
+  <int value="4" label="Offline item already exists"/>
 </enum>
 
 <enum name="OfflineStatus">
@@ -35308,6 +35390,7 @@ from previous Chrome versions.
   <int value="1" label="Other failure"/>
   <int value="2" label="Not found on server"/>
   <int value="3" label="Failed to create temporary directory"/>
+  <int value="4" label="Failed to save to file"/>
 </enum>
 
 <enum name="SoftwareReporterCleanupResult">
@@ -38433,20 +38516,26 @@ would be helpful to identify which type is being sent.
 </enum>
 
 <enum name="URLRequestAnnotationType">
-  Generated by tools/traffic_annotation/auditor/traffic_annotation_auditor.py.
+<!-- Generated from tools/traffic_annotation/summary/annotations.xml.
+Called by update_traffic_annotation_histograms.py.-->
+
   <int value="485305" label="data_reduction_proxy_config"/>
   <int value="727478" label="metrics_report_ukm"/>
   <int value="727528" label="metrics_report_uma"/>
+  <int value="1112842" label="oauth2_mint_token_flow"/>
   <int value="1313982" label="safe_browsing_client_side_phishing_detector"/>
-  <int value="3556498" label="tests"/>
+  <int value="3556498" label="test"/>
+  <int value="3813491" label="omnibox_zerosuggest_experimental"/>
   <int value="3989826" label="dom_distiller"/>
   <int value="4300475" label="gaia_cookie_manager_external_cc_result"/>
   <int value="4598626" label="gaia_auth_check_connection_info"/>
   <int value="5021348" label="sync_stop_reporter"/>
   <int value="5151071" label="extension_manifest_fetcher"/>
+  <int value="5154306" label="blob_reader"/>
   <int value="5492492" label="google_url_tracker"/>
   <int value="5637379" label="gaia_oauth_client_get_tokens"/>
   <int value="6019475" label="safe_browsing_module_loader"/>
+  <int value="7433837" label="refresh_token_annotation_request"/>
   <int value="7687691" label="omnibox_zerosuggest"/>
   <int value="8250451" label="data_reduction_proxy_warmup"/>
   <int value="8561691" label="safe_browsing_v4_get_hash"/>
@@ -38454,12 +38543,15 @@ would be helpful to identify which type is being sent.
   <int value="13211343" label="suggestions_image_manager"/>
   <int value="14257952" label="supervised_user_url_filter"/>
   <int value="15418154" label="ntp_snippets_fetch"/>
+  <int value="16469669" label="background_fetch_context"/>
   <int value="16653985" label="content_suggestion_get_favicon"/>
   <int value="17188928" label="websocket_stream"/>
   <int value="17400350" label="web_history_query"/>
   <int value="18300705" label="gcm_channel_status_request"/>
   <int value="18670926" label="CRD_telemetry_log"/>
+  <int value="18764319" label="webstore_installer"/>
   <int value="19185953" label="offline_prefetch"/>
+  <int value="20053290" label="cryptauth_find_eligible_for_promotion"/>
   <int value="21145003" label="extension_crx_fetcher"/>
   <int value="21785164" label="intranet_redirect_detector"/>
   <int value="22096011" label="test_partial"/>
@@ -38467,7 +38559,9 @@ would be helpful to identify which type is being sent.
   <int value="22774132" label="devtools_free_data_source"/>
   <int value="24058523" label="CRD_relay_session_request"/>
   <int value="24978481" label="cloud_print_privet_register"/>
+  <int value="25204343" label="cryptauth_toggle_easyunlock"/>
   <int value="25790702" label="appcache_update_job"/>
+  <int value="25844439" label="render_view_context_menu"/>
   <int value="25921771" label="webstore_install_helper"/>
   <int value="26096088" label="speech_recognition_downstream"/>
   <int value="26216847" label="gaia_auth_merge_sessions"/>
@@ -38479,6 +38573,7 @@ would be helpful to identify which type is being sent.
   <int value="32030464" label="persist_blob_to_indexed_db"/>
   <int value="32585152" label="gaia_oauth_client_get_token_info"/>
   <int value="35370363" label="suggestions_service"/>
+  <int value="35380758" label="download_manager_resume"/>
   <int value="35565745" label="gaia_auth_list_accounts"/>
   <int value="36859107" label="logo_tracker"/>
   <int value="37531401" label="proxy_script_fetcher"/>
@@ -38488,9 +38583,10 @@ would be helpful to identify which type is being sent.
   <int value="42848942" label="safe_browsing_extended_reporting"/>
   <int value="43206794" label="permission_request_creator"/>
   <int value="44494884" label="icon_catcher_get_large_icon"/>
+  <int value="44583172" label="prefetch_download"/>
   <int value="44583821" label="safe_browsing_feedback"/>
   <int value="44606780" label="rappor_report"/>
-  <int value="45578882" label="no_annotation"/>
+  <int value="45578882" label="undefined"/>
   <int value="46188932" label="network_time_component"/>
   <int value="47152935" label="sdch_dictionary_fetch"/>
   <int value="47815025" label="omnibox_suggest"/>
@@ -38501,8 +38597,12 @@ would be helpful to identify which type is being sent.
   <int value="50464499" label="extension_install_signer"/>
   <int value="50755044" label="popular_sites_fetch"/>
   <int value="50816767" label="lib_address_input"/>
+  <int value="50859288" label="cloud_print_proxy"/>
   <int value="51164680" label="profile_avatar"/>
   <int value="53695122" label="credenential_avatar"/>
+  <int value="54836939" label="cryptauth_enrollment_flow_finish"/>
+  <int value="56275203" label="save_file_manager"/>
+  <int value="56351037" label="download_web_contents_frame"/>
   <int value="56434025" label="gcm_subscription"/>
   <int value="57144960" label="sync_http_bridge"/>
   <int value="57276415" label="chrome_expect_ct_reporter"/>
@@ -38513,17 +38613,22 @@ would be helpful to identify which type is being sent.
   <int value="61656965" label="gcm_registration"/>
   <int value="61684939" label="omnibox_navigation_observer"/>
   <int value="62443804" label="webrtc_log_upload"/>
+  <int value="63171670" label="navigation_url_loader"/>
   <int value="64733114" label="content_hash_verification_job"/>
   <int value="65442685" label="wifi_prefetch_sites_from_network"/>
   <int value="65957842" label="gcm_checkin"/>
   <int value="66322287" label="password_protection_request"/>
   <int value="66590631" label="safe_browsing_certificate_error_reporting"/>
   <int value="66846958" label="speech_recognition_upstream"/>
+  <int value="67638271" label="printer_job_handler"/>
   <int value="68561428" label="data_reduction_proxy_pingback"/>
   <int value="68745894" label="safe_browsing_get_full_hash"/>
   <int value="70126372" label="notification_image_reporter"/>
+  <int value="71251498" label="privet_http_impl"/>
+  <int value="71578042" label="cloud_print_backend"/>
   <int value="72354423" label="invalidation_service"/>
   <int value="73107389" label="omnibox_result_change"/>
+  <int value="73309970" label="payment_instrument_icon_fetcher"/>
   <int value="73889867" label="wifi_prefetch_resource_from_network"/>
   <int value="75153841" label="safe_browsing_g4_update"/>
   <int value="77012883" label="missing"/>
@@ -38533,20 +38638,29 @@ would be helpful to identify which type is being sent.
   <int value="78917933" label="one_google_bar_service"/>
   <int value="79957943" label="safe_browsing_chunk_backup_request"/>
   <int value="80832574" label="history_notice_utils_popup"/>
+  <int value="81157007" label="resource_dispatcher_host"/>
   <int value="82167736" label="gaia_auth_get_user_info"/>
   <int value="82462683" label="gaia_oauth_client_refresh_token"/>
   <int value="83476155" label="gaia_oauth_client_get_user_info"/>
   <int value="84045030" label="payment_manifest_downloader"/>
   <int value="84212388" label="omnibox_suggest_deletion"/>
   <int value="84575287" label="background_performance_tracer"/>
+  <int value="84889397" label="cryptauth_enrollment_flow_setup"/>
   <int value="88754904" label="captive_portal_service"/>
   <int value="88863520" label="autofill_query"/>
+  <int value="89771989" label="asset_links"/>
   <int value="91597383" label="gaia_auth_login"/>
   <int value="95588446" label="payments_sync_cards"/>
+  <int value="95682324" label="ranker_url_fetcher"/>
+  <int value="95711309" label="ntp_contextual_suggestions_fetch"/>
+  <int value="95910019" label="drag_download_file"/>
+  <int value="96565489" label="cryptauth_device_sync_tickle"/>
   <int value="97199008" label="doodle_fetcher"/>
   <int value="97978464" label="gaia_auth_fetch_for_uber"/>
+  <int value="98123737" label="devtools_interceptor"/>
   <int value="100545943" label="webui_content_scripts_download"/>
   <int value="101725581" label="cros_recovery_image_download"/>
+  <int value="101845102" label="blink_resource_loader"/>
   <int value="102595701" label="history_notice_utils_notice"/>
   <int value="102819690" label="sync_file_system"/>
   <int value="102935425" label="safe_browsing_client_side_malware_detector"/>
@@ -38572,17 +38686,21 @@ would be helpful to identify which type is being sent.
   <int value="115188287" label="chrome_variations_service"/>
   <int value="115907811" label="safe_browsing_cache_collector"/>
   <int value="116426676" label="gaia_auth_log_out"/>
+  <int value="116443055" label="renderer_initiated_download"/>
   <int value="117649486" label="spellcheck_hunspell_dictionary"/>
   <int value="117782019" label="device_management_service"/>
   <int value="117963307" label="service_worker_write_to_cache_job"/>
   <int value="118389509" label="url_prevision_fetcher"/>
   <int value="119542033" label="gcm_unregistration"/>
   <int value="119677115" label="safe_search_url_reporter"/>
+  <int value="120000562" label="cryptauth_find_eligible_unlock_devices"/>
+  <int value="121068967" label="downloads_api_run_async"/>
   <int value="124950347" label="safe_browsing_incident"/>
   <int value="125522256" label="client_download_request"/>
   <int value="125596241" label="component_updater_utils"/>
   <int value="126122632" label="web_history_expire_between_dates"/>
   <int value="129652775" label="devtools_network_resource"/>
+  <int value="131180348" label="indexed_db_internals_handler"/>
   <int value="131236802" label="data_reduction_proxy_secure_proxy_check"/>
   <int value="131741641" label="permission_reporting"/>
   <int value="132055347" label="cloud_print_search"/>
@@ -38592,10 +38710,12 @@ would be helpful to identify which type is being sent.
   <int value="133982351" label="gaia_auth_revoke_token"/>
   <int value="134289752" label="gaia_auth_exchange_cookies"/>
   <int value="134729048" label="chrome_feedback_report_app"/>
+  <int value="135118587" label="parallel_download_job"/>
   <int value="135251783" label="thumbnail_source"/>
   <int value="135636011" label="devtools_handle_front_end_messages"/>
   <int value="135967426" label="ppapi_download_request"/>
   <int value="136117054" label="supervised_user_refresh_token_fetcher"/>
+  <int value="136498680" label="cryptauth_get_my_devices"/>
   <int value="137116619" label="translate_url_fetcher"/>
   <int value="137457845" label="web_history_counter"/>
 </enum>
@@ -39413,6 +39533,8 @@ would be helpful to identify which type is being sent.
   <int value="6" label="HTTP authentication dialog was suppressed in VR"/>
   <int value="7" label="Download permission was suppressed in VR"/>
   <int value="8" label="File access permission was suppressed in VR"/>
+  <int value="9" label="Password manager was disabled in VR"/>
+  <int value="10" label="Autofill was disabled in VR"/>
 </enum>
 
 <enum name="VRUnsupportedMode">
@@ -39788,6 +39910,12 @@ would be helpful to identify which type is being sent.
   <int value="0" label="Not in the cache"/>
   <int value="1" label="In the cache"/>
   <int value="2" label="Previously in the cache"/>
+</enum>
+
+<enum name="WebFontInstantiationResult">
+  <int value="0" label="Error instantiating variable font, falling back"/>
+  <int value="1" label="Success conventional web font"/>
+  <int value="2" label="Success variable web font"/>
 </enum>
 
 <enum name="WebFontInterventionResult">

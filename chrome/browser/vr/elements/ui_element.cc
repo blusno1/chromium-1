@@ -7,14 +7,19 @@
 #include <limits>
 
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "cc/base/math_util.h"
 #include "chrome/browser/vr/elements/ui_element_transform_operations.h"
-#include "chrome/browser/vr/target_property.h"
 
 namespace vr {
 
 namespace {
+
+int AllocateId() {
+  static int g_next_id = 1;
+  return g_next_id++;
+}
 
 bool GetRayPlaneDistance(const gfx::Point3F& ray_origin,
                          const gfx::Vector3dF& ray_vector,
@@ -32,7 +37,7 @@ bool GetRayPlaneDistance(const gfx::Point3F& ray_origin,
 
 }  // namespace
 
-UiElement::UiElement() {
+UiElement::UiElement() : id_(AllocateId()) {
   animation_player_.set_target(this);
   layout_offset_.AppendTranslate(0, 0, 0);
   transform_operations_.AppendTranslate(0, 0, 0);
@@ -77,32 +82,26 @@ void UiElement::Animate(const base::TimeTicks& time) {
   last_frame_time_ = time;
 }
 
-bool UiElement::IsVisible() const {
-  return visible_ && computed_opacity_ > 0.0f;
-}
-
 bool UiElement::IsHitTestable() const {
   return IsVisible() && hit_testable_;
 }
 
-void UiElement::SetEnabled(bool enabled) {
-  visible_ = enabled;
-}
-
 void UiElement::SetSize(float width, float height) {
-  animation_player_.TransitionSizeTo(last_frame_time_, TargetProperty::BOUNDS,
-                                     size_, gfx::SizeF(width, height));
+  animation_player_.TransitionSizeTo(last_frame_time_, BOUNDS, size_,
+                                     gfx::SizeF(width, height));
 }
 
 void UiElement::SetVisible(bool visible) {
-  animation_player_.TransitionBooleanTo(
-      last_frame_time_, TargetProperty::VISIBILITY, visible_, visible);
+  SetOpacity(visible ? opacity_when_visible_ : 0.0);
+}
+bool UiElement::IsVisible() const {
+  return opacity_ > 0.0f && computed_opacity_ > 0.0f;
 }
 
 void UiElement::SetTransformOperations(
     const UiElementTransformOperations& ui_element_transform_operations) {
   animation_player_.TransitionTransformOperationsTo(
-      last_frame_time_, TargetProperty::TRANSFORM, transform_operations_,
+      last_frame_time_, TRANSFORM, transform_operations_,
       ui_element_transform_operations.operations());
 }
 
@@ -112,8 +111,7 @@ void UiElement::SetLayoutOffset(float x, float y) {
   op.translate = {x, y, 0};
   op.Bake();
   animation_player_.TransitionTransformOperationsTo(
-      last_frame_time_, TargetProperty::LAYOUT_OFFSET, transform_operations_,
-      operations);
+      last_frame_time_, LAYOUT_OFFSET, transform_operations_, operations);
 }
 
 void UiElement::SetTranslate(float x, float y, float z) {
@@ -122,8 +120,7 @@ void UiElement::SetTranslate(float x, float y, float z) {
   op.translate = {x, y, z};
   op.Bake();
   animation_player_.TransitionTransformOperationsTo(
-      last_frame_time_, TargetProperty::TRANSFORM, transform_operations_,
-      operations);
+      last_frame_time_, TRANSFORM, transform_operations_, operations);
 }
 
 void UiElement::SetRotate(float x, float y, float z, float radians) {
@@ -133,8 +130,7 @@ void UiElement::SetRotate(float x, float y, float z, float radians) {
   op.rotate.angle = cc::MathUtil::Rad2Deg(radians);
   op.Bake();
   animation_player_.TransitionTransformOperationsTo(
-      last_frame_time_, TargetProperty::TRANSFORM, transform_operations_,
-      operations);
+      last_frame_time_, TRANSFORM, transform_operations_, operations);
 }
 
 void UiElement::SetScale(float x, float y, float z) {
@@ -143,13 +139,12 @@ void UiElement::SetScale(float x, float y, float z) {
   op.scale = {x, y, z};
   op.Bake();
   animation_player_.TransitionTransformOperationsTo(
-      last_frame_time_, TargetProperty::TRANSFORM, transform_operations_,
-      operations);
+      last_frame_time_, TRANSFORM, transform_operations_, operations);
 }
 
 void UiElement::SetOpacity(float opacity) {
-  animation_player_.TransitionFloatTo(last_frame_time_, TargetProperty::OPACITY,
-                                      opacity_, opacity);
+  animation_player_.TransitionFloatTo(last_frame_time_, OPACITY, opacity_,
+                                      opacity);
 }
 
 bool UiElement::HitTest(const gfx::PointF& point) const {
@@ -158,6 +153,9 @@ bool UiElement::HitTest(const gfx::PointF& point) const {
 }
 
 void UiElement::SetMode(ColorScheme::Mode mode) {
+  for (auto& child : children_) {
+    child->SetMode(mode);
+  }
   if (mode_ == mode)
     return;
   mode_ = mode;
@@ -165,10 +163,22 @@ void UiElement::SetMode(ColorScheme::Mode mode) {
 }
 
 void UiElement::OnSetMode() {}
+void UiElement::OnUpdatedInheritedProperties() {}
 
-void UiElement::AddChild(UiElement* child) {
+void UiElement::AddChild(std::unique_ptr<UiElement> child) {
   child->parent_ = this;
-  children_.push_back(child);
+  children_.push_back(std::move(child));
+}
+
+void UiElement::RemoveChild(UiElement* to_remove) {
+  DCHECK_EQ(this, to_remove->parent_);
+  to_remove->parent_ = nullptr;
+  size_t old_size = children_.size();
+  base::EraseIf(children_,
+                [to_remove](const std::unique_ptr<UiElement>& child) {
+                  return child.get() == to_remove;
+                });
+  DCHECK_NE(old_size, children_.size());
 }
 
 gfx::Point3F UiElement::GetCenter() const {
@@ -236,14 +246,26 @@ void UiElement::NotifyClientSizeAnimated(const gfx::SizeF& size,
   size_ = size;
 }
 
-void UiElement::NotifyClientBooleanAnimated(bool visible,
-                                            int target_property_id,
-                                            cc::Animation* animation) {
-  visible_ = visible;
+void UiElement::SetTransitionedProperties(
+    const std::set<TargetProperty>& properties) {
+  std::set<int> converted_properties(properties.begin(), properties.end());
+  animation_player_.SetTransitionedProperties(converted_properties);
+}
+
+void UiElement::AddAnimation(std::unique_ptr<cc::Animation> animation) {
+  animation_player_.AddAnimation(std::move(animation));
+}
+
+void UiElement::RemoveAnimation(int animation_id) {
+  animation_player_.RemoveAnimation(animation_id);
+}
+
+bool UiElement::IsAnimatingProperty(TargetProperty property) const {
+  return animation_player_.IsAnimatingProperty(static_cast<int>(property));
 }
 
 void UiElement::LayOutChildren() {
-  for (auto* child : children_) {
+  for (auto& child : children_) {
     // To anchor a child, use the parent's size to find its edge.
     float x_offset;
     switch (child->x_anchoring()) {
@@ -274,6 +296,34 @@ void UiElement::LayOutChildren() {
 }
 
 void UiElement::AdjustRotationForHeadPose(const gfx::Vector3dF& look_at) {}
+
+void UiElement::UpdateInheritedProperties() {
+  gfx::Transform transform;
+  transform.Scale(size_.width(), size_.height());
+  set_computed_opacity(opacity_);
+  set_computed_viewport_aware(viewport_aware_);
+
+  // Compute an inheritable transformation that can be applied to this element,
+  // and it's children, if applicable.
+  gfx::Transform inheritable = LocalTransform();
+
+  if (parent_) {
+    inheritable.ConcatTransform(parent_->inheritable_transform());
+    set_computed_opacity(computed_opacity() * parent_->opacity());
+    if (parent_->viewport_aware())
+      set_computed_viewport_aware(true);
+  }
+
+  transform.ConcatTransform(inheritable);
+  set_world_space_transform(transform);
+  set_inheritable_transform(inheritable);
+
+  for (auto& child : children_) {
+    child->UpdateInheritedProperties();
+  }
+
+  OnUpdatedInheritedProperties();
+}
 
 gfx::Transform UiElement::LocalTransform() const {
   return layout_offset_.Apply() * transform_operations_.Apply();

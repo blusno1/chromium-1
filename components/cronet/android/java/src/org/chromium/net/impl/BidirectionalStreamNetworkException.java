@@ -4,9 +4,13 @@
 
 package org.chromium.net.impl;
 
+import org.chromium.base.VisibleForTesting;
+import org.chromium.net.NetError;
+
 /**
  * Used in {@link CronetBidirectionalStream}. Implements {@link NetworkExceptionImpl}.
  */
+@VisibleForTesting
 public class BidirectionalStreamNetworkException extends NetworkExceptionImpl {
     public BidirectionalStreamNetworkException(
             String message, int errorCode, int cronetInternalErrorCode) {
@@ -15,9 +19,10 @@ public class BidirectionalStreamNetworkException extends NetworkExceptionImpl {
 
     @Override
     public boolean immediatelyRetryable() {
-        switch (mErrorCode) {
-            case ERROR_HTTP2_PING_FAILED:
-            case ERROR_QUIC_HANDSHAKE_FAILED:
+        switch (mCronetInternalErrorCode) {
+            case NetError.ERR_SPDY_PING_FAILED:
+            case NetError.ERR_QUIC_HANDSHAKE_FAILED:
+                assert mErrorCode == ERROR_OTHER;
                 return true;
             default:
                 return super.immediatelyRetryable();

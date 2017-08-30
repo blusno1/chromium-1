@@ -219,7 +219,7 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
   for (auto& pass : render_passes_in_draw_order) {
     auto& resource = render_pass_textures_[pass->id];
     if (!resource) {
-      resource = base::MakeUnique<ScopedResource>(resource_provider_);
+      resource = std::make_unique<ScopedResource>(resource_provider_);
 
       // |has_damage_from_contributing_content| is used to determine if previous
       // contents can be reused when caching render pass and as a result needs
@@ -309,8 +309,6 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
     output_surface_plane.display_rect =
         gfx::RectF(root_render_pass->output_rect);
     output_surface_plane.format = output_surface_->GetOverlayBufferFormat();
-    output_surface_plane.quad_rect_in_target_space =
-        root_render_pass->output_rect;
     output_surface_plane.use_output_surface_for_resource = true;
     output_surface_plane.overlay_handled = true;
     current_frame()->overlay_list.push_back(output_surface_plane);

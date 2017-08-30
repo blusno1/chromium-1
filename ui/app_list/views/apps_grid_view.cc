@@ -64,8 +64,8 @@ constexpr int kDragBufferPx = 20;
 // Padding space in pixels between pages.
 constexpr int kPagePadding = 40;
 
-// Extra page padding which ensures that the page break space for apps are 48px.
-constexpr int kExtraPagePdding = 36;
+// Padding space in pixels between pages for fullscreen launcher.
+constexpr int kPagePaddingFullscreen = 48;
 
 // Preferred tile size when showing in fixed layout.
 constexpr int kPreferredTileWidth = 100;
@@ -136,6 +136,11 @@ constexpr float kExpandArrowShowEndFraction = 1.0f;
 // change opacity.
 constexpr float kAllAppsOpacityStartPx = 8.0f;
 constexpr float kAllAppsOpacityEndPx = 144.0f;
+
+// The length of time we ignore scroll events on the AppsGridView after the
+// AppListView transitions to FULLSCREEN_ALL_APPS.
+constexpr base::TimeDelta kIgnoreScrollEventsDurationMs =
+    base::TimeDelta::FromMilliseconds(500);
 
 // Returns the size of a tile view excluding its padding.
 gfx::Size GetTileViewSize() {
@@ -950,12 +955,26 @@ bool AppsGridView::OnKeyPressed(const ui::KeyEvent& event) {
     const int forward_dir = base::i18n::IsRTL() ? -1 : 1;
     switch (event.key_code()) {
       case ui::VKEY_LEFT:
+        if (is_fullscreen_app_list_enabled_ && suggestions_container_ &&
+            suggestions_container_->selected_index() == 0) {
+          // Left arrow key moves focus back to search box when
+          // |suggestions_container|'s first app is selected.
+          ClearAnySelectedView();
+          return false;
+        }
         MoveSelected(0, -forward_dir, 0);
         return true;
       case ui::VKEY_RIGHT:
         MoveSelected(0, forward_dir, 0);
         return true;
       case ui::VKEY_UP:
+        if (is_fullscreen_app_list_enabled_ && suggestions_container_ &&
+            suggestions_container_->selected_index() != -1) {
+          // Up arrow key moves focus back to search box when
+          // |suggestions_container| is selected.
+          ClearAnySelectedView();
+          return false;
+        }
         if (is_fullscreen_app_list_enabled_ || selected_view_) {
           // Don't initiate selection with UP in non-fullscreen app list. In
           // fullscreen app list, UP is already handled by SearchBoxView.
@@ -999,6 +1018,9 @@ bool AppsGridView::OnKeyReleased(const ui::KeyEvent& event) {
 }
 
 bool AppsGridView::OnMouseWheel(const ui::MouseWheelEvent& event) {
+  if (is_ignoring_scroll_events_)
+    return true;
+
   // Bail on STATE_START or no apps page to make PaginationModel happy.
   if (contents_view_->GetActiveState() == AppListModel::STATE_START ||
       pagination_model_.total_pages() <= 0) {
@@ -1035,11 +1057,20 @@ void AppsGridView::OnGestureEvent(ui::GestureEvent* event) {
     return;
   }
 
-  if (pagination_controller_->OnGestureEvent(*event, GetContentsBounds()))
+  if (!contents_view_->app_list_view()->is_in_drag() &&
+      pagination_controller_->OnGestureEvent(*event, GetContentsBounds())) {
     event->SetHandled();
+  } else {
+    event->ConvertLocationToTarget(
+        static_cast<View*>(this),
+        static_cast<View*>(contents_view_->app_list_view()));
+    contents_view_->app_list_view()->OnGestureEvent(event);
+  }
 }
 
 void AppsGridView::OnScrollEvent(ui::ScrollEvent* event) {
+  if (is_ignoring_scroll_events_)
+    return;
   // Bail on STATE_START or no apps page to make PaginationModel happy.
   if (contents_view_->GetActiveState() == AppListModel::STATE_START ||
       pagination_model_.total_pages() <= 0) {
@@ -1437,7 +1468,7 @@ const gfx::Vector2d AppsGridView::CalculateTransitionOffset(
       }
     }
   } else {
-    const int page_height = grid_size.height();
+    const int page_height = grid_size.height() + kPagePaddingFullscreen;
     if (page_of_view < current_page)
       y_offset = -page_height;
     else if (page_of_view > current_page)
@@ -1474,26 +1505,21 @@ void AppsGridView::CalculateIdealBounds() {
     const int col = view_index.slot % cols_;
     gfx::Rect tile_slot = GetExpectedTileBounds(row, col);
     gfx::Vector2d offset = CalculateTransitionOffset(view_index.page);
-    const PaginationModel::Transition& transition =
-        pagination_model_.transition();
-    if (is_fullscreen_app_list_enabled_ && transition.progress > 0) {
+    if (is_fullscreen_app_list_enabled_) {
+      // For |current_page|'s neighbor pages, do adjustments to ensure page
+      // break space.
       const int current_page = pagination_model_.selected_page();
-      const bool forward = transition.target_page > current_page ? true : false;
-      // When transiting to previous page, ensure 48px page break space from
-      // just previous page since only the previous page could be visiable;
-      // and vice versa.
-      if (!forward && view_index.page == current_page - 1) {
+      if (view_index.page == current_page - 1) {
         if (view_index.page == 0) {
           offset.set_y(offset.y() + GetHeightOnTopOfAllAppsTiles(0) -
-                       GetHeightOnTopOfAllAppsTiles(1) -
-                       2 * kTileVerticalPadding - kExtraPagePdding);
+                       GetHeightOnTopOfAllAppsTiles(1));
         } else {
-          offset.set_y(offset.y() + GetHeightOnTopOfAllAppsTiles(current_page) -
-                       kExtraPagePdding);
+          offset.set_y(offset.y() + GetHeightOnTopOfAllAppsTiles(current_page) +
+                       2 * kTileVerticalPadding);
         }
-      } else if (forward && view_index.page == current_page + 1) {
-        offset.set_y(offset.y() - GetHeightOnTopOfAllAppsTiles(current_page) +
-                     kExtraPagePdding);
+      } else if (view_index.page == current_page + 1) {
+        offset.set_y(offset.y() - GetHeightOnTopOfAllAppsTiles(current_page) -
+                     2 * kTileVerticalPadding);
       }
     }
     tile_slot.Offset(offset.x(), offset.y());
@@ -1854,8 +1880,11 @@ void AppsGridView::OnFolderItemRemoved() {
 void AppsGridView::UpdateOpacity() {
   int app_list_y_position_in_screen =
       contents_view_->app_list_view()->app_list_y_position_in_screen();
-  int work_area_bottom = contents_view_->app_list_view()->GetWorkAreaBottom();
-  bool is_in_drag = contents_view_->app_list_view()->is_in_drag();
+  AppListView* app_list_view = contents_view_->app_list_view();
+  int work_area_bottom = app_list_view->GetWorkAreaBottom();
+  bool should_restore_opacity =
+      !app_list_view->is_in_drag() &&
+      (app_list_view->app_list_state() != AppListView::AppListState::CLOSED);
 
   // The opacity of suggested apps is a function of the fractional displacement
   // of the app list from collapsed(0) to peeking(1) state. When the fraction
@@ -1871,7 +1900,8 @@ void AppsGridView::UpdateOpacity() {
                              kSuggestedAppsOpacityStartFraction),
                         0.f),
                1.0f);
-  suggestions_container_->layer()->SetOpacity(is_in_drag ? opacity : 1.0f);
+  suggestions_container_->layer()->SetOpacity(should_restore_opacity ? 1.0f
+                                                                     : opacity);
 
   // The opacity of expand arrow during dragging from collapsed(0) to peeking(1)
   // state. When the dragging amount fraction changes from
@@ -1901,7 +1931,8 @@ void AppsGridView::UpdateOpacity() {
                                    kAllAppsIndicatorOpacityStartFraction),
                               0.f),
                      1.0f);
-  all_apps_indicator_->layer()->SetOpacity(is_in_drag ? opacity : 1.0f);
+  all_apps_indicator_->layer()->SetOpacity(should_restore_opacity ? 1.0f
+                                                                  : opacity);
 
   // The opacity of expand arrow during dragging from peeking(0) to
   // fullscreen(1) state. When the dragging amount fraction changes from
@@ -1917,10 +1948,10 @@ void AppsGridView::UpdateOpacity() {
   if (app_list_y_position_in_screen <
       (work_area_bottom + kShelfSize - kPeekingAppListHeight)) {
     expand_arrow_view_->layer()->SetOpacity(
-        is_in_drag ? arrow_fullscreen_opacity : 1.0f);
+        should_restore_opacity ? 1.0f : arrow_fullscreen_opacity);
   } else {
-    expand_arrow_view_->layer()->SetOpacity(is_in_drag ? arrow_peeking_opacity
-                                                       : 1.0f);
+    expand_arrow_view_->layer()->SetOpacity(
+        should_restore_opacity ? 1.0f : arrow_peeking_opacity);
   }
 
   // Updates the opacity of all apps. The opacity of the app starting at 0.f
@@ -1960,7 +1991,7 @@ void AppsGridView::UpdateOpacity() {
       opacity = std::max(opacity * opacity_factor, 0.f);
     }
 
-    item_view->layer()->SetOpacity(is_in_drag ? opacity : 1.0f);
+    item_view->layer()->SetOpacity(should_restore_opacity ? 1.0f : opacity);
   }
 
   // Updates the opacity of page switcher buttons. The same rule as all apps.
@@ -1973,8 +2004,15 @@ void AppsGridView::UpdateOpacity() {
                      (kAllAppsOpacityEndPx - kAllAppsOpacityStartPx),
                  0.f),
         1.0f);
-    page_switcher_view_->layer()->SetOpacity(is_in_drag ? opacity : 1.0f);
+    page_switcher_view_->layer()->SetOpacity(should_restore_opacity ? 1.0f
+                                                                    : opacity);
   }
+}
+
+void AppsGridView::StartTimerToIgnoreScrollEvents() {
+  is_ignoring_scroll_events_ = true;
+  scroll_ignore_timer_.Start(FROM_HERE, kIgnoreScrollEventsDurationMs, this,
+                             &AppsGridView::StopIgnoringScrollEvents);
 }
 
 void AppsGridView::StartDragAndDropHostDrag(const gfx::Point& grid_location) {
@@ -2470,6 +2508,10 @@ void AppsGridView::SetViewHidden(AppListItemView* view,
 void AppsGridView::OnImplicitAnimationsCompleted() {
   if (layer()->opacity() == 0.0f)
     SetVisible(false);
+}
+
+void AppsGridView::StopIgnoringScrollEvents() {
+  is_ignoring_scroll_events_ = false;
 }
 
 bool AppsGridView::EnableFolderDragDropUI() {

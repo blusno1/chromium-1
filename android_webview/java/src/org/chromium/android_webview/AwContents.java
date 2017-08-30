@@ -41,8 +41,10 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.animation.AnimationUtils;
+import android.view.autofill.AutofillValue;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.view.textclassifier.TextClassifier;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 
@@ -58,6 +60,7 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.blink_public.web.WebReferrerPolicy;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.navigation_interception.NavigationParams;
@@ -65,6 +68,7 @@ import org.chromium.content.browser.AppWebMessagePort;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.content.browser.SmartClipProvider;
+import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.JavaScriptCallback;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -316,6 +320,9 @@ public class AwContents implements SmartClipProvider {
     private boolean mIsContentViewCoreVisible;
     private boolean mIsUpdateVisibilityTaskPending;
     private Runnable mUpdateVisibilityRunnable;
+
+    private @RendererPriority int mRendererPriority;
+    private boolean mRendererPriorityWaivedWhenNotVisible;
 
     private Bitmap mFavicon;
     private boolean mHasRequestedVisitedHistoryFromClient;
@@ -750,6 +757,7 @@ public class AwContents implements SmartClipProvider {
             InternalAccessDelegate internalAccessAdapter,
             NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory, AwContentsClient contentsClient,
             AwSettings settings, DependencyFactory dependencyFactory) {
+        mRendererPriority = RendererPriority.HIGH;
         updateDefaultLocale();
         settings.updateAcceptLanguages();
 
@@ -1041,7 +1049,7 @@ public class AwContents implements SmartClipProvider {
      */
     private void setNewAwContents(long newAwContentsPtr) {
         // Move the text classifier to the new ContentViewCore.
-        Object textClassifier =
+        TextClassifier textClassifier =
                 mContentViewCore == null ? null : mContentViewCore.getCustomTextClassifier();
 
         if (mNativeAwContents != 0) {
@@ -1190,7 +1198,13 @@ public class AwContents implements SmartClipProvider {
     protected boolean onRenderProcessGoneDetail(int childProcessID, boolean crashed) {
         if (isDestroyed(NO_WARN)) return true;
         return mContentsClient.onRenderProcessGone(new AwRenderProcessGoneDetail(
-                crashed, nativeGetRendererCurrentPriority(mNativeAwContents)));
+                crashed, nativeGetEffectivePriority(mNativeAwContents)));
+    }
+
+    @VisibleForTesting
+    public @RendererPriority int getEffectivePriorityForTesting() {
+        assert !isDestroyed(NO_WARN);
+        return nativeGetEffectivePriority(mNativeAwContents);
     }
 
     private boolean isNoOperation() {
@@ -1621,7 +1635,7 @@ public class AwContents implements SmartClipProvider {
             for (String header : extraHeaders.keySet()) {
                 if (referer.equals(header.toLowerCase(Locale.US))) {
                     params.setReferrer(new Referrer(extraHeaders.remove(header),
-                            Referrer.REFERRER_POLICY_DEFAULT));
+                            WebReferrerPolicy.WEB_REFERRER_POLICY_DEFAULT));
                     params.setExtraHeaders(extraHeaders);
                     break;
                 }
@@ -2313,7 +2327,7 @@ public class AwContents implements SmartClipProvider {
         }
     }
 
-    public void autofill(final SparseArray<Object> values) {
+    public void autofill(final SparseArray<AutofillValue> values) {
         if (mAutofillProvider != null) {
             mAutofillProvider.autofill(values);
         }
@@ -2508,6 +2522,7 @@ public class AwContents implements SmartClipProvider {
             mContentViewCore.onHide();
         }
         mIsContentViewCoreVisible = contentViewCoreVisible;
+        updateChildProcessImportance();
     }
 
     /**
@@ -2676,29 +2691,52 @@ public class AwContents implements SmartClipProvider {
         return mIsPopupWindow;
     }
 
+    private void updateChildProcessImportance() {
+        @ChildProcessImportance
+        int effectiveImportance = ChildProcessImportance.IMPORTANT;
+        if (mRendererPriorityWaivedWhenNotVisible && !mIsContentViewCoreVisible) {
+            effectiveImportance = ChildProcessImportance.NORMAL;
+        } else {
+            switch (mRendererPriority) {
+                case RendererPriority.INITIAL:
+                case RendererPriority.HIGH:
+                    effectiveImportance = ChildProcessImportance.IMPORTANT;
+                    break;
+                case RendererPriority.LOW:
+                    effectiveImportance = ChildProcessImportance.MODERATE;
+                    break;
+                case RendererPriority.WAIVED:
+                    effectiveImportance = ChildProcessImportance.NORMAL;
+                    break;
+                default:
+                    assert false;
+            }
+        }
+        mWebContents.setImportance(effectiveImportance);
+    }
+
     @RendererPriority
     public int getRendererRequestedPriority() {
-        return nativeGetRendererRequestedPriority(mNativeAwContents);
+        return mRendererPriority;
     }
 
     public boolean getRendererPriorityWaivedWhenNotVisible() {
-        return nativeGetRendererPriorityWaivedWhenNotVisible(mNativeAwContents);
+        return mRendererPriorityWaivedWhenNotVisible;
     }
 
     public void setRendererPriorityPolicy(
             @RendererPriority int rendererRequestedPriority, boolean waivedWhenNotVisible) {
-        nativeSetRendererPriorityPolicy(
-                mNativeAwContents, rendererRequestedPriority, waivedWhenNotVisible);
+        mRendererPriority = rendererRequestedPriority;
+        mRendererPriorityWaivedWhenNotVisible = waivedWhenNotVisible;
+        updateChildProcessImportance();
     }
 
-    // TODO(timav): Use |TextClassifier| instead of |Object| after we switch to Android SDK 26.
-    public void setTextClassifier(Object textClassifier) {
+    public void setTextClassifier(TextClassifier textClassifier) {
         assert mContentViewCore != null;
         mContentViewCore.setTextClassifier(textClassifier);
     }
 
-    // TODO(timav): Use |TextClassifier| instead of |Object| after we switch to Android SDK 26.
-    public Object getTextClassifier() {
+    public TextClassifier getTextClassifier() {
         assert mContentViewCore != null;
         return mContentViewCore.getTextClassifier();
     }
@@ -3511,12 +3549,7 @@ public class AwContents implements SmartClipProvider {
 
     private native void nativeInvokeGeolocationCallback(
             long nativeAwContents, boolean value, String requestingFrame);
-
-    private native int nativeGetRendererRequestedPriority(long nativeAwContents);
-    private native boolean nativeGetRendererPriorityWaivedWhenNotVisible(long nativeAwContents);
-    private native int nativeGetRendererCurrentPriority(long nativeAwContents);
-    private native void nativeSetRendererPriorityPolicy(
-            long nativeAwContents, int rendererRequestedPriority, boolean waivedWhenNotVisible);
+    private native int nativeGetEffectivePriority(long nativeAwContents);
 
     private native void nativeSetJsOnlineProperty(long nativeAwContents, boolean networkUp);
 

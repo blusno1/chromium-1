@@ -201,11 +201,6 @@ bool ShouldForceFetchedSuggestionsNotifications() {
       kForceFetchedSuggestionsNotificationsDefault);
 }
 
-bool IsDeletingRemoteCategoriesNotPresentInLastFetchResponseEnabled() {
-  return base::FeatureList::IsEnabled(
-      kDeleteRemoteCategoriesNotPresentInLastFetch);
-}
-
 template <typename SuggestionPtrContainer>
 std::unique_ptr<std::vector<std::string>> GetSuggestionIDVector(
     const SuggestionPtrContainer& suggestions) {
@@ -754,6 +749,24 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
     return;
   }
 
+  if (!status.IsSuccess()) {
+    if (callback) {
+      std::move(callback).Run(status);
+    }
+    return;
+  }
+
+  if (IsKeepingPrefetchedSuggestionsEnabled() && prefetched_pages_tracker_ &&
+      !prefetched_pages_tracker_->IsInitialized()) {
+    // Wait until the tracker is initialized.
+    prefetched_pages_tracker_->AddInitializationCompletedCallback(
+        base::BindOnce(&RemoteSuggestionsProviderImpl::OnFetchFinished,
+                       base::Unretained(this), std::move(callback),
+                       interactive_request, status,
+                       std::move(fetched_categories)));
+    return;
+  }
+
   if (fetched_categories) {
     for (FetchedCategory& fetched_category : *fetched_categories) {
       for (std::unique_ptr<RemoteSuggestion>& suggestion :
@@ -771,19 +784,8 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
     }
   }
 
-  if (IsKeepingPrefetchedSuggestionsEnabled() && prefetched_pages_tracker_ &&
-      !prefetched_pages_tracker_->IsInitialized()) {
-    // Wait until the tracker is initialized.
-    prefetched_pages_tracker_->AddInitializationCompletedCallback(
-        base::BindOnce(&RemoteSuggestionsProviderImpl::OnFetchFinished,
-                       base::Unretained(this), std::move(callback),
-                       interactive_request, status,
-                       std::move(fetched_categories)));
-    return;
-  }
-
   // Record the fetch time of a successfull background fetch.
-  if (!interactive_request && status.IsSuccess()) {
+  if (!interactive_request) {
     pref_service_->SetInt64(prefs::kLastSuccessfulBackgroundFetchTime,
                             clock_->Now().ToInternalValue());
   }
@@ -835,14 +837,8 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
         category_ranker_->AppendCategoryIfNecessary(fetched_category.category);
       }
     }
-  }
 
-  // TODO(tschumann): The suggestions fetcher needs to signal errors so that we
-  // know why we received no data. If an error occured, none of the following
-  // should take place.
-
-  if (fetched_categories &&
-      IsDeletingRemoteCategoriesNotPresentInLastFetchResponseEnabled()) {
+    // Delete categories not present in this fetch.
     std::vector<Category> categories_to_delete;
     for (auto& item : category_contents_) {
       Category category = item.first;
@@ -854,6 +850,10 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
     }
     DeleteCategories(categories_to_delete);
   }
+
+  // TODO(tschumann): The suggestions fetcher needs to signal errors so that we
+  // know why we received no data. If an error occured, none of the following
+  // should take place.
 
   // We might have gotten new categories (or updated the titles of existing
   // ones), so update the pref.
@@ -923,15 +923,6 @@ void RemoteSuggestionsProviderImpl::IntegrateSuggestions(
     CategoryContent* content,
     RemoteSuggestion::PtrVector new_suggestions) {
   DCHECK(ready());
-
-  // Do not touch the current set of suggestions if the newly fetched one is
-  // empty.
-  // TODO(tschumann): This should go. If we get empty results we should update
-  // accordingly and remove the old one (only of course if this was not received
-  // through a fetch-more).
-  if (new_suggestions.empty()) {
-    return;
-  }
 
   // It's entirely possible that the newly fetched suggestions contain articles
   // that have been present before.
@@ -1089,7 +1080,7 @@ void RemoteSuggestionsProviderImpl::DeleteCategories(
 }
 
 void RemoteSuggestionsProviderImpl::ClearExpiredDismissedSuggestions() {
-  std::vector<Category> categories_to_erase;
+  std::vector<Category> categories_to_delete;
 
   const base::Time now = base::Time::Now();
 
@@ -1114,16 +1105,11 @@ void RemoteSuggestionsProviderImpl::ClearExpiredDismissedSuggestions() {
     if (content->suggestions.empty() && content->dismissed.empty() &&
         category != articles_category_ &&
         !content->included_in_last_server_response) {
-      categories_to_erase.push_back(category);
+      categories_to_delete.push_back(category);
     }
   }
 
-  // TODO(vitaliii): Use DeleteCategories instead.
-  for (Category category : categories_to_erase) {
-    UpdateCategoryStatus(category, CategoryStatus::NOT_PROVIDED);
-    category_contents_.erase(category);
-  }
-
+  DeleteCategories(categories_to_delete);
   StoreCategoriesToPrefs();
 }
 

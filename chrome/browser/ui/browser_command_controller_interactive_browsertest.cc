@@ -553,7 +553,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerInteractiveTest,
 // non-exiting commands, which is not the goal of this test.
 
 #if defined(OS_CHROMEOS)
-// This test is flaky on ChromeOS, see bug http://crbug.com/754878.
+// This test is flaky on ChromeOS, see http://crbug.com/754878.
 #define MAYBE_ShortcutsShouldTakeEffectInJsFullscreen \
         DISABLED_ShortcutsShouldTakeEffectInJsFullscreen
 #else
@@ -562,6 +562,13 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerInteractiveTest,
 #endif
 IN_PROC_BROWSER_TEST_F(BrowserCommandControllerInteractiveTest,
                        MAYBE_ShortcutsShouldTakeEffectInJsFullscreen) {
+  // This test is flaky when browser side navigation is enabled on Linux. See
+  // http://crbug.com/759704.
+  // TODO(zijiehe): Find out the root cause.
+#if defined(OS_LINUX)
+  if (content::IsBrowserSideNavigationEnabled())
+    return;
+#endif
   ASSERT_NO_FATAL_FAILURE(SendShortcutsAndExpectNotPrevented(true));
 }
 

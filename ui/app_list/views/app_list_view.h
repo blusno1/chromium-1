@@ -60,7 +60,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   static constexpr float kAppListOpacityWithBlur = 0.7;
 
   // The preferred blend alpha with wallpaper color for background.
-  static constexpr int kDarkMutedBlendAlpha = 0x3f;
+  static constexpr int kAppListColorDarkenAlpha = 178;
 
   // The defualt color of the app list background.
   static constexpr SkColor kDefaultBackgroundColor = SK_ColorBLACK;
@@ -163,12 +163,9 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   // whether the search box is empty.
   void SetStateFromSearchBoxView(bool search_box_is_empty);
 
-  // Updates y position and opacity of app list. |is_end_gesture| means it is
-  // the end of the gesture dragging of app list from shelf and should restore
-  // the opacity of the app list.
+  // Updates y position and opacity of app list.
   void UpdateYPositionAndOpacity(int y_position_in_screen,
-                                 float background_opacity,
-                                 bool is_end_gesture);
+                                 float background_opacity);
 
   // Gets the PaginationModel owned by this view's apps grid.
   PaginationModel* GetAppsPaginationModel() const;
@@ -182,6 +179,9 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   // Gets current work area bottom.
   int GetWorkAreaBottom();
+
+  // Layouts the app list during dragging.
+  void DraggingLayout();
 
   views::Widget* get_fullscreen_widget_for_test() const {
     return fullscreen_widget_;
@@ -285,9 +285,6 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   // Overridden from DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
-
-  // Layouts the app list during dragging.
-  void DraggingLayout();
 
   // Gets app list background opacity during dragging.
   float GetAppListBackgroundOpacityDuringDragging();

@@ -19,6 +19,7 @@
 #include "base/process/kill.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "cc/base/switches.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/bluetooth/web_bluetooth_service_impl.h"
@@ -31,6 +32,7 @@
 #include "content/browser/frame_host/debug_urls.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/input/input_injector_impl.h"
 #include "content/browser/frame_host/input/legacy_ipc_frame_input_handler.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
@@ -116,6 +118,7 @@
 #include "media/mojo/interfaces/media_service.mojom.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
 #include "media/mojo/services/media_interface_provider.h"
+#include "media/mojo/services/video_decode_stats_recorder.h"
 #include "media/mojo/services/watch_time_recorder.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -1755,23 +1758,6 @@ void RenderFrameHostImpl::OnBeforeUnloadACK(
           converter.ToLocalTimeTicks(
               RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
       before_unload_end_time = browser_before_unload_end_time.ToTimeTicks();
-
-      // Collect UMA on the inter-process skew.
-      bool is_skew_additive = false;
-      if (converter.IsSkewAdditiveForMetrics()) {
-        is_skew_additive = true;
-        base::TimeDelta skew = converter.GetSkewForMetrics();
-        if (skew >= base::TimeDelta()) {
-          UMA_HISTOGRAM_TIMES(
-              "InterProcessTimeTicks.BrowserBehind_RendererToBrowser", skew);
-        } else {
-          UMA_HISTOGRAM_TIMES(
-              "InterProcessTimeTicks.BrowserAhead_RendererToBrowser", -skew);
-        }
-      }
-      UMA_HISTOGRAM_BOOLEAN(
-          "InterProcessTimeTicks.IsSkewAdditive_RendererToBrowser",
-          is_skew_additive);
     }
 
     base::TimeDelta on_before_unload_overhead_time =
@@ -3025,6 +3011,14 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
 
   registry_->AddInterface(
       base::Bind(&media::WatchTimeRecorder::CreateWatchTimeRecorderProvider));
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          cc::switches::kEnableGpuBenchmarking)) {
+    registry_->AddInterface(
+        base::Bind(&InputInjectorImpl::Create, weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  registry_->AddInterface(base::Bind(&media::VideoDecodeStatsRecorder::Create));
 }
 
 void RenderFrameHostImpl::ResetWaitingState() {

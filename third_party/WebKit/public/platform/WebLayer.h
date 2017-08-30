@@ -172,6 +172,8 @@ class WebLayer {
   // bounds.
   virtual void SetScrollable(const WebSize& scroll_container_bounds) = 0;
   virtual bool Scrollable() const = 0;
+  virtual WebSize ScrollContainerBoundsForTesting() const = 0;
+
   virtual void SetUserScrollable(bool horizontal, bool vertical) = 0;
   virtual bool UserScrollableHorizontal() const = 0;
   virtual bool UserScrollableVertical() const = 0;
@@ -214,6 +216,11 @@ class WebLayer {
   // responsibility of the client to reset the layer's scroll client before
   // deleting the scroll client.
   virtual void SetScrollClient(WebLayerScrollClient*) = 0;
+
+  // Sets a synthetic impl-side scroll offset which will end up reporting this
+  // call back to blink via the |WebLayerScrollClient| callback.
+  virtual void SetScrollOffsetFromImplSideForTesting(
+      const gfx::ScrollOffset&) = 0;
 
   // The scroll-boundary-behavior allows developers to specify whether the
   // scroll should be propagated to its ancestors at the beginning of the

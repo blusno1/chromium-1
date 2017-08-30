@@ -56,6 +56,7 @@
          via scrolling. -->
     <dimen name="menu_vertical_fade_distance">15dp</dimen>
     <dimen name="menu_badge_translation_y_distance">6dp</dimen>
+    <dimen name="menu_negative_vertical_offset_not_top_anchored">4dp</dimen>
 
     <!-- Menu button dragging related dimensions -->
     <dimen name="auto_scroll_full_velocity">500dp</dimen>
@@ -198,7 +199,6 @@
     <dimen name="control_container_height">56dp</dimen>
     <dimen name="bottom_control_container_height">56dp</dimen>
     <dimen name="custom_tabs_control_container_height">56dp</dimen>
-    <dimen name="webapp_control_container_height">22dp</dimen>
 
     <!-- The combined height of the tab strip and toolbar. -->
     <dimen name="tab_strip_and_toolbar_height">56dp</dimen>
@@ -240,7 +240,7 @@
     <dimen name="toolbar_progress_bar_height">2dp</dimen>
     <dimen name="toolbar_button_width">48dp</dimen>
     <dimen name="toolbar_handle_height">3dp</dimen>
-    <dimen name="toolbar_handle_width">24dp</dimen>
+    <dimen name="toolbar_handle_width">20dp</dimen>
     <dimen name="toolbar_handle_corner_radius">1.5dp</dimen>
     <dimen name="toolbar_handle_margin_top">12dp</dimen>
 

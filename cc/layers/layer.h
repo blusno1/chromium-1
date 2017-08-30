@@ -267,7 +267,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   }
 
   void set_did_scroll_callback(
-      base::Callback<void(const gfx::ScrollOffset&)> callback) {
+      base::Callback<void(const gfx::ScrollOffset&, const ElementId&)>
+          callback) {
     inputs_.did_scroll_callback = std::move(callback);
   }
 
@@ -361,7 +362,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void set_property_tree_sequence_number(int sequence_number) {
     property_tree_sequence_number_ = sequence_number;
   }
-  int property_tree_sequence_number() { return property_tree_sequence_number_; }
+  int property_tree_sequence_number() const {
+    return property_tree_sequence_number_;
+  }
 
   void SetTransformTreeIndex(int index);
   int transform_tree_index() const;
@@ -626,7 +629,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
     // The following elements can not and are not serialized.
     LayerClient* client;
-    base::Callback<void(const gfx::ScrollOffset&)> did_scroll_callback;
+    base::Callback<void(const gfx::ScrollOffset&, const ElementId&)>
+        did_scroll_callback;
     std::vector<std::unique_ptr<viz::CopyOutputRequest>> copy_requests;
 
     ScrollBoundaryBehavior scroll_boundary_behavior;

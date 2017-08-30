@@ -19,9 +19,14 @@ viz::mojom::HitTestRegionPtr CreateHitTestRegion(
   DCHECK(layer);
 
   auto hit_test_region = viz::mojom::HitTestRegion::New();
-  hit_test_region->frame_sink_id = window_port->frame_sink_id();
-  if (layer->GetPrimarySurfaceInfo())
-    hit_test_region->surface_id = layer->GetPrimarySurfaceInfo()->id();
+  DCHECK(window_port->GetFrameSinkId().is_valid());
+  hit_test_region->frame_sink_id = window_port->GetFrameSinkId();
+  if (layer->GetPrimarySurfaceInfo()) {
+    DCHECK(window_port->GetFrameSinkId() ==
+           layer->GetPrimarySurfaceInfo()->id().frame_sink_id());
+    hit_test_region->local_surface_id =
+        layer->GetPrimarySurfaceInfo()->id().local_surface_id();
+  }
   hit_test_region->flags = flags;
   hit_test_region->rect = rect;
   hit_test_region->transform = layer->transform();
@@ -40,7 +45,19 @@ HitTestDataProviderAura::~HitTestDataProviderAura() {}
 
 viz::mojom::HitTestRegionListPtr HitTestDataProviderAura::GetHitTestData()
     const {
+  const ui::mojom::EventTargetingPolicy event_targeting_policy =
+      window_->event_targeting_policy();
+  if (event_targeting_policy == ui::mojom::EventTargetingPolicy::NONE)
+    return nullptr;
+
   auto hit_test_region_list = viz::mojom::HitTestRegionList::New();
+  hit_test_region_list->flags =
+      event_targeting_policy ==
+              ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY
+          ? viz::mojom::kHitTestIgnore
+          : viz::mojom::kHitTestMine;
+  hit_test_region_list->bounds = window_->bounds();
+
   GetHitTestDataRecursively(window_, hit_test_region_list.get());
   return hit_test_region_list;
 }
@@ -51,6 +68,7 @@ void HitTestDataProviderAura::GetHitTestDataRecursively(
   WindowTargeter* targeter =
       static_cast<WindowTargeter*>(window->GetEventTargeter());
 
+  // TODO(varkha): Figure out if we need to add hit-test regions for |window|.
   // Walk the children in Z-order (reversed order of children()) to produce
   // the hit-test data. Each child's hit test data is added before the hit-test
   // data from the child's descendants because the child could clip its

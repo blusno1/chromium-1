@@ -78,10 +78,16 @@ namespace {
 using base::UserMetricsAction;
 using chromeos::input_method::InputMethodManager;
 using message_center::Notification;
+using message_center::SystemNotificationWarningLevel;
 
 // Identifier for the high contrast toggle accelerator notification.
 const char kHighContrastToggleAccelNotificationId[] =
     "chrome://settings/accessibility/highcontrast";
+
+// Toast id and duration for voice interaction shortcuts
+const char kSecondaryUserToastId[] = "voice_interaction_secondary_user";
+const char kUnsupportedLocaleToastId[] = "voice_interaction_locale_unsupported";
+const int kToastDurationMs = 2500;
 
 // The notification delegate that will be used to open the keyboard shortcut
 // help page when the notification is clicked.
@@ -148,16 +154,18 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
                                            int new_shortcut_id) {
   const base::string16 message =
       GetNotificationText(message_id, old_shortcut_id, new_shortcut_id);
-  std::unique_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
-      base::string16(), message,
-      Shell::Get()->shell_delegate()->GetDeprecatedAcceleratorImage(),
-      base::string16(), GURL(),
-      message_center::NotifierId(
-          message_center::NotifierId::SYSTEM_COMPONENT,
-          system_notifier::kNotifierDeprecatedAccelerator),
-      message_center::RichNotificationData(),
-      new DeprecatedAcceleratorNotificationDelegate));
+  std::unique_ptr<Notification> notification =
+      system_notifier::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
+          l10n_util::GetStringUTF16(IDS_DEPRECATED_SHORTCUT_TITLE), message,
+          Shell::Get()->shell_delegate()->GetDeprecatedAcceleratorImage(),
+          base::string16(), GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              system_notifier::kNotifierDeprecatedAccelerator),
+          message_center::RichNotificationData(),
+          new DeprecatedAcceleratorNotificationDelegate,
+          kNotificationSettingsIcon, SystemNotificationWarningLevel::NORMAL);
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
 }
@@ -603,16 +611,29 @@ void HandleToggleVoiceInteraction(const ui::Accelerator& accelerator) {
         base::UserMetricsAction("VoiceInteraction.Started.Assistant"));
   }
 
-  // Show a toast if voice interaction is disabled due to unsupported locales.
-  if (!chromeos::switches::IsVoiceInteractionLocalesSupported()) {
+  // Show a toast if the active user is not primary.
+  if (Shell::Get()->session_controller()->GetPrimaryUserSession() !=
+      Shell::Get()->session_controller()->GetUserSession(0)) {
     ash::ToastData toast(
-        "voice_interaction_locales_unsupported",
+        kSecondaryUserToastId,
         l10n_util::GetStringUTF16(
-            IDS_ASH_VOICE_INTERACTION_LOCALE_UNSUPPORTED_TOAST_MESSAGE),
-        2500, base::Optional<base::string16>());
+            IDS_ASH_VOICE_INTERACTION_SECONDARY_USER_TOAST_MESSAGE),
+        kToastDurationMs, base::Optional<base::string16>());
     ash::Shell::Get()->toast_manager()->Show(toast);
     return;
   }
+
+  // Show a toast if voice interaction is disabled due to unsupported locales.
+  if (!chromeos::switches::IsVoiceInteractionLocalesSupported()) {
+    ash::ToastData toast(
+        kUnsupportedLocaleToastId,
+        l10n_util::GetStringUTF16(
+            IDS_ASH_VOICE_INTERACTION_LOCALE_UNSUPPORTED_TOAST_MESSAGE),
+        kToastDurationMs, base::Optional<base::string16>());
+    ash::Shell::Get()->toast_manager()->Show(toast);
+    return;
+  }
+
   Shell::Get()->app_list()->ToggleVoiceInteractionSession();
 }
 
@@ -699,15 +720,21 @@ void HandleToggleHighContrast() {
   // Show a notification so the user knows that this accelerator toggled
   // high contrast mode, and that they can press it again to toggle back.
   // The message center automatically only shows this once per session.
-  std::unique_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
-      kHighContrastToggleAccelNotificationId, base::string16() /* title */,
-      l10n_util::GetStringUTF16(IDS_HIGH_CONTRAST_ACCEL_MSG),
-      gfx::Image(CreateVectorIcon(kSystemMenuAccessibilityIcon, SK_ColorBLACK)),
-      base::string16() /* display source */, GURL(),
-      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
-                                 system_notifier::kNotifierAccessibility),
-      message_center::RichNotificationData(), nullptr));
+  std::unique_ptr<Notification> notification =
+      system_notifier::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE,
+          kHighContrastToggleAccelNotificationId,
+          l10n_util::GetStringUTF16(IDS_HIGH_CONTRAST_ACCEL_TITLE),
+          l10n_util::GetStringUTF16(IDS_HIGH_CONTRAST_ACCEL_MSG),
+          gfx::Image(
+              CreateVectorIcon(kSystemMenuAccessibilityIcon, SK_ColorBLACK)),
+          base::string16() /* display source */, GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              system_notifier::kNotifierAccessibility),
+          message_center::RichNotificationData(), nullptr,
+          kNotificationAccessibilityIcon,
+          SystemNotificationWarningLevel::NORMAL);
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
 

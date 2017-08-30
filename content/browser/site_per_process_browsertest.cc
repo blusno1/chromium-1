@@ -19,6 +19,7 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/pattern.h"
@@ -30,7 +31,6 @@
 #include "build/build_config.h"
 #include "cc/input/touch_action.h"
 #include "components/network_session_configurator/common/network_switches.h"
-#include "content/browser/child_process_importance.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_navigation_entry.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -121,7 +121,9 @@
 #include "content/browser/android/ime_adapter_android.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_manager_android.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
+#include "content/public/browser/android/child_process_importance.h"
 #include "content/test/mock_overscroll_refresh_handler_android.h"
+#include "ui/events/android/motion_event_android.h"
 #include "ui/gfx/geometry/point_f.h"
 #endif
 
@@ -1030,14 +1032,16 @@ class FrameRectChangedMessageFilter : public content::BrowserMessageFilter {
  private:
   ~FrameRectChangedMessageFilter() override {}
 
-  void OnFrameRectChanged(const gfx::Rect& rect) {
+  void OnFrameRectChanged(const gfx::Rect& rect,
+                          const viz::LocalSurfaceId& local_surface_id) {
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
         base::Bind(&FrameRectChangedMessageFilter::OnFrameRectChangedOnUI, this,
-                   rect));
+                   rect, local_surface_id));
   }
 
-  void OnFrameRectChangedOnUI(const gfx::Rect& rect) {
+  void OnFrameRectChangedOnUI(const gfx::Rect& rect,
+                              const viz::LocalSurfaceId& local_surface_id) {
     last_rect_ = rect;
     if (!frame_rect_received_) {
       frame_rect_received_ = true;
@@ -7861,11 +7865,29 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // Navigate the popup cross-site.  This should keep the unique origin and the
   // inherited sandbox flags.
   GURL c_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
-  TestFrameNavigationObserver popup_observer(foo_root);
-  EXPECT_TRUE(
-      ExecuteScript(foo_root, "location.href = '" + c_url.spec() + "';"));
-  popup_observer.Wait();
-  EXPECT_EQ(c_url, foo_shell->web_contents()->GetLastCommittedURL());
+  {
+    TestFrameNavigationObserver popup_observer(foo_root);
+    EXPECT_TRUE(
+        ExecuteScript(foo_root, "location.href = '" + c_url.spec() + "';"));
+    popup_observer.Wait();
+    EXPECT_EQ(c_url, foo_shell->web_contents()->GetLastCommittedURL());
+  }
+
+  // Confirm that the popup is still sandboxed, both on browser and renderer
+  // sides.
+  EXPECT_EQ(expected_flags, foo_root->effective_sandbox_flags());
+  EXPECT_EQ("null", GetDocumentOrigin(foo_root));
+
+  // Navigate the popup back to b.com.  The popup should perform a
+  // remote-to-local navigation in the b.com process, and keep the unique
+  // origin and the inherited sandbox flags.
+  {
+    TestFrameNavigationObserver popup_observer(foo_root);
+    EXPECT_TRUE(
+        ExecuteScript(foo_root, "location.href = '" + frame_url.spec() + "';"));
+    popup_observer.Wait();
+    EXPECT_EQ(frame_url, foo_shell->web_contents()->GetLastCommittedURL());
+  }
 
   // Confirm that the popup is still sandboxed, both on browser and renderer
   // sides.
@@ -11104,6 +11126,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
                 ->GetProcess());
 }
 
+#if defined(OS_ANDROID)
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TestChildProcessImportance) {
   web_contents()->SetImportance(ChildProcessImportance::MODERATE);
 
@@ -11116,34 +11139,28 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TestChildProcessImportance) {
   FrameTreeNode* child = root->child_at(0);
 
   // Importance should survive initial navigation.
-  EXPECT_EQ(ChildProcessImportance::MODERATE,
-            static_cast<RenderProcessHostImpl*>(
-                root->current_frame_host()->GetProcess())
-                ->GetWidgetImportanceForTesting());
-  EXPECT_EQ(ChildProcessImportance::MODERATE,
-            static_cast<RenderProcessHostImpl*>(
-                child->current_frame_host()->GetProcess())
-                ->GetWidgetImportanceForTesting());
+  EXPECT_EQ(
+      ChildProcessImportance::MODERATE,
+      root->current_frame_host()->GetProcess()->ComputeEffectiveImportance());
+  EXPECT_EQ(
+      ChildProcessImportance::MODERATE,
+      child->current_frame_host()->GetProcess()->ComputeEffectiveImportance());
 
   // Check setting importance.
   web_contents()->SetImportance(ChildProcessImportance::NORMAL);
-  EXPECT_EQ(ChildProcessImportance::NORMAL,
-            static_cast<RenderProcessHostImpl*>(
-                root->current_frame_host()->GetProcess())
-                ->GetWidgetImportanceForTesting());
-  EXPECT_EQ(ChildProcessImportance::NORMAL,
-            static_cast<RenderProcessHostImpl*>(
-                child->current_frame_host()->GetProcess())
-                ->GetWidgetImportanceForTesting());
+  EXPECT_EQ(
+      ChildProcessImportance::NORMAL,
+      root->current_frame_host()->GetProcess()->ComputeEffectiveImportance());
+  EXPECT_EQ(
+      ChildProcessImportance::NORMAL,
+      child->current_frame_host()->GetProcess()->ComputeEffectiveImportance());
   web_contents()->SetImportance(ChildProcessImportance::IMPORTANT);
-  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
-            static_cast<RenderProcessHostImpl*>(
-                root->current_frame_host()->GetProcess())
-                ->GetWidgetImportanceForTesting());
-  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
-            static_cast<RenderProcessHostImpl*>(
-                child->current_frame_host()->GetProcess())
-                ->GetWidgetImportanceForTesting());
+  EXPECT_EQ(
+      ChildProcessImportance::IMPORTANT,
+      root->current_frame_host()->GetProcess()->ComputeEffectiveImportance());
+  EXPECT_EQ(
+      ChildProcessImportance::IMPORTANT,
+      child->current_frame_host()->GetProcess()->ComputeEffectiveImportance());
 
   // Check importance is maintained if child navigates to new domain.
   int old_child_process_id = child->current_frame_host()->GetProcess()->GetID();
@@ -11155,10 +11172,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TestChildProcessImportance) {
   }
   int new_child_process_id = child->current_frame_host()->GetProcess()->GetID();
   EXPECT_NE(old_child_process_id, new_child_process_id);
-  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
-            static_cast<RenderProcessHostImpl*>(
-                child->current_frame_host()->GetProcess())
-                ->GetWidgetImportanceForTesting());
+  EXPECT_EQ(
+      ChildProcessImportance::IMPORTANT,
+      child->current_frame_host()->GetProcess()->ComputeEffectiveImportance());
 
   // Check importance is maintained if root navigates to new domain.
   int old_root_process_id = root->current_frame_host()->GetProcess()->GetID();
@@ -11171,10 +11187,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TestChildProcessImportance) {
   EXPECT_EQ(0u, root->child_count());
   int new_root_process_id = root->current_frame_host()->GetProcess()->GetID();
   EXPECT_NE(old_root_process_id, new_root_process_id);
-  EXPECT_EQ(ChildProcessImportance::IMPORTANT,
-            static_cast<RenderProcessHostImpl*>(
-                root->current_frame_host()->GetProcess())
-                ->GetWidgetImportanceForTesting());
+  EXPECT_EQ(
+      ChildProcessImportance::IMPORTANT,
+      root->current_frame_host()->GetProcess()->ComputeEffectiveImportance());
 
   // Check interstitial maintains importance.
   TestInterstitialDelegate* delegate = new TestInterstitialDelegate;
@@ -11185,18 +11200,16 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TestChildProcessImportance) {
       contents_impl, contents_impl, true, interstitial_url, delegate);
   interstitial->Show();
   WaitForInterstitialAttach(contents_impl);
-  RenderProcessHostImpl* interstitial_process =
-      static_cast<RenderProcessHostImpl*>(
-          interstitial->GetMainFrame()->GetProcess());
+  RenderProcessHost* interstitial_process =
+      interstitial->GetMainFrame()->GetProcess();
   EXPECT_EQ(ChildProcessImportance::IMPORTANT,
-            interstitial_process->GetWidgetImportanceForTesting());
+            interstitial_process->ComputeEffectiveImportance());
 
   web_contents()->SetImportance(ChildProcessImportance::MODERATE);
   EXPECT_EQ(ChildProcessImportance::MODERATE,
-            interstitial_process->GetWidgetImportanceForTesting());
+            interstitial_process->ComputeEffectiveImportance());
 }
 
-#if defined(OS_ANDROID)
 // Tests for Android TouchSelectionEditing.
 class TouchSelectionControllerClientAndroidSiteIsolationTest
     : public SitePerProcessBrowserTest {
@@ -11247,10 +11260,15 @@ class TouchSelectionControllerClientAndroidSiteIsolationTest
                  ui::MotionEvent::Action action,
                  gfx::Point point) {
     DCHECK(action >= ui::MotionEvent::ACTION_DOWN &&
-           action << ui::MotionEvent::ACTION_CANCEL);
-    ui::MotionEventGeneric touch(
-        action, ui::EventTimeForNow(),
-        ui::PointerProperties(point.x(), point.y(), 10));
+           action < ui::MotionEvent::ACTION_CANCEL);
+
+    ui::MotionEventAndroid::Pointer p(0, point.x(), point.y(), 10, 0, 0, 0, 0);
+    JNIEnv* env = base::android::AttachCurrentThread();
+    auto time_ms = (ui::EventTimeForNow() - base::TimeTicks()).InMilliseconds();
+    ui::MotionEventAndroid touch(
+        env, nullptr, 1.f, 0, 0, 0, time_ms,
+        ui::MotionEventAndroid::GetAndroidActionForTesting(action), 1, 0, 0, 0,
+        0, 0, 0, 0, false, &p, nullptr);
     view->OnTouchEvent(touch);
   }
 };

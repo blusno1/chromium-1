@@ -5096,11 +5096,10 @@ void WebGLRenderingContextBase::TexImageHelperHTMLCanvasElement(
     // TODO(crbug.com/622958): relax the constrains if copyTextureCHROMIUM is
     // upgraded to handle more formats.
     if (!canvas->IsAccelerated() || !CanUseTexImageByGPU(format, type)) {
-      // 2D canvas has only FrontBuffer.
       TexImageImpl(function_id, target, level, internalformat, xoffset, yoffset,
                    zoffset, format, type,
                    canvas
-                       ->CopiedImage(kFrontBuffer, kPreferAcceleration,
+                       ->CopiedImage(kBackBuffer, kPreferAcceleration,
                                      FunctionIDToSnapshotReason(function_id))
                        .Get(),
                    WebGLImageConversion::kHtmlDomCanvas, unpack_flip_y_,
@@ -5134,7 +5133,7 @@ void WebGLRenderingContextBase::TexImageHelperHTMLCanvasElement(
     TexImageImpl(function_id, target, level, internalformat, xoffset, yoffset,
                  zoffset, format, type,
                  canvas
-                     ->CopiedImage(kFrontBuffer, kPreferAcceleration,
+                     ->CopiedImage(kBackBuffer, kPreferAcceleration,
                                    FunctionIDToSnapshotReason(function_id))
                      .Get(),
                  WebGLImageConversion::kHtmlDomCanvas, unpack_flip_y_,

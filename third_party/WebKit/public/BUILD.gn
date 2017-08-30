@@ -76,6 +76,7 @@ if (is_android) {
       "./platform/WebDisplayMode.h",
       "./platform/WebFocusType.h",
       "./platform/WebInputEvent.h",
+      "./platform/WebReferrerPolicy.h",
       "./platform/WebTextInputMode.h",
       "./platform/WebTextInputType.h",
       "./platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
@@ -768,6 +769,7 @@ mojom("mojo_bindings") {
     "//content/common:mojo_bindings_blink",
     "//chrome/common:mojo_bindings_blink",
     "//third_party/WebKit/Source/platform",
+    "//third_party/WebKit/Source/platform/loader",
   ]
   sources = [
     "platform/display_mode.mojom",
@@ -793,6 +795,7 @@ mojom("mojo_bindings") {
     "platform/modules/permissions/permission.mojom",
     "platform/modules/permissions/permission_status.mojom",
     "platform/modules/presentation/presentation.mojom",
+    "platform/modules/serviceworker/service_worker_error_type.mojom",
     "platform/modules/serviceworker/service_worker_event_status.mojom",
     "platform/modules/serviceworker/service_worker_stream_handle.mojom",
     "platform/modules/webauth/authenticator.mojom",
@@ -888,7 +891,7 @@ mojom("offscreen_canvas_mojo_bindings") {
   ]
   deps = [
     "//cc/ipc:interfaces",
-    "//services/viz/public/interfaces/compositing",
+    "//services/viz/public/interfaces",
   ]
 
   component_output_prefix = "blink_offscreen_canvas_mojo_bindings"

@@ -9,7 +9,6 @@
 #include "ash/accessibility_types.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/magnifier/magnification_controller.h"
-#include "ash/magnifier/partial_magnification_controller.h"
 #include "ash/mus/bridge/shell_port_mash.h"
 #include "ash/mus/window_manager.h"
 #include "ash/public/cpp/config.h"
@@ -98,12 +97,6 @@ AshInit::AshInit() {
   else
     CreateClassicShell();
 
-  ash::Shell* shell = ash::Shell::Get();
-
-  // Under mash the local state pref service isn't available until after shell
-  // initialization. Make classic ash behave the same way.
-  shell->SetLocalStatePrefService(g_browser_process->local_state());
-
   ash::AcceleratorControllerDelegateClassic* accelerator_controller_delegate =
       nullptr;
   if (chromeos::GetAshConfig() == ash::Config::CLASSIC) {
@@ -124,18 +117,13 @@ AshInit::AshInit() {
       base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskPriority::BACKGROUND,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
+  ash::Shell* shell = ash::Shell::Get();
   shell->high_contrast_controller()->SetEnabled(
       chromeos::AccessibilityManager::Get()->IsHighContrastEnabled());
 
   DCHECK(chromeos::MagnificationManager::Get());
-  bool magnifier_enabled =
-      chromeos::MagnificationManager::Get()->IsMagnifierEnabled();
-  ash::MagnifierType magnifier_type =
-      chromeos::MagnificationManager::Get()->GetMagnifierType();
   shell->magnification_controller()->SetEnabled(
-      magnifier_enabled && magnifier_type == ash::MAGNIFIER_FULL);
-  shell->partial_magnification_controller()->SetEnabled(
-      magnifier_enabled && magnifier_type == ash::MAGNIFIER_PARTIAL);
+      chromeos::MagnificationManager::Get()->IsMagnifierEnabled());
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableZeroBrowsersOpenForTests)) {

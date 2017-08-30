@@ -7,6 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
 #include "base/time/time.h"
+#include "components/subresource_filter/content/browser/page_load_statistics.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
@@ -119,6 +120,10 @@ bool ContentSubresourceFilterDriverFactory::ShouldDisallowNewWindow(
   if (should_block) {
     web_contents()->GetMainFrame()->AddMessageToConsole(
         content::CONSOLE_MESSAGE_LEVEL_ERROR, kDisallowNewWindowMessage);
+    if (PageLoadStatistics* statistics =
+            throttle_manager_->page_load_statistics()) {
+      statistics->OnBlockedPopup();
+    }
   }
   return should_block;
 }
@@ -128,11 +133,11 @@ void ContentSubresourceFilterDriverFactory::OnFirstSubresourceLoadDisallowed() {
     return;
   // This shouldn't happen normally, but in the rare case that an IPC from a
   // previous page arrives late we should guard against it.
-  if (activation_options().should_disable_ruleset_rules)
+  if (activation_options().should_disable_ruleset_rules ||
+      activation_options().activation_level != ActivationLevel::ENABLED) {
     return;
-  DCHECK_EQ(activation_options().activation_level, ActivationLevel::ENABLED);
-  client_->ToggleNotificationVisibility(activation_options().activation_level ==
-                                        ActivationLevel::ENABLED);
+  }
+  client_->ShowNotification();
 }
 
 bool ContentSubresourceFilterDriverFactory::AllowRulesetRules() {
@@ -144,7 +149,7 @@ void ContentSubresourceFilterDriverFactory::DidStartNavigation(
   if (navigation_handle->IsInMainFrame() &&
       !navigation_handle->IsSameDocument()) {
     activation_decision_ = ActivationDecision::UNKNOWN;
-    client_->ToggleNotificationVisibility(false);
+    client_->OnNewNavigationStarted();
   }
 }
 

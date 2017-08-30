@@ -1207,6 +1207,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.ChromeHome.IPHMenuItemClicked">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User tapped the app menu item that triggers the Chrome Home in-product help
+    bubble.
+  </description>
+</action>
+
 <action name="Android.ChromeHome.NativeNTPShown">
   <owner>mdjones@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
@@ -1625,7 +1634,8 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="AppCloseButton_Clk">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <obsolete>Unused as of 08/2017</obsolete>
+  <owner>jamescook@chromium.org</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
@@ -11182,6 +11192,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileTabClobbered">
+  <obsolete>Deprecated as of 8/2017</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -15646,6 +15657,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_ImpressionWithAccount_FromNTPContentSuggestions">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded when starting sign-in using the promo view, with a default account,
+    from NTP content suggestions
+    (signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS).
+  </description>
+</action>
+
 <action name="Signin_ImpressionWithAccount_FromRecentTabs">
   <owner>jlebel@chromium.org</owner>
   <description>
@@ -15676,6 +15696,15 @@ should be able to be added at any place in this file.
     Recorded when starting sign-in using the promo view, with no default
     account, from bookmarks manager
     (signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER).
+  </description>
+</action>
+
+<action name="Signin_ImpressionWithNoAccount_FromNTPContentSuggestions">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded when starting sign-in using the promo view, with no default
+    account, from NTP content suggestions
+    (signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS).
   </description>
 </action>
 
@@ -16991,6 +17020,15 @@ should be able to be added at any place in this file.
   <owner>galinap@google.com</owner>
   <description>
     Android: User used the context menu to download a suggested item.
+  </description>
+</action>
+
+<action name="Suggestions.ContextMenu.LearnMore">
+  <owner>mvanouwerkerk@chromium.org</owner>
+  <owner>peconn@chromium.org</owner>
+  <description>
+    Android: User used the context menu to follow the learn more link to product
+    help.
   </description>
 </action>
 

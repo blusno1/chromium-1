@@ -29,6 +29,7 @@
 #include "platform/scheduler/renderer/task_cost_estimator.h"
 #include "platform/scheduler/renderer/user_model.h"
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
+#include "platform/scheduler/util/state_tracer.h"
 #include "public/platform/scheduler/renderer/renderer_scheduler.h"
 
 namespace base {
@@ -49,7 +50,6 @@ class PLATFORM_EXPORT RendererSchedulerImpl
       public IdleHelper::Delegate,
       public MainThreadSchedulerHelper::Observer,
       public RenderWidgetSignals::Observer,
-      public TaskTimeObserver,
       public QueueingTimeEstimator::Client,
       public base::trace_event::TraceLog::AsyncEnabledStateObserver {
  public:
@@ -136,10 +136,6 @@ class PLATFORM_EXPORT RendererSchedulerImpl
 
   // SchedulerHelper::Observer implementation:
   void OnTriedToExecuteBlockedTask() override;
-
-  // TaskTimeObserver implementation:
-  void WillProcessTask(double start_time) override;
-  void DidProcessTask(double start_time, double end_time) override;
   void OnBeginNestedRunLoop() override;
 
   // QueueingTimeEstimator::Client implementation:
@@ -234,6 +230,10 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void OnFirstMeaningfulPaint();
 
   void OnUnregisterTaskQueue(const scoped_refptr<MainThreadTaskQueue>& queue);
+
+  void OnTaskStarted(MainThreadTaskQueue* queue,
+                     const TaskQueue::Task& task,
+                     base::TimeTicks start);
 
   void OnTaskCompleted(MainThreadTaskQueue* queue,
                        const TaskQueue::Task& task,
@@ -595,6 +595,8 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     WakeUpBudgetPool* wake_up_budget_pool;                // Not owned.
     RendererMetricsHelper metrics_helper;
     RendererProcessType process_type;
+    StateTracer use_case_tracer;
+    StateTracer backgrounding_tracer;
   };
 
   struct AnyThread {

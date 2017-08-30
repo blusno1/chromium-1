@@ -114,7 +114,6 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/ChildProcessCreationParams.java",
     "java/src/org/chromium/content/browser/ChildProcessLauncherHelper.java",
     "java/src/org/chromium/content/browser/ContentChildProcessConstants.java",
-    "java/src/org/chromium/content/browser/ContentClassFactory.java",
     "java/src/org/chromium/content/browser/ContentFeatureList.java",
     "java/src/org/chromium/content/browser/ContentNfcDelegate.java",
     "java/src/org/chromium/content/browser/ContentVideoView.java",
@@ -234,6 +233,7 @@ android_library("content_java") {
     "java/src/org/chromium/content_public/browser/ScreenOrientationDelegate.java",
     "java/src/org/chromium/content_public/browser/ScreenOrientationDelegateManager.java",
     "java/src/org/chromium/content_public/browser/SmartClipCallback.java",
+    "java/src/org/chromium/content_public/browser/SmartSelectionToggle.java",
     "java/src/org/chromium/content_public/browser/WebContents.java",
     "java/src/org/chromium/content_public/browser/WebContentsObserver.java",
     "java/src/org/chromium/content_public/browser/WebContentsStatics.java",
@@ -300,7 +300,7 @@ java_cpp_enum("content_public_android_java_enums_srcjar") {
   sources = [
     "//content/browser/android/content_view_core.cc",
     "//content/browser/android/gesture_event_type.h",
-    "//content/browser/child_process_importance.h",
+    "//content/public/browser/android/child_process_importance.h",
     "//content/public/browser/android/motion_event_action.h",
     "//content/public/browser/download_item.h",
     "//content/public/browser/invalidate_type.h",
@@ -413,6 +413,7 @@ android_library("content_javatests") {
     "//third_party/jsr-305:jsr_305_javalib",
     "//third_party/junit",
     "//ui/android:ui_java",
+    "//ui/android:ui_java_test_support",
     "//ui/gfx/geometry/mojo:mojo_java",
   ]
 

@@ -241,6 +241,7 @@ void AddAboutStrings(content::WebUIDataSource* html_source) {
     {"aboutArcVersionLabel", IDS_SETTINGS_ABOUT_PAGE_ARC_VERSION},
     {"aboutBuildDateLabel", IDS_VERSION_UI_BUILD_DATE},
     {"aboutChannelBeta", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_BETA},
+    {"aboutChannelCanary", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_CANARY},
     {"aboutChannelDev", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_DEV},
     {"aboutChannelLabel", IDS_SETTINGS_ABOUT_PAGE_CHANNEL},
     {"aboutChannelStable", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_STABLE},
@@ -501,6 +502,7 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
       {"pointerFast", IDS_SETTINGS_POINTER_SPEED_FAST_LABEL},
       {"mouseSpeed", IDS_SETTINGS_MOUSE_SPEED_LABEL},
       {"mouseSwapButtons", IDS_SETTINGS_MOUSE_SWAP_BUTTONS_LABEL},
+      {"mouseReverseScroll", IDS_SETTINGS_MOUSE_REVERSE_SCROLL_LABEL},
   };
   AddLocalizedStringsBulk(html_source, pointers_strings,
                           arraysize(pointers_strings));
@@ -1857,6 +1859,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_SOURCE_KILL_SWITCH},
     {"siteSettingsReset", IDS_SETTINGS_SITE_SETTINGS_RESET_BUTTON},
     {"siteSettingsCookieHeader", IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER},
+    {"siteSettingsCookieLink", IDS_SETTINGS_SITE_SETTINGS_COOKIE_LINK},
     {"siteSettingsCookieRemove", IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE},
     {"siteSettingsCookieRemoveAll",
      IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_ALL},

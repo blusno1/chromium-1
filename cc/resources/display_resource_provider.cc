@@ -135,7 +135,8 @@ void DisplayResourceProvider::ReceiveFromChild(
 
     if ((!it->is_software && !gl) ||
         (it->is_software && !shared_bitmap_manager_)) {
-      TRACE_EVENT0("cc", "ResourceProvider::ReceiveFromChild dropping invalid");
+      TRACE_EVENT0(
+          "cc", "DisplayResourceProvider::ReceiveFromChild dropping invalid");
       std::vector<viz::ReturnedResource> to_return;
       to_return.push_back(it->ToReturnedResource());
       child_info.return_callback.Run(to_return,
@@ -207,6 +208,25 @@ DisplayResourceProvider::GetChildToParentMap(int child) const {
   DCHECK(!it->second.marked_for_deletion);
   return it->second.child_to_parent_map;
 }
+
+DisplayResourceProvider::ScopedSamplerGL::ScopedSamplerGL(
+    DisplayResourceProvider* resource_provider,
+    viz::ResourceId resource_id,
+    GLenum filter)
+    : resource_lock_(resource_provider, resource_id),
+      unit_(GL_TEXTURE0),
+      target_(resource_provider->BindForSampling(resource_id, unit_, filter)) {}
+
+DisplayResourceProvider::ScopedSamplerGL::ScopedSamplerGL(
+    DisplayResourceProvider* resource_provider,
+    viz::ResourceId resource_id,
+    GLenum unit,
+    GLenum filter)
+    : resource_lock_(resource_provider, resource_id),
+      unit_(unit),
+      target_(resource_provider->BindForSampling(resource_id, unit_, filter)) {}
+
+DisplayResourceProvider::ScopedSamplerGL::~ScopedSamplerGL() {}
 
 DisplayResourceProvider::ScopedReadLockSkImage::ScopedReadLockSkImage(
     DisplayResourceProvider* resource_provider,

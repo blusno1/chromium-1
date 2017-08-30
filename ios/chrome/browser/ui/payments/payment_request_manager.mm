@@ -30,11 +30,14 @@
 #include "components/payments/core/features.h"
 #include "components/payments/core/journey_logger.h"
 #include "components/payments/core/payment_address.h"
+#include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/payments/core/payment_request_base_delegate.h"
 #include "components/payments/core/payment_request_data_util.h"
+#include "components/payments/core/payment_shipping_option.h"
 #include "components/prefs/pref_service.h"
+#include "components/url_formatter/elide_url.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/autofill/validation_rules_storage_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -66,7 +69,6 @@
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 #include "third_party/libaddressinput/chromium/chrome_storage_impl.h"
 #include "url/gurl.h"
-#include "url/origin.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -157,6 +159,10 @@ struct PendingPaymentResponse {
 // The dispatcher for Payment Requests.
 @property(nonatomic, weak, readonly) id<ApplicationCommands> dispatcher;
 
+// A block to be run when the |_paymentRequestCoordinator| stops.
+@property(nonatomic, strong, nullable)
+    ProceduralBlock coordinatorDidStopCallback;
+
 // Terminates the pending request with |errorMessage| and dismisses the UI.
 // Invokes the callback once the request has been terminated.
 - (void)terminatePendingRequestWithErrorMessage:(NSString*)errorMessage
@@ -240,6 +246,7 @@ struct PendingPaymentResponse {
 @synthesize paymentRequestJsManager = _paymentRequestJsManager;
 @synthesize pendingPaymentRequest = _pendingPaymentRequest;
 @synthesize dispatcher = _dispatcher;
+@synthesize coordinatorDidStopCallback = _coordinatorDidStopCallback;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                               browserState:
@@ -275,6 +282,7 @@ struct PendingPaymentResponse {
   _paymentRequestJsManager = nil;
   _activeWebStateObserver.reset();
   _activeWebState = webState;
+  [self enableActiveWebState];
 
   if (_activeWebState) {
     _paymentRequestJsManager =
@@ -301,7 +309,7 @@ struct PendingPaymentResponse {
   if (!enabled) {
     [self cancelRequest];
     [self disableActiveWebState];
-  } else {
+  } else if (!_activeWebStateEnabled) {
     [self enableActiveWebState];
   }
 }
@@ -329,7 +337,6 @@ struct PendingPaymentResponse {
         rejectRequestPromiseWithErrorName:kAbortError
                              errorMessage:errorMessage
                         completionHandler:callback];
-    weakSelf.paymentRequestCoordinator = nil;
   };
   [self dismissUIWithCallback:dismissUICallback];
 }
@@ -347,24 +354,28 @@ struct PendingPaymentResponse {
 }
 
 - (void)enableActiveWebState {
-  if (_activeWebState && !_activeWebStateEnabled) {
-    __weak PaymentRequestManager* weakSelf = self;
-    auto callback = base::BindBlockArc(^bool(const base::DictionaryValue& JSON,
-                                             const GURL& originURL,
-                                             bool userIsInteracting) {
-      // |originURL| and |userIsInteracting| aren't used.
-      return [weakSelf handleScriptCommand:JSON];
-    });
-    _activeWebState->AddScriptCommandCallback(callback, kCommandPrefix);
-    _activeWebStateEnabled = YES;
-  }
+  if (!_activeWebState)
+    return;
+
+  DCHECK(!_activeWebStateEnabled);
+  __weak PaymentRequestManager* weakSelf = self;
+  auto callback =
+      base::BindBlockArc(^bool(const base::DictionaryValue& JSON,
+                               const GURL& originURL, bool userIsInteracting) {
+        // |originURL| and |userIsInteracting| aren't used.
+        return [weakSelf handleScriptCommand:JSON];
+      });
+  _activeWebState->AddScriptCommandCallback(callback, kCommandPrefix);
+  _activeWebStateEnabled = YES;
 }
 
 - (void)disableActiveWebState {
-  if (_activeWebState && _activeWebStateEnabled) {
-    _activeWebState->RemoveScriptCommandCallback(kCommandPrefix);
-    _activeWebStateEnabled = NO;
-  }
+  if (!_activeWebState)
+    return;
+
+  DCHECK(_activeWebStateEnabled);
+  _activeWebState->RemoveScriptCommandCallback(kCommandPrefix);
+  _activeWebStateEnabled = NO;
 }
 
 - (BOOL)handleScriptCommand:(const base::DictionaryValue&)JSONCommand {
@@ -546,7 +557,8 @@ struct PendingPaymentResponse {
     pageFavicon = navigationItem->GetFavicon().image.ToUIImage();
   NSString* pageTitle = base::SysUTF16ToNSString(_activeWebState->GetTitle());
   NSString* pageHost =
-      base::SysUTF8ToNSString(_activeWebState->GetLastCommittedURL().host());
+      base::SysUTF16ToNSString(url_formatter::FormatUrlForSecurityDisplay(
+          _activeWebState->GetLastCommittedURL()));
   BOOL connectionSecure =
       _activeWebState->GetLastCommittedURL().SchemeIs(url::kHttpsScheme);
   autofill::AutofillManager* autofillManager =
@@ -639,8 +651,10 @@ struct PendingPaymentResponse {
   DCHECK(canMakePaymentQuery);
   // iOS PaymentRequest does not support iframes.
   if (canMakePaymentQuery->CanQuery(
-          url::Origin(_activeWebState->GetLastCommittedURL().GetOrigin()),
-          url::Origin(_activeWebState->GetLastCommittedURL().GetOrigin()),
+          GURL(url_formatter::FormatUrlForSecurityDisplay(
+              _activeWebState->GetLastCommittedURL())),
+          GURL(url_formatter::FormatUrlForSecurityDisplay(
+              _activeWebState->GetLastCommittedURL())),
           paymentRequest->stringified_method_data())) {
     [_paymentRequestJsManager
         resolveCanMakePaymentPromiseWithValue:canMakePayment
@@ -705,10 +719,8 @@ struct PendingPaymentResponse {
     ProceduralBlock dismissUICallback = ^() {
       [weakSelf.paymentRequestJsManager
           resolveResponsePromiseWithCompletionHandler:nil];
-      weakSelf.paymentRequestCoordinator = nil;
     };
     [weakSelf dismissUIWithCallback:dismissUICallback];
-
   };
 
   // Display UI indicating failure if the value of |result| is "fail".
@@ -755,7 +767,7 @@ struct PendingPaymentResponse {
   [_updateEventTimeoutTimer invalidate];
 
   const base::DictionaryValue* paymentDetailsData = nullptr;
-  web::PaymentDetails paymentDetails;
+  payments::PaymentDetails paymentDetails;
   if (!message.GetDictionary("payment_details", &paymentDetailsData)) {
     DLOG(ERROR) << "JS message parameter 'payment_details' is missing";
     return NO;
@@ -801,9 +813,8 @@ struct PendingPaymentResponse {
 }
 
 - (void)dismissUIWithCallback:(ProceduralBlock)callback {
-  [_paymentRequestCoordinator stopWithCallback:callback];
-  if (!callback)
-    _paymentRequestCoordinator = nil;
+  _coordinatorDidStopCallback = callback;
+  [_paymentRequestCoordinator stop];
 }
 
 - (BOOL)webStateContentIsSecureHTML {
@@ -946,7 +957,7 @@ requestFullCreditCard:(const autofill::CreditCard&)creditCard
 
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
           didSelectShippingOption:
-              (const web::PaymentShippingOption&)shippingOption {
+              (const payments::PaymentShippingOption&)shippingOption {
   if (coordinator.paymentRequest->state() !=
           payments::PaymentRequest::State::INTERACTIVE ||
       coordinator.paymentRequest->updating()) {
@@ -957,6 +968,17 @@ requestFullCreditCard:(const autofill::CreditCard&)creditCard
                                completionHandler:nil];
   [self setUnblockEventQueueTimer];
   [self setUpdateEventTimeoutTimer];
+}
+
+- (void)paymentRequestCoordinatorDidStop:
+    (PaymentRequestCoordinator*)coordinator {
+  // The coordinator can now be safely set to nil.
+  _paymentRequestCoordinator = nil;
+
+  if (_coordinatorDidStopCallback) {
+    _coordinatorDidStopCallback();
+    _coordinatorDidStopCallback = nil;
+  }
 }
 
 #pragma mark - PaymentResponseHelperConsumer methods
@@ -1002,7 +1024,6 @@ requestFullCreditCard:(const autofill::CreditCard&)creditCard
   }
 
   [self dismissUIWithCallback:nil];
-  [self enableActiveWebState];
 
   // The lifetime of a PaymentRequest is tied to the WebState it is associated
   // with and the current URL. Therefore, PaymentRequest instances should get

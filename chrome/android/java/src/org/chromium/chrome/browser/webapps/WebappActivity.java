@@ -46,7 +46,6 @@ import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.toolbar.ToolbarControlContainer;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.ScreenOrientationProvider;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -67,6 +66,7 @@ public class WebappActivity extends SingleTabActivity {
     public static final String WEBAPP_SCHEME = "webapp";
 
     private static final String TAG = "WebappActivity";
+    private static final String HISTOGRAM_NAVIGATION_STATUS = "Webapp.NavigationStatus";
     private static final long MS_BEFORE_NAVIGATING_BACK_FROM_INTERSTITIAL = 1000;
 
     private static final int ENTER_IMMERSIVE_MODE_DELAY_MILLIS = 300;
@@ -186,6 +186,12 @@ public class WebappActivity extends SingleTabActivity {
         } else if (info.shouldForceNavigation()) {
             // Don't restore to previous page, navigate using WebappInfo retrieved from cache.
             resetSavedInstanceState();
+        }
+
+        if (info == null) {
+            // If {@link info} is null, there isn't much we can do, abort.
+            ApiCompatibilityUtils.finishAndRemoveTask(this);
+            return;
         }
 
         mWebappInfo = info;
@@ -476,11 +482,6 @@ public class WebappActivity extends SingleTabActivity {
     protected void onUpdatedLastUsedTime(
             WebappDataStorage storage, boolean previouslyLaunched, long previousUsageTimestamp) {}
 
-    private boolean isWebappDomain() {
-        return UrlUtilities.sameDomainOrHost(
-                getActivityTab().getUrl(), getWebappInfo().uri().toString(), true);
-    }
-
     @Override
     protected ChromeFullscreenManager createFullscreenManager() {
         // Disable HTML5 fullscreen in PWA fullscreen mode.
@@ -517,25 +518,24 @@ public class WebappActivity extends SingleTabActivity {
                 if (hasCommitted && isInMainFrame) {
                     // Updates the URL.
                     mNotificationManager.maybeShowNotification();
+                    RecordHistogram.recordBooleanHistogram(
+                            HISTOGRAM_NAVIGATION_STATUS, !isErrorPage);
                 }
             }
 
             @Override
             public void onDidChangeThemeColor(Tab tab, int color) {
-                if (!isWebappDomain()) return;
                 mBrandColor = color;
                 updateTaskDescription();
             }
 
             @Override
             public void onTitleUpdated(Tab tab) {
-                if (!isWebappDomain()) return;
                 updateTaskDescription();
             }
 
             @Override
             public void onFaviconUpdated(Tab tab, Bitmap icon) {
-                if (!isWebappDomain()) return;
                 // No need to cache the favicon if there is an icon declared in app manifest.
                 if (mWebappInfo.icon() != null) return;
                 if (icon == null) return;

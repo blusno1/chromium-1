@@ -848,6 +848,16 @@ class CORE_EXPORT LocalFrameView final
 
   size_t PaintFrameCount() const { return paint_frame_count_; };
 
+  // Return the ScrollableArea in a FrameView with the given ElementId, if any.
+  // This is not recursive and will only return ScrollableAreas owned by this
+  // LocalFrameView (or possibly the LocalFrameView itself).
+  ScrollableArea* ScrollableAreaWithElementId(const CompositorElementId&);
+
+  PaintArtifactCompositor* GetPaintArtifactCompositorForTesting() {
+    DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+    return paint_artifact_compositor_.get();
+  }
+
  protected:
   // Scroll the content via the compositor.
   bool ScrollContentsFastPath(const IntSize& scroll_delta);
@@ -1235,6 +1245,8 @@ class CORE_EXPORT LocalFrameView final
 
   // From the beginning of the document, how many frames have painted.
   size_t paint_frame_count_;
+
+  UniqueObjectId unique_id_;
 
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, DeviceEmulationResetScrollbars);
 };

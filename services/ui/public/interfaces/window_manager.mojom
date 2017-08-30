@@ -157,7 +157,7 @@ interface WindowManager {
   // End long lived properties. ------------------------------------------------
 
   // Called immediately when the WindowManager is obtained.
-  OnConnect(uint16 client_id);
+  OnConnect();
 
   // Called when a new display is added. |root| gives the root window specific
   // to this WindowManager for |display|. |local_surface_id| identifies the ID
@@ -305,8 +305,7 @@ interface WindowManagerClient {
   SetDisplayRoot(display.mojom.Display display,
                  WmViewportMetrics viewport_metrics,
                  bool is_primary_display,
-                 uint32 window_id) =>
-      (cc.mojom.LocalSurfaceId? local_surface_id);
+                 uint32 window_id) => (bool success);
 
   // Configures the metrics for the displays and notifies observers. This is
   // only applicable when WindowTree was created with a value of false for

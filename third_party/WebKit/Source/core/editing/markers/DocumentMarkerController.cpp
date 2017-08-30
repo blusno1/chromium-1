@@ -38,9 +38,9 @@
 #include "core/editing/markers/ActiveSuggestionMarkerListImpl.h"
 #include "core/editing/markers/CompositionMarker.h"
 #include "core/editing/markers/CompositionMarkerListImpl.h"
-#include "core/editing/markers/DocumentMarkerListEditor.h"
 #include "core/editing/markers/GrammarMarker.h"
 #include "core/editing/markers/GrammarMarkerListImpl.h"
+#include "core/editing/markers/SortedDocumentMarkerListEditor.h"
 #include "core/editing/markers/SpellingMarker.h"
 #include "core/editing/markers/SpellingMarkerListImpl.h"
 #include "core/editing/markers/SuggestionMarker.h"
@@ -264,8 +264,6 @@ void DocumentMarkerController::AddMarkerInternal(
   }
 }
 
-// Markers are stored in order sorted by their start offset.
-// Markers of the same type do not overlap each other.
 void DocumentMarkerController::AddMarkerToNode(Node* node,
                                                DocumentMarker* new_marker) {
   possibly_existing_marker_types_.Add(new_marker->GetType());

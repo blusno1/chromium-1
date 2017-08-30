@@ -534,25 +534,25 @@ bool TileManager::PrepareTiles(
   return true;
 }
 
-void TileManager::Flush() {
-  TRACE_EVENT0("cc", "TileManager::Flush");
+void TileManager::CheckForCompletedTasks() {
+  TRACE_EVENT0("cc", "TileManager::CheckForCompletedTasks");
 
   if (!tile_task_manager_) {
-    TRACE_EVENT_INSTANT0("cc", "Flush aborted", TRACE_EVENT_SCOPE_THREAD);
+    TRACE_EVENT_INSTANT0("cc", "TileManager::CheckForCompletedTasksAborted",
+                         TRACE_EVENT_SCOPE_THREAD);
     return;
   }
 
   tile_task_manager_->CheckForCompletedTasks();
   did_check_for_completed_tasks_since_last_schedule_tasks_ = true;
 
-  // Actually flush.
-  raster_buffer_provider_->Flush();
-
   CheckPendingGpuWorkTiles(true /* issue_signals */);
 
-  TRACE_EVENT_INSTANT1("cc", "DidFlush", TRACE_EVENT_SCOPE_THREAD, "stats",
-                       RasterTaskCompletionStatsAsValue(flush_stats_));
-  flush_stats_ = RasterTaskCompletionStats();
+  TRACE_EVENT_INSTANT1(
+      "cc", "TileManager::CheckForCompletedTasksFinished",
+      TRACE_EVENT_SCOPE_THREAD, "stats",
+      RasterTaskCompletionStatsAsValue(raster_task_completion_stats_));
+  raster_task_completion_stats_ = RasterTaskCompletionStats();
 }
 
 void TileManager::DidModifyTilePriorities() {
@@ -893,7 +893,8 @@ void TileManager::PartitionImagesForCheckering(
   for (const auto* original_draw_image : images_in_tile) {
     DrawImage draw_image(*original_draw_image, tile->raster_transform().scale(),
                          raster_color_space);
-    if (checker_image_tracker_.ShouldCheckerImage(draw_image, tree))
+    if (checker_image_tracker_.ShouldCheckerImage(
+            draw_image, tree, tile->required_for_activation()))
       checkered_images->push_back(draw_image.paint_image());
     else
       sync_decoded_images->push_back(std::move(draw_image));
@@ -914,7 +915,8 @@ void TileManager::AddCheckeredImagesToDecodeQueue(
   for (const auto* original_draw_image : images_in_tile) {
     DrawImage draw_image(*original_draw_image, tile->raster_transform().scale(),
                          raster_color_space);
-    if (checker_image_tracker_.ShouldCheckerImage(draw_image, tree)) {
+    if (checker_image_tracker_.ShouldCheckerImage(
+            draw_image, tree, tile->required_for_activation())) {
       image_decode_queue->push_back(CheckerImageTracker::ImageDecodeRequest(
           draw_image.paint_image(), decode_type));
     }
@@ -1213,13 +1215,13 @@ void TileManager::OnRasterTaskCompleted(
   scheduled_draw_images_.erase(images_it);
 
   if (was_canceled) {
-    ++flush_stats_.canceled_count;
+    ++raster_task_completion_stats_.canceled_count;
     resource_pool_->ReleaseResource(resource);
     return;
   }
 
   resource_pool_->OnContentReplaced(resource->id(), tile_id);
-  ++flush_stats_.completed_count;
+  ++raster_task_completion_stats_.completed_count;
 
   if (!tile) {
     resource_pool_->ReleaseResource(resource);
@@ -1584,7 +1586,7 @@ scoped_refptr<TileTask> TileManager::CreateTaskSetFinishedTask(
 
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 TileManager::ActivationStateAsValue() {
-  auto state = base::MakeUnique<base::trace_event::TracedValue>();
+  auto state = std::make_unique<base::trace_event::TracedValue>();
   ActivationStateAsValueInto(state.get());
   return std::move(state);
 }

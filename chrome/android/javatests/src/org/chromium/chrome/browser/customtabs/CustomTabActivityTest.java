@@ -61,6 +61,7 @@ import org.chromium.base.PathUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
@@ -95,7 +96,6 @@ import org.chromium.chrome.browser.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
 import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
@@ -108,10 +108,13 @@ import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.util.TestWebServer;
 import org.chromium.ui.mojom.WindowOpenDisposition;
+import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -128,6 +131,7 @@ public class CustomTabActivityTest {
     @Rule
     public CustomTabActivityTestRule mCustomTabActivityTestRule = new CustomTabActivityTestRule();
 
+    private static final int TIMEOUT_PAGE_LOAD_SECONDS = 10;
     private static final int MAX_MENU_CUSTOM_ITEMS = 5;
     private static final int NUM_CHROME_MENU_ITEMS = 5;
     private static final String TEST_PAGE = "/chrome/test/data/android/google.html";
@@ -710,9 +714,12 @@ public class CustomTabActivityTest {
 
     /**
      * Test whether a custom tab can be reparented to a new activity while showing an infobar.
+     *
+     * TODO(timloh): Use a different InfoBar type once we only use modals for permission prompts.
      */
     @Test
     @SmallTest
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.MODAL_PERMISSION_PROMPTS)
     @RetryOnFailure
     public void testTabReparentingInfoBar() throws InterruptedException {
         LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);
@@ -1064,18 +1071,76 @@ public class CustomTabActivityTest {
         }
     }
 
+    @Test
+    @SmallTest
+    @RetryOnFailure
+    public void testVerifiedReferrer() throws InterruptedException {
+        final Context context = InstrumentationRegistry.getInstrumentation()
+                                        .getTargetContext()
+                                        .getApplicationContext();
+        final Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage2);
+        String referrer = "https://example.com";
+        intent.putExtra(Intent.EXTRA_REFERRER_NAME, referrer);
+        CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
+        connection.newSession(token);
+        connection.overridePackageNameForSessionForTesting(token, "app1");
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                OriginVerifier.addVerifiedOriginForPackage(
+                        "app1", Uri.parse(referrer), CustomTabsService.RELATION_USE_AS_ORIGIN);
+            }
+        });
+
+        final CustomTabsSessionToken session = warmUpAndLaunchUrlWithSession(intent);
+        Assert.assertEquals(getActivity().getIntentDataProvider().getSession(), session);
+
+        final Tab tab = getActivity().getActivityTab();
+        final CallbackHelper pageLoadFinishedHelper = new CallbackHelper();
+        tab.addObserver(new EmptyTabObserver() {
+            @Override
+            public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
+                Assert.assertEquals(referrer, params.getReferrer().getUrl());
+            }
+
+            @Override
+            public void onPageLoadFinished(Tab tab) {
+                pageLoadFinishedHelper.notifyCalled();
+            }
+        });
+        Assert.assertTrue("CustomTabContentHandler can't handle intent with same session",
+                ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() throws Exception {
+                        return CustomTabActivity.handleInActiveContentIfNeeded(intent);
+                    }
+                }));
+        try {
+            pageLoadFinishedHelper.waitForCallback(0);
+        } catch (TimeoutException e) {
+            Assert.fail();
+        }
+    }
+
     /**
      * Tests that the navigation callbacks are sent.
      */
     @Test
     @SmallTest
-    @RetryOnFailure
     public void testCallbacksAreSent() {
-        final ArrayList<Integer> navigationEvents = new ArrayList<>();
+        final Semaphore navigationStartSemaphore = new Semaphore(0);
+        final Semaphore navigationFinishedSemaphore = new Semaphore(0);
         CustomTabsSession session = bindWithCallback(new CustomTabsCallback() {
             @Override
             public void onNavigationEvent(int navigationEvent, Bundle extras) {
-                navigationEvents.add(navigationEvent);
+                Assert.assertNotEquals(CustomTabsCallback.NAVIGATION_FAILED, navigationEvent);
+                Assert.assertNotEquals(CustomTabsCallback.NAVIGATION_ABORTED, navigationEvent);
+                if (navigationEvent == CustomTabsCallback.NAVIGATION_STARTED) {
+                    navigationStartSemaphore.release();
+                } else if (navigationEvent == CustomTabsCallback.NAVIGATION_FINISHED) {
+                    navigationFinishedSemaphore.release();
+                }
             }
         });
         Intent intent = new CustomTabsIntent.Builder(session).build().intent;
@@ -1087,23 +1152,13 @@ public class CustomTabActivityTest {
 
         try {
             mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
-            CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    return navigationEvents.contains(CustomTabsCallback.NAVIGATION_STARTED);
-                }
-            });
-            CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    return navigationEvents.contains(CustomTabsCallback.NAVIGATION_FINISHED);
-                }
-            });
+            Assert.assertTrue(navigationStartSemaphore.tryAcquire(
+                    TIMEOUT_PAGE_LOAD_SECONDS, TimeUnit.SECONDS));
+            Assert.assertTrue(navigationFinishedSemaphore.tryAcquire(
+                    TIMEOUT_PAGE_LOAD_SECONDS, TimeUnit.SECONDS));
         } catch (InterruptedException e) {
             Assert.fail();
         }
-        Assert.assertFalse(navigationEvents.contains(CustomTabsCallback.NAVIGATION_FAILED));
-        Assert.assertFalse(navigationEvents.contains(CustomTabsCallback.NAVIGATION_ABORTED));
     }
 
     /**
@@ -1168,6 +1223,45 @@ public class CustomTabActivityTest {
         } catch (InterruptedException e) {
             Assert.fail();
         }
+    }
+
+    /**
+     * Tests that one navigation in a custom tab records the histograms reflecting time from
+     * intent to first navigation commit.
+     */
+    @Test
+    @SmallTest
+    public void testNavigationCommitUmaRecorded() {
+        String zoomedOutHistogramName = "CustomTabs.IntentToFirstCommitNavigationTime3.ZoomedOut";
+        String zoomedInHistogramName = "CustomTabs.IntentToFirstCommitNavigationTime3.ZoomedIn";
+        Assert.assertEquals(
+                0, RecordHistogram.getHistogramTotalCountForTesting(zoomedOutHistogramName));
+        Assert.assertEquals(
+                0, RecordHistogram.getHistogramTotalCountForTesting(zoomedInHistogramName));
+        final Semaphore semaphore = new Semaphore(0);
+        CustomTabsSession session = bindWithCallback(new CustomTabsCallback() {
+            @Override
+            public void onNavigationEvent(int navigationEvent, Bundle extras) {
+                if (navigationEvent == CustomTabsCallback.NAVIGATION_FINISHED) semaphore.release();
+            }
+        });
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.setData(Uri.parse(mTestPage));
+        intent.setComponent(
+                new ComponentName(InstrumentationRegistry.getInstrumentation().getTargetContext(),
+                        ChromeLauncherActivity.class));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+        try {
+            mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+            Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_PAGE_LOAD_SECONDS, TimeUnit.SECONDS));
+        } catch (InterruptedException e) {
+            Assert.fail();
+        }
+        Assert.assertEquals(
+                1, RecordHistogram.getHistogramTotalCountForTesting(zoomedOutHistogramName));
+        Assert.assertEquals(
+                1, RecordHistogram.getHistogramTotalCountForTesting(zoomedInHistogramName));
     }
 
     /**
@@ -1822,7 +1916,7 @@ public class CustomTabActivityTest {
      */
     @Test
     @DisabledTest
-    @Restriction(ChromeRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
     @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
     public void testWarmupAndLaunchRegularChrome() {
         CustomTabsTestUtils.warmUpAndWait();
@@ -1850,7 +1944,7 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @Restriction(ChromeRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
     @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
     public void testWarmupAndLaunchRightToolbarLayout() {
         CustomTabsTestUtils.warmUpAndWait();
@@ -2488,7 +2582,9 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @CommandLineFlags.Add({"enable-spdy-proxy-auth", "data-reduction-proxy-lo-fi=always-on"})
+    @CommandLineFlags.Add({"enable-spdy-proxy-auth",
+            "disable-features=DataReductionProxyDecidesTransform",
+            "data-reduction-proxy-lo-fi=always-on"})
     @RetryOnFailure
     public void testLaunchWebLiteURLNoPreviews() throws Exception {
         final String testUrl = WEBLITE_PREFIX + mTestPage;
@@ -2505,7 +2601,8 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @CommandLineFlags.Add({"enable-spdy-proxy-auth", "enable-data-reduction-proxy-lite-page"})
+    @CommandLineFlags.Add({"enable-spdy-proxy-auth",
+            "disable-features=DataReductionProxyDecidesTransform"})
     @RetryOnFailure
     public void testLaunchWebLiteURLNoLoFi() throws Exception {
         final String testUrl = WEBLITE_PREFIX + mTestPage;

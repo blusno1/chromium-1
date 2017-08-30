@@ -11,7 +11,6 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
-#include "build/build_config.h"
 #include "content/renderer/media/audio_renderer_sink_cache_impl.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_parameters.h"
@@ -205,6 +204,10 @@ TEST_F(AudioRendererSinkCacheTest, GetDeviceInfo) {
 // MockAudioRendererSink::Stop().
 TEST_F(AudioRendererSinkCacheTest, GarbageCollection) {
   EXPECT_EQ(0, sink_count());
+
+  base::Thread thread("timeout_thread");
+  thread.Start();
+
   media::OutputDeviceInfo device_info =
       cache_->GetSinkInfo(kRenderFrameId, 0, kDefaultDeviceId, url::Origin());
   EXPECT_EQ(1, sink_count());
@@ -212,9 +215,6 @@ TEST_F(AudioRendererSinkCacheTest, GarbageCollection) {
   media::OutputDeviceInfo another_device_info =
       cache_->GetSinkInfo(kRenderFrameId, 0, kAnotherDeviceId, url::Origin());
   EXPECT_EQ(2, sink_count());
-
-  base::Thread thread("timeout_thread");
-  thread.Start();
 
   // 100 ms more than garbage collection timeout.
   WaitOnAnotherThread(thread, kDeleteTimeoutMs + 100);
@@ -225,21 +225,15 @@ TEST_F(AudioRendererSinkCacheTest, GarbageCollection) {
 
 // Verify that the sink created with GetSinkInfo() is not deleted if used within
 // the timeout.
-// Flaky on Linux TSan Tests. https://crbug.com/754196
-#if defined(OS_LINUX)
-#define MAYBE_NoGarbageCollectionForUsedSink \
-  DISABLED_NoGarbageCollectionForUsedSink
-#else
-#define MAYBE_NoGarbageCollectionForUsedSink NoGarbageCollectionForUsedSink
-#endif
-TEST_F(AudioRendererSinkCacheTest, MAYBE_NoGarbageCollectionForUsedSink) {
+TEST_F(AudioRendererSinkCacheTest, NoGarbageCollectionForUsedSink) {
   EXPECT_EQ(0, sink_count());
-  media::OutputDeviceInfo device_info =
-      cache_->GetSinkInfo(kRenderFrameId, 0, kDefaultDeviceId, url::Origin());
-  EXPECT_EQ(1, sink_count());
 
   base::Thread thread("timeout_thread");
   thread.Start();
+
+  media::OutputDeviceInfo device_info =
+      cache_->GetSinkInfo(kRenderFrameId, 0, kDefaultDeviceId, url::Origin());
+  EXPECT_EQ(1, sink_count());
 
   // Wait significantly less than grabage collection timeout.
   int wait_a_bit = 100;
@@ -281,6 +275,9 @@ TEST_F(AudioRendererSinkCacheTest, UnhealthySinkIsNotCached) {
 TEST_F(AudioRendererSinkCacheTest, ReleaseSinkBeforeScheduledDeletion) {
   EXPECT_EQ(0, sink_count());
 
+  base::Thread thread("timeout_thread");
+  thread.Start();
+
   media::OutputDeviceInfo device_info =
       cache_->GetSinkInfo(kRenderFrameId, 0, kDefaultDeviceId, url::Origin());
   EXPECT_EQ(1, sink_count());  // This sink is scheduled for deletion now.
@@ -299,9 +296,6 @@ TEST_F(AudioRendererSinkCacheTest, ReleaseSinkBeforeScheduledDeletion) {
       cache_->GetSinkInfo(kRenderFrameId, 0, kAnotherDeviceId, url::Origin());
   EXPECT_EQ(1, sink_count());  // This sink is scheduled for deletion now.
 
-  base::Thread thread("timeout_thread");
-  thread.Start();
-
   // 100 ms more than garbage collection timeout.
   WaitOnAnotherThread(thread, kDeleteTimeoutMs + 100);
 
@@ -311,14 +305,7 @@ TEST_F(AudioRendererSinkCacheTest, ReleaseSinkBeforeScheduledDeletion) {
 
 // Check that a sink created on one thread in response to GetSinkInfo can be
 // used on another thread.
-// Flaky on Linux TSan Tests. https://crbug.com/753228
-#if defined(OS_LINUX)
-#define MAYBE_MultithreadedAccess DISABLED_MultithreadedAccess
-#else
-#define MAYBE_MultithreadedAccess MultithreadedAccess
-#endif
-
-TEST_F(AudioRendererSinkCacheTest, MAYBE_MultithreadedAccess) {
+TEST_F(AudioRendererSinkCacheTest, MultithreadedAccess) {
   EXPECT_EQ(0, sink_count());
 
   base::Thread thread1("thread1");

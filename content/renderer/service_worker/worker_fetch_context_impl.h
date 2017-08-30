@@ -5,9 +5,9 @@
 #ifndef CONTENT_RENDERER_SERVICE_WORKER_WORKER_FETCH_CONTEXT_IMPL_H_
 #define CONTENT_RENDERER_SERVICE_WORKER_WORKER_FETCH_CONTEXT_IMPL_H_
 
-#include "content/child/child_url_loader_factory_getter.h"
-#include "content/common/service_worker/service_worker_provider_interfaces.mojom.h"
+#include "content/common/service_worker/service_worker_provider.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/service_worker_modes.h"
 #include "content/public/common/url_loader_factory.mojom.h"
 #include "ipc/ipc_message.h"
@@ -38,7 +38,7 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
                                public mojom::ServiceWorkerWorkerClient {
  public:
   WorkerFetchContextImpl(
-      mojom::ServiceWorkerWorkerClientRequest request,
+      mojom::ServiceWorkerWorkerClientRequest service_worker_client_request,
       ChildURLLoaderFactoryGetter::Info url_loader_factory_getter_info);
   ~WorkerFetchContextImpl() override;
 
@@ -84,7 +84,7 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
 
   mojo::Binding<mojom::ServiceWorkerWorkerClient> binding_;
 
-  mojom::ServiceWorkerWorkerClientRequest request_;
+  mojom::ServiceWorkerWorkerClientRequest service_worker_client_request_;
   // Consumed on the worker thread to create |url_loader_factory_getter_|.
   ChildURLLoaderFactoryGetter::Info url_loader_factory_getter_info_;
 

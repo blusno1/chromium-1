@@ -1139,6 +1139,11 @@ void HWNDMessageHandler::PostProcessActivateMessage(
     GetMonitorInfo(MonitorFromWindow(hwnd(), MONITOR_DEFAULTTOPRIMARY),
                    &monitor_info);
     SetBoundsInternal(gfx::Rect(monitor_info.rcMonitor), false);
+    // Inform the taskbar that this window is now a fullscreen window so it go
+    // behind the window in the Z-Order. The taskbar heuristics to detect
+    // fullscreen windows are not reliable. Marking it explicitly seems to work
+    // around these problems.
+    fullscreen_handler()->MarkFullscreen(true);
     background_fullscreen_hack_ = false;
   } else {
     // If the window becoming active has a fullscreen window on the same
@@ -2340,7 +2345,7 @@ LRESULT HWNDMessageHandler::OnTouchEvent(UINT message,
           touch_ids_.erase(input[i].dwID);
           GenerateTouchEvent(ui::ET_TOUCH_RELEASED, touch_point, touch_id,
                              event_time, &touch_events);
-          id_generator_.ReleaseNumber(input[i].dwID);
+          id_generator_.MaybeReleaseNumber(input[i].dwID);
         }
       }
     }
@@ -2708,6 +2713,15 @@ LRESULT HWNDMessageHandler::HandlePointerEventTypeTouch(UINT message,
     SetMsgHandled(FALSE);
     return -1;
   }
+
+  // Ignore enter/leave events, otherwise they will be converted in
+  // |GetTouchEventType| to ET_TOUCH_PRESSED/ET_TOUCH_RELEASED events, which
+  // is not correct.
+  if (message == WM_POINTERENTER || message == WM_POINTERLEAVE) {
+    SetMsgHandled(TRUE);
+    return 0;
+  }
+
   unsigned int mapped_pointer_id = id_generator_.GetGeneratedID(pointer_id);
   POINTER_INFO pointer_info = pointer_touch_info.pointerInfo;
   POINT client_point = pointer_info.ptPixelLocationRaw;
@@ -2748,7 +2762,7 @@ LRESULT HWNDMessageHandler::HandlePointerEventTypeTouch(UINT message,
   delegate_->HandleTouchEvent(event);
 
   if (event_type == ui::ET_TOUCH_RELEASED)
-    id_generator_.ReleaseNumber(pointer_id);
+    id_generator_.MaybeReleaseNumber(pointer_id);
   if (ref)
     SetMsgHandled(TRUE);
   return 0;
@@ -3005,6 +3019,11 @@ void HWNDMessageHandler::OnBackgroundFullscreen() {
   shrunk_rect.set_height(shrunk_rect.height() - 1);
   background_fullscreen_hack_ = true;
   SetBoundsInternal(shrunk_rect, false);
+  // Inform the taskbar that this window is no longer a fullscreen window so it
+  // can bring itself to the top of the Z-Order. The taskbar heuristics to
+  // detect fullscreen windows are not reliable. Marking it explicitly seems to
+  // work around these problems.
+  fullscreen_handler()->MarkFullscreen(false);
 }
 
 void HWNDMessageHandler::DestroyAXSystemCaret() {

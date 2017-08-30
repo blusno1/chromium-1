@@ -206,6 +206,7 @@ extern const char kTapDraggingEnabled[];
 extern const char kEnableTouchpadThreeFingerClick[];
 extern const char kNaturalScroll[];
 extern const char kPrimaryMouseButtonRight[];
+extern const char kMouseReverseScroll[];
 extern const char kMouseSensitivity[];
 extern const char kTouchpadSensitivity[];
 extern const char kUse24HourClock[];
@@ -316,6 +317,7 @@ extern const char kInstantTetheringEnabled[];
 extern const char kInstantTetheringBleAdvertisingSupported[];
 extern const char kCastReceiverEnabled[];
 extern const char kCastReceiverName[];
+extern const char kEcryptfsMigrationStrategy[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
@@ -497,12 +499,6 @@ extern const char kProfilesDeleted[];
 extern const char kStabilityOtherUserCrashCount[];
 extern const char kStabilityKernelCrashCount[];
 extern const char kStabilitySystemUncleanShutdownCount[];
-#if defined(OS_ANDROID)
-extern const char kStabilityForegroundActivityType[];
-extern const char kStabilityLaunchedActivityFlags[];
-extern const char kStabilityLaunchedActivityCounts[];
-extern const char kStabilityCrashedActivityCounts[];
-#endif  // defined(OS_ANDROID)
 
 extern const char kStabilityPluginStats[];
 extern const char kStabilityPluginName[];

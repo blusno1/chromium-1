@@ -33,7 +33,6 @@
 #include "core/animation/DocumentAnimations.h"
 #include "core/css/FontFaceSetDocument.h"
 #include "core/dom/AXObjectCache.h"
-#include "core/dom/DOMNodeIds.h"
 #include "core/dom/ElementVisibilityObserver.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/TaskRunnerHelper.h"
@@ -218,7 +217,8 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, IntRect frame_rect)
       forcing_layout_parent_view_(false),
       needs_intersection_observation_(false),
       main_thread_scrolling_reasons_(0),
-      paint_frame_count_(0) {
+      paint_frame_count_(0),
+      unique_id_(NewUniqueObjectId()) {
   Init();
 }
 
@@ -2823,9 +2823,7 @@ void LocalFrameView::NotifyPageThatContentAreaWillPaint() const {
 
 CompositorElementId LocalFrameView::GetCompositorElementId() const {
   if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-    return CompositorElementIdFromDOMNodeId(
-        DOMNodeIds::IdForNode(&GetLayoutView()->GetDocument()),
-        CompositorElementIdNamespace::kRootScroll);
+    return CompositorElementIdFromUniqueObjectId(unique_id_);
   } else {
     return PaintInvalidationCapableScrollableArea::GetCompositorElementId();
   }
@@ -3388,12 +3386,16 @@ void LocalFrameView::PushPaintArtifactToCompositor(
 
   DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
 
+  if (!frame_->GetSettings()->GetAcceleratedCompositingEnabled())
+    return;
+
   Page* page = GetFrame().GetPage();
   if (!page)
     return;
 
   if (!paint_artifact_compositor_) {
-    paint_artifact_compositor_ = PaintArtifactCompositor::Create();
+    paint_artifact_compositor_ =
+        PaintArtifactCompositor::Create(*page->GetScrollingCoordinator());
     page->GetChromeClient().AttachRootLayer(
         paint_artifact_compositor_->GetWebLayer(), &GetFrame());
   }
@@ -4073,7 +4075,7 @@ void LocalFrameView::ClipPaintRect(FloatRect* paint_rect) const {
 }
 
 IntSize LocalFrameView::MinimumScrollOffsetInt() const {
-  return IntSize(-ScrollOrigin().X(), -ScrollOrigin().Y());
+  return ToIntSize(-ScrollOrigin());
 }
 
 void LocalFrameView::AdjustScrollbarOpacity() {
@@ -4428,6 +4430,21 @@ void LocalFrameView::AdjustScrollOffsetFromUpdateScrollbars() {
   ScrollOffset clamped = ClampScrollOffset(GetScrollOffset());
   if (clamped != GetScrollOffset() || ScrollOriginChanged())
     SetScrollOffset(clamped, kClampingScroll);
+}
+
+ScrollableArea* LocalFrameView::ScrollableAreaWithElementId(
+    const CompositorElementId& id) {
+  if (id == GetCompositorElementId())
+    return this;
+  if (scrollable_areas_) {
+    // This requires iterating over all scrollable areas. We may want to store a
+    // map of ElementId to ScrollableArea if this is an issue for performance.
+    for (ScrollableArea* scrollable_area : *scrollable_areas_) {
+      if (id == scrollable_area->GetCompositorElementId())
+        return scrollable_area;
+    }
+  }
+  return nullptr;
 }
 
 void LocalFrameView::ScrollContentsIfNeeded() {

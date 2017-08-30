@@ -158,15 +158,6 @@ void SetupOnUIThread(
                      std::move(process_info), std::move(devtools_proxy)));
 }
 
-void CallDetach(EmbeddedWorkerInstance* instance) {
-  // This could be called on the UI thread if |client_| still be valid when the
-  // message loop on the UI thread gets destructed.
-  // TODO(shimazu): Remove this after https://crbug.com/604762 is fixed
-  if (!BrowserThread::CurrentlyOn(BrowserThread::IO))
-    return;
-  instance->Detach();
-}
-
 bool HasSentStartWorker(EmbeddedWorkerInstance::StartingPhase phase) {
   switch (phase) {
     case EmbeddedWorkerInstance::NOT_STARTING:
@@ -493,7 +484,7 @@ void EmbeddedWorkerInstance::Start(
     // |this| may be destroyed by the callback.
     return;
   }
-  DCHECK(status_ == EmbeddedWorkerStatus::STOPPED);
+  DCHECK_EQ(EmbeddedWorkerStatus::STOPPED, status_);
 
   DCHECK(!params->pause_after_download || !params->is_installed);
   DCHECK_NE(kInvalidServiceWorkerVersionId, params->service_worker_version_id);
@@ -515,7 +506,7 @@ void EmbeddedWorkerInstance::Start(
   mojom::EmbeddedWorkerInstanceClientAssociatedRequest request =
       mojo::MakeRequest(&client_);
   client_.set_connection_error_handler(
-      base::BindOnce(&CallDetach, base::Unretained(this)));
+      base::BindOnce(&EmbeddedWorkerInstance::Detach, base::Unretained(this)));
   pending_dispatcher_request_ = std::move(dispatcher_request);
   pending_installed_scripts_info_ = std::move(installed_scripts_info);
 
@@ -524,7 +515,7 @@ void EmbeddedWorkerInstance::Start(
   inflight_start_task_->Start(std::move(params), callback);
 }
 
-bool EmbeddedWorkerInstance::Stop() {
+void EmbeddedWorkerInstance::Stop() {
   DCHECK(status_ == EmbeddedWorkerStatus::STARTING ||
          status_ == EmbeddedWorkerStatus::RUNNING)
       << static_cast<int>(status_);
@@ -532,21 +523,20 @@ bool EmbeddedWorkerInstance::Stop() {
   // Abort an inflight start task.
   inflight_start_task_.reset();
 
+  // Don't send the StopWorker message if the StartWorker message hasn't
+  // been sent.
   if (status_ == EmbeddedWorkerStatus::STARTING &&
       !HasSentStartWorker(starting_phase())) {
-    // Don't send the StopWorker message when the StartWorker message hasn't
-    // been sent.
-    // TODO(shimazu): Invoke OnStopping/OnStopped after the legacy IPC path is
-    // removed.
-    OnDetached();
-    return false;
+    ReleaseProcess();
+    for (auto& observer : listener_list_)
+      observer.OnStopped(EmbeddedWorkerStatus::STARTING /* old_status */);
+    return;
   }
-  client_->StopWorker();
 
+  client_->StopWorker();
   status_ = EmbeddedWorkerStatus::STOPPING;
   for (auto& observer : listener_list_)
     observer.OnStopping();
-  return true;
 }
 
 void EmbeddedWorkerInstance::StopIfIdle() {
@@ -810,7 +800,7 @@ void EmbeddedWorkerInstance::OnStarted(
         std::move(start_timing), inflight_start_task_->start_worker_sent_time(),
         start_situation_);
   }
-  DCHECK(status_ == EmbeddedWorkerStatus::STARTING);
+  DCHECK_EQ(EmbeddedWorkerStatus::STARTING, status_);
   status_ = EmbeddedWorkerStatus::RUNNING;
   inflight_start_task_.reset();
   for (auto& observer : listener_list_)
@@ -826,18 +816,17 @@ void EmbeddedWorkerInstance::OnStopped() {
     observer.OnStopped(old_status);
 }
 
-void EmbeddedWorkerInstance::OnDetached() {
+void EmbeddedWorkerInstance::Detach() {
+  // Temporary CHECK for debugging https://crbug.com/750267.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  if (status() == EmbeddedWorkerStatus::STOPPED)
+    return;
+  registry_->DetachWorker(process_id(), embedded_worker_id());
+
   EmbeddedWorkerStatus old_status = status_;
   ReleaseProcess();
   for (auto& observer : listener_list_)
     observer.OnDetached(old_status);
-}
-
-void EmbeddedWorkerInstance::Detach() {
-  if (status() == EmbeddedWorkerStatus::STOPPED)
-    return;
-  registry_->DetachWorker(process_id(), embedded_worker_id());
-  OnDetached();
 }
 
 base::WeakPtr<EmbeddedWorkerInstance> EmbeddedWorkerInstance::AsWeakPtr() {

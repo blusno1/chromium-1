@@ -60,7 +60,10 @@ void OverviewWindowDragController::Drag(const gfx::Point& location_in_screen) {
   item_->SetBounds(bounds, OverviewAnimationType::OVERVIEW_ANIMATION_NONE);
   previous_event_location_ = location_in_screen;
 
-  UpdatePhantomWindowAndWindowGrid(location_in_screen);
+  // Attempt to show phantom window and move window grid only if the window is
+  // snappable.
+  if (wm::GetWindowState(item_->GetWindow())->CanSnap())
+    UpdatePhantomWindowAndWindowGrid(location_in_screen);
 }
 
 void OverviewWindowDragController::CompleteDrag() {
@@ -88,6 +91,10 @@ void OverviewWindowDragController::CompleteDrag() {
     else
       SnapWindow(snap_position_);
   }
+}
+
+void OverviewWindowDragController::ResetWindowSelector() {
+  window_selector_ = nullptr;
 }
 
 void OverviewWindowDragController::UpdatePhantomWindowAndWindowGrid(
@@ -174,12 +181,8 @@ void OverviewWindowDragController::SnapWindow(
   // |item_| will be deleted after RemoveWindowSelectorItem().
   aura::Window* window = item_->GetWindow();
   window_selector_->RemoveWindowSelectorItem(item_);
-  item_ = nullptr;
-
-  // Note: SplitViewController::SnapWindow() might end of overview mode if two
-  // windows are snapped to both side of the screen. In this case the deletion
-  // of WindowSelector will then delete OverviewWindowDragController.
   split_view_controller_->SnapWindow(window, snap_position);
+  item_ = nullptr;
 }
 
 }  // namespace ash

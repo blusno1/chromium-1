@@ -30,7 +30,6 @@
 #include "content/common/drag_event_source_info.h"
 #include "content/common/edit_command.h"
 #include "content/common/features.h"
-#include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/widget.mojom.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/common/screen_info.h"
@@ -85,7 +84,7 @@ class WebImage;
 class WebInputMethodController;
 class WebLocalFrame;
 class WebMouseEvent;
-class WebNode;
+class WebTappedInfo;
 struct WebPoint;
 }  // namespace blink
 
@@ -325,11 +324,10 @@ class CONTENT_EXPORT RenderWidget
 #if defined(OS_ANDROID)
   // Notifies that a tap was not consumed, so showing a UI for the unhandled
   // tap may be needed.
-  // Performs various checks on the given WebNode to apply heuristics to
+  // Performs various checks on the given WebTappedInfo to apply heuristics to
   // determine if triggering is appropriate.
-  void ShowUnhandledTapUIIfNeeded(const blink::WebPoint& tapped_position,
-                                  const blink::WebNode& tapped_node,
-                                  bool page_changed) override;
+  void ShowUnhandledTapUIIfNeeded(
+      const blink::WebTappedInfo& tapped_info) override;
 #endif
 
   // Begins the compositor's scheduler to start producing frames.
@@ -349,15 +347,6 @@ class CONTENT_EXPORT RenderWidget
   }
 
   void SetHandlingInputEventForTesting(bool handling_input_event);
-
-  // Callback for use with synthetic gestures (e.g. BeginSmoothScroll).
-  typedef base::Callback<void()> SyntheticGestureCompletionCallback;
-
-  // Send a synthetic gesture to the browser to be queued to the synthetic
-  // gesture controller.
-  void QueueSyntheticGesture(
-      std::unique_ptr<SyntheticGestureParams> gesture_params,
-      const SyntheticGestureCompletionCallback& callback);
 
   // Deliveres |message| together with compositor state change updates. The
   // exact behavior depends on |policy|.
@@ -548,7 +537,6 @@ class CONTENT_EXPORT RenderWidget
   virtual void OnDeviceScaleFactorChanged();
 
   void OnRepaint(gfx::Size size_to_paint);
-  void OnSyntheticGestureCompleted();
   void OnSetTextDirection(blink::WebTextDirection direction);
   void OnGetFPS();
   void OnUpdateScreenRects(const gfx::Rect& view_screen_rect,
@@ -790,12 +778,6 @@ class CONTENT_EXPORT RenderWidget
   // |screen_info_| on some platforms, and defaults to 1 on other platforms.
   float device_scale_factor_;
 
-  // State associated with synthetic gestures. Synthetic gestures are processed
-  // in-order, so a queue is sufficient to identify the correct state for a
-  // completed gesture.
-  std::queue<SyntheticGestureCompletionCallback>
-      pending_synthetic_gesture_callbacks_;
-
   // True if the IME requests updated composition info.
   bool monitor_composition_info_;
 
@@ -864,7 +846,8 @@ class CONTENT_EXPORT RenderWidget
                          uint32_t touch_event_id,
                          InputEventAckState ack_state,
                          const ui::LatencyInfo& latency_info,
-                         std::unique_ptr<ui::DidOverscrollParams>);
+                         std::unique_ptr<ui::DidOverscrollParams>,
+                         base::Optional<cc::TouchAction>);
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   // Returns the focused pepper plugin, if any, inside the WebWidget. That is

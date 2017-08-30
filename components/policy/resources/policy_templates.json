@@ -1759,7 +1759,7 @@
 
       When the 'Block all downloads' option is chosen, all downloads are blocked.
 
-      When this policy is not set, (or the 'No special restrictions' option is chosen), the dowloads will go through the usual security restrictions based on SafeBrowsing analysis results.
+      When this policy is not set, (or the 'No special restrictions' option is chosen), the downloads will go through the usual security restrictions based on SafeBrowsing analysis results.
 
       Note that these restrictions apply to downloads triggered from web page content, as well as the 'download link...' context menu option. These restrictions do not apply to the save / download of the currently displayed page, nor does it apply to saving as PDF from the printing options.
 
@@ -1853,7 +1853,7 @@
 
       This policy only takes effect if a proxy is configured (for example through policy, by the user in chrome://settings, or by extensions).
 
-      If you enable this setting, any captive portal authentication pages (i.e. all web pages starting from captive portal signin page until <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> detects succesful internet connection) will be displayed in a separate window ignoring all policy settings and restrictions for the current user.
+      If you enable this setting, any captive portal authentication pages (i.e. all web pages starting from captive portal signin page until <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> detects successful internet connection) will be displayed in a separate window ignoring all policy settings and restrictions for the current user.
 
       If you disable this setting or leave it unset, any captive portal authentication pages will be shown in a (regular) new browser tab, using the current user's proxy settings.''',
     },
@@ -8191,7 +8191,7 @@
       'name': 'ForceBrowserSignin',
       'type': 'main',
       'schema': { 'type': 'boolean' },
-      'supported_on': ['chrome.win:61-', 'chrome.linux:61-', 'android:63-'],
+      'supported_on': ['chrome.win:62-', 'chrome.linux:62-', 'android:63-'],
       'features': {
         'dynamic_refresh': False,
         'per_profile': False,
@@ -9726,16 +9726,19 @@
           'caption': '''Allow data migration''',
         },
       ],
-      'supported_on': ['chrome_os:60-'],
+      'supported_on': ['chrome_os:60-60'],
       'device_only': True,
       'features': {
         'dynamic_refresh': True,
       },
+      'deprecated': True,
       'example_value': 1,
       'id': 374,
       'caption': '''Migration strategy for ecryptfs''',
       'tags': [],
-      'desc': '''Specifies how a device should behave that shipped with ecryptfs and needs to transition to ext4 encryption.
+      'desc': '''This policy is deprecated in M61, please use EcryptfsMigrationStrategy instead.
+
+      Specifies how a device should behave that shipped with ecryptfs and needs to transition to ext4 encryption.
 
       If you set this policy to 'DisallowArc', Android apps will be disabled for all users on the device (including those that have ext4 encryption already) and no migration from ecryptfs to ext4 encryption will be offered to any users.
 
@@ -9748,7 +9751,7 @@
       'type': 'int-enum',
       'schema': {
         'type': 'integer',
-        'enum': [ 0, 1, 2, 3],
+        'enum': [ 0, 1, 2, 3, 4, 5],
       },
       'items': [
         {
@@ -9771,6 +9774,16 @@
           'value': 3,
           'caption': '''Ask the user if they would like to migrate or skip migration and disallow ARC.''',
         },
+        {
+          'name': 'MinimalMigrate',
+          'value': 4,
+          'caption': '''Similar to Wipe (value 2), but tries to preserve login tokens so the user does not have to sign in again.''',
+        },
+        {
+          'name': 'AskForEcryptfsArcUsers',
+          'value': 5,
+          'caption': '''If the client device model already supported ARC before migration to ext4 was necessary to run ARC and if the ArcEnabled policy is set to true, this option will behave as AskUser (value 3). In all other cases (if the device model did not support ARC before, or if ArcEnabled policy is set to false), this value is equivalent to DisallowArc (value 0).''',
+        }
       ],
       'supported_on': ['chrome_os:61-'],
       'device_only': False,
@@ -9875,7 +9888,7 @@
       'schema': {
         'type': 'object',
         'properties': {
-          'interval': {
+          'intervals': {
             'type': 'array',
             'items': {
               'type': 'object',
@@ -9885,7 +9898,7 @@
                   'type': 'object',
                   'id': 'WeeklyTime',
                   'properties': {
-                    'weekday': {
+                    'day_of_week': {
                       'type': 'string',
                       'enum': [
                         'MONDAY',
@@ -9907,7 +9920,7 @@
             }
           },
           'timezone': { 'type': 'string' },
-          'ignored_policy': {
+          'ignored_policies': {
             'type': 'array',
             'items': { 'type':'string' }
           }
@@ -9919,34 +9932,34 @@
         'dynamic_refresh': True
       },
       'example_value': {
-        'interval':
+        'intervals':
         [
           {
             'start': {
-              'weekday': 'MONDAY',
+              'day_of_week': 'MONDAY',
               'time': 12840000
             },
             'end': {
-              'weekday': 'MONDAY',
+              'day_of_week': 'MONDAY',
               'time': 21720000
             }
           },
           {
             'start': {
-              'weekday': 'FRIDAY',
+              'day_of_week': 'FRIDAY',
               'time': 38640000
             },
             'end': {
-              'weekday': 'FRIDAY',
+              'day_of_week': 'FRIDAY',
               'time': 57600000
             }
           }
         ],
         'timezone': 'GMT',
-        'ignored_policy': ['allow_new_users', 'guest_mode_enabled']
+        'ignored_policies': ['allow_new_users', 'guest_mode_enabled']
       },
       'id': 380,
-      'caption': '''Off hours intervals when device OffHours |ignored_policy| are released''',
+      'caption': '''Off hours intervals when device OffHours |ignored_policies| are released''',
       'tags': [],
       'desc': '''If "OffHours" policy is set, then the specified device policies are ignored (use the default settings of these policies) during the defined time intervals. Device policies are re-applied by Chrome on every event when "OffHours" period starts or ends. User will be notified and forced to sign out when "OffHours" time end and device policy settings are changed (i.e. when user is logged in not with an allowed account).''',
     },

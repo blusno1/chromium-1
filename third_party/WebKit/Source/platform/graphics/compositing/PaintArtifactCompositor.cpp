@@ -36,8 +36,8 @@ namespace blink {
 // http://crbug.com/692842#c4.
 static int g_s_property_tree_sequence_number = 1;
 
-PaintArtifactCompositor::PaintArtifactCompositor()
-    : tracks_raster_invalidations_(false) {
+PaintArtifactCompositor::PaintArtifactCompositor(WebLayerScrollClient& client)
+    : scroll_client_(client), tracks_raster_invalidations_(false) {
   if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
   root_layer_ = cc::Layer::Create();
@@ -188,11 +188,9 @@ PaintArtifactCompositor::ScrollHitTestLayerForPendingLayer(
   // Set the layer's bounds equal to the container because the scroll layer
   // does not scroll.
   scroll_layer->SetBounds(bounds);
-  if (auto* scroll_client = scroll_node.ScrollClient()) {
-    scroll_layer->set_did_scroll_callback(
-        base::Bind(&blink::WebLayerScrollClient::DidScroll,
-                   base::Unretained(scroll_client)));
-  }
+  scroll_layer->set_did_scroll_callback(
+      base::Bind(&blink::WebLayerScrollClient::DidScroll,
+                 base::Unretained(&scroll_client_)));
   return scroll_layer;
 }
 
@@ -557,9 +555,10 @@ void PaintArtifactCompositor::CollectPendingLayers(
 class SynthesizedClip : private cc::ContentLayerClient {
  public:
   SynthesizedClip() : layer_(cc::PictureLayer::Create(this)) {
-    static SyntheticEffectId serial;
-    mask_isolation_id_ = CompositorElementIdFromSyntheticEffectId(++serial);
-    mask_effect_id_ = CompositorElementIdFromSyntheticEffectId(++serial);
+    mask_isolation_id_ =
+        CompositorElementIdFromUniqueObjectId(NewUniqueObjectId());
+    mask_effect_id_ =
+        CompositorElementIdFromUniqueObjectId(NewUniqueObjectId());
     layer_->SetIsDrawable(true);
   }
 
@@ -753,6 +752,19 @@ void PaintArtifactCompositor::Update(
     chunk.raster_invalidation_rects.clear();
     chunk.raster_invalidation_tracking.clear();
   }
+}
+
+std::unique_ptr<WebLayer>
+PaintArtifactCompositor::ExtraDataForTesting::ContentWebLayerAt(
+    unsigned index) {
+  return Platform::Current()->CompositorSupport()->CreateLayerFromCCLayer(
+      content_layers[index].get());
+}
+std::unique_ptr<WebLayer>
+PaintArtifactCompositor::ExtraDataForTesting::ScrollHitTestWebLayerAt(
+    unsigned index) {
+  return Platform::Current()->CompositorSupport()->CreateLayerFromCCLayer(
+      scroll_hit_test_layers[index].get());
 }
 
 #ifndef NDEBUG

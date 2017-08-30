@@ -672,7 +672,7 @@
             ]
         }
     ],
-    "DataReductionProxyPreviewsBlacklistTransition": [
+    "DataReductionProxyPreviewsBlackListTransition": [
         {
             "platforms": [
                 "android"
@@ -971,6 +971,24 @@
             "experiments": [
                 {
                     "name": "Enabled"
+                }
+            ]
+        }
+    ],
+    "EnableNewMediaRouterRouteController": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "MediaRouterUIRouteController"
+                    ]
                 }
             ]
         }
@@ -3279,6 +3297,21 @@
                     "enable_features": [
                         "Ukm"
                     ]
+                }
+            ]
+        }
+    ],
+    "UpdateMenuItem": [
+        {
+            "platforms": [
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "StorageRequired500",
+                    "params": {
+                        "min_required_storage_for_update_mb": "500"
+                    }
                 }
             ]
         }

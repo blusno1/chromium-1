@@ -178,7 +178,7 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
                         mRecyclerView, mContextMenuManager, mUiDelegate, mUiConfig);
 
             case ItemViewType.PROMO:
-                return new SignInPromo.ViewHolder(mRecyclerView, mContextMenuManager, mUiConfig);
+                return mSigninPromo.createViewHolder(mRecyclerView, mContextMenuManager, mUiConfig);
 
             case ItemViewType.FOOTER:
                 return new Footer.ViewHolder(mRecyclerView, mUiDelegate.getNavigationDelegate());
@@ -202,7 +202,6 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         }
 
         for (Object payload : payloads) {
-            assert payload instanceof PartialBindCallback;
             ((PartialBindCallback) payload).onResult(holder);
         }
     }
@@ -312,9 +311,6 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         // We are assuming for now that the adapter is used with a single RecyclerView.
         // Getting the reference as we are doing here is going to be broken if that changes.
         assert mRecyclerView == null;
-
-        // FindBugs chokes on the cast below when not checked, raising BC_UNCONFIRMED_CAST
-        assert recyclerView instanceof SuggestionsRecyclerView;
 
         mRecyclerView = (SuggestionsRecyclerView) recyclerView;
 

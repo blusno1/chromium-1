@@ -332,7 +332,6 @@
 <translation id="4278390842282768270">مسموح بها</translation>
 <translation id="42981349822642051">توسيع</translation>
 <translation id="4307992518367153382">أساسيّات</translation>
-<translation id="4334425495413014985">لاستخدام <ph name="APP_NAME" /> للمرة الأولى، يُرجى الاتصال بالإنترنت</translation>
 <translation id="4351244548802238354">إغلاق مربع الحوار</translation>
 <translation id="4378154925671717803">الهاتف</translation>
 <translation id="4384468725000734951">‏استخدام محرك Sogou للبحث</translation>
@@ -351,7 +350,7 @@
 <translation id="4522570452068850558">التفاصيل</translation>
 <translation id="4526249700380860531">‏عرض كلمات المرور المحفوظة وإدارتها في <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4532845899244822526">اختيار مجلد</translation>
-<translation id="4550003330909367850">لعرض كلمة المرور أو نسخها هنا، عيّن قفل الشاشة على هذا الجهاز.</translation>
+<translation id="4550003330909367850">عيّن قفل الشاشة على هذا الجهاز لعرض كلمة المرور أو نسخها هنا.</translation>
 <translation id="4558311620361989323">اختصارات صفحة الويب</translation>
 <translation id="4572422548854449519">تسجيل الدخول إلى الحساب المدار</translation>
 <translation id="4581964774250883625">لقد انتقلت إلى التصفح المتخفي.</translation>

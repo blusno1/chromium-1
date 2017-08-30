@@ -9845,6 +9845,13 @@ Please help our engineers fix this problem. Tell us what happened right before y
         Delete
       </message>
 
+      <message name="IDS_MANAGE_PASSWORDS_SHOW_PASSWORD" desc="The tooltip of a button that is used in the manage pending password bubble for revealing the password.">
+        Show password
+      </message>
+      <message name="IDS_MANAGE_PASSWORDS_HIDE_PASSWORD" desc="The tooltip of a button that is used in the manage pending password bubble for hiding the password.">
+        Hide password
+      </message>
+
       <message name="IDS_MANAGE_PASSWORDS_AUTO_SIGNIN_TITLE" desc="The title of the auto-signin toast.">
         Signing in as <ph name="username">$1<ex>chef@google.com</ex></ph>
       </message>
@@ -10421,6 +10428,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
           </message>
           <message name="IDS_USER_MANAGER_ADD_PROFILE_PROFILES_LOCKED_ERROR" desc="Error message displayed when trying to add a profile while all profiles are locked.">
             Please unlock your profile before adding a person.
+          </message>
+          <message name="IDS_USER_MANAGER_PROMPT_MESSAGE" desc="Prompt message displayed on UserManager when force-sign-in policy is enabled.">
+            Please unlock your profile with your corporate account.
           </message>
           <message name="IDS_LOGIN_POD_USER_REMOVE_WARNING_NONSYNC" desc="Main text shown as a warning when attempting to remove an user.">
             This will permanently delete your browsing data from this device.

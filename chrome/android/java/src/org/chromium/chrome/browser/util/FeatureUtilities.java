@@ -23,10 +23,11 @@ import org.chromium.base.FieldTrialList;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.firstrun.FirstRunGlueImpl;
+import org.chromium.chrome.browser.firstrun.FirstRunUtils;
 import org.chromium.chrome.browser.omnibox.OmniboxPlaceholderFieldTrial;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
@@ -187,7 +188,7 @@ public class FeatureUtilities {
     public static void cacheNativeFlags() {
         cacheHerbFlavor();
         cacheChromeHomeEnabled();
-        FirstRunGlueImpl.cacheFirstRunPrefs();
+        FirstRunUtils.cacheFirstRunPrefs();
         OmniboxPlaceholderFieldTrial.cacheOmniboxPlaceholderGroup();
 
         // Propagate DONT_PREFETCH_LIBRARIES feature value to LibraryLoader. This can't
@@ -257,6 +258,7 @@ public class FeatureUtilities {
     /**
      * @return Whether or not chrome should attach the toolbar to the bottom of the screen.
      */
+    @CalledByNative
     public static boolean isChromeHomeEnabled() {
         if (DeviceFormFactor.isTablet()) return false;
 

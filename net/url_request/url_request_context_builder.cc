@@ -397,7 +397,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     context->set_http_user_agent_settings(shared_http_user_agent_settings_);
   } else {
     storage->set_http_user_agent_settings(
-        base::MakeUnique<StaticHttpUserAgentSettings>(accept_language_,
+        std::make_unique<StaticHttpUserAgentSettings>(accept_language_,
                                                       user_agent_));
   }
 
@@ -447,8 +447,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     storage->set_cookie_store(std::move(cookie_store_));
     storage->set_channel_id_service(std::move(channel_id_service_));
   } else {
-    std::unique_ptr<CookieStore> cookie_store(
-        new CookieMonster(nullptr, nullptr));
+    std::unique_ptr<CookieStore> cookie_store(new CookieMonster(nullptr));
     std::unique_ptr<ChannelIDService> channel_id_service(
         new ChannelIDService(new DefaultChannelIDStore(NULL)));
     cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
@@ -462,7 +461,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   }
 
   storage->set_transport_security_state(
-      base::MakeUnique<TransportSecurityState>());
+      std::make_unique<TransportSecurityState>());
   if (!transport_security_persister_path_.empty()) {
     // Use a low priority because saving this should not block anything
     // user-visible. Block shutdown to ensure it does get persisted to disk,
@@ -500,19 +499,19 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     storage->set_cert_transparency_verifier(std::move(ct_verifier_));
   } else {
     std::unique_ptr<MultiLogCTVerifier> ct_verifier =
-        base::MakeUnique<MultiLogCTVerifier>();
+        std::make_unique<MultiLogCTVerifier>();
     ct_verifier->AddLogs(ct::CreateLogVerifiersForKnownLogs());
     storage->set_cert_transparency_verifier(std::move(ct_verifier));
   }
   if (ct_policy_enforcer_) {
     storage->set_ct_policy_enforcer(std::move(ct_policy_enforcer_));
   } else {
-    storage->set_ct_policy_enforcer(base::MakeUnique<CTPolicyEnforcer>());
+    storage->set_ct_policy_enforcer(std::make_unique<CTPolicyEnforcer>());
   }
 
   if (throttling_enabled_) {
     storage->set_throttler_manager(
-        base::MakeUnique<URLRequestThrottlerManager>());
+        std::make_unique<URLRequestThrottlerManager>());
   }
 
   if (!proxy_service_) {
@@ -544,7 +543,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     network_session_context.proxy_delegate = shared_proxy_delegate_;
   }
 
-  storage->set_http_network_session(base::MakeUnique<HttpNetworkSession>(
+  storage->set_http_network_session(std::make_unique<HttpNetworkSession>(
       http_network_session_params_, network_session_context));
 
   std::unique_ptr<HttpTransactionFactory> http_transaction_factory;
@@ -554,7 +553,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
             .Run(storage->http_network_session());
   } else {
     http_transaction_factory =
-        base::MakeUnique<HttpNetworkLayer>(storage->http_network_session());
+        std::make_unique<HttpNetworkLayer>(storage->http_network_session());
   }
 
   if (http_cache_enabled_) {
@@ -608,7 +607,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   if (file_enabled_) {
     job_factory->SetProtocolHandler(
         url::kFileScheme,
-        base::MakeUnique<FileProtocolHandler>(base::CreateTaskRunnerWithTraits(
+        std::make_unique<FileProtocolHandler>(base::CreateTaskRunnerWithTraits(
             {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
   }

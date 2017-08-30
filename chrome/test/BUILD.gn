@@ -632,6 +632,7 @@ if (!is_android) {
           "../browser/ui/views/fullscreen_control/fullscreen_control_view_interactive_uitest.cc",
           "../browser/ui/views/keyboard_access_browsertest.cc",
           "../browser/ui/views/location_bar/location_icon_view_interactive_uitest.cc",
+          "../browser/ui/views/location_bar/selected_keyword_view_interactive_uitest.cc",
           "../browser/ui/views/location_bar/star_view_browsertest.cc",
           "../browser/ui/views/omnibox/omnibox_view_views_browsertest.cc",
           "../browser/ui/views/passwords/manage_passwords_icon_view_interactive_uitest.cc",
@@ -1604,8 +1605,8 @@ test("browser_tests") {
       "base/chrome_render_view_test.cc",
       "base/chrome_render_view_test.h",
       "base/in_process_browser_test_browsertest.cc",
+      "base/memory_tracing_browsertest.cc",
       "base/test_chrome_web_ui_controller_factory_browsertest.cc",
-      "base/tracing_browsertest.cc",
       "base/web_ui_browser_test_browsertest.cc",
       "data/webui/async_gen.cc",
       "data/webui/async_gen.h",
@@ -1877,6 +1878,7 @@ test("browser_tests") {
         "../browser/extensions/api/permissions/permissions_apitest.cc",
         "../browser/extensions/api/platform_keys/platform_keys_apitest_nss.cc",
         "../browser/extensions/api/preference/preference_apitest.cc",
+        "../browser/extensions/api/preference/preferences_private_apitest.cc",
         "../browser/extensions/api/processes/processes_apitest.cc",
         "../browser/extensions/api/proxy/proxy_apitest.cc",
         "../browser/extensions/api/resources_private/resources_private_apitest.cc",
@@ -2032,7 +2034,7 @@ test("browser_tests") {
         "../browser/chromeos/input_method/textinput_test_helper.cc",
         "../browser/chromeos/input_method/textinput_test_helper.h",
         "../browser/ui/ash/accelerator_commands_browsertest.cc",
-        "../browser/ui/ash/app_list/app_list_controller_ash_browsertest.cc",
+        "../browser/ui/ash/app_list/app_list_browsertest.cc",
         "../browser/ui/ash/chrome_new_window_client_browsertest.cc",
         "../browser/ui/ash/chrome_screenshot_grabber_browsertest.cc",
         "../browser/ui/ash/keyboard_controller_browsertest.cc",
@@ -3170,10 +3172,10 @@ test("unit_tests") {
     "../browser/media/media_engagement_contents_observer_unittest.cc",
     "../browser/media/media_engagement_score_unittest.cc",
     "../browser/media/media_engagement_service_unittest.cc",
+    "../browser/media/media_storage_id_salt_unittest.cc",
     "../browser/media/midi_permission_context_unittest.cc",
     "../browser/media/midi_sysex_permission_context_unittest.cc",
     "../browser/media/router/browser_presentation_connection_proxy_unittest.cc",
-    "../browser/media/router/create_presentation_connection_request_unittest.cc",
     "../browser/media/router/issue_manager_unittest.cc",
     "../browser/media/router/media_router_base_unittest.cc",
     "../browser/media/router/media_router_dialog_controller_unittest.cc",
@@ -3459,7 +3461,9 @@ test("unit_tests") {
 
   configs += [ "//build/config:precompiled_headers" ]
 
-  data_deps = []
+  data_deps = [
+    "//testing/buildbot/filters:unit_tests_filters",
+  ]
 
   data = [
     "data/",
@@ -4686,6 +4690,7 @@ test("unit_tests") {
         "../browser/ui/cocoa/fullscreen_low_power_coordinator_unittest.mm",
         "../browser/ui/cocoa/fullscreen_window_unittest.mm",
         "../browser/ui/cocoa/gradient_button_cell_unittest.mm",
+        "../browser/ui/cocoa/harmony_button_unittest.mm",
         "../browser/ui/cocoa/history_menu_bridge_unittest.mm",
         "../browser/ui/cocoa/history_menu_cocoa_controller_unittest.mm",
         "../browser/ui/cocoa/history_overlay_controller_unittest.mm",
@@ -4712,11 +4717,13 @@ test("unit_tests") {
         "../browser/ui/cocoa/location_bar/security_state_bubble_decoration_unittest.mm",
         "../browser/ui/cocoa/location_bar/selected_keyword_decoration_unittest.mm",
         "../browser/ui/cocoa/location_bar/zoom_decoration_unittest.mm",
+        "../browser/ui/cocoa/md_hover_button_unittest.mm",
         "../browser/ui/cocoa/media_picker/desktop_media_picker_controller_unittest.mm",
         "../browser/ui/cocoa/menu_button_unittest.mm",
         "../browser/ui/cocoa/notifications/notification_builder_mac_unittest.mm",
         "../browser/ui/cocoa/notifications/notification_response_builder_mac_unittest.mm",
         "../browser/ui/cocoa/nsmenuitem_additions_unittest.mm",
+        "../browser/ui/cocoa/nsview_additions_unittest.mm",
         "../browser/ui/cocoa/omnibox/omnibox_popup_cell_unittest.mm",
         "../browser/ui/cocoa/omnibox/omnibox_popup_matrix_unittest.mm",
         "../browser/ui/cocoa/omnibox/omnibox_popup_separator_view_unittest.mm",

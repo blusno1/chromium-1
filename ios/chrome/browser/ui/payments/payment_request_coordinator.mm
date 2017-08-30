@@ -10,8 +10,10 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/payments/core/autofill_payment_instrument.h"
 #include "components/payments/core/payment_address.h"
+#include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_request_data_util.h"
+#include "components/payments/core/payment_shipping_option.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/payments/payment_request.h"
@@ -28,6 +30,15 @@ namespace {
 // Time interval before updating the Payment Summary item in seconds.
 const NSTimeInterval kUpdatePaymentSummaryItemIntervalSeconds = 10.0;
 }  // namespace
+
+@interface PaymentRequestCoordinator ()
+
+// A weak reference to self used in -stop. -stop gets called in the
+// ChromeCoordinator's -dealloc. It is not possible to create a weak reference
+// to self in the process of deallocation.
+@property(nonatomic, weak) PaymentRequestCoordinator* weakSelf;
+
+@end
 
 @implementation PaymentRequestCoordinator {
   UINavigationController* _navigationController;
@@ -65,8 +76,11 @@ const NSTimeInterval kUpdatePaymentSummaryItemIntervalSeconds = 10.0;
 @synthesize pending = _pending;
 @synthesize cancellable = _cancellable;
 @synthesize delegate = _delegate;
+@synthesize weakSelf = _weakSelf;
 
 - (void)start {
+  _weakSelf = self;
+
   _mediator =
       [[PaymentRequestMediator alloc] initWithPaymentRequest:_paymentRequest];
 
@@ -95,15 +109,15 @@ const NSTimeInterval kUpdatePaymentSummaryItemIntervalSeconds = 10.0;
 }
 
 - (void)stop {
-  [self stopWithCallback:nil];
-}
-
-- (void)stopWithCallback:(ProceduralBlock)callback {
   [_updatePaymentSummaryItemTimer invalidate];
 
+  ProceduralBlock callback = ^() {
+    [_weakSelf.delegate paymentRequestCoordinatorDidStop:_weakSelf];
+  };
   [[_navigationController presentingViewController]
       dismissViewControllerAnimated:YES
                          completion:callback];
+
   [_addressEditCoordinator stop];
   _addressEditCoordinator = nil;
   [_creditCardEditCoordinator stop];
@@ -152,7 +166,7 @@ requestFullCreditCard:(const autofill::CreditCard&)card
   _fullCardRequester->GetFullCard(card, _autofillManager, resultDelegate);
 }
 
-- (void)updatePaymentDetails:(web::PaymentDetails)paymentDetails {
+- (void)updatePaymentDetails:(payments::PaymentDetails)paymentDetails {
   [_updatePaymentSummaryItemTimer invalidate];
 
   BOOL totalValueChanged =
@@ -174,9 +188,12 @@ requestFullCreditCard:(const autofill::CreditCard&)card
                                repeats:NO];
   }
 
-  // If a shipping address has been selected and there are available shipping
-  // options, set it as the selected shipping address.
-  if (_pendingShippingAddress && !_paymentRequest->shipping_options().empty()) {
+  // If there are no available shipping options, reset the previously selected
+  // shipping address. Otherwise, if a shipping address had been selected, set
+  // it as the selected shipping address.
+  if (_paymentRequest->shipping_options().empty())
+    _paymentRequest->set_selected_shipping_profile(nullptr);
+  else if (_pendingShippingAddress) {
     _paymentRequest->set_selected_shipping_profile(_pendingShippingAddress);
   }
   _pendingShippingAddress = nil;
@@ -421,7 +438,7 @@ contactInfoSelectionCoordinator:(ContactInfoSelectionCoordinator*)coordinator
 - (void)shippingOptionSelectionCoordinator:
             (ShippingOptionSelectionCoordinator*)coordinator
                    didSelectShippingOption:
-                       (web::PaymentShippingOption*)shippingOption {
+                       (payments::PaymentShippingOption*)shippingOption {
   DCHECK(shippingOption);
   [_delegate paymentRequestCoordinator:self
                didSelectShippingOption:*shippingOption];

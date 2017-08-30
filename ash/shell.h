@@ -91,6 +91,7 @@ class NativeCursorManagerAsh;
 class AshTouchTransformController;
 class AutoclickController;
 class BluetoothNotificationController;
+class BluetoothPowerController;
 class BrightnessControlDelegate;
 class CastConfigController;
 class DisplayColorManager;
@@ -479,6 +480,10 @@ class ASH_EXPORT Shell : public SessionObserver,
     return tray_bluetooth_helper_.get();
   }
 
+  BluetoothPowerController* bluetooth_power_controller() {
+    return bluetooth_power_controller_.get();
+  }
+
   VirtualKeyboardController* virtual_keyboard_controller() {
     return virtual_keyboard_controller_.get();
   }
@@ -532,15 +537,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   void AddShellObserver(ShellObserver* observer);
   void RemoveShellObserver(ShellObserver* observer);
 
+  // TODO(minch), move applist related functions to AppList.
+  // http://crbug.com/759909.
   // Shows the app list on the active root window.
   void ShowAppList(app_list::AppListShowSource toggle_method);
-
-  // Updates y position and opacity of app list. |is_end_gesture| means it is
-  // the end of the gesture dragging of app list from shelf and should restore
-  // the opacity of the app list.
-  void UpdateAppListYPositionAndOpacity(int y_position_in_screen,
-                                        float app_list_background_opacity,
-                                        bool is_end_gesture);
 
   // Dismisses the app list.
   void DismissAppList();
@@ -600,9 +600,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Used to provide better error messages for Shell::Get() under mash.
   static void SetIsBrowserProcessWithMash();
 
-  // Used when Chrome owns the pref service (not mash).
-  void SetLocalStatePrefService(PrefService* local_state);
-
   void NotifyAppListVisibilityChanged(bool visible, aura::Window* root_window);
 
   // TODO(kaznacheev) Move voice interaction related methods to a separate
@@ -613,11 +610,14 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   void NotifyVoiceInteractionContextEnabled(bool enabled);
 
+  void NotifyVoiceInteractionSetupCompleted();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ExtendedDesktopTest, TestCursor);
   FRIEND_TEST_ALL_PREFIXES(WindowManagerTest, MouseEventCursors);
   FRIEND_TEST_ALL_PREFIXES(WindowManagerTest, TransformActivate);
   friend class AcceleratorControllerTest;
+  friend class AshTestHelper;
   friend class RootWindowController;
   friend class ScopedRootWindowForNewWindows;
   friend class ShellTestApi;
@@ -720,13 +720,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<::wm::VisibilityController> visibility_controller_;
   std::unique_ptr<::wm::WindowModalityController> window_modality_controller_;
   std::unique_ptr<app_list::AppList> app_list_;
-
-  // Used in non-mash. Owned by chrome.
-  PrefService* local_state_non_mash_ = nullptr;
-
-  // Used in mash.
-  std::unique_ptr<PrefService> local_state_mash_;
-
+  std::unique_ptr<PrefService> local_state_;
   std::unique_ptr<views::corewm::TooltipController> tooltip_controller_;
   LinkHandlerModelFactory* link_handler_model_factory_;
   std::unique_ptr<PowerButtonController> power_button_controller_;
@@ -778,6 +772,7 @@ class ASH_EXPORT Shell : public SessionObserver,
       resolution_notification_controller_;
   std::unique_ptr<BluetoothNotificationController>
       bluetooth_notification_controller_;
+  std::unique_ptr<BluetoothPowerController> bluetooth_power_controller_;
   std::unique_ptr<TrayBluetoothHelper> tray_bluetooth_helper_;
   std::unique_ptr<VirtualKeyboardController> virtual_keyboard_controller_;
   std::unique_ptr<chromeos::AudioA11yController> audio_a11y_controller_;

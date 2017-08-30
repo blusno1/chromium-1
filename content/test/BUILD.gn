@@ -288,7 +288,7 @@ static_library("test_support") {
     "//net:test_support",
     "//services/network/public/interfaces:interfaces",
     "//services/service_manager/public/cpp",
-    "//services/viz/public/interfaces/compositing",
+    "//services/viz/public/interfaces",
     "//skia",
     "//storage/browser",
     "//storage/browser:test_support",
@@ -1536,7 +1536,7 @@ test("content_unittests") {
     sources += [ "../renderer/sandbox_mac_v2_unittest.mm" ]
   }
 
-  if (is_android || is_linux || is_mac || is_win) {
+  if (is_android || is_linux || is_mac || is_win || is_fuchsia) {
     data = [
       "$root_out_dir/content_shell.pak",
       "data/",
