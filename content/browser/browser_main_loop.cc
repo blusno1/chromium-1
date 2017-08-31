@@ -479,7 +479,7 @@ void InitDefaultJob() {
 
 }  // namespace
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
 namespace internal {
 
 // Forwards GPUInfo updates to ui::XVisualManager
@@ -883,7 +883,7 @@ int BrowserMainLoop::PreCreateThreads() {
 
   GpuDataManagerImpl* gpu_data_manager = GpuDataManagerImpl::GetInstance();
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   // GpuDataManagerVisualProxy() just adds itself as an observer of
   // |gpu_data_manager|, which is safe to do before Initialize().
   gpu_data_manager_visual_proxy_.reset(
@@ -1555,7 +1555,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   device_monitor_linux_.reset(
       new media::DeviceMonitorLinux(io_thread_->task_runner()));
 #elif defined(OS_MACOSX)
-  device_monitor_mac_.reset(new media::DeviceMonitorMac());
+  device_monitor_mac_.reset(
+      new media::DeviceMonitorMac(audio_manager_->GetTaskRunner()));
 #endif
 
   // RDH needs the IO thread to be created
@@ -1583,7 +1584,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   {
     TRACE_EVENT0("startup",
       "BrowserMainLoop::BrowserThreadsStarted:InitMediaStreamManager");
-    media_stream_manager_.reset(new MediaStreamManager(audio_system_.get()));
+    media_stream_manager_.reset(new MediaStreamManager(
+        audio_system_.get(), audio_manager_->GetTaskRunner()));
   }
 
   {

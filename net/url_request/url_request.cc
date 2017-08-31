@@ -28,7 +28,6 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_delegate.h"
 #include "net/base/upload_data_stream.h"
-#include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
@@ -646,6 +645,7 @@ void URLRequest::StartJob(URLRequestJob* job) {
   job_->SetExtraRequestHeaders(extra_request_headers_);
   job_->SetPriority(priority_);
   job_->SetRequestHeadersCallback(request_headers_callback_);
+  job_->SetResponseHeadersCallback(response_headers_callback_);
 
   if (upload_data_stream_.get())
     job_->SetUpload(upload_data_stream_.get());
@@ -950,6 +950,13 @@ void URLRequest::Redirect(const RedirectInfo& redirect_info) {
 
   if (redirect_info.new_method != method_) {
     // TODO(davidben): This logic still needs to be replicated at the consumers.
+    if (method_ == "POST") {
+      // If being switched from POST, must remove Origin header.
+      // TODO(jww): This is Origin header removal is probably layering violation
+      // and should be refactored into //content. See https://crbug.com/471397.
+      // See also: https://crbug.com/760487
+      extra_request_headers_.RemoveHeader(HttpRequestHeaders::kOrigin);
+    }
     // The inclusion of a multipart Content-Type header can cause problems with
     // some
     // servers:
@@ -1211,6 +1218,12 @@ void URLRequest::SetRequestHeadersCallback(RequestHeadersCallback callback) {
   DCHECK(!job_.get());
   DCHECK(request_headers_callback_.is_null());
   request_headers_callback_ = std::move(callback);
+}
+
+void URLRequest::SetResponseHeadersCallback(ResponseHeadersCallback callback) {
+  DCHECK(!job_.get());
+  DCHECK(response_headers_callback_.is_null());
+  response_headers_callback_ = std::move(callback);
 }
 
 void URLRequest::set_status(URLRequestStatus status) {

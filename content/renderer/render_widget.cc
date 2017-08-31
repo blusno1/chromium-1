@@ -1460,14 +1460,8 @@ void RenderWidget::QueueMessage(IPC::Message* msg,
                        RenderThreadImpl::current()->sync_message_filter(),
                        compositor_->GetSourceFrameNumber());
 
-  if (swap_promise) {
+  if (swap_promise)
     compositor_->QueueSwapPromise(std::move(swap_promise));
-    // Request a main frame. This might either A) request a commit ahead of time
-    // or B) request a commit which is not needed because there are not pending
-    // updates. If B) then the frame will be aborted early and the swap promises
-    // will be broken (see EarlyOut_NoUpdates).
-    compositor_->SetNeedsBeginFrame();
-  }
 }
 
 void RenderWidget::DidChangeCursor(const WebCursorInfo& cursor_info) {
@@ -1959,6 +1953,15 @@ void RenderWidget::ConvertWindowToViewport(blink::WebFloatRect* rect) {
   }
 }
 
+void RenderWidget::TransferActiveWheelFlingAnimation(
+    const blink::WebActiveWheelFlingParameters& params) {
+  blink::WebWidget* web_widget = GetWebWidget();
+  if (web_widget && web_widget->IsWebFrameWidget()) {
+    static_cast<blink::WebFrameWidget*>(web_widget)
+        ->TransferActiveWheelFlingAnimation(params);
+  }
+}
+
 void RenderWidget::OnRequestTextInputStateUpdate() {
 #if defined(OS_ANDROID)
   DCHECK(!ime_event_guard_);
@@ -2286,7 +2289,8 @@ void RenderWidget::DidOverscroll(
     const blink::WebFloatSize& overscrollDelta,
     const blink::WebFloatSize& accumulatedOverscroll,
     const blink::WebFloatPoint& position,
-    const blink::WebFloatSize& velocity) {
+    const blink::WebFloatSize& velocity,
+    const blink::WebScrollBoundaryBehavior& behavior) {
 #if defined(OS_MACOSX)
   // On OSX the user can disable the elastic overscroll effect. If that's the
   // case, don't forward the overscroll notification.
@@ -2295,7 +2299,7 @@ void RenderWidget::DidOverscroll(
     return;
 #endif
   input_handler_->DidOverscrollFromBlink(overscrollDelta, accumulatedOverscroll,
-                                         position, velocity);
+                                         position, velocity, behavior);
 }
 
 void RenderWidget::StartCompositor() {

@@ -137,7 +137,6 @@
     },
     {
       name: "Canvas2dImageChromium",
-      status: "experimental",
     },
     {
       name: "ClickRetargetting",
@@ -425,10 +424,6 @@
     },
     {
       name: "FetchRequestCache",
-      status: "experimental",
-    },
-    {
-      name: "FileAPIBlobClose",
       status: "experimental",
     },
     {
@@ -947,6 +942,7 @@
     },
     {
       name: "Sensor",
+      origin_trial_feature_name: "GenericSensor",
       status: "experimental",
     },
     {

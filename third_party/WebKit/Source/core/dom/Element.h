@@ -904,7 +904,8 @@ class CORE_EXPORT Element : public ContainerNode {
   void UpdatePseudoElement(PseudoId, StyleRecalcChange);
   bool UpdateFirstLetter(Element*);
 
-  inline void CreatePseudoElementIfNeeded(PseudoId);
+  inline PseudoElement* CreatePseudoElementIfNeeded(PseudoId);
+  void CreateAndAttachPseudoElementIfNeeded(PseudoId, AttachContext&);
 
   ShadowRoot* GetShadowRoot() const;
 
@@ -1032,6 +1033,26 @@ template <typename T>
 inline const T* ToElement(const Node* node) {
   SECURITY_DCHECK(!node || IsElementOfType<const T>(*node));
   return static_cast<const T*>(node);
+}
+
+template <typename T>
+inline T* ToElementOrNull(Node& node) {
+  return IsElementOfType<const T>(node) ? static_cast<T*>(&node) : nullptr;
+}
+template <typename T>
+inline T* ToElementOrNull(Node* node) {
+  return (node && IsElementOfType<const T>(*node)) ? static_cast<T*>(node)
+                                                   : nullptr;
+}
+template <typename T>
+inline const T* ToElementOrNull(const Node& node) {
+  return IsElementOfType<const T>(node) ? static_cast<const T*>(&node)
+                                        : nullptr;
+}
+template <typename T>
+inline const T* ToElementOrNull(const Node* node) {
+  return (node && IsElementOfType<const T>(*node)) ? static_cast<const T*>(node)
+                                                   : nullptr;
 }
 
 template <typename T>

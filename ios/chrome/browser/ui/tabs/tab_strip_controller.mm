@@ -25,7 +25,6 @@
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
@@ -343,7 +342,8 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
 
 - (instancetype)initWithTabModel:(TabModel*)tabModel
                            style:(TabStrip::Style)style
-                      dispatcher:(id<BrowserCommands>)dispatcher {
+                      dispatcher:
+                          (id<ApplicationCommands, BrowserCommands>)dispatcher {
   if ((self = [super init])) {
     _tabArray = [[NSMutableArray alloc] initWithCapacity:10];
     _closingTabs = [[NSMutableSet alloc] initWithCapacity:5];
@@ -1505,7 +1505,7 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
     if ([self.fullscreenDelegate currentHeaderOffset] != 0) {
       // Move the toolbar to visible and wait for the end of that animation to
       // animate the appearance of the new tab.
-      delay = ios_internal::kToolbarAnimationDuration;
+      delay = kFullScreenControllerToolbarAnimationDuration;
       // Signal the FullscreenController that the toolbar needs to stay on
       // screen for a bit, so the animation is visible.
       [[NSNotificationCenter defaultCenter]
@@ -1551,7 +1551,7 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
                                                     inIncognito:_isIncognito
                                                    inBackground:NO
                                                        appendTo:kLastTab];
-  [self.view chromeExecuteCommand:command];
+  [self.dispatcher openURL:command];
 }
 
 #pragma mark - TabViewDelegate

@@ -223,8 +223,18 @@ const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=ios_new_tab";
   web::NavigationManager* navigationManager = webState->GetNavigationManager();
   web::NavigationItem* item = navigationManager->GetVisibleItem();
   if (item && item->GetPageDisplayState().scroll_state().offset_y() > 0) {
-    self.suggestionsViewController.collectionView.contentOffset =
-        CGPointMake(0, item->GetPageDisplayState().scroll_state().offset_y());
+    CGFloat offset = item->GetPageDisplayState().scroll_state().offset_y();
+    UICollectionView* collection =
+        self.suggestionsViewController.collectionView;
+    // Don't set the offset such as the content of the collection is smaller
+    // than the part of the collection which should be displayed with that
+    // offset, taking into account the size of the toolbar.
+    offset = MAX(0, MIN(offset, collection.contentSize.height -
+                                    collection.bounds.size.height -
+                                    ntp_header::kToolbarHeight));
+    collection.contentOffset = CGPointMake(0, offset);
+    // Update the constraints in case the omnibox needs to be moved.
+    [self.suggestionsViewController updateConstraints];
   }
 }
 
@@ -315,6 +325,7 @@ const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=ios_new_tab";
   [self.alertCoordinator start];
 }
 
+// TODO(crbug.com/761096) : Promo handling should be DRY and tested.
 - (void)handlePromoTapped {
   NotificationPromoWhatsNew* notificationPromo =
       [self.contentSuggestionsMediator notificationPromo];
@@ -332,9 +343,14 @@ const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=ios_new_tab";
   }
 
   if (notificationPromo->IsChromeCommand()) {
-    GenericChromeCommand* command = [[GenericChromeCommand alloc]
-        initWithTag:notificationPromo->command_id()];
-    [self.suggestionsViewController chromeExecuteCommand:command];
+    int command_id = notificationPromo->command_id();
+    if (command_id == IDC_RATE_THIS_APP) {
+      [self.dispatcher performSelector:@selector(showRateThisAppDialog)];
+    } else {
+      GenericChromeCommand* command = [[GenericChromeCommand alloc]
+          initWithTag:notificationPromo->command_id()];
+      [self.suggestionsViewController chromeExecuteCommand:command];
+    }
     return;
   }
   NOTREACHED();

@@ -1,4 +1,3 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +29,9 @@ bool IsValidOldAllowSyntax(const String& policy,
     return false;
   // Old syntax only allows whitespace as valid delimiter.
   if (policy.Contains(';') || policy.Contains(','))
+    return false;
+  // An empty policy is also allowed in the new syntax.
+  if (policy.ContainsOnlyWhitespace())
     return false;
   // Old syntax does not support specifying wildcards / origins for any feature.
   if (policy.Contains("self") || policy.Contains("src") ||
@@ -126,6 +128,9 @@ Vector<WebParsedFeaturePolicyDeclaration> ParseFeaturePolicy(
       //     "name value1 value2" or "name".
       Vector<String> tokens;
       entry.Split(' ', tokens);
+      // Empty policy. Skip.
+      if (tokens.IsEmpty())
+        continue;
       if (!feature_names.Contains(tokens[0])) {
         if (messages)
           messages->push_back("Unrecognized feature: '" + tokens[0] + "'.");
@@ -142,13 +147,13 @@ Vector<WebParsedFeaturePolicyDeclaration> ParseFeaturePolicy(
       whitelist.feature = feature;
       features_specified.QuickSet(static_cast<int>(feature));
       Vector<WebSecurityOrigin> origins;
-      // If a policy entry has no (optional) values, only valid syntax for allow
-      // attribute (e,g, allow="feature_name1; feature_name2 value"), enable the
-      // feature for src origin.
-      if (tokens.size() == 1) {
-        DCHECK(src_origin);
-        origins.push_back(src_origin);
-      }
+      // If a policy entry has no (optional) values (e,g,
+      // allow="feature_name1; feature_name2 value"), enable the feature for:
+      //     a. if header policy (i.e., src_origin does not exist), self_origin;
+      //     or
+      //     b. if allow attribute (i.e., src_origin exists), src_origin.
+      if (tokens.size() == 1)
+        origins.push_back(src_origin ? src_origin : self_origin);
 
       for (size_t i = 1; i < tokens.size(); i++) {
         if (EqualIgnoringASCIICase(tokens[i], "'self'")) {
@@ -184,6 +189,7 @@ bool IsSupportedInFeaturePolicy(WebFeaturePolicyFeature feature) {
     case WebFeaturePolicyFeature::kFullscreen:
     case WebFeaturePolicyFeature::kPayment:
     case WebFeaturePolicyFeature::kUsb:
+    case WebFeaturePolicyFeature::kWebVr:
       return true;
     case WebFeaturePolicyFeature::kVibrate:
       return RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled();
@@ -208,6 +214,7 @@ const FeatureNameMap& GetDefaultFeatureNameMap() {
     default_feature_name_map.Set("geolocation",
                                  WebFeaturePolicyFeature::kGeolocation);
     default_feature_name_map.Set("midi", WebFeaturePolicyFeature::kMidiFeature);
+    default_feature_name_map.Set("vr", WebFeaturePolicyFeature::kWebVr);
     if (RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled()) {
       default_feature_name_map.Set("vibrate",
                                    WebFeaturePolicyFeature::kVibrate);

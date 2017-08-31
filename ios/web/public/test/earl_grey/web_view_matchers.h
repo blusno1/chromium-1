@@ -26,18 +26,11 @@ id<GREYMatcher> WebViewContainingBlockedImage(std::string image_id,
 id<GREYMatcher> WebViewContainingLoadedImage(std::string image_id,
                                              WebState* web_state);
 
-// Matcher for WKWebView containing an html element which matches |selector|.
-id<GREYMatcher> WebViewCssSelector(std::string selector, WebState* web_state);
-
 // Matcher for WKWebView's scroll view.
 id<GREYMatcher> WebViewScrollView(WebState* web_state);
 
 // Matcher for an interstitial page. Does not wait if the page is not displayed.
 id<GREYMatcher> Interstitial(WebState* web_state);
-
-// Matcher for interstitial page containing |text|. Waits until the text is
-// displayed or timed out.
-id<GREYMatcher> InterstitialContainingText(NSString* text, WebState* web_state);
 
 }  // namespace web
 

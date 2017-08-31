@@ -4,39 +4,53 @@
 
 #include "android_webview/browser/aw_safe_browsing_resource_throttle.h"
 
+#include <memory>
+
 #include "android_webview/browser/aw_contents_client_bridge.h"
-#include "android_webview/browser/aw_safe_browsing_ui_manager.h"
 #include "android_webview/browser/aw_safe_browsing_whitelist_manager.h"
-#include "base/macros.h"
-#include "components/safe_browsing/base_resource_throttle.h"
-#include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing/features.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
-#include "components/security_interstitials/content/unsafe_resource.h"
-#include "content/public/browser/browser_thread.h"
-#include "content/public/browser/navigation_entry.h"
-#include "content/public/common/resource_type.h"
-#include "net/base/net_errors.h"
 #include "net/url_request/url_request.h"
 
 namespace android_webview {
+namespace {
 
-// static
-const void* const AwSafeBrowsingResourceThrottle::kUserDataKey =
-    &AwSafeBrowsingResourceThrottle::kUserDataKey;
+// This is used as a user data key for net::URLRequest. Setting it indicates
+// that the request is cancelled because of SafeBrowsing. It could be used, for
+// example, to decide whether to override the error code with a
+// SafeBrowsing-specific error code.
+const void* const kCancelledBySafeBrowsingUserDataKey =
+    &kCancelledBySafeBrowsingUserDataKey;
 
-// static
-AwSafeBrowsingResourceThrottle* AwSafeBrowsingResourceThrottle::MaybeCreate(
+void SetCancelledBySafeBrowsing(net::URLRequest* request) {
+  request->SetUserData(kCancelledBySafeBrowsingUserDataKey,
+                       std::make_unique<base::SupportsUserData::Data>());
+}
+
+}  // namespace
+
+content::ResourceThrottle* MaybeCreateAwSafeBrowsingResourceThrottle(
     net::URLRequest* request,
     content::ResourceType resource_type,
     scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> database_manager,
     scoped_refptr<AwSafeBrowsingUIManager> ui_manager,
     AwSafeBrowsingWhitelistManager* whitelist_manager) {
-  if (database_manager->IsSupported()) {
-    return new AwSafeBrowsingResourceThrottle(request, resource_type,
-                                              database_manager, ui_manager,
-                                              whitelist_manager);
+  if (!database_manager->IsSupported())
+    return nullptr;
+
+  if (base::FeatureList::IsEnabled(safe_browsing::kParallelUrlCheck)) {
+    return new AwSafeBrowsingParallelResourceThrottle(
+        request, resource_type, std::move(database_manager),
+        std::move(ui_manager), whitelist_manager);
   }
-  return nullptr;
+
+  return new AwSafeBrowsingResourceThrottle(
+      request, resource_type, std::move(database_manager),
+      std::move(ui_manager), whitelist_manager);
+}
+
+bool IsCancelledBySafeBrowsing(const net::URLRequest* request) {
+  return request->GetUserData(kCancelledBySafeBrowsingUserDataKey) != nullptr;
 }
 
 AwSafeBrowsingResourceThrottle::AwSafeBrowsingResourceThrottle(
@@ -59,7 +73,7 @@ AwSafeBrowsingResourceThrottle::AwSafeBrowsingResourceThrottle(
                                        std::move(ui_manager),
                                        whitelist_manager)) {}
 
-AwSafeBrowsingResourceThrottle::~AwSafeBrowsingResourceThrottle() {}
+AwSafeBrowsingResourceThrottle::~AwSafeBrowsingResourceThrottle() = default;
 
 bool AwSafeBrowsingResourceThrottle::CheckUrl(const GURL& gurl) {
   if (url_checker_delegate_->IsUrlWhitelisted(gurl)) {
@@ -70,10 +84,6 @@ bool AwSafeBrowsingResourceThrottle::CheckUrl(const GURL& gurl) {
 
 void AwSafeBrowsingResourceThrottle::StartDisplayingBlockingPageHelper(
     security_interstitials::UnsafeResource resource) {
-  resource.callback =
-      base::Bind(&AwSafeBrowsingResourceThrottle::OnBlockingPageComplete,
-                 AsWeakPtr(), resource.callback);
-
   const content::ResourceRequestInfo* info =
       content::ResourceRequestInfo::ForRequest(request_);
   bool is_main_frame =
@@ -88,19 +98,31 @@ void AwSafeBrowsingResourceThrottle::StartDisplayingBlockingPageHelper(
       resource, request_->method(), headers, is_main_frame, has_user_gesture);
 }
 
-// static
-void AwSafeBrowsingResourceThrottle::OnBlockingPageComplete(
-    const base::WeakPtr<BaseResourceThrottle>& throttle,
-    const base::Callback<void(bool)>& forward_callback,
-    bool proceed) {
-  if (throttle && !proceed) {
-    AwSafeBrowsingResourceThrottle* aw_throttle =
-        static_cast<AwSafeBrowsingResourceThrottle*>(throttle.get());
-    aw_throttle->request_->SetUserData(
-        kUserDataKey, base::MakeUnique<base::SupportsUserData::Data>());
-  }
+void AwSafeBrowsingResourceThrottle::CancelResourceLoad() {
+  SetCancelledBySafeBrowsing(request_);
+  Cancel();
+}
 
-  forward_callback.Run(proceed);
+AwSafeBrowsingParallelResourceThrottle::AwSafeBrowsingParallelResourceThrottle(
+    net::URLRequest* request,
+    content::ResourceType resource_type,
+    scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> database_manager,
+    scoped_refptr<AwSafeBrowsingUIManager> ui_manager,
+    AwSafeBrowsingWhitelistManager* whitelist_manager)
+    : safe_browsing::BaseParallelResourceThrottle(
+          request,
+          resource_type,
+          new AwUrlCheckerDelegateImpl(std::move(database_manager),
+                                       std::move(ui_manager),
+                                       whitelist_manager)),
+      request_(request) {}
+
+AwSafeBrowsingParallelResourceThrottle::
+    ~AwSafeBrowsingParallelResourceThrottle() = default;
+
+void AwSafeBrowsingParallelResourceThrottle::CancelResourceLoad() {
+  SetCancelledBySafeBrowsing(request_);
+  Cancel();
 }
 
 }  // namespace android_webview

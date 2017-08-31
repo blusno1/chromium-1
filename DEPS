@@ -40,11 +40,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'ad8a43f7698071f00ce024a935b0bc04a4b19a41',
+  'skia_revision': '36c60c9777fc8635f6538db2c67da69ec07b2ef3',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '25bd579f2ef421e2792c7fd6926f7ba80fd31a12',
+  'v8_revision': 'efa2ac4129d30c7c72e84c16af3d20b44829f990',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -56,7 +56,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '5af0a3a8b89827a8634132080a39ab4b63dee489',
+  'buildtools_revision': '84fdc992430562c77356707e9a047c7c691b7c3e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling SwiftShader
   # and whatever else without interference from each other.
@@ -64,7 +64,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'fd70d79ca67ac87dd95ab23d548b1fcb879ad259',
+  'pdfium_revision': '47a90b894ecca2d3547226169602d7f8729d564f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -96,11 +96,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'dada7e203e5ef9e85885ca2bfa6ed8cea5599127',
+  'catapult_revision': '1519661f73d20277a87b31d6d42e4f63aff86e3f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
-  'libfuzzer_revision': '6d39c6ba7f52b61664c982d6ac89d7491b6f8730',
+  'libfuzzer_revision': 'edcfbba60b279570f7f065bba421e4b01adbc3f1',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling devtools-node-modules
   # and whatever else without interference from each other.
@@ -154,7 +154,7 @@ deps = {
     Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'e081cbe5aae6b131955b6c3bd7308d95d650948f',
 
   'src/third_party/googletest/src':
-    Var('chromium_git') + '/external/github.com/google/googletest.git' + '@' + '42bc671f47b122fad36db5eccbc06868afdf7862',
+    Var('chromium_git') + '/external/github.com/google/googletest.git' + '@' + '7f8fefabedf2965980585be8c2bff97458f28e0b',
 
   'src/third_party/icu':
     Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '08cb956852a5ccdba7f9c941728bb833529ba3c6',
@@ -303,7 +303,7 @@ deps = {
 
   # Used for building libFuzzers (only supports Linux).
   'src/third_party/libFuzzer/src':
-    Var('chromium_git') + '/chromium/llvm-project/llvm/lib/Fuzzer.git' + '@' +  Var('libfuzzer_revision'),
+    Var('chromium_git') + '/chromium/llvm-project/compiler-rt/lib/fuzzer.git' + '@' +  Var('libfuzzer_revision'),
 
   'src/third_party/libprotobuf-mutator/src':
     Var('chromium_git') + '/external/github.com/google/libprotobuf-mutator.git' + '@' +  Var('libprotobuf-mutator'),
@@ -359,7 +359,7 @@ deps_os = {
       Var('chromium_git') + '/external/github.com/swisspol/GCDWebServer.git' + '@' + '43555c66627f6ed44817855a0f6d465f559d30e0',
 
     'src/ios/third_party/material_components_ios/src':
-      Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + 'b72e8cb97f70f41d550620b2f03f193930f7c888',
+      Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + '7026a1f8016419aa2a05ff08b3897a9878aeae63',
 
     'src/ios/third_party/material_font_disk_loader_ios/src':
       Var('chromium_git') + '/external/github.com/material-foundation/material-font-disk-loader-ios.git' + '@' + '8e30188777b016182658fbaa0a4a020a48183224',
@@ -403,7 +403,7 @@ deps_os = {
 
     # For Linux and Chromium OS.
     'src/third_party/cros_system_api':
-      Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + 'd3b70a23a22ab8baa87367c6aaa77944ab965e18',
+      Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '27810c6ba2d3f136811e516fe07d5562704a92ee',
 
     # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
     'src/third_party/chromite':
@@ -1222,7 +1222,7 @@ hooks_os = {
       'action': [
         'python',
         'src/build/fuchsia/update_sdk.py',
-        '4f60d251ab16d2e514fb6394c83e4544ce91554c',
+        '2947889cf6f6a53dcd9826e4ce41316920fcb05c',
       ],
     },
   ],

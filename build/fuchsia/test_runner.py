@@ -103,7 +103,12 @@ def main():
   parser.add_argument('--gtest_filter',
                       help='GTest filter to use in place of any default.')
   parser.add_argument('--gtest_repeat',
-                      help='GTest repeat value to use.')
+                      help='GTest repeat value to use. This also disables the '
+                           'test launcher timeout.')
+  parser.add_argument('--gtest_break_on_failure', action='store_true',
+                      default=False,
+                      help='Should GTest break on failure; useful with '
+                           '--gtest_repeat.')
   parser.add_argument('--single-process-tests', action='store_true',
                       default=False,
                       help='Runs the tests and the launcher in the same '
@@ -129,12 +134,6 @@ def main():
 
   child_args = ['--test-launcher-retry-limit=0']
 
-  if int(os.environ.get('CHROME_HEADLESS', 0)) != 0:
-    # When running on bots (without KVM) execution is quite slow. The test
-    # launcher times out a subprocess after 45s which can be too short. Make the
-    # timeout twice as long.
-    child_args.append('--test-launcher-timeout=90000')
-
   if args.single_process_tests:
     child_args.append('--single-process-tests')
 
@@ -150,6 +149,9 @@ def main():
     child_args.append('--gtest_filter=' + args.gtest_filter)
   if args.gtest_repeat:
     child_args.append('--gtest_repeat=' + args.gtest_repeat)
+    child_args.append('--test-launcher-timeout=-1')
+  if args.gtest_break_on_failure:
+    child_args.append('--gtest_break_on_failure')
   if args.child_args:
     child_args.extend(args.child_args)
 

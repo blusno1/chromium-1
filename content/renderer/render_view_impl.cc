@@ -1102,12 +1102,6 @@ void RenderViewImpl::OnGetRenderedText() {
 
 #endif  // ENABLE_PLUGINS
 
-void RenderViewImpl::TransferActiveWheelFlingAnimation(
-    const blink::WebActiveWheelFlingParameters& params) {
-  if (webview())
-    webview()->TransferActiveWheelFlingAnimation(params);
-}
-
 // RenderWidgetInputHandlerDelegate -----------------------------------------
 
 bool RenderViewImpl::DoesRenderWidgetHaveTouchEventHandlersAt(
@@ -1770,9 +1764,10 @@ void RenderViewImpl::DidOverscroll(
     const blink::WebFloatSize& overscrollDelta,
     const blink::WebFloatSize& accumulatedOverscroll,
     const blink::WebFloatPoint& positionInViewport,
-    const blink::WebFloatSize& velocityInViewport) {
+    const blink::WebFloatSize& velocityInViewport,
+    const blink::WebScrollBoundaryBehavior& behavior) {
   RenderWidget::DidOverscroll(overscrollDelta, accumulatedOverscroll,
-                              positionInViewport, velocityInViewport);
+                              positionInViewport, velocityInViewport, behavior);
 }
 
 void RenderViewImpl::HasTouchEventHandlers(bool has_handlers) {

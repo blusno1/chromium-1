@@ -291,6 +291,8 @@
     <dimen name="omnibox_suggestion_refine_width">48dp</dimen>
     <dimen name="omnibox_suggestion_text_vertical_padding">5dp</dimen>
     <dimen name="omnibox_suggestion_multiline_text_vertical_padding">10dp</dimen>
+    <dimen name="omnibox_suggestion_refine_view_modern_end_padding">2dp</dimen>
+    <dimen name="omnibox_suggestion_list_modern_offset">10dp</dimen>
 
     <!-- NTP dimensions -->
     <dimen name="tile_grid_layout_max_width">504dp</dimen>
@@ -306,11 +308,13 @@
     <dimen name="tile_view_width">80dp</dimen>
     <dimen name="tile_view_width_condensed">64dp</dimen>
     <dimen name="tile_view_icon_size">48dp</dimen>
-    <dimen name="tile_view_icon_size_modern">28dp</dimen>
+    <dimen name="tile_view_icon_size_modern">24dp</dimen>
     <dimen name="tile_view_icon_margin_top">12dp</dimen>
     <dimen name="tile_view_icon_margin_top_condensed">8dp</dimen>
-    <dimen name="tile_view_icon_margin_top_modern">22dp</dimen>
+    <dimen name="tile_view_icon_margin_top_modern">24dp</dimen>
     <dimen name="tile_view_offline_badge_size">24dp</dimen>
+    <dimen name="tile_view_offline_badge_size_modern">16dp</dimen>
+    <dimen name="tile_view_offline_badge_margin_modern">8dp</dimen>
     <dimen name="tile_view_title_margin_top">66dp</dimen>
     <dimen name="tile_view_title_margin_top_condensed">62dp</dimen>
     <dimen name="ntp_logo_height">116dp</dimen>
@@ -352,7 +356,12 @@
     <dimen name="content_suggestions_card_video_overlay_size">48dp</dimen>
     <dimen name="content_suggestions_card_video_overlay_margin_start">38dp</dimen>
     <dimen name="content_suggestions_card_video_overlay_margin_top">38dp</dimen>
+    <dimen name="content_suggestions_card_modern_offline_badge_overlay_size">18dp</dimen>
+    <dimen name="content_suggestions_card_modern_offline_badge_overlay_margin_start">8dp</dimen>
+    <dimen name="content_suggestions_card_modern_offline_badge_overlay_margin_top">8dp</dimen>
     <dimen name="contextual_carousel_space_between_cards">8dp</dimen>
+    <dimen name="md_incognito_ntp_line_spacing">6sp</dimen>
+    <dimen name="md_incognito_ntp_padding_left">16dp</dimen>
 
     <!-- Recent tabs page -->
     <dimen name="recent_tabs_visible_separator_padding">8dp</dimen>
@@ -463,10 +472,13 @@
 
     <!-- SelectableListLayout dimensions -->
     <dimen name="selectable_list_layout_row_padding">16dp</dimen>
+    <dimen name="selectable_list_action_bar_end_padding">6dp</dimen>
     <dimen name="toolbar_wide_display_start_offset">13dp</dimen>
     <dimen name="toolbar_modern_search_view_start_offset">4dp</dimen>
     <dimen name="search_toolbar_modern_bg_top_bottom_inset">10dp</dimen>
     <dimen name="search_toolbar_modern_bg_lateral_inset">8dp</dimen>
+    <dimen name="selectable_list_toolbar_nav_button_start_offset">4dp</dimen>
+    <dimen name="selectable_list_search_icon_end_padding">4dp</dimen>
 
     <!-- Bottom sheet dimensions -->
     <dimen name="bottom_sheet_help_bubble_inset">10dp</dimen>
@@ -480,6 +492,7 @@
     <dimen name="chrome_home_empty_view_top_padding">72dp</dimen>
     <dimen name="chrome_home_min_full_half_distance">160dp</dimen>
     <dimen name="chrome_home_progress_bar_height">4dp</dimen>
+    <dimen name="chrome_home_incognito_ntp_bottom_margin">32dp</dimen>
 
     <!-- TextBubble dimensions -->
     <dimen name="text_bubble_margin">4dp</dimen>
@@ -491,6 +504,7 @@
     <!--  Miscellaneous dimensions -->
     <dimen name="action_bar_shadow_height">10dp</dimen>
     <dimen name="card_corner_radius">2dp</dimen>
+    <dimen name="clear_text_button_end_padding">8dp</dimen>
     <dimen name="signin_and_sync_view_padding">16dp</dimen>
     <dimen name="sad_tab_bullet_gap">12dp</dimen>
     <dimen name="sad_tab_bullet_leading_offset">1dp</dimen>

@@ -219,7 +219,6 @@ using bookmarks::BookmarkNode;
 class BrowserBookmarkModelBridge;
 class InfoBarContainerDelegateIOS;
 
-namespace ios_internal {
 NSString* const kPageInfoWillShowNotification =
     @"kPageInfoWillShowNotification";
 NSString* const kPageInfoWillHideNotification =
@@ -228,7 +227,6 @@ NSString* const kLocationBarBecomesFirstResponderNotification =
     @"kLocationBarBecomesFirstResponderNotification";
 NSString* const kLocationBarResignsFirstResponderNotification =
     @"kLocationBarResignsFirstResponderNotification";
-}  // namespace ios_internal
 
 namespace {
 
@@ -661,8 +659,6 @@ bool IsURLAllowedInIncognito(const GURL& url) {
 - (void)uninstallDelegatesForTab:(Tab*)tab;
 // Closes the current tab, with animation if applicable.
 - (void)closeCurrentTab;
-// Shows the Online Help Page in a tab.
-- (void)showHelpPage;
 // Show the bookmarks page.
 - (void)showAllBookmarks;
 // Shows a panel within the New Tab Page.
@@ -732,10 +728,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
 - (void)showFindBarWithAnimation:(BOOL)animate
                       selectText:(BOOL)selectText
                      shouldFocus:(BOOL)shouldFocus;
-// Show the Page Security Info.
-- (void)showPageInfoPopupForView:(UIView*)sourceView;
-// Hide the Page Security Info.
-- (void)hidePageInfoPopupForView:(UIView*)sourceView;
+
 // The infobar state (typically height) has changed.
 - (void)infoBarContainerStateChanged:(bool)is_animating;
 // Adds a CardView on top of the contentArea either taking the size of the full
@@ -1000,7 +993,8 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
         new JavaScriptDialogPresenterImpl(_dialogPresenter));
     _webStateDelegate.reset(new web::WebStateDelegateBridge(self));
     // TODO(leng): Delay this.
-    [[UpgradeCenter sharedInstance] registerClient:self];
+    [[UpgradeCenter sharedInstance] registerClient:self
+                                    withDispatcher:self.dispatcher];
     _inNewTabAnimation = NO;
     if (model && browserState)
       [self updateWithTabModel:model browserState:browserState];
@@ -1581,7 +1575,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   [[UpgradeCenter sharedInstance] addInfoBarToManager:infoBarManager
                                              forTabId:[tab tabId]];
   if (!ReSignInInfoBarDelegate::Create(_browserState, tab)) {
-    ios_internal::sync::displaySyncErrors(_browserState, tab);
+    DisplaySyncErrors(_browserState, tab);
   }
 
   // The rest of this function initiates the new tab animation, which is
@@ -1630,7 +1624,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
     newPage.image = [tab updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
     [animationParentView addSubview:newPage];
     CGPoint origin = [self lastTapPoint];
-    ios_internal::page_animation_util::AnimateInPaperWithAnimationAndCompletion(
+    page_animation_util::AnimateInPaperWithAnimationAndCompletion(
         newPage, -newPageOffset,
         newPage.frame.size.height - newPage.image.size.height, origin,
         _isOffTheRecord, NULL, ^{
@@ -1675,7 +1669,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
 
     // 3. A new, blank CardView to represent the new tab being added.
     // Launch the new background tab animation.
-    ios_internal::page_animation_util::AnimateNewBackgroundPageWithCompletion(
+    page_animation_util::AnimateNewBackgroundPageWithCompletion(
         topCard, [_contentArea frame], IsPortrait(), ^{
           [background removeFromSuperview];
           [topCard removeFromSuperview];
@@ -2034,7 +2028,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
 
 - (void)dismissPopups {
   [_toolbarController dismissToolsMenuPopup];
-  [self hidePageInfoPopupForView:nil];
+  [self hidePageInfo];
   [self.tabTipBubblePresenter dismissAnimated:YES];
 }
 
@@ -3068,7 +3062,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
                           offset:headerOffset];
   };
   if (animate) {
-    [UIView animateWithDuration:ios_internal::kToolbarAnimationDuration
+    [UIView animateWithDuration:kFullScreenControllerToolbarAnimationDuration
                           delay:0.0
                         options:UIViewAnimationOptionBeginFromCurrentState
                      animations:block
@@ -3112,7 +3106,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
                           offset:headerOffset];
   };
 
-  [UIView animateWithDuration:ios_internal::kToolbarAnimationDuration
+  [UIView animateWithDuration:kFullScreenControllerToolbarAnimationDuration
                         delay:0.0
                       options:UIViewAnimationOptionBeginFromCurrentState
                    animations:block
@@ -3619,68 +3613,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
 
 #pragma mark - Showing popups
 
-- (void)showPageInfoPopupForView:(UIView*)sourceView {
-  Tab* tab = [_model currentTab];
-  DCHECK([tab navigationManager]);
-  web::NavigationItem* navItem = [tab navigationManager]->GetVisibleItem();
-
-  // It is fully expected to have a navItem here, as showPageInfoPopup can only
-  // be trigerred by a button enabled when a current item matches some
-  // conditions. However a crash was seen were navItem was NULL hence this
-  // test after a DCHECK.
-  DCHECK(navItem);
-  if (!navItem)
-    return;
-
-  // Don't show if the page is native except for offline pages (to show the
-  // offline page info).
-  if ([self isTabNativePage:tab] &&
-      !reading_list::IsOfflineURL(navItem->GetURL())) {
-    return;
-  }
-
-  // Don't show the bubble twice (this can happen when tapping very quickly in
-  // accessibility mode).
-  if (_pageInfoController)
-    return;
-
-  base::RecordAction(UserMetricsAction("MobileToolbarPageSecurityInfo"));
-
-  // Dismiss the omnibox (if open).
-  [_toolbarController cancelOmniboxEdit];
-
-  [[NSNotificationCenter defaultCenter]
-      postNotificationName:ios_internal::kPageInfoWillShowNotification
-                    object:nil];
-
-  // TODO(rohitrao): Get rid of PageInfoModel completely.
-  PageInfoModelBubbleBridge* bridge = new PageInfoModelBubbleBridge();
-  PageInfoModel* pageInfoModel = new PageInfoModel(
-      _browserState, navItem->GetURL(), navItem->GetSSL(), bridge);
-
-  UIView* view = [self view];
-  _pageInfoController = [[PageInfoViewController alloc]
-      initWithModel:pageInfoModel
-             bridge:bridge
-        sourceFrame:[sourceView convertRect:[sourceView bounds] toView:view]
-         parentView:view];
-  _pageInfoController.dispatcher = self.dispatcher;
-  bridge->set_controller(_pageInfoController);
-}
-
-- (void)hidePageInfoPopupForView:(UIView*)sourceView {
-  [_pageInfoController dismiss];
-  _pageInfoController = nil;
-}
-
-- (void)showSecurityHelpPage {
-  [self webPageOrderedOpen:GURL(kPageInfoHelpCenterURL)
-                  referrer:web::Referrer()
-              inBackground:NO
-                  appendTo:kCurrentTab];
-  [self hidePageInfoPopupForView:nil];
-}
-
 - (void)addToReadingListURL:(const GURL&)URL title:(NSString*)title {
   base::RecordAction(UserMetricsAction("MobileReadingListAdd"));
 
@@ -3969,7 +3901,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
        inIncognito:inIncognito
       inBackground:inBackground
           appendTo:kLastTab];
-  [self chromeExecuteCommand:command];
+  [self.dispatcher openURL:command];
 }
 
 - (void)loadSessionTab:(const sessions::SessionTab*)sessionTab {
@@ -3997,8 +3929,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
     return;  // TODO(crbug.com/244366): This should not be necessary.
   _locationBarHasFocus = YES;
   [[NSNotificationCenter defaultCenter]
-      postNotificationName:ios_internal::
-                               kLocationBarBecomesFirstResponderNotification
+      postNotificationName:kLocationBarBecomesFirstResponderNotification
                     object:nil];
   [_sideSwipeController setEnabled:NO];
   if ([[_model currentTab].webController wantsKeyboardShield]) {
@@ -4020,8 +3951,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   _locationBarHasFocus = NO;
   [_sideSwipeController setEnabled:YES];
   [[NSNotificationCenter defaultCenter]
-      postNotificationName:ios_internal::
-                               kLocationBarResignsFirstResponderNotification
+      postNotificationName:kLocationBarResignsFirstResponderNotification
                     object:nil];
   [UIView animateWithDuration:0.3
       animations:^{
@@ -4088,7 +4018,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
 
   CGFloat shortAxis = frame.size.width;
   CGFloat shortInset = kCardImageInsets.left + kCardImageInsets.right;
-  shortAxis -= shortInset + 2 * ios_internal::page_animation_util::kCardMargin;
+  shortAxis -= shortInset + 2 * page_animation_util::kCardMargin;
   CGFloat aspectRatio = frame.size.height / frame.size.width;
   CGFloat longAxis = std::floor(aspectRatio * shortAxis);
   CGFloat longInset = kCardImageInsets.top + kCardImageInsets.bottom;
@@ -4407,6 +4337,84 @@ bubblePresenterForFeature:(const base::Feature&)feature
       });
 }
 
+- (void)showPageInfoForOriginPoint:(CGPoint)originPoint {
+  Tab* tab = [_model currentTab];
+  DCHECK([tab navigationManager]);
+  web::NavigationItem* navItem = [tab navigationManager]->GetVisibleItem();
+
+  // It is fully expected to have a navItem here, as showPageInfoPopup can only
+  // be trigerred by a button enabled when a current item matches some
+  // conditions. However a crash was seen were navItem was NULL hence this
+  // test after a DCHECK.
+  DCHECK(navItem);
+  if (!navItem)
+    return;
+
+  // Don't show if the page is native except for offline pages (to show the
+  // offline page info).
+  if ([self isTabNativePage:tab] &&
+      !reading_list::IsOfflineURL(navItem->GetURL())) {
+    return;
+  }
+
+  // Don't show the bubble twice (this can happen when tapping very quickly in
+  // accessibility mode).
+  if (_pageInfoController)
+    return;
+
+  base::RecordAction(UserMetricsAction("MobileToolbarPageSecurityInfo"));
+
+  // Dismiss the omnibox (if open).
+  [_toolbarController cancelOmniboxEdit];
+
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:kPageInfoWillShowNotification
+                    object:nil];
+
+  // TODO(crbug.com/760387): Get rid of PageInfoModel completely.
+  PageInfoModelBubbleBridge* bridge = new PageInfoModelBubbleBridge();
+  PageInfoModel* pageInfoModel = new PageInfoModel(
+      _browserState, navItem->GetURL(), navItem->GetSSL(), bridge);
+
+  UIView* view = [self view];
+  _pageInfoController = [[PageInfoViewController alloc]
+      initWithModel:pageInfoModel
+             bridge:bridge
+        sourcePoint:[view convertPoint:originPoint fromView:nil]
+         parentView:view];
+  _pageInfoController.dispatcher = self.dispatcher;
+  bridge->set_controller(_pageInfoController);
+}
+
+- (void)hidePageInfo {
+  // Early return if the PageInfoPopup is not presented.
+  if (!_pageInfoController)
+    return;
+
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:kPageInfoWillHideNotification
+                    object:nil];
+
+  [_pageInfoController dismiss];
+  _pageInfoController = nil;
+}
+
+- (void)showSecurityHelpPage {
+  [self webPageOrderedOpen:GURL(kPageInfoHelpCenterURL)
+                  referrer:web::Referrer()
+              inBackground:NO
+                  appendTo:kCurrentTab];
+  [self hidePageInfo];
+}
+
+- (void)showHelpPage {
+  GURL helpUrl(l10n_util::GetStringUTF16(IDS_IOS_TOOLS_MENU_HELP_URL));
+  [self webPageOrderedOpen:helpUrl
+                  referrer:web::Referrer()
+              inBackground:NO
+                  appendTo:kCurrentTab];
+}
+
 #pragma mark - Command Handling
 
 - (IBAction)chromeExecuteCommand:(id)sender {
@@ -4416,9 +4424,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
     return;
 
   switch (command) {
-    case IDC_HELP_PAGE_VIA_MENU:
-      [self showHelpPage];
-      break;
     case IDC_SHOW_MAIL_COMPOSER:
       [self showMailComposer:sender];
       break;
@@ -4452,19 +4457,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
       }
       break;
     }
-    case IDC_SHOW_PAGE_INFO:
-      DCHECK([sender isKindOfClass:[UIButton class]]);
-      [self showPageInfoPopupForView:sender];
-      break;
-    case IDC_HIDE_PAGE_INFO:
-      [[NSNotificationCenter defaultCenter]
-          postNotificationName:ios_internal::kPageInfoWillHideNotification
-                        object:nil];
-      [self hidePageInfoPopupForView:sender];
-      break;
-    case IDC_SHOW_SECURITY_HELP:
-      [self showSecurityHelpPage];
-      break;
     default:
       // Unknown commands get sent up the responder chain.
       [super chromeExecuteCommand:sender];
@@ -4490,7 +4482,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   // Do not animate close in iPad.
   if (!IsIPadIdiom()) {
     [_contentArea addSubview:exitingPage];
-    ios_internal::page_animation_util::AnimateOutWithCompletion(
+    page_animation_util::AnimateOutWithCompletion(
         exitingPage, 0, YES, IsPortrait(), ^{
           [exitingPage removeFromSuperview];
         });
@@ -4503,7 +4495,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   [_bookmarkInteractionController dismissSnackbar];
   [_toolbarController cancelOmniboxEdit];
   [_dialogPresenter cancelAllDialogs];
-  [self hidePageInfoPopupForView:nil];
+  [self hidePageInfo];
   [self.tabTipBubblePresenter dismissAnimated:NO];
   if (_voiceSearchController)
     _voiceSearchController->DismissMicPermissionsHelp();
@@ -4553,14 +4545,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
     // the completion block directly.
     dispatch_async(dispatch_get_main_queue(), completion);
   }
-}
-
-- (void)showHelpPage {
-  GURL helpUrl(l10n_util::GetStringUTF16(IDS_IOS_TOOLS_MENU_HELP_URL));
-  [self webPageOrderedOpen:helpUrl
-                  referrer:web::Referrer()
-              inBackground:NO
-                  appendTo:kCurrentTab];
 }
 
 #pragma mark - Find Bar

@@ -13,6 +13,7 @@ import static org.junit.Assert.assertThat;
 
 import android.annotation.TargetApi;
 import android.app.NotificationChannel;
+import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.os.Build;
@@ -20,15 +21,19 @@ import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
 import org.chromium.chrome.browser.notifications.NotificationSettingsBridge;
+import org.chromium.chrome.test.util.browser.Features;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -46,6 +51,10 @@ public class ChannelsInitializerTest {
     private NotificationManagerProxy mNotificationManagerProxy;
     private Context mContext;
 
+    @Rule
+    @SuppressFBWarnings("URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD")
+    public Features.Processor processor = new Features.Processor();
+
     @Before
     public void setUp() throws Exception {
         mContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -53,12 +62,17 @@ public class ChannelsInitializerTest {
                 (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE));
         mChannelsInitializer =
                 new ChannelsInitializer(mNotificationManagerProxy, mContext.getResources());
-        // Delete any channels that may already have been initialized. Cleaning up here rather than
-        // in tearDown in case tests running before these ones caused channels to be created.
+        // Delete any channels and channel groups that may already have been initialized. Cleaning
+        // up here rather than in tearDown in case tests running before these ones caused channels
+        // to be created.
         for (NotificationChannel channel : mNotificationManagerProxy.getNotificationChannels()) {
             if (!channel.getId().equals(NotificationChannel.DEFAULT_CHANNEL_ID)) {
                 mNotificationManagerProxy.deleteNotificationChannel(channel.getId());
             }
+        }
+        for (NotificationChannelGroup group :
+                mNotificationManagerProxy.getNotificationChannelGroups()) {
+            mNotificationManagerProxy.deleteNotificationChannelGroup(group.getId());
         }
     }
 
@@ -67,6 +81,7 @@ public class ChannelsInitializerTest {
     @MinAndroidSdkLevel(Build.VERSION_CODES.O)
     @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
+    @Features(@Features.Register(ChromeFeatureList.SITE_NOTIFICATION_CHANNELS))
     public void testDeleteLegacyChannels_noopOnCurrentDefinitions() throws Exception {
         assertThat(getChannelsIgnoringDefault(), is(empty()));
 
@@ -96,7 +111,7 @@ public class ChannelsInitializerTest {
                 containsInAnyOrder(ChannelDefinitions.CHANNEL_ID_BROWSER,
                         ChannelDefinitions.CHANNEL_ID_DOWNLOADS,
                         ChannelDefinitions.CHANNEL_ID_INCOGNITO,
-                        ChannelDefinitions.CHANNEL_ID_SITES, ChannelDefinitions.CHANNEL_ID_MEDIA));
+                        ChannelDefinitions.CHANNEL_ID_MEDIA));
     }
 
     @Test
@@ -196,6 +211,45 @@ public class ChannelsInitializerTest {
         assertThat(channel.getName().toString(),
                 is(mContext.getString(org.chromium.chrome.R.string.notification_category_sites)));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+    }
+
+    @Test
+    @SmallTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
+    @Feature({"Browser", "Notifications"})
+    public void testEnsureInitialized_contentSuggestionsEnabled() throws Exception {
+        mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS);
+
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
+        assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS));
+        assertThat(channel.getName().toString(),
+                is(mContext.getString(
+                        org.chromium.chrome.R.string.notification_category_content_suggestions)));
+        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+    }
+
+    @Test
+    @SmallTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
+    @Feature({"Browser", "Notifications"})
+    public void testEnsureInitialized_contentSuggestionsDisabled() throws Exception {
+        mChannelsInitializer.ensureInitializedAndDisabled(
+                ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS);
+
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
+        assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS));
+        assertThat(channel.getName().toString(),
+                is(mContext.getString(
+                        org.chromium.chrome.R.string.notification_category_content_suggestions)));
+        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_NONE));
         assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
     }
 

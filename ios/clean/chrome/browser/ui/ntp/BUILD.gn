@@ -34,6 +34,7 @@ source_set("ntp") {
     "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/broadcaster",
     "//ios/chrome/browser/ui/browser_list",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions",

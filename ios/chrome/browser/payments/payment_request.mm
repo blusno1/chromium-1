@@ -5,6 +5,7 @@
 #include "ios/chrome/browser/payments/payment_request.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "base/containers/adapters.h"
 #include "base/feature_list.h"
@@ -128,6 +129,7 @@ PaymentRequest::PaymentRequest(
   }
 
   RecordNumberOfSuggestionsShown();
+  RecordRequestedInformation();
 }
 
 PaymentRequest::~PaymentRequest() {}
@@ -199,7 +201,15 @@ PrefService* PaymentRequest::GetPrefService() {
 }
 
 void PaymentRequest::UpdatePaymentDetails(const PaymentDetails& details) {
+  DCHECK(web_payment_request_.details.total);
+  std::unique_ptr<PaymentItem> old_total =
+      std::move(web_payment_request_.details.total);
   web_payment_request_.details = details;
+  // Restore the old total amount if the PaymentDetails passed to updateWith()
+  // is missing a total value.
+  if (!web_payment_request_.details.total)
+    web_payment_request_.details.total = std::move(old_total);
+
   PopulateAvailableShippingOptions();
   SetSelectedShippingOption();
 }
@@ -226,10 +236,11 @@ PaymentShippingType PaymentRequest::shipping_type() const {
 
 CurrencyFormatter* PaymentRequest::GetOrCreateCurrencyFormatter() {
   if (!currency_formatter_) {
-    currency_formatter_.reset(new CurrencyFormatter(
-        web_payment_request_.details.total.amount.currency,
-        web_payment_request_.details.total.amount.currency_system,
-        GetApplicationLocale()));
+    DCHECK(web_payment_request_.details.total);
+    currency_formatter_ = base::MakeUnique<CurrencyFormatter>(
+        web_payment_request_.details.total->amount.currency,
+        web_payment_request_.details.total->amount.currency_system,
+        GetApplicationLocale());
   }
   return currency_formatter_.get();
 }
@@ -502,6 +513,34 @@ void PaymentRequest::RecordNumberOfSuggestionsShown() {
   journey_logger().SetNumberOfSuggestionsShown(
       payments::JourneyLogger::Section::SECTION_PAYMENT_METHOD,
       payment_methods().size(), has_complete_instrument);
+}
+
+void PaymentRequest::RecordRequestedInformation() {
+  journey_logger().SetRequestedInformation(
+      request_shipping(), request_payer_email(), request_payer_phone(),
+      request_payer_name());
+
+  // Log metrics around which payment methods are requested by the merchant.
+  const GURL kGooglePayUrl("https://google.com/pay");
+  const GURL kAndroidPayUrl("https://android.com/pay");
+
+  // Looking for payment methods that are NOT Google-related as well as the
+  // Google-related ones.
+  bool requestedMethodGoogle = false;
+  bool requestedMethodOther = false;
+  for (const GURL& url_payment_method : url_payment_method_identifiers()) {
+    if (url_payment_method == kGooglePayUrl ||
+        url_payment_method == kAndroidPayUrl) {
+      requestedMethodGoogle = true;
+    } else {
+      requestedMethodOther = true;
+    }
+  }
+
+  journey_logger().SetRequestedPaymentMethodTypes(
+      /*requested_basic_card=*/!supported_card_networks().empty(),
+      /*requested_method_google=*/requestedMethodGoogle,
+      /*requested_method_other=*/requestedMethodOther);
 }
 
 }  // namespace payments

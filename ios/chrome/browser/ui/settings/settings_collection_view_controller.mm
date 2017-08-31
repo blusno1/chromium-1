@@ -99,7 +99,7 @@ namespace {
 
 const CGFloat kAccountProfilePhotoDimension = 40.0f;
 
-const int kAutomaticSigninPromoViewDismissCount = 20;
+const int kAutomaticSigninPromoViewDismissCount = 5;
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierSignIn = kSectionIdentifierEnumZero,
@@ -949,12 +949,10 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     return;
   }
   identityAccountItem.shouldDisplayError =
-      !ios_internal::sync::IsTransientSyncError(
-          syncSetupService->GetSyncServiceState());
+      !IsTransientSyncError(syncSetupService->GetSyncServiceState());
   if (identityAccountItem.shouldDisplayError) {
     identityAccountItem.detailText =
-        ios_internal::sync::GetSyncErrorDescriptionForBrowserState(
-            _browserState);
+        GetSyncErrorDescriptionForBrowserState(_browserState);
   } else {
     identityAccountItem.detailText =
         syncSetupService->IsSyncEnabled()

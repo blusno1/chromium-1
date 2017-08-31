@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/broadcaster/chrome_broadcast_observer.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_controlling.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_delegate.h"
@@ -24,7 +25,8 @@
 @end
 
 @interface NTPHomeHeaderMediator
-    : NSObject<ContentSuggestionsHeaderControlling,
+    : NSObject<ChromeBroadcastObserver,
+               ContentSuggestionsHeaderControlling,
                ContentSuggestionsHeaderProvider,
                ContentSuggestionsViewControllerDelegate,
                GoogleLandingConsumer>
@@ -40,10 +42,6 @@
 
 @property(nonatomic, weak) id<NTPHomeHeaderConsumer> headerConsumer;
 @property(nonatomic, weak) id<NTPHomeHeaderProvider> headerProvider;
-
-// |YES| if its view is visible.  When set to |NO| various UI updates are
-// ignored.
-@property(nonatomic, assign) BOOL isShowing;
 
 @end
 

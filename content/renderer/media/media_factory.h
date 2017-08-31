@@ -21,7 +21,6 @@
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
 #include "third_party/WebKit/public/platform/WebString.h"
-#include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA)
 #include "media/mojo/interfaces/interface_factory.mojom.h"  // nogncheck
@@ -30,6 +29,7 @@
 namespace blink {
 class WebContentDecryptionModule;
 class WebEncryptedMediaClient;
+class WebLayerTreeView;
 class WebLocalFrame;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
@@ -92,12 +92,15 @@ class MediaFactory {
   // to a ContentDecryptionModule if MediaKeys have been provided to the
   // |encrypted_client| (otherwise null). |sink_id|, when not empty, identifies
   // the audio sink to use for this player (see HTMLMediaElement.sinkId).
+  // The |layer_tree_view| will be used to generate the correct FrameSinkId for
+  // the Surface containing the corresponding HTMLMediaElement.
   blink::WebMediaPlayer* CreateMediaPlayer(
       const blink::WebMediaPlayerSource& source,
       blink::WebMediaPlayerClient* client,
       blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
       blink::WebContentDecryptionModule* initial_cdm,
-      const blink::WebString& sink_id);
+      const blink::WebString& sink_id,
+      blink::WebLayerTreeView* layer_tree_view);
 
   // Provides an EncryptedMediaClient to connect blink's EME layer to media's
   // implementation of requestMediaKeySystemAccess. Will always return the same

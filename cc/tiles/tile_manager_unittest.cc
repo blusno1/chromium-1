@@ -1726,9 +1726,9 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
     EXPECT_EQ(TileDrawInfo::RESOURCE_MODE, tile->draw_info().mode());
     EXPECT_TRUE(tile->draw_info().IsReadyToDraw());
 
-    ResourceProvider::ScopedReadLockSoftware lock(
+    ResourceProvider::ScopedWriteLockSoftware lock(
         host_impl()->resource_provider(), tile->draw_info().resource_id());
-    const SkBitmap* bitmap = lock.sk_bitmap();
+    const SkBitmap bitmap = lock.sk_bitmap();
     for (int x = 0; x < size.width(); ++x) {
       for (int y = 0; y < size.height(); ++y) {
         SCOPED_TRACE(y);
@@ -1736,12 +1736,12 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
         if (resolutions[i] == LOW_RESOLUTION) {
           // Since it's low res, the bitmap was not drawn, and the background
           // (green) is visible instead.
-          ASSERT_EQ(SK_ColorGREEN, bitmap->getColor(x, y));
+          ASSERT_EQ(SK_ColorGREEN, bitmap.getColor(x, y));
         } else {
           EXPECT_EQ(HIGH_RESOLUTION, resolutions[i]);
           // Since it's high res, the bitmap (blue) was drawn, and the
           // background is not visible.
-          ASSERT_EQ(SK_ColorBLUE, bitmap->getColor(x, y));
+          ASSERT_EQ(SK_ColorBLUE, bitmap.getColor(x, y));
         }
       }
     }
@@ -2313,7 +2313,8 @@ class CheckerImagingTileManagerTest : public TestLayerTreeHostBase {
         : StubPaintImageGenerator(
               SkImageInfo::MakeN32Premul(size.width(), size.height())) {}
 
-    MOCK_METHOD4(GetPixels, bool(const SkImageInfo&, void*, size_t, uint32_t));
+    MOCK_METHOD5(GetPixels,
+                 bool(const SkImageInfo&, void*, size_t, size_t, uint32_t));
   };
 
   void TearDown() override {

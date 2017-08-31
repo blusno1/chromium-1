@@ -421,6 +421,10 @@ extern const char kPrintPreviewUseSystemDefaultPrinter[];
 #if defined(OS_CHROMEOS)
 extern const char kPrintingDevices[];
 extern const char kRecommendedNativePrinters[];
+extern const char kRecommendedNativePrintersFile[];
+extern const char kRecommendedNativePrintersAccessMode[];
+extern const char kRecommendedNativePrintersBlacklist[];
+extern const char kRecommendedNativePrintersWhitelist[];
 #endif  // OS_CHROMEOS
 
 extern const char kDefaultSupervisedUserFilteringBehavior[];
@@ -679,7 +683,6 @@ extern const char kConsumerManagementStage[];
 extern const char kIsBootstrappingSlave[];
 extern const char kReportArcStatusEnabled[];
 extern const char kNetworkThrottlingEnabled[];
-extern const char kTouchscreenEnabledLocal[];
 #endif  // defined(OS_CHROMEOS)
 
 extern const char kClearPluginLSODataEnabled[];
@@ -903,6 +906,8 @@ extern const char kOfflineUsageOfflineCount[];
 extern const char kOfflineUsageOnlineCount[];
 extern const char kOfflineUsageMixedCount[];
 #endif
+
+extern const char kMediaEngagementSchemaVersion[];
 
 }  // namespace prefs
 

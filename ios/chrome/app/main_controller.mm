@@ -421,8 +421,6 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 - (void)finishDismissingStackView;
 // Sets up self.currentBVC for testing by closing existing tabs.
 - (void)setUpCurrentBVCForTesting;
-// Opens an url.
-- (void)openUrl:(OpenUrlCommand*)command;
 // Opens an url from a link in the settings UI.
 - (void)openUrlFromSettings:(OpenUrlCommand*)command;
 // Switch all global states for the given mode (normal or incognito).
@@ -1276,8 +1274,7 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 
 - (void)crashIfRequested {
   if (experimental_flags::IsStartupCrashEnabled()) {
-    // Flush out the value cached for
-    // ios_internal::breakpad::SetUploadingEnabled().
+    // Flush out the value cached for breakpad::SetUploadingEnabled().
     [[NSUserDefaults standardUserDefaults] synchronize];
 
     int* x = NULL;
@@ -1459,15 +1456,29 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
                  completion:nil];
 }
 
+- (void)openURL:(OpenUrlCommand*)command {
+  if ([command fromChrome]) {
+    [self dismissModalsAndOpenSelectedTabInMode:ApplicationMode::NORMAL
+                                        withURL:[command url]
+                                     transition:ui::PAGE_TRANSITION_TYPED
+                                     completion:nil];
+  } else {
+    [self dismissModalDialogsWithCompletion:^{
+      self.currentBVC = [command inIncognito] ? self.otrBVC : self.mainBVC;
+      [self.currentBVC webPageOrderedOpen:[command url]
+                                 referrer:[command referrer]
+                             inBackground:[command inBackground]
+                                 appendTo:[command appendTo]];
+    }];
+  }
+}
+
 #pragma mark - chromeExecuteCommand
 
 - (IBAction)chromeExecuteCommand:(id)sender {
   NSInteger command = [sender tag];
 
   switch (command) {
-    case IDC_OPEN_URL:
-      [self openUrl:base::mac::ObjCCast<OpenUrlCommand>(sender)];
-      break;
     case IDC_SHOW_SIGNIN_IOS: {
       ShowSigninCommand* command =
           base::mac::ObjCCastStrict<ShowSigninCommand>(sender);
@@ -1527,23 +1538,6 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 }
 
 #pragma mark - chromeExecuteCommand helpers
-
-- (void)openUrl:(OpenUrlCommand*)command {
-  if ([command fromChrome]) {
-    [self dismissModalsAndOpenSelectedTabInMode:ApplicationMode::NORMAL
-                                        withURL:[command url]
-                                     transition:ui::PAGE_TRANSITION_TYPED
-                                     completion:nil];
-  } else {
-    [self dismissModalDialogsWithCompletion:^{
-      self.currentBVC = [command inIncognito] ? self.otrBVC : self.mainBVC;
-      [self.currentBVC webPageOrderedOpen:[command url]
-                                 referrer:[command referrer]
-                             inBackground:[command inBackground]
-                                 appendTo:[command appendTo]];
-    }];
-  }
-}
 
 - (void)openUrlFromSettings:(OpenUrlCommand*)command {
   DCHECK([command fromChrome]);

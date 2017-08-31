@@ -76,7 +76,6 @@ class WebSpeechRecognizer;
 class WebStorageNamespace;
 class WebTappedInfo;
 class WebURLRequest;
-struct WebActiveWheelFlingParameters;
 struct WebDateTimeChooserParams;
 struct WebMediaPlayerAction;
 struct WebPluginAction;
@@ -199,9 +198,6 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
 
   void AttachWebFrameWidget(blink::WebFrameWidget* frame_widget);
 
-  void TransferActiveWheelFlingAnimation(
-      const blink::WebActiveWheelFlingParameters& params) override;
-
   // Starts a timer to send an UpdateState message on behalf of |frame|, if the
   // timer isn't already running. This allows multiple state changing events to
   // be coalesced into one update.
@@ -265,7 +261,8 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   void DidOverscroll(const blink::WebFloatSize& overscrollDelta,
                      const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& positionInViewport,
-                     const blink::WebFloatSize& velocityInViewport) override;
+                     const blink::WebFloatSize& velocityInViewport,
+                     const blink::WebScrollBoundaryBehavior& behavior) override;
   void HasTouchEventHandlers(bool has_handlers) override;
   blink::WebScreenInfo GetScreenInfo() override;
   void SetToolTipText(const blink::WebString&,

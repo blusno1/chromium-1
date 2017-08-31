@@ -44,6 +44,8 @@ class PLATFORM_EXPORT PlaceholderImage final : public Image {
 
   PaintImage PaintImageForCurrentFrame() override;
 
+  bool IsPlaceholderImage() const override { return true; }
+
  private:
   PlaceholderImage(ImageObserver*, const IntSize&);
 
@@ -67,6 +69,7 @@ class PLATFORM_EXPORT PlaceholderImage final : public Image {
 
   // Lazily initialized.
   sk_sp<PaintRecord> paint_record_for_current_frame_;
+  PaintImage::ContentId paint_record_content_id_;
 };
 
 }  // namespace blink

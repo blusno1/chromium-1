@@ -12,7 +12,7 @@
 #include "components/ntp_snippets/content_suggestion.h"
 
 class GURL;
-class Profile;
+class PrefService;
 
 namespace gfx {
 class Image;
@@ -22,6 +22,19 @@ class ContentSuggestionsNotifier {
  public:
   ContentSuggestionsNotifier();
   virtual ~ContentSuggestionsNotifier();
+
+  // Returns true if notifications should be sent.
+  //
+  // This function considers:
+  //   * If the user has disabled notifications through preferences.
+  //   * If the user has ignored enough consecutive notifications to treat that
+  //     as disabling notifications (if auto-opt-out is enabled).
+  //
+  // It does not consider:
+  //   * Whether the notifications feature is enabled. In this case, none of the
+  //     notifications machinery is instantiated to begin with.
+  //   * On Android O, if the notification channel is disabled.
+  static bool ShouldSendNotifications(PrefService* prefs);
 
   virtual bool SendNotification(const ntp_snippets::ContentSuggestion::ID& id,
                                 const GURL& url,
@@ -44,14 +57,16 @@ class ContentSuggestionsNotifier {
   // is computed in turn from that.
   virtual void FlushCachedMetrics() = 0;
 
-  // False if auto opt out is enabled and the user has ignored enough
-  // notifications that we no longer think that the user is interested in them.
-  virtual bool IsEnabledForProfile(Profile* profile) = 0;
+  // Registers the notification channel on Android O. May be called regardless
+  // of Android version or registration state; it is a no-op before Android O,
+  // or if the channel is already registered. If |!enabled|, then the channel is
+  // disabled at creation. Returns true if the channel was created (false pre-O,
+  // or if it already existed).
+  virtual bool RegisterChannel(bool enabled) = 0;
 
-  // Registers or unregisters the notification channel on Android O. May be
-  // called regardless of Android version or registration state; they are no-ops
-  // before Android O, or if the channel is already (de)registered.
-  virtual void RegisterChannel() = 0;
+  // Unregisters the notification channel on Android O. May be called regardless
+  // of Android version or registration state; it is a no-op before Android O,
+  // or if the channel is not registered.
   virtual void UnregisterChannel() = 0;
 
  private:

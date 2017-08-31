@@ -1094,7 +1094,15 @@
             {
                 "name": "virtualTimeBudgetExpired",
                 "experimental": true,
-                "description": "Notification sent after the virual time budget for the current VirtualTimePolicy has run out."
+                "description": "Notification sent after the virtual time budget for the current VirtualTimePolicy has run out."
+            },
+            {
+                "name": "virtualTimePaused",
+                "experimental": true,
+                "parameters": [
+                    { "name": "virtualTimeElapsed", "type": "integer", "description": "The amount of virtual time that has elapsed in milliseconds since virtual time was first enabled." }
+                ],
+                "description": "Notification sent after the virtual time has paused."
             }
         ]
     },
@@ -2129,7 +2137,11 @@
                 "description": "Data entry.",
                 "properties": [
                     { "name": "requestURL", "type": "string", "description": "Request URL." },
+                    { "name": "requestMethod", "type": "string", "description": "Request method." },
+                    { "name": "requestHeaders", "type": "array", "items": { "$ref": "Header" }, "description": "Request headers" },
                     { "name": "responseTime", "type": "number", "description": "Number of seconds since epoch." },
+                    { "name": "responseStatus", "type": "integer", "description": "HTTP response status code." },
+                    { "name": "responseStatusText", "type": "string", "description": "HTTP response status text." },
                     { "name": "responseHeaders", "type": "array", "items": { "$ref": "Header" }, "description": "Response headers" }
                 ]
             },

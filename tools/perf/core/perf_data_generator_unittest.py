@@ -84,13 +84,13 @@ class PerfDataGeneratorTest(unittest.TestCase):
     expected_generated_test = {
         'override_compile_targets': ['telemetry_perf_tests'],
         'args': ['speedometer', '-v', '--upload-results',
-                 '--output-format=chartjson', '--browser=release'],
+                 '--browser=release', '--output-format=chartjson'],
         'swarming': {
           'ignore_task_failure': False,
           'dimension_sets': [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}],
           'hard_timeout': 10800,
           'can_use_on_swarming_builders': True,
-          'expiration': 72000,
+          'expiration': 36000,
           'io_timeout': 600,
           'upload_test_results': False,
         },
@@ -106,7 +106,7 @@ class PerfDataGeneratorTest(unittest.TestCase):
     expected_generated_test = {
         'override_compile_targets': ['telemetry_perf_tests'],
         'args': ['speedometer', '-v', '--upload-results',
-                 '--output-format=chartjson', '--browser=reference',
+                 '--browser=reference', '--output-format=chartjson',
                  '--max-failures=5',
                  '--output-trace-tag=_ref'],
         'swarming': {
@@ -114,7 +114,7 @@ class PerfDataGeneratorTest(unittest.TestCase):
           'dimension_sets': [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}],
           'hard_timeout': 10800,
           'can_use_on_swarming_builders': True,
-          'expiration': 72000,
+          'expiration': 36000,
           'io_timeout': 600,
           'upload_test_results': False,
         },
@@ -145,8 +145,8 @@ class PerfDataGeneratorTest(unittest.TestCase):
     self.assertEqual(len(tests), 1)
     test = tests[0]
     self.assertEquals(test['args'], [
-        'regular', '-v', '--upload-results', '--output-format=chartjson',
-        '--browser=android-webview',
+        'regular', '-v', '--upload-results',
+        '--browser=android-webview', '--output-format=chartjson',
         '--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk'])
     self.assertEquals(test['isolate_name'], 'telemetry_perf_webview_tests')
 
@@ -157,13 +157,13 @@ class PerfDataGeneratorTest(unittest.TestCase):
     expected_generated_test = {
         'override_compile_targets': ['telemetry_perf_tests'],
         'args': ['system_health.common_desktop', '-v', '--upload-results',
-                 '--output-format=chartjson', '--browser=release'],
+                 '--browser=release', '--output-format=chartjson'],
         'swarming': {
           'ignore_task_failure': False,
           'dimension_sets': [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}],
           'hard_timeout': 10800,
           'can_use_on_swarming_builders': True,
-          'expiration': 72000,
+          'expiration': 36000,
           'io_timeout': 600,
           'upload_test_results': True,
         },

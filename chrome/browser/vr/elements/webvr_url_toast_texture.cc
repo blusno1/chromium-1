@@ -12,19 +12,21 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/text_constants.h"
+#include "ui/gfx/text_elider.h"
 #include "url/gurl.h"
 
 namespace vr {
 
 namespace {
 
-static constexpr float kWidth = 0.572;
-static constexpr float kHeight = 0.088;
+static constexpr float kWidth = 0.472;
+static constexpr float kHeight = 0.064;
 static constexpr float kFontHeight = 0.027;
-static constexpr float kSecurityIconFieldWidth = 0.058;
+static constexpr float kSecurityIconOffsetLeft = 0.022;
+static constexpr float kSecurityIconOffsetRight = 0.016;
 static constexpr float kSecurityIconSize = 0.03;
 static constexpr float kUrlRightMargin = 0.02;
-static constexpr float kRadiusFactor = 0.055;
+static constexpr float kRadius = 0.004;
 
 }  // namespace
 
@@ -57,13 +59,12 @@ void WebVrUrlToastTexture::Draw(SkCanvas* canvas,
   size_.set_width(texture_size.width());
 
   // Draw background.
-  float radius = size_.height() * kRadiusFactor;
   SkPaint paint;
   paint.setColor(color_scheme().transient_warning_background);
   paint.setAlpha(255);
   canvas->drawRoundRect(
-      SkRect::MakeXYWH(0, 0, ToPixels(kWidth), ToPixels(kHeight)), radius,
-      radius, paint);
+      SkRect::MakeXYWH(0, 0, ToPixels(kWidth), ToPixels(kHeight)),
+      ToPixels(kRadius), ToPixels(kRadius), paint);
 
   // Make a gfx canvas to support utility drawing methods.
   cc::SkiaPaintCanvas paint_canvas(canvas);
@@ -72,12 +73,10 @@ void WebVrUrlToastTexture::Draw(SkCanvas* canvas,
   // Site security state icon.
   if ((state_.security_level != security_state::NONE || state_.offline_page) &&
       state_.vector_icon != nullptr && state_.should_display_url) {
-    gfx::RectF icon_region(kSecurityIconFieldWidth / 2 - kSecurityIconSize / 2,
-                           kHeight / 2 - kSecurityIconSize / 2,
-                           kSecurityIconSize, kSecurityIconSize);
     canvas->save();
     canvas->scale(size_.width() / kWidth, size_.width() / kWidth);
-    canvas->translate(icon_region.x(), icon_region.y());
+    canvas->translate(kSecurityIconOffsetLeft,
+                      kHeight / 2 - kSecurityIconSize / 2);
     const gfx::VectorIcon& icon = *state_.vector_icon;
     float icon_scale = kSecurityIconSize / GetDefaultSizeOfVectorIcon(icon);
     canvas->scale(icon_scale, icon_scale);
@@ -87,7 +86,8 @@ void WebVrUrlToastTexture::Draw(SkCanvas* canvas,
   }
 
   if (state_.should_display_url) {
-    float url_x = kSecurityIconFieldWidth;
+    float url_x =
+        kSecurityIconOffsetLeft + kSecurityIconSize + kSecurityIconOffsetRight;
     if (!url_render_text_ || url_dirty_) {
       float url_width = kWidth - url_x - kUrlRightMargin;
       gfx::Rect text_bounds(ToPixels(url_x), 0, ToPixels(url_width),
@@ -111,10 +111,18 @@ void WebVrUrlToastTexture::RenderUrl(const gfx::Size& texture_size,
   url_formatter::FormatUrlTypes format_types =
       url_formatter::kFormatUrlOmitDefaults;
   format_types |= url_formatter::kFormatUrlOmitHTTPS;
-  format_types |= url_formatter::kFormatUrlExperimentalElideAfterHost;
   const base::string16 formatted_url = url_formatter::FormatUrl(
       state_.gurl, format_types, net::UnescapeRule::NORMAL, &parsed, nullptr,
       nullptr);
+
+  base::string16 url;
+  if (parsed.host.is_valid())
+    url = formatted_url.substr(parsed.host.begin, parsed.host.len);
+
+  if (parsed.path.is_nonempty() || parsed.query.is_nonempty() ||
+      parsed.ref.is_nonempty()) {
+    url += gfx::kForwardSlash + base::string16(gfx::kEllipsisUTF16);
+  }
 
   gfx::FontList font_list;
   if (!UiTexture::GetFontList(pixel_font_height, formatted_url, &font_list))
@@ -125,7 +133,7 @@ void WebVrUrlToastTexture::RenderUrl(const gfx::Size& texture_size,
   render_text->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   render_text->SetElideBehavior(gfx::ELIDE_HEAD);
   render_text->SetDirectionalityMode(gfx::DIRECTIONALITY_FORCE_LTR);
-  render_text->SetText(formatted_url);
+  render_text->SetText(url);
 
   url_render_text_ = std::move(render_text);
 }

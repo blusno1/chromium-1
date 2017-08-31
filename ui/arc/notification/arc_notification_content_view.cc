@@ -235,6 +235,10 @@ class ArcNotificationContentView::ContentViewDelegate
     return owner_->control_buttons_view_;
   }
 
+  bool IsExpanded() const override { return owner_->IsExpanded(); }
+
+  void SetExpanded(bool expanded) override { owner_->SetExpanded(expanded); }
+
  private:
   ArcNotificationContentView* const owner_;
 
@@ -251,6 +255,10 @@ ArcNotificationContentView::ArcNotificationContentView(
       notification_key_(item->GetNotificationKey()),
       event_forwarder_(new EventForwarder(this)),
       mouse_enter_exit_handler_(new MouseEnterExitHandler(this)) {
+  // kNotificationWidth must be 360, since this value is separately defiend in
+  // ArcNotificationWrapperView class in Android side.
+  DCHECK_EQ(360, message_center::kNotificationWidth);
+
   SetFocusBehavior(FocusBehavior::ALWAYS);
   set_notify_enter_exit_on_child(true);
 
@@ -458,6 +466,21 @@ void ArcNotificationContentView::UpdateAccessibleName() {
     return;
 
   accessible_name_ = item_->GetAccessibleName();
+}
+
+bool ArcNotificationContentView::IsExpanded() const {
+  return item_->GetExpandState() == mojom::ArcNotificationExpandState::EXPANDED;
+}
+
+void ArcNotificationContentView::SetExpanded(bool expanded) {
+  auto expand_state = item_->GetExpandState();
+  if (expanded) {
+    if (expand_state == mojom::ArcNotificationExpandState::COLLAPSED)
+      item_->ToggleExpansion();
+  } else {
+    if (expand_state == mojom::ArcNotificationExpandState::EXPANDED)
+      item_->ToggleExpansion();
+  }
 }
 
 void ArcNotificationContentView::ViewHierarchyChanged(

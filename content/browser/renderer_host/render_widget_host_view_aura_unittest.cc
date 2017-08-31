@@ -44,7 +44,6 @@
 #include "content/browser/renderer_host/delegated_frame_host_client_aura.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
-#include "content/browser/renderer_host/mock_widget_impl.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/overscroll_controller_delegate.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
@@ -66,6 +65,7 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/fake_renderer_compositor_frame_sink.h"
+#include "content/test/mock_widget_impl.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "ipc/ipc_message.h"
@@ -1744,6 +1744,43 @@ TEST_F(RenderWidgetHostViewAuraTest, FinishCompositionByMouse) {
   EXPECT_EQ(InputMsg_ImeFinishComposingText::ID,
             sink_->GetMessageAt(0)->type());
   EXPECT_EQ(InputMsg_HandleInputEvent::ID, sink_->GetMessageAt(1)->type());
+}
+
+// Checks that WasOcculded/WasUnOccluded notifies RenderWidgetHostImpl.
+TEST_F(RenderWidgetHostViewAuraTest, WasOccluded) {
+  view_->InitAsChild(nullptr);
+  view_->Show();
+  EXPECT_FALSE(widget_host_->is_hidden());
+
+  // Verifies WasOccluded sets RenderWidgetHostImpl as hidden and WasUnOccluded
+  // resets the state.
+  view_->WasOccluded();
+  EXPECT_TRUE(widget_host_->is_hidden());
+  view_->WasUnOccluded();
+  EXPECT_FALSE(widget_host_->is_hidden());
+
+  // Verifies WasOccluded sets RenderWidgetHostImpl as hidden and Show resets
+  // the state.
+  view_->WasOccluded();
+  EXPECT_TRUE(widget_host_->is_hidden());
+  view_->Show();
+  EXPECT_FALSE(widget_host_->is_hidden());
+
+  // WasOccluded and WasUnOccluded are not in pairs. The last one dictates
+  // the final state.
+  for (int i = 0; i < 2; ++i) {
+    view_->WasOccluded();
+    EXPECT_TRUE(widget_host_->is_hidden());
+  }
+  view_->WasUnOccluded();
+  EXPECT_FALSE(widget_host_->is_hidden());
+
+  for (int i = 0; i < 4; ++i) {
+    view_->WasUnOccluded();
+    EXPECT_FALSE(widget_host_->is_hidden());
+  }
+  view_->WasOccluded();
+  EXPECT_TRUE(widget_host_->is_hidden());
 }
 
 // Checks that touch-event state is maintained correctly.
@@ -6264,7 +6301,7 @@ TEST_F(InputMethodStateAuraTest, GetSelectionRange) {
   }
 }
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
 // This test will verify that after selection, the selected text is written to
 // the clipboard from the focused widget.
 TEST_F(InputMethodStateAuraTest, SelectedTextCopiedToClipboard) {

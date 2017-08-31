@@ -391,7 +391,13 @@ TEST(CircularDeque, IteratorComparisons) {
 }
 
 TEST(CircularDeque, IteratorIncDec) {
-  circular_deque<int> q = MakeSequence(10);
+  circular_deque<int> q;
+
+  // No-op offset computations with no capacity.
+  EXPECT_EQ(q.end(), q.end() + 0);
+  EXPECT_EQ(q.end(), q.end() - 0);
+
+  q = MakeSequence(10);
 
   // Mutable preincrement, predecrement.
   {
@@ -722,6 +728,9 @@ TEST(CircularDeque, InsertFill) {
 TEST(CircularDeque, InsertEraseRange) {
   circular_deque<int> q;
 
+  // Erase nothing from an empty deque should work.
+  q.erase(q.begin(), q.end());
+
   // Loop index used below to shift the used items in the buffer.
   for (int i = 0; i < 10; i++) {
     circular_deque<int> source;
@@ -762,11 +771,20 @@ TEST(CircularDeque, InsertEraseRange) {
     EXPECT_EQ(1, q[6]);
     EXPECT_EQ(2, q[7]);
 
-    // Now erase the inserted ranges.
-    auto result = q.erase(q.begin(), q.begin() + 2);
+    // Now erase the inserted ranges. Try each subsection also with no items
+    // being erased, which should be a no-op.
+    auto result = q.erase(q.begin(), q.begin());  // No-op.
     EXPECT_EQ(q.begin(), result);
+    result = q.erase(q.begin(), q.begin() + 2);
+    EXPECT_EQ(q.begin(), result);
+
+    result = q.erase(q.begin() + 1, q.begin() + 1);  // No-op.
+    EXPECT_EQ(q.begin() + 1, result);
     result = q.erase(q.begin() + 1, q.begin() + 3);
     EXPECT_EQ(q.begin() + 1, result);
+
+    result = q.erase(q.end() - 2, q.end() - 2);  // No-op.
+    EXPECT_EQ(q.end() - 2, result);
     result = q.erase(q.end() - 2, q.end());
     EXPECT_EQ(q.end(), result);
 

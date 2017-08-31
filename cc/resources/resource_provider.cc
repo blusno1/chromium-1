@@ -1015,21 +1015,6 @@ void ResourceProvider::EnableReadLockFencesForTesting(viz::ResourceId id) {
   resource->read_lock_fences_enabled = true;
 }
 
-ResourceProvider::ScopedReadLockGL::ScopedReadLockGL(
-    ResourceProvider* resource_provider,
-    viz::ResourceId resource_id)
-    : resource_provider_(resource_provider), resource_id_(resource_id) {
-  const Resource* resource = resource_provider->LockForRead(resource_id);
-  texture_id_ = resource->gl_id;
-  target_ = resource->target;
-  size_ = resource->size;
-  color_space_ = resource->color_space;
-}
-
-ResourceProvider::ScopedReadLockGL::~ScopedReadLockGL() {
-  resource_provider_->UnlockForRead(resource_id_);
-}
-
 ResourceProvider::ScopedWriteLockGL::ScopedWriteLockGL(
     ResourceProvider* resource_provider,
     viz::ResourceId resource_id)
@@ -1209,18 +1194,6 @@ void ResourceProvider::PopulateSkBitmapWithResource(SkBitmap* sk_bitmap,
   SkImageInfo info = SkImageInfo::MakeN32Premul(resource->size.width(),
                                                 resource->size.height());
   sk_bitmap->installPixels(info, resource->pixels, info.minRowBytes());
-}
-
-ResourceProvider::ScopedReadLockSoftware::ScopedReadLockSoftware(
-    ResourceProvider* resource_provider,
-    viz::ResourceId resource_id)
-    : resource_provider_(resource_provider), resource_id_(resource_id) {
-  const Resource* resource = resource_provider->LockForRead(resource_id);
-  resource_provider->PopulateSkBitmapWithResource(&sk_bitmap_, resource);
-}
-
-ResourceProvider::ScopedReadLockSoftware::~ScopedReadLockSoftware() {
-  resource_provider_->UnlockForRead(resource_id_);
 }
 
 ResourceProvider::ScopedWriteLockSoftware::ScopedWriteLockSoftware(

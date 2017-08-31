@@ -89,6 +89,7 @@
 #include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray_caps_lock.h"
+#include "ash/system/web_notification/message_center_controller.h"
 #include "ash/touch/ash_touch_transform_controller.h"
 #include "ash/tray_action/tray_action.h"
 #include "ash/utility/screenshot_controller.h"
@@ -597,11 +598,16 @@ void Shell::NotifyAppListVisibilityChanged(bool visible,
 }
 
 void Shell::NotifyVoiceInteractionStatusChanged(VoiceInteractionState state) {
+  voice_interaction_state_ = state;
   for (auto& observer : shell_observers_)
     observer.OnVoiceInteractionStatusChanged(state);
 }
 
 void Shell::NotifyVoiceInteractionEnabled(bool enabled) {
+  // TODO(updowndota) Rename the methods name to be consist with the flag name
+  // after the methods are refactored into the voice interaction related
+  // cotroller (crbug.com/758650).
+  voice_interaction_settings_enabled_ = enabled;
   for (auto& observer : shell_observers_)
     observer.OnVoiceInteractionEnabled(enabled);
 }
@@ -612,6 +618,7 @@ void Shell::NotifyVoiceInteractionContextEnabled(bool enabled) {
 }
 
 void Shell::NotifyVoiceInteractionSetupCompleted() {
+  voice_interaction_setup_completed_ = true;
   for (auto& observer : shell_observers_)
     observer.OnVoiceInteractionSetupCompleted();
 }
@@ -1163,6 +1170,8 @@ void Shell::Init(const ShellInitParams& init_params) {
   // order to create mirror window. Run it after the main message loop
   // is started.
   display_manager_->CreateMirrorWindowAsyncIfAny();
+
+  message_center_controller_ = base::MakeUnique<MessageCenterController>();
 
   for (auto& observer : shell_observers_)
     observer.OnShellInitialized();

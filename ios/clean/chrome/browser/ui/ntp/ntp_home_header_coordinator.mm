@@ -4,6 +4,9 @@
 
 #import "ios/clean/chrome/browser/ui/ntp/ntp_home_header_coordinator.h"
 
+#import "ios/chrome/browser/ui/broadcaster/chrome_broadcaster.h"
+#import "ios/chrome/browser/ui/browser_list/browser.h"
+#import "ios/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 #import "ios/clean/chrome/browser/ui/ntp/ntp_home_header_mediator.h"
 #import "ios/clean/chrome/browser/ui/ntp/ntp_home_header_view_controller.h"
 
@@ -44,9 +47,18 @@
   return self.mediator;
 }
 
+- (void)setCollectionSynchronizer:
+    (id<ContentSuggestionsCollectionSynchronizing>)collectionSynchronizer {
+  _collectionSynchronizer = collectionSynchronizer;
+  self.mediator.collectionSynchronizer = collectionSynchronizer;
+}
+
 #pragma mark - BrowserCoordinator
 
 - (void)start {
+  if (self.started)
+    return;
+
   self.viewController = [[NTPHomeHeaderViewController alloc] init];
 
   self.mediator = [[NTPHomeHeaderMediator alloc] init];
@@ -57,11 +69,18 @@
   self.mediator.headerConsumer = self.viewController;
   self.mediator.alerter = self;
 
+  [self.browser->broadcaster()
+      addObserver:self.mediator
+      forSelector:@selector(broadcastSelectedNTPPanel:)];
+
   [super start];
 }
 
 - (void)stop {
   [super stop];
+  [self.browser->broadcaster()
+      removeObserver:self.mediator
+         forSelector:@selector(broadcastSelectedNTPPanel:)];
   self.mediator = nil;
   self.viewController = nil;
 }

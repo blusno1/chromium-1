@@ -35,8 +35,11 @@
 #include "services/service_manager/public/cpp/connect.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
+#include "third_party/WebKit/public/platform/WebSurfaceLayerBridge.h"
+#include "third_party/WebKit/public/platform/WebVideoFrameSubmitter.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "url/origin.h"
 
 #if defined(OS_ANDROID)
 #include "content/renderer/media/android/media_player_renderer_client_factory.h"
@@ -45,6 +48,7 @@
 #include "content/renderer/media/android/stream_texture_wrapper_impl.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/media.h"
+#include "url/gurl.h"
 #endif
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA)
@@ -172,7 +176,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
     blink::WebMediaPlayerClient* client,
     blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
     blink::WebContentDecryptionModule* initial_cdm,
-    const blink::WebString& sink_id) {
+    const blink::WebString& sink_id,
+    blink::WebLayerTreeView* layer_tree_view) {
   blink::WebLocalFrame* web_frame = render_frame_->GetWebFrame();
   blink::WebSecurityOrigin security_origin =
       render_frame_->GetWebFrame()->GetSecurityOrigin();
@@ -263,6 +268,7 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
         mojo::MakeRequest(&watch_time_recorder_provider_));
   }
 
+  DCHECK(layer_tree_view);
   std::unique_ptr<media::WebMediaPlayerParams> params(
       new media::WebMediaPlayerParams(
           std::move(media_log),
@@ -281,7 +287,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
           enable_instant_source_buffer_gc, embedded_media_experience_enabled,
           watch_time_recorder_provider_.get(),
           base::Bind(&MediaFactory::CreateVideoDecodeStatsRecorder,
-                     base::Unretained(this))));
+                     base::Unretained(this)),
+          base::Bind(&blink::WebSurfaceLayerBridge::Create, layer_tree_view)));
 
   media::WebMediaPlayerImpl* media_player = new media::WebMediaPlayerImpl(
       web_frame, client, encrypted_client, GetWebMediaPlayerDelegate(),

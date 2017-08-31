@@ -226,11 +226,6 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
           base::Bind(&WebMediaPlayerImpl::OnProgress, AsWeakPtr()),
           tick_clock_.get()),
       url_index_(url_index),
-      // Threaded compositing isn't enabled universally yet.
-      compositor_task_runner_(params->compositor_task_runner()
-                                  ? params->compositor_task_runner()
-                                  : base::ThreadTaskRunnerHandle::Get()),
-      compositor_(new VideoFrameCompositor(compositor_task_runner_)),
 #if defined(OS_ANDROID)  // WMPI_CAST
       cast_impl_(this, client_, params->context_3d_cb()),
 #endif
@@ -264,8 +259,25 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
   DCHECK(client_);
   DCHECK(delegate_);
 
-  if (surface_layer_for_video_enabled_)
-    bridge_ = base::WrapUnique(blink::WebSurfaceLayerBridge::Create());
+  if (surface_layer_for_video_enabled_) {
+    bridge_ = params->create_bridge_callback().Run(this);
+    // TODO(lethalantidote): Use a seperate task_runner. https://crbug/753605.
+    vfc_task_runner_ = media_task_runner_;
+  } else {
+    // Threaded compositing isn't enabled universally yet.
+    vfc_task_runner_ = params->compositor_task_runner()
+                           ? params->compositor_task_runner()
+                           : base::ThreadTaskRunnerHandle::Get();
+  }
+
+  compositor_ = base::MakeUnique<VideoFrameCompositor>(vfc_task_runner_);
+
+  if (surface_layer_for_video_enabled_) {
+    vfc_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&VideoFrameCompositor::EnableSubmission,
+                              base::Unretained(compositor_.get()),
+                              bridge_->GetFrameSinkId()));
+  }
 
   // If we're supposed to force video overlays, then make sure that they're
   // enabled all the time.
@@ -329,12 +341,12 @@ WebMediaPlayerImpl::~WebMediaPlayerImpl() {
 
   // Destruct compositor resources in the proper order.
   client_->SetWebLayer(nullptr);
+
   if (!surface_layer_for_video_enabled_ && video_weblayer_) {
     static_cast<cc::VideoLayer*>(video_weblayer_->layer())->StopUsingProvider();
   }
-  // TODO(lethalantidote): Handle destruction of compositor for surface layer.
-  // https://crbug/739854.
-  compositor_task_runner_->DeleteSoon(FROM_HERE, compositor_);
+
+  vfc_task_runner_->DeleteSoon(FROM_HERE, std::move(compositor_));
 
   media_log_->AddEvent(
       media_log_->CreateEvent(MediaLogEvent::WEBMEDIAPLAYER_DESTROYED));
@@ -355,6 +367,17 @@ void WebMediaPlayerImpl::Load(LoadType load_type,
     return;
   }
   DoLoad(load_type, url, cors_mode);
+}
+
+void WebMediaPlayerImpl::OnWebLayerReplaced() {
+  DCHECK(bridge_);
+  bridge_->GetWebLayer()->CcLayer()->SetContentsOpaque(opaque_);
+  // TODO(lethalantidote): Figure out how to persist opaque setting
+  // without calling WebLayerImpl's SetContentsOpaueIsFixed;
+  // https://crbug/739859.
+  // TODO(lethalantidote): Figure out how to pass along rotation information.
+  // https://crbug/750313.
+  client_->SetWebLayer(bridge_->GetWebLayer());
 }
 
 bool WebMediaPlayerImpl::SupportsOverlayFullscreenVideo() {
@@ -1347,6 +1370,7 @@ void WebMediaPlayerImpl::OnError(PipelineStatus status) {
     renderer_factory_selector_->SetUseMediaPlayer(true);
 
     pipeline_controller_.Stop();
+    SetMemoryReportingState(false);
 
     main_task_runner_->PostTask(
         FROM_HERE, base::Bind(&WebMediaPlayerImpl::StartPipeline, AsWeakPtr()));
@@ -1356,6 +1380,8 @@ void WebMediaPlayerImpl::OnError(PipelineStatus status) {
 
   ReportPipelineError(load_type_, status, media_log_.get());
   media_log_->AddEvent(media_log_->CreatePipelineErrorEvent(status));
+  if (watch_time_reporter_)
+    watch_time_reporter_->OnError(status);
 
   if (ready_state_ == WebMediaPlayer::kReadyStateHaveNothing) {
     // Any error that occurs before reaching ReadyStateHaveMetadata should
@@ -1418,16 +1444,10 @@ void WebMediaPlayerImpl::OnMetadata(PipelineMetadata metadata) {
     if (!surface_layer_for_video_enabled_) {
       DCHECK(!video_weblayer_);
       video_weblayer_.reset(new cc_blink::WebLayerImpl(cc::VideoLayer::Create(
-          compositor_, pipeline_metadata_.video_rotation)));
+          compositor_.get(), pipeline_metadata_.video_rotation)));
       video_weblayer_->layer()->SetContentsOpaque(opaque_);
       video_weblayer_->SetContentsOpaqueIsFixed(true);
       client_->SetWebLayer(video_weblayer_.get());
-    } else if (bridge_->GetWebLayer()) {
-      bridge_->GetWebLayer()->CcLayer()->SetContentsOpaque(opaque_);
-      // TODO(lethalantidote): Figure out how to persist opaque setting
-      // without calling WebLayerImpl's SetContentsOpaueIsFixed;
-      // https://crbug/739859.
-      client_->SetWebLayer(bridge_->GetWebLayer());
     }
   }
 
@@ -1625,11 +1645,7 @@ void WebMediaPlayerImpl::OnVideoNaturalSizeChange(const gfx::Size& size) {
     return;
 
   pipeline_metadata_.natural_size = rotated_size;
-
-  // Re-create |watch_time_reporter_| if we didn't originally know the video
-  // size or the previous size was too small for reporting.
-  if (!watch_time_reporter_->IsSizeLargeEnoughToReportWatchTime())
-    CreateWatchTimeReporter();
+  CreateWatchTimeReporter();
 
   if (video_decode_stats_reporter_)
     video_decode_stats_reporter_->OnNaturalSizeChanged(rotated_size);
@@ -1666,15 +1682,23 @@ void WebMediaPlayerImpl::OnAudioConfigChange(const AudioDecoderConfig& config) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   DCHECK_NE(ready_state_, WebMediaPlayer::kReadyStateHaveNothing);
 
+  const bool codec_change =
+      pipeline_metadata_.audio_decoder_config.codec() != config.codec();
   pipeline_metadata_.audio_decoder_config = config;
 
   if (observer_)
     observer_->OnMetadataChanged(pipeline_metadata_);
+
+  if (codec_change)
+    CreateWatchTimeReporter();
 }
 
 void WebMediaPlayerImpl::OnVideoConfigChange(const VideoDecoderConfig& config) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   DCHECK_NE(ready_state_, WebMediaPlayer::kReadyStateHaveNothing);
+
+  const bool codec_change =
+      pipeline_metadata_.video_decoder_config.codec() != config.codec();
 
   // TODO(chcunningham): Observe changes to video codec profile to signal
   // beginning of a new Media Capabilities playback report.
@@ -1685,6 +1709,9 @@ void WebMediaPlayerImpl::OnVideoConfigChange(const VideoDecoderConfig& config) {
 
   if (video_decode_stats_reporter_)
     video_decode_stats_reporter_->OnVideoConfigChanged(config);
+
+  if (codec_change)
+    CreateWatchTimeReporter();
 }
 
 void WebMediaPlayerImpl::OnVideoAverageKeyframeDistanceUpdate() {
@@ -1749,10 +1776,10 @@ void WebMediaPlayerImpl::OnFrameShown() {
     frame_time_report_cb_.Reset(
         base::Bind(&WebMediaPlayerImpl::ReportTimeFromForegroundToFirstFrame,
                    AsWeakPtr(), base::TimeTicks::Now()));
-    compositor_task_runner_->PostTask(
+    vfc_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&VideoFrameCompositor::SetOnNewProcessedFrameCallback,
-                   base::Unretained(compositor_),
+                   base::Unretained(compositor_.get()),
                    BindToCurrentLoop(frame_time_report_cb_.callback())));
   }
 
@@ -2041,7 +2068,7 @@ std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer() {
 #endif
   return renderer_factory_selector_->GetCurrentFactory()->CreateRenderer(
       media_task_runner_, worker_task_runner_, audio_source_provider_.get(),
-      compositor_, request_overlay_info_cb, client_->TargetColorSpace());
+      compositor_.get(), request_overlay_info_cb, client_->TargetColorSpace());
 }
 
 void WebMediaPlayerImpl::StartPipeline() {
@@ -2163,9 +2190,9 @@ scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrameFromCompositor()
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl::GetCurrentFrameFromCompositor");
 
-  // Needed when the |main_task_runner_| and |compositor_task_runner_| are the
+  // Needed when the |main_task_runner_| and |vfc_task_runner_| are the
   // same to avoid deadlock in the Wait() below.
-  if (compositor_task_runner_->BelongsToCurrentThread()) {
+  if (vfc_task_runner_->BelongsToCurrentThread()) {
     scoped_refptr<VideoFrame> video_frame =
         compositor_->GetCurrentFrameAndUpdateIfStale();
     if (!video_frame) {
@@ -2181,9 +2208,9 @@ scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrameFromCompositor()
   scoped_refptr<VideoFrame> video_frame;
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
-  compositor_task_runner_->PostTask(
+  vfc_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&GetCurrentFrameAndSignal, base::Unretained(compositor_),
+      base::Bind(&GetCurrentFrameAndSignal, base::Unretained(compositor_.get()),
                  &video_frame, &event));
   event.Wait();
 
@@ -2409,7 +2436,7 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
   // It's not critical if some cases where memory usage can change are missed,
   // since media memory changes are usually gradual.
   result.is_memory_reporting_enabled =
-      can_play && !result.is_suspended && (!paused_ || seeking_);
+      !has_error && can_play && !result.is_suspended && (!paused_ || seeking_);
 
   return result;
 }
@@ -2421,8 +2448,12 @@ void WebMediaPlayerImpl::ReportMemoryUsage() {
   // thread.  Before that, however, ~WebMediaPlayerImpl() posts a task to the
   // media thread and waits for it to finish.  Hence, the GetMemoryUsage() task
   // posted here must finish earlier.
-
-  if (demuxer_) {
+  //
+  // The exception to the above is when OnError() has been called. If we're in
+  // the error state we've already shut down the pipeline and can't rely on it
+  // to cycle the media thread before we destroy |demuxer_|. In this case skip
+  // collection of the demuxer memory stats.
+  if (demuxer_ && !IsNetworkStateError(network_state_)) {
     base::PostTaskAndReplyWithResult(
         media_task_runner_.get(), FROM_HERE,
         base::Bind(&Demuxer::GetMemoryUsage, base::Unretained(demuxer_.get())),

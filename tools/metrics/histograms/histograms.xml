@@ -1156,6 +1156,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Android.SeccompStatus.PhotoPickerSandbox"
+    enum="AndroidSeccompSandboxStatus">
+  <owner>peter@chromium.org</owner>
+  <owner>rsesek@chromium.org</owner>
+  <summary>
+    Reports the status of the seccomp-bpf sandbox in photo picker decoding
+    processes. Anything other than &quot;Sandbox Engaged&quot; indicates the
+    sandbox is not turned on. See https://crbug.com/477049.
+  </summary>
+</histogram>
+
 <histogram name="Android.SeccompStatus.Prctl" enum="AndroidSeccompStatus">
   <owner>rsesek@chromium.org</owner>
   <summary>
@@ -11029,6 +11040,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Cryptohome.DircryptoMinimalMigrationEndStatus"
+    enum="DircryptoMigrationEndStatus">
+  <owner>dspaid@chromium.org</owner>
+  <owner>pmarko@chromium.org</owner>
+  <summary>
+    The status of the user home directory minimal migration from ecryptfs to
+    ext4-crypto. This is logged once at the end of each minimal migration.
+  </summary>
+</histogram>
+
+<histogram name="Cryptohome.DircryptoMinimalMigrationStartStatus"
+    enum="DircryptoMigrationStartStatus">
+  <owner>dspaid@chromium.org</owner>
+  <owner>pmarko@chromium.org</owner>
+  <summary>
+    The status of the user home directory minimal migration from ecryptfs to
+    ext4-crypto. This is logged once at the start of each minimal migration.
+  </summary>
+</histogram>
+
 <histogram name="Cryptohome.Errors" enum="CryptohomeError">
   <owner>dkrahn@chromium.org</owner>
   <summary>Cryptohome errors.</summary>
@@ -11123,8 +11154,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The amount of time (ms) for the user's home directory to be migrated from
     ecryptfs to ext4-crypto.  If the migration is interrupted and subsequently
-    resumed (such as due to power loss) the no value is recorded for either
+    resumed (such as due to power loss) then no value is recorded for either
     attempt.
+  </summary>
+</histogram>
+
+<histogram name="Cryptohome.TimeToCompleteDircryptoMinimalMigration" units="ms">
+  <owner>dspaid@chromium.org</owner>
+  <summary>
+    The amount of time (ms) for the user's home directory to be migrated from
+    ecryptfs to ext4-crypto if the minimal migration method was used. If the
+    minimal migration is interrupted and subsequently resumed (such as due to
+    power loss) then no value is recorded for either attempt.
   </summary>
 </histogram>
 
@@ -47010,6 +47051,73 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.ContentSuggestions.BreakingNews.MessageReceived"
+    enum="ContentSuggestionsBreakingNewsMessageContainsNews">
+  <owner>vitaliii@chromium.org</owner>
+  <summary>
+    Android: Number of received messages and whether they contain pushed news. A
+    message contains pushed news if the payload key exists in the message. The
+    payload content is not checked at all (e.g. it may be empty). Recorded when
+    a message is received.
+  </summary>
+</histogram>
+
+<histogram
+    name="NewTabPage.ContentSuggestions.BreakingNews.SubscriptionRequestStatus"
+    enum="ContentSuggestionsStatusCode">
+  <owner>vitaliii@chromium.org</owner>
+  <summary>
+    Android: The result of a subscription request for breaking news at the
+    content suggestions server. Recorded when a request finishes. Analogous to
+    NewTabPage.ContentSuggestions.BreakingNews.UnsubscriptionRequestStatus.
+  </summary>
+</histogram>
+
+<histogram
+    name="NewTabPage.ContentSuggestions.BreakingNews.TimeSinceLastTokenValidation"
+    units="ms">
+  <owner>vitaliii@chromium.org</owner>
+  <summary>
+    Android: Time between a token validation and the last successful token
+    retrieval from InstanceID. Recorded when InstanceID answers our token
+    request for a validation either with a token or an error. If the token was
+    never received before the validation, the metric is not recorded.
+  </summary>
+</histogram>
+
+<histogram
+    name="NewTabPage.ContentSuggestions.BreakingNews.TokenRetrievalResult"
+    enum="InstanceIDResult">
+  <owner>vitaliii@chromium.org</owner>
+  <summary>
+    Android: The result of our inquiry to InstanceID to receive the current
+    token. Recorded when InstanceID replies to our inquiry for a token
+    (including for a validation).
+  </summary>
+</histogram>
+
+<histogram
+    name="NewTabPage.ContentSuggestions.BreakingNews.UnsubscriptionRequestStatus"
+    enum="ContentSuggestionsStatusCode">
+  <owner>vitaliii@chromium.org</owner>
+  <summary>
+    Android: The result of an unsubscription request for breaking news at the
+    content suggestions server. Recorded when a request finishes. Analogous to
+    NewTabPage.ContentSuggestions.BreakingNews.SubscriptionRequestStatus.
+  </summary>
+</histogram>
+
+<histogram
+    name="NewTabPage.ContentSuggestions.BreakingNews.WasTokenValidBeforeValidation"
+    enum="ContentSuggestionsBreakingNewsTokenValidationOutcome">
+  <owner>vitaliii@chromium.org</owner>
+  <summary>
+    Android: Whether a token validation detected an invalid token. This is
+    recorded only for validations where no error occured and the token was
+    actually retrieved.
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.ContentSuggestions.CategoryDismissed"
     enum="ContentSuggestionsCategory">
   <owner>treib@chromium.org</owner>
@@ -47674,14 +47782,27 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.LogoShown" enum="NewTabPageLogoShown">
-  <owner>ianwen@chromium.org</owner>
+  <owner>treib@chromium.org</owner>
   <summary>
-    The number of static logos and animated logos shown to users. Android and
-    iOS only.
+    The number of static logos and animated logos shown to users. Note that this
+    is recorded both for logos from the cache and for fresh (or revalidated)
+    logos, so it can be recorded twice per NTP impression. Android and iOS only.
   </summary>
 </histogram>
 
 <histogram name="NewTabPage.LogoShownTime" units="ms">
+  <obsolete>
+    Deprecated 2017-08 because it was only recorded for cached logos. Replaced
+    by LogoShownTime2.
+  </obsolete>
+  <owner>treib@chromium.org</owner>
+  <summary>
+    The amount of time between opening an NTP and the logo appearing. Only
+    recorded when there is a logo, and only recorded once per NTP. Android only.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.LogoShownTime2" units="ms">
   <owner>treib@chromium.org</owner>
   <summary>
     The amount of time between opening an NTP and the logo appearing. Only
@@ -49301,6 +49422,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NQE.Kbps.RawObservation" units="Kbps">
+  <owner>tbansal@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    Downstream throughput observation received or synthesized by network quality
+    estimator. Observations from different sources are recorded in separate
+    histograms.
+  </summary>
+</histogram>
+
 <histogram name="NQE.MainFrame.EffectiveConnectionType"
     enum="NQEEffectiveConnectionType">
   <owner>tbansal@chromium.org</owner>
@@ -49453,6 +49584,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Rough estimate of the round trip time at the URLRequest layer.  Recorded by
     the network quality estimator every time the effective connection type is
     computed.
+  </summary>
+</histogram>
+
+<histogram name="NQE.RTT.RawObservation" units="ms">
+  <owner>tbansal@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    RTT observation received or synthesized by network quality estimator.
+    Observations from different sources are recorded in separate histograms.
   </summary>
 </histogram>
 
@@ -55832,7 +55972,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="PDF.LoadStatus" enum="PDFLoadStatus">
+<histogram name="PDF.LoadStatus" enum="ChromePDFViewerLoadStatus">
   <owner>tommycli@chromium.org</owner>
   <summary>
     Tracks what happens when Chrome tries to load a PDF. This metric tracks all
@@ -64941,6 +65081,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="RendererScheduler.TaskQueueManager.DelayedTaskLateness"
     units="ms">
+  <obsolete>
+    Removed from code 2017-08.
+  </obsolete>
   <owner>alexclarke@chromium.org</owner>
   <summary>
     The delta between when a delayed task was scheduled to run and when the
@@ -64952,6 +65095,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram
     name="RendererScheduler.TaskQueueManager.ImmediateTaskQueueingDuration"
     units="ms">
+  <obsolete>
+    Removed from code 2017-08.
+  </obsolete>
   <owner>alexclarke@chromium.org</owner>
   <summary>
     The queueing duration for non-delayed tasks posted to the RendererScheduler.
@@ -64995,18 +65141,27 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="RendererScheduler.UserModel.GestureDuration" units="ms">
+  <obsolete>
+    Removed from code 2017-08.
+  </obsolete>
   <owner>alexclarke@chromium.org</owner>
   <summary>Duration of gestures (scrolls and pinches).</summary>
 </histogram>
 
 <histogram name="RendererScheduler.UserModel.GesturePredictedCorrectly"
     units="GesturePredictionResult">
+  <obsolete>
+    Removed from code 2017-08.
+  </obsolete>
   <owner>alexclarke@chromium.org</owner>
   <summary>Whether a user gesture was predicted correctly.</summary>
 </histogram>
 
 <histogram name="RendererScheduler.UserModel.GestureStartTimeSinceModelReset"
     units="ms">
+  <obsolete>
+    Removed from code 2017-08.
+  </obsolete>
   <owner>alexclarke@chromium.org</owner>
   <summary>
     Time between when the UserModel was last reset (which happens on navigation)
@@ -65015,6 +65170,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="RendererScheduler.UserModel.TimeBetweenGestures" units="ms">
+  <obsolete>
+    Removed from code 2017-08.
+  </obsolete>
   <owner>alexclarke@chromium.org</owner>
   <summary>Time between subsequent gestures (scrolls and pinches).</summary>
 </histogram>
@@ -81751,6 +81909,66 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="TabManager.BackgroundTabOpening.TabCount" units="tabs">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    The max number of background tabs pending or loading when opening background
+    tabs. This is recorded at the end of background tab opening session, which
+    is defined as the duration from the time when the browser starts to open
+    background tabs until the time when browser has finished loading those tabs
+    or paused loading due to memory pressure. A new session starts when the
+    browser resumes loading background tabs when memory pressure returns to
+    normal. The metric is not recorded when the session overlaps with session
+    restore.
+  </summary>
+</histogram>
+
+<histogram name="TabManager.BackgroundTabOpening.TabLoadAutoStartedCount"
+    units="tabs">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    The number of background tabs whose loading was triggered by TabManager
+    automatically when opening background tabs. This is recorded at the end of
+    background tab opening session, which is defined as the duration from the
+    time when the browser starts to open background tabs until the time when
+    browser has finished loading those tabs or paused loading due to memory
+    pressure. A new session starts when the browser resumes loading background
+    tabs when memory pressure returns to normal. The metric is not recorded when
+    the session overlaps with session restore.
+  </summary>
+</histogram>
+
+<histogram name="TabManager.BackgroundTabOpening.TabLoadUserInitiatedCount"
+    units="tabs">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    The number of background tabs whose loading was triggered by user action
+    when opening background tabs. For example, when the user selects a
+    background tab and brings it to foreground, that tab will start to load
+    immediately if not already loading. This is recorded at the end of
+    background tab opening session, which is defined as the duration from the
+    time when the browser starts to open background tabs until the time when
+    browser has finished loading those tabs or paused loading due to memory
+    pressure. A new session starts when the browser resumes loading background
+    tabs when memory pressure returns to normal. The metric is not recorded when
+    the session overlaps with session restore.
+  </summary>
+</histogram>
+
+<histogram name="TabManager.BackgroundTabOpening.TabPausedCount" units="tabs">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    The max number of background tabs paused to load due to memory pressure when
+    opening background tabs. This is recorded at the end of background tab
+    opening session, which is defined as the duration from the time when the
+    browser starts to open background tabs until the time when browser has
+    finished loading those tabs or paused loading them all due to memory
+    pressure. A new session starts when the browser resumes loading background
+    tabs when memory pressure returns to normal. The metric is not recorded when
+    the session overlaps with session restore.
+  </summary>
+</histogram>
+
 <histogram name="TabManager.Discarding.DiscardCount" units="Discards">
   <owner>georgesak@chromium.org</owner>
   <summary>
@@ -81914,6 +82132,32 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram
     name="TabManager.Experimental.BackgroundTabOpening.TabSwitchLoadTime"
     units="ms">
+  <obsolete>
+    Deprecated 08/2017, and replaced by
+    TabManager.Experimental.BackgroundTabOpening.TabSwitchLoadTime.UntilTabIsLoaded.
+  </obsolete>
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    The tab load time of a tab that is switched to when the browser is in
+    background tab opening session, which is the duration from the time when the
+    browser starts to open background tabs until the time when browser has
+    finished loading those tabs or paused loading due to memory pressure. A new
+    session starts when the browser resumes loading background tabs when memory
+    pressure returns to normal. Tab load time is defined as the time between
+    when the user switches to a backround tab, and the time when that tab
+    finishes loading in the foreground. If the user switches away before the tab
+    finishes loading, a metric will not be recorded unless the user switches
+    back, in which case the tab load time is measured from that point in time.
+    The metric is only recorded when a tab is switched to from another tab
+    within the same tabstrip. As a result, the initial forground tab is not
+    included in this metric since it was not switched to from another tab. The
+    metric is not recorded when the session overlaps with session restore.
+  </summary>
+</histogram>
+
+<histogram
+    name="TabManager.Experimental.BackgroundTabOpening.TabSwitchLoadTime.UntilTabIsLoaded"
+    units="ms">
   <owner>zhenw@chromium.org</owner>
   <summary>
     The tab load time of a tab that is switched to when the browser is in
@@ -82036,6 +82280,32 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="TabManager.Experimental.SessionRestore.TabSwitchLoadTime"
     units="ms">
+  <obsolete>
+    Deprecated 08/2017, and replaced by
+    TabManager.Experimental.SessionRestore.TabSwitchLoadTime.UntilTabIsLoaded.
+  </obsolete>
+  <owner>fmeawad@chromium.org</owner>
+  <summary>
+    The tab load time of a tab that is switched to during a session restore. Tab
+    load time is defined as the time between when the user switches to a
+    backround tab, and the time when that tab finishes loading in the
+    foreground. If the user switches away before the tab finishes loading, a
+    metric will not be recorded unless the user switches back, in which case the
+    tab load time is measured from that point in time. The metric is only
+    recorded when a tab is switched to from another tab within the same
+    tabstrip. As a result, the initial forground tab is not included in this
+    metric since it was not switched to from another tab. The metric is only
+    recorded when session restore is actively loading tabs, which ends when
+    either all tabs have been loaded and their pages rendered, or tab loading
+    needs to be deferred in cases where the system is under memory pressure. The
+    metric is not recorded when the session overlaps with background tab opening
+    session.
+  </summary>
+</histogram>
+
+<histogram
+    name="TabManager.Experimental.SessionRestore.TabSwitchLoadTime.UntilTabIsLoaded"
+    units="ms">
   <owner>fmeawad@chromium.org</owner>
   <summary>
     The tab load time of a tab that is switched to during a session restore. Tab
@@ -82109,6 +82379,34 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     title is updated. The first-time set of title will be ignored; this metric
     will only be recorded after 5 minutes from main frame navigation committed
     and when the tab is in the background.
+  </summary>
+</histogram>
+
+<histogram name="TabManager.SessionOverlap.BackgroundTabOpening"
+    units="BooleanOverlap">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    Whether background tab opening session is overlapped with other types of
+    session, e.g., session restore. Background tab opening session is the
+    duration from the time when the browser starts to open background tabs until
+    the time when browser has finished loading those tabs or paused loading due
+    to memory pressure. A new background tab opening session starts when the
+    browser resumes loading background tabs when memory pressure returns to
+    normal. This metric helps to understand how often background tab opening has
+    overlap with other sessions.
+  </summary>
+</histogram>
+
+<histogram name="TabManager.SessionOverlap.SessionRestore"
+    units="BooleanOverlap">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    Whether session restore is overlapped with other types of session, e.g.,
+    background tab opening. Session restore is the duration from the time when
+    the browser starts to restore tabs until the time when the browser has
+    finished loading those tabs or when the browser stops loading tabs due to
+    memory pressure. This metric helps to understand how often session restore
+    has overlap with other sessions.
   </summary>
 </histogram>
 
@@ -82425,6 +82723,30 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     (performance.timing.loadEventEnd - performance.timing.redirectEnd). On
     Chrome for iOS we're calculating the time between the creation of the
     top-level URLRequest and when webDidFinishWithURL is called.
+  </summary>
+</histogram>
+
+<histogram name="Tabs.MaxTabsInADay" units="tabs">
+  <owner>sebmarchand@chromium.org</owner>
+  <summary>
+    The maximum number of tabs that Chrome displays at the same time over the
+    course of a day.
+  </summary>
+</histogram>
+
+<histogram name="Tabs.MaxTabsPerWindowInADay" units="tabs">
+  <owner>sebmarchand@chromium.org</owner>
+  <summary>
+    The maximum number of tabs per window that Chrome displays over the course
+    of a day.
+  </summary>
+</histogram>
+
+<histogram name="Tabs.MaxWindowsInADay" units="tabs">
+  <owner>sebmarchand@chromium.org</owner>
+  <summary>
+    The maximum number of windows opened at the same time over the course of a
+    day.
   </summary>
 </histogram>
 
@@ -97835,6 +98157,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <affected-histogram name="NewTabPage.SuggestionsImpression"/>
 </histogram_suffixes>
 
+<histogram_suffixes name="NewTabPageLogoShownFromCache" separator=".">
+  <suffix name="FromCache" label="Logo from cache."/>
+  <suffix name="Fresh" label="Fresh logo from network."/>
+  <affected-histogram name="NewTabPage.LogoShown"/>
+</histogram_suffixes>
+
 <histogram_suffixes name="NewTabPageProviders" separator=".">
   <suffix name="client" label="Suggestions coming from the client."/>
   <suffix name="server" label="Suggestions coming from the server."/>
@@ -98257,6 +98585,21 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <affected-histogram name="NQE.TransportRTT.Percentile100"/>
   <affected-histogram name="NQE.TransportRTT.Percentile50"/>
   <affected-histogram name="NQE.TransportRTT.Percentile90"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="NQE.ObservationSources" separator=".">
+  <suffix name="Http" label="Observed from HTTP requests"/>
+  <suffix name="Tcp" label="Observed from TCP sockets"/>
+  <suffix name="Quic" label="Observed from QUIC"/>
+  <suffix name="HttpCachedEstimate" label="Cached HTTP layer observation"/>
+  <suffix name="HttpPlatform" label="Synthetic HTTP layer observation"/>
+  <suffix name="HttpExternalEstimate" label="From external estimate provider"/>
+  <suffix name="TransportCachedEstimate"
+      label="Cached transport layer observation"/>
+  <suffix name="TransportPlatform"
+      label="Synthetic transport layer observation"/>
+  <affected-histogram name="NQE.Kbps.RawObservation"/>
+  <affected-histogram name="NQE.RTT.RawObservation"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="NumLayersBucket" separator=".">

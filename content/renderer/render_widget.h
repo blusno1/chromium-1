@@ -304,7 +304,8 @@ class CONTENT_EXPORT RenderWidget
   void DidOverscroll(const blink::WebFloatSize& overscrollDelta,
                      const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& position,
-                     const blink::WebFloatSize& velocity) override;
+                     const blink::WebFloatSize& velocity,
+                     const blink::WebScrollBoundaryBehavior& behavior) override;
   void ShowVirtualKeyboardOnElementFocus() override;
   void ConvertViewportToWindow(blink::WebRect* rect) override;
   void ConvertWindowToViewport(blink::WebFloatRect* rect) override;
@@ -401,8 +402,8 @@ class CONTENT_EXPORT RenderWidget
   // Helper to convert |point| using ConvertWindowToViewport().
   gfx::Point ConvertWindowPointToViewport(const gfx::Point& point);
 
-  virtual void TransferActiveWheelFlingAnimation(
-      const blink::WebActiveWheelFlingParameters& params) {}
+  void TransferActiveWheelFlingAnimation(
+      const blink::WebActiveWheelFlingParameters& params);
 
   uint32_t GetContentSourceId();
   void IncrementContentSourceId();

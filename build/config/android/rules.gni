@@ -1695,6 +1695,14 @@ if (enable_java_templates) {
         defined(invoker.use_chromium_linker) && invoker.use_chromium_linker
     _enable_relocation_packing = defined(invoker.enable_relocation_packing) &&
                                  invoker.enable_relocation_packing
+
+    if (use_lld) {
+      # TODO(pcc): lld's output is currently incompatible with the relocation
+      # packer tool. We will probably want to implement relocation packing in
+      # lld itself eventually. http://crbug.com/760838.
+      _enable_relocation_packing = false
+    }
+
     _load_library_from_apk =
         defined(invoker.load_library_from_apk) && invoker.load_library_from_apk
     _requires_sdk_api_level_23 = defined(invoker.requires_sdk_api_level_23) &&
@@ -1754,6 +1762,10 @@ if (enable_java_templates) {
       if (defined(invoker.native_lib_version_arg)) {
         _native_lib_version_arg = invoker.native_lib_version_arg
       }
+    } else {
+      # Must exist for instrumentation_test_apk() to depend on.
+      group("${_template_name}__runtime_deps") {
+      }
     }
 
     if (_secondary_abi_shared_libraries_is_valid) {
@@ -1765,9 +1777,13 @@ if (enable_java_templates) {
       # complete list.
       _secondary_abi_runtime_deps_file =
           "$target_gen_dir/${_template_name}.secondary.abi.native.runtimedeps"
-      group("${_template_name}_secondary_abi__runtime_deps") {
+      group("${_template_name}__secondary_abi__runtime_deps") {
         deps = _secondary_abi_native_libs_deps
         write_runtime_deps = _secondary_abi_runtime_deps_file
+      }
+    } else {
+      # Must exist for instrumentation_test_apk() to depend on.
+      group("${_template_name}__secondary_abi_runtime_deps") {
       }
     }
 
@@ -2677,7 +2693,7 @@ if (enable_java_templates) {
 
     group(target_name) {
       if (incremental_apk_by_default) {
-        deps = [
+        public_deps = [
           ":${target_name}_incremental",
         ]
       } else {
@@ -2691,6 +2707,21 @@ if (enable_java_templates) {
         if (defined(invoker.apk_under_test)) {
           public_deps += [ invoker.apk_under_test ]
         }
+      }
+
+      # Ensure unstripped libraries are included in runtime deps so that
+      # symbolization can be done.
+      deps = [
+        ":${_apk_target_name}__runtime_deps",
+        ":${_apk_target_name}__secondary_abi_runtime_deps",
+      ]
+      if (defined(invoker.apk_under_test)) {
+        _under_test_label =
+            get_label_info(invoker.apk_under_test, "label_no_toolchain")
+        deps += [
+          "${_under_test_label}__runtime_deps",
+          "${_under_test_label}__secondary_abi_runtime_deps",
+        ]
       }
     }
 

@@ -2228,6 +2228,15 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="6" label="Ended, navigated away from page while prompt hidden"/>
   <int value="7" label="Dismissed, user clicked Learn More link"/>
   <int value="8" label="Dismissed, user clicked a legal message link"/>
+  <int value="9" label="CVC fix flow shown"/>
+  <int value="10" label="CVC fix flow ended, user explicitly accepted prompt"/>
+  <int value="11"
+      label="CVC fix flow ended, navigated away from page while prompt
+             showing"/>
+  <int value="12"
+      label="CVC fix flow ended, navigated away from page while prompt hidden"/>
+  <int value="13"
+      label="CVC fix flow dismissed, user clicked a legal message link"/>
 </enum>
 
 <enum name="AutofillScanCreditCardPrompt">
@@ -3509,6 +3518,11 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1" label="Orphan"/>
 </enum>
 
+<enum name="BooleanOverlap">
+  <int value="0" label="No overlap"/>
+  <int value="1" label="Overlapped"/>
+</enum>
+
 <enum name="BooleanOverlaySupported">
   <int value="0" label="No overlays supported"/>
   <int value="1" label="Supports overlays"/>
@@ -4444,6 +4458,15 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="20" label="Downloaded file"/>
   <int value="21" label="Old image"/>
   <int value="22" label="Profile image"/>
+</enum>
+
+<enum name="ChromePDFViewerLoadStatus">
+  <int value="0" label="Loaded a full-page PDF with Chrome PDF Viewer"/>
+  <int value="1" label="Loaded an embedded PDF with Chrome PDF Viewer"/>
+  <int value="2" label="Showed disabled plugin placeholder for embedded PDF"/>
+  <int value="3" label="Triggered a drive-by download without user gesture"/>
+  <int value="4" label="Loaded iframe PDF with no PDF viewer available"/>
+  <int value="5" label="View PDF button clicked in the PDF plugin placeholder"/>
 </enum>
 
 <enum name="ChromiumAndroidLinkerBrowserState">
@@ -5942,6 +5965,16 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="6" label="chrome-search"/>
 </enum>
 
+<enum name="ContentSuggestionsBreakingNewsMessageContainsNews">
+  <int value="0" label="Without pushed news"/>
+  <int value="1" label="With (possibly empty) pushed news"/>
+</enum>
+
+<enum name="ContentSuggestionsBreakingNewsTokenValidationOutcome">
+  <int value="0" label="Token invalid"/>
+  <int value="1" label="Token revalidated"/>
+</enum>
+
 <enum name="ContentSuggestionsCategory">
   <int value="0" label="Experimental"/>
   <int value="1" label="Recent Tabs"/>
@@ -5971,6 +6004,12 @@ uploading your change for review.  These are checked by presubmit scripts.
 <enum name="ContentSuggestionsNotificationsOptOut">
   <int value="0" label="Implicit"/>
   <int value="1" label="Explicit"/>
+</enum>
+
+<enum name="ContentSuggestionsStatusCode">
+  <int value="0" label="Success"/>
+  <int value="1" label="Temporary error"/>
+  <int value="2" label="Permanent error"/>
 </enum>
 
 <enum name="ContentSuggestionsUIUpdateResult">
@@ -11279,6 +11318,10 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="379" label="CastReceiverName"/>
   <int value="380" label="DeviceOffHours"/>
   <int value="381" label="CloudPolicyOverridesMachinePolicy"/>
+  <int value="382" label="NativePrintersBulkConfiguration"/>
+  <int value="383" label="NativePrintersBulkAccessMode"/>
+  <int value="384" label="NativePrintersBulkBlacklist"/>
+  <int value="385" label="NativePrintersBulkWhitelist"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations">
@@ -14010,7 +14053,7 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="FeatureObserver">
-<!-- Generated from third_party/WebKit/public/platform/web_feature.mojom -->
+<!-- Generated from third_party/WebKit/public/platform/web_feature.mojom.-->
 
   <int value="0" label="OBSOLETE_PageDestruction"/>
   <int value="1" label="LegacyNotifications"/>
@@ -16186,6 +16229,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2119" label="V8LabeledExpressionStatement"/>
   <int value="2120" label="PaymentRequestSupportedMethodsArray"/>
   <int value="2121" label="NavigatorDeviceMemory"/>
+  <int value="2122" label="FixedWidthTableDistributionChanged"/>
 </enum>
 
 <enum name="FeedbackSource">
@@ -25973,6 +26017,8 @@ from previous Chrome versions.
   <int value="2" label="LowStorage"/>
   <int value="3" label="ArcKiosk"/>
   <int value="4" label="StartAutomatically"/>
+  <int value="5" label="ResumeMinimal"/>
+  <int value="6" label="StartAutomaticallyMinimal"/>
 </enum>
 
 <enum name="MigrationUIMigrationResult">
@@ -30027,13 +30073,6 @@ from previous Chrome versions.
   <int value="0" label="Loaded Document"/>
   <int value="1" label="Has Title"/>
   <int value="2" label="Has Bookmarks"/>
-</enum>
-
-<enum name="PDFLoadStatus">
-  <int value="0" label="Loaded a full-page PDF with PDFium"/>
-  <int value="1" label="Loaded an embedded PDF with PDFium"/>
-  <int value="2" label="Showed disabled plugin placeholder for embedded PDF"/>
-  <int value="3" label="Triggered a drive-by download without user gesture"/>
 </enum>
 
 <enum name="PeerConnectionCounters">

@@ -87,7 +87,6 @@ class FinishLoadCdmPromise : public SimpleCdmPromise {
 }  // namespace
 
 ClearKeyPersistentSessionCdm::ClearKeyPersistentSessionCdm(
-    const GURL& origin,
     ClearKeyCdmHost* host,
     const SessionMessageCB& session_message_cb,
     const SessionClosedCB& session_closed_cb,
@@ -95,7 +94,7 @@ ClearKeyPersistentSessionCdm::ClearKeyPersistentSessionCdm(
     const SessionExpirationUpdateCB& session_expiration_update_cb)
     : host_(host), session_closed_cb_(session_closed_cb), weak_factory_(this) {
   cdm_ = base::MakeRefCounted<AesDecryptor>(
-      origin, session_message_cb,
+      session_message_cb,
       base::Bind(&ClearKeyPersistentSessionCdm::OnSessionClosed,
                  weak_factory_.GetWeakPtr()),
       session_keys_change_cb, session_expiration_update_cb);

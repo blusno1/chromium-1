@@ -7,11 +7,13 @@
 
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
@@ -372,7 +374,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   // Open new tab to cancel sign-in.
   OpenUrlCommand* command =
       [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")];
-  chrome_test_util::RunCommandWithActiveViewController(command);
+  [chrome_test_util::DispatcherForActiveViewController() openURL:command];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
@@ -413,7 +415,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   // Open new tab to cancel sign-in.
   OpenUrlCommand* command =
       [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")];
-  chrome_test_util::RunCommandWithActiveViewController(command);
+  [chrome_test_util::DispatcherForActiveViewController() openURL:command];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
@@ -475,7 +477,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   // Open new tab to cancel sign-in.
   OpenUrlCommand* command =
       [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")];
-  chrome_test_util::RunCommandWithActiveViewController(command);
+  [chrome_test_util::DispatcherForActiveViewController() openURL:command];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
@@ -497,11 +499,13 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 // Opens the sign in screen from the bookmarks and then cancel it by opening a
 // new tab. Ensures that the sign in screen is correctly dismissed.
 // Regression test for crbug.com/596029.
+// TODO(crbug.com/695749): Check if we need to rewrite this test for the new
+// Bookmarks UI.
 - (void)testSignInCancelFromBookmarks {
-  if (base::FeatureList::IsEnabled(
-          bookmark_new_generation::features::kBookmarkNewGeneration)) {
-    EARL_GREY_TEST_SKIPPED(@"Only enabled with old Bookmarks UI.");
-  }
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      bookmark_new_generation::features::kBookmarkNewGeneration);
+
   ChromeIdentity* identity = GetFakeIdentity1();
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
@@ -541,7 +545,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   // Open new tab to cancel sign-in.
   OpenUrlCommand* command =
       [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")];
-  chrome_test_util::RunCommandWithActiveViewController(command);
+  [chrome_test_util::DispatcherForActiveViewController() openURL:command];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.

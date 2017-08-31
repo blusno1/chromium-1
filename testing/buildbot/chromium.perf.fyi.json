@@ -68,7 +68,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -80,8 +80,8 @@
           "blink_perf.bindings",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.bindings",
@@ -98,7 +98,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -110,8 +110,8 @@
           "blink_perf.bindings",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -130,7 +130,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -142,8 +142,8 @@
           "blink_perf.canvas",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.canvas",
@@ -160,7 +160,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -172,8 +172,8 @@
           "blink_perf.canvas",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -192,7 +192,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -204,8 +204,8 @@
           "blink_perf.css",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.css",
@@ -222,7 +222,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -234,8 +234,8 @@
           "blink_perf.css",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -254,7 +254,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -266,8 +266,8 @@
           "blink_perf.dom",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.dom",
@@ -284,7 +284,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -296,8 +296,8 @@
           "blink_perf.dom",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -316,7 +316,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -328,8 +328,8 @@
           "blink_perf.events",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.events",
@@ -346,7 +346,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -358,8 +358,8 @@
           "blink_perf.events",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -378,7 +378,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -390,8 +390,8 @@
           "blink_perf.layout",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.layout",
@@ -408,7 +408,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -420,8 +420,8 @@
           "blink_perf.layout",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -440,7 +440,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -452,8 +452,8 @@
           "blink_perf.owp_storage",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.owp_storage",
@@ -470,7 +470,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -482,8 +482,8 @@
           "blink_perf.owp_storage",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -502,7 +502,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -514,8 +514,8 @@
           "blink_perf.paint",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.paint",
@@ -532,7 +532,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -544,8 +544,8 @@
           "blink_perf.paint",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -564,7 +564,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -576,8 +576,8 @@
           "blink_perf.parser",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.parser",
@@ -594,7 +594,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -606,8 +606,8 @@
           "blink_perf.parser",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -626,7 +626,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -638,8 +638,8 @@
           "blink_perf.shadow_dom",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.shadow_dom",
@@ -656,7 +656,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -668,8 +668,8 @@
           "blink_perf.shadow_dom",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -688,7 +688,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -700,8 +700,8 @@
           "blink_perf.svg",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.svg",
@@ -718,7 +718,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -730,8 +730,8 @@
           "blink_perf.svg",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -750,7 +750,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -762,8 +762,8 @@
           "blob_storage.blob_storage",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blob_storage.blob_storage",
@@ -780,7 +780,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -792,8 +792,8 @@
           "blob_storage.blob_storage",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -812,7 +812,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -833,7 +833,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -845,8 +845,8 @@
           "dromaeo.domcoreattr",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dromaeo.domcoreattr",
@@ -863,7 +863,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -875,8 +875,8 @@
           "dromaeo.domcoreattr",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -895,7 +895,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -907,8 +907,8 @@
           "dromaeo.domcoremodify",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dromaeo.domcoremodify",
@@ -925,7 +925,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -937,8 +937,8 @@
           "dromaeo.domcoremodify",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -957,7 +957,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -969,8 +969,8 @@
           "dromaeo.domcorequery",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dromaeo.domcorequery",
@@ -987,7 +987,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -999,8 +999,8 @@
           "dromaeo.domcorequery",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1019,7 +1019,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1031,8 +1031,8 @@
           "dromaeo.domcoretraverse",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dromaeo.domcoretraverse",
@@ -1049,7 +1049,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1061,8 +1061,8 @@
           "dromaeo.domcoretraverse",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1081,7 +1081,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1093,8 +1093,8 @@
           "dummy_benchmark.noisy_benchmark_1",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dummy_benchmark.noisy_benchmark_1",
@@ -1111,7 +1111,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1123,8 +1123,8 @@
           "dummy_benchmark.noisy_benchmark_1",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1143,7 +1143,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1155,8 +1155,8 @@
           "dummy_benchmark.stable_benchmark_1",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dummy_benchmark.stable_benchmark_1",
@@ -1173,7 +1173,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1185,8 +1185,8 @@
           "dummy_benchmark.stable_benchmark_1",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1205,7 +1205,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1226,71 +1226,9 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "image_decoding.image_decoding_measurement",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "image_decoding.image_decoding_measurement",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build144-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "image_decoding.image_decoding_measurement",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=reference",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "image_decoding.image_decoding_measurement.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build144-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
           "io_timeout": 600,
           "upload_test_results": false
         }
@@ -1300,8 +1238,8 @@
           "jetstream",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "jetstream",
@@ -1318,7 +1256,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 1200,
@@ -1330,8 +1268,8 @@
           "jetstream",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1350,7 +1288,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 1200,
@@ -1362,8 +1300,8 @@
           "kraken",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "kraken",
@@ -1380,7 +1318,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1392,8 +1330,8 @@
           "kraken",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1412,7 +1350,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1433,7 +1371,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1445,8 +1383,8 @@
           "loading.desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "loading.desktop",
@@ -1463,7 +1401,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 14400,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1475,8 +1413,8 @@
           "loading.desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1495,7 +1433,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 14400,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1507,8 +1445,8 @@
           "media.mse_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "media.mse_cases",
@@ -1525,7 +1463,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1537,8 +1475,8 @@
           "media.mse_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1557,7 +1495,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1569,8 +1507,8 @@
           "media.tough_video_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "media.tough_video_cases",
@@ -1587,7 +1525,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1599,8 +1537,8 @@
           "media.tough_video_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1619,7 +1557,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1631,8 +1569,8 @@
           "media.tough_video_cases_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "media.tough_video_cases_tbmv2",
@@ -1649,7 +1587,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1661,8 +1599,8 @@
           "media.tough_video_cases_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1681,7 +1619,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1693,8 +1631,8 @@
           "memory.desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "memory.desktop",
@@ -1711,7 +1649,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1723,8 +1661,8 @@
           "memory.desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1743,7 +1681,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1755,8 +1693,8 @@
           "memory.long_running_idle_gmail_background_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "memory.long_running_idle_gmail_background_tbmv2",
@@ -1773,7 +1711,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1785,8 +1723,8 @@
           "memory.long_running_idle_gmail_background_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1805,7 +1743,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1817,8 +1755,8 @@
           "memory.long_running_idle_gmail_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "memory.long_running_idle_gmail_tbmv2",
@@ -1835,7 +1773,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1847,8 +1785,8 @@
           "memory.long_running_idle_gmail_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1867,7 +1805,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1879,8 +1817,8 @@
           "octane",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "octane",
@@ -1897,7 +1835,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1909,8 +1847,8 @@
           "octane",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1929,7 +1867,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -1941,8 +1879,8 @@
           "oortonline",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "oortonline",
@@ -1959,7 +1897,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -1971,8 +1909,8 @@
           "oortonline",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1991,7 +1929,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2003,8 +1941,8 @@
           "oortonline_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "oortonline_tbmv2",
@@ -2021,7 +1959,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2033,8 +1971,8 @@
           "oortonline_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2053,131 +1991,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "page_cycler_v2.basic_oopif",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "page_cycler_v2.basic_oopif",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build155-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "page_cycler_v2.basic_oopif",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=reference",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "page_cycler_v2.basic_oopif.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build155-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "page_cycler_v2_site_isolation.basic_oopif",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "page_cycler_v2_site_isolation.basic_oopif",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build154-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "page_cycler_v2_site_isolation.basic_oopif",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=reference",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "page_cycler_v2_site_isolation.basic_oopif.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build154-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2198,7 +2012,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2210,8 +2024,8 @@
           "power.idle_platform",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "power.idle_platform",
@@ -2228,7 +2042,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2240,8 +2054,8 @@
           "rasterize_and_record_micro.partial_invalidation",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "rasterize_and_record_micro.partial_invalidation",
@@ -2258,7 +2072,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2270,8 +2084,8 @@
           "rasterize_and_record_micro.partial_invalidation",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2290,7 +2104,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2302,8 +2116,8 @@
           "rasterize_and_record_micro.top_25",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "rasterize_and_record_micro.top_25",
@@ -2320,7 +2134,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2332,8 +2146,8 @@
           "rasterize_and_record_micro.top_25",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2352,7 +2166,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2364,8 +2178,8 @@
           "scheduler.tough_scheduling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "scheduler.tough_scheduling_cases",
@@ -2382,7 +2196,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2394,8 +2208,8 @@
           "scheduler.tough_scheduling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2414,7 +2228,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2426,8 +2240,8 @@
           "service_worker.service_worker",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "service_worker.service_worker",
@@ -2444,7 +2258,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2456,8 +2270,8 @@
           "service_worker.service_worker",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2476,7 +2290,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2488,8 +2302,8 @@
           "service_worker.service_worker_micro_benchmark",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "service_worker.service_worker_micro_benchmark",
@@ -2506,7 +2320,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2518,8 +2332,8 @@
           "service_worker.service_worker_micro_benchmark",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2538,7 +2352,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2550,8 +2364,8 @@
           "smoothness.desktop_tough_pinch_zoom_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.desktop_tough_pinch_zoom_cases",
@@ -2568,7 +2382,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2580,8 +2394,8 @@
           "smoothness.desktop_tough_pinch_zoom_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2600,7 +2414,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2612,8 +2426,8 @@
           "smoothness.gpu_rasterization.tough_filters_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.gpu_rasterization.tough_filters_cases",
@@ -2630,7 +2444,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2642,8 +2456,8 @@
           "smoothness.gpu_rasterization.tough_filters_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2662,7 +2476,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2674,8 +2488,8 @@
           "smoothness.gpu_rasterization.tough_path_rendering_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.gpu_rasterization.tough_path_rendering_cases",
@@ -2692,7 +2506,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2704,8 +2518,8 @@
           "smoothness.gpu_rasterization.tough_path_rendering_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2724,7 +2538,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2736,8 +2550,8 @@
           "smoothness.gpu_rasterization.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.gpu_rasterization.tough_scrolling_cases",
@@ -2754,7 +2568,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2766,8 +2580,8 @@
           "smoothness.gpu_rasterization.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2786,7 +2600,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2798,8 +2612,8 @@
           "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
@@ -2816,7 +2630,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2828,8 +2642,8 @@
           "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2848,7 +2662,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2860,8 +2674,8 @@
           "smoothness.image_decoding_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.image_decoding_cases",
@@ -2878,7 +2692,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2890,8 +2704,8 @@
           "smoothness.image_decoding_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2910,7 +2724,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2922,8 +2736,8 @@
           "smoothness.key_desktop_move_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.key_desktop_move_cases",
@@ -2940,7 +2754,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -2952,8 +2766,8 @@
           "smoothness.key_desktop_move_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -2972,7 +2786,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -2984,8 +2798,8 @@
           "smoothness.maps",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.maps",
@@ -3002,7 +2816,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3014,8 +2828,8 @@
           "smoothness.maps",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3034,7 +2848,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3046,8 +2860,8 @@
           "smoothness.top_25_smooth",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.top_25_smooth",
@@ -3064,7 +2878,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3076,8 +2890,8 @@
           "smoothness.top_25_smooth",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3096,7 +2910,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3108,8 +2922,8 @@
           "smoothness.tough_ad_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_ad_cases",
@@ -3126,7 +2940,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3138,8 +2952,8 @@
           "smoothness.tough_ad_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3158,7 +2972,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3170,8 +2984,8 @@
           "smoothness.tough_animation_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_animation_cases",
@@ -3188,7 +3002,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3200,8 +3014,8 @@
           "smoothness.tough_animation_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3220,7 +3034,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3232,8 +3046,8 @@
           "smoothness.tough_canvas_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_canvas_cases",
@@ -3250,7 +3064,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3262,8 +3076,8 @@
           "smoothness.tough_canvas_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3282,7 +3096,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3294,8 +3108,8 @@
           "smoothness.tough_filters_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_filters_cases",
@@ -3312,7 +3126,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3324,8 +3138,8 @@
           "smoothness.tough_filters_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3344,7 +3158,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3356,8 +3170,8 @@
           "smoothness.tough_image_decode_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_image_decode_cases",
@@ -3374,7 +3188,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3386,8 +3200,8 @@
           "smoothness.tough_image_decode_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3406,7 +3220,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3418,8 +3232,8 @@
           "smoothness.tough_path_rendering_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_path_rendering_cases",
@@ -3436,7 +3250,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3448,8 +3262,8 @@
           "smoothness.tough_path_rendering_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3468,7 +3282,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3480,8 +3294,8 @@
           "smoothness.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_scrolling_cases",
@@ -3498,7 +3312,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3510,8 +3324,8 @@
           "smoothness.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3530,7 +3344,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3542,8 +3356,8 @@
           "smoothness.tough_texture_upload_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_texture_upload_cases",
@@ -3560,7 +3374,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3572,8 +3386,8 @@
           "smoothness.tough_texture_upload_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3592,7 +3406,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3604,8 +3418,8 @@
           "smoothness.tough_webgl_ad_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_webgl_ad_cases",
@@ -3622,7 +3436,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3634,8 +3448,8 @@
           "smoothness.tough_webgl_ad_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3654,7 +3468,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3666,8 +3480,8 @@
           "smoothness.tough_webgl_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_webgl_cases",
@@ -3684,7 +3498,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3696,8 +3510,8 @@
           "smoothness.tough_webgl_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3716,7 +3530,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3728,8 +3542,8 @@
           "speedometer",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "speedometer",
@@ -3746,7 +3560,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3758,8 +3572,8 @@
           "speedometer",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3778,7 +3592,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3790,8 +3604,8 @@
           "speedometer2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "speedometer2",
@@ -3808,7 +3622,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3820,8 +3634,8 @@
           "speedometer2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3840,7 +3654,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3852,8 +3666,8 @@
           "storage.indexeddb_endure",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "storage.indexeddb_endure",
@@ -3870,7 +3684,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3882,8 +3696,8 @@
           "storage.indexeddb_endure",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3902,7 +3716,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3914,8 +3728,8 @@
           "storage.indexeddb_endure_tracing",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "storage.indexeddb_endure_tracing",
@@ -3932,7 +3746,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -3944,8 +3758,8 @@
           "storage.indexeddb_endure_tracing",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -3964,7 +3778,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -3976,8 +3790,8 @@
           "system_health.common_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "system_health.common_desktop",
@@ -3994,7 +3808,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4006,8 +3820,8 @@
           "system_health.common_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4026,7 +3840,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4038,8 +3852,8 @@
           "system_health.memory_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "system_health.memory_desktop",
@@ -4056,7 +3870,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4068,8 +3882,8 @@
           "system_health.memory_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4088,7 +3902,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4100,8 +3914,8 @@
           "tab_switching.typical_25",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "tab_switching.typical_25",
@@ -4118,7 +3932,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4130,8 +3944,8 @@
           "tab_switching.typical_25",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4150,7 +3964,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4162,8 +3976,8 @@
           "thread_times.tough_compositor_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "thread_times.tough_compositor_cases",
@@ -4180,7 +3994,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4192,8 +4006,8 @@
           "thread_times.tough_compositor_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4212,7 +4026,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4224,8 +4038,8 @@
           "thread_times.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "thread_times.tough_scrolling_cases",
@@ -4242,7 +4056,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4254,8 +4068,8 @@
           "thread_times.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4274,7 +4088,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4286,8 +4100,8 @@
           "tracing.tracing_with_background_memory_infra",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "tracing.tracing_with_background_memory_infra",
@@ -4304,7 +4118,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4316,8 +4130,8 @@
           "tracing.tracing_with_background_memory_infra",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4336,7 +4150,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4357,7 +4171,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4369,8 +4183,8 @@
           "v8.browsing_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "v8.browsing_desktop",
@@ -4387,7 +4201,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4399,8 +4213,8 @@
           "v8.browsing_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4419,7 +4233,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4431,8 +4245,8 @@
           "v8.detached_context_age_in_gc",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "v8.detached_context_age_in_gc",
@@ -4449,7 +4263,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4461,8 +4275,8 @@
           "v8.detached_context_age_in_gc",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4481,7 +4295,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4493,8 +4307,8 @@
           "v8.runtimestats.browsing_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "v8.runtimestats.browsing_desktop",
@@ -4511,7 +4325,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4523,8 +4337,8 @@
           "v8.runtimestats.browsing_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4543,7 +4357,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4555,8 +4369,8 @@
           "webrtc",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "webrtc",
@@ -4573,7 +4387,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4585,8 +4399,8 @@
           "webrtc",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4605,7 +4419,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4621,8 +4435,8 @@
           "blink_perf.bindings",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.bindings",
@@ -4639,7 +4453,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4651,8 +4465,8 @@
           "blink_perf.bindings",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4671,7 +4485,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4683,8 +4497,8 @@
           "blink_perf.canvas",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.canvas",
@@ -4701,7 +4515,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4713,8 +4527,8 @@
           "blink_perf.canvas",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4733,7 +4547,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4745,8 +4559,8 @@
           "blink_perf.css",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.css",
@@ -4763,7 +4577,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4775,8 +4589,8 @@
           "blink_perf.css",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4795,7 +4609,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4807,8 +4621,8 @@
           "blink_perf.dom",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.dom",
@@ -4825,7 +4639,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4837,8 +4651,8 @@
           "blink_perf.dom",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4857,7 +4671,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4869,8 +4683,8 @@
           "blink_perf.events",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.events",
@@ -4887,7 +4701,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4899,8 +4713,8 @@
           "blink_perf.events",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4919,7 +4733,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4931,8 +4745,8 @@
           "blink_perf.layout",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.layout",
@@ -4949,7 +4763,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -4961,8 +4775,8 @@
           "blink_perf.layout",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -4981,7 +4795,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -4993,8 +4807,8 @@
           "blink_perf.owp_storage",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.owp_storage",
@@ -5011,7 +4825,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5023,8 +4837,8 @@
           "blink_perf.owp_storage",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5043,7 +4857,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5055,8 +4869,8 @@
           "blink_perf.paint",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.paint",
@@ -5073,7 +4887,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5085,8 +4899,8 @@
           "blink_perf.paint",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5105,7 +4919,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5117,8 +4931,8 @@
           "blink_perf.parser",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.parser",
@@ -5135,7 +4949,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5147,8 +4961,8 @@
           "blink_perf.parser",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5167,7 +4981,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5179,8 +4993,8 @@
           "blink_perf.shadow_dom",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.shadow_dom",
@@ -5197,7 +5011,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5209,8 +5023,8 @@
           "blink_perf.shadow_dom",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5229,7 +5043,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5241,8 +5055,8 @@
           "blink_perf.svg",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blink_perf.svg",
@@ -5259,7 +5073,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5271,8 +5085,8 @@
           "blink_perf.svg",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5291,7 +5105,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5303,8 +5117,8 @@
           "blob_storage.blob_storage",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "blob_storage.blob_storage",
@@ -5321,7 +5135,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5333,8 +5147,8 @@
           "blob_storage.blob_storage",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5353,7 +5167,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5365,8 +5179,8 @@
           "dromaeo.domcoreattr",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dromaeo.domcoreattr",
@@ -5383,7 +5197,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5395,8 +5209,8 @@
           "dromaeo.domcoreattr",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5415,7 +5229,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5427,8 +5241,8 @@
           "dromaeo.domcoremodify",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dromaeo.domcoremodify",
@@ -5445,7 +5259,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5457,8 +5271,8 @@
           "dromaeo.domcoremodify",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5477,7 +5291,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5489,8 +5303,8 @@
           "dromaeo.domcorequery",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dromaeo.domcorequery",
@@ -5507,7 +5321,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5519,8 +5333,8 @@
           "dromaeo.domcorequery",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5539,7 +5353,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5551,8 +5365,8 @@
           "dromaeo.domcoretraverse",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dromaeo.domcoretraverse",
@@ -5569,7 +5383,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5581,8 +5395,8 @@
           "dromaeo.domcoretraverse",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5601,7 +5415,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5613,8 +5427,8 @@
           "dummy_benchmark.noisy_benchmark_1",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dummy_benchmark.noisy_benchmark_1",
@@ -5631,7 +5445,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5643,8 +5457,8 @@
           "dummy_benchmark.noisy_benchmark_1",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5663,7 +5477,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5675,8 +5489,8 @@
           "dummy_benchmark.stable_benchmark_1",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dummy_benchmark.stable_benchmark_1",
@@ -5693,7 +5507,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5705,8 +5519,8 @@
           "dummy_benchmark.stable_benchmark_1",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5725,69 +5539,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "image_decoding.image_decoding_measurement",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "image_decoding.image_decoding_measurement",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build208-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "image_decoding.image_decoding_measurement",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=reference",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "image_decoding.image_decoding_measurement.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build208-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5799,8 +5551,8 @@
           "jetstream",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "jetstream",
@@ -5817,7 +5569,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 1200,
@@ -5829,8 +5581,8 @@
           "jetstream",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5849,7 +5601,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 1200,
@@ -5861,8 +5613,8 @@
           "kraken",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "kraken",
@@ -5879,7 +5631,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5891,8 +5643,8 @@
           "kraken",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5911,7 +5663,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5923,8 +5675,8 @@
           "loading.desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "loading.desktop",
@@ -5941,7 +5693,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 14400,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -5953,8 +5705,8 @@
           "loading.desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5973,7 +5725,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 14400,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -5985,8 +5737,8 @@
           "media.mse_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "media.mse_cases",
@@ -6003,7 +5755,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6015,8 +5767,8 @@
           "media.mse_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6035,7 +5787,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6047,8 +5799,8 @@
           "media.tough_video_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "media.tough_video_cases",
@@ -6065,7 +5817,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6077,8 +5829,8 @@
           "media.tough_video_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6097,7 +5849,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6109,8 +5861,8 @@
           "media.tough_video_cases_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "media.tough_video_cases_tbmv2",
@@ -6127,7 +5879,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6139,8 +5891,8 @@
           "media.tough_video_cases_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6159,7 +5911,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6171,8 +5923,8 @@
           "memory.desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "memory.desktop",
@@ -6189,7 +5941,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6201,8 +5953,8 @@
           "memory.desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6221,7 +5973,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6233,8 +5985,8 @@
           "memory.long_running_idle_gmail_background_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "memory.long_running_idle_gmail_background_tbmv2",
@@ -6251,7 +6003,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6263,8 +6015,8 @@
           "memory.long_running_idle_gmail_background_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6283,7 +6035,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6295,8 +6047,8 @@
           "memory.long_running_idle_gmail_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "memory.long_running_idle_gmail_tbmv2",
@@ -6313,7 +6065,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6325,8 +6077,8 @@
           "memory.long_running_idle_gmail_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6345,7 +6097,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6357,8 +6109,8 @@
           "octane",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "octane",
@@ -6375,7 +6127,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6387,8 +6139,8 @@
           "octane",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6407,7 +6159,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6419,8 +6171,8 @@
           "oortonline",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "oortonline",
@@ -6437,7 +6189,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6449,8 +6201,8 @@
           "oortonline",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6469,7 +6221,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6481,8 +6233,8 @@
           "oortonline_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "oortonline_tbmv2",
@@ -6499,7 +6251,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6511,8 +6263,8 @@
           "oortonline_tbmv2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6531,131 +6283,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "page_cycler_v2.basic_oopif",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "page_cycler_v2.basic_oopif",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build219-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "page_cycler_v2.basic_oopif",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=reference",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "page_cycler_v2.basic_oopif.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build219-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "page_cycler_v2_site_isolation.basic_oopif",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "page_cycler_v2_site_isolation.basic_oopif",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build218-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "page_cycler_v2_site_isolation.basic_oopif",
-          "-v",
-          "--upload-results",
-          "--output-format=chartjson",
-          "--browser=reference",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "page_cycler_v2_site_isolation.basic_oopif.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build218-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6667,8 +6295,8 @@
           "power.idle_platform",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "power.idle_platform",
@@ -6685,7 +6313,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6697,8 +6325,8 @@
           "rasterize_and_record_micro.partial_invalidation",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "rasterize_and_record_micro.partial_invalidation",
@@ -6715,7 +6343,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6727,8 +6355,8 @@
           "rasterize_and_record_micro.partial_invalidation",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6747,7 +6375,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6759,8 +6387,8 @@
           "rasterize_and_record_micro.top_25",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "rasterize_and_record_micro.top_25",
@@ -6777,7 +6405,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6789,8 +6417,8 @@
           "rasterize_and_record_micro.top_25",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6809,7 +6437,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6821,8 +6449,8 @@
           "scheduler.tough_scheduling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "scheduler.tough_scheduling_cases",
@@ -6839,7 +6467,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6851,8 +6479,8 @@
           "scheduler.tough_scheduling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6871,7 +6499,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6883,8 +6511,8 @@
           "service_worker.service_worker",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "service_worker.service_worker",
@@ -6901,7 +6529,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6913,8 +6541,8 @@
           "service_worker.service_worker",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6933,7 +6561,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -6945,8 +6573,8 @@
           "service_worker.service_worker_micro_benchmark",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "service_worker.service_worker_micro_benchmark",
@@ -6963,7 +6591,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -6975,8 +6603,8 @@
           "service_worker.service_worker_micro_benchmark",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -6995,7 +6623,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7007,8 +6635,8 @@
           "smoothness.desktop_tough_pinch_zoom_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.desktop_tough_pinch_zoom_cases",
@@ -7025,7 +6653,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7037,8 +6665,8 @@
           "smoothness.desktop_tough_pinch_zoom_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7057,7 +6685,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7069,8 +6697,8 @@
           "smoothness.gpu_rasterization.tough_filters_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.gpu_rasterization.tough_filters_cases",
@@ -7087,7 +6715,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7099,8 +6727,8 @@
           "smoothness.gpu_rasterization.tough_filters_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7119,7 +6747,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7131,8 +6759,8 @@
           "smoothness.gpu_rasterization.tough_path_rendering_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.gpu_rasterization.tough_path_rendering_cases",
@@ -7149,7 +6777,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7161,8 +6789,8 @@
           "smoothness.gpu_rasterization.tough_path_rendering_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7181,7 +6809,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7193,8 +6821,8 @@
           "smoothness.gpu_rasterization.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.gpu_rasterization.tough_scrolling_cases",
@@ -7211,7 +6839,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7223,8 +6851,8 @@
           "smoothness.gpu_rasterization.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7243,7 +6871,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7255,8 +6883,8 @@
           "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
@@ -7273,7 +6901,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7285,8 +6913,8 @@
           "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7305,7 +6933,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7317,8 +6945,8 @@
           "smoothness.image_decoding_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.image_decoding_cases",
@@ -7335,7 +6963,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7347,8 +6975,8 @@
           "smoothness.image_decoding_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7367,7 +6995,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7379,8 +7007,8 @@
           "smoothness.key_desktop_move_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.key_desktop_move_cases",
@@ -7397,7 +7025,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7409,8 +7037,8 @@
           "smoothness.key_desktop_move_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7429,7 +7057,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7441,8 +7069,8 @@
           "smoothness.maps",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.maps",
@@ -7459,7 +7087,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7471,8 +7099,8 @@
           "smoothness.maps",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7491,7 +7119,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7503,8 +7131,8 @@
           "smoothness.top_25_smooth",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.top_25_smooth",
@@ -7521,7 +7149,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7533,8 +7161,8 @@
           "smoothness.top_25_smooth",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7553,7 +7181,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7565,8 +7193,8 @@
           "smoothness.tough_ad_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_ad_cases",
@@ -7583,7 +7211,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7595,8 +7223,8 @@
           "smoothness.tough_ad_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7615,7 +7243,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7627,8 +7255,8 @@
           "smoothness.tough_animation_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_animation_cases",
@@ -7645,7 +7273,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7657,8 +7285,8 @@
           "smoothness.tough_animation_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7677,7 +7305,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7689,8 +7317,8 @@
           "smoothness.tough_canvas_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_canvas_cases",
@@ -7707,7 +7335,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7719,8 +7347,8 @@
           "smoothness.tough_canvas_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7739,7 +7367,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7751,8 +7379,8 @@
           "smoothness.tough_filters_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_filters_cases",
@@ -7769,7 +7397,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7781,8 +7409,8 @@
           "smoothness.tough_filters_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7801,7 +7429,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7813,8 +7441,8 @@
           "smoothness.tough_image_decode_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_image_decode_cases",
@@ -7831,7 +7459,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7843,8 +7471,8 @@
           "smoothness.tough_image_decode_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7863,7 +7491,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7875,8 +7503,8 @@
           "smoothness.tough_path_rendering_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_path_rendering_cases",
@@ -7893,7 +7521,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7905,8 +7533,8 @@
           "smoothness.tough_path_rendering_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7925,7 +7553,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7937,8 +7565,8 @@
           "smoothness.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_scrolling_cases",
@@ -7955,7 +7583,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -7967,8 +7595,8 @@
           "smoothness.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -7987,7 +7615,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -7999,8 +7627,8 @@
           "smoothness.tough_texture_upload_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_texture_upload_cases",
@@ -8017,7 +7645,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8029,8 +7657,8 @@
           "smoothness.tough_texture_upload_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8049,7 +7677,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8061,8 +7689,8 @@
           "smoothness.tough_webgl_ad_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_webgl_ad_cases",
@@ -8079,7 +7707,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8091,8 +7719,8 @@
           "smoothness.tough_webgl_ad_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8111,7 +7739,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8123,8 +7751,8 @@
           "smoothness.tough_webgl_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "smoothness.tough_webgl_cases",
@@ -8141,7 +7769,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8153,8 +7781,8 @@
           "smoothness.tough_webgl_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8173,7 +7801,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8185,8 +7813,8 @@
           "speedometer",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "speedometer",
@@ -8203,7 +7831,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8215,8 +7843,8 @@
           "speedometer",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8235,7 +7863,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8247,8 +7875,8 @@
           "speedometer2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "speedometer2",
@@ -8265,7 +7893,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8277,8 +7905,8 @@
           "speedometer2",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8297,7 +7925,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8309,8 +7937,8 @@
           "storage.indexeddb_endure",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "storage.indexeddb_endure",
@@ -8327,7 +7955,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8339,8 +7967,8 @@
           "storage.indexeddb_endure",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8359,7 +7987,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8371,8 +7999,8 @@
           "storage.indexeddb_endure_tracing",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "storage.indexeddb_endure_tracing",
@@ -8389,7 +8017,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8401,8 +8029,8 @@
           "storage.indexeddb_endure_tracing",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8421,7 +8049,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8433,8 +8061,8 @@
           "system_health.common_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "system_health.common_desktop",
@@ -8451,7 +8079,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8463,8 +8091,8 @@
           "system_health.common_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8483,7 +8111,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8495,8 +8123,8 @@
           "system_health.memory_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "system_health.memory_desktop",
@@ -8513,7 +8141,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8525,8 +8153,8 @@
           "system_health.memory_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8545,7 +8173,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8557,8 +8185,8 @@
           "tab_switching.typical_25",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "tab_switching.typical_25",
@@ -8575,7 +8203,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8587,8 +8215,8 @@
           "tab_switching.typical_25",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8607,7 +8235,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8619,8 +8247,8 @@
           "thread_times.tough_compositor_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "thread_times.tough_compositor_cases",
@@ -8637,7 +8265,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8649,8 +8277,8 @@
           "thread_times.tough_compositor_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8669,7 +8297,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8681,8 +8309,8 @@
           "thread_times.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "thread_times.tough_scrolling_cases",
@@ -8699,7 +8327,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8711,8 +8339,8 @@
           "thread_times.tough_scrolling_cases",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8731,7 +8359,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8743,8 +8371,8 @@
           "tracing.tracing_with_background_memory_infra",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "tracing.tracing_with_background_memory_infra",
@@ -8761,7 +8389,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8773,8 +8401,8 @@
           "tracing.tracing_with_background_memory_infra",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8793,7 +8421,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8805,8 +8433,8 @@
           "v8.browsing_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "v8.browsing_desktop",
@@ -8823,7 +8451,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8835,8 +8463,8 @@
           "v8.browsing_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8855,7 +8483,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8867,8 +8495,8 @@
           "v8.detached_context_age_in_gc",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "v8.detached_context_age_in_gc",
@@ -8885,7 +8513,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8897,8 +8525,8 @@
           "v8.detached_context_age_in_gc",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8917,7 +8545,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8929,8 +8557,8 @@
           "v8.runtimestats.browsing_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "v8.runtimestats.browsing_desktop",
@@ -8947,7 +8575,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -8959,8 +8587,8 @@
           "v8.runtimestats.browsing_desktop",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -8979,7 +8607,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
@@ -8991,8 +8619,8 @@
           "webrtc",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
-          "--browser=release_x64"
+          "--browser=release_x64",
+          "--output-format=chartjson"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "webrtc",
@@ -9009,7 +8637,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
@@ -9021,8 +8649,8 @@
           "webrtc",
           "-v",
           "--upload-results",
-          "--output-format=chartjson",
           "--browser=reference",
+          "--output-format=chartjson",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -9041,7 +8669,7 @@
               "pool": "Chrome-perf-fyi"
             }
           ],
-          "expiration": 72000,
+          "expiration": 36000,
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,

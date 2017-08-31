@@ -66,22 +66,25 @@ class ICCProfileCache {
   // We maintain UMA histograms of display ICC profiles. Only histogram a
   // display once for each |display_id| (because we will re-read the same
   // ICC profile repeatedly when reading other display profiles, which will
-  // skew samples). Return whether or not we have histogrammed this profile
-  // for |display_id|. Ensure that all future calls will return true for
+  // skew samples). Return true if we need to histogram this profile for
+  // |display_id|, and ensure that all future calls will return false for
   // |display_id|.
   bool GetAndSetNeedsHistogram(uint64_t display_id,
                                const ICCProfile& icc_profile) {
     base::AutoLock lock(lock_);
 
+    // If we don't find the profile in the cache, don't histogram it.
     auto found = id_to_icc_profile_mru_.Get(icc_profile.id_);
-    if (found != id_to_icc_profile_mru_.end())
+    if (found == id_to_icc_profile_mru_.end())
       return false;
 
+    // If we have already histogrammed this display, don't histogram it.
     std::set<int64_t>& histogrammed_display_ids =
         found->second.histogrammed_display_ids;
     if (histogrammed_display_ids.count(display_id))
       return false;
 
+    // Histogram this display, and mark that we have done so.
     histogrammed_display_ids.insert(display_id);
     return true;
   }
@@ -401,7 +404,7 @@ void ICCProfile::ComputeColorSpaceAndCache() {
 }
 
 void ICCProfile::HistogramDisplay(int64_t display_id) const {
-  if (g_cache.Get().GetAndSetNeedsHistogram(display_id, *this))
+  if (!g_cache.Get().GetAndSetNeedsHistogram(display_id, *this))
     return;
 
   UMA_HISTOGRAM_ENUMERATION("Blink.ColorSpace.Destination.ICCResult",

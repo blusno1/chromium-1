@@ -34,7 +34,10 @@ include_rules = [
     "+base/timer",
     "+base/trace_event",
     "+base/values.h",
+    "+base/lazy_instance.h",
     "+net/http/http_util.h",
+    "+net/http/http_request_headers.h",
+    "+net/http/http_response_headers.h",
     "+device",
     "+gpu/GLES2",
     "+mojo/public",
@@ -43,6 +46,7 @@ include_rules = [
     "+public/platform",
     #TODO(nverne): remove this
     "+public/web/WebKit.h",
+    "+services/viz/public/interfaces/compositing/compositor_frame_sink.mojom-blink.h",
     "+skia/ext",
     "+third_party/ced/src/compact_enc_det/compact_enc_det.h",
     "+third_party/khronos",

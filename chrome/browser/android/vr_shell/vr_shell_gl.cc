@@ -87,6 +87,8 @@ static constexpr float kMinAppButtonGestureAngleRad = 0.25;
 static constexpr base::TimeDelta kWebVRFenceCheckTimeout =
     base::TimeDelta::FromMicroseconds(2000);
 
+static constexpr int kWebVrInitialFrameTimeoutSeconds = 5;
+
 // Provides the direction the head is looking towards as a 3x1 unit vector.
 gfx::Vector3dF GetForwardVector(const gfx::Transform& head_pose) {
   // Same as multiplying the inverse of the rotation component of the matrix by
@@ -152,10 +154,6 @@ gvr::Rectf UVFromGfxRect(gfx::RectF rect) {
 gfx::RectF GfxRectFromUV(gvr::Rectf rect) {
   return gfx::RectF(rect.left, 1.0 - rect.top, rect.right - rect.left,
                     rect.top - rect.bottom);
-}
-
-double NowSeconds() {
-  return (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
 }
 
 void LoadControllerModelTask(
@@ -368,6 +366,7 @@ void VrShellGl::ConnectPresentingService(
   closePresentationBindings();
   submit_client_.Bind(std::move(submit_client_info));
   binding_.Bind(std::move(request));
+  ScheduleWebVrFrameTimeout();
 }
 
 void VrShellGl::OnContentFrameAvailable() {
@@ -393,6 +392,31 @@ void VrShellGl::OnWebVRFrameAvailable() {
   browser_->OnWebVrFrameAvailable();
 
   DrawFrame(frame_index);
+  if (web_vr_mode_) {
+    ++webvr_frames_received_;
+    ScheduleWebVrFrameTimeout();
+  } else {
+    webvr_frame_timeout_.Cancel();
+  }
+}
+
+void VrShellGl::ScheduleWebVrFrameTimeout() {
+  // TODO(mthiesse): We should also timeout after the initial frame to prevent
+  // bad experiences, but we have to be careful to handle things like splash
+  // screens correctly. For now just ensure we receive a first frame.
+  if (webvr_frames_received_ > 0) {
+    webvr_frame_timeout_.Cancel();
+    return;
+  }
+  webvr_frame_timeout_.Reset(
+      base::Bind(&VrShellGl::OnWebVrFrameTimedOut, base::Unretained(this)));
+  task_runner_->PostDelayedTask(
+      FROM_HERE, webvr_frame_timeout_.callback(),
+      base::TimeDelta::FromSeconds(kWebVrInitialFrameTimeoutSeconds));
+}
+
+void VrShellGl::OnWebVrFrameTimedOut() {
+  browser_->OnWebVrTimedOut();
 }
 
 void VrShellGl::GvrInit(gvr_context* gvr_api) {
@@ -491,6 +515,8 @@ void VrShellGl::UpdateController(const gfx::Transform& head_pose) {
   controller_info_.laser_origin = controller_->GetPointerStart();
 
   device::GvrGamepadData controller_data = controller_->GetGamepadData();
+  if (!ShouldDrawWebVr())
+    controller_data.connected = false;
   browser_->UpdateGamepadData(controller_data);
 
   HandleControllerInput(GetForwardVector(head_pose));
@@ -503,8 +529,6 @@ void VrShellGl::HandleControllerInput(const gfx::Vector3dF& head_direction) {
     SendImmediateExitRequestIfNecessary();
     return;
   }
-
-  HandleWebVrCompatibilityClick();
 
   gfx::Vector3dF ergo_neutral_pose;
   if (!controller_->IsConnected()) {
@@ -534,11 +558,7 @@ void VrShellGl::HandleControllerInput(const gfx::Vector3dF& head_direction) {
   DCHECK(!(controller_->ButtonUpHappened(gvr::kControllerButtonClick) &&
            controller_->ButtonDownHappened(gvr::kControllerButtonClick)))
       << "Cannot handle a button down and up event within one frame.";
-  if (touch_pending_) {
-    controller_info_.touchpad_button_state =
-        vr::UiInputManager::ButtonState::CLICKED;
-    touch_pending_ = false;
-  } else if (controller_->ButtonState(gvr::kControllerButtonClick)) {
+  if (controller_->ButtonState(gvr::kControllerButtonClick)) {
     controller_info_.touchpad_button_state =
         vr::UiInputManager::ButtonState::DOWN;
   }
@@ -555,24 +575,6 @@ void VrShellGl::HandleControllerInput(const gfx::Vector3dF& head_direction) {
       controller_direction, controller_info_.laser_origin,
       controller_info_.touchpad_button_state, &gesture_list,
       &controller_info_.target_point, &controller_info_.reticle_render_target);
-}
-
-void VrShellGl::HandleWebVrCompatibilityClick() {
-  if (!ShouldDrawWebVr())
-    return;
-
-  // Process screen touch events for Cardboard button compatibility.
-  if (touch_pending_) {
-    touch_pending_ = false;
-    auto gesture = base::MakeUnique<blink::WebGestureEvent>(
-        blink::WebInputEvent::kGestureTapDown,
-        blink::WebInputEvent::kNoModifiers, NowSeconds());
-    gesture->source_device = blink::kWebGestureDeviceTouchpad;
-    gesture->x = 0;
-    gesture->y = 0;
-    SendGestureToContent(std::move(gesture));
-    DVLOG(1) << __FUNCTION__ << ": sent CLICK gesture";
-  }
 }
 
 std::unique_ptr<blink::WebMouseEvent> VrShellGl::MakeMouseEvent(
@@ -1040,35 +1042,40 @@ void VrShellGl::DrawWebVr() {
   vr_shell_renderer_->GetWebVrRenderer()->Draw(webvr_texture_id_);
 }
 
-void VrShellGl::OnTriggerEvent() {
-  // Set a flag to handle this on the render thread at the next frame.
-  touch_pending_ = true;
-}
-
 void VrShellGl::OnPause() {
   vsync_helper_.CancelVSyncRequest();
   controller_->OnPause();
   gvr_api_->PauseTracking();
+  webvr_frame_timeout_.Cancel();
 }
 
 void VrShellGl::OnResume() {
   gvr_api_->RefreshViewerProfile();
   gvr_api_->ResumeTracking();
   controller_->OnResume();
-  if (ready_to_draw_) {
-    vsync_helper_.CancelVSyncRequest();
-    OnVSync(base::TimeTicks::Now());
-  }
+  if (!ready_to_draw_)
+    return;
+  vsync_helper_.CancelVSyncRequest();
+  OnVSync(base::TimeTicks::Now());
+  if (web_vr_mode_ && submit_client_)
+    ScheduleWebVrFrameTimeout();
 }
 
 void VrShellGl::SetWebVrMode(bool enabled) {
   web_vr_mode_ = enabled;
 
+  if (web_vr_mode_ && submit_client_) {
+    ScheduleWebVrFrameTimeout();
+  } else {
+    webvr_frame_timeout_.Cancel();
+    webvr_frames_received_ = 0;
+  }
+
   if (cardboard_) {
     browser_->ToggleCardboardGamepad(enabled);
   }
 
-  if (!enabled) {
+  if (!web_vr_mode_) {
     closePresentationBindings();
   }
 }
@@ -1242,6 +1249,7 @@ void VrShellGl::CreateVRDisplayInfo(
 }
 
 void VrShellGl::closePresentationBindings() {
+  webvr_frame_timeout_.Cancel();
   submit_client_.reset();
   if (!callback_.is_null()) {
     // When this Presentation provider is going away we have to respond to

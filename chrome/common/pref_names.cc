@@ -1226,6 +1226,22 @@ const char kPrintingDevices[] = "printing.devices";
 // List of printers configured by policy.
 const char kRecommendedNativePrinters[] =
     "native_printing.recommended_printers";
+
+// External resource containing all printer configurations for an enterprise.
+const char kRecommendedNativePrintersFile[] =
+    "native_printing.recommended_printers_file";
+
+// Enum designating the type of restrictions bulk printers are using.
+const char kRecommendedNativePrintersAccessMode[] =
+    "native_printing.recommended_printers_access_mode";
+
+// List of printer ids which are explicitly disallowed.  List of strings.
+const char kRecommendedNativePrintersBlacklist[] =
+    "native_printing.recommended_printers_blacklist";
+
+// List of printer ids that are allowed.  List of strings.
+const char kRecommendedNativePrintersWhitelist[] =
+    "native_printing.recommended_printers_whitelist";
 #endif  // OS_CHROMEOS
 
 // An integer pref specifying the fallback behavior for sites outside of content
@@ -1926,9 +1942,6 @@ const char kReportArcStatusEnabled[] = "arc.status_reporting_enabled";
 // and download rate in kbits/s to throttle to)
 const char kNetworkThrottlingEnabled[] = "net.throttling_enabled";
 
-// Boolean prefs for the local status of the touchscreen.
-const char kTouchscreenEnabledLocal[] = "events.touch_screen.enabled_local";
-
 #endif  // defined(OS_CHROMEOS)
 
 // Whether there is a Flash version installed that supports clearing LSO data.
@@ -2528,5 +2541,10 @@ const char kOfflineUsageOfflineCount[] = "offline_pages.offline_count";
 const char kOfflineUsageOnlineCount[] = "offline_pages.online_count";
 const char kOfflineUsageMixedCount[] = "offline_pages.mixed_count";
 #endif
+
+// Stores the Media Engagement Index schema version. If the stored value
+// is lower than the value in MediaEngagementService then the MEI data
+// will be wiped.
+const char kMediaEngagementSchemaVersion[] = "media.engagement.schema_version";
 
 }  // namespace prefs

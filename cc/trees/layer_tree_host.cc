@@ -35,6 +35,7 @@
 #include "cc/debug/rendering_stats_instrumentation.h"
 #include "cc/input/layer_selection_bound.h"
 #include "cc/input/page_scale_animation.h"
+#include "cc/input/scroll_boundary_behavior.h"
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
 #include "cc/layers/layer.h"
@@ -225,6 +226,14 @@ void LayerTreeHost::SetFrameSinkId(const viz::FrameSinkId& frame_sink_id) {
 void LayerTreeHost::QueueSwapPromise(
     std::unique_ptr<SwapPromise> swap_promise) {
   swap_promise_manager_.QueueSwapPromise(std::move(swap_promise));
+
+  // Request a main frame if one is not already in progress. This might either
+  // A) request a commit ahead of time or B) request a commit which is not
+  // needed because there are not pending updates. If B) then the frame will
+  // be aborted early and the swap promises will be broken (see
+  // EarlyOut_NoUpdates).
+  if (!inside_main_frame_)
+    SetNeedsAnimate();
 }
 
 viz::SurfaceSequenceGenerator* LayerTreeHost::GetSurfaceSequenceGenerator() {
@@ -1007,6 +1016,14 @@ void LayerTreeHost::SetBrowserControlsShownRatio(float ratio) {
   SetNeedsCommit();
 }
 
+void LayerTreeHost::SetScrollBoundaryBehavior(
+    const ScrollBoundaryBehavior& behavior) {
+  if (scroll_boundary_behavior_ == behavior)
+    return;
+  scroll_boundary_behavior_ = behavior;
+  SetNeedsCommit();
+}
+
 void LayerTreeHost::SetPageScaleFactorAndLimits(float page_scale_factor,
                                                 float min_page_scale_factor,
                                                 float max_page_scale_factor) {
@@ -1259,6 +1276,7 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
       browser_controls_shrink_blink_size_);
   tree_impl->set_top_controls_height(top_controls_height_);
   tree_impl->set_bottom_controls_height(bottom_controls_height_);
+  tree_impl->set_scroll_boundary_behavior(scroll_boundary_behavior_);
   tree_impl->PushBrowserControlsFromMainThread(top_controls_shown_ratio_);
   tree_impl->elastic_overscroll()->PushMainToPending(elastic_overscroll_);
   if (tree_impl->IsActiveTree())

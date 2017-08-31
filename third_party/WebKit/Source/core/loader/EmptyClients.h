@@ -109,7 +109,8 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void DidOverscroll(const FloatSize&,
                      const FloatSize&,
                      const FloatPoint&,
-                     const FloatSize&) override {}
+                     const FloatSize&,
+                     const WebScrollBoundaryBehavior&) override {}
 
   void BeginLifecycleUpdates() override {}
 
@@ -328,7 +329,8 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
-      WebMediaPlayerClient*) override;
+      WebMediaPlayerClient*,
+      WebLayerTreeView*) override;
   WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) override;
 

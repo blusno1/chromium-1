@@ -86,8 +86,6 @@ class VrShell : device::GvrGamepadDataProvider,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobject>& web_contents,
       const base::android::JavaParamRef<jobject>& android_ui_gesture_target);
-  void RestoreLayer(JNIEnv* env,
-                    const base::android::JavaParamRef<jobject>& obj);
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void OnTriggerEvent(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& obj,
@@ -127,6 +125,7 @@ class VrShell : device::GvrGamepadDataProvider,
   void NavigateBack();
   void ExitCct();
   void ToggleCardboardGamepad(bool enabled);
+  void ToggleGvrGamepad(bool enabled);
   base::android::ScopedJavaGlobalRef<jobject> TakeContentSurface(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -262,6 +261,7 @@ class VrShell : device::GvrGamepadDataProvider,
   // Are we currently providing a gamepad factory to the gamepad manager?
   bool gvr_gamepad_source_active_ = false;
   bool cardboard_gamepad_source_active_ = false;
+  bool pending_cardboard_trigger_ = false;
 
   // Registered fetchers, must remain alive for UpdateGamepadData calls.
   // That's ok since the fetcher is only destroyed from VrShell's destructor.

@@ -144,6 +144,12 @@ bool ParseQuad(std::unique_ptr<protocol::Array<double>> quad_array,
   return true;
 }
 
+#if defined(OS_MACOSX)
+const int kCtrlOrMeta = WebInputEvent::kMetaKey;
+#else
+const int kCtrlOrMeta = WebInputEvent::kControlKey;
+#endif
+
 }  // namespace
 
 class InspectorOverlayAgent::InspectorPageOverlayDelegate final
@@ -833,6 +839,7 @@ Page* InspectorOverlayAgent::OverlayPage() {
   overlay_settings.SetScriptEnabled(true);
   overlay_settings.SetPluginsEnabled(false);
   overlay_settings.SetLoadsImagesAutomatically(true);
+  overlay_settings.SetForceDisplayList2dCanvasEnabled(true);
   // FIXME: http://crbug.com/363843. Inspector should probably create its
   // own graphics layers and attach them to the tree rather than going
   // through some non-composited paint function.
@@ -990,7 +997,7 @@ bool InspectorOverlayAgent::HandleMouseMove(const WebMouseEvent& event) {
   if (!ShouldSearchForNode())
     return false;
 
-  if (event.GetModifiers() & WebInputEvent::kControlKey) {
+  if (event.GetModifiers() & kCtrlOrMeta) {
     InnerHideHighlight();
     hovered_node_for_inspect_mode_.Clear();
     if (screenshot_mode_) {
@@ -1059,7 +1066,7 @@ bool InspectorOverlayAgent::HandleMouseDown(const WebMouseEvent& event) {
   if (!ShouldSearchForNode())
     return false;
 
-  if ((event.GetModifiers() & WebInputEvent::kControlKey) &&
+  if ((event.GetModifiers() & kCtrlOrMeta) &&
       (event.GetModifiers() & WebInputEvent::kLeftButtonDown)) {
     InnerHideHighlight();
     hovered_node_for_inspect_mode_.Clear();

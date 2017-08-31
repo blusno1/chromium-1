@@ -458,7 +458,7 @@ HTMLMediaElement::HTMLMediaElement(const QualifiedName& tag_name,
           this,
           &HTMLMediaElement::CheckViewportIntersectionTimerFired),
       played_time_ranges_(),
-      async_event_queue_(GenericEventQueue::Create(this)),
+      async_event_queue_(MediaElementEventQueue::Create(this)),
       playback_rate_(1.0f),
       default_playback_rate_(1.0f),
       network_state_(kNetworkEmpty),
@@ -1233,8 +1233,10 @@ void HTMLMediaElement::StartPlayerLoad() {
     return;
   }
 
-  web_media_player_ =
-      frame->Client()->CreateWebMediaPlayer(*this, source, this);
+  web_media_player_ = frame->Client()->CreateWebMediaPlayer(
+      *this, source, this,
+      frame->GetPage()->GetChromeClient().GetWebLayerTreeView(frame));
+
   if (!web_media_player_) {
     MediaLoadingFailed(WebMediaPlayer::kNetworkStateFormatError,
                        BuildElementErrorMessage(
