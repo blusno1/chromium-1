@@ -31,7 +31,9 @@
 Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 """
 
+import os
 import re
+import sys
 
 from idl_types import IdlTypeBase
 import idl_types
@@ -341,9 +343,9 @@ def secure_context(member, interface):
 # [ImplementedAs]
 def cpp_name(definition_or_member):
     extended_attributes = definition_or_member.extended_attributes
-    if 'ImplementedAs' not in extended_attributes:
-        return definition_or_member.name
-    return extended_attributes['ImplementedAs']
+    if extended_attributes and 'ImplementedAs' in extended_attributes:
+        return extended_attributes['ImplementedAs']
+    return definition_or_member.name
 
 
 def cpp_name_from_interfaces_info(name, interfaces_info):

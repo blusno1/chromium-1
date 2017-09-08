@@ -16,6 +16,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/sys_info.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/platform_thread.h"
 #include "base/timer/hi_res_timer_manager.h"
@@ -143,6 +144,10 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
     media::DXVAVideoDecodeAccelerator::PreSandboxInitialization();
     media::MediaFoundationVideoEncodeAccelerator::PreSandboxInitialization();
 #endif
+
+    // On Linux, reading system memory doesn't work through the GPU sandbox.
+    // This value is cached, so access it here to populate the cache.
+    base::SysInfo::AmountOfPhysicalMemory();
   }
 
   bool EnsureSandboxInitialized(
@@ -267,8 +272,8 @@ int GpuMain(const MainFunctionParams& parameters) {
   // defer tearing down the GPU process until receiving the initialization
   // message from the browser (through mojom::GpuMain::CreateGpuService()).
   constexpr bool kInProcessGpu = false;
-  const bool init_success =
-      gpu_init.InitializeAndStartSandbox(command_line, kInProcessGpu);
+  const bool init_success = gpu_init.InitializeAndStartSandbox(
+      const_cast<base::CommandLine*>(&command_line), kInProcessGpu);
   const bool dead_on_arrival = !init_success;
 
   logging::SetLogMessageHandler(NULL);

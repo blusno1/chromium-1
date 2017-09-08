@@ -9,6 +9,10 @@
 
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/checked_math.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
+#include "content/browser/background_fetch/background_fetch.pb.h"
 #include "content/browser/background_fetch/background_fetch_constants.h"
 #include "content/browser/background_fetch/background_fetch_context.h"
 #include "content/browser/background_fetch/background_fetch_cross_origin_filter.h"
@@ -22,9 +26,89 @@
 #include "content/public/common/content_switches.h"
 #include "services/network/public/interfaces/fetch_api.mojom.h"
 
+// Service Worker DB UserData schema
+// =================================
+// Design doc:
+// https://docs.google.com/document/d/1-WPPTP909Gb5PnaBOKP58tPVLw2Fq0Ln-u1EBviIBns/edit
+//
+// - Each key will be stored twice by the Service Worker DB, once as a
+//   "REG_HAS_USER_DATA:", and once as a "REG_USER_DATA:" - see
+//   content/browser/service_worker/service_worker_database.cc for details.
+// - Integer values are serialized as a string by base::Int*ToString().
+//
+// key: "bgfetch_registration_" + <std::string 'registration_id'>
+// value: <std::string 'serialized content::proto::BackgroundFetchRegistration'>
+//
+// key: "bgfetch_request_" + <std::string 'registration_id'>
+//          + "_" + <int 'request_index'>
+// value: <TODO: FetchAPIRequest serialized as a string>
+//
+// key: "bgfetch_pending_request_"
+//          + <int64_t 'registration_creation_microseconds_since_unix_epoch'>
+//          + "_" + <std::string 'registration_id'>
+//          + "_" + <int 'request_index'>
+// value: ""
+
 namespace content {
 
 namespace {
+
+const char kSeparator[] = "_";  // Warning: registration IDs may contain these.
+const char kRegistrationKeyPrefix[] = "bgfetch_registration_";
+const char kRequestKeyPrefix[] = "bgfetch_request_";
+const char kPendingRequestKeyPrefix[] = "bgfetch_pending_request_";
+
+std::string RegistrationKey(
+    const BackgroundFetchRegistrationId& registration_id) {
+  // Allows looking up a registration by ID.
+  return kRegistrationKeyPrefix + registration_id.id();
+}
+
+std::string RequestKeyPrefix(
+    const BackgroundFetchRegistrationId& registration_id) {
+  // Allows looking up all requests within a registration.
+  return kRequestKeyPrefix + registration_id.id() + kSeparator;
+}
+
+std::string RequestKey(const BackgroundFetchRegistrationId& registration_id,
+                       int request_index) {
+  // Allows looking up a request by registration ID and index within that.
+  return RequestKeyPrefix(registration_id) + base::IntToString(request_index);
+}
+
+std::string PendingRequestKeyPrefix(
+    int64_t registration_creation_microseconds_since_unix_epoch,
+    const BackgroundFetchRegistrationId& registration_id) {
+  // These keys are ordered by creation time rather than by registration_id, so
+  // the highest priority pending requests can be looked up by fetching the
+  // lexicographically smallest keys.
+  //
+  // Currently (pending crbug.com/741609) registrations within each
+  // StoragePartition are prioritised in simple FIFO order by creation time.
+  // Since the ordering must survive restarts, wall clock time is used, but that
+  // is not monotonically increasing, so the ordering is not exact, and the
+  // registration ID is appended to break ties in case the wall clock returns
+  // the same values more than once.
+  //
+  // On Nov 20 2286 17:46:39 the microseconds will transition from 9999999999999
+  // to 10000000000000 and pending requests will briefly sort incorrectly.
+  return kPendingRequestKeyPrefix +
+         base::Int64ToString(
+             registration_creation_microseconds_since_unix_epoch) +
+         kSeparator + registration_id.id() + kSeparator;
+}
+
+std::string PendingRequestKey(
+    int64_t registration_creation_microseconds_since_unix_epoch,
+    const BackgroundFetchRegistrationId& registration_id,
+    int request_index) {
+  // In addition to the ordering from PendingRequestKeyPrefix, the requests
+  // within each registration should be prioritized according to their index.
+  return PendingRequestKeyPrefix(
+             registration_creation_microseconds_since_unix_epoch,
+             registration_id) +
+         base::IntToString(request_index);
+}
 
 enum class DatabaseStatus { kOk, kFailed, kNotFound };
 
@@ -70,13 +154,6 @@ DatabaseStatus ToDatabaseStatus(ServiceWorkerStatusCode status) {
 bool IsOK(const BackgroundFetchRequestInfo& request) {
   int status = request.GetResponseCode();
   return status >= 200 && status < 300;
-}
-
-const char kRegistrationKeyPrefix[] = "bgf_registration_";
-
-std::string RegistrationKey(
-    const BackgroundFetchRegistrationId& registration_id) {
-  return kRegistrationKeyPrefix + registration_id.id();
 }
 
 }  // namespace
@@ -164,15 +241,7 @@ class CreateRegistrationTask : public BackgroundFetchDataManager::DatabaseTask {
                           ServiceWorkerStatusCode status) {
     switch (ToDatabaseStatus(status)) {
       case DatabaseStatus::kNotFound:
-        service_worker_context()->StoreRegistrationUserData(
-            registration_id_.service_worker_registration_id(),
-            registration_id_.origin().GetURL(),
-            {
-                {RegistrationKey(registration_id_), "TODO VALUE"}
-                // TODO(crbug.com/757760): Store requests as well.
-            },
-            base::Bind(&CreateRegistrationTask::DidStoreRegistration,
-                       weak_factory_.GetWeakPtr()));
+        StoreRegistration();
         return;
       case DatabaseStatus::kOk:
         std::move(callback_).Run(
@@ -185,6 +254,47 @@ class CreateRegistrationTask : public BackgroundFetchDataManager::DatabaseTask {
         Finished();  // Destroys |this|.
         return;
     }
+  }
+
+  void StoreRegistration() {
+    int64_t registration_creation_microseconds_since_unix_epoch =
+        (base::Time::Now() - base::Time::UnixEpoch()).InMicroseconds();
+
+    std::vector<std::pair<std::string, std::string>> entries;
+    entries.reserve(requests_.size() * 2 + 1);
+
+    // First serialize per-registration (as opposed to per-request) data.
+    // TODO(crbug.com/757760): Serialize BackgroundFetchOptions as part of this.
+    proto::BackgroundFetchRegistration registration_proto;
+    registration_proto.set_creation_microseconds_since_unix_epoch(
+        registration_creation_microseconds_since_unix_epoch);
+    std::string serialized_registration_proto;
+    if (!registration_proto.SerializeToString(&serialized_registration_proto)) {
+      // TODO(johnme): Log failures to UMA.
+      std::move(callback_).Run(
+          blink::mojom::BackgroundFetchError::STORAGE_ERROR);
+      Finished();  // Destroys |this|.
+      return;
+    }
+    entries.emplace_back(RegistrationKey(registration_id_),
+                         std::move(serialized_registration_proto));
+
+    // Signed integers are used for request indexes to avoid unsigned gotchas.
+    for (int i = 0; i < base::checked_cast<int>(requests_.size()); i++) {
+      // TODO(crbug.com/757760): Serialize actual values for these entries.
+      entries.emplace_back(RequestKey(registration_id_, i),
+                           "TODO: Serialize FetchAPIRequest as value");
+      entries.emplace_back(
+          PendingRequestKey(registration_creation_microseconds_since_unix_epoch,
+                            registration_id_, i),
+          std::string());
+    }
+
+    service_worker_context()->StoreRegistrationUserData(
+        registration_id_.service_worker_registration_id(),
+        registration_id_.origin().GetURL(), entries,
+        base::Bind(&CreateRegistrationTask::DidStoreRegistration,
+                   weak_factory_.GetWeakPtr()));
   }
 
   void DidStoreRegistration(ServiceWorkerStatusCode status) {
@@ -223,18 +333,40 @@ class DeleteRegistrationTask : public BackgroundFetchDataManager::DatabaseTask {
         callback_(std::move(callback)),
         weak_factory_(this) {}
 
+  ~DeleteRegistrationTask() override = default;
+
   void Start() override {
-    service_worker_context()->ClearRegistrationUserData(
+    // Get the registration creation time so we can delete any pending requests.
+    service_worker_context()->GetRegistrationUserData(
         registration_id_.service_worker_registration_id(),
-        {
-            RegistrationKey(registration_id_)
-            // TODO(crbug.com/757760): Delete requests as well.
-        },
-        base::Bind(&DeleteRegistrationTask::DidDeleteRegistration,
+        {RegistrationKey(registration_id_)},
+        base::Bind(&DeleteRegistrationTask::DidGetRegistration,
                    weak_factory_.GetWeakPtr()));
   }
 
  private:
+  void DidGetRegistration(const std::vector<std::string>& data,
+                          ServiceWorkerStatusCode status) {
+    std::vector<std::string> prefixes_to_clear = {
+        RegistrationKey(registration_id_), RequestKeyPrefix(registration_id_)};
+
+    if (status == SERVICE_WORKER_OK) {
+      DCHECK_EQ(1u, data.size());
+      proto::BackgroundFetchRegistration registration_proto;
+      if (registration_proto.ParseFromString(data[0]) &&
+          registration_proto.has_creation_microseconds_since_unix_epoch()) {
+        prefixes_to_clear.emplace_back(PendingRequestKeyPrefix(
+            registration_proto.creation_microseconds_since_unix_epoch(),
+            registration_id_));
+      }
+    }
+
+    service_worker_context()->ClearRegistrationUserDataByKeyPrefixes(
+        registration_id_.service_worker_registration_id(), prefixes_to_clear,
+        base::Bind(&DeleteRegistrationTask::DidDeleteRegistration,
+                   weak_factory_.GetWeakPtr()));
+  }
+
   void DidDeleteRegistration(ServiceWorkerStatusCode status) {
     switch (ToDatabaseStatus(status)) {
       case DatabaseStatus::kOk:

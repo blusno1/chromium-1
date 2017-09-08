@@ -18,25 +18,31 @@ class CSSParserContext;
 class CSSParserLocalContext;
 class CSSProperty;
 class CSSValue;
+class StyleResolverState;
 
-class CORE_EXPORT CSSPropertyAPI {
+class CSSPropertyAPI {
  public:
-  static const CSSPropertyAPI& Get(CSSPropertyID);
+  CORE_EXPORT static const CSSPropertyAPI& Get(CSSPropertyID);
 
 #if !defined(OS_WIN) || !defined(COMPILER_MSVC)
   constexpr CSSPropertyAPI() {}
 #endif
 
+  // Parses and consumes a longhand property value from the token range.
+  // Returns nullptr if the input is invalid.
   virtual const CSSValue* ParseSingleValue(CSSPropertyID,
                                            CSSParserTokenRange&,
                                            const CSSParserContext&,
                                            const CSSParserLocalContext&) const;
+  // Parses and consumes entire shorthand value from the token range and adds
+  // all constituent parsed longhand properties to the 'properties' set.
+  // Returns false if the input is invalid.
   virtual bool ParseShorthand(CSSPropertyID,
                               bool important,
                               CSSParserTokenRange&,
                               const CSSParserContext&,
                               const CSSParserLocalContext&,
-                              HeapVector<CSSProperty, 256>&) const;
+                              HeapVector<CSSProperty, 256>& properties) const;
 
   virtual bool IsInterpolable() const { return false; }
   virtual bool IsInherited() const { return false; }
@@ -48,6 +54,12 @@ class CORE_EXPORT CSSPropertyAPI {
   virtual bool IsDescriptor() const { return false; }
   virtual bool SupportsPercentage() const { return false; }
   virtual bool IsProperty() const { return true; }
+  virtual bool IsEnabled() const { return true; }
+  virtual void ApplyInitial(StyleResolverState&) const { NOTREACHED(); }
+  virtual void ApplyInherit(StyleResolverState&) const { NOTREACHED(); }
+  virtual void ApplyValue(StyleResolverState&, const CSSValue&) const {
+    NOTREACHED();
+  }
 };
 
 {% for api_class_data in api_classes_by_property_id %}

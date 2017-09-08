@@ -9,10 +9,11 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "components/wallpaper/wallpaper_color_profile.h"
+#include "ui/accessibility/ax_node.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_model.h"
@@ -29,6 +30,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_targeter.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -42,6 +44,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -408,12 +411,6 @@ class AppListView::FullscreenWidgetObserver : views::WidgetObserver {
 };
 
 void AppListView::InitContents(gfx::NativeView parent, int initial_apps_page) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440224 and
-  // crbug.com/441028 are fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440224, 441028 AppListView::InitContents"));
-
   if (is_fullscreen_app_list_enabled_) {
     // The shield view that colors/blurs the background of the app list and
     // makes it transparent.
@@ -441,21 +438,9 @@ void AppListView::InitContents(gfx::NativeView parent, int initial_apps_page) {
   search_box_view_->layer()->SetFillsBoundsOpaquely(false);
   search_box_view_->layer()->SetMasksToBounds(true);
 
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440224 and
-  // crbug.com/441028 are fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440224, 441028 AppListView::InitContents1"));
-
   app_list_main_view_->Init(
       parent, is_fullscreen_app_list_enabled_ ? 0 : initial_apps_page,
       search_box_view_);
-
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440224 and
-  // crbug.com/441028 are fixed.
-  tracked_objects::ScopedTracker tracking_profile2(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440224, 441028 AppListView::InitContents2"));
 
   // Speech recognition is available only when the start page exists.
   if (delegate_ && delegate_->IsSpeechRecognitionEnabled()) {
@@ -714,7 +699,13 @@ void AppListView::EndDrag(const gfx::Point& location) {
         break;
       case PEEKING:
         if (std::abs(drag_delta) > app_list_threshold) {
-          SetState(drag_delta > 0 ? FULLSCREEN_ALL_APPS : CLOSED);
+          if (drag_delta > 0) {
+            SetState(FULLSCREEN_ALL_APPS);
+            UMA_HISTOGRAM_ENUMERATION(kAppListPeekingToFullscreenHistogram,
+                                      kSwipe, kMaxPeekingToFullscreen);
+          } else {
+            SetState(CLOSED);
+          }
         } else {
           SetState(app_list_state_);
         }
@@ -727,6 +718,23 @@ void AppListView::EndDrag(const gfx::Point& location) {
   drag_started_from_peeking_ = false;
   DraggingLayout();
   initial_drag_point_ = gfx::Point();
+}
+
+void AppListView::CreateAccessibilityEvent(AppListState new_state) {
+  if (new_state != PEEKING && new_state != FULLSCREEN_ALL_APPS)
+    return;
+
+  DCHECK(state_announcement_ == base::string16());
+
+  if (new_state == PEEKING) {
+    state_announcement_ = l10n_util::GetStringUTF16(
+        IDS_APP_LIST_SUGGESTED_APPS_ACCESSIBILITY_ANNOUNCEMENT);
+  } else {
+    state_announcement_ = l10n_util::GetStringUTF16(
+        IDS_APP_LIST_ALL_APPS_ACCESSIBILITY_ANNOUNCEMENT);
+  }
+  NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, true);
+  state_announcement_ = base::string16();
 }
 
 void AppListView::RecordStateTransitionForUma(AppListState new_state) {
@@ -759,7 +767,6 @@ AppListStateTransitionSource AppListView::GetAppListStateTransitionSource(
   switch (app_list_state_) {
     case CLOSED:
       // CLOSED->X transitions are not useful for UMA.
-      NOTREACHED();
       return kMaxAppListStateTransition;
     case PEEKING:
       switch (target_state) {
@@ -876,7 +883,7 @@ void AppListView::OnScrollEvent(ui::ScrollEvent* event) {
   if (event->type() == ui::ET_SCROLL_FLING_CANCEL)
     return;
 
-  if (!HandleScroll(event))
+  if (!HandleScroll(event->y_offset(), event->type()))
     return;
 
   event->SetHandled();
@@ -893,7 +900,8 @@ void AppListView::OnMouseEvent(ui::MouseEvent* event) {
       HandleClickOrTap(event);
       break;
     case ui::ET_MOUSEWHEEL:
-      if (HandleScroll(event))
+      if (HandleScroll(event->AsMouseWheelEvent()->offset().y(),
+                       ui::ET_MOUSEWHEEL))
         event->SetHandled();
       break;
     default:
@@ -942,7 +950,8 @@ void AppListView::OnGestureEvent(ui::GestureEvent* event) {
       event->SetHandled();
       break;
     case ui::ET_MOUSEWHEEL: {
-      if (HandleScroll(event))
+      if (HandleScroll(event->AsMouseWheelEvent()->offset().y(),
+                       ui::ET_MOUSEWHEEL))
         event->SetHandled();
       break;
     }
@@ -1028,6 +1037,11 @@ void AppListView::SchedulePaintInRect(const gfx::Rect& rect) {
     GetBubbleFrameView()->SchedulePaint();
 }
 
+void AppListView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->SetName(state_announcement_);
+  node_data->role = ui::AX_ROLE_DESKTOP;
+}
+
 void AppListView::OnTabletModeChanged(bool started) {
   is_tablet_mode_ = started;
   search_box_view_->OnTabletModeChanged(started);
@@ -1039,14 +1053,13 @@ void AppListView::OnTabletModeChanged(bool started) {
   }
 }
 
-bool AppListView::HandleScroll(const ui::Event* event) {
+bool AppListView::HandleScroll(int offset, ui::EventType type) {
   if (app_list_state_ != PEEKING)
     return false;
 
-  switch (event->type()) {
+  switch (type) {
     case ui::ET_MOUSEWHEEL:
-      SetState(event->AsMouseWheelEvent()->y_offset() < 0 ? FULLSCREEN_ALL_APPS
-                                                          : CLOSED);
+      SetState(offset < 0 ? FULLSCREEN_ALL_APPS : CLOSED);
       if (app_list_state_ == FULLSCREEN_ALL_APPS) {
         UMA_HISTOGRAM_ENUMERATION(kAppListPeekingToFullscreenHistogram,
                                   kMousewheelScroll, kMaxPeekingToFullscreen);
@@ -1056,10 +1069,8 @@ bool AppListView::HandleScroll(const ui::Event* event) {
       return true;
     case ui::ET_SCROLL:
     case ui::ET_SCROLL_FLING_START: {
-      if (fabs(event->AsScrollEvent()->y_offset()) >
-          kAppListMinScrollToSwitchStates) {
-        SetState(event->AsScrollEvent()->y_offset() < 0 ? FULLSCREEN_ALL_APPS
-                                                        : CLOSED);
+      if (fabs(offset) > kAppListMinScrollToSwitchStates) {
+        SetState(offset < 0 ? FULLSCREEN_ALL_APPS : CLOSED);
         if (app_list_state_ == FULLSCREEN_ALL_APPS) {
           UMA_HISTOGRAM_ENUMERATION(kAppListPeekingToFullscreenHistogram,
                                     kMousepadScroll, kMaxPeekingToFullscreen);
@@ -1087,6 +1098,9 @@ void AppListView::SetState(AppListState new_state) {
           app_list_state_ == FULLSCREEN_ALL_APPS ? CLOSED : FULLSCREEN_ALL_APPS;
     }
   }
+
+  // Notify ChromeVox if the state transition warrants a notification.
+  CreateAccessibilityEvent(new_state_override);
 
   switch (new_state_override) {
     case PEEKING: {

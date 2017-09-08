@@ -114,7 +114,6 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
@@ -134,6 +133,8 @@
 #import "ios/chrome/browser/ui/history_popup/requirements/tab_history_presentation.h"
 #import "ios/chrome/browser/ui/history_popup/tab_history_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/key_commands_provider.h"
+#import "ios/chrome/browser/ui/ntp/incognito_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/modal_ntp.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_handset_coordinator.h"
 #include "ios/chrome/browser/ui/omnibox/page_info_model.h"
@@ -148,6 +149,7 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/sad_tab/sad_tab_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
 #import "ios/chrome/browser/ui/stack_view/card_view.h"
 #import "ios/chrome/browser/ui/stack_view/page_animation_util.h"
@@ -170,6 +172,7 @@
 #import "ios/chrome/browser/web/error_page_content.h"
 #import "ios/chrome/browser/web/passkit_dialog_provider.h"
 #import "ios/chrome/browser/web/repost_form_tab_helper.h"
+#import "ios/chrome/browser/web/sad_tab_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -355,6 +358,7 @@ bool IsURLAllowedInIncognito(const GURL& url) {
                                     CRWWebStateDelegate,
                                     DialogPresenterDelegate,
                                     FullScreenControllerDelegate,
+                                    IncognitoViewControllerDelegate,
                                     IOSCaptivePortalBlockingPageDelegate,
                                     KeyCommandsPlumbing,
                                     MFMailComposeViewControllerDelegate,
@@ -537,6 +541,9 @@ bool IsURLAllowedInIncognito(const GURL& url) {
 
   // Coordinator for Tab History Popup.
   LegacyTabHistoryCoordinator* _tabHistoryCoordinator;
+
+  // Coordinator for displaying Sad Tab.
+  SadTabLegacyCoordinator* _sadTabCoordinator;
 }
 
 // The browser's side swipe controller.  Lazily instantiated on the first call.
@@ -973,8 +980,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
     [_dispatcher startDispatchingToTarget:self
                               forProtocol:@protocol(WebToolbarDelegate)];
     [_dispatcher startDispatchingToTarget:self
-                              forSelector:@selector(chromeExecuteCommand:)];
-    [_dispatcher startDispatchingToTarget:self
                               forProtocol:@protocol(BrowserCommands)];
     [_dispatcher startDispatchingToTarget:applicationCommandEndpoint
                               forProtocol:@protocol(ApplicationCommands)];
@@ -1030,8 +1035,13 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
 
 #pragma mark - Properties
 
-- (id<ApplicationCommands, BrowserCommands>)dispatcher {
-  return static_cast<id<ApplicationCommands, BrowserCommands>>(_dispatcher);
+- (id<ApplicationCommands,
+      BrowserCommands,
+      OmniboxFocuser,
+      UrlLoader,
+      WebToolbarDelegate>)dispatcher {
+  return static_cast<id<ApplicationCommands, BrowserCommands, OmniboxFocuser,
+                        UrlLoader, WebToolbarDelegate>>(_dispatcher);
 }
 
 - (void)setActive:(BOOL)active {
@@ -1583,8 +1593,16 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   // iPhones, this will get executed after the animation has finished.
   if (IsIPadIdiom()) {
     if (self.foregroundTabWasAddedCompletionBlock) {
-      self.foregroundTabWasAddedCompletionBlock();
-      self.foregroundTabWasAddedCompletionBlock = nil;
+      // This callback is called before webState is activated (on
+      // kTabModelNewTabWillOpenNotification notification). Dispatch the
+      // callback asynchronously to be sure the activation is complete.
+      dispatch_async(dispatch_get_main_queue(), ^() {
+        // Test existence again as the block may have been deleted.
+        if (self.foregroundTabWasAddedCompletionBlock) {
+          self.foregroundTabWasAddedCompletionBlock();
+          self.foregroundTabWasAddedCompletionBlock = nil;
+        }
+      });
     }
     return;
   }
@@ -1728,9 +1746,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
 
 - (void)browserStateDestroyed {
   [self setActive:NO];
-  // Reset the toolbar opacity in case it was changed for contextual search.
-  [self updateToolbarControlsAlpha:1.0];
-  [self updateToolbarBackgroundAlpha:1.0];
+  [self setToolbarBackgroundAlpha:1.0];
   [_paymentRequestManager close];
   _paymentRequestManager = nil;
   [_toolbarController browserStateDestroyed];
@@ -1859,6 +1875,9 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   _tabHistoryCoordinator.tabModel = _model;
   _tabHistoryCoordinator.presentationProvider = self;
   _tabHistoryCoordinator.tabHistoryUIUpdater = _toolbarController;
+
+  _sadTabCoordinator = [[SadTabLegacyCoordinator alloc] init];
+  _sadTabCoordinator.dispatcher = _dispatcher;
 
   if (base::FeatureList::IsEnabled(payments::features::kWebPayments)) {
     _paymentRequestManager = [[PaymentRequestManager alloc]
@@ -2339,6 +2358,9 @@ bubblePresenterForFeature:(const base::Feature&)feature
   if (tabHelper)
     tabHelper->SetLauncher(self);
   tab.webState->SetDelegate(_webStateDelegate.get());
+  // BrowserViewController owns the coordinator that displays the Sad Tab.
+  if (!SadTabTabHelper::FromWebState(tab.webState))
+    SadTabTabHelper::CreateForWebState(tab.webState, _sadTabCoordinator);
 }
 
 - (void)uninstallDelegatesForTab:(Tab*)tab {
@@ -2439,6 +2461,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
     _voiceSearchController->SetDelegate(nil);
   [_rateThisAppDialog setDelegate:nil];
   [_model closeAllTabs];
+  [_paymentRequestManager setActiveWebState:nullptr];
 }
 
 #pragma mark - SnapshotOverlayProvider methods
@@ -3259,10 +3282,10 @@ bubblePresenterForFeature:(const base::Feature&)feature
                                       ntpObserver:self
                                      browserState:_browserState
                                        colorCache:_dominantColorCache
-                               webToolbarDelegate:self
+                                  toolbarDelegate:self
                                          tabModel:_model
                              parentViewController:self
-                                       dispatcher:_dispatcher];
+                                       dispatcher:self.dispatcher];
     pageController.swipeRecognizerProvider = self.sideSwipeController;
 
     // Panel is always NTP for iPhone.
@@ -3848,16 +3871,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
   return [[_model currentTab] webState];
 }
 
-// This is called from within an animation block.
-- (void)toolbarHeightChanged {
-  if ([self headerHeight] != 0) {
-    // Ensure full screen height is updated.
-    Tab* currentTab = [_model currentTab];
-    BOOL visible = self.isToolbarOnScreen;
-    [currentTab updateFullscreenWithToolbarVisible:visible];
-  }
-}
-
 // Load a new URL on a new page/tab.
 - (void)webPageOrderedOpen:(const GURL&)URL
                   referrer:(const web::Referrer&)referrer
@@ -3989,20 +4002,8 @@ bubblePresenterForFeature:(const base::Feature&)feature
   }
 }
 
-- (IBAction)prepareToEnterTabSwitcher:(id)sender {
-  [[_model currentTab] updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
-}
-
 - (ToolbarModelIOS*)toolbarModelIOS {
   return _toolbarModelIOS.get();
-}
-
-- (void)updateToolbarBackgroundAlpha:(CGFloat)alpha {
-  [_toolbarController setBackgroundAlpha:alpha];
-}
-
-- (void)updateToolbarControlsAlpha:(CGFloat)alpha {
-  [_toolbarController setControlsAlpha:alpha];
 }
 
 - (void)willUpdateToolbarSnapshot {
@@ -4415,6 +4416,38 @@ bubblePresenterForFeature:(const base::Feature&)feature
                   appendTo:kCurrentTab];
 }
 
+- (void)showBookmarksManager {
+  if (!PresentNTPPanelModally()) {
+    [self showAllBookmarks];
+  } else {
+    [self initializeBookmarkInteractionController];
+    [_bookmarkInteractionController presentBookmarks];
+  }
+}
+
+- (void)showRecentTabs {
+  if (!PresentNTPPanelModally()) {
+    [self showNTPPanel:ntp_home::RECENT_TABS_PANEL];
+  } else {
+    if (!self.recentTabsCoordinator) {
+      self.recentTabsCoordinator = [[RecentTabsHandsetCoordinator alloc]
+          initWithBaseViewController:self];
+      self.recentTabsCoordinator.loader = self;
+      self.recentTabsCoordinator.dispatcher = self.dispatcher;
+      self.recentTabsCoordinator.browserState = _browserState;
+    }
+    [self.recentTabsCoordinator start];
+  }
+}
+
+- (void)requestDesktopSite {
+  [[_model currentTab] reloadWithUserAgentType:web::UserAgentType::DESKTOP];
+}
+
+- (void)requestMobileSite {
+  [[_model currentTab] reloadWithUserAgentType:web::UserAgentType::MOBILE];
+}
+
 #pragma mark - Command Handling
 
 - (IBAction)chromeExecuteCommand:(id)sender {
@@ -4427,36 +4460,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
     case IDC_SHOW_MAIL_COMPOSER:
       [self showMailComposer:sender];
       break;
-    case IDC_REQUEST_DESKTOP_SITE:
-      [[_model currentTab] reloadWithUserAgentType:web::UserAgentType::DESKTOP];
-      break;
-    case IDC_REQUEST_MOBILE_SITE:
-      [[_model currentTab] reloadWithUserAgentType:web::UserAgentType::MOBILE];
-      break;
-    case IDC_SHOW_BOOKMARK_MANAGER: {
-      if (IsIPadIdiom()) {
-        [self showAllBookmarks];
-      } else {
-        [self initializeBookmarkInteractionController];
-        [_bookmarkInteractionController presentBookmarks];
-      }
-      break;
-    }
-    case IDC_SHOW_OTHER_DEVICES: {
-      if (IsIPadIdiom()) {
-        [self showNTPPanel:ntp_home::RECENT_TABS_PANEL];
-      } else {
-        if (!self.recentTabsCoordinator) {
-          self.recentTabsCoordinator = [[RecentTabsHandsetCoordinator alloc]
-              initWithBaseViewController:self];
-          self.recentTabsCoordinator.loader = self;
-          self.recentTabsCoordinator.dispatcher = self.dispatcher;
-          self.recentTabsCoordinator.browserState = _browserState;
-        }
-        [self.recentTabsCoordinator start];
-      }
-      break;
-    }
     default:
       // Unknown commands get sent up the responder chain.
       [super chromeExecuteCommand:sender];
@@ -4731,6 +4734,10 @@ bubblePresenterForFeature:(const base::Feature&)feature
   [self updateVoiceSearchBarVisibilityAnimated:NO];
 
   [_paymentRequestManager setActiveWebState:newTab.webState];
+
+  // Update the Sad Tab coordinator webstate so it matches the current tab
+  // webstate.
+  _sadTabCoordinator.webState = newTab.webState;
 
   [self tabSelected:newTab];
   DCHECK_EQ(newTab, [model currentTab]);
@@ -5076,6 +5083,12 @@ bubblePresenterForFeature:(const base::Feature&)feature
 - (void)userTappedDismiss:(UIView*)view {
   base::RecordAction(base::UserMetricsAction("IOSRateThisAppDismissChosen"));
   _rateThisAppDialog = nil;
+}
+
+#pragma mark - IncognitoViewControllerDelegate
+
+- (void)setToolbarBackgroundAlpha:(CGFloat)alpha {
+  [_toolbarController setBackgroundAlpha:alpha];
 }
 
 #pragma mark - VoiceSearchBarDelegate

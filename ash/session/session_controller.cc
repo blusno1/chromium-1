@@ -228,6 +228,10 @@ void SessionController::ShowMultiProfileLogin() {
     client_->ShowMultiProfileLogin();
 }
 
+PrefService* SessionController::GetSigninScreenPrefService() const {
+  return signin_screen_prefs_.get();
+}
+
 PrefService* SessionController::GetUserPrefServiceForUser(
     const AccountId& account_id) {
   auto it = per_user_prefs_.find(account_id);
@@ -395,6 +399,11 @@ void SessionController::LockScreenAndFlushForTest() {
   FlushMojoForTest();
 }
 
+void SessionController::SetSigninScreenPrefServiceForTest(
+    std::unique_ptr<PrefService> prefs) {
+  OnSigninScreenPrefServiceInitialized(std::move(prefs));
+}
+
 void SessionController::ProvideUserPrefServiceForTest(
     const AccountId& account_id,
     std::unique_ptr<PrefService> pref_service) {
@@ -419,6 +428,14 @@ void SessionController::SetSessionState(SessionState state) {
 
     for (auto& observer : observers_)
       observer.OnLockStateChanged(locked);
+  }
+
+  // Signin profile prefs are needed at OOBE and login screen, but don't request
+  // them twice.
+  if (!signin_screen_prefs_requested_ &&
+      (state_ == SessionState::OOBE || state_ == SessionState::LOGIN_PRIMARY)) {
+    ConnectToSigninScreenPrefService();
+    signin_screen_prefs_requested_ = true;
   }
 }
 
@@ -521,6 +538,44 @@ void SessionController::UpdateLoginStatus() {
 void SessionController::OnLockAnimationFinished() {
   if (!start_lock_callback_.is_null())
     std::move(start_lock_callback_).Run(true /* locked */);
+}
+
+void SessionController::ConnectToSigninScreenPrefService() {
+  DCHECK(!signin_screen_prefs_requested_);
+
+  // Null in tests.
+  if (!connector_)
+    return;
+
+  // Connect to the PrefService for the signin profile.
+  auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
+  Shell::RegisterProfilePrefs(pref_registry.get());
+  ash::mojom::PrefConnectorPtr pref_connector_connector;
+  connector_->BindInterface(mojom::kPrefConnectorServiceName,
+                            &pref_connector_connector);
+  prefs::mojom::PrefStoreConnectorPtr pref_connector;
+  pref_connector_connector->GetPrefStoreConnectorForSigninScreen(
+      mojo::MakeRequest(&pref_connector));
+  prefs::ConnectToPrefService(
+      std::move(pref_connector), std::move(pref_registry),
+      base::Bind(&SessionController::OnSigninScreenPrefServiceInitialized,
+                 weak_ptr_factory_.GetWeakPtr()));
+}
+
+void SessionController::OnSigninScreenPrefServiceInitialized(
+    std::unique_ptr<PrefService> pref_service) {
+  // |pref_service| can be null when running standalone without chrome.
+  if (!pref_service)
+    return;
+
+  DCHECK(!signin_screen_prefs_);
+  signin_screen_prefs_ = std::move(pref_service);
+
+  // The signin profile should be initialized before any user profile.
+  DCHECK(!last_active_user_prefs_);
+
+  for (auto& observer : observers_)
+    observer.OnSigninScreenPrefServiceInitialized(signin_screen_prefs_.get());
 }
 
 void SessionController::OnProfilePrefServiceInitialized(

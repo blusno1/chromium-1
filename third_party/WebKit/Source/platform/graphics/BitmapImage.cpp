@@ -123,7 +123,8 @@ PaintImage BitmapImage::CreateAndCacheFrame(size_t index) {
   PaintImageBuilder builder;
   InitPaintImageBuilder(builder);
   builder.set_paint_image_generator(std::move(generator))
-      .set_frame_index(index);
+      .set_frame_index(index)
+      .set_repetition_count(repetition_count_);
 
   // The caching of the decoded image data by the external users of this image
   // is keyed based on the uniqueID of the underlying SkImage for this
@@ -365,12 +366,12 @@ bool BitmapImage::FrameIsReceivedAtIndex(size_t index) const {
   return decoder_ && decoder_->FrameIsReceivedAtIndex(index);
 }
 
-float BitmapImage::FrameDurationAtIndex(size_t index) const {
+TimeDelta BitmapImage::FrameDurationAtIndex(size_t index) const {
   if (index < frames_.size() && frames_[index].have_metadata_)
     return frames_[index].duration_;
 
   if (!decoder_)
-    return 0.f;
+    return TimeDelta();
   return decoder_->FrameDurationAtIndex(index);
 }
 
@@ -488,7 +489,10 @@ void BitmapImage::StartAnimation(CatchUpAnimation catch_up_if_necessary) {
   // Determine time for next frame to start.  By ignoring paint and timer lag
   // in this calculation, we make the animation appear to run at its desired
   // rate regardless of how fast it's being repainted.
-  const double current_duration = FrameDurationAtIndex(current_frame_index_);
+  // TODO(vmpstr): This function can probably deal in TimeTicks/TimeDelta
+  // instead.
+  const double current_duration =
+      FrameDurationAtIndex(current_frame_index_).InSecondsF();
   desired_frame_start_time_ += current_duration;
 
   // When an animated image is more than five minutes out of date, the
@@ -528,8 +532,11 @@ void BitmapImage::StartAnimation(CatchUpAnimation catch_up_if_necessary) {
          FrameIsReceivedAtIndex(frame_after_next);
          frame_after_next = (next_frame + 1) % FrameCount()) {
       // Should we skip the next frame?
+      // TODO(vmpstr): This function can probably deal in TimeTicks/TimeDelta
+      // instead.
       double frame_after_next_start_time =
-          desired_frame_start_time_ + FrameDurationAtIndex(next_frame);
+          desired_frame_start_time_ +
+          FrameDurationAtIndex(next_frame).InSecondsF();
       if (time < frame_after_next_start_time)
         break;
 

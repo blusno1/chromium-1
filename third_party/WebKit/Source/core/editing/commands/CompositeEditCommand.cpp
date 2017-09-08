@@ -63,7 +63,6 @@
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/serializers/Serialization.h"
-#include "core/editing/spellcheck/SpellChecker.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLDivElement.h"
@@ -1382,11 +1381,12 @@ void CompositeEditCommand::MoveParagraphs(
     return;
 
   // Can't move the range to a destination inside itself.
-  if (destination.DeepEquivalent() >
+  if (destination.DeepEquivalent() >=
           start_of_paragraph_to_move.DeepEquivalent() &&
-      destination.DeepEquivalent() <
+      destination.DeepEquivalent() <=
           end_of_paragraph_to_move.DeepEquivalent()) {
     // Reached by unit test TypingCommandTest.insertLineBreakWithIllFormedHTML
+    // and ApplyStyleCommandTest.JustifyRightDetachesDestination
     editing_state->Abort();
     return;
   }
@@ -1553,11 +1553,6 @@ void CompositeEditCommand::MoveParagraphs(
     return;
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  GetDocument()
-      .GetFrame()
-      ->GetSpellChecker()
-      .MarkMisspellingsForMovingParagraphs(EndingVisibleSelection());
 
   // If the selection is in an empty paragraph, restore styles from the old
   // empty paragraph to the new empty paragraph.

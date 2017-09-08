@@ -87,12 +87,11 @@ class CC_EXPORT LayerTreeSettings {
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
   ManagedMemoryPolicy gpu_memory_policy;
   ManagedMemoryPolicy software_memory_policy;
-  size_t decoded_image_cache_budget_bytes = 128 * 1024 * 1024;
   size_t decoded_image_working_set_budget_bytes = 128 * 1024 * 1024;
   int max_preraster_distance_in_screen_pixels = 1000;
   viz::ResourceFormat preferred_tile_format;
 
-  bool enable_color_correct_rasterization = false;
+  bool enable_color_correct_rasterization = true;
 
   // TODO(sunxd): remove this flag when filter demoting and aa of mask layers
   // are implemented.

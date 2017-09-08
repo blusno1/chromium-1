@@ -117,7 +117,7 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/chrome_feature_list.h"
 #else  // OS_ANDROID
-#include "ui/message_center/message_center_switches.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 #endif  // OS_ANDROID
 
 #if defined(OS_CHROMEOS)
@@ -792,6 +792,18 @@ const FeatureEntry::Choice kEnableAudioFocusChoices[] = {
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 };
 #endif  // !defined(OS_ANDROID)
+
+const FeatureEntry::Choice kForceColorProfileChoices[] = {
+    {flags_ui::kGenericExperimentChoiceDefault, "", ""},
+    {flag_descriptions::kForceColorProfileSRGB, switches::kForceColorProfile,
+     "srgb"},
+    {flag_descriptions::kForceColorProfileP3, switches::kForceColorProfile,
+     "display-p3-d65"},
+    {flag_descriptions::kForceColorProfileColorSpin,
+     switches::kForceColorProfile, "color-spin-gamma24"},
+    {flag_descriptions::kForceColorProfileHdr, switches::kForceColorProfile,
+     "scrgb-linear"},
+};
 
 const FeatureEntry::Choice kAutoplayPolicyChoices[] = {
     {flags_ui::kGenericExperimentChoiceDefault, "", ""},
@@ -1977,14 +1989,15 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kMessageCenterAlwaysScrollUpUponRemovalDescription,
      kOsDesktop,
      SINGLE_VALUE_TYPE(
-         switches::kEnableMessageCenterAlwaysScrollUpUponNotificationRemoval)},
+         message_center::switches::
+             kEnableMessageCenterAlwaysScrollUpUponNotificationRemoval)},
     {"enable-message-center-new-style-notification",
      flag_descriptions::kMessageCenterNewStyleNotificationName,
      flag_descriptions::kMessageCenterNewStyleNotificationDescription,
      kOsDesktop,
      ENABLE_DISABLE_VALUE_TYPE(
-         switches::kEnableMessageCenterNewStyleNotification,
-         switches::kDisableMessageCenterNewStyleNotification)},
+         message_center::switches::kEnableMessageCenterNewStyleNotification,
+         message_center::switches::kDisableMessageCenterNewStyleNotification)},
 #endif  // !OS_ANDROID
 #if defined(OS_CHROMEOS)
     {"memory-pressure-thresholds",
@@ -2264,13 +2277,14 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kOfflinePagesPrefetchingName,
      flag_descriptions::kOfflinePagesPrefetchingDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(offline_pages::kPrefetchingOfflinePagesFeature)},
+    {"offline-pages-prefetching-ui",
+     flag_descriptions::kOfflinePagesPrefetchingUIName,
+     flag_descriptions::kOfflinePagesPrefetchingUIDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesPrefetchingUIFeature)},
     {"background-loader-for-downloads",
      flag_descriptions::kBackgroundLoaderForDownloadsName,
      flag_descriptions::kBackgroundLoaderForDownloadsDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(offline_pages::kBackgroundLoaderForDownloadsFeature)},
-    {"background-loader", flag_descriptions::kNewBackgroundLoaderName,
-     flag_descriptions::kNewBackgroundLoaderDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(offline_pages::kNewBackgroundLoaderFeature)},
     {"offline-pages-renovations",
      flag_descriptions::kOfflinePagesRenovationsName,
      flag_descriptions::kOfflinePagesRenovationsDescription, kOsAndroid,
@@ -2687,6 +2701,11 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kWebPaymentsModifiersDescription,
      kOsAndroid | kOsDesktop,
      FEATURE_VALUE_TYPE(payments::features::kWebPaymentsModifiers)},
+    {"service-worker-payment-apps",
+     flag_descriptions::kServiceWorkerPaymentAppsName,
+     flag_descriptions::kServiceWorkerPaymentAppsDescription,
+     kOsAndroid | kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kServiceWorkerPaymentApps)},
 #if defined(OS_ANDROID)
     {"enable-android-pay-integration-v1",
      flag_descriptions::kEnableAndroidPayIntegrationV1Name,
@@ -2712,10 +2731,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"pay-with-google-v1", flag_descriptions::kPayWithGoogleV1Name,
      flag_descriptions::kPayWithGoogleV1Description, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kPayWithGoogleV1)},
-    {"service-worker-payment-apps",
-     flag_descriptions::kServiceWorkerPaymentAppsName,
-     flag_descriptions::kServiceWorkerPaymentAppsDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(features::kServiceWorkerPaymentApps)},
 #endif  // OS_ANDROID
 #if defined(OS_CHROMEOS)
     {"disable-eol-notification", flag_descriptions::kEolNotificationName,
@@ -2817,10 +2832,6 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_VALUE_TYPE(features::kPrintPdfAsImage)},
 #endif
 #if defined(OS_ANDROID)
-    {"enable-consistent-omnibox-geolocation",
-     flag_descriptions::kEnableConsistentOmniboxGeolocationName,
-     flag_descriptions::kEnableConsistentOmniboxGeolocationDescription,
-     kOsAndroid, FEATURE_VALUE_TYPE(features::kConsistentOmniboxGeolocation)},
     {"concurrent-background-loading-on-svelte",
      flag_descriptions::kOfflinePagesSvelteConcurrentLoadingName,
      flag_descriptions::kOfflinePagesSvelteConcurrentLoadingDescription,
@@ -3095,6 +3106,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kColorCorrectRenderingDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kColorCorrectRendering)},
 
+    {"force-color-profile", flag_descriptions::kForceColorProfileName,
+     flag_descriptions::kForceColorProfileDescription, kOsAll,
+     MULTI_VALUE_TYPE(kForceColorProfileChoices)},
+
 #if defined(OS_CHROMEOS)
     {"quick-unlock-pin-signin", flag_descriptions::kQuickUnlockPinSignin,
      flag_descriptions::kQuickUnlockPinSigninDescription, kOsCrOS,
@@ -3106,11 +3121,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableWebNfcDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(features::kWebNfc)},
 #endif
-
-    {"enable-idle-time-spell-checking",
-     flag_descriptions::kEnableIdleTimeSpellCheckingName,
-     flag_descriptions::kEnableIdleTimeSpellCheckingDescription, kOsAll,
-     FEATURE_VALUE_TYPE(features::kIdleTimeSpellChecking)},
 
 #if defined(OS_ANDROID)
     {"enable-clipboard-provider",
@@ -3200,6 +3210,11 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kCaptureThumbnailOnLoadFinishedDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kCaptureThumbnailOnLoadFinished)},
 
+    {"use-new-accept-language-header",
+     flag_descriptions::kUseNewAcceptLanguageHeaderName,
+     flag_descriptions::kUseNewAcceptLanguageHeaderDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kUseNewAcceptLanguageHeader)},
+
 #if defined(OS_WIN)
     {"enable-d3d-vsync", flag_descriptions::kEnableD3DVsync,
      flag_descriptions::kEnableD3DVsyncDescription, kOsWin,
@@ -3275,6 +3290,12 @@ const FeatureEntry kFeatureEntries[] = {
     {"out-of-blink-cors", flag_descriptions::kEnableOutOfBlinkCORSName,
      flag_descriptions::kEnableOutOfBlinkCORSDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kOutOfBlinkCORS)},
+
+    {"keep-alive-renderer-for-keepalive-requests",
+     flag_descriptions::kKeepAliveRendererForKeepaliveRequestsName,
+     flag_descriptions::kKeepAliveRendererForKeepaliveRequestsDescription,
+     kOsAll,
+     FEATURE_VALUE_TYPE(features::kKeepAliveRendererForKeepaliveRequests)},
 
     {"use-ddljson-api", flag_descriptions::kUseDdljsonApiName,
      flag_descriptions::kUseDdljsonApiDescription, kOsAll,
@@ -3420,6 +3441,24 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kSyzyAsanDcheckIsFatalDescription, kOsWin,
      FEATURE_VALUE_TYPE(base::kSyzyAsanDCheckIsFatalFeature)},
 #endif  // DCHECK_IS_ON() && defined(SYZYASAN)
+
+#if defined(OS_CHROMEOS)
+    {"enable-external-drive-rename",
+     flag_descriptions::kEnableExternalDriveRename,
+     flag_descriptions::kEnableExternalDriveRenameDescription, kOsCrOS,
+     SINGLE_VALUE_TYPE(chromeos::switches::kEnableExternalDriveRename)},
+#endif  // defined(OS_CHROMEOS)
+
+#if defined(OS_CHROMEOS)
+    {"sys-internals", flag_descriptions::kSysInternalsName,
+     flag_descriptions::kSysInternalsDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kSysInternals)},
+#endif  // defined(OS_CHROMEOS)
+
+    {"enable-module-scripts-dynamic-import",
+     flag_descriptions::kModuleScriptsDynamicImportName,
+     flag_descriptions::kModuleScriptsDynamicImportDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kModuleScriptsDynamicImport)},
 
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms/enums.xml. See note in

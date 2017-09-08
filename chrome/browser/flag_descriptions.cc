@@ -115,6 +115,16 @@ const char kColorCorrectRenderingName[] = "Color correct rendering";
 const char kColorCorrectRenderingDescription[] =
     "Enables color correct rendering of web content.";
 
+const char kForceColorProfileSRGB[] = "sRGB";
+const char kForceColorProfileP3[] = "Display P3 D65";
+const char kForceColorProfileColorSpin[] = "Color spin with gamma 2.4";
+const char kForceColorProfileHdr[] = "scRGB linear (HDR where available)";
+
+const char kForceColorProfileName[] = "Force color profile";
+const char kForceColorProfileDescription[] =
+    "Forces Chrome to use a specific color profile instead of the color "
+    "of the window's current monitor, as specified by the operating system.";
+
 const char kCompositedLayerBordersName[] = "Composited render layer borders";
 const char kCompositedLayerBordersDescription[] =
     "Renders a border around composited Render Layers to help debug and study "
@@ -351,16 +361,10 @@ const char kEnableHeapProfilingTaskProfiler[] = "Enabled (task mode)";
 
 const char kEnableHttpFormWarningName[] =
     "Show in-form warnings for sensitive fields when the top-level page is not "
-    "not HTTPS";
+    "HTTPS";
 const char kEnableHttpFormWarningDescription[] =
     "Attaches a warning UI to any password or credit card fields detected when "
     "the top-level page is not HTTPS";
-
-const char kEnableIdleTimeSpellCheckingName[] =
-    "Enable idle time spell checker";
-const char kEnableIdleTimeSpellCheckingDescription[] =
-    "Make spell-checking code run only when the browser is idle, so that input "
-    "latency is reduced, especially when editing long articles, emails, etc.";
 
 const char kEnableManualFallbacksFillingName[] =
     "Manual fallbacks for password manager forms filling";
@@ -716,6 +720,12 @@ const char kJavascriptHarmonyShippingDescription[] =
     "conflict with the latest JavaScript features. This flag allows disabling "
     "support of those features for compatibility with such pages.";
 
+const char kKeepAliveRendererForKeepaliveRequestsName[] =
+    "Keep a renderer alive for keepalive fetch requests";
+const char kKeepAliveRendererForKeepaliveRequestsDescription[] =
+    "Keep a render process alive when the process has a pending fetch request "
+    "with `keepalive' specified.";
+
 const char kLcdTextName[] = "LCD text antialiasing";
 const char kLcdTextDescription[] =
     "If disabled, text is rendered with grayscale antialiasing instead of LCD "
@@ -796,6 +806,12 @@ const char kMojoVideoEncodeAcceleratorDescription[] =
 const char kModuleScriptsName[] = "Enable ECMAScript 6 modules";
 const char kModuleScriptsDescription[] =
     "Enables ECMAScript 6 modules support in Blink.";
+
+const char kModuleScriptsDynamicImportName[] =
+    "Enable ECMAScript 6 modules dynamic import";
+const char kModuleScriptsDynamicImportDescription[] =
+    "Enables ECMAScript 6 modules dynamic \"import\" syntax support in V8 and "
+    "Blink.";
 
 const char kNewAudioRenderingMixingStrategyName[] =
     "New audio rendering mixing strategy";
@@ -941,6 +957,12 @@ const char kOverlayScrollbarsFlashWhenMouseEnterName[] =
 const char kOverlayScrollbarsFlashWhenMouseEnterDescription[] =
     "Flash Overlay Scrollbars When Mouse Enter a scrollable area. You must also"
     " enable Overlay Scrollbars.";
+
+const char kUseNewAcceptLanguageHeaderName[] = "Use new Accept-Language header";
+const char kUseNewAcceptLanguageHeaderDescription[] =
+    "Adds the base language code after other corresponding language+region "
+    "codes. This ensures that users receive content in their preferred "
+    "language.";
 
 const char kOverscrollHistoryNavigationName[] = "Overscroll history navigation";
 const char kOverscrollHistoryNavigationDescription[] =
@@ -1100,6 +1122,10 @@ const char kServiceWorkerNavigationPreloadName[] =
 const char kServiceWorkerNavigationPreloadDescription[] =
     "Enable web pages to use the experimental service worker navigation "
     "preload API.";
+
+const char kServiceWorkerPaymentAppsName[] = "Service Worker payment apps";
+const char kServiceWorkerPaymentAppsDescription[] =
+    "Enable Service Worker applications to integrate as payment apps";
 
 const char kServiceWorkerScriptStreamingName[] =
     "Service worker script streaming.";
@@ -1575,12 +1601,6 @@ const char kEnableAndroidSpellcheckerDescription[] =
     "Enables use of the Android spellchecker.";
 const char kEnableAndroidSpellcheckerName[] = "Enable spell checking";
 
-const char kEnableConsistentOmniboxGeolocationName[] =
-    "Have consistent omnibox geolocation access.";
-const char kEnableConsistentOmniboxGeolocationDescription[] =
-    "Have consistent geolocation access between the omnibox and default search "
-    "engine.";
-
 const char kEnableContentSuggestionsNewFaviconServerName[] =
     "Get favicons for content suggestions from a new server.";
 const char kEnableContentSuggestionsNewFaviconServerDescription[] =
@@ -1773,12 +1793,6 @@ const char kModalPermissionPromptsName[] = "Modal Permission Prompts";
 const char kModalPermissionPromptsDescription[] =
     "Whether to use permission dialogs in place of permission infobars.";
 
-const char kNewBackgroundLoaderName[] =
-    "Use background loader instead of prerenderer to load pages.";
-const char kNewBackgroundLoaderDescription[] =
-    "Use background loader instead of prerenderer to asynchronously download "
-    "pages.";
-
 const char kNewPhotoPickerName[] = "Enable new Photopicker";
 const char kNewPhotoPickerDescription[] =
     "Activates the new picker for selecting photos.";
@@ -1842,6 +1856,12 @@ const char kOfflinePagesPrefetchingName[] =
 const char kOfflinePagesPrefetchingDescription[] =
     "Enables suggested offline pages to be prefetched, so useful content is "
     "available while offline.";
+
+const char kOfflinePagesPrefetchingUIName[] =
+    "Enables prefetched offline pages to be shown in UI.";
+const char kOfflinePagesPrefetchingUIDescription[] =
+    "Enables prefetched offline pages to raise notifications and be shown in "
+    "download home UI.";
 
 const char kOfflinePagesRenovationsName[] = "Enables offline page renovations.";
 const char kOfflinePagesRenovationsDescription[] =
@@ -1912,10 +1932,6 @@ const char kReaderModeHeuristicsAlwaysOn[] = "Always";
 const char kReaderModeInCCTName[] = "Reader Mode in CCT";
 const char kReaderModeInCCTDescription[] =
     "Open Reader Mode in Chrome Custom Tabs.";
-
-const char kServiceWorkerPaymentAppsName[] = "Service Worker payment apps";
-const char kServiceWorkerPaymentAppsDescription[] =
-    "Enable Service Worker applications to integrate as payment apps";
 
 const char kSetMarketUrlForTestingName[] = "Set market URL for testing";
 const char kSetMarketUrlForTestingDescription[] =
@@ -2299,6 +2315,11 @@ const char kEnableEncryptionMigrationDescription[] =
     "If enabled and the device supports ARC, the user will be asked to update "
     "the encryption of user data when the user signs in.";
 
+const char kEnableExternalDriveRename[] = "Enable external drive rename";
+const char kEnableExternalDriveRenameDescription[] =
+    "If enabled, external removable drives will get 'Rename' action in the "
+    "context menu";
+
 const char kEnableImeMenuName[] = "Enable opt-in IME menu";
 const char kEnableImeMenuDescription[] =
     "Enable access to the new IME menu in the Language Settings page.";
@@ -2455,6 +2476,11 @@ const char kSpuriousPowerButtonLidAngleChangeName[] =
 const char kSpuriousPowerButtonLidAngleChangeDescription[] =
     "Change in lid angle (i.e. hinge between keyboard and screen) that must be "
     "met or exceeded for a power button event to be considered spurious.";
+
+const char kSysInternalsName[] = "Enable Sys-Internals";
+const char kSysInternalsDescription[] =
+    "If enabled, user can monitor system information at "
+    "chrome://sys-internals.";
 
 const char kTeamDrivesName[] = "Enable Team Drives Integration";
 const char kTeamDrivesDescription[] =

@@ -116,13 +116,6 @@ const base::Feature kGuestViewCrossProcessFrames{
 const base::Feature kHeapCompaction{"HeapCompaction",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables Blink's idle time spell checker.
-// Design: https://goo.gl/zONC3v
-// Note: The feature is implemented in Blink, and is independent to the
-// ENABLE_SPELLCHECK build flag defined in components/spellcheck.
-const base::Feature kIdleTimeSpellChecking{"IdleTimeSpellChecking",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enable lazy initialization of the media controls.
 const base::Feature kLazyInitializeMediaControls{
     "LazyInitializeMediaControls", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -132,8 +125,14 @@ const base::Feature kLazyParseCSS{"LazyParseCSS",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use Mojo IPC for resource loading.
-const base::Feature kLoadingWithMojo{"LoadingWithMojo",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kLoadingWithMojo {
+  "LoadingWithMojo",
+#if defined(OS_ANDROID)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Enables the old algorithm for processing audio constraints in getUserMedia().
 const base::Feature kMediaStreamOldAudioConstraints{
@@ -168,12 +167,22 @@ const base::Feature kMojoInputMessages{"MojoInputMessages",
 
 // Enables/disables hardware video encode acceleration using Mojo (falls back).
 // TODO(mcasas): remove after https://crbug.com/736517 is closed.
-const base::Feature kMojoVideoEncodeAccelerator{
-    "MojoVideoEncodeAccelerator", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kMojoVideoEncodeAccelerator {
+  "MojoVideoEncodeAccelerator",
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // ES6 Modules.
 const base::Feature kModuleScripts{"ModuleScripts",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
+
+// ES6 Modules dynamic imports.
+const base::Feature kModuleScriptsDynamicImport{
+    "ModuleScriptsDynamicImport", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Resource fetch optimizations for workers. See crbug.com/443374
 const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
@@ -254,6 +263,11 @@ const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
     "SendBeaconThrowForBlobWithNonSimpleType",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Service worker based payment apps as defined by w3c here:
+// https://w3c.github.io/webpayments-payment-apps-api/
+const base::Feature kServiceWorkerPaymentApps{
+    "ServiceWorkerPaymentApps", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Streaming installed scripts on starting service workers.
 const base::Feature kServiceWorkerScriptStreaming{
     "ServiceWorkerScriptStreaming", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -267,15 +281,14 @@ const base::Feature kSharedArrayBuffer{"SharedArrayBuffer",
 const base::Feature kSignInProcessIsolation{"sign-in-process-isolation",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Alternative to switches::kSitePerProcess, for turning on full site isolation.
+// Launch bug: https://crbug.com/739418.
+const base::Feature kSitePerProcess{"site-per-process",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // An experiment for skipping compositing small scrollers.
 const base::Feature kSkipCompositingSmallScrollers{
     "SkipCompositingSmallScrollers", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// An experiment to reduce the soft tile memory limit on low-end android
-// devices.
-const base::Feature kReducedSoftTileMemoryLimitOnLowEndAndroid{
-    "ReducedSoftTileMemoryLimitOnLowEndAndroid",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Paint invalidation based on slimming paint. See https://goo.gl/eQczQW
 const base::Feature kSlimmingPaintInvalidation{
@@ -375,6 +388,11 @@ const base::Feature kWebRtcHWVP8Encoding {
 #endif
 };
 
+// Fallback from hardware encoder (if available) to software, for WebRTC
+// screensharing that uses temporal scalability.
+const base::Feature kWebRtcScreenshareSwEncoding{
+    "WebRtcScreenshareSwEncoding", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the WebRTC Echo Canceller version 3 (AEC3). Feature for
 // http://crbug.com/688388. This value is sent to WebRTC's echo canceller to
 // toggle which echo canceller should be used.
@@ -389,6 +407,9 @@ const base::Feature kWebUsb{"WebUSB", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kImageCaptureAPI{"ImageCaptureAPI",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kKeepAliveRendererForKeepaliveRequests{
+    "KeepAliveRendererForKeepaliveRequests", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables WebVR experimental rendering optimizations.
 const base::Feature kWebVRExperimentalRendering{
     "WebVRExperimentalRendering", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -402,12 +423,6 @@ const base::Feature kAndroidAutofillAccessibility{
 // Enables hiding incorrectly-sized frames while in fullscreen.
 const base::Feature kHideIncorrectlySizedFullscreenFrames{
     "HideIncorrectlySizedFullscreenFrames", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Service worker based payment apps as defined by w3c here:
-// https://w3c.github.io/webpayments-payment-apps-api/
-const base::Feature kServiceWorkerPaymentApps{
-    "ServiceWorkerPaymentApps",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether the WebNFC API is enabled:
 // https://w3c.github.io/web-nfc/
@@ -440,5 +455,10 @@ const base::Feature kDeviceMonitorMac{"DeviceMonitorMac",
 const base::Feature kMacV2Sandbox{"MacV2Sandbox",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
+
+bool IsMojoBlobsEnabled() {
+  return base::FeatureList::IsEnabled(features::kMojoBlobs) ||
+         base::FeatureList::IsEnabled(features::kNetworkService);
+}
 
 }  // namespace features

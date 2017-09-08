@@ -860,7 +860,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool NeedsForcedBreakBefore(EBreakBetween previous_break_after_value) const;
 
   bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
-  LayoutRect LocalVisualRect() const override;
   bool MapToVisualRectInAncestorSpaceInternal(
       const LayoutBoxModelObject* ancestor,
       TransformState&,
@@ -1450,10 +1449,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                                const HitTestLocation& location_in_container,
                                const LayoutPoint& accumulated_offset,
                                HitTestAction);
-  void AddLayerHitTestRects(LayerHitTestRects&,
-                            const PaintLayer* current_composited_layer,
-                            const LayoutPoint& layer_offset,
-                            const LayoutRect& container_rect) const override;
+  void AddLayerHitTestRects(
+      LayerHitTestRects&,
+      const PaintLayer* current_composited_layer,
+      const LayoutPoint& layer_offset,
+      TouchAction supported_fast_actions,
+      const LayoutRect& container_rect,
+      TouchAction container_whitelisted_touch_action) const override;
   void ComputeSelfHitTestRects(Vector<LayoutRect>&,
                                const LayoutPoint& layer_offset) const override;
 
@@ -1500,6 +1502,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       LayoutUnit container_logical_height);
   bool SkipContainingBlockForPercentHeightCalculation(
       const LayoutBox* containing_block) const;
+
+  LayoutRect LocalVisualRectIgnoringVisibility() const override;
 
  private:
   void UpdateShapeOutsideInfoAfterStyleChange(const ComputedStyle&,

@@ -7,9 +7,9 @@
 #include <memory>
 #include "core/css/CSSFontSelector.h"
 #include "core/css/OffscreenFontSelector.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/StyleEngine.h"
 #include "core/fileapi/Blob.h"
 #include "core/html/ImageData.h"
 #include "core/html/canvas/CanvasAsyncBlobCreator.h"
@@ -248,14 +248,19 @@ ImageBuffer* OffscreenCanvas::GetOrCreateImageBuffer() {
     OpacityMode opacity_mode =
         context_->CreationAttributes().hasAlpha() ? kNonOpaque : kOpaque;
     std::unique_ptr<ImageBufferSurface> surface;
-    if (RuntimeEnabledFeatures::Accelerated2dCanvasEnabled()) {
+    // TODO(zakerinasab): crbug.com/761424
+    // Remove the check for canvas color extensions to allow OffscreenCanvas
+    // use accelerated code path with color management.
+    if (!CanvasColorParams::ColorCorrectRenderingInAnyColorSpace() &&
+        RuntimeEnabledFeatures::Accelerated2dCanvasEnabled()) {
       surface.reset(
           new AcceleratedImageBufferSurface(surface_size, opacity_mode));
     }
 
     if (!surface || !surface->IsValid()) {
       surface.reset(new UnacceleratedImageBufferSurface(
-          surface_size, opacity_mode, kInitializeImagePixels));
+          surface_size, opacity_mode, kInitializeImagePixels,
+          context_->color_params()));
     }
 
     image_buffer_ = ImageBuffer::Create(std::move(surface));
@@ -389,14 +394,9 @@ ScriptPromise OffscreenCanvas::convertToBlob(ScriptState* script_state,
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
 
-  Document* document =
-      ExecutionContext::From(script_state)->IsDocument()
-          ? static_cast<Document*>(ExecutionContext::From(script_state))
-          : nullptr;
-
   CanvasAsyncBlobCreator* async_creator = CanvasAsyncBlobCreator::Create(
       image_data->data(), encoding_mime_type, image_data->Size(), start_time,
-      document, resolver);
+      ExecutionContext::From(script_state), resolver);
 
   async_creator->ScheduleAsyncBlobCreation(options.quality());
 

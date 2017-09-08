@@ -243,6 +243,15 @@ bool DecodeMigrationActionFromPolicy(
   return true;
 }
 
+// Returns true if ArcEnabled policy is present and set to true. Otherwise
+// returns false.
+bool IsArcEnabledFromPolicy(
+    const enterprise_management::CloudPolicySettings* policy) {
+  if (policy->has_arcenabled())
+    return policy->arcenabled().value();
+  return false;
+}
+
 }  // namespace
 
 // static
@@ -695,10 +704,6 @@ void ExistingUserController::ShowEnrollmentScreen() {
   host_->StartWizard(OobeScreen::SCREEN_OOBE_ENROLLMENT);
 }
 
-void ExistingUserController::ShowResetScreen() {
-  host_->StartWizard(OobeScreen::SCREEN_OOBE_RESET);
-}
-
 void ExistingUserController::ShowEnableDebuggingScreen() {
   host_->StartWizard(OobeScreen::SCREEN_OOBE_ENABLE_DEBUGGING);
 }
@@ -1046,18 +1051,27 @@ void ExistingUserController::OnPolicyFetchResult(
   VLOG(1) << "Migration action: " << static_cast<int>(action);
 
   switch (action) {
+    case apu::EcryptfsMigrationAction::kDisallowMigration:
+      ContinuePerformLoginWithoutMigration(login_performer_->auth_mode(),
+                                           user_context);
+      break;
+
     case apu::EcryptfsMigrationAction::kMigrate:
       user_manager::known_user::SetUserHomeMinimalMigrationAttempted(
           user_context.GetAccountId(), false);
-      ShowEncryptionMigrationScreen(user_context,
-                                    EncryptionMigrationMode::START_MIGRATION);
+      user_manager::UserManager::Get()->GetLocalState()->CommitPendingWrite(
+          base::BindOnce(&ExistingUserController::ShowEncryptionMigrationScreen,
+                         weak_factory_.GetWeakPtr(), user_context,
+                         EncryptionMigrationMode::START_MIGRATION));
       break;
 
     case apu::EcryptfsMigrationAction::kAskUser:
       user_manager::known_user::SetUserHomeMinimalMigrationAttempted(
           user_context.GetAccountId(), false);
-      ShowEncryptionMigrationScreen(user_context,
-                                    EncryptionMigrationMode::ASK_USER);
+      user_manager::UserManager::Get()->GetLocalState()->CommitPendingWrite(
+          base::BindOnce(&ExistingUserController::ShowEncryptionMigrationScreen,
+                         weak_factory_.GetWeakPtr(), user_context,
+                         EncryptionMigrationMode::ASK_USER));
       break;
 
     case apu::EcryptfsMigrationAction::kWipe:
@@ -1075,16 +1089,25 @@ void ExistingUserController::OnPolicyFetchResult(
           user_context.GetAccountId());
       user_manager::known_user::SetUserHomeMinimalMigrationAttempted(
           user_context.GetAccountId(), true);
-      ShowEncryptionMigrationScreen(
-          user_context, EncryptionMigrationMode::START_MINIMAL_MIGRATION);
+      user_manager::UserManager::Get()->GetLocalState()->CommitPendingWrite(
+          base::BindOnce(&ExistingUserController::ShowEncryptionMigrationScreen,
+                         weak_factory_.GetWeakPtr(), user_context,
+                         EncryptionMigrationMode::START_MINIMAL_MIGRATION));
       break;
 
     case apu::EcryptfsMigrationAction::kAskForEcryptfsArcUsers:
-    // TODO(igorcov): Fall-through intended. This behaves as Disallow Migration
-    // until it's implemented.
-    case apu::EcryptfsMigrationAction::kDisallowMigration:
-      ContinuePerformLoginWithoutMigration(login_performer_->auth_mode(),
-                                           user_context);
+      // If the device is transitioning from ARC M to ARC N and has ARC enabled
+      // by policy, then ask the user about the migration. Otherwise disallow
+      // migration.
+      if (IsArcEnabledFromPolicy(policy_payload.get()) &&
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kArcTransitionMigrationRequired)) {
+        ShowEncryptionMigrationScreen(user_context,
+                                      EncryptionMigrationMode::ASK_USER);
+      } else {
+        ContinuePerformLoginWithoutMigration(login_performer_->auth_mode(),
+                                             user_context);
+      }
       break;
   }
 }

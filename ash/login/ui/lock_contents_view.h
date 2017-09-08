@@ -5,8 +5,11 @@
 #ifndef ASH_LOGIN_UI_CONTENTS_VIEW_H_
 #define ASH_LOGIN_UI_CONTENTS_VIEW_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
 #include "ash/login/ui/login_data_dispatcher.h"
+#include "ash/system/status_area_focus_observer.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
@@ -22,6 +25,7 @@ class ScrollView;
 namespace ash {
 
 class LoginAuthUserView;
+class LoginBubble;
 class LoginUserView;
 
 // LockContentsView hosts the root view for the lock screen. All other lock
@@ -30,6 +34,7 @@ class LoginUserView;
 // at a time.
 class ASH_EXPORT LockContentsView : public views::View,
                                     public LoginDataDispatcher::Observer,
+                                    public StatusAreaFocusObserver,
                                     public display::DisplayObserver {
  public:
   // TestApi is used for tests to get internal implementation details.
@@ -52,11 +57,15 @@ class ASH_EXPORT LockContentsView : public views::View,
   // views::View:
   void Layout() override;
   void AddedToWidget() override;
+  void OnFocus() override;
+  void AboutToRequestFocusFromTabTraversal(bool reverse) override;
 
   // LoginDataDispatcher::Observer:
-  void OnUsersChanged(
-      const std::vector<ash::mojom::UserInfoPtr>& users) override;
+  void OnUsersChanged(const std::vector<mojom::UserInfoPtr>& users) override;
   void OnPinEnabledForUserChanged(const AccountId& user, bool enabled) override;
+
+  // StatusAreaFocusObserver:
+  void OnFocusOut(bool reverse) override;
 
   // display::DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
@@ -72,15 +81,15 @@ class ASH_EXPORT LockContentsView : public views::View,
 
   using OnRotate = base::RepeatingCallback<void(bool landscape)>;
 
+  // Focus the next/previous widget.
+  void FocusNextWidget(bool reverse);
+
   // 1-2 users.
-  void CreateLowDensityLayout(
-      const std::vector<ash::mojom::UserInfoPtr>& users);
+  void CreateLowDensityLayout(const std::vector<mojom::UserInfoPtr>& users);
   // 3-6 users.
-  void CreateMediumDensityLayout(
-      const std::vector<ash::mojom::UserInfoPtr>& users);
+  void CreateMediumDensityLayout(const std::vector<mojom::UserInfoPtr>& users);
   // 7+ users.
-  void CreateHighDensityLayout(
-      const std::vector<ash::mojom::UserInfoPtr>& users);
+  void CreateHighDensityLayout(const std::vector<mojom::UserInfoPtr>& users);
 
   // Lay out the entire view. This is called when the view is attached to a
   // widget and when the screen is rotated.
@@ -115,6 +124,15 @@ class ASH_EXPORT LockContentsView : public views::View,
   // the actual user may change.
   void SwapToAuthUser(int user_index);
 
+  // Called after the auth user change has taken place.
+  void OnAuthUserChanged();
+
+  // Get the LoginAuthUserView of the current auth user.
+  LoginAuthUserView* CurrentAuthUserView();
+
+  // Opens an error bubble to indicate authentication failure.
+  void ShowErrorMessage();
+
   std::vector<UserState> users_;
 
   LoginDataDispatcher* const data_dispatcher_;  // Unowned.
@@ -133,6 +151,9 @@ class ASH_EXPORT LockContentsView : public views::View,
   std::vector<OnRotate> rotation_actions_;
 
   ScopedObserver<display::Screen, display::DisplayObserver> display_observer_;
+
+  std::unique_ptr<LoginBubble> error_bubble_;
+  int unlock_attempt_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(LockContentsView);
 };

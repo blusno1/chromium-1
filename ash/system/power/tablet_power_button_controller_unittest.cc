@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "ash/ash_switches.h"
+#include "ash/media_controller.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/touchscreen_enabled_source.h"
 #include "ash/session/session_controller.h"
@@ -14,6 +15,7 @@
 #include "ash/shell.h"
 #include "ash/shell_test_api.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test_media_client.h"
 #include "ash/test_shell_delegate.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/lock_state_controller_test_api.h"
@@ -702,11 +704,14 @@ TEST_F(TabletPowerButtonControllerTest, IgnoreSpuriousEventsForLidAngle) {
 // Tests that when backlights get forced off due to tablet power button, media
 // sessions should be suspended.
 TEST_F(TabletPowerButtonControllerTest, SuspendMediaSessions) {
-  ASSERT_FALSE(shell_delegate_->media_sessions_suspended());
+  TestMediaClient client;
+  Shell::Get()->media_controller()->SetClient(client.CreateAssociatedPtrInfo());
+  ASSERT_FALSE(client.media_sessions_suspended());
+
   PressPowerButton();
   ReleasePowerButton();
   ASSERT_TRUE(GetBacklightsForcedOff());
-  EXPECT_TRUE(shell_delegate_->media_sessions_suspended());
+  EXPECT_TRUE(client.media_sessions_suspended());
 }
 
 // Tests that when system is suspended with backlights forced off, and then
@@ -725,9 +730,9 @@ TEST_F(TabletPowerButtonControllerTest, SuspendDoneStopsForcingOff) {
   EXPECT_FALSE(GetBacklightsForcedOff());
 }
 
-// Tests that for tablet power button, we have immediate pre-lock animation
-// (crbug.com/746657).
-TEST_F(TabletPowerButtonControllerTest, ImmediatePreLockAnimation) {
+// Tests that for tablet power button induced locking screen, locking animations
+// are immediate.
+TEST_F(TabletPowerButtonControllerTest, ImmediateLockAnimations) {
   TestSessionStateAnimator* test_animator = new TestSessionStateAnimator;
   lock_state_controller_->set_animator_for_test(test_animator);
   Initialize(LoginStatus::USER);
@@ -736,15 +741,35 @@ TEST_F(TabletPowerButtonControllerTest, ImmediatePreLockAnimation) {
 
   PressPowerButton();
   ReleasePowerButton();
-  EXPECT_TRUE(test_animator->AreContainersAnimated(
-      LockStateController::kPreLockContainersMask,
-      SessionStateAnimator::ANIMATION_HIDE_IMMEDIATELY));
+  // Tests that locking animation starts.
   EXPECT_TRUE(lock_state_test_api_->is_animating_lock());
 
-  EXPECT_TRUE(GetLockedState());
-  // Advance post lock animation to check animating lock gets reset.
+  // Tests that we have two active animation containers for pre-lock animation,
+  // which are non lock screen containers and shelf container.
+  EXPECT_EQ(2u, test_animator->GetAnimationCount());
+  test_animator->AreContainersAnimated(
+      LockStateController::kPreLockContainersMask,
+      SessionStateAnimator::ANIMATION_HIDE_IMMEDIATELY);
+  // Tests that after finishing immediate animation, we have no active
+  // animations left.
   test_animator->Advance(test_animator->GetDuration(
-      SessionStateAnimator::ANIMATION_SPEED_MOVE_WINDOWS));
+      SessionStateAnimator::ANIMATION_SPEED_IMMEDIATE));
+  EXPECT_EQ(0u, test_animator->GetAnimationCount());
+
+  // Flushes locking screen async request to start post-lock animation.
+  EXPECT_TRUE(GetLockedState());
+  EXPECT_TRUE(lock_state_test_api_->is_animating_lock());
+  // Tests that we have one active animation container for post-lock animation,
+  // which is lock screen containers.
+  EXPECT_EQ(1u, test_animator->GetAnimationCount());
+  test_animator->AreContainersAnimated(
+      SessionStateAnimator::LOCK_SCREEN_CONTAINERS,
+      SessionStateAnimator::ANIMATION_RAISE_TO_SCREEN);
+  // Tests that after finishing immediate animation, we have no active
+  // animations left. Also checks that animation ends.
+  test_animator->Advance(test_animator->GetDuration(
+      SessionStateAnimator::ANIMATION_SPEED_IMMEDIATE));
+  EXPECT_EQ(0u, test_animator->GetAnimationCount());
   EXPECT_FALSE(lock_state_test_api_->is_animating_lock());
 }
 

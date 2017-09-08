@@ -63,20 +63,20 @@ std::unique_ptr<NotificationTemplateBuilder> NotificationTemplateBuilder::Build(
 }
 
 NotificationTemplateBuilder::NotificationTemplateBuilder()
-    : xml_writer_(base::MakeUnique<XmlWriter>()) {
+    : xml_writer_(std::make_unique<XmlWriter>()) {
   xml_writer_->StartWriting();
 }
 
 NotificationTemplateBuilder::~NotificationTemplateBuilder() = default;
 
-std::string NotificationTemplateBuilder::GetNotificationTemplate() {
+base::string16 NotificationTemplateBuilder::GetNotificationTemplate() const {
   std::string template_xml = xml_writer_->GetWrittenString();
   DCHECK(base::StartsWith(template_xml, kXmlVersionHeader,
                           base::CompareCase::SENSITIVE));
 
   // The |kXmlVersionHeader| is automatically appended by libxml, but the toast
-  // systen in the Windows Action Center expects it to be absent.
-  return template_xml.substr(sizeof(kXmlVersionHeader) - 1);
+  // system in the Windows Action Center expects it to be absent.
+  return base::UTF8ToUTF16(template_xml.substr(sizeof(kXmlVersionHeader) - 1));
 }
 
 std::string NotificationTemplateBuilder::FormatOrigin(

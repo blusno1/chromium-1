@@ -101,7 +101,7 @@ class CORE_EXPORT NGLineBreaker {
     kForcedBreak
   };
 
-  LineBreakState HandleText(const NGInlineItemResults&,
+  LineBreakState HandleText(const NGLineInfo&,
                             const NGInlineItem&,
                             NGInlineItemResult*);
   void BreakText(NGInlineItemResult*,
@@ -122,7 +122,7 @@ class CORE_EXPORT NGLineBreaker {
   void Rewind(NGLineInfo*, unsigned new_end);
 
   void SetCurrentStyle(const ComputedStyle&);
-  bool IsFirstBreakOpportunity(unsigned, const NGInlineItemResults&) const;
+  bool IsFirstBreakOpportunity(unsigned, const NGLineInfo&) const;
   LineBreakState ComputeIsBreakableAfter(NGInlineItemResult*) const;
 
   void MoveToNextOf(const NGInlineItem&);
@@ -152,6 +152,9 @@ class CORE_EXPORT NGLineBreaker {
 
   // True when current box has 'word-break/word-wrap: break-word'.
   bool break_if_overflow_ = false;
+
+  // True when breaking at soft hyphens (U+00AD) is allowed.
+  bool enable_soft_hyphen_ = true;
 };
 
 }  // namespace blink

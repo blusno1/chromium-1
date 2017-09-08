@@ -15,19 +15,19 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/lifetime/keep_alive_registry.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
 #include "chrome/browser/notifications/message_center_notification_manager.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_switches.h"
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/notification_types.h"
 #include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 
 class TestAddObserver : public message_center::MessageCenterObserver {
  public:
@@ -290,30 +290,8 @@ IN_PROC_BROWSER_TEST_F(MessageCenterNotificationsTest,
   delegate->Release();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// MessageCenterNotificationsTestWithoutChangeQueue
-
-// TODO(yoshiki): Merge this to NessageCenterNotificationsTest after the
-// feature gets stable.
-class MessageCenterNotificationsTestWithoutChangeQueue
-    : public MessageCenterNotificationsTest {
- public:
-  MessageCenterNotificationsTestWithoutChangeQueue() {}
-  ~MessageCenterNotificationsTestWithoutChangeQueue() override {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    MessageCenterNotificationsTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(switches::kMessageCenterChangesWhileOpen,
-                                    "enabled");
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MessageCenterNotificationsTestWithoutChangeQueue);
-};
-
-IN_PROC_BROWSER_TEST_F(MessageCenterNotificationsTestWithoutChangeQueue,
+IN_PROC_BROWSER_TEST_F(MessageCenterNotificationsTest,
                        UpdateNonProgressNotificationWhenCenterVisible) {
-
   TestAddObserver observer(message_center());
 
   TestDelegate* delegate;
@@ -341,9 +319,8 @@ IN_PROC_BROWSER_TEST_F(MessageCenterNotificationsTestWithoutChangeQueue,
 }
 
 IN_PROC_BROWSER_TEST_F(
-    MessageCenterNotificationsTestWithoutChangeQueue,
+    MessageCenterNotificationsTest,
     UpdateNonProgressToProgressNotificationWhenCenterVisible) {
-
   TestAddObserver observer(message_center());
 
   TestDelegate* delegate;
@@ -362,85 +339,6 @@ IN_PROC_BROWSER_TEST_F(
 
   // Expect that the notification update is done.
   EXPECT_NE("", observer.log(notification_id));
-
-  message_center()->SetVisibility(message_center::VISIBILITY_TRANSIENT);
-  EXPECT_EQ(base::StringPrintf("update-%s", notification_id.c_str()),
-            observer.log(notification_id));
-
-  delegate->Release();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// MessageCenterNotificationsTestWithoutRealtimeChange
-
-// TODO(yoshiki): Remove this after the feature gets stable.
-class MessageCenterNotificationsTestWithChangeQueue
-    : public MessageCenterNotificationsTest {
- public:
-  MessageCenterNotificationsTestWithChangeQueue() {}
-  ~MessageCenterNotificationsTestWithChangeQueue() override {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    MessageCenterNotificationsTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(switches::kMessageCenterChangesWhileOpen,
-                                    "disabled");
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MessageCenterNotificationsTestWithChangeQueue);
-};
-
-IN_PROC_BROWSER_TEST_F(MessageCenterNotificationsTestWithChangeQueue,
-                       UpdateNonProgressNotificationWhenCenterVisible) {
-
-  TestAddObserver observer(message_center());
-
-  TestDelegate* delegate;
-
-  // Add a non-progress notification and update it while the message center
-  // is visible.
-  Notification notification = CreateTestNotification("n", &delegate);
-  manager()->Add(notification, profile());
-  const std::string notification_id =
-      manager()->GetMessageCenterNotificationIdForTest("n", profile());
-  message_center()->ClickOnNotification(notification_id);
-  message_center()->SetVisibility(message_center::VISIBILITY_MESSAGE_CENTER);
-  observer.reset_logs();
-  notification.set_title(base::ASCIIToUTF16("title2"));
-  manager()->Update(notification, profile());
-
-  // Expect that the notification update is not done.
-  EXPECT_EQ("", observer.log(notification_id));
-
-  message_center()->SetVisibility(message_center::VISIBILITY_TRANSIENT);
-  EXPECT_EQ(base::StringPrintf("update-%s", notification_id.c_str()),
-            observer.log(notification_id));
-
-  delegate->Release();
-}
-
-IN_PROC_BROWSER_TEST_F(
-    MessageCenterNotificationsTestWithChangeQueue,
-    UpdateNonProgressToProgressNotificationWhenCenterVisible) {
-
-  TestAddObserver observer(message_center());
-
-  TestDelegate* delegate;
-
-  // Add a non-progress notification and change the type to progress while the
-  // message center is visible.
-  Notification notification = CreateTestNotification("n", &delegate);
-  manager()->Add(notification, profile());
-  const std::string notification_id =
-      manager()->GetMessageCenterNotificationIdForTest("n", profile());
-  message_center()->ClickOnNotification(notification_id);
-  message_center()->SetVisibility(message_center::VISIBILITY_MESSAGE_CENTER);
-  observer.reset_logs();
-  notification.set_type(message_center::NOTIFICATION_TYPE_PROGRESS);
-  manager()->Update(notification, profile());
-
-  // Expect that the notification update is not done.
-  EXPECT_EQ("", observer.log(notification_id));
 
   message_center()->SetVisibility(message_center::VISIBILITY_TRANSIENT);
   EXPECT_EQ(base::StringPrintf("update-%s", notification_id.c_str()),

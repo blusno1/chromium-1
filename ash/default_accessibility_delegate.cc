@@ -6,6 +6,9 @@
 
 #include <limits>
 
+#include "ash/accessibility/accessibility_controller.h"
+#include "ash/shell.h"
+
 namespace ash {
 
 DefaultAccessibilityDelegate::DefaultAccessibilityDelegate() {}
@@ -16,28 +19,12 @@ bool DefaultAccessibilityDelegate::IsSpokenFeedbackEnabled() const {
   return spoken_feedback_enabled_;
 }
 
-void DefaultAccessibilityDelegate::ToggleHighContrast() {
-  high_contrast_enabled_ = !high_contrast_enabled_;
-}
-
-bool DefaultAccessibilityDelegate::IsHighContrastEnabled() const {
-  return high_contrast_enabled_;
-}
-
 void DefaultAccessibilityDelegate::SetMagnifierEnabled(bool enabled) {
   screen_magnifier_enabled_ = enabled;
 }
 
 bool DefaultAccessibilityDelegate::IsMagnifierEnabled() const {
   return screen_magnifier_enabled_;
-}
-
-void DefaultAccessibilityDelegate::SetLargeCursorEnabled(bool enabled) {
-  large_cursor_enabled_ = enabled;
-}
-
-bool DefaultAccessibilityDelegate::IsLargeCursorEnabled() const {
-  return large_cursor_enabled_;
 }
 
 void DefaultAccessibilityDelegate::SetAutoclickEnabled(bool enabled) {
@@ -121,9 +108,12 @@ bool DefaultAccessibilityDelegate::IsSwitchAccessEnabled() const {
 }
 
 bool DefaultAccessibilityDelegate::ShouldShowAccessibilityMenu() const {
-  return spoken_feedback_enabled_ || high_contrast_enabled_ ||
-         screen_magnifier_enabled_ || large_cursor_enabled_ ||
-         autoclick_enabled_ || virtual_keyboard_enabled_ || mono_audio_enabled_;
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  return spoken_feedback_enabled_ || screen_magnifier_enabled_ ||
+         autoclick_enabled_ || virtual_keyboard_enabled_ ||
+         mono_audio_enabled_ || controller->IsLargeCursorEnabled() ||
+         controller->IsHighContrastEnabled();
 }
 
 bool DefaultAccessibilityDelegate::IsBrailleDisplayConnected() const {

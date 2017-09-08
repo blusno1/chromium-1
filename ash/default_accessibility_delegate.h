@@ -18,12 +18,8 @@ class ASH_EXPORT DefaultAccessibilityDelegate : public AccessibilityDelegate {
   ~DefaultAccessibilityDelegate() override;
 
   bool IsSpokenFeedbackEnabled() const override;
-  void ToggleHighContrast() override;
-  bool IsHighContrastEnabled() const override;
   void SetMagnifierEnabled(bool enabled) override;
   bool IsMagnifierEnabled() const override;
-  void SetLargeCursorEnabled(bool enabled) override;
-  bool IsLargeCursorEnabled() const override;
   void SetAutoclickEnabled(bool enabled) override;
   bool IsAutoclickEnabled() const override;
   void SetVirtualKeyboardEnabled(bool enabled) override;
@@ -62,9 +58,7 @@ class ASH_EXPORT DefaultAccessibilityDelegate : public AccessibilityDelegate {
 
  private:
   bool spoken_feedback_enabled_ = false;
-  bool high_contrast_enabled_ = false;
   bool screen_magnifier_enabled_ = false;
-  bool large_cursor_enabled_ = false;
   bool autoclick_enabled_ = false;
   bool virtual_keyboard_enabled_ = false;
   bool mono_audio_enabled_ = false;

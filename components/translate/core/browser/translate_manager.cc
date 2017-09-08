@@ -11,7 +11,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -26,7 +25,6 @@
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_driver.h"
 #include "components/translate/core/browser/translate_error_details.h"
-#include "components/translate/core/browser/translate_experiment.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/browser/translate_ranker.h"
@@ -146,11 +144,6 @@ base::WeakPtr<TranslateManager> TranslateManager::GetWeakPtr() {
 }
 
 void TranslateManager::InitiateTranslation(const std::string& page_lang) {
-  // TODO(rogerm): Remove ScopedTracker below once crbug.com/646711 is closed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "646711 translate::TranslateManager::InitiateTranslation"));
-
   // Short-circuit out if not in a state where initiating translation makes
   // sense (this method may be called muhtiple times for a given page).
   if (!language_state_.page_needs_translation() ||
@@ -483,24 +476,16 @@ void TranslateManager::OnTranslateScriptFetchComplete(
 
 // static
 std::string TranslateManager::GetTargetLanguage(const TranslatePrefs* prefs) {
-  std::string language;
+  // Get target language from ULP if the ULP experiment is enabled.
+  std::string language = TranslateManager::GetTargetLanguageFromULP(prefs);
+  if (!language.empty())
+    return language;
 
-  // Get the override UI language.
-  TranslateExperiment::OverrideUiLanguage(prefs->GetCountry(), &language);
-
-  // If there are no override.
-  if (language.empty()) {
-    // Get the language from ULP.
-    language = TranslateManager::GetTargetLanguageFromULP(prefs);
-    if (!language.empty())
-      return language;
-
-    // Get the browser's user interface language.
-    language = TranslateDownloadManager::GetLanguageCode(
-        TranslateDownloadManager::GetInstance()->application_locale());
-    // Map 'he', 'nb', 'fil' back to 'iw', 'no', 'tl'
-    translate::ToTranslateLanguageSynonym(&language);
-  }
+  // Get the browser's user interface language.
+  language = TranslateDownloadManager::GetLanguageCode(
+      TranslateDownloadManager::GetInstance()->application_locale());
+  // Map 'he', 'nb', 'fil' back to 'iw', 'no', 'tl'
+  translate::ToTranslateLanguageSynonym(&language);
   if (TranslateDownloadManager::IsSupportedLanguage(language))
     return language;
 
@@ -513,6 +498,7 @@ std::string TranslateManager::GetTargetLanguage(const TranslatePrefs* prefs) {
     if (TranslateDownloadManager::IsSupportedLanguage(lang_code))
       return lang_code;
   }
+
   return std::string();
 }
 

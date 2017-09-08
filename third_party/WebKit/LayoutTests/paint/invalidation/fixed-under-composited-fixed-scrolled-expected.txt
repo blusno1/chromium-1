@@ -4,14 +4,14 @@
       "name": "LayoutView #document",
       "bounds": [785, 2016],
       "contentsOpaque": true,
-      "drawsContent": true
+      "backgroundColor": "#FFFFFF",
+      "transform": 1
     },
     {
       "name": "LayoutBlockFlow (positioned) DIV id='fixed-container'",
       "position": [0, 400],
       "bounds": [785, 600],
       "contentsOpaque": true,
-      "drawsContent": true,
       "backfaceVisibility": "hidden",
       "backgroundColor": "#008000",
       "paintInvalidations": [
@@ -20,6 +20,18 @@
           "rect": [100, 100, 200, 200],
           "reason": "disappeared"
         }
+      ],
+      "transform": 1
+    }
+  ],
+  "transforms": [
+    {
+      "id": 1,
+      "transform": [
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, -400, 0, 1]
       ]
     }
   ],

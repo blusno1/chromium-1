@@ -54,12 +54,14 @@
 #include "core/css/CSSReflectValue.h"
 #include "core/css/CSSRuleList.h"
 #include "core/css/CSSSelector.h"
+#include "core/css/CSSSelectorWatch.h"
 #include "core/css/CSSStyleRule.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/ElementRuleCollector.h"
 #include "core/css/FontFace.h"
 #include "core/css/MediaQueryEvaluator.h"
 #include "core/css/PageRuleCollector.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRuleImport.h"
 #include "core/css/StyleSheetContents.h"
@@ -74,12 +76,10 @@
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/css/resolver/StyleResolverStats.h"
 #include "core/css/resolver/StyleRuleUsageTracker.h"
-#include "core/dom/CSSSelectorWatch.h"
 #include "core/dom/ElementShadow.h"
 #include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
@@ -365,8 +365,8 @@ void StyleResolver::MatchScopedRules(const Element& element,
 
 void StyleResolver::MatchAuthorRules(const Element& element,
                                      ElementRuleCollector& collector) {
-  if (GetDocument().GetShadowCascadeOrder() !=
-      ShadowCascadeOrder::kShadowCascadeV1) {
+  if (GetDocument().GetShadowCascadeOrder() ==
+      ShadowCascadeOrder::kShadowCascadeV0) {
     MatchAuthorRulesV0(element, collector);
     return;
   }
@@ -466,8 +466,8 @@ void StyleResolver::MatchAllRules(StyleResolverState& state,
   if (state.GetElement()->IsStyledElement()) {
     // For Shadow DOM V1, inline style is already collected in
     // matchScopedRules().
-    if (GetDocument().GetShadowCascadeOrder() !=
-            ShadowCascadeOrder::kShadowCascadeV1 &&
+    if (GetDocument().GetShadowCascadeOrder() ==
+            ShadowCascadeOrder::kShadowCascadeV0 &&
         state.GetElement()->InlineStyle()) {
       // Inline style is immutable as long as there is no CSSOM wrapper.
       bool is_inline_style_cacheable =
@@ -534,15 +534,6 @@ RefPtr<ComputedStyle> StyleResolver::StyleForViewport(Document& document) {
   viewport_style->SetOverflowY(EOverflow::kAuto);
 
   return viewport_style;
-}
-
-void StyleResolver::AdjustComputedStyle(StyleResolverState& state,
-                                        Element* element) {
-  DCHECK(state.LayoutParentStyle());
-  DCHECK(state.ParentStyle());
-  StyleAdjuster::AdjustComputedStyle(state.MutableStyleRef(),
-                                     *state.ParentStyle(),
-                                     *state.LayoutParentStyle(), element);
 }
 
 // Start loading resources referenced by this style.
@@ -718,7 +709,7 @@ RefPtr<ComputedStyle> StyleResolver::StyleForElement(
     // Cache our original display.
     state.Style()->SetOriginalDisplay(state.Style()->Display());
 
-    AdjustComputedStyle(state, element);
+    StyleAdjuster::AdjustComputedStyle(state, element);
 
     UpdateBaseComputedStyle(state, element);
   } else {
@@ -733,7 +724,7 @@ RefPtr<ComputedStyle> StyleResolver::StyleForElement(
   if (ApplyAnimatedStandardProperties(state, element)) {
     INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
                                   styles_animated, 1);
-    AdjustComputedStyle(state, element);
+    StyleAdjuster::AdjustComputedStyle(state, element);
   }
 
   if (isHTMLBodyElement(*element))
@@ -900,8 +891,8 @@ bool StyleResolver::PseudoStyleForElementInternal(
     state.Style()->SetOriginalDisplay(state.Style()->Display());
 
     // FIXME: Passing 0 as the Element* introduces a lot of complexity
-    // in the adjustComputedStyle code.
-    AdjustComputedStyle(state, 0);
+    // in the StyleAdjuster::AdjustComputedStyle code.
+    StyleAdjuster::AdjustComputedStyle(state, 0);
 
     UpdateBaseComputedStyle(state, pseudo_element);
   }
@@ -911,7 +902,7 @@ bool StyleResolver::PseudoStyleForElementInternal(
   // require adjustment to have happened before deciding which properties to
   // transition.
   if (ApplyAnimatedStandardProperties(state, pseudo_element))
-    AdjustComputedStyle(state, 0);
+    StyleAdjuster::AdjustComputedStyle(state, 0);
 
   GetDocument().GetStyleEngine().IncStyleForElementCount();
   INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
@@ -1900,7 +1891,8 @@ void StyleResolver::ApplyMatchedStandardProperties(
       state, match_result.UaRules(), false, apply_inherited_only,
       needs_apply_pass);
 
-  // Cache the UA properties to pass them to LayoutTheme in adjustComputedStyle.
+  // Cache the UA properties to pass them to LayoutTheme in
+  // StyleAdjuster::AdjustComputedStyle.
   state.CacheUserAgentBorderAndBackground();
 
   // Now do the author and user normal priority properties and all the

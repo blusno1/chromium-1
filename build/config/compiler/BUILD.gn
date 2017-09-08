@@ -276,6 +276,8 @@ config("compiler") {
     # and build system rebuild things when their commandline changes). Nothing
     # should ever read this define.
     defines += [ "CR_CLANG_REVISION=\"$clang_revision\"" ]
+
+    configs += [ "//build/config/coverage" ]
   }
 
   # Non-Mac Posix compiler flags setup.
@@ -899,14 +901,12 @@ config("compiler_codegen") {
 #   configs -= [ "//build/config/compiler:clang_stackrealign" ]
 # See https://crbug.com/556393 for details of where it must be avoided.
 config("clang_stackrealign") {
-  if (is_clang && current_cpu == "x86" && (is_android || is_linux)) {
-    # Android needs -mstackrealign due to a bug on ia32 Jelly Bean.
-    # See crbug.com/521527
-    cflags = [ "-mstackrealign" ]
-    if (is_linux) {
+  if (is_clang && current_cpu == "x86" && is_linux) {
+    cflags = [
       # Align the stack on 16-byte boundaries, http://crbug.com/418554.
-      cflags += [ "-mstack-alignment=16" ]
-    }
+      "-mstack-alignment=16",
+      "-mstackrealign",
+    ]
   }
 }
 
@@ -1224,6 +1224,12 @@ config("default_warnings") {
         # TODO(thakis): https://crbug.com/753973
         "-Wno-enum-compare-switch",
       ]
+      if (llvm_force_head_revision) {
+        cflags += [
+          # TODO(hans): https://crbug.com/763392
+          "-Wno-tautological-unsigned-zero-compare",
+        ]
+      }
     } else if (use_xcode_clang && xcode_version_int >= 830) {
       # This is necessary to allow a progressive transition from using xcode 8.0
       # to 8.3 or more recent. Remove when all bots are migrated to 8.3.

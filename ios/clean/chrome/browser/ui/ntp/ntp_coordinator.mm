@@ -26,12 +26,16 @@
 @property(nonatomic, strong) NTPMediator* mediator;
 @property(nonatomic, strong) NTPViewController* viewController;
 @property(nonatomic, strong) NTPHomeCoordinator* homeCoordinator;
+@property(nonatomic, strong) BookmarksCoordinator* bookmarksCoordinator;
+@property(nonatomic, strong) RecentTabsCoordinator* recentTabsCoordinator;
 @end
 
 @implementation NTPCoordinator
 @synthesize mediator = _mediator;
 @synthesize viewController = _viewController;
 @synthesize homeCoordinator = _homeCoordinator;
+@synthesize bookmarksCoordinator = _bookmarksCoordinator;
+@synthesize recentTabsCoordinator = _recentTabsCoordinator;
 
 - (void)start {
   if (self.started)
@@ -40,10 +44,10 @@
   self.viewController = [[NTPViewController alloc] init];
   self.mediator = [[NTPMediator alloc] initWithConsumer:self.viewController];
 
-  CommandDispatcher* dispatcher = self.browser->dispatcher();
   // NTPCommands
-  [dispatcher startDispatchingToTarget:self forProtocol:@protocol(NTPCommands)];
-  self.viewController.dispatcher = static_cast<id>(self.browser->dispatcher());
+  [self.dispatcher startDispatchingToTarget:self
+                                forProtocol:@protocol(NTPCommands)];
+  self.viewController.dispatcher = self.callableDispatcher;
   [self.browser->broadcaster()
       broadcastValue:@"selectedNTPPanel"
             ofObject:self.viewController
@@ -55,30 +59,50 @@
   [super stop];
   [self.browser->broadcaster()
       stopBroadcastingForSelector:@selector(broadcastSelectedNTPPanel:)];
-  [self.browser->dispatcher() stopDispatchingToTarget:self];
+  [self.dispatcher stopDispatchingToTarget:self];
 }
 
 - (void)childCoordinatorDidStart:(BrowserCoordinator*)coordinator {
   if ([coordinator isKindOfClass:[NTPHomeCoordinator class]]) {
     self.viewController.homeViewController = coordinator.viewController;
 
-  } else if ([coordinator isKindOfClass:[BookmarksCoordinator class]]) {
-    if (IsIPadIdiom()) {
+  } else if (coordinator == self.bookmarksCoordinator) {
+    if (self.bookmarksCoordinator.mode == CONTAINED) {
       self.viewController.bookmarksViewController = coordinator.viewController;
     } else {
+      coordinator.viewController.modalPresentationStyle =
+          UIModalPresentationFormSheet;
       [self.viewController presentViewController:coordinator.viewController
                                         animated:YES
                                       completion:nil];
     }
 
-  } else if ([coordinator isKindOfClass:[RecentTabsCoordinator class]]) {
-    if (IsIPadIdiom()) {
+  } else if (coordinator == self.recentTabsCoordinator) {
+    if (self.recentTabsCoordinator.mode == CONTAINED) {
       self.viewController.recentTabsViewController = coordinator.viewController;
     } else {
+      coordinator.viewController.modalPresentationStyle =
+          UIModalPresentationFormSheet;
+      coordinator.viewController.modalPresentationCapturesStatusBarAppearance =
+          YES;
       [self.viewController presentViewController:coordinator.viewController
                                         animated:YES
                                       completion:nil];
     }
+  }
+}
+
+- (void)childCoordinatorWillStop:(BrowserCoordinator*)childCoordinator {
+  if ([childCoordinator isKindOfClass:[BookmarksCoordinator class]] &&
+      !IsIPadIdiom()) {
+    [childCoordinator.viewController.presentingViewController
+        dismissViewControllerAnimated:YES
+                           completion:nil];
+  } else if ([childCoordinator isKindOfClass:[RecentTabsCoordinator class]] &&
+             !IsIPadIdiom()) {
+    [childCoordinator.viewController.presentingViewController
+        dismissViewControllerAnimated:YES
+                           completion:nil];
   }
 }
 
@@ -91,35 +115,21 @@
 }
 
 - (void)showNTPBookmarksPanel {
-  // TODO(crbug.com/740793): Remove alert once this feature is implemented.
-  UIAlertController* alertController =
-      [UIAlertController alertControllerWithTitle:@"Bookmarks"
-                                          message:nil
-                                   preferredStyle:UIAlertControllerStyleAlert];
-  UIAlertAction* action =
-      [UIAlertAction actionWithTitle:@"Done"
-                               style:UIAlertActionStyleCancel
-                             handler:nil];
-  [alertController addAction:action];
-  [self.viewController presentViewController:alertController
-                                    animated:YES
-                                  completion:nil];
+  if (!self.bookmarksCoordinator) {
+    self.bookmarksCoordinator = [[BookmarksCoordinator alloc] init];
+    self.bookmarksCoordinator.mode = IsIPadIdiom() ? CONTAINED : PRESENTED;
+    [self addChildCoordinator:self.bookmarksCoordinator];
+  }
+  [self.bookmarksCoordinator start];
 }
 
 - (void)showNTPRecentTabsPanel {
-  // TODO(crbug.com/740793): Remove alert once this feature is implemented.
-  UIAlertController* alertController =
-      [UIAlertController alertControllerWithTitle:@"Recent Sites"
-                                          message:nil
-                                   preferredStyle:UIAlertControllerStyleAlert];
-  UIAlertAction* action =
-      [UIAlertAction actionWithTitle:@"Done"
-                               style:UIAlertActionStyleCancel
-                             handler:nil];
-  [alertController addAction:action];
-  [self.viewController presentViewController:alertController
-                                    animated:YES
-                                  completion:nil];
+  if (!self.recentTabsCoordinator) {
+    self.recentTabsCoordinator = [[RecentTabsCoordinator alloc] init];
+    self.recentTabsCoordinator.mode = IsIPadIdiom() ? CONTAINED : PRESENTED;
+    [self addChildCoordinator:self.recentTabsCoordinator];
+  }
+  [self.recentTabsCoordinator start];
 }
 
 @end

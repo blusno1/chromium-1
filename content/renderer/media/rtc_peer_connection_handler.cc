@@ -24,7 +24,6 @@
 #include "content/renderer/media/media_stream_constraints_util.h"
 #include "content/renderer/media/media_stream_track.h"
 #include "content/renderer/media/peer_connection_tracker.h"
-#include "content/renderer/media/remote_media_stream_impl.h"
 #include "content/renderer/media/rtc_certificate.h"
 #include "content/renderer/media/rtc_data_channel_handler.h"
 #include "content/renderer/media/rtc_dtmf_sender_handler.h"
@@ -925,23 +924,29 @@ std::set<RTCPeerConnectionHandler*>* GetPeerConnectionHandlers() {
   return handlers;
 }
 
-bool IsReceiverForStream(
-    const rtc::scoped_refptr<webrtc::RtpReceiverInterface>& webrtc_receiver,
-    const scoped_refptr<webrtc::MediaStreamInterface>& webrtc_stream) {
-  rtc::scoped_refptr<webrtc::MediaStreamTrackInterface> webrtc_track =
-      webrtc_receiver->track();
-  if (webrtc_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    for (const auto& track : webrtc_stream->GetAudioTracks()) {
-      if (webrtc_track == track)
-        return true;
-    }
-  } else {
-    for (const auto& track : webrtc_stream->GetVideoTracks()) {
-      if (webrtc_track == track)
-        return true;
-    }
+rtc::scoped_refptr<webrtc::RtpReceiverInterface> FindReceiverForTrack(
+    const std::string& track_id,
+    const std::vector<rtc::scoped_refptr<webrtc::RtpReceiverInterface>>&
+        webrtc_receivers) {
+  for (const auto& webrtc_receiver : webrtc_receivers) {
+    if (webrtc_receiver->track()->id() == track_id)
+      return webrtc_receiver;
   }
-  return false;
+  return nullptr;
+}
+
+std::unique_ptr<RTCRtpReceiver> CreateRTCRtpReceiverForTrack(
+    webrtc::MediaStreamTrackInterface* webrtc_track,
+    const std::vector<rtc::scoped_refptr<webrtc::RtpReceiverInterface>>&
+        webrtc_receivers,
+    scoped_refptr<WebRtcMediaStreamTrackAdapterMap> track_adapter_map) {
+  auto webrtc_receiver =
+      FindReceiverForTrack(webrtc_track->id(), webrtc_receivers);
+  DCHECK(webrtc_receiver);
+  auto track_adapter = track_adapter_map->GetRemoteTrackAdapter(webrtc_track);
+  DCHECK(track_adapter);
+  return base::MakeUnique<RTCRtpReceiver>(std::move(webrtc_receiver),
+                                          std::move(track_adapter));
 }
 
 }  // namespace
@@ -995,8 +1000,13 @@ class RTCPeerConnectionHandler::Observer
   Observer(const base::WeakPtr<RTCPeerConnectionHandler>& handler)
       : handler_(handler),
         main_thread_(base::ThreadTaskRunnerHandle::Get()),
-        track_adapter_map_(handler_->track_adapter_map_) {
-    DCHECK(track_adapter_map_);
+        stream_adapter_map_(handler_->stream_adapter_map_),
+        native_peer_connection_(nullptr) {
+    DCHECK(stream_adapter_map_);
+  }
+
+  void Initialize(webrtc::PeerConnectionInterface* native_peer_connection) {
+    native_peer_connection_ = native_peer_connection;
   }
 
  protected:
@@ -1015,26 +1025,55 @@ class RTCPeerConnectionHandler::Observer
     }
   }
 
-  void OnAddStream(rtc::scoped_refptr<MediaStreamInterface> stream) override {
-    DCHECK(stream);
-    std::unique_ptr<RemoteMediaStreamImpl> remote_stream(
-        new RemoteMediaStreamImpl(main_thread_, track_adapter_map_, stream));
+  void OnAddStream(
+      rtc::scoped_refptr<MediaStreamInterface> remote_webrtc_stream) override {
+    DCHECK(!main_thread_->BelongsToCurrentThread());
+    DCHECK(remote_webrtc_stream);
+    DCHECK(native_peer_connection_);
+    DCHECK(remote_webrtc_stream);
+    std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>
+        remote_stream_adapter_ref =
+            stream_adapter_map_->GetOrCreateRemoteStreamAdapter(
+                remote_webrtc_stream.get());
 
-    // The webkit object owned by RemoteMediaStreamImpl, will be initialized
-    // asynchronously and the posted task will execude after that initialization
+    // Because |SetRemoteDescription| is asynchronous it is unsafe to query the
+    // |native_peer_connection_|'s state after the callback has jumped back to
+    // the main thread - something could happen in-between this callback on the
+    // signaling thread and |OnAddStreamImpl|. Every state that the callback on
+    // the main thread needs to know about has to be passed as arguments.
+    // Get all receivers that belong to the stream's track.
+    std::vector<rtc::scoped_refptr<webrtc::RtpReceiverInterface>>
+        webrtc_receivers = native_peer_connection_->GetReceivers();
+    std::vector<std::unique_ptr<blink::WebRTCRtpReceiver>> stream_web_receivers;
+    for (const auto& webrtc_audio_track :
+         remote_webrtc_stream->GetAudioTracks()) {
+      stream_web_receivers.push_back(CreateRTCRtpReceiverForTrack(
+          webrtc_audio_track.get(), webrtc_receivers,
+          stream_adapter_map_->track_adapter_map()));
+    }
+    for (const auto& webrtc_video_track :
+         remote_webrtc_stream->GetVideoTracks()) {
+      stream_web_receivers.push_back(CreateRTCRtpReceiverForTrack(
+          webrtc_video_track.get(), webrtc_receivers,
+          stream_adapter_map_->track_adapter_map()));
+    }
+
+    // The webkit object owned by |RemoteMediaStreamImpl|, will be initialized
+    // asynchronously and the posted task will execute after that initialization
     // is done.
     main_thread_->PostTask(
         FROM_HERE,
         base::BindOnce(&RTCPeerConnectionHandler::Observer::OnAddStreamImpl,
-                       this, base::Passed(&remote_stream)));
+                       this, base::Passed(&remote_stream_adapter_ref),
+                       base::Passed(&stream_web_receivers)));
   }
 
   void OnRemoveStream(
-      rtc::scoped_refptr<MediaStreamInterface> stream) override {
+      rtc::scoped_refptr<MediaStreamInterface> remote_webrtc_stream) override {
     main_thread_->PostTask(
         FROM_HERE,
         base::BindOnce(&RTCPeerConnectionHandler::Observer::OnRemoveStreamImpl,
-                       this, make_scoped_refptr(stream.get())));
+                       this, make_scoped_refptr(remote_webrtc_stream.get())));
   }
 
   void OnDataChannel(
@@ -1101,23 +1140,34 @@ class RTCPeerConnectionHandler::Observer
                        candidate->candidate().address().family()));
   }
 
-  void OnAddStreamImpl(std::unique_ptr<RemoteMediaStreamImpl> stream) {
-    if (handler_)
-      handler_->OnAddStream(std::move(stream));
+  void OnAddStreamImpl(std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>
+                           remote_stream_adapter_ref,
+                       std::vector<std::unique_ptr<blink::WebRTCRtpReceiver>>
+                           stream_webrtc_receivers) {
+    DCHECK(main_thread_->BelongsToCurrentThread());
+    DCHECK(remote_stream_adapter_ref->adapter().is_initialized());
+    if (handler_) {
+      handler_->OnAddStream(std::move(remote_stream_adapter_ref),
+                            std::move(stream_webrtc_receivers));
+    }
   }
 
-  void OnRemoveStreamImpl(const scoped_refptr<MediaStreamInterface>& stream) {
+  void OnRemoveStreamImpl(
+      const scoped_refptr<MediaStreamInterface>& remote_webrtc_stream) {
+    DCHECK(main_thread_->BelongsToCurrentThread());
     if (handler_)
-      handler_->OnRemoveStream(stream);
+      handler_->OnRemoveStream(remote_webrtc_stream);
   }
 
   void OnDataChannelImpl(std::unique_ptr<RtcDataChannelHandler> handler) {
+    DCHECK(main_thread_->BelongsToCurrentThread());
     if (handler_)
       handler_->OnDataChannel(std::move(handler));
   }
 
   void OnIceCandidateImpl(const std::string& sdp, const std::string& sdp_mid,
       int sdp_mline_index, int component, int address_family) {
+    DCHECK(main_thread_->BelongsToCurrentThread());
     if (handler_) {
       handler_->OnIceCandidate(sdp, sdp_mid, sdp_mline_index, component,
           address_family);
@@ -1127,7 +1177,10 @@ class RTCPeerConnectionHandler::Observer
  private:
   const base::WeakPtr<RTCPeerConnectionHandler> handler_;
   const scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
-  const scoped_refptr<WebRtcMediaStreamTrackAdapterMap> track_adapter_map_;
+  const scoped_refptr<WebRtcMediaStreamAdapterMap> stream_adapter_map_;
+  // Raw pointer. Only guaranteed to be valid within within callbacks on the
+  // signaling thread since these are triggered by |native_peer_connection_|.
+  webrtc::PeerConnectionInterface* native_peer_connection_;
 };
 
 RTCPeerConnectionHandler::RTCPeerConnectionHandler(
@@ -1197,6 +1250,7 @@ bool RTCPeerConnectionHandler::Initialize(
   peer_connection_observer_ = new Observer(weak_factory_.GetWeakPtr());
   native_peer_connection_ = dependency_factory_->CreatePeerConnection(
       configuration_, frame_, peer_connection_observer_.get());
+  peer_connection_observer_->Initialize(native_peer_connection_.get());
 
   if (!native_peer_connection_.get()) {
     LOG(ERROR) << "Failed to initialize native PeerConnection.";
@@ -1225,6 +1279,7 @@ bool RTCPeerConnectionHandler::InitializeForTest(
 
   native_peer_connection_ = dependency_factory_->CreatePeerConnection(
       configuration_, nullptr, peer_connection_observer_.get());
+  peer_connection_observer_->Initialize(native_peer_connection_.get());
   if (!native_peer_connection_.get()) {
     LOG(ERROR) << "Failed to initialize native PeerConnection.";
     return false;
@@ -1991,76 +2046,71 @@ void RTCPeerConnectionHandler::OnRenegotiationNeeded() {
 }
 
 void RTCPeerConnectionHandler::OnAddStream(
-    std::unique_ptr<RemoteMediaStreamImpl> stream) {
+    std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>
+        remote_stream_adapter_ref,
+    std::vector<std::unique_ptr<blink::WebRTCRtpReceiver>>
+        stream_webrtc_receivers) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(remote_streams_.find(stream->webrtc_stream().get()) ==
-         remote_streams_.end());
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::OnAddStreamImpl");
+  DCHECK(FindRemoteStreamAdapter(
+             remote_stream_adapter_ref->adapter().webrtc_stream()) ==
+         remote_streams_.end());
+  DCHECK(remote_stream_adapter_ref->adapter().is_initialized());
 
-  RemoteMediaStreamImpl* stream_ptr = stream.get();
-  remote_streams_[stream_ptr->webrtc_stream().get()] = std::move(stream);
+  const WebRtcMediaStreamAdapter* remote_stream_adapter =
+      &remote_stream_adapter_ref->adapter();
+  remote_streams_.push_back(std::move(remote_stream_adapter_ref));
 
   if (peer_connection_tracker_) {
     peer_connection_tracker_->TrackAddStream(
-        this, stream_ptr->webkit_stream(),
+        this, remote_stream_adapter->web_stream(),
         PeerConnectionTracker::SOURCE_REMOTE);
   }
 
   PerSessionWebRTCAPIMetrics::GetInstance()->IncrementStreamCounter();
 
   track_metrics_.AddStream(MediaStreamTrackMetrics::RECEIVED_STREAM,
-                           stream_ptr->webrtc_stream().get());
+                           remote_stream_adapter->webrtc_stream().get());
   if (!is_closed_) {
-    // Get receivers for the tracks in this stream. We need to filter out the
-    // webrtc layer receivers of interest before creating content layer
-    // receivers so that we don't end up with content layer receivers for
-    // receivers of remote streams that have not been processed yet (this could
-    // yield track adapters that have not completed initialization).
-    // Note: This performs a synchronous call to the webrtc signaling thread.
-    // Once we switch over to |OnAddTrack| we'll get rid of these thread hops
-    // since it will contain the receiver. https://crbug.com/741619
-    std::vector<rtc::scoped_refptr<webrtc::RtpReceiverInterface>>
-        webrtc_receivers = native_peer_connection_->GetReceivers();
-    std::vector<std::unique_ptr<blink::WebRTCRtpReceiver>> stream_web_receivers;
-    for (const auto& webrtc_receiver : webrtc_receivers) {
-      if (IsReceiverForStream(webrtc_receiver, stream_ptr->webrtc_stream()))
-        stream_web_receivers.push_back(GetWebRTCRtpReceiver(webrtc_receiver));
+    blink::WebVector<std::unique_ptr<blink::WebRTCRtpReceiver>>
+        web_vector_stream_webrtc_receivers(stream_webrtc_receivers.size());
+    for (size_t i = 0; i < stream_webrtc_receivers.size(); ++i) {
+      web_vector_stream_webrtc_receivers[i] =
+          std::move(stream_webrtc_receivers[i]);
     }
-    blink::WebVector<std::unique_ptr<blink::WebRTCRtpReceiver>> result(
-        stream_web_receivers.size());
-    for (size_t i = 0; i < stream_web_receivers.size(); ++i) {
-      result[i] = std::move(stream_web_receivers[i]);
-    }
-    client_->DidAddRemoteStream(stream_ptr->webkit_stream(), &result);
+    client_->DidAddRemoteStream(remote_stream_adapter->web_stream(),
+                                &web_vector_stream_webrtc_receivers);
   }
 }
 
 void RTCPeerConnectionHandler::OnRemoveStream(
-    const scoped_refptr<webrtc::MediaStreamInterface>& stream) {
+    const scoped_refptr<webrtc::MediaStreamInterface>& remote_webrtc_stream) {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::OnRemoveStreamImpl");
-  auto it = remote_streams_.find(stream.get());
+  auto it = FindRemoteStreamAdapter(remote_webrtc_stream);
   if (it == remote_streams_.end()) {
     NOTREACHED() << "Stream not found";
     return;
   }
 
   track_metrics_.RemoveStream(MediaStreamTrackMetrics::RECEIVED_STREAM,
-                              stream.get());
+                              remote_webrtc_stream.get());
   PerSessionWebRTCAPIMetrics::GetInstance()->DecrementStreamCounter();
 
-  std::unique_ptr<RemoteMediaStreamImpl> remote_stream = std::move(it->second);
-  const blink::WebMediaStream& webkit_stream = remote_stream->webkit_stream();
-  DCHECK(!webkit_stream.IsNull());
+  std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>
+      remote_stream_adapter_ref = std::move(*it);
   remote_streams_.erase(it);
 
   if (peer_connection_tracker_) {
     peer_connection_tracker_->TrackRemoveStream(
-        this, webkit_stream, PeerConnectionTracker::SOURCE_REMOTE);
+        this, remote_stream_adapter_ref->adapter().web_stream(),
+        PeerConnectionTracker::SOURCE_REMOTE);
   }
 
-  if (!is_closed_)
-    client_->DidRemoveRemoteStream(webkit_stream);
+  if (!is_closed_) {
+    client_->DidRemoveRemoteStream(
+        remote_stream_adapter_ref->adapter().web_stream());
+  }
 }
 
 void RTCPeerConnectionHandler::OnDataChannel(
@@ -2149,6 +2199,19 @@ void RTCPeerConnectionHandler::ReportFirstSessionDescriptions(
 
   // TODO(pthatcher): Reports stats about whether we have audio and
   // video or not.
+}
+
+std::vector<std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>>::iterator
+RTCPeerConnectionHandler::FindRemoteStreamAdapter(
+    const scoped_refptr<webrtc::MediaStreamInterface>& webrtc_stream) {
+  return std::find_if(
+      remote_streams_.begin(), remote_streams_.end(),
+      [webrtc_stream](
+          const std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>&
+              adapter_ref) {
+        return adapter_ref->adapter().webrtc_stream().get() ==
+               webrtc_stream.get();
+      });
 }
 
 std::unique_ptr<blink::WebRTCRtpReceiver>

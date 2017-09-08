@@ -872,6 +872,7 @@ static_library("extensions") {
     "//extensions/common/api",
     "//extensions/features",
     "//extensions/strings",
+    "//google_apis",
     "//media:media_features",
     "//net",
     "//ppapi/features",
@@ -899,6 +900,8 @@ static_library("extensions") {
     "//ui/display/manager",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/message_center",
+    "//ui/message_center/public/cpp",
     "//ui/native_theme",
     "//ui/resources",
     "//ui/shell_dialogs",
@@ -965,6 +968,7 @@ static_library("extensions") {
       configs += [ "//build/config/linux/dbus" ]
     }
     deps += [
+      "//components/arc",
       "//components/chrome_apps",
       "//components/constrained_window",
       "//components/drive",

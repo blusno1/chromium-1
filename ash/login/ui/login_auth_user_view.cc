@@ -103,8 +103,7 @@ LoginAuthUserView::LoginAuthUserView(const mojom::UserInfoPtr& user,
   user_view_ = new LoginUserView(LoginDisplayStyle::kLarge,
                                  true /*show_dropdown*/, on_tap);
   password_view_ = new LoginPasswordView(
-      base::Bind(&LoginAuthUserView::OnAuthSubmit, base::Unretained(this),
-                 false /*is_pin*/));
+      base::Bind(&LoginAuthUserView::OnAuthSubmit, base::Unretained(this)));
   // Enable layer rendering so the password opacity can be animated.
   password_view_->SetPaintToLayer();
   password_view_->layer()->SetFillsBoundsOpaquely(false);
@@ -182,11 +181,25 @@ void LoginAuthUserView::SetAuthMethods(uint32_t auth_methods) {
 
   bool has_password = (auth_methods & AUTH_PASSWORD) != 0;
   password_view_->SetEnabled(has_password);
+  password_view_->SetFocusEnabledForChildViews(has_password);
   password_view_->layer()->SetOpacity(has_password ? 1 : 0);
+
+  // Make sure to clear any existing password on showing the view. We do this on
+  // show instead of on hide so that the password does not clear when animating
+  // out.
+  if (has_password) {
+    password_view_->Clear();
+    password_view_->RequestFocus();
+  }
 
   pin_view_->SetVisible(auth_methods_ & AUTH_PIN);
 
-  user_view_->SetForceOpaque(auth_methods_ != 0);
+  // Only the active auth user view has a password displayed. If that is the
+  // case, then render the user view as if it was always focused, since clicking
+  // on it will not do anything (such as swapping users).
+  user_view_->SetForceOpaque(has_password);
+  user_view_->SetFocusBehavior(has_password ? FocusBehavior::NEVER
+                                            : FocusBehavior::ALWAYS);
 
   PreferredSizeChanged();
 }
@@ -309,10 +322,10 @@ void LoginAuthUserView::RequestFocus() {
   password_view_->RequestFocus();
 }
 
-void LoginAuthUserView::OnAuthSubmit(bool is_pin,
-                                     const base::string16& password) {
+void LoginAuthUserView::OnAuthSubmit(const base::string16& password) {
   Shell::Get()->lock_screen_controller()->AuthenticateUser(
-      current_user()->account_id, base::UTF16ToUTF8(password), is_pin,
+      current_user()->account_id, base::UTF16ToUTF8(password),
+      (auth_methods_ & AUTH_PIN) != 0,
       base::BindOnce([](OnAuthCallback on_auth,
                         bool auth_success) { on_auth.Run(auth_success); },
                      on_auth_));

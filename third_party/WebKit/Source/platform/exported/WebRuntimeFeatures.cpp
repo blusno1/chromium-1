@@ -104,6 +104,10 @@ void WebRuntimeFeatures::EnableCSSHexAlphaColor(bool enable) {
   RuntimeEnabledFeatures::SetCSSHexAlphaColorEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableScrollTopLeftInterop(bool enable) {
+  RuntimeEnabledFeatures::SetScrollTopLeftInteropEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableDatabase(bool enable) {
   RuntimeEnabledFeatures::SetDatabaseEnabled(enable);
 }
@@ -178,6 +182,10 @@ void WebRuntimeFeatures::EnableMediaSession(bool enable) {
 
 void WebRuntimeFeatures::EnableModuleScripts(bool enable) {
   RuntimeEnabledFeatures::SetModuleScriptsEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableModuleScriptsDynamicImport(bool enable) {
+  RuntimeEnabledFeatures::SetModuleScriptsDynamicImportEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableMojoBlobs(bool enable) {

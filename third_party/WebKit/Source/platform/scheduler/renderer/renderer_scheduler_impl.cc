@@ -299,12 +299,6 @@ scoped_refptr<MainThreadTaskQueue> RendererSchedulerImpl::ControlTaskQueue() {
 }
 
 scoped_refptr<MainThreadTaskQueue>
-RendererSchedulerImpl::BestEffortTaskQueue() {
-  helper_.CheckOnValidThread();
-  return helper_.BestEffortMainThreadTaskQueue();
-}
-
-scoped_refptr<MainThreadTaskQueue>
 RendererSchedulerImpl::VirtualTimeControlTaskQueue() {
   helper_.CheckOnValidThread();
   return virtual_time_control_task_queue_;
@@ -1163,6 +1157,11 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
   if (main_thread_only().renderer_paused) {
     new_policy.loading_queue_policy().is_paused = true;
     new_policy.timer_queue_policy().is_paused = true;
+  }
+
+  if (main_thread_only().renderer_backgrounded &&
+      RuntimeEnabledFeatures::TimerThrottlingForBackgroundTabsEnabled()) {
+    new_policy.timer_queue_policy().is_throttled = true;
   }
 
   if (main_thread_only().use_virtual_time) {

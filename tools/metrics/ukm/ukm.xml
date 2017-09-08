@@ -762,6 +762,11 @@ be describing additional metrics about the same event.
       Measure of total memory consumed by all processes.
     </summary>
   </metric>
+  <metric name="Uptime">
+    <summary>
+      Process uptime.
+    </summary>
+  </metric>
   <metric name="V8">
     <summary>
       Measure of memory consumed by V8.
@@ -827,6 +832,13 @@ be describing additional metrics about the same event.
   <metric name="Navigation.PageTransition">
     <summary>
       The |ui::PageTransition| for the main frame navigation of this page load.
+    </summary>
+  </metric>
+  <metric name="Net.DownstreamKbpsEstimate.OnNavigationStart">
+    <owner>tbansal@chromium.org</owner>
+    <summary>
+      The downstream throughput (in kilobits per second) for this page load, at
+      the time the navigation for this page load was initiated.
     </summary>
   </metric>
   <metric name="Net.EffectiveConnectionType.OnNavigationStart">
@@ -1245,6 +1257,25 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="TabManager.Background.FirstAlertFired">
+  <owner>chrisha@chromium.org</owner>
+  <owner>lpy@chromium.org</owner>
+  <summary>
+    Collects the duration in MS from when the tab is backgrounded to when a
+    JavaScript alert is fired. Only recorded when the tab is in the background.
+  </summary>
+  <metric name="IsMainFrame">
+    <summary>
+      Indicates whether the alert is fired from main frame.
+    </summary>
+  </metric>
+  <metric name="TimeFromBackgrounded">
+    <summary>
+      Duration in MS from when the tab is backgrounded to when alert is fired.
+    </summary>
+  </metric>
+</event>
+
 <event name="TabManager.Background.FirstAudioStarts">
   <owner>chrisha@chromium.org</owner>
   <owner>lpy@chromium.org</owner>
@@ -1254,13 +1285,60 @@ be describing additional metrics about the same event.
   </summary>
   <metric name="IsMainFrame">
     <summary>
-      Indicates whether the the audio stream belongs to the main frame.
+      Indicates whether the audio stream belongs to the main frame.
     </summary>
   </metric>
   <metric name="TimeFromBackgrounded">
     <summary>
       Duration in MS from when the tab is backgrounded to when audio starts to
-      play. Only recorded when the tab is in the background.
+      play.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.Background.FirstFaviconUpdated">
+  <owner>chrisha@chromium.org</owner>
+  <owner>lpy@chromium.org</owner>
+  <summary>
+    Collects the duration in MS from when the tab is backgrounded to when the
+    favicon is updated. Only recorded when the tab is in the background.
+  </summary>
+  <metric name="TimeFromBackgrounded">
+    <summary>
+      Duration in MS from when the tab is backgrounded to when the favicon is
+      updated.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.Background.FirstNonPersistentNotificationCreated">
+  <owner>chrisha@chromium.org</owner>
+  <owner>lpy@chromium.org</owner>
+  <summary/>
+  <metric name="IsMainFrame">
+    <summary>
+      Indicates whether the notification creation is from the main frame.
+    </summary>
+  </metric>
+  <metric name="TimeFromBackgrounded">
+    <summary>
+      Duration in MS from when the tab is backgrounded to when a non-persistent
+      notification is created.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.Background.FirstTitleUpdated">
+  <owner>chrisha@chromium.org</owner>
+  <owner>lpy@chromium.org</owner>
+  <summary>
+    Collects the duration in MS from when the tab is backgrounded to when the
+    title is updated. Only recorded when the tab is in the background.
+  </summary>
+  <metric name="TimeFromBackgrounded">
+    <summary>
+      Duration in MS from when the tab is backgrounded to when the title is
+      updated.
     </summary>
   </metric>
 </event>

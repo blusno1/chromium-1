@@ -607,8 +607,14 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // with the interface calls processed on the WidgetInputHandler.
   void SetWidgetInputHandler(
       mojom::WidgetInputHandlerAssociatedPtr widget_input_handler);
-  mojom::WidgetInputHandler* GetWidgetInputHandler() override;
   void SetWidget(mojom::WidgetPtr widget);
+
+  // InputRouterImplClient overrides.
+  mojom::WidgetInputHandler* GetWidgetInputHandler() override;
+  void OnImeCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds) override;
+  void OnImeCancelComposition() override;
 
  protected:
   // ---------------------------------------------------------------------------
@@ -676,10 +682,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnAutoscrollEnd();
   void OnTextInputStateChanged(const TextInputState& params);
 
-  void OnImeCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds);
-  void OnImeCancelComposition();
   void OnLockMouse(bool user_gesture,
                    bool privileged);
   void OnUnlockMouse();
@@ -1023,6 +1025,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
     uint32_t max_shared_bitmap_sequence_number = 0;
     viz::mojom::HitTestRegionListPtr hit_test_region_list;
   } saved_frame_;
+
+  bool enable_surface_synchronization_ = false;
 
   // If the |associated_widget_input_handler_| is set it should always be
   // used to ensure in order delivery of related messages that may occur

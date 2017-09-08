@@ -73,10 +73,6 @@ extern const base::Feature kCheckInstallabilityForBannerOnLoad;
 
 extern const base::Feature kClickToOpenPDFPlaceholder;
 
-#if defined(OS_ANDROID)
-extern const base::Feature kConsistentOmniboxGeolocation;
-#endif
-
 #if defined(OS_MACOSX)
 extern const base::Feature kContentFullscreen;
 #endif
@@ -169,6 +165,8 @@ extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 extern const base::Feature kOneGoogleBarOnLocalNtp;
 #endif
 
+extern const base::Feature kUseNewAcceptLanguageHeader;
+
 extern const base::Feature kPermissionsBlacklist;
 
 #if defined(OS_WIN)
@@ -214,6 +212,10 @@ extern const base::Feature kStaggeredBackgroundTabOpeningExperiment;
 
 extern const base::Feature kSupervisedUserCreation;
 
+#if defined(OS_CHROMEOS)
+extern const base::Feature kSysInternals;
+#endif
+
 #if defined(SYZYASAN)
 extern const base::Feature kSyzyasanDeferredFree;
 #endif
@@ -221,10 +223,6 @@ extern const base::Feature kSyzyasanDeferredFree;
 extern const base::Feature kTabsInCbd;
 
 extern const base::Feature kUseGoogleLocalNtp;
-
-extern const base::Feature kUseGroupedPermissionInfobars;
-
-extern const base::Feature kUsePermissionManagerForMediaRequests;
 
 #if !defined(OS_ANDROID)
 extern const base::Feature kVoiceSearchOnLocalNtp;

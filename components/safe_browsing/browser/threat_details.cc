@@ -20,6 +20,7 @@
 #include "components/safe_browsing/browser/threat_details_cache.h"
 #include "components/safe_browsing/browser/threat_details_history.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
+#include "components/safe_browsing/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing_db/hit_report.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -82,8 +83,6 @@ ClientSafeBrowsingReportRequest::ReportType GetReportTypeFromSBThreatType(
       return ClientSafeBrowsingReportRequest::URL_CLIENT_SIDE_PHISHING;
     case SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE:
       return ClientSafeBrowsingReportRequest::URL_CLIENT_SIDE_MALWARE;
-    case SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING:
-      return ClientSafeBrowsingReportRequest::URL_PASSWORD_PROTECTION_PHISHING;
     case SB_THREAT_TYPE_AD_SAMPLE:
       return ClientSafeBrowsingReportRequest::AD_SAMPLE;
     default:  // Gated by SafeBrowsingBlockingPage::ShouldReportThreatDetails.
@@ -506,9 +505,6 @@ void ThreatDetails::StartCollection() {
     report_->set_type(GetReportTypeFromSBThreatType(resource_.threat_type));
   }
 
-  if (resource_.threat_type == SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING)
-    report_->set_token(resource_.token);
-
   GURL referrer_url;
   NavigationEntry* nav_entry = resource_.GetNavigationEntryForResource();
   if (nav_entry) {
@@ -742,6 +738,12 @@ void ThreatDetails::OnCacheCollectionReady() {
     DLOG(ERROR) << "Unable to serialize the threat report.";
     return;
   }
+
+  BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(&WebUIInfoSingleton::AddToReportsSent,
+                 base::Unretained(WebUIInfoSingleton::GetInstance()),
+                 base::Passed(&report_)));
   ui_manager_->SendSerializedThreatDetails(serialized);
 }
 

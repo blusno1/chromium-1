@@ -295,7 +295,8 @@ class AppsGridView::FadeoutLayerDelegate : public ui::LayerDelegate {
     canvas->DrawRect(bottom_rect, flags);
   }
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {}
 
   ui::Layer layer_;
 
@@ -1680,7 +1681,9 @@ bool AppsGridView::CalculateFolderDropTarget(const gfx::Point& point,
   // Items can only be dropped into non-folders (which have no children) or
   // folders that have fewer than the max allowed items.
   // The OEM folder does not allow drag/drop of other items into it.
-  if (target_item->ChildItemCount() >= kMaxFolderItems ||
+  if (target_item->ChildItemCount() >= (is_fullscreen_app_list_enabled_
+                                            ? kMaxFolderItemsFullscreen
+                                            : kMaxFolderItems) ||
       IsOEMFolderItem(target_item)) {
     return false;
   }

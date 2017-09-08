@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Multiply-included message file, no include guard.
+#ifndef CONTENT_COMMON_DATABASE_MESSAGES_H_
+#define CONTENT_COMMON_DATABASE_MESSAGES_H_
 
 #include <stdint.h>
 
@@ -12,19 +13,6 @@
 #include "url/origin.h"
 
 #define IPC_MESSAGE_START DatabaseMsgStart
-
-// Database messages sent from the browser to the renderer.
-
-// Notifies the child process of the new database size
-IPC_MESSAGE_CONTROL3(DatabaseMsg_UpdateSize,
-                     url::Origin /* the origin */,
-                     base::string16 /* the database name */,
-                     int64_t /* the new database size */)
-
-// Asks the child process to close a database immediately
-IPC_MESSAGE_CONTROL2(DatabaseMsg_CloseImmediately,
-                     url::Origin /* the origin */,
-                     base::string16 /* the database name */)
 
 // Database messages sent from the renderer to the browser.
 
@@ -83,3 +71,5 @@ IPC_MESSAGE_CONTROL3(DatabaseHostMsg_HandleSqliteError,
                      url::Origin /* origin */,
                      base::string16 /* database name */,
                      int /* error */)
+
+#endif  // CONTENT_COMMON_DATABASE_MESSAGES_H_

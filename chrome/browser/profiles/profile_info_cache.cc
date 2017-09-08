@@ -13,7 +13,6 @@
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/task_scheduler/post_task.h"
@@ -220,12 +219,12 @@ void ProfileInfoCache::AddProfileToCache(
 
 void ProfileInfoCache::DeleteProfileFromCache(
     const base::FilePath& profile_path) {
-  size_t profile_index = GetIndexOfProfileWithPath(profile_path);
-  if (profile_index == std::string::npos) {
+  ProfileAttributesEntry* entry;
+  if (!GetProfileAttributesWithPath(profile_path, &entry)) {
     NOTREACHED();
     return;
   }
-  base::string16 name = GetNameOfProfileAtIndex(profile_index);
+  base::string16 name = entry->GetName();
 
   for (auto& observer : observer_list_)
     observer.OnProfileWillBeRemoved(profile_path);
@@ -827,11 +826,6 @@ void ProfileInfoCache::DownloadHighResAvatar(
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
   return;
 #endif
-  // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461175
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "461175 ProfileInfoCache::DownloadHighResAvatar::GetFileName"));
   const char* file_name =
       profiles::GetDefaultAvatarIconFileNameAtIndex(icon_index);
   DCHECK(file_name);
@@ -839,11 +833,6 @@ void ProfileInfoCache::DownloadHighResAvatar(
   if (avatar_images_downloads_in_progress_.count(file_name))
     return;
 
-  // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461175
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile2(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "461175 ProfileInfoCache::DownloadHighResAvatar::MakeDownloader"));
   // Start the download for this file. The cache takes ownership of the
   // avatar downloader, which will be deleted when the download completes, or
   // if that never happens, when the ProfileInfoCache is destroyed.
@@ -856,11 +845,6 @@ void ProfileInfoCache::DownloadHighResAvatar(
                      base::Unretained(this),
                      profile_path)));
 
-  // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461175
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile3(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "461175 ProfileInfoCache::DownloadHighResAvatar::StartDownload"));
   current_downloader->Start();
 }
 
@@ -897,35 +881,14 @@ void ProfileInfoCache::OnAvatarPictureLoaded(const base::FilePath& profile_path,
                                              const std::string& key,
                                              gfx::Image** image) const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461175
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "461175 ProfileInfoCache::OnAvatarPictureLoaded::Start"));
-
   cached_avatar_images_loading_[key] = false;
 
   if (*image) {
-    // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461175
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile2(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "461175 ProfileInfoCache::OnAvatarPictureLoaded::SetImage"));
     cached_avatar_images_[key].reset(*image);
   } else {
-    // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461175
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile3(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "461175 ProfileInfoCache::OnAvatarPictureLoaded::MakeEmptyImage"));
     // Place an empty image in the cache to avoid reloading it again.
     cached_avatar_images_[key].reset(new gfx::Image());
   }
-  // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461175
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile4(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "461175 ProfileInfoCache::OnAvatarPictureLoaded::DeleteImage"));
   delete image;
 
   for (auto& observer : observer_list_)
@@ -944,38 +907,24 @@ void ProfileInfoCache::OnAvatarPictureSaved(
 void ProfileInfoCache::MigrateLegacyProfileNamesAndDownloadAvatars() {
   // Only do this on desktop platforms.
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
-  // Migrate any legacy profile names ("First user", "Default Profile") to
-  // new style default names ("Person 1"). The problem here is that every
-  // time you rename a profile, the ProfileInfoCache sorts itself, so
-  // whatever you were iterating through is no longer valid. We need to
-  // save a list of the profile paths (which thankfully do not change) that
-  // need to be renamed. We also can't pre-compute the new names, as they
-  // depend on the names of all the other profiles in the info cache, so they
-  // need to be re-computed after each rename.
-  std::vector<base::FilePath> profiles_to_rename;
-
+  // Migrate any legacy default profile names ("First user", "Default Profile")
+  // to new style default names ("Person 1").
   const base::string16 default_profile_name = base::i18n::ToLower(
       l10n_util::GetStringUTF16(IDS_DEFAULT_PROFILE_NAME));
   const base::string16 default_legacy_profile_name = base::i18n::ToLower(
       l10n_util::GetStringUTF16(IDS_LEGACY_DEFAULT_PROFILE_NAME));
 
-  for (size_t i = 0; i < GetNumberOfProfiles(); i++) {
-    DownloadHighResAvatarIfNeeded(GetAvatarIconIndexOfProfileAtIndex(i),
-                                  GetPathOfProfileAtIndex(i));
+  std::vector<ProfileAttributesEntry*> entries = GetAllProfilesAttributes();
+  for (ProfileAttributesEntry* entry : entries) {
+    DownloadHighResAvatarIfNeeded(entry->GetAvatarIconIndex(),
+                                  entry->GetPath());
 
-    base::string16 name = base::i18n::ToLower(GetNameOfProfileAtIndex(i));
-    if (name == default_profile_name || name == default_legacy_profile_name)
-      profiles_to_rename.push_back(GetPathOfProfileAtIndex(i));
-  }
-
-  // Rename the necessary profiles.
-  std::vector<base::FilePath>::const_iterator it;
-  for (it = profiles_to_rename.begin(); it != profiles_to_rename.end(); ++it) {
-    size_t profile_index = GetIndexOfProfileWithPath(*it);
-    SetProfileIsUsingDefaultNameAtIndex(profile_index, true);
-    // This will assign a new "Person %d" type name and re-sort the cache.
-    SetNameOfProfileAtIndex(profile_index, ChooseNameForNewProfile(
-        GetAvatarIconIndexOfProfileAtIndex(profile_index)));
+    // Rename the necessary profiles.
+    base::string16 name = base::i18n::ToLower(entry->GetName());
+    if (name == default_profile_name || name == default_legacy_profile_name) {
+      entry->SetIsUsingDefaultName(true);
+      entry->SetName(ChooseNameForNewProfile(entry->GetAvatarIconIndex()));
+    }
   }
 #endif
 }

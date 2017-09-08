@@ -10,10 +10,9 @@
 #include <memory>
 #include <utility>
 
-#include "ash/ash_constants.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/autoclick/mus/public/interfaces/autoclick.mojom.h"
-#include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
@@ -245,11 +244,8 @@ AccessibilityManager::AccessibilityManager()
           ash::prefs::kAccessibilitySelectToSpeakEnabled),
       switch_access_pref_handler_(
           ash::prefs::kAccessibilitySwitchAccessEnabled),
-      large_cursor_enabled_(false),
-      large_cursor_size_in_dip_(ash::kDefaultLargeCursorSize),
       sticky_keys_enabled_(false),
       spoken_feedback_enabled_(false),
-      high_contrast_enabled_(false),
       autoclick_enabled_(false),
       autoclick_delay_ms_(ash::AutoclickController::GetDefaultAutoclickDelay()),
       virtual_keyboard_enabled_(false),
@@ -305,6 +301,8 @@ AccessibilityManager::AccessibilityManager()
   manager->Initialize(SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_LOW,
                       bundle.GetRawDataResource(
                           IDR_SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_LOW_WAV));
+  manager->Initialize(SOUND_TOUCH_TYPE,
+                      bundle.GetRawDataResource(IDR_SOUND_TOUCH_TYPE_WAV));
 
   base::FilePath resources_path;
   if (!PathService::Get(chrome::DIR_RESOURCES, &resources_path))
@@ -381,19 +379,6 @@ void AccessibilityManager::UpdateAlwaysShowMenuFromPref() {
       ash::A11Y_NOTIFICATION_NONE);
 }
 
-bool AccessibilityManager::ShouldEnableCursorCompositing() {
-  if (!profile_)
-    return false;
-  PrefService* prefs = profile_->GetPrefs();
-  // Enable cursor compositing when one or more of the listed accessibility
-  // features are turned on.
-  if (prefs->GetBoolean(ash::prefs::kAccessibilityLargeCursorEnabled) ||
-      prefs->GetBoolean(ash::prefs::kAccessibilityHighContrastEnabled) ||
-      prefs->GetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled))
-    return true;
-  return false;
-}
-
 void AccessibilityManager::EnableLargeCursor(bool enabled) {
   if (!profile_)
     return;
@@ -404,44 +389,11 @@ void AccessibilityManager::EnableLargeCursor(bool enabled) {
   pref_service->CommitPendingWrite();
 }
 
-void AccessibilityManager::UpdateLargeCursorFromPref() {
-  if (!profile_)
-    return;
-
-  const bool enabled = profile_->GetPrefs()->GetBoolean(
-      ash::prefs::kAccessibilityLargeCursorEnabled);
-
-  // Clear cursor size if large cursor is disabled.
-  if (enabled != large_cursor_enabled_ && !enabled) {
-    profile_->GetPrefs()->ClearPref(
-        ash::prefs::kAccessibilityLargeCursorDipSize);
-  }
-
-  const int large_cursor_size_in_dip = profile_->GetPrefs()->GetInteger(
-      ash::prefs::kAccessibilityLargeCursorDipSize);
-
-  // Do nothing if nothing has changed.
-  if (large_cursor_enabled_ == enabled &&
-      large_cursor_size_in_dip_ == large_cursor_size_in_dip) {
-    return;
-  }
-
-  large_cursor_enabled_ = enabled;
-  large_cursor_size_in_dip_ = large_cursor_size_in_dip;
-
+void AccessibilityManager::OnLargeCursorChanged() {
   AccessibilityStatusEventDetails details(ACCESSIBILITY_TOGGLE_LARGE_CURSOR,
-                                          enabled, ash::A11Y_NOTIFICATION_NONE);
+                                          IsLargeCursorEnabled(),
+                                          ash::A11Y_NOTIFICATION_NONE);
   NotifyAccessibilityStatusChanged(details);
-
-  // TODO(crbug.com/594887): Fix for mash by moving pref into ash.
-  if (GetAshConfig() == ash::Config::MASH)
-    return;
-
-  ash::Shell::Get()->cursor_manager()->SetCursorSize(
-      enabled ? ui::CursorSize::kLarge : ui::CursorSize::kNormal);
-  ash::Shell::Get()->SetLargeCursorSizeInDip(large_cursor_size_in_dip);
-  ash::Shell::Get()->SetCursorCompositingEnabled(
-      ShouldEnableCursorCompositing());
 }
 
 bool AccessibilityManager::IsIncognitoAllowed() {
@@ -452,7 +404,8 @@ bool AccessibilityManager::IsIncognitoAllowed() {
 }
 
 bool AccessibilityManager::IsLargeCursorEnabled() const {
-  return large_cursor_enabled_;
+  return profile_ && profile_->GetPrefs()->GetBoolean(
+                         ash::prefs::kAccessibilityLargeCursorEnabled);
 }
 
 void AccessibilityManager::EnableStickyKeys(bool enabled) {
@@ -564,31 +517,16 @@ void AccessibilityManager::EnableHighContrast(bool enabled) {
   pref_service->CommitPendingWrite();
 }
 
-void AccessibilityManager::UpdateHighContrastFromPref() {
-  if (!profile_)
-    return;
+bool AccessibilityManager::IsHighContrastEnabled() const {
+  return profile_ && profile_->GetPrefs()->GetBoolean(
+                         ash::prefs::kAccessibilityHighContrastEnabled);
+}
 
-  const bool enabled = profile_->GetPrefs()->GetBoolean(
-      ash::prefs::kAccessibilityHighContrastEnabled);
-
-  if (high_contrast_enabled_ == enabled)
-    return;
-
-  high_contrast_enabled_ = enabled;
-
+void AccessibilityManager::OnHighContrastChanged() {
   AccessibilityStatusEventDetails details(
-      ACCESSIBILITY_TOGGLE_HIGH_CONTRAST_MODE, enabled,
+      ACCESSIBILITY_TOGGLE_HIGH_CONTRAST_MODE, IsHighContrastEnabled(),
       ash::A11Y_NOTIFICATION_NONE);
-
   NotifyAccessibilityStatusChanged(details);
-
-  // TODO(crbug.com/594887): Fix for mash by moving pref into ash.
-  if (GetAshConfig() == ash::Config::MASH)
-    return;
-
-  ash::Shell::Get()->high_contrast_controller()->SetEnabled(enabled);
-  ash::Shell::Get()->SetCursorCompositingEnabled(
-      ShouldEnableCursorCompositing());
 }
 
 void AccessibilityManager::OnLocaleChanged() {
@@ -709,10 +647,6 @@ void AccessibilityManager::SetTouchAccessibilityAnchorPoint(
     const gfx::Point& anchor_point) {
   for (auto* rwc : ash::RootWindowController::root_window_controllers())
     rwc->SetTouchAccessibilityAnchorPoint(anchor_point);
-}
-
-bool AccessibilityManager::IsHighContrastEnabled() const {
-  return high_contrast_enabled_;
 }
 
 void AccessibilityManager::EnableAutoclick(bool enabled) {
@@ -1208,11 +1142,11 @@ void AccessibilityManager::SetProfile(Profile* profile) {
                    base::Unretained(this)));
     pref_change_registrar_->Add(
         ash::prefs::kAccessibilityLargeCursorEnabled,
-        base::Bind(&AccessibilityManager::UpdateLargeCursorFromPref,
+        base::Bind(&AccessibilityManager::OnLargeCursorChanged,
                    base::Unretained(this)));
     pref_change_registrar_->Add(
         ash::prefs::kAccessibilityLargeCursorDipSize,
-        base::Bind(&AccessibilityManager::UpdateLargeCursorFromPref,
+        base::Bind(&AccessibilityManager::OnLargeCursorChanged,
                    base::Unretained(this)));
     pref_change_registrar_->Add(
         ash::prefs::kAccessibilityStickyKeysEnabled,
@@ -1224,7 +1158,7 @@ void AccessibilityManager::SetProfile(Profile* profile) {
                    base::Unretained(this)));
     pref_change_registrar_->Add(
         ash::prefs::kAccessibilityHighContrastEnabled,
-        base::Bind(&AccessibilityManager::UpdateHighContrastFromPref,
+        base::Bind(&AccessibilityManager::OnHighContrastChanged,
                    base::Unretained(this)));
     pref_change_registrar_->Add(
         ash::prefs::kAccessibilityAutoclickEnabled,
@@ -1308,10 +1242,8 @@ void AccessibilityManager::SetProfile(Profile* profile) {
   else
     UpdateBrailleImeState();
   UpdateAlwaysShowMenuFromPref();
-  UpdateLargeCursorFromPref();
   UpdateStickyKeysFromPref();
   UpdateSpokenFeedbackFromPref();
-  UpdateHighContrastFromPref();
   UpdateAutoclickFromPref();
   UpdateAutoclickDelayFromPref();
   UpdateVirtualKeyboardFromPref();
@@ -1369,8 +1301,11 @@ void AccessibilityManager::NotifyAccessibilityStatusChanged(
   if (GetAshConfig() == ash::Config::MASH)
     return;
 
-  // Update system tray menu visibility.
-  if (details.notification_type != ACCESSIBILITY_MANAGER_SHUTDOWN) {
+  // Update system tray menu visibility. Prefs tracked inside ash handle their
+  // own updates to avoid race conditions (pref updates are asynchronous between
+  // chrome and ash).
+  if (details.notification_type != ACCESSIBILITY_MANAGER_SHUTDOWN &&
+      details.notification_type != ACCESSIBILITY_TOGGLE_LARGE_CURSOR) {
     ash::Shell::Get()->system_tray_notifier()->NotifyAccessibilityStatusChanged(
         details.notify);
   }

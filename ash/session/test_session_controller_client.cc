@@ -62,6 +62,12 @@ void TestSessionControllerClient::Reset() {
 
   controller_->ClearUserSessionsForTest();
   controller_->SetSessionInfo(session_info_->Clone());
+
+  if (!controller_->GetSigninScreenPrefService()) {
+    auto pref_service = base::MakeUnique<TestingPrefServiceSimple>();
+    Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
+    controller_->SetSigninScreenPrefServiceForTest(std::move(pref_service));
+  }
 }
 
 void TestSessionControllerClient::SetCanLockScreen(bool can_lock) {
@@ -122,7 +128,7 @@ void TestSessionControllerClient::AddUserSession(
   if (provide_pref_service &&
       !controller_->GetUserPrefServiceForUser(account_id)) {
     auto pref_service = base::MakeUnique<TestingPrefServiceSimple>();
-    Shell::RegisterProfilePrefs(pref_service->registry());
+    Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
     controller_->ProvideUserPrefServiceForTest(account_id,
                                                std::move(pref_service));
   }

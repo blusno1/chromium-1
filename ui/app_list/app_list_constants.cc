@@ -169,7 +169,9 @@ const int kPeekingAppListHeight = 320;
 const int kShelfSize = 48;
 
 // Max items allowed in a folder.
-size_t kMaxFolderItems = 16;
+const size_t kMaxFolderItems = 16;
+// Max items allowed in a folder for fullscreen app list folder v1.
+const size_t kMaxFolderItemsFullscreen = 20;
 
 // Number of the top items in a folder, which are shown inside the folder icon
 // and animated when opening and closing a folder.
@@ -206,7 +208,7 @@ const char kAppListFolderOpenedHistogram[] = "Apps.AppListFolderOpened";
 // The UMA histogram that logs how the app list transitions from peeking to
 // fullscreen.
 const char kAppListPeekingToFullscreenHistogram[] =
-    "Apps.AppListPeekingToFullscreen";
+    "Apps.AppListPeekingToFullscreenSource";
 
 // The UMA histogram that logs how the app list is shown.
 const char kAppListToggleMethodHistogram[] = "Apps.AppListShowSource";

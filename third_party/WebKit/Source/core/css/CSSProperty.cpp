@@ -303,13 +303,15 @@ bool CSSProperty::IsAffectedByAllProperty(CSSPropertyID property_id) {
   if (property_id == CSSPropertyAll)
     return false;
 
-  if (!CSSPropertyMetadata::IsEnabledProperty(property_id))
+  const CSSPropertyAPI& property_api =
+      CSSPropertyAPI::Get(resolveCSSPropertyID(property_id));
+  if (!property_api.IsEnabled())
     return false;
 
   if (property_id == CSSPropertyVariable)
     return false;
 
-  if (!CSSPropertyAPI::Get(property_id).IsProperty())
+  if (!property_api.IsProperty())
     return false;
 
   // all shorthand spec says:
@@ -320,6 +322,17 @@ bool CSSProperty::IsAffectedByAllProperty(CSSPropertyID property_id) {
   // affected by all property.
   return property_id != CSSPropertyUnicodeBidi &&
          property_id != CSSPropertyDirection;
+}
+
+void CSSProperty::FilterEnabledCSSPropertiesIntoVector(
+    const CSSPropertyID* properties,
+    size_t propertyCount,
+    Vector<CSSPropertyID>& outVector) {
+  for (unsigned i = 0; i < propertyCount; i++) {
+    CSSPropertyID property = properties[i];
+    if (CSSPropertyAPI::Get(property).IsEnabled())
+      outVector.push_back(property);
+  }
 }
 
 bool CSSProperty::operator==(const CSSProperty& other) const {

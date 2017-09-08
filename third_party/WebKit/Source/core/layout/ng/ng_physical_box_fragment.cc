@@ -15,14 +15,15 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
     Vector<NGBaseline>& baselines,
     unsigned border_edges,  // NGBorderEdges::Physical
     RefPtr<NGBreakToken> break_token)
-    : NGPhysicalFragment(layout_object,
-                         style,
-                         size,
-                         kFragmentBox,
-                         std::move(break_token)),
-      overflow_(overflow) {
-  children_.swap(children);
-  baselines_.swap(baselines);
+    : NGPhysicalContainerFragment(layout_object,
+                                  style,
+                                  size,
+                                  kFragmentBox,
+                                  children,
+                                  std::move(break_token)),
+      overflow_(overflow),
+      baselines_(std::move(baselines)) {
+  DCHECK(baselines.IsEmpty());  // Ensure move semantics is used.
   border_edge_ = border_edges;
 }
 
@@ -33,6 +34,12 @@ const NGBaseline* NGPhysicalBoxFragment::Baseline(
       return &baseline;
   }
   return nullptr;
+}
+
+void NGPhysicalBoxFragment::UpdateVisualRect() const {
+  NGPhysicalContainerFragment::UpdateVisualRect();
+
+  // TODO(kojii): Add its own visual overflow (e.g., box-shadow)
 }
 
 RefPtr<NGPhysicalFragment> NGPhysicalBoxFragment::CloneWithoutOffset() const {

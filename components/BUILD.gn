@@ -195,6 +195,7 @@ test("components_unittests") {
       "//components/keyed_service/content:unit_tests",
       "//components/link_header_util:unit_tests",
       "//components/navigation_interception:unit_tests",
+      "//components/network_error_logging:unit_tests",
       "//components/network_hints/renderer:unit_tests",
       "//components/offline_pages/content/background_loader:unit_tests",
       "//components/offline_pages/core:unit_tests",
@@ -267,6 +268,8 @@ test("components_unittests") {
       "//ui/gfx",
       "//v8:v8_external_startup_data_assets",
     ]
+  } else {  # !is_android
+    deps += [ "//components/keep_alive_registry:unit_tests" ]
   }
 
   # Desktop-only deps.
@@ -278,6 +281,7 @@ test("components_unittests") {
       # See comment in components/guest_view/browser/BUILD.gn for why
       # guest_view is currently non-mobile.
       "//components/guest_view/browser:unit_tests",
+      "//components/multidevice:unit_tests",
       "//components/proximity_auth:unit_tests",
       "//components/storage_monitor:unit_tests",
       "//components/web_modal:unit_tests",

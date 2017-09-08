@@ -975,6 +975,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->SetDoNotUpdateSelectionOnMutatingSelectionRange(
       prefs.do_not_update_selection_on_mutating_selection_range);
   WebRuntimeFeatures::EnableCSSHexAlphaColor(prefs.css_hex_alpha_color_enabled);
+  WebRuntimeFeatures::EnableScrollTopLeftInterop(
+      prefs.scroll_top_left_interop_enabled);
 #endif  // defined(OS_ANDROID)
 
   switch (prefs.autoplay_policy) {
@@ -2396,10 +2398,10 @@ void RenderViewImpl::SuspendVideoCaptureDevices(bool suspend) {
   if (!media_stream_dispatcher)
     return;
 
-  StreamDeviceInfoArray video_array =
+  MediaStreamDevices video_devices =
       media_stream_dispatcher->GetNonScreenCaptureDevices();
   RenderThreadImpl::current()->video_capture_impl_manager()->SuspendDevices(
-      video_array, suspend);
+      video_devices, suspend);
 #endif  // BUILDFLAG(ENABLE_WEBRTC)
 }
 #endif  // defined(OS_ANDROID)

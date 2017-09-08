@@ -272,7 +272,7 @@ static_library("common") {
     "//ui/gfx/ipc/geometry",
     "//ui/gfx/ipc/skia",
     "//ui/gl",
-    "//ui/message_center",
+    "//ui/message_center/public/cpp",
     "//ui/resources:resources",
     "//url",
   ]
@@ -389,9 +389,6 @@ static_library("common") {
     sources += [
       "media_galleries/itunes_library.cc",
       "media_galleries/itunes_library.h",
-      "media_galleries/picasa_types.cc",
-      "media_galleries/picasa_types.h",
-      "media_galleries/pmp_constants.h",
     ]
   }
   if (is_mac) {
@@ -634,15 +631,6 @@ static_library("test_support") {
     "//testing/gtest",
   ]
 
-  if (is_win || is_mac) {
-    sources += [
-      "media_galleries/picasa_test_util.cc",
-      "media_galleries/picasa_test_util.h",
-      "media_galleries/pmp_test_util.cc",
-      "media_galleries/pmp_test_util.h",
-    ]
-  }
-
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   if (enable_extensions) {
@@ -682,6 +670,7 @@ mojom("mojo_bindings") {
     "net_benchmarking.mojom",
     "network_diagnostics.mojom",
     "open_search_description_document_handler.mojom",
+    "plugin.mojom",
     "prerender.mojom",
     "renderer_configuration.mojom",
     "resource_usage_reporter.mojom",

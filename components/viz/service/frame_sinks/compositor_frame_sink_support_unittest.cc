@@ -146,6 +146,8 @@ class CompositorFrameSinkSupportTest : public testing::Test {
     manager_.SetLocalClient(&frame_sink_manager_client_);
     manager_.surface_manager()->AddObserver(&surface_observer_);
     manager_.RegisterFrameSinkId(kArbitraryFrameSinkId);
+    manager_.SetFrameSinkDebugLabel(kArbitraryFrameSinkId,
+                                    "kArbitraryFrameSinkId");
     support_ = CompositorFrameSinkSupport::Create(
         &fake_support_client_, &manager_, kArbitraryFrameSinkId, kIsRoot,
         kNeedsSyncPoints);
@@ -532,6 +534,8 @@ TEST_F(CompositorFrameSinkSupportTest, ResourceLifetime) {
 
 TEST_F(CompositorFrameSinkSupportTest, AddDuringEviction) {
   manager_.RegisterFrameSinkId(kAnotherArbitraryFrameSinkId);
+  manager_.SetFrameSinkDebugLabel(kAnotherArbitraryFrameSinkId,
+                                  "kAnotherArbitraryFrameSinkId");
   test::MockCompositorFrameSinkSupportClient mock_client;
   auto support = CompositorFrameSinkSupport::Create(
       &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot,
@@ -552,6 +556,8 @@ TEST_F(CompositorFrameSinkSupportTest, AddDuringEviction) {
 // Tests doing an EvictCurrentSurface before shutting down the factory.
 TEST_F(CompositorFrameSinkSupportTest, EvictCurrentSurface) {
   manager_.RegisterFrameSinkId(kAnotherArbitraryFrameSinkId);
+  manager_.SetFrameSinkDebugLabel(kAnotherArbitraryFrameSinkId,
+                                  "kAnotherArbitraryFrameSinkId");
   test::MockCompositorFrameSinkSupportClient mock_client;
   auto support = CompositorFrameSinkSupport::Create(
       &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot,
@@ -585,6 +591,7 @@ TEST_F(CompositorFrameSinkSupportTest, EvictCurrentSurface) {
 TEST_F(CompositorFrameSinkSupportTest, EvictSurfaceWithTemporaryReference) {
   constexpr FrameSinkId parent_frame_sink_id(1234, 5678);
   manager_.RegisterFrameSinkId(parent_frame_sink_id);
+  manager_.SetFrameSinkDebugLabel(parent_frame_sink_id, "parent_frame_sink_id");
 
   const LocalSurfaceId local_surface_id(5, kArbitraryToken);
   const SurfaceId surface_id(support_->frame_sink_id(), local_surface_id);
@@ -622,7 +629,8 @@ TEST_F(CompositorFrameSinkSupportTest, DuplicateCopyRequest) {
   }
 
   bool called1 = false;
-  auto request = CopyOutputRequest::CreateRequest(
+  auto request = std::make_unique<CopyOutputRequest>(
+      CopyOutputRequest::ResultFormat::RGBA_BITMAP,
       base::BindOnce(&CopyRequestTestCallback, &called1));
   request->set_source(kArbitrarySourceId1);
 
@@ -630,7 +638,8 @@ TEST_F(CompositorFrameSinkSupportTest, DuplicateCopyRequest) {
   EXPECT_FALSE(called1);
 
   bool called2 = false;
-  request = CopyOutputRequest::CreateRequest(
+  request = std::make_unique<CopyOutputRequest>(
+      CopyOutputRequest::ResultFormat::RGBA_BITMAP,
       base::BindOnce(&CopyRequestTestCallback, &called2));
   request->set_source(kArbitrarySourceId2);
 
@@ -640,7 +649,8 @@ TEST_F(CompositorFrameSinkSupportTest, DuplicateCopyRequest) {
   EXPECT_FALSE(called2);
 
   bool called3 = false;
-  request = CopyOutputRequest::CreateRequest(
+  request = std::make_unique<CopyOutputRequest>(
+      CopyOutputRequest::ResultFormat::RGBA_BITMAP,
       base::BindOnce(&CopyRequestTestCallback, &called3));
   request->set_source(kArbitrarySourceId1);
 

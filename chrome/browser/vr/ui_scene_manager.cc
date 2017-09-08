@@ -197,10 +197,11 @@ static constexpr float kContentBoundsPropagationThreshold = 0.2f;
 //   kWebVrRoot
 //     kWebVrContent
 //     kWebVrViewportAwareRoot
+//       kSplashScreenText
 //       kWebVrPresentationToast
-//       kWebVrPermanentHttpSecurityWarning,
-//       kWebVrTransientHttpSecurityWarning,
-//       kTransientUrlBar
+//       kWebVrPermanentHttpSecurityWarning
+//       kWebVrTransientHttpSecurityWarning
+//       kWebVrUrlToast
 //
 // TODO(vollick): The above hierarchy is complex, brittle, and would be easier
 // to manage if it were specified in a declarative format.
@@ -364,6 +365,7 @@ void UiSceneManager::CreateSystemIndicators() {
   std::unique_ptr<LinearLayout> indicator_layout =
       base::MakeUnique<LinearLayout>(LinearLayout::kHorizontal);
   indicator_layout->set_name(kIndicatorLayout);
+  indicator_layout->set_hit_testable(false);
   indicator_layout->set_draw_phase(kPhaseForeground);
   indicator_layout->set_y_anchoring(YAnchoring::YTOP);
   indicator_layout->SetTranslate(0, kIndicatorVerticalOffset,
@@ -422,13 +424,14 @@ void UiSceneManager::CreateSplashScreen() {
       }),
       IDS_VR_POWERED_BY_CHROME_MESSAGE);
   text->set_name(kSplashScreenText);
+  text->set_viewport_aware(true);
   text->set_draw_phase(kPhaseForeground);
   text->set_hit_testable(false);
   text->SetSize(kSplashScreenTextWidthM, kSplashScreenTextHeightM);
   text->SetTranslate(0, kSplashScreenTextVerticalOffset,
                      -kSplashScreenTextDistance);
   splash_screen_text_ = text.get();
-  scene_->AddUiElement(kWebVrRoot, std::move(text));
+  scene_->AddUiElement(kWebVrViewportAwareRoot, std::move(text));
 }
 
 void UiSceneManager::CreateUnderDevelopmentNotice() {
@@ -642,7 +645,7 @@ void UiSceneManager::CreateToasts() {
   element->SetSize(kToastWidthDMM, kToastHeightDMM);
   element->SetTranslate(0, kWebVrToastDistance * sin(kWebVrAngleRadians),
                         -kWebVrToastDistance * cos(kWebVrAngleRadians));
-  element->SetRotate(1, 0, 0, cc::MathUtil::Rad2Deg(kWebVrAngleRadians));
+  element->SetRotate(1, 0, 0, kWebVrAngleRadians);
   element->SetScale(kWebVrToastDistance, kWebVrToastDistance, 1);
   element->SetVisible(false);
   element->set_hit_testable(false);
@@ -931,6 +934,13 @@ void UiSceneManager::ConfigureIndicators() {
   screen_capture_indicator_->SetVisible(allowed && screen_capturing_);
   location_access_indicator_->SetVisible(allowed && location_access_);
   bluetooth_connected_indicator_->SetVisible(allowed && bluetooth_connected_);
+
+  audio_capture_indicator_->set_requires_layout(allowed && audio_capturing_);
+  video_capture_indicator_->set_requires_layout(allowed && video_capturing_);
+  screen_capture_indicator_->set_requires_layout(allowed && screen_capturing_);
+  location_access_indicator_->set_requires_layout(allowed && location_access_);
+  bluetooth_connected_indicator_->set_requires_layout(allowed &&
+                                                      bluetooth_connected_);
 }
 
 void UiSceneManager::ConfigureExclusiveScreenToast() {

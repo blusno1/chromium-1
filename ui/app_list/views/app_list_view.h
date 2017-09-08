@@ -137,6 +137,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void Layout() override;
   void SchedulePaintInRect(const gfx::Rect& rect) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // Overridden from ui::EventHandler:
   void OnScrollEvent(ui::ScrollEvent* event) override;
@@ -146,8 +147,8 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   // Called when tablet mode starts and ends.
   void OnTabletModeChanged(bool started);
 
-  // Changes |app_list_state_| from |PEEKING| to |FULLSCREEN_ALL_APPS|.
-  bool HandleScroll(const ui::Event* event);
+  // Handles scroll events from various sources.
+  bool HandleScroll(int offset, ui::EventType type);
 
   // Changes the app list state.
   void SetState(AppListState new_state);
@@ -250,6 +251,9 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   // Records the state transition for UMA.
   void RecordStateTransitionForUma(AppListState new_state);
+
+  // Creates an Accessibility Event if the state transition warrants one.
+  void CreateAccessibilityEvent(AppListState new_state);
 
   // Gets the display nearest to the parent window.
   display::Display GetDisplayNearestView() const;
@@ -360,6 +364,9 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   // True if the dragging started from PEEKING state.
   bool drag_started_from_peeking_ = false;
+
+  // Accessibility announcement dialogue.
+  base::string16 state_announcement_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListView);
 };

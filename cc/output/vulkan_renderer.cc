@@ -48,7 +48,7 @@ void VulkanRenderer::PrepareSurfaceForPass(
 }
 
 void VulkanRenderer::DoDrawQuad(DrawingFrame* frame,
-                                const DrawQuad* quad,
+                                const viz::DrawQuad* quad,
                                 const gfx::QuadF* clip_region) {
   NOTIMPLEMENTED();
 }
@@ -78,7 +78,7 @@ void VulkanRenderer::EnsureScissorTestDisabled() {
   NOTIMPLEMENTED();
 }
 
-void VulkanRenderer::CopyCurrentRenderPassToBitmap(
+void VulkanRenderer::CopyDrawnRenderPass(
     DrawingFrame* frame,
     std::unique_ptr<viz::CopyOutputRequest> request) {
   NOTIMPLEMENTED();

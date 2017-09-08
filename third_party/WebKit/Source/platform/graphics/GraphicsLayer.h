@@ -166,6 +166,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   // For special cases, e.g. drawing missing tiles on Android.
   // The compositor should never paint this color in normal cases because the
   // Layer will paint the background by itself.
+  Color BackgroundColor() const { return background_color_; }
   void SetBackgroundColor(const Color&);
 
   // opaque means that we know the layer contents have no alpha
@@ -330,8 +331,9 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   std::unique_ptr<JSONObject> LayerAsJSONInternal(
       LayerTreeFlags,
       RenderingContextMap&,
-      const FloatPoint& = FloatPoint()) const;
+      const FloatPoint& position) const;
   void AddTransformJSONProperties(JSONObject&, RenderingContextMap&) const;
+  void AddFlattenInheritedTransformJSON(JSONObject&) const;
   class LayersAsJSONArray;
 
   sk_sp<PaintRecord> CaptureRecord();

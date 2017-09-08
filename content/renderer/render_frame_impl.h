@@ -132,7 +132,6 @@ namespace content {
 
 class AssociatedInterfaceProviderImpl;
 class BlinkInterfaceRegistryImpl;
-class ChildFrameCompositingHelper;
 class ChildURLLoaderFactoryGetter;
 class CompositorDependencies;
 class DevToolsAgent;
@@ -303,6 +302,14 @@ class CONTENT_EXPORT RenderFrameImpl
   RenderAccessibilityImpl* render_accessibility() {
     return render_accessibility_;
   }
+
+  // Whether or not the frame is currently swapped into the frame tree.  If
+  // this is false, this is a provisional frame which has not committed yet,
+  // and which will swap with a proxy when it commits.
+  //
+  // TODO(https://crbug.com/578349): Remove this once provisional frames are
+  // gone, and clean up code that depends on it.
+  bool in_frame_tree() { return in_frame_tree_; }
 
   void HandleWebAccessibilityEvent(const blink::WebAXObject& obj,
                                    blink::WebAXEvent event);
@@ -784,6 +791,10 @@ class CONTENT_EXPORT RenderFrameImpl
   // TODO(varunjain): delete this method once we figure out how to keep
   // selection handles in sync with the webpage.
   void SyncSelectionIfRequired();
+
+  // Sets the custom URLLoaderFactory instance to be used for network requests.
+  void SetCustomURLLoadeFactory(
+      mojo::MessagePipeHandle custom_loader_factory_handle);
 
  protected:
   explicit RenderFrameImpl(const CreateParams& params);
@@ -1279,8 +1290,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // All the registered observers.
   base::ObserverList<RenderFrameObserver> observers_;
-
-  scoped_refptr<ChildFrameCompositingHelper> compositing_helper_;
 
   // External context menu requests we're waiting for. "Internal"
   // (WebKit-originated) context menu events will have an ID of 0 and will not

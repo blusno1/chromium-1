@@ -15,6 +15,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "third_party/webrtc/rtc_base/scoped_ref_ptr.h"
 #include "third_party/webrtc/rtc_base/thread_annotations.h"
 
 namespace rtc {
@@ -142,7 +143,7 @@ static std::unique_ptr<QueuedTask> NewClosure(const Closure& closure,
 // TaskQueue itself has been deleted or it may happen synchronously while the
 // TaskQueue instance is being deleted.  This may vary from one OS to the next
 // so assumptions about lifetimes of pending tasks should not be made.
-class LOCKABLE TaskQueue {
+class RTC_LOCKABLE TaskQueue {
  public:
   // TaskQueue priority levels. On some platforms these will map to thread
   // priorities, on others such as Mac and iOS, GCD queue priorities.
@@ -159,7 +160,6 @@ class LOCKABLE TaskQueue {
   static TaskQueue* Current();
 
   // Used for DCHECKing the current queue.
-  static bool IsCurrent(const char* queue_name);
   bool IsCurrent() const;
 
   // TODO(tommi): For better debuggability, implement RTC_FROM_HERE.
@@ -172,13 +172,24 @@ class LOCKABLE TaskQueue {
   void PostTaskAndReply(std::unique_ptr<QueuedTask> task,
                         std::unique_ptr<QueuedTask> reply);
 
+  // Schedules a task to execute a specified number of milliseconds from when
+  // the call is made. The precision should be considered as "best effort"
+  // and in some cases, such as on Windows when all high precision timers have
+  // been used up, can be off by as much as 15 millseconds (although 8 would be
+  // more likely). This can be mitigated by limiting the use of delayed tasks.
   void PostDelayedTask(std::unique_ptr<QueuedTask> task, uint32_t milliseconds);
 
-  template <class Closure>
+  // std::enable_if is used here to make sure that calls to PostTask() with
+  // std::unique_ptr<SomeClassDerivedFromQueuedTask> would not end up being
+  // caught by this template.
+  template <class Closure,
+            typename std::enable_if<
+                std::is_copy_constructible<Closure>::value>::type* = nullptr>
   void PostTask(const Closure& closure) {
     PostTask(std::unique_ptr<QueuedTask>(new ClosureTask<Closure>(closure)));
   }
 
+  // See documentation above for performance expectations.
   template <class Closure>
   void PostDelayedTask(const Closure& closure, uint32_t milliseconds) {
     PostDelayedTask(
@@ -219,9 +230,9 @@ class LOCKABLE TaskQueue {
   }
 
  private:
-  class WorkerThread;
+  class Impl;
+  const scoped_refptr<Impl> impl_;
 
-  std::unique_ptr<WorkerThread> thread_;
   DISALLOW_COPY_AND_ASSIGN(TaskQueue);
 };
 

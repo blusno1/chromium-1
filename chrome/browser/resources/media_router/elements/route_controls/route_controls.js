@@ -40,6 +40,16 @@ Polymer({
     },
 
     /**
+     * True if the Hangouts route is currently using local present mode.
+     * Valid for Hangouts routes only.
+     * @private {boolean}
+     */
+    hangoutsLocalPresent_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
      * The timestamp for when the initial media status was loaded.
      * @private {number}
      */
@@ -70,9 +80,18 @@ Polymer({
 
     /**
      * The timestamp for when the controller last submitted a seek request.
-     * @private {boolean}
+     * @private {number}
      */
     lastSeekByUser_: {
+      type: Number,
+      value: 0,
+    },
+
+    /**
+     * The timestamp for when |routeStatus| was last updated.
+     * @private {number}
+     */
+    lastStatusUpdate_: {
       type: Number,
       value: 0,
     },
@@ -85,6 +104,15 @@ Polymer({
     lastVolumeChangeByUser_: {
       type: Number,
       value: 0,
+    },
+
+    /**
+     * The route currently associated with this controller.
+     * @type {?media_router.Route|undefined}
+     */
+    route: {
+      type: Object,
+      observer: 'onRouteUpdated_',
     },
 
     /**
@@ -137,9 +165,10 @@ Polymer({
    * @private
    */
   canIncrementCurrentTime_: function() {
-    return this.routeStatus.playState === media_router.PlayState.PLAYING &&
+    return !this.isSeeking_ &&
+        this.routeStatus.playState === media_router.PlayState.PLAYING &&
         (this.routeStatus.duration === 0 ||
-         this.routeStatus.currentTime < this.routeStatus.duration);
+         this.displayedCurrentTime_ < this.routeStatus.duration);
   },
 
   /**
@@ -258,16 +287,28 @@ Polymer({
    */
   maybeIncrementCurrentTime_: function() {
     if (this.canIncrementCurrentTime_()) {
-      this.routeStatus.currentTime++;
-      this.displayedCurrentTime_ = this.routeStatus.currentTime;
+      var updatedCurrentTime = this.routeStatus.currentTime +
+          Math.floor((Date.now() - this.lastStatusUpdate_) / 1000);
+      this.displayedCurrentTime_ = this.routeStatus.duration === 0 ?
+          updatedCurrentTime :
+          Math.min(updatedCurrentTime, this.routeStatus.duration);
       if (this.routeStatus.duration === 0 ||
-          this.routeStatus.currentTime < this.routeStatus.duration) {
+          this.displayedCurrentTime_ < this.routeStatus.duration) {
         this.timeIncrementsTimeoutId_ =
             setTimeout(() => this.maybeIncrementCurrentTime_(), 1000);
       }
     } else {
       this.timeIncrementsTimeoutId_ = 0;
     }
+  },
+
+  /**
+   * Called when the "smooth motion" box for Hangouts is changed by the user.
+   * @param {!{target: !PaperCheckboxElement}} e
+   * @private
+   */
+  onHangoutsLocalPresentChange_: function(e) {
+    media_router.browserApi.setHangoutsLocalPresent(e.target.checked);
   },
 
   /**
@@ -299,6 +340,7 @@ Polymer({
    * @private
    */
   onRouteStatusChange_: function(newRouteStatus) {
+    this.lastStatusUpdate_ = Date.now();
     if (this.shouldAcceptCurrentTimeUpdates_()) {
       this.displayedCurrentTime_ = newRouteStatus.currentTime;
     }
@@ -313,22 +355,22 @@ Polymer({
       media_router.browserApi.reportWebUIRouteControllerLoaded(
           this.initialLoadTime_ - this.routeDetailsOpenTime);
     }
+    this.stopIncrementingCurrentTime_();
     if (this.canIncrementCurrentTime_()) {
-      if (!this.timeIncrementsTimeoutId_) {
-        this.timeIncrementsTimeoutId_ =
-            setTimeout(() => this.maybeIncrementCurrentTime_(), 1000);
-      }
-    } else {
-      this.stopIncrementingCurrentTime_();
+      this.timeIncrementsTimeoutId_ =
+          setTimeout(() => this.maybeIncrementCurrentTime_(), 1000);
     }
+    this.hangoutsLocalPresent_ = !!newRouteStatus.hangoutsExtraData &&
+        newRouteStatus.hangoutsExtraData.localPresent;
   },
 
   /**
    * Called when the route is updated. Updates the description shown if it has
    * not been provided by status updates.
    * @param {?media_router.Route} route
+   * @private
    */
-  onRouteUpdated: function(route) {
+  onRouteUpdated_: function(route) {
     if (!route) {
       this.stopIncrementingCurrentTime_();
     }

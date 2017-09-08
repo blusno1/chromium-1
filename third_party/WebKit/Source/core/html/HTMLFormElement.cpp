@@ -26,9 +26,9 @@
 #include "core/html/HTMLFormElement.h"
 
 #include <limits>
-#include "bindings/core/v8/RadioNodeListOrElement.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptEventListener.h"
+#include "bindings/core/v8/radio_node_list_or_element.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
@@ -361,7 +361,7 @@ void HTMLFormElement::submitFromJavaScript() {
 void HTMLFormElement::SubmitDialog(FormSubmission* form_submission) {
   for (Node* node = this; node; node = node->ParentOrShadowHostNode()) {
     if (auto* dialog = ToHTMLDialogElementOrNull(*node)) {
-      dialog->CloseDialog(form_submission->Result());
+      dialog->close(form_submission->Result());
       return;
     }
   }

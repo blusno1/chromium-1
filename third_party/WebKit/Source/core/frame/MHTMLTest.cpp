@@ -341,6 +341,49 @@ TEST_F(MHTMLTest, EnforceSandboxFlags) {
 
   // The element to be created by the script is not there.
   EXPECT_FALSE(document->getElementById("mySpan"));
+
+  // Make sure the subframe is also sandboxed.
+  LocalFrame* child_frame =
+      ToLocalFrame(GetPage()->MainFrame()->Tree().FirstChild());
+  ASSERT_TRUE(child_frame);
+  Document* child_document = child_frame->GetDocument();
+  ASSERT_TRUE(child_document);
+
+  EXPECT_EQ(kSandboxAll & ~(kSandboxPopups |
+                            kSandboxPropagatesToAuxiliaryBrowsingContexts),
+            child_document->GetSandboxFlags());
+
+  // MHTML document should be loaded into unique origin.
+  EXPECT_TRUE(child_document->GetSecurityOrigin()->IsUnique());
+  // Script execution should be disabled.
+  EXPECT_FALSE(child_document->CanExecuteScripts(kNotAboutToExecuteScript));
+
+  // The element to be created by the script is not there.
+  EXPECT_FALSE(child_document->getElementById("mySpan"));
+}
+
+TEST_F(MHTMLTest, EnforceSandboxFlagsInXSLT) {
+  const char kURL[] = "http://www.example.com";
+
+  // Register the mocked frame and load it.
+  RegisterMockedURLLoad(kURL, "xslt.mht");
+  LoadURLInTopFrame(ToKURL(kURL));
+  ASSERT_TRUE(GetPage());
+  LocalFrame* frame = ToLocalFrame(GetPage()->MainFrame());
+  ASSERT_TRUE(frame);
+  Document* document = frame->GetDocument();
+  ASSERT_TRUE(document);
+
+  // Full sandboxing with the exception to new top-level windows should be
+  // turned on.
+  EXPECT_EQ(kSandboxAll & ~(kSandboxPopups |
+                            kSandboxPropagatesToAuxiliaryBrowsingContexts),
+            document->GetSandboxFlags());
+
+  // MHTML document should be loaded into unique origin.
+  EXPECT_TRUE(document->GetSecurityOrigin()->IsUnique());
+  // Script execution should be disabled.
+  EXPECT_FALSE(document->CanExecuteScripts(kNotAboutToExecuteScript));
 }
 
 TEST_F(MHTMLTest, ShadowDom) {

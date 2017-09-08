@@ -251,11 +251,6 @@ gfx::Size CalculateDefaultTileSize(float initial_device_scale_factor,
   return gfx::Size(default_tile_size, default_tile_size);
 }
 
-bool IsRunningInMash() {
-  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  return cmdline->HasSwitch(switches::kIsRunningInMash);
-}
-
 // Check cc::BrowserControlsState, and blink::WebBrowserControlsState
 // are kept in sync.
 static_assert(int(blink::kWebBrowserControlsBoth) == int(cc::BOTH),
@@ -462,7 +457,6 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   settings.initial_debug_state.SetRecordRenderingStats(
       cmd.HasSwitch(cc::switches::kEnableGpuBenchmarking));
   settings.enable_surface_synchronization =
-      IsRunningInMash() ||
       cmd.HasSwitch(switches::kEnableSurfaceSynchronization);
 
   if (cmd.HasSwitch(cc::switches::kSlowDownRasterScaleFactor)) {
@@ -501,21 +495,10 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   // Memory policy on Android WebView does not depend on whether device is
   // low end, so always use default policy.
   if (using_low_memory_policy && !using_synchronous_compositor) {
-    // |using_low_memory_policy| includes both 1GB and 512MB devices. We'd like
-    // the change of the following percentage to be applied only to 512MB
-    // devices.
-    if (base::SysInfo::AmountOfPhysicalMemoryMB() <= 512 &&
-        base::FeatureList::IsEnabled(
-            features::kReducedSoftTileMemoryLimitOnLowEndAndroid)) {
-      // The soft tile memroy limit is computed by multiplying hard limit (8MB)
-      // with this percentage. Seeting this to 13% makes the soft limit ~1MB.
-      settings.max_memory_for_prepaint_percentage = 13;
-    } else {
-      // On low-end we want to be very carefull about killing other
-      // apps. So initially we use 50% more memory to avoid flickering
-      // or raster-on-demand.
-      settings.max_memory_for_prepaint_percentage = 67;
-    }
+    // On low-end we want to be very carefull about killing other
+    // apps. So initially we use 50% more memory to avoid flickering
+    // or raster-on-demand.
+    settings.max_memory_for_prepaint_percentage = 67;
   } else {
     // On other devices we have increased memory excessively to avoid
     // raster-on-demand already, so now we reserve 50% _only_ to avoid
@@ -548,15 +531,13 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   }
 
   // On desktop, if there's over 4GB of memory on the machine, increase the
-  // image decode budget to 256MB for both gpu and software.
+  // working set size to 256MB for both gpu and software.
   const int kImageDecodeMemoryThresholdMB = 4 * 1024;
   if (base::SysInfo::AmountOfPhysicalMemoryMB() >=
       kImageDecodeMemoryThresholdMB) {
-    settings.decoded_image_cache_budget_bytes = 256 * 1024 * 1024;
     settings.decoded_image_working_set_budget_bytes = 256 * 1024 * 1024;
   } else {
-    // These are the defaults, but recorded here as well.
-    settings.decoded_image_cache_budget_bytes = 128 * 1024 * 1024;
+    // This is the default, but recorded here as well.
     settings.decoded_image_working_set_budget_bytes = 128 * 1024 * 1024;
   }
 #endif  // defined(OS_ANDROID)
@@ -571,11 +552,6 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
         !using_synchronous_compositor) {
       settings.preferred_tile_format = viz::RGBA_4444;
     }
-
-    // When running on a low end device, we limit cached bytes to 512KB.
-    // This allows pages which are light on images to stay in cache, but
-    // prevents most long-term caching.
-    settings.decoded_image_cache_budget_bytes = 512 * 1024;
   }
 
   if (cmd.HasSwitch(switches::kEnableLowResTiling))
@@ -1020,17 +996,6 @@ bool RenderWidgetCompositor::HaveScrollEventHandlers() const {
   return layer_tree_host_->have_scroll_event_handlers();
 }
 
-void CompositeAndReadbackAsyncCallback(
-    blink::WebCompositeAndReadbackAsyncCallback* callback,
-    std::unique_ptr<viz::CopyOutputResult> result) {
-  if (result->HasBitmap()) {
-    std::unique_ptr<SkBitmap> result_bitmap = result->TakeBitmap();
-    callback->DidCompositeAndReadback(*result_bitmap);
-  } else {
-    callback->DidCompositeAndReadback(SkBitmap());
-  }
-}
-
 bool RenderWidgetCompositor::CompositeIsSynchronous() const {
   if (!threaded_) {
     DCHECK(!layer_tree_host_->GetSettings().single_thread_proxy_scheduler);
@@ -1081,15 +1046,20 @@ void RenderWidgetCompositor::CompositeAndReadbackAsync(
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
       layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner();
   std::unique_ptr<viz::CopyOutputRequest> request =
-      viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
-          [](blink::WebCompositeAndReadbackAsyncCallback* callback,
-             scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-             std::unique_ptr<viz::CopyOutputResult> result) {
-            task_runner->PostTask(FROM_HERE,
-                                  base::Bind(&CompositeAndReadbackAsyncCallback,
-                                             callback, base::Passed(&result)));
-          },
-          callback, base::Passed(&main_thread_task_runner)));
+      std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+          base::BindOnce(
+              [](blink::WebCompositeAndReadbackAsyncCallback* callback,
+                 scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                 std::unique_ptr<viz::CopyOutputResult> result) {
+                task_runner->PostTask(
+                    FROM_HERE,
+                    base::Bind(&blink::WebCompositeAndReadbackAsyncCallback::
+                                   DidCompositeAndReadback,
+                               base::Unretained(callback),
+                               result->AsSkBitmap()));
+              },
+              callback, base::Passed(&main_thread_task_runner)));
   // Force a redraw to ensure that the copy swap promise isn't cancelled due to
   // no damage.
   SetNeedsForcedRedraw();

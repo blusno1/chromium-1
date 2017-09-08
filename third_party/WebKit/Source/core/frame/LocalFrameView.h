@@ -302,6 +302,11 @@ class CORE_EXPORT LocalFrameView final
   // Everything except paint (the last phase).
   void UpdateAllLifecyclePhasesExceptPaint();
 
+  // Printing needs everything up-to-date except paint (which will be done
+  // specially). We may also print a detached frame or a descendant of a
+  // detached frame and need special handling of the frame.
+  void UpdateLifecyclePhasesForPrinting();
+
   // Computes the style, layout and compositing lifecycle stages if needed.
   // After calling this method, all frames will be in a lifecycle
   // state >= CompositingClean, and scrolling has been updated (unless
@@ -651,10 +656,14 @@ class CORE_EXPORT LocalFrameView final
 
   // Handles painting of the contents of the view as well as the scrollbars.
   void Paint(GraphicsContext&, const CullRect&) const override;
-  void Paint(GraphicsContext&, const GlobalPaintFlags, const CullRect&) const;
+  // Paints, and also updates the lifecycle to in-paint and paint clean
+  // beforehand.  Call this for painting use-cases outside of the lifecycle.
+  void PaintWithLifecycleUpdate(GraphicsContext&,
+                                const GlobalPaintFlags,
+                                const CullRect&);
   void PaintContents(GraphicsContext&,
                      const GlobalPaintFlags,
-                     const IntRect& damage_rect) const;
+                     const IntRect& damage_rect);
 
   void Show() override;
   void Hide() override;
@@ -912,6 +921,10 @@ class CORE_EXPORT LocalFrameView final
    protected:
     void DestroyScrollbar(ScrollbarOrientation) override;
   };
+
+  void PaintInternal(GraphicsContext&,
+                     const GlobalPaintFlags,
+                     const CullRect&) const;
 
   LocalFrameView* ParentFrameView() const;
 

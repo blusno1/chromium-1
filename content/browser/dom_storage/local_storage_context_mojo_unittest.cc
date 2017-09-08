@@ -696,7 +696,7 @@ TEST_F(LocalStorageContextMojoTest, Migration) {
   DOMStorageNamespace* local = local_storage_namespace();
   DOMStorageArea* area = local->OpenStorageArea(origin1.GetURL());
   base::NullableString16 dummy;
-  area->SetItem(key, value, &dummy);
+  area->SetItem(key, value, dummy, &dummy);
   local->CloseStorageArea(area);
   FlushAndPurgeDOMStorageMemory();
 
@@ -1084,7 +1084,7 @@ class MockLevelDBService : public leveldb::mojom::LevelDBService {
   }
 
   void OpenWithOptions(
-      leveldb::mojom::OpenOptionsPtr options,
+      const leveldb_env::Options& options,
       filesystem::mojom::DirectoryPtr,
       const std::string& dbname,
       const base::Optional<base::trace_event::MemoryAllocatorDumpGuid>&

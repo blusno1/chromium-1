@@ -9,8 +9,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -66,18 +65,11 @@ void SelectNewTabPagePanel(ntp_home::PanelIdentifier panel_type) {
       chrome_test_util::GetCurrentNewTabPageController();
   if (IsIPadIdiom()) {
     [ntp_controller selectPanel:panel_type];
-  } else {
-    NSUInteger tag = 0;
-    if (panel_type == ntp_home::BOOKMARKS_PANEL) {
-      tag = IDC_SHOW_BOOKMARK_MANAGER;
-    } else if (panel_type == ntp_home::RECENT_TABS_PANEL) {
-      tag = IDC_SHOW_OTHER_DEVICES;
-    }
-    if (tag) {
-      GenericChromeCommand* command =
-          [[GenericChromeCommand alloc] initWithTag:tag];
-      chrome_test_util::RunCommandWithActiveViewController(command);
-    }
+  } else if (panel_type == ntp_home::BOOKMARKS_PANEL) {
+    [chrome_test_util::BrowserCommandDispatcherForMainBVC()
+        showBookmarksManager];
+  } else if (panel_type == ntp_home::RECENT_TABS_PANEL) {
+    [chrome_test_util::BrowserCommandDispatcherForMainBVC() showRecentTabs];
   }
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 }
@@ -127,8 +119,7 @@ void AssertNTPScrolledToTop(bool scrolledToTop) {
 // Bookmarks UI.
 - (void)testAccessibilityOnBookmarks {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      bookmark_new_generation::features::kBookmarkNewGeneration);
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
 
   SelectNewTabPagePanel(ntp_home::BOOKMARKS_PANEL);
   chrome_test_util::VerifyAccessibilityForCurrentScreen();

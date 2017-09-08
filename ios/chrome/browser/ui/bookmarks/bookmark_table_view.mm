@@ -22,10 +22,10 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #include "ios/chrome/browser/ui/bookmarks/bookmark_collection_view_background.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_home_waiting_view.h"
 #include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_cell.h"
-#import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_promo_cell.h"
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_signin_promo_cell.h"
 #import "ios/chrome/browser/ui/sync/synced_sessions_bridge.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -50,17 +50,28 @@ using bookmarks::BookmarkNode;
 // collections.
 using IntegerPair = std::pair<NSInteger, NSInteger>;
 
-@interface BookmarkTableView ()<BookmarkTablePromoCellDelegate,
+@interface BookmarkTableView ()<BookmarkModelBridgeObserver,
+                                BookmarkTableCellTitleEditDelegate,
                                 SigninPromoViewConsumer,
+                                SyncedSessionsObserver,
                                 UITableViewDataSource,
-                                UITableViewDelegate,
-                                BookmarkModelBridgeObserver> {
+                                UITableViewDelegate> {
   // A vector of bookmark nodes to display in the table view.
   std::vector<const BookmarkNode*> _bookmarkItems;
+
+  // The current root node of this table view.
   const BookmarkNode* _currentRootNode;
+
+  // The newly created folder node its name is being edited.
+  const BookmarkNode* _editingFolderNode;
 
   // Bridge to register for bookmark changes.
   std::unique_ptr<bookmarks::BookmarkModelBridge> _modelBridge;
+
+  // Observer to keep track of the signin and syncing status.
+  std::unique_ptr<synced_sessions::SyncedSessionsObserverBridge>
+      _syncedSessionsObserver;
+
   // Map of favicon load tasks for each index path. Used to keep track of
   // pending favicon load operations so that they can be cancelled upon cell
   // reuse. Keys are (section, item) pairs of cell index paths.
@@ -73,6 +84,9 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 
   // True if the promo is visible.
   BOOL _promoVisible;
+
+  // Set of nodes being editing currently.
+  std::set<const bookmarks::BookmarkNode*> _editNodes;
 }
 
 // The UITableView to show bookmarks.
@@ -82,10 +96,13 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 // The browser state.
 @property(nonatomic, assign) ios::ChromeBrowserState* browserState;
 // The delegate for actions on the table.
-@property(nonatomic, assign) id<BookmarkTableViewDelegate> delegate;
-// Background view of the collection view shown when there is no items.
+@property(nonatomic, weak) id<BookmarkTableViewDelegate> delegate;
+// Background shown when there is no bookmarks or folders at the current root
+// node.
 @property(nonatomic, strong)
     BookmarkCollectionViewBackground* emptyTableBackgroundView;
+// The loading spinner background which appears when syncing.
+@property(nonatomic, strong) BookmarkHomeWaitingView* spinnerView;
 
 // Section indices.
 @property(nonatomic, readonly, assign) NSInteger promoSection;
@@ -101,6 +118,8 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 @synthesize tableView = _tableView;
 @synthesize delegate = _delegate;
 @synthesize emptyTableBackgroundView = _emptyTableBackgroundView;
+@synthesize spinnerView = _spinnerView;
+@synthesize editing = _editing;
 
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   registry->RegisterIntegerPref(prefs::kIosBookmarkSigninPromoDisplayedCount,
@@ -123,8 +142,11 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
         ios::BookmarkModelFactory::GetForBrowserState(browserState);
 
     // Set up observers.
-    _modelBridge.reset(
-        new bookmarks::BookmarkModelBridge(self, _bookmarkModel));
+    _modelBridge =
+        std::make_unique<bookmarks::BookmarkModelBridge>(self, _bookmarkModel);
+    _syncedSessionsObserver =
+        std::make_unique<synced_sessions::SyncedSessionsObserverBridge>(
+            self, _browserState);
 
     [self computeBookmarkTableViewData];
 
@@ -136,29 +158,26 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
         [[UITableView alloc] initWithFrame:frame style:UITableViewStylePlain];
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
-
     // Use iOS8's self sizing feature to compute row height. However,
     // this reduces the row height of bookmarks section from 56 to 45
     // TODO(crbug.com/695749): Fix the bookmark section row height to 56.
     self.tableView.estimatedRowHeight = kCellHeightPt;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
-
     // Remove extra rows.
     self.tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectZero];
     self.tableView.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.tableView.allowsMultipleSelectionDuringEditing = YES;
+    UILongPressGestureRecognizer* longPressRecognizer =
+        [[UILongPressGestureRecognizer alloc]
+            initWithTarget:self
+                    action:@selector(handleLongPress:)];
+    longPressRecognizer.numberOfTouchesRequired = 1;
+    [self.tableView addGestureRecognizer:longPressRecognizer];
     [self addSubview:self.tableView];
     [self bringSubviewToFront:self.tableView];
 
-    // Set up the background view shown when the table is empty.
-    self.emptyTableBackgroundView =
-        [[BookmarkCollectionViewBackground alloc] initWithFrame:frame];
-    self.emptyTableBackgroundView.autoresizingMask =
-        UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
-    self.emptyTableBackgroundView.text =
-        l10n_util::GetNSString(IDS_IOS_BOOKMARK_NO_BOOKMARKS_LABEL);
-    [self updateEmptyBackground];
-    [self addSubview:self.emptyTableBackgroundView];
+    [self showEmptyOrLoadingSpinnerBackgroundIfNeeded];
   }
   return self;
 }
@@ -182,26 +201,47 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
        _signinPromoViewMediator.signinPromoViewState ==
            ios::SigninPromoViewState::SigninStarted);
 
-  if (promoVisible == _promoVisible)
+  if (promoVisible == _promoVisible) {
     return;
+  }
 
   _promoVisible = promoVisible;
 
-  if (experimental_flags::IsSigninPromoEnabled()) {
-    if (!promoVisible) {
-      _signinPromoViewMediator.consumer = nil;
-      [_signinPromoViewMediator signinPromoViewRemoved];
-      _signinPromoViewMediator = nil;
-    } else {
-      _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
-          initWithBrowserState:_browserState
-                   accessPoint:signin_metrics::AccessPoint::
-                                   ACCESS_POINT_BOOKMARK_MANAGER];
-      _signinPromoViewMediator.consumer = self;
-      [_signinPromoViewMediator signinPromoViewVisible];
-    }
+  if (!promoVisible) {
+    _signinPromoViewMediator.consumer = nil;
+    [_signinPromoViewMediator signinPromoViewRemoved];
+    _signinPromoViewMediator = nil;
+  } else {
+    _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
+        initWithBrowserState:_browserState
+                 accessPoint:signin_metrics::AccessPoint::
+                                 ACCESS_POINT_BOOKMARK_MANAGER];
+    _signinPromoViewMediator.consumer = self;
+    [_signinPromoViewMediator signinPromoViewVisible];
   }
   [self.tableView reloadData];
+}
+
+- (void)addNewFolder {
+  // TODO(crbug.com/695749): Check if we need to disable the 'New Folder' button
+  // when _currentRootNode is NULL.
+  if (!_currentRootNode) {
+    return;
+  }
+  base::string16 folderTitle = base::SysNSStringToUTF16(
+      l10n_util::GetNSString(IDS_IOS_BOOKMARK_NEW_GROUP_DEFAULT_NAME));
+  _editingFolderNode = self.bookmarkModel->AddFolder(
+      _currentRootNode, _currentRootNode->child_count(), folderTitle);
+}
+
+- (void)setEditing:(BOOL)editing {
+  _editing = editing;
+  [self resetEditNodes];
+  [self.tableView setEditing:editing animated:YES];
+}
+
+- (const std::set<const bookmarks::BookmarkNode*>&)editNodes {
+  return _editNodes;
 }
 
 #pragma mark - UITableViewDataSource
@@ -212,10 +252,12 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 
 - (NSInteger)tableView:(UITableView*)tableView
     numberOfRowsInSection:(NSInteger)section {
-  if (section == self.bookmarksSection)
+  if (section == self.bookmarksSection) {
     return _bookmarkItems.size();
-  if (section == self.promoSection)
+  }
+  if (section == self.promoSection) {
     return 1;
+  }
 
   NOTREACHED();
   return -1;
@@ -226,32 +268,21 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   // TODO(crbug.com/695749): Introduce a custom separator for bookmarks
   // section, so that we don't show a separator after promo section.
   if (indexPath.section == self.promoSection) {
-    if (experimental_flags::IsSigninPromoEnabled()) {
-      BookmarkTableSigninPromoCell* signinPromoCell = [self.tableView
-          dequeueReusableCellWithIdentifier:[BookmarkTableSigninPromoCell
-                                                reuseIdentifier]];
-      if (signinPromoCell == nil) {
-        signinPromoCell =
-            [[BookmarkTableSigninPromoCell alloc] initWithFrame:CGRectZero];
-      }
-      signinPromoCell.signinPromoView.delegate = _signinPromoViewMediator;
-      [[_signinPromoViewMediator createConfigurator]
-          configureSigninPromoView:signinPromoCell.signinPromoView];
-      __weak BookmarkTableView* weakSelf = self;
-      signinPromoCell.closeButtonAction = ^() {
-        [weakSelf signinPromoCloseButtonAction];
-      };
-      return signinPromoCell;
-    } else {
-      BookmarkTablePromoCell* promoCell = [self.tableView
-          dequeueReusableCellWithIdentifier:[BookmarkTablePromoCell
-                                                reuseIdentifier]];
-      if (promoCell == nil) {
-        promoCell = [[BookmarkTablePromoCell alloc] initWithFrame:CGRectZero];
-      }
-      promoCell.delegate = self;
-      return promoCell;
+    BookmarkTableSigninPromoCell* signinPromoCell = [self.tableView
+        dequeueReusableCellWithIdentifier:[BookmarkTableSigninPromoCell
+                                              reuseIdentifier]];
+    if (signinPromoCell == nil) {
+      signinPromoCell =
+          [[BookmarkTableSigninPromoCell alloc] initWithFrame:CGRectZero];
     }
+    signinPromoCell.signinPromoView.delegate = _signinPromoViewMediator;
+    [[_signinPromoViewMediator createConfigurator]
+        configureSigninPromoView:signinPromoCell.signinPromoView];
+    __weak BookmarkTableView* weakSelf = self;
+    signinPromoCell.closeButtonAction = ^() {
+      [weakSelf signinPromoCloseButtonAction];
+    };
+    return signinPromoCell;
   }
 
   const BookmarkNode* node = [self nodeAtIndexPath:indexPath];
@@ -264,6 +295,10 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   }
   [cell setNode:node];
 
+  if (node == _editingFolderNode) {
+    [cell startEdit];
+    cell.textDelegate = self;
+  }
   [self loadFaviconAtIndexPath:indexPath];
   return cell;
 }
@@ -305,7 +340,18 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   if (indexPath.section == self.bookmarksSection) {
     const BookmarkNode* node = [self nodeAtIndexPath:indexPath];
     DCHECK(node);
+    // If table is in edit mode, record all the nodes added to edit set.
+    if (self.editing) {
+      _editNodes.insert(node);
+      [self.delegate bookmarkTableView:self selectedEditNodes:_editNodes];
+      return;
+    }
     if (node->is_folder()) {
+      // if editing folder name, cancel it.
+      if (_editingFolderNode) {
+        _editingFolderNode = NULL;
+        [self refreshContents];
+      }
       [self.delegate bookmarkTableView:self selectedFolderForNavigation:node];
     } else {
       // Open URL. Pass this to the delegate.
@@ -317,16 +363,14 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
-#pragma mark - BookmarkTablePromoCellDelegate
-
-- (void)bookmarkTablePromoCellDidTapSignIn:
-    (BookmarkTablePromoCell*)bookmarkTablePromoCell {
-  [self.delegate bookmarkTableViewShowSignIn:self];
-}
-
-- (void)bookmarkTablePromoCellDidTapDismiss:
-    (BookmarkTablePromoCell*)bookmarkTablePromoCell {
-  [self.delegate bookmarkTableViewDismissPromo:self];
+- (void)tableView:(UITableView*)tableView
+    didDeselectRowAtIndexPath:(NSIndexPath*)indexPath {
+  if (indexPath.section == self.bookmarksSection && self.editing) {
+    const BookmarkNode* node = [self nodeAtIndexPath:indexPath];
+    DCHECK(node);
+    _editNodes.erase(node);
+    [self.delegate bookmarkTableView:self selectedEditNodes:_editNodes];
+  }
 }
 
 #pragma mark - SigninPromoViewConsumer
@@ -340,8 +384,9 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   BookmarkTableSigninPromoCell* signinPromoCell =
       static_cast<BookmarkTableSigninPromoCell*>(
           [self.tableView cellForRowAtIndexPath:indexPath]);
-  if (!signinPromoCell)
+  if (!signinPromoCell) {
     return;
+  }
   // Should always reconfigure the cell size even if it has to be reloaded.
   [configurator configureSigninPromoView:signinPromoCell.signinPromoView];
   if (identityChanged) {
@@ -368,8 +413,9 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 // The node has changed, but not its children.
 - (void)bookmarkNodeChanged:(const BookmarkNode*)bookmarkNode {
   // The root folder changed. Do nothing.
-  if (bookmarkNode == _currentRootNode)
+  if (bookmarkNode == _currentRootNode) {
     return;
+  }
 
   // A specific cell changed. Reload, if currently shown.
   if (std::find(_bookmarkItems.begin(), _bookmarkItems.end(), bookmarkNode) !=
@@ -419,13 +465,15 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   // Update image of corresponding cell.
   NSIndexPath* indexPath = [self indexPathForNode:bookmarkNode];
 
-  if (!indexPath)
+  if (!indexPath) {
     return;
+  }
 
   // Check that this cell is visible.
   NSArray* visiblePaths = [self.tableView indexPathsForVisibleRows];
-  if (![visiblePaths containsObject:indexPath])
+  if (![visiblePaths containsObject:indexPath]) {
     return;
+  }
 
   [self loadFaviconAtIndexPath:indexPath];
 }
@@ -446,6 +494,33 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 
 #pragma mark - Private
 
+- (void)handleLongPress:(UILongPressGestureRecognizer*)gestureRecognizer {
+  if (self.editing ||
+      gestureRecognizer.state != UIGestureRecognizerStateBegan) {
+    return;
+  }
+  CGPoint touchPoint = [gestureRecognizer locationInView:self.tableView];
+  NSIndexPath* indexPath = [self.tableView indexPathForRowAtPoint:touchPoint];
+  if (indexPath == nil || indexPath.section != self.bookmarksSection) {
+    return;
+  }
+
+  const BookmarkNode* node = [self nodeAtIndexPath:indexPath];
+  if (!node) {
+    return;
+  }
+
+  [self.delegate bookmarkTableView:self showContextMenuForNode:node];
+}
+
+- (void)resetEditNodes {
+  _editNodes.clear();
+  if (self.editing) {
+    // Also update viewcontroler that the edit nodes changed, if in edit mode.
+    [self.delegate bookmarkTableView:self selectedEditNodes:_editNodes];
+  }
+}
+
 // Removes the sign-in promo view.
 - (void)signinPromoCloseButtonAction {
   [_signinPromoViewMediator signinPromoViewClosed];
@@ -458,8 +533,9 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 
 - (void)refreshContents {
   [self computeBookmarkTableViewData];
-  [self updateEmptyBackground];
+  [self showEmptyOrLoadingSpinnerBackgroundIfNeeded];
   [self cancelAllFaviconLoads];
+  [self resetEditNodes];
   [self.tableView reloadData];
 }
 
@@ -475,11 +551,25 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 
 // Computes the bookmarks table view based on the current root node.
 - (void)computeBookmarkTableViewData {
-  if (!self.bookmarkModel->loaded() || _currentRootNode == NULL)
+  if (!self.bookmarkModel->loaded() || !_currentRootNode) {
     return;
+  }
 
   // Regenerate the list of all bookmarks.
   _bookmarkItems.clear();
+  if (_currentRootNode == self.bookmarkModel->root_node()) {
+    [self generateTableViewDataForRootNode];
+    return;
+  }
+  [self generateTableViewData];
+}
+
+// Generate the table view data when the current root node is a child node.
+- (void)generateTableViewData {
+  if (!_currentRootNode) {
+    return;
+  }
+  // Add all bookmarks and folders of the current root node to the table.
   int childCount = _currentRootNode->child_count();
   for (int i = 0; i < childCount; ++i) {
     const BookmarkNode* node = _currentRootNode->GetChild(i);
@@ -487,9 +577,85 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   }
 }
 
-- (void)updateEmptyBackground {
-  self.emptyTableBackgroundView.alpha =
-      _currentRootNode != NULL && _currentRootNode->child_count() > 0 ? 0 : 1;
+// Generate the table view data when the current root node is the outermost
+// root.
+- (void)generateTableViewDataForRootNode {
+  // Add "Mobile Bookmarks" to the table.
+  _bookmarkItems.push_back(self.bookmarkModel->mobile_node());
+
+  // Add "Bookmarks Bar" and "Other Bookmarks" only when they are not empty.
+  const BookmarkNode* bookmarkBar = self.bookmarkModel->bookmark_bar_node();
+  if (!bookmarkBar->empty()) {
+    _bookmarkItems.push_back(bookmarkBar);
+  }
+
+  const BookmarkNode* otherBookmarks = self.bookmarkModel->other_node();
+  if (!otherBookmarks->empty()) {
+    _bookmarkItems.push_back(otherBookmarks);
+  }
+}
+
+// If the current root node is the outermost root, check if we need to show the
+// spinner backgound.  Otherwise, check if we need to show the empty background.
+- (void)showEmptyOrLoadingSpinnerBackgroundIfNeeded {
+  if (_currentRootNode == self.bookmarkModel->root_node()) {
+    if (self.bookmarkModel->HasNoUserCreatedBookmarksOrFolders() &&
+        _syncedSessionsObserver->IsSyncing()) {
+      [self showLoadingSpinnerBackground];
+    } else {
+      [self hideLoadingSpinnerBackground];
+    }
+    return;
+  }
+
+  if (!_currentRootNode || _currentRootNode->empty()) {
+    [self showEmptyBackground];
+  } else {
+    // Hides the empty bookmarks background if it is showing.
+    self.tableView.backgroundView = nil;
+  }
+}
+
+// Shows loading spinner background view.
+- (void)showLoadingSpinnerBackground {
+  if (!self.spinnerView) {
+    self.spinnerView =
+        [[BookmarkHomeWaitingView alloc] initWithFrame:self.tableView.bounds
+                                       backgroundColor:[UIColor clearColor]];
+    [self.spinnerView startWaiting];
+  }
+  self.tableView.backgroundView = self.spinnerView;
+}
+
+// Hide the loading spinner if it is showing.
+- (void)hideLoadingSpinnerBackground {
+  if (self.spinnerView) {
+    [self.spinnerView stopWaitingWithCompletion:^{
+      [UIView animateWithDuration:0.2
+          animations:^{
+            self.spinnerView.alpha = 0.0;
+          }
+          completion:^(BOOL finished) {
+            self.tableView.backgroundView = nil;
+            self.spinnerView = nil;
+          }];
+    }];
+  }
+}
+
+// Shows empty bookmarks background view.
+- (void)showEmptyBackground {
+  if (!self.emptyTableBackgroundView) {
+    // Set up the background view shown when the table is empty.
+    self.emptyTableBackgroundView = [[BookmarkCollectionViewBackground alloc]
+        initWithFrame:self.tableView.bounds];
+    self.emptyTableBackgroundView.autoresizingMask =
+        UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
+    self.emptyTableBackgroundView.text =
+        l10n_util::GetNSString(IDS_IOS_BOOKMARK_NO_BOOKMARKS_LABEL);
+    self.emptyTableBackgroundView.frame = self.tableView.bounds;
+  }
+  self.tableView.backgroundView = self.emptyTableBackgroundView;
 }
 
 - (NSIndexPath*)indexPathForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
@@ -509,8 +675,9 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
                     textColor:(UIColor*)textColor
                  fallbackText:(NSString*)text {
   BookmarkTableCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
-  if (!cell)
+  if (!cell) {
     return;
+  }
 
   if (image) {
     [cell setImage:image];
@@ -551,8 +718,9 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   void (^faviconBlock)(const favicon_base::LargeIconResult&) =
       ^(const favicon_base::LargeIconResult& result) {
         BookmarkTableView* strongSelf = weakSelf;
-        if (!strongSelf)
+        if (!strongSelf) {
           return;
+        }
         UIImage* favIcon = nil;
         UIColor* backgroundColor = nil;
         UIColor* textColor = nil;
@@ -589,6 +757,34 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
                                         base::BindBlockArc(faviconBlock),
                                         &_faviconTaskTracker);
   _faviconLoadTasks[IntegerPair(indexPath.section, indexPath.item)] = taskId;
+}
+
+#pragma mark - SyncedSessionsObserver
+
+- (void)reloadSessions {
+  // Nothing to do.
+}
+
+- (void)onSyncStateChanged {
+  // Permanent nodes ("Bookmarks Bar", "Other Bookmarks") at the root node might
+  // be added after syncing.  So we need to refresh here.
+  if (_currentRootNode == self.bookmarkModel->root_node()) {
+    [self refreshContents];
+    return;
+  }
+  [self showEmptyOrLoadingSpinnerBackgroundIfNeeded];
+}
+
+#pragma mark - BookmarkTableCellTextFieldDelegate
+
+- (void)textDidChangeTo:(NSString*)newName {
+  DCHECK(_editingFolderNode);
+  if (newName.length > 0) {
+    self.bookmarkModel->SetTitle(_editingFolderNode,
+                                 base::SysNSStringToUTF16(newName));
+  }
+  _editingFolderNode = NULL;
+  [self refreshContents];
 }
 
 @end

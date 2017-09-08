@@ -92,6 +92,11 @@ int SuggestionsContainerView::DoUpdate() {
       item = display_results[i];
     search_result_tile_views_[i]->SetSearchResult(item);
     search_result_tile_views_[i]->SetEnabled(true);
+
+    // Notify text change after accessible name is updated and the tile view
+    // is re-enabled, so that ChromeVox will announce the updated text.
+    search_result_tile_views_[i]->NotifyAccessibilityEvent(
+        ui::AX_EVENT_TEXT_CHANGED, true);
   }
 
   parent()->Layout();
@@ -133,7 +138,8 @@ views::View* SuggestionsContainerView::GetSelectedView() const {
 
 void SuggestionsContainerView::CreateAppsGrid(int apps_num) {
   DCHECK(search_result_tile_views_.empty());
-  views::GridLayout* tiles_layout_manager = new views::GridLayout(this);
+  views::GridLayout* tiles_layout_manager =
+      views::GridLayout::CreateAndInstall(this);
   SetLayoutManager(tiles_layout_manager);
 
   views::ColumnSet* column_set = tiles_layout_manager->AddColumnSet(0);

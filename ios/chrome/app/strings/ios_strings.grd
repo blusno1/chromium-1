@@ -420,15 +420,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_PAGE_SAVED_FOLDER" desc="Presented in an infobar when a bookmark is created. Specifies in which folder the bookmark was added. [Length: 30em.]">
         Bookmarked to <ph name="FOLDER_TITLE">$1<ex>My Folder</ex></ph>
       </message>
-      <message name="IDS_IOS_BOOKMARK_PROMO_DISMISS_BUTTON" desc="Title of the button displayed at the top of the bookmarks list to dismiss the promo. [Length: 20em.] [iOS only]">
-        No thanks
-      </message>
-      <message name="IDS_IOS_BOOKMARK_PROMO_SIGN_IN_BUTTON" desc="Title of the button displayed at the top of the bookmarks list to propose the user to sign in and sync bookmarks. [Length: 20em.] [iOS only]">
-        Sign in
-      </message>
-      <message name="IDS_IOS_BOOKMARK_PROMO_TITLE" desc="Title of the promo panel for the new bookmarks UI. [iOS only]">
-        Sync your bookmarks
-      </message>
       <message name="IDS_IOS_BOOKMARK_URL_FIELD_HEADER" desc="Title shown above URL field on Edit Bookmark screen. [Length: 20em]">
         URL
       </message>
@@ -1077,9 +1068,6 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_RECENT_TABS_RECENTLY_CLOSED" desc="The heading of the recently closed section in the recent tab panel. [Length: 35em] [iOS only]">
         Recently closed
       </message>
-      <message name="IDS_IOS_RECENT_TABS_SIGNIN_BUTTON" desc="Title of the Sign In button in the recent tabs screen. [Length: 20em]">
-        Sign in
-      </message>
       <message name="IDS_IOS_SAFE_MODE_AW_SNAP" desc="The title of the safe mode UI after multiple crashes.  This is intended to be a humorous exclamation of dismay. [Length: 30em]">
         Aw, Snap!
       </message>
@@ -1576,9 +1564,45 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_CHOOSE_EMAIL_CLIENT_APP" desc="Title for action sheet to select an email client app when user taps on an URL that has a mailto: URL scheme. [Length: 50em]">
         Create email with:
       </message>
+      <message name="IDS_IOS_CHOOSE_DEFAULT_EMAIL_CLIENT_APP" desc="Title for action sheet to select an email client app when user taps on an URL that has a mailto: URL scheme. [Length: 50em]">
+        Choose Default Email App
+      </message>
+      <message name="IDS_IOS_CHOOSE_EMAIL_APP_HOW_TO_CHANGE" desc="Subtitle for action sheet to choose mailto:// handler with instructions on how to change the preference in the future. [Length: 80]">
+        You can change this preference any time in Chrome settings
+      </message>
       <message name="IDS_IOS_CHOOSE_EMAIL_ASK_TOGGLE" desc="Title for toggle switch to set whether to ask user which Mail client app to use every time a mailto:// URL is tapped. [Length: 50]">
         Ask me which app to use every time
       </message>
-    </messages>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_NEW_FOLDER" desc="Text on the bookmarks context bar to create new folder">
+        New Folder
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_DELETE" desc="Text on the bookmarks context bar for delete action">
+       Delete
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_SELECT" desc="Text on the bookmarks context bar for select action">
+        Select
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT" desc="Text on the bookmarks context bar for edit action">
+        Edit
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_MORE" desc="Text on the bookmarks context bar to show more context menu">
+        More...
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN" desc="Text on the bookmarks context menu to open all selected bookmarks">
+        Open All
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO" desc="Text on the bookmarks context menu to open selected bookmark in incognito">
+        Open in incognito
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE" desc="Text on the bookmarks context menu to move selected bookmark">
+        Move
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT" desc="Text on the bookmarks context menu to edit selected bookmark">
+        Edit Bookmark
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_COPY" desc="Text on the bookmarks context menu to copy selected bookmark URL">
+        Copy URL
+      </message>
+   </messages>
   </release>
 </grit>

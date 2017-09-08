@@ -75,6 +75,7 @@ android_library("chrome_java_test_support") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android:chrome_java",
+    "//chrome/android/third_party/widget_bottomsheet_base:widget_bottomsheet_base_java",
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/invalidation/impl:java",
     "//components/location/android:location_java",
@@ -98,6 +99,7 @@ android_library("chrome_java_test_support") {
     "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/jsr-305:jsr_305_javalib",
     "//third_party/junit",
+    "//third_party/ub-uiautomator:ub_uiautomator_java",
     "//ui/android:ui_java",
     "//ui/android:ui_java_test_support",
   ]

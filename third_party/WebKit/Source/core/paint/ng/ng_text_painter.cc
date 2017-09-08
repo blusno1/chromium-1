@@ -13,6 +13,7 @@
 #include "core/style/ComputedStyle.h"
 #include "core/style/ShadowList.h"
 #include "platform/fonts/Font.h"
+#include "platform/fonts/NGTextFragmentPaintInfo.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/wtf/Assertions.h"
@@ -23,7 +24,7 @@ namespace blink {
 void NGTextPainter::Paint(unsigned start_offset,
                           unsigned end_offset,
                           unsigned length,
-                          const Style& text_style) {
+                          const TextPaintStyle& text_style) {
   GraphicsContextStateSaver state_saver(graphics_context_, false);
   UpdateGraphicsContext(text_style, state_saver);
   // TODO(layout-dev): Handle combine text here or elsewhere.
@@ -34,7 +35,7 @@ void NGTextPainter::Paint(unsigned start_offset,
 
 template <NGTextPainter::PaintInternalStep step>
 void NGTextPainter::PaintInternalFragment(
-    TextFragmentPaintInfo& fragment_paint_info,
+    NGTextFragmentPaintInfo& fragment_paint_info,
     unsigned from,
     unsigned to) {
   DCHECK(from <= fragment_paint_info.text.length());
@@ -62,10 +63,7 @@ void NGTextPainter::PaintInternal(unsigned start_offset,
   if (!fragment_.TextShapeResult())
     return;
 
-  unsigned offset = 0;
-  TextFragmentPaintInfo fragment_paint_info = {
-      fragment_.Text(), TextDirection::kLtr, offset, fragment_.Text().length(),
-      fragment_.TextShapeResult()};
+  NGTextFragmentPaintInfo fragment_paint_info = fragment_.PaintInfo();
 
   if (start_offset <= end_offset) {
     PaintInternalFragment<Step>(fragment_paint_info, start_offset, end_offset);
@@ -83,7 +81,19 @@ void NGTextPainter::PaintInternal(unsigned start_offset,
 
 void NGTextPainter::ClipDecorationsStripe(float upper,
                                           float stripe_width,
-                                          float dilation) {}
+                                          float dilation) {
+  if (!fragment_.Length())
+    return;
+
+  NGTextFragmentPaintInfo fragment_paint_info = fragment_.PaintInfo();
+  Vector<Font::TextIntercept> text_intercepts;
+  font_.GetTextIntercepts(
+      fragment_paint_info, graphics_context_.DeviceScaleFactor(),
+      graphics_context_.FillFlags(),
+      std::make_tuple(upper, upper + stripe_width), text_intercepts);
+
+  DecorationsStripeIntercepts(upper, stripe_width, dilation, text_intercepts);
+}
 
 void NGTextPainter::PaintEmphasisMarkForCombinedText() {}
 

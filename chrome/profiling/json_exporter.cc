@@ -6,6 +6,7 @@
 
 #include <map>
 
+#include "base/containers/adapters.h"
 #include "base/format_macros.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
@@ -65,7 +66,17 @@ constexpr int kTypeId = 0;
 // this entry since everything is associated with a PID.
 void WriteProcessName(int pid, std::ostream& out) {
   out << "{ \"pid\":" << pid << ", \"ph\":\"M\", \"name\":\"process_name\", "
-      << "\"args\":{\"name\":\"Browser process\"}}";
+      << "\"args\":{\"name\":\"Browser\"}},";
+
+  // Catapult needs a thread named "CrBrowserMain" to recognize Chrome browser.
+  out << "{ \"pid\":" << pid << ", \"ph\":\"M\", \"name\":\"thread_name\", "
+      << "\"tid\": 1,"
+      << "\"args\":{\"name\":\"CrBrowserMain\"}},";
+
+  // At least, one event must be present on the thread to avoid being pruned.
+  out << "{ \"name\": \"MemlogTraceEvent\", \"cat\": \"memlog\", "
+      << "\"ph\": \"B\", \"ts\": 1, \"pid\": " << pid << ", "
+      << "\"tid\": 1, \"args\": {}}";
 }
 
 // Writes the dictionary keys to preceed a "dumps" trace argument.
@@ -126,7 +137,8 @@ size_t AppendBacktraceStrings(const Backtrace& backtrace,
                               BacktraceTable* backtrace_table,
                               StringTable* string_table) {
   int parent = -1;
-  for (const Address& addr : backtrace.addrs()) {
+  // Addresses must be outputted in reverse order.
+  for (const Address& addr : base::Reversed(backtrace.addrs())) {
     static constexpr char kPcPrefix[] = "pc:";
     // std::numeric_limits<>::digits gives the number of bits in the value.
     // Dividing by 4 gives the number of hex digits needed to store the value.
@@ -295,28 +307,70 @@ void ExportMemoryMapsAndV2StackTraceToJSON(
   out << R"("level_of_detail": "detailed")"
       << ",\n";
 
+  // Aggregate allocations. Allocations of the same size and stack get grouped.
+  UniqueAllocCount alloc_counts;
+  for (const auto& alloc : event_set) {
+    UniqueAlloc unique_alloc(alloc.backtrace(), alloc.size());
+    alloc_counts[unique_alloc]++;
+  }
+
+  size_t total_size = 0;
+  size_t total_count = 0;
+  // Filter irrelevant allocations.
+  for (auto alloc = alloc_counts.begin(); alloc != alloc_counts.end();) {
+    size_t alloc_count = alloc->second;
+    size_t alloc_size = alloc->first.size;
+    size_t alloc_total_size = alloc_size * alloc_count;
+    total_size += alloc_total_size;
+    total_count += alloc_count;
+    if (alloc_total_size < min_size_threshold &&
+        alloc_count < min_count_threshold) {
+      alloc = alloc_counts.erase(alloc);
+    } else {
+      ++alloc;
+    }
+  }
+
   // Write the top-level allocators section. This section is used by the tracing
   // UI to show a small summary for each allocator. It's necessary as a
   // placeholder to allow the stack-viewing UI to be shown.
   // TODO: Fill in placeholders for "value". https://crbug.com/758434.
-  out << R"(
+  const char* allocators_raw = R"(
   "allocators": {
     "malloc": {
       "attrs": {
         "virtual_size": {
           "type": "scalar",
           "units": "bytes",
-          "value": "1234"
+          "value": "%zx"
         },
         "size": {
           "type": "scalar",
           "units": "bytes",
-          "value": "1234"
+          "value": "%zx"
+        }
+      }
+    },
+    "malloc/allocated_objects": {
+      "attrs": {
+        "shim_allocated_objects_count": {
+          "type": "scalar",
+          "units": "objects",
+          "value": "%zx"
+        },
+        "shim_allocated_objects_size": {
+          "type": "scalar",
+          "units": "bytes",
+          "value": "%zx"
         }
       }
     }
   },
   )";
+
+  std::string allocators = base::StringPrintf(
+      allocators_raw, total_size, total_size, total_count, total_size);
+  out << allocators;
 
   WriteHeapsV2Header(out);
 
@@ -327,26 +381,6 @@ void ExportMemoryMapsAndV2StackTraceToJSON(
 
   // We hardcode one type, "[unknown]".
   size_t type_string_id = AddOrGetString("[unknown]", &string_table);
-
-  // Aggregate allocations. Allocations of the same size and stack get grouped.
-  UniqueAllocCount alloc_counts;
-  for (const auto& alloc : event_set) {
-    UniqueAlloc unique_alloc(alloc.backtrace(), alloc.size());
-    alloc_counts[unique_alloc]++;
-  }
-
-  // Filter irrelevant allocations.
-  for (auto alloc = alloc_counts.begin(); alloc != alloc_counts.end();) {
-    size_t alloc_count = alloc->second;
-    size_t alloc_size = alloc->first.size;
-    size_t alloc_total_size = alloc_size * alloc_count;
-    if (alloc_total_size < min_size_threshold &&
-        alloc_count < min_count_threshold) {
-      alloc = alloc_counts.erase(alloc);
-    } else {
-      ++alloc;
-    }
-  }
 
   // Find all backtraces referenced by the set and not filtered. The backtrace
   // storage will contain more stacks than we want to write out (it will refer

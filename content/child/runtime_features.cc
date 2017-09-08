@@ -323,8 +323,7 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableOffMainThreadFetch(
       base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
 
-  WebRuntimeFeatures::EnableMojoBlobs(
-      base::FeatureList::IsEnabled(features::kMojoBlobs));
+  WebRuntimeFeatures::EnableMojoBlobs(features::IsMojoBlobsEnabled());
 
   WebRuntimeFeatures::EnableNetworkService(
       base::FeatureList::IsEnabled(features::kNetworkService));
@@ -376,9 +375,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     WebRuntimeFeatures::EnableWebNfc(true);
 #endif
 
-  if (base::FeatureList::IsEnabled(features::kIdleTimeSpellChecking))
-    WebRuntimeFeatures::EnableFeatureFromString("IdleTimeSpellChecking", true);
-
   if (media::GetEffectiveAutoplayPolicy(command_line) !=
       switches::autoplay::kNoUserGestureRequiredPolicy) {
     WebRuntimeFeatures::EnableAutoplayMutedVideos(true);
@@ -409,6 +405,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableMediaEngagementBypassAutoplayPolicies(
       base::FeatureList::IsEnabled(
           media::kMediaEngagementBypassAutoplayPolicies));
+
+  WebRuntimeFeatures::EnableModuleScriptsDynamicImport(
+      base::FeatureList::IsEnabled(features::kModuleScriptsDynamicImport));
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

@@ -22,6 +22,7 @@
 #include "core/layout/ng/ng_space_utils.h"
 #include "core/layout/ng/ng_unpositioned_float.h"
 #include "core/style/ComputedStyle.h"
+#include "platform/fonts/shaping/ShapeResultSpacing.h"
 
 namespace blink {
 namespace {
@@ -138,7 +139,15 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
     RefPtr<NGInlineBreakToken> break_token) {
   NGInlineItemResults* line_items = &line_info->Results();
 
+  // Apply justification before placing items, because it affects size/position
+  // of items, which are needed to compute inline static positions.
   const ComputedStyle& line_style = line_info->LineStyle();
+  ETextAlign text_align = line_style.GetTextAlign(line_info->IsLastLine());
+  if (text_align == ETextAlign::kJustify) {
+    if (!ApplyJustify(line_info))
+      text_align = ETextAlign::kStart;
+  }
+
   NGLineHeightMetrics line_metrics(line_style, baseline_type_);
   NGLineHeightMetrics line_metrics_with_leading = line_metrics;
   line_metrics_with_leading.AddLeading(line_style.ComputedLineHeightAsFixed());
@@ -174,6 +183,7 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
         }
         text_builder.SetEndEffect(item_result.text_end_effect);
         text_builder.SetShapeResult(std::move(item_result.shape_result));
+        text_builder.SetExpansion(item_result.expansion);
       } else {
         DCHECK(!item.TextShapeResult());  // kControl or unit tests.
       }
@@ -231,11 +241,10 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
 
   box_states_.OnEndPlaceItems(&line_box, baseline_type_, position);
 
-  LayoutUnit baseline = line_info->LineTop() + line_box.Metrics().ascent;
-
   // Check if the line fits into the constraint space in block direction.
-  LayoutUnit line_bottom = baseline + line_box.Metrics().descent;
-
+  NGLogicalOffset line_offset(line_info->LineOffset());
+  LayoutUnit line_bottom =
+      line_offset.block_offset + line_box.Metrics().LineHeight();
   if (!container_builder_.Children().IsEmpty() &&
       ConstraintSpace().AvailableSize().block_size != NGSizeIndefinite &&
       line_bottom > ConstraintSpace().AvailableSize().block_size) {
@@ -250,25 +259,18 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
   // Up until this point, children are placed so that the dominant baseline is
   // at 0. Move them to the final baseline position, and set the logical top of
   // the line box to the line top.
-  line_box.MoveChildrenInBlockDirection(baseline);
+  line_box.MoveChildrenInBlockDirection(line_box.Metrics().ascent);
 
-  // Compute the offset of the line box.
+  // Other 'text-align' values than 'justify' move line boxes as a whole, but
+  // indivisual items do not change their relative position to the line box.
   LayoutUnit inline_size = position;
-  NGLogicalOffset offset(line_info->LineLeft(),
-                         baseline - box_states_.LineBoxState().metrics.ascent);
-  LayoutUnit available_width = line_info->AvailableWidth();
-  if (LayoutUnit text_indent = line_info->TextIndent()) {
-    // Move the line box by indent. Negative indents are ink overflow, let the
-    // line box overflow from the container box.
-    if (IsLtr(Node().BaseDirection()))
-      offset.inline_offset += text_indent;
-    available_width -= text_indent;
+  if (text_align != ETextAlign::kJustify) {
+    ApplyTextAlign(text_align, &line_offset.inline_offset, inline_size,
+                   line_info->AvailableWidth());
   }
-  ApplyTextAlign(line_style.GetTextAlign(line_info->IsLastLine()),
-                 &offset.inline_offset, inline_size, available_width);
 
   line_box.SetInlineSize(inline_size);
-  container_builder_.AddChild(line_box.ToLineBoxFragment(), offset);
+  container_builder_.AddChild(line_box.ToLineBoxFragment(), line_offset);
 
   max_inline_size_ = std::max(max_inline_size_, inline_size);
   content_size_ = ComputeContentSize(*line_info, exclusion_space, line_bottom);
@@ -296,8 +298,7 @@ NGInlineBoxState* NGInlineLayoutAlgorithm::PlaceAtomicInline(
 
   NGBoxFragment fragment(
       ConstraintSpace().WritingMode(),
-      ToNGPhysicalBoxFragment(
-          item_result->layout_result->PhysicalFragment().Get()));
+      ToNGPhysicalBoxFragment(*item_result->layout_result->PhysicalFragment()));
   NGLineHeightMetrics metrics = fragment.BaselineMetrics(
       {line_info.UseFirstLineStyle()
            ? NGBaselineAlgorithmType::kAtomicInlineForFirstLine
@@ -321,6 +322,61 @@ NGInlineBoxState* NGInlineLayoutAlgorithm::PlaceAtomicInline(
   line_box->AddChild(std::move(text_fragment), {position, line_top});
 
   return box_states_.OnCloseTag(item, line_box, box, baseline_type_);
+}
+
+// Justify the line. This changes the size of items by adding spacing.
+// Returns false if justification failed and should fall back to start-aligned.
+bool NGInlineLayoutAlgorithm::ApplyJustify(NGLineInfo* line_info) {
+  LayoutUnit inline_size;
+  for (const NGInlineItemResult& item_result : line_info->Results())
+    inline_size += item_result.inline_size;
+  LayoutUnit available_width = line_info->AvailableWidth();
+  LayoutUnit expansion = available_width - inline_size;
+  if (expansion <= 0)
+    return false;  // no expansion is needed.
+
+  // Construct the line text to compute spacing for.
+  String line_text =
+      Node().Text(line_info->StartOffset(), line_info->EndOffset()).ToString();
+
+  // Append a hyphen if the last word is hyphenated. The hyphen is in
+  // |ShapeResult|, but not in text. |ShapeResultSpacing| needs the text that
+  // matches to the |ShapeResult|.
+  const NGInlineItemResult& last_item_result = line_info->Results().back();
+  if (last_item_result.text_end_effect == NGTextEndEffect::kHyphen)
+    line_text.append(last_item_result.item->Style()->HyphenString());
+
+  // Compute the spacing to justify.
+  ShapeResultSpacing<String> spacing(line_text);
+  spacing.SetExpansion(expansion, Node().BaseDirection(),
+                       line_info->LineStyle().GetTextJustify());
+  if (!spacing.HasExpansion())
+    return false;  // no expansion opportunities exist.
+
+  for (NGInlineItemResult& item_result : line_info->Results()) {
+    if (item_result.shape_result) {
+      // Mutate the existing shape result if only used here, if not create a
+      // copy.
+      RefPtr<ShapeResult> shape_result =
+          item_result.shape_result->MutableUnique();
+      DCHECK_GE(item_result.start_offset, line_info->StartOffset());
+      // |shape_result| has more characters if it's hyphenated.
+      DCHECK(item_result.text_end_effect != NGTextEndEffect::kNone ||
+             shape_result->NumCharacters() ==
+                 item_result.end_offset - item_result.start_offset);
+      LayoutUnit size_before_justify = item_result.inline_size;
+      shape_result->ApplySpacing(
+          spacing, item_result.start_offset - line_info->StartOffset() -
+                       shape_result->StartIndexForResult());
+      item_result.inline_size = shape_result->SnappedWidth();
+      item_result.expansion =
+          (item_result.inline_size - size_before_justify).ToInt();
+      item_result.shape_result = std::move(shape_result);
+    } else {
+      // TODO(kojii): Implement atomic inline.
+    }
+  }
+  return true;
 }
 
 void NGInlineLayoutAlgorithm::ApplyTextAlign(ETextAlign text_align,
@@ -367,7 +423,8 @@ void NGInlineLayoutAlgorithm::ApplyTextAlign(ETextAlign text_align,
         text_align = is_base_ltr ? ETextAlign::kRight : ETextAlign::kLeft;
         continue;
       case ETextAlign::kJustify:
-        // TODO(kojii): Implement.
+        // Justification is applied in earlier phase, see PlaceItems().
+        NOTREACHED();
         return;
     }
     NOTREACHED();

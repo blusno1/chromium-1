@@ -9,6 +9,7 @@
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "cc/base/math_util.h"
 #include "chrome/browser/vr/color_scheme.h"
+#include "chrome/browser/vr/elements/content_element.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/elements/ui_element_name.h"
 #include "chrome/browser/vr/target_property.h"
@@ -42,6 +43,25 @@ std::set<UiElementName> kElementsVisibleWithExitPrompt = {
     kBackgroundFront, kBackgroundLeft,     kBackgroundBack, kBackgroundRight,
     kBackgroundTop,   kBackgroundBottom,   kCeiling,        kFloor,
     kExitPrompt,      kExitPromptBackplane};
+std::set<UiElementName> kHitTestableElements = {
+    kFloor,
+    kCeiling,
+    kBackplane,
+    kContentQuad,
+    kAudioCaptureIndicator,
+    kVideoCaptureIndicator,
+    kScreenCaptureIndicator,
+    kBluetoothConnectedIndicator,
+    kLocationAccessIndicator,
+    kExitPrompt,
+    kExitPromptBackplane,
+    kUrlBar,
+    kLoadingIndicator,
+    kCloseButton,
+};
+std::set<UiElementName> kSpecialOpacityElements = {
+    kScreenDimmer,
+};
 
 static constexpr float kTolerance = 1e-5;
 
@@ -50,6 +70,16 @@ MATCHER_P2(SizeFsAreApproximatelyEqual, other, tolerance, "") {
                                           tolerance) &&
          cc::MathUtil::ApproximatelyEqual(arg.height(), other.height(),
                                           tolerance);
+}
+
+void CheckHitTestableRecursive(UiElement* element) {
+  const bool should_be_hit_testable =
+      kHitTestableElements.find(element->name()) != kHitTestableElements.end();
+  EXPECT_EQ(should_be_hit_testable, element->hit_testable())
+      << "element name: " << element->name();
+  for (const auto& child : element->children()) {
+    CheckHitTestableRecursive(child.get());
+  }
 }
 
 }  // namespace
@@ -502,6 +532,7 @@ TEST_F(UiSceneManagerTest, CaptureIndicatorsVisibility) {
 
   MakeManager(kNotInCct, kNotInWebVr);
   EXPECT_TRUE(VerifyVisibility(indicators, false));
+  EXPECT_TRUE(VerifyRequiresLayout(indicators, false));
 
   manager_->SetAudioCapturingIndicator(true);
   manager_->SetVideoCapturingIndicator(true);
@@ -509,17 +540,21 @@ TEST_F(UiSceneManagerTest, CaptureIndicatorsVisibility) {
   manager_->SetLocationAccessIndicator(true);
   manager_->SetBluetoothConnectedIndicator(true);
   EXPECT_TRUE(VerifyVisibility(indicators, true));
+  EXPECT_TRUE(VerifyRequiresLayout(indicators, true));
 
   // Go into non-browser modes and make sure all indicators are hidden.
   manager_->SetWebVrMode(true, false);
   EXPECT_TRUE(VerifyVisibility(indicators, false));
+  EXPECT_TRUE(VerifyRequiresLayout(indicators, false));
   manager_->SetWebVrMode(false, false);
   manager_->SetFullscreen(true);
   EXPECT_TRUE(VerifyVisibility(indicators, false));
+  EXPECT_TRUE(VerifyRequiresLayout(indicators, false));
   manager_->SetFullscreen(false);
 
   // Back to browser, make sure the indicators reappear.
   EXPECT_TRUE(VerifyVisibility(indicators, true));
+  EXPECT_TRUE(VerifyRequiresLayout(indicators, true));
 
   // Ensure they can be turned off.
   manager_->SetAudioCapturingIndicator(false);
@@ -528,6 +563,7 @@ TEST_F(UiSceneManagerTest, CaptureIndicatorsVisibility) {
   manager_->SetLocationAccessIndicator(false);
   manager_->SetBluetoothConnectedIndicator(false);
   EXPECT_TRUE(VerifyVisibility(indicators, false));
+  EXPECT_TRUE(VerifyRequiresLayout(indicators, false));
 }
 
 TEST_F(UiSceneManagerTest, PropagateContentBoundsOnStart) {
@@ -560,6 +596,12 @@ TEST_F(UiSceneManagerTest, PropagateContentBoundsOnFullscreen) {
   manager_->OnProjMatrixChanged(kProjMatrix);
 }
 
+TEST_F(UiSceneManagerTest, HitTestableElements) {
+  MakeManager(kNotInCct, kNotInWebVr);
+  AnimateBy(MsToDelta(0));
+  CheckHitTestableRecursive(&scene_->root_element());
+}
+
 TEST_F(UiSceneManagerTest, DontPropagateContentBoundsOnNegligibleChange) {
   MakeManager(kNotInCct, kNotInWebVr);
 
@@ -575,6 +617,18 @@ TEST_F(UiSceneManagerTest, DontPropagateContentBoundsOnNegligibleChange) {
   EXPECT_CALL(*browser_, OnContentScreenBoundsChanged(testing::_)).Times(0);
 
   manager_->OnProjMatrixChanged(kProjMatrix);
+}
+
+TEST_F(UiSceneManagerTest, RendererUsesCorrectOpacity) {
+  MakeManager(kNotInCct, kNotInWebVr);
+
+  ContentElement* content_element =
+      static_cast<ContentElement*>(scene_->GetUiElementByName(kContentQuad));
+  content_element->set_texture_id(1);
+  TexturedElement::SetInitializedForTesting();
+
+  CheckRendererOpacityRecursive(kSpecialOpacityElements,
+                                &scene_->root_element());
 }
 
 }  // namespace vr

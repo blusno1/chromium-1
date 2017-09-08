@@ -7,15 +7,20 @@
 
 #include "base/test/scoped_command_line.h"
 #include "components/reading_list/core/reading_list_model.h"
+#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_switches.h"
+#include "ios/chrome/browser/experimental_flags.h"
+#include "ios/chrome/browser/notification_promo.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory_util.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_whats_new_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_provider_test_singleton.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_test_utils.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -32,66 +37,6 @@
 using namespace content_suggestions;
 using namespace ntp_home;
 using namespace ntp_snippets;
-
-namespace {
-// Returns a matcher, which is true if the view has its width equals to |width|.
-id<GREYMatcher> OmniboxWidth(CGFloat width) {
-  MatchesBlock matches = ^BOOL(UIView* view) {
-    return view.bounds.size.width == width;
-  };
-  DescribeToBlock describe = ^void(id<GREYDescription> description) {
-    [description
-        appendText:[NSString stringWithFormat:@"Omnibox has correct width: %g",
-                                              width]];
-  };
-
-  return [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
-                                              descriptionBlock:describe];
-}
-
-// Returns a matcher, which is true if the view has its width equals to |width|
-// plus or minus |margin|.
-id<GREYMatcher> OmniboxWidthBetween(CGFloat width, CGFloat margin) {
-  MatchesBlock matches = ^BOOL(UIView* view) {
-    return view.bounds.size.width >= width - margin &&
-           view.bounds.size.width <= width + margin;
-  };
-  DescribeToBlock describe = ^void(id<GREYDescription> description) {
-    [description
-        appendText:[NSString
-                       stringWithFormat:
-                           @"Omnibox has correct width: %g with margin: %g",
-                           width, margin]];
-  };
-
-  return [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
-                                              descriptionBlock:describe];
-}
-
-// Returns the subview of |parentView| corresponding to the
-// ContentSuggestionsViewController. Returns nil if it is not in its subviews.
-UIView* SubviewWithCollectionViewIdentifier(UIView* parentView) {
-  if (parentView.accessibilityIdentifier ==
-      [ContentSuggestionsViewController collectionAccessibilityIdentifier]) {
-    return parentView;
-  }
-  if (parentView.subviews.count == 0)
-    return nil;
-  for (UIView* view in parentView.subviews) {
-    UIView* resultView = SubviewWithCollectionViewIdentifier(view);
-    if (resultView)
-      return resultView;
-  }
-  return nil;
-}
-
-// Returns the view corresponding to the ContentSuggestionsViewController.
-// Returns nil if it is not in the view hierarchy.
-UIView* CollectionView() {
-  return SubviewWithCollectionViewIdentifier(
-      [[UIApplication sharedApplication] keyWindow]);
-}
-}  // namespace
 
 // Test case for the NTP home UI. More precisely, this tests the positions of
 // the elements after interacting with the device.
@@ -293,6 +238,36 @@ UIView* CollectionView() {
                                           FakeOmniboxAccessibilityID())]
       assertWithMatcher:OmniboxWidthBetween(collectionWidthAfterRotation + 1,
                                             1)];
+}
+
+// Tests that the promo is correctly displayed and removed once tapped.
+- (void)testPromoTap {
+  // Setup the promo.
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setInteger:experimental_flags::WHATS_NEW_APP_RATING
+                forKey:@"WhatsNewPromoStatus"];
+  PrefService* local_state = GetApplicationContext()->GetLocalState();
+  ios::NotificationPromo::MigrateUserPrefs(local_state);
+
+  // Open a new tab to have the promo.
+  [ChromeEarlGreyUI openNewTab];
+
+  // Tap the promo.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          [ContentSuggestionsWhatsNewItem
+                                              accessibilityIdentifier])]
+      performAction:grey_tap()];
+
+  // Promo dismissed.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          [ContentSuggestionsWhatsNewItem
+                                              accessibilityIdentifier])]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
+
+  // Reset the promo.
+  [defaults setInteger:experimental_flags::WHATS_NEW_DEFAULT
+                forKey:@"WhatsNewPromoStatus"];
+  ios::NotificationPromo::MigrateUserPrefs(local_state);
 }
 
 @end

@@ -25,14 +25,11 @@ using base::allocator::AllocatorDispatch;
 
 MemlogSenderPipe* g_sender_pipe = nullptr;
 
-#if defined(OS_WIN)
 // Matches the native buffer size on the pipe.
+// On Windows and Linux, the default pipe buffer size is 65536.
+// On macOS, the default pipe buffer size is 16 * 1024, but grows to 64 * 1024
+// for large writes.
 constexpr int kSendBufferSize = 65536;
-#else
-// Writes on Posix greater than PIPE_BUF are not guaranteed to be atomic so
-// our buffers can't be larger than that.
-constexpr int kSendBufferSize = PIPE_BUF;
-#endif
 
 // Prime since this is used like a hash table. Numbers of this magnitude seemed
 // to provide sufficient parallelism to avoid lock overhead in ad-hoc testing.
@@ -197,6 +194,9 @@ void AllocatorShimLogAlloc(void* address, size_t sz) {
   if (address) {
     constexpr size_t max_message_size =
         sizeof(AllocPacket) + kMaxStackEntries * sizeof(uint64_t);
+    static_assert(max_message_size < kSendBufferSize,
+                  "We can't have a message size that exceeds the pipe write "
+                  "buffer size.");
     char message[max_message_size];
     // TODO(ajwong) check that this is technically valid.
     AllocPacket* alloc_packet = reinterpret_cast<AllocPacket*>(message);

@@ -39,6 +39,11 @@ declare_args() {
 
   # Partition alloc is included by default except iOS.
   use_partition_alloc = !is_ios
+
+  # Indicates if the Location object contains the source code information
+  # (file, function, line). False means only the program counter (and currently
+  # file name) is saved.
+  enable_location_source = true
 }
 
 if (is_android) {
@@ -676,10 +681,6 @@ component("base") {
     "profiler/native_stack_sampler_mac.cc",
     "profiler/native_stack_sampler_posix.cc",
     "profiler/native_stack_sampler_win.cc",
-    "profiler/scoped_profile.cc",
-    "profiler/scoped_profile.h",
-    "profiler/scoped_tracker.cc",
-    "profiler/scoped_tracker.h",
     "profiler/stack_sampling_profiler.cc",
     "profiler/stack_sampling_profiler.h",
     "rand_util.cc",
@@ -1006,8 +1007,6 @@ component("base") {
     "trace_event/tracing_agent.h",
     "tracked_objects.cc",
     "tracked_objects.h",
-    "tracking_info.cc",
-    "tracking_info.h",
     "tuple.h",
     "unguessable_token.cc",
     "unguessable_token.h",
@@ -1681,6 +1680,7 @@ buildflag_header("debugging_flags") {
   header = "debugging_flags.h"
   header_dir = "base/debug"
   flags = [
+    "ENABLE_LOCATION_SOURCE=$enable_location_source",
     "ENABLE_PROFILING=$enable_profiling",
     "CAN_UNWIND_WITH_FRAME_POINTERS=$can_unwind_with_frame_pointers",
   ]

@@ -523,6 +523,7 @@ void AndroidVideoDecodeAccelerator::InitializePictureBufferManager() {
       state_ = NO_ERROR;
     }
     incoming_bundle_ = nullptr;
+    CacheFrameInformation();
     return;
   }
 
@@ -533,6 +534,7 @@ void AndroidVideoDecodeAccelerator::InitializePictureBufferManager() {
   // right thing to do even if we can switch.
   codec_config_->surface_bundle = incoming_bundle_;
   incoming_bundle_ = nullptr;
+  CacheFrameInformation();
 
   // If the client doesn't support deferred initialization (WebRTC), then we
   // should complete it now and return a meaningful result.  Note that it would
@@ -908,7 +910,15 @@ void AndroidVideoDecodeAccelerator::SendDecodedFrameToClient(
   // Only ask for promotion hints if we can actually switch surfaces.
   const bool want_promotion_hint = device_info_->IsSetOutputSurfaceSupported();
   const bool allow_overlay = picture_buffer_manager_.ArePicturesOverlayable();
+
+  // TODO(liberato): remove in M63, if FrameInformation is clearly working.
   UMA_HISTOGRAM_BOOLEAN("Media.AVDA.FrameSentAsOverlay", allow_overlay);
+
+  // Record the frame type that we're sending and some information about why.
+  UMA_HISTOGRAM_ENUMERATION(
+      "Media.AVDA.FrameInformation", cached_frame_information_,
+      static_cast<int>(FrameInformation::FRAME_INFORMATION_MAX) + 1);
+
   // We unconditionally mark the picture as overlayable, even if
   // |!allow_overlay|, if we want to get hints.  It's required, else we won't
   // get hints.
@@ -1787,6 +1797,30 @@ void AndroidVideoDecodeAccelerator::ReleaseCodec() {
 void AndroidVideoDecodeAccelerator::ReleaseCodecAndBundle() {
   ReleaseCodec();
   codec_config_->surface_bundle = nullptr;
+}
+
+void AndroidVideoDecodeAccelerator::CacheFrameInformation() {
+  if (!codec_config_->surface_bundle ||
+      !codec_config_->surface_bundle->overlay) {
+    // Not an overlay.
+    cached_frame_information_ = surface_chooser_state_.is_secure
+                                    ? FrameInformation::SURFACETEXTURE_L3
+                                    : FrameInformation::SURFACETEXTURE_INSECURE;
+    return;
+  }
+
+  // Overlay.
+  if (surface_chooser_state_.is_secure) {
+    cached_frame_information_ = surface_chooser_state_.is_required
+                                    ? FrameInformation::OVERLAY_L1
+                                    : FrameInformation::OVERLAY_L3;
+    return;
+  }
+
+  cached_frame_information_ =
+      surface_chooser_state_.is_fullscreen
+          ? FrameInformation::OVERLAY_INSECURE_PLAYER_ELEMENT_FULLSCREEN
+          : FrameInformation::OVERLAY_INSECURE_NON_PLAYER_ELEMENT_FULLSCREEN;
 }
 
 }  // namespace media

@@ -2590,6 +2590,9 @@
         "test": "sbox_validation_tests"
       },
       {
+        "args": [
+          "--test-launcher-filter-file=../../testing/buildbot/filters/win10.services_unittests.filter"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -10890,6 +10893,21 @@
       }
     ]
   },
+  "Jumbo Linux x64": {
+    "additional_compile_targets": [
+      "all"
+    ]
+  },
+  "Jumbo Mac": {
+    "additional_compile_targets": [
+      "all"
+    ]
+  },
+  "Jumbo Win x64": {
+    "additional_compile_targets": [
+      "all"
+    ]
+  },
   "Linux ARM": {
     "gtest_tests": [
       {
@@ -13888,13 +13906,13 @@
             {
               "gpu": "8086:0a2e",
               "hidpi": "0",
-              "os": "Mac-10.12.5",
+              "os": "Mac-10.12.6",
               "pool": "Chrome"
             },
             {
               "gpu": "8086:0d26",
               "hidpi": "1",
-              "os": "Mac-10.12.5",
+              "os": "Mac-10.12.6",
               "pool": "Chrome"
             }
           ],

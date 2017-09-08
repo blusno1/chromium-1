@@ -6046,7 +6046,7 @@ class CompositedSelectionBoundsTest : public ParameterizedWebFrameTest {
 
     EXPECT_FALSE(selection->IsNone());
 
-    blink::Node* layer_owner_node_for_start = V8Node::toImplWithTypeCheck(
+    blink::Node* layer_owner_node_for_start = V8Node::ToImplWithTypeCheck(
         v8::Isolate::GetCurrent(), expected_result.Get(0));
     ASSERT_TRUE(layer_owner_node_for_start);
     EXPECT_EQ(layer_owner_node_for_start->GetLayoutObject()
@@ -6063,7 +6063,7 @@ class CompositedSelectionBoundsTest : public ParameterizedWebFrameTest {
     EXPECT_EQ(start_edge_bottom_in_layer_x,
               select_start->edge_bottom_in_layer.x);
 
-    blink::Node* layer_owner_node_for_end = V8Node::toImplWithTypeCheck(
+    blink::Node* layer_owner_node_for_end = V8Node::ToImplWithTypeCheck(
         v8::Isolate::GetCurrent(),
         expected_result.Get(context, 5).ToLocalChecked());
 
@@ -6644,12 +6644,10 @@ TEST_P(ParameterizedWebFrameTest, ReplaceMisspelledRange) {
   document->execCommand("InsertText", false, "_wellcome_.", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled()) {
-    document->GetFrame()
-        ->GetSpellChecker()
-        .GetIdleSpellCheckCallback()
-        .ForceInvocationForTesting();
-  }
+  document->GetFrame()
+      ->GetSpellChecker()
+      .GetIdleSpellCheckCallback()
+      .ForceInvocationForTesting();
 
   const int kAllTextBeginOffset = 0;
   const int kAllTextLength = 11;
@@ -6690,12 +6688,10 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkers) {
   document->execCommand("InsertText", false, "_wellcome_.", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled()) {
-    document->GetFrame()
-        ->GetSpellChecker()
-        .GetIdleSpellCheckCallback()
-        .ForceInvocationForTesting();
-  }
+  document->GetFrame()
+      ->GetSpellChecker()
+      .GetIdleSpellCheckCallback()
+      .ForceInvocationForTesting();
 
   frame->RemoveSpellingMarkers();
 
@@ -6741,11 +6737,10 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkersUnderWords) {
   document->execCommand("InsertText", false, " wellcome ", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled()) {
-    frame->GetSpellChecker()
-        .GetIdleSpellCheckCallback()
-        .ForceInvocationForTesting();
-  }
+  frame->GetSpellChecker()
+      .GetIdleSpellCheckCallback()
+      .ForceInvocationForTesting();
+
   WebVector<unsigned> offsets1;
   GetSpellingMarkerOffsets(&offsets1, *frame->GetDocument());
   EXPECT_EQ(1U, offsets1.size());
@@ -6822,44 +6817,16 @@ TEST_P(ParameterizedWebFrameTest, SlowSpellcheckMarkerPosition) {
   document->execCommand("InsertText", false, "he", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled()) {
-    document->GetFrame()
-        ->GetSpellChecker()
-        .GetIdleSpellCheckCallback()
-        .ForceInvocationForTesting();
-  }
+  document->GetFrame()
+      ->GetSpellChecker()
+      .GetIdleSpellCheckCallback()
+      .ForceInvocationForTesting();
 
   textcheck.Kick();
 
   WebVector<unsigned> offsets;
   GetSpellingMarkerOffsets(&offsets, *frame->GetFrame()->GetDocument());
   EXPECT_EQ(0U, offsets.size());
-}
-
-// This test verifies that cancelling spelling request does not cause a
-// write-after-free when there's no spellcheck client set.
-TEST_P(ParameterizedWebFrameTest, CancelSpellingRequestCrash) {
-  // The relevant code paths are obsolete with idle time spell checker.
-  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
-    return;
-
-  RegisterMockedHttpURLLoad("spell.html");
-  FrameTestHelpers::WebViewHelper web_view_helper;
-  web_view_helper.InitializeAndLoad(base_url_ + "spell.html");
-
-  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
-  frame->SetTextCheckClient(0);
-
-  Document* document = frame->GetFrame()->GetDocument();
-  Element* element = document->getElementById("data");
-
-  web_view_helper.WebView()->GetSettings()->SetEditingBehavior(
-      WebSettings::kEditingBehaviorWin);
-
-  element->focus();
-  frame->GetFrame()->GetEditor().ReplaceSelectionWithText(
-      "A", false, false, InputEvent::InputType::kInsertReplacementText);
-  frame->GetFrame()->GetSpellChecker().CancelCheck();
 }
 
 TEST_P(ParameterizedWebFrameTest, SpellcheckResultErasesMarkers) {
@@ -6881,12 +6848,10 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultErasesMarkers) {
   NonThrowableExceptionState exception_state;
   document->execCommand("InsertText", false, "welcome ", exception_state);
 
-  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled()) {
-    document->GetFrame()
-        ->GetSpellChecker()
-        .GetIdleSpellCheckCallback()
-        .ForceInvocationForTesting();
-  }
+  document->GetFrame()
+      ->GetSpellChecker()
+      .GetIdleSpellCheckCallback()
+      .ForceInvocationForTesting();
 
   document->UpdateStyleAndLayout();
 
@@ -6920,12 +6885,10 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultsSavedInDocument) {
   document->execCommand("InsertText", false, "wellcome ", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled()) {
-    document->GetFrame()
-        ->GetSpellChecker()
-        .GetIdleSpellCheckCallback()
-        .ForceInvocationForTesting();
-  }
+  document->GetFrame()
+      ->GetSpellChecker()
+      .GetIdleSpellCheckCallback()
+      .ForceInvocationForTesting();
 
   textcheck.Kick();
   ASSERT_EQ(1U, document->Markers().Markers().size());
@@ -6936,12 +6899,10 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultsSavedInDocument) {
   document->execCommand("InsertText", false, "wellcome ", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled()) {
-    document->GetFrame()
-        ->GetSpellChecker()
-        .GetIdleSpellCheckCallback()
-        .ForceInvocationForTesting();
-  }
+  document->GetFrame()
+      ->GetSpellChecker()
+      .GetIdleSpellCheckCallback()
+      .ForceInvocationForTesting();
 
   textcheck.KickGrammar();
   ASSERT_EQ(1U, document->Markers().Markers().size());
@@ -11883,6 +11844,10 @@ class SlimmingPaintWebFrameTest
 
   WebLocalFrame* LocalMainFrame() { return web_view_helper_->LocalMainFrame(); }
 
+  LocalFrameView* LocalFrameView() {
+    return web_view_helper_->LocalMainFrame()->GetFrameView();
+  }
+
   WebViewImpl* WebView() { return web_view_helper_->WebView(); }
 
   size_t ContentLayerCount() {
@@ -11911,8 +11876,7 @@ class SlimmingPaintWebFrameTest
 
  private:
   PaintArtifactCompositor* paint_artifact_compositor() {
-    auto* frame_view = web_view_helper_->LocalMainFrame()->GetFrameView();
-    return frame_view->GetPaintArtifactCompositorForTesting();
+    return LocalFrameView()->GetPaintArtifactCompositorForTesting();
   }
   FrameTestHelpers::TestWebViewClient web_view_client_;
   std::unique_ptr<FrameTestHelpers::WebViewHelper> web_view_helper_;
@@ -11977,6 +11941,61 @@ TEST_P(SlimmingPaintWebFrameTest, DidScrollCallbackAfterScrollableAreaChanges) {
   WebView()->UpdateAllLifecyclePhases();
   EXPECT_EQ(ContentLayerCount(), 1u);
   EXPECT_EQ(ScrollHitTestLayerCount(), 0u);
+}
+
+TEST_P(SlimmingPaintWebFrameTest, FrameViewScroll) {
+  DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(),
+                     "<style>"
+                     "  #forceScroll {"
+                     "    height: 2000px;"
+                     "    width: 100px;"
+                     "  }"
+                     "</style>"
+                     "<div id='forceScroll'></div>");
+
+  WebView()->UpdateAllLifecyclePhases();
+
+  auto* scrollable_area = LocalFrameView()->LayoutViewportScrollableArea();
+  EXPECT_NE(nullptr, scrollable_area);
+
+  EXPECT_EQ(ScrollHitTestLayerCount(), 1u);
+
+  // Ensure a synthetic impl-side scroll offset propagates to the scrollable
+  // area using the DidScroll callback.
+  EXPECT_EQ(ScrollOffset(), scrollable_area->GetScrollOffset());
+  ScrollHitTestLayerAt(0)->SetScrollOffsetFromImplSideForTesting(
+      gfx::ScrollOffset(0, 1));
+  WebView()->UpdateAllLifecyclePhases();
+  EXPECT_EQ(ScrollOffset(0, 1), scrollable_area->GetScrollOffset());
+}
+
+static void TestFramePrinting(WebLocalFrameImpl* frame) {
+  WebPrintParams print_params;
+  WebSize page_size(500, 500);
+  print_params.print_content_area.width = page_size.width;
+  print_params.print_content_area.height = page_size.height;
+  EXPECT_EQ(1, frame->PrintBegin(print_params, WebNode()));
+  PaintRecorder recorder;
+  frame->PrintPagesForTesting(recorder.beginRecording(IntRect()), page_size);
+  frame->PrintEnd();
+}
+
+TEST_P(ParameterizedWebFrameTest, PrintDetachedIframe) {
+  RegisterMockedHttpURLLoad("print-detached-iframe.html");
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  web_view_helper.InitializeAndLoad(base_url_ + "print-detached-iframe.html");
+  TestFramePrinting(
+      ToWebLocalFrameImpl(web_view_helper.LocalMainFrame()->FirstChild()));
+}
+
+TEST_P(ParameterizedWebFrameTest, PrintIframeUnderDetached) {
+  RegisterMockedHttpURLLoad("print-detached-iframe.html");
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  web_view_helper.InitializeAndLoad(base_url_ + "print-detached-iframe.html");
+  TestFramePrinting(ToWebLocalFrameImpl(
+      web_view_helper.LocalMainFrame()->FirstChild()->FirstChild()));
 }
 
 }  // namespace blink

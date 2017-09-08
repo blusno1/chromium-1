@@ -6,20 +6,15 @@
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_SCRIPT_URL_LOADER_H_
 
 #include "base/macros.h"
-#include "content/browser/service_worker/service_worker_provider_host.h"
+#include "content/browser/service_worker/service_worker_version.h"
+#include "content/common/content_export.h"
 #include "content/public/common/resource_request.h"
 #include "content/public/common/url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
-namespace storage {
-class BlobStorageContext;
-}  // namespace storage
-
 namespace content {
 
-class ServiceWorkerContextCore;
-class ServiceWorkerProviderHost;
 class URLLoaderFactoryGetter;
 
 // S13nServiceWorker:
@@ -28,8 +23,9 @@ class URLLoaderFactoryGetter;
 // Eventually this should replace the existing URLRequestJob-based request
 // interception for script loading, namely ServiceWorkerWriteToCacheJob.
 // TODO(kinuko): Implement this.
-class ServiceWorkerScriptURLLoader : public mojom::URLLoader,
-                                     public mojom::URLLoaderClient {
+class CONTENT_EXPORT ServiceWorkerScriptURLLoader
+    : public mojom::URLLoader,
+      public mojom::URLLoaderClient {
  public:
   ServiceWorkerScriptURLLoader(
       int32_t routing_id,
@@ -37,9 +33,7 @@ class ServiceWorkerScriptURLLoader : public mojom::URLLoader,
       uint32_t options,
       const ResourceRequest& resource_request,
       mojom::URLLoaderClientPtr client,
-      base::WeakPtr<ServiceWorkerContextCore> context,
-      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
-      base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
+      scoped_refptr<ServiceWorkerVersion> version,
       scoped_refptr<URLLoaderFactoryGetter> loader_factory_getter,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
   ~ServiceWorkerScriptURLLoader() override;
@@ -69,7 +63,7 @@ class ServiceWorkerScriptURLLoader : public mojom::URLLoader,
   mojom::URLLoaderPtr network_loader_;
   mojo::Binding<mojom::URLLoaderClient> network_client_binding_;
   mojom::URLLoaderClientPtr forwarding_client_;
-  base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
+  scoped_refptr<ServiceWorkerVersion> version_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerScriptURLLoader);
 };

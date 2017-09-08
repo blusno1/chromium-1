@@ -20,7 +20,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_layout.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recording.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
@@ -57,13 +56,13 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 
 @synthesize audience = _audience;
 @synthesize suggestionCommandHandler = _suggestionCommandHandler;
-@synthesize headerCommandHandler = _headerCommandHandler;
-@synthesize suggestionsDelegate = _suggestionsDelegate;
+@synthesize headerSynchronizer = _headerSynchronizer;
 @synthesize collectionUpdater = _collectionUpdater;
 @synthesize overscrollActionsController = _overscrollActionsController;
 @synthesize overscrollDelegate = _overscrollDelegate;
 @synthesize scrolledToTop = _scrolledToTop;
 @synthesize metricsRecorder = _metricsRecorder;
+@synthesize containsToolbar = _containsToolbar;
 @dynamic collectionViewModel;
 
 #pragma mark - Lifecycle
@@ -192,7 +191,7 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 - (void)updateConstraints {
   [self.collectionUpdater
       updateMostVisitedForSize:self.collectionView.bounds.size];
-  [self.headerCommandHandler
+  [self.headerSynchronizer
       updateFakeOmniboxOnNewWidth:self.collectionView.bounds.size.width];
   [self.collectionView reloadData];
   if (ShouldCellsBeFullWidth(
@@ -266,7 +265,7 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 
   void (^alongsideBlock)(id<UIViewControllerTransitionCoordinatorContext>) =
       ^(id<UIViewControllerTransitionCoordinatorContext> context) {
-        [self.headerCommandHandler updateFakeOmniboxOnNewWidth:size.width];
+        [self.headerSynchronizer updateFakeOmniboxOnNewWidth:size.width];
         [self.collectionView.collectionViewLayout invalidateLayout];
       };
   [coordinator animateAlongsideTransition:alongsideBlock completion:nil];
@@ -293,7 +292,7 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
     didSelectItemAtIndexPath:(NSIndexPath*)indexPath {
   [super collectionView:collectionView didSelectItemAtIndexPath:indexPath];
 
-  [self.headerCommandHandler unfocusOmnibox];
+  [self.headerSynchronizer unfocusOmnibox];
 
   CollectionViewItem* item =
       [self.collectionViewModel itemAtIndexPath:indexPath];
@@ -464,7 +463,7 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
                                  (UICollectionViewLayout*)collectionViewLayout
     referenceSizeForHeaderInSection:(NSInteger)section {
   if ([self.collectionUpdater isHeaderSection:section]) {
-    return CGSizeMake(0, [self.suggestionsDelegate headerHeight]);
+    return CGSizeMake(0, [self.headerSynchronizer headerHeight]);
   }
   return [super collectionView:collectionView
                                layout:collectionViewLayout
@@ -538,9 +537,9 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
   [super scrollViewDidScroll:scrollView];
   [self.audience contentOffsetDidChange];
   [self.overscrollActionsController scrollViewDidScroll:scrollView];
-  [self.headerCommandHandler updateFakeOmniboxOnCollectionScroll];
+  [self.headerSynchronizer updateFakeOmniboxOnCollectionScroll];
   self.scrolledToTop =
-      scrollView.contentOffset.y >= [self.suggestionsDelegate pinnedOffsetY];
+      scrollView.contentOffset.y >= [self.headerSynchronizer pinnedOffsetY];
 }
 
 - (void)scrollViewWillBeginDragging:(UIScrollView*)scrollView {
@@ -568,7 +567,8 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
   CGFloat toolbarHeight = ntp_header::kToolbarHeight;
   CGFloat targetY = targetContentOffset->y;
 
-  if (IsIPadIdiom() || targetY <= 0 || targetY >= toolbarHeight)
+  if (IsIPadIdiom() || targetY <= 0 || targetY >= toolbarHeight ||
+      !self.containsToolbar)
     return;
 
   // Adjust the toolbar to be all the way on or off screen.

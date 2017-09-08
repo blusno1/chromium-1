@@ -31,7 +31,6 @@
 #include "cc/debug/debug_colors.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_metadata.h"
-#include "cc/output/layer_quad.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/output_surface_frame.h"
 #include "cc/output/texture_mailbox_deleter.h"
@@ -47,6 +46,7 @@
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/quads/copy_output_request.h"
 #include "components/viz/service/display/dynamic_geometry_binding.h"
+#include "components/viz/service/display/layer_quad.h"
 #include "components/viz/service/display/static_geometry_binding.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
@@ -296,6 +296,7 @@ struct GLRenderer::PendingAsyncReadPixels {
   PendingAsyncReadPixels() : buffer(0) {}
 
   std::unique_ptr<CopyOutputRequest> copy_request;
+  gfx::Rect copy_rect;
   unsigned buffer;
 
  private:
@@ -585,48 +586,48 @@ void GLRenderer::BeginDrawingFrame() {
   num_triangles_drawn_ = 0;
 }
 
-void GLRenderer::DoDrawQuad(const cc::DrawQuad* quad,
+void GLRenderer::DoDrawQuad(const DrawQuad* quad,
                             const gfx::QuadF* clip_region) {
   DCHECK(quad->rect.Contains(quad->visible_rect));
-  if (quad->material != cc::DrawQuad::TEXTURE_CONTENT) {
+  if (quad->material != DrawQuad::TEXTURE_CONTENT) {
     FlushTextureQuadCache(SHARED_BINDING);
   }
 
   switch (quad->material) {
-    case cc::DrawQuad::INVALID:
+    case DrawQuad::INVALID:
       NOTREACHED();
       break;
-    case cc::DrawQuad::DEBUG_BORDER:
+    case DrawQuad::DEBUG_BORDER:
       DrawDebugBorderQuad(cc::DebugBorderDrawQuad::MaterialCast(quad));
       break;
-    case cc::DrawQuad::PICTURE_CONTENT:
+    case DrawQuad::PICTURE_CONTENT:
       // PictureDrawQuad should only be used for resourceless software draws.
       NOTREACHED();
       break;
-    case cc::DrawQuad::RENDER_PASS:
+    case DrawQuad::RENDER_PASS:
       DrawRenderPassQuad(cc::RenderPassDrawQuad::MaterialCast(quad),
                          clip_region);
       break;
-    case cc::DrawQuad::SOLID_COLOR:
+    case DrawQuad::SOLID_COLOR:
       DrawSolidColorQuad(cc::SolidColorDrawQuad::MaterialCast(quad),
                          clip_region);
       break;
-    case cc::DrawQuad::STREAM_VIDEO_CONTENT:
+    case DrawQuad::STREAM_VIDEO_CONTENT:
       DrawStreamVideoQuad(cc::StreamVideoDrawQuad::MaterialCast(quad),
                           clip_region);
       break;
-    case cc::DrawQuad::SURFACE_CONTENT:
+    case DrawQuad::SURFACE_CONTENT:
       // Surface content should be fully resolved to other quad types before
       // reaching a direct renderer.
       NOTREACHED();
       break;
-    case cc::DrawQuad::TEXTURE_CONTENT:
+    case DrawQuad::TEXTURE_CONTENT:
       EnqueueTextureQuad(cc::TextureDrawQuad::MaterialCast(quad), clip_region);
       break;
-    case cc::DrawQuad::TILED_CONTENT:
+    case DrawQuad::TILED_CONTENT:
       DrawTileQuad(cc::TileDrawQuad::MaterialCast(quad), clip_region);
       break;
-    case cc::DrawQuad::YUV_VIDEO_CONTENT:
+    case DrawQuad::YUV_VIDEO_CONTENT:
       DrawYUVVideoQuad(cc::YUVVideoDrawQuad::MaterialCast(quad), clip_region);
       break;
   }
@@ -1023,7 +1024,7 @@ const cc::TileDrawQuad* GLRenderer::CanPassBeDrawnDirectly(
   if (!pass->copy_requests.empty())
     return nullptr;
 
-  const cc::DrawQuad* quad = *pass->quad_list.BackToFrontBegin();
+  const DrawQuad* quad = *pass->quad_list.BackToFrontBegin();
   // Hack: this could be supported by concatenating transforms, but
   // in practice if there is one quad, it is at the origin of the render pass
   // and has the same size as the pass.
@@ -1033,7 +1034,7 @@ const cc::TileDrawQuad* GLRenderer::CanPassBeDrawnDirectly(
   // The quad is expected to be the entire layer so that AA edges are correct.
   if (quad->shared_quad_state->quad_layer_rect != quad->rect)
     return nullptr;
-  if (quad->material != cc::DrawQuad::TILED_CONTENT)
+  if (quad->material != DrawQuad::TILED_CONTENT)
     return nullptr;
 
   // TODO(chrishtr): support could be added for opacity, but care needs
@@ -1505,7 +1506,7 @@ void GLRenderer::DrawRPDQ(const DrawRenderPassDrawQuadParams& params) {
 namespace {
 // These functions determine if a quad, clipped by a clip_region contains
 // the entire {top|bottom|left|right} edge.
-bool is_top(const gfx::QuadF* clip_region, const cc::DrawQuad* quad) {
+bool is_top(const gfx::QuadF* clip_region, const DrawQuad* quad) {
   if (!quad->IsTopEdge())
     return false;
   if (!clip_region)
@@ -1515,7 +1516,7 @@ bool is_top(const gfx::QuadF* clip_region, const cc::DrawQuad* quad) {
          std::abs(clip_region->p2().y()) < kAntiAliasingEpsilon;
 }
 
-bool is_bottom(const gfx::QuadF* clip_region, const cc::DrawQuad* quad) {
+bool is_bottom(const gfx::QuadF* clip_region, const DrawQuad* quad) {
   if (!quad->IsBottomEdge())
     return false;
   if (!clip_region)
@@ -1529,7 +1530,7 @@ bool is_bottom(const gfx::QuadF* clip_region, const cc::DrawQuad* quad) {
              kAntiAliasingEpsilon;
 }
 
-bool is_left(const gfx::QuadF* clip_region, const cc::DrawQuad* quad) {
+bool is_left(const gfx::QuadF* clip_region, const DrawQuad* quad) {
   if (!quad->IsLeftEdge())
     return false;
   if (!clip_region)
@@ -1539,7 +1540,7 @@ bool is_left(const gfx::QuadF* clip_region, const cc::DrawQuad* quad) {
          std::abs(clip_region->p4().x()) < kAntiAliasingEpsilon;
 }
 
-bool is_right(const gfx::QuadF* clip_region, const cc::DrawQuad* quad) {
+bool is_right(const gfx::QuadF* clip_region, const DrawQuad* quad) {
   if (!quad->IsRightEdge())
     return false;
   if (!clip_region)
@@ -1555,11 +1556,11 @@ bool is_right(const gfx::QuadF* clip_region, const cc::DrawQuad* quad) {
 }  // anonymous namespace
 
 static gfx::QuadF GetDeviceQuadWithAntialiasingOnExteriorEdges(
-    const cc::LayerQuad& device_layer_edges,
+    const LayerQuad& device_layer_edges,
     const gfx::Transform& device_transform,
     const gfx::QuadF& tile_quad,
     const gfx::QuadF* clip_region,
-    const cc::DrawQuad* quad) {
+    const DrawQuad* quad) {
   auto tile_rect = gfx::RectF(quad->visible_rect);
 
   gfx::PointF bottom_right = tile_quad.p3();
@@ -1577,10 +1578,10 @@ static gfx::QuadF GetDeviceQuadWithAntialiasingOnExteriorEdges(
   top_left = cc::MathUtil::MapPoint(device_transform, top_left, &clipped);
   top_right = cc::MathUtil::MapPoint(device_transform, top_right, &clipped);
 
-  cc::LayerQuad::Edge bottom_edge(bottom_right, bottom_left);
-  cc::LayerQuad::Edge left_edge(bottom_left, top_left);
-  cc::LayerQuad::Edge top_edge(top_left, top_right);
-  cc::LayerQuad::Edge right_edge(top_right, bottom_right);
+  LayerQuad::Edge bottom_edge(bottom_right, bottom_left);
+  LayerQuad::Edge left_edge(bottom_left, top_left);
+  LayerQuad::Edge top_edge(top_left, top_right);
+  LayerQuad::Edge right_edge(top_right, bottom_right);
 
   // Only apply anti-aliasing to edges not clipped by culling or scissoring.
   // If an edge is degenerate we do not want to replace it with a "proper" edge
@@ -1609,7 +1610,7 @@ static gfx::QuadF GetDeviceQuadWithAntialiasingOnExteriorEdges(
   right_edge.scale(sign);
 
   // Create device space quad.
-  return cc::LayerQuad(left_edge, top_edge, right_edge, bottom_edge).ToQuadF();
+  return LayerQuad(left_edge, top_edge, right_edge, bottom_edge).ToQuadF();
 }
 
 float GetTotalQuadError(const gfx::QuadF* clipped_quad,
@@ -1639,10 +1640,10 @@ void AlignQuadToBoundingBox(gfx::QuadF* clipped_quad) {
 }
 
 void InflateAntiAliasingDistances(const gfx::QuadF& quad,
-                                  cc::LayerQuad* device_layer_edges,
+                                  LayerQuad* device_layer_edges,
                                   float edge[24]) {
   DCHECK(!quad.BoundingBox().IsEmpty());
-  cc::LayerQuad device_layer_bounds(gfx::QuadF(quad.BoundingBox()));
+  LayerQuad device_layer_bounds(gfx::QuadF(quad.BoundingBox()));
 
   device_layer_edges->InflateAntiAliasingDistance();
   device_layer_edges->ToFloatArray(edge);
@@ -1674,7 +1675,7 @@ bool GLRenderer::ShouldAntialiasQuad(const gfx::QuadF& device_layer_quad,
 // static
 void GLRenderer::SetupQuadForClippingAndAntialiasing(
     const gfx::Transform& device_transform,
-    const cc::DrawQuad* quad,
+    const DrawQuad* quad,
     const gfx::QuadF* aa_quad,
     const gfx::QuadF* clip_region,
     gfx::QuadF* local_quad,
@@ -1693,7 +1694,7 @@ void GLRenderer::SetupQuadForClippingAndAntialiasing(
     return;
   }
 
-  cc::LayerQuad device_layer_edges(*aa_quad);
+  LayerQuad device_layer_edges(*aa_quad);
   InflateAntiAliasingDistances(*aa_quad, &device_layer_edges, edge);
 
   // If we have a clip region then we are split, and therefore
@@ -1745,7 +1746,7 @@ void GLRenderer::SetupRenderPassQuadForClippingAndAntialiasing(
     return;
   }
 
-  cc::LayerQuad device_layer_edges(*aa_quad);
+  LayerQuad device_layer_edges(*aa_quad);
   InflateAntiAliasingDistances(*aa_quad, &device_layer_edges, edge);
 
   gfx::QuadF device_quad;
@@ -2143,23 +2144,25 @@ void GLRenderer::DrawYUVVideoQuad(const cc::YUVVideoDrawQuad* quad,
         break;
     }
   }
-  // Invalid or unspecified color spaces should be treated as REC709.
-  if (!src_color_space.IsValid())
-    src_color_space = gfx::ColorSpace::CreateREC709();
-
-  // The source color space should never be RGB.
-  DCHECK_NE(src_color_space, src_color_space.GetAsFullRangeRGB());
-
   cc::DisplayResourceProvider::ScopedSamplerGL y_plane_lock(
       resource_provider_, quad->y_plane_resource_id(), GL_TEXTURE1, GL_LINEAR);
-  if (base::FeatureList::IsEnabled(media::kVideoColorManagement))
-    DCHECK_EQ(src_color_space, y_plane_lock.color_space());
   cc::DisplayResourceProvider::ScopedSamplerGL u_plane_lock(
       resource_provider_, quad->u_plane_resource_id(), GL_TEXTURE2, GL_LINEAR);
   DCHECK_EQ(y_plane_lock.target(), u_plane_lock.target());
   DCHECK_EQ(y_plane_lock.color_space(), u_plane_lock.color_space());
   // TODO(jbauman): Use base::Optional when available.
   std::unique_ptr<cc::DisplayResourceProvider::ScopedSamplerGL> v_plane_lock;
+
+  // Invalid or unspecified color spaces should be treated as REC709.
+  if (!src_color_space.IsValid())
+    src_color_space = gfx::ColorSpace::CreateREC709();
+#if DCHECK_IS_ON()
+  else if (base::FeatureList::IsEnabled(media::kVideoColorManagement))
+    DCHECK_EQ(src_color_space, y_plane_lock.color_space());
+#endif
+
+  // The source color space should never be RGB.
+  DCHECK_NE(src_color_space, src_color_space.GetAsFullRangeRGB());
 
   if (uv_texture_mode == UV_TEXTURE_MODE_U_V) {
     v_plane_lock.reset(new cc::DisplayResourceProvider::ScopedSamplerGL(
@@ -2612,9 +2615,9 @@ void GLRenderer::EnsureScissorTestDisabled() {
   is_scissor_enabled_ = false;
 }
 
-void GLRenderer::CopyCurrentRenderPassToBitmap(
+void GLRenderer::CopyDrawnRenderPass(
     std::unique_ptr<CopyOutputRequest> request) {
-  TRACE_EVENT0("cc", "GLRenderer::CopyCurrentRenderPassToBitmap");
+  TRACE_EVENT0("cc", "GLRenderer::CopyDrawnRenderPass");
   gfx::Rect copy_rect = current_frame()->current_render_pass->output_rect;
   if (request->has_area())
     copy_rect.Intersect(request->area());
@@ -2640,7 +2643,7 @@ void GLRenderer::SetShaderQuadF(const gfx::QuadF& quad) {
   gl_->Uniform2fv(current_program_->quad_location(), 4, gl_quad);
 }
 
-void GLRenderer::SetShaderOpacity(const cc::DrawQuad* quad) {
+void GLRenderer::SetShaderOpacity(const DrawQuad* quad) {
   if (!current_program_ || current_program_->alpha_location() == -1)
     return;
   gl_->Uniform1f(current_program_->alpha_location(),
@@ -2805,11 +2808,8 @@ void GLRenderer::DidReceiveTextureInUseResponses(
 void GLRenderer::GetFramebufferPixelsAsync(
     const gfx::Rect& rect,
     std::unique_ptr<CopyOutputRequest> request) {
-  DCHECK(!request->IsEmpty());
-  if (request->IsEmpty())
-    return;
   if (rect.IsEmpty())
-    return;
+    return;  // |request| auto-sends empty result on out-of-scope.
 
   if (overdraw_feedback_)
     FlushOverdrawFeedback(rect);
@@ -2819,90 +2819,104 @@ void GLRenderer::GetFramebufferPixelsAsync(
   DCHECK_GE(window_rect.y(), 0);
   DCHECK_LE(window_rect.right(), current_surface_size_.width());
   DCHECK_LE(window_rect.bottom(), current_surface_size_.height());
+  DCHECK_EQ(window_rect.width(), rect.width());
+  DCHECK_EQ(window_rect.height(), rect.height());
 
-  if (!request->force_bitmap_result()) {
-    bool own_mailbox = !request->has_texture_mailbox();
+  switch (request->result_format()) {
+    case CopyOutputRequest::ResultFormat::RGBA_TEXTURE: {
+      bool own_mailbox = !request->has_texture_mailbox();
 
-    GLuint texture_id = 0;
-    gpu::Mailbox mailbox;
-    if (own_mailbox) {
-      gl_->GenMailboxCHROMIUM(mailbox.name);
-      gl_->GenTextures(1, &texture_id);
-      gl_->BindTexture(GL_TEXTURE_2D, texture_id);
+      GLuint texture_id = 0;
+      gpu::Mailbox mailbox;
+      if (own_mailbox) {
+        gl_->GenMailboxCHROMIUM(mailbox.name);
+        gl_->GenTextures(1, &texture_id);
+        gl_->BindTexture(GL_TEXTURE_2D, texture_id);
 
-      gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      gl_->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
-    } else {
-      mailbox = request->texture_mailbox().mailbox();
-      DCHECK_EQ(static_cast<unsigned>(GL_TEXTURE_2D),
-                request->texture_mailbox().target());
-      DCHECK(!mailbox.IsZero());
-      const gpu::SyncToken& incoming_sync_token =
-          request->texture_mailbox().sync_token();
-      if (incoming_sync_token.HasData())
-        gl_->WaitSyncTokenCHROMIUM(incoming_sync_token.GetConstData());
+        gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        gl_->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+      } else {
+        mailbox = request->texture_mailbox().mailbox();
+        DCHECK_EQ(static_cast<unsigned>(GL_TEXTURE_2D),
+                  request->texture_mailbox().target());
+        DCHECK(!mailbox.IsZero());
+        const gpu::SyncToken& incoming_sync_token =
+            request->texture_mailbox().sync_token();
+        if (incoming_sync_token.HasData())
+          gl_->WaitSyncTokenCHROMIUM(incoming_sync_token.GetConstData());
 
-      texture_id =
-          gl_->CreateAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+        texture_id =
+            gl_->CreateAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+      }
+      GetFramebufferTexture(texture_id, window_rect);
+
+      const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
+      gl_->ShallowFlushCHROMIUM();
+
+      gpu::SyncToken sync_token;
+      gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+
+      TextureMailbox texture_mailbox(mailbox, sync_token, GL_TEXTURE_2D);
+      // TODO(miu): Set |texture_mailbox.color_space_|. http://crbug.com/758057
+
+      std::unique_ptr<SingleReleaseCallback> release_callback;
+      if (own_mailbox) {
+        gl_->BindTexture(GL_TEXTURE_2D, 0);
+        release_callback = texture_mailbox_deleter_->GetReleaseCallback(
+            output_surface_->context_provider(), texture_id);
+      } else {
+        gl_->DeleteTextures(1, &texture_id);
+        // Create a no-op release callback, since the client that made the
+        // request owns the texture. This wart is going away soon, per work on
+        // http://crbug.com/754872.
+        release_callback = SingleReleaseCallback::Create(
+            base::Bind([](const gpu::SyncToken&, bool) {}));
+      }
+
+      request->SendResult(std::make_unique<CopyOutputTextureResult>(
+          rect, texture_mailbox, std::move(release_callback)));
+      return;
     }
-    GetFramebufferTexture(texture_id, window_rect);
 
-    const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
-    gl_->ShallowFlushCHROMIUM();
+    case CopyOutputRequest::ResultFormat::RGBA_BITMAP: {
+      std::unique_ptr<PendingAsyncReadPixels> pending_read(
+          new PendingAsyncReadPixels);
+      pending_read->copy_request = std::move(request);
+      pending_read->copy_rect = rect;
+      pending_async_read_pixels_.insert(pending_async_read_pixels_.begin(),
+                                        std::move(pending_read));
 
-    gpu::SyncToken sync_token;
-    gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+      GLuint buffer = 0;
+      gl_->GenBuffers(1, &buffer);
+      gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, buffer);
+      gl_->BufferData(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM,
+                      4 * window_rect.size().GetArea(), NULL, GL_STREAM_READ);
 
-    TextureMailbox texture_mailbox(mailbox, sync_token, GL_TEXTURE_2D);
+      GLuint query = 0;
+      gl_->GenQueriesEXT(1, &query);
+      gl_->BeginQueryEXT(GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM, query);
 
-    std::unique_ptr<SingleReleaseCallback> release_callback;
-    if (own_mailbox) {
-      gl_->BindTexture(GL_TEXTURE_2D, 0);
-      release_callback = texture_mailbox_deleter_->GetReleaseCallback(
-          output_surface_->context_provider(), texture_id);
-    } else {
-      gl_->DeleteTextures(1, &texture_id);
+      gl_->ReadPixels(window_rect.x(), window_rect.y(), window_rect.width(),
+                      window_rect.height(), GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+      gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, 0);
+
+      // Save the buffer to verify the callbacks happen in the expected order.
+      pending_async_read_pixels_.front()->buffer = buffer;
+
+      gl_->EndQueryEXT(GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM);
+      context_support_->SignalQuery(
+          query, base::Bind(&GLRenderer::FinishedReadback,
+                            weak_ptr_factory_.GetWeakPtr(), buffer, query,
+                            window_rect.size()));
+      return;
     }
-
-    request->SendTextureResult(window_rect.size(), texture_mailbox,
-                               std::move(release_callback));
-    return;
   }
 
-  DCHECK(request->force_bitmap_result());
-
-  std::unique_ptr<PendingAsyncReadPixels> pending_read(
-      new PendingAsyncReadPixels);
-  pending_read->copy_request = std::move(request);
-  pending_async_read_pixels_.insert(pending_async_read_pixels_.begin(),
-                                    std::move(pending_read));
-
-  GLuint buffer = 0;
-  gl_->GenBuffers(1, &buffer);
-  gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, buffer);
-  gl_->BufferData(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM,
-                  4 * window_rect.size().GetArea(), NULL, GL_STREAM_READ);
-
-  GLuint query = 0;
-  gl_->GenQueriesEXT(1, &query);
-  gl_->BeginQueryEXT(GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM, query);
-
-  gl_->ReadPixels(window_rect.x(), window_rect.y(), window_rect.width(),
-                  window_rect.height(), GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-
-  gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, 0);
-
-  // Save the buffer to verify the callbacks happen in the expected order.
-  pending_async_read_pixels_.front()->buffer = buffer;
-
-  gl_->EndQueryEXT(GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM);
-  context_support_->SignalQuery(
-      query,
-      base::Bind(&GLRenderer::FinishedReadback, weak_ptr_factory_.GetWeakPtr(),
-                 buffer, query, window_rect.size()));
+  NOTREACHED();
 }
 
 void GLRenderer::FinishedReadback(unsigned source_buffer,
@@ -2928,7 +2942,7 @@ void GLRenderer::FinishedReadback(unsigned source_buffer,
   PendingAsyncReadPixels* current_read = iter->get();
 
   uint8_t* src_pixels = NULL;
-  std::unique_ptr<SkBitmap> bitmap;
+  SkBitmap bitmap;
 
   if (source_buffer != 0) {
     gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, source_buffer);
@@ -2936,9 +2950,14 @@ void GLRenderer::FinishedReadback(unsigned source_buffer,
         GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, GL_READ_ONLY));
 
     if (src_pixels) {
-      bitmap.reset(new SkBitmap);
-      bitmap->allocN32Pixels(size.width(), size.height());
-      uint8_t* dest_pixels = static_cast<uint8_t*>(bitmap->getPixels());
+      // TODO(miu): Provide color space in this allocN32Pixels() call.
+      // http://crbug.com/758057
+      bitmap.allocN32Pixels(size.width(), size.height());
+
+      // TODO(miu): Replace the logic below with a simple SkBitmap.writePixels()
+      // call (to use Skia's optimized swizzle/conversion implementation).
+      // http://crbug.com/754872
+      uint8_t* dest_pixels = static_cast<uint8_t*>(bitmap.getPixels());
 
       size_t row_bytes = size.width() * 4;
       int num_rows = size.height();
@@ -2965,8 +2984,14 @@ void GLRenderer::FinishedReadback(unsigned source_buffer,
     gl_->DeleteBuffers(1, &source_buffer);
   }
 
-  if (bitmap)
-    current_read->copy_request->SendBitmapResult(std::move(bitmap));
+  if (bitmap.readyToDraw()) {
+    current_read->copy_request->SendResult(
+        std::make_unique<CopyOutputSkBitmapResult>(current_read->copy_rect,
+                                                   bitmap));
+  } else {
+    // The CopyOutputRequest will auto-send an empty result on out-of-scope
+    // (below).
+  }
 
   // Conversion from reverse iterator to iterator:
   // Iterator |iter.base() - 1| points to the same element with reverse iterator
@@ -3135,6 +3160,9 @@ void GLRenderer::SetUseProgram(const ProgramKey& program_key,
 void GLRenderer::SetUseProgram(const ProgramKey& program_key_no_color,
                                const gfx::ColorSpace& src_color_space,
                                const gfx::ColorSpace& dst_color_space) {
+  if (settings_->enable_color_correct_rendering)
+    DCHECK(dst_color_space.IsValid());
+
   ProgramKey program_key = program_key_no_color;
   const gfx::ColorTransform* color_transform =
       GetColorTransform(src_color_space, dst_color_space);
@@ -3339,7 +3367,7 @@ void GLRenderer::ScheduleDCLayers() {
     DCHECK(!dc_layer_overlay.rpdq);
 
     int i = 0;
-    unsigned texture_ids[cc::DrawQuad::Resources::kMaxResourceIdCount] = {};
+    unsigned texture_ids[DrawQuad::Resources::kMaxResourceIdCount] = {};
     int ids_to_send = 0;
 
     for (const auto& contents_resource_id : dc_layer_overlay.resources) {
@@ -3527,7 +3555,7 @@ void GLRenderer::CopyRenderPassDrawQuadToOverlayResource(
     params.contents_device_transform.FlattenTo2d();
     gfx::QuadF device_layer_quad = cc::MathUtil::MapQuad(
         params.contents_device_transform, SharedGeometryQuad(), &clipped);
-    cc::LayerQuad device_layer_edges(device_layer_quad);
+    LayerQuad device_layer_edges(device_layer_quad);
     InflateAntiAliasingDistances(device_layer_quad, &device_layer_edges,
                                  params.edge);
   }

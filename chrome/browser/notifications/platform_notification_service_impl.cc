@@ -51,8 +51,8 @@
 #include "url/url_constants.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
-#include "chrome/browser/lifetime/keep_alive_types.h"
-#include "chrome/browser/lifetime/scoped_keep_alive.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -398,7 +398,7 @@ void PlatformNotificationServiceImpl::GetDisplayedNotifications(
   Profile* profile = Profile::FromBrowserContext(browser_context);
   // Tests will not have a message center.
   if (!profile || profile->AsTestingProfile()) {
-    auto displayed_notifications = base::MakeUnique<std::set<std::string>>();
+    auto displayed_notifications = std::make_unique<std::set<std::string>>();
     callback.Run(std::move(displayed_notifications),
                  false /* supports_synchronization */);
     return;

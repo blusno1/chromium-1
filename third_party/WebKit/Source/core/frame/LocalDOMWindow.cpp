@@ -44,6 +44,7 @@
 #include "core/dom/FrameRequestCallback.h"
 #include "core/dom/Modulator.h"
 #include "core/dom/SandboxFlags.h"
+#include "core/dom/ScriptedIdleTaskController.h"
 #include "core/dom/SinkDocument.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/UserGestureIndicator.h"
@@ -82,6 +83,7 @@
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/probe/CoreProbes.h"
+#include "core/style/ComputedStyle.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "platform/EventDispatchForbiddenScope.h"
@@ -1346,10 +1348,12 @@ void LocalDOMWindow::cancelAnimationFrame(int id) {
     document->CancelAnimationFrame(id);
 }
 
-int LocalDOMWindow::requestIdleCallback(IdleRequestCallback* callback,
+int LocalDOMWindow::requestIdleCallback(V8IdleRequestCallback* callback,
                                         const IdleRequestOptions& options) {
-  if (Document* document = this->document())
-    return document->RequestIdleCallback(callback, options);
+  if (Document* document = this->document()) {
+    return document->RequestIdleCallback(
+        ScriptedIdleTaskController::V8IdleTask::Create(callback), options);
+  }
   return 0;
 }
 

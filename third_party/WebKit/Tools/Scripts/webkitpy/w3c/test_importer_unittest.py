@@ -15,6 +15,7 @@ from webkitpy.common.system.log_testing import LoggingTestCase
 from webkitpy.layout_tests.builder_list import BuilderList
 from webkitpy.w3c.chromium_commit_mock import MockChromiumCommit
 from webkitpy.w3c.local_wpt import LocalWPT
+from webkitpy.w3c.local_wpt_mock import MockLocalWPT
 from webkitpy.w3c.test_importer import TestImporter
 from webkitpy.w3c.wpt_github_mock import MockWPTGitHub
 
@@ -136,7 +137,24 @@ class TestImporterTest(LoggingTestCase):
             ['git', 'cl', 'set-commit'],
         ])
 
+    def test_run_commit_queue_for_cl_timeout(self):
+        host = MockHost()
+        importer = TestImporter(host)
+        # The simulates the case where importer.git_cl.wait_for_try_jobs returns
+        # None, which would normally happen if we time out waiting for results.
+        importer.git_cl = MockGitCL(host, results=None)
+        success = importer.run_commit_queue_for_cl()
+        self.assertFalse(success)
+        self.assertLog([
+            'INFO: Triggering CQ try jobs.\n',
+            'ERROR: Timed out waiting for CQ; aborting.\n'
+        ])
+        self.assertEqual(
+            importer.git_cl.calls,
+            [['git', 'cl', 'try'], ['git', 'cl', 'set-close']])
+
     def test_apply_exportable_commits_locally(self):
+        # TODO(robertma): Consider using MockLocalWPT.
         host = MockHost()
         importer = TestImporter(host, wpt_github=MockWPTGitHub(pull_requests=[]))
         fake_commit = MockChromiumCommit(
@@ -177,8 +195,7 @@ class TestImporterTest(LoggingTestCase):
         importer = TestImporter(host, wpt_github=wpt_github)
         commit = MockChromiumCommit(host, subject='My fake commit')
         importer.exportable_but_not_exported_commits = lambda _: [commit]
-        local_wpt = LocalWPT(host)
-        local_wpt.apply_patch = lambda _: 'Failed'  # Failure to apply patch.
+        local_wpt = MockLocalWPT(apply_patch=['Failed'])    # Failure to apply patch.
         applied = importer.apply_exportable_commits_locally(local_wpt)
         self.assertIsNone(applied)
 

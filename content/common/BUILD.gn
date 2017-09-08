@@ -223,8 +223,8 @@ source_set("common") {
     "media/media_devices_param_traits.h",
     "media/media_player_delegate_messages.h",
     "media/media_player_messages_android.h",
-    "media/media_stream_options.cc",
-    "media/media_stream_options.h",
+    "media/media_stream_controls.cc",
+    "media/media_stream_controls.h",
     "media/media_stream_param_traits.cc",
     "media/media_stream_param_traits.h",
     "media/media_stream_track_metrics_host_messages.h",
@@ -320,6 +320,8 @@ source_set("common") {
     "service_worker/embedded_worker_start_params.h",
     "service_worker/service_worker_client_info.cc",
     "service_worker/service_worker_client_info.h",
+    "service_worker/service_worker_loader_helpers.cc",
+    "service_worker/service_worker_loader_helpers.h",
     "service_worker/service_worker_messages.h",
     "service_worker/service_worker_provider_host_info.cc",
     "service_worker/service_worker_provider_host_info.h",
@@ -638,6 +640,7 @@ mojom("mojo_bindings") {
     "service_worker/service_worker_types.mojom",
     "storage_partition_service.mojom",
     "video_capture.mojom",
+    "web_database.mojom",
     "widget.mojom",
   ]
 

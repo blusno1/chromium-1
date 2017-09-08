@@ -43,7 +43,8 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_style.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/note_taking_helper.h"
@@ -368,7 +369,7 @@ void DownloadItemNotification::UpdateNotificationData(
   DownloadCommands command(item_);
 
   notification_->set_title(GetTitle());
-  if (message_center::MessageCenter::IsNewStyleNotificationEnabled()) {
+  if (message_center::IsNewStyleNotificationEnabled()) {
     notification_->set_message(GetSubStatusString());
     notification_->set_progress_status(GetStatusString());
   } else {
@@ -445,23 +446,6 @@ void DownloadItemNotification::UpdateNotificationData(
              // If the notification is already visible as popup or in the
              // notification center, doesn't pop it up.
              (type == UPDATE_AND_POPUP && IsNotificationVisible())) {
-    // Shows a notifiation as progress type once so the visible content will be
-    // updated. Only progress-type notification's content will be updated
-    // immediately when the message center is visible.
-    // See the comment in MessageCenterImpl::UpdateNotification() for detail.
-    if (type == UPDATE_AND_POPUP &&
-        message_center_->IsMessageCenterVisible() &&
-        (item_->GetState() == content::DownloadItem::COMPLETE ||
-         item_->GetState() == content::DownloadItem::INTERRUPTED)) {
-      DCHECK_EQ(notification_->type(),
-                message_center::NOTIFICATION_TYPE_BASE_FORMAT);
-
-      notification_->set_type(message_center::NOTIFICATION_TYPE_PROGRESS);
-      g_browser_process->notification_ui_manager()->
-          Update(*notification_, profile());
-      notification_->set_type(message_center::NOTIFICATION_TYPE_BASE_FORMAT);
-    }
-
     g_browser_process->notification_ui_manager()->
         Update(*notification_, profile());
   } else if (type == UPDATE_AND_POPUP) {
@@ -502,9 +486,19 @@ void DownloadItemNotification::UpdateNotificationIcon() {
                             ? IDR_DOWNLOAD_NOTIFICATION_WARNING_BAD
                             : IDR_DOWNLOAD_NOTIFICATION_WARNING_UNWANTED);
 #else
-    SetNotificationVectorIcon(
-        vector_icons::kWarningIcon,
-        model.MightBeMalicious() ? gfx::kGoogleRed700 : gfx::kGoogleYellow700);
+    if (message_center::IsNewStyleNotificationEnabled()) {
+      SetNotificationVectorIcon(
+          kNotificationDownloadIcon,
+          model.MightBeMalicious()
+              ? message_center::kSystemNotificationColorCriticalWarning
+              : message_center::kSystemNotificationColorWarning);
+
+    } else {
+      SetNotificationVectorIcon(vector_icons::kWarningIcon,
+                                model.MightBeMalicious()
+                                    ? gfx::kGoogleRed700
+                                    : gfx::kGoogleYellow700);
+    }
 #endif
     return;
   }
@@ -514,15 +508,21 @@ void DownloadItemNotification::UpdateNotificationIcon() {
   switch (item_->GetState()) {
     case content::DownloadItem::IN_PROGRESS:
     case content::DownloadItem::COMPLETE:
-      if (is_off_the_record) {
-#if defined(OS_MACOSX)
-        SetNotificationIcon(IDR_DOWNLOAD_NOTIFICATION_INCOGNITO);
-#else
-        SetNotificationVectorIcon(kFileDownloadIncognitoIcon,
-                                  gfx::kChromeIconGrey);
-#endif
+      if (message_center::IsNewStyleNotificationEnabled()) {
+        SetNotificationVectorIcon(
+            kNotificationDownloadIcon,
+            message_center::kSystemNotificationColorNormal);
       } else {
-        SetNotificationVectorIcon(kFileDownloadIcon, gfx::kGoogleBlue500);
+        if (is_off_the_record) {
+#if defined(OS_MACOSX)
+          SetNotificationIcon(IDR_DOWNLOAD_NOTIFICATION_INCOGNITO);
+#else
+          SetNotificationVectorIcon(kFileDownloadIncognitoIcon,
+                                    gfx::kChromeIconGrey);
+#endif
+        } else {
+          SetNotificationVectorIcon(kFileDownloadIcon, gfx::kGoogleBlue500);
+        }
       }
       break;
 
@@ -530,8 +530,14 @@ void DownloadItemNotification::UpdateNotificationIcon() {
 #if defined(OS_MACOSX)
       SetNotificationIcon(IDR_DOWNLOAD_NOTIFICATION_ERROR);
 #else
-      SetNotificationVectorIcon(vector_icons::kErrorCircleIcon,
-                                gfx::kGoogleRed700);
+      if (message_center::IsNewStyleNotificationEnabled()) {
+        SetNotificationVectorIcon(
+            kNotificationDownloadIcon,
+            message_center::kSystemNotificationColorCriticalWarning);
+      } else {
+        SetNotificationVectorIcon(vector_icons::kErrorCircleIcon,
+                                  gfx::kGoogleRed700);
+      }
 #endif
       break;
 
@@ -565,7 +571,14 @@ void DownloadItemNotification::SetNotificationIcon(int resource_id) {
 void DownloadItemNotification::SetNotificationVectorIcon(
     const gfx::VectorIcon& icon,
     SkColor color) {
-  notification_->set_icon(gfx::Image(gfx::CreateVectorIcon(icon, 40, color)));
+  if (message_center::IsNewStyleNotificationEnabled()) {
+    notification_->set_accent_color(color);
+    notification_->set_small_image(gfx::Image(
+        gfx::CreateVectorIcon(icon, message_center::kSmallImageSizeMD, color)));
+    notification_->set_vector_small_image(icon);
+  } else {
+    notification_->set_icon(gfx::Image(gfx::CreateVectorIcon(icon, 40, color)));
+  }
 }
 
 void DownloadItemNotification::DisablePopup() {
@@ -924,7 +937,7 @@ base::string16 DownloadItemNotification::GetStatusString() const {
       show_size_ratio ? model.GetProgressSizesString() :
                         ui::FormatBytes(item_->GetReceivedBytes());
 
-  if (message_center::MessageCenter::IsNewStyleNotificationEnabled()) {
+  if (message_center::IsNewStyleNotificationEnabled()) {
     return l10n_util::GetStringFUTF16(IDS_DOWNLOAD_NOTIFICATION_STATUS_SHORT,
                                       size, host_name);
   } else {

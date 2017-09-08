@@ -26,7 +26,6 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/stop_find_action.h"
-#include "ipc/ipc_sender.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/base/window_open_disposition.h"
@@ -100,7 +99,6 @@ struct RendererPreferences;
 // WebContents, navigate it backwards/forwards, etc. See navigation_controller.h
 // for more details.
 class WebContents : public PageNavigator,
-                    public IPC::Sender,
                     public base::SupportsUserData {
  public:
   struct CONTENT_EXPORT CreateParams {
@@ -241,8 +239,12 @@ class WebContents : public PageNavigator,
   // See also GetVisibleURL above, which may differ from this URL.
   virtual const GURL& GetLastCommittedURL() const = 0;
 
-  // Return the currently active RenderProcessHost and RenderViewHost. Each of
-  // these may change over time.
+  // Returns the main frame's process.  This may change over time (e.g. if the
+  // main frame is navigated to another origin).
+  // DEPRECATED: Explicitly specify which frame's process is needed, by instead
+  // calling something like web_contents->GetMainFrame()->GetProcess() or
+  // web_contents->GetFocusedFrame()->GetProcess().
+  // TODO(https://crbug.com/666525): Remove this method when possible.
   virtual RenderProcessHost* GetRenderProcessHost() const = 0;
 
   // Returns the main frame for the currently active view.

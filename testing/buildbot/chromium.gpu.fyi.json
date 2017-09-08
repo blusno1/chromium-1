@@ -122,6 +122,36 @@
         },
         "test": "gl_unittests",
         "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "gpu": "0000:0000",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
       }
     ],
     "isolated_scripts": [
@@ -484,6 +514,36 @@
         },
         "test": "gl_unittests",
         "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "gpu": "0000:0000",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
       }
     ],
     "isolated_scripts": [
@@ -769,7 +829,6 @@
           ],
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -801,7 +860,6 @@
           ],
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -833,7 +891,6 @@
           ],
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -865,7 +922,6 @@
           ],
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -883,6 +939,37 @@
           ]
         },
         "test": "gl_unittests",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "M",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       }
     ],
@@ -905,7 +992,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -931,7 +1017,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -957,7 +1042,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -983,7 +1067,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -1013,7 +1096,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -1045,7 +1127,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -1085,7 +1166,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -1111,7 +1191,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -1137,7 +1216,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -1164,7 +1242,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -1265,6 +1342,36 @@
           ]
         },
         "test": "gl_unittests",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "gpu": "0000:0000",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       }
     ],
@@ -1658,6 +1765,36 @@
         },
         "test": "gl_unittests",
         "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "gpu": "0000:0000",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
       }
     ],
     "isolated_scripts": [
@@ -2020,6 +2157,36 @@
         },
         "test": "gl_unittests",
         "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "gpu": "0000:0000",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
       }
     ],
     "isolated_scripts": [
@@ -2310,7 +2477,6 @@
           ],
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -2347,7 +2513,6 @@
           ],
           "dimension_sets": [
             {
-              "android_devices": "1",
               "device_os": "M",
               "device_type": "bullhead",
               "os": "Android"
@@ -2373,58 +2538,13 @@
   },
   "GPU Linux Builder": {},
   "GPU Linux Builder (dbg)": {},
+  "GPU Linux Ozone Builder": {},
   "GPU Mac Builder": {},
   "GPU Mac Builder (dbg)": {},
   "GPU Win Builder": {},
   "GPU Win Builder (dbg)": {},
   "GPU Win x64 Builder": {},
   "GPU Win x64 Builder (dbg)": {},
-  "Linux ChromiumOS Builder": {
-    "additional_compile_targets": [
-      "All"
-    ]
-  },
-  "Linux ChromiumOS Ozone (Intel)": {
-    "gtest_tests": [
-      {
-        "args": [
-          "--use-gpu-in-tests",
-          "--test-launcher-retry-limit=0"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": false,
-          "dimension_sets": [
-            {
-              "gpu": "8086:1912",
-              "os": "Ubuntu"
-            }
-          ]
-        },
-        "test": "angle_end2end_tests",
-        "use_xvfb": false
-      },
-      {
-        "args": [
-          "--use-gpu-in-tests",
-          "--test-launcher-retry-limit=0",
-          "--no-xvfb"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": false,
-          "dimension_sets": [
-            {
-              "gpu": "8086:1912",
-              "os": "Ubuntu"
-            }
-          ]
-        },
-        "test": "angle_unittests",
-        "use_xvfb": false
-      }
-    ],
-    "isolated_scripts": []
-  },
-  "Linux ChromiumOS Ozone Builder": {},
   "Linux Debug (NVIDIA)": {
     "gtest_tests": [
       {
@@ -2966,6 +3086,46 @@
         }
       }
     ]
+  },
+  "Linux Ozone (Intel)": {
+    "gtest_tests": [
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "8086:1912",
+              "os": "Ubuntu"
+            }
+          ]
+        },
+        "test": "angle_end2end_tests",
+        "use_xvfb": false
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--no-xvfb"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "8086:1912",
+              "os": "Ubuntu"
+            }
+          ]
+        },
+        "test": "angle_unittests",
+        "use_xvfb": false
+      }
+    ],
+    "isolated_scripts": []
   },
   "Linux Release (AMD R7 240)": {
     "gtest_tests": [
@@ -4972,6 +5132,19 @@
         "use_xvfb": false
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.12"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
         "args": [
           "--gtest_filter=*Detection*",
           "--use-gpu-in-tests"
@@ -5381,6 +5554,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -5813,6 +5999,20 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -6257,6 +6457,20 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -6739,6 +6953,24 @@
         "use_xvfb": false
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.12"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
         "args": [
           "--gtest_filter=*Detection*",
           "--use-gpu-in-tests"
@@ -7207,6 +7439,19 @@
             }
           ]
         },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "1002:679e",
+              "os": "Mac-10.10"
+            }
+          ]
+        },
         "test": "swiftshader_unittests",
         "use_xvfb": false
       }
@@ -7590,6 +7835,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "1002:679e",
+              "os": "Mac-10.10"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       }
     ],
@@ -8005,6 +8263,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.12"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -8439,6 +8710,20 @@
         "use_xvfb": false
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
         "args": [
           "--gtest_filter=*Detection*",
           "--use-gpu-in-tests"
@@ -8852,6 +9137,20 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -9289,6 +9588,20 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -9757,6 +10070,20 @@
         "use_xvfb": false
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
         "args": [
           "--gtest_filter=*Detection*",
           "--use-gpu-in-tests"
@@ -10094,6 +10421,35 @@
       }
     ]
   },
+  "Mac dEQP Release": {
+    "gtest_tests": [
+      {
+        "args": [
+          "--test-launcher-batch-limit=400",
+          "--deqp-egl-display-type=angle-gl"
+        ],
+        "name": "angle_deqp_gles2_gl_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.12"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ],
+          "shards": 4
+        },
+        "test": "angle_deqp_gles2_tests",
+        "use_xvfb": false
+      }
+    ],
+    "isolated_scripts": []
+  },
   "Optional Linux Release (NVIDIA)": {
     "gtest_tests": [
       {
@@ -10309,6 +10665,19 @@
         "use_xvfb": false
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.12"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
         "args": [
           "--gtest_filter=*Detection*",
           "--use-gpu-in-tests"
@@ -10449,6 +10818,20 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -10596,6 +10979,20 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -10765,6 +11162,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -11096,6 +11506,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-10"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -11703,6 +12126,19 @@
             }
           ]
         },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "8086:5912",
+              "os": "Windows-10"
+            }
+          ]
+        },
         "test": "swiftshader_unittests",
         "use_xvfb": false
       },
@@ -12294,6 +12730,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "10de:1cb3",
+              "os": "Windows-10"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -12922,6 +13371,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-10"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -13632,6 +14094,19 @@
             }
           ]
         },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6613",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ]
+        },
         "test": "swiftshader_unittests",
         "use_xvfb": false
       },
@@ -14177,6 +14652,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -14772,6 +15260,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6613",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -15388,6 +15889,19 @@
             }
           ]
         },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6613",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ]
+        },
         "test": "swiftshader_unittests",
         "use_xvfb": false
       },
@@ -15980,6 +16494,19 @@
           ]
         },
         "test": "gles2_conform_test",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ]
+        },
+        "test": "gpu_unittests",
         "use_xvfb": false
       },
       {
@@ -16788,6 +17315,19 @@
             }
           ]
         },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ]
+        },
         "test": "swiftshader_unittests",
         "use_xvfb": false
       },
@@ -17389,6 +17929,19 @@
             }
           ]
         },
+        "test": "gpu_unittests",
+        "use_xvfb": false
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ]
+        },
         "test": "swiftshader_unittests",
         "use_xvfb": false
       },
@@ -17851,6 +18404,63 @@
           "shards": 4
         },
         "test": "angle_deqp_gles2_tests",
+        "use_xvfb": false
+      },
+      {
+        "args": [
+          "--test-launcher-batch-limit=400",
+          "--deqp-egl-display-type=angle-d3d11"
+        ],
+        "name": "angle_deqp_gles31_d3d11_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ],
+          "shards": 4
+        },
+        "test": "angle_deqp_gles31_tests",
+        "use_xvfb": false
+      },
+      {
+        "args": [
+          "--test-launcher-batch-limit=400",
+          "--deqp-egl-display-type=angle-gl"
+        ],
+        "name": "angle_deqp_gles31_gl_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ],
+          "shards": 4
+        },
+        "test": "angle_deqp_gles31_tests",
+        "use_xvfb": false
+      },
+      {
+        "args": [
+          "--test-launcher-batch-limit=400",
+          "--deqp-egl-display-type=angle-d3d11"
+        ],
+        "name": "angle_deqp_gles3_d3d11_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:104a",
+              "os": "Windows-2008ServerR2-SP1"
+            }
+          ],
+          "shards": 12
+        },
+        "test": "angle_deqp_gles3_tests",
         "use_xvfb": false
       }
     ],

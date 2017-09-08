@@ -21,6 +21,7 @@
 #include "modules/encryptedmedia/MediaKeysController.h"
 #include "platform/EncryptedMediaRequest.h"
 #include "platform/Histogram.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
 #include "platform/network/ParsedContentType.h"
@@ -250,11 +251,14 @@ void MediaKeySystemAccessInitializer::CheckVideoCapabilityRobustness() const {
   }
 
   if (has_empty_robustness) {
+    // TODO(xhwang): Write a best practice doc explaining details about risks of
+    // using an empty robustness here, and provide the link to the doc in this
+    // message. See http://crbug.com/720013
     resolver_->GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
         kJSMessageSource, kWarningMessageLevel,
         "It is recommended that a robustness level be specified. Not "
-        "specifying the robustness level could result in unexpected behavior, "
-        "potentially including failure to play."));
+        "specifying the robustness level could result in unexpected "
+        "behavior."));
   }
 }
 
@@ -269,6 +273,20 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
 
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   Document* document = ToDocument(execution_context);
+
+  Deprecation::CountDeprecationFeaturePolicy(*document,
+                                             WebFeaturePolicyFeature::kEme);
+
+  if (RuntimeEnabledFeatures::FeaturePolicyForEncryptedMediaEnabled()) {
+    if (!document->GetFrame() || !document->GetFrame()->IsFeatureEnabled(
+                                     WebFeaturePolicyFeature::kEme)) {
+      return ScriptPromise::RejectWithDOMException(
+          script_state,
+          DOMException::Create(
+              kNotSupportedError,
+              "requestMediaKeySystemAccess is disabled by feature policy."));
+    }
+  }
 
   // From https://w3c.github.io/encrypted-media/#common-key-systems
   // All user agents MUST support the common key systems described in this
@@ -331,8 +349,6 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
   UseCounter::Count(*document, WebFeature::kEncryptedMediaSecureOrigin);
   UseCounter::CountCrossOriginIframe(
       *document, WebFeature::kEncryptedMediaCrossOriginIframe);
-  Deprecation::CountDeprecationFeaturePolicy(*document,
-                                             WebFeaturePolicyFeature::kEme);
 
   // 4. Let origin be the origin of document.
   //    (Passed with the execution context.)

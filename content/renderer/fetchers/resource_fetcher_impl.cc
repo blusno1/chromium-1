@@ -36,8 +36,9 @@ const char kAccessControlAllowOriginHeader[] = "Access-Control-Allow-Origin";
 namespace content {
 
 // static
-ResourceFetcher* ResourceFetcher::Create(const GURL& url) {
-  return new ResourceFetcherImpl(url);
+std::unique_ptr<ResourceFetcher> ResourceFetcher::Create(const GURL& url) {
+  // Can not use std::make_unique<> because the constructor is private.
+  return std::unique_ptr<ResourceFetcher>(new ResourceFetcherImpl(url));
 }
 
 // TODO(toyoshim): Internal implementation might be replaced with
@@ -46,7 +47,7 @@ ResourceFetcher* ResourceFetcher::Create(const GURL& url) {
 class ResourceFetcherImpl::ClientImpl : public mojom::URLLoaderClient {
  public:
   ClientImpl(ResourceFetcherImpl* parent,
-             const Callback& callback,
+             Callback callback,
              size_t maximum_download_size)
       : parent_(parent),
         client_binding_(this),
@@ -55,9 +56,12 @@ class ResourceFetcherImpl::ClientImpl : public mojom::URLLoaderClient {
         status_(Status::kNotStarted),
         completed_(false),
         maximum_download_size_(maximum_download_size),
-        callback_(callback) {}
+        callback_(std::move(callback)) {}
 
-  ~ClientImpl() override {}
+  ~ClientImpl() override {
+    callback_ = Callback();
+    Cancel();
+  }
 
   void Start(const ResourceRequest& request,
              mojom::URLLoaderFactory* url_loader_factory,
@@ -78,12 +82,8 @@ class ResourceFetcherImpl::ClientImpl : public mojom::URLLoaderClient {
 
   void Cancel() {
     ClearReceivedDataToFail();
-
-    // Close will invoke OnComplete() eventually.
+    completed_ = true;
     Close();
-
-    // Reset |loader_| to avoid unexpected other callbacks invocations.
-    loader_.reset();
   }
 
   bool IsActive() const {
@@ -115,10 +115,7 @@ class ResourceFetcherImpl::ClientImpl : public mojom::URLLoaderClient {
     if (callback_.is_null())
       return;
 
-    // Take a reference to the callback as running the callback may lead to our
-    // destruction.
-    Callback callback = callback_;
-    callback.Run(response_, data_);
+    std::move(callback_).Run(response_, data_);
   }
 
   void ClearReceivedDataToFail() {
@@ -212,6 +209,10 @@ class ResourceFetcherImpl::ClientImpl : public mojom::URLLoaderClient {
     ReadDataPipe();
   }
   void OnComplete(const ResourceRequestCompletionStatus& status) override {
+    // When Cancel() sets |complete_|, OnComplete() may be called.
+    if (completed_)
+      return;
+
     DCHECK(IsActive()) << "status: " << static_cast<int>(status_);
     if (status.error_code != net::OK) {
       ClearReceivedDataToFail();
@@ -256,8 +257,7 @@ ResourceFetcherImpl::ResourceFetcherImpl(const GURL& url) {
 }
 
 ResourceFetcherImpl::~ResourceFetcherImpl() {
-  if (client_->IsActive())
-    client_->Cancel();
+  client_.reset();
 }
 
 void ResourceFetcherImpl::SetMethod(const std::string& method) {
@@ -279,42 +279,8 @@ void ResourceFetcherImpl::SetHeader(const std::string& header,
     DCHECK(request_.referrer.is_valid());
     request_.referrer_policy = blink::kWebReferrerPolicyDefault;
   } else {
-    headers_.SetHeader(header, value);
+    request_.headers.SetHeader(header, value);
   }
-}
-
-void ResourceFetcherImpl::Start(
-    blink::WebLocalFrame* frame,
-    blink::WebURLRequest::RequestContext request_context,
-    const Callback& callback) {
-  static const net::NetworkTrafficAnnotationTag annotation_tag =
-      net::DefineNetworkTrafficAnnotation("content_resource_fetcher", R"(
-    semantics {
-      sender: "content ResourceFetcher"
-      description:
-        "Chrome content API initiated request, which includes network error "
-        "pages and mojo internal component downloader."
-      trigger:
-        "Showing network error pages, or needs to download mojo component."
-      data: "Anything the initiator wants."
-      destination: OTHER
-    }
-    policy {
-      cookies_allowed: YES
-      cookies_store: "user"
-      setting: "These requests cannot be disabled in settings."
-      policy_exception_justification:
-        "Not implemented. Without these requests, Chrome will not work."
-    })");
-
-  mojom::URLLoaderFactory* url_loader_factory =
-      RenderFrame::FromWebFrame(frame)
-          ->GetDefaultURLLoaderFactoryGetter()
-          ->GetNetworkLoaderFactory();
-  DCHECK(url_loader_factory);
-
-  Start(frame, request_context, url_loader_factory, annotation_tag, callback,
-        kDefaultMaximumDownloadSize);
 }
 
 void ResourceFetcherImpl::Start(
@@ -322,7 +288,7 @@ void ResourceFetcherImpl::Start(
     blink::WebURLRequest::RequestContext request_context,
     mojom::URLLoaderFactory* url_loader_factory,
     const net::NetworkTrafficAnnotationTag& annotation_tag,
-    const Callback& callback,
+    Callback callback,
     size_t maximum_download_size) {
   DCHECK(!client_);
   DCHECK(frame);
@@ -344,12 +310,10 @@ void ResourceFetcherImpl::Start(
     SetHeader(kAccessControlAllowOriginHeader,
               blink::WebSecurityOrigin::CreateUnique().ToString().Ascii());
   }
-  if (!headers_.IsEmpty())
-    request_.headers = headers_.ToString();
-
   request_.resource_type = WebURLRequestContextToResourceType(request_context);
 
-  client_ = base::MakeUnique<ClientImpl>(this, callback, maximum_download_size);
+  client_ = base::MakeUnique<ClientImpl>(this, std::move(callback),
+                                         maximum_download_size);
   client_->Start(request_, url_loader_factory, annotation_tag,
                  frame->LoadingTaskRunner());
 
@@ -360,15 +324,17 @@ void ResourceFetcherImpl::Start(
 void ResourceFetcherImpl::SetTimeout(const base::TimeDelta& timeout) {
   DCHECK(client_);
   DCHECK(client_->IsActive());
+  DCHECK(!timeout_timer_.IsRunning());
 
-  timeout_timer_.Start(FROM_HERE, timeout, this, &ResourceFetcherImpl::Cancel);
+  timeout_timer_.Start(FROM_HERE, timeout, this,
+                       &ResourceFetcherImpl::OnTimeout);
 }
 
 void ResourceFetcherImpl::OnLoadComplete() {
   timeout_timer_.Stop();
 }
 
-void ResourceFetcherImpl::Cancel() {
+void ResourceFetcherImpl::OnTimeout() {
   DCHECK(client_);
   DCHECK(client_->IsActive());
   client_->Cancel();

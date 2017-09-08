@@ -62,8 +62,8 @@ void MediaStreamDispatcherHost::StreamGenerated(
     int render_frame_id,
     int page_request_id,
     const std::string& label,
-    const StreamDeviceInfoArray& audio_devices,
-    const StreamDeviceInfoArray& video_devices) {
+    const MediaStreamDevices& audio_devices,
+    const MediaStreamDevices& video_devices) {
   DVLOG(1) << __func__ << " label= " << label;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -85,25 +85,24 @@ void MediaStreamDispatcherHost::StreamGenerationFailed(
 
 void MediaStreamDispatcherHost::DeviceStopped(int render_frame_id,
                                               const std::string& label,
-                                              const StreamDeviceInfo& device) {
-  DVLOG(1) << __func__ << " label=" << label << " type=" << device.device.type
-           << " device_id=" << device.device.id;
+                                              const MediaStreamDevice& device) {
+  DVLOG(1) << __func__ << " label=" << label << " type=" << device.type
+           << " device_id=" << device.id;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   GetMediaStreamDispatcherForFrame(render_frame_id)
       ->OnDeviceStopped(label, device);
 }
 
-void MediaStreamDispatcherHost::DeviceOpened(
-    int render_frame_id,
-    int page_request_id,
-    const std::string& label,
-    const StreamDeviceInfo& video_device) {
+void MediaStreamDispatcherHost::DeviceOpened(int render_frame_id,
+                                             int page_request_id,
+                                             const std::string& label,
+                                             const MediaStreamDevice& device) {
   DVLOG(1) << __func__ << " page_request_id=" << page_request_id;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   GetMediaStreamDispatcherForFrame(render_frame_id)
-      ->OnDeviceOpened(page_request_id, label, video_device);
+      ->OnDeviceOpened(page_request_id, label, device);
 }
 
 mojom::MediaStreamDispatcher*

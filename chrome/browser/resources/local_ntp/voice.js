@@ -834,13 +834,18 @@ speech.toggleStartStop = function() {
  * Handles click events during speech recognition.
  * @param {boolean} shouldSubmit True if a query should be submitted.
  * @param {boolean} shouldRetry True if the interface should be restarted.
+ * @param {boolean} navigatingAway True if the browser is navigating away
+ *     from the NTP.
  * @private
  */
-speech.onClick_ = function(shouldSubmit, shouldRetry) {
+speech.onClick_ = function(shouldSubmit, shouldRetry, navigatingAway) {
   if (speech.finalResult_ && shouldSubmit) {
     speech.submitFinalResult_();
   } else if (speech.currentState_ == speech.State_.STOPPED && shouldRetry) {
     speech.restart();
+  } else if (speech.currentState_ == speech.State_.STOPPED && navigatingAway) {
+    // If the user clicks on a "Learn more" or "Details" support page link
+    // from an error message, do nothing, and let Chrome navigate to that page.
   } else {
     speech.abort_();
   }
@@ -865,10 +870,24 @@ let text = {};
 
 
 /**
- * ID for the link shown in error output.
+ * ID for the "Try Again" link shown in error output.
  * @const
  */
-text.ERROR_LINK_ID = 'voice-text-area';
+text.RETRY_LINK_ID = 'voice-retry-link';
+
+
+/**
+ * ID for the Voice Search support site link shown in error output.
+ * @const
+ */
+text.SUPPORT_LINK_ID = 'voice-support-link';
+
+
+/**
+ * Class for the links shown in error output.
+ * @const @private
+ */
+text.ERROR_LINK_CLASS_ = 'voice-text-link';
 
 
 /**
@@ -975,39 +994,38 @@ text.init = function() {
 
 /**
  * Updates the text elements with new recognition results.
- * @param {string} interimText Low confidence speech recognition result text.
- * @param {string} opt_finalText High confidence speech recognition result text,
- *    defaults to an empty string.
+ * @param {!string} interimText Low confidence speech recognition result text.
+ * @param {!string} opt_finalText High confidence speech recognition result
+ *     text, defaults to an empty string.
  */
-text.updateTextArea = function(interimText, opt_finalText) {
-  const finalText = opt_finalText || '';
-
+text.updateTextArea = function(interimText, opt_finalText = '') {
   window.clearTimeout(text.initializingTimer_);
   text.cancelListeningTimeout();
 
   text.interim_.textContent = interimText;
-  text.final_.textContent = finalText;
+  text.final_.textContent = opt_finalText;
 
   text.interim_.className = text.final_.className = text.getTextClassName_();
 };
 
 
 /**
- * Sets the text view to the initializing state.
+ * Sets the text view to the initializing state. The initializing message
+ * shown while waiting for permission is not displayed immediately, but after
+ * a short timeout. The reason for this is that the "Waiting..." message would
+ * still appear ("blink") every time a user opens Voice Search, even if they
+ * have already granted and persisted microphone permission for the NTP,
+ * and could therefore directly proceed to the "Speak now" message.
  */
 text.showInitializingMessage = function() {
-  const displayMessage = function() {
-    if (text.interim_.innerText == '') {
-      text.updateTextArea(speech.messages.waiting);
-    }
-  };
-
   text.interim_.textContent = '';
   text.final_.textContent = '';
 
-  // We give the interface some time to get the permission. Once permission
-  // is obtained, the ready message is displayed, in which case the
-  // initializing message won't be shown.
+  const displayMessage = function() {
+    if (text.interim_.textContent == '') {
+      text.updateTextArea(speech.messages.waiting);
+    }
+  };
   text.initializingTimer_ =
       window.setTimeout(displayMessage, text.INITIALIZING_TIMEOUT_MS_);
 };
@@ -1024,6 +1042,7 @@ text.showReadyMessage = function() {
 
 
 /**
+ * Display an error message in the text area for the given error.
  * @param {RecognitionError} error The error that occured.
  */
 text.showErrorMessage = function(error) {
@@ -1071,21 +1090,24 @@ text.getErrorMessage_ = function(error) {
  */
 text.getErrorLink_ = function(error) {
   let linkElement = document.createElement('a');
-  linkElement.id = text.ERROR_LINK_ID;
+  linkElement.className = text.ERROR_LINK_CLASS_;
 
   switch (error) {
     case RecognitionError.NO_MATCH:
+      linkElement.id = text.RETRY_LINK_ID;
       linkElement.textContent = speech.messages.tryAgain;
       linkElement.onclick = speech.restart;
       return linkElement;
     case RecognitionError.NO_SPEECH:
     case RecognitionError.AUDIO_CAPTURE:
+      linkElement.id = text.SUPPORT_LINK_ID;
       linkElement.href = text.SUPPORT_LINK_BASE_ + getChromeUILanguage();
       linkElement.textContent = speech.messages.learnMore;
       linkElement.target = '_blank';
       return linkElement;
     case RecognitionError.NOT_ALLOWED:
     case RecognitionError.SERVICE_NOT_ALLOWED:
+      linkElement.id = text.SUPPORT_LINK_ID;
       linkElement.href = text.SUPPORT_LINK_BASE_ + getChromeUILanguage();
       linkElement.textContent = speech.messages.details;
       linkElement.target = '_blank';
@@ -1100,6 +1122,8 @@ text.getErrorLink_ = function(error) {
  * Clears the text elements.
  */
 text.clear = function() {
+  text.updateTextArea('');
+
   text.cancelListeningTimeout();
   window.clearTimeout(text.initializingTimer_);
 
@@ -1152,7 +1176,9 @@ text.getTextClassName_ = function() {
  */
 text.startListeningMessageAnimation_ = function() {
   const animateListeningText = function() {
-    if (text.interim_.innerText == speech.messages.ready) {
+    // TODO(oskopek): Substitute the fragile string comparison with a correct
+    // state condition.
+    if (text.interim_.textContent == speech.messages.ready) {
       text.updateTextArea(speech.messages.listening);
       text.interim_.classList.add(text.LISTENING_ANIMATION_CLASS_);
     }
@@ -1255,7 +1281,7 @@ microphone.init = function() {
 
 
 /**
- * Starts the volume circles animations.
+ * Starts the volume circles animations, if it has not started yet.
  */
 microphone.startInputAnimation = function() {
   if (!microphone.isLevelAnimating_) {
@@ -1325,13 +1351,6 @@ view.OVERLAY_HIDDEN_CLASS_ = 'overlay-hidden';
  * @const @private
  */
 view.BACKGROUND_ID_ = 'voice-overlay';
-
-
-/**
- * ID of the close (x) button.
- * @const @private
- */
-view.CLOSE_BUTTON_ID_ = 'voice-close-button';
 
 
 /**
@@ -1417,7 +1436,7 @@ view.show = function() {
 
 /**
  * Sets the output area text to listening. This should only be called when
- * the Web Speech API is receiving audio input (i.e., onaudiostart).
+ * the Web Speech API starts receiving audio input (i.e., onaudiostart).
  */
 view.setReadyForSpeech = function() {
   if (view.isVisible_) {
@@ -1429,8 +1448,10 @@ view.setReadyForSpeech = function() {
 
 /**
  * Shows the pulsing animation emanating from the microphone. This should only
- * be called when the Web Speech API is receiving speech input (i.e.,
- * onspeechstart).
+ * be called when the Web Speech API starts receiving speech input (i.e.,
+ * |onspeechstart|). Do note that this may also be run when the Web Speech API
+ * is receiving speech recognition results (|onresult|), because |onspeechstart|
+ * may not have been called.
  */
 view.setReceivingSpeech = function() {
   if (view.isVisible_) {
@@ -1448,7 +1469,11 @@ view.setReceivingSpeech = function() {
  */
 view.updateSpeechResult = function(interimResultText, finalResultText) {
   if (view.isVisible_) {
-    view.container_.className = view.RECEIVING_SPEECH_CLASS_;
+    // If the Web Speech API is receiving speech recognition results
+    // (|onresult|) and |onspeechstart| has not been called.
+    if (view.container_.className != view.RECEIVING_SPEECH_CLASS_) {
+      view.setReceivingSpeech();
+    }
     text.updateTextArea(interimResultText, finalResultText);
   }
 };
@@ -1550,12 +1575,14 @@ view.onWindowClick_ = function(event) {
   if (!view.isVisible_) {
     return;
   }
-  const targetId = event.target.id;
-  const shouldRetry = (targetId == microphone.RED_BUTTON_ID ||
-                       targetId == text.ERROR_LINK_ID) &&
-      view.isNoMatchShown_;
-  const submitQuery =
-      targetId == microphone.RED_BUTTON_ID && !view.isNoMatchShown_;
-  view.onClick_(submitQuery, shouldRetry);
+  const retryLinkClicked = event.target.id === text.RETRY_LINK_ID;
+  const supportLinkClicked = event.target.id === text.SUPPORT_LINK_ID;
+  const micIconClicked = event.target.id === microphone.RED_BUTTON_ID;
+
+  const submitQuery = micIconClicked && !view.isNoMatchShown_;
+  const shouldRetry =
+      retryLinkClicked || (micIconClicked && view.isNoMatchShown_);
+  const navigatingAway = supportLinkClicked;
+  view.onClick_(submitQuery, shouldRetry, navigatingAway);
 };
 /* END VIEW */

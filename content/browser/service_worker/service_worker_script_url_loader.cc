@@ -6,11 +6,8 @@
 
 #include <memory>
 #include "content/browser/service_worker/service_worker_context_core.h"
-#include "content/browser/service_worker/service_worker_provider_host.h"
-#include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/public/common/resource_response.h"
-#include "storage/browser/blob/blob_storage_context.h"
 
 namespace content {
 
@@ -20,14 +17,12 @@ ServiceWorkerScriptURLLoader::ServiceWorkerScriptURLLoader(
     uint32_t options,
     const ResourceRequest& resource_request,
     mojom::URLLoaderClientPtr client,
-    base::WeakPtr<ServiceWorkerContextCore> context,
-    base::WeakPtr<ServiceWorkerProviderHost> provider_host,
-    base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
+    scoped_refptr<ServiceWorkerVersion> version,
     scoped_refptr<URLLoaderFactoryGetter> loader_factory_getter,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
     : network_client_binding_(this),
       forwarding_client_(std::move(client)),
-      provider_host_(provider_host) {
+      version_(version) {
   mojom::URLLoaderClientPtr network_client;
   network_client_binding_.Bind(mojo::MakeRequest(&network_client));
   loader_factory_getter->GetNetworkFactory()->get()->CreateLoaderAndStart(
@@ -50,24 +45,26 @@ void ServiceWorkerScriptURLLoader::OnReceiveResponse(
     const ResourceResponseHead& response_head,
     const base::Optional<net::SSLInfo>& ssl_info,
     mojom::DownloadedTempFilePtr downloaded_file) {
-  if (provider_host_) {
-    // We don't have complete info here, but fill in what we have now.
-    // At least we need headers and SSL info.
-    net::HttpResponseInfo response_info;
-    response_info.headers = response_head.headers;
-    if (ssl_info.has_value())
-      response_info.ssl_info = *ssl_info;
-    response_info.was_fetched_via_spdy = response_head.was_fetched_via_spdy;
-    response_info.was_alpn_negotiated = response_head.was_alpn_negotiated;
-    response_info.alpn_negotiated_protocol =
-        response_head.alpn_negotiated_protocol;
-    response_info.connection_info = response_head.connection_info;
-    response_info.socket_address = response_head.socket_address;
-
-    DCHECK(provider_host_->IsHostToRunningServiceWorker());
-    provider_host_->running_hosted_version()->SetMainScriptHttpResponseInfo(
-        response_info);
+  if (!version_->context() || version_->is_redundant()) {
+    OnComplete(ResourceRequestCompletionStatus(net::ERR_FAILED));
+    return;
   }
+
+  // We don't have complete info here, but fill in what we have now.
+  // At least we need headers and SSL info.
+  net::HttpResponseInfo response_info;
+  response_info.headers = response_head.headers;
+  if (ssl_info.has_value())
+    response_info.ssl_info = *ssl_info;
+  response_info.was_fetched_via_spdy = response_head.was_fetched_via_spdy;
+  response_info.was_alpn_negotiated = response_head.was_alpn_negotiated;
+  response_info.alpn_negotiated_protocol =
+      response_head.alpn_negotiated_protocol;
+  response_info.connection_info = response_head.connection_info;
+  response_info.socket_address = response_head.socket_address;
+
+  version_->SetMainScriptHttpResponseInfo(response_info);
+
   forwarding_client_->OnReceiveResponse(response_head, ssl_info,
                                         std::move(downloaded_file));
 }
@@ -109,6 +106,9 @@ void ServiceWorkerScriptURLLoader::OnStartLoadingResponseBody(
 void ServiceWorkerScriptURLLoader::OnComplete(
     const ResourceRequestCompletionStatus& status) {
   forwarding_client_->OnComplete(status);
+
+  network_client_binding_.Close();
+  network_loader_.reset();
 }
 
 }  // namespace content

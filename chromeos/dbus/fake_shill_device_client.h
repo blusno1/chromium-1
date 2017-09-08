@@ -44,9 +44,6 @@ class CHROMEOS_EXPORT FakeShillDeviceClient
   void ClearProperty(const dbus::ObjectPath& device_path,
                      const std::string& name,
                      VoidDBusMethodCallback callback) override;
-  void AddIPConfig(const dbus::ObjectPath& device_path,
-                   const std::string& method,
-                   const ObjectPathDBusMethodCallback& callback) override;
   void RequirePin(const dbus::ObjectPath& device_path,
                   const std::string& pin,
                   bool require,
@@ -112,6 +109,7 @@ class CHROMEOS_EXPORT FakeShillDeviceClient
   void SetTDLSBusyCount(int count) override;
   void SetTDLSState(const std::string& state) override;
   void SetSimLocked(const std::string& device_path, bool locked) override;
+  void AddCellularFoundNetwork(const std::string& device_path) override;
 
   static const char kDefaultSimPin[];
   static const int kSimPinRetryCount;

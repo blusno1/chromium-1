@@ -61,6 +61,8 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
   // mojom::FrameSinkManager implementation:
   void RegisterFrameSinkId(const FrameSinkId& frame_sink_id) override;
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id) override;
+  void SetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id,
+                              const std::string& debug_label) override;
   void CreateRootCompositorFrameSink(
       const FrameSinkId& frame_sink_id,
       gpu::SurfaceHandle surface_handle,
@@ -138,6 +140,11 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
   // reference. But the map can continue to iterate and try to use it. Passing
   // by value avoids this.
   void DestroyCompositorFrameSink(FrameSinkId frame_sink_id);
+
+  void SubmitHitTestRegionList(
+      const SurfaceId& surface_id,
+      uint64_t frame_index,
+      mojom::HitTestRegionListPtr hit_test_region_list);
 
  private:
   friend class cc::test::SurfaceSynchronizationTest;

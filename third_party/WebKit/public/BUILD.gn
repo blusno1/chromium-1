@@ -124,6 +124,7 @@ source_set("blink_headers") {
     "platform/Platform.h",
     "platform/PointerProperties.h",
     "platform/ShapeProperties.h",
+    "platform/TaskType.h",
     "platform/URLConversion.h",
     "platform/UserMetricsAction.h",
     "platform/WebAddressSpace.h",
@@ -892,7 +893,6 @@ mojom("offscreen_canvas_mojo_bindings") {
     "platform/modules/offscreencanvas/offscreen_canvas_surface.mojom",
   ]
   deps = [
-    "//cc/ipc:interfaces",
     "//services/viz/public/interfaces",
   ]
 

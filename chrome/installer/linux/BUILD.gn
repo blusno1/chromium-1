@@ -17,13 +17,144 @@ if (current_cpu == "x86" || current_cpu == "x64") {
 
 assert(is_linux)
 
+packaging_files_executables = [
+  "$root_out_dir/chrome",
+  "$root_out_dir/chrome_sandbox",
+]
+packaging_files_shlibs = []
+
+if (enable_nacl) {
+  packaging_files_executables += [
+    "$root_out_dir/nacl_helper",
+    "$root_out_dir/nacl_helper_bootstrap",
+  ]
+
+  if (current_cpu == "x86") {
+    packaging_files_executables += [ "$root_out_dir/nacl_irt_x86_32.nexe" ]
+  } else if (current_cpu == "x64") {
+    packaging_files_executables += [ "$root_out_dir/nacl_irt_x86_64.nexe" ]
+  } else if (current_cpu == "arm") {
+    packaging_files_executables += [ "$root_out_dir/nacl_irt_arm.nexe" ]
+  }
+}
+
+# The widevine BUILD.gn only produces shared libraries for x86 and x64
+if (is_chrome_branded && (current_cpu == "x86" || current_cpu == "x64")) {
+  packaging_files_shlibs += [
+    "$root_out_dir/$widevine_cdm_path/libwidevinecdmadapter.so",
+    "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so",
+  ]
+}
+
+if (!libcpp_is_static && use_custom_libcxx) {
+  packaging_files_shlibs += [ "$root_out_dir/libc++.so" ]
+}
+
+packaging_files_binaries = packaging_files_executables + packaging_files_shlibs
+
+# TODO(mmoss) Any convenient way to get all the relevant build files?
+# (e.g. all locales, resources, etc.)
+packaging_files = packaging_files_binaries + [
+                    "$root_out_dir/xdg-mime",
+                    "$root_out_dir/xdg-settings",
+                    "$root_out_dir/locales/en-US.pak",
+                  ]
+
+action_foreach("calculate_deb_dependencies") {
+  deps = [
+    ":installer_deps",
+  ]
+  script = "debian/calculate_package_deps.py"
+  sources = packaging_files_binaries
+  outputs = [
+    "$root_out_dir/deb_{{source_name_part}}.deps",
+  ]
+  args = [
+    "{{source}}",
+    rebase_path(sysroot, root_build_dir),
+    target_cpu,
+    "deb_{{source_name_part}}.deps",
+  ]
+}
+
+action("merge_deb_dependencies") {
+  deps = [
+    ":calculate_deb_dependencies",
+  ]
+  script = "debian/merge_package_versions.py"
+  additional_deps = "debian/additional_deps"
+  inputs = [
+    additional_deps,
+  ]
+  outputs = [
+    "$root_out_dir/deb_common.deps",
+  ]
+  args = [
+    "deb_common.deps",
+    rebase_path(additional_deps, root_build_dir),
+  ]
+  args += rebase_path(get_target_outputs(":calculate_deb_dependencies"),
+                      root_build_dir)
+}
+
+action_foreach("calculate_rpm_dependencies") {
+  deps = [
+    ":installer_deps",
+  ]
+  script = "rpm/calculate_package_deps.py"
+  sources = packaging_files_binaries
+  outputs = [
+    "$root_out_dir/rpm_{{source_name_part}}.deps",
+  ]
+  args = [
+    "{{source}}",
+    "rpm_{{source_name_part}}.deps",
+  ]
+  args += rebase_path(packaging_files_shlibs, root_build_dir)
+}
+
+action("merge_rpm_dependencies") {
+  deps = [
+    ":calculate_rpm_dependencies",
+  ]
+  script = "rpm/merge_package_deps.py"
+  outputs = [
+    "$root_out_dir/rpm_common.deps",
+  ]
+  args = [ "rpm_common.deps" ]
+  args += rebase_path(get_target_outputs(":calculate_rpm_dependencies"),
+                      root_build_dir)
+}
+
+action("strip_chrome_binary") {
+  prog_name = "$root_out_dir/chrome"
+  debug_file = prog_name + ".debug"
+  stripped_file = prog_name + ".stripped"
+  deps = [
+    "//chrome",
+  ]
+  script = "strip-chrome-binary.py"
+  sources = [
+    prog_name,
+  ]
+  outputs = [
+    debug_file,
+    stripped_file,
+  ]
+  args = [
+    rebase_path("//third_party/eu-strip/bin/eu-strip", root_build_dir),
+    rebase_path(prog_name, root_build_dir),
+    rebase_path(debug_file, root_build_dir),
+    rebase_path(stripped_file, root_build_dir),
+  ]
+}
+
 # This target builds all "normal" Linux installers.
 #
 # The bot setup is to build stable, unstable, and beta packages for the current
 # build. Then a later step picks up the package corresponding to what the
 # current build is supposed to be. This is wasteful since one build will only
-# be one of these. This build file also has targets for trunk and possibly asan
-# installers.
+# be one of these.
 #
 # TODO it would be much nicer to have a build variable so the bot can tell us
 # what the current build should be, so we only have to make one .deb/.rpm pair.
@@ -99,7 +230,6 @@ copy("deb_packaging_files") {
     "debian/changelog.template",
     "debian/control.template",
     "debian/debian.menu",
-    "debian/expected_deps_x64",
     "debian/postinst",
     "debian/postrm",
     "debian/prerm",
@@ -164,6 +294,7 @@ group("installer_deps") {
     ":common_packaging_files",
     ":deb_packaging_files",
     ":save_build_info",
+    ":strip_chrome_binary",
     ":theme_files",
     "//chrome",
     "//chrome:packed_resources",
@@ -209,39 +340,6 @@ template("linux_package") {
     build_script_arch = current_cpu
   }
 
-  packaging_files_binaries = [
-    # TODO(mmoss) Any convenient way to get all the relevant build
-    # files? (e.g. all locales, resources, etc.)
-    "$root_out_dir/chrome",
-    "$root_out_dir/chrome_sandbox",
-    "$root_out_dir/xdg-mime",
-    "$root_out_dir/xdg-settings",
-    "$root_out_dir/locales/en-US.pak",
-
-    "$root_out_dir/nacl_helper",
-    "$root_out_dir/nacl_helper_bootstrap",
-  ]
-
-  if (current_cpu == "x86") {
-    packaging_files_binaries += [ "$root_out_dir/nacl_irt_x86_32.nexe" ]
-  } else if (current_cpu == "x64") {
-    packaging_files_binaries += [ "$root_out_dir/nacl_irt_x86_64.nexe" ]
-  } else if (current_cpu == "arm") {
-    packaging_files_binaries += [ "$root_out_dir/nacl_irt_arm.nexe" ]
-  }
-
-  # The widevine BUILD.gn only produces shared libraries for x86 and x64
-  if (is_chrome_branded && (current_cpu == "x86" || current_cpu == "x64")) {
-    packaging_files_binaries += [
-      "$root_out_dir/$widevine_cdm_path/libwidevinecdmadapter.so",
-      "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so",
-    ]
-  }
-
-  if (!libcpp_is_static && use_custom_libcxx) {
-    packaging_files_binaries += [ "$root_out_dir/libc++.so" ]
-  }
-
   deb_target_name = "${target_name}_deb"
   action(deb_target_name) {
     visibility = [ ":*" ]
@@ -257,7 +355,7 @@ template("linux_package") {
       assert(false, "Linux installer not configured for this architecture.")
     }
 
-    inputs = packaging_files_binaries
+    inputs = packaging_files
     outputs = [
       "$root_out_dir/google-chrome-${channel}_${chrome_version_full}-1_${deb_arch}.deb",
     ]
@@ -265,21 +363,25 @@ template("linux_package") {
     args = [
       rebase_path("$root_out_dir/linux_package.lock", root_build_dir),
       rebase_path("$root_out_dir/installer/debian/build.sh", root_build_dir),
-      "-o",
-      rebase_path(root_out_dir, root_build_dir),
-      "-b",
-      rebase_path(root_out_dir, root_build_dir),
       "-a",
       build_script_arch,
+      "-b",
+      rebase_path(root_out_dir, root_build_dir),
       "-c",
       invoker.channel,
       "-d",
       branding_path_component,
+      "-o",
+      rebase_path(root_out_dir, root_build_dir),
       "-s",
       rebase_path(sysroot),
     ]
+    if (is_official_build) {
+      args += [ "-f" ]
+    }
     deps = [
       ":installer_deps",
+      ":merge_deb_dependencies",
     ]
   }
 
@@ -299,7 +401,7 @@ template("linux_package") {
         assert(false, "Linux installer not configured for this architecture.")
       }
 
-      inputs = packaging_files_binaries
+      inputs = packaging_files
       outputs = [
         "$root_out_dir/google-chrome-${channel}-${chrome_version_full}-1.${rpm_arch}.rpm",
       ]
@@ -307,17 +409,20 @@ template("linux_package") {
       args = [
         rebase_path("$root_out_dir/linux_package.lock", root_build_dir),
         rebase_path("$root_out_dir/installer/rpm/build.sh", root_build_dir),
-        "-o",
-        rebase_path(root_out_dir, root_build_dir),
-        "-b",
-        rebase_path(root_out_dir, root_build_dir),
         "-a",
         build_script_arch,
+        "-b",
+        rebase_path(root_out_dir, root_build_dir),
         "-c",
         invoker.channel,
         "-d",
         branding_path_component,
+        "-o",
+        rebase_path(root_out_dir, root_build_dir),
       ]
+      if (is_official_build) {
+        args += [ "-f" ]
+      }
       deps = [
         ":installer_deps",
       ]
@@ -343,15 +448,4 @@ linux_package("beta") {
 }
 linux_package("unstable") {
   channel = "unstable"
-}
-
-# Other packages that we support that aren't included in the default "linux"
-# target.
-linux_package("trunk") {
-  channel = "trunk"
-}
-if (is_asan) {
-  linux_package("asan") {
-    channel = "asan"
-  }
 }

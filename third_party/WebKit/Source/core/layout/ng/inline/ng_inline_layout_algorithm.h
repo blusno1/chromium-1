@@ -62,6 +62,7 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
                       LayoutUnit* line_left,
                       LayoutUnit inline_size,
                       LayoutUnit available_width);
+  bool ApplyJustify(NGLineInfo*);
 
   LayoutUnit ComputeContentSize(const NGLineInfo&,
                                 const NGExclusionSpace&,
@@ -76,9 +77,6 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
   LayoutUnit content_size_;
   LayoutUnit max_inline_size_;
   FontBaseline baseline_type_ = FontBaseline::kAlphabeticBaseline;
-
-  NGLogicalOffset bfc_offset_;
-  NGBfcRect current_opportunity_;
 
   unsigned is_horizontal_writing_mode_ : 1;
 

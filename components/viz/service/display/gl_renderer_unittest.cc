@@ -140,12 +140,16 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
     renderer()->SetCurrentFrameForTesting(GLRenderer::DrawingFrame());
     const size_t kNumSrcColorSpaces = 4;
     gfx::ColorSpace src_color_spaces[kNumSrcColorSpaces] = {
-        gfx::ColorSpace(), gfx::ColorSpace::CreateSRGB(),
+        gfx::ColorSpace::CreateSRGB(),
+        gfx::ColorSpace(gfx::ColorSpace::PrimaryID::ADOBE_RGB,
+                        gfx::ColorSpace::TransferID::GAMMA28),
         gfx::ColorSpace::CreateREC709(), gfx::ColorSpace::CreateExtendedSRGB(),
     };
     const size_t kNumDstColorSpaces = 3;
     gfx::ColorSpace dst_color_spaces[kNumDstColorSpaces] = {
-        gfx::ColorSpace(), gfx::ColorSpace::CreateSRGB(),
+        gfx::ColorSpace::CreateSRGB(),
+        gfx::ColorSpace(gfx::ColorSpace::PrimaryID::ADOBE_RGB,
+                        gfx::ColorSpace::TransferID::GAMMA18),
         gfx::ColorSpace::CreateSCRGBLinear(),
     };
     for (size_t i = 0; i < kNumDstColorSpaces; ++i) {
@@ -1915,8 +1919,6 @@ void MailboxReleased(const gpu::SyncToken& sync_token,
                      bool lost_resource,
                      cc::BlockingTaskRunner* main_thread_task_runner) {}
 
-void IgnoreCopyResult(std::unique_ptr<CopyOutputResult> result) {}
-
 TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   cc::FakeOutputSurfaceClient output_surface_client;
   std::unique_ptr<cc::FakeOutputSurface> output_surface(
@@ -1950,8 +1952,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
                     gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
-  root_pass->copy_requests.push_back(
-      CopyOutputRequest::CreateRequest(base::BindOnce(&IgnoreCopyResult)));
+  root_pass->copy_requests.push_back(CopyOutputRequest::CreateStubForTesting());
 
   TextureMailbox mailbox =
       TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_2D,
@@ -2138,7 +2139,7 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   SharedQuadState* shared_state = root_pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(gfx::Transform(), gfx::Rect(viewport_size),
                        gfx::Rect(viewport_size), gfx::Rect(viewport_size),
-                       false, 1, SkBlendMode::kSrcOver, 0);
+                       false, false, 1, SkBlendMode::kSrcOver, 0);
   overlay_quad->SetNew(shared_state, gfx::Rect(viewport_size),
                        gfx::Rect(viewport_size), needs_blending, resource_id,
                        premultiplied_alpha, uv_top_left, uv_bottom_right,
@@ -2339,7 +2340,7 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
       gfx::RectF tex_coord_rect(0, 0, 1, 1);
       SharedQuadState* shared_state =
           root_pass->CreateAndAppendSharedQuadState();
-      shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, 1,
+      shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, false, 1,
                            SkBlendMode::kSrcOver, 0);
       cc::YUVVideoDrawQuad* quad =
           root_pass->CreateAndAppendDrawQuad<cc::YUVVideoDrawQuad>();

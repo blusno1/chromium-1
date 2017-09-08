@@ -79,7 +79,7 @@ bool LocationArbitrator::DoStartProviders() {
     // If no providers are available, we report an error to avoid
     // callers waiting indefinitely for a reply.
     Geoposition position;
-    position.error_code = Geoposition::ERROR_CODE_PERMISSION_DENIED;
+    position.error_code = Geoposition::ERROR_CODE_POSITION_UNAVAILABLE;
     arbitrator_update_callback_.Run(this, position);
     return false;
   }
@@ -175,8 +175,7 @@ LocationArbitrator::NewNetworkLocationProvider(
   // Android uses its own SystemLocationProvider.
   return nullptr;
 #else
-  return std::make_unique<NetworkLocationProvider>(access_token_store, context,
-                                                   url, access_token);
+  return std::make_unique<NetworkLocationProvider>(context, url);
 #endif
 }
 

@@ -77,7 +77,7 @@ class PromptLabel : public views::StyledLabel {
 
   gfx::Insets GetInsets() const override {
     return ChromeLayoutProvider::Get()->GetInsetsMetric(
-        views::INSETS_DIALOG_CONTENTS);
+        views::INSETS_DIALOG_SUBSECTION);
   }
 };
 
@@ -205,10 +205,10 @@ void ForcedReauthenticationDialogView::AddedToWidget() {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   // Layout the components.
   const gfx::Insets dialog_insets =
-      provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS);
+      provider->GetDialogInsetsForContentType(views::TEXT, views::TEXT);
   SetBorder(views::CreateEmptyBorder(dialog_insets.top(), 0,
                                      dialog_insets.bottom(), 0));
-  views::GridLayout* dialog_layout = new views::GridLayout(this);
+  views::GridLayout* dialog_layout = views::GridLayout::CreateAndInstall(this);
   SetLayoutManager(dialog_layout);
 
   // Use a column set with no padding.

@@ -16,6 +16,7 @@ class NGBreakToken;
 class NGConstraintSpace;
 class NGFragmentBuilder;
 class NGLayoutResult;
+class NGPhysicalBoxFragment;
 class NGPhysicalFragment;
 struct MinMaxSize;
 struct NGBaselineRequest;
@@ -59,7 +60,12 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
  private:
   // After we run the layout algorithm, this function copies back the geometry
   // data to the layout box.
-  void CopyFragmentDataToLayoutBox(const NGConstraintSpace&, NGLayoutResult*);
+  void CopyFragmentDataToLayoutBox(const NGConstraintSpace&,
+                                   const NGLayoutResult&);
+  void PlaceChildrenInLayoutBox(const NGConstraintSpace&,
+                                const NGPhysicalBoxFragment&);
+  void PlaceChildrenInFlowThread(const NGConstraintSpace&,
+                                 const NGPhysicalBoxFragment&);
   void CopyChildFragmentPosition(
       const NGPhysicalFragment& fragment,
       const NGPhysicalOffset& additional_offset = NGPhysicalOffset());

@@ -8,7 +8,6 @@
 #include <map>
 #include <vector>
 
-#include "ash/accelerators/accelerator_controller.h"
 #include "ash/login_status.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/config.h"
@@ -67,7 +66,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_style.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
@@ -601,18 +600,6 @@ void SystemTray::OnMouseEnteredView() {
 void SystemTray::OnMouseExitedView() {
   if (system_bubble_)
     system_bubble_->bubble()->RestartAutoCloseTimer();
-}
-
-void SystemTray::RegisterAccelerators(
-    const std::vector<ui::Accelerator>& accelerators,
-    views::TrayBubbleView* tray_bubble_view) {
-  Shell::Get()->accelerator_controller()->Register(accelerators,
-                                                   tray_bubble_view);
-}
-
-void SystemTray::UnregisterAllAccelerators(
-    views::TrayBubbleView* tray_bubble_view) {
-  Shell::Get()->accelerator_controller()->UnregisterAll(tray_bubble_view);
 }
 
 base::string16 SystemTray::GetAccessibleNameForBubble() {

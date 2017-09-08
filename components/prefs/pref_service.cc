@@ -104,8 +104,12 @@ void PrefService::InitFromStorage(bool async) {
 }
 
 void PrefService::CommitPendingWrite() {
+  CommitPendingWrite(base::OnceClosure());
+}
+
+void PrefService::CommitPendingWrite(base::OnceClosure done_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  user_pref_store_->CommitPendingWrite();
+  user_pref_store_->CommitPendingWrite(std::move(done_callback));
 }
 
 void PrefService::SchedulePendingLossyWrites() {
@@ -384,6 +388,14 @@ void PrefService::ClearMutableValues() {
 
 void PrefService::OnStoreDeletionFromDisk() {
   user_pref_store_->OnStoreDeletionFromDisk();
+}
+
+void PrefService::AddPrefObserverAllPrefs(PrefObserver* obs) {
+  pref_notifier_->AddPrefObserverAllPrefs(obs);
+}
+
+void PrefService::RemovePrefObserverAllPrefs(PrefObserver* obs) {
+  pref_notifier_->RemovePrefObserverAllPrefs(obs);
 }
 
 void PrefService::Set(const std::string& path, const base::Value& value) {

@@ -19,6 +19,11 @@ service_test("services_unittests") {
   # section below. If you are unsure, contact blundell@chromium.org.
   deps = [
     "//services/identity:tests",
+    "//services/network/public/cpp:tests",
+  ]
+
+  data_deps = [
+    "//testing/buildbot/filters:services_unittests_filters",
   ]
 
   if (!is_ios) {

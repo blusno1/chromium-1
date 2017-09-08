@@ -32,10 +32,10 @@
 
 #include <algorithm>
 #include <memory>
-#include "bindings/core/v8/ArrayBufferOrArrayBufferView.h"
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "bindings/core/v8/V8ArrayBufferView.h"
+#include "bindings/core/v8/array_buffer_or_array_buffer_view.h"
 #include "bindings/modules/v8/V8CryptoKey.h"
 #include "core/typed_arrays/DOMArrayPiece.h"
 #include "core/typed_arrays/DOMTypedArray.h"
@@ -281,13 +281,13 @@ bool GetOptionalBufferSource(const Dictionary& raw,
 
   if (v8_value->IsArrayBufferView()) {
     bytes = CopyBytes(
-        V8ArrayBufferView::toImpl(v8::Local<v8::Object>::Cast(v8_value)));
+        V8ArrayBufferView::ToImpl(v8::Local<v8::Object>::Cast(v8_value)));
     return true;
   }
 
   if (v8_value->IsArrayBuffer()) {
     bytes =
-        CopyBytes(V8ArrayBuffer::toImpl(v8::Local<v8::Object>::Cast(v8_value)));
+        CopyBytes(V8ArrayBuffer::ToImpl(v8::Local<v8::Object>::Cast(v8_value)));
     return true;
   }
 
@@ -843,7 +843,7 @@ bool ParseEcdhKeyDeriveParams(const Dictionary& raw,
   }
 
   CryptoKey* crypto_key =
-      V8CryptoKey::toImplWithTypeCheck(raw.GetIsolate(), v8_value);
+      V8CryptoKey::ToImplWithTypeCheck(raw.GetIsolate(), v8_value);
   if (!crypto_key) {
     SetTypeError(context.ToString("public", "Must be a CryptoKey"), error);
     return false;

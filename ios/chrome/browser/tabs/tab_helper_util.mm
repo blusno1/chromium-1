@@ -13,6 +13,9 @@
 #import "components/history/ios/browser/web_state_top_sites_observer.h"
 #include "components/keyed_service/core/service_access_type.h"
 #import "components/signin/ios/browser/account_consistency_service.h"
+#import "ios/chrome/browser/autofill/autofill_tab_helper.h"
+#import "ios/chrome/browser/autofill/form_input_accessory_view_tab_helper.h"
+#import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
@@ -20,6 +23,8 @@
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
+#import "ios/chrome/browser/passwords/password_tab_helper.h"
+#import "ios/chrome/browser/passwords/passwords_ui_delegate_impl.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/reading_list_web_state_observer.h"
 #import "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
@@ -36,7 +41,6 @@
 #import "ios/chrome/browser/web/network_activity_indicator_tab_helper.h"
 #import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #import "ios/chrome/browser/web/repost_form_tab_helper.h"
-#import "ios/chrome/browser/web/sad_tab_tab_helper.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/web/public/web_state/web_state.h"
@@ -64,7 +68,6 @@ void AttachTabHelpers(web::WebState* web_state) {
   BlockedPopupTabHelper::CreateForWebState(web_state);
   FindTabHelper::CreateForWebState(web_state, tab.findInPageControllerDelegate);
   StoreKitTabHelper::CreateForWebState(web_state);
-  SadTabTabHelper::CreateForWebState(web_state, tab);
   PagePlaceholderTabHelper::CreateForWebState(web_state, tab);
   CaptivePortalDetectorTabHelper::CreateForWebState(web_state);
 
@@ -91,6 +94,34 @@ void AttachTabHelpers(web::WebState* web_state) {
   history::WebStateTopSitesObserver::CreateForWebState(
       web_state,
       ios::TopSitesFactory::GetForBrowserState(original_browser_state).get());
+
+  PasswordTabHelper::CreateForWebState(web_state,
+                                       [[PasswordsUiDelegateImpl alloc] init]);
+
+  AutofillTabHelper::CreateForWebState(
+      web_state, PasswordTabHelper::FromWebState(web_state)
+                     ->GetPasswordGenerationManager());
+
+  FormSuggestionTabHelper::CreateForWebState(web_state, @[
+    PasswordTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
+    AutofillTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
+  ]);
+
+  if (id<FormInputAccessoryViewProvider>
+          password_controller_form_input_accessory_view_provider =
+              PasswordTabHelper::FromWebState(web_state)
+                  ->GetAccessoryViewProvider()) {
+    FormInputAccessoryViewTabHelper::CreateForWebState(web_state, @[
+      password_controller_form_input_accessory_view_provider,
+      FormSuggestionTabHelper::FromWebState(web_state)
+          ->GetAccessoryViewProvider(),
+    ]);
+  } else {
+    FormInputAccessoryViewTabHelper::CreateForWebState(web_state, @[
+      FormSuggestionTabHelper::FromWebState(web_state)
+          ->GetAccessoryViewProvider(),
+    ]);
+  }
 
   // Allow the embedder to attach tab helpers.
   ios::GetChromeBrowserProvider()->AttachTabHelpers(web_state, tab);

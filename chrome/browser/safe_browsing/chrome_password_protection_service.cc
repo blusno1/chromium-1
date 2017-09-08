@@ -134,30 +134,28 @@ void ChromePasswordProtectionService::FillReferrerChain(
 
 void ChromePasswordProtectionService::ShowModalWarning(
     content::WebContents* web_contents,
-    const LoginReputationClientRequest* request_proto,
-    const LoginReputationClientResponse* response_proto) {
-  // Do nothing if there is already a modal warning showing for this
-  // WebContents.
-  if (web_contents_to_proto_map().find(web_contents) !=
-      web_contents_to_proto_map().end())
-    return;
-
-  web_contents_to_proto_map().insert(std::make_pair(
-      web_contents,
-      std::make_pair(LoginReputationClientRequest(*request_proto),
-                     LoginReputationClientResponse(*response_proto))));
-
+    const std::string& unused_verdict_token) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // TODO(jialiul): Use verdict_token field in post warning report.
   UpdateSecurityState(SB_THREAT_TYPE_PASSWORD_REUSE, web_contents);
 #if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
   // TODO(jialiul): Remove the restriction on Mac when this dialog has a Cocoa
   // version as well.
   ShowPasswordReuseModalWarningDialog(
-      web_contents,
+      web_contents, this,
       base::BindOnce(&ChromePasswordProtectionService::OnWarningDone,
                      GetWeakPtr(), web_contents,
                      PasswordProtectionService::MODAL_DIALOG));
 #endif  // !OS_MACOSX || MAC_VIEWS_BROWSER
   OnWarningShown(web_contents, PasswordProtectionService::MODAL_DIALOG);
+}
+
+void ChromePasswordProtectionService::AddObserver(Observer* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void ChromePasswordProtectionService::RemoveObserver(Observer* observer) {
+  observer_list_.RemoveObserver(observer);
 }
 
 PrefService* ChromePasswordProtectionService::GetPrefs() {
@@ -382,30 +380,6 @@ void ChromePasswordProtectionService::MaybeLogPasswordReuseLookupEvent(
       NOTREACHED() << __FUNCTION__ << ": outcome: " << outcome;
       break;
   }
-}
-
-void ChromePasswordProtectionService::ShowPhishingInterstitial(
-    const GURL& phishing_url,
-    const std::string& token,
-    content::WebContents* web_contents) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!ui_manager_)
-    return;
-  security_interstitials::UnsafeResource resource;
-  resource.url = phishing_url;
-  resource.original_url = phishing_url;
-  resource.is_subresource = false;
-  resource.threat_type = SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING;
-  resource.threat_source = ThreatSource::PASSWORD_PROTECTION_SERVICE;
-  resource.web_contents_getter =
-      SafeBrowsingUIManager::UnsafeResource::GetWebContentsGetter(
-          web_contents->GetRenderProcessHost()->GetID(),
-          web_contents->GetMainFrame()->GetRoutingID());
-  resource.token = token;
-  if (!ui_manager_->IsWhitelisted(resource)) {
-    web_contents->GetController().DiscardNonCommittedEntries();
-  }
-  ui_manager_->DisplayBlockingPage(resource);
 }
 
 void ChromePasswordProtectionService::UpdateSecurityState(

@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility_delegate.h"
 #include "ash/accessibility_types.h"
 #include "ash/ash_view_ids.h"
@@ -29,6 +30,8 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/message_center/message_center.h"
+#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/widget/widget.h"
@@ -57,14 +60,16 @@ enum AccessibilityState {
 
 uint32_t GetAccessibilityState() {
   AccessibilityDelegate* delegate = Shell::Get()->accessibility_delegate();
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
   uint32_t state = A11Y_NONE;
   if (delegate->IsSpokenFeedbackEnabled())
     state |= A11Y_SPOKEN_FEEDBACK;
-  if (delegate->IsHighContrastEnabled())
+  if (controller->IsHighContrastEnabled())
     state |= A11Y_HIGH_CONTRAST;
   if (delegate->IsMagnifierEnabled())
     state |= A11Y_SCREEN_MAGNIFIER;
-  if (delegate->IsLargeCursorEnabled())
+  if (controller->IsLargeCursorEnabled())
     state |= A11Y_LARGE_CURSOR;
   if (delegate->IsAutoclickEnabled())
     state |= A11Y_AUTOCLICK;
@@ -95,13 +100,13 @@ LoginStatus GetCurrentLoginStatus() {
 const gfx::VectorIcon& GetNotificationIcon(uint32_t enabled_accessibility) {
   if ((enabled_accessibility & A11Y_BRAILLE_DISPLAY_CONNECTED) &&
       (enabled_accessibility & A11Y_SPOKEN_FEEDBACK)) {
-    return message_center::MessageCenter::IsNewStyleNotificationEnabled()
+    return message_center::IsNewStyleNotificationEnabled()
                ? kNotificationAccessibilityIcon
                : kSystemMenuAccessibilityIcon;
   }
   if (enabled_accessibility & A11Y_BRAILLE_DISPLAY_CONNECTED)
     return kNotificationAccessibilityBrailleIcon;
-  return message_center::MessageCenter::IsNewStyleNotificationEnabled()
+  return message_center::IsNewStyleNotificationEnabled()
              ? kNotificationChromevoxIcon
              : kSystemMenuAccessibilityChromevoxIcon;
 }
@@ -151,6 +156,8 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
   CreateScrollableList();
 
   AccessibilityDelegate* delegate = Shell::Get()->accessibility_delegate();
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
 
   spoken_feedback_enabled_ = delegate->IsSpokenFeedbackEnabled();
   spoken_feedback_view_ = AddScrollListCheckableItem(
@@ -159,7 +166,7 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
           IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SPOKEN_FEEDBACK),
       spoken_feedback_enabled_);
 
-  high_contrast_enabled_ = delegate->IsHighContrastEnabled();
+  high_contrast_enabled_ = controller->IsHighContrastEnabled();
   high_contrast_view_ = AddScrollListCheckableItem(
       kSystemMenuAccessibilityContrastIcon,
       l10n_util::GetStringUTF16(
@@ -191,7 +198,7 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
 
   AddScrollListSubHeader(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_ADDITIONAL_SETTINGS);
 
-  large_cursor_enabled_ = delegate->IsLargeCursorEnabled();
+  large_cursor_enabled_ = controller->IsLargeCursorEnabled();
   large_cursor_view_ = AddScrollListCheckableItem(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_LARGE_CURSOR),
       large_cursor_enabled_);
@@ -236,6 +243,8 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
 
 void AccessibilityDetailedView::HandleViewClicked(views::View* view) {
   AccessibilityDelegate* delegate = Shell::Get()->accessibility_delegate();
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
   using base::RecordAction;
   using base::UserMetricsAction;
   if (view == spoken_feedback_view_) {
@@ -244,20 +253,22 @@ void AccessibilityDetailedView::HandleViewClicked(views::View* view) {
                      : UserMetricsAction("StatusArea_SpokenFeedbackEnabled"));
     delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
   } else if (view == high_contrast_view_) {
-    RecordAction(delegate->IsHighContrastEnabled()
-                     ? UserMetricsAction("StatusArea_HighContrastDisabled")
-                     : UserMetricsAction("StatusArea_HighContrastEnabled"));
-    delegate->ToggleHighContrast();
+    bool new_state = !controller->IsHighContrastEnabled();
+    RecordAction(new_state
+                     ? UserMetricsAction("StatusArea_HighContrastEnabled")
+                     : UserMetricsAction("StatusArea_HighContrastDisabled"));
+    controller->SetHighContrastEnabled(new_state);
   } else if (view == screen_magnifier_view_) {
     RecordAction(delegate->IsMagnifierEnabled()
                      ? UserMetricsAction("StatusArea_MagnifierDisabled")
                      : UserMetricsAction("StatusArea_MagnifierEnabled"));
     delegate->SetMagnifierEnabled(!delegate->IsMagnifierEnabled());
   } else if (large_cursor_view_ && view == large_cursor_view_) {
-    RecordAction(delegate->IsLargeCursorEnabled()
-                     ? UserMetricsAction("StatusArea_LargeCursorDisabled")
-                     : UserMetricsAction("StatusArea_LargeCursorEnabled"));
-    delegate->SetLargeCursorEnabled(!delegate->IsLargeCursorEnabled());
+    bool new_state = !controller->IsLargeCursorEnabled();
+    RecordAction(new_state
+                     ? UserMetricsAction("StatusArea_LargeCursorEnabled")
+                     : UserMetricsAction("StatusArea_LargeCursorDisabled"));
+    controller->SetLargeCursorEnabled(new_state);
   } else if (autoclick_view_ && view == autoclick_view_) {
     RecordAction(delegate->IsAutoclickEnabled()
                      ? UserMetricsAction("StatusArea_AutoClickDisabled")
@@ -477,7 +488,7 @@ void TrayAccessibility::OnAccessibilityStatusChanged(
   }
 
   std::unique_ptr<message_center::Notification> notification;
-  if (message_center::MessageCenter::IsNewStyleNotificationEnabled()) {
+  if (message_center::IsNewStyleNotificationEnabled()) {
     notification = message_center::Notification::CreateSystemNotification(
         message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, title, text,
         gfx::Image(), base::string16(), GURL(),

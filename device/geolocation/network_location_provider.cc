@@ -12,7 +12,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "device/geolocation/access_token_store.h"
 
 namespace device {
 namespace {
@@ -94,27 +93,20 @@ bool NetworkLocationProvider::PositionCache::MakeKey(const WifiData& wifi_data,
 
 // NetworkLocationProvider factory function
 LocationProvider* NewNetworkLocationProvider(
-    const scoped_refptr<AccessTokenStore>& access_token_store,
     const scoped_refptr<net::URLRequestContextGetter>& context,
-    const GURL& url,
-    const base::string16& access_token) {
-  return new NetworkLocationProvider(access_token_store, context, url,
-                                     access_token);
+    const GURL& url) {
+  return new NetworkLocationProvider(context, url);
 }
 
 // NetworkLocationProvider
 NetworkLocationProvider::NetworkLocationProvider(
-    const scoped_refptr<AccessTokenStore>& access_token_store,
     const scoped_refptr<net::URLRequestContextGetter>& url_context_getter,
-    const GURL& url,
-    const base::string16& access_token)
-    : access_token_store_(access_token_store),
-      wifi_data_provider_manager_(nullptr),
+    const GURL& url)
+    : wifi_data_provider_manager_(nullptr),
       wifi_data_update_callback_(
           base::Bind(&NetworkLocationProvider::OnWifiDataUpdate,
                      base::Unretained(this))),
       is_wifi_data_complete_(false),
-      access_token_(access_token),
       is_permission_granted_(false),
       is_new_data_available_(false),
       request_(new NetworkLocationRequest(
@@ -123,10 +115,7 @@ NetworkLocationProvider::NetworkLocationProvider(
           base::Bind(&NetworkLocationProvider::OnLocationResponse,
                      base::Unretained(this)))),
       position_cache_(new PositionCache),
-      weak_factory_(this) {
-  DLOG_IF(WARNING, !url.is_valid())
-      << __func__ << " Bad URL: " << url.possibly_invalid_spec();
-}
+      weak_factory_(this) {}
 
 NetworkLocationProvider::~NetworkLocationProvider() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -162,19 +151,12 @@ void NetworkLocationProvider::OnWifiDataUpdate() {
 void NetworkLocationProvider::OnLocationResponse(
     const Geoposition& position,
     bool server_error,
-    const base::string16& access_token,
     const WifiData& wifi_data) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Record the position and update our cache.
   position_ = position;
   if (position.Validate())
     position_cache_->CachePosition(wifi_data, position);
-
-  // Record access_token if it's set.
-  if (!access_token.empty() && access_token_ != access_token) {
-    access_token_ = access_token;
-    access_token_store_->SaveAccessToken(request_->url(), access_token);
-  }
 
   // Let listeners know that we now have a position available.
   if (!location_provider_update_callback_.is_null())
@@ -183,10 +165,9 @@ void NetworkLocationProvider::OnLocationResponse(
 
 bool NetworkLocationProvider::StartProvider(bool high_accuracy) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
   if (IsStarted())
     return true;
-  if (!request_->url().is_valid())
-    return false;
 
   // Registers a callback with the data provider. The first call to Register()
   // will create a singleton data provider that will be deleted on Unregister().
@@ -253,7 +234,7 @@ void NetworkLocationProvider::RequestPosition() {
          "with new data. Wifi APs: "
       << wifi_data_.access_point_data.size();
 
-  request_->MakeRequest(access_token_, wifi_data_, wifi_timestamp_);
+  request_->MakeRequest(wifi_data_, wifi_timestamp_);
 }
 
 bool NetworkLocationProvider::IsStarted() const {

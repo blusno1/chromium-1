@@ -347,8 +347,6 @@ class QuicStreamFactory::Job {
 
   void OnIOComplete(int rv);
 
-  void Cancel();
-
   const QuicSessionKey& key() const { return key_; }
 
   const NetLogWithSource& net_log() const { return net_log_; }
@@ -482,14 +480,6 @@ void QuicStreamFactory::Job::OnIOComplete(int rv) {
   rv = DoLoop(rv);
   if (rv != ERR_IO_PENDING && !callback_.is_null())
     base::ResetAndReturn(&callback_).Run(rv);
-}
-
-void QuicStreamFactory::Job::Cancel() {
-  callback_.Reset();
-  if (session_)
-    session_->connection()->CloseConnection(
-        QUIC_CONNECTION_CANCELLED, "New job canceled.",
-        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
 }
 
 void QuicStreamFactory::Job::PopulateNetErrorDetails(
@@ -1035,22 +1025,19 @@ bool QuicStreamFactory::OnResolution(const QuicSessionKey& key,
 }
 
 void QuicStreamFactory::OnJobComplete(Job* job, int rv) {
-  // Copy |server_id|, because |job| might be destroyed before this method
-  // returns.
-  const QuicServerId server_id(job->key().server_id());
-
-  auto iter = active_jobs_.find(server_id);
+  auto iter = active_jobs_.find(job->key().server_id());
   // TODO(xunjieli): Change following CHECKs back to DCHECKs after
   // crbug.com/750271 is fixed.
   CHECK(iter != active_jobs_.end());
   if (rv == OK) {
     set_require_confirmation(false);
 
-    SessionMap::iterator session_it = active_sessions_.find(server_id);
+    SessionMap::iterator session_it =
+        active_sessions_.find(job->key().server_id());
     CHECK(session_it != active_sessions_.end());
     QuicChromiumClientSession* session = session_it->second;
     for (auto* request : iter->second->stream_requests()) {
-      CHECK(request->server_id() == server_id);
+      CHECK(request->server_id() == job->key().server_id());
       // Do not notify |request| yet.
       request->SetSession(session->CreateHandle());
     }

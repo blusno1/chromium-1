@@ -1085,11 +1085,12 @@ TEST_F(WindowTreeClientClientTest, InputEventCaptureWindow) {
   // child1 has a custom targeter set which would always return itself as the
   // target window therefore event should go to child1.
   const gfx::Point event_location(50, 60);
+  const gfx::Point root_location;
   uint32_t event_id = 1;
   window_delegate1->set_event_id(event_id);
   window_delegate2->set_event_id(event_id);
   std::unique_ptr<ui::Event> ui_event(
-      new ui::MouseEvent(ui::ET_MOUSE_MOVED, event_location, gfx::Point(),
+      new ui::MouseEvent(ui::ET_MOUSE_MOVED, event_location, root_location,
                          ui::EventTimeForNow(), ui::EF_NONE, 0));
   window_tree_client()->OnWindowInputEvent(
       event_id, server_id(child1.get()), window_tree_host->display_id(),
@@ -1103,7 +1104,9 @@ TEST_F(WindowTreeClientClientTest, InputEventCaptureWindow) {
   window_delegate1->reset();
   window_delegate2->reset();
 
-  // The same event should go to child2 if child2 is the capture window.
+  // Set capture to |child2|. Capture takes precedence, and because the event is
+  // converted local coordinates are converted from the original target to root
+  // and then to capture target.
   std::unique_ptr<client::DefaultCaptureClient> capture_client(
       base::MakeUnique<client::DefaultCaptureClient>());
   client::SetCaptureClient(top_level, capture_client.get());
@@ -1120,7 +1123,10 @@ TEST_F(WindowTreeClientClientTest, InputEventCaptureWindow) {
             window_tree()->GetEventResult(event_id));
   EXPECT_EQ(0, window_delegate1->move_count());
   EXPECT_EQ(1, window_delegate2->move_count());
-  EXPECT_EQ(gfx::Point(30, 30), window_delegate2->last_event_location());
+  gfx::Point location_in_child2(event_location);
+  Window::ConvertPointToTarget(child1.get(), top_level, &location_in_child2);
+  Window::ConvertPointToTarget(top_level, child2.get(), &location_in_child2);
+  EXPECT_EQ(location_in_child2, window_delegate2->last_event_location());
   child2.reset();
   child1.reset();
   window_tree_host.reset();
@@ -2354,6 +2360,54 @@ TEST_F(WindowTreeClientWmTest, ManuallyCreateDisplay) {
   window_tree_host.InitHost();
   EXPECT_EQ(bounds, window_tree_host.GetBoundsInPixels());
   EXPECT_EQ(gfx::Rect(bounds.size()), window_tree_host.window()->bounds());
+}
+
+TEST_F(WindowTreeClientWmTestHighDPI, BoundsChangeWhenAdded) {
+  const gfx::Rect bounds(1, 2, 101, 102);
+  std::unique_ptr<DisplayInitParams> display_params =
+      base::MakeUnique<DisplayInitParams>();
+  display_params->display = base::MakeUnique<display::Display>(201);
+  display_params->display->set_bounds(bounds);
+  display_params->viewport_metrics.bounds_in_pixels = bounds;
+  const float device_scale_factor = 2.0f;
+  display_params->viewport_metrics.device_scale_factor = device_scale_factor;
+  display_params->viewport_metrics.ui_scale_factor = 1.0f;
+  WindowTreeHostMusInitParams init_params =
+      WindowTreeClientPrivate(window_tree_client_impl())
+          .CallCreateInitParamsForNewDisplay();
+  init_params.display_id = display_params->display->id();
+  init_params.display_init_params = std::move(display_params);
+  WindowTreeHostMus window_tree_host(std::move(init_params));
+  window_tree_host.InitHost();
+
+  const gfx::Rect bounds_in_dips(1, 2, 3, 4);
+  aura::Window child_window(nullptr);
+  child_window.SetProperty(aura::client::kEmbedType,
+                           aura::client::WindowEmbedType::EMBED_IN_OWNER);
+  child_window.Init(ui::LAYER_NOT_DRAWN);
+  EXPECT_EQ(1.0f, WindowMus::Get(&child_window)->GetDeviceScaleFactor());
+  window_tree()->AckAllChanges();
+  child_window.SetBounds(bounds_in_dips);
+  ASSERT_EQ(1u,
+            window_tree()->GetChangeCountForType(WindowTreeChangeType::BOUNDS));
+  EXPECT_EQ(bounds_in_dips, window_tree()->last_set_window_bounds());
+  base::Optional<viz::LocalSurfaceId> child_window_local_surface_id =
+      window_tree()->last_local_surface_id();
+  ASSERT_TRUE(child_window_local_surface_id);
+  window_tree()->AckAllChanges();
+
+  window_tree_host.window()->AddChild(&child_window);
+  EXPECT_EQ(2.0f, WindowMus::Get(&child_window)->GetDeviceScaleFactor());
+  EXPECT_EQ(bounds_in_dips, child_window.bounds());
+  ASSERT_EQ(1u,
+            window_tree()->GetChangeCountForType(WindowTreeChangeType::BOUNDS));
+  EXPECT_EQ(gfx::ConvertRectToPixel(device_scale_factor, bounds_in_dips),
+            window_tree()->last_set_window_bounds());
+  base::Optional<viz::LocalSurfaceId> updated_child_window_local_surface_id =
+      window_tree()->last_local_surface_id();
+  ASSERT_TRUE(child_window_local_surface_id);
+  EXPECT_NE(*child_window_local_surface_id,
+            *updated_child_window_local_surface_id);
 }
 
 TEST_F(WindowTreeClientWmTestHighDPI, SetBounds) {

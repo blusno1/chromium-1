@@ -187,6 +187,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       preload_(base::FeatureList::IsEnabled(kPreloadDefaultIsMetadata)
                    ? MultibufferDataSource::METADATA
                    : MultibufferDataSource::AUTO),
+      has_poster_(false),
       main_task_runner_(frame->LoadingTaskRunner()),
       media_task_runner_(params->media_task_runner()),
       worker_task_runner_(params->worker_task_runner()),
@@ -512,6 +513,15 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
   GURL gurl(url);
   ReportMetrics(load_type, gurl, frame_->GetSecurityOrigin(), media_log_.get());
 
+  // Report poster availability for SRC=.
+  if (load_type == kLoadTypeURL) {
+    if (preload_ == MultibufferDataSource::METADATA) {
+      UMA_HISTOGRAM_BOOLEAN("Media.SRC.PreloadMetaDataHasPoster", has_poster_);
+    } else if (preload_ == MultibufferDataSource::AUTO) {
+      UMA_HISTOGRAM_BOOLEAN("Media.SRC.PreloadAutoHasPoster", has_poster_);
+    }
+  }
+
   // Set subresource URL for crash reporting.
   base::debug::SetCrashKeyValue("subresource_url", gurl.spec());
 
@@ -808,15 +818,6 @@ void WebMediaPlayerImpl::SelectedVideoTrackChanged(
   pipeline_controller_.OnSelectedVideoTrackChanged(selected_video_track_id);
 }
 
-bool WebMediaPlayerImpl::GetLastUploadedFrameInfo(unsigned* width,
-                                                  unsigned* height,
-                                                  double* timestamp) {
-  *width = last_uploaded_frame_size_.width();
-  *height = last_uploaded_frame_size_.height();
-  *timestamp = last_uploaded_frame_timestamp_.InSecondsF();
-  return true;
-}
-
 blink::WebSize WebMediaPlayerImpl::NaturalSize() const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
@@ -1009,7 +1010,9 @@ bool WebMediaPlayerImpl::DidLoadingProgress() {
 
 void WebMediaPlayerImpl::Paint(blink::WebCanvas* canvas,
                                const blink::WebRect& rect,
-                               cc::PaintFlags& flags) {
+                               cc::PaintFlags& flags,
+                               int already_uploaded_id,
+                               VideoFrameUploadMetadata* out_metadata) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl:paint");
 
@@ -1028,6 +1031,15 @@ void WebMediaPlayerImpl::Paint(blink::WebCanvas* canvas,
       return;  // Unable to get/create a shared main thread context.
     if (!context_3d.gr_context)
       return;  // The context has been lost since and can't setup a GrContext.
+  }
+  if (out_metadata) {
+    // WebGL last-uploaded-frame-metadata API enabled. https://crbug.com/639174
+    ComputeFrameUploadMetadata(video_frame.get(), already_uploaded_id,
+                               out_metadata);
+    if (out_metadata->skipped) {
+      // Skip uploading this frame.
+      return;
+    }
   }
   skcanvas_video_renderer_.Paint(video_frame, canvas, gfx::RectF(gfx_rect),
                                  flags, pipeline_metadata_.video_rotation,
@@ -1087,7 +1099,9 @@ bool WebMediaPlayerImpl::CopyVideoTextureToPlatformTexture(
     unsigned type,
     int level,
     bool premultiply_alpha,
-    bool flip_y) {
+    bool flip_y,
+    int already_uploaded_id,
+    VideoFrameUploadMetadata* out_metadata) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl:copyVideoTextureToPlatformTexture");
 
@@ -1099,6 +1113,16 @@ bool WebMediaPlayerImpl::CopyVideoTextureToPlatformTexture(
   if (!video_frame.get() || !video_frame->HasTextures()) {
     return false;
   }
+  if (out_metadata) {
+    // WebGL last-uploaded-frame-metadata API is enabled.
+    // https://crbug.com/639174
+    ComputeFrameUploadMetadata(video_frame.get(), already_uploaded_id,
+                               out_metadata);
+    if (out_metadata->skipped) {
+      // Skip uploading this frame.
+      return true;
+    }
+  }
 
   Context3D context_3d;
   if (!context_3d_cb_.is_null())
@@ -1106,6 +1130,19 @@ bool WebMediaPlayerImpl::CopyVideoTextureToPlatformTexture(
   return skcanvas_video_renderer_.CopyVideoFrameTexturesToGLTexture(
       context_3d, gl, video_frame.get(), target, texture, internal_format,
       format, type, level, premultiply_alpha, flip_y);
+}
+
+void WebMediaPlayerImpl::ComputeFrameUploadMetadata(
+    VideoFrame* frame,
+    int already_uploaded_id,
+    VideoFrameUploadMetadata* out_metadata) {
+  DCHECK(out_metadata);
+  out_metadata->frame_id = frame->unique_id();
+  out_metadata->visible_rect = frame->visible_rect();
+  out_metadata->timestamp = frame->timestamp();
+  bool skip_possible = already_uploaded_id != -1;
+  bool same_frame_id = frame->unique_id() == already_uploaded_id;
+  out_metadata->skipped = skip_possible && same_frame_id;
 }
 
 void WebMediaPlayerImpl::SetContentDecryptionModule(
@@ -1913,11 +1950,14 @@ gfx::Size WebMediaPlayerImpl::GetCanvasSize() const {
 void WebMediaPlayerImpl::SetDeviceScaleFactor(float scale_factor) {
   cast_impl_.SetDeviceScaleFactor(scale_factor);
 }
+#endif  // defined(OS_ANDROID)  // WMPI_CAST
 
 void WebMediaPlayerImpl::SetPoster(const blink::WebURL& poster) {
+  has_poster_ = !poster.IsEmpty();
+#if defined(OS_ANDROID)  // WMPI_CAST
   cast_impl_.setPoster(poster);
-}
 #endif  // defined(OS_ANDROID)  // WMPI_CAST
+}
 
 void WebMediaPlayerImpl::DataSourceInitialized(bool success) {
   DVLOG(1) << __func__;

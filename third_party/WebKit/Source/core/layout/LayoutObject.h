@@ -430,10 +430,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void AddAbsoluteRectForLayer(IntRect& result);
   bool RequiresAnonymousTableWrappers(const LayoutObject*) const;
 
-  // Gets ::selection pseudo style from Shadow host(in case of input elements)
-  // or from parent element.
-  RefPtr<ComputedStyle> GetUncachedSelectionStyle() const;
-
  public:
 #ifndef NDEBUG
   void ShowTreeForThis() const;
@@ -1387,7 +1383,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // non-SVG objects and LayoutSVGRoot only. SVG objects (except LayoutSVGRoot)
   // should use visualRectInLocalSVGCoordinates() and map with SVG transforms
   // instead.
-  virtual LayoutRect LocalVisualRect() const;
+  LayoutRect LocalVisualRect() const {
+    if (StyleRef().Visibility() != EVisibility::kVisible &&
+        VisualRectRespectsVisibility())
+      return LayoutRect();
+    return LocalVisualRectIgnoringVisibility();
+  }
 
   // Given a rect in the object's coordinate space, mutates the rect into one
   // representing the size of its visual painted output as if |ancestor| was the
@@ -1463,10 +1464,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
   bool IsSelectable() const;
-  // Obtains the selection colors that should be used when painting a selection.
-  Color SelectionBackgroundColor() const;
-  Color SelectionForegroundColor(const GlobalPaintFlags) const;
-  Color SelectionEmphasisMarkColor(const GlobalPaintFlags) const;
 
   /**
      * Returns the local coordinates of the caret within this layout object.
@@ -1610,8 +1607,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   virtual IntRect AbsoluteElementBoundingBoxRect() const;
 
   // Compute a list of hit-test rectangles per layer rooted at this
-  // layoutObject.
-  virtual void ComputeLayerHitTestRects(LayerHitTestRects&) const;
+  // layoutObject with at most the given touch action.
+  virtual void ComputeLayerHitTestRects(LayerHitTestRects&, TouchAction) const;
 
   static RespectImageOrientationEnum ShouldRespectImageOrientation(
       const LayoutObject*);
@@ -1996,10 +1993,13 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // containerRect is a rect that has already been added for the currentLayer
   // which is likely to be a container for child elements. Any rect wholly
   // contained by containerRect can be skipped.
-  virtual void AddLayerHitTestRects(LayerHitTestRects&,
-                                    const PaintLayer* current_layer,
-                                    const LayoutPoint& layer_offset,
-                                    const LayoutRect& container_rect) const;
+  virtual void AddLayerHitTestRects(
+      LayerHitTestRects&,
+      const PaintLayer* current_layer,
+      const LayoutPoint& layer_offset,
+      TouchAction supported_fast_actions,
+      const LayoutRect& container_rect,
+      TouchAction container_whitelisted_touch_action) const;
 
   // Add hit-test rects for this layoutObject only to the provided list.
   // layerOffset is the offset of this layoutObject within the current layer
@@ -2047,6 +2047,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   RarePaintData& EnsureRarePaintData();
   RarePaintData* GetRarePaintData() const { return rare_paint_data_.get(); }
+
+  virtual bool VisualRectRespectsVisibility() const { return true; }
+  virtual LayoutRect LocalVisualRectIgnoringVisibility() const;
 
  private:
   // Used only by applyFirstLineChanges to get a first line style based off of a
@@ -2102,8 +2105,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   ComputedStyle* CachedFirstLineStyle() const;
   StyleDifference AdjustStyleDifference(StyleDifference) const;
-
-  Color SelectionColor(int color_property, const GlobalPaintFlags) const;
 
   void RemoveShapeImageClient(ShapeValue*);
   void RemoveCursorImageClient(const CursorList*);

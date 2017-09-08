@@ -22,7 +22,6 @@ using testing::Not;
 using testing::Pair;
 using testing::Pointwise;
 using testing::Return;
-using testing::SetArgPointee;
 using testing::StrictMock;
 using testing::_;
 
@@ -544,7 +543,6 @@ TEST_F(QuicSentPacketManagerTest, GetLeastUnackedUnacked) {
 }
 
 TEST_F(QuicSentPacketManagerTest, AckAckAndUpdateRtt) {
-  FLAGS_quic_reloadable_flag_quic_no_stop_waiting_frames = true;
   EXPECT_EQ(0u, manager_.largest_packet_peer_knows_is_acked());
   SendDataPacket(1);
   SendAckPacket(2, 1);

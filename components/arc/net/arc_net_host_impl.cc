@@ -60,7 +60,7 @@ std::string GetStringFromOncDictionary(const base::DictionaryValue* dict,
   std::string value;
   dict->GetString(key, &value);
   if (required && value.empty())
-    VLOG(1) << "Required parameter " << key << " was not found.";
+    NOTREACHED() << "Required parameter " << key << " was not found.";
   return value;
 }
 
@@ -115,45 +115,48 @@ std::vector<std::string> TranslateStringArray(const base::ListValue* list) {
   return strings;
 }
 
+arc::mojom::IPConfigurationPtr TranslateONCIPConfig(
+    const base::DictionaryValue* ip_dict) {
+  arc::mojom::IPConfigurationPtr configuration =
+      arc::mojom::IPConfiguration::New();
+
+  if (ip_dict->FindKey(onc::ipconfig::kIPAddress)) {
+    configuration->ip_address = GetStringFromOncDictionary(
+        ip_dict, onc::ipconfig::kIPAddress, true /* required */);
+    if (!ip_dict->GetInteger(onc::ipconfig::kRoutingPrefix,
+                             &configuration->routing_prefix)) {
+      NOTREACHED();
+    }
+    configuration->gateway = GetStringFromOncDictionary(
+        ip_dict, onc::ipconfig::kGateway, true /* required */);
+  }
+
+  const base::ListValue* dns_list;
+  if (ip_dict->GetList(onc::ipconfig::kNameServers, &dns_list))
+    configuration->name_servers = TranslateStringArray(dns_list);
+
+  std::string type = GetStringFromOncDictionary(ip_dict, onc::ipconfig::kType,
+                                                true /* required */);
+  configuration->type = type == onc::ipconfig::kIPv6
+                            ? arc::mojom::IPAddressType::IPV6
+                            : arc::mojom::IPAddressType::IPV4;
+
+  configuration->web_proxy_auto_discovery_url = GetStringFromOncDictionary(
+      ip_dict, onc::ipconfig::kWebProxyAutoDiscoveryUrl, false /* required */);
+
+  return configuration;
+}
+
 std::vector<arc::mojom::IPConfigurationPtr> TranslateONCIPConfigs(
     const base::ListValue* list) {
   std::vector<arc::mojom::IPConfigurationPtr> configs;
 
   for (size_t i = 0; i < list->GetSize(); i++) {
     const base::DictionaryValue* ip_dict = nullptr;
-    arc::mojom::IPConfigurationPtr configuration =
-        arc::mojom::IPConfiguration::New();
 
     list->GetDictionary(i, &ip_dict);
     DCHECK(ip_dict);
-
-    // crbug.com/625229 - Gateway is not always present (but it should be).
-    configuration->gateway = GetStringFromOncDictionary(
-        ip_dict, onc::ipconfig::kGateway, false /* required */);
-    configuration->ip_address = GetStringFromOncDictionary(
-        ip_dict, onc::ipconfig::kIPAddress, true /* required */);
-
-    const base::ListValue* dns_list;
-    if (!ip_dict->GetList(onc::ipconfig::kNameServers, &dns_list))
-      NOTREACHED();
-    configuration->name_servers = TranslateStringArray(dns_list);
-
-    if (!ip_dict->GetInteger(onc::ipconfig::kRoutingPrefix,
-                             &configuration->routing_prefix)) {
-      NOTREACHED();
-    }
-
-    std::string type = GetStringFromOncDictionary(ip_dict, onc::ipconfig::kType,
-                                                  true /* required */);
-    configuration->type = type == onc::ipconfig::kIPv6
-                              ? arc::mojom::IPAddressType::IPV6
-                              : arc::mojom::IPAddressType::IPV4;
-
-    configuration->web_proxy_auto_discovery_url = GetStringFromOncDictionary(
-        ip_dict, onc::ipconfig::kWebProxyAutoDiscoveryUrl,
-        false /* required */);
-
-    configs.push_back(std::move(configuration));
+    configs.push_back(TranslateONCIPConfig(ip_dict));
   }
   return configs;
 }
@@ -161,16 +164,12 @@ std::vector<arc::mojom::IPConfigurationPtr> TranslateONCIPConfigs(
 arc::mojom::ConnectionStateType TranslateONCConnectionState(
     const base::DictionaryValue* dict) {
   std::string connection_state = GetStringFromOncDictionary(
-      dict, onc::network_config::kConnectionState, true /* required */);
+      dict, onc::network_config::kConnectionState, false /* required */);
 
   if (connection_state == onc::connection_state::kConnected)
     return arc::mojom::ConnectionStateType::CONNECTED;
   else if (connection_state == onc::connection_state::kConnecting)
     return arc::mojom::ConnectionStateType::CONNECTING;
-  else if (connection_state == onc::connection_state::kNotConnected)
-    return arc::mojom::ConnectionStateType::NOT_CONNECTED;
-
-  NOTREACHED();
   return arc::mojom::ConnectionStateType::NOT_CONNECTED;
 }
 
@@ -208,16 +207,26 @@ arc::mojom::NetworkConfigurationPtr TranslateONCConfiguration(
   mojo->guid = GetStringFromOncDictionary(dict, onc::network_config::kGUID,
                                           true /* required */);
 
+  // crbug.com/761708 - VPNs do not currently have an IPConfigs array,
+  // so in order to fetch the parameters (particularly the DNS server list),
+  // fall back to StaticIPConfig or SavedIPConfig.
   const base::ListValue* ip_config_list = nullptr;
+  const base::DictionaryValue* ip_dict = nullptr;
   if (dict->GetList(onc::network_config::kIPConfigs, &ip_config_list)) {
-    DCHECK(ip_config_list);
     mojo->ip_configs = TranslateONCIPConfigs(ip_config_list);
+  } else if (dict->GetDictionary(onc::network_config::kStaticIPConfig,
+                                 &ip_dict) ||
+             dict->GetDictionary(onc::network_config::kSavedIPConfig,
+                                 &ip_dict)) {
+    std::vector<arc::mojom::IPConfigurationPtr> configs;
+    configs.push_back(TranslateONCIPConfig(ip_dict));
+    mojo->ip_configs = std::move(configs);
   }
 
   mojo->guid = GetStringFromOncDictionary(dict, onc::network_config::kGUID,
                                           true /* required */);
   mojo->mac_address = GetStringFromOncDictionary(
-      dict, onc::network_config::kMacAddress, true /* required */);
+      dict, onc::network_config::kMacAddress, false /* required */);
   TranslateONCNetworkTypeDetails(dict, mojo.get());
 
   return mojo;
@@ -617,7 +626,7 @@ void ArcNetHostImpl::SetWifiEnabledState(
 }
 
 void ArcNetHostImpl::StartScan() {
-  GetStateHandler()->RequestScan();
+  GetStateHandler()->RequestScan(chromeos::NetworkTypePattern::WiFi());
 }
 
 void ArcNetHostImpl::ScanCompleted(const chromeos::DeviceState* /*unused*/) {

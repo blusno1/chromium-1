@@ -141,13 +141,6 @@ const base::Feature kCheckInstallabilityForBannerOnLoad{
 const base::Feature kClickToOpenPDFPlaceholder{
     "ClickToOpenPDFPlaceholder", base::FEATURE_DISABLED_BY_DEFAULT};
 
-#if defined(OS_ANDROID)
-// Experiment to make Geolocation permissions in the omnibox and the default
-// search engine's search page consistent.
-const base::Feature kConsistentOmniboxGeolocation{
-    "ConsistentOmniboxGeolocation", base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
-
 #if defined(OS_MACOSX)
 const base::Feature kContentFullscreen{"ContentFullscreen",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -243,7 +236,7 @@ const base::Feature kMacFullSizeContentView{"MacFullSizeContentView",
 
 // Enables or disables the Material Design version of chrome://bookmarks.
 const base::Feature kMaterialDesignBookmarks{"MaterialDesignBookmarks",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Enabled or disabled the Material Design version of chrome://extensions.
@@ -325,6 +318,12 @@ const base::Feature kOfflinePageDownloadSuggestionsFeature{
 const base::Feature kOneGoogleBarOnLocalNtp{"OneGoogleBarOnLocalNtp",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
+
+// Adds the base language code to the Language-Accept headers if at least one
+// corresponding language+region code is present in the user preferences.
+// For example: "en-US, fr-FR" --> "en-US, en, fr-FR, fr".
+const base::Feature kUseNewAcceptLanguageHeader{
+    "UseNewAcceptLanguageHeader", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables Permissions Blacklisting via Safe Browsing.
 const base::Feature kPermissionsBlacklist{
@@ -417,6 +416,12 @@ const base::Feature kStaggeredBackgroundTabOpeningExperiment{
 const base::Feature kSupervisedUserCreation{"SupervisedUserCreation",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined(OS_CHROMEOS)
+// Enables or disables chrome://sys-internals.
+const base::Feature kSysInternals{"SysInternals",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined(SYZYASAN)
 // Enable the deferred free mechanism in the syzyasan module, which helps the
 // performance by deferring some work on the critical path to a background
@@ -428,16 +433,6 @@ const base::Feature kSyzyasanDeferredFree{"SyzyasanDeferredFree",
 // Enables using the local NTP if Google is the default search engine.
 const base::Feature kUseGoogleLocalNtp{"UseGoogleLocalNtp",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Experiment to use grouped permission infobars which could show and handle
-// multiple permission requests.
-const base::Feature kUseGroupedPermissionInfobars{
-    "UseGroupedPermissionInfobars", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Feature to use the PermissionManager to show prompts for WebRTC permission
-// requests.
-const base::Feature kUsePermissionManagerForMediaRequests{
-    "UsePermissionManagerForMediaRequests", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if !defined(OS_ANDROID)
 // Enables or disables Voice Search on the local NTP.

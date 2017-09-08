@@ -363,8 +363,11 @@ need to be translated for each locale.-->
       <message name="IDS_AX_CHECK_ACTION_VERB" desc="Verb stating the action that will occur when an unchecked checkbox is clicked, as used by accessibility.">
         check
       </message>
-      <message name="IDS_AX_CLICK_ACTION_VERB" desc="Verb stating the action that will occur when clicking on a generic clickable object, when we don't know what that action is, as used by accessibility.">
+      <message name="IDS_AX_CLICK_ACTION_VERB" desc="Verb stating the action that will occur when clicking on a generic clickable object, when we don't have a more specific action description, as used by accessibility.">
         click
+      </message>
+      <message name="IDS_AX_CLICK_ANCESTOR_ACTION_VERB" desc="Verb stating the action that will occur when clicking on a generic object that is not itself clickable but one of its ancestors is, as used by accessibility.">
+        click ancestor
       </message>
       <message name="IDS_AX_JUMP_ACTION_VERB" desc="Verb stating the action that will occur when an element such as an in-page link is activated, as used by accessibility.">
         jump
@@ -700,7 +703,7 @@ need to be translated for each locale.-->
           Annotate image
         </message>
         <message name="IDS_MESSAGE_CENTER_NOTIFIER_HATS_NAME" desc="The name of hats notifier that is a system component">
-          Hats
+          Survey
         </message>
         <message name="IDS_MESSAGE_CENTER_NOTIFIER_FINGERPRINT_UNLOCK_FEATURE_NAME" desc="The name of fingerprint unlock feature notifier that is a system component">
           Fingerprint Unlock Feature
@@ -756,8 +759,17 @@ need to be translated for each locale.-->
       <message name="IDS_APP_LIST_EXPAND_BUTTON" desc="Tooltip for the button that expands the app list from suggested apps to a fullscreen view which shows all apps.">
         Expand to all apps
       </message>
+      <message name="IDS_APP_LIST_ALL_APPS_ACCESSIBILITY_ANNOUNCEMENT" desc="The accessibility announcement that notifies users that all of their apps are showing, as opposed to showing only suggested apps">
+      Launcher, all apps
+      </message>
+      <message name="IDS_APP_LIST_SUGGESTED_APPS_ACCESSIBILITY_ANNOUNCEMENT" desc="The accessibility announcement that notifies users that the UI is showing a small version of the app list">
+      Launcher, partial view
+      </message>
       <message name="IDS_APP_LIST_CLEAR_SEARCHBOX" desc="Tooltip for the button that clears all text from the search box in the app list.">
-        Clear searchbox text button
+        Clear searchbox text
+      </message>
+      <message name="IDS_APP_LIST_PAGE_SWITCHER" desc="Tooltip for page switcher for each page in fullscreen view which shows all apps.">
+        Page <ph name="selected_page">$1<ex>1</ex></ph> of <ph name="total_page_num">$2<ex>3</ex></ph>
       </message>
 
       <!-- Strings describing the touch calibration UX -->

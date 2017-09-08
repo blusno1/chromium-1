@@ -40,13 +40,12 @@
 #import "ios/chrome/app/application_delegate/metrics_mediator.h"
 #import "ios/chrome/app/application_delegate/url_opener.h"
 #include "ios/chrome/app/application_mode.h"
-#include "ios/chrome/app/chrome_app_startup_parameters.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
 #import "ios/chrome/app/main_controller_private.h"
 #import "ios/chrome/app/memory_monitor.h"
-#import "ios/chrome/app/safe_mode_crashing_modules_config.h"
 #import "ios/chrome/app/spotlight/spotlight_manager.h"
 #import "ios/chrome/app/spotlight/spotlight_util.h"
+#include "ios/chrome/app/startup/chrome_app_startup_parameters.h"
 #include "ios/chrome/app/startup/chrome_main_starter.h"
 #include "ios/chrome/app/startup/client_registration.h"
 #import "ios/chrome/app/startup/content_suggestions_scheduler_notifications.h"
@@ -351,10 +350,6 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
 @property(nonatomic, readwrite)
     NTPTabOpeningPostOpeningAction NTPActionAfterTabSwitcherDismissal;
 
-// Activates browsing and enables web views if |enabled| is YES.
-// Disables browsing and purges web views if |enabled| is NO.
-// Must be called only on the main thread.
-- (void)setWebUsageEnabled:(BOOL)enabled;
 // Activates |mainBVC| and |otrBVC| and sets |currentBVC| as primary iff
 // |currentBVC| can be made active.
 - (void)activateBVCAndMakeCurrentBVCPrimary;
@@ -822,16 +817,6 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   return _browsingDataRemovalController;
 }
 
-- (void)setWebUsageEnabled:(BOOL)enabled {
-  DCHECK([NSThread isMainThread]);
-  if (enabled) {
-    [self activateBVCAndMakeCurrentBVCPrimary];
-  } else {
-    [self.mainBVC setActive:NO];
-    [self.otrBVC setActive:NO];
-  }
-}
-
 - (void)activateBVCAndMakeCurrentBVCPrimary {
   // If there are pending removal operations, the activation will be deferred
   // until the callback for |removeBrowsingDataFromBrowserState:| is received.
@@ -1119,7 +1104,7 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
   // Deferred tasks.
   [self schedulePrefObserverInitialization];
   [self scheduleMemoryDebuggingTools];
-  [_startupTasks scheduleDeferredBrowserStateInitialization:_mainBrowserState];
+  [StartupTasks scheduleDeferredBrowserStateInitialization:_mainBrowserState];
   [self scheduleAuthenticationServiceNotification];
   [self sendQueuedFeedback];
   [self scheduleSpotlightResync];
@@ -1735,7 +1720,7 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
     [currentTab setSnapshotCoalescingEnabled:NO];
   }));
 
-  [currentBVC prepareToEnterTabSwitcher:nil];
+  [currentTab updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
 
   if (!_tabSwitcherController) {
     if (IsIPadIdiom()) {
@@ -1903,14 +1888,8 @@ enum class StackViewDismissalMode { NONE, NORMAL, INCOGNITO };
                                       mask:(int)mask
                                 timePeriod:(browsing_data::TimePeriod)timePeriod
                          completionHandler:(ProceduralBlock)completionHandler {
-  // TODO(crbug.com/632772): Remove web usage disabling once
-  // https://bugs.webkit.org/show_bug.cgi?id=149079 has been fixed.
-  if (mask & IOSChromeBrowsingDataRemover::REMOVE_SITE_DATA) {
-    [self setWebUsageEnabled:NO];
-  }
 
   ProceduralBlock browsingDataRemoved = ^{
-    [self setWebUsageEnabled:YES];
     if (completionHandler) {
       completionHandler();
     }

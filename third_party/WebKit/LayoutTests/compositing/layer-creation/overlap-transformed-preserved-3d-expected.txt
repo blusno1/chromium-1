@@ -5,63 +5,60 @@
       "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
-      "drawsContent": true
+      "backgroundColor": "#FFFFFF"
     },
     {
       "name": "LayoutBlockFlow (positioned) DIV id='green-box' class='center box-container'",
       "position": [108, 108],
-      "contentsOpaque": true
+      "contentsOpaque": true,
+      "drawsContent": false
     },
     {
       "name": "Child Transform Layer",
-      "transform": 1
+      "drawsContent": false,
+      "transform": 2
     },
     {
       "name": "LayoutBlockFlow DIV id='camera' class='rotate-3d-start'",
       "contentsOpaque": true,
-      "transform": 2
+      "drawsContent": false,
+      "transform": 3
     },
     {
       "name": "LayoutBlockFlow (positioned) DIV class='side side-1'",
       "bounds": [100, 100],
-      "drawsContent": true,
-      "backgroundColor": "#00FF00CC",
-      "transform": 3
-    },
-    {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-2'",
-      "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 4
     },
     {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-3'",
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-2'",
       "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 5
     },
     {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-4'",
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-3'",
       "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 6
     },
     {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-5'",
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-4'",
       "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 7
     },
     {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-6'",
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-5'",
       "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 8
+    },
+    {
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-6'",
+      "bounds": [100, 100],
+      "backgroundColor": "#00FF00CC",
+      "transform": 9
     }
   ],
   "transforms": [
@@ -70,15 +67,24 @@
       "transform": [
         [1, 0, 0, 0],
         [0, 1, 0, 0],
-        [0, 0, 1, -0.005],
-        [0, 0, 0, 1]
-      ],
-      "origin": [50, 50],
-      "flattenInheritedTransform": false
+        [0, 0, 1, 0],
+        [108, 108, 0, 1]
+      ]
     },
     {
       "id": 2,
       "parent": 1,
+      "transform": [
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, -0.005],
+        [0, 0, 0, 1]
+      ],
+      "origin": [50, 50]
+    },
+    {
+      "id": 3,
+      "parent": 2,
       "transform": [
         [0.353553390593274, 0.25, -0.5, 0],
         [0, 0.353553390593274, 0.707106781186548, 0],
@@ -90,19 +96,20 @@
       "renderingContext": 1
     },
     {
-      "id": 3,
-      "parent": 2,
+      "id": 4,
+      "parent": 3,
       "transform": [
         [1, 0, 0, 0],
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [0, 0, 50, 1]
       ],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 4,
-      "parent": 2,
+      "id": 5,
+      "parent": 3,
       "transform": [
         [0, 0, -1, 0],
         [0, 1, 0, 0],
@@ -110,11 +117,12 @@
         [50, 0, 0, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 5,
-      "parent": 2,
+      "id": 6,
+      "parent": 3,
       "transform": [
         [-1, 0, 0, 0],
         [0, 1, 0, 0],
@@ -122,11 +130,12 @@
         [0, 0, -50, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 6,
-      "parent": 2,
+      "id": 7,
+      "parent": 3,
       "transform": [
         [0, 0, 1, 0],
         [0, 1, 0, 0],
@@ -134,11 +143,12 @@
         [-50, 0, 0, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 7,
-      "parent": 2,
+      "id": 8,
+      "parent": 3,
       "transform": [
         [1, 0, 0, 0],
         [0, 0, 1, 0],
@@ -146,11 +156,12 @@
         [0, -50, 0, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 8,
-      "parent": 2,
+      "id": 9,
+      "parent": 3,
       "transform": [
         [1, 0, 0, 0],
         [0, 0, -1, 0],
@@ -158,6 +169,7 @@
         [0, 50, 0, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     }
   ]
@@ -170,80 +182,76 @@ After:
       "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
-      "drawsContent": true
+      "backgroundColor": "#FFFFFF"
     },
     {
       "name": "LayoutBlockFlow (positioned) DIV id='green-box' class='center box-container'",
       "position": [108, 108],
-      "contentsOpaque": true
+      "contentsOpaque": true,
+      "drawsContent": false
     },
     {
       "name": "Child Transform Layer",
-      "transform": 1
+      "drawsContent": false,
+      "transform": 2
     },
     {
       "name": "LayoutBlockFlow DIV id='camera' class='rotate-3d-start rotate-3d-end'",
       "contentsOpaque": true,
-      "transform": 2
+      "drawsContent": false,
+      "transform": 3
     },
     {
       "name": "LayoutBlockFlow (positioned) DIV class='side side-1'",
       "bounds": [100, 100],
-      "drawsContent": true,
-      "backgroundColor": "#00FF00CC",
-      "transform": 3
-    },
-    {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-2'",
-      "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 4
     },
     {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-3'",
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-2'",
       "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 5
     },
     {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-4'",
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-3'",
       "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 6
     },
     {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-5'",
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-4'",
       "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 7
     },
     {
-      "name": "LayoutBlockFlow (positioned) DIV class='side side-6'",
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-5'",
       "bounds": [100, 100],
-      "drawsContent": true,
       "backgroundColor": "#00FF00CC",
       "transform": 8
     },
     {
-      "name": "Squashing Containment Layer"
+      "name": "LayoutBlockFlow (positioned) DIV class='side side-6'",
+      "bounds": [100, 100],
+      "backgroundColor": "#00FF00CC",
+      "transform": 9
+    },
+    {
+      "name": "Squashing Containment Layer",
+      "drawsContent": false
     },
     {
       "name": "LayoutBlockFlow (positioned) DIV class='box top left'",
       "position": [8, 8],
       "bounds": [100, 150],
       "contentsOpaque": true,
-      "drawsContent": true,
       "backgroundColor": "#808080"
     },
     {
       "name": "Squashing Layer (first squashed layer: LayoutBlockFlow (positioned) DIV class='box top right')",
       "position": [8, 8],
-      "bounds": [300, 300],
-      "drawsContent": true
+      "bounds": [300, 300]
     }
   ],
   "transforms": [
@@ -252,15 +260,24 @@ After:
       "transform": [
         [1, 0, 0, 0],
         [0, 1, 0, 0],
-        [0, 0, 1, -0.005],
-        [0, 0, 0, 1]
-      ],
-      "origin": [50, 50],
-      "flattenInheritedTransform": false
+        [0, 0, 1, 0],
+        [108, 108, 0, 1]
+      ]
     },
     {
       "id": 2,
       "parent": 1,
+      "transform": [
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, -0.005],
+        [0, 0, 0, 1]
+      ],
+      "origin": [50, 50]
+    },
+    {
+      "id": 3,
+      "parent": 2,
       "transform": [
         [0.707106781186548, 0.5, -0.5, 0],
         [0, 0.707106781186548, 0.707106781186548, 0],
@@ -272,19 +289,20 @@ After:
       "renderingContext": 1
     },
     {
-      "id": 3,
-      "parent": 2,
+      "id": 4,
+      "parent": 3,
       "transform": [
         [1, 0, 0, 0],
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [0, 0, 50, 1]
       ],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 4,
-      "parent": 2,
+      "id": 5,
+      "parent": 3,
       "transform": [
         [0, 0, -1, 0],
         [0, 1, 0, 0],
@@ -292,11 +310,12 @@ After:
         [50, 0, 0, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 5,
-      "parent": 2,
+      "id": 6,
+      "parent": 3,
       "transform": [
         [-1, 0, 0, 0],
         [0, 1, 0, 0],
@@ -304,11 +323,12 @@ After:
         [0, 0, -50, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 6,
-      "parent": 2,
+      "id": 7,
+      "parent": 3,
       "transform": [
         [0, 0, 1, 0],
         [0, 1, 0, 0],
@@ -316,11 +336,12 @@ After:
         [-50, 0, 0, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 7,
-      "parent": 2,
+      "id": 8,
+      "parent": 3,
       "transform": [
         [1, 0, 0, 0],
         [0, 0, 1, 0],
@@ -328,11 +349,12 @@ After:
         [0, -50, 0, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     },
     {
-      "id": 8,
-      "parent": 2,
+      "id": 9,
+      "parent": 3,
       "transform": [
         [1, 0, 0, 0],
         [0, 0, -1, 0],
@@ -340,6 +362,7 @@ After:
         [0, 50, 0, 1]
       ],
       "origin": [50, 50],
+      "flattenInheritedTransform": false,
       "renderingContext": 1
     }
   ]

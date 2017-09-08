@@ -13,6 +13,7 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/picture_draw_quad.h"
 #include "cc/quads/render_pass_draw_quad.h"
+#include "cc/resources/resource_provider.h"
 #include "ipc/ipc_message.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/effects/SkBlurImageFilter.h"
@@ -23,7 +24,7 @@
 
 using cc::CompositorFrame;
 using cc::DebugBorderDrawQuad;
-using cc::DrawQuad;
+using viz::DrawQuad;
 using cc::FilterOperation;
 using cc::FilterOperations;
 using cc::PictureDrawQuad;
@@ -90,8 +91,8 @@ class CCParamTraitsTest : public testing::Test {
     EXPECT_EQ(a->sorting_context_id, b->sorting_context_id);
   }
 
-  void Compare(const DrawQuad* a, const DrawQuad* b) {
-    ASSERT_NE(DrawQuad::INVALID, a->material);
+  void Compare(const viz::DrawQuad* a, const viz::DrawQuad* b) {
+    ASSERT_NE(viz::DrawQuad::INVALID, a->material);
     ASSERT_EQ(a->material, b->material);
     EXPECT_EQ(a->rect.ToString(), b->rect.ToString());
     EXPECT_EQ(a->visible_rect.ToString(), b->visible_rect.ToString());
@@ -100,42 +101,42 @@ class CCParamTraitsTest : public testing::Test {
     Compare(a->shared_quad_state, b->shared_quad_state);
 
     switch (a->material) {
-      case DrawQuad::DEBUG_BORDER:
+      case viz::DrawQuad::DEBUG_BORDER:
         Compare(DebugBorderDrawQuad::MaterialCast(a),
                 DebugBorderDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::PICTURE_CONTENT:
+      case viz::DrawQuad::PICTURE_CONTENT:
         Compare(PictureDrawQuad::MaterialCast(a),
                 PictureDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::RENDER_PASS:
+      case viz::DrawQuad::RENDER_PASS:
         Compare(RenderPassDrawQuad::MaterialCast(a),
                 RenderPassDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::TEXTURE_CONTENT:
+      case viz::DrawQuad::TEXTURE_CONTENT:
         Compare(TextureDrawQuad::MaterialCast(a),
                 TextureDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::TILED_CONTENT:
+      case viz::DrawQuad::TILED_CONTENT:
         Compare(TileDrawQuad::MaterialCast(a), TileDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::SOLID_COLOR:
+      case viz::DrawQuad::SOLID_COLOR:
         Compare(SolidColorDrawQuad::MaterialCast(a),
                 SolidColorDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::STREAM_VIDEO_CONTENT:
+      case viz::DrawQuad::STREAM_VIDEO_CONTENT:
         Compare(StreamVideoDrawQuad::MaterialCast(a),
                 StreamVideoDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::SURFACE_CONTENT:
+      case viz::DrawQuad::SURFACE_CONTENT:
         Compare(SurfaceDrawQuad::MaterialCast(a),
                 SurfaceDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::YUV_VIDEO_CONTENT:
+      case viz::DrawQuad::YUV_VIDEO_CONTENT:
         Compare(YUVVideoDrawQuad::MaterialCast(a),
                 YUVVideoDrawQuad::MaterialCast(b));
         break;
-      case DrawQuad::INVALID:
+      case viz::DrawQuad::INVALID:
         break;
     }
   }
@@ -318,8 +319,9 @@ TEST_F(CCParamTraitsTest, AllQuads) {
 
   SharedQuadState* shared_state1_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state1_in->SetAll(arbitrary_matrix1, arbitrary_rect1, arbitrary_rect1,
-                           arbitrary_rect2, arbitrary_bool1, arbitrary_float1,
-                           arbitrary_blend_mode1, arbitrary_context_id1);
+                           arbitrary_rect2, arbitrary_bool1, arbitrary_bool2,
+                           arbitrary_float1, arbitrary_blend_mode1,
+                           arbitrary_context_id1);
 
   std::unique_ptr<RenderPass> pass_cmp = RenderPass::Create();
   pass_cmp->SetAll(root_id, arbitrary_rect1, arbitrary_rect2, arbitrary_matrix1,
@@ -340,8 +342,9 @@ TEST_F(CCParamTraitsTest, AllQuads) {
 
   SharedQuadState* shared_state2_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state2_in->SetAll(arbitrary_matrix2, arbitrary_rect2, arbitrary_rect2,
-                           arbitrary_rect3, arbitrary_bool1, arbitrary_float2,
-                           arbitrary_blend_mode2, arbitrary_context_id2);
+                           arbitrary_rect3, arbitrary_bool1, arbitrary_bool1,
+                           arbitrary_float2, arbitrary_blend_mode2,
+                           arbitrary_context_id2);
   SharedQuadState* shared_state2_cmp =
       pass_cmp->CreateAndAppendSharedQuadState();
   *shared_state2_cmp = *shared_state2_in;
@@ -358,8 +361,9 @@ TEST_F(CCParamTraitsTest, AllQuads) {
 
   SharedQuadState* shared_state3_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state3_in->SetAll(arbitrary_matrix1, arbitrary_rect3, arbitrary_rect3,
-                           arbitrary_rect1, arbitrary_bool1, arbitrary_float3,
-                           arbitrary_blend_mode3, arbitrary_context_id3);
+                           arbitrary_rect1, arbitrary_bool1, arbitrary_bool2,
+                           arbitrary_float3, arbitrary_blend_mode3,
+                           arbitrary_context_id3);
   SharedQuadState* shared_state3_cmp =
       pass_cmp->CreateAndAppendSharedQuadState();
   *shared_state3_cmp = *shared_state3_in;
@@ -501,7 +505,8 @@ TEST_F(CCParamTraitsTest, UnusedSharedQuadStates) {
   // The first SharedQuadState is used.
   SharedQuadState* shared_state1_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state1_in->SetAll(gfx::Transform(), gfx::Rect(1, 1), gfx::Rect(),
-                           gfx::Rect(), false, 1.f, SkBlendMode::kSrcOver, 0);
+                           gfx::Rect(), false, true, 1.f, SkBlendMode::kSrcOver,
+                           0);
 
   SolidColorDrawQuad* quad1 =
       pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -511,16 +516,19 @@ TEST_F(CCParamTraitsTest, UnusedSharedQuadStates) {
   // The second and third SharedQuadStates are not used.
   SharedQuadState* shared_state2_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state2_in->SetAll(gfx::Transform(), gfx::Rect(2, 2), gfx::Rect(),
-                           gfx::Rect(), false, 1.f, SkBlendMode::kSrcOver, 0);
+                           gfx::Rect(), false, true, 1.f, SkBlendMode::kSrcOver,
+                           0);
 
   SharedQuadState* shared_state3_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state3_in->SetAll(gfx::Transform(), gfx::Rect(3, 3), gfx::Rect(),
-                           gfx::Rect(), false, 1.f, SkBlendMode::kSrcOver, 0);
+                           gfx::Rect(), false, true, 1.f, SkBlendMode::kSrcOver,
+                           0);
 
   // The fourth SharedQuadState is used.
   SharedQuadState* shared_state4_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state4_in->SetAll(gfx::Transform(), gfx::Rect(4, 4), gfx::Rect(),
-                           gfx::Rect(), false, 1.f, SkBlendMode::kSrcOver, 0);
+                           gfx::Rect(), false, true, 1.f, SkBlendMode::kSrcOver,
+                           0);
 
   SolidColorDrawQuad* quad2 =
       pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -530,7 +538,8 @@ TEST_F(CCParamTraitsTest, UnusedSharedQuadStates) {
   // The fifth is not used again.
   SharedQuadState* shared_state5_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state5_in->SetAll(gfx::Transform(), gfx::Rect(5, 5), gfx::Rect(),
-                           gfx::Rect(), false, 1.f, SkBlendMode::kSrcOver, 0);
+                           gfx::Rect(), false, true, 1.f, SkBlendMode::kSrcOver,
+                           0);
 
   // 5 SharedQuadStates go in.
   ASSERT_EQ(5u, pass_in->shared_quad_state_list.size());

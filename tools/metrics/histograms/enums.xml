@@ -1167,6 +1167,12 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="3" label="Scrolled With Mouse"/>
 </enum>
 
+<enum name="AppListPlayStoreQueryState">
+  <int value="0" label="SUCCESS"/>
+  <int value="1" label="CANCELED"/>
+  <int value="2" label="ERROR"/>
+</enum>
+
 <enum name="AppListSearchResult">
   <int value="0" label="OMNIBOX"/>
   <int value="1" label="APP"/>
@@ -2393,6 +2399,15 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2" label="Ok, got it"/>
 </enum>
 
+<enum name="AVDAFrameInformation">
+  <int value="0" label="SurfaceTexture Insecure"/>
+  <int value="1" label="SurfaceTexture L3"/>
+  <int value="2" label="Overlay L3"/>
+  <int value="3" label="Overlay L1"/>
+  <int value="4" label="Overlay Insecure Player-element Fullscreen"/>
+  <int value="5" label="Overlay Insecure Non-player-element Fullscreen"/>
+</enum>
+
 <enum name="BackForwardNavigationType">
   <int value="0" label="Fast back navigation with WKBackForwardList"/>
   <int value="1" label="Slow back navigation"/>
@@ -2469,14 +2484,14 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="BadMessageReasonChrome">
-<!-- Generated from chrome/browser/bad_message.h -->
+<!-- Generated from chrome/browser/bad_message.h.-->
 
   <int value="0" label="WRLHH_LOGGING_STOPPED_BAD_STATE"/>
   <int value="1" label="PPH_EXTRA_PREVIEW_MESSAGE"/>
 </enum>
 
 <enum name="BadMessageReasonContent">
-<!-- Generated from content/browser/bad_message.h -->
+<!-- Generated from content/browser/bad_message.h.-->
 
   <int value="0" label="NC_IN_PAGE_NAVIGATION"/>
   <int value="1" label="RFH_CAN_COMMIT_URL_BLOCKED"/>
@@ -2658,10 +2673,11 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="175" label="SWDH_PROVIDER_CREATED_ILLEGAL_TYPE_CONTROLLER"/>
   <int value="176" label="SWDH_PROVIDER_CREATED_DUPLICATE_ID"/>
   <int value="177" label="SWDH_PROVIDER_CREATED_BAD_ID"/>
+  <int value="178" label="RFH_KEEP_ALIVE_HANDLE_REQUESTED_INCORRECTLY"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions">
-<!-- Generated from extensions/browser/bad_message.h -->
+<!-- Generated from extensions/browser/bad_message.h.-->
 
   <int value="0" label="EOG_BAD_ORIGIN"/>
   <int value="1" label="EVG_BAD_ORIGIN"/>
@@ -2677,7 +2693,7 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="BadMessageReasonGuestView">
-<!-- Generated from components/guest_view/browser/bad_message.h -->
+<!-- Generated from components/guest_view/browser/bad_message.h.-->
 
   <int value="0" label="GVM_EMBEDDER_FORBIDDEN_ACCESS_TO_GUEST"/>
   <int value="1" label="GVM_INVALID_GUESTVIEW_TYPE"/>
@@ -2685,7 +2701,7 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="BadMessageReasonNaCl">
-<!-- Generated from components/nacl/browser/bad_message.h -->
+<!-- Generated from components/nacl/browser/bad_message.h.-->
 
   <int value="0" label="NFH_OPEN_EXECUTABLE_BAD_ROUTING_ID"/>
   <int value="1" label="NHMF_LAUNCH_CONTINUATION_BAD_ROUTING_ID"/>
@@ -2693,7 +2709,7 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="BadMessageReasonPasswordManager">
-<!-- Generated from components/password_manager/content/browser/bad_message.h -->
+<!-- Generated from components/password_manager/content/browser/bad_message.h.-->
 
   <int value="1" label="CPMD_BAD_ORIGIN_FORMS_PARSED"/>
   <int value="2" label="CPMD_BAD_ORIGIN_FORMS_RENDERED"/>
@@ -8734,6 +8750,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="22" label="Completed with content length mismatch"/>
   <int value="23" label="More bytes received after content length mismatch"/>
   <int value="24" label="No bytes received after content length mismatch"/>
+  <int value="25" label="Target determination requeted"/>
+  <int value="26" label="Target determination completed"/>
 </enum>
 
 <enum name="DownloadDatabaseRecordDroppedType">
@@ -11322,6 +11340,10 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="383" label="NativePrintersBulkAccessMode"/>
   <int value="384" label="NativePrintersBulkBlacklist"/>
   <int value="385" label="NativePrintersBulkWhitelist"/>
+  <int value="386" label="DeviceNativePrinters"/>
+  <int value="387" label="DeviceNativePrintersAccessMode"/>
+  <int value="388" label="DeviceNativePrintersBlacklist"/>
+  <int value="389" label="DeviceNativePrintersWhitelist"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations">
@@ -13405,6 +13427,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1189" label="FILEMANAGERPRIVATE_GETRECENTFILES"/>
   <int value="1190" label="FILEMANAGERPRIVATE_RENAMEVOLUME"/>
   <int value="1191" label="AUTOTESTPRIVATE_SETMOUSEREVERSESCROLL"/>
+  <int value="1192" label="METRICSPRIVATE_RECORDSPARSEHASHABLE"/>
 </enum>
 
 <enum name="ExtensionIconState">
@@ -16230,6 +16253,31 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2120" label="PaymentRequestSupportedMethodsArray"/>
   <int value="2121" label="NavigatorDeviceMemory"/>
   <int value="2122" label="FixedWidthTableDistributionChanged"/>
+  <int value="2123" label="WebkitBoxLayout"/>
+  <int value="2124" label="WebkitBoxLayoutHorizontal"/>
+  <int value="2125" label="WebkitBoxLayoutVertical"/>
+  <int value="2126" label="WebkitBoxAlignNotInitial"/>
+  <int value="2127" label="WebkitBoxDirectionNotInitial"/>
+  <int value="2128" label="WebkitBoxLinesNotInitial"/>
+  <int value="2129" label="WebkitBoxPackNotInitial"/>
+  <int value="2130" label="WebkitBoxChildFlexNotInitial"/>
+  <int value="2131" label="WebkitBoxChildFlexGroupNotInitial"/>
+  <int value="2132" label="WebkitBoxChildOrdinalGroupNotInitial"/>
+  <int value="2133" label="WebkitBoxNotDefaultOrder"/>
+  <int value="2134" label="WebkitBoxNoChildren"/>
+  <int value="2135" label="WebkitBoxOneChild"/>
+  <int value="2136" label="WebkitBoxOneChildIsLayoutBlockFlowInline"/>
+  <int value="2137" label="WebkitBoxManyChildren"/>
+  <int value="2138" label="WebkitBoxLineClamp"/>
+  <int value="2139" label="WebkitBoxLineClampPercentage"/>
+  <int value="2140" label="WebkitBoxLineClampNoChildren"/>
+  <int value="2141" label="WebkitBoxLineClampOneChild"/>
+  <int value="2142" label="WebkitBoxLineClampOneChildIsLayoutBlockFlowInline"/>
+  <int value="2143" label="WebkitBoxLineClampManyChildren"/>
+  <int value="2144" label="WebkitBoxLineClampDoesSomething"/>
+  <int value="2145" label="FeaturePolicyAllowAttributeDeprecatedSyntax"/>
+  <int value="2146" label="SuppressHistoryEntryWithoutUserGesture"/>
+  <int value="2147" label="ImageInputTypeFormDataWithNonEmptyValue"/>
 </enum>
 
 <enum name="FeedbackSource">
@@ -19234,7 +19282,7 @@ uploading your change for review.  These are checked by presubmit scripts.
              AMD"/>
 </enum>
 
-<enum name="GpuImageDecodeState">
+<enum name="GpuImageUsageState">
   <int value="0" label="Wasted, once"/>
   <int value="1" label="Used, once"/>
   <int value="2" label="Wasted, relocked"/>
@@ -22974,6 +23022,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-2043128632" label="enable-tab-switcher-in-document-mode"/>
   <int value="-2040471724" label="CrOSComponent:disabled"/>
   <int value="-2040115518" label="load-media-router-component-extension"/>
+  <int value="-2039343702"
+      label="KeepAliveRendererForKeepaliveRequests:enabled"/>
   <int value="-2036149591" label="FaviconsFromWebManifest:disabled"/>
   <int value="-2035126988" label="enabled-new-style-notification"/>
   <int value="-2033225430" label="NTPMostLikelyFaviconsFromServer:disabled"/>
@@ -23129,6 +23179,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-1617183455" label="OfflineRecentPages:disabled"/>
   <int value="-1616855537" label="enable-manual-password-generation:disabled"/>
   <int value="-1614912400" label="enable-link-disambiguation-popup"/>
+  <int value="-1613583483" label="UseNewAcceptLanguageHeader:enabled"/>
   <int value="-1611305202" label="KeepPrefetchedContentSuggestions:disabled"/>
   <int value="-1607691647" label="MojoVideoEncodeAccelerator:disabled"/>
   <int value="-1605567628" label="disable-overlay-scrollbar"/>
@@ -23419,6 +23470,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-741806604" label="DownloadsUi:disabled"/>
   <int value="-723224470" label="enable-password-force-saving:enabled"/>
   <int value="-722474177" label="browser-side-navigation:disabled"/>
+  <int value="-718626298" label="SysInternals:enabled"/>
   <int value="-716953514" label="disable-password-separated-signin-flow"/>
   <int value="-715733307" label="force-effective-connection-type"/>
   <int value="-714712077" label="ClickToOpenPDFPlaceholder:disabled"/>
@@ -23529,6 +23581,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-351127770" label="enable-offline-pages-as-bookmarks"/>
   <int value="-349437334" label="UseDdljsonApi:disabled"/>
   <int value="-349057743" label="extensions-on-chrome-urls"/>
+  <int value="-346413328" label="UseNewAcceptLanguageHeader:disabled"/>
   <int value="-345838366" label="enable-hosted-apps-in-windows"/>
   <int value="-345324571" label="enable-quirks-client"/>
   <int value="-344343842" label="disable-experimental-app-list"/>
@@ -23616,6 +23669,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-76631048" label="disable-offline-auto-reload-visible-only"/>
   <int value="-72455054" label="WebVrAutopresent:disabled"/>
   <int value="-70595606" label="ash-enable-unified-desktop"/>
+  <int value="-69427025" label="OfflinePagesPrefetchingUI:enabled"/>
   <int value="-68877684" label="BackgroundVideoTrackOptimization:enabled"/>
   <int value="-68225452" label="enable-translate-new-ux"/>
   <int value="-59401847" label="ContentSuggestionsLargeThumbnail:disabled"/>
@@ -23830,6 +23884,7 @@ from previous Chrome versions.
   <int value="605150752" label="WebUSB:disabled"/>
   <int value="606288133" label="enable-print-preview-register-promos"/>
   <int value="606512202" label="AutofillCreditCardPopupLayout:enabled"/>
+  <int value="606834606" label="force-color-profile"/>
   <int value="609112512" label="touch-selection-strategy"/>
   <int value="610545308" label="enable-potentially-annoying-security-features"/>
   <int value="624317932" label="print-pdf-as-image"/>
@@ -23862,6 +23917,7 @@ from previous Chrome versions.
   <int value="691020108" label="NTPCondensedTileLayout:disabled"/>
   <int value="693012666" label="QuickUnlockPin:disabled"/>
   <int value="694985670" label="OmniboxUIExperimentNarrowDropdown:disabled"/>
+  <int value="695385040" label="enable-external-drive-rename"/>
   <int value="696600628" label="VibrateRequiresUserGesture:disabled"/>
   <int value="698809951" label="WebRtcHWVP8Encoding:enabled"/>
   <int value="705713283" label="EasyUnlockPromotions:disabled"/>
@@ -23869,6 +23925,8 @@ from previous Chrome versions.
   <int value="711424932" label="enable-cloud-print-xps"/>
   <int value="715617684" label="OriginTrials:disabled"/>
   <int value="716080990" label="restrict-iframe-permissions"/>
+  <int value="719267310"
+      label="KeepAliveRendererForKeepaliveRequests:disabled"/>
   <int value="724208771" label="TabsInCBD:enabled"/>
   <int value="730024226" label="enable-out-of-process-pdf"/>
   <int value="730750097" label="PermissionsBlacklist:disabled"/>
@@ -23880,6 +23938,7 @@ from previous Chrome versions.
   <int value="752194066" label="enable-app-window-cycling"/>
   <int value="752939691" label="disable-tab-for-desktop-share"/>
   <int value="762700519" label="enable-checker-imaging"/>
+  <int value="765306424" label="ModuleScriptsDynamicImport:disabled"/>
   <int value="773919225" label="disable-office-editing-component-extension"/>
   <int value="779086132" label="enable-data-reduction-proxy-alt"/>
   <int value="782167080" label="enable-new-qp-input-view"/>
@@ -24077,6 +24136,7 @@ from previous Chrome versions.
   <int value="1363136936" label="VrCustomTabBrowsing:enabled"/>
   <int value="1367529437" label="NTPAssetDownloadSuggestions:enabled"/>
   <int value="1367671275" label="enable-proximity-auth-proximity-detection"/>
+  <int value="1369449914" label="SysInternals:disabled"/>
   <int value="1371092708" label="disable-desktop-capture-picker-old-ui"/>
   <int value="1371907429" label="enable-wallet-card-import"/>
   <int value="1372199493" label="windows10-custom-titlebar"/>
@@ -24282,6 +24342,7 @@ from previous Chrome versions.
   <int value="1988506961" label="EnableManualSaving:enabled"/>
   <int value="1989051182" label="view-passwords:enabled"/>
   <int value="1989877708" label="PostScriptPrinting:enabled"/>
+  <int value="1991912338" label="ModuleScriptsDynamicImport:enabled"/>
   <int value="1992466116" label="enable-passive-event-listeners-due-to-fling"/>
   <int value="1993258379" label="enable-icon-ntp"/>
   <int value="1994431722" label="MaterialDesignUserMenu:disabled"/>
@@ -24299,6 +24360,7 @@ from previous Chrome versions.
   <int value="2014629801" label="view-passwords:disabled"/>
   <int value="2020107447" label="AndroidPayIntegrationV1:enabled"/>
   <int value="2037756154" label="enable-impl-side-painting"/>
+  <int value="2043321329" label="OfflinePagesPrefetchingUI:disabled"/>
   <int value="2056572020" label="EnableUsernameCorrection:disabled"/>
   <int value="2059322877" label="new-avatar-menu"/>
   <int value="2063091429" label="OfflinePagesSharing:enabled"/>
@@ -28138,6 +28200,13 @@ from previous Chrome versions.
   <int value="22" label="above 200%"/>
 </enum>
 
+<enum name="OfflinePrefetchDownloadFinishedOutcome">
+  <int value="0" label="Download sucessful, item updated"/>
+  <int value="1" label="Download failed, item updated"/>
+  <int value="2" label="Download sucessful, item not found"/>
+  <int value="3" label="Download failed, item not found"/>
+</enum>
+
 <enum name="OfflinePrefetchItemErrorCode">
   <summary>
     Error codes representing the reason why a prefetch item was finalized.
@@ -31284,6 +31353,13 @@ from previous Chrome versions.
   <int value="3" label="PREVIEW_EVENT_NEW_SETTINGS"/>
 </enum>
 
+<enum name="PrintPreviewPdfActionBuckets">
+  <int value="0" label="PRINT_PREVIEW_SHOWN"/>
+  <int value="1" label="ROTATE"/>
+  <int value="2" label="SELECT_TEXT"/>
+  <int value="3" label="UPDATE_ZOOM"/>
+</enum>
+
 <enum name="PrintPreviewPrintDestinationBuckets">
   <int value="0" label="DESTINATION_SHOWN"/>
   <int value="1" label="DESTINATION_CLOSED_CHANGED"/>
@@ -32831,6 +32907,7 @@ from previous Chrome versions.
   <int value="86" label="IDC_CONTENT_CONTEXT_OPEN_WITH13"/>
   <int value="87" label="IDC_CONTENT_CONTEXT_OPEN_WITH14"/>
   <int value="88" label="IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN"/>
+  <int value="89" label="IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP"/>
 </enum>
 
 <enum name="ReportingHeaderEndpointOutcome">
@@ -35066,6 +35143,9 @@ from previous Chrome versions.
   <int value="7" label="Authentication failed with force signin">
     Signed out because credentials are invalid and force-sign-in is enabled.
   </int>
+  <int value="8" label="User turned off sync from DICE UI.">
+    User turned off sync from the Desktop Identity Consistency internals UI.
+  </int>
 </enum>
 
 <enum name="SigninSource">
@@ -36727,6 +36807,11 @@ from previous Chrome versions.
   <int value="0" label="Load succeeded"/>
   <int value="1" label="Load cancelled"/>
   <int value="2" label="Load failed"/>
+</enum>
+
+<enum name="SuggestedAppListAppLaunched">
+  <int value="0" label="Not a suggested app"/>
+  <int value="1" label="Suggested app"/>
 </enum>
 
 <!--
@@ -39574,6 +39659,8 @@ Called by update_traffic_annotation_histograms.py.-->
   <int value="8" label="File access permission was suppressed in VR"/>
   <int value="9" label="Password manager was disabled in VR"/>
   <int value="10" label="Autofill was disabled in VR"/>
+  <int value="11" label="USB chooser dialog was suppressed in VR"/>
+  <int value="12" label="SSL client certificate selector was suppressed in VR"/>
 </enum>
 
 <enum name="VRUnsupportedMode">
@@ -40099,6 +40186,92 @@ Called by update_traffic_annotation_histograms.py.-->
   <int value="1" label="ArrayBuffer"/>
   <int value="2" label="ArrayBufferView"/>
   <int value="3" label="Blob"/>
+</enum>
+
+<enum name="WebUISettingsPathHashes">
+  <int value="-2088016711" label="/startupPages"/>
+  <int value="-2082028555" label="/androidApps/details"/>
+  <int value="-2081867874" label="/usbDevices"/>
+  <int value="-2019732586" label="/printing"/>
+  <int value="-1930329480" label="/signOut"/>
+  <int value="-1915654604" label="/sound"/>
+  <int value="-1836863301" label="/ads"/>
+  <int value="-1820397898" label="/manageAccessibility"/>
+  <int value="-1737559358" label="/flash"/>
+  <int value="-1688600161" label="/manageProfile"/>
+  <int value="-1351149930" label="/backgroundSync"/>
+  <int value="-1312744606" label="/knownNetworks"/>
+  <int value="-1297176639" label="/fonts"/>
+  <int value="-1279337432" label="/power"/>
+  <int value="-1227595649" label="/all"/>
+  <int value="-1167413307" label="/inputMethods"/>
+  <int value="-1165810228" label="/searchEngines"/>
+  <int value="-1119639824" label="/display"/>
+  <int value="-1058065329" label="/languages"/>
+  <int value="-1048015830" label="/"/>
+  <int value="-1024208058" label="/midiDevices"/>
+  <int value="-1021686484" label="/javascript"/>
+  <int value="-1006445425" label="/importData"/>
+  <int value="-988053194" label="/lockScreen"/>
+  <int value="-972517930" label="/googleAssistant"/>
+  <int value="-916174295" label="/internet"/>
+  <int value="-907780721" label="/certificates"/>
+  <int value="-843556233" label="/location"/>
+  <int value="-732448620" label="/pdfDocuments"/>
+  <int value="-710357049" label="/bluetooth"/>
+  <int value="-686834549" label="/downloads"/>
+  <int value="-536183569" label="/protectedContent"/>
+  <int value="-512116630" label="/search"/>
+  <int value="-482801316" label="/appearance"/>
+  <int value="-469021167" label="/resetProfileSettings"/>
+  <int value="-442978022" label="/networks"/>
+  <int value="-378866134" label="/networkDetail"/>
+  <int value="-319293467" label="/multidevice"/>
+  <int value="-300300075" label="/system"/>
+  <int value="-230959653" label="/syncSetup"/>
+  <int value="-210069062" label="/content"/>
+  <int value="-44267040" label="/bluetoothDevices"/>
+  <int value="-14666765" label="/accounts"/>
+  <int value="16194264" label="/popups"/>
+  <int value="48697687" label="/zoomLevels"/>
+  <int value="223791833" label="/help/about"/>
+  <int value="273561147" label="/autofill"/>
+  <int value="297583680" label="/device"/>
+  <int value="306239043" label="/camera"/>
+  <int value="334469894" label="/people"/>
+  <int value="338873252" label="/passwords"/>
+  <int value="350639838" label="/cookies"/>
+  <int value="408074355" label="/onStartup"/>
+  <int value="511430105" label="/automaticDownloads"/>
+  <int value="537677705" label="/cookies/detail"/>
+  <int value="618530678" label="/advanced"/>
+  <int value="683177973" label="/cupsPrinters"/>
+  <int value="754547746" label="/help/details"/>
+  <int value="856943564" label="/content/siteDetails"/>
+  <int value="868952532" label="/pointer-overlay"/>
+  <int value="912274271" label="/siteData"/>
+  <int value="943458628" label="/triggeredResetProfileSettings"/>
+  <int value="1114615837" label="/accessibility"/>
+  <int value="1147116633" label="/networkConfig"/>
+  <int value="1220946500" label="/notifications"/>
+  <int value="1300569861" label="/keyboard-overlay"/>
+  <int value="1364454971" label="/androidApps"/>
+  <int value="1383875055" label="/microphone"/>
+  <int value="1384165448" label="/stylus"/>
+  <int value="1462185522" label="/dateTime"/>
+  <int value="1497571989" label="/images"/>
+  <int value="1513138656" label="/passwordsAndForms"/>
+  <int value="1602314362" label="/storage"/>
+  <int value="1641570017" label="/defaultBrowser"/>
+  <int value="1661964813" label="/reset"/>
+  <int value="1742260422" label="/cloudPrinters"/>
+  <int value="1798082697" label="/handlers"/>
+  <int value="1853516270" label="/lockScreen/fingerprint"/>
+  <int value="1935584577" label="/clearBrowserData"/>
+  <int value="1956464558" label="/changePicture"/>
+  <int value="2083843665" label="/unsandboxedPlugins"/>
+  <int value="2127311241" label="/editDictionary"/>
+  <int value="2136345292" label="/privacy"/>
 </enum>
 
 <enum name="WebUIUrlHashes">

@@ -104,7 +104,6 @@
 #include "content/renderer/accessibility/render_accessibility_impl.h"
 #include "content/renderer/browser_plugin/browser_plugin.h"
 #include "content/renderer/browser_plugin/browser_plugin_manager.h"
-#include "content/renderer/child_frame_compositing_helper.h"
 #include "content/renderer/content_security_policy_util.h"
 #include "content/renderer/context_menu_params_builder.h"
 #include "content/renderer/devtools/devtools_agent.h"
@@ -1015,6 +1014,7 @@ RenderFrameImpl* RenderFrameImpl::CreateMainFrame(
   DCHECK_EQ(render_view->GetWidget(), render_frame->render_widget_)
       << "Main frame is no longer reusing the RenderView as its widget! "
       << "Does the RenderFrame need to register itself with the RenderWidget?";
+  render_frame->in_frame_tree_ = true;
   return render_frame;
 }
 
@@ -2994,7 +2994,7 @@ RenderFrameImpl::CreateApplicationCacheHost(
   return base::MakeUnique<RendererWebApplicationCacheHostImpl>(
       RenderViewImpl::FromWebView(frame_->View()), client,
       RenderThreadImpl::current()->appcache_dispatcher()->backend_proxy(),
-      navigation_state->request_params().appcache_host_id);
+      navigation_state->request_params().appcache_host_id, routing_id_);
 }
 
 std::unique_ptr<blink::WebContentSettingsClient>
@@ -5250,11 +5250,7 @@ void RenderFrameImpl::OnCommitNavigation(
       },
       weak_factory_.GetWeakPtr());
 
-  // Chrome doesn't use interface versioning.
-  mojom::URLLoaderFactoryPtr url_loader_factory;
-  url_loader_factory.Bind(mojom::URLLoaderFactoryPtrInfo(
-      mojo::ScopedMessagePipeHandle(commit_data.url_loader_factory), 0u));
-  custom_url_loader_factory_ = std::move(url_loader_factory);
+  SetCustomURLLoadeFactory(commit_data.url_loader_factory);
 
   // If the request was initiated in the context of a user gesture then make
   // sure that the navigation also executes in the context of a user gesture.
@@ -5983,7 +5979,7 @@ void RenderFrameImpl::OpenURL(const NavigationPolicyInfo& info,
   params.uses_post = IsHttpPost(info.url_request);
   params.resource_request_body =
       GetRequestBodyForWebURLRequest(info.url_request);
-  params.extra_headers = GetWebURLRequestHeaders(info.url_request);
+  params.extra_headers = GetWebURLRequestHeadersAsString(info.url_request);
   params.referrer = send_referrer ? RenderViewImpl::GetReferrerFromRequest(
                                         frame_, info.url_request)
                                   : content::Referrer();
@@ -6358,6 +6354,15 @@ void RenderFrameImpl::SyncSelectionIfRequired() {
   GetRenderWidget()->UpdateSelectionBounds();
 }
 
+void RenderFrameImpl::SetCustomURLLoadeFactory(
+    mojo::MessagePipeHandle custom_loader_factory_handle) {
+  // Chrome doesn't use interface versioning.
+  mojom::URLLoaderFactoryPtr url_loader_factory;
+  url_loader_factory.Bind(mojom::URLLoaderFactoryPtrInfo(
+      mojo::ScopedMessagePipeHandle(custom_loader_factory_handle), 0u));
+  custom_url_loader_factory_ = std::move(url_loader_factory);
+}
+
 void RenderFrameImpl::InitializeUserMediaClient() {
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   if (!render_thread)  // Will be NULL during unit tests.
@@ -6469,7 +6474,7 @@ void RenderFrameImpl::BeginNavigation(const NavigationPolicyInfo& info) {
       info.navigation_type == blink::kWebNavigationTypeFormResubmitted;
 
   BeginNavigationParams begin_navigation_params(
-      GetWebURLRequestHeaders(info.url_request), load_flags,
+      GetWebURLRequestHeadersAsString(info.url_request), load_flags,
       info.url_request.HasUserGesture(),
       info.url_request.GetServiceWorkerMode() !=
           blink::WebURLRequest::ServiceWorkerMode::kAll,
@@ -6844,8 +6849,15 @@ std::unique_ptr<blink::WebURLLoader> RenderFrameImpl::CreateURLLoader(
     DCHECK(factory);
   }
 
+  mojom::KeepAliveHandlePtr keep_alive_handle;
+  if (base::FeatureList::IsEnabled(
+          features::kKeepAliveRendererForKeepaliveRequests) &&
+      request.GetKeepalive()) {
+    GetFrameHost()->IssueKeepAliveHandle(mojo::MakeRequest(&keep_alive_handle));
+  }
   return base::MakeUnique<WebURLLoaderImpl>(child_thread->resource_dispatcher(),
-                                            task_runner, factory);
+                                            task_runner, factory,
+                                            std::move(keep_alive_handle));
 }
 
 void RenderFrameImpl::DraggableRegionsChanged() {

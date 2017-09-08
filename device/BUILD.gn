@@ -125,7 +125,6 @@ test("device_unittests") {
       "//device/hid",
       "//device/hid:mocks",
       "//device/serial",
-      "//device/serial:test_support",
       "//device/u2f",
       "//device/u2f:mocks",
     ]
@@ -239,7 +238,7 @@ test("device_unittests") {
     ]
   }
 
-  if (enable_vr) {
+  if (enable_vr && is_android) {
     sources += [
       "vr/vr_device_manager_unittest.cc",
       "vr/vr_display_impl_unittest.cc",
@@ -249,6 +248,7 @@ test("device_unittests") {
     deps += [
       "//device/vr",
       "//device/vr:fakes",
+      "//device/vr:java",
       "//device/vr:mojo_bindings",
     ]
   }

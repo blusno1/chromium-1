@@ -4,7 +4,8 @@
 
 #include "chrome/browser/notifications/notification_display_service.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/strings/nullable_string16.h"
 #include "chrome/browser/notifications/non_persistent_notification_handler.h"
 #include "chrome/browser/notifications/notification_common.h"
@@ -19,13 +20,13 @@
 NotificationDisplayService::NotificationDisplayService(Profile* profile)
     : profile_(profile) {
   AddNotificationHandler(NotificationCommon::NON_PERSISTENT,
-                         base::MakeUnique<NonPersistentNotificationHandler>());
+                         std::make_unique<NonPersistentNotificationHandler>());
   AddNotificationHandler(NotificationCommon::PERSISTENT,
-                         base::MakeUnique<PersistentNotificationHandler>());
+                         std::make_unique<PersistentNotificationHandler>());
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   AddNotificationHandler(
       NotificationCommon::EXTENSION,
-      base::MakeUnique<extensions::ExtensionNotificationHandler>());
+      std::make_unique<extensions::ExtensionNotificationHandler>());
 #endif
 }
 
@@ -52,8 +53,9 @@ void NotificationDisplayService::ProcessNotificationOperation(
     NotificationCommon::Type notification_type,
     const std::string& origin,
     const std::string& notification_id,
-    int action_index,
-    const base::NullableString16& reply) {
+    const base::Optional<int>& action_index,
+    const base::Optional<base::string16>& reply,
+    const base::Optional<bool>& by_user) {
   NotificationHandler* handler = GetNotificationHandler(notification_type);
   DCHECK(handler);
   if (!handler) {
@@ -65,7 +67,8 @@ void NotificationDisplayService::ProcessNotificationOperation(
       handler->OnClick(profile_, origin, notification_id, action_index, reply);
       break;
     case NotificationCommon::CLOSE:
-      handler->OnClose(profile_, origin, notification_id, true /* by_user */);
+      DCHECK(by_user.has_value());
+      handler->OnClose(profile_, origin, notification_id, by_user.value());
       break;
     case NotificationCommon::SETTINGS:
       handler->OpenSettings(profile_);

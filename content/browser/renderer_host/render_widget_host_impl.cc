@@ -31,6 +31,7 @@
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "cc/output/compositor_frame.h"
+#include "components/viz/common/switches.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/bad_message.h"
@@ -117,7 +118,6 @@
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #endif
 
-using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
 using blink::WebDragOperation;
@@ -372,8 +372,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   }
 #endif
 
-  SetWidget(std::move(widget));
-
   std::pair<RoutingIDWidgetMap::iterator, bool> result =
       g_routing_id_widget_map.Get().insert(std::make_pair(
           RenderWidgetHostID(process->GetID(), routing_id_), this));
@@ -391,6 +389,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
 
   SetupInputRouter();
   touch_emulator_.reset();
+  SetWidget(std::move(widget));
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableHangMonitor)) {
@@ -402,6 +401,11 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   new_content_rendering_timeout_.reset(new TimeoutMonitor(
       base::Bind(&RenderWidgetHostImpl::ClearDisplayedGraphics,
                  weak_factory_.GetWeakPtr())));
+
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  enable_surface_synchronization_ =
+      command_line.HasSwitch(switches::kEnableSurfaceSynchronization);
 
   delegate_->RenderWidgetCreated(this);
 }
@@ -780,14 +784,18 @@ bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
       old_resize_params_->bottom_controls_height !=
           resize_params->bottom_controls_height ||
       old_resize_params_->visible_viewport_size !=
-          resize_params->visible_viewport_size;
+          resize_params->visible_viewport_size ||
+      (enable_surface_synchronization_ &&
+       old_resize_params_->local_surface_id != resize_params->local_surface_id);
 
   // We don't expect to receive an ACK when the requested size or the physical
   // backing size is empty, or when the main viewport size didn't change.
   resize_params->needs_resize_ack =
       g_check_for_pending_resize_ack && !resize_params->new_size.IsEmpty() &&
-      !resize_params->physical_backing_size.IsEmpty() && size_changed;
-
+      !resize_params->physical_backing_size.IsEmpty() && size_changed &&
+      (!enable_surface_synchronization_ ||
+       (resize_params->local_surface_id.has_value() &&
+        resize_params->local_surface_id->is_valid()));
   return dirty;
 }
 
@@ -2800,7 +2808,13 @@ void RenderWidgetHostImpl::SetWidgetInputHandler(
 void RenderWidgetHostImpl::SetWidget(mojom::WidgetPtr widget) {
   if (widget && base::FeatureList::IsEnabled(features::kMojoInputMessages)) {
     widget_input_handler_.reset();
-    widget->GetWidgetInputHandler(mojo::MakeRequest(&widget_input_handler_));
+
+    mojom::WidgetInputHandlerHostPtr host;
+    mojom::WidgetInputHandlerHostRequest host_request =
+        mojo::MakeRequest(&host);
+    widget->SetupWidgetInputHandler(mojo::MakeRequest(&widget_input_handler_),
+                                    std::move(host));
+    input_router_->BindHost(std::move(host_request));
   }
 }
 

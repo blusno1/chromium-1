@@ -761,11 +761,13 @@ static void AppendQuadsToFillScreen(
   gfx::Rect root_target_rect = root_render_surface->content_rect();
   float opacity = 1.f;
   int sorting_context_id = 0;
+  bool are_contents_opaque = SkColorGetA(screen_background_color) == 0xFF;
   viz::SharedQuadState* shared_quad_state =
       target_render_pass->CreateAndAppendSharedQuadState();
   shared_quad_state->SetAll(gfx::Transform(), root_target_rect,
-                            root_target_rect, root_target_rect, false, opacity,
-                            SkBlendMode::kSrcOver, sorting_context_id);
+                            root_target_rect, root_target_rect, false,
+                            are_contents_opaque, opacity, SkBlendMode::kSrcOver,
+                            sorting_context_id);
 
   for (Region::Iterator fill_rects(fill_region); fill_rects.has_rect();
        fill_rects.next()) {
@@ -1180,7 +1182,7 @@ void LayerTreeHostImpl::RemoveRenderPasses(FrameData* frame) {
 
     // Remove orphan RenderPassDrawQuads.
     for (auto it = pass->quad_list.begin(); it != pass->quad_list.end();) {
-      if (it->material != DrawQuad::RENDER_PASS) {
+      if (it->material != viz::DrawQuad::RENDER_PASS) {
         ++it;
         continue;
       }
@@ -1227,7 +1229,7 @@ void LayerTreeHostImpl::RemoveRenderPasses(FrameData* frame) {
       continue;
 
     for (auto it = pass->quad_list.begin(); it != pass->quad_list.end(); ++it) {
-      if (it->material != DrawQuad::RENDER_PASS)
+      if (it->material != viz::DrawQuad::RENDER_PASS)
         continue;
       const RenderPassDrawQuad* quad = RenderPassDrawQuad::MaterialCast(*it);
       pass_references[quad->render_pass_id]--;
@@ -2014,7 +2016,9 @@ void LayerTreeHostImpl::UpdateViewportContainerSizes() {
   // Adjust the viewport layers by shrinking/expanding the container to account
   // for changes in the size (e.g. browser controls) since the last resize from
   // Blink.
-  gfx::Vector2dF amount_to_expand(0.f, delta_from_top_controls);
+  gfx::Vector2dF amount_to_expand(
+      0.f,
+      delta_from_top_controls * active_tree_->painted_device_scale_factor());
   inner_container->SetViewportBoundsDelta(amount_to_expand);
 
   if (outer_container && !outer_container->BoundsForScrolling().IsEmpty()) {
@@ -2323,8 +2327,7 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
         layer_tree_frame_sink_->worker_context_provider(),
         viz::ResourceFormatToClosestSkColorType(
             settings_.preferred_tile_format),
-        settings_.decoded_image_working_set_budget_bytes,
-        settings_.decoded_image_cache_budget_bytes);
+        settings_.decoded_image_working_set_budget_bytes);
   } else {
     image_decode_cache_ = std::make_unique<SoftwareImageDecodeCache>(
         viz::ResourceFormatToClosestSkColorType(

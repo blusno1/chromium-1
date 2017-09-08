@@ -900,8 +900,7 @@ const char kPinUnlockFeatureNotificationShown[] =
 const char kFingerprintUnlockFeatureNotificationShown[] =
     "fingerprint_unlock_feature_notification_shown";
 
-// The salt and hash for the pin quick unlock mechanism.
-const char kQuickUnlockPinSalt[] = "quick_unlock.pin.salt";
+// The hash for the pin quick unlock mechanism.
 const char kQuickUnlockPinSecret[] = "quick_unlock.pin.secret";
 
 // An integer pref. Indicates the number of fingerprint records registered.
@@ -1268,26 +1267,6 @@ const char kMessageCenterDisabledExtensionIds[] =
 // notifications to the message center.
 const char kMessageCenterDisabledSystemComponentIds[] =
     "message_center.disabled_system_component_ids";
-
-// Boolean pref indicating the Chrome Now welcome notification was dismissed
-// by the user. Syncable.
-// Note: This is now read-only. The welcome notification writes the _local
-// version, below.
-const char kWelcomeNotificationDismissed[] =
-    "message_center.welcome_notification_dismissed";
-
-// Boolean pref indicating the Chrome Now welcome notification was dismissed
-// by the user on this machine.
-const char kWelcomeNotificationDismissedLocal[] =
-    "message_center.welcome_notification_dismissed_local";
-
-// Boolean pref indicating the welcome notification was previously popped up.
-const char kWelcomeNotificationPreviouslyPoppedUp[] =
-    "message_center.welcome_notification_previously_popped_up";
-
-// Integer pref containing the expiration timestamp of the welcome notification.
-const char kWelcomeNotificationExpirationTimestamp[] =
-    "message_center.welcome_notification_expiration_timestamp";
 
 // Boolean pref that determines whether the user can enter fullscreen mode.
 // Disabling fullscreen mode also makes kiosk mode unavailable on desktop

@@ -13,7 +13,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/payments/core/features.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -35,8 +37,6 @@
 #import "ios/chrome/browser/ui/browser_view_controller_dependency_factory.h"
 #import "ios/chrome/browser/ui/browser_view_controller_testing.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #import "ios/chrome/browser/ui/page_not_available_controller.h"
 #include "ios/chrome/browser/ui/toolbar/test_toolbar_model_ios.h"
@@ -268,10 +268,6 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     BlockCleanupTest::TearDown();
   }
 
-  GenericChromeCommand* GetCommandWithTag(NSInteger tag) {
-    return [[GenericChromeCommand alloc] initWithTag:tag];
-  }
-
   MOCK_METHOD0(OnCompletionCalled, void());
 
   web::TestWebThreadBundle thread_bundle_;
@@ -465,6 +461,27 @@ TEST_F(BrowserViewControllerTest, TestClearPresentedState) {
   [bvc_ clearPresentedStateWithCompletion:^{
     this->OnCompletionCalled();
   }];
+}
+
+// Tests for the browser view controller when Payment Request is enabled.
+class PaymentRequestBrowserViewControllerTest
+    : public BrowserViewControllerTest {
+ public:
+  PaymentRequestBrowserViewControllerTest() {}
+
+ protected:
+  void SetUp() override {
+    feature_list_.InitAndEnableFeature(payments::features::kWebPayments);
+    BrowserViewControllerTest::SetUp();
+  }
+
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Verifies that the controller starts up and shuts down cleanly with Payment
+// Request enabled.
+TEST_F(PaymentRequestBrowserViewControllerTest, TestStartupAndShutdown) {
+  // The body of this test is deliberately left empty.
 }
 
 }  // namespace

@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/viz/common/surfaces/surface_info.h"
+#include "components/viz/common/switches.h"
 #include "content/common/browser_plugin/browser_plugin_constants.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/view_messages.h"
@@ -52,10 +53,12 @@ using blink::WebURL;
 using blink::WebVector;
 
 namespace {
+
 using PluginContainerMap =
     std::map<blink::WebPluginContainer*, content::BrowserPlugin*>;
 static base::LazyInstance<PluginContainerMap>::DestructorAtExit
     g_plugin_container_map = LAZY_INSTANCE_INITIALIZER;
+
 }  // namespace
 
 namespace content {
@@ -90,12 +93,17 @@ BrowserPlugin::BrowserPlugin(
 
   if (delegate_)
     delegate_->SetElementInstanceID(browser_plugin_instance_id_);
+
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  enable_surface_synchronization_ =
+      command_line.HasSwitch(switches::kEnableSurfaceSynchronization);
 }
 
 BrowserPlugin::~BrowserPlugin() {
   Detach();
 
-  if (compositing_helper_.get())
+  if (compositing_helper_)
     compositing_helper_->OnContainerDestroy();
 
   if (delegate_) {
@@ -130,9 +138,28 @@ void BrowserPlugin::OnSetChildFrameSurface(
   if (!attached())
     return;
 
-  EnableCompositing(true);
-  DCHECK(compositing_helper_.get());
-  compositing_helper_->SetPrimarySurfaceInfo(surface_info);
+  if (!compositing_helper_) {
+    compositing_helper_.reset(
+        ChildFrameCompositingHelper::CreateForBrowserPlugin(
+            weak_ptr_factory_.GetWeakPtr()));
+    if (enable_surface_synchronization_) {
+      // We wait until there is a single CompositorFrame guaranteed to be
+      // available and ready for display in the display compositor before using
+      // surface synchronization. This guarantees that we will have something to
+      // display when the compositor goes to produce a display frame.
+      //
+      // Once there's an available fallback surface that can be employed, then
+      // the primary surface is updated as soon as the frame rect changes.
+      //
+      // The compositor will attempt to composite the primary surface within a
+      // give deadline (4 frames is the default). If the primary surface isn't
+      // available for four frames, then the fallback surface will be used.
+      compositing_helper_->SetPrimarySurfaceInfo(surface_info);
+    }
+  }
+
+  if (!enable_surface_synchronization_)
+    compositing_helper_->SetPrimarySurfaceInfo(surface_info);
   compositing_helper_->SetFallbackSurfaceInfo(surface_info, sequence);
 }
 
@@ -188,6 +215,8 @@ void BrowserPlugin::Attach() {
           ui::AX_EVENT_CHILDREN_CHANGED);
     }
   }
+
+  ViewRectsChanged(view_rect());
 }
 
 void BrowserPlugin::Detach() {
@@ -196,7 +225,10 @@ void BrowserPlugin::Detach() {
 
   attached_ = false;
   guest_crashed_ = false;
-  EnableCompositing(false);
+  if (compositing_helper_) {
+    compositing_helper_->OnContainerDestroy();
+    compositing_helper_.reset();
+  }
 
   BrowserPluginManager::Get()->Send(
       new BrowserPluginHostMsg_Detach(browser_plugin_instance_id_));
@@ -218,12 +250,22 @@ void BrowserPlugin::OnAdvanceFocus(int browser_plugin_instance_id,
 void BrowserPlugin::OnGuestGone(int browser_plugin_instance_id) {
   guest_crashed_ = true;
 
-  EnableCompositing(true);
+  if (!compositing_helper_) {
+    compositing_helper_.reset(
+        ChildFrameCompositingHelper::CreateForBrowserPlugin(
+            weak_ptr_factory_.GetWeakPtr()));
+  }
   compositing_helper_->ChildFrameGone();
 }
 
-void BrowserPlugin::OnGuestReady(int browser_plugin_instance_id) {
+void BrowserPlugin::OnGuestReady(int browser_plugin_instance_id,
+                                 const viz::FrameSinkId& frame_sink_id) {
   guest_crashed_ = false;
+  frame_sink_id_ = frame_sink_id;
+  gfx::Rect view_rect = view_rect_;
+  view_rect_ = gfx::Rect();
+  if (!view_rect.IsEmpty())
+    ViewRectsChanged(view_rect);
 }
 
 void BrowserPlugin::OnSetCursor(int browser_plugin_instance_id,
@@ -277,6 +319,36 @@ void BrowserPlugin::UpdateInternalInstanceId() {
       base::UTF8ToUTF16(base::IntToString(browser_plugin_instance_id_)));
 }
 
+void BrowserPlugin::ViewRectsChanged(const gfx::Rect& view_rect) {
+  bool rect_size_changed = view_rect_.size() != view_rect.size();
+  if (rect_size_changed || !local_surface_id_.is_valid()) {
+    local_surface_id_ = local_surface_id_allocator_.GenerateId();
+    if (compositing_helper_ && enable_surface_synchronization_ &&
+        frame_sink_id_.is_valid()) {
+      RenderWidget* render_widget =
+          RenderFrameImpl::FromWebFrame(Container()->GetDocument().GetFrame())
+              ->GetRenderWidget();
+      float device_scale_factor = render_widget->GetOriginalDeviceScaleFactor();
+      viz::SurfaceInfo surface_info(
+          viz::SurfaceId(frame_sink_id_, local_surface_id_),
+          device_scale_factor,
+          gfx::ScaleToCeiledSize(view_rect.size(), device_scale_factor));
+      compositing_helper_->SetPrimarySurfaceInfo(surface_info);
+    }
+  }
+
+  view_rect_ = view_rect;
+
+  if (attached()) {
+    // Let the browser know about the updated view rect.
+    BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_UpdateGeometry(
+        browser_plugin_instance_id_, view_rect_, local_surface_id_));
+  }
+
+  if (rect_size_changed && delegate_)
+    delegate_->DidResizeElement(view_rect_.size());
+}
+
 void BrowserPlugin::UpdateGuestFocusState(blink::WebFocusType focus_type) {
   if (!attached())
     return;
@@ -320,26 +392,6 @@ bool BrowserPlugin::Initialize(WebPluginContainer* container) {
       FROM_HERE, base::Bind(&BrowserPlugin::UpdateInternalInstanceId,
                             weak_ptr_factory_.GetWeakPtr()));
   return true;
-}
-
-void BrowserPlugin::EnableCompositing(bool enable) {
-  bool enabled = !!compositing_helper_.get();
-  if (enabled == enable)
-    return;
-
-  if (enable) {
-    DCHECK(!compositing_helper_.get());
-    if (!compositing_helper_.get()) {
-      compositing_helper_ = ChildFrameCompositingHelper::CreateForBrowserPlugin(
-          weak_ptr_factory_.GetWeakPtr());
-    }
-  }
-
-  if (!enable) {
-    DCHECK(compositing_helper_.get());
-    compositing_helper_->OnContainerDestroy();
-    compositing_helper_ = nullptr;
-  }
 }
 
 void BrowserPlugin::Destroy() {
@@ -393,17 +445,17 @@ void BrowserPlugin::UpdateGeometry(const WebRect& plugin_rect_in_viewport,
                                    const WebRect& clip_rect,
                                    const WebRect& unobscured_rect,
                                    bool is_visible) {
-  gfx::Rect old_view_rect = view_rect_;
   // Convert the plugin_rect_in_viewport to window coordinates, which is css.
   WebRect rect_in_css(plugin_rect_in_viewport);
 
   // We will use the local root's RenderWidget to convert coordinates to Window.
   // If this local root belongs to an OOPIF, on the browser side we will have to
   // consider the displacement of the child frame in root window.
-  RenderFrameImpl::FromWebFrame(Container()->GetDocument().GetFrame())
-      ->GetRenderWidget()
-      ->ConvertViewportToWindow(&rect_in_css);
-  view_rect_ = rect_in_css;
+  RenderWidget* render_widget =
+      RenderFrameImpl::FromWebFrame(Container()->GetDocument().GetFrame())
+          ->GetRenderWidget();
+  render_widget->ConvertViewportToWindow(&rect_in_css);
+  gfx::Rect view_rect = rect_in_css;
 
   if (!ready_) {
     if (delegate_)
@@ -411,20 +463,7 @@ void BrowserPlugin::UpdateGeometry(const WebRect& plugin_rect_in_viewport,
     ready_ = true;
   }
 
-  bool rect_size_changed = view_rect_.size() != old_view_rect.size();
-  if (delegate_ && rect_size_changed)
-    delegate_->DidResizeElement(view_rect_.size());
-
-  if (!attached())
-    return;
-
-  if ((!delegate_ && rect_size_changed) ||
-      view_rect_.origin() != old_view_rect.origin()) {
-    // Let the browser know about the updated view rect.
-    BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_UpdateGeometry(
-        browser_plugin_instance_id_, view_rect_));
-    return;
-  }
+  ViewRectsChanged(view_rect);
 }
 
 void BrowserPlugin::UpdateFocus(bool focused, blink::WebFocusType focus_type) {
@@ -440,7 +479,7 @@ void BrowserPlugin::UpdateVisibility(bool visible) {
   if (!attached())
     return;
 
-  if (compositing_helper_.get())
+  if (compositing_helper_)
     compositing_helper_->UpdateVisibility(visible);
 
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_SetVisibility(

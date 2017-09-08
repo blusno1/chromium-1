@@ -59,9 +59,9 @@ class VirtualTimeBrowserTest : public HeadlessAsyncDevTooledBrowserTest,
   // emulation::Observer implementation:
   void OnVirtualTimeBudgetExpired(
       const emulation::VirtualTimeBudgetExpiredParams& params) override {
-    EXPECT_THAT(log_,
-                ElementsAre("Paused @ 0ms", "step1", "step2", "Paused @ 100ms",
-                            "step3", "Paused @ 200ms", "step4", "pass"));
+    EXPECT_THAT(log_, ElementsAre("step1", "step2", "Paused @ 100ms", "step3",
+                                  "Paused @ 200ms", "step4", "pass",
+                                  "Paused @ 5000ms"));
     FinishAsynchronousTest();
   }
 

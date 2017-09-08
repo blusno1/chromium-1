@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_view_controller.h"
 
 #include "base/metrics/user_metrics.h"
+#include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -38,6 +39,7 @@
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ios/web/public/referrer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -47,6 +49,9 @@ using bookmarks::BookmarkNode;
 namespace {
 // The width of the bookmark menu, displaying the different sections.
 const CGFloat kMenuWidth = 264;
+
+// The spacer between title and done button on the navigation bar.
+const CGFloat kSpacer = 50;
 }
 
 @interface BookmarkHomeViewController ()<
@@ -85,6 +90,7 @@ const CGFloat kMenuWidth = 264;
 @synthesize homeDelegate = _homeDelegate;
 @synthesize bookmarksTableView = _bookmarksTableView;
 @synthesize contextBar = _contextBar;
+@synthesize contextBarState = _contextBarState;
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -124,14 +130,35 @@ const CGFloat kMenuWidth = 264;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  if (!base::FeatureList::IsEnabled(
-          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+  if (!base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
     self.navigationBar =
         [[BookmarkNavigationBar alloc] initWithFrame:CGRectZero];
     [self.navigationBar setEditTarget:self
                                action:@selector(navigationBarWantsEditing:)];
     [self.navigationBar setBackTarget:self
                                action:@selector(navigationBarBack:)];
+  } else {
+    [self setupNavigationBar];
+  }
+}
+
+- (void)viewWillLayoutSubviews {
+  [super viewWillLayoutSubviews];
+  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
+    // Resize the custom title view (placed as leftBarButtonItem) on the
+    // navigation bar according to the space available, so that we truncate it
+    // correctly.
+    CGRect frame = self.navigationItem.leftBarButtonItem.customView.frame;
+    NSDictionary* attributes = [self.navigationItem.rightBarButtonItem
+        titleTextAttributesForState:UIControlStateNormal];
+    CGFloat rightButtonWidth =
+        attributes ? [self.navigationItem.rightBarButtonItem.title
+                         sizeWithAttributes:attributes]
+                         .width
+                   : 0;
+    frame.size.width = self.view.bounds.size.width - frame.origin.x -
+                       rightButtonWidth - kSpacer;
+    self.navigationItem.leftBarButtonItem.customView.frame = frame;
   }
 }
 
@@ -145,94 +172,10 @@ const CGFloat kMenuWidth = 264;
 #pragma mark - Protected
 
 - (void)loadBookmarkViews {
-  if (base::FeatureList::IsEnabled(
-          bookmark_new_generation::features::kBookmarkNewGeneration)) {
-    // Set up new UI view. TODO(crbug.com/695749): Polish UI according to mocks.
-    _containerView = [[UIView alloc] initWithFrame:self.view.bounds];
-    [_containerView setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
-                                        UIViewAutoresizingFlexibleHeight];
-    [self.view addSubview:_containerView];
-
-    self.bookmarksTableView =
-        [[BookmarkTableView alloc] initWithBrowserState:self.browserState
-                                               delegate:self
-                                               rootNode:_rootNode
-                                                  frame:self.view.bounds];
-
-    [self.bookmarksTableView setTranslatesAutoresizingMaskIntoConstraints:NO];
-    [_containerView addSubview:self.bookmarksTableView];
-
-    // TODO(crbug.com/695749): Hide the context bar when browsing
-    // bookmarkModel->root_node.
-    self.contextBar = [[BookmarkContextBar alloc] initWithFrame:CGRectZero];
-    self.contextBar.delegate = self;
-    [self.contextBar setTranslatesAutoresizingMaskIntoConstraints:NO];
-
-    // TODO(crbug.com/695749): Check if we need to create new strings for the
-    // context bar buttons.
-    [self.contextBar setButtonVisibility:YES forButton:ContextBarLeadingButton];
-    [self.contextBar
-        setButtonTitle:l10n_util::GetNSStringWithFixup(
-                           IDS_IOS_BOOKMARK_NEW_GROUP_EDITOR_CREATE_TITLE)
-             forButton:ContextBarLeadingButton];
-
-    [self.contextBar setButtonVisibility:YES
-                               forButton:ContextBarTrailingButton];
-    [self.contextBar setButtonTitle:l10n_util::GetNSStringWithFixup(
-                                        IDS_IOS_BOOKMARK_ACTION_SELECT)
-                          forButton:ContextBarTrailingButton];
-
-    [_containerView addSubview:self.contextBar];
-
-    // Set up the navigation bar.
-    NSString* doneTitle =
-        l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
-            .uppercaseString;
-    UIBarButtonItem* doneButton =
-        [[UIBarButtonItem alloc] initWithTitle:doneTitle
-                                         style:UIBarButtonItemStyleDone
-                                        target:self
-                                        action:@selector(navigationBarCancel:)];
-    doneButton.accessibilityIdentifier = @"bookmark_done_button";
-    self.navigationItem.rightBarButtonItem = doneButton;
-    self.navigationItem.backBarButtonItem =
-        [[UIBarButtonItem alloc] initWithTitle:@""
-                                         style:UIBarButtonItemStylePlain
-                                        target:nil
-                                        action:nil];
-    self.navigationItem.title =
-        bookmark_utils_ios::TitleForBookmarkNode(_rootNode);
-    self.navigationController.navigationBar.tintColor = UIColor.blackColor;
-    self.navigationController.navigationBar.backgroundColor =
-        bookmark_utils_ios::mainBackgroundColor();
+  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
+    [self loadBookmarkViewsForNewUI];
   } else {
-    // Set up old UI view.
-    LayoutRect menuLayout =
-        LayoutRectMake(0, self.view.bounds.size.width, 0, self.menuWidth,
-                       self.view.bounds.size.height);
-
-    // Create menu view.
-    self.menuView = [[BookmarkMenuView alloc]
-        initWithBrowserState:self.browserState
-                       frame:LayoutRectGetRect(menuLayout)];
-    self.menuView.autoresizingMask =
-        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-
-    // Create panel view.
-    self.panelView = [[BookmarkPanelView alloc] initWithFrame:CGRectZero
-                                                menuViewWidth:self.menuWidth];
-    self.panelView.autoresizingMask =
-        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-
-    // Create folder view.
-    BookmarkCollectionView* view =
-        [[BookmarkCollectionView alloc] initWithBrowserState:self.browserState
-                                                       frame:CGRectZero];
-    self.folderView = view;
-    [self.folderView setEditing:self.editing animated:NO];
-    self.folderView.autoresizingMask =
-        UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
-    self.folderView.delegate = self;
+    [self loadBookmarkViewsForOldUI];
   }
 }
 
@@ -318,8 +261,7 @@ const CGFloat kMenuWidth = 264;
 #pragma mark - BookmarkPromoControllerDelegate
 
 - (void)promoStateChanged:(BOOL)promoEnabled {
-  if (base::FeatureList::IsEnabled(
-          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
     [self.bookmarksTableView promoStateChangedAnimated:YES];
   } else {
     [self.folderView promoStateChangedAnimated:YES];
@@ -467,6 +409,82 @@ const CGFloat kMenuWidth = 264;
 
 - (void)bookmarkTableViewDismissPromo:(BookmarkTableView*)view {
   [self.bookmarkPromoController hidePromoCell];
+}
+
+- (void)bookmarkTableView:(BookmarkTableView*)view
+        selectedEditNodes:
+            (const std::set<const bookmarks::BookmarkNode*>&)nodes {
+  // Early return if bookmarks table is not in edit mode.
+  if (!self.bookmarksTableView.editing) {
+    return;
+  }
+
+  if (nodes.size() == 0) {
+    [self setContextBarState:BookmarksContextBarBeginSelection];
+    return;
+  }
+  if (nodes.size() == 1) {
+    const bookmarks::BookmarkNode* node = *nodes.begin();
+    if (node->is_url()) {
+      [self setContextBarState:BookmarksContextBarSingleURLSelection];
+    } else if (node->is_folder()) {
+      [self setContextBarState:BookmarksContextBarSingleFolderSelection];
+    }
+    return;
+  }
+
+  BOOL foundURL = NO;
+  BOOL foundFolder = NO;
+  for (std::set<const bookmarks::BookmarkNode*>::iterator i = nodes.begin();
+       i != nodes.end(); ++i) {
+    const bookmarks::BookmarkNode* node = *i;
+    if (!foundURL && node->is_url()) {
+      foundURL = YES;
+    } else if (!foundFolder && node->is_folder()) {
+      foundFolder = YES;
+    }
+    // Break early, if we found both types of nodes.
+    if (foundURL && foundFolder) {
+      break;
+    }
+  }
+
+  // Only URLs are selected.
+  if (foundURL && !foundFolder) {
+    [self setContextBarState:BookmarksContextBarMultipleURLSelection];
+    return;
+  }
+  // Only Folders are selected.
+  if (!foundURL && foundFolder) {
+    [self setContextBarState:BookmarksContextBarMultipleFolderSelection];
+    return;
+  }
+  // Mixed selection.
+  if (foundURL && foundFolder) {
+    [self setContextBarState:BookmarksContextBarMixedSelection];
+    return;
+  }
+
+  NOTREACHED();
+  return;
+}
+
+- (void)bookmarkTableView:(BookmarkTableView*)view
+    showContextMenuForNode:(const bookmarks::BookmarkNode*)node {
+  if (node->is_url()) {
+    [self presentViewController:[self contextMenuForSingleBookmarkURL:node]
+                       animated:YES
+                     completion:nil];
+    return;
+  }
+
+  if (node->is_folder()) {
+    [self presentViewController:[self contextMenuForSingleBookmarkFolder:node]
+                       animated:YES
+                     completion:nil];
+    return;
+  }
+  NOTREACHED();
 }
 
 #pragma mark - BookmarkFolderViewControllerDelegate
@@ -862,6 +880,134 @@ const CGFloat kMenuWidth = 264;
 
 #pragma mark - private
 
+// Set up UI views for the old UI.
+- (void)loadBookmarkViewsForOldUI {
+  LayoutRect menuLayout =
+      LayoutRectMake(0, self.view.bounds.size.width, 0, self.menuWidth,
+                     self.view.bounds.size.height);
+
+  // Create menu view.
+  self.menuView = [[BookmarkMenuView alloc]
+      initWithBrowserState:self.browserState
+                     frame:LayoutRectGetRect(menuLayout)];
+  self.menuView.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+  // Create panel view.
+  self.panelView = [[BookmarkPanelView alloc] initWithFrame:CGRectZero
+                                              menuViewWidth:self.menuWidth];
+  self.panelView.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+  // Create folder view.
+  BookmarkCollectionView* view =
+      [[BookmarkCollectionView alloc] initWithBrowserState:self.browserState
+                                                     frame:CGRectZero];
+  self.folderView = view;
+  [self.folderView setEditing:self.editing animated:NO];
+  self.folderView.autoresizingMask =
+      UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
+  self.folderView.delegate = self;
+}
+
+// Set up UI views for the new UI.
+- (void)loadBookmarkViewsForNewUI {
+  // TODO(crbug.com/695749): Polish UI according to mocks.
+  self.automaticallyAdjustsScrollViewInsets = NO;
+  self.bookmarksTableView =
+      [[BookmarkTableView alloc] initWithBrowserState:self.browserState
+                                             delegate:self
+                                             rootNode:_rootNode
+                                                frame:self.view.bounds];
+  [self.bookmarksTableView
+      setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
+                          UIViewAutoresizingFlexibleHeight];
+  [self.bookmarksTableView setTranslatesAutoresizingMaskIntoConstraints:NO];
+  [self.view addSubview:self.bookmarksTableView];
+
+  if (_rootNode != self.bookmarks->root_node()) {
+    [self setupContextBar];
+  }
+}
+
+// Set up context bar for the new UI.
+- (void)setupContextBar {
+  self.contextBar = [[BookmarkContextBar alloc] initWithFrame:CGRectZero];
+  self.contextBar.delegate = self;
+  [self.contextBar setTranslatesAutoresizingMaskIntoConstraints:NO];
+
+  [self setContextBarState:BookmarksContextBarDefault];
+  [self.view addSubview:self.contextBar];
+}
+
+// Set up navigation bar for the new UI.
+- (void)setupNavigationBar {
+  // Add custom back button.
+  self.navigationItem.backBarButtonItem = [self customizedBackButton];
+
+  // Add custom title.
+  self.navigationItem.leftBarButtonItem = [self customizedNavigationTitle];
+
+  // Add custom done button.
+  self.navigationItem.rightBarButtonItem = [self customizedDoneButton];
+
+  self.navigationController.navigationBar.tintColor = UIColor.blackColor;
+  self.navigationController.navigationBar.barTintColor =
+      bookmark_utils_ios::mainBackgroundColor();
+  self.navigationController.navigationBar.translucent = NO;
+}
+
+- (UIBarButtonItem*)customizedBackButton {
+  UIImage* backImage = [UIImage imageNamed:@"bookmark_gray_back"];
+  // Set these two properties to customize the back button.
+  [UINavigationBar appearance].backIndicatorImage = backImage;
+  [UINavigationBar appearance].backIndicatorTransitionMaskImage = backImage;
+  // Removes back button label.
+  UIBarButtonItem* backButton =
+      [[UIBarButtonItem alloc] initWithTitle:@""
+                                       style:UIBarButtonItemStylePlain
+                                      target:nil
+                                      action:nil];
+  backImage.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_BOOKMARK_NEW_BACK_LABEL);
+  return backButton;
+}
+
+- (UIBarButtonItem*)customizedNavigationTitle {
+  NSDictionary* titleAttributes = @{
+    NSForegroundColorAttributeName :
+        [UIColor colorWithWhite:68 / 255.0 alpha:1.0],
+    NSFontAttributeName : [MDCTypography titleFont]
+  };
+  UILabel* titleView = [[UILabel alloc] initWithFrame:CGRectZero];
+  [titleView
+      setAttributedText:
+          [[NSAttributedString alloc]
+              initWithString:bookmark_utils_ios::TitleForBookmarkNode(_rootNode)
+                  attributes:titleAttributes]];
+  [titleView sizeToFit];
+  self.navigationItem.leftItemsSupplementBackButton = YES;
+  return [[UIBarButtonItem alloc] initWithCustomView:titleView];
+}
+
+- (UIBarButtonItem*)customizedDoneButton {
+  UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
+      initWithTitle:l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
+                        .localizedUppercaseString
+              style:UIBarButtonItemStylePlain
+             target:self
+             action:@selector(navigationBarCancel:)];
+  NSDictionary* attributes = @{
+    NSForegroundColorAttributeName :
+        [UIColor colorWithWhite:68 / 255.0 alpha:1.0],
+    NSFontAttributeName : [MDCTypography buttonFont]
+  };
+  [doneButton setTitleTextAttributes:attributes forState:UIControlStateNormal];
+  doneButton.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
+  return doneButton;
+}
+
 // Saves the current position and asks the delegate to open the url, if delegate
 // is set, otherwise opens the URL using loader.
 - (void)dismissWithURL:(const GURL&)url {
@@ -913,17 +1059,30 @@ const CGFloat kMenuWidth = 264;
 }
 
 - (void)updateViewConstraints {
-  if (base::FeatureList::IsEnabled(
-          bookmark_new_generation::features::kBookmarkNewGeneration)) {
-    NSDictionary* views = @{
-      @"tableView" : self.bookmarksTableView,
-      @"contextBar" : self.contextBar,
-    };
-    NSArray* constraints = @[
-      @"V:|[tableView][contextBar(==48)]|", @"H:|[tableView]|",
-      @"H:|[contextBar]|"
-    ];
-    ApplyVisualConstraints(constraints, views);
+  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
+    if (self.contextBar && self.bookmarksTableView) {
+      NSDictionary* views = @{
+        @"tableView" : self.bookmarksTableView,
+        @"contextBar" : self.contextBar,
+        @"topGuide" : self.topLayoutGuide,
+      };
+      NSArray* constraints = @[
+        @"V:|[topGuide][tableView][contextBar(==48)]|",
+        @"H:|[tableView]|",
+        @"H:|[contextBar]|",
+      ];
+      ApplyVisualConstraints(constraints, views);
+    } else if (self.bookmarksTableView) {
+      NSDictionary* views = @{
+        @"tableView" : self.bookmarksTableView,
+        @"topGuide" : self.topLayoutGuide,
+      };
+      NSArray* constraints = @[
+        @"V:|[topGuide][tableView]|",
+        @"H:|[tableView]|",
+      ];
+      ApplyVisualConstraints(constraints, views);
+    }
   }
   [super updateViewConstraints];
 }
@@ -932,15 +1091,304 @@ const CGFloat kMenuWidth = 264;
 
 // Called when the leading button is clicked.
 - (void)leadingButtonClicked {
-  // TODO(crbug.com/695749): Implement the button action here.
+  const std::set<const bookmarks::BookmarkNode*> nodes =
+      [self.bookmarksTableView editNodes];
+  switch (self.contextBarState) {
+    case BookmarksContextBarDefault:
+      // New Folder clicked.
+      [self.bookmarksTableView addNewFolder];
+      break;
+    case BookmarksContextBarBeginSelection:
+      // This must never happen, as the leading button is disabled at this
+      // point.
+      NOTREACHED();
+      break;
+    case BookmarksContextBarSingleURLSelection:
+    case BookmarksContextBarMultipleURLSelection:
+    case BookmarksContextBarSingleFolderSelection:
+    case BookmarksContextBarMultipleFolderSelection:
+    case BookmarksContextBarMixedSelection:
+      // Delete clicked.
+      [self deleteNodes:nodes];
+      break;
+    case BookmarksContextBarNone:
+    default:
+      NOTREACHED();
+  }
 }
+
 // Called when the center button is clicked.
 - (void)centerButtonClicked {
-  // TODO(crbug.com/695749): Implement the button action here.
+  const std::set<const bookmarks::BookmarkNode*> nodes =
+      [self.bookmarksTableView editNodes];
+  // Center button is shown and is clickable only when at least
+  // one node is selected.
+  DCHECK(nodes.size() > 0);
+  switch (self.contextBarState) {
+    case BookmarksContextBarDefault:
+      // Center button is disabled in default state.
+      NOTREACHED();
+      break;
+    case BookmarksContextBarBeginSelection:
+      // Center button is disabled in start state.
+      NOTREACHED();
+      break;
+    case BookmarksContextBarSingleURLSelection:
+      // More clicked, show action sheet with context menu.
+      [self presentViewController:
+                [self contextMenuForSingleBookmarkURL:*(nodes.begin())]
+                         animated:YES
+                       completion:nil];
+      break;
+    case BookmarksContextBarMultipleURLSelection:
+      // More clicked, show action sheet with context menu.
+      [self presentViewController:[self contextMenuForMultipleBookmarkURLs]
+                         animated:YES
+                       completion:nil];
+      break;
+    case BookmarksContextBarSingleFolderSelection:
+      // Edit clicked, open the editor.
+      [self editNode:*(nodes.begin())];
+      break;
+    case BookmarksContextBarMultipleFolderSelection:
+    case BookmarksContextBarMixedSelection:
+      // More clicked, show action sheet with context menu.
+      [self presentViewController:
+                [self contextMenuForMixedAndMultiFolderSelection:nodes]
+                         animated:YES
+                       completion:nil];
+      break;
+    case BookmarksContextBarNone:
+    default:
+      NOTREACHED();
+  }
 }
-// Called when the trailing button is clicked.
+
+// Called when the trailing button, "Select" or "Cancel" is clicked.
 - (void)trailingButtonClicked {
-  // TODO(crbug.com/695749): Implement the button action here.
+  // Toggle edit mode.
+  [self.bookmarksTableView setEditing:!self.bookmarksTableView.editing];
+  [self setContextBarState:self.bookmarksTableView.editing
+                               ? BookmarksContextBarBeginSelection
+                               : BookmarksContextBarDefault];
+}
+
+#pragma mark - ContextBarStates
+
+// Customizes the context bar buttons based the |state| passed in.
+- (void)setContextBarState:(BookmarksContextBarState)state {
+  _contextBarState = state;
+  switch (state) {
+    case BookmarksContextBarDefault:
+      [self setBookmarksContextBarButtonsDefaultState];
+      break;
+    case BookmarksContextBarBeginSelection:
+      [self setBookmarksContextBarSelectionStartState];
+      break;
+    case BookmarksContextBarSingleURLSelection:
+    case BookmarksContextBarMultipleURLSelection:
+    case BookmarksContextBarMultipleFolderSelection:
+    case BookmarksContextBarMixedSelection:
+      // Reset to start state, and then override with customizations that apply.
+      [self setBookmarksContextBarSelectionStartState];
+      [self.contextBar setButtonEnabled:YES forButton:ContextBarCenterButton];
+      [self.contextBar setButtonEnabled:YES forButton:ContextBarLeadingButton];
+      break;
+    case BookmarksContextBarSingleFolderSelection:
+      // Reset to start state, and then override with customizations that apply.
+      [self setBookmarksContextBarSelectionStartState];
+      [self.contextBar setButtonTitle:l10n_util::GetNSString(
+                                          IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT)
+                            forButton:ContextBarCenterButton];
+      [self.contextBar setButtonEnabled:YES forButton:ContextBarCenterButton];
+      [self.contextBar setButtonEnabled:YES forButton:ContextBarLeadingButton];
+      break;
+    case BookmarksContextBarNone:
+    default:
+      break;
+  }
+}
+
+- (void)setBookmarksContextBarButtonsDefaultState {
+  // Set New Folder button
+  [self.contextBar setButtonTitle:l10n_util::GetNSString(
+                                      IDS_IOS_BOOKMARK_CONTEXT_BAR_NEW_FOLDER)
+                        forButton:ContextBarLeadingButton];
+  [self.contextBar setButtonVisibility:YES forButton:ContextBarLeadingButton];
+  [self.contextBar setButtonEnabled:YES forButton:ContextBarLeadingButton];
+  [self.contextBar setButtonStyle:ContextBarButtonStyleDefault
+                        forButton:ContextBarLeadingButton];
+
+  // Set Center button to invisible.
+  [self.contextBar setButtonVisibility:NO forButton:ContextBarCenterButton];
+
+  // Set Select button.
+  [self.contextBar
+      setButtonTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_SELECT)
+           forButton:ContextBarTrailingButton];
+  [self.contextBar setButtonVisibility:YES forButton:ContextBarTrailingButton];
+  [self.contextBar setButtonEnabled:YES forButton:ContextBarTrailingButton];
+}
+
+- (void)setBookmarksContextBarSelectionStartState {
+  // Disabled Delete button.
+  [self.contextBar
+      setButtonTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_DELETE)
+           forButton:ContextBarLeadingButton];
+  [self.contextBar setButtonVisibility:YES forButton:ContextBarLeadingButton];
+  [self.contextBar setButtonEnabled:NO forButton:ContextBarLeadingButton];
+  [self.contextBar setButtonStyle:ContextBarButtonStyleDelete
+                        forButton:ContextBarLeadingButton];
+
+  // Disabled More button.
+  [self.contextBar
+      setButtonTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_MORE)
+           forButton:ContextBarCenterButton];
+  [self.contextBar setButtonVisibility:YES forButton:ContextBarCenterButton];
+  [self.contextBar setButtonEnabled:NO forButton:ContextBarCenterButton];
+
+  // Enabled Cancel button.
+  [self.contextBar setButtonTitle:l10n_util::GetNSString(IDS_CANCEL)
+                        forButton:ContextBarTrailingButton];
+  [self.contextBar setButtonVisibility:YES forButton:ContextBarTrailingButton];
+  [self.contextBar setButtonEnabled:YES forButton:ContextBarTrailingButton];
+}
+
+#pragma mark - Context Menu
+
+- (UIAlertController*)contextMenuForMultipleBookmarkURLs {
+  UIAlertController* alert = [UIAlertController
+      alertControllerWithTitle:nil
+                       message:nil
+                preferredStyle:UIAlertControllerStyleActionSheet];
+  alert.view.accessibilityIdentifier = @"bookmark_context_menu";
+
+  UIAlertAction* cancelAction =
+      [UIAlertAction actionWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                               style:UIAlertActionStyleCancel
+                             handler:nil];
+
+  UIAlertAction* openAllAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN)
+                style:UIAlertActionStyleDefault
+              handler:nil];
+
+  UIAlertAction* openInIncognitoAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO)
+                style:UIAlertActionStyleDefault
+              handler:nil];
+
+  UIAlertAction* moveAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
+                style:UIAlertActionStyleDefault
+              handler:nil];
+  [alert addAction:openAllAction];
+  [alert addAction:openInIncognitoAction];
+  [alert addAction:moveAction];
+  [alert addAction:cancelAction];
+  return alert;
+}
+
+- (UIAlertController*)contextMenuForSingleBookmarkURL:
+    (const BookmarkNode*)node {
+  __weak BookmarkHomeViewController* weakSelf = self;
+  UIAlertController* alert = [UIAlertController
+      alertControllerWithTitle:nil
+                       message:nil
+                preferredStyle:UIAlertControllerStyleActionSheet];
+  alert.view.accessibilityIdentifier = @"bookmark_context_menu";
+
+  UIAlertAction* cancelAction =
+      [UIAlertAction actionWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                               style:UIAlertActionStyleCancel
+                             handler:nil];
+
+  UIAlertAction* editAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT)
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* _Nonnull action) {
+                [weakSelf editNode:node];
+              }];
+
+  void (^copyHandler)(UIAlertAction*) = ^(UIAlertAction*) {
+    UIPasteboard* pasteboard = [UIPasteboard generalPasteboard];
+    std::string urlString = node->url().possibly_invalid_spec();
+    pasteboard.string = base::SysUTF8ToNSString(urlString);
+  };
+  UIAlertAction* copyAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_COPY)
+                style:UIAlertActionStyleDefault
+              handler:copyHandler];
+
+  UIAlertAction* openInIncognitoAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO)
+                style:UIAlertActionStyleDefault
+              handler:nil];
+  [alert addAction:editAction];
+  [alert addAction:copyAction];
+  [alert addAction:openInIncognitoAction];
+  [alert addAction:cancelAction];
+  return alert;
+}
+
+- (UIAlertController*)contextMenuForSingleBookmarkFolder:
+    (const BookmarkNode*)node {
+  __weak BookmarkHomeViewController* weakSelf = self;
+  UIAlertController* alert = [UIAlertController
+      alertControllerWithTitle:nil
+                       message:nil
+                preferredStyle:UIAlertControllerStyleActionSheet];
+  alert.view.accessibilityIdentifier = @"bookmark_context_menu";
+
+  UIAlertAction* cancelAction =
+      [UIAlertAction actionWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                               style:UIAlertActionStyleCancel
+                             handler:nil];
+
+  UIAlertAction* editAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT)
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* _Nonnull action) {
+                [weakSelf editNode:node];
+              }];
+
+  void (^moveHandler)(UIAlertAction*) = ^(UIAlertAction*) {
+    std::set<const BookmarkNode*> nodes;
+    nodes.insert(node);
+    [weakSelf moveNodes:nodes];
+  };
+  UIAlertAction* moveAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
+                style:UIAlertActionStyleDefault
+              handler:moveHandler];
+  [alert addAction:editAction];
+  [alert addAction:moveAction];
+  [alert addAction:cancelAction];
+  return alert;
+}
+
+- (UIAlertController*)contextMenuForMixedAndMultiFolderSelection:
+    (const std::set<const bookmarks::BookmarkNode*>&)nodes {
+  UIAlertController* alert = [UIAlertController
+      alertControllerWithTitle:nil
+                       message:nil
+                preferredStyle:UIAlertControllerStyleActionSheet];
+  alert.view.accessibilityIdentifier = @"bookmark_context_menu";
+
+  UIAlertAction* cancelAction =
+      [UIAlertAction actionWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                               style:UIAlertActionStyleCancel
+                             handler:nil];
+
+  UIAlertAction* moveAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
+                style:UIAlertActionStyleDefault
+              handler:nil];
+  [alert addAction:moveAction];
+  [alert addAction:cancelAction];
+  return alert;
 }
 
 @end

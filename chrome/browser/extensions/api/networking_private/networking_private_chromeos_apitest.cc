@@ -494,14 +494,12 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
   }
 
   bool SetupCertificates() {
-    scoped_refptr<net::X509Certificate> system_ca_cert =
-        net::ImportCertFromFile(net::GetTestCertsDirectory(),
-                                "client_1_ca.pem");
-    if (!system_ca_cert)
+    net::ScopedCERTCertificateList cert_list =
+        net::CreateCERTCertificateListFromFile(
+            net::GetTestCertsDirectory(), "client_1_ca.pem",
+            net::X509Certificate::FORMAT_AUTO);
+    if (cert_list.empty())
       return false;
-
-    net::CertificateList cert_list;
-    cert_list.push_back(std::move(system_ca_cert));
     // TODO(stevenjb): Figure out a simple way to import a test user cert.
 
     chromeos::NetworkHandler::Get()
@@ -607,6 +605,12 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetDeviceStates) {
 
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, RequestNetworkScan) {
   EXPECT_TRUE(RunNetworkingSubtest("requestNetworkScan")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
+                       RequestNetworkScanCellular) {
+  SetupCellular();
+  EXPECT_TRUE(RunNetworkingSubtest("requestNetworkScanCellular")) << message_;
 }
 
 // Properties are filtered and translated through

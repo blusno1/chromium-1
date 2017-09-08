@@ -72,6 +72,18 @@ void FakeCentral::SetNextGATTDiscoveryResponse(
   std::move(callback).Run(true);
 }
 
+void FakeCentral::SimulateGATTDisconnection(
+    const std::string& address,
+    SimulateGATTDisconnectionCallback callback) {
+  FakePeripheral* fake_peripheral = GetFakePeripheral(address);
+  if (fake_peripheral == nullptr) {
+    std::move(callback).Run(false);
+  }
+
+  fake_peripheral->SimulateGATTDisconnection();
+  std::move(callback).Run(true);
+}
+
 void FakeCentral::SimulateGATTServicesChanged(
     const std::string& address,
     SimulateGATTServicesChangedCallback callback) {
@@ -178,6 +190,24 @@ void FakeCentral::SetNextWriteCharacteristicResponse(
   }
 
   fake_remote_gatt_characteristic->SetNextWriteResponse(gatt_code);
+  std::move(callback).Run(true);
+}
+
+void FakeCentral::SetNextSubscribeToNotificationsResponse(
+    uint16_t gatt_code,
+    const std::string& characteristic_id,
+    const std::string& service_id,
+    const std::string& peripheral_address,
+    SetNextSubscribeToNotificationsResponseCallback callback) {
+  FakeRemoteGattCharacteristic* fake_remote_gatt_characteristic =
+      GetFakeRemoteGattCharacteristic(peripheral_address, service_id,
+                                      characteristic_id);
+  if (fake_remote_gatt_characteristic == nullptr) {
+    std::move(callback).Run(false);
+  }
+
+  fake_remote_gatt_characteristic->SetNextSubscribeToNotificationsResponse(
+      gatt_code);
   std::move(callback).Run(true);
 }
 

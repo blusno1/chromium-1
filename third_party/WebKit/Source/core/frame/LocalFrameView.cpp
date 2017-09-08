@@ -32,9 +32,9 @@
 #include "core/MediaTypeNames.h"
 #include "core/animation/DocumentAnimations.h"
 #include "core/css/FontFaceSetDocument.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ElementVisibilityObserver.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/editing/DragCaret.h"
 #include "core/editing/EditingUtilities.h"
@@ -320,8 +320,6 @@ void LocalFrameView::ForAllChildLocalFrameViews(const Function& function) {
 }
 
 // Call function for each non-throttled frame view in pre tree order.
-// Note it needs a null check of the frame's layoutView to access it in case of
-// detached frames.
 template <typename Function>
 void LocalFrameView::ForAllNonThrottledLocalFrameViews(
     const Function& function) {
@@ -1227,6 +1225,11 @@ void LocalFrameView::UpdateLayout() {
         if (v_mode == kScrollbarAuto) {
           // This causes a vertical scrollbar to appear.
           SetVerticalScrollbarMode(kScrollbarAlwaysOn);
+          if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+            GetLayoutView()
+                ->GetScrollableArea()
+                ->ForceVerticalScrollbarForFirstLayout();
+          }
         }
         // Set the initial hMode to AlwaysOff if we're auto.
         if (h_mode == kScrollbarAuto) {
@@ -1366,7 +1369,8 @@ void LocalFrameView::SetNeedsPaintPropertyUpdate() {
 
 void LocalFrameView::SetSubtreeNeedsPaintPropertyUpdate() {
   SetNeedsPaintPropertyUpdate();
-  GetLayoutView()->SetSubtreeNeedsPaintPropertyUpdate();
+  if (auto* layout_view = GetLayoutView())
+    layout_view->SetSubtreeNeedsPaintPropertyUpdate();
 }
 
 IntRect LocalFrameView::ComputeVisibleArea() {
@@ -2823,7 +2827,8 @@ void LocalFrameView::NotifyPageThatContentAreaWillPaint() const {
 
 CompositorElementId LocalFrameView::GetCompositorElementId() const {
   if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-    return CompositorElementIdFromUniqueObjectId(unique_id_);
+    return CompositorElementIdFromUniqueObjectId(
+        unique_id_, CompositorElementIdNamespace::kScroll);
   } else {
     return PaintInvalidationCapableScrollableArea::GetCompositorElementId();
   }
@@ -3023,6 +3028,28 @@ void LocalFrameView::UpdateAllLifecyclePhasesExceptPaint() {
       DocumentLifecycle::kPrePaintClean);
 }
 
+void LocalFrameView::UpdateLifecyclePhasesForPrinting() {
+  auto* local_frame_view_root = GetFrame().LocalFrameRoot().View();
+  local_frame_view_root->UpdateLifecyclePhasesInternal(
+      DocumentLifecycle::kPrePaintClean);
+
+  auto* detached_frame_view = this;
+  while (detached_frame_view->is_attached_ &&
+         detached_frame_view != local_frame_view_root)
+    detached_frame_view = detached_frame_view->parent_.Get();
+
+  if (detached_frame_view == local_frame_view_root)
+    return;
+  DCHECK(!detached_frame_view->is_attached_);
+
+  // We are printing a detached frame or a descendant of a detached frame which
+  // was not reached in some phases during during |local_frame_view_root->
+  // UpdateLifecyclePhasesInternalnormal()|. We need the subtree to be ready for
+  // painting.
+  detached_frame_view->UpdateLifecyclePhasesInternal(
+      DocumentLifecycle::kPrePaintClean);
+}
+
 void LocalFrameView::UpdateLifecycleToLayoutClean() {
   GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhasesInternal(
       DocumentLifecycle::kLayoutClean);
@@ -3115,9 +3142,10 @@ void LocalFrameView::UpdateLifecyclePhasesInternal(
     return;
   }
 
-  // This must be called from the root frame, since it recurses down, not up.
-  // Otherwise the lifecycles of the frames might be out of sync.
-  DCHECK(frame_->IsLocalRoot());
+  // This must be called from the root frame, or a detached frame for printing,
+  // since it recurses down, not up. Otherwise the lifecycles of the frames
+  // might be out of sync.
+  DCHECK(frame_->IsLocalRoot() || !is_attached_);
 
   // Only the following target states are supported.
   DCHECK(target_state == DocumentLifecycle::kLayoutClean ||
@@ -3324,7 +3352,8 @@ void LocalFrameView::PaintTree() {
         graphics_context.SetHighContrast(high_contrast_settings);
       }
 
-      Paint(graphics_context, CullRect(LayoutRect::InfiniteIntRect()));
+      PaintInternal(graphics_context, kGlobalPaintNormalPhase,
+                    CullRect(LayoutRect::InfiniteIntRect()));
       paint_controller_->CommitNewDisplayItems();
     }
   } else {
@@ -3884,6 +3913,11 @@ void LocalFrameView::AttachToLayout() {
   UpdateParentScrollableAreaSet();
   SetupRenderThrottling();
   subtree_throttled_ = ParentFrameView()->CanThrottleRendering();
+
+  // We may have updated paint properties in detached frame subtree for
+  // printing (see UpdateLifecyclePhasesForPrinting()). The paint properties
+  // may change after the frame is attached.
+  SetSubtreeNeedsPaintPropertyUpdate();
 }
 
 void LocalFrameView::DetachFromLayout() {
@@ -3901,6 +3935,10 @@ void LocalFrameView::DetachFromLayout() {
     parent->RemoveScrollableArea(this);
   SetParentVisible(false);
   is_attached_ = false;
+
+  // We may need update paint properties in detached frame subtree for printing.
+  // See UpdateLifecyclePhasesForPrinting().
+  SetSubtreeNeedsPaintPropertyUpdate();
 }
 
 void LocalFrameView::AddPlugin(PluginView* plugin) {
@@ -4434,8 +4472,11 @@ void LocalFrameView::AdjustScrollOffsetFromUpdateScrollbars() {
 
 ScrollableArea* LocalFrameView::ScrollableAreaWithElementId(
     const CompositorElementId& id) {
-  if (id == GetCompositorElementId())
+  // With root layer scrolling the LocalFrameView does not scroll.
+  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled() &&
+      id == GetCompositorElementId()) {
     return this;
+  }
   if (scrollable_areas_) {
     // This requires iterating over all scrollable areas. We may want to store a
     // map of ElementId to ScrollableArea if this is an issue for performance.
@@ -4749,19 +4790,42 @@ ScrollBehavior LocalFrameView::ScrollBehaviorStyle() const {
 
 void LocalFrameView::Paint(GraphicsContext& context,
                            const CullRect& cull_rect) const {
-  Paint(context, kGlobalPaintNormalPhase, cull_rect);
+  PaintInternal(context, kGlobalPaintNormalPhase, cull_rect);
 }
 
-void LocalFrameView::Paint(GraphicsContext& context,
-                           const GlobalPaintFlags global_paint_flags,
-                           const CullRect& cull_rect) const {
+void LocalFrameView::PaintWithLifecycleUpdate(
+    GraphicsContext& context,
+    const GlobalPaintFlags global_paint_flags,
+    const CullRect& cull_rect) {
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kInPaint);
+  });
+
+  PaintInternal(context, global_paint_flags, cull_rect);
+
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kPaintClean);
+  });
+}
+
+void LocalFrameView::PaintInternal(GraphicsContext& context,
+                                   const GlobalPaintFlags global_paint_flags,
+                                   const CullRect& cull_rect) const {
   FramePainter(*this).Paint(context, global_paint_flags, cull_rect);
 }
 
 void LocalFrameView::PaintContents(GraphicsContext& context,
                                    const GlobalPaintFlags global_paint_flags,
-                                   const IntRect& damage_rect) const {
+                                   const IntRect& damage_rect) {
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kInPaint);
+  });
+
   FramePainter(*this).PaintContents(context, global_paint_flags, damage_rect);
+
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kPaintClean);
+  });
 }
 
 bool LocalFrameView::IsPointInScrollbarCorner(
@@ -5088,6 +5152,8 @@ void LocalFrameView::UpdateRenderThrottlingStatus(
   bool has_handlers =
       frame_->GetPage() &&
       (frame_->GetPage()->GetEventHandlerRegistry().HasEventHandlers(
+           EventHandlerRegistry::kTouchAction) ||
+       frame_->GetPage()->GetEventHandlerRegistry().HasEventHandlers(
            EventHandlerRegistry::kTouchStartOrMoveEventBlocking) ||
        frame_->GetPage()->GetEventHandlerRegistry().HasEventHandlers(
            EventHandlerRegistry::kTouchStartOrMoveEventBlockingLowLatency));

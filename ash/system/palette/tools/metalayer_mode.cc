@@ -30,7 +30,8 @@ const int kToastDurationMs = 2500;
 
 }  // namespace
 
-MetalayerMode::MetalayerMode(Delegate* delegate) : CommonPaletteTool(delegate) {
+MetalayerMode::MetalayerMode(Delegate* delegate)
+    : CommonPaletteTool(delegate), weak_factory_(this) {
   Shell::Get()->AddPreTargetHandler(this);
   Shell::Get()->AddShellObserver(this);
 }
@@ -51,7 +52,8 @@ PaletteToolId MetalayerMode::GetToolId() const {
 void MetalayerMode::OnEnable() {
   CommonPaletteTool::OnEnable();
 
-  Shell::Get()->palette_delegate()->ShowMetalayer();
+  Shell::Get()->palette_delegate()->ShowMetalayer(base::BindOnce(
+      &MetalayerMode::OnMetalayerSessionComplete, weak_factory_.GetWeakPtr()));
   delegate()->HidePalette();
 }
 
@@ -144,9 +146,11 @@ void MetalayerMode::UpdateView() {
   if (!highlight_view_)
     return;
 
-  highlight_view_->text_label()->SetText(l10n_util::GetStringUTF16(
+  const base::string16 text = l10n_util::GetStringUTF16(
       loading() ? IDS_ASH_STYLUS_TOOLS_METALAYER_MODE_LOADING
-                : IDS_ASH_STYLUS_TOOLS_METALAYER_MODE));
+                : IDS_ASH_STYLUS_TOOLS_METALAYER_MODE);
+  highlight_view_->text_label()->SetText(text);
+  highlight_view_->SetAccessibleName(text);
 
   highlight_view_->SetEnabled(selectable());
 
@@ -159,6 +163,10 @@ void MetalayerMode::UpdateView() {
 
   highlight_view_->left_icon()->SetImage(
       CreateVectorIcon(GetPaletteIcon(), kMenuIconSize, style.GetIconColor()));
+}
+
+void MetalayerMode::OnMetalayerSessionComplete() {
+  delegate()->DisableTool(GetToolId());
 }
 
 }  // namespace ash

@@ -43,13 +43,14 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
   void SetScissorTestRect(const gfx::Rect& scissor_rect) override;
   void PrepareSurfaceForPass(SurfaceInitializationMode initialization_mode,
                              const gfx::Rect& render_pass_scissor) override;
-  void DoDrawQuad(const DrawQuad* quad, const gfx::QuadF* draw_region) override;
+  void DoDrawQuad(const viz::DrawQuad* quad,
+                  const gfx::QuadF* draw_region) override;
   void BeginDrawingFrame() override;
   void FinishDrawingFrame() override;
   bool FlippedFramebuffer() const override;
   void EnsureScissorTestEnabled() override;
   void EnsureScissorTestDisabled() override;
-  void CopyCurrentRenderPassToBitmap(
+  void CopyDrawnRenderPass(
       std::unique_ptr<viz::CopyOutputRequest> request) override;
   void SetEnableDCLayers(bool enable) override;
   void DidChangeVisibility() override;
@@ -66,7 +67,7 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
   void DrawSolidColorQuad(const SolidColorDrawQuad* quad);
   void DrawTextureQuad(const TextureDrawQuad* quad);
   void DrawTileQuad(const TileDrawQuad* quad);
-  void DrawUnsupportedQuad(const DrawQuad* quad);
+  void DrawUnsupportedQuad(const viz::DrawQuad* quad);
   bool ShouldApplyBackgroundFilters(
       const RenderPassDrawQuad* quad,
       const FilterOperations* background_filters) const;

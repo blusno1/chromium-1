@@ -207,7 +207,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
       render_pass->CreateAndAppendSharedQuadState();
 
   if (raster_source_->IsSolidColor()) {
-    PopulateSharedQuadState(shared_quad_state);
+    PopulateSharedQuadState(shared_quad_state, contents_opaque());
 
     AppendDebugBorderQuad(
         render_pass, bounds(), shared_quad_state, append_quads_data);
@@ -223,7 +223,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
       layer_tree_impl() ? layer_tree_impl()->device_scale_factor() : 1;
   float max_contents_scale = MaximumTilingContentsScale();
   PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
-                                max_contents_scale);
+                                max_contents_scale, contents_opaque());
   Occlusion scaled_occlusion;
   if (mask_type_ == Layer::LayerMaskType::NOT_MASK) {
     scaled_occlusion =
@@ -264,7 +264,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
                  needs_blending, texture_rect, texture_size, nearest_neighbor_,
                  viz::RGBA_8888, quad_content_rect, max_contents_scale,
-                 raster_source_);
+                 raster_source_->GetDisplayItemList());
     ValidateQuadResources(quad);
     return;
   }
@@ -1488,6 +1488,13 @@ void PictureLayerImpl::InvalidateRegionForImages(
                      "Invalidation", invalidation.ToString());
     return;
   }
+
+  // Make sure to union the rect from this invalidation with the update_rect
+  // instead of over-writing it. We don't want to reset the update that came
+  // from the main thread.
+  gfx::Rect new_update_rect = invalidation.bounds();
+  new_update_rect.Union(update_rect());
+  SetUpdateRect(new_update_rect);
 
   invalidation_.Union(invalidation);
   tilings_->Invalidate(invalidation);

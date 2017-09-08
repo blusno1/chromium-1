@@ -63,10 +63,6 @@ class MESSAGE_CENTER_EXPORT MessageCenter {
   // Destroys the global message_center object.
   static void Shutdown();
 
-  // Returns if new style notification is enabled, i.e. NotificationViewMD is
-  // used instead of NotificationView.
-  static bool IsNewStyleNotificationEnabled();
-
   // Management of the observer list.
   virtual void AddObserver(MessageCenterObserver* observer) = 0;
   virtual void RemoveObserver(MessageCenterObserver* observer) = 0;
@@ -208,19 +204,11 @@ class MESSAGE_CENTER_EXPORT MessageCenter {
   friend class TrayViewControllerTest;
   friend class test::MessagePopupCollectionTest;
   virtual void DisableTimersForTest() = 0;
-  virtual void EnableChangeQueueForTest(bool enabled) = 0;
 
   MessageCenter();
   virtual ~MessageCenter();
 
  private:
-  // Forces to flush the queued changes even when the message center opens. This
-  // method is a workaround of UpdateNotification not updating notifications
-  // while the message center.
-  // Note carefully: this may break the layout of message center. Shouldn't use
-  // this method if the update changes its notification size.
-  virtual void ForceNotificationFlush(const std::string& id) {}
-
   DISALLOW_COPY_AND_ASSIGN(MessageCenter);
 };
 

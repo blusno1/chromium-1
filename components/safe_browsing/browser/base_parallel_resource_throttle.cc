@@ -48,8 +48,8 @@ void BaseParallelResourceThrottle::WillStartRequest(bool* defer) {
 
   net::HttpRequestHeaders full_headers;
   resource_request.headers = request_->GetFullRequestHeaders(&full_headers)
-                                 ? full_headers.ToString()
-                                 : request_->extra_request_headers().ToString();
+                                 ? full_headers
+                                 : request_->extra_request_headers();
 
   resource_request.load_flags = request_->load_flags();
   resource_request.resource_type = resource_type_;
@@ -69,7 +69,6 @@ void BaseParallelResourceThrottle::WillRedirectRequest(
     const net::RedirectInfo& redirect_info,
     bool* defer) {
   url_loader_throttle_->WillRedirectRequest(redirect_info, defer);
-  DCHECK(!*defer);
 }
 
 void BaseParallelResourceThrottle::WillProcessResponse(bool* defer) {

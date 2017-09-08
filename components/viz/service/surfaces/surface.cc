@@ -155,10 +155,8 @@ bool Surface::QueueFrame(cc::CompositorFrame frame,
 
 void Surface::RequestCopyOfOutput(
     std::unique_ptr<CopyOutputRequest> copy_request) {
-  if (!active_frame_data_) {
-    copy_request->SendEmptyResult();
-    return;
-  }
+  if (!active_frame_data_)
+    return;  // |copy_request| auto-sends empty result on out-of-scope.
 
   std::vector<std::unique_ptr<CopyOutputRequest>>& copy_requests =
       active_frame_data_->frame.render_pass_list.back()->copy_requests;
@@ -357,7 +355,7 @@ void Surface::AddDestructionDependency(SurfaceSequence sequence) {
 
 void Surface::SatisfyDestructionDependencies(
     base::flat_set<SurfaceSequence>* sequences,
-    base::flat_set<FrameSinkId>* valid_frame_sink_ids) {
+    base::flat_map<FrameSinkId, std::string>* valid_frame_sink_ids) {
   base::EraseIf(destruction_dependencies_,
                 [sequences, valid_frame_sink_ids](SurfaceSequence seq) {
                   return (!!sequences->erase(seq) ||
@@ -388,8 +386,9 @@ void Surface::UnrefFrameResourcesAndRunDrawCallback(
 void Surface::ClearCopyRequests() {
   if (active_frame_data_) {
     for (const auto& render_pass : active_frame_data_->frame.render_pass_list) {
-      for (const auto& copy_request : render_pass->copy_requests)
-        copy_request->SendEmptyResult();
+      // When the container is cleared, all copy requests within it will
+      // auto-send an empty result as they are being destroyed.
+      render_pass->copy_requests.clear();
     }
   }
 }

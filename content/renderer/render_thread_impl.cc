@@ -65,13 +65,13 @@
 #include "content/child/blob_storage/blob_message_filter.h"
 #include "content/child/child_histogram_message_filter.h"
 #include "content/child/child_resource_message_filter.h"
-#include "content/child/db_message_filter.h"
 #include "content/child/indexed_db/indexed_db_dispatcher.h"
 #include "content/child/memory/child_memory_coordinator_impl.h"
 #include "content/child/resource_dispatcher.h"
 #include "content/child/resource_scheduling_filter.h"
 #include "content/child/runtime_features.h"
 #include "content/child/thread_safe_sender.h"
+#include "content/child/web_database_impl.h"
 #include "content/child/web_database_observer_impl.h"
 #include "content/child/worker_thread_registry.h"
 #include "content/common/child_process_messages.h"
@@ -708,9 +708,6 @@ void RenderThreadImpl::Init(
 
   blob_message_filter_ = new BlobMessageFilter(GetFileThreadTaskRunner());
   AddFilter(blob_message_filter_.get());
-  db_message_filter_ = new DBMessageFilter();
-  AddFilter(db_message_filter_.get());
-
   vc_manager_.reset(new VideoCaptureImplManager());
 
   browser_plugin_manager_.reset(new BrowserPluginManager());
@@ -762,13 +759,20 @@ void RenderThreadImpl::Init(
   }
 #endif
 
-  auto registry = base::MakeUnique<service_manager::BinderRegistryWithArgs<
-      const service_manager::BindSourceInfo&>>();
-  registry->AddInterface(base::Bind(&CreateFrameFactory),
-                         base::ThreadTaskRunnerHandle::Get());
+  auto registry = base::MakeUnique<service_manager::BinderRegistry>();
+  registry->AddInterface(base::Bind(&WebDatabaseImpl::Create),
+                         GetIOTaskRunner());
+  GetServiceManagerConnection()->AddConnectionFilter(
+      base::MakeUnique<SimpleConnectionFilter>(std::move(registry)));
+
+  auto registry_with_source_info =
+      base::MakeUnique<service_manager::BinderRegistryWithArgs<
+          const service_manager::BindSourceInfo&>>();
+  registry_with_source_info->AddInterface(base::Bind(&CreateFrameFactory),
+                                          base::ThreadTaskRunnerHandle::Get());
   GetServiceManagerConnection()->AddConnectionFilter(
       base::MakeUnique<SimpleConnectionFilterWithSourceInfo>(
-          std::move(registry)));
+          std::move(registry_with_source_info)));
 
   GetContentClient()->renderer()->RenderThreadStarted();
 
@@ -1550,16 +1554,6 @@ int32_t RenderThreadImpl::GetClientId() {
   return client_id_;
 }
 
-scoped_refptr<base::SingleThreadTaskRunner>
-RenderThreadImpl::GetTimerTaskRunner() {
-  return renderer_scheduler_->TimerTaskRunner();
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-RenderThreadImpl::GetLoadingTaskRunner() {
-  return renderer_scheduler_->LoadingTaskRunner();
-}
-
 void RenderThreadImpl::SetRendererProcessType(
     blink::scheduler::RendererProcessType type) {
   renderer_scheduler_->SetRendererProcessType(type);
@@ -1945,7 +1939,6 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
     use_software = true;
 
   bool enable_surface_synchronization =
-      IsRunningInMash() ||
       command_line.HasSwitch(switches::kEnableSurfaceSynchronization);
 
   // In disable gpu vsync mode, also let the renderer tick as fast as it

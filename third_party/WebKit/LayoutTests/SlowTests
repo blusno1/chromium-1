@@ -99,8 +99,10 @@ crbug.com/451577 external/wpt/IndexedDB/idbindex-multientry-big.htm [ Slow ]
 crbug.com/451577 [ Mac ] http/tests/inspector/extensions/extensions-reload.html [ Slow ]
 crbug.com/451577 [ Mac ] http/tests/inspector/extensions/extensions-resources.html [ Slow ]
 crbug.com/451577 [ Win10 ] http/tests/inspector/extensions/extensions-sidebar.html [ Slow ]
-crbug.com/451577 [ Mac ] inspector/layers/layer-canvas-log.html [ Slow ]
-crbug.com/451577 [ Mac ] inspector/network/network-domain-filter.html [ Slow ]
+crbug.com/451577 [ Mac ] http/tests/devtools/layers/layer-canvas-log.html [ Slow ]
+crbug.com/667560 [ Mac ] virtual/mojo-loading/http/tests/devtools/layers/layer-canvas-log.html [ Slow ]
+crbug.com/451577 [ Mac ] http/tests/devtools/network/network-domain-filter.html [ Slow ]
+crbug.com/667560 [ Mac ] virtual/mojo-loading/http/tests/devtools/network/network-domain-filter.html [ Slow ]
 
 crbug.com/237245 [ Debug Win7 ] editing/selection/programmatic-selection-on-mac-is-directionless.html [ Slow ]
 
@@ -112,13 +114,13 @@ crbug.com/237245 [ Debug Win7 ] editing/selection/programmatic-selection-on-mac-
 webkit.org/b/90488 [ Debug ] http/tests/devtools/ [ Slow ]
 webkit.org/b/90488 [ Debug ] virtual/mojo-loading/http/tests/devtools/ [ Slow ]
 crbug.com/451577 http/tests/devtools/console [ Slow ]
+crbug.com/451577 virtual/mojo-loading/http/tests/devtools/console [ Slow ]
 crbug.com/450493 http/tests/devtools/sources/ [ Slow ]
 crbug.com/450493 virtual/mojo-loading/http/tests/devtools/sources/ [ Slow ]
 
 #############################################################
 
 # Most inspector tests are slow in Debug.
-webkit.org/b/90488 [ Debug ] inspector/ [ Slow ]
 webkit.org/b/90488 [ Debug ] http/tests/inspector/ [ Slow ]
 webkit.org/b/90488 [ Debug ] virtual/mojo-loading/http/tests/inspector/ [ Slow ]
 webkit.org/b/90488 [ Debug ] http/tests/inspector-enabled/ [ Slow ]
@@ -128,13 +130,15 @@ crbug.com/679833 http/tests/inspector/network/network-datareceived.html [ Slow ]
 crbug.com/679833 virtual/mojo-loading/http/tests/inspector/network/network-datareceived.html [ Slow ]
 
 # Debugger and profiler tests are slow in Release as well.
-crbug.com/450493 inspector-enabled/sources/ [ Slow ]
+crbug.com/450493 http/tests/devtools/startup/sources/ [ Slow ]
 crbug.com/450493 http/tests/inspector/sources/ [ Slow ]
 crbug.com/450493 virtual/mojo-loading/http/tests/inspector/sources/ [ Slow ]
 crbug.com/450493 http/tests/inspector/stacktraces/ [ Slow ]
 crbug.com/450493 virtual/mojo-loading/http/tests/inspector/stacktraces/ [ Slow ]
 crbug.com/450493 http/tests/devtools/profiler/ [ Slow ]
+crbug.com/450493 virtual/mojo-loading/http/tests/devtools/profiler/ [ Slow ]
 crbug.com/420008 http/tests/devtools/tracing/ [ Slow ]
+crbug.com/420008 virtual/mojo-loading/http/tests/devtools/tracing/ [ Slow ]
 crbug.com/420008 virtual/threaded/http/tests/devtools/tracing/ [ Slow ]
 crbug.com/246190 [ Release ] http/tests/inspector/indexeddb/ [ Slow ]
 crbug.com/246190 [ Release ] virtual/mojo-loading/http/tests/inspector/indexeddb/ [ Slow ]
@@ -162,6 +166,8 @@ crbug.com/451577 http/tests/inspector/resource-tree/resource-tree-crafted-frame-
 crbug.com/451577 virtual/mojo-loading/http/tests/inspector/resource-tree/resource-tree-crafted-frame-add.html [ Slow ]
 crbug.com/451577 http/tests/inspector/resource-tree/resource-tree-frame-in-crafted-frame.html [ Slow ]
 crbug.com/451577 virtual/mojo-loading/http/tests/inspector/resource-tree/resource-tree-frame-in-crafted-frame.html [ Slow ]
+crbug.com/763197 [ Mac ] virtual/gpu-rasterization/images/color-profile-border-radius.html [ Slow ]
+crbug.com/763197 [ Mac ] virtual/gpu-rasterization/images/color-profile-image-canvas-svg.html [ Slow ]
 
 crbug.com/510337 cssom/cssvalue-comparison.html [ Slow ]
 crbug.com/510337 http/tests/devtools/elements/styles-1/edit-value-url-with-color.html [ Slow ]
@@ -189,7 +195,6 @@ crbug.com/248938 virtual/threaded/animations/cross-fade-webkit-mask-box-image.ht
 crbug.com/248938 virtual/threaded/animations/cross-fade-webkit-mask-image.html [ Slow ]
 crbug.com/248938 virtual/threaded/animations/missing-values-last-keyframe.html [ Slow ]
 crbug.com/248938 virtual/threaded/animations/3d/replace-filling-transform.html [ Slow ]
-crbug.com/311482 virtual/threaded/animations/interpolation/filter-interpolation.html [ Slow ]
 crbug.com/311482 virtual/threaded/animations/prefixed/keyframes-unprefixed-03.html [ Slow ]
 crbug.com/243871 virtual/threaded/fast/scroll-behavior/ [ Slow ]
 crbug.com/243871 virtual/threaded/fast/idle-callback/idle_periods.html [ Slow ]
@@ -252,7 +257,8 @@ crbug.com/492664 external/wpt/css/css-writing-modes-3/text-orientation-script-00
 crbug.com/492664 external/wpt/css/css-writing-modes-3/text-orientation-script-001n.html [ Slow ]
 crbug.com/492664 external/wpt/css/css-writing-modes-3/text-orientation-script-001o.html [ Slow ]
 
-crbug.com/336481 inspector/jump-to-previous-editing-location.html [ Slow ]
+crbug.com/336481 http/tests/devtools/jump-to-previous-editing-location.html [ Slow ]
+crbug.com/667560 virtual/mojo-loading/http/tests/devtools/jump-to-previous-editing-location.html [ Slow ]
 crbug.com/346259 http/tests/websocket/no-crash-on-cookie-flood.html [ Slow ]
 crbug.com/346259 virtual/mojo-loading/http/tests/websocket/no-crash-on-cookie-flood.html [ Slow ]
 
@@ -265,8 +271,6 @@ crbug.com/357427 http/tests/workers/terminate-during-sync-operation-file.html [ 
 crbug.com/357427 virtual/mojo-loading/http/tests/workers/terminate-during-sync-operation-file.html [ Slow ]
 crbug.com/357427 http/tests/workers/terminate-during-sync-operation-filesystem.html [ Slow ]
 crbug.com/357427 virtual/mojo-loading/http/tests/workers/terminate-during-sync-operation-filesystem.html [ Slow ]
-crbug.com/364250 [ Debug ] virtual/threaded/animations/interpolation/transform-interpolation.html [ Slow ]
-crbug.com/364250 [ Debug ] virtual/threaded/animations/interpolation/webkit-transform-interpolation.html [ Slow ]
 crbug.com/402379 [ Debug ] storage/indexeddb/cursor-continue-validity.html [ Slow ]
 crbug.com/402379 [ Debug ] storage/indexeddb/mozilla/indexes.html [ Slow ]
 crbug.com/504706 [ Linux ] http/tests/devtools/profiler/heap-snapshot-containment-expansion-preserved-when-sorting.html [ Slow ]
@@ -303,8 +307,6 @@ crbug.com/516319 [ Win ] virtual/mojo-loading/http/tests/fetch/ [ Slow ]
 # Most crypto/subtle tests are slow some or most of the time.
 crbug.com/459009 crypto/subtle/ [ Slow ]
 
-crbug.com/24182 [ Debug ] animations/interpolation/transform-interpolation.html [ Slow ]
-crbug.com/24182 [ Debug ] animations/interpolation/webkit-transform-interpolation.html [ Slow ]
 
 crbug.com/528419 [ Linux ] http/tests/devtools/elements/shadow/shadow-host-display-modes.html [ Slow ]
 crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/elements/shadow/shadow-host-display-modes.html [ Slow ]
@@ -442,7 +444,6 @@ crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-composite-transfor
 crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-filter-modified-save-restore.html [ Slow ]
 crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-filter-modified.html [ Slow ]
 crbug.com/726075 [ Win Debug ] virtual/gpu/fast/canvas/canvas-scale-drawImage-shadow.html [ Slow ]
-crbug.com/726075 [ Win Debug ] virtual/threaded/animations/interpolation/svg-d-interpolation.html [ Slow ]
 crbug.com/726075 [ Win Debug ] virtual/threaded/animations/svg/animated-filter-svg-element.html [ Slow ]
 
 # IDB Observer tests require multiple browsing contexts/workers interacting with
@@ -474,7 +475,8 @@ crbug.com/741259 editing/selection/select-bidi-run.html [ Slow ]
 # These tests were previously marked Slow in ASANExpectations.
 crbug.com/451577 [ Linux ] http/tests/devtools/elements/user-properties.html [ Slow ]
 crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/elements/user-properties.html [ Slow ]
-crbug.com/451577 [ Linux ] inspector/layers/layer-canvas-log.html [ Slow ]
+crbug.com/451577 [ Linux ] http/tests/devtools/layers/layer-canvas-log.html [ Slow ]
+crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/layers/layer-canvas-log.html [ Slow ]
 
 # These imported tests exercise tens of thousands of code points and generate large results.
 crbug.com/736056 external/wpt/encoding/legacy-mb-japanese [ Slow ]

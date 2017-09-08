@@ -39,11 +39,15 @@ enable_built_in_dns = !is_ios && !is_proto_quic
 enable_net_mojo = !is_ios && !is_proto_quic
 
 # True if certificates are represented with DER byte buffers. This can be true
-# in addition to use_openssl_certs or use_nss_certs, in that case byte certs
-# are used internally but OpenSSL or NSS are used for certificate verification.
+# in addition to use_nss_certs, in that case byte certs are used internally but
+# NSS is used for certificate verification.
 # TODO(mattm): crbug.com/671420: Implement and enable this for all platforms.
 use_byte_certs =
     is_mac || is_android || is_nacl || is_ios || is_win || is_fuchsia
+
+# Android and Fuchsia can't run testserver.py directly, so they use remote
+# test server.
+use_remote_test_server = is_android || is_fuchsia
 
 buildflag_header("features") {
   header = "net_features.h"
@@ -159,7 +163,7 @@ component("net") {
     "cert/asn1_util.h",
     "cert/cert_database.cc",
     "cert/cert_database.h",
-    "cert/cert_database_openssl.cc",
+    "cert/cert_database_stub.cc",
     "cert/cert_status_flags.cc",
     "cert/cert_status_flags.h",
     "cert/cert_status_flags_list.h",
@@ -199,12 +203,12 @@ component("net") {
     "cert/internal/extended_key_usage.h",
     "cert/internal/name_constraints.cc",
     "cert/internal/name_constraints.h",
+    "cert/internal/ocsp.cc",
+    "cert/internal/ocsp.h",
     "cert/internal/parse_certificate.cc",
     "cert/internal/parse_certificate.h",
     "cert/internal/parse_name.cc",
     "cert/internal/parse_name.h",
-    "cert/internal/parse_ocsp.cc",
-    "cert/internal/parse_ocsp.h",
     "cert/internal/parsed_certificate.cc",
     "cert/internal/parsed_certificate.h",
     "cert/internal/path_builder.cc",
@@ -251,8 +255,6 @@ component("net") {
     "cert/x509_certificate_net_log_param.h",
     "cert/x509_util.cc",
     "cert/x509_util.h",
-    "cert/x509_util_openssl.cc",
-    "cert/x509_util_openssl.h",
     "der/encode_values.cc",
     "der/encode_values.h",
     "der/input.cc",
@@ -599,13 +601,9 @@ component("net") {
       "cert/test_root_certs_mac.cc",
       "cert/test_root_certs_nss.cc",
       "cert/test_root_certs_win.cc",
-      "cert/x509_cert_types_mac.cc",
       "cert/x509_cert_types_win.cc",
-      "cert/x509_certificate_ios.cc",
       "cert/x509_certificate_known_roots_win.h",
-      "cert/x509_certificate_mac.cc",
       "cert/x509_certificate_nss.cc",
-      "cert/x509_certificate_openssl.cc",
       "cert/x509_certificate_win.cc",
       "cert/x509_util_android.cc",
       "cert/x509_util_ios.cc",
@@ -1241,6 +1239,8 @@ component("net") {
       "quic/core/crypto/quic_encrypter.h",
       "quic/core/crypto/quic_random.cc",
       "quic/core/crypto/quic_random.h",
+      "quic/core/crypto/quic_tls_adapter.cc",
+      "quic/core/crypto/quic_tls_adapter.h",
       "quic/core/crypto/scoped_evp_aead_ctx.cc",
       "quic/core/crypto/scoped_evp_aead_ctx.h",
       "quic/core/frames/quic_ack_frame.cc",
@@ -1398,6 +1398,8 @@ component("net") {
       "quic/platform/api/quic_logging.h",
       "quic/platform/api/quic_lru_cache.h",
       "quic/platform/api/quic_map_util.h",
+      "quic/platform/api/quic_mem_slice.h",
+      "quic/platform/api/quic_mem_slice_span.h",
       "quic/platform/api/quic_mutex.cc",
       "quic/platform/api/quic_mutex.h",
       "quic/platform/api/quic_pcc_sender.h",
@@ -1431,6 +1433,10 @@ component("net") {
       "quic/platform/impl/quic_logging_impl.h",
       "quic/platform/impl/quic_lru_cache_impl.h",
       "quic/platform/impl/quic_map_util_impl.h",
+      "quic/platform/impl/quic_mem_slice_impl.cc",
+      "quic/platform/impl/quic_mem_slice_impl.h",
+      "quic/platform/impl/quic_mem_slice_span_impl.cc",
+      "quic/platform/impl/quic_mem_slice_span_impl.h",
       "quic/platform/impl/quic_mutex_impl.cc",
       "quic/platform/impl/quic_mutex_impl.h",
       "quic/platform/impl/quic_pcc_sender_impl.h",
@@ -1819,20 +1825,8 @@ component("net") {
     }
 
     if (use_byte_certs) {
-      if (is_ios) {
-        sources -= [ "cert/x509_certificate_ios.cc" ]
-      }
-      if (is_mac) {
-        sources -= [
-          "cert/x509_cert_types_mac.cc",
-          "cert/x509_certificate_mac.cc",
-        ]
-      }
       if (use_nss_certs) {
         sources -= [ "cert/x509_certificate_nss.cc" ]
-      }
-      if (use_openssl_certs) {
-        sources -= [ "cert/x509_certificate_openssl.cc" ]
       }
       if (is_win) {
         sources -= [
@@ -1844,18 +1838,6 @@ component("net") {
       sources -= [ "cert/x509_certificate_bytes.cc" ]
     }
 
-    if (!use_openssl_certs) {
-      sources -= [
-        "cert/cert_database_openssl.cc",
-        "cert/x509_certificate_openssl.cc",
-      ]
-    } else {
-      if (is_android) {
-        # Android doesn't use this file even when using OpenSSL.
-        sources -= [ "cert/cert_database_openssl.cc" ]
-      }
-    }
-
     if (!use_kerberos || is_android) {
       sources -= [
         "http/http_auth_gssapi_posix.cc",
@@ -1864,7 +1846,10 @@ component("net") {
     }
 
     if (!is_nacl) {
-      sources -= [ "base/network_interfaces_nacl.cc" ]
+      sources -= [
+        "base/network_interfaces_nacl.cc",
+        "cert/cert_database_stub.cc",
+      ]
     }
 
     # Use getifaddrs() on POSIX platforms, except Linux and Android.
@@ -2657,14 +2642,16 @@ static_library("test_support") {
     public_deps += [ "//crypto:platform" ]
   }
 
-  if (is_android || is_fuchsia) {
+  if (use_remote_test_server) {
     sources += [
       "test/spawned_test_server/remote_test_server.cc",
       "test/spawned_test_server/remote_test_server.h",
       "test/spawned_test_server/remote_test_server_config.cc",
       "test/spawned_test_server/remote_test_server_config.h",
-      "test/spawned_test_server/spawner_communicator.cc",
-      "test/spawned_test_server/spawner_communicator.h",
+      "test/spawned_test_server/remote_test_server_proxy.cc",
+      "test/spawned_test_server/remote_test_server_proxy.h",
+      "test/spawned_test_server/remote_test_server_spawner_request.cc",
+      "test/spawned_test_server/remote_test_server_spawner_request.h",
     ]
   }
 
@@ -3123,10 +3110,13 @@ source_set("quic_test_tools") {
     "quic/platform/api/quic_test.h",
     "quic/platform/api/quic_test_loopback.cc",
     "quic/platform/api/quic_test_loopback.h",
+    "quic/platform/api/quic_test_mem_slice_vector.h",
     "quic/platform/impl/quic_test_impl.cc",
     "quic/platform/impl/quic_test_impl.h",
     "quic/platform/impl/quic_test_loopback_impl.cc",
     "quic/platform/impl/quic_test_loopback_impl.h",
+    "quic/platform/impl/quic_test_mem_slice_vector_impl.cc",
+    "quic/platform/impl/quic_test_mem_slice_vector_impl.h",
     "quic/test_tools/crypto_test_utils.cc",
     "quic/test_tools/crypto_test_utils.h",
     "quic/test_tools/failing_proof_source.cc",
@@ -3513,6 +3503,29 @@ bundle_data("net_unittests_bundle_data") {
     "data/name_constraints_unittest/uri-permitted.pem",
     "data/name_constraints_unittest/x400address-excluded.pem",
     "data/name_constraints_unittest/x400address-permitted.pem",
+    "data/ocsp_unittest/bad_ocsp_type.pem",
+    "data/ocsp_unittest/bad_signature.pem",
+    "data/ocsp_unittest/bad_status.pem",
+    "data/ocsp_unittest/good_response.pem",
+    "data/ocsp_unittest/good_response_next_update.pem",
+    "data/ocsp_unittest/has_extension.pem",
+    "data/ocsp_unittest/has_single_extension.pem",
+    "data/ocsp_unittest/has_version.pem",
+    "data/ocsp_unittest/malformed_status.pem",
+    "data/ocsp_unittest/missing_response.pem",
+    "data/ocsp_unittest/multiple_response.pem",
+    "data/ocsp_unittest/no_response.pem",
+    "data/ocsp_unittest/ocsp_extra_certs.pem",
+    "data/ocsp_unittest/ocsp_sign_bad_indirect.pem",
+    "data/ocsp_unittest/ocsp_sign_direct.pem",
+    "data/ocsp_unittest/ocsp_sign_indirect.pem",
+    "data/ocsp_unittest/ocsp_sign_indirect_missing.pem",
+    "data/ocsp_unittest/other_response.pem",
+    "data/ocsp_unittest/responder_id.pem",
+    "data/ocsp_unittest/responder_name.pem",
+    "data/ocsp_unittest/revoke_response.pem",
+    "data/ocsp_unittest/revoke_response_reason.pem",
+    "data/ocsp_unittest/unknown_response.pem",
     "data/parse_certificate_unittest/bad_key_usage.pem",
     "data/parse_certificate_unittest/bad_policy_qualifiers.pem",
     "data/parse_certificate_unittest/bad_signature_algorithm_oid.pem",
@@ -3600,29 +3613,6 @@ bundle_data("net_unittests_bundle_data") {
     "data/parse_certificate_unittest/tbs_validity_relaxed.pem",
     "data/parse_certificate_unittest/tbs_validity_utc_time_and_generalized_time.pem",
     "data/parse_certificate_unittest/v1_explicit_version.pem",
-    "data/parse_ocsp_unittest/bad_ocsp_type.pem",
-    "data/parse_ocsp_unittest/bad_signature.pem",
-    "data/parse_ocsp_unittest/bad_status.pem",
-    "data/parse_ocsp_unittest/good_response.pem",
-    "data/parse_ocsp_unittest/good_response_next_update.pem",
-    "data/parse_ocsp_unittest/has_extension.pem",
-    "data/parse_ocsp_unittest/has_single_extension.pem",
-    "data/parse_ocsp_unittest/has_version.pem",
-    "data/parse_ocsp_unittest/malformed_status.pem",
-    "data/parse_ocsp_unittest/missing_response.pem",
-    "data/parse_ocsp_unittest/multiple_response.pem",
-    "data/parse_ocsp_unittest/no_response.pem",
-    "data/parse_ocsp_unittest/ocsp_extra_certs.pem",
-    "data/parse_ocsp_unittest/ocsp_sign_bad_indirect.pem",
-    "data/parse_ocsp_unittest/ocsp_sign_direct.pem",
-    "data/parse_ocsp_unittest/ocsp_sign_indirect.pem",
-    "data/parse_ocsp_unittest/ocsp_sign_indirect_missing.pem",
-    "data/parse_ocsp_unittest/other_response.pem",
-    "data/parse_ocsp_unittest/responder_id.pem",
-    "data/parse_ocsp_unittest/responder_name.pem",
-    "data/parse_ocsp_unittest/revoke_response.pem",
-    "data/parse_ocsp_unittest/revoke_response_reason.pem",
-    "data/parse_ocsp_unittest/unknown_response.pem",
     "data/test.html",
     "data/url_request_unittest/308-without-location-header",
     "data/url_request_unittest/308-without-location-header.mock-http-headers",
@@ -4684,9 +4674,9 @@ test("net_unittests") {
     "cert/internal/name_constraints_unittest.cc",
     "cert/internal/nist_pkits_unittest.cc",
     "cert/internal/nist_pkits_unittest.h",
+    "cert/internal/ocsp_unittest.cc",
     "cert/internal/parse_certificate_unittest.cc",
     "cert/internal/parse_name_unittest.cc",
-    "cert/internal/parse_ocsp_unittest.cc",
     "cert/internal/parsed_certificate_unittest.cc",
     "cert/internal/path_builder_pkits_unittest.cc",
     "cert/internal/path_builder_unittest.cc",
@@ -5025,6 +5015,7 @@ test("net_unittests") {
     "quic/core/crypto/quic_crypto_client_config_test.cc",
     "quic/core/crypto/quic_crypto_server_config_test.cc",
     "quic/core/crypto/quic_random_test.cc",
+    "quic/core/crypto/quic_tls_adapter_test.cc",
     "quic/core/frames/quic_frames_test.cc",
     "quic/core/packet_number_indexed_queue_test.cc",
     "quic/core/quic_alarm_test.cc",
@@ -5077,6 +5068,8 @@ test("net_unittests") {
     "quic/platform/api/quic_endian_test.cc",
     "quic/platform/api/quic_hostname_utils_test.cc",
     "quic/platform/api/quic_lru_cache_test.cc",
+    "quic/platform/api/quic_mem_slice_span_test.cc",
+    "quic/platform/api/quic_mem_slice_test.cc",
     "quic/platform/api/quic_reference_counted_test.cc",
     "quic/platform/api/quic_str_cat_test.cc",
     "quic/platform/api/quic_text_utils_test.cc",
@@ -5358,6 +5351,11 @@ test("net_unittests") {
       "ntlm/ntlm_test_data.h",
       "ntlm/ntlm_unittest.cc",
     ]
+  }
+
+  if (use_remote_test_server) {
+    sources +=
+        [ "test/spawned_test_server/remote_test_server_proxy_unittests.cc" ]
   }
 
   if (is_fuchsia) {

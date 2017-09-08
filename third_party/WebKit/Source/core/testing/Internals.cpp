@@ -40,7 +40,8 @@
 #include "core/SVGNames.h"
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/DocumentTimeline.h"
-#include "core/css/CSSPropertyMetadata.h"
+#include "core/css/SelectRuleFeatureSet.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/DOMStringList.h"
 #include "core/dom/Document.h"
@@ -53,10 +54,8 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/PseudoElement.h"
 #include "core/dom/Range.h"
-#include "core/dom/SelectRuleFeatureSet.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/StaticNodeList.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/TreeScope.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/editing/Editor.h"
@@ -1709,7 +1708,8 @@ unsigned Internals::scrollEventHandlerCount(Document* document) const {
 unsigned Internals::touchStartOrMoveEventHandlerCount(
     Document* document) const {
   DCHECK(document);
-  return EventHandlerCount(
+  return EventHandlerCount(*document, EventHandlerRegistry::kTouchAction) +
+         EventHandlerCount(
              *document, EventHandlerRegistry::kTouchStartOrMoveEventBlocking) +
          EventHandlerCount(
              *document,

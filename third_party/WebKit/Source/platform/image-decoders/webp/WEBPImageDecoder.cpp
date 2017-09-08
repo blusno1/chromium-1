@@ -171,27 +171,47 @@ bool WEBPImageDecoder::FrameIsReceivedAtIndex(size_t index) const {
   return frame_is_received_at_index;
 }
 
-float WEBPImageDecoder::FrameDurationAtIndex(size_t index) const {
+TimeDelta WEBPImageDecoder::FrameDurationAtIndex(size_t index) const {
   return index < frame_buffer_cache_.size()
              ? frame_buffer_cache_[index].Duration()
-             : 0;
+             : TimeDelta();
 }
 
 bool WEBPImageDecoder::UpdateDemuxer() {
   if (Failed())
     return false;
 
+  const unsigned kWebpHeaderSize = 30;
+  if (data_->size() < kWebpHeaderSize)
+    return IsAllDataReceived() ? SetFailed() : false;
+
   if (have_already_parsed_this_data_)
     return true;
 
   have_already_parsed_this_data_ = true;
 
-  const unsigned kWebpHeaderSize = 30;
-  if (data_->size() < kWebpHeaderSize)
-    return false;  // Await VP8X header so WebPDemuxPartial succeeds.
+  if (consolidated_data_ && consolidated_data_->size() >= data_->size()) {
+    // Less data provided than last time. |consolidated_data_| is guaranteed
+    // to be its own copy of the data, so it is safe to keep it.
+    return true;
+  }
+
+  if (IsAllDataReceived() && !consolidated_data_) {
+    consolidated_data_ = data_->GetAsSkData();
+  } else {
+    buffer_.ReserveCapacity(data_->size());
+    while (buffer_.size() < data_->size()) {
+      const char* segment;
+      const size_t bytes = data_->GetSomeData(segment, buffer_.size());
+      DCHECK(bytes);
+      buffer_.Append(segment, bytes);
+    }
+    DCHECK_EQ(buffer_.size(), data_->size());
+    consolidated_data_ =
+        SkData::MakeWithoutCopy(buffer_.data(), buffer_.size());
+  }
 
   WebPDemuxDelete(demux_);
-  consolidated_data_ = data_->GetAsSkData();
   WebPData input_data = {
       reinterpret_cast<const uint8_t*>(consolidated_data_->data()),
       consolidated_data_->size()};
@@ -401,7 +421,7 @@ void WEBPImageDecoder::InitializeNewFrame(size_t index) {
                      animated_frame.width, animated_frame.height);
   buffer->SetOriginalFrameRect(
       Intersection(frame_rect, IntRect(IntPoint(), Size())));
-  buffer->SetDuration(animated_frame.duration);
+  buffer->SetDuration(TimeDelta::FromMilliseconds(animated_frame.duration));
   buffer->SetDisposalMethod(animated_frame.dispose_method ==
                                     WEBP_MUX_DISPOSE_BACKGROUND
                                 ? ImageFrame::kDisposeOverwriteBgcolor

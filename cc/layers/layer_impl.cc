@@ -24,7 +24,6 @@
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_state.h"
 #include "cc/layers/layer.h"
-#include "cc/layers/layer_utils.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/render_pass.h"
 #include "cc/trees/clip_node.h"
@@ -40,7 +39,6 @@
 #include "cc/trees/transform_node.h"
 #include "components/viz/common/quads/copy_output_request.h"
 #include "components/viz/common/traced_value.h"
-#include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -144,17 +142,19 @@ void LayerImpl::SetScrollTreeIndex(int index) {
   scroll_tree_index_ = index;
 }
 
-void LayerImpl::PopulateSharedQuadState(viz::SharedQuadState* state) const {
+void LayerImpl::PopulateSharedQuadState(viz::SharedQuadState* state,
+                                        bool contents_opaque) const {
   state->SetAll(draw_properties_.target_space_transform, gfx::Rect(bounds()),
                 draw_properties_.visible_layer_rect, draw_properties_.clip_rect,
-                draw_properties_.is_clipped, draw_properties_.opacity,
-                SkBlendMode::kSrcOver, GetSortingContextId());
+                draw_properties_.is_clipped, contents_opaque,
+                draw_properties_.opacity, SkBlendMode::kSrcOver,
+                GetSortingContextId());
 }
 
-void LayerImpl::PopulateScaledSharedQuadState(
-    viz::SharedQuadState* state,
-    float layer_to_content_scale_x,
-    float layer_to_content_scale_y) const {
+void LayerImpl::PopulateScaledSharedQuadState(viz::SharedQuadState* state,
+                                              float layer_to_content_scale_x,
+                                              float layer_to_content_scale_y,
+                                              bool contents_opaque) const {
   gfx::Transform scaled_draw_transform =
       draw_properties_.target_space_transform;
   scaled_draw_transform.Scale(SK_MScalar1 / layer_to_content_scale_x,
@@ -167,8 +167,9 @@ void LayerImpl::PopulateScaledSharedQuadState(
 
   state->SetAll(scaled_draw_transform, gfx::Rect(scaled_bounds),
                 scaled_visible_layer_rect, draw_properties().clip_rect,
-                draw_properties().is_clipped, draw_properties().opacity,
-                SkBlendMode::kSrcOver, GetSortingContextId());
+                draw_properties().is_clipped, contents_opaque,
+                draw_properties().opacity, SkBlendMode::kSrcOver,
+                GetSortingContextId());
 }
 
 bool LayerImpl::WillDraw(DrawMode draw_mode,
@@ -460,7 +461,7 @@ void LayerImpl::NoteLayerPropertyChangedFromPropertyTrees() {
   SetNeedsPushProperties();
 }
 
-void LayerImpl::ValidateQuadResourcesInternal(DrawQuad* quad) const {
+void LayerImpl::ValidateQuadResourcesInternal(viz::DrawQuad* quad) const {
 #if DCHECK_IS_ON()
   const ResourceProvider* resource_provider =
       layer_tree_impl_->resource_provider();
@@ -780,10 +781,6 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
 
   state->SetBoolean("has_will_change_transform_hint",
                     has_will_change_transform_hint());
-
-  gfx::BoxF box;
-  if (LayerUtils::GetAnimationBounds(*this, &box))
-    MathUtil::AddToTracedValue("animation_bounds", box, state);
 
   if (debug_info_) {
     std::string str;

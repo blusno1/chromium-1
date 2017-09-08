@@ -51,11 +51,11 @@ const base::Feature kOfflinePagesAsyncDownloadFeature{
 const base::Feature kPrefetchingOfflinePagesFeature{
     "OfflinePagesPrefetching", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kNewBackgroundLoaderFeature{
-    "BackgroundLoader", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kOfflinePagesCTV2Feature{"OfflinePagesCTV2",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kOfflinePagesPrefetchingUIFeature{
+    "OfflinePagesPrefetchingUI", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsOfflineBookmarksEnabled() {
   return base::FeatureList::IsEnabled(kOfflineBookmarksFeature);
@@ -90,16 +90,16 @@ bool IsPrefetchingOfflinePagesEnabled() {
   return base::FeatureList::IsEnabled(kPrefetchingOfflinePagesFeature);
 }
 
+bool IsOfflinePagesPrefetchingUIEnabled() {
+  return base::FeatureList::IsEnabled(kOfflinePagesPrefetchingUIFeature);
+}
+
 bool IsOfflinePagesLoadSignalCollectingEnabled() {
   return base::FeatureList::IsEnabled(kOfflinePagesLoadSignalCollectingFeature);
 }
 
 bool IsOfflinePagesRenovationsEnabled() {
   return base::FeatureList::IsEnabled(kOfflinePagesRenovationsFeature);
-}
-
-bool ShouldUseNewBackgroundLoader() {
-  return base::FeatureList::IsEnabled(kNewBackgroundLoaderFeature);
 }
 
 bool ShouldUseTestingSnapshotDelay() {

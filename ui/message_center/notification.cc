@@ -4,17 +4,18 @@
 
 #include "ui/message_center/notification.h"
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_style.h"
 #include "ui/message_center/notification_delegate.h"
 #include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/strings/grit/ui_strings.h"
 
 namespace message_center {
@@ -246,7 +247,7 @@ std::unique_ptr<Notification> Notification::CreateSystemNotification(
         IDS_MESSAGE_CENTER_NOTIFICATION_CHROMEOS_SYSTEM,
         MessageCenter::Get()->GetProductOSName());
   }
-  std::unique_ptr<Notification> notification = base::MakeUnique<Notification>(
+  std::unique_ptr<Notification> notification = std::make_unique<Notification>(
       type, id, title, message, icon, display_source_or_default, origin_url,
       notifier_id, optional_fields, delegate);
   notification->set_accent_color(color);

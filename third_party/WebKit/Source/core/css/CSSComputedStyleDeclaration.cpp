@@ -29,17 +29,18 @@
 #include "core/css/CSSIdentifierValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
+#include "core/css/CSSProperty.h"
 #include "core/css/CSSPropertyIDTemplates.h"
-#include "core/css/CSSPropertyMetadata.h"
 #include "core/css/CSSSelector.h"
 #include "core/css/CSSVariableData.h"
 #include "core/css/ComputedStyleCSSValueMapping.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "core/css/zoomAdjustedPixelValue.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/PseudoElement.h"
-#include "core/dom/StyleEngine.h"
 #include "core/layout/LayoutObject.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -265,7 +266,7 @@ const Vector<CSSPropertyID>&
 CSSComputedStyleDeclaration::ComputableProperties() {
   DEFINE_STATIC_LOCAL(Vector<CSSPropertyID>, properties, ());
   if (properties.IsEmpty()) {
-    CSSPropertyMetadata::FilterEnabledCSSPropertiesIntoVector(
+    CSSProperty::FilterEnabledCSSPropertiesIntoVector(
         kComputedPropertyArray, WTF_ARRAY_LENGTH(kComputedPropertyArray),
         properties);
   }
@@ -509,7 +510,7 @@ String CSSComputedStyleDeclaration::getPropertyValue(
       return value->CssText();
     return String();
   }
-  DCHECK(CSSPropertyMetadata::IsEnabledProperty(property_id));
+  DCHECK(CSSPropertyAPI::Get(property_id).IsEnabled());
   return GetPropertyValue(property_id);
 }
 

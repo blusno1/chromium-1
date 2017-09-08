@@ -35,13 +35,13 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/modules/v8/RenderingContext.h"
+#include "bindings/modules/v8/rendering_context.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSFontSelector.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/AXObjectCache.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/events/MouseEvent.h"
@@ -117,17 +117,17 @@ CanvasRenderingContext2D::CanvasRenderingContext2D(
       try_restore_context_attempt_count_(0),
       dispatch_context_lost_event_timer_(
           TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI,
-                                canvas->GetDocument().GetFrame()),
+                                &canvas->GetDocument()),
           this,
           &CanvasRenderingContext2D::DispatchContextLostEvent),
       dispatch_context_restored_event_timer_(
           TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI,
-                                canvas->GetDocument().GetFrame()),
+                                &canvas->GetDocument()),
           this,
           &CanvasRenderingContext2D::DispatchContextRestoredEvent),
       try_restore_context_event_timer_(
           TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI,
-                                canvas->GetDocument().GetFrame()),
+                                &canvas->GetDocument()),
           this,
           &CanvasRenderingContext2D::TryRestoreContextEvent),
       should_prune_local_font_cache_(false) {

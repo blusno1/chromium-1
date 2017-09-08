@@ -164,6 +164,9 @@ public abstract class ChromeSwitches {
     public static final String ALWAYS_EXTRACT_WEBAPK_RUNTIME_DEX_ON_STARTUP =
             "always-extract-webapk-dex-on-startup";
 
+    /** Treats all WebAPKs as valid - useful only for local testing. */
+    public static final String SKIP_WEBAPK_VERIFICATION = "skip-webapk-verification";
+
     /**
      * Forces a check for whether the WebAPK's Web Manifest has changed each time that a WebAPK is
      * launched.
@@ -182,6 +185,9 @@ public abstract class ChromeSwitches {
 
     /** Switch for enabling "button only" swipe logic for Chrome Home. */
     public static final String CHROME_HOME_SWIPE_LOGIC_BUTTON_ONLY = "button-only";
+
+    /** Switch for enabling downloads as a foreground service for all versions of Android. */
+    public static final String ENABLE_DOWNLOADS_FOREGROUND = "enable-downloads-foreground";
 
     // Prevent instantiation.
     private ChromeSwitches() {}

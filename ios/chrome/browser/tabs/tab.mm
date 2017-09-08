@@ -45,9 +45,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_formatter.h"
 #include "ios/chrome/browser/application_context.h"
-#import "ios/chrome/browser/autofill/autofill_controller.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_controller.h"
-#import "ios/chrome/browser/autofill/form_suggestion_controller.h"
+#import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/crash_loop_detection_util.h"
@@ -58,8 +57,7 @@
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/metrics/tab_usage_recorder.h"
-#import "ios/chrome/browser/passwords/password_controller.h"
-#import "ios/chrome/browser/passwords/passwords_ui_delegate_impl.h"
+#import "ios/chrome/browser/passwords/password_tab_helper.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
@@ -94,14 +92,11 @@
 #import "ios/chrome/browser/ui/open_in_controller.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/browser/ui/prerender_delegate.h"
-#import "ios/chrome/browser/ui/sad_tab/sad_tab_view.h"
 #include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/chrome/browser/web/auto_reload_bridge.h"
 #import "ios/chrome/browser/web/external_app_launcher.h"
 #import "ios/chrome/browser/web/navigation_manager_util.h"
 #import "ios/chrome/browser/web/passkit_dialog_provider.h"
 #include "ios/chrome/browser/web/print_observer.h"
-#import "ios/chrome/browser/web/sad_tab_tab_helper.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
@@ -216,24 +211,12 @@ class TabHistoryContext : public history::Context {
   // opening a URL in an external application.
   ExternalAppLauncher* _externalAppLauncher;
 
-  // Handles suggestions for form entry.
-  FormSuggestionController* _suggestionController;
-
-  // Manages the input accessory view during form input.
-  FormInputAccessoryViewController* _inputAccessoryViewController;
-
-  // Handles autofill.
-  AutofillController* _autofillController;
-
   // Handles retrieving, generating and updating snapshots of CRWWebController's
   // web page.
   WebControllerSnapshotHelper* _webControllerSnapshotHelper;
 
   // Handles support for window.print JavaScript calls.
   std::unique_ptr<PrintObserver> _printObserver;
-
-  // AutoReloadBridge for this tab.
-  AutoReloadBridge* _autoReloadBridge;
 
   // WebStateImpl for this tab.
   web::WebStateImpl* _webStateImpl;
@@ -260,14 +243,6 @@ class TabHistoryContext : public history::Context {
 
 // Handles caching and retrieving of snapshots.
 @property(nonatomic, strong) SnapshotManager* snapshotManager;
-
-// Returns a list of FormSuggestionProviders to be queried for suggestions
-// in order of priority.
-- (NSArray*)suggestionProviders;
-
-// Returns a list of FormInputAccessoryViewProviders to be queried for an input
-// accessory view in order of priority.
-- (NSArray*)accessoryViewProviders;
 
 // Sets the favicon on the current NavigationItem.
 - (void)setFavicon:(const gfx::Image*)image;
@@ -396,7 +371,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 @synthesize isPrerenderTab = _isPrerenderTab;
 @synthesize isLinkLoadingPrerenderTab = isLinkLoadingPrerenderTab_;
 @synthesize isVoiceSearchResultsTab = _isVoiceSearchResultsTab;
-@synthesize passwordController = passwordController_;
 @synthesize overscrollActionsController = _overscrollActionsController;
 @synthesize overscrollActionsControllerDelegate =
     overscrollActionsControllerDelegate_;
@@ -438,27 +412,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   _tabInfoBarObserver = base::MakeUnique<TabInfoBarObserver>(self);
   _tabInfoBarObserver->SetShouldObserveInfoBarManager(true);
 
-  if (experimental_flags::IsAutoReloadEnabled())
-    _autoReloadBridge = [[AutoReloadBridge alloc] initWithTab:self];
-
-  id<PasswordsUiDelegate> passwordsUIDelegate =
-      [[PasswordsUiDelegateImpl alloc] init];
-  passwordController_ =
-      [[PasswordController alloc] initWithWebState:self.webState
-                               passwordsUiDelegate:passwordsUIDelegate];
-  password_manager::PasswordGenerationManager* passwordGenerationManager =
-      [passwordController_ passwordGenerationManager];
-  _autofillController =
-      [[AutofillController alloc] initWithBrowserState:_browserState
-                             passwordGenerationManager:passwordGenerationManager
-                                              webState:self.webState];
-  _suggestionController = [[FormSuggestionController alloc]
-      initWithWebState:self.webState
-             providers:[self suggestionProviders]];
-  _inputAccessoryViewController = [[FormInputAccessoryViewController alloc]
-      initWithWebState:self.webState
-             providers:[self accessoryViewProviders]];
-
   [self setShouldObserveFaviconChanges:YES];
 }
 
@@ -467,23 +420,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 - (void)attachDispatcherDependentTabHelpers {
   _printObserver =
       base::MakeUnique<PrintObserver>(self.webState, self.dispatcher);
-}
-
-- (NSArray*)accessoryViewProviders {
-  NSMutableArray* providers = [NSMutableArray array];
-  id<FormInputAccessoryViewProvider> provider =
-      [passwordController_ accessoryViewProvider];
-  if (provider)
-    [providers addObject:provider];
-  [providers addObject:[_suggestionController accessoryViewProvider]];
-  return providers;
-}
-
-- (NSArray*)suggestionProviders {
-  NSMutableArray* providers = [NSMutableArray array];
-  [providers addObject:[passwordController_ suggestionProvider]];
-  [providers addObject:[_autofillController suggestionProvider]];
-  return providers;
 }
 
 - (id<FindInPageControllerDelegate>)findInPageControllerDelegate {
@@ -715,7 +651,9 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   // should be nil, or the new value should be nil.
   DCHECK(!_dispatcher || !dispatcher);
   _dispatcher = dispatcher;
-  self.passwordController.dispatcher = dispatcher;
+  // Forward the new dispatcher to tab helpers.
+  PasswordTabHelper::FromWebState(self.webState)
+      ->SetDispatcher(self.dispatcher);
   // If the new dispatcher is nonnull, add tab helpers.
   if (self.dispatcher)
     [self attachDispatcherDependentTabHelpers];
@@ -867,17 +805,11 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   self.passKitDialogProvider = nil;
   self.snapshotOverlayProvider = nil;
 
-  [passwordController_ detach];
-  passwordController_ = nil;
   _tabInfoBarObserver.reset();
 
   _faviconDriverObserverBridge.reset();
   [_openInController detachFromWebController];
   _openInController = nil;
-  [_autofillController detachFromWebState];
-  _autofillController = nil;
-  [_suggestionController detachFromWebState];
-  _suggestionController = nil;
   if (_fullScreenController)
     [self.webController removeObserver:_fullScreenController];
   [_fullScreenController invalidate];
@@ -1251,7 +1183,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   // |disableFullScreen| is called only from one place.
   [_fullScreenController disableFullScreen];
   GURL lastCommittedURL = webState->GetLastCommittedURL();
-  [_autoReloadBridge loadStartedForURL:lastCommittedURL];
 
   if (_parentTabModel) {
     [[NSNotificationCenter defaultCenter]
@@ -1310,10 +1241,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
     wasPost = lastCommittedItem->HasPostData();
     lastCommittedURL = lastCommittedItem->GetVirtualURL();
   }
-  if (loadSuccess)
-    [_autoReloadBridge loadFinishedForURL:lastCommittedURL wasPost:wasPost];
-  else
-    [_autoReloadBridge loadFailedForURL:lastCommittedURL wasPost:wasPost];
   [_webControllerSnapshotHelper setSnapshotCoalescingEnabled:YES];
   if (!loadSuccess)
     [_fullScreenController disableFullScreen];
@@ -1618,7 +1545,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   [self updateFullscreenWithToolbarVisible:YES];
   if (self.webState)
     self.webState->WasShown();
-  [_inputAccessoryViewController wasShown];
 }
 
 - (void)wasHidden {
@@ -1626,7 +1552,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   [self updateFullscreenWithToolbarVisible:YES];
   if (self.webState)
     self.webState->WasHidden();
-  [_inputAccessoryViewController wasHidden];
 }
 
 #pragma mark - PagePlaceholderTabHelperDelegate
@@ -1666,21 +1591,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
       }];
 }
 
-#pragma mark - SadTabTabHelperDelegate
-
-- (void)sadTabHelper:(SadTabTabHelper*)tabHelper
-    presentSadTabForRepeatedFailure:(BOOL)repeatedFailure {
-  // Create a SadTabView so |webstate| presents it.
-  SadTabView* sadTabview = [[SadTabView alloc]
-           initWithMode:repeatedFailure ? SadTabViewMode::FEEDBACK
-                                        : SadTabViewMode::RELOAD
-      navigationManager:tabHelper->web_state()->GetNavigationManager()];
-  sadTabview.dispatcher = self.dispatcher;
-  CRWContentView* contentView =
-      [[CRWGenericContentView alloc] initWithView:sadTabview];
-  tabHelper->web_state()->ShowTransientContentView(contentView);
-}
-
 @end
 
 #pragma mark - TestingSupport
@@ -1693,10 +1603,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 
 - (TabModel*)parentTabModel {
   return _parentTabModel;
-}
-
-- (FormInputAccessoryViewController*)inputAccessoryViewController {
-  return _inputAccessoryViewController;
 }
 
 // TODO(crbug.com/620465): this require the Tab's WebState to be a WebStateImpl,

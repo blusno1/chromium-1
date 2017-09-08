@@ -32,6 +32,8 @@ static_library("tether") {
     "disconnect_tethering_operation.h",
     "disconnect_tethering_request_sender.cc",
     "disconnect_tethering_request_sender.h",
+    "disconnect_tethering_request_sender_impl.cc",
+    "disconnect_tethering_request_sender_impl.h",
     "host_connection_metrics_logger.cc",
     "host_connection_metrics_logger.h",
     "host_scan_cache.cc",
@@ -93,6 +95,9 @@ static_library("tether") {
     "timer_factory.h",
     "wifi_hotspot_connector.cc",
     "wifi_hotspot_connector.h",
+    "wifi_hotspot_disconnector.h",
+    "wifi_hotspot_disconnector_impl.cc",
+    "wifi_hotspot_disconnector_impl.h",
   ]
 
   deps = [
@@ -140,6 +145,8 @@ static_library("test_support") {
     "fake_tether_host_fetcher.h",
     "fake_wifi_hotspot_connector.cc",
     "fake_wifi_hotspot_connector.h",
+    "fake_wifi_hotspot_disconnector.cc",
+    "fake_wifi_hotspot_disconnector.h",
     "host_scan_test_util.cc",
     "host_scan_test_util.h",
     "mock_host_connection_metrics_logger.cc",
@@ -179,6 +186,7 @@ source_set("unit_tests") {
     "crash_recovery_manager_unittest.cc",
     "device_status_util_unittest.cc",
     "disconnect_tethering_operation_unittest.cc",
+    "disconnect_tethering_request_sender_impl_unittest.cc",
     "host_connection_metrics_logger_unittest.cc",
     "host_scan_cache_unittest.cc",
     "host_scan_device_prioritizer_impl_unittest.cc",
@@ -203,6 +211,7 @@ source_set("unit_tests") {
     "tether_host_response_recorder_unittest.cc",
     "tether_network_disconnection_handler_unittest.cc",
     "wifi_hotspot_connector_unittest.cc",
+    "wifi_hotspot_disconnector_impl_unittest.cc",
   ]
 
   deps = [

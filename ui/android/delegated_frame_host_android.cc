@@ -66,6 +66,10 @@ DelegatedFrameHostAndroid::DelegatedFrameHostAndroid(
   DCHECK(client_);
 
   host_frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_, this);
+#if DCHECK_IS_ON()
+  host_frame_sink_manager_->SetFrameSinkDebugLabel(frame_sink_id_,
+                                                   "DelegatedFrameHostAndroid");
+#endif
   CreateNewCompositorFrameSinkSupport();
 }
 
@@ -124,7 +128,8 @@ void DelegatedFrameHostAndroid::RequestCopyOfSurface(
   readback_layer->SetHideLayerAndSubtree(true);
   compositor->AttachLayerForReadback(readback_layer);
   std::unique_ptr<viz::CopyOutputRequest> copy_output_request =
-      viz::CopyOutputRequest::CreateRequest(
+      std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
           base::BindOnce(&CopyOutputRequestCallback, readback_layer,
                          std::move(result_callback)));
 

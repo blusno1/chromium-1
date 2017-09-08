@@ -299,7 +299,6 @@ extern const char kAllowScreenLock[];
 extern const char kHatsLastInteractionTimestamp[];
 extern const char kHatsSurveyCycleEndTimestamp[];
 extern const char kHatsDeviceIsSelected[];
-extern const char kQuickUnlockPinSalt[];
 extern const char kQuickUnlockPinSecret[];
 extern const char kQuickUnlockFingerprintRecord[];
 extern const char kEolStatus[];
@@ -434,10 +433,6 @@ extern const char kSupervisedUsers[];
 
 extern const char kMessageCenterDisabledExtensionIds[];
 extern const char kMessageCenterDisabledSystemComponentIds[];
-extern const char kWelcomeNotificationDismissed[];
-extern const char kWelcomeNotificationDismissedLocal[];
-extern const char kWelcomeNotificationPreviouslyPoppedUp[];
-extern const char kWelcomeNotificationExpirationTimestamp[];
 
 extern const char kFullscreenAllowed[];
 

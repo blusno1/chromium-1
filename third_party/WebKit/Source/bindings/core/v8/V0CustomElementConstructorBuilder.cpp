@@ -31,11 +31,11 @@
 #include "bindings/core/v8/V0CustomElementConstructorBuilder.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/StringOrDictionary.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8HTMLElement.h"
 #include "bindings/core/v8/V8SVGElement.h"
+#include "bindings/core/v8/string_or_dictionary.h"
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
 #include "core/dom/Document.h"
@@ -327,7 +327,7 @@ static void ConstructCustomElement(
 
   v8::Local<v8::Object> data = v8::Local<v8::Object>::Cast(info.Data());
   Document* document =
-      V8Document::toImpl(V8PrivateProperty::GetCustomElementDocument(isolate)
+      V8Document::ToImpl(V8PrivateProperty::GetCustomElementDocument(isolate)
                              .GetOrEmpty(data)
                              .As<v8::Object>());
   TOSTRING_VOID(

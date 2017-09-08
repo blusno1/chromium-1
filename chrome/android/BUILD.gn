@@ -18,6 +18,7 @@ import("//third_party/protobuf/proto_library.gni")
 import("//tools/resources/generate_resource_whitelist.gni")
 import("channel.gni")
 import("java_sources.gni")
+import("static_initializers.gni")
 
 manifest_package = "org.chromium.chrome"
 
@@ -53,7 +54,7 @@ jinja_template("chrome_public_android_manifest") {
   variables = chrome_public_jinja_variables
   variables += [
     "min_sdk_version=16",
-    "target_sdk_version=23",
+    "target_sdk_version=$android_sdk_version",
   ]
 }
 
@@ -63,16 +64,16 @@ jinja_template("chrome_modern_public_android_manifest") {
   variables = chrome_public_jinja_variables
   variables += [
     "min_sdk_version=21",
-    "target_sdk_version=23",
+    "target_sdk_version=$android_sdk_version",
   ]
 }
 
 jinja_template("monochrome_public_android_manifest") {
   input = "java/AndroidManifest_monochrome.xml"
   output = monochrome_public_android_manifest
-  variables =
-      chrome_public_jinja_variables +
-      monochrome_android_manifest_jinja_variables + [ "target_sdk_version=24" ]
+  variables = chrome_public_jinja_variables +
+              monochrome_android_manifest_jinja_variables +
+              [ "target_sdk_version=$android_sdk_version" ]
 }
 
 jinja_template("chrome_sync_shell_android_manifest") {
@@ -81,7 +82,7 @@ jinja_template("chrome_sync_shell_android_manifest") {
   variables = chrome_sync_shell_jinja_variables
   variables += [
     "min_sdk_version=16",
-    "target_sdk_version=22",
+    "target_sdk_version=$android_sdk_version",
   ]
 }
 
@@ -101,7 +102,6 @@ android_resources("chrome_java_resources") {
     "//third_party/android_data_chart:android_data_chart_java_resources",
     "//third_party/android_media:android_media_resources",
     "//third_party/android_tools:android_support_design_java",
-    "//third_party/android_tools:android_support_transition_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
     "//third_party/android_tools:android_support_v7_recyclerview_java",
   ]
@@ -470,6 +470,7 @@ android_library("chrome_test_java") {
     "//base:base_java_test_support",
     "//chrome/android:app_hooks_java",
     "//chrome/android:chrome_java",
+    "//chrome/android/third_party/widget_bottomsheet_base:widget_bottomsheet_base_java",
     "//chrome/android/webapk/libs/client:client_java",
     "//chrome/android/webapk/libs/common:common_java",
     "//chrome/android/webapk/libs/runtime_library:webapk_service_aidl_java",
@@ -544,6 +545,7 @@ android_library("chrome_test_java") {
     "//chrome/test/data/geolocation/",
     "//chrome/test/data/google/",
     "//chrome/test/data/image_search/valid.png",
+    "//chrome/test/data/media/",
     "//chrome/test/data/navigation_interception/",
     "//chrome/test/data/notifications/",
     "//chrome/test/data/popup_blocker/",
@@ -1069,6 +1071,12 @@ instrumentation_test_apk("chrome_public_test_apk") {
     "//net/android:net_test_support_apk",
   ]
   proguard_enabled = !is_java_debug
+  if (proguard_enabled && !enable_proguard_obfuscation &&
+      enable_proguard_obfuscation_for_tests) {
+    proguard_configs = [ "//base/android/proguard/enable_obfuscation.flags" ]
+    proguard_config_exclusions =
+        [ "//base/android/proguard/disable_chromium_obfuscation.flags" ]
+  }
 
   # The test APK contains code from both the APK under test and the
   # test APK when proguard is enabled. That causes this APK to exceed
@@ -1088,6 +1096,12 @@ if (enable_vr) {
     ]
     additional_apks = [ "//net/android:net_test_support_apk" ]
     proguard_enabled = !is_java_debug
+    if (proguard_enabled && !enable_proguard_obfuscation &&
+        enable_proguard_obfuscation_for_tests) {
+      proguard_configs = [ "//base/android/proguard/enable_obfuscation.flags" ]
+      proguard_config_exclusions =
+          [ "//base/android/proguard/disable_chromium_obfuscation.flags" ]
+    }
   }
 
   android_apk("vr_nfc_simulator_apk") {
@@ -1143,4 +1157,33 @@ instrumentation_test_apk("chrome_sync_shell_test_apk") {
     "//ui/android:ui_java",
   ]
   proguard_enabled = !is_java_debug
+  if (proguard_enabled && !enable_proguard_obfuscation &&
+      enable_proguard_obfuscation_for_tests) {
+    proguard_configs = [ "//base/android/proguard/enable_obfuscation.flags" ]
+    proguard_config_exclusions =
+        [ "//base/android/proguard/disable_chromium_obfuscation.flags" ]
+  }
+}
+
+if (defined(expected_static_initializer_count)) {
+  action("monochrome_static_initializers") {
+    script = "//build/android/gyp/assert_static_initializers.py"
+    inputs = [
+      "$root_build_dir/apks/MonochromePublic.apk",
+    ]
+    outputs = [
+      "$target_gen_dir/$target_name.stamp",
+    ]
+    deps = [
+      ":monochrome_public_apk",
+    ]
+    args = [
+      "--expected-count=$expected_static_initializer_count",
+      "--tool-prefix",
+      rebase_path(android_tool_prefix, root_build_dir),
+      "--touch",
+      rebase_path(outputs[0], root_build_dir),
+      rebase_path(inputs[0], root_build_dir),
+    ]
+  }
 }

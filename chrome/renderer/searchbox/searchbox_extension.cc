@@ -306,28 +306,6 @@ static const char kDispatchMostVisitedChangedScript[] =
     "  true;"
     "}";
 
-static const char kDispatchSubmitEventScript[] =
-    "if (window.chrome &&"
-    "    window.chrome.embeddedSearch &&"
-    "    window.chrome.embeddedSearch.searchBox &&"
-    "    window.chrome.embeddedSearch.searchBox.onsubmit &&"
-    "    typeof window.chrome.embeddedSearch.searchBox.onsubmit =="
-    "        'function') {"
-    "  window.chrome.embeddedSearch.searchBox.onsubmit();"
-    "  true;"
-    "}";
-
-static const char kDispatchSuggestionChangeEventScript[] =
-    "if (window.chrome &&"
-    "    window.chrome.embeddedSearch &&"
-    "    window.chrome.embeddedSearch.searchBox &&"
-    "    window.chrome.embeddedSearch.searchBox.onsuggestionchange &&"
-    "    typeof window.chrome.embeddedSearch.searchBox.onsuggestionchange =="
-    "        'function') {"
-    "  window.chrome.embeddedSearch.searchBox.onsuggestionchange();"
-    "  true;"
-    "}";
-
 static const char kDispatchThemeChangeEventScript[] =
     "if (window.chrome &&"
     "    window.chrome.embeddedSearch &&"
@@ -378,14 +356,6 @@ class SearchBoxExtensionWrapper : public v8::Extension {
 
   // Returns true if the Chrome UI is rendered right-to-left.
   static void GetRightToLeft(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  // Gets the Embedded Search request params. Used for logging purposes.
-  static void GetSearchRequestParams(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  // Gets the current top suggestion to prefetch search results.
-  static void GetSuggestionToPrefetch(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
 
   // Gets the background info of the theme currently adopted by browser.
   // Call only when overlay is showing NTP page.
@@ -491,16 +461,6 @@ void SearchBoxExtension::DispatchMostVisitedChanged(
 }
 
 // static
-void SearchBoxExtension::DispatchSubmit(blink::WebLocalFrame* frame) {
-  Dispatch(frame, kDispatchSubmitEventScript);
-}
-
-// static
-void SearchBoxExtension::DispatchSuggestionChange(blink::WebLocalFrame* frame) {
-  Dispatch(frame, kDispatchSuggestionChangeEventScript);
-}
-
-// static
 void SearchBoxExtension::DispatchThemeChange(blink::WebLocalFrame* frame) {
   Dispatch(frame, kDispatchThemeChangeEventScript);
 }
@@ -531,10 +491,6 @@ SearchBoxExtensionWrapper::GetNativeFunctionTemplate(
     return v8::FunctionTemplate::New(isolate, GetMostVisitedItemData);
   if (name_str == "GetRightToLeft")
     return v8::FunctionTemplate::New(isolate, GetRightToLeft);
-  if (name_str == "GetSearchRequestParams")
-    return v8::FunctionTemplate::New(isolate, GetSearchRequestParams);
-  if (name_str == "GetSuggestionToPrefetch")
-    return v8::FunctionTemplate::New(isolate, GetSuggestionToPrefetch);
   if (name_str == "GetThemeBackgroundInfo")
     return v8::FunctionTemplate::New(isolate, GetThemeBackgroundInfo);
   if (name_str == "IsFocused")
@@ -680,59 +636,6 @@ void SearchBoxExtensionWrapper::GetRightToLeft(
   args.GetReturnValue().Set(base::i18n::IsRTL());
 }
 
-// static
-void SearchBoxExtensionWrapper::GetSearchRequestParams(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  content::RenderFrame* render_frame = GetRenderFrame();
-  if (!render_frame)
-    return;
-
-  const EmbeddedSearchRequestParams& params =
-      SearchBox::Get(render_frame)->GetEmbeddedSearchRequestParams();
-  v8::Isolate* isolate = args.GetIsolate();
-  v8::Local<v8::Object> data = v8::Object::New(isolate);
-  if (!params.search_query.empty()) {
-    data->Set(v8::String::NewFromUtf8(isolate, kSearchQueryKey),
-              UTF16ToV8String(isolate, params.search_query));
-  }
-  if (!params.original_query.empty()) {
-    data->Set(v8::String::NewFromUtf8(isolate, kOriginalQueryKey),
-              UTF16ToV8String(isolate, params.original_query));
-  }
-  if (!params.rlz_parameter_value.empty()) {
-    data->Set(v8::String::NewFromUtf8(isolate, kRLZParameterKey),
-              UTF16ToV8String(isolate, params.rlz_parameter_value));
-  }
-  if (!params.input_encoding.empty()) {
-    data->Set(v8::String::NewFromUtf8(isolate, kInputEncodingKey),
-              UTF16ToV8String(isolate, params.input_encoding));
-  }
-  if (!params.assisted_query_stats.empty()) {
-    data->Set(v8::String::NewFromUtf8(isolate, kAssistedQueryStatsKey),
-              UTF16ToV8String(isolate, params.assisted_query_stats));
-  }
-  args.GetReturnValue().Set(data);
-}
-
-// static
-void SearchBoxExtensionWrapper::GetSuggestionToPrefetch(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  content::RenderFrame* render_frame = GetRenderFrame();
-  if (!render_frame)
-    return;
-
-  const InstantSuggestion& suggestion =
-      SearchBox::Get(render_frame)->suggestion();
-  v8::Isolate* isolate = args.GetIsolate();
-  v8::Local<v8::Object> data = v8::Object::New(isolate);
-  data->Set(v8::String::NewFromUtf8(isolate, "text"),
-            UTF16ToV8String(isolate, suggestion.text));
-  data->Set(v8::String::NewFromUtf8(isolate, "metadata"),
-            UTF8ToV8String(isolate, suggestion.metadata));
-  args.GetReturnValue().Set(data);
-}
-
-// static
 void SearchBoxExtensionWrapper::GetThemeBackgroundInfo(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   content::RenderFrame* render_frame = GetRenderFrame();

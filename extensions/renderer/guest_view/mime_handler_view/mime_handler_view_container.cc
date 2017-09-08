@@ -7,6 +7,7 @@
 #include <map>
 #include <set>
 
+#include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "components/guest_view/common/guest_view_messages.h"
@@ -178,7 +179,7 @@ bool MimeHandlerViewContainer::OnMessage(const IPC::Message& message) {
 
 void MimeHandlerViewContainer::PluginDidFinishLoading() {
   DCHECK(!is_embedded_);
-  CreateMimeHandlerViewGuest();
+  CreateMimeHandlerViewGuestIfNecessary();
 }
 
 void MimeHandlerViewContainer::OnRenderFrameDestroyed() {
@@ -193,6 +194,14 @@ void MimeHandlerViewContainer::PluginDidReceiveData(const char* data,
 
 void MimeHandlerViewContainer::DidResizeElement(const gfx::Size& new_size) {
   element_size_ = new_size;
+
+  CreateMimeHandlerViewGuestIfNecessary();
+
+  // Don't try to resize a guest that hasn't been created yet. It is enough to
+  // initialise |element_size_| here and then we'll send that to the browser
+  // during guest creation.
+  if (!guest_created_)
+    return;
 
   render_frame()->Send(new ExtensionsGuestViewHostMsg_ResizeGuest(
       render_frame()->GetRoutingID(), element_instance_id(), new_size));
@@ -215,7 +224,7 @@ void MimeHandlerViewContainer::DidReceiveData(const char* data,
 
 void MimeHandlerViewContainer::DidFinishLoading(double /* unused */) {
   DCHECK(is_embedded_);
-  CreateMimeHandlerViewGuest();
+  CreateMimeHandlerViewGuestIfNecessary();
 }
 
 void MimeHandlerViewContainer::PostMessage(v8::Isolate* isolate,
@@ -307,7 +316,10 @@ void MimeHandlerViewContainer::OnMimeHandlerViewGuestOnLoadCompleted(
   pending_messages_.clear();
 }
 
-void MimeHandlerViewContainer::CreateMimeHandlerViewGuest() {
+void MimeHandlerViewContainer::CreateMimeHandlerViewGuestIfNecessary() {
+  if (guest_created_ || element_size_.IsEmpty() || view_id_.empty())
+    return;
+
   // The loader has completed loading |view_id_| so we can dispose it.
   if (loader_) {
     DCHECK(is_embedded_);
@@ -323,6 +335,8 @@ void MimeHandlerViewContainer::CreateMimeHandlerViewGuest() {
       new ExtensionsGuestViewHostMsg_CreateMimeHandlerViewGuest(
           render_frame()->GetRoutingID(), view_id_, element_instance_id(),
           element_size_));
+
+  guest_created_ = true;
 }
 
 }  // namespace extensions

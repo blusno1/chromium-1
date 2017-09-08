@@ -9,7 +9,6 @@ import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
-import android.text.TextPaint;
 import android.text.method.LinkMovementMethod;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -18,7 +17,6 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
@@ -73,7 +71,6 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     private boolean mClearOnNextQueryComplete;
     private boolean mPrivacyDisclaimersVisible;
     private boolean mClearBrowsingDataButtonVisible;
-    private long mNextQueryEndTime;
     private String mQueryText = EMPTY_QUERY;
 
     public HistoryAdapter(SelectionDelegate<HistoryItem> delegate, HistoryManager manager,
@@ -115,9 +112,8 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     public void initialize() {
         mIsInitialized = false;
         mIsLoadingItems = true;
-        mNextQueryEndTime = 0;
         mClearOnNextQueryComplete = true;
-        mHistoryProvider.queryHistory(mQueryText, mNextQueryEndTime);
+        mHistoryProvider.queryHistory(mQueryText);
     }
 
     @Override
@@ -143,7 +139,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mIsLoadingItems = true;
         addFooter();
         notifyDataSetChanged();
-        mHistoryProvider.queryHistory(mQueryText, mNextQueryEndTime);
+        mHistoryProvider.queryHistoryContinuation();
     }
 
     /**
@@ -159,10 +155,9 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
      */
     public void search(String query) {
         mQueryText = query;
-        mNextQueryEndTime = 0;
         mIsSearching = true;
         mClearOnNextQueryComplete = true;
-        mHistoryProvider.queryHistory(mQueryText, mNextQueryEndTime);
+        mHistoryProvider.queryHistory(mQueryText);
     }
 
     /**
@@ -267,9 +262,6 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
 
         mIsLoadingItems = false;
         mHasMorePotentialItems = hasMorePotentialMatches;
-        if (items.size() > 0) {
-            mNextQueryEndTime = items.get(items.size() - 1).getTimestamp();
-        }
     }
 
     @Override
@@ -350,13 +342,6 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
             @Override
             public void onClick(View view) {
                 mHistoryManager.openUrl(url, null, true);
-            }
-
-            @Override
-            public void updateDrawState(TextPaint textPaint) {
-                super.updateDrawState(textPaint);
-                textPaint.setColor(
-                        ApiCompatibilityUtils.getColor(resources, R.color.google_blue_700));
             }
         };
         return SpanApplier.applySpans(

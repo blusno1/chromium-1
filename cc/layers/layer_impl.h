@@ -125,10 +125,12 @@ class CC_EXPORT LayerImpl {
 
   LayerTreeImpl* layer_tree_impl() const { return layer_tree_impl_; }
 
-  void PopulateSharedQuadState(viz::SharedQuadState* state) const;
+  void PopulateSharedQuadState(viz::SharedQuadState* state,
+                               bool contents_opaque) const;
   void PopulateScaledSharedQuadState(viz::SharedQuadState* state,
                                      float layer_to_content_scale_x,
-                                     float layer_to_content_scale_y) const;
+                                     float layer_to_content_scale_y,
+                                     bool contents_opaque) const;
   // WillDraw must be called before AppendQuads. If WillDraw returns false,
   // AppendQuads and DidDraw will not be called. If WillDraw returns true,
   // DidDraw is guaranteed to be called before another WillDraw or before
@@ -142,7 +144,7 @@ class CC_EXPORT LayerImpl {
   virtual void DidDraw(ResourceProvider* resource_provider);
 
   // Verify that the resource ids in the quad are valid.
-  void ValidateQuadResources(DrawQuad* quad) const {
+  void ValidateQuadResources(viz::DrawQuad* quad) const {
 #if DCHECK_IS_ON()
     ValidateQuadResourcesInternal(quad);
 #endif
@@ -457,7 +459,7 @@ class CC_EXPORT LayerImpl {
   gfx::Rect GetScaledEnclosingRectInTargetSpace(float scale) const;
 
  private:
-  void ValidateQuadResourcesInternal(DrawQuad* quad) const;
+  void ValidateQuadResourcesInternal(viz::DrawQuad* quad) const;
 
   virtual const char* LayerTypeAsString() const;
 

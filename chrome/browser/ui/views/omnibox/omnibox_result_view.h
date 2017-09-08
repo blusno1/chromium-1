@@ -7,8 +7,6 @@
 
 #include <stddef.h>
 
-#include <vector>
-
 #include "base/macros.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/suggestion_answer.h"
@@ -24,6 +22,7 @@ class OmniboxPopupContentsView;
 
 namespace gfx {
 class Canvas;
+class Image;
 class RenderText;
 }
 
@@ -70,6 +69,8 @@ class OmniboxResultView : public views::View,
   gfx::Size CalculatePreferredSize() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
+  void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnMouseMoved(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
@@ -80,11 +81,8 @@ class OmniboxResultView : public views::View,
   // class, this is the height of one line of text.
   virtual int GetTextHeight() const;
 
-  // Returns the display width required for the match contents.
-  int GetMatchContentsWidth() const;
-
-  // Stores a custom icon as a local data member and schedules a repaint.
-  void SetCustomIcon(const gfx::ImageSkia& icon);
+  // Notification that the match icon has changed and schedules a repaint.
+  void OnMatchIconUpdated();
 
   // Stores the image in a local data member and schedules a repaint.
   void SetAnswerImage(const gfx::ImageSkia& image);
@@ -136,10 +134,9 @@ class OmniboxResultView : public views::View,
   // views::View:
   const char* GetClassName() const override;
 
-  gfx::ImageSkia GetIcon() const;
+  gfx::Image GetIcon() const;
 
-  // Utility function for creating vector icons.
-  gfx::ImageSkia GetVectorIcon(const gfx::VectorIcon& icon_id) const;
+  SkColor GetVectorIconColor() const;
 
   // Whether to render only the keyword match.  Returns true if |match_| has an
   // associated keyword match that has been animated so close to the start that
@@ -214,13 +211,11 @@ class OmniboxResultView : public views::View,
 
   std::unique_ptr<gfx::SlideAnimation> animation_;
 
-  gfx::ImageSkia custom_icon_;
-
   // If the answer has an icon, cache the image.
   gfx::ImageSkia answer_image_;
 
   // We preserve these RenderTexts so that we won't recreate them on every call
-  // to GetMatchContentsWidth() or OnPaint().
+  // to OnPaint().
   mutable std::unique_ptr<gfx::RenderText> contents_rendertext_;
   mutable std::unique_ptr<gfx::RenderText> description_rendertext_;
   mutable std::unique_ptr<gfx::RenderText> separator_rendertext_;

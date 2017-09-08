@@ -127,6 +127,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   gfx::Rect GetBoundsInRootWindow() override;
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
+  void DidStopFlinging() override;
   bool LockMouse() override;
   void UnlockMouse() override;
   viz::FrameSinkId GetFrameSinkId() override;
@@ -310,6 +311,10 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   std::unique_ptr<TouchSelectionControllerClientChildFrame>
       selection_controller_client_;
+
+  // Used to trigger a non-crashing stack dump when this class is destructed
+  // without calling Destroy() first.
+  bool destroy_was_called_;
 
   base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrame);

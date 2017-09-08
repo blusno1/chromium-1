@@ -36,11 +36,11 @@
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/IdTargetObserver.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/dom/SyncReattachContext.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/V0InsertionPoint.h"
@@ -323,17 +323,6 @@ void HTMLInputElement::UpdateFocusAppearance(
   }
 }
 
-void HTMLInputElement::BeginEditing() {
-  DCHECK(GetDocument().IsActive());
-  if (!GetDocument().IsActive())
-    return;
-
-  if (!IsTextField())
-    return;
-
-  GetDocument().GetFrame()->GetSpellChecker().DidBeginEditing(this);
-}
-
 void HTMLInputElement::EndEditing() {
   DCHECK(GetDocument().IsActive());
   if (!GetDocument().IsActive())
@@ -349,7 +338,6 @@ void HTMLInputElement::EndEditing() {
 
 void HTMLInputElement::HandleFocusEvent(Element* old_focused_element,
                                         WebFocusType type) {
-  input_type_view_->HandleFocusEvent(old_focused_element, type);
   input_type_->EnableSecureTextInput();
 }
 
@@ -423,6 +411,14 @@ void HTMLInputElement::UpdateType() {
   if (input_type_->SupportsReadOnly() != new_type->SupportsReadOnly()) {
     PseudoStateChanged(CSSSelector::kPseudoReadOnly);
     PseudoStateChanged(CSSSelector::kPseudoReadWrite);
+  }
+  if (input_type_->IsCheckable() != new_type->IsCheckable()) {
+    PseudoStateChanged(CSSSelector::kPseudoChecked);
+  }
+  PseudoStateChanged(CSSSelector::kPseudoIndeterminate);
+  if (input_type_->IsSteppable() || new_type->IsSteppable()) {
+    PseudoStateChanged(CSSSelector::kPseudoInRange);
+    PseudoStateChanged(CSSSelector::kPseudoOutOfRange);
   }
 
   bool placeholder_changed =

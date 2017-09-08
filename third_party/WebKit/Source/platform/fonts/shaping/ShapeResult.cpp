@@ -40,6 +40,31 @@
 
 namespace blink {
 
+unsigned ShapeResult::RunInfo::NextSafeToBreakOffset(unsigned offset) const {
+  DCHECK_LT(offset, num_characters_);
+  for (unsigned i = 0; i < safe_break_offsets_.size(); i++) {
+    if (safe_break_offsets_[i] >= offset)
+      return safe_break_offsets_[i];
+  }
+
+  // Next safe break is at the end of the run.
+  return num_characters_;
+}
+
+unsigned ShapeResult::RunInfo::PreviousSafeToBreakOffset(
+    unsigned offset) const {
+  if (offset >= num_characters_)
+    return num_characters_;
+
+  for (unsigned i = safe_break_offsets_.size(); i > 0; i--) {
+    if (safe_break_offsets_[i - 1] <= offset)
+      return safe_break_offsets_[i - 1];
+  }
+
+  // Next safe break is at the start of the run.
+  return 0;
+}
+
 float ShapeResult::RunInfo::XPositionForVisualOffset(
     unsigned offset,
     AdjustMidCluster adjust_mid_cluster) const {
@@ -205,6 +230,58 @@ unsigned ShapeResult::EndIndexForResult() const {
   return StartIndexForResult() + NumCharacters();
 }
 
+RefPtr<ShapeResult> ShapeResult::MutableUnique() const {
+  if (HasOneRef())
+    return const_cast<ShapeResult*>(this);
+  return ShapeResult::Create(*this);
+}
+
+unsigned ShapeResult::NextSafeToBreakOffset(unsigned absolute_offset) const {
+  if (!absolute_offset)
+    return StartIndexForResult();
+
+  // The absolute_offset argument represents the offset for the entire
+  // ShapeResult while offset is continuously updated to be relative to the
+  // current run.
+  unsigned offset = absolute_offset;
+  unsigned run_offset = 0;
+  for (const auto& run : runs_) {
+    if (!run)
+      continue;
+
+    unsigned num_characters = run->num_characters_;
+    if (offset < num_characters)
+      return run->NextSafeToBreakOffset(offset) + run_offset;
+
+    offset -= num_characters;
+    run_offset += num_characters;
+  }
+
+  return EndIndexForResult();
+}
+
+unsigned ShapeResult::PreviousSafeToBreakOffset(
+    unsigned absolute_offset) const {
+  if (absolute_offset >= NumCharacters())
+    return NumCharacters();
+
+  for (unsigned i = runs_.size(); i > 0; i--) {
+    const auto& run = runs_[i - 1];
+    if (!run)
+      continue;
+
+    unsigned run_start = run->start_index_;
+    unsigned run_end = run_start + run->num_characters_;
+    if (absolute_offset >= run_start && absolute_offset < run_end) {
+      unsigned start =
+          absolute_offset > run_start ? absolute_offset - run_start : 0;
+      return run->PreviousSafeToBreakOffset(start) + run_start;
+    }
+  }
+
+  return StartIndexForResult();
+}
+
 // If the position is outside of the result, returns the start or the end offset
 // depends on the position.
 unsigned ShapeResult::OffsetForPosition(float target_x,
@@ -255,7 +332,7 @@ float ShapeResult::PositionForOffset(unsigned absolute_offset) const {
   float x = 0;
   float offset_x = 0;
 
-  // The absoluteOffset argument represents the offset for the entire
+  // The absolute_offset argument represents the offset for the entire
   // ShapeResult while offset is continuously updated to be relative to the
   // current run.
   unsigned offset = absolute_offset;
@@ -305,15 +382,18 @@ void ShapeResult::FallbackFonts(
   }
 }
 
+// TODO(kojii): VC2015 fails to explicit instantiation of a member function.
+// Typed functions + this private function are to instantiate instances.
 template <typename TextContainerType>
-void ShapeResult::ApplySpacing(ShapeResultSpacing<TextContainerType>& spacing,
-                               const TextContainerType& text) {
-  float offset_x, offset_y;
-  float& offset = spacing.IsVerticalOffset() ? offset_y : offset_x;
+void ShapeResult::ApplySpacingImpl(
+    ShapeResultSpacing<TextContainerType>& spacing,
+    int text_start_offset) {
+  float offset = 0;
   float total_space = 0;
   for (auto& run : runs_) {
     if (!run)
       continue;
+    unsigned run_start_index = run->start_index_ + text_start_offset;
     float total_space_for_run = 0;
     for (size_t i = 0; i < run->glyph_data_.size(); i++) {
       HarfBuzzRunGlyphData& glyph_data = run->glyph_data_[i];
@@ -322,15 +402,25 @@ void ShapeResult::ApplySpacing(ShapeResultSpacing<TextContainerType>& spacing,
       if (i + 1 < run->glyph_data_.size() &&
           glyph_data.character_index ==
               run->glyph_data_[i + 1].character_index) {
-      } else {
-        offset_x = offset_y = 0;
-        float space = spacing.ComputeSpacing(
-            text, run->start_index_ + glyph_data.character_index, offset);
-        glyph_data.advance += space;
-        total_space_for_run += space;
-        glyph_data.offset.Expand(offset_x, offset_y);
+        continue;
       }
-      has_vertical_offsets_ |= (glyph_data.offset.Height() != 0);
+
+      float space = spacing.ComputeSpacing(
+          run_start_index + glyph_data.character_index, offset);
+      glyph_data.advance += space;
+      total_space_for_run += space;
+
+      // |offset| is non-zero only when justifying CJK characters that follow
+      // non-CJK characters.
+      if (UNLIKELY(offset)) {
+        if (run->IsHorizontal()) {
+          glyph_data.offset.SetWidth(glyph_data.offset.Width() + offset);
+        } else {
+          glyph_data.offset.SetHeight(glyph_data.offset.Height() + offset);
+          has_vertical_offsets_ = true;
+        }
+        offset = 0;
+      }
     }
     run->width_ += total_space_for_run;
     total_space += total_space_for_run;
@@ -340,21 +430,47 @@ void ShapeResult::ApplySpacing(ShapeResultSpacing<TextContainerType>& spacing,
   glyph_bounding_box_.SetWidth(glyph_bounding_box_.Width() + total_space);
 }
 
-void ShapeResult::ApplySpacing(ShapeResultSpacing<String>& spacing) {
-  ApplySpacing(spacing, spacing.Text());
+void ShapeResult::ApplySpacing(ShapeResultSpacing<String>& spacing,
+                               int text_start_offset) {
+  ApplySpacingImpl(spacing, text_start_offset);
 }
 
 PassRefPtr<ShapeResult> ShapeResult::ApplySpacingToCopy(
     ShapeResultSpacing<TextRun>& spacing,
     const TextRun& run) const {
+  unsigned index_of_sub_run = spacing.Text().IndexOfSubRun(run);
+  DCHECK_NE(std::numeric_limits<unsigned>::max(), index_of_sub_run);
   RefPtr<ShapeResult> result = ShapeResult::Create(*this);
-  result->ApplySpacing(spacing, run);
+  if (index_of_sub_run != std::numeric_limits<unsigned>::max())
+    result->ApplySpacingImpl(spacing, index_of_sub_run);
   return result;
 }
 
-static inline float HarfBuzzPositionToFloat(hb_position_t value) {
+namespace {
+
+float HarfBuzzPositionToFloat(hb_position_t value) {
   return static_cast<float>(value) / (1 << 16);
 }
+
+// Checks whether it's safe to break without reshaping before the given glyph.
+bool IsSafeToBreakBefore(const hb_glyph_info_t* glyph_infos,
+                         unsigned num_glyphs,
+                         unsigned i) {
+  // At the end of the run.
+  if (i == num_glyphs - 1)
+    return true;
+
+  // Not at a cluster boundary.
+  if (glyph_infos[i].cluster == glyph_infos[i + 1].cluster)
+    return false;
+
+  // The HB_GLYPH_FLAG_UNSAFE_TO_BREAK flag is set for all glyphs in a
+  // given cluster so we only need to check the last one.
+  hb_glyph_flags_t flags = hb_glyph_info_get_glyph_flags(glyph_infos + i);
+  return (flags & HB_GLYPH_FLAG_UNSAFE_TO_BREAK) == 0;
+}
+
+}  // anonymous namespace
 
 // Computes glyph positions, sets advance and offset of each glyph to RunInfo.
 //
@@ -406,8 +522,9 @@ void ShapeResult::ComputeGlyphPositions(ShapeResult::RunInfo* run,
     else
       advance = -HarfBuzzPositionToFloat(pos.y_advance);
 
-    run->glyph_data_[i].character_index =
+    uint16_t character_index =
         glyph_infos[start_glyph + i].cluster - start_cluster;
+    run->glyph_data_[i].character_index = character_index;
 
     run->SetGlyphAndPositions(i, glyph, advance, offset_x, offset_y);
     total_advance += advance;
@@ -428,6 +545,14 @@ void ShapeResult::ComputeGlyphPositions(ShapeResult::RunInfo* run,
       glyph_origin.SetX(glyph_origin.X() + advance);
     else
       glyph_origin.SetY(glyph_origin.Y() + advance);
+
+    // Check if it is safe to break without reshaping before the cluster.
+    if (IsSafeToBreakBefore(glyph_infos + start_glyph, num_glyphs, i)) {
+      if (run->Rtl())
+        run->safe_break_offsets_.push_front(character_index);
+      else
+        run->safe_break_offsets_.push_back(character_index);
+    }
   }
 
   run->width_ = std::max(0.0f, total_advance);
@@ -497,18 +622,21 @@ void ShapeResult::InsertRun(std::unique_ptr<ShapeResult::RunInfo> run_to_insert,
 void ShapeResult::CopyRange(unsigned start_offset,
                             unsigned end_offset,
                             ShapeResult* target) const {
+  if (!runs_.size())
+    return;
+
   unsigned index = target->num_characters_;
   float total_width = 0;
   for (const auto& run : runs_) {
-    unsigned run_start = (*run).start_index_;
-    unsigned run_end = run_start + (*run).num_characters_;
+    unsigned run_start = run->start_index_;
+    unsigned run_end = run_start + run->num_characters_;
 
     if (start_offset < run_end && end_offset > run_start) {
       unsigned start = start_offset > run_start ? start_offset - run_start : 0;
       unsigned end = std::min(end_offset, run_end) - run_start;
       DCHECK(end > start);
 
-      auto sub_run = (*run).CreateSubRun(start, end);
+      auto sub_run = run->CreateSubRun(start, end);
       sub_run->start_index_ = index;
       total_width += sub_run->width_;
       index += sub_run->num_characters_;
@@ -556,6 +684,9 @@ PassRefPtr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
     float advance = font->TabWidth(font_data, text_run.GetTabSize(), position);
     run->glyph_data_[i].character_index = i;
     run->SetGlyphAndPositions(i, font_data->SpaceGlyph(), advance, 0, 0);
+
+    // Assume it's safe to break after a tab character.
+    run->safe_break_offsets_.push_back(run->glyph_data_[i].character_index);
     position += advance;
   }
   run->width_ = position - start_position;

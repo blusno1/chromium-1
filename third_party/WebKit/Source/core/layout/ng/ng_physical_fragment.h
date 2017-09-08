@@ -54,6 +54,10 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
   ~NGPhysicalFragment();
 
   NGFragmentType Type() const { return static_cast<NGFragmentType>(type_); }
+  bool IsContainer() const {
+    return Type() == NGFragmentType::kFragmentBox ||
+           Type() == NGFragmentType::kFragmentLineBox;
+  }
   bool IsBox() const { return Type() == NGFragmentType::kFragmentBox; }
   bool IsText() const { return Type() == NGFragmentType::kFragmentText; }
   bool IsLineBox() const { return Type() == NGFragmentType::kFragmentLineBox; }
@@ -77,6 +81,7 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
 
   NGBreakToken* BreakToken() const { return break_token_.Get(); }
   const ComputedStyle& Style() const;
+  Node* GetNode() const;
 
   // GetLayoutObject should only be used when necessary for compatibility
   // with LegacyLayout.
@@ -87,10 +92,14 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
 
   // TODO(layout-dev): Implement when we have oveflow support.
   bool HasOverflowClip() const { return false; }
-  LayoutRect VisualRect() const {
-    return LayoutRect(LayoutPoint(), LayoutSize(Size().width, Size().height));
-  }
+  LayoutRect VisualRect() const { return visual_rect_; }
   LayoutRect VisualOverflowRect() const { return VisualRect(); }
+
+  // Update visual rect for this fragment.
+  // This is called not only after layout, but also after transform changes,
+  // because visual overflow may change due to font hinting.
+  // "const" because it only updates cached value that does not affect layout.
+  virtual void UpdateVisualRect() const;
 
   // Should only be used by the parent fragment's layout.
   void SetOffset(NGPhysicalOffset offset) {
@@ -104,6 +113,21 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
   RefPtr<NGPhysicalFragment> CloneWithoutOffset() const;
 
   String ToString() const;
+
+  enum DumpFlag {
+    DumpHeaderText = 0x1,
+    DumpSubtree = 0x2,
+    DumpIndentation = 0x4,
+    DumpType = 0x8,
+    DumpOffset = 0x10,
+    DumpSize = 0x20,
+    DumpOverflow = 0x40,
+    DumpTextOffsets = 0x80,
+    DumpAll = -1
+  };
+  typedef int DumpFlags;
+
+  String DumpFragmentTree(DumpFlags) const;
 
 #ifndef NDEBUG
   void ShowFragmentTree() const;
@@ -123,11 +147,15 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
                      NGFragmentType type,
                      RefPtr<NGBreakToken> break_token = nullptr);
 
+  // "const" because it only updates cached value that does not affect layout.
+  void SetVisualRect(const LayoutRect& rect) const { visual_rect_ = rect; }
+
   LayoutObject* layout_object_;
   RefPtr<const ComputedStyle> style_;
   NGPhysicalSize size_;
   NGPhysicalOffset offset_;
   RefPtr<NGBreakToken> break_token_;
+  mutable LayoutRect visual_rect_;
 
   unsigned type_ : 2;  // NGFragmentType
   unsigned is_placed_ : 1;

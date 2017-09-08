@@ -139,12 +139,16 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   // Show the multi-profile login UI to add another user to this session.
   void ShowMultiProfileLogin();
 
+  // Returns the PrefService used at the signin screen, which is tied to an
+  // incognito profile in chrome and is valid until the browser exits.
+  PrefService* GetSigninScreenPrefService() const;
+
   // Returns the PrefService for |account_id| or null if one does not exist.
   PrefService* GetUserPrefServiceForUser(const AccountId& account_id);
 
   // Returns the PrefService for the last active user that had one or null if no
-  // PrefService connection has been successfully established, for example,
-  // during login before the first user is active.
+  // PrefService connection has been successfully established. Returns the
+  // signin screen profile prefs when at the login screen.
   PrefService* GetLastActiveUserPrefService();
 
   void AddObserver(SessionObserver* observer);
@@ -173,6 +177,7 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   void ClearUserSessionsForTest();
   void FlushMojoForTest();
   void LockScreenAndFlushForTest();
+  void SetSigninScreenPrefServiceForTest(std::unique_ptr<PrefService> prefs);
   void ProvideUserPrefServiceForTest(const AccountId& account_id,
                                      std::unique_ptr<PrefService> pref_service);
 
@@ -193,6 +198,12 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   // when post lock animation finishes and ash is fully locked. It would then
   // run |start_lock_callback_| to indicate ash is locked successfully.
   void OnLockAnimationFinished();
+
+  // Connects over mojo to the PrefService for the signin screen profile.
+  void ConnectToSigninScreenPrefService();
+
+  void OnSigninScreenPrefServiceInitialized(
+      std::unique_ptr<PrefService> pref_service);
 
   void OnProfilePrefServiceInitialized(
       const AccountId& account_id,
@@ -246,6 +257,11 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   base::ObserverList<ash::SessionObserver> observers_;
 
   service_manager::Connector* const connector_;
+
+  // Prefs for the incognito profile used by the signin screen.
+  std::unique_ptr<PrefService> signin_screen_prefs_;
+
+  bool signin_screen_prefs_requested_ = false;
 
   std::map<AccountId, std::unique_ptr<PrefService>> per_user_prefs_;
   PrefService* last_active_user_prefs_ = nullptr;

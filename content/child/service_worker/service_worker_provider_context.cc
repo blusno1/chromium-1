@@ -8,11 +8,11 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/service_worker/service_worker_dispatcher.h"
-#include "content/child/service_worker/service_worker_event_dispatcher_holder.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
 #include "content/child/service_worker/service_worker_registration_handle_reference.h"
 #include "content/child/service_worker/service_worker_subresource_loader.h"
@@ -20,9 +20,12 @@
 #include "content/child/worker_thread_registry.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/child/child_url_loader_factory_getter.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_loader_factory.mojom.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace content {
 
@@ -43,7 +46,6 @@ struct ServiceWorkerProviderContext::ControlleeState {
 
   // S13nServiceWorker:
   // Used when we create |subresource_loader_factory|.
-  scoped_refptr<ServiceWorkerEventDispatcherHolder> event_dispatcher;
   scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter;
 
   // Tracks feature usage for UseCounter.
@@ -76,7 +78,8 @@ ServiceWorkerProviderContext::ServiceWorkerProviderContext(
     mojom::ServiceWorkerContainerHostAssociatedPtrInfo host_ptr_info,
     ServiceWorkerDispatcher* dispatcher,
     scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter)
-    : provider_id_(provider_id),
+    : provider_type_(provider_type),
+      provider_id_(provider_id),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       binding_(this, std::move(request)) {
   container_host_.Bind(std::move(host_ptr_info));
@@ -154,13 +157,21 @@ void ServiceWorkerProviderContext::SetController(
   state->used_features = used_features;
   if (event_dispatcher_ptr_info.is_valid()) {
     CHECK(ServiceWorkerUtils::IsServicificationEnabled());
-    state->event_dispatcher =
-        base::MakeRefCounted<ServiceWorkerEventDispatcherHolder>(
-            std::move(event_dispatcher_ptr_info));
+    mojom::ServiceWorkerEventDispatcherPtr event_dispatcher_ptr;
+    event_dispatcher_ptr.Bind(std::move(event_dispatcher_ptr_info));
+    auto event_dispatcher = base::MakeRefCounted<
+        base::RefCountedData<mojom::ServiceWorkerEventDispatcherPtr>>();
+    event_dispatcher->data = std::move(event_dispatcher_ptr);
+    storage::mojom::BlobRegistryPtr blob_registry_ptr;
+    ChildThreadImpl::current()->GetConnector()->BindInterface(
+        mojom::kBrowserServiceName, mojo::MakeRequest(&blob_registry_ptr));
+    auto blob_registry = base::MakeRefCounted<
+        base::RefCountedData<storage::mojom::BlobRegistryPtr>>();
+    blob_registry->data = std::move(blob_registry_ptr);
     mojo::MakeStrongBinding(
         base::MakeUnique<ServiceWorkerSubresourceLoaderFactory>(
-            state->event_dispatcher, state->default_loader_factory_getter,
-            state->controller->url().GetOrigin()),
+            std::move(event_dispatcher), state->default_loader_factory_getter,
+            state->controller->url().GetOrigin(), std::move(blob_registry)),
         mojo::MakeRequest(&state->subresource_loader_factory));
   }
 }
@@ -175,6 +186,12 @@ mojom::URLLoaderFactory*
 ServiceWorkerProviderContext::subresource_loader_factory() {
   DCHECK(controllee_state_);
   return controllee_state_->subresource_loader_factory.get();
+}
+
+mojom::ServiceWorkerContainerHost*
+ServiceWorkerProviderContext::container_host() const {
+  DCHECK_EQ(SERVICE_WORKER_PROVIDER_FOR_WINDOW, provider_type_);
+  return container_host_.get();
 }
 
 void ServiceWorkerProviderContext::CountFeature(uint32_t feature) {

@@ -19,6 +19,9 @@
 #include "ui/aura/window_targeter.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/path.h"
 
 namespace exo {
@@ -104,6 +107,8 @@ void SurfaceTreeHost::SetRootSurface(Surface* root_surface) {
     host_window_->SetBounds(
         gfx::Rect(host_window_->bounds().origin(), gfx::Size()));
     root_surface_->SetSurfaceDelegate(nullptr);
+    // Force recreating resources when the surface is added to a tree again.
+    root_surface_->SurfaceHierarchyResourcesLost();
     root_surface_ = nullptr;
 
     active_frame_callbacks_.splice(active_frame_callbacks_.end(),
@@ -192,7 +197,9 @@ void SurfaceTreeHost::UpdateNeedsBeginFrame() {
 // SurfaceDelegate overrides:
 
 void SurfaceTreeHost::OnSurfaceCommit() {
-  SubmitCompositorFrame(Surface::FRAME_TYPE_COMMIT);
+  root_surface_->CommitSurfaceHierarchy(gfx::Point(), &frame_callbacks_,
+                                        &presentation_callbacks_);
+  SubmitCompositorFrame();
 }
 
 void SurfaceTreeHost::OnSurfaceContentSizeChanged() {
@@ -264,11 +271,11 @@ void SurfaceTreeHost::OnUpdateVSyncParameters(base::TimeTicks timebase,
 void SurfaceTreeHost::OnLostResources() {
   if (!host_window_->GetSurfaceId().is_valid() || !root_surface_)
     return;
-  root_surface_->RecreateResources(layer_tree_frame_sink_holder_.get());
-  SubmitCompositorFrame(Surface::FRAME_TYPE_RECREATED_RESOURCES);
+  root_surface_->SurfaceHierarchyResourcesLost();
+  SubmitCompositorFrame();
 }
 
-void SurfaceTreeHost::SubmitCompositorFrame(Surface::FrameType frame_type) {
+void SurfaceTreeHost::SubmitCompositorFrame() {
   DCHECK(root_surface_);
   cc::CompositorFrame frame;
   // If we commit while we don't have an active BeginFrame, we acknowledge a
@@ -285,14 +292,19 @@ void SurfaceTreeHost::SubmitCompositorFrame(Surface::FrameType frame_type) {
   render_pass->SetNew(kRenderPassId, gfx::Rect(), gfx::Rect(),
                       gfx::Transform());
   frame.render_pass_list.push_back(std::move(render_pass));
-  root_surface_->CommitSurfaceHierarchy(
-      gfx::Point(), frame_type, layer_tree_frame_sink_holder_.get(), &frame,
-      &frame_callbacks_, &presentation_callbacks_);
+  float device_scale_factor = host_window()->layer()->device_scale_factor();
+  root_surface_->AppendSurfaceHierarchyContentsToFrame(
+      gfx::Point(), device_scale_factor, layer_tree_frame_sink_holder_.get(),
+      &frame);
+  // Surface uses DIP, but the |output_rect| uses pixels, so we need
+  // scale it beased on the |device_scale_factor|.
   frame.render_pass_list.back()->output_rect =
-      gfx::Rect(root_surface_->content_size());
+      gfx::Rect(gfx::ConvertSizeToPixel(device_scale_factor,
+                                        root_surface_->content_size()));
+
   host_window_->layer()->SetFillsBoundsOpaquely(
       root_surface_->FillsBoundsOpaquely());
-  frame.metadata.device_scale_factor = 1.0f;
+  frame.metadata.device_scale_factor = device_scale_factor;
   layer_tree_frame_sink_holder_->frame_sink()->SubmitCompositorFrame(
       std::move(frame));
 

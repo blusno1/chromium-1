@@ -15,8 +15,8 @@ set -u
 
 gen_spec() {
   rm -f "${SPEC}"
-  # Trunk packages need to install to a custom path so they don't conflict with
-  # release channel packages.
+  # Different channels need to install to different locations so they
+  # don't conflict with each other.
   local PACKAGE_FILENAME="${PACKAGE}-${CHANNEL}"
   if [ "$CHANNEL" != "stable" ]; then
     local INSTALLDIR="${INSTALLDIR}-${CHANNEL}"
@@ -59,8 +59,11 @@ verify_package() {
   local ADDITIONAL_RPM_DEPENDS="/bin/sh, \
   rpmlib(CompressedFileNames) <= 3.0.4-1, \
   rpmlib(PayloadFilesHavePrefix) <= 4.0-1, \
-  rpmlib(PayloadIsXz) <= 5.2-1, \
   /usr/sbin/update-alternatives"
+  if [ ${IS_OFFICIAL_BUILD} -ne 0 ]; then
+    ADDITIONAL_RPM_DEPENDS="${ADDITIONAL_RPM_DEPENDS}, \
+      rpmlib(PayloadIsXz) <= 5.2-1"
+  fi
   echo "${DEPENDS}" "${ADDITIONAL_RPM_DEPENDS}" | sed 's/,/\n/g' | \
       sed 's/^ *//' | LANG=C sort > expected_rpm_depends
   rpm -qpR "${OUTPUTDIR}/${PKGNAME}.${ARCHITECTURE}.rpm" | LANG=C sort | uniq \
@@ -179,9 +182,14 @@ do_package() {
   gen_spec
 
   # Create temporary rpmbuild dirs.
-  RPMBUILD_DIR=$(mktemp -d -t rpmbuild.XXXXXX) || exit 1
   mkdir -p "$RPMBUILD_DIR/BUILD"
   mkdir -p "$RPMBUILD_DIR/RPMS"
+
+  if [ ${IS_OFFICIAL_BUILD} -ne 0 ]; then
+    local COMPRESSION_OPT="_binary_payload w9.xzdio"
+  else
+    local COMPRESSION_OPT="_binary_payload w0.gzdio"
+  fi
 
   # '__os_install_post ${nil}' disables a bunch of automatic post-processing
   # (brp-compress, etc.), which by default appears to only be enabled on 32-bit,
@@ -189,7 +197,7 @@ do_package() {
   # compression, symbol stripping, etc. that we want.
   fakeroot rpmbuild -bb --target="$ARCHITECTURE" --rmspec \
     --define "_topdir $RPMBUILD_DIR" \
-    --define "_binary_payload w9.xzdio" \
+    --define "${COMPRESSION_OPT}" \
     --define "__os_install_post  %{nil}" \
     "${SPEC}"
   PKGNAME="${PACKAGE}-${CHANNEL}-${VERSION}-${PACKAGE_RELEASE}"
@@ -198,7 +206,6 @@ do_package() {
   # Make sure the package is world-readable, otherwise it causes problems when
   # copied to share drive.
   chmod a+r "${OUTPUTDIR}/${PKGNAME}.${ARCHITECTURE}.rpm"
-  rm -rf "$RPMBUILD_DIR"
 
   verify_package "$DEPENDS"
 }
@@ -207,17 +214,19 @@ do_package() {
 cleanup() {
   rm -rf "${STAGEDIR}"
   rm -rf "${TMPFILEDIR}"
+  rm -rf "${RPMBUILD_DIR}"
 }
 
 usage() {
-  echo "usage: $(basename $0) [-c channel] [-a target_arch] [-o 'dir']"
-  echo "                      [-b 'dir'] -d branding"
-  echo "-c channel the package channel (trunk, asan, unstable, beta, stable)"
-  echo "-a arch    package architecture (ia32 or x64)"
-  echo "-o dir     package output directory [${OUTPUTDIR}]"
-  echo "-b dir     build input directory    [${BUILDDIR}]"
-  echo "-d brand   either chromium or google_chrome"
-  echo "-h         this help message"
+  echo "usage: $(basename $0) [-a target_arch] [-b 'dir'] -c channel"
+  echo "                      -d branding [-f] [-o 'dir']"
+  echo "-a arch     package architecture (ia32 or x64)"
+  echo "-b dir      build input directory    [${BUILDDIR}]"
+  echo "-c channel  the package channel (unstable, beta, stable)"
+  echo "-d brand    either chromium or google_chrome"
+  echo "-f          indicates that this is an official build"
+  echo "-h          this help message"
+  echo "-o dir      package output directory [${OUTPUTDIR}]"
 }
 
 # Check that the channel name is one of the allowable ones.
@@ -238,15 +247,6 @@ verify_channel() {
       # TODO(phajdan.jr): Remove REPLACES completely.
       REPLACES="dummy"
       ;;
-    trunk|asan )
-      # This is a special package, mostly for development testing, so don't make
-      # it replace any installed release packages.
-      # TODO(phajdan.jr): Remove REPLACES completely.
-      REPLACES="dummy"
-      # Setting this to empty will prevent it from updating any existing configs
-      # from release packages.
-      REPOCONFIG=""
-      ;;
     * )
       echo
       echo "ERROR: '$CHANNEL' is not a valid channel type."
@@ -257,12 +257,11 @@ verify_channel() {
 }
 
 process_opts() {
-  while getopts ":o:b:c:a:d:h" OPTNAME
+  while getopts ":a:b:c:d:fho:" OPTNAME
   do
     case $OPTNAME in
-      o )
-        OUTPUTDIR=$(readlink -f "${OPTARG}")
-        mkdir -p "${OUTPUTDIR}"
+      a )
+        TARGETARCH="$OPTARG"
         ;;
       b )
         BUILDDIR=$(readlink -f "${OPTARG}")
@@ -271,15 +270,19 @@ process_opts() {
         CHANNEL="$OPTARG"
         verify_channel
         ;;
-      a )
-        TARGETARCH="$OPTARG"
-        ;;
       d )
         BRANDING="$OPTARG"
+        ;;
+      f )
+        IS_OFFICIAL_BUILD=1
         ;;
       h )
         usage
         exit 0
+        ;;
+      o )
+        OUTPUTDIR=$(readlink -f "${OPTARG}")
+        mkdir -p "${OUTPUTDIR}"
         ;;
       \: )
         echo "'-$OPTARG' needs an argument."
@@ -301,21 +304,26 @@ process_opts() {
 
 SCRIPTDIR=$(readlink -f "$(dirname "$0")")
 OUTPUTDIR="${PWD}"
-STAGEDIR=$(mktemp -d -t rpm.build.XXXXXX) || exit 1
-TMPFILEDIR=$(mktemp -d -t rpm.tmp.XXXXXX) || exit 1
-CHANNEL="trunk"
 # Default target architecture to same as build host.
 if [ "$(uname -m)" = "x86_64" ]; then
   TARGETARCH="x64"
 else
   TARGETARCH="ia32"
 fi
-SPEC="${TMPFILEDIR}/chrome.spec"
 
 # call cleanup() on exit
 trap cleanup 0
 process_opts "$@"
 BUILDDIR=${BUILDDIR:=$(readlink -f "${SCRIPTDIR}/../../../../out/Release")}
+IS_OFFICIAL_BUILD=${IS_OFFICIAL_BUILD:=0}
+
+STAGEDIR="${BUILDDIR}/rpm-staging-${CHANNEL}"
+mkdir -p "${STAGEDIR}"
+TMPFILEDIR="${BUILDDIR}/rpm-tmp-${CHANNEL}"
+mkdir -p "${TMPFILEDIR}"
+RPMBUILD_DIR="${BUILDDIR}/rpm-build-${CHANNEL}"
+mkdir -p "${RPMBUILD_DIR}"
+SPEC="${TMPFILEDIR}/chrome.spec"
 
 source ${BUILDDIR}/installer/common/installer.include
 

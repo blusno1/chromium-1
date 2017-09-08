@@ -89,8 +89,7 @@ class PLATFORM_EXPORT WebViewScheduler {
   };
 
   // Adds a VirtualTimeObserver instance to be notified when virtual time has
-  // been paused. Note the observer will fire in the microtask after the policy
-  // decision was made.
+  // been paused.
   virtual void AddVirtualTimeObserver(VirtualTimeObserver*) = 0;
   virtual void RemoveVirtualTimeObserver(VirtualTimeObserver*) = 0;
 

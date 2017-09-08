@@ -350,6 +350,28 @@ IN_PROC_BROWSER_TEST_F(LocalNTPVoiceJavascriptTest, MicrophoneTests) {
   EXPECT_TRUE(success);
 }
 
+IN_PROC_BROWSER_TEST_F(LocalNTPVoiceJavascriptTest, TextTests) {
+  content::WebContents* active_tab =
+      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  // Run the tests.
+  bool success = false;
+  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
+      active_tab, "!!runSimpleTests('text')", &success));
+  EXPECT_TRUE(success);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPVoiceJavascriptTest, ViewTests) {
+  content::WebContents* active_tab =
+      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  // Run the tests.
+  bool success = false;
+  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
+      active_tab, "!!runSimpleTests('view')", &success));
+  EXPECT_TRUE(success);
+}
+
 namespace {
 
 // Returns the RenderFrameHost corresponding to the most visited iframe in the

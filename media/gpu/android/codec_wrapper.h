@@ -16,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "media/base/android/media_codec_bridge.h"
+#include "media/base/decoder_buffer.h"
 #include "media/gpu/android/device_info.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/surface_texture_gl_owner.h"
@@ -86,33 +87,22 @@ class MEDIA_GPU_EXPORT CodecWrapper {
   // Whether an EOS has been dequeued but the codec hasn't been flushed yet.
   bool IsDrained() const;
 
-  // Whether there are any valid CodecOutputBuffers that have not been released.
-  bool HasValidCodecOutputBuffers() const;
+  // Whether there are any dequeued output buffers that have not been released.
+  bool HasUnreleasedOutputBuffers() const;
 
-  // Releases currently dequeued codec buffers back to the codec without
-  // rendering.
-  void DiscardCodecOutputBuffers();
+  // Releases all dequeued output buffers back to the codec without rendering.
+  void DiscardOutputBuffers();
 
   // Whether the codec supports Flush().
   bool SupportsFlush(DeviceInfo* device_info) const;
 
-  // See MediaCodecBridge documentation for the following.
+  // Flushes the codec and discards all output buffers.
   bool Flush();
-  MediaCodecStatus QueueInputBuffer(int index,
-                                    const uint8_t* data,
-                                    size_t data_size,
-                                    base::TimeDelta presentation_time);
-  MediaCodecStatus QueueSecureInputBuffer(
-      int index,
-      const uint8_t* data,
-      size_t data_size,
-      const std::string& key_id,
-      const std::string& iv,
-      const std::vector<SubsampleEntry>& subsamples,
-      const EncryptionScheme& encryption_scheme,
-      base::TimeDelta presentation_time);
-  void QueueEOS(int input_buffer_index);
-  MediaCodecStatus DequeueInputBuffer(int* index);
+
+  // Queues |buffer| if the codec has an available input buffer.
+  enum class QueueStatus { kOk, kError, kTryAgainLater, kNoKey };
+  QueueStatus QueueInputBuffer(const DecoderBuffer& buffer,
+                               const EncryptionScheme& encryption_scheme);
 
   // Like MediaCodecBridge::DequeueOutputBuffer() but it outputs a
   // CodecOutputBuffer instead of an index. |*codec_buffer| must be null.
@@ -121,14 +111,14 @@ class MEDIA_GPU_EXPORT CodecWrapper {
   // codec immediately. Unlike MediaCodecBridge, this does not return
   // MEDIA_CODEC_OUTPUT_BUFFERS_CHANGED or MEDIA_CODEC_OUTPUT_FORMAT_CHANGED. It
   // tries to dequeue another buffer instead.
-  MediaCodecStatus DequeueOutputBuffer(
+  enum class DequeueStatus { kOk, kError, kTryAgainLater };
+  DequeueStatus DequeueOutputBuffer(
       base::TimeDelta* presentation_time,
       bool* end_of_stream,
       std::unique_ptr<CodecOutputBuffer>* codec_buffer);
 
-  // Sets the given surface and returns MEDIA_CODEC_OK on success or
-  // MEDIA_CODEC_ERROR on failure.
-  MediaCodecStatus SetSurface(const base::android::JavaRef<jobject>& surface);
+  // Sets the given surface and returns true on success.
+  bool SetSurface(const base::android::JavaRef<jobject>& surface);
 
  private:
   scoped_refptr<CodecWrapperImpl> impl_;

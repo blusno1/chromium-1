@@ -24,17 +24,30 @@ void HighlighterControllerTestApi::SetEnabled(bool enabled) {
   instance_->SetEnabled(enabled);
 }
 
+void HighlighterControllerTestApi::DestroyPointerView() {
+  instance_->DestroyPointerView();
+}
+
+void HighlighterControllerTestApi::SimulateInterruptedStrokeTimeout() {
+  instance_->interrupted_stroke_timer_->Stop();
+  instance_->RecognizeGesture();
+}
+
 bool HighlighterControllerTestApi::IsShowingHighlighter() const {
   return instance_->highlighter_view_.get();
 }
 
 bool HighlighterControllerTestApi::IsFadingAway() const {
-  return IsShowingHighlighter() &&
-         instance_->highlighter_view_->animation_timer_.get();
+  return IsShowingHighlighter() && instance_->highlighter_view_->animating();
 }
 
 bool HighlighterControllerTestApi::IsShowingSelectionResult() const {
   return instance_->result_view_.get();
+}
+
+bool HighlighterControllerTestApi::IsWaitingToResumeStroke() const {
+  return instance_->interrupted_stroke_timer_ &&
+         instance_->interrupted_stroke_timer_->IsRunning();
 }
 
 const FastInkPoints& HighlighterControllerTestApi::points() const {

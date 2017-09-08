@@ -180,6 +180,10 @@ void ChromeNativeAppWindowViewsAuraAsh::OnBeforeWidgetInit(
   init_params->mus_properties
       [ui::mojom::WindowManager::kRemoveStandardFrame_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(init_params->remove_standard_frame);
+  init_params
+      ->mus_properties[ui::mojom::WindowManager::kShelfItemType_Property] =
+      mojo::ConvertTo<std::vector<uint8_t>>(
+          static_cast<int64_t>(ash::TYPE_APP));
 }
 
 void ChromeNativeAppWindowViewsAuraAsh::OnBeforePanelWidgetInit(
@@ -194,6 +198,10 @@ void ChromeNativeAppWindowViewsAuraAsh::OnBeforePanelWidgetInit(
     wm::ConvertRectToScreen(ash::Shell::GetRootWindowForNewWindows(),
                             &init_params->bounds);
   }
+  init_params
+      ->mus_properties[ui::mojom::WindowManager::kShelfItemType_Property] =
+      mojo::ConvertTo<std::vector<uint8_t>>(
+          static_cast<int64_t>(ash::TYPE_APP_PANEL));
 }
 
 views::NonClientFrameView*
@@ -225,25 +233,29 @@ ChromeNativeAppWindowViewsAuraAsh::GetRestoredState() const {
   ui::WindowShowState restore_state = widget()->GetNativeWindow()->GetProperty(
       aura::client::kPreMinimizedShowStateKey);
 
+  bool is_fullscreen = false;
   if (widget()->GetNativeWindow()->GetProperty(
           ash::kRestoreBoundsOverrideKey)) {
-    // If an override is given, we use that restore state (after filtering).
+    // If an override is given, use that restore state, unless the window is in
+    // immersive fullscreen.
     restore_state = widget()->GetNativeWindow()->GetProperty(
         ash::kRestoreShowStateOverrideKey);
+    is_fullscreen = restore_state == ui::SHOW_STATE_FULLSCREEN;
   } else {
-    // Otherwise first normal states are checked.
     if (IsMaximized())
       return ui::SHOW_STATE_MAXIMIZED;
-    if (IsFullscreen()) {
-      if (immersive_fullscreen_controller_.get() &&
-          immersive_fullscreen_controller_->IsEnabled()) {
-        // Restore windows which were previously in immersive fullscreen to
-        // maximized. Restoring the window to a different fullscreen type
-        // makes for a bad experience.
-        return ui::SHOW_STATE_MAXIMIZED;
-      }
-      return ui::SHOW_STATE_FULLSCREEN;
+    is_fullscreen = IsFullscreen();
+  }
+
+  if (is_fullscreen) {
+    if (immersive_fullscreen_controller_.get() &&
+        immersive_fullscreen_controller_->IsEnabled()) {
+      // Restore windows which were previously in immersive fullscreen to
+      // maximized. Restoring the window to a different fullscreen type
+      // makes for a bad experience.
+      return ui::SHOW_STATE_MAXIMIZED;
     }
+    return ui::SHOW_STATE_FULLSCREEN;
   }
 
   return GetRestorableState(restore_state);

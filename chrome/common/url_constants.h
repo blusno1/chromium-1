@@ -84,6 +84,7 @@ extern const char kChromeUISiteEngagementHost[];
 extern const char kChromeUISuggestionsURL[];
 extern const char kChromeUISupervisedUserPassphrasePageURL[];
 extern const char kChromeUISyncConfirmationURL[];
+extern const char kChromeUISysInternalsURL[];
 extern const char kChromeUITermsURL[];
 extern const char kChromeUIThemeURL[];
 extern const char kChromeUIThumbnailURL[];
@@ -217,7 +218,6 @@ extern const char kChromeUIPolicyHost[];
 extern const char kChromeUIPrefsInternalsHost[];
 extern const char kChromeUIMdUserManagerHost[];
 extern const char kChromeUIPredictorsHost[];
-extern const char kChromeUIProfilerHost[];
 extern const char kChromeUIQuotaInternalsHost[];
 extern const char kChromeUIQuitHost[];
 extern const char kChromeUIRestartHost[];
@@ -234,6 +234,7 @@ extern const char kChromeUISyncHost[];
 extern const char kChromeUISyncFileSystemInternalsHost[];
 extern const char kChromeUISyncInternalsHost[];
 extern const char kChromeUISyncResourcesHost[];
+extern const char kChromeUISysInternalsHost[];
 extern const char kChromeUISystemInfoHost[];
 extern const char kChromeUITaskSchedulerInternalsHost[];
 extern const char kChromeUITermsHost[];
@@ -254,10 +255,6 @@ extern const char kChromeUIWorkersHost[];
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 extern const char kChromeUIPrintHost[];
 #endif  // ENABLE_PRINT_PREVIEW
-
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-extern const char kChromeUISigninDiceInternalsHost[];
-#endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
 extern const char kChromeUIDiscardsHost[];
@@ -529,9 +526,6 @@ extern const char kNotificationsHelpURL[];
 // The URL for the Learn More link in the Chrome Cleanup settings card.
 extern const char kChromeCleanerLearnMoreURL[];
 #endif
-
-// The Welcome Notification More Info URL.
-extern const char kNotificationWelcomeLearnMoreURL[];
 
 // Gets the hosts/domains that are shown in chrome://chrome-urls.
 extern const char* const kChromeHostURLs[];

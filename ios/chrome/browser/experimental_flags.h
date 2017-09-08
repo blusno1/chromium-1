@@ -39,9 +39,6 @@ std::string GetOriginServerHost();
 // If |WHATS_NEW_DEFAULT| is returned, no promo is force enabled.
 WhatsNewPromoStatus GetWhatsNewPromoStatus();
 
-// Whether auto-reload is enabled.
-bool IsAutoReloadEnabled();
-
 // Whether the lru snapshot cache experiment is enabled.
 bool IsLRUSnapshotCacheEnabled();
 
@@ -60,9 +57,6 @@ bool IsPasswordGenerationEnabled();
 // Whether the Physical Web feature is enabled.
 bool IsPhysicalWebEnabled();
 
-// Whether the Sign In Flow via SFSafariViewController is enabled.
-bool IsSafariVCSignInEnabled();
-
 // Whether startup crash is enabled.
 bool IsStartupCrashEnabled();
 
@@ -71,9 +65,6 @@ bool IsViewCopyPasswordsEnabled();
 
 // Whether the Suggestions UI is enabled.
 bool IsSuggestionsUIEnabled();
-
-// Whether Sign-in promo is enabled.
-bool IsSigninPromoEnabled();
 
 // Whether a new version of FeedbackKit is the preferred feedback UI provider.
 bool IsNewFeedbackKitEnabled();

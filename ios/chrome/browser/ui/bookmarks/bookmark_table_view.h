@@ -48,9 +48,20 @@ class PrefRegistrySyncable;
 // Dismisses the promo.
 - (void)bookmarkTableViewDismissPromo:(BookmarkTableView*)view;
 
+// Tells the delegate that nodes were selected in edit mode.
+- (void)bookmarkTableView:(BookmarkTableView*)view
+        selectedEditNodes:
+            (const std::set<const bookmarks::BookmarkNode*>&)nodes;
+
+// Tells the delegate to show context menu for the given |node|.
+- (void)bookmarkTableView:(BookmarkTableView*)view
+    showContextMenuForNode:(const bookmarks::BookmarkNode*)node;
+
 @end
 
 @interface BookmarkTableView : UIView
+// If the table is in edit mode.
+@property(nonatomic, assign) BOOL editing;
 
 // Shows all sub-folders and sub-urls of a folder node (that is set as the root
 // node) in a UITableView. Note: This class intentionally does not try to
@@ -73,6 +84,12 @@ class PrefRegistrySyncable;
 
 // Called when something outside the view causes the promo state to change.
 - (void)promoStateChangedAnimated:(BOOL)animated;
+
+// Called when adding a new folder
+- (void)addNewFolder;
+
+// Returns the currently selected edit nodes.
+- (const std::set<const bookmarks::BookmarkNode*>&)editNodes;
 
 @end
 

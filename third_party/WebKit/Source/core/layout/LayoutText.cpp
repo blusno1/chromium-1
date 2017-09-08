@@ -1557,10 +1557,13 @@ UChar LayoutText::PreviousCharacter() const {
   return prev;
 }
 
-void LayoutText::AddLayerHitTestRects(LayerHitTestRects&,
-                                      const PaintLayer* current_layer,
-                                      const LayoutPoint& layer_offset,
-                                      const LayoutRect& container_rect) const {
+void LayoutText::AddLayerHitTestRects(
+    LayerHitTestRects&,
+    const PaintLayer* current_layer,
+    const LayoutPoint& layer_offset,
+    TouchAction supported_fast_actions,
+    const LayoutRect& container_rect,
+    TouchAction container_whitelisted_touch_action) const {
   // Text nodes aren't event targets, so don't descend any further.
 }
 
@@ -1859,10 +1862,7 @@ LayoutRect LayoutText::VisualOverflowRect() const {
   return rect;
 }
 
-LayoutRect LayoutText::LocalVisualRect() const {
-  if (Style()->Visibility() != EVisibility::kVisible)
-    return LayoutRect();
-
+LayoutRect LayoutText::LocalVisualRectIgnoringVisibility() const {
   return UnionRect(VisualOverflowRect(), LocalSelectionRect());
 }
 
@@ -1885,15 +1885,17 @@ LayoutRect LayoutText::LocalSelectionRect() const {
   } else {
     const FrameSelection& frame_selection = GetFrame()->Selection();
     if (GetSelectionState() == SelectionState::kStart) {
-      start_pos = frame_selection.LayoutSelectionStart().value();
+      // TODO(yoichio): value_or is used to prevent use uininitialized value
+      // on release. It should be value() after LayoutSelection brushup.
+      start_pos = frame_selection.LayoutSelectionStart().value_or(0);
       end_pos = TextLength();
     } else if (GetSelectionState() == SelectionState::kEnd) {
       start_pos = 0;
-      end_pos = frame_selection.LayoutSelectionEnd().value();
+      end_pos = frame_selection.LayoutSelectionEnd().value_or(0);
     } else {
       DCHECK(GetSelectionState() == SelectionState::kStartAndEnd);
-      start_pos = frame_selection.LayoutSelectionStart().value();
-      end_pos = frame_selection.LayoutSelectionEnd().value();
+      start_pos = frame_selection.LayoutSelectionStart().value_or(0);
+      end_pos = frame_selection.LayoutSelectionEnd().value_or(0);
     }
   }
 

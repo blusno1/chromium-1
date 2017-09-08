@@ -35,6 +35,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/layer.h"
@@ -1551,6 +1552,14 @@ void ShelfView::OnGestureEvent(ui::GestureEvent* event) {
     event->StopPropagation();
 }
 
+bool ShelfView::OnMouseWheel(const ui::MouseWheelEvent& event) {
+  if (!app_list::features::IsFullscreenAppListEnabled())
+    return false;
+
+  shelf_->ProcessMouseWheelEvent(event);
+  return true;
+}
+
 void ShelfView::ShelfItemAdded(int model_index) {
   {
     base::AutoReset<bool> cancelling_drag(&cancelling_drag_model_changed_,
@@ -1777,9 +1786,9 @@ void ShelfView::ShowContextMenuForView(views::View* source,
 
   // Get any custom entries; show the context menu in AfterGetContextMenuItems.
   model_->GetShelfItemDelegate(item->id)->GetContextMenuItems(
-      display_id,
-      base::Bind(&ShelfView::AfterGetContextMenuItems,
-                 weak_factory_.GetWeakPtr(), item->id, point, source_type));
+      display_id, base::Bind(&ShelfView::AfterGetContextMenuItems,
+                             weak_factory_.GetWeakPtr(), item->id,
+                             context_menu_point, source_type));
 }
 
 void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,

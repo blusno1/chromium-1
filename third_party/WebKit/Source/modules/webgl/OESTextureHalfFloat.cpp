@@ -31,6 +31,7 @@ OESTextureHalfFloat::OESTextureHalfFloat(WebGLRenderingContextBase* context)
     : WebGLExtension(context) {
   context->ExtensionsUtil()->EnsureExtensionEnabled(
       "GL_OES_texture_half_float");
+  // GL_EXT_color_buffer_half_float is always enabled if available.
 }
 
 WebGLExtensionName OESTextureHalfFloat::GetName() const {

@@ -69,7 +69,8 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
   AddLocalizedString(source, "menuEdit", IDS_EDIT);
   AddLocalizedString(source, "menuExport", IDS_MD_BOOKMARK_MANAGER_MENU_EXPORT);
   AddLocalizedString(source, "menuImport", IDS_MD_BOOKMARK_MANAGER_MENU_IMPORT);
-  AddLocalizedString(source, "menuOpenAllNewTab", IDS_BOOKMARK_BAR_OPEN_ALL);
+  AddLocalizedString(source, "menuOpenAllNewTab",
+                     IDS_MD_BOOKMARK_MANAGER_MENU_OPEN_ALL);
   AddLocalizedString(source, "menuOpenAllNewWindow",
                      IDS_MD_BOOKMARK_MANAGER_MENU_OPEN_ALL_NEW_WINDOW);
   AddLocalizedString(source, "menuOpenAllIncognito",
@@ -206,6 +207,8 @@ MdBookmarksUI::MdBookmarksUI(content::WebUI* web_ui) : WebUIController(web_ui) {
                                 CreateMdBookmarksUIHTMLSource(profile));
 
   auto plural_string_handler = base::MakeUnique<PluralStringHandler>();
+  plural_string_handler->AddLocalizedString(
+      "listChanged", IDS_MD_BOOKMARK_MANAGER_FOLDER_LIST_CHANGED);
   plural_string_handler->AddLocalizedString(
       "toastItemsDeleted", IDS_MD_BOOKMARK_MANAGER_TOAST_ITEMS_DELETED);
   plural_string_handler->AddLocalizedString(

@@ -9,10 +9,10 @@
 
 #include "build/build_config.h"
 #include "core/HTMLNames.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/Settings.h"
 #include "core/geometry/DOMRect.h"
@@ -1056,6 +1056,39 @@ TEST_F(MediaControlsImplTest,
     EXPECT_TRUE(remote_playback->HasEventListeners());
     EXPECT_TRUE(HasAvailabilityCallbacks(remote_playback));
   }
+}
+
+TEST_F(MediaControlsImplTest, InitialInfinityDurationHidesDurationField) {
+  EnsureSizing();
+
+  LoadMediaWithDuration(std::numeric_limits<double>::infinity());
+
+  MediaControlRemainingTimeDisplayElement* duration_display =
+      GetRemainingTimeDisplayElement();
+
+  EXPECT_FALSE(duration_display->IsWanted());
+  EXPECT_EQ(std::numeric_limits<double>::infinity(),
+            duration_display->CurrentValue());
+}
+
+TEST_F(MediaControlsImplTest, InfinityDurationChangeHidesDurationField) {
+  EnsureSizing();
+
+  LoadMediaWithDuration(42);
+
+  MediaControlRemainingTimeDisplayElement* duration_display =
+      GetRemainingTimeDisplayElement();
+
+  EXPECT_TRUE(duration_display->IsWanted());
+  EXPECT_EQ(42, duration_display->CurrentValue());
+
+  MediaControls().MediaElement().DurationChanged(
+      std::numeric_limits<double>::infinity(), false /* request_seek */);
+  testing::RunPendingTasks();
+
+  EXPECT_FALSE(duration_display->IsWanted());
+  EXPECT_EQ(std::numeric_limits<double>::infinity(),
+            duration_display->CurrentValue());
 }
 
 }  // namespace blink

@@ -10,8 +10,9 @@
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -81,51 +82,21 @@ BrowserInstantController::BrowserInstantController(Browser* browser)
       instant_(this) {
   browser_->search_model()->AddObserver(this);
 
-  InstantService* instant_service =
-      InstantServiceFactory::GetForProfile(profile());
-  instant_service->AddObserver(this);
+  TemplateURLService* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(profile());
+  // TemplateURLService can be null in tests.
+  if (template_url_service) {
+    search_engine_base_url_tracker_ =
+        base::MakeUnique<SearchEngineBaseURLTracker>(
+            template_url_service,
+            base::MakeUnique<UIThreadSearchTermsData>(profile()),
+            base::Bind(&BrowserInstantController::OnSearchEngineBaseURLChanged,
+                       base::Unretained(this)));
+  }
 }
 
 BrowserInstantController::~BrowserInstantController() {
   browser_->search_model()->RemoveObserver(this);
-
-  InstantService* instant_service =
-      InstantServiceFactory::GetForProfile(profile());
-  instant_service->RemoveObserver(this);
-}
-
-void BrowserInstantController::OpenInstant(WindowOpenDisposition disposition,
-                                           const GURL& url) {
-  // Unsupported dispositions.
-  if (disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
-      disposition == WindowOpenDisposition::NEW_WINDOW ||
-      disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB) {
-    return;
-  }
-
-  // The omnibox currently doesn't use other dispositions, so we don't attempt
-  // to handle them. If you hit this DCHECK file a bug and I'll (sky) add
-  // support for the new disposition.
-  DCHECK(disposition == WindowOpenDisposition::CURRENT_TAB)
-      << static_cast<int>(disposition);
-
-  const base::string16& search_terms =
-      search::ExtractSearchTermsFromURL(profile(), url);
-  if (search_terms.empty())
-    return;
-
-  InstantSearchPrerenderer* prerenderer =
-      InstantSearchPrerenderer::GetForProfile(profile());
-  if (!prerenderer)
-    return;
-
-  if (prerenderer->CanCommitQuery(GetActiveWebContents(), search_terms)) {
-    // Submit query to render the prefetched results. Browser will swap the
-    // prerendered contents with the active tab contents.
-    prerenderer->Commit(EmbeddedSearchRequestParams(url));
-  } else {
-    prerenderer->Cancel();
-  }
 }
 
 Profile* BrowserInstantController::profile() const {
@@ -140,20 +111,13 @@ void BrowserInstantController::ActiveTabChanged() {
   instant_.ActiveTabChanged();
 }
 
-void BrowserInstantController::TabDeactivated(content::WebContents* contents) {
-  InstantSearchPrerenderer* prerenderer =
-      InstantSearchPrerenderer::GetForProfile(profile());
-  if (prerenderer)
-    prerenderer->Cancel();
-}
-
 void BrowserInstantController::ModelChanged(SearchModel::Origin old_origin,
                                             SearchModel::Origin new_origin) {
   instant_.SearchModeChanged(old_origin, new_origin);
 }
 
-void BrowserInstantController::DefaultSearchProviderChanged(
-    bool google_base_url_domain_changed) {
+void BrowserInstantController::OnSearchEngineBaseURLChanged(
+    SearchEngineBaseURLTracker::ChangeReason change_reason) {
   InstantService* instant_service =
       InstantServiceFactory::GetForProfile(profile());
   if (!instant_service)
@@ -173,6 +137,9 @@ void BrowserInstantController::DefaultSearchProviderChanged(
     if (!instant_service->IsInstantProcess(rph->GetID()))
       continue;
 
+    bool google_base_url_domain_changed =
+        change_reason ==
+        SearchEngineBaseURLTracker::ChangeReason::GOOGLE_BASE_URL;
     SearchModel* model = SearchTabHelper::FromWebContents(contents)->model();
     if (google_base_url_domain_changed &&
         model->origin() == SearchModel::Origin::NTP) {

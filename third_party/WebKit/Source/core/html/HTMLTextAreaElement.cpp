@@ -29,15 +29,14 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/dom/Text.h"
 #include "core/dom/events/Event.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/iterators/TextIterator.h"
-#include "core/editing/spellcheck/SpellChecker.h"
 #include "core/events/BeforeTextInsertedEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
@@ -267,11 +266,6 @@ void HTMLTextAreaElement::DefaultEventHandler(Event* event) {
     HandleBeforeTextInsertedEvent(static_cast<BeforeTextInsertedEvent*>(event));
 
   TextControlElement::DefaultEventHandler(event);
-}
-
-void HTMLTextAreaElement::HandleFocusEvent(Element*, WebFocusType) {
-  if (LocalFrame* frame = GetDocument().GetFrame())
-    frame->GetSpellChecker().DidBeginEditing(this);
 }
 
 void HTMLTextAreaElement::SubtreeHasChanged() {

@@ -5,6 +5,7 @@
 #ifndef CONTENT_CHILD_SERVICE_WORKER_SERVICE_WORKER_SUBRESOURCE_LOADER_H_
 #define CONTENT_CHILD_SERVICE_WORKER_SERVICE_WORKER_SUBRESOURCE_LOADER_H_
 
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -13,12 +14,11 @@
 #include "content/public/common/url_loader_factory.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "storage/public/interfaces/blobs.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_stream_handle.mojom.h"
 
 namespace content {
 
-struct ServiceWorkerFetchRequest;
-class ServiceWorkerEventDispatcherHolder;
 class ChildURLLoaderFactoryGetter;
 
 // S13nServiceWorker:
@@ -41,9 +41,13 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
       const ResourceRequest& resource_request,
       mojom::URLLoaderClientPtr client,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-      scoped_refptr<ServiceWorkerEventDispatcherHolder> event_dispatcher,
+      scoped_refptr<
+          base::RefCountedData<mojom::ServiceWorkerEventDispatcherPtr>>
+          event_dispatcher,
       scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter,
-      const GURL& controller_origin);
+      const GURL& controller_origin,
+      scoped_refptr<base::RefCountedData<storage::mojom::BlobRegistryPtr>>
+          blob_registry);
 
   ~ServiceWorkerSubresourceLoader() override;
 
@@ -51,8 +55,6 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   void DeleteSoon();
 
   void StartRequest(const ResourceRequest& resource_request);
-  std::unique_ptr<ServiceWorkerFetchRequest> CreateFetchRequest(
-      const ResourceRequest& request);
   void OnFetchEventFinished(ServiceWorkerStatusCode status,
                             base::Time dispatch_event_time);
 
@@ -77,14 +79,7 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   void SetPriority(net::RequestPriority priority,
                    int intra_priority_value) override;
 
-  // Populates |response_head_| (except for headers) with given |response|.
-  void SaveResponseInfo(const ServiceWorkerResponse& response);
-  // Generates and populates |response_head_.headers|.
-  void SaveResponseHeaders(int status_code,
-                           const std::string& status_text,
-                           const ServiceWorkerHeaderMap& headers);
   // Calls url_loader_client_->OnReceiveResponse() with |response_head_|.
-  // Expected to be called after saving response info/headers.
   void CommitResponseHeaders();
   // Calls url_loader_client_->OnComplete(). Expected to be called after
   // CommitResponseHeaders (i.e. status_ == kSentHeader).
@@ -118,7 +113,8 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   // For handling FetchEvent response.
   mojo::Binding<ServiceWorkerFetchResponseCallback> response_callback_binding_;
 
-  scoped_refptr<ServiceWorkerEventDispatcherHolder> event_dispatcher_;
+  scoped_refptr<base::RefCountedData<mojom::ServiceWorkerEventDispatcherPtr>>
+      event_dispatcher_;
 
   // These are given by the constructor (as the params for
   // URLLoaderFactory::CreateLoaderAndStart).
@@ -129,10 +125,12 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
 
   // To load a blob.
-  GURL blob_url_;
+  storage::mojom::BlobURLHandlePtr blob_url_handle_;
   GURL controller_origin_;
   mojom::URLLoaderPtr blob_loader_;
   mojo::Binding<mojom::URLLoaderClient> blob_client_binding_;
+  scoped_refptr<base::RefCountedData<storage::mojom::BlobRegistryPtr>>
+      blob_registry_;
 
   // For Blob loading and network fallback loading.
   scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter_;
@@ -165,9 +163,12 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoaderFactory
   // network fallback. |controller_origin| is used to create a new Blob public
   // URL (this will become unnecessary once we switch over to MojoBlobs).
   ServiceWorkerSubresourceLoaderFactory(
-      scoped_refptr<ServiceWorkerEventDispatcherHolder> event_dispatcher,
+      scoped_refptr<base::RefCountedData<
+          mojom::ServiceWorkerEventDispatcherPtr>> event_dispatcher,
       scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter,
-      const GURL& controller_origin);
+      const GURL& controller_origin,
+      scoped_refptr<base::RefCountedData<storage::mojom::BlobRegistryPtr>>
+          blob_registry);
 
   ~ServiceWorkerSubresourceLoaderFactory() override;
 
@@ -183,13 +184,17 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoaderFactory
   void Clone(mojom::URLLoaderFactoryRequest request) override;
 
  private:
-  scoped_refptr<ServiceWorkerEventDispatcherHolder> event_dispatcher_;
+  scoped_refptr<base::RefCountedData<mojom::ServiceWorkerEventDispatcherPtr>>
+      event_dispatcher_;
 
   // Contains a set of default loader factories for the associated loading
   // context. Used to load a blob, and for network fallback.
   scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter_;
 
   GURL controller_origin_;
+
+  scoped_refptr<base::RefCountedData<storage::mojom::BlobRegistryPtr>>
+      blob_registry_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerSubresourceLoaderFactory);
 };

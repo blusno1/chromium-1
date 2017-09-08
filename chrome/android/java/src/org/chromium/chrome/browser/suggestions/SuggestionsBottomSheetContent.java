@@ -6,17 +6,17 @@ package org.chromium.chrome.browser.suggestions;
 
 import android.annotation.SuppressLint;
 import android.content.res.Resources;
+import android.graphics.Rect;
 import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.OnScrollListener;
-import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.Callback;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -27,25 +27,22 @@ import org.chromium.chrome.browser.ntp.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.ntp.LogoDelegateImpl;
 import org.chromium.chrome.browser.ntp.LogoView;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
-import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.FadingShadow;
 import org.chromium.chrome.browser.widget.FadingShadowView;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContentController;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetNewTabController;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
-import org.chromium.ui.widget.Toast;
-
-import java.util.List;
-import java.util.Locale;
 
 /**
  * Provides content to be displayed inside of the Home tab of bottom sheet.
@@ -64,7 +61,7 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
     private final BottomSheet mSheet;
     private final LogoView mLogoView;
     private final LogoDelegateImpl mLogoDelegate;
-    private final View mToolbarView;
+    private final ViewGroup mToolbarView;
 
     private boolean mNewTabShown;
     private boolean mSearchProviderHasLogo = true;
@@ -119,7 +116,7 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
 
         mSuggestionsCarousel =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SUGGESTIONS_CAROUSEL)
-                ? new SuggestionsCarousel(uiConfig, mSuggestionsUiDelegate)
+                ? new SuggestionsCarousel(uiConfig, mSuggestionsUiDelegate, mContextMenuManager)
                 : null;
 
         final NewTabPageAdapter adapter = new NewTabPageAdapter(mSuggestionsUiDelegate,
@@ -160,13 +157,13 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
                     SuggestionsMetrics.recordSurfaceFullyVisible();
                     mRecyclerView.setScrollEnabled(true);
                 }
-                updateLogoTransition();
             }
 
             @Override
             public void onSheetClosed() {
                 super.onSheetClosed();
                 mRecyclerView.setAdapter(null);
+                updateLogoTransition();
             }
 
             @Override
@@ -193,7 +190,7 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         });
 
         mLogoView = mView.findViewById(R.id.search_provider_logo);
-        mToolbarView = activity.findViewById(R.id.control_container);
+        mToolbarView = (ViewGroup) activity.findViewById(R.id.toolbar);
         mLogoDelegate = new LogoDelegateImpl(navigationDelegate, mLogoView, profile);
         updateSearchProviderHasLogo();
         if (mSearchProviderHasLogo) {
@@ -289,29 +286,10 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         if (mSuggestionsCarousel == null) return;
         assert ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SUGGESTIONS_CAROUSEL);
 
-        if (mSheet.getActiveTab() == null) {
-            mSuggestionsCarousel.clearSuggestions();
-            return;
-        }
+        Tab activeTab = mSheet.getActiveTab();
+        final String currentUrl = activeTab == null ? null : activeTab.getUrl();
 
-        final String url = mSheet.getActiveTab().getUrl();
-
-        // Do nothing if there are already suggestions in the carousel for the current context.
-        if (TextUtils.equals(url, mSuggestionsCarousel.getCurrentCarouselContextUrl())) return;
-
-        // Context has changed, so we want to remove any old suggestions from the carousel.
-        mSuggestionsCarousel.clearSuggestions();
-
-        String text = String.format(Locale.US, "Fetching contextual suggestions...");
-        Toast.makeText(mRecyclerView.getContext(), text, Toast.LENGTH_SHORT).show();
-        mSuggestionsUiDelegate.getSuggestionsSource().fetchContextualSuggestions(
-                url, new Callback<List<SnippetArticle>>() {
-                    @Override
-                    public void onResult(List<SnippetArticle> contextualSuggestions) {
-                        mSuggestionsCarousel.newContextualSuggestionsAvailable(
-                                url, contextualSuggestions);
-                    }
-                });
+        mSuggestionsCarousel.refresh(mSheet.getContext(), currentUrl);
     }
 
     private void updateSearchProviderHasLogo() {
@@ -338,17 +316,20 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
     }
 
     private void updateLogoTransition() {
-        boolean showLogo = mSearchProviderHasLogo && mNewTabShown
-                && FeatureUtilities.isChromeHomeDoodleEnabled() && mBottomSheetObserver.isVisible();
+        boolean showLogo = mSearchProviderHasLogo && mNewTabShown && mSheet.isSheetOpen()
+                && FeatureUtilities.isChromeHomeDoodleEnabled();
 
         if (!showLogo) {
             mLogoView.setVisibility(View.GONE);
             mToolbarView.setTranslationY(0);
             mRecyclerView.setTranslationY(0);
+            mSheet.setTouchDelegate(null);
+            ViewUtils.setAncestorsShouldClipChildren(mToolbarView, true);
             return;
         }
 
         mLogoView.setVisibility(View.VISIBLE);
+        ViewUtils.setAncestorsShouldClipChildren(mToolbarView, false);
 
         // TODO(mvanouwerkerk): Consider using Material animation curves.
         final float transitionFraction;
@@ -373,5 +354,77 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         float toolbarOffset = maxToolbarOffset * (1.0f - transitionFraction);
         mToolbarView.setTranslationY(toolbarOffset);
         mRecyclerView.setTranslationY(toolbarOffset);
+
+        if (transitionFraction == 0.f) {
+            mSheet.setTouchDelegate(new NtpTouchDelegate(mSheet, mToolbarView, mLogoView));
+        } else {
+            mSheet.setTouchDelegate(null);
+        }
+    }
+
+    /**
+     * Routes touch events when the NTP is showing a search provider logo. When Views are translated
+     * outside of their parent's bounds, they typically cannot receive touch input. This class sends
+     * touch events to the search provider logo, toolbar, and menu button.
+     */
+    private static class NtpTouchDelegate extends TouchDelegate {
+        private final TouchDelegate mLogoTouchDelegate;
+        private final TouchDelegate mMenuButtonTouchDelegate;
+        private final TouchDelegate mToolbarTouchDelegate;
+        private final Rect mLogoRect;
+        private final Rect mMenuButtonRect;
+        private final Rect mToolbarRect;
+
+        /**
+         * Creates a new NTP touch delegate.
+         * @param bottomSheet The {@link BottomSheet} that contains the
+         *                    SuggestionBottomSheetContent. Used to determine hit rects for children
+         *                    contained within the BottomSheet.
+         * @param toolbarView The {@link View} containing the toolbar.
+         * @param logoView    The {@link View} containing the search provider logo.
+         */
+        public NtpTouchDelegate(View bottomSheet, View toolbarView, View logoView) {
+            // We don't actually rely on the superclass for anything, so initialize it with dummy
+            // values.
+            super(new Rect(), bottomSheet);
+
+            int[] parentLocationOnScreen = new int[2];
+            bottomSheet.getLocationOnScreen(parentLocationOnScreen);
+
+            mLogoRect = createTouchDelegateRect(logoView, parentLocationOnScreen);
+
+            View menuButton = toolbarView.findViewById(R.id.menu_button);
+            mMenuButtonRect = createTouchDelegateRect(menuButton, parentLocationOnScreen);
+
+            mToolbarRect = createTouchDelegateRect(toolbarView, parentLocationOnScreen);
+
+            mLogoTouchDelegate = new TouchDelegate(mLogoRect, logoView);
+            mMenuButtonTouchDelegate = new TouchDelegate(mMenuButtonRect, menuButton);
+            mToolbarTouchDelegate = new TouchDelegate(mToolbarRect, toolbarView);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            int x = (int) event.getX();
+            int y = (int) event.getY();
+
+            if (mLogoRect.contains(x, y)) return mLogoTouchDelegate.onTouchEvent(event);
+            if (mMenuButtonRect.contains(x, y)) return mMenuButtonTouchDelegate.onTouchEvent(event);
+            if (mToolbarRect.contains(x, y)) return mToolbarTouchDelegate.onTouchEvent(event);
+
+            return false;
+        }
+
+        private Rect createTouchDelegateRect(View childView, int[] parentLocationOnScreen) {
+            int[] childLocationOnScreen = new int[2];
+            childView.getLocationOnScreen(childLocationOnScreen);
+
+            Rect touchRect = new Rect();
+            touchRect.top = childLocationOnScreen[1] - parentLocationOnScreen[1];
+            touchRect.bottom = touchRect.top + childView.getMeasuredHeight();
+            touchRect.left = childLocationOnScreen[0] - parentLocationOnScreen[0];
+            touchRect.right = touchRect.left + childView.getMeasuredWidth();
+            return touchRect;
+        }
     }
 }

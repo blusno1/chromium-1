@@ -182,11 +182,12 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
         if (mBatchEditNestCount > 0) return;
         if (mCurrentState.equals(mPreviouslyNotifiedState)) return;
         notifyAccessibilityService();
-        // Nothing has changed except that autocomplete text has been set or modified.
-        if (mCurrentState.equalsExceptAutocompleteText(mPreviouslyNotifiedState)
-                && mCurrentState.hasAutocompleteText()) {
-            // Autocomplete text is set by the controller, we should not notify the controller with
-            // the same information.
+        if (mCurrentState.getUserText().equals(mPreviouslyNotifiedState.getUserText())
+                && (mCurrentState.hasAutocompleteText()
+                           || !mPreviouslyNotifiedState.hasAutocompleteText())) {
+            // Nothing has changed except that autocomplete text has been set or modified. Or
+            // selection change did not affect autocomplete text. Autocomplete text is set by the
+            // controller, so only text change or deletion of autocomplete text should be notified.
             mPreviouslyNotifiedState.copyFrom(mCurrentState);
             return;
         }
@@ -240,6 +241,8 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
     @Override
     public void onSelectionChanged(int selStart, int selEnd) {
         if (DEBUG) Log.i(TAG, "onSelectionChanged [%d,%d]", selStart, selEnd);
+        if (mCurrentState.getSelStart() == selStart && mCurrentState.getSelEnd() == selEnd) return;
+
         mCurrentState.setSelection(selStart, selEnd);
         if (mBatchEditNestCount > 0) return;
         int len = mCurrentState.getUserText().length();
@@ -512,6 +515,11 @@ public class SpannableAutocompleteEditTextModel implements AutocompleteEditTextM
             Editable editable = mDelegate.getEditableText();
             editable.append(diff);
             decrementBatchEditCount();
+            if (mBatchEditNestCount == 0) { // only at the outermost batch edit
+                // crbug.com/758443: Japanese keyboard does not finish composition when we restore
+                // the deleted text.
+                super.finishComposingText();
+            }
         }
 
         private boolean setAutocompleteSpan() {

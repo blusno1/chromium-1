@@ -26,11 +26,11 @@
 #include "core/StylePropertyShorthand.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSIdentifierValue.h"
-#include "core/css/CSSPropertyMetadata.h"
 #include "core/css/StylePropertySerializer.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/css/parser/CSSParserContext.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "core/frame/UseCounter.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -114,7 +114,8 @@ static bool IsPropertyMatch(const StylePropertyMetadata& metadata,
   DCHECK_EQ(id, property_id);
   bool result = metadata.property_id_ == id;
   // Only enabled properties should be part of the style.
-  DCHECK(!result || CSSPropertyMetadata::IsEnabledProperty(property_id));
+  DCHECK(!result ||
+         CSSPropertyAPI::Get(resolveCSSPropertyID(property_id)).IsEnabled());
   return result;
 }
 

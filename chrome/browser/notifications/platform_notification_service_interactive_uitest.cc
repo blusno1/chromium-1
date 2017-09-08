@@ -46,8 +46,8 @@
 #include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
-#include "chrome/browser/lifetime/keep_alive_registry.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
 #endif
 
 namespace {
@@ -88,7 +88,7 @@ class PlatformNotificationServiceBrowserTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     display_service_tester_ =
-        base::MakeUnique<NotificationDisplayServiceTester>(
+        std::make_unique<NotificationDisplayServiceTester>(
             browser()->profile());
 
     SiteEngagementScore::SetParamValuesForTesting();

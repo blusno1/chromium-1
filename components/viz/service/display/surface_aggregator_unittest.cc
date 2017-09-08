@@ -85,7 +85,7 @@ class SurfaceAggregatorTest : public testing::Test {
   struct Quad {
     static Quad SolidColorQuad(SkColor color) {
       Quad quad;
-      quad.material = cc::DrawQuad::SOLID_COLOR;
+      quad.material = DrawQuad::SOLID_COLOR;
       quad.color = color;
       return quad;
     }
@@ -94,7 +94,7 @@ class SurfaceAggregatorTest : public testing::Test {
                             const SurfaceId& fallback_surface_id,
                             float opacity) {
       Quad quad;
-      quad.material = cc::DrawQuad::SURFACE_CONTENT;
+      quad.material = DrawQuad::SURFACE_CONTENT;
       quad.opacity = opacity;
       quad.primary_surface_id = primary_surface_id;
       quad.fallback_surface_id = fallback_surface_id;
@@ -103,24 +103,23 @@ class SurfaceAggregatorTest : public testing::Test {
 
     static Quad RenderPassQuad(int id) {
       Quad quad;
-      quad.material = cc::DrawQuad::RENDER_PASS;
+      quad.material = DrawQuad::RENDER_PASS;
       quad.render_pass_id = id;
       return quad;
     }
 
-    cc::DrawQuad::Material material;
-    // Set when material==cc::DrawQuad::SURFACE_CONTENT.
+    DrawQuad::Material material;
+    // Set when material==DrawQuad::SURFACE_CONTENT.
     SurfaceId primary_surface_id;
     SurfaceId fallback_surface_id;
     float opacity;
-    // Set when material==cc::DrawQuad::SOLID_COLOR.
+    // Set when material==DrawQuad::SOLID_COLOR.
     SkColor color;
-    // Set when material==cc::DrawQuad::RENDER_PASS.
+    // Set when material==DrawQuad::RENDER_PASS.
     cc::RenderPassId render_pass_id;
 
    private:
-    Quad()
-        : material(cc::DrawQuad::INVALID), opacity(1.f), color(SK_ColorWHITE) {}
+    Quad() : material(DrawQuad::INVALID), opacity(1.f), color(SK_ColorWHITE) {}
   };
 
   struct Pass {
@@ -136,14 +135,14 @@ class SurfaceAggregatorTest : public testing::Test {
 
   static void AddQuadInPass(cc::RenderPass* pass, Quad desc) {
     switch (desc.material) {
-      case cc::DrawQuad::SOLID_COLOR:
+      case DrawQuad::SOLID_COLOR:
         AddQuad(pass, gfx::Rect(0, 0, 5, 5), desc.color);
         break;
-      case cc::DrawQuad::SURFACE_CONTENT:
+      case DrawQuad::SURFACE_CONTENT:
         AddSurfaceQuad(pass, gfx::Size(5, 5), desc.opacity,
                        desc.primary_surface_id, desc.fallback_surface_id);
         break;
-      case cc::DrawQuad::RENDER_PASS:
+      case DrawQuad::RENDER_PASS:
         AddRenderPassQuad(pass, desc.render_pass_id);
         break;
       default:
@@ -168,10 +167,10 @@ class SurfaceAggregatorTest : public testing::Test {
   }
 
   static void TestQuadMatchesExpectations(Quad expected_quad,
-                                          const cc::DrawQuad* quad) {
+                                          const DrawQuad* quad) {
     switch (expected_quad.material) {
-      case cc::DrawQuad::SOLID_COLOR: {
-        ASSERT_EQ(cc::DrawQuad::SOLID_COLOR, quad->material);
+      case DrawQuad::SOLID_COLOR: {
+        ASSERT_EQ(DrawQuad::SOLID_COLOR, quad->material);
 
         const auto* solid_color_quad =
             cc::SolidColorDrawQuad::MaterialCast(quad);
@@ -179,8 +178,8 @@ class SurfaceAggregatorTest : public testing::Test {
         EXPECT_EQ(expected_quad.color, solid_color_quad->color);
         break;
       }
-      case cc::DrawQuad::RENDER_PASS: {
-        ASSERT_EQ(cc::DrawQuad::RENDER_PASS, quad->material);
+      case DrawQuad::RENDER_PASS: {
+        ASSERT_EQ(DrawQuad::RENDER_PASS, quad->material);
 
         const auto* render_pass_quad =
             cc::RenderPassDrawQuad::MaterialCast(quad);
@@ -228,12 +227,13 @@ class SurfaceAggregatorTest : public testing::Test {
     gfx::Rect visible_layer_rect = gfx::Rect(surface_size);
     gfx::Rect clip_rect = gfx::Rect(surface_size);
     bool is_clipped = false;
+    bool are_contents_opaque = false;
     SkBlendMode blend_mode = SkBlendMode::kSrcOver;
 
     auto* shared_quad_state = pass->CreateAndAppendSharedQuadState();
-    shared_quad_state->SetAll(layer_to_target_transform,
-                              gfx::Rect(layer_bounds), visible_layer_rect,
-                              clip_rect, is_clipped, opacity, blend_mode, 0);
+    shared_quad_state->SetAll(
+        layer_to_target_transform, gfx::Rect(layer_bounds), visible_layer_rect,
+        clip_rect, is_clipped, are_contents_opaque, opacity, blend_mode, 0);
 
     cc::SurfaceDrawQuad* surface_quad =
         pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
@@ -260,7 +260,8 @@ class SurfaceAggregatorTest : public testing::Test {
     gfx::Rect output_rect = gfx::Rect(0, 0, 5, 5);
     auto* shared_state = pass->CreateAndAppendSharedQuadState();
     shared_state->SetAll(gfx::Transform(), output_rect, output_rect,
-                         output_rect, false, 1, SkBlendMode::kSrcOver, 0);
+                         output_rect, false, false, 1, SkBlendMode::kSrcOver,
+                         0);
     auto* quad = pass->CreateAndAppendDrawQuad<cc::RenderPassDrawQuad>();
     quad->SetNew(shared_state, output_rect, output_rect, render_pass_id, 0,
                  gfx::RectF(), gfx::Size(), gfx::Vector2dF(), gfx::PointF(),
@@ -687,7 +688,7 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, CopyRequest) {
 
   SubmitCompositorFrame(embedded_support.get(), embedded_passes,
                         arraysize(embedded_passes), embedded_local_surface_id);
-  auto copy_request = CopyOutputRequest::CreateEmptyRequest();
+  auto copy_request = CopyOutputRequest::CreateStubForTesting();
   auto* copy_request_ptr = copy_request.get();
   embedded_support->RequestCopyOfSurface(std::move(copy_request));
 
@@ -742,9 +743,9 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, RootCopyRequest) {
 
   SubmitCompositorFrame(embedded_support.get(), embedded_passes,
                         arraysize(embedded_passes), embedded_local_surface_id);
-  auto copy_request(CopyOutputRequest::CreateEmptyRequest());
+  auto copy_request(CopyOutputRequest::CreateStubForTesting());
   auto* copy_request_ptr = copy_request.get();
-  auto copy_request2(CopyOutputRequest::CreateEmptyRequest());
+  auto copy_request2(CopyOutputRequest::CreateStubForTesting());
   auto* copy_request2_ptr = copy_request2.get();
 
   Quad root_quads[] = {
@@ -823,7 +824,7 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, UnreferencedSurface) {
 
   SubmitCompositorFrame(embedded_support.get(), embedded_passes,
                         arraysize(embedded_passes), embedded_local_surface_id);
-  auto copy_request(CopyOutputRequest::CreateEmptyRequest());
+  auto copy_request(CopyOutputRequest::CreateStubForTesting());
   auto* copy_request_ptr = copy_request.get();
   embedded_support->RequestCopyOfSurface(std::move(copy_request));
 
@@ -973,7 +974,7 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, MultiPassSurfaceReference) {
 
     // This render pass pass quad will reference the first pass from the
     // embedded surface, which is the second pass in the aggregated frame.
-    ASSERT_EQ(cc::DrawQuad::RENDER_PASS,
+    ASSERT_EQ(DrawQuad::RENDER_PASS,
               third_pass_quad_list.ElementAt(1)->material);
     const auto* third_pass_render_pass_draw_quad =
         cc::RenderPassDrawQuad::MaterialCast(third_pass_quad_list.ElementAt(1));
@@ -995,7 +996,7 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, MultiPassSurfaceReference) {
 
     // The next quad will be a render pass quad referencing the second pass from
     // the embedded surface, which is the third pass in the aggregated frame.
-    ASSERT_EQ(cc::DrawQuad::RENDER_PASS,
+    ASSERT_EQ(DrawQuad::RENDER_PASS,
               fourth_pass_quad_list.ElementAt(1)->material);
     const auto* fourth_pass_first_render_pass_draw_quad =
         cc::RenderPassDrawQuad::MaterialCast(
@@ -1005,7 +1006,7 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, MultiPassSurfaceReference) {
 
     // The last quad will be a render pass quad referencing the first pass from
     // the root surface, which is the first pass overall.
-    ASSERT_EQ(cc::DrawQuad::RENDER_PASS,
+    ASSERT_EQ(DrawQuad::RENDER_PASS,
               fourth_pass_quad_list.ElementAt(2)->material);
     const auto* fourth_pass_second_render_pass_draw_quad =
         cc::RenderPassDrawQuad::MaterialCast(
@@ -1025,7 +1026,7 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, MultiPassSurfaceReference) {
     // The last quad in the last pass will reference the second pass from the
     // root surface, which after aggregating is the fourth pass in the overall
     // list.
-    ASSERT_EQ(cc::DrawQuad::RENDER_PASS,
+    ASSERT_EQ(DrawQuad::RENDER_PASS,
               fifth_pass_quad_list.ElementAt(1)->material);
     const auto* fifth_pass_render_pass_draw_quad =
         cc::RenderPassDrawQuad::MaterialCast(fifth_pass_quad_list.ElementAt(1));
@@ -1187,15 +1188,14 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, RenderPassIdMapping) {
   }
 
   // Make sure the render pass quads reference the remapped pass IDs.
-  cc::DrawQuad* render_pass_quads[] = {
-      aggregated_pass_list[1]->quad_list.front(),
-      aggregated_pass_list[2]->quad_list.front()};
-  ASSERT_EQ(render_pass_quads[0]->material, cc::DrawQuad::RENDER_PASS);
+  DrawQuad* render_pass_quads[] = {aggregated_pass_list[1]->quad_list.front(),
+                                   aggregated_pass_list[2]->quad_list.front()};
+  ASSERT_EQ(render_pass_quads[0]->material, DrawQuad::RENDER_PASS);
   EXPECT_EQ(actual_pass_ids[0],
             cc::RenderPassDrawQuad::MaterialCast(render_pass_quads[0])
                 ->render_pass_id);
 
-  ASSERT_EQ(render_pass_quads[1]->material, cc::DrawQuad::RENDER_PASS);
+  ASSERT_EQ(render_pass_quads[1]->material, DrawQuad::RENDER_PASS);
   EXPECT_EQ(actual_pass_ids[1],
             cc::RenderPassDrawQuad::MaterialCast(render_pass_quads[1])
                 ->render_pass_id);
@@ -1210,17 +1210,19 @@ void AddSolidColorQuadWithBlendMode(const gfx::Size& size,
   const gfx::Rect clip_rect(size);
 
   bool is_clipped = false;
+  SkColor color = SK_ColorGREEN;
+  bool are_contents_opaque = SkColorGetA(color) == 0xFF;
   float opacity = 1.f;
 
   bool force_anti_aliasing_off = false;
   auto* sqs = pass->CreateAndAppendSharedQuadState();
   sqs->SetAll(layer_to_target_transform, layer_rect, visible_layer_rect,
-              clip_rect, is_clipped, opacity, blend_mode, 0);
+              clip_rect, is_clipped, are_contents_opaque, opacity, blend_mode,
+              0);
 
   auto* color_quad = pass->CreateAndAppendDrawQuad<cc::SolidColorDrawQuad>();
   color_quad->SetNew(pass->shared_quad_state_list.back(), visible_layer_rect,
-                     visible_layer_rect, SK_ColorGREEN,
-                     force_anti_aliasing_off);
+                     visible_layer_rect, color, force_anti_aliasing_off);
 }
 
 // This tests that we update shared quad state pointers correctly within
@@ -1938,7 +1940,7 @@ TEST_F(SurfaceAggregatorPartialSwapTest, IgnoreOutside) {
     auto* child_root_pass = child_pass_list[1].get();
 
     child_root_pass->copy_requests.push_back(
-        CopyOutputRequest::CreateEmptyRequest());
+        CopyOutputRequest::CreateStubForTesting());
     child_root_pass->damage_rect = gfx::Rect();
     SubmitPassListAsFrame(child_support_.get(), child_local_surface_id,
                           &child_pass_list);
@@ -2414,8 +2416,7 @@ TEST_F(SurfaceAggregatorWithResourcesTest, SecureOutputTexture) {
 
   auto* render_pass = frame.render_pass_list.back().get();
 
-  EXPECT_EQ(cc::DrawQuad::TEXTURE_CONTENT,
-            render_pass->quad_list.back()->material);
+  EXPECT_EQ(DrawQuad::TEXTURE_CONTENT, render_pass->quad_list.back()->material);
 
   {
     auto pass = cc::RenderPass::Create();
@@ -2427,7 +2428,7 @@ TEST_F(SurfaceAggregatorWithResourcesTest, SecureOutputTexture) {
     surface_quad->SetNew(sqs, gfx::Rect(0, 0, 1, 1), gfx::Rect(0, 0, 1, 1),
                          surface1_id, cc::SurfaceDrawQuadType::PRIMARY,
                          nullptr);
-    pass->copy_requests.push_back(CopyOutputRequest::CreateEmptyRequest());
+    pass->copy_requests.push_back(CopyOutputRequest::CreateStubForTesting());
 
     cc::CompositorFrame frame = test::MakeEmptyCompositorFrame();
     frame.render_pass_list.push_back(std::move(pass));
@@ -2440,14 +2441,14 @@ TEST_F(SurfaceAggregatorWithResourcesTest, SecureOutputTexture) {
   render_pass = frame.render_pass_list.front().get();
 
   // Parent has copy request, so texture should not be drawn.
-  EXPECT_EQ(cc::DrawQuad::SOLID_COLOR, render_pass->quad_list.back()->material);
+  EXPECT_EQ(DrawQuad::SOLID_COLOR, render_pass->quad_list.back()->material);
 
   frame = aggregator_->Aggregate(surface2_id);
   EXPECT_EQ(1u, frame.render_pass_list.size());
   render_pass = frame.render_pass_list.front().get();
 
   // Copy request has been executed earlier, so texture should be drawn.
-  EXPECT_EQ(cc::DrawQuad::TEXTURE_CONTENT,
+  EXPECT_EQ(DrawQuad::TEXTURE_CONTENT,
             render_pass->quad_list.front()->material);
 
   aggregator_->set_output_is_secure(false);
@@ -2456,7 +2457,7 @@ TEST_F(SurfaceAggregatorWithResourcesTest, SecureOutputTexture) {
   render_pass = frame.render_pass_list.back().get();
 
   // Output is insecure, so texture should be drawn.
-  EXPECT_EQ(cc::DrawQuad::SOLID_COLOR, render_pass->quad_list.back()->material);
+  EXPECT_EQ(DrawQuad::SOLID_COLOR, render_pass->quad_list.back()->material);
 
   support1->EvictCurrentSurface();
   support2->EvictCurrentSurface();

@@ -34,6 +34,7 @@ import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
 import org.chromium.chrome.browser.notifications.NotificationSettingsBridge;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.content.browser.test.NativeLibraryTestRule;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -52,16 +53,24 @@ public class ChannelsInitializerTest {
     private Context mContext;
 
     @Rule
+    public NativeLibraryTestRule mNativeLibraryTestRule = new NativeLibraryTestRule();
+
+    @Rule
     @SuppressFBWarnings("URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD")
     public Features.Processor processor = new Features.Processor();
 
     @Before
     public void setUp() throws Exception {
+        // Not initializing the browser process is safe because
+        // UrlFormatter.formatUrlForSecurityDisplay() is stand-alone.
+        mNativeLibraryTestRule.loadNativeLibraryNoBrowserProcess();
+
         mContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         mNotificationManagerProxy = new NotificationManagerProxyImpl(
                 (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE));
         mChannelsInitializer =
                 new ChannelsInitializer(mNotificationManagerProxy, mContext.getResources());
+
         // Delete any channels and channel groups that may already have been initialized. Cleaning
         // up here rather than in tearDown in case tests running before these ones caused channels
         // to be created.
@@ -219,26 +228,10 @@ public class ChannelsInitializerTest {
     @MinAndroidSdkLevel(Build.VERSION_CODES.O)
     @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
-    public void testEnsureInitialized_contentSuggestionsEnabled() throws Exception {
-        mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS);
-
-        assertThat(getChannelsIgnoringDefault(), hasSize(1));
-
-        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
-        assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS));
-        assertThat(channel.getName().toString(),
-                is(mContext.getString(
-                        org.chromium.chrome.R.string.notification_category_content_suggestions)));
-        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
-        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
-    }
-
-    @Test
-    @SmallTest
-    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
-    @TargetApi(Build.VERSION_CODES.O)
-    @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_contentSuggestionsDisabled() throws Exception {
+        // This test does not cover ensureInitialized() with CHANNEL_ID_CONTENT_SUGGESTIONS, because
+        // channels ignore construction parameters when re-created. If one test created the channel
+        // enabled, and the other disabled, the second test would fail.
         mChannelsInitializer.ensureInitializedAndDisabled(
                 ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS);
 
@@ -268,7 +261,7 @@ public class ChannelsInitializerTest {
         assertThat(getChannelsIgnoringDefault(), hasSize(1));
 
         NotificationChannel channel = getChannelsIgnoringDefault().get(0);
-        assertThat(channel.getName().toString(), is("https://example.com"));
+        assertThat(channel.getName().toString(), is("example.com"));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
         assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_SITES));
     }

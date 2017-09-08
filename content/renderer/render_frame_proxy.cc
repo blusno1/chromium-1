@@ -54,11 +54,6 @@ typedef std::map<blink::WebRemoteFrame*, RenderFrameProxy*> FrameMap;
 base::LazyInstance<FrameMap>::DestructorAtExit g_frame_map =
     LAZY_INSTANCE_INITIALIZER;
 
-bool IsRunningInMash() {
-  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  return cmdline->HasSwitch(switches::kIsRunningInMash);
-}
-
 }  // namespace
 
 // static
@@ -222,7 +217,6 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   enable_surface_synchronization_ =
-      IsRunningInMash() ||
       command_line.HasSwitch(switches::kEnableSurfaceSynchronization);
 }
 
@@ -356,8 +350,8 @@ void RenderFrameProxy::OnSetChildFrameSurface(
     return;
 
   if (!compositing_helper_) {
-    compositing_helper_ =
-        ChildFrameCompositingHelper::CreateForRenderFrameProxy(this);
+    compositing_helper_.reset(
+        ChildFrameCompositingHelper::CreateForRenderFrameProxy(this));
     if (enable_surface_synchronization_) {
       // We wait until there is a single CompositorFrame guaranteed to be
       // available and ready for display in the display compositor before using
@@ -535,7 +529,7 @@ void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
   params.url = request.Url();
   params.uses_post = request.HttpMethod().Utf8() == "POST";
   params.resource_request_body = GetRequestBodyForWebURLRequest(request);
-  params.extra_headers = GetWebURLRequestHeaders(request);
+  params.extra_headers = GetWebURLRequestHeadersAsString(request);
   params.referrer = Referrer(blink::WebStringToGURL(request.HttpHeaderField(
                                  blink::WebString::FromUTF8("Referer"))),
                              request.GetReferrerPolicy());
@@ -557,7 +551,7 @@ void RenderFrameProxy::FrameRectsChanged(const blink::WebRect& frame_rect) {
       viz::SurfaceInfo surface_info(
           viz::SurfaceId(frame_sink_id_, local_surface_id_),
           device_scale_factor,
-          gfx::ScaleToCeiledSize(frame_rect_.size(), device_scale_factor));
+          gfx::ScaleToCeiledSize(rect.size(), device_scale_factor));
       compositing_helper_->SetPrimarySurfaceInfo(surface_info);
     }
   }

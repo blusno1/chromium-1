@@ -13,6 +13,7 @@
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "url/gurl.h"
@@ -40,7 +41,7 @@ struct LogoMetadata {
   // to action image.
   GURL animated_url;
 
-  // For use by LogoTracker ---------------------------------------------------
+  // For use by LogoService ---------------------------------------------------
 
   // The URL from which the logo was downloaded (without the fingerprint param).
   GURL source_url;
@@ -65,6 +66,8 @@ struct EncodedLogo {
   // Metadata about the logo.
   LogoMetadata metadata;
 };
+using EncodedLogoCallback =
+    base::OnceCallback<void(const base::Optional<EncodedLogo> logo)>;
 
 struct Logo {
   Logo();
@@ -75,6 +78,7 @@ struct Logo {
   // Metadata about the logo.
   LogoMetadata metadata;
 };
+using LogoCallback = base::OnceCallback<void(const base::Optional<Logo> logo)>;
 
 // Parses the response from the server and returns it as an EncodedLogo. Returns
 // null if the response is invalid.

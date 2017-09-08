@@ -302,6 +302,7 @@
     <dimen name="tile_grid_layout_no_logo_padding_top">20dp</dimen>
     <dimen name="tile_grid_layout_bleed">8dp</dimen>
     <dimen name="tile_grid_layout_vertical_spacing">3dp</dimen>
+    <dimen name="tile_grid_layout_vertical_spacing_modern">6dp</dimen>
     <dimen name="tile_grid_layout_min_horizontal_spacing">4dp</dimen>
     <dimen name="tile_grid_layout_max_horizontal_spacing">16dp</dimen>
     <dimen name="tile_view_bg_corner_radius">2dp</dimen>
@@ -311,12 +312,17 @@
     <dimen name="tile_view_icon_size_modern">24dp</dimen>
     <dimen name="tile_view_icon_margin_top">12dp</dimen>
     <dimen name="tile_view_icon_margin_top_condensed">8dp</dimen>
-    <dimen name="tile_view_icon_margin_top_modern">24dp</dimen>
+    <dimen name="tile_view_icon_margin_top_modern">19dp</dimen>
+    <dimen name="tile_view_icon_background_margin_top_modern">7dp</dimen>
     <dimen name="tile_view_offline_badge_size">24dp</dimen>
     <dimen name="tile_view_offline_badge_size_modern">16dp</dimen>
-    <dimen name="tile_view_offline_badge_margin_modern">8dp</dimen>
+    <dimen name="tile_view_offline_badge_margin_top_modern">7dp</dimen>
+    <dimen name="tile_view_offline_badge_margin_end_modern">9dp</dimen>
+    <dimen name="tile_view_offline_badge_margin_top_modern_condensed">6dp</dimen>
+    <dimen name="tile_view_offline_badge_margin_end_modern_condensed">7dp</dimen>
     <dimen name="tile_view_title_margin_top">66dp</dimen>
     <dimen name="tile_view_title_margin_top_condensed">62dp</dimen>
+    <dimen name="tile_view_title_margin_top_modern">61dp</dimen>
     <dimen name="ntp_logo_height">116dp</dimen>
     <dimen name="ntp_logo_height_modern">30dp</dimen>
     <dimen name="ntp_logo_margin_top_modern">25dp</dimen>
@@ -327,7 +333,6 @@
     <dimen name="ntp_search_box_logo_padding">8dp</dimen>
     <dimen name="ntp_wide_card_lateral_margins">48dp</dimen>
     <dimen name="ntp_list_item_min_height">48dp</dimen>
-    <dimen name="ntp_list_item_text_size">16sp</dimen>
     <dimen name="ntp_shadow_height">9dp</dimen>
     <dimen name="ntp_sign_in_promo_margin_top">20dp</dimen>
     <dimen name="ntp_progress_indicator_diameter">56dp</dimen>
@@ -370,6 +375,7 @@
     <dimen name="snackbar_min_height">48dp</dimen>
     <dimen name="snackbar_width_tablet">450dp</dimen>
     <dimen name="snackbar_margin_tablet">24dp</dimen>
+    <dimen name="snackbar_shadow_height">8dp</dimen>
 
     <!-- Bookmarks dimensions -->
     <dimen name="bookmark_item_popup_width">140dp</dimen>
@@ -384,6 +390,7 @@
     <!-- Custom Tabs dimensions -->
     <dimen name="custom_tabs_toolbar_maxWidth">60dp</dimen>
     <dimen name="custom_tabs_toolbar_vertical_padding">16dp</dimen>
+    <dimen name="custom_tabs_toolbar_horizontal_margin_no_close">8dp</dimen>
     <dimen name="toolbar_icon_height">24dp</dimen>
     <dimen name="min_toolbar_icon_side_padding">6dp</dimen>
     <dimen name="custom_tabs_url_text_size">12sp</dimen>
@@ -482,11 +489,9 @@
 
     <!-- Bottom sheet dimensions -->
     <dimen name="bottom_sheet_help_bubble_inset">10dp</dimen>
-    <dimen name="bottom_nav_height">56dp</dimen>
+    <dimen name="bottom_nav_height">40dp</dimen>
     <dimen name="bottom_nav_space_from_toolbar">96dp</dimen>
     <!-- The following two dimensions override defaults in Android's BottomNavigationView -->
-    <dimen name="design_bottom_navigation_text_size">12sp</dimen>
-    <dimen name="design_bottom_navigation_active_text_size">14sp</dimen>
 
     <!-- Chrome Home dimensions -->
     <dimen name="chrome_home_empty_view_top_padding">72dp</dimen>

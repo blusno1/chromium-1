@@ -76,7 +76,7 @@ bool IsEmptyBlock(const NGLayoutInputNode child,
   // assume that its in the same writing mode as its parent, as a different
   // writing mode child will be caught by the CreatesNewFormattingContext check.
   NGFragment fragment(FromPlatformWritingMode(child.Style().GetWritingMode()),
-                      layout_result.PhysicalFragment().Get());
+                      *layout_result.PhysicalFragment());
   DCHECK_EQ(LayoutUnit(), fragment.BlockSize());
 #endif
 
@@ -246,19 +246,6 @@ RefPtr<NGLayoutResult> NGBlockLayoutAlgorithm::Layout() {
 
   NGMarginStrut input_margin_strut = ConstraintSpace().MarginStrut();
 
-  // If this node is a quirky container, (we are in quirks mode and either a
-  // table cell or body), we set our margin strut to a mode where it only
-  // considers non-quirky margins. E.g.
-  // <body>
-  //   <p></p>
-  //   <div style="margin-top: 10px"></div>
-  //   <h1>Hello</h1>
-  // </body>
-  // In the above example <p>'s & <h1>'s margins are ignored as they are
-  // quirky, and we only consider <div>'s 10px margin.
-  if (node_.IsQuirkyContainer())
-    input_margin_strut.is_quirky_container_start = true;
-
   LayoutUnit input_bfc_block_offset =
       ConstraintSpace().BfcOffset().block_offset;
 
@@ -279,6 +266,19 @@ RefPtr<NGLayoutResult> NGBlockLayoutAlgorithm::Layout() {
     input_bfc_block_offset = ContainerBfcOffset().block_offset;
     input_margin_strut = NGMarginStrut();
   }
+
+  // If this node is a quirky container, (we are in quirks mode and either a
+  // table cell or body), we set our margin strut to a mode where it only
+  // considers non-quirky margins. E.g.
+  // <body>
+  //   <p></p>
+  //   <div style="margin-top: 10px"></div>
+  //   <h1>Hello</h1>
+  // </body>
+  // In the above example <p>'s & <h1>'s margins are ignored as they are
+  // quirky, and we only consider <div>'s 10px margin.
+  if (node_.IsQuirkyContainer())
+    input_margin_strut.is_quirky_container_start = true;
 
   // If a new formatting context hits the margin collapsing if-branch above
   // then the BFC offset is still {} as the margin strut from the constraint
@@ -335,12 +335,17 @@ RefPtr<NGLayoutResult> NGBlockLayoutAlgorithm::Layout() {
   if (border_scrollbar_padding_.block_end ||
       previous_inflow_position.empty_block_affected_by_clearance ||
       ConstraintSpace().IsNewFormattingContext()) {
-    // TODO(ikilpatrick): If we are a quirky container and our last child had a
-    // quirky block end margin, we need to use the margin strut without the
-    // quirky margin appended. - http://jsbin.com/yizinagupo/edit?html,output
+    // If we are a quirky container, we ignore any quirky margins and
+    // just consider normal margins to extend our size.  Other UAs
+    // perform this calculation differently, e.g. by just ignoring the
+    // *last* quirky margin.
+    // TODO: revisit previous implementation to avoid changing behavior and
+    // https://html.spec.whatwg.org/multipage/rendering.html#margin-collapsing-quirks
     content_size_ =
         std::max(content_size_, previous_inflow_position.logical_block_offset +
-                                    end_margin_strut.Sum());
+                                    (node_.IsQuirkyContainer()
+                                         ? end_margin_strut.QuirkyContainerSum()
+                                         : end_margin_strut.Sum()));
     end_margin_strut = NGMarginStrut();
   }
 
@@ -440,9 +445,9 @@ void NGBlockLayoutAlgorithm::HandleOutOfFlowPositioned(
 void NGBlockLayoutAlgorithm::HandleFloat(
     const NGPreviousInflowPosition& previous_inflow_position,
     NGBlockNode child,
-    NGBlockBreakToken* token) {
+    NGBlockBreakToken* child_break_token) {
   // Calculate margins in the BFC's writing mode.
-  NGBoxStrut margins = CalculateMargins(child);
+  NGBoxStrut margins = CalculateMargins(child, child_break_token);
 
   LayoutUnit origin_inline_offset =
       ConstraintSpace().BfcOffset().line_offset +
@@ -450,12 +455,13 @@ void NGBlockLayoutAlgorithm::HandleFloat(
 
   RefPtr<NGUnpositionedFloat> unpositioned_float = NGUnpositionedFloat::Create(
       child_available_size_, child_percentage_size_, origin_inline_offset,
-      ConstraintSpace().BfcOffset().line_offset, margins, child, token);
+      ConstraintSpace().BfcOffset().line_offset, margins, child,
+      child_break_token);
   unpositioned_floats_.push_back(std::move(unpositioned_float));
 
   // If there is a break token for a float we must be resuming layout, we must
   // always know our position in the BFC.
-  DCHECK(!token || container_builder_.BfcOffset());
+  DCHECK(!child_break_token || container_builder_.BfcOffset());
 
   // No need to postpone the positioning if we know the correct offset.
   if (container_builder_.BfcOffset() || ConstraintSpace().FloatsBfcOffset()) {
@@ -532,7 +538,7 @@ bool NGBlockLayoutAlgorithm::HandleInflow(
 
   // Perform layout on the child.
   NGInflowChildData child_data =
-      ComputeChildData(*previous_inflow_position, child);
+      ComputeChildData(*previous_inflow_position, child, child_break_token);
   RefPtr<NGConstraintSpace> child_space =
       CreateConstraintSpaceForChild(child, child_data);
   RefPtr<NGLayoutResult> layout_result =
@@ -660,11 +666,10 @@ bool NGBlockLayoutAlgorithm::HandleInflow(
   }
 
   // We must have an actual fragment at this stage.
-  DCHECK(layout_result->PhysicalFragment().Get());
+  DCHECK(layout_result->PhysicalFragment());
 
-  NGBoxFragment fragment(
-      ConstraintSpace().WritingMode(),
-      ToNGPhysicalBoxFragment(layout_result->PhysicalFragment().Get()));
+  NGFragment fragment(ConstraintSpace().WritingMode(),
+                      *layout_result->PhysicalFragment());
 
   NGLogicalOffset logical_offset =
       CalculateLogicalOffset(fragment, child_data.margins, child_bfc_offset);
@@ -697,12 +702,13 @@ bool NGBlockLayoutAlgorithm::HandleInflow(
 
 NGInflowChildData NGBlockLayoutAlgorithm::ComputeChildData(
     const NGPreviousInflowPosition& previous_inflow_position,
-    NGLayoutInputNode child) {
+    NGLayoutInputNode child,
+    const NGBreakToken* child_break_token) {
   DCHECK(child);
   DCHECK(!child.IsFloating());
 
   // Calculate margins in parent's writing mode.
-  NGBoxStrut margins = CalculateMargins(child);
+  NGBoxStrut margins = CalculateMargins(child, child_break_token);
 
   // Append the current margin strut with child's block start margin.
   // Non empty border/padding, and new FC use cases are handled inside of the
@@ -802,9 +808,9 @@ bool NGBlockLayoutAlgorithm::PositionNewFc(
     WTF::Optional<NGBfcOffset>* child_bfc_offset) {
   const EClear child_clear = child.Style().Clear();
 
-  NGBoxFragment fragment(
-      ConstraintSpace().WritingMode(),
-      ToNGPhysicalBoxFragment(layout_result.PhysicalFragment().Get()));
+  DCHECK(layout_result.PhysicalFragment());
+  NGFragment fragment(ConstraintSpace().WritingMode(),
+                      *layout_result.PhysicalFragment());
 
   LayoutUnit child_bfc_offset_estimate =
       child_data.bfc_offset_estimate.block_offset;
@@ -952,7 +958,9 @@ void NGBlockLayoutAlgorithm::FinalizeForFragmentation() {
   container_builder_.SetBlockOverflow(content_size_);
 }
 
-NGBoxStrut NGBlockLayoutAlgorithm::CalculateMargins(NGLayoutInputNode child) {
+NGBoxStrut NGBlockLayoutAlgorithm::CalculateMargins(
+    NGLayoutInputNode child,
+    const NGBreakToken* child_break_token) {
   DCHECK(child);
   if (child.IsInline())
     return {};
@@ -968,6 +976,10 @@ NGBoxStrut NGBlockLayoutAlgorithm::CalculateMargins(NGLayoutInputNode child) {
   NGBoxStrut margins =
       ComputeMargins(*space, child_style, ConstraintSpace().WritingMode(),
                      ConstraintSpace().Direction());
+
+  // The block-start margin should only be used in the first fragment.
+  if (child_break_token)
+    margins.block_start = LayoutUnit();
 
   // TODO(ikilpatrick): Move the auto margins calculation for different writing
   // modes to post-layout.

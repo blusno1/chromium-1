@@ -43,6 +43,8 @@ class LogoObserver {
   // If the fresh logo is the same as the cached logo, this will not be called
   // again.
   virtual void OnLogoAvailable(const Logo* logo, bool from_cache) = 0;
+  virtual void OnEncodedLogoAvailable(const EncodedLogo* logo,
+                                      bool from_cache) {}
 
   // Called when the LogoTracker will no longer send updates to this
   // LogoObserver. For example: after the cached logo is validated, after
@@ -87,9 +89,10 @@ class LogoTracker : public net::URLFetcherDelegate {
   // |request_context_getter| is the URLRequestContextGetter used to download
   // the logo.
   explicit LogoTracker(
-      base::FilePath cached_logo_directory,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
-      std::unique_ptr<LogoDelegate> delegate);
+      std::unique_ptr<LogoDelegate> delegate,
+      std::unique_ptr<LogoCache> logo_cache,
+      std::unique_ptr<base::Clock> clock);
 
   ~LogoTracker() override;
 
@@ -115,12 +118,6 @@ class LogoTracker : public net::URLFetcherDelegate {
   // Prevents |observer| from receiving future updates. This is safe to call
   // even when the observer is being notified of an update.
   void RemoveObserver(LogoObserver* observer);
-
-  // Overrides the cache used to store logos.
-  void SetLogoCacheForTests(std::unique_ptr<LogoCache> cache);
-
-  // Overrides the clock used to check the time.
-  void SetClockForTests(std::unique_ptr<base::Clock> clock);
 
  private:
 
@@ -171,9 +168,15 @@ class LogoTracker : public net::URLFetcherDelegate {
   // Called when the fresh logo has been decoded into an SkBitmap. |image| will
   // be NULL if decoding failed.
   void OnFreshLogoAvailable(std::unique_ptr<EncodedLogo> logo,
+                            bool download_failed,
                             bool parsing_failed,
                             bool from_http_cache,
                             const SkBitmap& image);
+
+  void NotifyDecodedLogoObservers(const Logo* logo, bool from_cache) const;
+  void NotifyEncodedLogoObservers(const EncodedLogo* logo,
+                                  bool from_cache) const;
+  bool HaveDecodedLogoObservers() const;
 
   // net::URLFetcherDelegate:
   void OnURLFetchComplete(const net::URLFetcher* source) override;

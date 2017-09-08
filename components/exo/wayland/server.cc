@@ -5,6 +5,7 @@
 #include "components/exo/wayland/server.h"
 
 #include <alpha-compositing-unstable-v1-server-protocol.h>
+#include <aura-shell-server-protocol.h>
 #include <gaming-input-unstable-v1-server-protocol.h>
 #include <gaming-input-unstable-v2-server-protocol.h>
 #include <grp.h>
@@ -79,7 +80,6 @@
 #include "ui/base/class_property.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ui_features.h"
-#include "ui/compositor/compositor_vsync_manager.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
@@ -208,28 +208,32 @@ base::flat_set<DndAction> DataDeviceManagerDndActions(uint32_t value) {
 }
 
 // A property key containing the surface resource that is associated with
-// window. If unset, no surface resource is associated with window.
+// window. If unset, no surface resource is associated with surface object.
 DEFINE_UI_CLASS_PROPERTY_KEY(wl_resource*, kSurfaceResourceKey, nullptr);
 
 // A property key containing a boolean set to true if a viewport is associated
-// with window.
+// with with surface object.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasViewportKey, false);
 
 // A property key containing a boolean set to true if a security object is
-// associated with window.
+// associated with surface object.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasSecurityKey, false);
 
 // A property key containing a boolean set to true if a blending object is
-// associated with window.
+// associated with surface object.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasBlendingKey, false);
 
 // A property key containing a boolean set to true if the stylus_tool
-// object is associated with a window.
+// object is associated with surface object.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasStylusToolKey, false);
 
 // A property key containing the data offer resource that is associated with
 // data offer object.
 DEFINE_UI_CLASS_PROPERTY_KEY(wl_resource*, kDataOfferResourceKey, nullptr);
+
+// A property key containing a boolean set to true if na aura surface object is
+// associated with surface object.
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasAuraSurfaceKey, false);
 
 wl_resource* GetSurfaceResource(Surface* surface) {
   return surface->GetProperty(kSurfaceResourceKey);
@@ -1061,13 +1065,7 @@ void shell_surface_resize(wl_client* client,
 }
 
 void shell_surface_set_toplevel(wl_client* client, wl_resource* resource) {
-  ShellSurface* shell_surface = GetUserDataAs<ShellSurface>(resource);
-  if (shell_surface->enabled())
-    return;
-
-  shell_surface->SetFrame(true);
-  shell_surface->SetRectangularShadowEnabled(true);
-  shell_surface->SetEnabled(true);
+  GetUserDataAs<ShellSurface>(resource)->SetEnabled(true);
 }
 
 void shell_surface_set_transient(wl_client* client,
@@ -1115,10 +1113,8 @@ void shell_surface_set_transient(wl_client* client,
     shell_surface->SetContainer(ash::kShellWindowId_SystemModalContainer);
     shell_surface->SetActivatable(false);
   } else {
-    shell_surface->SetFrame(true);
     shell_surface->SetParent(parent_shell_surface);
   }
-  shell_surface->SetRectangularShadowEnabled(true);
   shell_surface->SetEnabled(true);
 }
 
@@ -2280,6 +2276,17 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
                        ? ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET
                        : ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
 
+    if (wl_resource_get_version(remote_shell_resource_) >= 8) {
+      float scale_factor =
+          WMHelper::GetInstance()->GetDefaultDeviceScaleFactor();
+      // Send using 16.16 fixed point.
+      const int kDecimalBits = 24;
+      int32_t fixed_scale =
+          static_cast<int32_t>(scale_factor * (1 << kDecimalBits));
+      zcr_remote_shell_v1_send_default_device_scale_factor(
+          remote_shell_resource_, fixed_scale);
+    }
+
     SendDisplayMetrics();
     SendActivated(helper->GetActiveWindow(), nullptr);
   }
@@ -2294,9 +2301,12 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
     return wl_resource_get_version(remote_shell_resource_) >= 5;
   }
 
-  std::unique_ptr<ShellSurface> CreateShellSurface(Surface* surface,
-                                                   int container) {
-    return display_->CreateRemoteShellSurface(surface, container);
+  std::unique_ptr<ShellSurface> CreateShellSurface(
+      Surface* surface,
+      int container,
+      bool scale_by_default_device_scale_factor) {
+    return display_->CreateRemoteShellSurface(
+        surface, container, scale_by_default_device_scale_factor);
   }
 
   std::unique_ptr<NotificationSurface> CreateNotificationSurface(
@@ -2541,8 +2551,11 @@ void remote_shell_get_remote_surface(wl_client* client,
                                      wl_resource* surface,
                                      uint32_t container) {
   WaylandRemoteShell* shell = GetUserDataAs<WaylandRemoteShell>(resource);
+  bool scale_by_default_scale_factor = wl_resource_get_version(resource) >= 8;
+
   std::unique_ptr<ShellSurface> shell_surface = shell->CreateShellSurface(
-      GetUserDataAs<Surface>(surface), RemoteSurfaceContainer(container));
+      GetUserDataAs<Surface>(surface), RemoteSurfaceContainer(container),
+      scale_by_default_scale_factor);
   if (!shell_surface) {
     wl_resource_post_error(resource, ZCR_REMOTE_SHELL_V1_ERROR_ROLE,
                            "surface has already been assigned a role");
@@ -2602,7 +2615,7 @@ const struct zcr_remote_shell_v1_interface remote_shell_implementation = {
     remote_shell_destroy, remote_shell_get_remote_surface,
     remote_shell_get_notification_surface};
 
-const uint32_t remote_shell_version = 7;
+const uint32_t remote_shell_version = 8;
 
 void bind_remote_shell(wl_client* client,
                        void* data,
@@ -2618,24 +2631,115 @@ void bind_remote_shell(wl_client* client,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// aura_surface_interface:
+
+class AuraSurface : public SurfaceObserver {
+ public:
+  explicit AuraSurface(Surface* surface) : surface_(surface) {
+    surface_->AddSurfaceObserver(this);
+    surface_->SetProperty(kSurfaceHasAuraSurfaceKey, true);
+  }
+  ~AuraSurface() override {
+    if (surface_) {
+      surface_->RemoveSurfaceObserver(this);
+      surface_->SetProperty(kSurfaceHasAuraSurfaceKey, false);
+    }
+  }
+
+  void SetFrame(SurfaceFrameType type) {
+    if (surface_)
+      surface_->SetFrame(type);
+  }
+
+  // Overridden from SurfaceObserver:
+  void OnSurfaceDestroying(Surface* surface) override {
+    surface->RemoveSurfaceObserver(this);
+    surface_ = nullptr;
+  }
+
+ private:
+  Surface* surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(AuraSurface);
+};
+
+SurfaceFrameType ToSurfaceFrameType(uint32_t frame_type) {
+  switch (frame_type) {
+    case ZAURA_SURFACE_FRAME_TYPE_NONE:
+      return SurfaceFrameType::NONE;
+    case ZAURA_SURFACE_FRAME_TYPE_NORMAL:
+      return SurfaceFrameType::NORMAL;
+    case ZAURA_SURFACE_FRAME_TYPE_SHADOW:
+      return SurfaceFrameType::SHADOW;
+    default:
+      DLOG(WARNING) << "Unsupported frame type: " << frame_type;
+      return SurfaceFrameType::NONE;
+  }
+}
+
+void aura_surface_set_frame(wl_client* client, wl_resource* resource,
+                            uint32_t type) {
+  GetUserDataAs<AuraSurface>(resource)->SetFrame(ToSurfaceFrameType(type));
+}
+
+const struct zaura_surface_interface aura_surface_implementation = {
+    aura_surface_set_frame};
+
+////////////////////////////////////////////////////////////////////////////////
+// aura_shell_interface:
+
+void aura_shell_get_aura_surface(wl_client* client,
+                                 wl_resource* resource,
+                                 uint32_t id,
+                                 wl_resource* surface_resource) {
+  Surface* surface = GetUserDataAs<Surface>(surface_resource);
+  if (surface->GetProperty(kSurfaceHasAuraSurfaceKey)) {
+    wl_resource_post_error(
+        resource,
+        ZAURA_SHELL_ERROR_AURA_SURFACE_EXISTS,
+        "an aura surface object for that surface already exists");
+    return;
+  }
+
+  wl_resource* aura_surface_resource =
+      wl_resource_create(client, &zaura_surface_interface, 1, id);
+
+  SetImplementation(aura_surface_resource, &aura_surface_implementation,
+                    base::MakeUnique<AuraSurface>(surface));
+}
+
+const struct zaura_shell_interface aura_shell_implementation = {
+    aura_shell_get_aura_surface};
+
+void bind_aura_shell(wl_client* client,
+                     void* data,
+                     uint32_t version,
+                     uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zaura_shell_interface, 1, id);
+
+  wl_resource_set_implementation(resource, &aura_shell_implementation,
+                                 nullptr, nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // vsync_timing_interface:
 
-// Implements VSync timing interface by monitoring a compositor for updates
-// to VSync parameters.
-class VSyncTiming : public ui::CompositorVSyncManager::Observer {
+// Implements VSync timing interface by monitoring updates to VSync parameters.
+class VSyncTiming final : public WMHelper::VSyncObserver {
  public:
-  ~VSyncTiming() { vsync_manager_->RemoveObserver(this); }
+  ~VSyncTiming() override {
+    WMHelper::GetInstance()->RemoveVSyncObserver(this);
+  }
 
-  static std::unique_ptr<VSyncTiming> Create(ui::Compositor* compositor,
-                                             wl_resource* timing_resource) {
-    std::unique_ptr<VSyncTiming> vsync_timing(
-        new VSyncTiming(compositor, timing_resource));
+  static std::unique_ptr<VSyncTiming> Create(wl_resource* timing_resource) {
+    std::unique_ptr<VSyncTiming> vsync_timing(new VSyncTiming(timing_resource));
     // Note: AddObserver() will call OnUpdateVSyncParameters.
-    vsync_timing->vsync_manager_->AddObserver(vsync_timing.get());
+    WMHelper::GetInstance()->AddVSyncObserver(vsync_timing.get());
     return vsync_timing;
   }
 
-  // Overridden from ui::CompositorVSyncManager::Observer:
+  // Overridden from WMHelper::VSyncObserver:
   void OnUpdateVSyncParameters(base::TimeTicks timebase,
                                base::TimeDelta interval) override {
     uint64_t timebase_us = timebase.ToInternalValue();
@@ -2670,12 +2774,8 @@ class VSyncTiming : public ui::CompositorVSyncManager::Observer {
   }
 
  private:
-  VSyncTiming(ui::Compositor* compositor, wl_resource* timing_resource)
-      : vsync_manager_(compositor->vsync_manager()),
-        timing_resource_(timing_resource) {}
-
-  // The VSync manager being observed.
-  scoped_refptr<ui::CompositorVSyncManager> vsync_manager_;
+  explicit VSyncTiming(wl_resource* timing_resource)
+      : timing_resource_(timing_resource) {}
 
   // The VSync timing resource.
   wl_resource* const timing_resource_;
@@ -2706,13 +2806,8 @@ void vsync_feedback_get_vsync_timing(wl_client* client,
                                      wl_resource* output) {
   wl_resource* timing_resource =
       wl_resource_create(client, &zcr_vsync_timing_v1_interface, 1, id);
-
-  // TODO(reveman): Multi-display support.
-  ui::Compositor* compositor =
-      ash::Shell::GetPrimaryRootWindow()->layer()->GetCompositor();
-
   SetImplementation(timing_resource, &vsync_timing_implementation,
-                    VSyncTiming::Create(compositor, timing_resource));
+                    VSyncTiming::Create(timing_resource));
 }
 
 const struct zcr_vsync_feedback_v1_interface vsync_feedback_implementation = {
@@ -4501,6 +4596,8 @@ Server::Server(Display* display)
                    display_, bind_alpha_compositing);
   wl_global_create(wl_display_.get(), &zcr_remote_shell_v1_interface,
                    remote_shell_version, display_, bind_remote_shell);
+  wl_global_create(wl_display_.get(), &zaura_shell_interface, 1, display_,
+                   bind_aura_shell);
   wl_global_create(wl_display_.get(), &zcr_gaming_input_v1_interface, 1,
                    display_, bind_gaming_input_v1_DEPRECATED);
   wl_global_create(wl_display_.get(), &zcr_gaming_input_v2_interface, 1,

@@ -17,10 +17,10 @@
 #include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -32,7 +32,6 @@
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -104,6 +103,9 @@ class GeolocationPermissionContextTests
                                     const GURL& requesting_frame,
                                     bool user_gesture);
 
+  void CancelGeolocationPermission(content::WebContents* web_contents,
+                                   const PermissionRequestID& id);
+
   void PermissionResponse(const PermissionRequestID& id,
                           ContentSetting content_setting);
   void CheckPermissionMessageSent(int request_id, bool allowed);
@@ -172,6 +174,13 @@ void GeolocationPermissionContextTests::RequestGeolocationPermission(
       web_contents, id, requesting_frame, user_gesture,
       base::Bind(&GeolocationPermissionContextTests::PermissionResponse,
                  base::Unretained(this), id));
+  content::RunAllBlockingPoolTasksUntilIdle();
+}
+
+void GeolocationPermissionContextTests::CancelGeolocationPermission(
+    content::WebContents* web_contents,
+    const PermissionRequestID& id) {
+  geolocation_permission_context_->CancelPermissionRequest(web_contents, id);
   content::RunAllBlockingPoolTasksUntilIdle();
 }
 
@@ -814,6 +823,31 @@ TEST_F(GeolocationPermissionContextTests, LSDBackOffAcceptLSDResetsBackOff) {
   AddDayOffsetForTesting(7);
   EXPECT_TRUE(RequestPermissionIsLSDShown(requesting_frame));
 }
+
+TEST_F(GeolocationPermissionContextTests, CancelWithLSDOpen) {
+  GURL requesting_frame("https://www.example.com/geolocation");
+  NavigateAndCommit(requesting_frame);
+  RequestManagerDocumentLoadCompleted();
+  MockLocationSettings::SetLocationStatus(true /* android */,
+                                          false /* system */);
+  MockLocationSettings::SetLocationSettingsDialogStatus(true /* enabled */,
+                                                        GRANTED);
+  MockLocationSettings::SetAsyncLocationSettingsDialog();
+  EXPECT_FALSE(HasActivePrompt());
+  RequestGeolocationPermission(web_contents(), RequestID(0), requesting_frame,
+                               true);
+  ASSERT_TRUE(HasActivePrompt());
+  AcceptPrompt();
+
+  EXPECT_TRUE(MockLocationSettings::HasShownLocationSettingsDialog());
+
+  CancelGeolocationPermission(web_contents(), RequestID(0));
+  ASSERT_TRUE(responses_.empty());
+
+  MockLocationSettings::ResolveAsyncLocationSettingsDialog();
+  ASSERT_TRUE(responses_.empty());
+}
+
 #endif
 
 TEST_F(GeolocationPermissionContextTests, QueuedPermission) {
@@ -1076,10 +1110,6 @@ TEST_F(GeolocationPermissionContextTests, TabDestroyed) {
 
 #if defined(OS_ANDROID)
 TEST_F(GeolocationPermissionContextTests, SearchGeolocationInIncognito) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kConsistentOmniboxGeolocation);
-
   GURL requesting_frame(TestSearchEngineDelegate::kDSETestUrl);
   // The DSE Geolocation setting should be used in incognito if it is BLOCK,
   // but not if it is ALLOW.

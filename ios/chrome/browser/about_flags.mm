@@ -174,8 +174,7 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
          omnibox::kUIExperimentHideSuggestionUrlTrivialSubdomains)},
     {"bookmark-new-generation", flag_descriptions::kBookmarkNewGenerationName,
      flag_descriptions::kBookmarkNewGenerationDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(
-         bookmark_new_generation::features::kBookmarkNewGeneration)},
+     FEATURE_VALUE_TYPE(kBookmarkNewGeneration)},
     {"mailto-prompt-for-user-choice",
      flag_descriptions::kMailtoPromptForUserChoiceName,
      flag_descriptions::kMailtoPromptForUserChoiceDescription, flags_ui::kOsIos,
@@ -269,14 +268,6 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
 
     base::CommandLine temp_command_line(flags);
     command_line->AppendArguments(temp_command_line, false);
-  }
-
-  // Populate command line flag for Sign-in promo.
-  NSString* enableSigninPromo = [defaults stringForKey:@"EnableSigninPromo"];
-  if ([enableSigninPromo isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(switches::kEnableSigninPromo);
-  } else if ([enableSigninPromo isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(switches::kDisableSigninPromo);
   }
 
   // Populate command line flag for 3rd party keyboard omnibox workaround.

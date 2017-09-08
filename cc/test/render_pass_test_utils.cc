@@ -39,7 +39,7 @@ SolidColorDrawQuad* AddQuad(RenderPass* pass,
                             const gfx::Rect& rect,
                             SkColor color) {
   viz::SharedQuadState* shared_state = pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, 1,
+  shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, false, 1,
                        SkBlendMode::kSrcOver, 0);
   SolidColorDrawQuad* quad =
       pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -51,7 +51,7 @@ SolidColorDrawQuad* AddClippedQuad(RenderPass* pass,
                                    const gfx::Rect& rect,
                                    SkColor color) {
   viz::SharedQuadState* shared_state = pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(gfx::Transform(), rect, rect, rect, true, 1,
+  shared_state->SetAll(gfx::Transform(), rect, rect, rect, true, false, 1,
                        SkBlendMode::kSrcOver, 0);
   SolidColorDrawQuad* quad =
       pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -64,7 +64,8 @@ SolidColorDrawQuad* AddTransformedQuad(RenderPass* pass,
                                        SkColor color,
                                        const gfx::Transform& transform) {
   viz::SharedQuadState* shared_state = pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(transform, rect, rect, rect, false, 1,
+  shared_state->SetAll(transform, rect, rect, rect, false, false, 1,
+
                        SkBlendMode::kSrcOver, 0);
   SolidColorDrawQuad* quad =
       pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -77,7 +78,7 @@ void AddRenderPassQuad(RenderPass* to_pass, RenderPass* contributing_pass) {
   viz::SharedQuadState* shared_state =
       to_pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(gfx::Transform(), output_rect, output_rect, output_rect,
-                       false, 1, SkBlendMode::kSrcOver, 0);
+                       false, false, 1, SkBlendMode::kSrcOver, 0);
   RenderPassDrawQuad* quad =
       to_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
   quad->SetNew(shared_state, output_rect, output_rect, contributing_pass->id, 0,
@@ -94,7 +95,7 @@ void AddRenderPassQuad(RenderPass* to_pass,
   viz::SharedQuadState* shared_state =
       to_pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(transform, output_rect, output_rect, output_rect, false,
-                       1, blend_mode, 0);
+                       false, 1, blend_mode, 0);
   RenderPassDrawQuad* quad =
       to_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
   gfx::Size arbitrary_nonzero_size(1, 1);
@@ -124,32 +125,32 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
 
   viz::ResourceId resource1 = resource_provider->CreateResource(
       gfx::Size(45, 5), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format(), gfx::ColorSpace());
+      resource_provider->best_texture_format(), gfx::ColorSpace::CreateSRGB());
   resource_provider->AllocateForTesting(resource1);
   viz::ResourceId resource2 = resource_provider->CreateResource(
       gfx::Size(346, 61), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format(), gfx::ColorSpace());
+      resource_provider->best_texture_format(), gfx::ColorSpace::CreateSRGB());
   resource_provider->AllocateForTesting(resource2);
   viz::ResourceId resource3 = resource_provider->CreateResource(
       gfx::Size(12, 134), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format(), gfx::ColorSpace());
+      resource_provider->best_texture_format(), gfx::ColorSpace::CreateSRGB());
   resource_provider->AllocateForTesting(resource3);
   viz::ResourceId resource4 = resource_provider->CreateResource(
       gfx::Size(56, 12), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format(), gfx::ColorSpace());
+      resource_provider->best_texture_format(), gfx::ColorSpace::CreateSRGB());
   resource_provider->AllocateForTesting(resource4);
   gfx::Size resource5_size(73, 26);
   viz::ResourceId resource5 = resource_provider->CreateResource(
       resource5_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format(), gfx::ColorSpace());
+      resource_provider->best_texture_format(), gfx::ColorSpace::CreateSRGB());
   resource_provider->AllocateForTesting(resource5);
   viz::ResourceId resource6 = resource_provider->CreateResource(
       gfx::Size(64, 92), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format(), gfx::ColorSpace());
+      resource_provider->best_texture_format(), gfx::ColorSpace::CreateSRGB());
   resource_provider->AllocateForTesting(resource6);
   viz::ResourceId resource7 = resource_provider->CreateResource(
       gfx::Size(9, 14), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format(), gfx::ColorSpace());
+      resource_provider->best_texture_format(), gfx::ColorSpace::CreateSRGB());
   resource_provider->AllocateForTesting(resource7);
 
   unsigned target = GL_TEXTURE_2D;
@@ -166,7 +167,7 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
 
   viz::SharedQuadState* shared_state =
       to_pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, 1,
+  shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, false, 1,
                        SkBlendMode::kSrcOver, 0);
 
   DebugBorderDrawQuad* debug_border_quad =
@@ -226,7 +227,7 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
 
   viz::SharedQuadState* shared_state2 =
       to_pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, 1,
+  shared_state->SetAll(gfx::Transform(), rect, rect, rect, false, false, 1,
                        SkBlendMode::kSrcOver, 0);
 
   TileDrawQuad* tile_quad = to_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
@@ -238,7 +239,8 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
   for (int i = 0; i < 4; ++i) {
     plane_resources[i] = resource_provider->CreateResource(
         gfx::Size(20, 12), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-        resource_provider->best_texture_format(), gfx::ColorSpace());
+        resource_provider->best_texture_format(),
+        gfx::ColorSpace::CreateREC601());
     resource_provider->AllocateForTesting(plane_resources[i]);
   }
   YUVVideoDrawQuad::ColorSpace color_space = YUVVideoDrawQuad::REC_601;
@@ -250,7 +252,7 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
                    gfx::RectF(.0f, .0f, 50.0f, 50.0f), gfx::Size(100, 100),
                    gfx::Size(50, 50), plane_resources[0], plane_resources[1],
                    plane_resources[2], plane_resources[3], color_space,
-                   gfx::ColorSpace::CreateJpeg(), 0.0, 1.0, 8);
+                   gfx::ColorSpace::CreateREC601(), 0.0, 1.0, 8);
 }
 
 }  // namespace cc

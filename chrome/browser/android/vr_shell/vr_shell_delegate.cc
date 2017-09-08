@@ -17,6 +17,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/origin_util.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
+#include "device/vr/android/gvr/gvr_delegate_provider_factory.h"
 #include "device/vr/vr_device.h"
 #include "device/vr/vr_device_manager.h"
 #include "device/vr/vr_display_impl.h"
@@ -45,6 +46,22 @@ bool IsSecureContext(content::RenderFrameHost* host) {
     host = host->GetParent();
   }
   return true;
+}
+
+class VrShellDelegateProviderFactory
+    : public device::GvrDelegateProviderFactory {
+ public:
+  VrShellDelegateProviderFactory() = default;
+  ~VrShellDelegateProviderFactory() override = default;
+  device::GvrDelegateProvider* CreateGvrDelegateProvider() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(VrShellDelegateProviderFactory);
+};
+
+device::GvrDelegateProvider*
+VrShellDelegateProviderFactory::CreateGvrDelegateProvider() {
+  return VrShellDelegate::CreateVrShellDelegate();
 }
 
 }  // namespace
@@ -177,26 +194,19 @@ void VrShellDelegate::DisplayActivate(JNIEnv* env,
 }
 
 void VrShellDelegate::OnPause(JNIEnv* env, const JavaParamRef<jobject>& obj) {
-  if (gvr_api_) {
-    gvr_api_->PauseTracking();
-  }
+  if (vr_shell_)
+    return;
+  device::VRDevice* device = GetDevice();
+  if (device)
+    device->PauseTracking();
 }
 
 void VrShellDelegate::OnResume(JNIEnv* env, const JavaParamRef<jobject>& obj) {
-  if (gvr_api_) {
-    gvr_api_->ResumeTracking();
-  }
-}
-
-void VrShellDelegate::UpdateNonPresentingContext(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jlong context) {
-  if (context == 0) {
-    gvr_api_ = nullptr;
+  if (vr_shell_)
     return;
-  }
-  gvr_api_ = gvr::GvrApi::WrapNonOwned(reinterpret_cast<gvr_context*>(context));
+  device::VRDevice* device = GetDevice();
+  if (device)
+    device->ResumeTracking();
 }
 
 bool VrShellDelegate::IsClearActivatePending(JNIEnv* env,
@@ -347,19 +357,20 @@ void VrShellDelegate::SetListeningForActivate(bool listening) {
 }
 
 void VrShellDelegate::GetNextMagicWindowPose(
+    gvr::GvrApi* gvr_api,
     device::VRDisplayImpl* display,
     device::mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) {
   content::RenderFrameHost* host = GetHostForDisplay(display);
-  if (!gvr_api_ || vr_shell_ || host == nullptr ||
-      !host->GetView()->HasFocus()) {
+  if (vr_shell_ || host == nullptr || !host->GetView()->HasFocus()) {
     std::move(callback).Run(nullptr);
     return;
   }
   std::move(callback).Run(
-      device::GvrDelegate::GetVRPosePtrWithNeckModel(gvr_api_.get(), nullptr));
+      device::GvrDelegate::GetVRPosePtrWithNeckModel(gvr_api, nullptr));
 }
 
 void VrShellDelegate::CreateVRDisplayInfo(
+    gvr::GvrApi* gvr_api,
     const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
     uint32_t device_id) {
   if (vr_shell_) {
@@ -367,8 +378,8 @@ void VrShellDelegate::CreateVRDisplayInfo(
     return;
   }
   // This is for magic window mode, which doesn't care what the render size is.
-  callback.Run(device::GvrDelegate::CreateDefaultVRDisplayInfo(gvr_api_.get(),
-                                                               device_id));
+  callback.Run(
+      device::GvrDelegate::CreateDefaultVRDisplayInfo(gvr_api, device_id));
 }
 
 device::VRDevice* VrShellDelegate::GetDevice() {
@@ -384,8 +395,8 @@ jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
 }
 
 static void OnLibraryAvailable(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
-  device::GvrDelegateProvider::SetInstance(
-      base::Bind(&VrShellDelegate::CreateVrShellDelegate));
+  device::GvrDelegateProviderFactory::Install(
+      new VrShellDelegateProviderFactory);
 }
 
 }  // namespace vr_shell

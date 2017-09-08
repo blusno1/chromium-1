@@ -4,7 +4,7 @@
 
 #include "core/mojo/MojoHandle.h"
 
-#include "bindings/core/v8/ArrayBufferOrArrayBufferView.h"
+#include "bindings/core/v8/array_buffer_or_array_buffer_view.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/mojo/MojoCreateSharedBufferResult.h"
 #include "core/mojo/MojoDiscardDataOptions.h"
@@ -46,7 +46,7 @@ void MojoHandle::close() {
 
 MojoWatcher* MojoHandle::watch(ScriptState* script_state,
                                const MojoHandleSignals& signals,
-                               MojoWatchCallback* callback) {
+                               V8MojoWatchCallback* callback) {
   return MojoWatcher::Create(handle_.get(), signals, callback,
                              ExecutionContext::From(script_state));
 }

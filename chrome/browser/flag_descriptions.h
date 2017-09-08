@@ -95,6 +95,14 @@ extern const char kCloudImportDescription[];
 extern const char kColorCorrectRenderingName[];
 extern const char kColorCorrectRenderingDescription[];
 
+extern const char kForceColorProfileSRGB[];
+extern const char kForceColorProfileP3[];
+extern const char kForceColorProfileColorSpin[];
+extern const char kForceColorProfileHdr[];
+
+extern const char kForceColorProfileName[];
+extern const char kForceColorProfileDescription[];
+
 extern const char kCompositedLayerBordersName[];
 extern const char kCompositedLayerBordersDescription[];
 
@@ -237,9 +245,6 @@ extern const char kEnableHeapProfilingTaskProfiler[];
 
 extern const char kEnableHttpFormWarningName[];
 extern const char kEnableHttpFormWarningDescription[];
-
-extern const char kEnableIdleTimeSpellCheckingName[];
-extern const char kEnableIdleTimeSpellCheckingDescription[];
 
 extern const char kEnableManualFallbacksFillingName[];
 extern const char kEnableManualFallbacksFillingDescription[];
@@ -450,6 +455,9 @@ extern const char kJavascriptHarmonyDescription[];
 extern const char kJavascriptHarmonyShippingName[];
 extern const char kJavascriptHarmonyShippingDescription[];
 
+extern const char kKeepAliveRendererForKeepaliveRequestsName[];
+extern const char kKeepAliveRendererForKeepaliveRequestsDescription[];
+
 extern const char kLcdTextName[];
 extern const char kLcdTextDescription[];
 
@@ -500,6 +508,9 @@ extern const char kMojoVideoEncodeAcceleratorDescription[];
 
 extern const char kModuleScriptsName[];
 extern const char kModuleScriptsDescription[];
+
+extern const char kModuleScriptsDynamicImportName[];
+extern const char kModuleScriptsDynamicImportDescription[];
 
 extern const char kNewAudioRenderingMixingStrategyName[];
 extern const char kNewAudioRenderingMixingStrategyDescription[];
@@ -582,6 +593,9 @@ extern const char kOverlayScrollbarsFlashAfterAnyScrollUpdateDescription[];
 
 extern const char kOverlayScrollbarsFlashWhenMouseEnterName[];
 extern const char kOverlayScrollbarsFlashWhenMouseEnterDescription[];
+
+extern const char kUseNewAcceptLanguageHeaderName[];
+extern const char kUseNewAcceptLanguageHeaderDescription[];
 
 extern const char kOverscrollHistoryNavigationName[];
 extern const char kOverscrollHistoryNavigationDescription[];
@@ -676,6 +690,9 @@ extern const char kSecondaryUiMdDescription[];
 extern const char kServiceWorkerNavigationPreloadName[];
 extern const char kServiceWorkerNavigationPreloadDescription[];
 
+extern const char kServiceWorkerPaymentAppsName[];
+extern const char kServiceWorkerPaymentAppsDescription[];
+
 extern const char kServiceWorkerScriptStreamingName[];
 extern const char kServiceWorkerScriptStreamingDescription[];
 
@@ -761,6 +778,9 @@ extern const char kSyncAppListDescription[];
 
 extern const char kSyncSandboxName[];
 extern const char kSyncSandboxDescription[];
+
+extern const char kSysInternalsName[];
+extern const char kSysInternalsDescription[];
 
 extern const char kTabAudioMutingName[];
 extern const char kTabAudioMutingDescription[];
@@ -969,9 +989,6 @@ extern const char kEnableAndroidPayIntegrationV2Description[];
 extern const char kEnableAndroidSpellcheckerDescription[];
 extern const char kEnableAndroidSpellcheckerName[];
 
-extern const char kEnableConsistentOmniboxGeolocationName[];
-extern const char kEnableConsistentOmniboxGeolocationDescription[];
-
 extern const char kEnableContentSuggestionsNewFaviconServerName[];
 extern const char kEnableContentSuggestionsNewFaviconServerDescription[];
 
@@ -1075,9 +1092,6 @@ extern const char kMediaScreenCaptureDescription[];
 extern const char kModalPermissionPromptsName[];
 extern const char kModalPermissionPromptsDescription[];
 
-extern const char kNewBackgroundLoaderName[];
-extern const char kNewBackgroundLoaderDescription[];
-
 extern const char kNewPhotoPickerName[];
 extern const char kNewPhotoPickerDescription[];
 
@@ -1120,6 +1134,9 @@ extern const char kOfflinePagesLoadSignalCollectingDescription[];
 extern const char kOfflinePagesPrefetchingName[];
 extern const char kOfflinePagesPrefetchingDescription[];
 
+extern const char kOfflinePagesPrefetchingUIName[];
+extern const char kOfflinePagesPrefetchingUIDescription[];
+
 extern const char kOfflinePagesRenovationsName[];
 extern const char kOfflinePagesRenovationsDescription[];
 
@@ -1161,9 +1178,6 @@ extern const char kReaderModeHeuristicsAlwaysOn[];
 
 extern const char kReaderModeInCCTName[];
 extern const char kReaderModeInCCTDescription[];
-
-extern const char kServiceWorkerPaymentAppsName[];
-extern const char kServiceWorkerPaymentAppsDescription[];
 
 extern const char kSetMarketUrlForTestingName[];
 extern const char kSetMarketUrlForTestingDescription[];
@@ -1408,6 +1422,9 @@ extern const char kEnableEhvInputDescription[];
 
 extern const char kEnableEncryptionMigrationName[];
 extern const char kEnableEncryptionMigrationDescription[];
+
+extern const char kEnableExternalDriveRename[];
+extern const char kEnableExternalDriveRenameDescription[];
 
 extern const char kEnableImeMenuName[];
 extern const char kEnableImeMenuDescription[];

@@ -200,6 +200,72 @@ TEST_P(CSSParserTokenStreamTest, RangesDoNotGetInvalidatedWhenConsuming) {
   EXPECT_TRUE(range.AtEnd());
 }
 
+TEST_P(CSSParserTokenStreamTest, BlockErrorRecoveryConsumesRestOfBlock) {
+  CSSTokenizer tokenizer("{B }1");
+  auto stream = GetStream(tokenizer, GetParam());
+
+  {
+    CSSParserTokenStream::BlockGuard guard(stream);
+    EXPECT_EQ(kIdentToken, stream.Consume().GetType());
+    EXPECT_FALSE(stream.AtEnd());
+  }  // calls destructor
+
+  EXPECT_EQ(kNumberToken, stream.Consume().GetType());
+}
+
+TEST_P(CSSParserTokenStreamTest, BlockErrorRecoveryOnSuccess) {
+  CSSTokenizer tokenizer("{B }1");
+  auto stream = GetStream(tokenizer, GetParam());
+
+  {
+    CSSParserTokenStream::BlockGuard guard(stream);
+    EXPECT_EQ(kIdentToken, stream.Consume().GetType());
+    EXPECT_EQ(kWhitespaceToken, stream.Consume().GetType());
+    EXPECT_TRUE(stream.AtEnd());
+  }  // calls destructor
+
+  EXPECT_EQ(kNumberToken, stream.Consume().GetType());
+}
+
+TEST_P(CSSParserTokenStreamTest, BlockErrorRecoveryConsumeComponentValue) {
+  CSSTokenizer tokenizer("{{B} C}1");
+  auto stream = GetStream(tokenizer, GetParam());
+
+  {
+    CSSParserTokenStream::BlockGuard guard(stream);
+    EXPECT_EQ(CSSParserTokenStream::LookAhead::kIsValid,
+              stream.EnsureLookAhead());
+    stream.UncheckedConsumeComponentValue();
+  }  // calls destructor
+
+  EXPECT_EQ(kNumberToken, stream.Consume().GetType());
+}
+
+TEST_F(CSSParserTokenStreamTest, OffsetAfterPeek) {
+  CSSTokenizer tokenizer("ABC");
+  CSSParserTokenStream stream(tokenizer);
+
+  EXPECT_EQ(0U, stream.Offset());
+  EXPECT_EQ(kIdentToken, stream.Peek().GetType());
+  EXPECT_EQ(0U, stream.Offset());
+}
+
+TEST_F(CSSParserTokenStreamTest, OffsetAfterConsumes) {
+  CSSTokenizer tokenizer("ABC 1 {23 }");
+  CSSParserTokenStream stream(tokenizer);
+
+  EXPECT_EQ(0U, stream.Offset());
+  EXPECT_EQ(kIdentToken, stream.Consume().GetType());
+  EXPECT_EQ(3U, stream.Offset());
+  EXPECT_EQ(kWhitespaceToken, stream.Consume().GetType());
+  EXPECT_EQ(4U, stream.Offset());
+  EXPECT_EQ(kNumberToken, stream.ConsumeIncludingWhitespace().GetType());
+  EXPECT_EQ(6U, stream.Offset());
+  stream.EnsureLookAhead();
+  stream.UncheckedConsumeComponentValue();
+  EXPECT_EQ(11U, stream.Offset());
+}
+
 INSTANTIATE_TEST_CASE_P(ShouldTokenizeToEnd,
                         CSSParserTokenStreamTest,
                         ::testing::Bool());

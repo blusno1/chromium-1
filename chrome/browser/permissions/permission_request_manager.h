@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_PERMISSIONS_PERMISSION_REQUEST_MANAGER_H_
 #define CHROME_BROWSER_PERMISSIONS_PERMISSION_REQUEST_MANAGER_H_
 
-#include <deque>
 #include <unordered_map>
 
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -91,10 +91,6 @@ class PermissionRequestManager
   // True if a permission bubble is currently visible.
   // TODO(hcarmona): Remove this as part of the bubble API work.
   bool IsBubbleVisible();
-
-  // Whether PermissionRequestManager is reused on Android, instead of
-  // PermissionQueueController.
-  static bool IsEnabled();
 
   // Get the native window of the bubble.
   // TODO(hcarmona): Remove this as part of the bubble API work.
@@ -196,7 +192,7 @@ class PermissionRequestManager
   bool tab_can_show_prompts_;
 
   std::vector<PermissionRequest*> requests_;
-  std::deque<PermissionRequest*> queued_requests_;
+  base::circular_deque<PermissionRequest*> queued_requests_;
   // Maps from the first request of a kind to subsequent requests that were
   // duped against it.
   std::unordered_multimap<PermissionRequest*, PermissionRequest*>

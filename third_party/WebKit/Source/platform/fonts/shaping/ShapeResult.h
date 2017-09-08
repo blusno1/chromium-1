@@ -65,6 +65,10 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
       unsigned count);
   ~ShapeResult();
 
+  // Returns a mutalbe unique instance. If |this| has more than 1 ref count,
+  // a clone is created.
+  RefPtr<ShapeResult> MutableUnique() const;
+
   // The logical width of this result.
   float Width() const { return width_; }
   LayoutUnit SnappedWidth() const { return LayoutUnit::FromFloatCeil(width_); }
@@ -90,6 +94,11 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   // For memory reporting.
   size_t ByteSize() const;
 
+  // Returns the next or previous offsets respectively at which it is safe to
+  // break without reshaping.
+  unsigned NextSafeToBreakOffset(unsigned offset) const;
+  unsigned PreviousSafeToBreakOffset(unsigned offset) const;
+
   unsigned OffsetForPosition(float target_x, bool include_partial_glyphs) const;
   float PositionForOffset(unsigned offset) const;
   LayoutUnit SnappedStartPositionForOffset(unsigned offset) const {
@@ -99,7 +108,12 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
     return LayoutUnit::FromFloatCeil(PositionForOffset(offset));
   }
 
-  void ApplySpacing(ShapeResultSpacing<String>&);
+  // Apply spacings (letter-spacing, word-spacing, and justification) as
+  // configured to |ShapeResultSpacing|.
+  // |text_start_offset| adjusts the character index in the ShapeResult before
+  // giving it to |ShapeResultSpacing|. It can be negative if
+  // |StartIndexForResult()| is larger than the text in |ShapeResultSpacing|.
+  void ApplySpacing(ShapeResultSpacing<String>&, int text_start_offset = 0);
   PassRefPtr<ShapeResult> ApplySpacingToCopy(ShapeResultSpacing<TextRun>&,
                                              const TextRun&) const;
 
@@ -116,8 +130,8 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   }
 
   template <typename TextContainerType>
-  void ApplySpacing(ShapeResultSpacing<TextContainerType>&,
-                    const TextContainerType&);
+  void ApplySpacingImpl(ShapeResultSpacing<TextContainerType>&,
+                        int text_start_offset = 0);
   template <bool is_horizontal_run>
   void ComputeGlyphPositions(ShapeResult::RunInfo*,
                              unsigned start_glyph,

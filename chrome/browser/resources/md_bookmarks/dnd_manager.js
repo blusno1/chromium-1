@@ -166,14 +166,16 @@ cr.define('bookmarks', function() {
     /** @const {number} */
     this.EXPAND_FOLDER_DELAY = 400;
 
-    /** @private {number} */
-    this.lastTimestamp_ = 0;
-
-    /** @private {BookmarkElement|null} */
+    /** @private {?BookmarkElement} */
     this.lastElement_ = null;
 
-    /** @private {number} */
-    this.testTimestamp_ = 0;
+    /** @type {!bookmarks.Debouncer} */
+    this.debouncer_ = new bookmarks.Debouncer(() => {
+      var store = bookmarks.Store.getInstance();
+      store.dispatch(
+          bookmarks.actions.changeFolderOpen(this.lastElement_.itemId, true));
+      this.reset();
+    });
   }
 
   AutoExpander.prototype = {
@@ -182,32 +184,81 @@ cr.define('bookmarks', function() {
      * @param {?BookmarkElement} overElement
      */
     update: function(e, overElement) {
-      var eventTimestamp = this.testTimestamp_ || e.timeStamp;
       var itemId = overElement ? overElement.itemId : null;
       var store = bookmarks.Store.getInstance();
 
-      // If hovering over the same folder as last update, open the folder after
-      // the delay has passed.
-      if (overElement && overElement == this.lastElement_) {
-        if (eventTimestamp - this.lastTimestamp_ < this.EXPAND_FOLDER_DELAY)
-          return;
-
-        var action = bookmarks.actions.changeFolderOpen(itemId, true);
-        store.dispatch(action);
-      } else if (
-          overElement && isClosedBookmarkFolderNode(overElement) &&
+      // If dragging over a new closed folder node with children reset the
+      // expander. Falls through to reset the expander delay.
+      if (overElement && overElement != this.lastElement_ &&
+          isClosedBookmarkFolderNode(overElement) &&
           bookmarks.util.hasChildFolders(itemId, store.data.nodes)) {
-        // Since this is a closed folder node that has children, set the auto
-        // expander to this element.
-        this.lastTimestamp_ = eventTimestamp;
+        this.reset();
         this.lastElement_ = overElement;
+      }
+
+      // If dragging over the same node, reset the expander delay.
+      if (overElement && overElement == this.lastElement_) {
+        this.debouncer_.restartTimeout(this.EXPAND_FOLDER_DELAY);
         return;
       }
 
-      // If the folder has been expanded or we have moved to a different
-      // element, reset the auto expander.
-      this.lastTimestamp_ = 0;
+      // Otherwise, cancel the expander.
+      this.reset();
+    },
+
+    reset: function() {
+      this.debouncer_.reset();
       this.lastElement_ = null;
+    },
+  };
+
+  /**
+   * Manages auto scrolling of elements on hover during internal drags. Native
+   * drags do this by themselves.
+   * @constructor
+   */
+  function AutoScroller() {
+    /** @const {number} */
+    this.SCROLL_ZONE_LENGTH = 20;
+    /** @const {number} */
+    this.SCROLL_DISTANCE = 10;
+    /** @const {number} */
+    this.SCROLL_INTERVAL = 100;
+    /** @private {?number} */
+    this.intervalId_ = null;
+  }
+
+  AutoScroller.prototype = {
+    /** @param {!Event} e */
+    update: function(e) {
+      this.reset();
+
+      var scrollParent = e.path.find((el) => {
+        return el.nodeType == Node.ELEMENT_NODE &&
+            window.getComputedStyle(el).overflowY == 'auto';
+      });
+
+      if (!scrollParent)
+        return;
+
+      var rect = scrollParent.getBoundingClientRect();
+      var yDelta = 0;
+      if (e.clientY < rect.top + this.SCROLL_ZONE_LENGTH)
+        yDelta = -this.SCROLL_DISTANCE;
+      else if (e.clientY > rect.bottom - this.SCROLL_ZONE_LENGTH)
+        yDelta = this.SCROLL_DISTANCE;
+
+      this.intervalId_ = window.setInterval(() => {
+        scrollParent.scrollTop += yDelta;
+      }, this.SCROLL_INTERVAL);
+    },
+
+    reset: function() {
+      if (this.intervalId_ == null)
+        return;
+
+      window.clearInterval(this.intervalId_);
+      this.intervalId_ = null;
     },
   };
 
@@ -334,6 +385,12 @@ cr.define('bookmarks', function() {
     /** @private {Object<string, function(!Event)>} */
     this.documentListeners_ = null;
 
+    /** @private {?bookmarks.AutoScroller} */
+    this.autoScroller_ = null;
+
+    /** @private {?bookmarks.AutoExpander} */
+    this.autoExpander_ = null;
+
     /**
      * Used to instantly clearDragData in tests.
      * @private {bookmarks.TimerProxy}
@@ -365,6 +422,7 @@ cr.define('bookmarks', function() {
       this.dragInfo_ = new DragInfo();
       this.dropIndicator_ = new DropIndicator();
       this.autoExpander_ = new AutoExpander();
+      this.autoScroller_ = new AutoScroller();
 
       this.documentListeners_ = {
         'mousedown': this.onMousedown_.bind(this),
@@ -437,6 +495,8 @@ cr.define('bookmarks', function() {
       // Prevents a native drag from starting.
       e.preventDefault();
 
+      this.autoScroller_.update(e);
+
       // On the first mousemove after a mousedown, calculate the items to drag.
       // This can't be done in mousedown because the user may be shift-clicking
       // an item.
@@ -494,10 +554,12 @@ cr.define('bookmarks', function() {
 
         var movePromises = this.dragInfo_.dragData.elements.map((item) => {
           return new Promise((resolve) => {
-            chrome.bookmarks.move(item.id, {
-              parentId: dropInfo.parentId,
-              index: dropInfo.index == -1 ? undefined : dropInfo.index
-            }, resolve);
+            chrome.bookmarks.move(
+                item.id, {
+                  parentId: dropInfo.parentId,
+                  index: dropInfo.index == -1 ? undefined : dropInfo.index
+                },
+                resolve);
           });
         });
 
@@ -623,8 +685,10 @@ cr.define('bookmarks', function() {
     /** @private */
     clearDragData_: function() {
       this.dndChip.hide();
+      this.autoScroller_.reset();
       this.internalDragElement_ = null;
       this.mouseDownPos_ = null;
+      this.autoExpander_.reset();
 
       // Defer the clearing of the data so that the bookmark manager API's drop
       // event doesn't clear the drop data before the web drop event has a
@@ -937,6 +1001,8 @@ cr.define('bookmarks', function() {
   };
 
   return {
+    AutoExpander: AutoExpander,
+    AutoScroller: AutoScroller,
     DNDManager: DNDManager,
     DragInfo: DragInfo,
     DropIndicator: DropIndicator,

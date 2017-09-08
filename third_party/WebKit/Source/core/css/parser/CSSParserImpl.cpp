@@ -233,17 +233,13 @@ void CSSParserImpl::ParseStyleSheet(const String& string,
                      context->Mode());
 
   TRACE_EVENT_BEGIN0("blink,blink_style",
-                     "CSSParserImpl::parseStyleSheet.tokenize");
+                     "CSSParserImpl::parseStyleSheet.parse");
   CSSTokenizer tokenizer(string);
   CSSParserTokenStream stream(tokenizer);
   // TODO(shend): Use streams instead of ranges. Streams will ruin
   // tokenize/parse metrics as we will be tokenizing on demand.
   const CSSParserTokenRange range = stream.MakeRangeToEOF();
-  TRACE_EVENT_END0("blink,blink_style",
-                   "CSSParserImpl::parseStyleSheet.tokenize");
 
-  TRACE_EVENT_BEGIN0("blink,blink_style",
-                     "CSSParserImpl::parseStyleSheet.parse");
   CSSParserImpl parser(context, style_sheet);
   if (defer_property_parsing) {
     parser.lazy_state_ = new CSSLazyParsingState(
@@ -494,7 +490,7 @@ StyleRuleBase* CSSParserImpl::ConsumeAtRule(CSSParserTokenStream& stream,
   // TODO(shend): Use streams instead of ranges
   CSSParserTokenRange range = stream.MakeRangeToEOF();
   CSSParserTokenRange block = range.ConsumeBlock();
-  stream.UpdatePositionFromRange(range);
+  CSSParserTokenStream::BlockGuard guard(stream);
 
   if (allowed_rules == kKeyframeRules)
     return nullptr;  // Parse error, no at-rules supported inside @keyframes
@@ -512,7 +508,7 @@ StyleRuleBase* CSSParserImpl::ConsumeAtRule(CSSParserTokenStream& stream,
     case kCSSAtRuleViewport:
       return ConsumeViewportRule(prelude, block);
     case kCSSAtRuleFontFace:
-      return ConsumeFontFaceRule(prelude, block);
+      return ConsumeFontFaceRule(prelude, stream);
     case kCSSAtRuleWebkitKeyframes:
       return ConsumeKeyframesRule(true, prelude, block);
     case kCSSAtRuleKeyframes:
@@ -748,6 +744,29 @@ StyleRuleViewport* CSSParserImpl::ConsumeViewportRule(
   ConsumeDeclarationList(block, StyleRule::kViewport);
   return StyleRuleViewport::Create(
       CreateStylePropertySet(parsed_properties_, kCSSViewportRuleMode));
+}
+
+StyleRuleFontFace* CSSParserImpl::ConsumeFontFaceRule(
+    CSSParserTokenRange prelude,
+    CSSParserTokenStream& stream) {
+  if (!prelude.AtEnd())
+    return nullptr;  // Parse error; @font-face prelude should be empty
+
+  if (observer_wrapper_) {
+    unsigned end_offset = observer_wrapper_->EndOffset(prelude);
+    observer_wrapper_->Observer().StartRuleHeader(
+        StyleRule::kFontFace, observer_wrapper_->StartOffset(prelude));
+    observer_wrapper_->Observer().EndRuleHeader(end_offset);
+    observer_wrapper_->Observer().StartRuleBody(end_offset);
+    observer_wrapper_->Observer().EndRuleBody(end_offset);
+  }
+
+  if (style_sheet_)
+    style_sheet_->SetHasFontFaceRule();
+
+  ConsumeDeclarationList(stream, StyleRule::kFontFace);
+  return StyleRuleFontFace::Create(
+      CreateStylePropertySet(parsed_properties_, kCSSFontFaceRuleMode));
 }
 
 StyleRuleFontFace* CSSParserImpl::ConsumeFontFaceRule(

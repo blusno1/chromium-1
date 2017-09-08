@@ -4,7 +4,6 @@
 
 #include "ash/system/web_notification/web_notification_tray.h"
 
-#include "ash/accelerators/accelerator_controller.h"
 #include "ash/accessibility_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
@@ -30,8 +29,8 @@
 #include "ui/display/screen.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_style.h"
 #include "ui/message_center/message_center_tray_delegate.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/views/message_popup_collection.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/bubble/tray_bubble_view.h"
@@ -434,18 +433,6 @@ void WebNotificationTray::OnMouseEnteredView() {}
 
 void WebNotificationTray::OnMouseExitedView() {}
 
-void WebNotificationTray::RegisterAccelerators(
-    const std::vector<ui::Accelerator>& accelerators,
-    views::TrayBubbleView* tray_bubble_view) {
-  Shell::Get()->accelerator_controller()->Register(accelerators,
-                                                   tray_bubble_view);
-}
-
-void WebNotificationTray::UnregisterAllAccelerators(
-    views::TrayBubbleView* tray_bubble_view) {
-  Shell::Get()->accelerator_controller()->UnregisterAll(tray_bubble_view);
-}
-
 base::string16 WebNotificationTray::GetAccessibleNameForBubble() {
   return GetAccessibleNameForTray();
 }
@@ -513,7 +500,7 @@ void WebNotificationTray::UpdateTrayContent() {
   should_update_tray_content_ = false;
 
   std::unordered_set<std::string> notification_ids;
-  for (auto pair : visible_small_icons_)
+  for (auto& pair : visible_small_icons_)
     notification_ids.insert(pair.first);
 
   // Add small icons (up to kMaximumSmallIconCount = 3).
@@ -533,17 +520,17 @@ void WebNotificationTray::UpdateTrayContent() {
     if (visible_small_icons_.count(notification->id()) != 0)
       continue;
 
-    auto* item = new WebNotificationImage(image.AsImageSkia(),
-                                          animation_container_.get(), this);
-    visible_small_icons_.insert(std::make_pair(notification->id(), item));
-
-    tray_container()->AddChildViewAt(item, 0);
+    auto item = base::MakeUnique<WebNotificationImage>(
+        image.AsImageSkia(), animation_container_.get(), this);
+    tray_container()->AddChildViewAt(item.get(), 0);
     item->SetVisible(true);
+    visible_small_icons_.insert(
+        std::make_pair(notification->id(), std::move(item)));
   }
 
   // Remove unnecessary icons.
   for (const std::string& id : notification_ids) {
-    WebNotificationImage* item = visible_small_icons_[id];
+    WebNotificationImage* item = visible_small_icons_[id].release();
     visible_small_icons_.erase(id);
     item->HideAndDelete();
   }

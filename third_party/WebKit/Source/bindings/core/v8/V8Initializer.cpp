@@ -94,7 +94,7 @@ static String ExtractMessageForConsole(v8::Isolate* isolate,
     v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(data);
     const WrapperTypeInfo* type = ToWrapperTypeInfo(obj);
     if (V8DOMException::wrapperTypeInfo.IsSubclass(type)) {
-      DOMException* exception = V8DOMException::toImpl(obj);
+      DOMException* exception = V8DOMException::ToImpl(obj);
       if (exception && !exception->MessageForConsole().IsEmpty())
         return exception->ToStringForConsole();
     }
@@ -435,10 +435,10 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
                      Protection protection) override {
     switch (protection) {
       case Protection::kNoAccess:
-        WTF::SetSystemPagesInaccessible(data, length);
+        CHECK(WTF::SetSystemPagesAccess(data, length, WTF::PageInaccessible));
         return;
       case Protection::kReadWrite:
-        (void)WTF::SetSystemPagesAccessible(data, length);
+        CHECK(WTF::SetSystemPagesAccess(data, length, WTF::PageReadWrite));
         return;
       default:
         NOTREACHED();

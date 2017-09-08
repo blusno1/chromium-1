@@ -33,13 +33,13 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/HTMLScriptElementOrSVGScriptElement.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/SourceLocation.h"
-#include "bindings/core/v8/StringOrDictionary.h"
 #include "bindings/core/v8/V0CustomElementConstructorBuilder.h"
 #include "bindings/core/v8/V8ElementCreationOptions.h"
 #include "bindings/core/v8/WindowProxy.h"
+#include "bindings/core/v8/html_script_element_or_svg_script_element.h"
+#include "bindings/core/v8/string_or_dictionary.h"
 #include "core/HTMLElementFactory.h"
 #include "core/HTMLElementTypeHelpers.h"
 #include "core/HTMLNames.h"
@@ -57,6 +57,9 @@
 #include "core/css/FontFaceSetDocument.h"
 #include "core/css/MediaQueryMatcher.h"
 #include "core/css/PropertyRegistry.h"
+#include "core/css/SelectorQuery.h"
+#include "core/css/StyleChangeReason.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/StyleSheetList.h"
@@ -97,14 +100,9 @@
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/ScriptRunner.h"
 #include "core/dom/ScriptedAnimationController.h"
-#include "core/dom/ScriptedIdleTaskController.h"
-#include "core/dom/SelectorQuery.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/StaticNodeList.h"
-#include "core/dom/StyleChangeReason.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/TouchList.h"
 #include "core/dom/TransformSource.h"
 #include "core/dom/TreeWalker.h"
 #include "core/dom/VisitedLinkState.h"
@@ -117,7 +115,6 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/serializers/Serialization.h"
-#include "core/editing/spellcheck/SpellChecker.h"
 #include "core/events/BeforeUnloadEvent.h"
 #include "core/events/EventFactory.h"
 #include "core/events/HashChangeEvent.h"
@@ -178,6 +175,7 @@
 #include "core/html/parser/NestingLevelIncrementer.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/input/EventHandler.h"
+#include "core/input/TouchList.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/MainThreadDebugger.h"
@@ -575,6 +573,7 @@ Document::Document(const DocumentInit& initializer,
       // pointer?
       dom_window_(frame_ ? frame_->DomWindow() : nullptr),
       imports_controller_(initializer.ImportsController()),
+      context_document_(initializer.ContextDocument()),
       context_features_(ContextFeatures::DefaultSwitch()),
       well_formed_(false),
       printing_(kNotPrinting),
@@ -621,7 +620,6 @@ Document::Document(const DocumentInit& initializer,
       is_srcdoc_document_(initializer.ShouldTreatURLAsSrcdocDocument()),
       is_mobile_document_(false),
       layout_view_(0),
-      context_document_(initializer.ContextDocument()),
       has_fullscreen_supplement_(false),
       load_event_delay_count_(0),
       load_event_delay_timer_(
@@ -864,7 +862,7 @@ String GetTypeExtension(Document* document,
   if (string_or_options.isDictionary()) {
     Dictionary dict = string_or_options.getAsDictionary();
     ElementCreationOptions impl;
-    V8ElementCreationOptions::toImpl(dict.GetIsolate(), dict.V8Value(), impl,
+    V8ElementCreationOptions::ToImpl(dict.GetIsolate(), dict.V8Value(), impl,
                                      exception_state);
     if (exception_state.HadException())
       return g_empty_string;
@@ -3462,7 +3460,10 @@ bool Document::CanCreateHistoryEntry() const {
     return true;
   if (frame_->HasReceivedUserGesture())
     return true;
-  return ElapsedTime() >= kElapsedTimeForHistoryEntryWithoutUserGestureMS;
+  if (ElapsedTime() >= kElapsedTimeForHistoryEntryWithoutUserGestureMS)
+    return true;
+  UseCounter::Count(*this, WebFeature::kSuppressHistoryEntryWithoutUserGesture);
+  return false;
 }
 
 void Document::write(const SegmentedString& text,
@@ -4476,9 +4477,6 @@ bool Document::SetFocusedElement(Element* new_focused_element,
         goto SetFocusedElementDone;
       }
     }
-
-    if (IsRootEditableElement(*focused_element_))
-      GetFrame()->GetSpellChecker().DidBeginEditing(focused_element_.Get());
   }
 
   if (!focus_change_blocked && focused_element_) {
@@ -5884,9 +5882,20 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
     return;
   }
 
+  SandboxFlags sandbox_flags = initializer.GetSandboxFlags();
+  if (fetcher_->Archive()) {
+    // The URL of a Document loaded from a MHTML archive is controlled by the
+    // Content-Location header. This would allow UXSS, since Content-Location
+    // can be arbitrarily controlled to control the Document's URL and origin.
+    // Instead, force a Document loaded from a MHTML archive to be sandboxed,
+    // providing exceptions only for creating new windows.
+    sandbox_flags |=
+        kSandboxAll &
+        ~(kSandboxPopups | kSandboxPropagatesToAuxiliaryBrowsingContexts);
+  }
   // In the common case, create the security context from the currently
   // loading URL with a fresh content security policy.
-  EnforceSandboxFlags(initializer.GetSandboxFlags());
+  EnforceSandboxFlags(sandbox_flags);
   SetInsecureRequestPolicy(initializer.GetInsecureRequestPolicy());
   if (initializer.InsecureNavigationsToUpgrade()) {
     for (auto to_upgrade : *initializer.InsecureNavigationsToUpgrade())
@@ -6416,9 +6425,11 @@ ScriptedIdleTaskController& Document::EnsureScriptedIdleTaskController() {
   return *scripted_idle_task_controller_;
 }
 
-int Document::RequestIdleCallback(IdleRequestCallback* callback,
-                                  const IdleRequestOptions& options) {
-  return EnsureScriptedIdleTaskController().RegisterCallback(callback, options);
+int Document::RequestIdleCallback(
+    ScriptedIdleTaskController::IdleTask* idle_task,
+    const IdleRequestOptions& options) {
+  return EnsureScriptedIdleTaskController().RegisterCallback(idle_task,
+                                                             options);
 }
 
 void Document::CancelIdleCallback(int id) {
@@ -7049,6 +7060,7 @@ DEFINE_TRACE_WRAPPERS(Document) {
   visitor->TraceWrappers(style_sheet_list_);
   visitor->TraceWrappers(style_engine_);
   visitor->TraceWrappers(script_runner_);
+  visitor->TraceWrappers(scripted_idle_task_controller_);
   // Cannot trace in Supplementable<Document> as it is part of platform/ and
   // thus cannot refer to ScriptWrappableVisitor.
   visitor->TraceWrappersWithManualWriteBarrier(

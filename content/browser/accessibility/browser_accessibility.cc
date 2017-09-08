@@ -310,10 +310,6 @@ BrowserAccessibility* BrowserAccessibility::InternalGetParent() const {
   return nullptr;
 }
 
-int32_t BrowserAccessibility::GetIndexInParent() const {
-  return node_ ? node_->index_in_parent() : -1;
-}
-
 int32_t BrowserAccessibility::GetId() const {
   return node_ ? node_->id() : -1;
 }
@@ -971,6 +967,10 @@ ui::AXPlatformNode* BrowserAccessibility::GetFromNodeID(int32_t id) {
   return nullptr;
 }
 
+int BrowserAccessibility::GetIndexInParent() const {
+  return node_ ? node_->index_in_parent() : -1;
+}
+
 gfx::AcceleratedWidget
 BrowserAccessibility::GetTargetForNativeAccessibilityEvent() {
   BrowserAccessibilityDelegate* root_delegate =
@@ -989,6 +989,28 @@ bool BrowserAccessibility::AccessibilityPerformAction(
 
   if (data.action == ui::AX_ACTION_FOCUS) {
     manager_->SetFocus(*this);
+    return true;
+  }
+
+  if (data.action == ui::AX_ACTION_SCROLL_TO_POINT) {
+    // target_point is in screen coordinates.  We need to convert this to frame
+    // coordinates because that's what BrowserAccessiblity cares about.
+    gfx::Point target =
+        data.target_point -
+        manager_->GetRootManager()->GetViewBounds().OffsetFromOrigin();
+
+    manager_->ScrollToPoint(*this, target);
+    return true;
+  }
+
+  if (data.action == ui::AX_ACTION_SCROLL_TO_MAKE_VISIBLE) {
+    // target_rect is in screen coordinates.  We need to convert this to frame
+    // coordinates because that's what BrowserAccessiblity cares about.
+    gfx::Rect target =
+        data.target_rect -
+        manager_->GetRootManager()->GetViewBounds().OffsetFromOrigin();
+
+    manager_->ScrollToMakeVisible(*this, target);
     return true;
   }
 

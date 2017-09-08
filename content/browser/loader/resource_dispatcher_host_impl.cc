@@ -29,7 +29,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/task_scheduler/post_task.h"
@@ -695,76 +694,13 @@ void ResourceDispatcherHostImpl::DidFinishLoading(ResourceLoader* loader) {
     UMA_HISTOGRAM_SPARSE_SLOWLY(
         "Net.ErrorCodesForMainFrame3",
         -loader->request()->status().error());
-
-    // Record time to success and error for the most common errors, and for
-    // the aggregate remainder errors.
-    base::TimeDelta request_loading_time(
-        base::TimeTicks::Now() - loader->request()->creation_time());
-    switch (loader->request()->status().error()) {
-      case net::OK:
-        UMA_HISTOGRAM_LONG_TIMES(
-            "Net.RequestTime2.Success", request_loading_time);
-        break;
-      case net::ERR_ABORTED:
-        UMA_HISTOGRAM_CUSTOM_COUNTS("Net.ErrAborted.SentBytes",
-                                    loader->request()->GetTotalSentBytes(), 1,
-                                    50000000, 50);
-        UMA_HISTOGRAM_CUSTOM_COUNTS("Net.ErrAborted.ReceivedBytes",
-                                    loader->request()->GetTotalReceivedBytes(),
-                                    1, 50000000, 50);
-        UMA_HISTOGRAM_LONG_TIMES(
-            "Net.RequestTime2.ErrAborted", request_loading_time);
-
-        if (loader->request()->url().SchemeIsHTTPOrHTTPS()) {
-          UMA_HISTOGRAM_LONG_TIMES("Net.RequestTime2.ErrAborted.HttpScheme",
-                                   request_loading_time);
-        } else {
-          UMA_HISTOGRAM_LONG_TIMES("Net.RequestTime2.ErrAborted.NonHttpScheme",
-                                   request_loading_time);
-        }
-
-        if (loader->request()->GetTotalReceivedBytes() > 0) {
-          UMA_HISTOGRAM_LONG_TIMES("Net.RequestTime2.ErrAborted.NetworkContent",
-                                   request_loading_time);
-        } else if (loader->request()->received_response_content_length() > 0) {
-          UMA_HISTOGRAM_LONG_TIMES(
-              "Net.RequestTime2.ErrAborted.NoNetworkContent.CachedContent",
-              request_loading_time);
-        } else {
-          UMA_HISTOGRAM_LONG_TIMES(
-              "Net.RequestTime2.ErrAborted.NoBytesRead",
-              request_loading_time);
-        }
-
-        if (delegate_) {
-          delegate_->OnAbortedFrameLoad(loader->request()->url(),
-                                        request_loading_time);
-        }
-        break;
-      case net::ERR_CONNECTION_RESET:
-        UMA_HISTOGRAM_LONG_TIMES(
-            "Net.RequestTime2.ErrConnectionReset", request_loading_time);
-        break;
-      case net::ERR_CONNECTION_TIMED_OUT:
-        UMA_HISTOGRAM_LONG_TIMES(
-            "Net.RequestTime2.ErrConnectionTimedOut", request_loading_time);
-        break;
-      case net::ERR_INTERNET_DISCONNECTED:
-        UMA_HISTOGRAM_LONG_TIMES(
-            "Net.RequestTime2.ErrInternetDisconnected", request_loading_time);
-        break;
-      case net::ERR_NAME_NOT_RESOLVED:
-        UMA_HISTOGRAM_LONG_TIMES(
-            "Net.RequestTime2.ErrNameNotResolved", request_loading_time);
-        break;
-      case net::ERR_TIMED_OUT:
-        UMA_HISTOGRAM_LONG_TIMES(
-            "Net.RequestTime2.ErrTimedOut", request_loading_time);
-        break;
-      default:
-        UMA_HISTOGRAM_LONG_TIMES(
-            "Net.RequestTime2.MiscError", request_loading_time);
-        break;
+    if (loader->request()->status().error() == net::ERR_ABORTED) {
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Net.ErrAborted.SentBytes",
+                                  loader->request()->GetTotalSentBytes(), 1,
+                                  50000000, 50);
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Net.ErrAborted.ReceivedBytes",
+                                  loader->request()->GetTotalReceivedBytes(), 1,
+                                  50000000, 50);
     }
 
     if (loader->request()->url().SchemeIsCryptographic()) {
@@ -903,10 +839,6 @@ void ResourceDispatcherHostImpl::OnRequestResourceInternal(
     mojom::URLLoaderClientPtr url_loader_client,
     const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "477117 ResourceDispatcherHostImpl::OnRequestResource"));
   // When logging time-to-network only care about main frame and non-transfer
   // navigations.
   // PlzNavigate: this log happens from NavigationRequest::OnRequestStarted
@@ -1166,12 +1098,9 @@ void ResourceDispatcherHostImpl::BeginRequest(
 
   // Parse the headers before calling ShouldServiceRequest, so that they are
   // available to be validated.
-  net::HttpRequestHeaders headers;
-  headers.AddHeadersFromString(request_data.headers);
-
   if (is_shutdown_ ||
-      !ShouldServiceRequest(child_id, request_data, headers, requester_info,
-                            resource_context)) {
+      !ShouldServiceRequest(child_id, request_data, request_data.headers,
+                            requester_info, resource_context)) {
     AbortRequestBeforeItStarts(requester_info->filter(), sync_result_handler,
                                request_id, std::move(url_loader_client));
     return;
@@ -1204,7 +1133,8 @@ void ResourceDispatcherHostImpl::BeginRequest(
     // yes then we need to mark the current request as pending and wait for the
     // interceptor to invoke the callback with a status code indicating whether
     // the request needs to be aborted or continued.
-    for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();) {
+    for (net::HttpRequestHeaders::Iterator it(request_data.headers);
+         it.GetNext();) {
       HeaderInterceptorMap::iterator index =
           http_header_interceptor_map_.find(it.name());
       if (index != http_header_interceptor_map_.end()) {
@@ -1223,7 +1153,8 @@ void ResourceDispatcherHostImpl::BeginRequest(
                   &ResourceDispatcherHostImpl::ContinuePendingBeginRequest,
                   base::Unretained(this), make_scoped_refptr(requester_info),
                   request_id, request_data, is_sync_load, sync_result_handler,
-                  route_id, headers, base::Passed(std::move(mojo_request)),
+                  route_id, request_data.headers,
+                  base::Passed(std::move(mojo_request)),
                   base::Passed(std::move(url_loader_client)),
                   base::Passed(std::move(blob_handles)), traffic_annotation));
           return;
@@ -1231,11 +1162,12 @@ void ResourceDispatcherHostImpl::BeginRequest(
       }
     }
   }
-  ContinuePendingBeginRequest(
-      requester_info, request_id, request_data, is_sync_load,
-      sync_result_handler, route_id, headers, std::move(mojo_request),
-      std::move(url_loader_client), std::move(blob_handles), traffic_annotation,
-      HeaderInterceptorResult::CONTINUE);
+  ContinuePendingBeginRequest(requester_info, request_id, request_data,
+                              is_sync_load, sync_result_handler, route_id,
+                              request_data.headers, std::move(mojo_request),
+                              std::move(url_loader_client),
+                              std::move(blob_handles), traffic_annotation,
+                              HeaderInterceptorResult::CONTINUE);
 }
 
 void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
@@ -1508,10 +1440,6 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
     mojom::URLLoaderRequest mojo_request,
     mojom::URLLoaderClientPtr url_loader_client) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/456331 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "456331 ResourceDispatcherHostImpl::CreateResourceHandler"));
   // Construct the IPC resource handler.
   std::unique_ptr<ResourceHandler> handler;
   if (sync_result_handler) {
@@ -1864,7 +1792,19 @@ void ResourceDispatcherHostImpl::CancelRequestsForRoute(
       any_requests_transferring = true;
     if (cancel_all_routes || route_id == info->GetRenderFrameID()) {
       if (info->detachable_handler()) {
-        info->detachable_handler()->Detach();
+        if (base::FeatureList::IsEnabled(
+                features::kKeepAliveRendererForKeepaliveRequests)) {
+          // If the feature is enabled, the renderer process's lifetime is
+          // prolonged so there's no need to detach.
+          if (cancel_all_routes) {
+            // If the process is going to shut down for other reasons, we need
+            // to cancel the request.
+            matching_requests.push_back(id);
+          }
+        } else {
+          // Otherwise, use DetachableResourceHandler's functionality.
+          info->detachable_handler()->Detach();
+        }
       } else if (!info->IsDownload() && !info->is_stream() &&
                  !IsTransferredNavigation(id)) {
         matching_requests.push_back(id);
@@ -2455,11 +2395,6 @@ void ResourceDispatcherHostImpl::CancelRequestFromRenderer(
 void ResourceDispatcherHostImpl::StartLoading(
     ResourceRequestInfoImpl* info,
     std::unique_ptr<ResourceLoader> loader) {
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/456331 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "456331 ResourceDispatcherHostImpl::StartLoading"));
-
   ResourceLoader* loader_ptr = loader.get();
   DCHECK(pending_loaders_[info->GetGlobalRequestID()] == nullptr);
   pending_loaders_[info->GetGlobalRequestID()] = std::move(loader);

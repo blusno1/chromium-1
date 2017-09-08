@@ -27,8 +27,6 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# pylint: disable=W0403
-
 """Compile an .idl file to Blink V8 bindings (.h and .cpp files).
 
 Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
@@ -79,12 +77,6 @@ def parse_options():
     return options, idl_filename
 
 
-def idl_filename_to_interface_name(idl_filename):
-    basename = os.path.basename(idl_filename)
-    interface_name, _ = os.path.splitext(basename)
-    return interface_name
-
-
 class IdlCompiler(object):
     """The IDL Compiler.
 
@@ -112,9 +104,9 @@ class IdlCompiler(object):
                                                    self.output_directory)
 
     def compile_and_write(self, idl_filename):
-        interface_name = idl_filename_to_interface_name(idl_filename)
         definitions = self.reader.read_idl_definitions(idl_filename)
         target_definitions = definitions[self.target_component]
+        interface_name = target_definitions.first_name
         output_code_list = self.code_generator.generate_code(
             target_definitions, interface_name)
 

@@ -40,7 +40,6 @@
 #include "core/dom/FlatTreeTraversal.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/TouchList.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/dom/events/EventPath.h"
 #include "core/editing/EditingUtilities.h"
@@ -68,6 +67,7 @@
 #include "core/input/EventHandlingUtil.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/input/TouchActionUtil.h"
+#include "core/input/TouchList.h"
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutView.h"
@@ -827,9 +827,6 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
     last_scrollbar_under_mouse_->MouseMoved(mouse_event);
     return WebInputEventResult::kHandledSystem;
   }
-
-  // Mouse events simulated from touch should not hit-test again.
-  DCHECK(!mouse_event.FromTouch());
 
   HitTestRequest::HitTestRequestType hit_type = HitTestRequest::kMove;
   if (mouse_event_manager_->MousePressed()) {

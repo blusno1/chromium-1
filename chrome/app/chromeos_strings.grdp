@@ -238,11 +238,11 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_ERROR_WHITESPACE_NAME" desc="Error message displayed when the user enters a file name consisting of only whitespace characters.">
     Invalid name
   </message>
-  <message name="IDS_FILE_BROWSER_ERROR_LONG_NAME" desc="Error message displayed when user trys to enter too long name for a file or a folder.">
-    This name is too long
+  <message name="IDS_FILE_BROWSER_ERROR_LONG_NAME" desc="Error message displayed when user tries to enter too long name for a file or a folder.">
+    Use a shorter name
   </message>
-  <message name="IDS_FILE_BROWSER_ERROR_EXTERNAL_DRIVE_LONG_NAME" desc="Error message displayed when user trys to enter too long name for an external drive.">
-    This name is too long and exceeds $1 character length limit.
+  <message name="IDS_FILE_BROWSER_ERROR_EXTERNAL_DRIVE_LONG_NAME" desc="Error message displayed when user tries to enter too long name for an external drive.">
+    Use a name that's $1 characters or less
   </message>
   <message name="IDS_FILE_BROWSER_EMPTY_FOLDER" desc="Label shown in an empty folder.">
     Nothing to see here...
@@ -4940,6 +4940,9 @@ All users must sign out to continue.
   <message name="IDS_ARC_NOTIFICATION_TITLE" desc="Title of the first-run notification that enables Android apps.">
     Google Play on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
   </message>
+  <message name="IDS_ARC_NOTIFICATION_DISPLAY_SOURCE" desc="Context title of the first-run notification that enables Android apps.">
+    Google Play
+  </message>
   <message name="IDS_ARC_NOTIFICATION_MESSAGE" desc="Description message of the first-run notification that enables Android apps.">
     Install apps and games from Google Play
   </message>
@@ -5194,6 +5197,9 @@ All users must sign out to continue.
   </message>
 
   <!-- Print Job Notification -->
+  <message name="IDS_PRINT_JOB_NOTIFICATION_DISPLAY_SOURCE" desc="The context title of printing notification.">
+    Print
+  </message>
   <message name="IDS_PRINT_JOB_PRINTING_NOTIFICATION_TITLE" desc="Title of the printing-in-progress notification.">
     Now printing <ph name="DOCUMENT_NAME">$1<ex>document.pdf</ex></ph>
   </message>

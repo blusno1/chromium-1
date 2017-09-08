@@ -15,6 +15,7 @@
 #include "components/subresource_filter/content/browser/content_activation_list_utils.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
+#include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -47,8 +48,7 @@ SubresourceFilterSafeBrowsingActivationThrottle::
   DCHECK(handle->IsInMainFrame());
 
   CheckCurrentUrl();
-  // Check added to investigate crbug.com/733099.
-  CHECK(!database_client_ || !check_results_.empty());
+  DCHECK(!database_client_ || !check_results_.empty());
 }
 
 SubresourceFilterSafeBrowsingActivationThrottle::
@@ -116,25 +116,15 @@ bool SubresourceFilterSafeBrowsingActivationThrottle::NavigationIsPageReload(
 }
 
 content::NavigationThrottle::ThrottleCheckResult
-SubresourceFilterSafeBrowsingActivationThrottle::WillStartRequest() {
-  will_start_request_called_ = true;
-  return content::NavigationThrottle::ThrottleCheckResult::PROCEED;
-}
-
-content::NavigationThrottle::ThrottleCheckResult
 SubresourceFilterSafeBrowsingActivationThrottle::WillRedirectRequest() {
   CheckCurrentUrl();
-  // Check added to investigate crbug.com/733099.
-  CHECK(!database_client_ || !check_results_.empty());
+  DCHECK(!database_client_ || !check_results_.empty());
   return content::NavigationThrottle::ThrottleCheckResult::PROCEED;
 }
 
 content::NavigationThrottle::ThrottleCheckResult
 SubresourceFilterSafeBrowsingActivationThrottle::WillProcessResponse() {
-  // Checks added to investigate crbug.com/733099.
-  CHECK(will_start_request_called_);
-  CHECK(!database_client_ || !check_results_.empty());
-
+  DCHECK(!database_client_ || !check_results_.empty());
   // No need to defer the navigation if the check already happened.
   if (!database_client_ || check_results_.back().finished) {
     NotifyResult();
@@ -192,6 +182,23 @@ void SubresourceFilterSafeBrowsingActivationThrottle::NotifyResult() {
     client_->WhitelistInCurrentWebContents(navigation_handle()->GetURL());
   }
 
+  // Compute the matched list and notify observers of the check result.
+  DCHECK(!database_client_ || !check_results_.empty());
+  ActivationList matched_list = ActivationList::NONE;
+  bool experimental_list = false;
+  if (!check_results_.empty()) {
+    const auto& check_result = check_results_.back();
+    DCHECK(check_result.finished);
+    matched_list = GetListForThreatTypeAndMetadata(
+        check_result.threat_type, check_result.threat_metadata);
+    experimental_list = check_result.threat_metadata.experimental;
+    SubresourceFilterObserverManager::FromWebContents(
+        navigation_handle()->GetWebContents())
+        ->NotifySafeBrowsingCheckComplete(navigation_handle(),
+                                          check_result.threat_type,
+                                          check_result.threat_metadata);
+  }
+
   Configuration matched_configuration;
   ActivationDecision activation_decision = ActivationDecision::UNKNOWN;
   if (client_->ForceActivationInCurrentWebContents()) {
@@ -199,7 +206,8 @@ void SubresourceFilterSafeBrowsingActivationThrottle::NotifyResult() {
     activation_decision = ActivationDecision::ACTIVATED;
     matched_configuration = Configuration::MakeForForcedActivation();
   } else {
-    activation_decision = ComputeActivation(&matched_configuration);
+    activation_decision = ComputeActivation(matched_list, experimental_list,
+                                            &matched_configuration);
   }
   DCHECK_NE(activation_decision, ActivationDecision::UNKNOWN);
 
@@ -210,7 +218,8 @@ void SubresourceFilterSafeBrowsingActivationThrottle::NotifyResult() {
   bool whitelisted = client_->OnPageActivationComputed(
       navigation_handle(),
       matched_configuration.activation_options.activation_level ==
-          ActivationLevel::ENABLED);
+          ActivationLevel::ENABLED,
+      matched_configuration.activation_options.should_suppress_notifications);
 
   // Only reset the activation decision reason if we would have activated.
   if (whitelisted && activation_decision == ActivationDecision::ACTIVATED) {
@@ -239,19 +248,10 @@ void SubresourceFilterSafeBrowsingActivationThrottle::NotifyResult() {
 
 ActivationDecision
 SubresourceFilterSafeBrowsingActivationThrottle::ComputeActivation(
+    ActivationList matched_list,
+    bool experimental_list,
     Configuration* configuration) {
   const GURL& url(navigation_handle()->GetURL());
-  ActivationList matched_list = ActivationList::NONE;
-  DCHECK(!database_client_ || !check_results_.empty());
-  bool experimental_list = false;
-  if (!check_results_.empty()) {
-    const auto& check_result = check_results_.back();
-    DCHECK(check_result.finished);
-    matched_list = GetListForThreatTypeAndMetadata(
-        check_result.threat_type, check_result.threat_metadata);
-    experimental_list = check_result.threat_metadata.experimental;
-  }
-
   const auto config_list = GetEnabledConfigurations();
   bool scheme_is_http_or_https = url.SchemeIsHTTPOrHTTPS();
   const auto highest_priority_activated_config = std::find_if(

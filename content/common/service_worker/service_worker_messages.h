@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Message definition file, included multiple times, hence no include guard.
+#ifndef CONTENT_COMMON_SERVICE_WORKER_SERVICE_WORKER_MESSAGES_H_
+#define CONTENT_COMMON_SERVICE_WORKER_SERVICE_WORKER_MESSAGES_H_
 
 #include <stdint.h>
 
@@ -170,13 +171,6 @@ IPC_STRUCT_END()
 //---------------------------------------------------------------------------
 // Messages sent from the child process to the browser.
 
-IPC_MESSAGE_CONTROL5(ServiceWorkerHostMsg_RegisterServiceWorker,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     int /* provider_id */,
-                     GURL /* script_url */,
-                     content::ServiceWorkerRegistrationOptions)
-
 IPC_MESSAGE_CONTROL4(ServiceWorkerHostMsg_UpdateServiceWorker,
                      int /* thread_id */,
                      int /* request_id */,
@@ -188,17 +182,6 @@ IPC_MESSAGE_CONTROL4(ServiceWorkerHostMsg_UnregisterServiceWorker,
                      int /* request_id */,
                      int /* provider_id */,
                      int64_t /* registration_id */)
-
-IPC_MESSAGE_CONTROL4(ServiceWorkerHostMsg_GetRegistration,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     int /* provider_id */,
-                     GURL /* document_url */)
-
-IPC_MESSAGE_CONTROL3(ServiceWorkerHostMsg_GetRegistrations,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     int /* provider_id */)
 
 IPC_MESSAGE_CONTROL3(ServiceWorkerHostMsg_GetRegistrationForReady,
                      int /* thread_id */,
@@ -323,13 +306,6 @@ IPC_MESSAGE_ROUTED1(ServiceWorkerHostMsg_ClaimClients,
 // extract it and dispatch the message to the correct ServiceWorkerDispatcher
 // on the correct thread.
 
-// Response to ServiceWorkerHostMsg_RegisterServiceWorker.
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_ServiceWorkerRegistered,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     content::ServiceWorkerRegistrationObjectInfo,
-                     content::ServiceWorkerVersionAttributes)
-
 // Response to ServiceWorkerHostMsg_UpdateServiceWorker.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_ServiceWorkerUpdated,
                      int /* thread_id */,
@@ -341,34 +317,12 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_ServiceWorkerUnregistered,
                      int /* request_id */,
                      bool /* is_success */)
 
-// Response to ServiceWorkerHostMsg_GetRegistration.
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_DidGetRegistration,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     content::ServiceWorkerRegistrationObjectInfo,
-                     content::ServiceWorkerVersionAttributes)
-
-// Response to ServiceWorkerHostMsg_GetRegistrations.
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_DidGetRegistrations,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     std::vector<content::ServiceWorkerRegistrationObjectInfo>,
-                     std::vector<content::ServiceWorkerVersionAttributes>)
-
 // Response to ServiceWorkerHostMsg_GetRegistrationForReady.
 IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_DidGetRegistrationForReady,
                      int /* thread_id */,
                      int /* request_id */,
                      content::ServiceWorkerRegistrationObjectInfo,
                      content::ServiceWorkerVersionAttributes)
-
-// Sent when any kind of registration error occurs during a
-// RegisterServiceWorker handler above.
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_ServiceWorkerRegistrationError,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     blink::mojom::ServiceWorkerErrorType,
-                     base::string16 /* message */)
 
 // Sent when any kind of update error occurs during a
 // UpdateServiceWorker handler above.
@@ -381,22 +335,6 @@ IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_ServiceWorkerUpdateError,
 // Sent when any kind of registration error occurs during a
 // UnregisterServiceWorker handler above.
 IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_ServiceWorkerUnregistrationError,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     blink::mojom::ServiceWorkerErrorType,
-                     base::string16 /* message */)
-
-// Sent when any kind of registration error occurs during a
-// GetRegistration handler above.
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_ServiceWorkerGetRegistrationError,
-                     int /* thread_id */,
-                     int /* request_id */,
-                     blink::mojom::ServiceWorkerErrorType,
-                     base::string16 /* message */)
-
-// Sent when any kind of registration error occurs during a
-// GetRegistrations handler above.
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_ServiceWorkerGetRegistrationsError,
                      int /* thread_id */,
                      int /* request_id */,
                      blink::mojom::ServiceWorkerErrorType,
@@ -508,3 +446,5 @@ IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_NavigateClientResponse,
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_NavigateClientError,
                      int /* request_id */,
                      GURL /* url */)
+
+#endif  // CONTENT_COMMON_SERVICE_WORKER_SERVICE_WORKER_MESSAGES_H_

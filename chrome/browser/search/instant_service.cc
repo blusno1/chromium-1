@@ -10,7 +10,6 @@
 #include "base/feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/ntp_tiles/chrome_most_visited_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,21 +17,13 @@
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/search/most_visited_iframe_source.h"
 #include "chrome/browser/search/search.h"
-#include "chrome/browser/search/suggestions/image_decoder_impl.h"
-#include "chrome/browser/search/suggestions/suggestions_service_factory.h"
 #include "chrome/browser/search/thumbnail_source.h"
-#include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/thumbnails/thumbnail_list_source.h"
-#include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/search.mojom.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/history/core/browser/top_sites.h"
-#include "components/image_fetcher/core/image_fetcher_impl.h"
-#include "components/keyed_service/core/service_access_type.h"
-#include "components/ntp_tiles/icon_cacher.h"
 #include "components/search/search.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -68,20 +59,6 @@ InstantService::InstantService(Profile* profile)
   // This depends on the existence of the typical browser threads. Therefore it
   // is only instantiated here (after the check for a UI thread above).
   instant_io_context_ = new InstantIOContext();
-
-  TemplateURLService* template_url_service =
-      TemplateURLServiceFactory::GetForProfile(profile_);
-  // TemplateURLService can be null in tests.
-  if (template_url_service) {
-    search_engine_base_url_tracker_ =
-        base::MakeUnique<SearchEngineBaseURLTracker>(
-            template_url_service,
-            base::MakeUnique<UIThreadSearchTermsData>(profile_),
-            base::Bind(&InstantService::OnSearchEngineBaseURLChanged,
-                       base::Unretained(this)));
-  }
-
-  ResetInstantSearchPrerendererIfNecessary();
 
   registrar_.Add(this,
                  content::NOTIFICATION_RENDERER_PROCESS_CREATED,
@@ -210,13 +187,6 @@ void InstantService::SendSearchURLsToRenderer(content::RenderProcessHost* rph) {
     client->SetSearchURLs(search::GetSearchURLs(profile_),
                           search::GetNewTabPageURL(profile_));
   }
-}
-
-InstantSearchPrerenderer* InstantService::GetInstantSearchPrerenderer() {
-  // The Instant prefetch base URL may have changed (see e.g. crbug.com/660923).
-  // If so, recreate the prerenderer.
-  ResetInstantSearchPrerendererIfNecessary();
-  return instant_prerenderer_.get();
 }
 
 void InstantService::Shutdown() {
@@ -453,25 +423,4 @@ void InstantService::TopSitesChanged(history::TopSites* top_sites,
   top_sites_->GetMostVisitedURLs(base::Bind(&InstantService::OnTopSitesReceived,
                                             weak_ptr_factory_.GetWeakPtr()),
                                  false);
-}
-
-void InstantService::OnSearchEngineBaseURLChanged(
-    SearchEngineBaseURLTracker::ChangeReason change_reason) {
-  ResetInstantSearchPrerendererIfNecessary();
-  bool google_base_url_changed =
-      change_reason ==
-      SearchEngineBaseURLTracker::ChangeReason::GOOGLE_BASE_URL;
-  for (InstantServiceObserver& observer : observers_)
-    observer.DefaultSearchProviderChanged(google_base_url_changed);
-}
-
-void InstantService::ResetInstantSearchPrerendererIfNecessary() {
-  if (!search::IsInstantExtendedAPIEnabled())
-    return;
-
-  GURL url(search::GetSearchResultPrefetchBaseURL(profile_));
-  if (!instant_prerenderer_ || instant_prerenderer_->prerender_url() != url) {
-    instant_prerenderer_.reset(
-        url.is_valid() ? new InstantSearchPrerenderer(profile_, url) : nullptr);
-  }
 }

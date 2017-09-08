@@ -754,6 +754,10 @@
     "label": "//mojo/android:mojo_test_apk",
     "type": "console_test_launcher",
   },
+  "monochrome_static_initializers": {
+    "label": "//chrome/android:monochrome_static_initializers",
+    "type": "additional_compile_target",
+  },
   "mus_browser_tests": {
     "label": "//chrome/test:mus_browser_tests",
     "label_type": "group",
@@ -1134,6 +1138,14 @@
       "--debug-rwt-logging",
       "--results-directory", "${ISOLATED_OUTDIR}/layout-test-results",
     ],
+  },
+  "webkit_python_tests": {
+    "label": "//:webkit_python_tests",
+    "type": "script",
+    "script": "//testing/scripts/run_isolated_script_test.py",
+    "args": [
+      "../../third_party/WebKit/Tools/Scripts/test-webkitpy"
+    ]
   },
   "webkit_unit_tests": {
     "label": "//third_party/WebKit/Source/controller:webkit_unit_tests",

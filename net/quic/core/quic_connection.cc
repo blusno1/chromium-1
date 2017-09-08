@@ -286,10 +286,7 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
   SetMaxPacketLength(perspective_ == Perspective::IS_SERVER
                          ? kDefaultServerMaxPacketSize
                          : kDefaultMaxPacketSize);
-  if (packet_generator_.latched_flag_no_stop_waiting_frames()) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_no_stop_waiting_frames, 1, 2);
-    received_packet_manager_.set_max_ack_ranges(255);
-  }
+  received_packet_manager_.set_max_ack_ranges(255);
 }
 
 QuicConnection::~QuicConnection() {
@@ -369,10 +366,8 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
     QUIC_FLAG_COUNT(quic_reloadable_flag_quic_enable_3rtos);
     close_connection_after_three_rtos_ = true;
   }
-  if (packet_generator_.latched_flag_no_stop_waiting_frames() &&
-      version() > QUIC_VERSION_37 &&
+  if (version() > QUIC_VERSION_37 &&
       config.HasClientSentConnectionOption(kNSTP, perspective_)) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_no_stop_waiting_frames, 2, 2);
     no_stop_waiting_frames_ = true;
   }
 }
@@ -1274,6 +1269,10 @@ void QuicConnection::ProcessUdpPacket(const QuicSocketAddress& self_address,
   current_packet_data_ = nullptr;
 }
 
+void QuicConnection::OnBlockedWriterCanWrite() {
+  OnCanWrite();
+}
+
 void QuicConnection::OnCanWrite() {
   DCHECK(!writer_->IsWriteBlocked());
 
@@ -1328,6 +1327,8 @@ bool QuicConnection::ProcessValidatedPacket(const QuicPacketHeader& header) {
             last_packet_destination_address_.host().Normalized()) {
       if (FLAGS_quic_reloadable_flag_quic_allow_one_address_change &&
           AllowSelfAddressChange()) {
+        QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_allow_one_address_change, 2,
+                          2);
         OnSelfAddressChange();
       } else {
         CloseConnection(
@@ -1519,7 +1520,7 @@ bool QuicConnection::WritePacket(SerializedPacket* packet) {
   // Termination packets are eventually owned by TimeWaitListManager.
   // Others are deleted at the end of this call.
   if (is_termination_packet) {
-    if (termination_packets_.get() == nullptr) {
+    if (termination_packets_ == nullptr) {
       termination_packets_.reset(
           new std::vector<std::unique_ptr<QuicEncryptedPacket>>);
     }

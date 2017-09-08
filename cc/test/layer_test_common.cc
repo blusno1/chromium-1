@@ -12,7 +12,6 @@
 #include "cc/base/math_util.h"
 #include "cc/base/region.h"
 #include "cc/layers/append_quads_data.h"
-#include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/fake_layer_tree_frame_sink.h"
@@ -20,6 +19,7 @@
 #include "cc/trees/layer_tree_host_common.h"
 #include "components/viz/common/quads/copy_output_request.h"
 #include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/quads/draw_quad.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
@@ -232,12 +232,9 @@ void LayerTestCommon::LayerImplTest::AppendSurfaceQuadsWithOcclusion(
                             render_pass_.get(), &data);
 }
 
-void EmptyCopyOutputCallback(std::unique_ptr<viz::CopyOutputResult> result) {}
-
 void LayerTestCommon::LayerImplTest::RequestCopyOfOutput() {
   root_layer_for_testing()->test_properties()->copy_requests.push_back(
-      viz::CopyOutputRequest::CreateRequest(
-          base::BindOnce(&EmptyCopyOutputCallback)));
+      viz::CopyOutputRequest::CreateStubForTesting());
 }
 
 }  // namespace cc

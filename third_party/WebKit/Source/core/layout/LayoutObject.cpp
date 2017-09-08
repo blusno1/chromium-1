@@ -32,13 +32,13 @@
 #include <memory>
 
 #include "core/animation/ElementAnimations.h"
+#include "core/css/StyleChangeReason.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleChangeReason.h"
-#include "core/dom/StyleEngine.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/TextAffinity.h"
@@ -1182,7 +1182,7 @@ LayoutRect LayoutObject::AbsoluteVisualRect() const {
   return rect;
 }
 
-LayoutRect LayoutObject::LocalVisualRect() const {
+LayoutRect LayoutObject::LocalVisualRectIgnoringVisibility() const {
   NOTREACHED();
   return LayoutRect();
 }
@@ -1315,45 +1315,6 @@ void LayoutObject::ShowLayoutTreeAndMark(const LayoutObject* marked_object1,
 bool LayoutObject::IsSelectable() const {
   return !IsInert() && !(Style()->UserSelect() == EUserSelect::kNone &&
                          Style()->UserModify() == EUserModify::kReadOnly);
-}
-
-Color LayoutObject::SelectionBackgroundColor() const {
-  if (!IsSelectable())
-    return Color::kTransparent;
-
-  if (RefPtr<ComputedStyle> pseudo_style = GetUncachedSelectionStyle())
-    return ResolveColor(*pseudo_style, CSSPropertyBackgroundColor)
-        .BlendWithWhite();
-  return GetFrame()->Selection().FrameIsFocusedAndActive()
-             ? LayoutTheme::GetTheme().ActiveSelectionBackgroundColor()
-             : LayoutTheme::GetTheme().InactiveSelectionBackgroundColor();
-}
-
-Color LayoutObject::SelectionColor(
-    int color_property,
-    const GlobalPaintFlags global_paint_flags) const {
-  // If the element is unselectable, or we are only painting the selection,
-  // don't override the foreground color with the selection foreground color.
-  if (!IsSelectable() || (global_paint_flags & kGlobalPaintSelectionOnly))
-    return ResolveColor(color_property);
-
-  if (RefPtr<ComputedStyle> pseudo_style = GetUncachedSelectionStyle())
-    return ResolveColor(*pseudo_style, color_property);
-  if (!LayoutTheme::GetTheme().SupportsSelectionForegroundColors())
-    return ResolveColor(color_property);
-  return GetFrame()->Selection().FrameIsFocusedAndActive()
-             ? LayoutTheme::GetTheme().ActiveSelectionForegroundColor()
-             : LayoutTheme::GetTheme().InactiveSelectionForegroundColor();
-}
-
-Color LayoutObject::SelectionForegroundColor(
-    const GlobalPaintFlags global_paint_flags) const {
-  return SelectionColor(CSSPropertyWebkitTextFillColor, global_paint_flags);
-}
-
-Color LayoutObject::SelectionEmphasisMarkColor(
-    const GlobalPaintFlags global_paint_flags) const {
-  return SelectionColor(CSSPropertyWebkitTextEmphasisColor, global_paint_flags);
 }
 
 // Called when an object that was floating or positioned becomes a normal flow
@@ -1723,7 +1684,6 @@ void LayoutObject::StyleWillChange(StyleDifference diff,
   //
   // Since a CSS property cannot be applied directly to a text node, a
   // handler will have already been added for its parent so ignore it.
-  // TODO: Remove this blocking event handler; crbug.com/318381
   TouchAction old_touch_action =
       style_ ? style_->GetTouchAction() : TouchAction::kTouchActionAuto;
   if (GetNode() && !GetNode()->IsTextNode() &&
@@ -1731,12 +1691,13 @@ void LayoutObject::StyleWillChange(StyleDifference diff,
           (new_style.GetTouchAction() == TouchAction::kTouchActionAuto)) {
     EventHandlerRegistry& registry =
         GetDocument().GetPage()->GetEventHandlerRegistry();
-    if (new_style.GetTouchAction() != TouchAction::kTouchActionAuto)
-      registry.DidAddEventHandler(
-          *GetNode(), EventHandlerRegistry::kTouchStartOrMoveEventBlocking);
-    else
-      registry.DidRemoveEventHandler(
-          *GetNode(), EventHandlerRegistry::kTouchStartOrMoveEventBlocking);
+    if (new_style.GetTouchAction() != TouchAction::kTouchActionAuto) {
+      registry.DidAddEventHandler(*GetNode(),
+                                  EventHandlerRegistry::kTouchAction);
+    } else {
+      registry.DidRemoveEventHandler(*GetNode(),
+                                     EventHandlerRegistry::kTouchAction);
+    }
   }
 }
 
@@ -2335,7 +2296,8 @@ LayoutRect LayoutObject::LocalCaretRect(
 }
 
 void LayoutObject::ComputeLayerHitTestRects(
-    LayerHitTestRects& layer_rects) const {
+    LayerHitTestRects& layer_rects,
+    TouchAction supported_fast_actions) const {
   // Figure out what layer our container is in. Any offset (or new layer) for
   // this layoutObject within it's container will be applied in
   // addLayerHitTestRects.
@@ -2361,14 +2323,17 @@ void LayoutObject::ComputeLayerHitTestRects(
   }
 
   this->AddLayerHitTestRects(layer_rects, current_layer, layer_offset,
-                             LayoutRect());
+                             supported_fast_actions, LayoutRect(),
+                             TouchAction::kTouchActionAuto);
 }
 
 void LayoutObject::AddLayerHitTestRects(
     LayerHitTestRects& layer_rects,
     const PaintLayer* current_layer,
     const LayoutPoint& layer_offset,
-    const LayoutRect& container_rect) const {
+    TouchAction supported_fast_actions,
+    const LayoutRect& container_rect,
+    TouchAction container_whitelisted_touch_action) const {
   DCHECK(current_layer);
   DCHECK_EQ(current_layer, this->EnclosingLayer());
 
@@ -2377,6 +2342,8 @@ void LayoutObject::AddLayerHitTestRects(
   // but this seems slightly simpler.
   Vector<LayoutRect> own_rects;
   LayoutRect new_container_rect;
+  TouchAction new_container_whitelisted_touch_action =
+      TouchAction::kTouchActionAuto;
   ComputeSelfHitTestRects(own_rects, layer_offset);
 
   // When we get to have a lot of rects on a layer, the performance cost of
@@ -2387,28 +2354,40 @@ void LayoutObject::AddLayerHitTestRects(
   const size_t kMaxRectsPerLayer = 100;
 
   LayerHitTestRects::iterator iter = layer_rects.find(current_layer);
-  Vector<LayoutRect>* iter_value;
-  if (iter == layer_rects.end())
-    iter_value = &layer_rects.insert(current_layer, Vector<LayoutRect>())
+  Vector<TouchActionRect>* iter_value;
+  if (iter == layer_rects.end()) {
+    iter_value = &layer_rects.insert(current_layer, Vector<TouchActionRect>())
                       .stored_value->value;
-  else
+  } else {
     iter_value = &iter->value;
+  }
+  TouchAction whitelisted_touch_action =
+      Style()->GetEffectiveTouchAction() & supported_fast_actions;
   for (size_t i = 0; i < own_rects.size(); i++) {
-    if (!container_rect.Contains(own_rects[i])) {
-      iter_value->push_back(own_rects[i]);
+    // If we have a different touch action than the container the rect needs to
+    // be reported even if it is contained.
+    if (whitelisted_touch_action != container_whitelisted_touch_action ||
+        !container_rect.Contains(own_rects[i])) {
+      iter_value->push_back(
+          TouchActionRect(own_rects[i], whitelisted_touch_action));
       if (iter_value->size() > kMaxRectsPerLayer) {
         // Just mark the entire layer instead, and switch to walking the layer
         // tree instead of the layout tree.
         layer_rects.erase(current_layer);
-        current_layer->AddLayerHitTestRects(layer_rects);
+        current_layer->AddLayerHitTestRects(layer_rects,
+                                            supported_fast_actions);
         return;
       }
-      if (new_container_rect.IsEmpty())
+      if (new_container_rect.IsEmpty()) {
+        new_container_whitelisted_touch_action = whitelisted_touch_action;
         new_container_rect = own_rects[i];
+      }
     }
   }
-  if (new_container_rect.IsEmpty())
+  if (new_container_rect.IsEmpty()) {
+    new_container_whitelisted_touch_action = container_whitelisted_touch_action;
     new_container_rect = container_rect;
+  }
 
   // If it's possible for children to have rects outside our bounds, then we
   // need to descend into the children and compute them.
@@ -2422,7 +2401,8 @@ void LayoutObject::AddLayerHitTestRects(
     for (LayoutObject* curr = SlowFirstChild(); curr;
          curr = curr->NextSibling()) {
       curr->AddLayerHitTestRects(layer_rects, current_layer, layer_offset,
-                                 new_container_rect);
+                                 supported_fast_actions, new_container_rect,
+                                 new_container_whitelisted_touch_action);
     }
   }
 }
@@ -2560,12 +2540,11 @@ void LayoutObject::WillBeDestroyed() {
       style_->GetTouchAction() != TouchAction::kTouchActionAuto) {
     EventHandlerRegistry& registry =
         GetDocument().GetPage()->GetEventHandlerRegistry();
-    if (registry
-            .EventHandlerTargets(
-                EventHandlerRegistry::kTouchStartOrMoveEventBlocking)
-            ->Contains(GetNode()))
-      registry.DidRemoveEventHandler(
-          *GetNode(), EventHandlerRegistry::kTouchStartOrMoveEventBlocking);
+    if (registry.EventHandlerTargets(EventHandlerRegistry::kTouchAction)
+            ->Contains(GetNode())) {
+      registry.DidRemoveEventHandler(*GetNode(),
+                                     EventHandlerRegistry::kTouchAction);
+    }
   }
 
   SetAncestorLineBoxDirty(false);
@@ -2796,7 +2775,7 @@ void LayoutObject::DestroyAndCleanupAnonymousWrappers() {
        destroy_root = destroy_root_parent,
                     destroy_root_parent = destroy_root_parent->Parent()) {
     // Anonymous block continuations are tracked and destroyed elsewhere (see
-    // the bottom of LayoutBlock::removeChild)
+    // the bottom of LayoutBlockFlow::RemoveChild)
     if (destroy_root_parent->IsLayoutBlockFlow() &&
         ToLayoutBlockFlow(destroy_root_parent)->IsAnonymousBlockContinuation())
       break;
@@ -2805,10 +2784,9 @@ void LayoutObject::DestroyAndCleanupAnonymousWrappers() {
     if (destroy_root_parent->IsLayoutFlowThread())
       break;
 
-    if (destroy_root_parent->SlowFirstChild() != destroy_root ||
-        destroy_root_parent->SlowLastChild() != destroy_root)
+    if (destroy_root->PreviousSibling() || destroy_root->NextSibling())
       break;  // Need to keep the anonymous parent, since it won't become empty
-              // by the removal of this layoutObject.
+              // by the removal of this LayoutObject.
   }
 
   destroy_root->Destroy();
@@ -3024,44 +3002,10 @@ RefPtr<ComputedStyle> LayoutObject::GetUncachedPseudoStyle(
   Element* element = Traversal<Element>::FirstAncestorOrSelf(*GetNode());
   if (!element)
     return nullptr;
+  if (element->IsPseudoElement())
+    return nullptr;
 
   return element->GetUncachedPseudoStyle(request, parent_style);
-}
-
-RefPtr<ComputedStyle> LayoutObject::GetUncachedSelectionStyle() const {
-  if (!GetNode())
-    return nullptr;
-
-  // In Blink, ::selection only applies to direct children of the element on
-  // which ::selection is matched. In order to be able to style ::selection
-  // inside elements implemented with a UA shadow tree, like input::selection,
-  // we calculate ::selection style on the shadow host for elements inside the
-  // UA shadow.
-  if (ShadowRoot* root = GetNode()->ContainingShadowRoot()) {
-    if (root->GetType() == ShadowRootType::kUserAgent) {
-      if (Element* shadow_host = GetNode()->OwnerShadowHost()) {
-        if (LayoutObject* obj = shadow_host->GetLayoutObject()) {
-          return obj->GetUncachedPseudoStyle(
-              PseudoStyleRequest(kPseudoIdSelection));
-        }
-      }
-    }
-  }
-
-  // If we request ::selection style for LayoutText, query ::selection style on
-  // the parent element instead, as that is the node for which ::selection
-  // matches.
-  const LayoutObject* selection_layout_object = this;
-  Element* element = Traversal<Element>::FirstAncestorOrSelf(*GetNode());
-  if (!element)
-    return nullptr;
-  if (element != GetNode()) {
-    selection_layout_object = element->GetLayoutObject();
-    if (!selection_layout_object)
-      return nullptr;
-  }
-  return selection_layout_object->GetUncachedPseudoStyle(
-      PseudoStyleRequest(kPseudoIdSelection));
 }
 
 void LayoutObject::AddAnnotatedRegions(Vector<AnnotatedRegionValue>& regions) {

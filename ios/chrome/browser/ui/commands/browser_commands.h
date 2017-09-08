@@ -101,6 +101,18 @@
 // Shows the online help page in a tab.
 - (void)showHelpPage;
 
+// Shows the bookmarks manager.
+- (void)showBookmarksManager;
+
+// Shows recent tabs.
+- (void)showRecentTabs;
+
+// Requests the "desktop" version of the current page in the active tab.
+- (void)requestDesktopSite;
+
+// Requests the "mobile" version of the current page in the active tab.
+- (void)requestMobileSite;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_COMMANDS_BROWSER_COMMANDS_H_

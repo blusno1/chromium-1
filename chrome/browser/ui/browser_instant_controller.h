@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_INSTANT_CONTROLLER_H_
 #define CHROME_BROWSER_UI_BROWSER_INSTANT_CONTROLLER_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "chrome/browser/search/instant_service_observer.h"
+#include "chrome/browser/search/search_engine_base_url_tracker.h"
 #include "chrome/browser/ui/search/instant_controller.h"
 #include "chrome/browser/ui/search/search_model_observer.h"
 
@@ -18,14 +20,10 @@ namespace content {
 class WebContents;
 }
 
-class BrowserInstantController : public SearchModelObserver,
-                                 public InstantServiceObserver {
+class BrowserInstantController : public SearchModelObserver {
  public:
   explicit BrowserInstantController(Browser* browser);
   ~BrowserInstantController() override;
-
-  // Commits the current Instant. This is intended for use from OpenCurrentURL.
-  void OpenInstant(WindowOpenDisposition disposition, const GURL& url);
 
   // Returns the Profile associated with the Browser that owns this object.
   Profile* profile() const;
@@ -38,21 +36,19 @@ class BrowserInstantController : public SearchModelObserver,
   // Invoked by |browser_| when the active tab changes.
   void ActiveTabChanged();
 
-  // Invoked by |browser_| when the active tab is about to be deactivated.
-  void TabDeactivated(content::WebContents* contents);
-
  private:
   // SearchModelObserver:
   void ModelChanged(SearchModel::Origin old_origin,
                     SearchModel::Origin new_origin) override;
 
-  // InstantServiceObserver:
-  void DefaultSearchProviderChanged(
-      bool google_base_url_domain_changed) override;
+  void OnSearchEngineBaseURLChanged(
+      SearchEngineBaseURLTracker::ChangeReason change_reason);
 
   Browser* const browser_;
 
   InstantController instant_;
+
+  std::unique_ptr<SearchEngineBaseURLTracker> search_engine_base_url_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserInstantController);
 };

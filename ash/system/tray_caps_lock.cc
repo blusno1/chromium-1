@@ -30,6 +30,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -58,11 +59,6 @@ bool IsSearchKeyMappedToCapsLock() {
   if (!prefs)
     return false;
 
-  // This pref value is not registered in tests.
-  // TODO(crbug/760406): register this pref in tests and remove this check.
-  if (!prefs->FindPreference(prefs::kLanguageRemapSearchKeyTo))
-    return false;
-
   // Don't bother to observe for the pref changing because the system tray
   // menu is rebuilt every time it is opened and the user has to close the
   // menu to open settings to change the pref. It's not worth the complexity
@@ -78,7 +74,7 @@ std::unique_ptr<Notification> CreateNotification() {
           ? IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_SEARCH
           : IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_ALT_SEARCH;
   std::unique_ptr<Notification> notification;
-  if (message_center::MessageCenter::IsNewStyleNotificationEnabled()) {
+  if (message_center::IsNewStyleNotificationEnabled()) {
     notification = Notification::CreateSystemNotification(
         message_center::NOTIFICATION_TYPE_SIMPLE, kCapsLockNotificationId,
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_CAPS_LOCK_ENABLED),
@@ -207,7 +203,14 @@ TrayCapsLock::~TrayCapsLock() {
 }
 
 // static
-void TrayCapsLock::RegisterForeignPrefs(PrefRegistrySimple* registry) {
+void TrayCapsLock::RegisterProfilePrefs(PrefRegistrySimple* registry,
+                                        bool for_test) {
+  if (for_test) {
+    // There is no remote pref service, so pretend that ash owns the pref.
+    registry->RegisterIntegerPref(prefs::kLanguageRemapSearchKeyTo,
+                                  chromeos::input_method::kSearchKey);
+    return;
+  }
   // Pref is owned by chrome and flagged as PUBLIC.
   registry->RegisterForeignPref(prefs::kLanguageRemapSearchKeyTo);
 }

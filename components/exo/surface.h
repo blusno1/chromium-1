@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
+#include "components/exo/surface_delegate.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
@@ -41,7 +42,6 @@ namespace exo {
 class Buffer;
 class LayerTreeFrameSinkHolder;
 class Pointer;
-class SurfaceDelegate;
 class SurfaceObserver;
 class Surface;
 
@@ -58,7 +58,7 @@ using CursorProvider = Pointer;
 
 // This class represents a rectangular area that is displayed on the screen.
 // It has a location, size and pixel contents.
-class Surface : public ui::PropertyHandler {
+class Surface final : public ui::PropertyHandler {
  public:
   using PropertyDeallocator = void (*)(int64_t value);
 
@@ -132,6 +132,9 @@ class Surface : public ui::PropertyHandler {
   // This sets the alpha value that will be applied to the whole surface.
   void SetAlpha(float alpha);
 
+  // Request that surface should have the specified frame type.
+  void SetFrame(SurfaceFrameType type);
+
   // Surface state (damage regions, attached buffers, etc.) is double-buffered.
   // A Commit() call atomically applies all pending state, replacing the
   // current state. Commit() is not guaranteed to be synchronous. See
@@ -141,17 +144,16 @@ class Surface : public ui::PropertyHandler {
   // This will synchronously commit all pending state of the surface and its
   // descendants by recursively calling CommitSurfaceHierarchy() for each
   // sub-surface with pending state.
-  enum FrameType {
-    FRAME_TYPE_COMMIT,
-    FRAME_TYPE_RECREATED_RESOURCES,
-  };
   void CommitSurfaceHierarchy(
       const gfx::Point& origin,
-      FrameType frame_type,
-      LayerTreeFrameSinkHolder* frame_sink_holder,
-      cc::CompositorFrame* frame,
       std::list<FrameCallback>* frame_callbacks,
       std::list<PresentationCallback>* presentation_callbacks);
+
+  void AppendSurfaceHierarchyContentsToFrame(
+      const gfx::Point& origin,
+      float device_scale_factor,
+      LayerTreeFrameSinkHolder* frame_sink_holder,
+      cc::CompositorFrame* frame);
 
   // Returns true if surface is in synchronized mode.
   bool IsSynchronized() const;
@@ -205,8 +207,8 @@ class Surface : public ui::PropertyHandler {
   // Enables 'stylus-only' mode for the associated window.
   void SetStylusOnly();
 
-  // Recreates resources for the surface and sub surfaces.
-  void RecreateResources(LayerTreeFrameSinkHolder* frame_sink_holder);
+  // Notify surface that resources and subsurfaces' resources have been lost.
+  void SurfaceHierarchyResourcesLost();
 
   // Returns true if the surface's bounds should be filled opaquely.
   bool FillsBoundsOpaquely() const;
@@ -252,26 +254,19 @@ class Surface : public ui::PropertyHandler {
 
   friend class subtle::PropertyHelper;
 
-  bool needs_commit_surface_hierarchy() const {
-    return needs_commit_surface_hierarchy_;
-  }
-
-  // Set SurfaceLayer contents to the current buffer.
-  void SetSurfaceLayerContents(ui::Layer* layer);
-
   // Updates current_resource_ with a new resource id corresponding to the
   // contents of the attached buffer (or id 0, if no buffer is attached).
   // UpdateSurface must be called afterwards to ensure the release callback
   // will be called.
-  void UpdateResource(LayerTreeFrameSinkHolder* frame_sink_holder,
-                      bool client_usage);
+  void UpdateResource(LayerTreeFrameSinkHolder* frame_sink_holder);
 
   // Puts the current surface into a draw quad, and appends the draw quads into
   // the |frame|.
   void AppendContentsToFrame(const gfx::Point& origin,
-                             cc::CompositorFrame* frame,
-                             bool needs_full_damage);
+                             float device_scale_factor,
+                             cc::CompositorFrame* frame);
 
+  // Update surface content size base on current buffer size.
   void UpdateContentSize();
 
   // This returns true when the surface has some contents assigned to it.
@@ -295,6 +290,10 @@ class Surface : public ui::PropertyHandler {
 
   // The damage region to schedule paint for when Commit() is called.
   SkRegion pending_damage_;
+
+  // The damage region which will be used by
+  // AppendSurfaceHierarchyContentsToFrame() to generate frame.
+  SkRegion damage_;
 
   // These lists contains the callbacks to notify the client when it is a good
   // time to start producing a new frame. These callbacks move to
@@ -337,7 +336,10 @@ class Surface : public ui::PropertyHandler {
 
   // This is true if a call to Commit() as been made but
   // CommitSurfaceHierarchy() has not yet been called.
-  bool needs_commit_surface_hierarchy_ = false;
+  bool needs_commit_surface_ = false;
+
+  // This is true if UpdateResources() should be called.
+  bool needs_update_resource_ = true;
 
   // This is set when the compositing starts and passed to active frame
   // callbacks when compositing successfully ends.

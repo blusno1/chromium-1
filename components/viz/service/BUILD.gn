@@ -25,6 +25,8 @@ viz_component("service") {
     "display/gl_renderer.h",
     "display/gl_renderer_draw_cache.cc",
     "display/gl_renderer_draw_cache.h",
+    "display/layer_quad.cc",
+    "display/layer_quad.h",
     "display/program_binding.cc",
     "display/program_binding.h",
     "display/shader.cc",
@@ -103,6 +105,7 @@ viz_component("service") {
   configs = [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
+    "//cc/paint",
     "//components/viz/common",
 
     # Note that dependency on //gpu/ipc/client is for GpuMemoryBufferImpl. This
@@ -122,7 +125,6 @@ viz_component("service") {
     "//base",
     "//cc",
     "//cc/debug",
-    "//cc/ipc:interfaces",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/ipc:command_buffer",
     "//services/viz/privileged/interfaces/compositing",
@@ -171,6 +173,7 @@ viz_source_set("unit_tests") {
     "display/display_scheduler_unittest.cc",
     "display/display_unittest.cc",
     "display/gl_renderer_unittest.cc",
+    "display/layer_quad_unittest.cc",
     "display/shader_unittest.cc",
     "display/surface_aggregator_pixeltest.cc",
     "display/surface_aggregator_unittest.cc",

@@ -47,15 +47,13 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public cc::DirectRenderer {
   void SetScissorTestRect(const gfx::Rect& scissor_rect) override;
   void PrepareSurfaceForPass(SurfaceInitializationMode initialization_mode,
                              const gfx::Rect& render_pass_scissor) override;
-  void DoDrawQuad(const cc::DrawQuad* quad,
-                  const gfx::QuadF* draw_region) override;
+  void DoDrawQuad(const DrawQuad* quad, const gfx::QuadF* draw_region) override;
   void BeginDrawingFrame() override;
   void FinishDrawingFrame() override;
   bool FlippedFramebuffer() const override;
   void EnsureScissorTestEnabled() override;
   void EnsureScissorTestDisabled() override;
-  void CopyCurrentRenderPassToBitmap(
-      std::unique_ptr<CopyOutputRequest> request) override;
+  void CopyDrawnRenderPass(std::unique_ptr<CopyOutputRequest> request) override;
   void SetEnableDCLayers(bool enable) override;
   void DidChangeVisibility() override;
   void FinishDrawingQuadList() override;
@@ -72,7 +70,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public cc::DirectRenderer {
   void DrawSolidColorQuad(const cc::SolidColorDrawQuad* quad);
   void DrawTextureQuad(const cc::TextureDrawQuad* quad);
   void DrawTileQuad(const cc::TileDrawQuad* quad);
-  void DrawUnsupportedQuad(const cc::DrawQuad* quad);
+  void DrawUnsupportedQuad(const DrawQuad* quad);
   bool ShouldApplyBackgroundFilters(
       const cc::RenderPassDrawQuad* quad,
       const cc::FilterOperations* background_filters) const;

@@ -11,6 +11,7 @@
 #include <set>
 
 #include "base/macros.h"
+#include "base/timer/timer.h"
 #include "content/common/content_export.h"
 #include "content/network/cookie_manager_impl.h"
 #include "content/public/common/network_service.mojom.h"
@@ -66,6 +67,8 @@ class CONTENT_EXPORT NetworkContext : public mojom::NetworkContext {
 
   net::URLRequestContext* url_request_context() { return url_request_context_; }
 
+  NetworkServiceImpl* network_service() { return network_service_; }
+
   // These are called by individual url loaders as they are being created and
   // destroyed.
   void RegisterURLLoader(URLLoaderImpl* url_loader);
@@ -114,6 +117,24 @@ class CONTENT_EXPORT NetworkContext : public mojom::NetworkContext {
   mojo::Binding<mojom::NetworkContext> binding_;
 
   std::unique_ptr<CookieManagerImpl> cookie_manager_;
+
+  // Temporary class to help diagnose the impact of https://crbug.com/711579.
+  // Every 24-hours, measures the size of the network cache and emits an UMA
+  // metric.
+  class DiskChecker {
+   public:
+    explicit DiskChecker(const base::FilePath& cache_path);
+    ~DiskChecker();
+
+   private:
+    void CheckDiskSize();
+    static void CheckDiskSizeOnBackgroundThread(
+        const base::FilePath& cache_path);
+    base::RepeatingTimer timer_;
+    base::FilePath cache_path_;
+    DISALLOW_COPY_AND_ASSIGN(DiskChecker);
+  };
+  std::unique_ptr<DiskChecker> disk_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkContext);
 };

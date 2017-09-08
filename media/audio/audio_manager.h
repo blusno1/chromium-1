@@ -88,7 +88,7 @@ class MEDIA_EXPORT AudioManager {
   // was created.
   // Returns true on success but false if AudioManager could not be shutdown.
   // AudioManager instance must not be deleted if shutdown failed.
-  bool Shutdown();
+  virtual bool Shutdown();
 
   // Log callback used for sending log messages from a stream to the object
   // that manages the stream.
@@ -260,7 +260,7 @@ class MEDIA_EXPORT AudioManager {
       const std::string& input_device_id) = 0;
 
  private:
-  friend class AudioSystemImpl;
+  friend class AudioSystemHelper;
 
   std::unique_ptr<AudioThread> audio_thread_;
   bool shutdown_ = false;  // True after |this| has been shutdown.

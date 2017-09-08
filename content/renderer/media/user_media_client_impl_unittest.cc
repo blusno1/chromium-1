@@ -98,11 +98,11 @@ blink::WebMediaConstraints CreateFacingModeConstraints(
 
 class MockMediaStreamVideoCapturerSource : public MockMediaStreamVideoSource {
  public:
-  MockMediaStreamVideoCapturerSource(const StreamDeviceInfo& device,
+  MockMediaStreamVideoCapturerSource(const MediaStreamDevice& device,
                                      const SourceStoppedCallback& stop_callback,
                                      PeerConnectionDependencyFactory* factory)
       : MockMediaStreamVideoSource() {
-    SetDeviceInfo(device);
+    SetDevice(device);
     SetStopCallback(stop_callback);
   }
 };
@@ -281,7 +281,7 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
   }
 
   MediaStreamAudioSource* CreateAudioSource(
-      const StreamDeviceInfo& device,
+      const MediaStreamDevice& device,
       const blink::WebMediaConstraints& constraints,
       const MediaStreamSource::ConstraintsCallback& source_ready,
       bool* has_sw_echo_cancellation) override {
@@ -300,7 +300,8 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
     } else {
       source = new MediaStreamAudioSource(true);
     }
-    source->SetDeviceInfo(device);
+
+    source->SetDevice(device);
 
     if (!create_source_that_fails_) {
       // RunUntilIdle is required for this task to complete.
@@ -315,11 +316,10 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
   }
 
   MediaStreamVideoSource* CreateVideoSource(
-      const StreamDeviceInfo& device,
+      const MediaStreamDevice& device,
       const MediaStreamSource::SourceStoppedCallback& stop_callback) override {
-    video_source_ = new MockMediaStreamVideoCapturerSource(device,
-                                                           stop_callback,
-                                                           factory_);
+    video_source_ =
+        new MockMediaStreamVideoCapturerSource(device, stop_callback, factory_);
     return video_source_;
   }
 
@@ -441,8 +441,8 @@ class UserMediaClientImplTest : public ::testing::TestWithParam<bool> {
     // Audio request ID is used as the shared request ID.
     user_media_client_impl_->OnStreamGenerated(
         ms_dispatcher_->audio_input_request_id(),
-        ms_dispatcher_->stream_label(), ms_dispatcher_->audio_input_array(),
-        ms_dispatcher_->video_array());
+        ms_dispatcher_->stream_label(), ms_dispatcher_->audio_devices(),
+        ms_dispatcher_->video_devices());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -490,14 +490,14 @@ class UserMediaClientImplTest : public ::testing::TestWithParam<bool> {
 
     EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_SUCCEEDED,
               user_media_client_impl_->request_state());
-    EXPECT_EQ(1U, ms_dispatcher_->audio_input_array().size());
-    EXPECT_EQ(1U, ms_dispatcher_->video_array().size());
+    EXPECT_EQ(1U, ms_dispatcher_->audio_devices().size());
+    EXPECT_EQ(1U, ms_dispatcher_->video_devices().size());
     // MockMediaStreamDispatcher appends the session ID to its internal device
     // IDs.
     EXPECT_EQ(std::string(expected_audio_device_id) + "0",
-              ms_dispatcher_->audio_input_array()[0].device.id);
+              ms_dispatcher_->audio_devices()[0].id);
     EXPECT_EQ(std::string(expected_video_device_id) + "0",
-              ms_dispatcher_->video_array()[0].device.id);
+              ms_dispatcher_->video_devices()[0].id);
   }
 
  protected:

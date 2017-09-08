@@ -224,7 +224,11 @@ bool BrowserAccessibilityAndroid::IsDismissable() const {
 }
 
 bool BrowserAccessibilityAndroid::IsEditableText() const {
-  return GetRole() == ui::AX_ROLE_TEXT_FIELD;
+  // TODO(dmazzoni): Use utility function in ax_role_properties, and
+  // handle different types of combo boxes correctly.
+  return GetRole() == ui::AX_ROLE_TEXT_FIELD ||
+         GetRole() == ui::AX_ROLE_SEARCH_BOX ||
+         GetRole() == ui::AX_ROLE_COMBO_BOX;
 }
 
 bool BrowserAccessibilityAndroid::IsEnabled() const {
@@ -441,6 +445,10 @@ base::string16 BrowserAccessibilityAndroid::GetHint() const {
   }
 
   return description;
+}
+
+std::string BrowserAccessibilityAndroid::GetRoleString() const {
+  return ToString(GetRole());
 }
 
 base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {

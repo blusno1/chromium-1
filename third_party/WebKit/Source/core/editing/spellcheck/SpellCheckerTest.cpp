@@ -79,8 +79,6 @@ TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
   input->focus();
   input->setValue("Hello, input field");
   GetDocument().UpdateStyleAndLayout();
-  VisibleSelection old_selection =
-      GetDocument().GetFrame()->Selection().ComputeVisibleSelectionInDOMTree();
 
   Position new_position(input->InnerEditorElement()->firstChild(), 3);
   GetDocument().GetFrame()->Selection().SetSelection(
@@ -90,8 +88,7 @@ TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
   EXPECT_TRUE(GetSpellChecker().IsSpellCheckingEnabled());
   ForceLayout();
   int start_count = LayoutCount();
-  GetSpellChecker().RespondToChangedSelection(old_selection.Start(),
-                                              TypingContinuation::kEnd);
+  GetSpellChecker().RespondToChangedSelection();
   EXPECT_EQ(start_count, LayoutCount());
 }
 

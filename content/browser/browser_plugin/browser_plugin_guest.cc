@@ -712,8 +712,10 @@ void BrowserPluginGuest::RenderViewReady() {
   // associated BrowserPlugin know. We only need to send this if we're attached,
   // as guest_crashed_ is cleared automatically on attach anyways.
   if (attached()) {
+    RenderWidgetHostViewGuest* rwhv = static_cast<RenderWidgetHostViewGuest*>(
+        web_contents()->GetRenderWidgetHostView());
     SendMessageToEmbedder(base::MakeUnique<BrowserPluginMsg_GuestReady>(
-        browser_plugin_instance_id()));
+        browser_plugin_instance_id(), rwhv->GetFrameSinkId()));
   }
 
   RenderWidgetHostImpl::From(rvh->GetWidget())
@@ -997,7 +999,10 @@ void BrowserPluginGuest::OnLockMouse(bool user_gesture,
   if (pending_lock_request_) {
     // Immediately reject the lock because only one pointerLock may be active
     // at a time.
-    Send(new ViewMsg_LockMouse_ACK(routing_id(), false));
+    RenderWidgetHost* widget_host =
+        web_contents()->GetRenderViewHost()->GetWidget();
+    widget_host->Send(
+        new ViewMsg_LockMouse_ACK(widget_host->GetRoutingID(), false));
     return;
   }
 
@@ -1015,7 +1020,10 @@ void BrowserPluginGuest::OnLockMouse(bool user_gesture,
 
 void BrowserPluginGuest::OnLockMouseAck(int browser_plugin_instance_id,
                                         bool succeeded) {
-  Send(new ViewMsg_LockMouse_ACK(routing_id(), succeeded));
+  RenderWidgetHost* widget_host =
+      web_contents()->GetRenderViewHost()->GetWidget();
+  widget_host->Send(
+      new ViewMsg_LockMouse_ACK(widget_host->GetRoutingID(), succeeded));
   pending_lock_request_ = false;
   if (succeeded)
     mouse_locked_ = true;
@@ -1061,17 +1069,29 @@ void BrowserPluginGuest::OnUnlockMouseAck(int browser_plugin_instance_id) {
   // mouse_locked_ could be false here if the lock attempt was cancelled due
   // to window focus, or for various other reasons before the guest was informed
   // of the lock's success.
-  if (mouse_locked_)
-    Send(new ViewMsg_MouseLockLost(routing_id()));
+  if (mouse_locked_) {
+    RenderWidgetHost* widget_host =
+        web_contents()->GetRenderViewHost()->GetWidget();
+    widget_host->Send(new ViewMsg_MouseLockLost(widget_host->GetRoutingID()));
+  }
   mouse_locked_ = false;
 }
 
-void BrowserPluginGuest::OnUpdateGeometry(int browser_plugin_instance_id,
-                                          const gfx::Rect& view_rect) {
+void BrowserPluginGuest::OnUpdateGeometry(
+    int browser_plugin_instance_id,
+    const gfx::Rect& view_rect,
+    const viz::LocalSurfaceId& local_surface_id) {
   // The plugin has moved within the embedder without resizing or the
   // embedder/container's view rect changing.
   guest_window_rect_ = view_rect;
   GetWebContents()->SendScreenRects();
+  if (local_surface_id_ != local_surface_id) {
+    local_surface_id_ = local_surface_id;
+    web_contents()
+        ->GetRenderWidgetHostView()
+        ->GetRenderWidgetHost()
+        ->WasResized();
+  }
 }
 
 void BrowserPluginGuest::OnHasTouchEventHandlers(bool accept) {

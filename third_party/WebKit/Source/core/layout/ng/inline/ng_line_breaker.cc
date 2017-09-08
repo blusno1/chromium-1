@@ -61,6 +61,7 @@ void NGLineBreaker::PrepareNextLine(const NGExclusionSpace& exclusion_space,
                                     NGLineInfo* line_info) {
   NGInlineItemResults* item_results = &line_info->Results();
   item_results->clear();
+  line_info->SetStartOffset(offset_);
   line_info->SetLineStyle(node_, constraint_space_, IsFirstFormattedLine(),
                           line_.is_after_forced_break);
   SetCurrentStyle(line_info->LineStyle());
@@ -104,6 +105,8 @@ bool NGLineBreaker::NextLine(const NGLogicalOffset& content_offset,
   if (line_.should_create_line_box)
     ComputeLineLocation(line_info);
 
+  line_info->SetEndOffset(offset_);
+
   return true;
 }
 
@@ -141,7 +144,7 @@ void NGLineBreaker::BreakLine(NGLineInfo* line_info) {
         NGInlineItemResult(&item, item_index_, offset_, item.EndOffset()));
     NGInlineItemResult* item_result = &item_results->back();
     if (item.Type() == NGInlineItem::kText) {
-      state = HandleText(*item_results, item, item_result);
+      state = HandleText(*line_info, item, item_result);
     } else if (item.Type() == NGInlineItem::kAtomicInline) {
       state = HandleAtomicInline(item, item_result, *line_info);
     } else if (item.Type() == NGInlineItem::kControl) {
@@ -223,15 +226,27 @@ void NGLineBreaker::FindNextLayoutOpportunityWithMinimumInlineSize(
 void NGLineBreaker::ComputeLineLocation(NGLineInfo* line_info) const {
   LayoutUnit line_left = line_.opportunity.value().LineStartOffset() -
                          constraint_space_.BfcOffset().line_offset;
-  line_info->SetLineLocation(line_left, line_.AvailableWidth(),
-                             content_offset_.block_offset);
+  LayoutUnit available_width = line_.AvailableWidth();
+
+  // Indenting should move the current position to compute the size of
+  // tabulations. Since it is computed and stored in NGInlineItemResult,
+  // adjust the positoin of the line box to simplify placing items.
+  if (LayoutUnit text_indent = line_info->TextIndent()) {
+    // Move the line box by indent. Negative indents are ink overflow, let the
+    // line box overflow from the container box.
+    if (IsLtr(node_.BaseDirection()))
+      line_left += text_indent;
+    available_width -= text_indent;
+  }
+
+  line_info->SetLineOffset({line_left, content_offset_.block_offset},
+                           available_width);
 }
 
-bool NGLineBreaker::IsFirstBreakOpportunity(
-    unsigned offset,
-    const NGInlineItemResults& results) const {
-  unsigned line_start_offset = results.front().start_offset;
-  return break_iterator_.NextBreakOpportunity(line_start_offset) >= offset;
+bool NGLineBreaker::IsFirstBreakOpportunity(unsigned offset,
+                                            const NGLineInfo& line_info) const {
+  return break_iterator_.NextBreakOpportunity(line_info.StartOffset() + 1) >=
+         offset;
 }
 
 NGLineBreaker::LineBreakState NGLineBreaker::ComputeIsBreakableAfter(
@@ -245,7 +260,7 @@ NGLineBreaker::LineBreakState NGLineBreaker::ComputeIsBreakableAfter(
 }
 
 NGLineBreaker::LineBreakState NGLineBreaker::HandleText(
-    const NGInlineItemResults& results,
+    const NGLineInfo& line_info,
     const NGInlineItem& item,
     NGInlineItemResult* item_result) {
   DCHECK_EQ(item.Type(), NGInlineItem::kText);
@@ -275,7 +290,7 @@ NGLineBreaker::LineBreakState NGLineBreaker::HandleText(
     // If overflow and no break opportunities exist, and if 'break-word', try to
     // break at every grapheme cluster boundary.
     if (is_overflow && break_if_overflow_ &&
-        IsFirstBreakOpportunity(item_result->end_offset, results)) {
+        IsFirstBreakOpportunity(item_result->end_offset, line_info)) {
       DCHECK_EQ(break_iterator_.BreakType(), LineBreakType::kNormal);
       break_iterator_.SetBreakType(LineBreakType::kBreakCharacter);
       BreakText(item_result, item, available_width - line_.position);
@@ -336,6 +351,8 @@ void NGLineBreaker::BreakText(NGInlineItemResult* item_result,
   ShapingLineBreaker breaker(&shaper_, &item.Style()->GetFont(),
                              item.TextShapeResult(), &break_iterator_,
                              &spacing_, hyphenation_);
+  if (!enable_soft_hyphen_)
+    breaker.DisableSoftHyphen();
   available_width = std::max(LayoutUnit(0), available_width);
   ShapingLineBreaker::Result result;
   RefPtr<ShapeResult> shape_result =
@@ -456,10 +473,10 @@ NGLineBreaker::LineBreakState NGLineBreaker::HandleAtomicInline(
           .ToConstraintSpace(FromPlatformWritingMode(style.GetWritingMode()));
   item_result->layout_result = node.Layout(*constraint_space);
 
+  DCHECK(item_result->layout_result->PhysicalFragment());
   item_result->inline_size =
-      NGBoxFragment(constraint_space_.WritingMode(),
-                    ToNGPhysicalBoxFragment(
-                        item_result->layout_result->PhysicalFragment().Get()))
+      NGFragment(constraint_space_.WritingMode(),
+                 *item_result->layout_result->PhysicalFragment())
           .InlineSize();
 
   item_result->margins =
@@ -768,7 +785,7 @@ void NGLineBreaker::SetCurrentStyle(const ComputedStyle& style) {
     }
     break_iterator_.SetBreakAfterSpace(style.BreakOnlyAfterWhiteSpace());
 
-    // TODO(kojii): Implement 'hyphens: none'.
+    enable_soft_hyphen_ = style.GetHyphens() != Hyphens::kNone;
     hyphenation_ = style.GetHyphenation();
   }
 

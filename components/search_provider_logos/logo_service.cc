@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
 #include "build/build_config.h"
 #include "components/image_fetcher/core/image_decoder.h"
 #include "components/search_engines/search_terms_data.h"
@@ -17,6 +18,7 @@
 #include "components/search_provider_logos/features.h"
 #include "components/search_provider_logos/fixed_logo_api.h"
 #include "components/search_provider_logos/google_logo_api.h"
+#include "components/search_provider_logos/logo_cache.h"
 #include "components/search_provider_logos/logo_tracker.h"
 #include "components/search_provider_logos/switches.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -92,6 +94,59 @@ class LogoDelegateImpl : public search_provider_logos::LogoDelegate {
   const std::unique_ptr<image_fetcher::ImageDecoder> image_decoder_;
 
   DISALLOW_COPY_AND_ASSIGN(LogoDelegateImpl);
+};
+
+class CallbackLogoObserver : public LogoObserver {
+ public:
+  CallbackLogoObserver(LogoCallback on_cached_logo_available,
+                       EncodedLogoCallback on_cached_encoded_logo_available,
+                       LogoCallback on_fresh_logo_available,
+                       EncodedLogoCallback on_fresh_encoded_logo_available)
+      : on_cached_logo_available_(std::move(on_cached_logo_available)),
+        on_cached_encoded_logo_available_(
+            std::move(on_cached_encoded_logo_available)),
+        on_fresh_logo_available_(std::move(on_fresh_logo_available)),
+        on_fresh_encoded_logo_available_(
+            std::move(on_fresh_encoded_logo_available)) {}
+
+  void OnLogoAvailable(const Logo* logo, bool from_cache) override {
+    if (from_cache) {
+      if (on_cached_logo_available_) {
+        std::move(on_cached_logo_available_)
+            .Run(logo ? base::make_optional(*logo) : base::nullopt);
+      }
+    } else {
+      if (on_fresh_logo_available_) {
+        std::move(on_fresh_logo_available_)
+            .Run(logo ? base::make_optional(*logo) : base::nullopt);
+      }
+    }
+  }
+
+  void OnEncodedLogoAvailable(const EncodedLogo* logo,
+                              bool from_cache) override {
+    if (from_cache) {
+      if (on_cached_encoded_logo_available_) {
+        std::move(on_cached_encoded_logo_available_)
+            .Run(logo ? base::make_optional(*logo) : base::nullopt);
+      }
+    } else {
+      if (on_fresh_encoded_logo_available_) {
+        std::move(on_fresh_encoded_logo_available_)
+            .Run(logo ? base::make_optional(*logo) : base::nullopt);
+      }
+    }
+  }
+
+  void OnObserverRemoved() override { delete this; }
+
+ private:
+  LogoCallback on_cached_logo_available_;
+  EncodedLogoCallback on_cached_encoded_logo_available_;
+  LogoCallback on_fresh_logo_available_;
+  EncodedLogoCallback on_fresh_encoded_logo_available_;
+
+  DISALLOW_COPY_AND_ASSIGN(CallbackLogoObserver);
 };
 
 }  // namespace
@@ -175,9 +230,20 @@ void LogoService::GetLogo(search_provider_logos::LogoObserver* observer) {
   const bool use_fixed_logo = !doodle_url.is_valid();
 
   if (!logo_tracker_) {
-    logo_tracker_ = base::MakeUnique<LogoTracker>(
-        cache_directory_, request_context_getter_,
-        base::MakeUnique<LogoDelegateImpl>(std::move(image_decoder_)));
+    std::unique_ptr<LogoCache> logo_cache = std::move(logo_cache_for_test_);
+    if (!logo_cache) {
+      logo_cache = std::make_unique<LogoCache>(cache_directory_);
+    }
+
+    std::unique_ptr<base::Clock> clock = std::move(clock_for_test_);
+    if (!clock) {
+      clock = std::make_unique<base::DefaultClock>();
+    }
+
+    logo_tracker_ = std::make_unique<LogoTracker>(
+        request_context_getter_,
+        std::make_unique<LogoDelegateImpl>(std::move(image_decoder_)),
+        std::move(logo_cache), std::move(clock));
   }
 
   if (use_fixed_logo) {
@@ -202,6 +268,30 @@ void LogoService::GetLogo(search_provider_logos::LogoObserver* observer) {
   }
 
   logo_tracker_->GetLogo(observer);
+}
+
+void LogoService::GetLogo(LogoCallback on_cached_logo_available,
+                          LogoCallback on_fresh_logo_available) {
+  // CallbackLogoObserver is self-deleting.
+  GetLogo(new CallbackLogoObserver(
+      std::move(on_cached_logo_available), EncodedLogoCallback(),
+      std::move(on_fresh_logo_available), EncodedLogoCallback()));
+}
+
+void LogoService::GetEncodedLogo(EncodedLogoCallback on_cached_logo_available,
+                                 EncodedLogoCallback on_fresh_logo_available) {
+  // CallbackLogoObserver is self-deleting.
+  GetLogo(new CallbackLogoObserver(
+      LogoCallback(), std::move(on_cached_logo_available), LogoCallback(),
+      std::move(on_fresh_logo_available)));
+}
+
+void LogoService::SetLogoCacheForTests(std::unique_ptr<LogoCache> cache) {
+  logo_cache_for_test_ = std::move(cache);
+}
+
+void LogoService::SetClockForTests(std::unique_ptr<base::Clock> clock) {
+  clock_for_test_ = std::move(clock);
 }
 
 }  // namespace search_provider_logos

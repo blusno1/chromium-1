@@ -115,8 +115,6 @@ WebViewSchedulerImpl::WebViewSchedulerImpl(
       background_time_budget_pool_(nullptr),
       delegate_(delegate) {
   renderer_scheduler->AddWebViewScheduler(this);
-  virtual_time_paused_notification_.Reset(base::Bind(
-      &WebViewSchedulerImpl::NotifyVirtualTimePaused, base::Unretained(this)));
 }
 
 WebViewSchedulerImpl::~WebViewSchedulerImpl() {
@@ -129,8 +127,6 @@ WebViewSchedulerImpl::~WebViewSchedulerImpl() {
 
   if (background_time_budget_pool_)
     background_time_budget_pool_->Close();
-
-  virtual_time_paused_notification_.Cancel();
 }
 
 void WebViewSchedulerImpl::SetPageVisible(bool page_visible) {
@@ -214,22 +210,15 @@ void WebViewSchedulerImpl::ApplyVirtualTimePolicyToTimers() {
 
 void WebViewSchedulerImpl::SetAllowVirtualTimeToAdvance(
     bool allow_virtual_time_to_advance) {
-  // Notify observers if we've paused in a subsequent microtask. Important
-  // because observers may wish to use this signal as a trigger to batch process
-  // any pending network fetches, we always send this notification, even if
-  // we where previously paused.
-  virtual_time_paused_notification_.Cancel();
-  if (!allow_virtual_time_to_advance && have_seen_loading_task_) {
-    renderer_scheduler_->BestEffortTaskQueue()->PostTask(
-        FROM_HERE, virtual_time_paused_notification_.GetCallback());
-  }
-
   if (allow_virtual_time_to_advance_ == allow_virtual_time_to_advance)
     return;
   allow_virtual_time_to_advance_ = allow_virtual_time_to_advance;
 
   if (!virtual_time_)
     return;
+
+  if (!allow_virtual_time_to_advance)
+    NotifyVirtualTimePaused();
 
   renderer_scheduler_->GetVirtualTimeDomain()->SetCanAdvanceVirtualTime(
       allow_virtual_time_to_advance);
@@ -295,6 +284,11 @@ void WebViewSchedulerImpl::SetVirtualTimePolicy(VirtualTimePolicy policy) {
       break;
 
     case VirtualTimePolicy::DETERMINISTIC_LOADING:
+      // If we're using VirtualTimePolicy::DETERMINISTIC_LOADING it's because
+      // we're expecting a network fetch. We reset |have_seen_loading_task_| to
+      // avoid a race between the load starting and virtual time budget
+      // expiring.
+      have_seen_loading_task_ = false;
       ApplyVirtualTimePolicyForLoading();
       break;
   }

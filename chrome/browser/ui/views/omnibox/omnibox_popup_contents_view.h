@@ -41,12 +41,19 @@ class OmniboxPopupContentsView : public views::View,
 
   virtual void LayoutChildren();
 
+  // Sets the line specified by |index| as selected.
+  virtual void SetSelectedLine(size_t index);
+
+  // Opens a match from the list specified by |index| with the type of tab or
+  // window specified by |disposition|.
+  void OpenMatch(size_t index, WindowOpenDisposition disposition);
+
   // OmniboxPopupView:
   bool IsOpen() const override;
   void InvalidateLine(size_t line) override;
   void OnLineSelected(size_t line) override;
   void UpdatePopupAppearance() override;
-  void SetMatchIcon(size_t match_index, const gfx::Image& icon) override;
+  void OnMatchIconUpdated(size_t match_index) override;
   gfx::Rect GetTargetBounds() override;
   void PaintUpdatesNow() override;
   void OnDragCanceled() override;
@@ -57,14 +64,12 @@ class OmniboxPopupContentsView : public views::View,
   // views::View:
   void Layout() override;
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
-  bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
-  void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
 
-  bool IsSelectedIndex(size_t index) const;
-  gfx::Image GetIconIfExtensionMatch(size_t index) const;
-  bool IsStarredMatch(const AutocompleteMatch& match) const;
+  virtual bool IsSelectedIndex(size_t index) const;
+  gfx::Image GetMatchIcon(const AutocompleteMatch& match,
+                          SkColor vector_icon_color) const;
 
  protected:
   OmniboxPopupContentsView(const gfx::FontList& font_list,
@@ -101,14 +106,6 @@ class OmniboxPopupContentsView : public views::View,
   // coordinates. Returns OmniboxPopupModel::kNoMatch if there isn't a match at
   // the specified point.
   size_t GetIndexForPoint(const gfx::Point& point);
-
-  // Sets the line corresponding to |event| as selected.
-  void SetSelectedLine(const ui::LocatedEvent& event);
-
-  // Opens an entry from the list depending on the event and the selected
-  // disposition.
-  void OpenSelectedLine(const ui::LocatedEvent& event,
-                        WindowOpenDisposition disposition);
 
   OmniboxResultView* result_view_at(size_t i);
 

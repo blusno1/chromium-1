@@ -1,47 +1,25 @@
-# TODO(fuchsia): Fix these tests and remove the filter. crbug.com/731302 .
--*HTTPS*
--*QuicEndToEndTest.Large*
--*QuicEndToEndTest.TokenBinding*
--*QuicEndToEndTest.Uber*
--*QuicHttpStreamTest*
--*RootCert*
--BbrSenderTest.SimpleTransferAckDecimation2
--BidirectionalStreamTest.TestHonorAlternativeServiceHeader
--CertNetFetcherImplTest*
+# TODO(fuchsia): Fix these tests and remove the filter. https://crbug.com/731302 .
 -CertVerifyProcInternalTest.*
 -CloseOnConnectHttpServerTest.ServerImmediatelyClosesConnection
--DiskCache*
--EffectiveConnectionTypeTest*
--EmbeddedTestServer*
--HostResolverImplDnsTest.DnsTask
--HttpCache.RangeGET_ParallelValidationDifferentRanges  # https://crbug.com/755552
--HttpCache.RangeGET_ParallelValidationOverlappingRanges  # https://crbug.com/758221
--HttpNetworkTransactionTest.UploadUnreadableFile
--HttpServerTest.*
 -NetworkInterfacesTest.GetNetworkList
--NetworkQualitiesPrefManager*
--NetworkQualityEstimatorTest*
--Proxy*
+-ProxyScriptFetcherImplTest.Priority
 -PythonUtils*
--QuicSimpleClientTest*
--ReportingUploader*
--SimpleIndexFileTest*
--SpdyNetworkTransactionTest.UnreadableFilePost
 -SQLite*
--SSL*
--ThroughputAnalyzerTest*
--TokenBindingURLRequest*
--TransportClientSocketPoolTest.RequestTwice
 -UnixDomain*Socket*
--URLFetcher*
--URLRequest*
--WebSocket*
+-URLRequest*FTP*
+-URLRequestQuic*
+-URLRequestTestHTTP.HeadersCallbacks
 
-# TODO(fuchsia): These run too slowly at present. crbug.com/745094
--BbrSenderTest.*
--CryptoServerTests/*
--HttpNetworkTransactionTest.*
--*Quic*
--RangeOfTreeSizes/*
--*Spdy*
--*SendAlgorithmTests.*
+# Following tests pass locally, but flake on bots.
+-DiskCacheEntryTest*AsyncIO*
+-DiskCacheTest.BlockFiles_Grow
+-DiskCacheBackendTest.SimpleCacheDeleteQuickly
+-URLRequestTestHTTP.GetTest_ManyCookies
+
+# https://crbug.com/755552
+-HttpCache.RangeGET_ParallelValidationDifferentRanges
+-HttpCache.RangeGET_ParallelValidationOverlappingRanges
+
+# base::MakeFileUnreadable() doesn't work. https://crbug.com/759853
+-HttpNetworkTransactionTest.UploadUnreadableFile
+-SpdyNetworkTransactionTest.UnreadableFilePost

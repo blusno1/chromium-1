@@ -85,6 +85,7 @@ class WindowModalityController;
 namespace ash {
 
 class AcceleratorController;
+class AccessibilityController;
 class AccessibilityDelegate;
 class AshDisplayController;
 class AppListDelegateImpl;
@@ -112,7 +113,6 @@ class ImmersiveHandlerFactoryAsh;
 class KeyboardBrightnessControlDelegate;
 class KeyboardUI;
 class LaserPointerController;
-class LinkHandlerModelFactory;
 class LocaleNotificationController;
 class LockStateController;
 class LogoutConfirmationController;
@@ -261,8 +261,11 @@ class ASH_EXPORT Shell : public SessionObserver,
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
   // Registers all ash related user profile prefs to the given |registry|.
-  // Can be called before Shell is initialized.
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+  // Can be called before Shell is initialized. When |for_test| is true this
+  // registers foreign user profile prefs (e.g. chrome prefs) as if they are
+  // owned by ash. This allows test code to read the pref values.
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry,
+                                   bool for_test = false);
 
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
@@ -294,6 +297,9 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   AcceleratorController* accelerator_controller() {
     return accelerator_controller_.get();
+  }
+  AccessibilityController* accessibility_controller() {
+    return accessibility_controller_.get();
   }
   AccessibilityDelegate* accessibility_delegate() {
     return accessibility_delegate_.get();
@@ -360,13 +366,6 @@ class ASH_EXPORT Shell : public SessionObserver,
     return window_selector_controller_.get();
   }
   OverlayEventFilter* overlay_filter() { return overlay_filter_.get(); }
-  LinkHandlerModelFactory* link_handler_model_factory() {
-    return link_handler_model_factory_;
-  }
-  void set_link_handler_model_factory(
-      LinkHandlerModelFactory* link_handler_model_factory) {
-    link_handler_model_factory_ = link_handler_model_factory;
-  }
   PowerButtonController* power_button_controller() {
     return power_button_controller_.get();
   }
@@ -539,24 +538,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   void AddShellObserver(ShellObserver* observer);
   void RemoveShellObserver(ShellObserver* observer);
 
-  // TODO(minch), move applist related functions to AppList.
-  // http://crbug.com/759909.
-  // Shows the app list on the active root window.
-  void ShowAppList(app_list::AppListShowSource toggle_method);
-
-  // Dismisses the app list.
-  void DismissAppList();
-
-  // Shows the app list if it's not visible. Dismisses it otherwise.
-  void ToggleAppList(app_list::AppListShowSource toggle_method);
-
-  // Returns app list actual visibility. This might differ from
-  // GetAppListTargetVisibility() when hiding animation is still in flight.
-  bool IsAppListVisible() const;
-
-  // Returns app list target visibility.
-  bool GetAppListTargetVisibility() const;
-
   // Called when the login status changes.
   // TODO(oshima): Investigate if we can merge this and |OnLoginStateChanged|.
   void UpdateAfterLoginStatusChange(LoginStatus status);
@@ -695,6 +676,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<WindowPositioner> window_positioner_;
 
   std::unique_ptr<AcceleratorController> accelerator_controller_;
+  std::unique_ptr<AccessibilityController> accessibility_controller_;
   std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
   std::unique_ptr<AshDisplayController> ash_display_controller_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
@@ -736,7 +718,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<app_list::AppList> app_list_;
   std::unique_ptr<PrefService> local_state_;
   std::unique_ptr<views::corewm::TooltipController> tooltip_controller_;
-  LinkHandlerModelFactory* link_handler_model_factory_;
   std::unique_ptr<PowerButtonController> power_button_controller_;
   std::unique_ptr<LockStateController> lock_state_controller_;
   std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;

@@ -10,6 +10,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "cc/paint/frame_metadata.h"
+#include "cc/paint/image_animation_count.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/skia_paint_image_generator.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -46,10 +47,7 @@ class CC_PAINT_EXPORT PaintImage {
 
   class CC_PAINT_EXPORT FrameKey {
    public:
-    FrameKey(Id paint_image_id,
-             ContentId content_id,
-             size_t frame_index,
-             gfx::Rect subset_rect);
+    FrameKey(ContentId content_id, size_t frame_index, gfx::Rect subset_rect);
     bool operator==(const FrameKey& other) const;
     bool operator!=(const FrameKey& other) const;
 
@@ -57,7 +55,6 @@ class CC_PAINT_EXPORT PaintImage {
     std::string ToString() const;
 
    private:
-    Id paint_image_id_;
     ContentId content_id_;
     size_t frame_index_;
     // TODO(khushalsagar): Remove this when callers take care of subsetting.
@@ -150,6 +147,13 @@ class CC_PAINT_EXPORT PaintImage {
   friend class PaintImageBuilder;
   FRIEND_TEST_ALL_PREFIXES(PaintImageTest, Subsetting);
 
+  bool DecodeFromGenerator(void* memory,
+                           SkImageInfo* info,
+                           sk_sp<SkColorSpace> color_space) const;
+  bool DecodeFromSkImage(void* memory,
+                         SkImageInfo* info,
+                         sk_sp<SkColorSpace> color_space) const;
+
   sk_sp<SkImage> sk_image_;
 
   sk_sp<PaintRecord> paint_record_;
@@ -161,6 +165,7 @@ class CC_PAINT_EXPORT PaintImage {
   Id id_ = 0;
   AnimationType animation_type_ = AnimationType::STATIC;
   CompletionState completion_state_ = CompletionState::DONE;
+  int repetition_count_ = kAnimationNone;
 
   // If non-empty, holds the subset of this image relative to the original image
   // at the origin.

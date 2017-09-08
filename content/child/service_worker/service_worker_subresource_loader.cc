@@ -6,17 +6,11 @@
 
 #include "base/atomic_sequence_num.h"
 #include "base/callback.h"
-#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/child/service_worker/service_worker_event_dispatcher_holder.h"
+#include "content/common/service_worker/service_worker_loader_helpers.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/content_features.h"
-#include "net/base/io_buffer.h"
-#include "net/http/http_util.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebBlobRegistry.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -40,9 +34,12 @@ ServiceWorkerSubresourceLoader::ServiceWorkerSubresourceLoader(
     const ResourceRequest& resource_request,
     mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-    scoped_refptr<ServiceWorkerEventDispatcherHolder> event_dispatcher,
+    scoped_refptr<base::RefCountedData<mojom::ServiceWorkerEventDispatcherPtr>>
+        event_dispatcher,
     scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter,
-    const GURL& controller_origin)
+    const GURL& controller_origin,
+    scoped_refptr<base::RefCountedData<storage::mojom::BlobRegistryPtr>>
+        blob_registry)
     : url_loader_client_(std::move(client)),
       url_loader_binding_(this, std::move(request)),
       response_callback_binding_(this),
@@ -54,20 +51,16 @@ ServiceWorkerSubresourceLoader::ServiceWorkerSubresourceLoader(
       traffic_annotation_(traffic_annotation),
       controller_origin_(controller_origin),
       blob_client_binding_(this),
+      blob_registry_(std::move(blob_registry)),
       default_loader_factory_getter_(std::move(default_loader_factory_getter)),
       weak_factory_(this) {
-  DCHECK(event_dispatcher_ && event_dispatcher_->get());
+  DCHECK(event_dispatcher_ && event_dispatcher_->data);
   url_loader_binding_.set_connection_error_handler(base::BindOnce(
       &ServiceWorkerSubresourceLoader::DeleteSoon, weak_factory_.GetWeakPtr()));
   StartRequest(resource_request);
 }
 
-ServiceWorkerSubresourceLoader::~ServiceWorkerSubresourceLoader() {
-  if (!blob_url_.is_empty()) {
-    blink::Platform::Current()->GetBlobRegistry()->RevokePublicBlobURL(
-        blob_url_);
-  }
-}
+ServiceWorkerSubresourceLoader::~ServiceWorkerSubresourceLoader() = default;
 
 void ServiceWorkerSubresourceLoader::DeleteSoon() {
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
@@ -75,44 +68,19 @@ void ServiceWorkerSubresourceLoader::DeleteSoon() {
 
 void ServiceWorkerSubresourceLoader::StartRequest(
     const ResourceRequest& resource_request) {
-  auto request = CreateFetchRequest(resource_request);
+  std::unique_ptr<ServiceWorkerFetchRequest> request =
+      ServiceWorkerLoaderHelpers::CreateFetchRequest(resource_request);
   DCHECK_EQ(Status::kNotStarted, status_);
   status_ = Status::kStarted;
 
   mojom::ServiceWorkerFetchResponseCallbackPtr response_callback_ptr;
   response_callback_binding_.Bind(mojo::MakeRequest(&response_callback_ptr));
 
-  event_dispatcher_->get()->DispatchFetchEvent(
+  event_dispatcher_->data->DispatchFetchEvent(
       GetNextFetchEventID(), *request, mojom::FetchEventPreloadHandlePtr(),
       std::move(response_callback_ptr),
       base::Bind(&ServiceWorkerSubresourceLoader::OnFetchEventFinished,
                  weak_factory_.GetWeakPtr()));
-}
-
-std::unique_ptr<ServiceWorkerFetchRequest>
-ServiceWorkerSubresourceLoader::CreateFetchRequest(
-    const ResourceRequest& request) {
-  std::string blob_uuid;
-  uint64_t blob_size = 0;
-  // TODO(kinuko): Implement request.request_body handling.
-  auto new_request = base::MakeUnique<ServiceWorkerFetchRequest>();
-  new_request->mode = request.fetch_request_mode;
-  new_request->is_main_resource_load =
-      ServiceWorkerUtils::IsMainResourceType(request.resource_type);
-  new_request->request_context_type = request.fetch_request_context_type;
-  new_request->frame_type = request.fetch_frame_type;
-  new_request->url = request.url;
-  new_request->method = request.method;
-  new_request->blob_uuid = blob_uuid;
-  new_request->blob_size = blob_size;
-  new_request->credentials_mode = request.fetch_credentials_mode;
-  new_request->redirect_mode = request.fetch_redirect_mode;
-  new_request->is_reload = ui::PageTransitionCoreTypeIs(
-      request.transition_type, ui::PAGE_TRANSITION_RELOAD);
-  new_request->referrer =
-      Referrer(GURL(request.referrer), request.referrer_policy);
-  new_request->fetch_type = ServiceWorkerFetchType::FETCH;
-  return new_request;
 }
 
 void ServiceWorkerSubresourceLoader::OnFetchEventFinished(
@@ -167,15 +135,18 @@ void ServiceWorkerSubresourceLoader::StartResponse(
     const ServiceWorkerResponse& response,
     storage::mojom::BlobPtr body_as_blob,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream) {
-  SaveResponseInfo(response);
-  SaveResponseHeaders(response.status_code, response.status_text,
-                      response.headers);
+  ServiceWorkerLoaderHelpers::SaveResponseInfo(response, &response_head_);
+  ServiceWorkerLoaderHelpers::SaveResponseHeaders(
+      response.status_code, response.status_text, response.headers,
+      &response_head_);
 
   // Handle a stream response body.
   if (!body_as_stream.is_null() && body_as_stream->stream.is_valid()) {
     CommitResponseHeaders();
     url_loader_client_->OnStartLoadingResponseBody(
         std::move(body_as_stream->stream));
+    // TODO(falken): Call CommitCompleted() when stream finished.
+    // See https://crbug.com/758455
     CommitCompleted(net::OK);
     return;
   }
@@ -186,22 +157,12 @@ void ServiceWorkerSubresourceLoader::StartResponse(
   // https://docs.google.com/a/google.com/document/d/1_ROmusFvd8ATwIZa29-P6Ls5yyLjfld0KvKchVfA84Y/edit?usp=drive_web
   // TODO(kinuko): This code is hacked up on top of the legacy API, migrate
   // to mojo-fied Blob code once it becomes ready.
-  blink::WebBlobRegistry* blob_registry =
-      blink::Platform::Current()->GetBlobRegistry();
-  if (!response.blob_uuid.empty() && blob_registry) {
-    blink::WebString webstring_blob_uuid =
-        blink::WebString::FromASCII(response.blob_uuid);
-    blob_url_ =
+  if (!response.blob_uuid.empty()) {
+    GURL blob_url =
         GURL("blob:" + controller_origin_.spec() + "/" + response.blob_uuid);
-    blob_registry->RegisterPublicBlobURL(blob_url_, webstring_blob_uuid);
-    // Decrement the Blob ref-count to offset AddRef in the controller Service
-    // Worker code. TODO(kinuko): Remove this once RegisterPublicBlobURL can be
-    // issued over mojo. Also see the comment around AddBlobDataRef in
-    // ServiceWorkerContextClient for additional details. (crbug.com/756743)
-    blob_registry->RemoveBlobDataRef(webstring_blob_uuid);
-    VLOG(1) << "Reading blob: " << response.blob_uuid << " / "
-            << blob_url_.spec();
-    resource_request_.url = blob_url_;
+    blob_registry_->data->RegisterURL(std::move(body_as_blob), blob_url,
+                                      &blob_url_handle_);
+    resource_request_.url = blob_url;
 
     mojom::URLLoaderClientPtr blob_loader_client;
     blob_client_binding_.Bind(mojo::MakeRequest(&blob_loader_client));
@@ -218,52 +179,13 @@ void ServiceWorkerSubresourceLoader::StartResponse(
   CommitCompleted(net::OK);
 }
 
-void ServiceWorkerSubresourceLoader::SaveResponseInfo(
-    const ServiceWorkerResponse& response) {
-  response_head_.was_fetched_via_service_worker = true;
-  response_head_.was_fetched_via_foreign_fetch = false;
-  response_head_.was_fallback_required_by_service_worker = false;
-  response_head_.url_list_via_service_worker = response.url_list;
-  response_head_.response_type_via_service_worker = response.response_type;
-  response_head_.is_in_cache_storage = response.is_in_cache_storage;
-  response_head_.cache_storage_cache_name = response.cache_storage_cache_name;
-  response_head_.cors_exposed_header_names = response.cors_exposed_header_names;
-  response_head_.did_service_worker_navigation_preload = false;
-}
-
-void ServiceWorkerSubresourceLoader::SaveResponseHeaders(
-    int status_code,
-    const std::string& status_text,
-    const ServiceWorkerHeaderMap& headers) {
-  // Build a string instead of using HttpResponseHeaders::AddHeader on
-  // each header, since AddHeader has O(n^2) performance.
-  std::string buf(base::StringPrintf("HTTP/1.1 %d %s\r\n", status_code,
-                                     status_text.c_str()));
-  for (const auto& item : headers) {
-    buf.append(item.first);
-    buf.append(": ");
-    buf.append(item.second);
-    buf.append("\r\n");
-  }
-  buf.append("\r\n");
-
-  response_head_.headers = new net::HttpResponseHeaders(
-      net::HttpUtil::AssembleRawHeaders(buf.c_str(), buf.size()));
-  if (response_head_.mime_type.empty()) {
-    std::string mime_type;
-    response_head_.headers->GetMimeType(&mime_type);
-    if (mime_type.empty())
-      mime_type = "text/plain";
-    response_head_.mime_type = mime_type;
-  }
-}
-
 void ServiceWorkerSubresourceLoader::CommitResponseHeaders() {
   DCHECK_EQ(Status::kStarted, status_);
   status_ = Status::kSentHeader;
   // TODO(kinuko): Fill the ssl_info.
   url_loader_client_->OnReceiveResponse(response_head_,
-                                        base::nullopt /* ssl_info */, nullptr);
+                                        base::nullopt /* ssl_info_ */,
+                                        nullptr /* downloaded_file */);
 }
 
 void ServiceWorkerSubresourceLoader::CommitCompleted(int error_code) {
@@ -279,8 +201,9 @@ void ServiceWorkerSubresourceLoader::DeliverErrorResponse() {
   DCHECK_GT(status_, Status::kNotStarted);
   DCHECK_LT(status_, Status::kCompleted);
   if (status_ < Status::kSentHeader) {
-    SaveResponseHeaders(500, "Service Worker Response Error",
-                        ServiceWorkerHeaderMap());
+    ServiceWorkerLoaderHelpers::SaveResponseHeaders(
+        500, "Service Worker Response Error", ServiceWorkerHeaderMap(),
+        &response_head_);
     CommitResponseHeaders();
   }
   CommitCompleted(net::ERR_FAILED);
@@ -361,12 +284,16 @@ void ServiceWorkerSubresourceLoader::OnComplete(
 // ServiceWorkerSubresourceLoaderFactory ------------------------------------
 
 ServiceWorkerSubresourceLoaderFactory::ServiceWorkerSubresourceLoaderFactory(
-    scoped_refptr<ServiceWorkerEventDispatcherHolder> event_dispatcher,
+    scoped_refptr<base::RefCountedData<mojom::ServiceWorkerEventDispatcherPtr>>
+        event_dispatcher,
     scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter,
-    const GURL& controller_origin)
+    const GURL& controller_origin,
+    scoped_refptr<base::RefCountedData<storage::mojom::BlobRegistryPtr>>
+        blob_registry)
     : event_dispatcher_(std::move(event_dispatcher)),
       default_loader_factory_getter_(std::move(default_loader_factory_getter)),
-      controller_origin_(controller_origin) {
+      controller_origin_(controller_origin),
+      blob_registry_(std::move(blob_registry)) {
   DCHECK_EQ(controller_origin, controller_origin.GetOrigin());
   DCHECK(default_loader_factory_getter_);
 }
@@ -389,7 +316,7 @@ void ServiceWorkerSubresourceLoaderFactory::CreateLoaderAndStart(
   new ServiceWorkerSubresourceLoader(
       std::move(request), routing_id, request_id, options, resource_request,
       std::move(client), traffic_annotation, event_dispatcher_,
-      default_loader_factory_getter_, controller_origin_);
+      default_loader_factory_getter_, controller_origin_, blob_registry_);
 }
 
 void ServiceWorkerSubresourceLoaderFactory::Clone(

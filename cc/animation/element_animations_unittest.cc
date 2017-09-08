@@ -208,17 +208,17 @@ TEST_F(ElementAnimationsTest, SyncNewAnimation) {
   AttachTimelinePlayerLayer();
   CreateImplTimelineAndPlayer();
 
+  EXPECT_FALSE(player_->GetAnimation(TargetProperty::OPACITY));
   EXPECT_FALSE(player_impl_->GetAnimation(TargetProperty::OPACITY));
-
-  EXPECT_FALSE(player_->needs_to_start_animations());
-  EXPECT_FALSE(player_impl_->needs_to_start_animations());
 
   int animation_id =
       AddOpacityTransitionToPlayer(player_.get(), 1, 0, 1, false);
-  EXPECT_TRUE(player_->needs_to_start_animations());
+  EXPECT_TRUE(player_->GetAnimationById(animation_id));
+  EXPECT_EQ(Animation::WAITING_FOR_TARGET_AVAILABILITY,
+            player_->GetAnimationById(animation_id)->run_state());
+  EXPECT_FALSE(player_impl_->GetAnimationById(animation_id));
 
   PushProperties();
-  EXPECT_TRUE(player_impl_->needs_to_start_animations());
   player_impl_->ActivateAnimations();
 
   EXPECT_TRUE(player_impl_->GetAnimationById(animation_id));
@@ -232,10 +232,8 @@ TEST_F(ElementAnimationsTest,
   AttachTimelinePlayerLayer();
   CreateImplTimelineAndPlayer();
 
+  EXPECT_FALSE(player_->GetAnimation(TargetProperty::SCROLL_OFFSET));
   EXPECT_FALSE(player_impl_->GetAnimation(TargetProperty::SCROLL_OFFSET));
-
-  EXPECT_FALSE(player_->needs_to_start_animations());
-  EXPECT_FALSE(player_impl_->needs_to_start_animations());
 
   gfx::ScrollOffset initial_value(100.f, 300.f);
   gfx::ScrollOffset provider_initial_value(150.f, 300.f);
@@ -695,12 +693,16 @@ TEST_F(ElementAnimationsTest, TrivialTransition) {
   std::unique_ptr<Animation> to_add(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
       1, TargetProperty::OPACITY));
+  int animation_id = to_add->id();
 
-  EXPECT_FALSE(player_->needs_to_start_animations());
+  EXPECT_FALSE(player_->GetAnimationById(animation_id));
   player_->AddAnimation(std::move(to_add));
-  EXPECT_TRUE(player_->needs_to_start_animations());
+  EXPECT_TRUE(player_->GetAnimationById(animation_id));
+  EXPECT_EQ(Animation::WAITING_FOR_TARGET_AVAILABILITY,
+            player_->GetAnimationById(animation_id)->run_state());
   player_->Tick(kInitialTickTime);
-  EXPECT_FALSE(player_->needs_to_start_animations());
+  EXPECT_EQ(Animation::STARTING,
+            player_->GetAnimationById(animation_id)->run_state());
   player_->UpdateState(true, events.get());
   EXPECT_TRUE(player_->HasTickingAnimation());
   EXPECT_EQ(0.f, client_.GetOpacity(element_id_, ElementListType::ACTIVE));
@@ -1219,30 +1221,41 @@ TEST_F(ElementAnimationsTest, TrivialQueuing) {
 
   auto events = CreateEventsForTesting();
 
-  EXPECT_FALSE(player_->needs_to_start_animations());
-
-  player_->AddAnimation(CreateAnimation(
+  int animation1_id = 1;
+  int animation2_id = 2;
+  player_->AddAnimation(Animation::Create(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
-  player_->AddAnimation(CreateAnimation(
+      animation1_id, 1, TargetProperty::OPACITY));
+  player_->AddAnimation(Animation::Create(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.5f)),
-      2, TargetProperty::OPACITY));
-
-  EXPECT_TRUE(player_->needs_to_start_animations());
+      animation2_id, 2, TargetProperty::OPACITY));
 
   player_->Tick(kInitialTickTime);
 
+  // The first animation should have been started.
+  EXPECT_TRUE(player_->GetAnimationById(animation1_id));
+  EXPECT_EQ(Animation::STARTING,
+            player_->GetAnimationById(animation1_id)->run_state());
+
   // The second animation still needs to be started.
-  EXPECT_TRUE(player_->needs_to_start_animations());
+  EXPECT_TRUE(player_->GetAnimationById(animation2_id));
+  EXPECT_EQ(Animation::WAITING_FOR_TARGET_AVAILABILITY,
+            player_->GetAnimationById(animation2_id)->run_state());
 
   player_->UpdateState(true, events.get());
   EXPECT_TRUE(player_->HasTickingAnimation());
   EXPECT_EQ(0.f, client_.GetOpacity(element_id_, ElementListType::ACTIVE));
 
   player_->Tick(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
-  EXPECT_TRUE(player_->needs_to_start_animations());
   player_->UpdateState(true, events.get());
-  EXPECT_FALSE(player_->needs_to_start_animations());
+
+  // Now the first should be finished, and the second started.
+  EXPECT_TRUE(player_->GetAnimationById(animation1_id));
+  EXPECT_EQ(Animation::FINISHED,
+            player_->GetAnimationById(animation1_id)->run_state());
+  EXPECT_TRUE(player_->GetAnimationById(animation2_id));
+  EXPECT_EQ(Animation::RUNNING,
+            player_->GetAnimationById(animation2_id)->run_state());
 
   EXPECT_TRUE(player_->HasTickingAnimation());
   EXPECT_EQ(1.f, client_.GetOpacity(element_id_, ElementListType::ACTIVE));
@@ -1671,113 +1684,6 @@ TEST_F(ElementAnimationsTest, InactiveObserverGetsTicked) {
             client_impl_.GetOpacity(element_id_, ElementListType::PENDING));
   EXPECT_NE(0.5f,
             client_impl_.GetOpacity(element_id_, ElementListType::ACTIVE));
-}
-
-TEST_F(ElementAnimationsTest, TransformAnimationBounds) {
-  AttachTimelinePlayerLayer();
-  CreateImplTimelineAndPlayer();
-
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve1(
-      KeyframedTransformAnimationCurve::Create());
-
-  TransformOperations operations1;
-  curve1->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations1, nullptr));
-  operations1.AppendTranslate(10.0, 15.0, 0.0);
-  curve1->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta::FromSecondsD(1.0), operations1, nullptr));
-
-  std::unique_ptr<Animation> animation(
-      Animation::Create(std::move(curve1), 1, 1, TargetProperty::TRANSFORM));
-  player_impl_->AddAnimation(std::move(animation));
-
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve2(
-      KeyframedTransformAnimationCurve::Create());
-
-  TransformOperations operations2;
-  curve2->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations2, nullptr));
-  operations2.AppendScale(2.0, 3.0, 4.0);
-  curve2->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta::FromSecondsD(1.0), operations2, nullptr));
-
-  animation =
-      Animation::Create(std::move(curve2), 2, 2, TargetProperty::TRANSFORM);
-  player_impl_->AddAnimation(std::move(animation));
-
-  gfx::BoxF box(1.f, 2.f, -1.f, 3.f, 4.f, 5.f);
-  gfx::BoxF bounds;
-
-  EXPECT_TRUE(player_impl_->TransformAnimationBoundsForBox(box, &bounds));
-  EXPECT_EQ(gfx::BoxF(1.f, 2.f, -4.f, 13.f, 19.f, 20.f).ToString(),
-            bounds.ToString());
-
-  player_impl_->GetAnimationById(1)->SetRunState(Animation::FINISHED,
-                                                 TicksFromSecondsF(0.0));
-
-  // Only the unfinished animation should affect the animated bounds.
-  EXPECT_TRUE(player_impl_->TransformAnimationBoundsForBox(box, &bounds));
-  EXPECT_EQ(gfx::BoxF(1.f, 2.f, -4.f, 7.f, 16.f, 20.f).ToString(),
-            bounds.ToString());
-
-  player_impl_->GetAnimationById(2)->SetRunState(Animation::FINISHED,
-                                                 TicksFromSecondsF(0.0));
-
-  // There are no longer any running animations.
-  EXPECT_FALSE(player_impl_->HasTransformAnimationThatInflatesBounds());
-
-  // Add an animation whose bounds we don't yet support computing.
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve3(
-      KeyframedTransformAnimationCurve::Create());
-  TransformOperations operations3;
-  gfx::Transform transform3;
-  transform3.Scale3d(1.0, 2.0, 3.0);
-  curve3->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations3, nullptr));
-  operations3.AppendMatrix(transform3);
-  curve3->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta::FromSecondsD(1.0), operations3, nullptr));
-  animation =
-      Animation::Create(std::move(curve3), 3, 3, TargetProperty::TRANSFORM);
-  player_impl_->AddAnimation(std::move(animation));
-  EXPECT_FALSE(player_impl_->TransformAnimationBoundsForBox(box, &bounds));
-}
-
-TEST_F(ElementAnimationsTest, TransformAnimationBoundsTwoPlayers) {
-  AttachTimelinePlayerLayer();
-  CreateImplTimelineAndPlayer();
-
-  scoped_refptr<AnimationPlayer> player2 =
-      AnimationPlayer::Create(AnimationIdProvider::NextPlayerId());
-  timeline_->AttachPlayer(player2);
-  player2->AttachElement(element_id_);
-
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve(
-      KeyframedTransformAnimationCurve::Create());
-
-  TransformOperations operations;
-  curve->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations, nullptr));
-  operations.AppendScale(2.0, 3.0, 4.0);
-  curve->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta::FromSecondsD(1.0), operations, nullptr));
-
-  std::unique_ptr<Animation> animation(
-      Animation::Create(std::move(curve), 1, 1, TargetProperty::TRANSFORM));
-  player2->AddAnimation(std::move(animation));
-
-  gfx::BoxF box(1.f, 2.f, -1.f, 3.f, 4.f, 5.f);
-  gfx::BoxF bounds;
-
-  EXPECT_FALSE(player_impl_->HasTransformAnimationThatInflatesBounds());
-  EXPECT_TRUE(player2->TransformAnimationBoundsForBox(box, &bounds));
-  EXPECT_EQ(gfx::BoxF(1.f, 2.f, -4.f, 7.f, 16.f, 20.f).ToString(),
-            bounds.ToString());
-
-  EXPECT_TRUE(
-      element_animations_->TransformAnimationBoundsForBox(box, &bounds));
-  EXPECT_EQ(gfx::BoxF(1.f, 2.f, -4.f, 7.f, 16.f, 20.f).ToString(),
-            bounds.ToString());
 }
 
 // Tests that AbortAnimations aborts all animations targeting the specified
@@ -2488,14 +2394,12 @@ TEST_F(ElementAnimationsTest, NewlyPushedAnimationWaitsForActivation) {
 
   auto events = CreateEventsForTesting();
 
-  EXPECT_FALSE(player_->needs_to_start_animations());
   int animation_id =
       AddOpacityTransitionToPlayer(player_.get(), 1, 0.5f, 1.f, false);
-  EXPECT_TRUE(player_->needs_to_start_animations());
+  EXPECT_TRUE(player_->GetAnimationById(animation_id));
+  EXPECT_FALSE(player_impl_->GetAnimationById(animation_id));
 
-  EXPECT_FALSE(player_impl_->needs_to_start_animations());
   PushProperties();
-  EXPECT_TRUE(player_impl_->needs_to_start_animations());
 
   EXPECT_TRUE(player_impl_->GetAnimationById(animation_id));
   EXPECT_EQ(Animation::WAITING_FOR_TARGET_AVAILABILITY,
@@ -2506,7 +2410,8 @@ TEST_F(ElementAnimationsTest, NewlyPushedAnimationWaitsForActivation) {
       player_impl_->GetAnimationById(animation_id)->affects_active_elements());
 
   player_impl_->Tick(kInitialTickTime);
-  EXPECT_FALSE(player_impl_->needs_to_start_animations());
+  EXPECT_EQ(Animation::STARTING,
+            player_impl_->GetAnimationById(animation_id)->run_state());
   player_impl_->UpdateState(true, events.get());
 
   // Since the animation hasn't been activated, it should still be STARTING

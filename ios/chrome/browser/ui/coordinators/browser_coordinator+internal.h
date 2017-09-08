@@ -8,7 +8,7 @@
 #import "ios/chrome/browser/ui/coordinators/browser_coordinator.h"
 
 // Internal API for subclasses and categories of BrowserCoordinator.
-//
+
 // This API can be used to create and manage 'overlay coordinators'.
 // Overlay coordinators are intended to be used for UI elements that
 // sit on top of the regular UI, and which may need to be dismissed

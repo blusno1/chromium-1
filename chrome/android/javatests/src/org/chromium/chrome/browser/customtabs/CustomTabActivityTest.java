@@ -333,6 +333,18 @@ public class CustomTabActivityTest {
         return actualMenuSize;
     }
 
+    /**
+     * @return The number of visible items in the given menu.
+     */
+    private int getVisibleMenuSize(Menu menu) {
+        int visibleMenuSize = 0;
+        for (int i = 0; i < menu.size(); i++) {
+            MenuItem item = menu.getItem(i);
+            if (item.isVisible()) visibleMenuSize++;
+        }
+        return visibleMenuSize;
+    }
+
     private Bitmap createTestBitmap(int widthDp, int heightDp) {
         Resources testRes =
                 InstrumentationRegistry.getInstrumentation().getTargetContext().getResources();
@@ -527,10 +539,10 @@ public class CustomTabActivityTest {
         Menu menu =
                 mCustomTabActivityTestRule.getActivity().getAppMenuHandler().getAppMenu().getMenu();
         final int expectedMenuSize = numMenuEntries + NUM_CHROME_MENU_ITEMS;
-        final int actualMenuSize = getActualMenuSize(menu);
 
         Assert.assertNotNull("App menu is not initialized: ", menu);
-        Assert.assertEquals(expectedMenuSize, actualMenuSize);
+        Assert.assertEquals(expectedMenuSize, getActualMenuSize(menu));
+        Assert.assertEquals(expectedMenuSize, getVisibleMenuSize(menu));
         Assert.assertNotNull(menu.findItem(R.id.forward_menu_id));
         Assert.assertNotNull(menu.findItem(R.id.bookmark_this_page_id));
         Assert.assertNotNull(menu.findItem(R.id.offline_page_id));
@@ -561,14 +573,10 @@ public class CustomTabActivityTest {
         Menu menu =
                 mCustomTabActivityTestRule.getActivity().getAppMenuHandler().getAppMenu().getMenu();
         final int expectedMenuSize = 0;
-        final int actualMenuSize = getActualMenuSize(menu);
 
         Assert.assertNotNull("App menu is not initialized: ", menu);
-        Assert.assertEquals(expectedMenuSize, actualMenuSize);
-        Assert.assertFalse(menu.findItem(R.id.find_in_page_id).isVisible());
-        Assert.assertFalse(menu.findItem(R.id.add_to_homescreen_id).isVisible());
-        Assert.assertFalse(menu.findItem(R.id.request_desktop_site_row_menu_id).isVisible());
-        Assert.assertFalse(menu.findItem(R.id.open_in_browser_id).isVisible());
+        Assert.assertEquals(expectedMenuSize, getActualMenuSize(menu));
+        Assert.assertEquals(expectedMenuSize, getVisibleMenuSize(menu));
     }
 
     /**
@@ -587,10 +595,10 @@ public class CustomTabActivityTest {
         Menu menu =
                 mCustomTabActivityTestRule.getActivity().getAppMenuHandler().getAppMenu().getMenu();
         final int expectedMenuSize = 2;
-        final int actualMenuSize = getActualMenuSize(menu);
 
         Assert.assertNotNull("App menu is not initialized: ", menu);
-        Assert.assertEquals(expectedMenuSize, actualMenuSize);
+        Assert.assertEquals(expectedMenuSize, getActualMenuSize(menu));
+        Assert.assertEquals(expectedMenuSize, getVisibleMenuSize(menu));
         Assert.assertTrue(menu.findItem(R.id.find_in_page_id).isVisible());
         Assert.assertTrue(menu.findItem(R.id.reader_mode_prefs_id).isVisible());
     }
@@ -623,6 +631,7 @@ public class CustomTabActivityTest {
     public void testMaxMenuItems() throws InterruptedException {
         Intent intent = createMinimalCustomTabIntent();
         int numMenuEntries = 7;
+        Assert.assertTrue(MAX_MENU_CUSTOM_ITEMS < numMenuEntries);
         addMenuEntriesToIntent(intent, numMenuEntries);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
 
@@ -630,9 +639,9 @@ public class CustomTabActivityTest {
         Menu menu =
                 mCustomTabActivityTestRule.getActivity().getAppMenuHandler().getAppMenu().getMenu();
         final int expectedMenuSize = MAX_MENU_CUSTOM_ITEMS + NUM_CHROME_MENU_ITEMS;
-        final int actualMenuSize = getActualMenuSize(menu);
         Assert.assertNotNull("App menu is not initialized: ", menu);
-        Assert.assertEquals(expectedMenuSize, actualMenuSize);
+        Assert.assertEquals(expectedMenuSize, getActualMenuSize(menu));
+        Assert.assertEquals(expectedMenuSize, getVisibleMenuSize(menu));
     }
 
     /**
@@ -1225,19 +1234,25 @@ public class CustomTabActivityTest {
         }
     }
 
+    private static void assertSuffixedHistogramTotalCount(long expected, String histogramPrefix) {
+        for (String suffix : new String[] {".ZoomedIn", ".ZoomedOut"}) {
+            Assert.assertEquals(expected,
+                    RecordHistogram.getHistogramTotalCountForTesting(histogramPrefix + suffix));
+        }
+    }
+
     /**
      * Tests that one navigation in a custom tab records the histograms reflecting time from
-     * intent to first navigation commit.
+     * intent to first navigation start/commit.
      */
     @Test
     @SmallTest
-    public void testNavigationCommitUmaRecorded() {
-        String zoomedOutHistogramName = "CustomTabs.IntentToFirstCommitNavigationTime3.ZoomedOut";
-        String zoomedInHistogramName = "CustomTabs.IntentToFirstCommitNavigationTime3.ZoomedIn";
-        Assert.assertEquals(
-                0, RecordHistogram.getHistogramTotalCountForTesting(zoomedOutHistogramName));
-        Assert.assertEquals(
-                0, RecordHistogram.getHistogramTotalCountForTesting(zoomedInHistogramName));
+    public void testNavigationHistogramsRecorded() {
+        String startHistogramPrefix = "CustomTabs.IntentToFirstNavigationStartTime";
+        String commitHistogramPrefix = "CustomTabs.IntentToFirstCommitNavigationTime3";
+        assertSuffixedHistogramTotalCount(0, startHistogramPrefix);
+        assertSuffixedHistogramTotalCount(0, commitHistogramPrefix);
+
         final Semaphore semaphore = new Semaphore(0);
         CustomTabsSession session = bindWithCallback(new CustomTabsCallback() {
             @Override
@@ -1251,17 +1266,15 @@ public class CustomTabActivityTest {
                 new ComponentName(InstrumentationRegistry.getInstrumentation().getTargetContext(),
                         ChromeLauncherActivity.class));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
         try {
             mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
             Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_PAGE_LOAD_SECONDS, TimeUnit.SECONDS));
         } catch (InterruptedException e) {
             Assert.fail();
         }
-        Assert.assertEquals(
-                1, RecordHistogram.getHistogramTotalCountForTesting(zoomedOutHistogramName));
-        Assert.assertEquals(
-                1, RecordHistogram.getHistogramTotalCountForTesting(zoomedInHistogramName));
+
+        assertSuffixedHistogramTotalCount(1, startHistogramPrefix);
+        assertSuffixedHistogramTotalCount(1, commitHistogramPrefix);
     }
 
     /**
@@ -3016,8 +3029,7 @@ public class CustomTabActivityTest {
                 BrowsingHistoryBridge historyService = new BrowsingHistoryBridge(false);
                 historyService.setObserver(historyObserver);
                 String historyQueryFilter = "";
-                int historyQueryTimeout = 0;
-                historyService.queryHistory(historyQueryFilter, historyQueryTimeout);
+                historyService.queryHistory(historyQueryFilter);
             }
         });
         historyObserver.getQueryCallback().waitForCallback(0);

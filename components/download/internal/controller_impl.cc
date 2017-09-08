@@ -21,6 +21,7 @@
 #include "components/download/internal/stats.h"
 #include "components/download/public/client.h"
 #include "components/download/public/download_metadata.h"
+#include "components/download/public/navigation_monitor.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace download {
@@ -78,6 +79,7 @@ ControllerImpl::ControllerImpl(
     std::unique_ptr<DownloadDriver> driver,
     std::unique_ptr<Model> model,
     std::unique_ptr<DeviceStatusListener> device_status_listener,
+    NavigationMonitor* navigation_monitor,
     std::unique_ptr<Scheduler> scheduler,
     std::unique_ptr<TaskScheduler> task_scheduler,
     std::unique_ptr<FileMonitor> file_monitor,
@@ -875,8 +877,7 @@ void ControllerImpl::HandleCompleteDownload(CompletionType type,
   auto driver_entry = driver_->Find(guid);
   uint64_t file_size =
       driver_entry.has_value() ? driver_entry->bytes_downloaded : 0;
-  stats::LogDownloadCompletion(
-      type, entry->completion_time - entry->create_time, file_size);
+  stats::LogDownloadCompletion(type, file_size);
 
   if (type == CompletionType::SUCCEED) {
     DCHECK(driver_entry.has_value());
@@ -917,6 +918,8 @@ void ControllerImpl::ScheduleCleanupTask() {
     base::Time cleanup_time_for_entry =
         std::min(entry->last_cleanup_check_time + config_->file_keep_alive_time,
                  entry->completion_time + config_->max_file_keep_alive_time);
+    cleanup_time_for_entry =
+        std::max(cleanup_time_for_entry, base::Time::Now());
     if (cleanup_time_for_entry < earliest_cleanup_start_time) {
       earliest_cleanup_start_time = cleanup_time_for_entry;
     }
@@ -927,6 +930,9 @@ void ControllerImpl::ScheduleCleanupTask() {
 
   base::TimeDelta start_time = earliest_cleanup_start_time - base::Time::Now();
   base::TimeDelta end_time = start_time + config_->file_cleanup_window;
+  DCHECK_LT(std::ceil(start_time.InSecondsF()),
+            std::ceil(end_time.InSecondsF()))
+      << "GCM requires start time to be less than end time";
 
   task_scheduler_->ScheduleTask(DownloadTaskType::CLEANUP_TASK, false, false,
                                 std::ceil(start_time.InSecondsF()),

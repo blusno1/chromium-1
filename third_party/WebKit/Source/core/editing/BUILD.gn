@@ -337,6 +337,7 @@ source_set("unit_tests") {
     "VisiblePositionTest.cpp",
     "VisibleSelectionTest.cpp",
     "VisibleUnitsTest.cpp",
+    "VisibleUnitsWordTest.cpp",
     "commands/ApplyBlockElementCommandTest.cpp",
     "commands/ApplyStyleCommandTest.cpp",
     "commands/CompositeEditCommandTest.cpp",
@@ -384,6 +385,9 @@ source_set("unit_tests") {
     "state_machines/StateMachineTestUtil.h",
     "state_machines/StateMachineUtilTest.cpp",
     "suggestion/TextSuggestionControllerTest.cpp",
+    "testing/SelectionSample.cpp",
+    "testing/SelectionSample.h",
+    "testing/SelectionSampleTest.cpp",
   ]
 
   configs += [

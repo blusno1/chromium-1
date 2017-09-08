@@ -260,6 +260,10 @@ BaseTestServer::BaseTestServer(Type type, const SSLOptions& ssl_options)
 
 BaseTestServer::~BaseTestServer() {}
 
+bool BaseTestServer::Start() {
+  return StartInBackground() && BlockUntilStarted();
+}
+
 const HostPortPair& BaseTestServer::host_port_pair() const {
   DCHECK(started_);
   return host_port_pair_;
@@ -437,7 +441,8 @@ void BaseTestServer::SetResourcePath(const base::FilePath& document_root,
   DCHECK(!certificates_dir_.empty());
 }
 
-bool BaseTestServer::ParseServerData(const std::string& server_data) {
+bool BaseTestServer::SetAndParseServerData(const std::string& server_data,
+                                           int* port) {
   VLOG(1) << "Server data: " << server_data;
   base::JSONReader json_reader;
   std::unique_ptr<base::Value> value(json_reader.ReadToValue(server_data));
@@ -448,22 +453,21 @@ bool BaseTestServer::ParseServerData(const std::string& server_data) {
   }
 
   server_data_.reset(static_cast<base::DictionaryValue*>(value.release()));
-  int port = 0;
-  if (!server_data_->GetInteger("port", &port)) {
+  if (!server_data_->GetInteger("port", port)) {
     LOG(ERROR) << "Could not find port value";
     return false;
   }
-  if ((port <= 0) || (port > std::numeric_limits<uint16_t>::max())) {
+  if ((*port <= 0) || (*port > std::numeric_limits<uint16_t>::max())) {
     LOG(ERROR) << "Invalid port value: " << port;
     return false;
   }
-  host_port_pair_.set_port(port);
 
   return true;
 }
 
 bool BaseTestServer::SetupWhenServerStarted() {
   DCHECK(host_port_pair_.port());
+  DCHECK(!started_);
 
   if (UsingSSL(type_) && !LoadTestRootCert())
       return false;

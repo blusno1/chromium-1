@@ -12,9 +12,9 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_style.h"
 #include "ui/message_center/message_center_tray.h"
 #include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/views/message_center_view.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -159,8 +159,7 @@ MessageCenterButtonBar::MessageCenterButtonBar(
 }
 
 void MessageCenterButtonBar::ViewVisibilityChanged() {
-  views::GridLayout* layout = new views::GridLayout(this);
-  SetLayoutManager(layout);
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
   views::ColumnSet* column = layout->AddColumnSet(0);
   constexpr int kFooterLeftMargin = 4;
   column->AddPaddingColumn(0, kFooterLeftMargin);

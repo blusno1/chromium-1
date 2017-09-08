@@ -36,7 +36,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_mediator.h"
@@ -45,6 +44,8 @@
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/clean/chrome/browser/ui/adaptor/browser_commands_adaptor.h"
+#import "ios/clean/chrome/browser/ui/adaptor/url_loader_adaptor.h"
 #import "ios/clean/chrome/browser/ui/ntp/ntp_home_header_coordinator.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -70,6 +71,10 @@
     ContentSuggestionsHeaderSynchronizer* headerCollectionInteractionHandler;
 @property(nonatomic, strong) ContentSuggestionsMetricsRecorder* metricsRecorder;
 
+@property(nonatomic, strong) CommandDispatcher* router;
+@property(nonatomic, strong) URLLoaderAdaptor* URLAdaptor;
+@property(nonatomic, strong) BrowserCommandsAdaptor* browserCommandAdaptor;
+
 @end
 
 @implementation NTPHomeCoordinator
@@ -82,6 +87,10 @@
 @synthesize headerCollectionInteractionHandler =
     _headerCollectionInteractionHandler;
 @synthesize metricsRecorder = _metricsRecorder;
+
+@synthesize router = _router;
+@synthesize URLAdaptor = _URLAdaptor;
+@synthesize browserCommandAdaptor = _browserCommandAdaptor;
 
 #pragma mark - BrowserCoordinator
 
@@ -105,26 +114,21 @@
   self.viewController = [[ContentSuggestionsViewController alloc]
       initWithStyle:CollectionViewControllerStyleDefault];
 
-  self.headerCoordinator = [[NTPHomeHeaderCoordinator alloc] init];
-  self.headerCoordinator.delegate = self;
-  self.headerCoordinator.commandHandler = self;
-  [self addChildCoordinator:self.headerCoordinator];
-  [self.headerCoordinator start];
-
-  [super start];
-}
-
-- (void)childCoordinatorDidStart:(BrowserCoordinator*)childCoordinator {
-  DCHECK([childCoordinator isKindOfClass:[NTPHomeHeaderCoordinator class]]);
-  ntp_snippets::ContentSuggestionsService* contentSuggestionsService =
-      IOSChromeContentSuggestionsServiceFactory::GetForBrowserState(
-          self.browser->browser_state());
+  self.URLAdaptor = [[URLLoaderAdaptor alloc] init];
+  self.URLAdaptor.viewControllerForAlert = self.viewController;
+  self.browserCommandAdaptor = [[BrowserCommandsAdaptor alloc] init];
+  self.browserCommandAdaptor.viewControllerForAlert = self.viewController;
+  self.router = [[CommandDispatcher alloc] init];
+  [self.router startDispatchingToTarget:self.URLAdaptor
+                            forProtocol:@protocol(UrlLoader)];
+  [self.router startDispatchingToTarget:self.browserCommandAdaptor
+                            forProtocol:@protocol(BrowserCommands)];
 
   self.googleLandingMediator = [[GoogleLandingMediator alloc]
-      initWithConsumer:self.headerCoordinator.consumer
-          browserState:self.browser->browser_state()
-            dispatcher:static_cast<id>(self.browser->dispatcher())
-          webStateList:&self.browser->web_state_list()];
+      initWithBrowserState:self.browser->browser_state()
+              webStateList:&self.browser->web_state_list()];
+  self.googleLandingMediator.dispatcher =
+      static_cast<id<BrowserCommands, UrlLoader>>(self.router);
 
   favicon::LargeIconService* largeIconService =
       IOSChromeLargeIconServiceFactory::GetForBrowserState(
@@ -140,18 +144,33 @@
               largeIconCache:cache
              mostVisitedSite:std::move(mostVisitedFactory)];
   self.suggestionsMediator.commandHandler = self;
-  self.suggestionsMediator.headerProvider =
-      self.headerCoordinator.headerProvider;
 
   self.metricsRecorder = [[ContentSuggestionsMetricsRecorder alloc] init];
   self.metricsRecorder.delegate = self.suggestionsMediator;
 
   [self.viewController setDataSource:self.suggestionsMediator];
   self.viewController.suggestionCommandHandler = self;
-  self.viewController.suggestionsDelegate =
-      self.headerCoordinator.collectionDelegate;
   self.viewController.audience = self;
   self.viewController.metricsRecorder = self.metricsRecorder;
+  self.viewController.containsToolbar = NO;
+
+  self.headerCoordinator = [[NTPHomeHeaderCoordinator alloc] init];
+  self.headerCoordinator.delegate = self;
+  self.headerCoordinator.commandHandler = self;
+  [self addChildCoordinator:self.headerCoordinator];
+  [self.headerCoordinator start];
+
+  self.googleLandingMediator.consumer = self.headerCoordinator.consumer;
+  [self.googleLandingMediator setUp];
+
+  self.suggestionsMediator.headerProvider =
+      self.headerCoordinator.headerProvider;
+
+  [super start];
+}
+
+- (void)childCoordinatorDidStart:(BrowserCoordinator*)childCoordinator {
+  DCHECK(childCoordinator == self.headerCoordinator);
 
   [self.viewController
       addChildViewController:self.headerCoordinator.viewController];
@@ -162,12 +181,6 @@
       [[ContentSuggestionsHeaderSynchronizer alloc]
           initWithCollectionController:self.viewController
                       headerController:self.headerCoordinator.headerController];
-
-  self.viewController.headerCommandHandler =
-      self.headerCollectionInteractionHandler;
-  self.headerCoordinator.collectionSynchronizer =
-      self.headerCollectionInteractionHandler;
-
 }
 
 - (void)stop {
@@ -178,6 +191,11 @@
   self.suggestionsMediator = nil;
   self.googleLandingMediator = nil;
   self.headerCoordinator = nil;
+  [self.router stopDispatchingToTarget:self.URLAdaptor];
+  [self.router stopDispatchingToTarget:self.browserCommandAdaptor];
+  self.router = nil;
+  self.URLAdaptor = nil;
+  self.browserCommandAdaptor = nil;
 }
 
 #pragma mark - ContentSuggestionsCommands

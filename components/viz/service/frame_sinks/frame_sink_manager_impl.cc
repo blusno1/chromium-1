@@ -81,6 +81,12 @@ void FrameSinkManagerImpl::InvalidateFrameSinkId(
   surface_manager_.InvalidateFrameSinkId(frame_sink_id);
 }
 
+void FrameSinkManagerImpl::SetFrameSinkDebugLabel(
+    const FrameSinkId& frame_sink_id,
+    const std::string& debug_label) {
+  surface_manager_.SetFrameSinkDebugLabel(frame_sink_id, debug_label);
+}
+
 void FrameSinkManagerImpl::CreateRootCompositorFrameSink(
     const FrameSinkId& frame_sink_id,
     gpu::SurfaceHandle surface_handle,
@@ -356,6 +362,14 @@ void FrameSinkManagerImpl::OnClientConnectionLost(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (client_)
     client_->OnClientConnectionClosed(frame_sink_id);
+}
+
+void FrameSinkManagerImpl::SubmitHitTestRegionList(
+    const SurfaceId& surface_id,
+    uint64_t frame_index,
+    mojom::HitTestRegionListPtr hit_test_region_list) {
+  // TODO(gklassen): Route hit_test_region_list to appropriate
+  // matching RootCompositorFrameSink
 }
 
 void FrameSinkManagerImpl::OnAggregatedHitTestRegionListUpdated(
