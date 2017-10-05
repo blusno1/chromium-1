@@ -2,7 +2,8 @@
   {
     "prefix": "color_space",
     "base": "fast/canvas/color-space",
-    "args": ["--enable-blink-features=ColorCanvasExtensions"]
+    "args": ["--enable-blink-features=ColorCanvasExtensions",
+             "--force-color-profile=srgb"]
   },
   {
     "prefix": "gpu",
@@ -121,6 +122,13 @@
     "prefix": "feature-policy-permissions",
     "base": "http/tests/geolocation-api",
     "args": ["--enable-features=UseFeaturePolicyForPermissions"]
+  },
+  {
+    "prefix": "feature-policy-permissions",
+    "base": "external/wpt/mediacapture-streams",
+    "args": ["--enable-features=UseFeaturePolicyForPermissions",
+             "--use-fake-device-for-media-stream",
+             "--use-fake-ui-for-media-stream"]
   },
   {
     "prefix": "origin-trials-runtimeflags-disabled",
@@ -284,6 +292,11 @@
   {
     "prefix": "scalefactor200",
     "base": "external/wpt/css-paint-api/hidpi",
+    "args": ["--force-device-scale-factor=2"]
+  },
+  {
+    "prefix": "scalefactor200",
+    "base": "http/tests/csspaint/hidpi",
     "args": ["--force-device-scale-factor=2"]
   },
   {
@@ -479,6 +492,11 @@
     "args": ["--blink-settings=highContrastMode=3,highContrastImagePolicy=1"]
   },
   {
+    "prefix": "high-contrast-mode",
+    "base": "paint/high-contrast-mode/image-filter-smart",
+    "args": ["--blink-settings=highContrastMode=3,highContrastImagePolicy=2"]
+  },
+  {
     "prefix": "outofblink-cors",
     "base": "external/wpt/fetch",
     "args": ["--enable-features=OutOfBlinkCORS,LoadingWithMojo"]
@@ -515,6 +533,11 @@
   },
   {
     "prefix": "mojo-blobs",
+    "base": "external/wpt/IndexedDB",
+    "args": ["--enable-features=MojoBlobs"]
+  },
+  {
+    "prefix": "mojo-blobs",
     "base": "external/wpt/fetch",
     "args": ["--enable-features=MojoBlobs"]
   },
@@ -537,5 +560,15 @@
     "prefix": "paint-timing",
     "base": "external/wpt/paint-timing",
     "args": ["--enable-threaded-compositing"]
+  },
+  {
+    "prefix": "cors-rfc1918",
+    "base": "http/tests/security/cors-rfc1918",
+    "args": ["--enable-blink-features=CorsRFC1918"]
+  },
+  {
+    "prefix": "dynamic-import",
+    "base": "external/wpt/html/semantics/scripting-1/the-script-element/module/dynamic-import",
+    "args": ["--enable-features=ModuleScriptsDynamicImport"]
   }
 ]

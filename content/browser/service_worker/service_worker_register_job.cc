@@ -24,6 +24,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "net/base/net_errors.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -69,12 +70,13 @@ typedef ServiceWorkerRegisterJobBase::RegistrationJobType RegistrationJobType;
 ServiceWorkerRegisterJob::ServiceWorkerRegisterJob(
     base::WeakPtr<ServiceWorkerContextCore> context,
     const GURL& script_url,
-    const ServiceWorkerRegistrationOptions& options)
+    const blink::mojom::ServiceWorkerRegistrationOptions& options)
     : context_(context),
       job_type_(REGISTRATION_JOB),
       pattern_(options.scope),
       script_url_(script_url),
       phase_(INITIAL),
+      doom_installing_worker_(false),
       is_promise_resolved_(false),
       should_uninstall_on_failure_(false),
       force_bypass_cache_(false),
@@ -91,6 +93,7 @@ ServiceWorkerRegisterJob::ServiceWorkerRegisterJob(
       job_type_(UPDATE_JOB),
       pattern_(registration->pattern()),
       phase_(INITIAL),
+      doom_installing_worker_(false),
       is_promise_resolved_(false),
       should_uninstall_on_failure_(false),
       force_bypass_cache_(force_bypass_cache),
@@ -121,7 +124,6 @@ void ServiceWorkerRegisterJob::AddCallback(
 }
 
 void ServiceWorkerRegisterJob::Start() {
-  start_time_ = base::TimeTicks::Now();
   BrowserThread::PostAfterStartupTask(
       FROM_HERE, base::ThreadTaskRunnerHandle::Get(),
       base::BindOnce(&ServiceWorkerRegisterJob::StartImpl,
@@ -168,12 +170,14 @@ bool ServiceWorkerRegisterJob::Equals(ServiceWorkerRegisterJobBase* job) const {
          register_job->script_url_ == script_url_;
 }
 
-base::TimeTicks ServiceWorkerRegisterJob::StartTime() const {
-  return start_time_;
-}
-
 RegistrationJobType ServiceWorkerRegisterJob::GetType() const {
   return job_type_;
+}
+
+void ServiceWorkerRegisterJob::DoomInstallingWorker() {
+  doom_installing_worker_ = true;
+  if (phase_ == INSTALL)
+    Complete(SERVICE_WORKER_ERROR_INSTALL_WORKER_FAILED, std::string());
 }
 
 ServiceWorkerRegisterJob::Internal::Internal() {}
@@ -311,13 +315,14 @@ void ServiceWorkerRegisterJob::RegisterAndContinue() {
   SetPhase(REGISTER);
 
   int64_t registration_id = context_->storage()->NewRegistrationId();
-  if (registration_id == kInvalidServiceWorkerRegistrationId) {
+  if (registration_id == blink::mojom::kInvalidServiceWorkerRegistrationId) {
     Complete(SERVICE_WORKER_ERROR_ABORT);
     return;
   }
 
   set_registration(new ServiceWorkerRegistration(
-      ServiceWorkerRegistrationOptions(pattern_), registration_id, context_));
+      blink::mojom::ServiceWorkerRegistrationOptions(pattern_), registration_id,
+      context_));
   AddRegistrationToMatchingProviderHosts(registration());
   UpdateAndContinue();
 }
@@ -440,8 +445,14 @@ void ServiceWorkerRegisterJob::InstallAndContinue() {
       ServiceWorkerMetrics::EventType::INSTALL,
       base::BindOnce(&ServiceWorkerRegisterJob::DispatchInstallEvent,
                      weak_factory_.GetWeakPtr()),
-      base::Bind(&ServiceWorkerRegisterJob::OnInstallFailed,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&ServiceWorkerRegisterJob::OnInstallFailed,
+                     weak_factory_.GetWeakPtr()));
+
+  // A subsequent registration job may terminate our installing worker. It can
+  // only do so after we've started the worker and dispatched the install
+  // event, as those are atomic substeps in the [[Install]] algorithm.
+  if (doom_installing_worker_)
+    Complete(SERVICE_WORKER_ERROR_INSTALL_WORKER_FAILED);
 }
 
 void ServiceWorkerRegisterJob::DispatchInstallEvent() {
@@ -521,7 +532,7 @@ void ServiceWorkerRegisterJob::OnStoreRegistrationComplete(
     // 1. Set redundantWorker to registration’s waiting worker.
     // 2. Terminate redundantWorker.
     registration()->waiting_version()->StopWorker(
-        base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+        base::BindOnce(&base::DoNothing));
     // TODO(falken): Move this further down. The spec says to set status to
     // 'redundant' after promoting the new version to .waiting attribute and
     // 'installed' status.

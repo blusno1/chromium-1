@@ -35,6 +35,7 @@ namespace blink {
 
 class LayoutBlockFlow;
 class LayoutMultiColumnSpannerPlaceholder;
+struct NGPhysicalBoxStrut;
 class ShapeOutsideInfo;
 
 struct PaintInfo;
@@ -612,6 +613,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   LayoutUnit MarginRight() const override {
     return margin_box_outsets_.Right();
   }
+  void SetMargin(const NGPhysicalBoxStrut&);
   void SetMarginTop(LayoutUnit margin) { margin_box_outsets_.SetTop(margin); }
   void SetMarginBottom(LayoutUnit margin) {
     margin_box_outsets_.SetBottom(margin);
@@ -1088,8 +1090,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return LayoutUnit(-1);
   }  // Returns -1 if we should skip this box when computing the baseline of an
      // inline-block.
-
-  virtual Node* NodeForHitTest() const { return GetNode(); }
 
   bool ShrinkToAvoidFloats() const;
   virtual bool AvoidsFloats() const;

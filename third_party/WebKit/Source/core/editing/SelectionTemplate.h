@@ -8,9 +8,8 @@
 #include <iosfwd>
 #include "base/macros.h"
 #include "core/CoreExport.h"
-#include "core/editing/EphemeralRange.h"
+#include "core/editing/Forward.h"
 #include "core/editing/Position.h"
-#include "core/editing/PositionWithAffinity.h"
 #include "core/editing/SelectionType.h"
 #include "core/editing/TextAffinity.h"
 #include "platform/wtf/Allocator.h"
@@ -160,6 +159,11 @@ extern template class CORE_EXTERN_TEMPLATE_EXPORT
 
 using SelectionInDOMTree = SelectionTemplate<EditingStrategy>;
 using SelectionInFlatTree = SelectionTemplate<EditingInFlatTreeStrategy>;
+
+CORE_EXPORT SelectionInDOMTree
+ConvertToSelectionInDOMTree(const SelectionInFlatTree&);
+CORE_EXPORT SelectionInFlatTree
+ConvertToSelectionInFlatTree(const SelectionInDOMTree&);
 
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const SelectionInDOMTree&);
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const SelectionInFlatTree&);

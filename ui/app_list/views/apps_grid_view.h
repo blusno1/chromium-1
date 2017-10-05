@@ -66,7 +66,8 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
     TOUCH,
   };
 
-  explicit AppsGridView(ContentsView* contents_view);
+  AppsGridView(ContentsView* contents_view,
+               AppsGridViewFolderDelegate* folder_delegate);
   ~AppsGridView() override;
 
   // Sets fixed layout parameters. After setting this, CalculateLayout below
@@ -138,7 +139,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void Layout() override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
-  bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
   bool GetDropFormats(
@@ -154,7 +154,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // Overridden from ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
-  void OnScrollEvent(ui::ScrollEvent* event) override;
 
   // Stops the timer that triggers a page flip during a drag.
   void StopPageFlipTimer();
@@ -209,6 +208,10 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // Starts a timer during which we ignore scroll events.
   void StartTimerToIgnoreScrollEvents();
+
+  // Passes scroll information from AppListView to the PaginationController,
+  // returns true if this scroll would change pages.
+  bool HandleScrollFromAppListView(int offset, ui::EventType type);
 
   // Return the view model for test purposes.
   const views::ViewModelT<AppListItemView>* view_model_for_test() const {
@@ -296,6 +299,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void UpdatePulsingBlockViews();
 
   AppListItemView* CreateViewForItemAtIndex(size_t index);
+
+  // Returns true if the event was handled by the pagination controller.
+  bool HandleScroll(int offset, ui::EventType type);
 
   // Convert between the model index and the visual index. The model index
   // is the index of the item in AppListModel. The visual index is the Index
@@ -466,11 +472,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Gets height on top of the all apps tiles for |page|.
   int GetHeightOnTopOfAllAppsTiles(int page) const;
 
-  // Gets the bounds of the tile located at |slot| on the current page.
-  gfx::Rect GetExpectedTileBounds(int slot) const;
-
-  // Gets the bounds of the tile located at |row| and |col| on the current page.
-  gfx::Rect GetExpectedTileBounds(int row, int col) const;
+  // Gets the bounds of the tile located at |index|, where |index| contains the
+  // page/slot info.
+  gfx::Rect GetExpectedTileBounds(const Index& index) const;
 
   // Gets the item view currently displayed at |slot| on the current page. If
   // there is no item displayed at |slot|, returns NULL. Note that this finds an
@@ -512,6 +516,13 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // Returns true if the grid view is under an OEM folder.
   bool IsUnderOEMFolder();
+
+  // Handle focus movement triggered by arrow up and down in PEEKING state.
+  bool HandleFocusMovementInPeekingState(bool arrow_up);
+
+  // Handle focus movement triggered by arrow up and down in FULLSCREEN_ALL_APPS
+  // state.
+  bool HandleFocusMovementInFullscreenAllAppsState(bool arrow_up);
 
   AppListModel* model_ = nullptr;         // Owned by AppListView.
   AppListItemList* item_list_ = nullptr;  // Not owned.
@@ -623,6 +634,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // True if the fullscreen app list feature is enabled.
   const bool is_fullscreen_app_list_enabled_;
+
+  // Whether the app list focus is enabled.
+  const bool is_app_list_focus_enabled_;
 
   // Delay in milliseconds of when |page_flip_timer_| should fire after user
   // drags an item near the edges.

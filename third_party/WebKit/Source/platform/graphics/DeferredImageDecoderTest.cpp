@@ -36,7 +36,6 @@
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/graphics/test/MockImageDecoder.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
@@ -92,7 +91,7 @@ class DeferredImageDecoderTest : public ::testing::Test,
     actual_decoder_->SetSize(1, 1);
     lazy_decoder_ = DeferredImageDecoder::CreateForTesting(std::move(decoder));
     bitmap_.allocPixels(SkImageInfo::MakeN32Premul(100, 100));
-    canvas_ = base::MakeUnique<cc::SkiaPaintCanvas>(bitmap_);
+    canvas_ = std::make_unique<cc::SkiaPaintCanvas>(bitmap_);
     decode_request_count_ = 0;
     repetition_count_ = kAnimationNone;
     status_ = ImageFrame::kFrameComplete;
@@ -333,9 +332,9 @@ TEST_F(DeferredImageDecoderTest, frameOpacity) {
       data_ = SharedBuffer::Create(kWhiteGIF, sizeof(kWhiteGIF));
 
     std::unique_ptr<DeferredImageDecoder> decoder =
-        DeferredImageDecoder::Create(
-            data_, true, ImageDecoder::kAlphaPremultiplied,
-            ColorBehavior::TransformToTargetForTesting());
+        DeferredImageDecoder::Create(data_, true,
+                                     ImageDecoder::kAlphaPremultiplied,
+                                     ColorBehavior::TransformToSRGB());
 
     SkImageInfo pix_info = SkImageInfo::MakeN32Premul(1, 1);
 
@@ -391,7 +390,7 @@ class MultiFrameDeferredImageDecoderTest : public DeferredImageDecoderTest {
 
 TEST_F(MultiFrameDeferredImageDecoderTest, PaintImage) {
   frame_count_ = 2;
-  frame_duration_ = TimeDelta::FromMilliseconds(10);
+  frame_duration_ = TimeDelta::FromMilliseconds(20);
   last_complete_frame_ = 0u;
   lazy_decoder_->SetData(data_, false);
 
@@ -439,6 +438,21 @@ TEST_F(MultiFrameDeferredImageDecoderTest, PaintImage) {
   EXPECT_NE(complete_frame0_key, complete_frame1_key);
   EXPECT_EQ(updated_frame0_key, complete_frame0_key);
   EXPECT_NE(updated_frame1_key, complete_frame1_key);
+}
+
+TEST_F(MultiFrameDeferredImageDecoderTest, FrameDurationOverride) {
+  frame_count_ = 2;
+  frame_duration_ = TimeDelta::FromMilliseconds(5);
+  last_complete_frame_ = 1u;
+  lazy_decoder_->SetData(data_, true);
+
+  // If the frame duration is below a threshold, we override it to a constant
+  // value of 100 ms.
+  PaintImage image = CreatePaintImageAtIndex(0);
+  EXPECT_EQ(image.GetFrameMetadata()[0].duration,
+            base::TimeDelta::FromMilliseconds(100));
+  EXPECT_EQ(image.GetFrameMetadata()[1].duration,
+            base::TimeDelta::FromMilliseconds(100));
 }
 
 }  // namespace blink

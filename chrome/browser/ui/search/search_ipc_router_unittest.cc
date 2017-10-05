@@ -15,6 +15,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/mock_callback.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -58,17 +59,19 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
   MOCK_METHOD0(OnUndoAllMostVisitedDeletions, void());
   MOCK_METHOD2(OnLogEvent, void(NTPLoggingEventType event,
                                 base::TimeDelta time));
-  MOCK_METHOD3(OnLogMostVisitedImpression,
+  MOCK_METHOD4(OnLogMostVisitedImpression,
                void(int position,
+                    ntp_tiles::TileTitleSource tile_title_source,
                     ntp_tiles::TileSource tile_source,
                     ntp_tiles::TileVisualType tile_type));
-  MOCK_METHOD3(OnLogMostVisitedNavigation,
+  MOCK_METHOD4(OnLogMostVisitedNavigation,
                void(int position,
+                    ntp_tiles::TileTitleSource tile_title_source,
                     ntp_tiles::TileSource tile_source,
                     ntp_tiles::TileVisualType tile_type));
   MOCK_METHOD1(PasteIntoOmnibox, void(const base::string16&));
-  MOCK_METHOD1(OnChromeIdentityCheck, void(const base::string16& identity));
-  MOCK_METHOD0(OnHistorySyncCheck, void());
+  MOCK_METHOD1(ChromeIdentityCheck, bool(const base::string16& identity));
+  MOCK_METHOD0(HistorySyncCheck, bool());
 };
 
 class MockSearchIPCRouterPolicy : public SearchIPCRouter::Policy {
@@ -83,12 +86,10 @@ class MockSearchIPCRouterPolicy : public SearchIPCRouter::Policy {
   MOCK_METHOD1(ShouldProcessPasteIntoOmnibox, bool(bool));
   MOCK_METHOD0(ShouldProcessChromeIdentityCheck, bool());
   MOCK_METHOD0(ShouldProcessHistorySyncCheck, bool());
-  MOCK_METHOD0(ShouldSendSetSuggestionToPrefetch, bool());
   MOCK_METHOD1(ShouldSendSetInputInProgress, bool(bool));
   MOCK_METHOD0(ShouldSendOmniboxFocusChanged, bool());
   MOCK_METHOD0(ShouldSendMostVisitedItems, bool());
   MOCK_METHOD0(ShouldSendThemeBackgroundInfo, bool());
-  MOCK_METHOD0(ShouldSubmitQuery, bool());
 };
 
 class MockEmbeddedSearchClientFactory
@@ -119,10 +120,8 @@ class SearchIPCRouterTest : public BrowserWithTestWindowTest {
     TemplateURLData data;
     data.SetShortName(base::ASCIIToUTF16("foo.com"));
     data.SetURL("http://foo.com/url?bar={searchTerms}");
-    data.instant_url = "http://foo.com/instant?foo=foo#foo=foo&espv";
-    data.new_tab_url = "https://foo.com/newtab?espv";
+    data.new_tab_url = "https://foo.com/newtab";
     data.alternate_urls.push_back("http://foo.com/alt#quux={searchTerms}");
-    data.search_terms_replacement_key = "espv";
 
     TemplateURL* template_url =
         template_url_service->Add(base::MakeUnique<TemplateURL>(data));
@@ -276,15 +275,16 @@ TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedImpressionMsg) {
   NavigateAndCommitActiveTab(GURL(chrome::kChromeSearchLocalNtpUrl));
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(
-      *mock_delegate(),
-      OnLogMostVisitedImpression(3, ntp_tiles::TileSource::SUGGESTIONS_SERVICE,
-                                 ntp_tiles::TileVisualType::THUMBNAIL))
+  EXPECT_CALL(*mock_delegate(), OnLogMostVisitedImpression(
+                                    3, ntp_tiles::TileTitleSource::UNKNOWN,
+                                    ntp_tiles::TileSource::SUGGESTIONS_SERVICE,
+                                    ntp_tiles::TileVisualType::THUMBNAIL))
       .Times(1);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(1).WillOnce(Return(true));
 
   GetSearchIPCRouter().LogMostVisitedImpression(
-      GetSearchIPCRouterSeqNo(), 3, ntp_tiles::TileSource::SUGGESTIONS_SERVICE,
+      GetSearchIPCRouterSeqNo(), 3, ntp_tiles::TileTitleSource::UNKNOWN,
+      ntp_tiles::TileSource::SUGGESTIONS_SERVICE,
       ntp_tiles::TileVisualType::THUMBNAIL);
 }
 
@@ -292,15 +292,16 @@ TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedNavigationMsg) {
   NavigateAndCommitActiveTab(GURL(chrome::kChromeSearchLocalNtpUrl));
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(
-      *mock_delegate(),
-      OnLogMostVisitedNavigation(3, ntp_tiles::TileSource::SUGGESTIONS_SERVICE,
-                                 ntp_tiles::TileVisualType::THUMBNAIL))
+  EXPECT_CALL(*mock_delegate(), OnLogMostVisitedNavigation(
+                                    3, ntp_tiles::TileTitleSource::UNKNOWN,
+                                    ntp_tiles::TileSource::SUGGESTIONS_SERVICE,
+                                    ntp_tiles::TileVisualType::THUMBNAIL))
       .Times(1);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(1).WillOnce(Return(true));
 
   GetSearchIPCRouter().LogMostVisitedNavigation(
-      GetSearchIPCRouterSeqNo(), 3, ntp_tiles::TileSource::SUGGESTIONS_SERVICE,
+      GetSearchIPCRouterSeqNo(), 3, ntp_tiles::TileTitleSource::UNKNOWN,
+      ntp_tiles::TileSource::SUGGESTIONS_SERVICE,
       ntp_tiles::TileVisualType::THUMBNAIL);
 }
 
@@ -309,13 +310,17 @@ TEST_F(SearchIPCRouterTest, ProcessChromeIdentityCheckMsg) {
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
   const base::string16 test_identity = base::ASCIIToUTF16("foo@bar.com");
-  EXPECT_CALL(*mock_delegate(), OnChromeIdentityCheck(test_identity)).Times(1);
+  EXPECT_CALL(*mock_delegate(), ChromeIdentityCheck(test_identity))
+      .Times(1)
+      .WillOnce(Return(true));
   EXPECT_CALL(*policy, ShouldProcessChromeIdentityCheck())
       .Times(1)
       .WillOnce(Return(true));
 
+  base::MockCallback<SearchIPCRouter::ChromeIdentityCheckCallback> callback;
+  EXPECT_CALL(callback, Run(true));
   GetSearchIPCRouter().ChromeIdentityCheck(GetSearchIPCRouterSeqNo(),
-                                           test_identity);
+                                           test_identity, callback.Get());
 }
 
 TEST_F(SearchIPCRouterTest, IgnoreChromeIdentityCheckMsg) {
@@ -324,25 +329,31 @@ TEST_F(SearchIPCRouterTest, IgnoreChromeIdentityCheckMsg) {
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
 
   const base::string16 test_identity = base::ASCIIToUTF16("foo@bar.com");
-  EXPECT_CALL(*mock_delegate(), OnChromeIdentityCheck(test_identity)).Times(0);
+  EXPECT_CALL(*mock_delegate(), ChromeIdentityCheck(test_identity)).Times(0);
   EXPECT_CALL(*policy, ShouldProcessChromeIdentityCheck())
       .Times(1)
       .WillOnce(Return(false));
 
+  base::MockCallback<SearchIPCRouter::ChromeIdentityCheckCallback> callback;
   GetSearchIPCRouter().ChromeIdentityCheck(GetSearchIPCRouterSeqNo(),
-                                           test_identity);
+                                           test_identity, callback.Get());
 }
 
 TEST_F(SearchIPCRouterTest, ProcessHistorySyncCheckMsg) {
   NavigateAndCommitActiveTab(GURL(chrome::kChromeSearchLocalNtpUrl));
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(*mock_delegate(), OnHistorySyncCheck()).Times(1);
+  EXPECT_CALL(*mock_delegate(), HistorySyncCheck())
+      .Times(1)
+      .WillOnce(Return(true));
   EXPECT_CALL(*policy, ShouldProcessHistorySyncCheck())
       .Times(1)
       .WillOnce(Return(true));
 
-  GetSearchIPCRouter().HistorySyncCheck(GetSearchIPCRouterSeqNo());
+  base::MockCallback<SearchIPCRouter::ChromeIdentityCheckCallback> callback;
+  EXPECT_CALL(callback, Run(true));
+  GetSearchIPCRouter().HistorySyncCheck(GetSearchIPCRouterSeqNo(),
+                                        callback.Get());
 }
 
 TEST_F(SearchIPCRouterTest, IgnoreHistorySyncCheckMsg) {
@@ -350,12 +361,14 @@ TEST_F(SearchIPCRouterTest, IgnoreHistorySyncCheckMsg) {
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
 
-  EXPECT_CALL(*mock_delegate(), OnHistorySyncCheck()).Times(0);
+  EXPECT_CALL(*mock_delegate(), HistorySyncCheck()).Times(0);
   EXPECT_CALL(*policy, ShouldProcessHistorySyncCheck())
       .Times(1)
       .WillOnce(Return(false));
 
-  GetSearchIPCRouter().HistorySyncCheck(GetSearchIPCRouterSeqNo());
+  base::MockCallback<SearchIPCRouter::ChromeIdentityCheckCallback> callback;
+  GetSearchIPCRouter().HistorySyncCheck(GetSearchIPCRouterSeqNo(),
+                                        callback.Get());
 }
 
 TEST_F(SearchIPCRouterTest, ProcessDeleteMostVisitedItemMsg) {

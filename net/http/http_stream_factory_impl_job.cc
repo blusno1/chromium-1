@@ -425,6 +425,11 @@ SpdySessionKey HttpStreamFactoryImpl::Job::GetSpdySessionKey(
 bool HttpStreamFactoryImpl::Job::CanUseExistingSpdySession() const {
   DCHECK(!using_quic_);
 
+  if (proxy_info_.is_direct() &&
+      session_->http_server_properties()->RequiresHTTP11(destination_)) {
+    return false;
+  }
+
   // We need to make sure that if a spdy session was created for
   // https://somehost/ that we don't use that session for http://somehost:443/.
   // The only time we can use an existing session is if the request URL is
@@ -542,7 +547,6 @@ void HttpStreamFactoryImpl::Job::OnPreconnectsComplete() {
 int HttpStreamFactoryImpl::Job::OnHostResolution(
     SpdySessionPool* spdy_session_pool,
     const SpdySessionKey& spdy_session_key,
-    const GURL& origin_url,
     bool enable_ip_based_pooling,
     const AddressList& addresses,
     const NetLogWithSource& net_log) {
@@ -550,7 +554,7 @@ int HttpStreamFactoryImpl::Job::OnHostResolution(
   // ClientSocketPoolManager will be destroyed in the same callback that
   // destroys the SpdySessionPool.
   return spdy_session_pool->FindAvailableSession(
-             spdy_session_key, origin_url, enable_ip_based_pooling, net_log)
+             spdy_session_key, enable_ip_based_pooling, net_log)
              ? ERR_SPDY_SESSION_ALREADY_EXISTS
              : OK;
 }
@@ -918,12 +922,17 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionImpl() {
     return rv;
   }
 
-  // Check first if we have a spdy session for this group.  If so, then go
-  // straight to using that.
+  // Check first if there is a pushed stream matching the request, or an HTTP/2
+  // connection this request can pool to.  If so, then go straight to using
+  // that.
   if (CanUseExistingSpdySession()) {
     base::WeakPtr<SpdySession> spdy_session =
-        session_->spdy_session_pool()->FindAvailableSession(
-            spdy_session_key_, origin_url_, enable_ip_based_pooling_, net_log_);
+        session_->spdy_session_pool()->push_promise_index()->Find(
+            spdy_session_key_, origin_url_);
+    if (!spdy_session) {
+      spdy_session = session_->spdy_session_pool()->FindAvailableSession(
+          spdy_session_key_, enable_ip_based_pooling_, net_log_);
+    }
     if (spdy_session) {
       // If we're preconnecting, but we already have a SpdySession, we don't
       // actually need to preconnect any sockets, so we're done.
@@ -955,7 +964,8 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionImpl() {
         GetSocketGroup(), destination_, request_info_.extra_headers,
         request_info_.load_flags, priority_, session_, proxy_info_,
         expect_spdy_, server_ssl_config_, proxy_ssl_config_,
-        request_info_.privacy_mode, net_log_, num_streams_);
+        request_info_.privacy_mode, net_log_, num_streams_,
+        request_info_.motivation);
   }
 
   // If we can't use a SPDY session, don't bother checking for one after
@@ -963,7 +973,7 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionImpl() {
   OnHostResolutionCallback resolution_callback =
       CanUseExistingSpdySession()
           ? base::Bind(&Job::OnHostResolution, session_->spdy_session_pool(),
-                       spdy_session_key_, origin_url_, enable_ip_based_pooling_)
+                       spdy_session_key_, enable_ip_based_pooling_)
           : OnHostResolutionCallback();
   if (delegate_->for_websockets()) {
     SSLConfig websocket_server_ssl_config = server_ssl_config_;
@@ -997,7 +1007,7 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionComplete(int result) {
     // probably an IP pooled connection.
     existing_spdy_session_ =
         session_->spdy_session_pool()->FindAvailableSession(
-            spdy_session_key_, origin_url_, enable_ip_based_pooling_, net_log_);
+            spdy_session_key_, enable_ip_based_pooling_, net_log_);
     if (existing_spdy_session_) {
       using_spdy_ = true;
       next_state_ = STATE_CREATE_STREAM;
@@ -1163,12 +1173,6 @@ int HttpStreamFactoryImpl::Job::DoCreateStream() {
                             destination_.HostForURL());
   }
 
-  // We only set the socket motivation if we're the first to use
-  // this socket.  Is there a race for two SPDY requests?  We really
-  // need to plumb this through to the connect level.
-  if (connection_->socket() && !connection_->is_reused())
-    SetSocketMotivation();
-
   if (!using_spdy_) {
     DCHECK(!expect_spdy_);
     // We may get ftp scheme when fetching ftp resources through proxy.
@@ -1191,10 +1195,19 @@ int HttpStreamFactoryImpl::Job::DoCreateStream() {
 
   CHECK(!stream_.get());
 
+  // It is possible that a pushed stream has been opened by a server since last
+  // time Job checked above.
+  if (!existing_spdy_session_) {
+    existing_spdy_session_ =
+        session_->spdy_session_pool()->push_promise_index()->Find(
+            spdy_session_key_, origin_url_);
+  }
+  // It is also possible that an HTTP/2 connection has been established since
+  // last time Job checked above.
   if (!existing_spdy_session_) {
     existing_spdy_session_ =
         session_->spdy_session_pool()->FindAvailableSession(
-            spdy_session_key_, origin_url_, enable_ip_based_pooling_, net_log_);
+            spdy_session_key_, enable_ip_based_pooling_, net_log_);
   }
   if (existing_spdy_session_.get()) {
     // We picked up an existing session, so we don't need our socket.
@@ -1289,14 +1302,6 @@ void HttpStreamFactoryImpl::Job::ReturnToStateInitConnection(
     delegate_->RemoveRequestFromSpdySessionRequestMapForJob(this);
 
   next_state_ = STATE_INIT_CONNECTION;
-}
-
-void HttpStreamFactoryImpl::Job::SetSocketMotivation() {
-  if (request_info_.motivation == HttpRequestInfo::PRECONNECT_MOTIVATED)
-    connection_->socket()->SetSubresourceSpeculation();
-  else if (request_info_.motivation == HttpRequestInfo::OMNIBOX_MOTIVATED)
-    connection_->socket()->SetOmniboxSpeculation();
-  // TODO(mbelshe): Add other motivations (like EARLY_LOAD_MOTIVATED).
 }
 
 void HttpStreamFactoryImpl::Job::InitSSLConfig(SSLConfig* ssl_config,

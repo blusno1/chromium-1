@@ -7,11 +7,14 @@
 
 #include <string>
 
-#include "core/editing/SelectionTemplate.h"
+#include "core/editing/Forward.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 
 namespace blink {
+
+class ContainerNode;
+class HTMLElement;
 
 // |SelectionSample| provides parsing HTML text with selection markers and
 // serializes DOM tree with selection markers.
@@ -33,6 +36,9 @@ class SelectionSample final {
   // Note: We don't escape "--" in comment.
   static std::string GetSelectionText(const ContainerNode&,
                                       const SelectionInDOMTree&);
+  static std::string GetSelectionTextInFlatTree(const ContainerNode&,
+                                                const SelectionInFlatTree&);
+  static void ConvertTemplatesToShadowRootsForTesring(HTMLElement&);
 };
 
 }  // namespace blink

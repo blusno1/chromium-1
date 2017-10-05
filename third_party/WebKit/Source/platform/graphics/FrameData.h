@@ -56,7 +56,6 @@ struct FrameData {
   bool is_complete_ : 1;
   bool has_alpha_ : 1;
   size_t frame_bytes_;
-  uint32_t sk_image_unique_id_ = SkiaPaintImageGenerator::kNeedNewImageUniqueID;
 };
 
 }  // namespace blink

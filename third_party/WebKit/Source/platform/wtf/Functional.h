@@ -26,16 +26,15 @@
 #ifndef WTF_Functional_h
 #define WTF_Functional_h
 
+#include <utility>
 #include "base/bind.h"
 #include "base/threading/thread_checker.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/TypeTraits.h"
-#include <utility>
 
 namespace blink {
 template <typename T>
@@ -172,11 +171,6 @@ struct ParamStorageTraits {
 };
 
 template <typename T>
-struct ParamStorageTraits<PassRefPtr<T>> {
-  typedef RefPtr<T> StorageType;
-};
-
-template <typename T>
 struct ParamStorageTraits<RefPtr<T>> {
   typedef RefPtr<T> StorageType;
 };
@@ -230,12 +224,25 @@ class Function<R(Args...), threadAffinity> {
     return *this;
   }
 
+  // TODO(tzik): Remove operator() once we finished to update all call sites
+  // to use Run() instead.
   R operator()(Args... args) const {
     DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
     return callback_.Run(std::forward<Args>(args)...);
   }
 
+  R Run(Args... args) const & {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    return callback_.Run(std::forward<Args>(args)...);
+  }
+
+  R Run(Args... args) && {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    return std::move(callback_).Run(std::forward<Args>(args)...);
+  }
+
   bool IsCancelled() const { return callback_.IsCancelled(); }
+  void Reset() { callback_.Reset(); }
   explicit operator bool() const { return static_cast<bool>(callback_); }
 
   friend base::Callback<R(Args...)> ConvertToBaseCallback(Function function) {
@@ -284,7 +291,7 @@ namespace base {
 
 template <typename T>
 struct BindUnwrapTraits<WTF::RefPtr<T>> {
-  static T* Unwrap(const WTF::RefPtr<T>& wrapped) { return wrapped.Get(); }
+  static T* Unwrap(const WTF::RefPtr<T>& wrapped) { return wrapped.get(); }
 };
 
 template <typename T>

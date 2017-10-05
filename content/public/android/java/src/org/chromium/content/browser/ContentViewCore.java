@@ -332,7 +332,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     /**
      * @return The context used for creating this ContentViewCore.
      */
-    @CalledByNative
     public Context getContext() {
         return mContext;
     }
@@ -481,13 +480,16 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
 
         mSelectionPopupController = new SelectionPopupController(
                 mContext, windowAndroid, webContents, mContainerView, mRenderCoordinates);
+        mSelectionPopupController.setSelectionClient(SmartSelectionClient.create(
+                mSelectionPopupController.getResultCallback(), windowAndroid, webContents));
         mSelectionPopupController.setCallback(ActionModeCallbackHelper.EMPTY_CALLBACK);
         mSelectionPopupController.setContainerView(mContainerView);
 
         mWebContentsObserver = new ContentViewWebContentsObserver(this);
 
         mShouldRequestUnbufferedDispatch = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                && ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_UNBUFFERED_DISPATCH);
+                && ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_UNBUFFERED_DISPATCH)
+                && !nativeUsingSynchronousCompositing(mNativeContentViewCore);
     }
 
     /**
@@ -2136,7 +2138,9 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
      * Sets TextClassifier for Smart Text selection.
      */
     public void setTextClassifier(TextClassifier textClassifier) {
-        mSelectionPopupController.setTextClassifier(textClassifier);
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        SelectionClient client = mSelectionPopupController.getSelectionClient();
+        if (client != null) client.setTextClassifier(textClassifier);
     }
 
     /**
@@ -2145,14 +2149,18 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
      * classifier.
      */
     public TextClassifier getTextClassifier() {
-        return mSelectionPopupController.getTextClassifier();
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        SelectionClient client = mSelectionPopupController.getSelectionClient();
+        return client == null ? null : client.getTextClassifier();
     }
 
     /**
      * Returns the TextClassifier which has been set with setTextClassifier(), or null.
      */
     public TextClassifier getCustomTextClassifier() {
-        return mSelectionPopupController.getCustomTextClassifier();
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        SelectionClient client = mSelectionPopupController.getSelectionClient();
+        return client == null ? null : client.getCustomTextClassifier();
     }
 
     private native long nativeInit(WebContents webContents, ViewAndroidDelegate viewAndroidDelegate,
@@ -2211,6 +2219,8 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             long nativeContentViewCore, long nativeSelectPopupSourceFrame, int[] indices);
 
     private native int nativeGetCurrentRenderProcessId(long nativeContentViewCore);
+
+    private native boolean nativeUsingSynchronousCompositing(long nativeContentViewCore);
 
     private native void nativeSetAllowJavascriptInterfacesInspection(
             long nativeContentViewCore, boolean allow);

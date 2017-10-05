@@ -346,6 +346,14 @@ void WindowTreeHost::OnHostWorkspaceChanged() {
     observer.OnHostWorkspaceChanged(this);
 }
 
+void WindowTreeHost::OnHostDisplayChanged() {
+  if (!compositor_)
+    return;
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(window());
+  compositor_->SetDisplayColorSpace(display.color_space());
+}
+
 void WindowTreeHost::OnHostCloseRequested() {
   for (WindowTreeHostObserver& observer : observers_)
     observer.OnHostCloseRequested(this);
@@ -356,6 +364,12 @@ void WindowTreeHost::OnHostActivated() {
 }
 
 void WindowTreeHost::OnHostLostWindowCapture() {
+  // It is possible for this function to be called during destruction, after the
+  // root window has already been destroyed (e.g. when the ui::PlatformWindow is
+  // destroyed, and during destruction, it loses capture. See more details in
+  // http://crbug.com/770670)
+  if (!window())
+    return;
   Window* capture_window = client::GetCaptureWindow(window());
   if (capture_window && capture_window->GetRootWindow() == window())
     capture_window->ReleaseCapture();

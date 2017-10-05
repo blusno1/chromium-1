@@ -40,7 +40,6 @@
 #include <memory>
 #include "build/build_config.h"
 #include "platform/instrumentation/PlatformInstrumentation.h"
-#include "platform/wtf/PtrUtil.h"
 
 extern "C" {
 #include <stdio.h>  // jpeglib.h needs stdio FILE.
@@ -376,7 +375,7 @@ class JPEGImageReader final {
   }
 
   void SetData(SegmentReader* data) {
-    if (data_.Get() == data)
+    if (data_.get() == data)
       return;
 
     data_ = data;
@@ -1032,8 +1031,8 @@ void JPEGImageDecoder::Decode(bool only_size) {
     return;
 
   if (!reader_) {
-    reader_ = WTF::MakeUnique<JPEGImageReader>(this);
-    reader_->SetData(data_.Get());
+    reader_ = std::make_unique<JPEGImageReader>(this);
+    reader_->SetData(data_.get());
   }
 
   // If we couldn't decode the image but have received all the data, decoding

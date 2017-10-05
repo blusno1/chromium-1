@@ -112,7 +112,7 @@ bool Node::CanShutdownCleanly(ShutdownPolicy policy) {
 
   if (policy == ShutdownPolicy::DONT_ALLOW_LOCAL_PORTS) {
 #if DCHECK_IS_ON()
-    for (auto entry : ports_) {
+    for (auto& entry : ports_) {
       DVLOG(2) << "Port " << entry.first << " referencing node "
                << entry.second->peer_node_name << " is blocking shutdown of "
                << "node " << name_ << " (state=" << entry.second->state << ")";
@@ -127,7 +127,7 @@ bool Node::CanShutdownCleanly(ShutdownPolicy policy) {
   // relatively few ports should be open during shutdown and shutdown doesn't
   // need to be blazingly fast.
   bool can_shutdown = true;
-  for (auto entry : ports_) {
+  for (auto& entry : ports_) {
     PortRef port_ref(entry.first, entry.second);
     SinglePortLocker locker(&port_ref);
     auto* port = locker.port();
@@ -169,14 +169,8 @@ int Node::CreateUninitializedPort(PortRef* port_ref) {
 
   scoped_refptr<Port> port(new Port(kInitialSequenceNum, kInitialSequenceNum));
   int rv = AddPortWithName(port_name, port);
-  if (rv != OK) {
-    // TODO(crbug.com/725605): Remove this CHECK. This is testing whether or not
-    // random port name generation is somehow resulting in insufficiently random
-    // and thus colliding names in the wild, which would be one explanation for
-    // some of the weird behavior we're seeing.
-    CHECK(false);
+  if (rv != OK)
     return rv;
-  }
 
   *port_ref = PortRef(port_name, std::move(port));
   return OK;
@@ -787,7 +781,7 @@ int Node::OnMergePort(std::unique_ptr<MergePortEvent> event) {
 int Node::AddPortWithName(const PortName& port_name, scoped_refptr<Port> port) {
   PortLocker::AssertNoPortsLockedOnCurrentThread();
   base::AutoLock lock(ports_lock_);
-  if (!ports_.insert(std::make_pair(port_name, std::move(port))).second)
+  if (!ports_.emplace(port_name, std::move(port)).second)
     return OOPS(ERROR_PORT_EXISTS);  // Suggests a bad UUID generator.
   DVLOG(2) << "Created port " << port_name << "@" << name_;
   return OK;
@@ -999,9 +993,9 @@ void Node::ConvertToProxy(Port* port,
 
 int Node::AcceptPort(const PortName& port_name,
                      const Event::PortDescriptor& port_descriptor) {
-  scoped_refptr<Port> port = make_scoped_refptr(
-      new Port(port_descriptor.next_sequence_num_to_send,
-               port_descriptor.next_sequence_num_to_receive));
+  scoped_refptr<Port> port =
+      base::MakeRefCounted<Port>(port_descriptor.next_sequence_num_to_send,
+                                 port_descriptor.next_sequence_num_to_receive);
   port->state = Port::kReceiving;
   port->peer_node_name = port_descriptor.peer_node_name;
   port->peer_port_name = port_descriptor.peer_port_name;

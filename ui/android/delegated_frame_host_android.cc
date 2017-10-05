@@ -9,8 +9,8 @@
 #include "base/memory/ptr_util.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
-#include "cc/output/compositor_frame.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -82,12 +82,12 @@ DelegatedFrameHostAndroid::~DelegatedFrameHostAndroid() {
 
 void DelegatedFrameHostAndroid::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   if (local_surface_id != surface_info_.id().local_surface_id()) {
     DestroyDelegatedContent();
     DCHECK(!content_layer_);
 
-    cc::RenderPass* root_pass = frame.render_pass_list.back().get();
+    viz::RenderPass* root_pass = frame.render_pass_list.back().get();
     gfx::Size frame_size = root_pass->output_rect.size();
     surface_info_ = viz::SurfaceInfo(
         viz::SurfaceId(frame_sink_id_, local_surface_id), 1.f, frame_size);
@@ -194,10 +194,6 @@ void DelegatedFrameHostAndroid::ReclaimResources(
     const std::vector<viz::ReturnedResource>& resources) {
   client_->ReclaimResources(resources);
 }
-
-void DelegatedFrameHostAndroid::WillDrawSurface(
-    const viz::LocalSurfaceId& local_surface_id,
-    const gfx::Rect& damage_rect) {}
 
 void DelegatedFrameHostAndroid::OnBeginFramePausedChanged(bool paused) {
   begin_frame_source_.OnSetBeginFrameSourcePaused(paused);

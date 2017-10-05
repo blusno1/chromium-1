@@ -57,29 +57,22 @@ class BluetoothLowEnergyWeaveClientConnection
    public:
     static std::unique_ptr<Connection> NewInstance(
         const RemoteDevice& remote_device,
-        const std::string& device_address,
         scoped_refptr<device::BluetoothAdapter> adapter,
-        const device::BluetoothUUID remote_service_uuid);
+        const device::BluetoothUUID remote_service_uuid,
+        device::BluetoothDevice* bluetooth_device,
+        bool should_set_low_connection_latency);
     static void SetInstanceForTesting(Factory* factory);
 
    protected:
     virtual std::unique_ptr<Connection> BuildInstance(
         const RemoteDevice& remote_device,
-        const std::string& device_address,
         scoped_refptr<device::BluetoothAdapter> adapter,
-        const device::BluetoothUUID remote_service_uuid);
+        const device::BluetoothUUID remote_service_uuid,
+        device::BluetoothDevice* bluetooth_device,
+        bool should_set_low_connection_latency);
 
    private:
     static Factory* factory_instance_;
-  };
-
-  // TODO(thakis): It looks like this could be stack-allocated and passed by
-  // pointer instead of by unique_ptr, removing the need for a virtual dtor.
-  class TimerFactory {
-   public:
-    virtual ~TimerFactory();
-
-    virtual std::unique_ptr<base::Timer> CreateTimer();
   };
 
   enum SubStatus {
@@ -98,9 +91,10 @@ class BluetoothLowEnergyWeaveClientConnection
   // necessary to initiate the BLE connection.
   BluetoothLowEnergyWeaveClientConnection(
       const RemoteDevice& remote_device,
-      const std::string& device_address,
       scoped_refptr<device::BluetoothAdapter> adapter,
-      const device::BluetoothUUID remote_service_uuid);
+      const device::BluetoothUUID remote_service_uuid,
+      device::BluetoothDevice* bluetooth_device,
+      bool should_set_low_connection_latency);
 
   ~BluetoothLowEnergyWeaveClientConnection() override;
 
@@ -119,7 +113,7 @@ class BluetoothLowEnergyWeaveClientConnection
 
   void SetupTestDoubles(
       scoped_refptr<base::TaskRunner> test_task_runner,
-      std::unique_ptr<TimerFactory> test_timer_factory,
+      std::unique_ptr<base::Timer> test_timer,
       std::unique_ptr<BluetoothLowEnergyWeavePacketGenerator> test_generator,
       std::unique_ptr<BluetoothLowEnergyWeavePacketReceiver> test_receiver);
 
@@ -143,12 +137,44 @@ class BluetoothLowEnergyWeaveClientConnection
       device::BluetoothRemoteGattCharacteristic* characteristic,
       const Packet& value) override;
 
+  bool should_set_low_connection_latency() {
+    return should_set_low_connection_latency_;
+  }
+
  private:
+  friend class CryptAuthBluetoothLowEnergyWeaveClientConnectionTest;
+
   enum WriteRequestType {
     REGULAR,
     MESSAGE_COMPLETE,
     CONNECTION_REQUEST,
     CONNECTION_CLOSE
+  };
+
+  enum GattConnectionResult {
+    GATT_CONNECTION_RESULT_SUCCESS = 0,
+    GATT_CONNECTION_RESULT_ERROR_AUTH_CANCELED = 1,
+    GATT_CONNECTION_RESULT_ERROR_AUTH_FAILED = 2,
+    GATT_CONNECTION_RESULT_ERROR_AUTH_REJECTED = 3,
+    GATT_CONNECTION_RESULT_ERROR_AUTH_TIMEOUT = 4,
+    GATT_CONNECTION_RESULT_ERROR_FAILED = 5,
+    GATT_CONNECTION_RESULT_ERROR_INPROGRESS = 6,
+    GATT_CONNECTION_RESULT_ERROR_UNKNOWN = 7,
+    GATT_CONNECTION_RESULT_ERROR_UNSUPPORTED_DEVICE = 8,
+    GATT_CONNECTION_RESULT_MAX
+  };
+
+  enum GattServiceOperationResult {
+    GATT_SERVICE_OPERATION_RESULT_SUCCESS = 0,
+    GATT_SERVICE_OPERATION_RESULT_GATT_ERROR_UNKNOWN = 1,
+    GATT_SERVICE_OPERATION_RESULT_GATT_ERROR_FAILED = 2,
+    GATT_SERVICE_OPERATION_RESULT_GATT_ERROR_IN_PROGRESS = 3,
+    GATT_SERVICE_OPERATION_RESULT_GATT_ERROR_INVALID_LENGTH = 4,
+    GATT_SERVICE_OPERATION_RESULT_GATT_ERROR_NOT_PERMITTED = 5,
+    GATT_SERVICE_OPERATION_RESULT_GATT_ERROR_NOT_AUTHORIZED = 6,
+    GATT_SERVICE_OPERATION_RESULT_GATT_ERROR_NOT_PAIRED = 7,
+    GATT_SERVICE_OPERATION_RESULT_GATT_ERROR_NOT_SUPPORTED = 8,
+    GATT_SERVICE_OPERATION_RESULT_MAX
   };
 
   // Represents a request to write |value| to a some characteristic.
@@ -168,9 +194,16 @@ class BluetoothLowEnergyWeaveClientConnection
     int number_of_failed_attempts = 0;
   };
 
+  static std::string SubStatusToString(SubStatus sub_status);
+
+  // Returns the timeout for the given SubStatus. If no timeout is needed for
+  // |sub_status|, base::TimeDelta::Max() is returned.
+  static base::TimeDelta GetTimeoutForSubStatus(SubStatus sub_status);
+
   // Sets the current status; if |status| corresponds to one of Connection's
   // Status types, observers will be notified of the change.
   void SetSubStatus(SubStatus status);
+  void OnTimeoutForSubStatus(SubStatus status);
 
   // These functions are used to set up the connection so that it is ready to
   // send/receive data.
@@ -194,7 +227,6 @@ class BluetoothLowEnergyWeaveClientConnection
   // Sends the connection request message (the first message in the uWeave
   // handshake).
   void SendConnectionRequest();
-  void OnConnectionResponseTimeout();
 
   // Completes and updates the status accordingly.
   void CompleteConnection();
@@ -210,6 +242,16 @@ class BluetoothLowEnergyWeaveClientConnection
       device::BluetoothRemoteGattService::GattErrorCode error);
   void ClearQueueAndSendConnectionClose();
 
+  void RecordGattConnectionResult(GattConnectionResult result);
+  GattConnectionResult BluetoothDeviceConnectErrorCodeToGattConnectionResult(
+      device::BluetoothDevice::ConnectErrorCode error_code);
+  void RecordGattNotifySessionResult(GattServiceOperationResult result);
+  void RecordGattWriteCharacteristicResult(GattServiceOperationResult result);
+  GattServiceOperationResult
+  BluetoothRemoteDeviceGattServiceGattErrorCodeToGattServiceOperationResult(
+      device::BluetoothRemoteGattService::GattErrorCode error_code);
+  void RecordSetSubStatus(bool success);
+
   // Private getters for the Bluetooth classes corresponding to this connection.
   device::BluetoothRemoteGattService* GetRemoteService();
   device::BluetoothRemoteGattCharacteristic* GetGattCharacteristic(
@@ -220,10 +262,10 @@ class BluetoothLowEnergyWeaveClientConnection
   // connection.
   std::string GetReasonForClose();
 
-  // The device to which to connect. This is the starting value, but the device
-  // address may change during the connection because BLE addresses are
-  // ephemeral. Use GetDeviceAddress() to get the most up-to-date address.
-  const std::string device_address_;
+  // The device to which to connect.
+  device::BluetoothDevice* bluetooth_device_;
+
+  bool should_set_low_connection_latency_;
 
   scoped_refptr<device::BluetoothAdapter> adapter_;
   RemoteAttribute remote_service_;
@@ -231,9 +273,8 @@ class BluetoothLowEnergyWeaveClientConnection
   std::unique_ptr<BluetoothLowEnergyWeavePacketReceiver> packet_receiver_;
   RemoteAttribute tx_characteristic_;
   RemoteAttribute rx_characteristic_;
-  std::unique_ptr<TimerFactory> timer_factory_;
   scoped_refptr<base::TaskRunner> task_runner_;
-  std::unique_ptr<base::Timer> connection_response_timer_;
+  std::unique_ptr<base::Timer> timer_;
 
   // These pointers start out null and are created during the connection
   // process.

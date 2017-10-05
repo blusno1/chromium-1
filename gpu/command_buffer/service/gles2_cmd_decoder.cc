@@ -14,10 +14,10 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <queue>
 
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/containers/queue.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -496,11 +496,11 @@ uint32_t GLES2Decoder::GetAndClearBackbufferClearBitsForTest() {
   return 0;
 }
 
-GLES2Decoder::GLES2Decoder(CommandBufferServiceBase* command_buffer_service)
-    : CommonDecoder(command_buffer_service),
-      initialized_(false),
-      debug_(false),
-      log_commands_(false) {}
+GLES2Decoder::GLES2Decoder(CommandBufferServiceBase* command_buffer_service,
+                           Outputter* outputter)
+    : CommonDecoder(command_buffer_service), outputter_(outputter) {
+  DCHECK(outputter_);
+}
 
 GLES2Decoder::~GLES2Decoder() {
 }
@@ -519,6 +519,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
  public:
   GLES2DecoderImpl(GLES2DecoderClient* client,
                    CommandBufferServiceBase* command_buffer_service,
+                   Outputter* outputter,
                    ContextGroup* group);
   ~GLES2DecoderImpl() override;
 
@@ -2470,7 +2471,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   bool gpu_trace_commands_;
   bool gpu_debug_commands_;
 
-  std::queue<FenceCallback> pending_readpixel_fences_;
+  base::queue<FenceCallback> pending_readpixel_fences_;
 
   // After a second fence is inserted, both the GpuChannelMessageQueue and
   // CommandExecutor are descheduled. Once the first fence has completed, both
@@ -3096,19 +3097,21 @@ GLenum BackFramebuffer::CheckStatus() {
 GLES2Decoder* GLES2Decoder::Create(
     GLES2DecoderClient* client,
     CommandBufferServiceBase* command_buffer_service,
+    Outputter* outputter,
     ContextGroup* group) {
   if (group->use_passthrough_cmd_decoder()) {
     return new GLES2DecoderPassthroughImpl(client, command_buffer_service,
-                                           group);
+                                           outputter, group);
   }
-  return new GLES2DecoderImpl(client, command_buffer_service, group);
+  return new GLES2DecoderImpl(client, command_buffer_service, outputter, group);
 }
 
 GLES2DecoderImpl::GLES2DecoderImpl(
     GLES2DecoderClient* client,
     CommandBufferServiceBase* command_buffer_service,
+    Outputter* outputter,
     ContextGroup* group)
-    : GLES2Decoder(command_buffer_service),
+    : GLES2Decoder(command_buffer_service, outputter),
       client_(client),
       group_(group),
       logger_(&debug_marker_manager_, client_),
@@ -3399,7 +3402,7 @@ bool GLES2DecoderImpl::Initialize(
     offscreen_single_buffer_ = attrib_helper.single_buffer;
 
     if (gl_version_info().is_es) {
-      const bool rgb8_supported = context_->HasExtension("GL_OES_rgb8_rgba8");
+      const bool rgb8_supported = features().oes_rgb8_rgba8;
       // The only available default render buffer formats in GLES2 have very
       // little precision.  Don't enable multisampling unless 8-bit render
       // buffer formats are available--instead fall back to 8-bit textures.
@@ -3945,6 +3948,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   if (workarounds().disable_overlay_ca_layers) {
     caps.disable_overlay_ca_layers = true;
   }
+  caps.texture_npot = feature_info_->feature_flags().npot_ok;
 
   return caps;
 }
@@ -4592,12 +4596,7 @@ bool GLES2DecoderImpl::FormsTextureCopyingFeedbackLoop(
 gfx::Size GLES2DecoderImpl::GetBoundReadFramebufferSize() {
   Framebuffer* framebuffer = GetBoundReadFramebuffer();
   if (framebuffer) {
-    const Framebuffer::Attachment* attachment =
-        framebuffer->GetReadBufferAttachment();
-    if (attachment) {
-      return gfx::Size(attachment->width(), attachment->height());
-    }
-    return gfx::Size(0, 0);
+    return framebuffer->GetFramebufferValidSize();
   } else if (offscreen_target_frame_buffer_.get()) {
     return offscreen_size_;
   } else {
@@ -4977,7 +4976,7 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
 
   // Release all fences now, because some fence types need the context to be
   // current on destruction.
-  pending_readpixel_fences_ = std::queue<FenceCallback>();
+  pending_readpixel_fences_ = base::queue<FenceCallback>();
 
   // Need to release these before releasing |group_| which may own the
   // ShaderTranslatorCache.
@@ -10118,8 +10117,15 @@ void GLES2DecoderImpl::RestoreStateForAttrib(
   // when running on desktop GL with compatibility profile because it will
   // never be re-enabled.
   if (attrib_index != 0 || gl_version_info().BehavesLikeGLES()) {
-    state_.vertex_attrib_manager->SetDriverVertexAttribEnabled(
-        attrib_index, attrib->enabled());
+    // Restore the vertex attrib array enable-state according to
+    // the VertexAttrib enabled_in_driver value (which really represents the
+    // state of the virtual context - not the driver - notably, above the
+    // vertex array object emulation layer).
+    if (attrib->enabled_in_driver()) {
+      glEnableVertexAttribArray(attrib_index);
+    } else {
+      glDisableVertexAttribArray(attrib_index);
+    }
   }
 }
 
@@ -11809,9 +11815,6 @@ error::Error GLES2DecoderImpl::HandleReadPixels(uint32_t immediate_data_size,
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, func_name,
         "format and type incompatible with the current read framebuffer");
     return error::kNoError;
-  }
-  if (type == GL_HALF_FLOAT_OES && !gl_version_info().is_es) {
-    type = GL_HALF_FLOAT;
   }
   if (width == 0 || height == 0) {
     return error::kNoError;

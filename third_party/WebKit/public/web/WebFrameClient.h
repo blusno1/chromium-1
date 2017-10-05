@@ -80,10 +80,6 @@ namespace service_manager {
 class InterfaceProvider;
 }
 
-namespace base {
-class SingleThreadTaskRunner;
-}
-
 namespace blink {
 namespace mojom {
 enum class WebFeature : int32_t;
@@ -200,10 +196,7 @@ class BLINK_EXPORT WebFrameClient {
 
   // Returns an InterfaceProvider the frame can use to request interfaces from
   // the browser. This method may not return nullptr.
-  virtual service_manager::InterfaceProvider* GetInterfaceProvider() {
-    NOTREACHED();
-    return nullptr;
-  }
+  virtual service_manager::InterfaceProvider* GetInterfaceProvider();
 
   // General notifications -----------------------------------------------
 
@@ -738,11 +731,11 @@ class BLINK_EXPORT WebFrameClient {
 
   // WebGL ------------------------------------------------------
 
-  // Asks the embedder whether WebGL is allowed for the WebFrame. This call is
+  // Asks the embedder whether WebGL is blocked for the WebFrame. This call is
   // placed here instead of WebContentSettingsClient because this class is
   // implemented in content/, and putting it here avoids adding more public
   // content/ APIs.
-  virtual bool AllowWebGL(bool default_value) { return default_value; }
+  virtual bool ShouldBlockWebGL() { return false; }
 
   // Screen Orientation --------------------------------------------------
 
@@ -832,7 +825,7 @@ class BLINK_EXPORT WebFrameClient {
 
   virtual std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
       const WebURLRequest&,
-      base::SingleThreadTaskRunner*) {
+      SingleThreadTaskRunnerRefPtr) {
     NOTREACHED();
     return nullptr;
   }

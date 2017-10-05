@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "content/browser/background_fetch/background_fetch_data_manager.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace content {
@@ -25,10 +24,12 @@ BackgroundFetchJobController::BackgroundFetchJobController(
       completed_callback_(std::move(completed_callback)),
       weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  data_manager_->SetListener(registration_id, this);
 }
 
 BackgroundFetchJobController::~BackgroundFetchJobController() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  data_manager_->SetListener(registration_id_, nullptr);
 }
 
 void BackgroundFetchJobController::Start() {
@@ -74,6 +75,12 @@ void BackgroundFetchJobController::DidStartRequest(
 void BackgroundFetchJobController::DidCompleteRequest(
     const scoped_refptr<BackgroundFetchRequestInfo>& request) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(state_ == State::FETCHING || state_ == State::ABORTED);
+
+  // TODO(delphick): When ABORT is implemented correctly we should hopefully
+  // never get here and the DCHECK above should only allow FETCHING.
+  if (state_ == State::ABORTED)
+    return;
 
   // The DataManager must acknowledge that it stored the data and that there are
   // no more pending requests to avoid marking this job as completed too early.

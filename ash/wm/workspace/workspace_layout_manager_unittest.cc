@@ -9,9 +9,9 @@
 
 #include "ash/accessibility_delegate.h"
 #include "ash/app_list/test_app_list_presenter_impl.h"
-#include "ash/ash_switches.h"
 #include "ash/frame/custom_frame_view_ash.h"
 #include "ash/public/cpp/app_types.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
@@ -582,7 +582,7 @@ TEST_F(WorkspaceLayoutManagerTest,
   Shell::Get()->SetDisplayWorkAreaInsets(window.get(), insets);
   const wm::WMEvent snap_left(wm::WM_EVENT_SNAP_LEFT);
   window_state->OnWMEvent(&snap_left);
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_LEFT_SNAPPED, window_state->GetStateType());
+  EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED, window_state->GetStateType());
   const gfx::Rect kWorkAreaBounds = GetPrimaryDisplay().work_area();
   gfx::Rect expected_bounds =
       gfx::Rect(kWorkAreaBounds.x(), kWorkAreaBounds.y(),
@@ -656,6 +656,17 @@ TEST_F(WorkspaceLayoutManagerSoloTest, Minimize) {
   EXPECT_TRUE(window->IsVisible());
   EXPECT_FALSE(wm::GetWindowState(window.get())->IsMinimized());
   EXPECT_EQ(bounds, window->bounds());
+}
+
+// Tests that activation of a minimized window unminimizes the window.
+TEST_F(WorkspaceLayoutManagerSoloTest, UnminimizeWithActivation) {
+  std::unique_ptr<aura::Window> window = CreateTestWindow();
+  wm::GetWindowState(window.get())->Minimize();
+  EXPECT_TRUE(wm::GetWindowState(window.get())->IsMinimized());
+  EXPECT_FALSE(wm::GetWindowState(window.get())->IsActive());
+  wm::GetWindowState(window.get())->Activate();
+  EXPECT_FALSE(wm::GetWindowState(window.get())->IsMinimized());
+  EXPECT_TRUE(wm::GetWindowState(window.get())->IsActive());
 }
 
 // A aura::WindowObserver which sets the focus when the window becomes visible.
@@ -1668,15 +1679,24 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropForSplitScreenTest) {
   SplitViewController* split_view_controller =
       Shell::Get()->split_view_controller();
 
+  // Windows in tablet mode are created with immersive mode on. In mash,
+  // immersive mode creates a new widget to render the title area. This will
+  // cause some differences in the test in mash configuration and non-mash
+  // configuration.
+  const bool is_mash = Shell::GetAshConfig() == Config::MASH;
+
   const gfx::Rect bounds(0, 0, 400, 400);
   std::unique_ptr<aura::Window> window1(CreateTestWindow(bounds));
   window1->Show();
 
+  // In mash, with one window, there is a extra child, the title area renderer
+  // of |window1|.
+  size_t expected_size = is_mash ? 3U : 2U;
   // Test that backdrop window is visible and is the second child in the
   // container. Its bounds should be the same as the container bounds.
-  ASSERT_EQ(2U, default_container()->children().size());
-  EXPECT_TRUE(default_container()->children()[0]->IsVisible());
-  EXPECT_TRUE(default_container()->children()[1]->IsVisible());
+  ASSERT_EQ(expected_size, default_container()->children().size());
+  for (auto* child : default_container()->children())
+    EXPECT_TRUE(child->IsVisible());
   EXPECT_EQ(window1.get(), default_container()->children()[1]);
   EXPECT_EQ(default_container()->bounds(),
             default_container()->children()[0]->bounds());
@@ -1685,9 +1705,9 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropForSplitScreenTest) {
   // and is the second child in the container. Its bounds should still be the
   // same as the container bounds.
   split_view_controller->SnapWindow(window1.get(), SplitViewController::LEFT);
-  ASSERT_EQ(2U, default_container()->children().size());
-  EXPECT_TRUE(default_container()->children()[0]->IsVisible());
-  EXPECT_TRUE(default_container()->children()[1]->IsVisible());
+  ASSERT_EQ(expected_size, default_container()->children().size());
+  for (auto* child : default_container()->children())
+    EXPECT_TRUE(child->IsVisible());
   EXPECT_EQ(window1.get(), default_container()->children()[1]);
   EXPECT_EQ(default_container()->bounds(),
             default_container()->children()[0]->bounds());
@@ -1698,25 +1718,32 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropForSplitScreenTest) {
   std::unique_ptr<aura::Window> window2(CreateTestWindow(bounds));
   split_view_controller->SnapWindow(window2.get(), SplitViewController::RIGHT);
 
-  ASSERT_EQ(3U, default_container()->children().size());
-  EXPECT_TRUE(default_container()->children()[0]->IsVisible());
-  EXPECT_TRUE(default_container()->children()[1]->IsVisible());
-  EXPECT_TRUE(default_container()->children()[2]->IsVisible());
+  // In mash, with two windows, there are two extra children, the title area
+  // renderer of |window1| and |window2|.
+  expected_size = is_mash ? 5U : 3U;
+  const int expected_second_window_index = is_mash ? 3 : 2;
+
+  ASSERT_EQ(expected_size, default_container()->children().size());
+  for (auto* child : default_container()->children())
+    EXPECT_TRUE(child->IsVisible());
   EXPECT_EQ(window1.get(), default_container()->children()[1]);
-  EXPECT_EQ(window2.get(), default_container()->children()[2]);
+  EXPECT_EQ(window2.get(),
+            default_container()->children()[expected_second_window_index]);
   EXPECT_EQ(default_container()->bounds(),
             default_container()->children()[0]->bounds());
 
   // Test activation change correctly updates the backdrop.
   wm::ActivateWindow(window1.get());
-  EXPECT_EQ(window1.get(), default_container()->children()[2]);
+  EXPECT_EQ(window1.get(),
+            default_container()->children()[expected_second_window_index]);
   EXPECT_EQ(window2.get(), default_container()->children()[1]);
   EXPECT_EQ(default_container()->bounds(),
             default_container()->children()[0]->bounds());
 
   wm::ActivateWindow(window2.get());
   EXPECT_EQ(window1.get(), default_container()->children()[1]);
-  EXPECT_EQ(window2.get(), default_container()->children()[2]);
+  EXPECT_EQ(window2.get(),
+            default_container()->children()[expected_second_window_index]);
   EXPECT_EQ(default_container()->bounds(),
             default_container()->children()[0]->bounds());
 }

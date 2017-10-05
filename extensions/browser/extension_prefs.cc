@@ -16,6 +16,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/time/clock.h"
+#include "base/time/default_clock.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/crx_file/id_util.h"
@@ -249,21 +251,11 @@ void LoadExtensionControlledPrefs(ExtensionPrefs* prefs,
   }
 }
 
+// Whether SetAlertSystemFirstRun() should always return true, so that alerts
+// are triggered, even in first run.
+bool g_run_alerts_in_first_run_for_testing = false;
+
 }  // namespace
-
-//
-// TimeProvider
-//
-
-ExtensionPrefs::TimeProvider::TimeProvider() {
-}
-
-ExtensionPrefs::TimeProvider::~TimeProvider() {
-}
-
-base::Time ExtensionPrefs::TimeProvider::GetCurrentTime() const {
-  return base::Time::Now();
-}
 
 //
 // ScopedDictionaryUpdate
@@ -335,9 +327,10 @@ ExtensionPrefs* ExtensionPrefs::Create(
     ExtensionPrefValueMap* extension_pref_value_map,
     bool extensions_disabled,
     const std::vector<ExtensionPrefsObserver*>& early_observers) {
-  return ExtensionPrefs::Create(
-      browser_context, prefs, root_dir, extension_pref_value_map,
-      extensions_disabled, early_observers, std::make_unique<TimeProvider>());
+  return ExtensionPrefs::Create(browser_context, prefs, root_dir,
+                                extension_pref_value_map, extensions_disabled,
+                                early_observers,
+                                std::make_unique<base::DefaultClock>());
 }
 
 // static
@@ -348,9 +341,9 @@ ExtensionPrefs* ExtensionPrefs::Create(
     ExtensionPrefValueMap* extension_pref_value_map,
     bool extensions_disabled,
     const std::vector<ExtensionPrefsObserver*>& early_observers,
-    std::unique_ptr<TimeProvider> time_provider) {
+    std::unique_ptr<base::Clock> clock) {
   return new ExtensionPrefs(browser_context, pref_service, root_dir,
-                            extension_pref_value_map, std::move(time_provider),
+                            extension_pref_value_map, std::move(clock),
                             extensions_disabled, early_observers);
 }
 
@@ -705,7 +698,7 @@ bool ExtensionPrefs::SetAlertSystemFirstRun() {
     return true;
   }
   prefs_->SetBoolean(pref_names::kAlertsInitialized, true);
-  return false;
+  return g_run_alerts_in_first_run_for_testing;  // Note: normally false.
 }
 
 bool ExtensionPrefs::DidExtensionEscalatePermissions(
@@ -1081,7 +1074,7 @@ void ExtensionPrefs::OnExtensionInstalled(
     const std::string& install_parameter) {
   ScopedExtensionPrefUpdate update(prefs_, extension->id());
   auto extension_dict = update.Get();
-  const base::Time install_time = time_provider_->GetCurrentTime();
+  const base::Time install_time = clock_->Now();
   PopulateExtensionInfoPrefs(extension, install_time, initial_state,
                              install_flags, install_parameter,
                              extension_dict.get());
@@ -1295,8 +1288,8 @@ void ExtensionPrefs::SetDelayedInstallInfo(
     const std::string& install_parameter) {
   ScopedDictionaryUpdate update(this, extension->id(), kDelayedInstallInfo);
   auto extension_dict = update.Create();
-  PopulateExtensionInfoPrefs(extension, time_provider_->GetCurrentTime(),
-                             initial_state, install_flags, install_parameter,
+  PopulateExtensionInfoPrefs(extension, clock_->Now(), initial_state,
+                             install_flags, install_parameter,
                              extension_dict.get());
 
   // Add transient data that is needed by FinishDelayedInstallInfo(), but
@@ -1345,7 +1338,7 @@ bool ExtensionPrefs::FinishDelayedInstallInfo(
   }
   pending_install_dict->Remove(kDelayedInstallReason, NULL);
 
-  const base::Time install_time = time_provider_->GetCurrentTime();
+  const base::Time install_time = clock_->Now();
   pending_install_dict->SetString(
       kPrefInstallTime, base::Int64ToString(install_time.ToInternalValue()));
 
@@ -1706,19 +1699,24 @@ void ExtensionPrefs::SetNeedsSync(const std::string& extension_id,
       needs_sync ? std::make_unique<base::Value>(true) : nullptr);
 }
 
+// static
+void ExtensionPrefs::SetRunAlertsInFirstRunForTest() {
+  g_run_alerts_in_first_run_for_testing = true;
+}
+
 ExtensionPrefs::ExtensionPrefs(
     content::BrowserContext* browser_context,
     PrefService* prefs,
     const base::FilePath& root_dir,
     ExtensionPrefValueMap* extension_pref_value_map,
-    std::unique_ptr<TimeProvider> time_provider,
+    std::unique_ptr<base::Clock> clock,
     bool extensions_disabled,
     const std::vector<ExtensionPrefsObserver*>& early_observers)
     : browser_context_(browser_context),
       prefs_(prefs),
       install_directory_(root_dir),
       extension_pref_value_map_(extension_pref_value_map),
-      time_provider_(std::move(time_provider)),
+      clock_(std::move(clock)),
       extensions_disabled_(extensions_disabled) {
   MakePathsRelative();
 

@@ -59,12 +59,12 @@
 #include "core/frame/UseCounter.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "core/typed_arrays/DOMArrayBufferView.h"
-#include "platform/FontFamilyNames.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/bindings/ScriptState.h"
+#include "platform/font_family_names.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -79,12 +79,12 @@ FontFace* FontFace::Create(ExecutionContext* context,
                            const AtomicString& family,
                            StringOrArrayBufferOrArrayBufferView& source,
                            const FontFaceDescriptors& descriptors) {
-  if (source.isString())
-    return Create(context, family, source.getAsString(), descriptors);
-  if (source.isArrayBuffer())
-    return Create(context, family, source.getAsArrayBuffer(), descriptors);
-  if (source.isArrayBufferView()) {
-    return Create(context, family, source.getAsArrayBufferView().View(),
+  if (source.IsString())
+    return Create(context, family, source.GetAsString(), descriptors);
+  if (source.IsArrayBuffer())
+    return Create(context, family, source.GetAsArrayBuffer(), descriptors);
+  if (source.IsArrayBufferView()) {
+    return Create(context, family, source.GetAsArrayBufferView().View(),
                   descriptors);
   }
   NOTREACHED();
@@ -179,10 +179,8 @@ FontFace::FontFace(ExecutionContext* context,
                         CSSPropertyFontVariant);
   SetPropertyFromString(document, descriptors.featureSettings(),
                         CSSPropertyFontFeatureSettings);
-  if (RuntimeEnabledFeatures::CSSFontDisplayEnabled()) {
-    SetPropertyFromString(document, descriptors.display(),
-                          CSSPropertyFontDisplay);
-  }
+  SetPropertyFromString(document, descriptors.display(),
+                        CSSPropertyFontDisplay);
 }
 
 FontFace::~FontFace() {}
@@ -373,6 +371,9 @@ void FontFace::SetLoadStatus(LoadStatusType status) {
   status_ = status;
   DCHECK(status_ != kError || error_);
 
+  if (!GetExecutionContext())
+    return;
+
   // When promises are resolved with 'thenables', instead of the object being
   // returned directly, the 'then' method is executed (the resolver tries to
   // resolve the thenable). This can lead to synchronous script execution, so we
@@ -381,24 +382,19 @@ void FontFace::SetLoadStatus(LoadStatusType status) {
   if (status_ == kLoaded || status_ == kError) {
     if (loaded_property_) {
       if (status_ == kLoaded) {
-        GetTaskRunner()->PostTask(
-            BLINK_FROM_HERE, WTF::Bind(&LoadedProperty::Resolve<FontFace*>,
-                                       WrapPersistent(loaded_property_.Get()),
-                                       WrapPersistent(this)));
+        TaskRunnerHelper::Get(TaskType::kDOMManipulation, GetExecutionContext())
+            ->PostTask(BLINK_FROM_HERE,
+                       WTF::Bind(&LoadedProperty::Resolve<FontFace*>,
+                                 WrapPersistent(loaded_property_.Get()),
+                                 WrapPersistent(this)));
       } else
         loaded_property_->Reject(error_.Get());
     }
 
-    GetTaskRunner()->PostTask(
-        BLINK_FROM_HERE,
-        WTF::Bind(&FontFace::RunCallbacks, WrapPersistent(this)));
+    TaskRunnerHelper::Get(TaskType::kDOMManipulation, GetExecutionContext())
+        ->PostTask(BLINK_FROM_HERE,
+                   WTF::Bind(&FontFace::RunCallbacks, WrapPersistent(this)));
   }
-}
-
-WebTaskRunner* FontFace::GetTaskRunner() {
-  return TaskRunnerHelper::Get(TaskType::kDOMManipulation,
-                               GetExecutionContext())
-      .Get();
 }
 
 void FontFace::RunCallbacks() {
@@ -726,7 +722,7 @@ void FontFace::InitCSSFontFace(const unsigned char* data, size_t size) {
 
   RefPtr<SharedBuffer> buffer = SharedBuffer::Create(data, size);
   BinaryDataFontFaceSource* source =
-      new BinaryDataFontFaceSource(buffer.Get(), ots_parse_message_);
+      new BinaryDataFontFaceSource(buffer.get(), ots_parse_message_);
   if (source->IsValid())
     SetLoadStatus(kLoaded);
   else

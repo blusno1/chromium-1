@@ -221,8 +221,8 @@ class RasterBufferProviderPerfTestBase {
 
   RasterBufferProviderPerfTestBase()
       : compositor_context_provider_(
-            make_scoped_refptr(new PerfContextProvider)),
-        worker_context_provider_(make_scoped_refptr(new PerfContextProvider)),
+            base::MakeRefCounted<PerfContextProvider>()),
+        worker_context_provider_(base::MakeRefCounted<PerfContextProvider>()),
         task_runner_(new base::TestSimpleTaskRunner),
         task_graph_runner_(new SynchronousTaskGraphRunner),
         timer_(kWarmupRuns,
@@ -244,7 +244,7 @@ class RasterBufferProviderPerfTestBase {
     for (unsigned i = 0; i < num_raster_tasks; ++i) {
       auto resource =
           std::make_unique<ScopedResource>(resource_provider_.get());
-      resource->Allocate(size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
+      resource->Allocate(size, ResourceProvider::TEXTURE_HINT_DEFAULT,
                          viz::RGBA_8888, gfx::ColorSpace());
 
       // No tile ids are given to support partial updates.

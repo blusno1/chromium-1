@@ -13,11 +13,11 @@
 #include "core/timing/WorkerGlobalScopePerformance.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/Supplementable.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebMixedContent.h"
@@ -215,11 +215,12 @@ SecurityOrigin* WorkerFetchContext::GetSecurityOrigin() const {
 }
 
 std::unique_ptr<WebURLLoader> WorkerFetchContext::CreateURLLoader(
-    const ResourceRequest& request) {
+    const ResourceRequest& request,
+    WebTaskRunner* task_runner) {
   CountUsage(WebFeature::kOffMainThreadFetch);
   WrappedResourceRequest wrapped(request);
-  return web_context_->CreateURLLoader(
-      wrapped, loading_task_runner_->ToSingleThreadTaskRunner());
+  return web_context_->CreateURLLoader(wrapped,
+                                       task_runner->ToSingleThreadTaskRunner());
 }
 
 bool WorkerFetchContext::IsControlledByServiceWorker() const {
@@ -251,7 +252,7 @@ void WorkerFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request,
     return;
 
   if (web_context_->IsDataSaverEnabled())
-    request.SetHTTPHeaderField("Save-Data", "on");
+    request.SetHTTPHeaderField(HTTPNames::Save_Data, "on");
 }
 
 void WorkerFetchContext::DispatchWillSendRequest(
@@ -335,6 +336,10 @@ void WorkerFetchContext::SetFirstPartyCookieAndRequestorOrigin(
     out_request.SetSiteForCookies(GetSiteForCookies());
   if (!out_request.RequestorOrigin())
     out_request.SetRequestorOrigin(GetSecurityOrigin());
+}
+
+RefPtr<WebTaskRunner> WorkerFetchContext::GetLoadingTaskRunner() {
+  return loading_task_runner_;
 }
 
 DEFINE_TRACE(WorkerFetchContext) {

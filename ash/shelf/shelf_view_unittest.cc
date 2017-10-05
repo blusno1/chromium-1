@@ -269,6 +269,9 @@ class ShelfViewTest : public AshTestBase {
 
     test_api_.reset(new ShelfViewTestAPI(shelf_view_));
     test_api_->SetAnimationDuration(1);  // Speeds up animation for test.
+
+    // Add a browser shortcut shelf item, as chrome does, for testing.
+    AddItem(TYPE_BROWSER_SHORTCUT, true);
   }
 
   void TearDown() override {
@@ -443,8 +446,6 @@ class ShelfViewTest : public AshTestBase {
                             int destination_index,
                             bool progressively) {
     views::View* button = SimulateViewPressed(pointer, button_index);
-    if (pointer == ShelfView::TOUCH && reach_touch_time_threshold_)
-      base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(300));
 
     if (!progressively) {
       ContinueDrag(button, pointer, button_index, destination_index, false);
@@ -652,7 +653,6 @@ class ShelfViewTest : public AshTestBase {
 
   ShelfModel* model_ = nullptr;
   ShelfView* shelf_view_ = nullptr;
-  bool reach_touch_time_threshold_ = true;
 
   std::unique_ptr<ShelfViewTestAPI> test_api_;
 
@@ -1100,46 +1100,6 @@ TEST_F(ShelfViewTest, SimultaneousDrag) {
   shelf_view_->PointerReleasedOnButton(dragged_button_touch, ShelfView::TOUCH,
                                        false);
   ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-}
-
-TEST_F(ShelfViewTest, DragWithTimeThreshold) {
-  std::vector<std::pair<ShelfID, views::View*>> id_map;
-  SetupForDragTest(&id_map);
-
-  // Start a touch drag that does not reach the touch time threshold.
-  reach_touch_time_threshold_ = false;
-  views::View* dragged_button_touch =
-      SimulateDrag(ShelfView::TOUCH, 4, 2, false);
-  // Nothing changes since the drag didn't reach the touch time threshold.
-  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-  shelf_view_->PointerReleasedOnButton(dragged_button_touch, ShelfView::TOUCH,
-                                       false);
-
-  // Start a touch drag that does reach the touch time threshold.
-  reach_touch_time_threshold_ = true;
-  dragged_button_touch = SimulateDrag(ShelfView::TOUCH, 1, 3, false);
-  std::rotate(id_map.begin() + 1, id_map.begin() + 2, id_map.begin() + 4);
-  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-  shelf_view_->PointerReleasedOnButton(dragged_button_touch, ShelfView::TOUCH,
-                                       false);
-
-  // Start a mouse drag that does not reach the touch time threshold.
-  reach_touch_time_threshold_ = false;
-  views::View* dragged_button_mouse =
-      SimulateDrag(ShelfView::MOUSE, 1, 3, false);
-  std::rotate(id_map.begin() + 1, id_map.begin() + 2, id_map.begin() + 4);
-  // The ordering changes since there is no time threshold for mouse drags.
-  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-  shelf_view_->PointerReleasedOnButton(dragged_button_mouse, ShelfView::MOUSE,
-                                       false);
-
-  // Start a mouse drag that does reach the touch time threshold.
-  reach_touch_time_threshold_ = true;
-  dragged_button_mouse = SimulateDrag(ShelfView::MOUSE, 4, 2, false);
-  std::rotate(id_map.begin() + 3, id_map.begin() + 4, id_map.begin() + 5);
-  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-  shelf_view_->PointerReleasedOnButton(dragged_button_mouse, ShelfView::MOUSE,
-                                       false);
 }
 
 // Ensure the app list button cannot be dragged and other items cannot be
@@ -2030,7 +1990,7 @@ TEST_F(ShelfViewTest, ShelfWindowWatcherButtonShowsContextMenu) {
   std::unique_ptr<views::Widget> widget = CreateTestWidget();
   widget->Show();
   aura::Window* window = widget->GetNativeWindow();
-  ShelfID shelf_id(std::to_string(123));
+  ShelfID shelf_id("123");
   window->SetProperty(kShelfIDKey, new std::string(shelf_id.Serialize()));
   window->SetProperty(kShelfItemTypeKey, static_cast<int32_t>(TYPE_DIALOG));
   ShelfButton* button = GetButtonByID(shelf_id);
@@ -2038,6 +1998,35 @@ TEST_F(ShelfViewTest, ShelfWindowWatcherButtonShowsContextMenu) {
   generator.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
   generator.PressRightButton();
   EXPECT_TRUE(test_api_->CloseMenu());
+}
+
+// Tests that the drag view is set on left click and not set on right click.
+TEST_F(ShelfViewTest, ShelfDragViewAndContextMenu) {
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  widget->Show();
+  aura::Window* window = widget->GetNativeWindow();
+  ShelfID shelf_id("123");
+  window->SetProperty(kShelfIDKey, new std::string(shelf_id.Serialize()));
+  window->SetProperty(kShelfItemTypeKey, static_cast<int32_t>(TYPE_DIALOG));
+  ShelfButton* button = GetButtonByID(shelf_id);
+  ASSERT_TRUE(button);
+
+  // Context menu is shown on right button press and no drag view is set.
+  EXPECT_FALSE(shelf_view_->IsShowingMenu());
+  EXPECT_FALSE(shelf_view_->drag_view());
+  generator.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
+  generator.PressRightButton();
+  EXPECT_TRUE(shelf_view_->IsShowingMenu());
+  EXPECT_FALSE(shelf_view_->drag_view());
+
+  // Press left button. Menu should close and drag view is set to |button|.
+  generator.PressLeftButton();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(shelf_view_->IsShowingMenu());
+  EXPECT_EQ(shelf_view_->drag_view(), button);
+  generator.ReleaseLeftButton();
+  EXPECT_FALSE(shelf_view_->drag_view());
 }
 
 TEST_F(ShelfViewTest, MouseWheelScrollOnShelfTransitionsAppList) {

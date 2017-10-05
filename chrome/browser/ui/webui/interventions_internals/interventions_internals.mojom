@@ -1,0 +1,17 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mojom;
+
+struct PreviewsStatus {
+  // The human readable description of the status that will be displayed on
+  // chrome://interventions-internals.
+  string description;
+  bool enabled;
+};
+
+interface InterventionsInternalsPageHandler {
+  // Returns a map of previews modes statuses.
+  GetPreviewsEnabled() => (map<string, PreviewsStatus> statuses);
+};

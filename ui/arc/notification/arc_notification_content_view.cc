@@ -84,7 +84,8 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
 
     // TODO(yoshiki): Use a better tigger (eg. focusing EditText on
     // notification) than clicking (crbug.com/697379).
-    if (event->type() == ui::ET_MOUSE_PRESSED)
+    if (event->type() == ui::ET_MOUSE_PRESSED ||
+        event->type() == ui::ET_GESTURE_TAP)
       owner_->Activate();
 
     views::Widget* widget = owner_->GetWidget();
@@ -412,6 +413,11 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
   if (!control_buttons_view_)
     return;
 
+  // If the visibility change is ongoing, skip this method to prevent an
+  // infinite loop.
+  if (updating_control_buttons_visibility_)
+    return;
+
   DCHECK(floating_control_buttons_widget_);
 
   const bool target_visiblity =
@@ -420,6 +426,10 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
 
   if (target_visiblity == floating_control_buttons_widget_->IsVisible())
     return;
+
+  // Add the guard to prevent an infinite loop. Changing visibility may generate
+  // an event and it may call thie method again.
+  base::AutoReset<bool> reset(&updating_control_buttons_visibility_, true);
 
   if (target_visiblity)
     floating_control_buttons_widget_->Show();
@@ -558,14 +568,20 @@ void ArcNotificationContentView::Layout() {
 void ArcNotificationContentView::OnPaint(gfx::Canvas* canvas) {
   views::NativeViewHost::OnPaint(canvas);
 
-  // Bail if there is a |surface_| or no item or no snapshot image.
-  if (surface_ || !item_ || item_->GetSnapshot().isNull())
-    return;
-  const gfx::Rect contents_bounds = GetContentsBounds();
-  canvas->DrawImageInt(item_->GetSnapshot(), 0, 0, item_->GetSnapshot().width(),
-                       item_->GetSnapshot().height(), contents_bounds.x(),
-                       contents_bounds.y(), contents_bounds.width(),
-                       contents_bounds.height(), false);
+  if (!surface_ && item_ && !item_->GetSnapshot().isNull()) {
+    // Draw the snapshot if there is no surface and the snapshot is available.
+    const gfx::Rect contents_bounds = GetContentsBounds();
+    canvas->DrawImageInt(
+        item_->GetSnapshot(), 0, 0, item_->GetSnapshot().width(),
+        item_->GetSnapshot().height(), contents_bounds.x(), contents_bounds.y(),
+        contents_bounds.width(), contents_bounds.height(), false);
+  } else {
+    // Draw a blank background otherwise. The height of the view and surface are
+    // not exactly synced and user may see the blank area out of the surface.
+    // This code prevetns an ugly blank area and show white color instead.
+    // This should be removed after b/35786193 is done.
+    canvas->DrawColor(SK_ColorWHITE);
+  }
 }
 
 void ArcNotificationContentView::OnMouseEntered(const ui::MouseEvent&) {
@@ -581,6 +597,9 @@ void ArcNotificationContentView::OnFocus() {
 
   NativeViewHost::OnFocus();
   static_cast<ArcNotificationView*>(parent())->OnContentFocused();
+
+  if (surface_ && surface_->GetAXTreeId() != -1)
+    Activate();
 }
 
 void ArcNotificationContentView::OnBlur() {
@@ -627,11 +646,17 @@ bool ArcNotificationContentView::HandleAccessibleAction(
 
 void ArcNotificationContentView::GetAccessibleNodeData(
     ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_BUTTON;
-  node_data->AddStringAttribute(
-      ui::AX_ATTR_ROLE_DESCRIPTION,
-      l10n_util::GetStringUTF8(
-          IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
+  if (surface_ && surface_->GetAXTreeId() != -1) {
+    node_data->role = ui::AX_ROLE_CLIENT;
+    node_data->AddIntAttribute(ui::AX_ATTR_CHILD_TREE_ID,
+                               surface_->GetAXTreeId());
+  } else {
+    node_data->role = ui::AX_ROLE_BUTTON;
+    node_data->AddStringAttribute(
+        ui::AX_ATTR_ROLE_DESCRIPTION,
+        l10n_util::GetStringUTF8(
+            IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
+  }
   node_data->SetName(accessible_name_);
 }
 
@@ -675,6 +700,12 @@ void ArcNotificationContentView::OnNotificationSurfaceAdded(
     return;
 
   SetSurface(surface);
+
+  // Notify AX_EVENT_CHILDREN_CHANGED to force AXNodeData of this view updated.
+  // As order of OnNotificationSurfaceAdded call is not guaranteed, we are
+  // dispatching the event in both ArcNotificationContentView and
+  // ArcAccessibilityHelperBridge.
+  NotifyAccessibilityEvent(ui::AX_EVENT_CHILDREN_CHANGED, false);
 }
 
 void ArcNotificationContentView::OnNotificationSurfaceRemoved(

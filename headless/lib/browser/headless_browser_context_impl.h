@@ -65,6 +65,7 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   content::PushMessagingService* GetPushMessagingService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
+  content::BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
   content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
       override;
@@ -104,7 +105,9 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
                                   HeadlessWebContentsImpl* child);
 
   // This will be called on the IO thread.
-  void NotifyUrlRequestFailed(net::URLRequest* request, int net_error);
+  void NotifyUrlRequestFailed(net::URLRequest* request,
+                              int net_error,
+                              bool canceled_by_devtools);
 
  private:
   HeadlessBrowserContextImpl(

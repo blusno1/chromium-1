@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_H_
 #define CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_H_
 
-#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -17,6 +16,7 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/app_banner.mojom.h"
 
+class InstallableManager;
 class SkBitmap;
 struct WebApplicationInfo;
 
@@ -52,38 +52,40 @@ class AppBannerManager : public content::WebContentsObserver,
                          public SiteEngagementObserver {
  public:
   enum class State {
-    // The banner pipeline has not yet been triggered for this page load.
+    // The pipeline has not yet been triggered for this page load.
     INACTIVE,
 
-    // The banner pipeline is currently running for this page load.
+    // The pipeline is running for this page load.
     ACTIVE,
 
-    // The banner pipeline is currently waiting for the page manifest to be
-    // fetched.
+    // The pipeline is waiting for the web app manifest to be fetched.
     FETCHING_MANIFEST,
 
-    // The banner pipeline is currently waiting for the installability criteria
-    // to be checked. In this state the pipeline could be paused while waiting
-    // for the site to register a service worker.
+    // The pipeline is waiting for native app data to be fetched.
+    FETCHING_NATIVE_DATA,
+
+    // The pipeline is waiting for the installability criteria to be checked.
+    // In this state, the pipeline could be paused while waiting for a service
+    // worker to be registered..
     PENDING_INSTALLABLE_CHECK,
 
-    // The banner pipeline has finished running, but is waiting for sufficient
+    // The pipeline has finished running, but is waiting for sufficient
     // engagement to trigger the banner.
     PENDING_ENGAGEMENT,
 
-    // The banner has sent the beforeinstallprompt event and is waiting for the
-    // response to the event.
+    // The beforeinstallprompt event has been sent and the pipeline is waiting
+    // for the response.
     SENDING_EVENT,
 
-    // The banner has sent the beforeinstallprompt, and the web page called
-    // prompt on the event while the event was being handled.
+    // The beforeinstallprompt event was sent, and the web page called prompt()
+    // on the event while the event was being handled.
     SENDING_EVENT_GOT_EARLY_PROMPT,
 
-    // The banner pipeline has finished running, but is waiting for the web page
-    // to call prompt on the event.
+    // The pipeline has finished running, but is waiting for the web page to
+    // call prompt() on the event.
     PENDING_PROMPT,
 
-    // The banner pipeline has finished running for this page load and no more
+    // The pipeline has finished running for this page load and no more
     // processing is to be done.
     COMPLETE,
   };
@@ -145,9 +147,13 @@ class AppBannerManager : public content::WebContentsObserver,
   // alerting websites that a banner is about to be created.
   virtual std::string GetBannerType();
 
-  // Returns the ideal and minimum primary icon size requirements.
-  virtual int GetIdealPrimaryIconSizeInPx();
-  virtual int GetMinimumPrimaryIconSizeInPx();
+  // Returns a string parameter for a devtools console message corresponding to
+  // |code|. Returns the empty string if |code| requires no parameter.
+  std::string GetStatusParam(InstallableStatusCode code);
+
+  // Returns true if |has_sufficient_engagement_| is true or IsDebugMode()
+  // returns true.
+  bool HasSufficientEngagement() const;
 
   // Returns true if |triggered_by_devtools_| is true or the
   // kBypassAppBannerEngagementChecks flag is set.
@@ -181,17 +187,21 @@ class AppBannerManager : public content::WebContentsObserver,
   // metric being recorded.
   void RecordDidShowBanner(const std::string& event_name);
 
-  // Reports |code| via a UMA histogram or logs it to the console.
+  // Logs an error message corresponding to |code| to the devtools console
+  // attached to |web_contents|. Does nothing if IsDebugMode() returns false.
   void ReportStatus(content::WebContents* web_contents,
                     InstallableStatusCode code);
 
   // Resets all fetched data for the current page.
   virtual void ResetCurrentPageData();
 
+  // Stops the banner pipeline early.
+  void Terminate();
+
   // Stops the banner pipeline, preventing any outstanding callbacks from
   // running and resetting the manager state. This method is virtual to allow
   // tests to intercept it and verify correct behaviour.
-  virtual void Stop();
+  virtual void StopWithCode(InstallableStatusCode code);
 
   // Sends a message to the renderer that the page has met the requirements to
   // show a banner. The page can respond to cancel the banner (and possibly
@@ -277,6 +287,9 @@ class AppBannerManager : public content::WebContentsObserver,
   // requesting that it be shown later.
   void DisplayAppBanner(bool user_gesture) override;
 
+  // Returns a status code based on the current state, to log when terminating.
+  InstallableStatusCode TerminationCode() const;
+
   // Fetches the data required to display a banner for the current page.
   InstallableManager* manager_;
 
@@ -298,23 +311,8 @@ class AppBannerManager : public content::WebContentsObserver,
   // Whether the current flow was begun via devtools.
   bool triggered_by_devtools_;
 
- public:
-  // A StatusReporter handles the reporting of |InstallableStatusCode|s.
-  class StatusReporter {
-   public:
-    virtual ~StatusReporter() {}
-
-    // Reports whether the StatusReporter is waiting for ReportStatus to be
-    // called.
-    virtual bool Waiting() const = 0;
-
-    // Reports |code| (via a mechanism which depends on the implementation).
-    virtual void ReportStatus(content::WebContents* web_contents,
-                              InstallableStatusCode code) = 0;
-  };
-
- private:
-  std::unique_ptr<StatusReporter> status_reporter_;
+  // Whether the installable status has been logged for this run.
+  bool need_to_log_status_;
 
   // The concrete subclasses of this class are expected to have their lifetimes
   // scoped to the WebContents which they are observing. This allows us to use

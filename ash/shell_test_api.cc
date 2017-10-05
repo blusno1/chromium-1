@@ -18,6 +18,10 @@ ShellTestApi::ShellTestApi() : ShellTestApi(Shell::Get()) {}
 
 ShellTestApi::ShellTestApi(Shell* shell) : shell_(shell) {}
 
+MessageCenterController* ShellTestApi::message_center_controller() {
+  return shell_->message_center_controller_.get();
+}
+
 SystemGestureEventFilter* ShellTestApi::system_gesture_event_filter() {
   return shell_->system_gesture_filter_.get();
 }
@@ -49,8 +53,7 @@ void ShellTestApi::OnLocalStatePrefServiceInitialized(
 }
 
 void ShellTestApi::ResetPowerButtonControllerForTest() {
-  shell_->power_button_controller_ =
-      std::make_unique<PowerButtonController>(shell_->lock_state_controller());
+  shell_->power_button_controller_ = std::make_unique<PowerButtonController>();
 }
 
 }  // namespace ash

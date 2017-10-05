@@ -9,7 +9,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
-#include "components/safe_browsing_db/whitelist_checker_client.h"
+#include "components/safe_browsing/db/whitelist_checker_client.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
@@ -69,6 +69,8 @@ PasswordProtectionRequest::PasswordProtectionRequest(
          trigger_type_ == LoginReputationClientRequest::PASSWORD_REUSE_EVENT);
   DCHECK(trigger_type_ != LoginReputationClientRequest::PASSWORD_REUSE_EVENT ||
          matches_sync_password_ || matching_domains_.size() > 0);
+
+  request_proto_->set_trigger_type(trigger_type_);
 }
 
 PasswordProtectionRequest::~PasswordProtectionRequest() {
@@ -133,7 +135,6 @@ void PasswordProtectionRequest::CheckCachedVerdicts() {
 
 void PasswordProtectionRequest::FillRequestProto() {
   request_proto_->set_page_url(main_frame_url_.spec());
-  request_proto_->set_trigger_type(trigger_type_);
   password_protection_service_->FillUserPopulation(trigger_type_,
                                                    request_proto_.get());
   request_proto_->set_stored_verdict_cnt(
@@ -144,9 +145,18 @@ void PasswordProtectionRequest::FillRequestProto() {
   main_frame->set_frame_index(0 /* main frame */);
   password_protection_service_->FillReferrerChain(
       main_frame_url_, -1 /* tab id not available */, main_frame);
+  bool clicked_through_interstitial =
+      password_protection_service_->UserClickedThroughSBInterstitial(
+          web_contents_);
+  request_proto_->set_clicked_through_interstitial(
+      clicked_through_interstitial);
 
   switch (trigger_type_) {
     case LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE: {
+      UMA_HISTOGRAM_BOOLEAN(
+          "PasswordProtection.UserClickedThroughSBInterstitial."
+          "PasswordFieldOnFocus",
+          clicked_through_interstitial);
       LoginReputationClientRequest::Frame::Form* password_form;
       if (password_form_frame_url_ == main_frame_url_) {
         main_frame->set_has_password_field(true);
@@ -165,11 +175,19 @@ void PasswordProtectionRequest::FillRequestProto() {
       break;
     }
     case LoginReputationClientRequest::PASSWORD_REUSE_EVENT: {
+      UMA_HISTOGRAM_BOOLEAN(
+          "PasswordProtection.UserClickedThroughSBInterstitial."
+          "AnyPasswordEntry",
+          clicked_through_interstitial);
       main_frame->set_has_password_field(password_field_exists_);
       LoginReputationClientRequest::PasswordReuseEvent* reuse_event =
           request_proto_->mutable_password_reuse_event();
       reuse_event->set_is_chrome_signin_password(matches_sync_password_);
       if (matches_sync_password_) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "PasswordProtection.UserClickedThroughSBInterstitial."
+            "SyncPasswordEntry",
+            clicked_through_interstitial);
         reuse_event->set_sync_account_type(
             password_protection_service_->GetSyncAccountType());
         UMA_HISTOGRAM_ENUMERATION(
@@ -178,6 +196,11 @@ void PasswordProtectionRequest::FillRequestProto() {
             LoginReputationClientRequest::PasswordReuseEvent::
                     SyncAccountType_MAX +
                 1);
+      } else {
+        UMA_HISTOGRAM_BOOLEAN(
+            "PasswordProtection.UserClickedThroughSBInterstitial."
+            "ProtectedPasswordEntry",
+            clicked_through_interstitial);
       }
       if (password_protection_service_->IsExtendedReporting() &&
           !password_protection_service_->IsIncognito()) {

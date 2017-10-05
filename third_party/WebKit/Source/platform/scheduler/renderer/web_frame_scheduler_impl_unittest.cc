@@ -7,11 +7,10 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "components/viz/test/ordered_simple_task_runner.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WebTaskRunner.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate_for_test.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
@@ -21,6 +20,8 @@
 
 namespace blink {
 namespace scheduler {
+// To avoid symbol collisions in jumbo builds.
+namespace web_frame_scheduler_impl_unittest {
 
 class WebFrameSchedulerImplTest : public ::testing::Test {
  public:
@@ -31,14 +32,14 @@ class WebFrameSchedulerImplTest : public ::testing::Test {
     clock_.reset(new base::SimpleTestTickClock());
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
     mock_task_runner_ =
-        make_scoped_refptr(new cc::OrderedSimpleTaskRunner(clock_.get(), true));
+        base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(clock_.get(), true);
     delegate_ = SchedulerTqmDelegateForTest::Create(
         mock_task_runner_, base::WrapUnique(new TestTimeSource(clock_.get())));
     scheduler_.reset(new RendererSchedulerImpl(delegate_));
     web_view_scheduler_.reset(
         new WebViewSchedulerImpl(nullptr, nullptr, scheduler_.get(), false));
-    web_frame_scheduler_ =
-        web_view_scheduler_->CreateWebFrameSchedulerImpl(nullptr);
+    web_frame_scheduler_ = web_view_scheduler_->CreateWebFrameSchedulerImpl(
+        nullptr, WebFrameScheduler::FrameType::kSubframe);
   }
 
   void TearDown() override {
@@ -98,7 +99,7 @@ WTF::Closure MakeRepeatingTask(RefPtr<blink::WebTaskRunner> task_runner,
 void RunRepeatingTask(RefPtr<WebTaskRunner> task_runner, int* run_count) {
   ++*run_count;
 
-  WebTaskRunner* task_runner_ptr = task_runner.Get();
+  WebTaskRunner* task_runner_ptr = task_runner.get();
   task_runner_ptr->PostDelayedTask(
       BLINK_FROM_HERE, MakeRepeatingTask(std::move(task_runner), run_count),
       TimeDelta::FromMilliseconds(1));
@@ -247,7 +248,7 @@ TEST_F(WebFrameSchedulerImplTest, PauseAndResume) {
 // Tests if throttling observer interfaces work.
 TEST_F(WebFrameSchedulerImplTest, ThrottlingObserver) {
   std::unique_ptr<MockThrottlingObserver> observer =
-      base::MakeUnique<MockThrottlingObserver>();
+      std::make_unique<MockThrottlingObserver>();
 
   size_t throttled_count = 0u;
   size_t not_throttled_count = 0u;
@@ -285,5 +286,6 @@ TEST_F(WebFrameSchedulerImplTest, ThrottlingObserver) {
   observer->CheckObserverState(throttled_count, not_throttled_count);
 }
 
+}  // namespace web_frame_scheduler_impl_unittest
 }  // namespace scheduler
 }  // namespace blink

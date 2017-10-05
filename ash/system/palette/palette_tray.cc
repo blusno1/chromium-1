@@ -9,7 +9,6 @@
 #include "ash/public/cpp/config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
-#include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
@@ -67,15 +66,6 @@ constexpr int kPaddingBetweenTitleAndSeparator = 3;
 
 // Color of the separator.
 const SkColor kPaletteSeparatorColor = SkColorSetARGB(0x1E, 0x00, 0x00, 0x00);
-
-// Returns true if we are in a user session that can show the stylus tools.
-bool IsInUserSession() {
-  SessionController* session_controller = Shell::Get()->session_controller();
-  return !session_controller->IsUserSessionBlocked() &&
-         session_controller->GetSessionState() ==
-             session_manager::SessionState::ACTIVE &&
-         !session_controller->IsKioskSession();
-}
 
 // Returns true if the |palette_tray| is on an internal display or on every
 // display if requested from the command line.
@@ -196,9 +186,6 @@ PaletteTray::PaletteTray(Shelf* shelf)
 
   Shell::Get()->AddShellObserver(this);
   ui::InputDeviceManager::GetInstance()->AddObserver(this);
-
-  if (!drag_controller())
-    set_drag_controller(base::MakeUnique<TrayDragController>(shelf));
 }
 
 PaletteTray::~PaletteTray() {
@@ -288,14 +275,16 @@ void PaletteTray::OnStylusStateChanged(ui::StylusState stylus_state) {
 
   // Don't do anything if the palette should not be shown or if the user has
   // disabled it all-together.
-  if (!IsInUserSession() || !palette_delegate->ShouldShowPalette())
+  if (!palette_utils::IsInUserSession() ||
+      !palette_delegate->ShouldShowPalette()) {
     return;
+  }
 
   // Auto show/hide the palette if allowed by the user.
   if (palette_delegate->ShouldAutoOpenPalette()) {
     if (stylus_state == ui::StylusState::REMOVED && !bubble_) {
       is_bubble_auto_opened_ = true;
-      ShowBubble();
+      ShowBubble(false /* show_by_click */);
     } else if (stylus_state == ui::StylusState::INSERTED && bubble_) {
       HidePalette();
     }
@@ -308,9 +297,12 @@ void PaletteTray::OnStylusStateChanged(ui::StylusState stylus_state) {
 
 void PaletteTray::BubbleViewDestroyed() {
   palette_tool_manager_->NotifyViewsDestroyed();
-  // The tray button remains active if the current active tool is a mode.
-  SetIsActive(palette_tool_manager_->GetActiveTool(PaletteGroup::MODE) !=
-              PaletteToolId::NONE);
+  // Opening the palette via an accelerator will close any open widget and then
+  // open a new one. This method is called when the widget is closed, but due to
+  // async close the new bubble may have already been created. If this happens,
+  // |bubble_| will not be null.
+  SetIsActive(bubble_ || palette_tool_manager_->GetActiveTool(
+                             PaletteGroup::MODE) != PaletteToolId::NONE);
 }
 
 void PaletteTray::OnMouseEnteredView() {}
@@ -400,6 +392,8 @@ void PaletteTray::Initialize() {
   if (!delegate)
     return;
 
+  TrayBackgroundView::Initialize();
+
   // OnPaletteEnabledPrefChanged will get called with the initial pref value,
   // which will take care of showing the palette.
   palette_enabled_subscription_ = delegate->AddPaletteEnableListener(base::Bind(
@@ -416,20 +410,14 @@ bool PaletteTray::PerformAction(const ui::Event& event) {
     return true;
   }
 
-  // Deactivate the active tool if there is one.
-  PaletteToolId active_tool_id =
-      palette_tool_manager_->GetActiveTool(PaletteGroup::MODE);
-  if (active_tool_id != PaletteToolId::NONE) {
-    palette_tool_manager_->DeactivateTool(active_tool_id);
-    // TODO(sammiequon): Investigate whether we should removed |is_switched|
-    // from PaletteToolIdToPaletteModeCancelType.
-    RecordPaletteModeCancellation(PaletteToolIdToPaletteModeCancelType(
-        active_tool_id, false /*is_switched*/));
+  // Do not show the bubble if there was an action on the palette tray while
+  // there was an active tool.
+  if (DeactivateActiveTool()) {
     SetIsActive(false);
     return true;
   }
 
-  ShowBubble();
+  ShowBubble(event.IsMouseEvent() || event.IsGestureEvent());
   return true;
 }
 
@@ -437,11 +425,15 @@ void PaletteTray::CloseBubble() {
   HidePalette();
 }
 
-void PaletteTray::ShowBubble() {
+void PaletteTray::ShowBubble(bool show_by_click) {
   if (bubble_)
     return;
 
   DCHECK(tray_container());
+
+  // There may still be an active tool if show bubble was called from an
+  // accelerator.
+  DeactivateActiveTool();
 
   views::TrayBubbleView::InitParams init_params;
   init_params.delegate = this;
@@ -451,6 +443,7 @@ void PaletteTray::ShowBubble() {
   init_params.min_width = kPaletteWidth;
   init_params.max_width = kPaletteWidth;
   init_params.close_on_deactivate = true;
+  init_params.show_by_click = show_by_click;
 
   // TODO(tdanderson): Refactor into common row layout code.
   // TODO(tdanderson|jdufault): Add material design ripple effects to the menu
@@ -483,7 +476,7 @@ void PaletteTray::ShowBubble() {
     bubble_view->AddChildView(view.view);
 
   // Show the bubble.
-  bubble_ = base::MakeUnique<ash::TrayBubbleWrapper>(this, bubble_view);
+  bubble_ = base::MakeUnique<TrayBubbleWrapper>(this, bubble_view);
   SetIsActive(true);
 }
 
@@ -528,10 +521,25 @@ void PaletteTray::OnHasSeenStylusPrefChanged() {
   UpdateIconVisibility();
 }
 
+bool PaletteTray::DeactivateActiveTool() {
+  PaletteToolId active_tool_id =
+      palette_tool_manager_->GetActiveTool(PaletteGroup::MODE);
+  if (active_tool_id != PaletteToolId::NONE) {
+    palette_tool_manager_->DeactivateTool(active_tool_id);
+    // TODO(sammiequon): Investigate whether we should removed |is_switched|
+    // from PaletteToolIdToPaletteModeCancelType.
+    RecordPaletteModeCancellation(PaletteToolIdToPaletteModeCancelType(
+        active_tool_id, false /*is_switched*/));
+    return true;
+  }
+
+  return false;
+}
+
 void PaletteTray::UpdateIconVisibility() {
   SetVisible(has_seen_stylus_ && is_palette_enabled_ &&
              palette_utils::HasStylusInput() && ShouldShowOnDisplay(this) &&
-             IsInUserSession());
+             palette_utils::IsInUserSession());
 }
 
 // TestApi. For testing purposes.

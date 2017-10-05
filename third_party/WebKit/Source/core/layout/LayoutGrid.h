@@ -106,6 +106,8 @@ class LayoutGrid final : public LayoutBlock {
   LayoutUnit GridGap(GridTrackSizingDirection) const;
   LayoutUnit GridItemOffset(GridTrackSizingDirection) const;
 
+  StyleContentAlignmentData ContentAlignment(GridTrackSizingDirection) const;
+
  protected:
   ItemPosition SelfAlignmentNormalBehavior(
       const LayoutBox* child = nullptr) const override {
@@ -210,8 +212,6 @@ class LayoutGrid final : public LayoutBlock {
   LayoutUnit GridAreaBreadthForChildIncludingAlignmentOffsets(
       const LayoutBox&,
       GridTrackSizingDirection) const;
-
-  void ApplyStretchAlignmentToTracksIfNeeded(GridTrackSizingDirection);
 
   void PaintChildren(const PaintInfo&, const LayoutPoint&) const override;
 

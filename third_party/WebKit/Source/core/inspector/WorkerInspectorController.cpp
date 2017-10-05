@@ -43,8 +43,8 @@
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/LayoutTestSupport.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WebThreadSupportingGC.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -73,8 +73,8 @@ void WorkerInspectorController::ConnectFrontend(int session_id) {
   InspectorSession* session = new InspectorSession(
       this, probe_sink_.Get(), session_id, debugger_->GetV8Inspector(),
       debugger_->ContextGroupId(thread_), nullptr);
-  session->Append(
-      new InspectorLogAgent(thread_->GetConsoleMessageStorage(), nullptr));
+  session->Append(new InspectorLogAgent(thread_->GetConsoleMessageStorage(),
+                                        nullptr, session->V8Session()));
   if (thread_->GlobalScope()->IsWorkerGlobalScope() &&
       RuntimeEnabledFeatures::OffMainThreadFetchEnabled()) {
     DCHECK(ToWorkerGlobalScope(thread_->GlobalScope())->GetResourceFetcher());

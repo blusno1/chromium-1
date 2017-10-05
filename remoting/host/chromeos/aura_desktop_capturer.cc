@@ -7,13 +7,13 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "remoting/host/chromeos/skia_bitmap_desktop_frame.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
 #include "ash/shell.h"
 #endif
 
@@ -25,7 +25,7 @@ AuraDesktopCapturer::AuraDesktopCapturer()
 AuraDesktopCapturer::~AuraDesktopCapturer() {}
 
 void AuraDesktopCapturer::Start(webrtc::DesktopCapturer::Callback* callback) {
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
   if (ash::Shell::HasInstance()) {
     // TODO(kelvinp): Use ash::Shell::GetAllRootWindows() when multiple monitor
     // support is implemented.

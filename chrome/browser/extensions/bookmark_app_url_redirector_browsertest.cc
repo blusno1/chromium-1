@@ -5,8 +5,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/bookmark_app_helper.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/prerender/prerender_manager.h"
+#include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
@@ -19,6 +22,7 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/common/context_menu_params.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -26,6 +30,7 @@
 #include "extensions/browser/notification_types.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "net/url_request/url_fetcher.h"
 
 using namespace net::test_server;
 
@@ -38,6 +43,28 @@ enum class LinkTarget {
 
 namespace {
 
+// Inserts an iframe in the main frame of |web_contents|.
+void InsertIFrame(content::WebContents* web_contents) {
+  ASSERT_TRUE(
+      content::ExecuteScript(web_contents,
+                             "let iframe = document.createElement('iframe');"
+                             "document.body.appendChild(iframe);"));
+}
+
+// Returns a subframe in |web_contents|.
+content::RenderFrameHost* GetIFrame(content::WebContents* web_contents) {
+  const auto all_frames = web_contents->GetAllFrames();
+  const content::RenderFrameHost* main_frame = web_contents->GetMainFrame();
+
+  DCHECK_EQ(2u, all_frames.size());
+  auto it = std::find_if(all_frames.begin(), all_frames.end(),
+                         [main_frame](content::RenderFrameHost* frame) {
+                           return main_frame != frame;
+                         });
+  DCHECK(it != all_frames.end());
+  return *it;
+}
+
 // Creates an <a> element, sets its href and target to |href| and |target|
 // respectively, adds it to the DOM, and clicks on it. Returns once the link
 // has loaded.
@@ -47,15 +74,51 @@ void ClickLinkAndWait(content::WebContents* web_contents,
   ui_test_utils::UrlLoadObserver url_observer(
       target_url, content::NotificationService::AllSources());
   std::string script = base::StringPrintf(
+      "(() => {"
       "const link = document.createElement('a');"
       "link.href = '%s';"
       "link.target = '%s';"
       "document.body.appendChild(link);"
       "const event = new MouseEvent('click', {'view': window});"
-      "link.dispatchEvent(event);",
+      "link.dispatchEvent(event);"
+      "})();",
       target_url.spec().c_str(),
       target == LinkTarget::SELF ? "_self" : "_blank");
-  EXPECT_TRUE(content::ExecuteScript(web_contents, script));
+  ASSERT_TRUE(content::ExecuteScript(web_contents, script));
+  url_observer.Wait();
+}
+
+// Creates a <form> element with a |target_url| action and |method| method. Adds
+// the form to the DOM with a button and clicks the button. Returns once
+// |target_url| has been loaded.
+//
+// If |method| is net::URLFetcher::RequestType::GET, |target_url| should contain
+// an empty query string, since that URL will be loaded when submitting the form
+// e.g. "https://www.example.com/?".
+void SubmitFormAndWait(content::WebContents* web_contents,
+                       const GURL& target_url,
+                       net::URLFetcher::RequestType method) {
+  if (method == net::URLFetcher::RequestType::GET) {
+    ASSERT_TRUE(target_url.has_query());
+    ASSERT_TRUE(target_url.query().empty());
+  }
+
+  ui_test_utils::UrlLoadObserver url_observer(
+      target_url, content::NotificationService::AllSources());
+  std::string script = base::StringPrintf(
+      "(() => {"
+      "const form = document.createElement('form');"
+      "form.action = '%s';"
+      "form.method = '%s';"
+      "const button = document.createElement('input');"
+      "button.type = 'submit';"
+      "form.appendChild(button);"
+      "document.body.appendChild(form);"
+      "button.dispatchEvent(new MouseEvent('click', {'view': window}));"
+      "})();",
+      target_url.spec().c_str(),
+      method == net::URLFetcher::RequestType::POST ? "post" : "get");
+  ASSERT_TRUE(content::ExecuteScript(web_contents, script));
   url_observer.Wait();
 }
 
@@ -65,6 +128,11 @@ void NavigateToURLAndWait(chrome::NavigateParams* params) {
       params->url, content::NotificationService::AllSources());
   ui_test_utils::NavigateToURL(params);
   url_observer.Wait();
+}
+
+// Wrapper so that we can use base::Bind with NavigateToURL.
+void NavigateToURLWrapper(chrome::NavigateParams* params) {
+  ui_test_utils::NavigateToURL(params);
 }
 
 }  // namespace
@@ -91,6 +159,7 @@ class BookmarkAppUrlRedirectorBrowserTest : public ExtensionBrowserTest {
         base::BindRepeating([](const HttpRequest& request) {
           auto response = base::MakeUnique<BasicHttpResponse>();
           response->set_content_type("text/html");
+          response->AddCustomHeader("Access-Control-Allow-Origin", "*");
           return static_cast<std::unique_ptr<HttpResponse>>(
               std::move(response));
         }));
@@ -136,14 +205,33 @@ class BookmarkAppUrlRedirectorBrowserTest : public ExtensionBrowserTest {
     return chrome::FindLastActive();
   }
 
+  // Navigates the active tab in |browser| to the launching page.
+  void NavigateToLaunchingPage(Browser* browser) {
+    ui_test_utils::NavigateToURL(browser, GetLaunchingPageURL());
+  }
+
   // Navigates the active tab to the launching page.
-  void NavigateToLaunchingPage() {
-    GURL launching_page_url =
-        embedded_test_server()->GetURL(kLaunchingPagePath);
-    ui_test_utils::UrlLoadObserver url_observer(
-        launching_page_url, content::NotificationService::AllSources());
-    ui_test_utils::NavigateToURL(browser(), launching_page_url);
-    url_observer.Wait();
+  void NavigateToLaunchingPage() { NavigateToLaunchingPage(browser()); }
+
+  // Checks that, after running |action|, the initial tab's window doesn't have
+  // any new tabs, the initial tab did not navigate, and that no new windows
+  // have been opened.
+  void TestTabActionDoesNotNavigateOrOpenAppWindow(
+      const base::Closure& action) {
+    size_t num_browsers = chrome::GetBrowserCount(profile());
+    int num_tabs = browser()->tab_strip_model()->count();
+    content::WebContents* initial_tab =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    GURL initial_url = initial_tab->GetLastCommittedURL();
+
+    action.Run();
+
+    EXPECT_EQ(num_browsers, chrome::GetBrowserCount(profile()));
+    EXPECT_EQ(browser(), chrome::FindLastActive());
+    EXPECT_EQ(num_tabs, browser()->tab_strip_model()->count());
+    EXPECT_EQ(initial_tab,
+              browser()->tab_strip_model()->GetActiveWebContents());
+    EXPECT_EQ(initial_url, initial_tab->GetLastCommittedURL());
   }
 
   // Checks that, after running |action|, the initial tab's window doesn't have
@@ -171,25 +259,68 @@ class BookmarkAppUrlRedirectorBrowserTest : public ExtensionBrowserTest {
   }
 
   // Checks that no new windows are opened after running |action| and that the
-  // existing window is still the active one and navigated to |target_url|.
-  void TestTabActionDoesNotOpenAppWindow(const GURL& target_url,
+  // existing |browser| window is still the active one and navigated to
+  // |target_url|. Returns true if there were no errors.
+  bool TestTabActionDoesNotOpenAppWindow(Browser* browser,
+                                         const GURL& target_url,
                                          const base::Closure& action) {
     content::WebContents* initial_tab =
-        browser()->tab_strip_model()->GetActiveWebContents();
-    int num_tabs = browser()->tab_strip_model()->count();
-    size_t num_browsers = chrome::GetBrowserCount(profile());
+        browser->tab_strip_model()->GetActiveWebContents();
+    int num_tabs = browser->tab_strip_model()->count();
+    size_t num_browsers = chrome::GetBrowserCount(browser->profile());
 
     action.Run();
 
-    EXPECT_EQ(num_tabs, browser()->tab_strip_model()->count());
+    EXPECT_EQ(num_tabs, browser->tab_strip_model()->count());
+    EXPECT_EQ(num_browsers, chrome::GetBrowserCount(browser->profile()));
+    EXPECT_EQ(browser, chrome::FindLastActive());
+    EXPECT_EQ(initial_tab, browser->tab_strip_model()->GetActiveWebContents());
+    EXPECT_EQ(target_url, initial_tab->GetLastCommittedURL());
+
+    return !HasFailure();
+  }
+
+  // Checks that no new windows are opened after running |action| and that the
+  // main browser window is still the active one and navigated to |target_url|.
+  // Returns true if there were no errors.
+  bool TestTabActionDoesNotOpenAppWindow(const GURL& target_url,
+                                         const base::Closure& action) {
+    return TestTabActionDoesNotOpenAppWindow(browser(), target_url, action);
+  }
+
+  // Checks that no new windows are opened after running |action| and that the
+  // iframe in the initial tab navigated to |target_url|. Returns true if there
+  // were no errors.
+  bool TestIFrameActionDoesNotOpenAppWindow(const GURL& target_url,
+                                            const base::Closure& action) {
+    size_t num_browsers = chrome::GetBrowserCount(profile());
+    int num_tabs = browser()->tab_strip_model()->count();
+    content::WebContents* initial_tab =
+        browser()->tab_strip_model()->GetActiveWebContents();
+
+    action.Run();
+
     EXPECT_EQ(num_browsers, chrome::GetBrowserCount(profile()));
     EXPECT_EQ(browser(), chrome::FindLastActive());
-    EXPECT_EQ(initial_tab,
-              browser()->tab_strip_model()->GetActiveWebContents());
-    EXPECT_EQ(target_url, initial_tab->GetLastCommittedURL());
+    EXPECT_EQ(num_tabs, browser()->tab_strip_model()->count());
+
+    // When Site Isolation is enabled, navigating the iframe to a different
+    // origin causes the original iframe's RenderFrameHost to be deleted.
+    // So we retrieve the iframe's RenderFrameHost again.
+    EXPECT_EQ(target_url, GetIFrame(initial_tab)->GetLastCommittedURL());
+
+    return !HasFailure();
   }
 
   void ResetFeatureList() { scoped_feature_list_.reset(); }
+
+  GURL GetLaunchingPageURL() {
+    // We use "localhost" as the host of the launching page, so that it has a
+    // different origin than that the of the app. The resolved URL of the
+    // launching page would have the same host as that of the app, but the
+    // URLs used in our NavigationThrottle are not resolved.
+    return embedded_test_server()->GetURL("localhost", kLaunchingPagePath);
+  }
 
  private:
   const Extension* test_bookmark_app_;
@@ -273,60 +404,58 @@ IN_PROC_BROWSER_TEST_P(BookmarkAppUrlRedirectorNavigationBrowserTest,
 // by the end of the navigation, the transition type is
 // PAGE_TRANSITION_AUTO_SUBFRAME/PAGE_TRANSITON_MANUAL_SUBFRAME.
 IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest,
-                       SubframeNavigation) {
+                       AutoSubframeNavigation) {
   InstallTestBookmarkApp();
   NavigateToLaunchingPage();
 
-  size_t num_browsers = chrome::GetBrowserCount(profile());
-  int num_tabs = browser()->tab_strip_model()->count();
   content::WebContents* initial_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
+  InsertIFrame(initial_tab);
 
-  ASSERT_TRUE(
-      content::ExecuteScript(initial_tab,
-                             "let iframe = document.createElement('iframe');"
-                             "document.body.appendChild(iframe);"));
+  content::RenderFrameHost* iframe = GetIFrame(initial_tab);
+  const GURL app_url = embedded_test_server()->GetURL(kAppUrlPath);
 
-  auto all_frames = initial_tab->GetAllFrames();
-  content::RenderFrameHost* main_frame = initial_tab->GetMainFrame();
-  ASSERT_EQ(2u, all_frames.size());
-  auto it = std::find_if(all_frames.begin(), all_frames.end(),
-                         [main_frame](content::RenderFrameHost* frame) {
-                           return main_frame != frame;
-                         });
-  ASSERT_NE(all_frames.end(), it);
-  content::RenderFrameHost* iframe = *it;
+  chrome::NavigateParams params(browser(), app_url, ui::PAGE_TRANSITION_LINK);
+  params.frame_tree_node_id = iframe->GetFrameTreeNodeId();
+  content::TestFrameNavigationObserver observer(iframe);
+  TestIFrameActionDoesNotOpenAppWindow(
+      app_url, base::Bind(&NavigateToURLWrapper, &params));
 
-  {
-    content::TestFrameNavigationObserver observer(iframe);
-    const GURL app_url = embedded_test_server()->GetURL(kAppUrlPath);
-    chrome::NavigateParams params(browser(), app_url, ui::PAGE_TRANSITION_LINK);
-    params.frame_tree_node_id = iframe->GetFrameTreeNodeId();
-    ui_test_utils::NavigateToURL(&params);
-    ASSERT_TRUE(ui::PageTransitionCoreTypeIs(
-        observer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+  ASSERT_TRUE(ui::PageTransitionCoreTypeIs(observer.transition_type(),
+                                           ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+}
 
-    EXPECT_EQ(num_browsers, chrome::GetBrowserCount(profile()));
-    EXPECT_EQ(browser(), chrome::FindLastActive());
-    EXPECT_EQ(num_tabs, browser()->tab_strip_model()->count());
-    EXPECT_EQ(app_url, iframe->GetLastCommittedURL());
-  }
+IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest,
+                       ManualSubframeNavigation) {
+  InstallTestBookmarkApp();
+  NavigateToLaunchingPage();
+
+  content::WebContents* initial_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  InsertIFrame(initial_tab);
 
   {
-    content::TestFrameNavigationObserver observer(iframe);
-    const GURL in_scope_url = embedded_test_server()->GetURL(kInScopeUrlPath);
-    chrome::NavigateParams params(browser(), in_scope_url,
+    // Navigate the iframe once, so that the next navigation is a
+    // MANUAL_SUBFRAME navigation.
+    content::RenderFrameHost* iframe = GetIFrame(initial_tab);
+    chrome::NavigateParams params(browser(), GetLaunchingPageURL(),
                                   ui::PAGE_TRANSITION_LINK);
     params.frame_tree_node_id = iframe->GetFrameTreeNodeId();
-    ui_test_utils::NavigateToURL(&params);
-    ASSERT_TRUE(ui::PageTransitionCoreTypeIs(
-        observer.transition_type(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-
-    EXPECT_EQ(num_browsers, chrome::GetBrowserCount(profile()));
-    EXPECT_EQ(browser(), chrome::FindLastActive());
-    EXPECT_EQ(num_tabs, browser()->tab_strip_model()->count());
-    EXPECT_EQ(in_scope_url, iframe->GetLastCommittedURL());
+    ASSERT_TRUE(TestIFrameActionDoesNotOpenAppWindow(
+        GetLaunchingPageURL(), base::Bind(&NavigateToURLWrapper, &params)));
   }
+
+  content::RenderFrameHost* iframe = GetIFrame(initial_tab);
+  const GURL app_url = embedded_test_server()->GetURL(kAppUrlPath);
+
+  chrome::NavigateParams params(browser(), app_url, ui::PAGE_TRANSITION_LINK);
+  params.frame_tree_node_id = iframe->GetFrameTreeNodeId();
+  content::TestFrameNavigationObserver observer(iframe);
+  TestIFrameActionDoesNotOpenAppWindow(
+      app_url, base::Bind(&NavigateToURLWrapper, &params));
+
+  ASSERT_TRUE(ui::PageTransitionCoreTypeIs(
+      observer.transition_type(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
 }
 
 // Tests that clicking a link with target="_self" to the app's app_url opens the
@@ -369,6 +498,162 @@ IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest, OutOfScopeUrlSelf) {
       base::Bind(&ClickLinkAndWait,
                  browser()->tab_strip_model()->GetActiveWebContents(),
                  out_of_scope_url, LinkTarget::SELF));
+}
+
+// Tests that submitting a form using POST does not open a new app window.
+IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest,
+                       PostFormSubmission) {
+  InstallTestBookmarkApp();
+  NavigateToLaunchingPage();
+
+  const GURL in_scope_url = embedded_test_server()->GetURL(kInScopeUrlPath);
+  TestTabActionDoesNotOpenAppWindow(
+      in_scope_url,
+      base::Bind(&SubmitFormAndWait,
+                 browser()->tab_strip_model()->GetActiveWebContents(),
+                 in_scope_url, net::URLFetcher::RequestType::POST));
+}
+
+// Tests that submitting a form using GET does not open a new app window.
+IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest, GetFormSubmission) {
+  InstallTestBookmarkApp();
+  NavigateToLaunchingPage();
+
+  GURL::Replacements replacements;
+  replacements.SetQuery("", url::Component(0, 0));
+  const GURL in_scope_form_url = embedded_test_server()
+                                     ->GetURL(kInScopeUrlPath)
+                                     .ReplaceComponents(replacements);
+  TestTabActionDoesNotOpenAppWindow(
+      in_scope_form_url,
+      base::Bind(&SubmitFormAndWait,
+                 browser()->tab_strip_model()->GetActiveWebContents(),
+                 in_scope_form_url, net::URLFetcher::RequestType::GET));
+}
+
+// Tests that prerender links don't open the app.
+IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest, PrerenderLinks) {
+  prerender::PrerenderManager::SetMode(
+      prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
+
+  InstallTestBookmarkApp();
+  NavigateToLaunchingPage();
+
+  TestTabActionDoesNotNavigateOrOpenAppWindow(base::Bind(
+      [](content::WebContents* web_contents, const GURL& target_url) {
+        std::string script = base::StringPrintf(
+            "(() => {"
+            "const prerender_link = document.createElement('link');"
+            "prerender_link.rel = 'prerender';"
+            "prerender_link.href = '%s';"
+            "prerender_link.addEventListener('webkitprerenderstop',"
+            "() => window.domAutomationController.send(true));"
+            "document.body.appendChild(prerender_link);"
+            "})();",
+            target_url.spec().c_str());
+        bool result;
+        ASSERT_TRUE(content::ExecuteScriptAndExtractBool(web_contents, script,
+                                                         &result));
+        ASSERT_TRUE(result);
+      },
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      embedded_test_server()->GetURL(kInScopeUrlPath)));
+}
+
+// Tests fetch calls don't open a new App window.
+IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest, Fetch) {
+  InstallTestBookmarkApp();
+  NavigateToLaunchingPage();
+
+  TestTabActionDoesNotNavigateOrOpenAppWindow(base::Bind(
+      [](content::WebContents* web_contents, const GURL& target_url) {
+        std::string script = base::StringPrintf(
+            "(() => {"
+            "fetch('%s').then(response => {"
+            "  window.domAutomationController.send(response.ok);"
+            "});"
+            "})();",
+            target_url.spec().c_str());
+        bool result;
+        ASSERT_TRUE(content::ExecuteScriptAndExtractBool(web_contents, script,
+                                                         &result));
+        ASSERT_TRUE(result);
+      },
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      embedded_test_server()->GetURL(kInScopeUrlPath)));
+}
+
+// Tests that clicking "Open link in incognito window" to an in-scope URL opens
+// an incognito window and not an app window.
+IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest, OpenInIncognito) {
+  InstallTestBookmarkApp();
+  NavigateToLaunchingPage();
+
+  size_t num_browsers = chrome::GetBrowserCount(profile());
+  int num_tabs = browser()->tab_strip_model()->count();
+  content::WebContents* initial_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  GURL initial_url = initial_tab->GetLastCommittedURL();
+
+  const GURL in_scope_url = embedded_test_server()->GetURL(kInScopeUrlPath);
+  ui_test_utils::UrlLoadObserver url_observer(
+      in_scope_url, content::NotificationService::AllSources());
+  content::ContextMenuParams params;
+  params.page_url = initial_url;
+  params.link_url = in_scope_url;
+  TestRenderViewContextMenu menu(initial_tab->GetMainFrame(), params);
+  menu.Init();
+  menu.ExecuteCommand(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
+                      0 /* event_flags */);
+  url_observer.Wait();
+
+  Browser* incognito_browser = chrome::FindLastActive();
+  EXPECT_EQ(incognito_browser->profile(), profile()->GetOffTheRecordProfile());
+  EXPECT_NE(browser(), incognito_browser);
+  EXPECT_EQ(in_scope_url, incognito_browser->tab_strip_model()
+                              ->GetActiveWebContents()
+                              ->GetLastCommittedURL());
+
+  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(profile()));
+  EXPECT_EQ(num_tabs, browser()->tab_strip_model()->count());
+  EXPECT_EQ(initial_tab, browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_EQ(initial_url, initial_tab->GetLastCommittedURL());
+}
+
+// Tests that clicking a link to an in-scope URL when in incognito does not open
+// an App window.
+IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest,
+                       InScopeUrlIncognito) {
+  InstallTestBookmarkApp();
+  Browser* incognito_browser = CreateIncognitoBrowser();
+  NavigateToLaunchingPage(incognito_browser);
+
+  const GURL in_scope_url = embedded_test_server()->GetURL(kInScopeUrlPath);
+  TestTabActionDoesNotOpenAppWindow(
+      incognito_browser, in_scope_url,
+      base::Bind(&ClickLinkAndWait,
+                 incognito_browser->tab_strip_model()->GetActiveWebContents(),
+                 in_scope_url, LinkTarget::SELF));
+}
+
+// Tests that clicking links inside a website for an installed app doesn't open
+// a new browser window.
+IN_PROC_BROWSER_TEST_F(BookmarkAppUrlRedirectorBrowserTest,
+                       InWebsiteNavigation) {
+  InstallTestBookmarkApp();
+
+  // Navigate to app's page. Shouldn't open a new window.
+  const GURL app_url = embedded_test_server()->GetURL(kAppUrlPath);
+  chrome::NavigateParams params(browser(), app_url, ui::PAGE_TRANSITION_TYPED);
+  ASSERT_TRUE(TestTabActionDoesNotOpenAppWindow(
+      app_url, base::Bind(&NavigateToURLWrapper, &params)));
+
+  const GURL in_scope_url = embedded_test_server()->GetURL(kInScopeUrlPath);
+  TestTabActionDoesNotOpenAppWindow(
+      in_scope_url,
+      base::Bind(&ClickLinkAndWait,
+                 browser()->tab_strip_model()->GetActiveWebContents(),
+                 in_scope_url, LinkTarget::SELF));
 }
 
 // Tests that clicking links inside the app doesn't open new browser windows.

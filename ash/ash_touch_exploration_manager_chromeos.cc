@@ -4,6 +4,9 @@
 
 #include "ash/ash_touch_exploration_manager_chromeos.h"
 
+#include <vector>
+
+#include "ash/accessibility/accessibility_focus_ring_controller.h"
 #include "ash/accessibility_delegate.h"
 #include "ash/keyboard/keyboard_observer_register.h"
 #include "ash/public/cpp/app_types.h"
@@ -18,6 +21,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/chromeos/touch_exploration_controller.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -27,9 +31,6 @@ AshTouchExplorationManager::AshTouchExplorationManager(
     RootWindowController* root_window_controller)
     : root_window_controller_(root_window_controller),
       audio_handler_(chromeos::CrasAudioHandler::Get()),
-      enable_chromevox_arc_support_(
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              chromeos::switches::kEnableChromeVoxArcSupport)),
       keyboard_observer_(this) {
   Shell::Get()->AddShellObserver(this);
   Shell::Get()->system_tray_notifier()->AddAccessibilityObserver(this);
@@ -175,9 +176,8 @@ void AshTouchExplorationManager::UpdateTouchExplorationState() {
   // See crbug.com/603745 for more details.
   const bool pass_through_surface =
       wm::GetActiveWindow() &&
-      wm::GetActiveWindow()->GetProperty(aura::client::kAppType) ==
-          static_cast<int>(ash::AppType::ARC_APP) &&
-      !enable_chromevox_arc_support_;
+      wm::GetActiveWindow()->GetProperty(
+          aura::client::kAccessibilityTouchExplorationPassThrough);
 
   const bool spoken_feedback_enabled =
       Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled();
@@ -202,7 +202,10 @@ void AshTouchExplorationManager::UpdateTouchExplorationState() {
       const gfx::Rect work_area = display.work_area();
       touch_exploration_controller_->SetExcludeBounds(work_area);
       SilenceSpokenFeedback();
-      Shell::Get()->accessibility_delegate()->ClearFocusHighlight();
+      // Clear the focus highlight.
+      AccessibilityFocusRingController::GetInstance()->SetFocusRing(
+          std::vector<gfx::Rect>(),
+          AccessibilityFocusRingController::PERSIST_FOCUS_RING);
     } else {
       touch_exploration_controller_->SetExcludeBounds(gfx::Rect());
     }

@@ -7,9 +7,17 @@
 #include <algorithm>
 
 #include "base/time/time.h"
+#include "net/cert/asn1_util.h"
 #include "net/cert/internal/cert_errors.h"
+#include "net/cert/internal/extended_key_usage.h"
+#include "net/cert/internal/parsed_certificate.h"
+#include "net/cert/internal/verify_name_match.h"
+#include "net/cert/internal/verify_signed_data.h"
+#include "net/cert/x509_util.h"
 #include "net/der/encode_values.h"
+#include "third_party/boringssl/src/include/openssl/bytestring.h"
 #include "third_party/boringssl/src/include/openssl/digest.h"
+#include "third_party/boringssl/src/include/openssl/mem.h"
 #include "third_party/boringssl/src/include/openssl/sha.h"
 
 namespace net {
@@ -144,6 +152,21 @@ bool ParseCertStatus(const der::Input& raw_tlv, OCSPCertStatus* out) {
   }
 
   return !parser.HasMore();
+}
+
+// Writes the hash of |value| as an OCTET STRING to |cbb|, using |hash_type| as
+// the algorithm. Returns true on success.
+bool AppendHashAsOctetString(const EVP_MD* hash_type,
+                             CBB* cbb,
+                             const der::Input& value) {
+  CBB octet_string;
+  unsigned hash_len;
+  uint8_t hash_buffer[EVP_MAX_MD_SIZE];
+
+  return CBB_add_asn1(cbb, &octet_string, CBS_ASN1_OCTETSTRING) &&
+         EVP_Digest(value.UnsafeData(), value.Length(), hash_buffer, &hash_len,
+                    hash_type, nullptr) &&
+         CBB_add_bytes(&octet_string, hash_buffer, hash_len) && CBB_flush(cbb);
 }
 
 }  // namespace
@@ -438,16 +461,39 @@ bool VerifyHash(const EVP_MD* type,
   return hash == der::Input(value_hash, value_hash_len);
 }
 
-// Checks that the input |id_tlv| parses to a valid CertID and matches the
-// issuer |issuer| name and key, as well as the serial number |serial_number|.
-bool CheckCertID(const der::Input& id_tlv,
-                 const ParsedTbsCertificate& certificate,
-                 const ParsedTbsCertificate& issuer,
-                 const der::Input& serial_number) {
-  OCSPCertID id;
-  if (!ParseOCSPCertID(id_tlv, &id))
+// Extracts the bytes of the SubjectPublicKey bit string given an SPKI. That is
+// to say, the value of subjectPublicKey without the leading unused bit
+// count octet.
+//
+// Returns true on success and fills |*spk_tlv| with the result.
+//
+// SubjectPublicKeyInfo  ::=  SEQUENCE  {
+//     algorithm            AlgorithmIdentifier,
+//     subjectPublicKey     BIT STRING
+// }
+bool GetSubjectPublicKeyBytes(const der::Input& spki_tlv, der::Input* spk_tlv) {
+  base::StringPiece spk_strpiece;
+  if (!asn1::ExtractSubjectPublicKeyFromSPKI(spki_tlv.AsStringPiece(),
+                                             &spk_strpiece)) {
     return false;
+  }
 
+  // ExtractSubjectPublicKeyFromSPKI() includes the unused bit count. For this
+  // application, the unused bit count must be zero, and is not included in the
+  // result.
+  if (!spk_strpiece.starts_with("\0"))
+    return false;
+  spk_strpiece.remove_prefix(1);
+
+  *spk_tlv = der::Input(spk_strpiece);
+  return true;
+}
+
+// Checks the OCSPCertID |id| identifies |certificate|.
+bool CheckCertIDMatchesCertificate(
+    const OCSPCertID& id,
+    const ParsedCertificate* certificate,
+    const ParsedCertificate* issuer_certificate) {
   const EVP_MD* type = nullptr;
   switch (id.hash_algorithm) {
     case DigestAlgorithm::Md2:
@@ -469,71 +515,303 @@ bool CheckCertID(const der::Input& id_tlv,
       break;
   }
 
-  if (!VerifyHash(type, id.issuer_name_hash, certificate.issuer_tlv))
+  if (!VerifyHash(type, id.issuer_name_hash, certificate->tbs().issuer_tlv))
     return false;
 
-  // SubjectPublicKeyInfo  ::=  SEQUENCE  {
-  //     algorithm            AlgorithmIdentifier,
-  //     subjectPublicKey     BIT STRING
-  // }
-  der::Parser outer_parser(issuer.spki_tlv);
-  der::Parser spki_parser;
-  der::BitString key_bits;
-  if (!outer_parser.ReadSequence(&spki_parser))
+  der::Input key_tlv;
+  if (!GetSubjectPublicKeyBytes(issuer_certificate->tbs().spki_tlv, &key_tlv))
     return false;
-  if (outer_parser.HasMore())
-    return false;
-  if (!spki_parser.SkipTag(der::kSequence))
-    return false;
-  if (!spki_parser.ReadBitString(&key_bits))
-    return false;
-  der::Input key_tlv = key_bits.bytes();
+
   if (!VerifyHash(type, id.issuer_key_hash, key_tlv))
     return false;
 
-  return id.serial_number == serial_number;
+  return id.serial_number == certificate->tbs().serial_number;
+}
+
+// TODO(eroman): Revisit how certificate parsing is used by this file. Ideally
+// would either pass in the parsed bits, or have a better abstraction for lazily
+// parsing.
+scoped_refptr<ParsedCertificate> ParseCertificate(base::StringPiece der) {
+  ParseCertificateOptions parse_options;
+  parse_options.allow_invalid_serial_numbers = true;
+
+  // TODO(eroman): Swallows the parsing errors. However uses a permissive
+  // parsing model.
+  CertErrors errors;
+  return ParsedCertificate::Create(
+      x509_util::CreateCryptoBuffer(
+          reinterpret_cast<const uint8_t*>(der.data()), der.size()),
+      {}, &errors);
+}
+
+// Checks that the ResponderID |id| matches the certificate |cert| either
+// by verifying the name matches that of the certificate or that the hash
+// matches the certificate's public key hash (RFC 6960, 4.2.2.3).
+WARN_UNUSED_RESULT bool CheckResponderIDMatchesCertificate(
+    const OCSPResponseData::ResponderID& id,
+    const ParsedCertificate* cert) {
+  switch (id.type) {
+    case OCSPResponseData::ResponderType::NAME: {
+      der::Input name_rdn;
+      der::Input cert_rdn;
+      if (!der::Parser(id.name).ReadTag(der::kSequence, &name_rdn) ||
+          !der::Parser(cert->tbs().subject_tlv)
+               .ReadTag(der::kSequence, &cert_rdn))
+        return false;
+      return VerifyNameMatch(name_rdn, cert_rdn);
+    }
+    case OCSPResponseData::ResponderType::KEY_HASH: {
+      der::Input key;
+      if (!GetSubjectPublicKeyBytes(cert->tbs().spki_tlv, &key))
+        return false;
+      return VerifyHash(EVP_sha1(), id.key_hash, key);
+    }
+  }
+
+  return false;
+}
+
+// Verifies that |responder_certificate| has been authority for OCSP signing,
+// delegated to it by |issuer_certificate|.
+//
+// TODO(eroman): No revocation checks are done (see id-pkix-ocsp-nocheck in the
+//     spec). extension).
+//
+// TODO(eroman): Not all properties of the certificate are verified, only the
+//     signature and EKU. Can full RFC 5280 validation be used, or are there
+//     compatibility concerns?
+WARN_UNUSED_RESULT bool VerifyAuthorizedResponderCert(
+    const ParsedCertificate* responder_certificate,
+    const ParsedCertificate* issuer_certificate) {
+  // The Authorized Responder must be directly signed by the issuer of the
+  // certificate being checked.
+  // TODO(eroman): Must check the signature algorithm against policy.
+  if (!VerifySignedData(responder_certificate->signature_algorithm(),
+                        responder_certificate->tbs_certificate_tlv(),
+                        responder_certificate->signature_value(),
+                        issuer_certificate->tbs().spki_tlv)) {
+    return false;
+  }
+
+  // The Authorized Responder must include the value id-kp-OCSPSigning as
+  // part of the extended key usage extension.
+  if (!responder_certificate->has_extended_key_usage())
+    return false;
+  const std::vector<der::Input>& ekus =
+      responder_certificate->extended_key_usage();
+  if (std::find(ekus.begin(), ekus.end(), OCSPSigning()) == ekus.end())
+    return false;
+
+  return true;
+}
+
+WARN_UNUSED_RESULT bool VerifyOCSPResponseSignatureGivenCert(
+    const OCSPResponse& response,
+    const ParsedCertificate* cert) {
+  // TODO(eroman): Must check the signature algorithm against policy.
+  return VerifySignedData(*(response.signature_algorithm), response.data,
+                          response.signature, cert->tbs().spki_tlv);
+}
+
+// Verifies that the OCSP response has a valid signature using
+// |issuer_certificate|, or an authorized responder issued by
+// |issuer_certificate| for OCSP signing.
+WARN_UNUSED_RESULT bool VerifyOCSPResponseSignature(
+    const OCSPResponse& response,
+    const OCSPResponseData& response_data,
+    const ParsedCertificate* issuer_certificate) {
+  // In order to verify the OCSP signature, a valid responder matching the OCSP
+  // Responder ID must be located (RFC 6960, 4.2.2.2). The responder is allowed
+  // to be either the certificate issuer or a delegated authority directly
+  // signed by the issuer.
+  if (CheckResponderIDMatchesCertificate(response_data.responder_id,
+                                         issuer_certificate) &&
+      VerifyOCSPResponseSignatureGivenCert(response, issuer_certificate)) {
+    return true;
+  }
+
+  // Otherwise search through the provided certificates for the Authorized
+  // Responder. Want a certificate that:
+  //  (1) Matches the OCSP Responder ID.
+  //  (2) Has been given authority for OCSP signing by |issuer_certificate|.
+  //  (3) Has signed the OCSP response using its public key.
+  for (const auto& responder_cert_tlv : response.certs) {
+    scoped_refptr<ParsedCertificate> cur_responder_certificate =
+        ParseCertificate(responder_cert_tlv.AsStringPiece());
+
+    // If failed parsing the certificate, keep looking.
+    if (!cur_responder_certificate)
+      continue;
+
+    // If the certificate doesn't match the OCSP's responder ID, keep looking.
+    if (!CheckResponderIDMatchesCertificate(response_data.responder_id,
+                                            cur_responder_certificate.get())) {
+      continue;
+    }
+
+    // If the certificate isn't a valid Authorized Responder certificate, keep
+    // looking.
+    if (!VerifyAuthorizedResponderCert(cur_responder_certificate.get(),
+                                       issuer_certificate)) {
+      continue;
+    }
+
+    // If the certificate signed this OCSP response, have found a match.
+    // Otherwise keep looking.
+    if (VerifyOCSPResponseSignatureGivenCert(response,
+                                             cur_responder_certificate.get())) {
+      return true;
+    }
+  }
+
+  // Failed to confirm the validity of the OCSP signature using any of the
+  // candidate certificates.
+  return false;
+}
+
+// Loops through the OCSPSingleResponses to find the best match for |cert|.
+OCSPRevocationStatus GetRevocationStatusForCert(
+    const OCSPResponseData& response_data,
+    const ParsedCertificate* cert,
+    const ParsedCertificate* issuer_certificate,
+    const base::Time& verify_time,
+    OCSPVerifyResult::ResponseStatus* response_details) {
+  // The maximum age for an OCSP response, implemented as time since the
+  // |this_update| field in OCSPSingleResponse. Responses older than |max_age|
+  // will be considered invalid.
+  base::TimeDelta max_age = base::TimeDelta::FromDays(7);
+  OCSPRevocationStatus result = OCSPRevocationStatus::UNKNOWN;
+  *response_details = OCSPVerifyResult::NO_MATCHING_RESPONSE;
+
+  for (const auto& single_response_der : response_data.responses) {
+    // In the common case, there should only be one SingleResponse in the
+    // ResponseData (matching the certificate requested and used on this
+    // connection). However, it is possible for the OCSP responder to provide
+    // multiple responses for multiple certificates. Look through all the
+    // provided SingleResponses, and check to see if any match the
+    // certificate. A SingleResponse matches a certificate if it has the same
+    // serial number, issuer name (hash), and issuer public key (hash).
+    OCSPSingleResponse single_response;
+    if (!ParseOCSPSingleResponse(single_response_der, &single_response))
+      return OCSPRevocationStatus::UNKNOWN;
+    OCSPCertID cert_id;
+    if (!ParseOCSPCertID(single_response.cert_id_tlv, &cert_id))
+      return OCSPRevocationStatus::UNKNOWN;
+    if (!CheckCertIDMatchesCertificate(cert_id, cert, issuer_certificate))
+      continue;
+
+    // The SingleResponse matches the certificate, but may be out of date. Out
+    // of date responses are noted seperate from responses with mismatched
+    // serial numbers. If an OCSP responder provides both an up to date
+    // response and an expired response, the up to date response takes
+    // precedence (PROVIDED > INVALID_DATE).
+    if (!CheckOCSPDateValid(single_response, verify_time, max_age)) {
+      if (*response_details != OCSPVerifyResult::PROVIDED)
+        *response_details = OCSPVerifyResult::INVALID_DATE;
+      continue;
+    }
+
+    // In the case with multiple matching and up to date responses, keep only
+    // the strictest status (REVOKED > UNKNOWN > GOOD).
+    if (*response_details != OCSPVerifyResult::PROVIDED ||
+        result == OCSPRevocationStatus::GOOD ||
+        single_response.cert_status.status == OCSPRevocationStatus::REVOKED) {
+      result = single_response.cert_status.status;
+    }
+    *response_details = OCSPVerifyResult::PROVIDED;
+  }
+
+  return result;
 }
 
 }  // namespace
 
-bool GetOCSPCertStatus(const OCSPResponseData& response_data,
-                       const der::Input& issuer_tbs_certificate_tlv,
-                       const der::Input& cert_tbs_certificate_tlv,
-                       OCSPCertStatus* out) {
-  out->status = OCSPRevocationStatus::GOOD;
+OCSPRevocationStatus CheckOCSP(
+    base::StringPiece raw_response,
+    base::StringPiece certificate_der,
+    base::StringPiece issuer_certificate_der,
+    const base::Time& verify_time,
+    OCSPVerifyResult::ResponseStatus* response_details) {
+  *response_details = OCSPVerifyResult::NOT_CHECKED;
 
-  ParsedTbsCertificate tbs_cert;
-  // TODO(crbug.com/634443): Propagate the errors.
-  CertErrors errors;
-  if (!ParseTbsCertificate(cert_tbs_certificate_tlv, {}, &tbs_cert, &errors))
-    return false;
-  ParsedTbsCertificate issuer_tbs_cert;
-  if (!ParseTbsCertificate(issuer_tbs_certificate_tlv, {}, &issuer_tbs_cert,
-                           &errors))
-    return false;
-
-  bool found = false;
-  for (const auto& response : response_data.responses) {
-    OCSPSingleResponse single_response;
-    if (!ParseOCSPSingleResponse(response, &single_response))
-      return false;
-    if (CheckCertID(single_response.cert_id_tlv, tbs_cert, issuer_tbs_cert,
-                    tbs_cert.serial_number)) {
-      OCSPCertStatus new_status = single_response.cert_status;
-      found = true;
-      // In the case that we receive multiple responses, we keep only the
-      // strictest status (REVOKED > UNKNOWN > GOOD).
-      if (out->status == OCSPRevocationStatus::GOOD ||
-          new_status.status == OCSPRevocationStatus::REVOKED) {
-        *out = new_status;
-      }
-    }
+  if (raw_response.empty()) {
+    *response_details = OCSPVerifyResult::MISSING;
+    return OCSPRevocationStatus::UNKNOWN;
   }
 
-  if (!found)
-    out->status = OCSPRevocationStatus::UNKNOWN;
+  der::Input response_der(raw_response);
+  OCSPResponse response;
+  if (!ParseOCSPResponse(response_der, &response)) {
+    *response_details = OCSPVerifyResult::PARSE_RESPONSE_ERROR;
+    return OCSPRevocationStatus::UNKNOWN;
+  }
 
-  return found;
+  // RFC 6960 defines all responses |response_status| != SUCCESSFUL as error
+  // responses. No revocation information is provided on error responses, and
+  // the OCSPResponseData structure is not set.
+  if (response.status != OCSPResponse::ResponseStatus::SUCCESSFUL) {
+    *response_details = OCSPVerifyResult::ERROR_RESPONSE;
+    return OCSPRevocationStatus::UNKNOWN;
+  }
+
+  // Actual revocation information is contained within the BasicOCSPResponse as
+  // a ResponseData structure. The BasicOCSPResponse was parsed above, and
+  // contains an unparsed ResponseData. From RFC 6960:
+  //
+  // BasicOCSPResponse       ::= SEQUENCE {
+  //    tbsResponseData      ResponseData,
+  //    signatureAlgorithm   AlgorithmIdentifier,
+  //    signature            BIT STRING,
+  //    certs            [0] EXPLICIT SEQUENCE OF Certificate OPTIONAL }
+  //
+  // ResponseData ::= SEQUENCE {
+  //     version              [0] EXPLICIT Version DEFAULT v1,
+  //     responderID              ResponderID,
+  //     producedAt               GeneralizedTime,
+  //     responses                SEQUENCE OF SingleResponse,
+  //     responseExtensions   [1] EXPLICIT Extensions OPTIONAL }
+  OCSPResponseData response_data;
+  if (!ParseOCSPResponseData(response.data, &response_data)) {
+    *response_details = OCSPVerifyResult::PARSE_RESPONSE_DATA_ERROR;
+    return OCSPRevocationStatus::UNKNOWN;
+  }
+
+  scoped_refptr<ParsedCertificate> certificate =
+      ParseCertificate(certificate_der);
+  scoped_refptr<ParsedCertificate> issuer_certificate =
+      ParseCertificate(issuer_certificate_der);
+
+  if (!certificate || !issuer_certificate) {
+    *response_details = OCSPVerifyResult::NOT_CHECKED;
+    return OCSPRevocationStatus::UNKNOWN;
+  }
+
+  // If producedAt is outside of the certificate validity period, reject the
+  // response.
+  if (response_data.produced_at < certificate->tbs().validity_not_before ||
+      response_data.produced_at > certificate->tbs().validity_not_after) {
+    *response_details = OCSPVerifyResult::BAD_PRODUCED_AT;
+    return OCSPRevocationStatus::UNKNOWN;
+  }
+
+  // Look through all of the OCSPSingleResponses for a match (based on CertID
+  // and time).
+  OCSPRevocationStatus status = GetRevocationStatusForCert(
+      response_data, certificate.get(), issuer_certificate.get(), verify_time,
+      response_details);
+
+  // TODO(eroman): Process the OCSP extensions. In particular, must reject if
+  // there are any critical extensions that are not understood.
+
+  // Check that the OCSP response has a valid signature. It must either be
+  // signed directly by the issuing certificate, or a valid authorized
+  // responder.
+  if (!VerifyOCSPResponseSignature(response, response_data,
+                                   issuer_certificate.get())) {
+    return OCSPRevocationStatus::UNKNOWN;
+  }
+
+  return status;
 }
 
 bool CheckOCSPDateValid(const OCSPSingleResponse& response,
@@ -557,6 +835,91 @@ bool CheckOCSPDateValid(const OCSPSingleResponse& response,
   if (response.this_update < earliest_this_update)
     return false;  // Response is too old.
 
+  return true;
+}
+
+bool CreateOCSPRequest(const ParsedCertificate* cert,
+                       const ParsedCertificate* issuer,
+                       std::vector<uint8_t>* request_der) {
+  request_der->clear();
+
+  bssl::ScopedCBB cbb;
+
+  // This initial buffer size is big enough for 20 octet long serial numbers
+  // (upper bound from RFC 5280) and then a handful of extra bytes. This
+  // number doesn't matter for correctness.
+  const size_t kInitialBufferSize = 100;
+
+  if (!CBB_init(cbb.get(), kInitialBufferSize))
+    return false;
+
+  //   OCSPRequest     ::=     SEQUENCE {
+  //       tbsRequest                  TBSRequest,
+  //       optionalSignature   [0]     EXPLICIT Signature OPTIONAL }
+  //
+  //   TBSRequest      ::=     SEQUENCE {
+  //       version             [0]     EXPLICIT Version DEFAULT v1,
+  //       requestorName       [1]     EXPLICIT GeneralName OPTIONAL,
+  //       requestList                 SEQUENCE OF Request,
+  //       requestExtensions   [2]     EXPLICIT Extensions OPTIONAL }
+  CBB ocsp_request;
+  if (!CBB_add_asn1(cbb.get(), &ocsp_request, CBS_ASN1_SEQUENCE))
+    return false;
+
+  CBB tbs_request;
+  if (!CBB_add_asn1(&ocsp_request, &tbs_request, CBS_ASN1_SEQUENCE))
+    return false;
+
+  // "version", "requestorName", and "requestExtensions" are omitted.
+
+  CBB request_list;
+  if (!CBB_add_asn1(&tbs_request, &request_list, CBS_ASN1_SEQUENCE))
+    return false;
+
+  CBB request;
+  if (!CBB_add_asn1(&request_list, &request, CBS_ASN1_SEQUENCE))
+    return false;
+
+  //   Request         ::=     SEQUENCE {
+  //       reqCert                     CertID,
+  //       singleRequestExtensions     [0] EXPLICIT Extensions OPTIONAL }
+  CBB req_cert;
+  if (!CBB_add_asn1(&request, &req_cert, CBS_ASN1_SEQUENCE))
+    return false;
+
+  //   CertID          ::=     SEQUENCE {
+  //       hashAlgorithm       AlgorithmIdentifier,
+  //       issuerNameHash      OCTET STRING, -- Hash of issuer's DN
+  //       issuerKeyHash       OCTET STRING, -- Hash of issuer's public key
+  //       serialNumber        CertificateSerialNumber }
+
+  // TODO(eroman): Don't use SHA1.
+  const EVP_MD* md = EVP_sha1();
+  if (!EVP_marshal_digest_algorithm(&req_cert, md))
+    return false;
+
+  AppendHashAsOctetString(md, &req_cert, issuer->tbs().issuer_tlv);
+
+  der::Input key_tlv;
+  if (!GetSubjectPublicKeyBytes(issuer->tbs().spki_tlv, &key_tlv))
+    return false;
+  AppendHashAsOctetString(md, &req_cert, key_tlv);
+
+  CBB serial_number;
+  if (!CBB_add_asn1(&req_cert, &serial_number, CBS_ASN1_INTEGER))
+    return false;
+  if (!CBB_add_bytes(&serial_number, cert->tbs().serial_number.UnsafeData(),
+                     cert->tbs().serial_number.Length())) {
+    return false;
+  }
+
+  uint8_t* result_bytes;
+  size_t result_bytes_length;
+  if (!CBB_finish(cbb.get(), &result_bytes, &result_bytes_length))
+    return false;
+  bssl::UniquePtr<uint8_t> delete_tbs_cert_bytes(result_bytes);
+
+  request_der->assign(result_bytes, result_bytes + result_bytes_length);
   return true;
 }
 

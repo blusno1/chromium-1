@@ -19,7 +19,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/test/scoped_task_environment.h"
 #include "crypto/scoped_nss_types.h"
 #include "crypto/scoped_test_nss_db.h"
 #include "net/base/hash_value.h"
@@ -31,21 +31,15 @@
 #include "net/cert/x509_util_nss.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
+#include "net/test/net_test_suite.h"
 #include "net/test/test_data_directory.h"
 #include "net/third_party/mozilla_security_manager/nsNSSCertificateDB.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using base::ASCIIToUTF16;
 using net::test::IsError;
 using net::test::IsOk;
-
-// In NSS 3.13, CERTDB_VALID_PEER was renamed CERTDB_TERMINAL_RECORD. So we use
-// the new name of the macro.
-#if !defined(CERTDB_TERMINAL_RECORD)
-#define CERTDB_TERMINAL_RECORD CERTDB_VALID_PEER
-#endif
-
-using base::ASCIIToUTF16;
 
 namespace net {
 
@@ -149,11 +143,10 @@ TEST_F(CertDatabaseNSSTest, ListCerts) {
   // This test isn't terribly useful, though it will at least let valgrind test
   // for leaks.
   ScopedCERTCertificateList certs;
-  cert_db_->SetSlowTaskRunnerForTest(base::ThreadTaskRunnerHandle::Get());
   cert_db_->ListCerts(base::Bind(&SwapCertList, base::Unretained(&certs)));
   EXPECT_EQ(0U, certs.size());
 
-  base::RunLoop().RunUntilIdle();
+  NetTestSuite::GetScopedTaskEnvironment()->RunUntilIdle();
 
   // The test DB is empty, but let's assume there will always be something in
   // the other slots.
@@ -803,12 +796,6 @@ TEST_F(CertDatabaseNSSTest, TrustIntermediateCa) {
 }
 
 TEST_F(CertDatabaseNSSTest, TrustIntermediateCa2) {
-  if (NSS_VersionCheck("3.14.2") && !NSS_VersionCheck("3.15")) {
-    // See http://bugzil.la/863947 for details.
-    LOG(INFO) << "Skipping test for NSS 3.14.2 - NSS 3.15";
-    return;
-  }
-
   NSSCertDatabase::ImportCertFailureList failed;
 
   ScopedCERTCertificateList intermediate_certs =
@@ -861,12 +848,6 @@ TEST_F(CertDatabaseNSSTest, TrustIntermediateCa2) {
 }
 
 TEST_F(CertDatabaseNSSTest, TrustIntermediateCa3) {
-  if (NSS_VersionCheck("3.14.2") && !NSS_VersionCheck("3.15")) {
-    // See http://bugzil.la/863947 for details.
-    LOG(INFO) << "Skipping test for NSS 3.14.2 - NSS 3.15";
-    return;
-  }
-
   NSSCertDatabase::ImportCertFailureList failed;
 
   ScopedCERTCertificateList ca_certs = CreateCERTCertificateListFromFile(

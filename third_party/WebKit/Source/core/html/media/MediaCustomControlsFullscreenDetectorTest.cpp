@@ -7,8 +7,8 @@
 #include "core/EventTypeNames.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/testing/DummyPageHolder.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntRect.h"
+#include "platform/runtime_enabled_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -41,7 +41,7 @@ class MediaCustomControlsFullscreenDetectorTest : public ::testing::Test {
   }
 
   HTMLVideoElement* VideoElement() const {
-    return toHTMLVideoElement(GetDocument().QuerySelector("video"));
+    return ToHTMLVideoElement(GetDocument().QuerySelector("video"));
   }
 
   static MediaCustomControlsFullscreenDetector* FullscreenDetectorFor(
@@ -64,7 +64,7 @@ class MediaCustomControlsFullscreenDetectorTest : public ::testing::Test {
       return false;
 
     for (const auto& registered_listener : *listeners) {
-      if (registered_listener.Listener() == listener)
+      if (registered_listener.Callback() == listener)
         return true;
     }
     return false;
@@ -118,7 +118,7 @@ TEST_F(MediaCustomControlsFullscreenDetectorTest, computeIsDominantVideo) {
 TEST_F(MediaCustomControlsFullscreenDetectorTest,
        hasNoListenersBeforeAddingToDocument) {
   HTMLVideoElement* video =
-      toHTMLVideoElement(GetDocument().createElement("video"));
+      ToHTMLVideoElement(GetDocument().createElement("video"));
 
   EXPECT_FALSE(CheckEventListenerRegistered(GetDocument(),
                                             EventTypeNames::fullscreenchange,
@@ -133,7 +133,7 @@ TEST_F(MediaCustomControlsFullscreenDetectorTest,
 TEST_F(MediaCustomControlsFullscreenDetectorTest,
        hasListenersAfterAddToDocumentByScript) {
   HTMLVideoElement* video =
-      toHTMLVideoElement(GetDocument().createElement("video"));
+      ToHTMLVideoElement(GetDocument().createElement("video"));
   GetDocument().body()->AppendChild(video);
 
   EXPECT_TRUE(CheckEventListenerRegistered(
@@ -147,7 +147,7 @@ TEST_F(MediaCustomControlsFullscreenDetectorTest,
 
 TEST_F(MediaCustomControlsFullscreenDetectorTest,
        hasListenersAfterAddToDocumentByParser) {
-  GetDocument().body()->setInnerHTML("<body><video></video></body>");
+  GetDocument().body()->SetInnerHTMLFromString("<body><video></video></body>");
 
   EXPECT_TRUE(CheckEventListenerRegistered(
       GetDocument(), EventTypeNames::fullscreenchange, FullscreenDetector()));
@@ -161,7 +161,7 @@ TEST_F(MediaCustomControlsFullscreenDetectorTest,
 TEST_F(MediaCustomControlsFullscreenDetectorTest,
        hasListenersAfterDocumentMove) {
   HTMLVideoElement* video =
-      toHTMLVideoElement(GetDocument().createElement("video"));
+      ToHTMLVideoElement(GetDocument().createElement("video"));
   GetDocument().body()->AppendChild(video);
 
   NewDocument().body()->AppendChild(VideoElement());

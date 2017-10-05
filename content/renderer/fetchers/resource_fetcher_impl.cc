@@ -66,12 +66,12 @@ class ResourceFetcherImpl::ClientImpl : public mojom::URLLoaderClient {
   void Start(const ResourceRequest& request,
              mojom::URLLoaderFactory* url_loader_factory,
              const net::NetworkTrafficAnnotationTag& annotation_tag,
-             base::SingleThreadTaskRunner* task_runner) {
+             scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
     status_ = Status::kStarted;
     response_.SetURL(request.url);
 
     mojom::URLLoaderClientPtr client;
-    client_binding_.Bind(mojo::MakeRequest(&client), task_runner);
+    client_binding_.Bind(mojo::MakeRequest(&client), std::move(task_runner));
 
     url_loader_factory->CreateLoaderAndStart(
         mojo::MakeRequest(&loader_), kRoutingId,
@@ -314,8 +314,10 @@ void ResourceFetcherImpl::Start(
 
   client_ = base::MakeUnique<ClientImpl>(this, std::move(callback),
                                          maximum_download_size);
+  // TODO(kinuko, toyoshim): This task runner should be given by the consumer
+  // of this class.
   client_->Start(request_, url_loader_factory, annotation_tag,
-                 frame->LoadingTaskRunner());
+                 frame->GetTaskRunner(blink::TaskType::kNetworking));
 
   // No need to hold on to the request; reset it now.
   request_ = ResourceRequest();

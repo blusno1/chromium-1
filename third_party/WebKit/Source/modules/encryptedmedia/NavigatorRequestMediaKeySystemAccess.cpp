@@ -9,7 +9,6 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
-#include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/Deprecation.h"
@@ -21,11 +20,11 @@
 #include "modules/encryptedmedia/MediaKeysController.h"
 #include "platform/EncryptedMediaRequest.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
 #include "platform/network/ParsedContentType.h"
 #include "platform/network/mime/ContentType.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
@@ -274,12 +273,13 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   Document* document = ToDocument(execution_context);
 
-  Deprecation::CountDeprecationFeaturePolicy(*document,
-                                             WebFeaturePolicyFeature::kEme);
+  Deprecation::CountDeprecationFeaturePolicy(
+      *document, WebFeaturePolicyFeature::kEncryptedMedia);
 
   if (RuntimeEnabledFeatures::FeaturePolicyForEncryptedMediaEnabled()) {
-    if (!document->GetFrame() || !document->GetFrame()->IsFeatureEnabled(
-                                     WebFeaturePolicyFeature::kEme)) {
+    if (!document->GetFrame() ||
+        !document->GetFrame()->IsFeatureEnabled(
+            WebFeaturePolicyFeature::kEncryptedMedia)) {
       return ScriptPromise::RejectWithDOMException(
           script_state,
           DOMException::Create(

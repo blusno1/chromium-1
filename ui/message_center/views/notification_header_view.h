@@ -43,11 +43,6 @@ class NotificationHeaderView : public views::Button {
 
   // Button override:
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
-  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
-  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
-      const override;
-  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
-  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
 
   views::ImageView* expand_button() { return expand_button_; }
 
@@ -59,7 +54,6 @@ class NotificationHeaderView : public views::Button {
 
   SkColor accent_color_ = message_center::kNotificationDefaultAccentColor;
 
-  views::InkDropContainerView* ink_drop_container_ = nullptr;
   views::Label* app_name_view_ = nullptr;
   views::Label* summary_text_divider_ = nullptr;
   views::Label* summary_text_view_ = nullptr;

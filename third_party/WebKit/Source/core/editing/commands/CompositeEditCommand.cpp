@@ -27,7 +27,6 @@
 
 #include <algorithm>
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/ElementTraversal.h"
@@ -37,8 +36,13 @@
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/PlainTextRange.h"
 #include "core/editing/RelocatablePosition.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/AppendNodeCommand.h"
 #include "core/editing/commands/ApplyStyleCommand.h"
@@ -70,6 +74,7 @@
 #include "core/html/HTMLLIElement.h"
 #include "core/html/HTMLQuoteElement.h"
 #include "core/html/HTMLSpanElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutListItem.h"
 #include "core/layout/LayoutText.h"
@@ -269,10 +274,10 @@ void CompositeEditCommand::InsertParagraphSeparator(
 
 bool CompositeEditCommand::IsRemovableBlock(const Node* node) {
   DCHECK(node);
-  if (!isHTMLDivElement(*node))
+  if (!IsHTMLDivElement(*node))
     return false;
 
-  const HTMLDivElement& element = toHTMLDivElement(*node);
+  const HTMLDivElement& element = ToHTMLDivElement(*node);
   ContainerNode* parent_node = element.parentNode();
   if (parent_node && parent_node->firstChild() != parent_node->lastChild())
     return false;
@@ -978,7 +983,7 @@ void CompositeEditCommand::RemovePlaceholderAt(const Position& p) {
 
   // We are certain that the position is at a line break, but it may be a br or
   // a preserved newline.
-  if (isHTMLBRElement(*p.AnchorNode())) {
+  if (IsHTMLBRElement(*p.AnchorNode())) {
     // Removing a BR element won't dispatch synchronous events.
     RemoveNode(p.AnchorNode(), ASSERT_NO_EDITING_ABORT);
     return;
@@ -1066,7 +1071,7 @@ HTMLElement* CompositeEditCommand::MoveParagraphContentsToNewBlockIfNecessary(
   DCHECK(new_block);
 
   bool end_was_br =
-      isHTMLBRElement(*visible_paragraph_end.DeepEquivalent().AnchorNode());
+      IsHTMLBRElement(*visible_paragraph_end.DeepEquivalent().AnchorNode());
 
   // Inserting default paragraph element can change visible position. We
   // should update visible positions before use them.
@@ -1088,7 +1093,7 @@ HTMLElement* CompositeEditCommand::MoveParagraphContentsToNewBlockIfNecessary(
   if (editing_state->IsAborted())
     return nullptr;
 
-  if (new_block->lastChild() && isHTMLBRElement(*new_block->lastChild()) &&
+  if (new_block->lastChild() && IsHTMLBRElement(*new_block->lastChild()) &&
       !end_was_br) {
     RemoveNode(new_block->lastChild(), editing_state);
     if (editing_state->IsAborted())
@@ -1218,6 +1223,10 @@ void CompositeEditCommand::CloneParagraphUnderNewElement(
 // Deleting a paragraph will leave a placeholder. Remove it (and prune
 // empty or unrendered parents).
 
+void CompositeEditCommand::CleanupAfterDeletion(EditingState* editing_state) {
+  CleanupAfterDeletion(editing_state, VisiblePosition());
+}
+
 void CompositeEditCommand::CleanupAfterDeletion(EditingState* editing_state,
                                                 VisiblePosition destination) {
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -1237,7 +1246,7 @@ void CompositeEditCommand::CleanupAfterDeletion(EditingState* editing_state,
       return;
 
     // Normally deletion will leave a br as a placeholder.
-    if (isHTMLBRElement(*node)) {
+    if (IsHTMLBRElement(*node)) {
       RemoveNodeAndPruneAncestors(node, editing_state, destination_node);
 
       // If the selection to move was empty and in an empty block that
@@ -1611,14 +1620,14 @@ bool CompositeEditCommand::BreakOutOfEmptyListItem(
   // FIXME: Can't we do something better when the immediate parent wasn't a list
   // node?
   if (!list_node ||
-      (!isHTMLUListElement(*list_node) && !isHTMLOListElement(*list_node)) ||
+      (!IsHTMLUListElement(*list_node) && !IsHTMLOListElement(*list_node)) ||
       !HasEditableStyle(*list_node) ||
       list_node == RootEditableElement(*empty_list_item))
     return false;
 
   HTMLElement* new_block = nullptr;
   if (ContainerNode* block_enclosing_list = list_node->parentNode()) {
-    if (isHTMLLIElement(
+    if (IsHTMLLIElement(
             *block_enclosing_list)) {  // listNode is inside another list item
       if (VisiblePositionAfterNode(*block_enclosing_list).DeepEquivalent() ==
           VisiblePositionAfterNode(*list_node).DeepEquivalent()) {
@@ -1643,8 +1652,8 @@ bool CompositeEditCommand::BreakOutOfEmptyListItem(
       }
       // If listNode does NOT appear at the end of the outer list item, then
       // behave as if in a regular paragraph.
-    } else if (isHTMLOListElement(*block_enclosing_list) ||
-               isHTMLUListElement(*block_enclosing_list)) {
+    } else if (IsHTMLOListElement(*block_enclosing_list) ||
+               IsHTMLUListElement(*block_enclosing_list)) {
       new_block = HTMLLIElement::Create(GetDocument());
     }
   }
@@ -1768,12 +1777,12 @@ bool CompositeEditCommand::BreakOutOfEmptyMailBlockquotedParagraph(
   Position caret_pos(MostForwardCaretPosition(caret.DeepEquivalent()));
   // A line break is either a br or a preserved newline.
   DCHECK(
-      isHTMLBRElement(caret_pos.AnchorNode()) ||
+      IsHTMLBRElement(caret_pos.AnchorNode()) ||
       (caret_pos.AnchorNode()->IsTextNode() &&
        caret_pos.AnchorNode()->GetLayoutObject()->Style()->PreserveNewline()))
       << caret_pos;
 
-  if (isHTMLBRElement(*caret_pos.AnchorNode())) {
+  if (IsHTMLBRElement(*caret_pos.AnchorNode())) {
     RemoveNodeAndPruneAncestors(caret_pos.AnchorNode(), editing_state);
     if (editing_state->IsAborted())
       return false;
@@ -1901,7 +1910,7 @@ Node* CompositeEditCommand::SplitTreeToNode(Node* start,
     VisiblePosition position_in_parent =
         VisiblePosition::FirstPositionInNode(*parent_element);
     VisiblePosition position_in_node =
-        CreateVisiblePosition(FirstPositionInOrBeforeNode(node));
+        CreateVisiblePosition(FirstPositionInOrBeforeNode(*node));
     if (position_in_parent.DeepEquivalent() !=
         position_in_node.DeepEquivalent())
       SplitElement(parent_element, node);

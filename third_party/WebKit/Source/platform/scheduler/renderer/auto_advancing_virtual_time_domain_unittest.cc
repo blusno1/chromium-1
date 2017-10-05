@@ -4,7 +4,7 @@
 
 #include "platform/scheduler/renderer/auto_advancing_virtual_time_domain.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
 #include "base/test/simple_test_tick_clock.h"
 #include "components/viz/test/ordered_simple_task_runner.h"
 #include "platform/scheduler/base/task_queue_manager.h"
@@ -17,6 +17,8 @@
 
 namespace blink {
 namespace scheduler {
+// Namespace to avoid symbol collisions in jumbo builds.
+namespace auto_advancing_virtual_time_domain_unittest {
 
 class AutoAdvancingVirtualTimeDomainTest : public ::testing::Test {
  public:
@@ -28,12 +30,12 @@ class AutoAdvancingVirtualTimeDomainTest : public ::testing::Test {
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
 
     test_time_source_.reset(new TestTimeSource(clock_.get()));
-    mock_task_runner_ = make_scoped_refptr(
-        new cc::OrderedSimpleTaskRunner(clock_.get(), false));
+    mock_task_runner_ =
+        base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(clock_.get(), false);
     main_task_runner_ = SchedulerTqmDelegateForTest::Create(
-        mock_task_runner_, base::MakeUnique<TestTimeSource>(clock_.get()));
+        mock_task_runner_, std::make_unique<TestTimeSource>(clock_.get()));
 
-    manager_ = base::MakeUnique<TaskQueueManager>(main_task_runner_);
+    manager_ = std::make_unique<TaskQueueManager>(main_task_runner_);
     manager_->AddTaskTimeObserver(&test_task_time_observer_);
     task_queue_ =
         manager_->CreateTaskQueue<TestTaskQueue>(TaskQueue::Spec("test"));
@@ -95,5 +97,6 @@ TEST_F(AutoAdvancingVirtualTimeDomainTest, VirtualTimeDoesNotAdvance) {
   EXPECT_FALSE(task_run);
 }
 
+}  // namespace auto_advancing_virtual_time_domain_unittest
 }  // namespace scheduler
 }  // namespace blink

@@ -25,19 +25,18 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/surface_layer.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/latency_info_swap_promise.h"
+#include "cc/trees/latency_info_swap_promise.h"
 #include "cc/trees/layer_tree_host.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/gl_helper.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
-#include "components/viz/common/quads/single_release_callback.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_hittest.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/accessibility/web_contents_accessibility_android.h"
-#include "content/browser/android/composited_touch_handle_drawable.h"
 #include "content/browser/android/content_view_core.h"
 #include "content/browser/android/ime_adapter_android.h"
 #include "content/browser/android/overscroll_controller_android.h"
@@ -64,6 +63,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
+#include "content/common/content_switches_internal.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/common/input_messages.h"
 #include "content/common/site_isolation_policy.h"
@@ -340,8 +340,6 @@ std::unique_ptr<ui::TouchSelectionController> CreateSelectionController(
 
 gfx::RectF GetSelectionRect(const ui::TouchSelectionController& controller) {
   gfx::RectF rect = controller.GetRectBetweenBounds();
-  if (rect.IsEmpty())
-    return rect;
 
   rect.Union(controller.GetStartHandleRect());
   rect.Union(controller.GetEndHandleRect());
@@ -403,7 +401,7 @@ void PrepareTextureCopyOutputResult(
 
   gl_helper->CropScaleReadbackAndCleanMailbox(
       texture_mailbox.mailbox(), texture_mailbox.sync_token(), result->size(),
-      gfx::Rect(result->size()), output_size_in_pixel, pixels, color_type,
+      output_size_in_pixel, pixels, color_type,
       base::Bind(&CopyFromCompositingSurfaceFinished, callback,
                  base::Passed(&release_callback), base::Passed(&bitmap),
                  start_time, readback_lock),
@@ -456,11 +454,12 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       is_in_vr_(false),
       content_view_core_(nullptr),
       ime_adapter_android_(nullptr),
+      popup_zoomer_(nullptr),
       selection_popup_controller_(nullptr),
       text_suggestion_host_(nullptr),
       background_color_(SK_ColorWHITE),
       cached_background_color_(SK_ColorWHITE),
-      view_(this),
+      view_(this, ui::ViewAndroid::LayoutType::MATCH_PARENT),
       gesture_provider_(ui::GetGestureProviderConfig(
                             ui::GestureProviderConfigType::CURRENT_PLATFORM),
                         this),
@@ -504,8 +503,6 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
 }
 
 RenderWidgetHostViewAndroid::~RenderWidgetHostViewAndroid() {
-  if (content_view_core_)
-    content_view_core_->RemoveObserver(this);
   SetContentViewCore(NULL);
   DCHECK(!ime_adapter_android_);
   DCHECK(ack_callbacks_.empty());
@@ -975,7 +972,7 @@ bool RenderWidgetHostViewAndroid::OnTouchEvent(
   // Receiving any other touch event before the double-tap timeout expires
   // cancels opening the spellcheck menu.
   if (text_suggestion_host_)
-    text_suggestion_host_->StopSpellCheckMenuTimer();
+    text_suggestion_host_->StopSuggestionMenuTimer();
 
   // If a browser-based widget consumes the touch event, it's critical that
   // touch event interception be disabled. This avoids issues with
@@ -1240,7 +1237,7 @@ void RenderWidgetHostViewAndroid::EvictFrameIfNecessary() {
 
 void RenderWidgetHostViewAndroid::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   if (!delegated_frame_host_) {
     DCHECK(!using_browser_compositor_);
     return;
@@ -1249,11 +1246,11 @@ void RenderWidgetHostViewAndroid::SubmitCompositorFrame(
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
   DCHECK(!frame.render_pass_list.empty());
 
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
+  viz::RenderPass* root_pass = frame.render_pass_list.back().get();
   current_surface_size_ = root_pass->output_rect.size();
   bool is_transparent = root_pass->has_transparent_background;
 
-  cc::CompositorFrameMetadata metadata = frame.metadata.Clone();
+  viz::CompositorFrameMetadata metadata = frame.metadata.Clone();
 
   bool has_content = !current_surface_size_.IsEmpty();
 
@@ -1324,7 +1321,7 @@ void RenderWidgetHostViewAndroid::ClearCompositorFrame() {
 }
 
 void RenderWidgetHostViewAndroid::SynchronousFrameMetadata(
-    cc::CompositorFrameMetadata frame_metadata) {
+    viz::CompositorFrameMetadata frame_metadata) {
   if (!content_view_core_)
     return;
 
@@ -1382,15 +1379,15 @@ void RenderWidgetHostViewAndroid::MoveCaret(const gfx::PointF& position) {
 
 void RenderWidgetHostViewAndroid::MoveRangeSelectionExtent(
     const gfx::PointF& extent) {
-  DCHECK(content_view_core_);
-  content_view_core_->MoveRangeSelectionExtent(extent);
+  DCHECK(selection_popup_controller_);
+  selection_popup_controller_->MoveRangeSelectionExtent(extent);
 }
 
 void RenderWidgetHostViewAndroid::SelectBetweenCoordinates(
     const gfx::PointF& base,
     const gfx::PointF& extent) {
-  DCHECK(content_view_core_);
-  content_view_core_->SelectBetweenCoordinates(base, extent);
+  DCHECK(selection_popup_controller_);
+  selection_popup_controller_->SelectBetweenCoordinates(base, extent);
 }
 
 void RenderWidgetHostViewAndroid::OnSelectionEvent(
@@ -1423,22 +1420,17 @@ void RenderWidgetHostViewAndroid::SetSelectionControllerClientForTesting(
 
 std::unique_ptr<ui::TouchHandleDrawable>
 RenderWidgetHostViewAndroid::CreateDrawable() {
-  DCHECK(content_view_core_);
   if (!using_browser_compositor_) {
     if (!sync_compositor_)
       return nullptr;
     return std::unique_ptr<ui::TouchHandleDrawable>(
         sync_compositor_->client()->CreateDrawable());
   }
-  base::android::ScopedJavaLocalRef<jobject> activityContext =
-      content_view_core_->GetContext();
-  // If activityContext is null then Application context is used instead on
-  // the java side in CompositedTouchHandleDrawable.
-  return std::unique_ptr<ui::TouchHandleDrawable>(
-      new CompositedTouchHandleDrawable(
-          content_view_core_->GetViewAndroid()->GetLayer(), view_.GetDipScale(),
-          activityContext));
+  DCHECK(selection_popup_controller_);
+  return selection_popup_controller_->CreateTouchHandleDrawable();
 }
+
+void RenderWidgetHostViewAndroid::DidScroll() {}
 
 void RenderWidgetHostViewAndroid::SynchronousCopyContents(
     const gfx::Rect& src_subrect_in_pixel,
@@ -1483,12 +1475,12 @@ RenderWidgetHostViewAndroid::GetWebContentsAccessibilityAndroid() const {
 }
 
 void RenderWidgetHostViewAndroid::OnFrameMetadataUpdated(
-    const cc::CompositorFrameMetadata& frame_metadata,
+    const viz::CompositorFrameMetadata& frame_metadata,
     bool is_transparent) {
   bool is_mobile_optimized = IsMobileOptimizedFrame(frame_metadata);
   gesture_provider_.SetDoubleTapSupportForPageEnabled(!is_mobile_optimized);
 
-  float dip_scale = view_.GetDipScale();
+  float dip_scale = IsUseZoomForDSFEnabled() ? 1.f : view_.GetDipScale();
   float top_controls_pix = frame_metadata.top_controls_height * dip_scale;
   float top_content_offset = frame_metadata.top_controls_height *
                              frame_metadata.top_controls_shown_ratio;
@@ -2104,13 +2096,11 @@ void RenderWidgetHostViewAndroid::SetContentViewCore(
     if (content_view_core_ || is_size_initialized)
       resize = true;
     if (content_view_core_) {
-      content_view_core_->RemoveObserver(this);
       view_.RemoveObserver(this);
       view_.RemoveFromParent();
       view_.GetLayer()->RemoveFromParent();
     }
     if (content_view_core) {
-      content_view_core->AddObserver(this);
       view_.AddObserver(this);
       ui::ViewAndroid* parent_view = content_view_core->GetViewAndroid();
       parent_view->AddChild(&view_);

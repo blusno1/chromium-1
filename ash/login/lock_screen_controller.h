@@ -8,11 +8,15 @@
 #include "ash/ash_export.h"
 #include "ash/public/interfaces/lock_screen.mojom.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 
 class PrefRegistrySimple;
 
 namespace ash {
+
+class LockScreenAppsFocusObserver;
+class LoginDataDispatcher;
 
 // LockScreenController implements mojom::LockScreen and wraps the
 // mojom::LockScreenClient interface. This lets a consumer of ash provide a
@@ -49,6 +53,7 @@ class ASH_EXPORT LockScreenController : public mojom::LockScreen {
                  bool show_guest) override;
   void SetPinEnabledForUser(const AccountId& account_id,
                             bool is_enabled) override;
+  void HandleFocusLeavingLockScreenApps(bool reverse) override;
 
   // Wrappers around the mojom::LockScreenClient interface.
   // Hash the password and send AuthenticateUser request to LockScreenClient.
@@ -67,7 +72,18 @@ class ASH_EXPORT LockScreenController : public mojom::LockScreen {
   void OnNoPodFocused();
   void LoadWallpaper(const AccountId& account_id);
   void SignOutUser();
+  void CancelAddUser();
   void OnMaxIncorrectPasswordAttempted(const AccountId& account_id);
+  void FocusLockScreenApps(bool reverse);
+
+  // Methods to manage lock screen apps focus observers.
+  // The observers will be notified when lock screen apps focus changes are
+  // reported via lock screen mojo interface.
+  void AddLockScreenAppsFocusObserver(LockScreenAppsFocusObserver* observer);
+  void RemoveLockScreenAppsFocusObserver(LockScreenAppsFocusObserver* observer);
+
+  // Flushes the mojo pipes - to be used in tests.
+  void FlushForTesting();
 
  private:
   using PendingAuthenticateUserCall =
@@ -82,6 +98,9 @@ class ASH_EXPORT LockScreenController : public mojom::LockScreen {
 
   void OnGetSystemSalt(const std::string& system_salt);
 
+  // Returns the active data dispatcher or nullptr if there is no lock screen.
+  LoginDataDispatcher* DataDispatcher() const;
+
   // Client interface in chrome browser. May be null in tests.
   mojom::LockScreenClientPtr lock_screen_client_;
 
@@ -90,6 +109,9 @@ class ASH_EXPORT LockScreenController : public mojom::LockScreen {
 
   // User authentication call that will run when we have system salt.
   PendingAuthenticateUserCall pending_user_auth_;
+
+  base::ObserverList<LockScreenAppsFocusObserver>
+      lock_screen_apps_focus_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(LockScreenController);
 };

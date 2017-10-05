@@ -4,6 +4,7 @@
 
 #include "chromeos/dbus/shill_device_client.h"
 
+#include <map>
 #include <utility>
 
 #include "base/bind.h"
@@ -63,13 +64,6 @@ class ShillDeviceClientImpl : public ShillDeviceClient {
     dbus::MethodCall method_call(shill::kFlimflamDeviceInterface,
                                  shill::kGetPropertiesFunction);
     GetHelper(device_path)->CallDictionaryValueMethod(&method_call, callback);
-  }
-
-  void ProposeScan(const dbus::ObjectPath& device_path,
-                   VoidDBusMethodCallback callback) override {
-    dbus::MethodCall method_call(shill::kFlimflamDeviceInterface,
-                                 shill::kProposeScanFunction);
-    GetHelper(device_path)->CallVoidMethod(&method_call, std::move(callback));
   }
 
   void SetProperty(const dbus::ObjectPath& device_path,

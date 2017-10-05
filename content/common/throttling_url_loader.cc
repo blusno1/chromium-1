@@ -9,6 +9,36 @@
 
 namespace content {
 
+class ThrottlingURLLoader::ForwardingThrottleDelegate
+    : public URLLoaderThrottle::Delegate {
+ public:
+  ForwardingThrottleDelegate(ThrottlingURLLoader* loader,
+                             URLLoaderThrottle* throttle)
+      : loader_(loader), throttle_(throttle) {}
+  ~ForwardingThrottleDelegate() override = default;
+
+  // URLLoaderThrottle::Delegate:
+  void CancelWithError(int error_code) override {
+    loader_->CancelWithError(error_code);
+  }
+
+  void Resume() override { loader_->StopDeferringForThrottle(throttle_); }
+
+  void PauseReadingBodyFromNet() override {
+    loader_->PauseReadingBodyFromNet(throttle_);
+  }
+
+  void ResumeReadingBodyFromNet() override {
+    loader_->ResumeReadingBodyFromNet(throttle_);
+  }
+
+ private:
+  ThrottlingURLLoader* const loader_;
+  URLLoaderThrottle* const throttle_;
+
+  DISALLOW_COPY_AND_ASSIGN(ForwardingThrottleDelegate);
+};
+
 ThrottlingURLLoader::StartInfo::StartInfo(
     mojom::URLLoaderFactory* in_url_loader_factory,
     int32_t in_routing_id,
@@ -119,13 +149,9 @@ ThrottlingURLLoader::ThrottlingURLLoader(
     : forwarding_client_(client),
       client_binding_(this),
       traffic_annotation_(traffic_annotation) {
-  if (throttles.size() > 0) {
-    // TODO(yzshen): Implement a URLLoaderThrottle subclass which handles a list
-    // of URLLoaderThrottles.
-    CHECK_EQ(1u, throttles.size());
-    throttle_ = std::move(throttles[0]);
-    throttle_->set_delegate(this);
-  }
+  throttles_.reserve(throttles.size());
+  for (auto& throttle : throttles)
+    throttles_.emplace_back(this, std::move(throttle));
 }
 
 void ThrottlingURLLoader::Start(
@@ -142,11 +168,16 @@ void ThrottlingURLLoader::Start(
   if (options & mojom::kURLLoadOptionSynchronous)
     is_synchronous_ = true;
 
-  if (throttle_) {
+  DCHECK(deferring_throttles_.empty());
+  if (!throttles_.empty()) {
     bool deferred = false;
-    throttle_->WillStartRequest(url_request, &deferred);
-    if (loader_cancelled_)
-      return;
+    for (auto& entry : throttles_) {
+      auto* throttle = entry.throttle.get();
+      bool throttle_deferred = false;
+      throttle->WillStartRequest(url_request, &throttle_deferred);
+      if (!HandleThrottleResult(throttle, throttle_deferred, &deferred))
+        return;
+    }
 
     if (deferred) {
       deferred_stage_ = DEFERRED_START;
@@ -179,20 +210,45 @@ void ThrottlingURLLoader::StartNow(
   if (factory) {
     DCHECK(!start_loader_callback);
 
-    mojom::URLLoaderPtr url_loader;
-    auto url_loader_request = mojo::MakeRequest(&url_loader);
-    url_loader_ = std::move(url_loader);
     factory->CreateLoaderAndStart(
-        std::move(url_loader_request), routing_id, request_id, options,
+        mojo::MakeRequest(&url_loader_), routing_id, request_id, options,
         url_request, std::move(client),
         net::MutableNetworkTrafficAnnotationTag(traffic_annotation_));
   } else {
-    mojom::URLLoaderPtr url_loader;
-    auto url_loader_request = mojo::MakeRequest(&url_loader);
-    url_loader_ = std::move(url_loader);
     std::move(start_loader_callback)
-        .Run(std::move(url_loader_request), std::move(client));
+        .Run(mojo::MakeRequest(&url_loader_), std::move(client));
   }
+
+  if (!pausing_reading_body_from_net_throttles_.empty())
+    url_loader_->PauseReadingBodyFromNet();
+
+  if (priority_info_) {
+    auto priority_info = std::move(priority_info_);
+    url_loader_->SetPriority(priority_info->priority,
+                             priority_info->intra_priority_value);
+  }
+}
+
+bool ThrottlingURLLoader::HandleThrottleResult(URLLoaderThrottle* throttle,
+                                               bool throttle_deferred,
+                                               bool* should_defer) {
+  DCHECK(!deferring_throttles_.count(throttle));
+  if (loader_cancelled_)
+    return false;
+  *should_defer |= throttle_deferred;
+  if (throttle_deferred)
+    deferring_throttles_.insert(throttle);
+  return true;
+}
+
+void ThrottlingURLLoader::StopDeferringForThrottle(
+    URLLoaderThrottle* throttle) {
+  if (deferring_throttles_.find(throttle) == deferring_throttles_.end())
+    return;
+
+  deferring_throttles_.erase(throttle);
+  if (deferring_throttles_.empty() && !loader_cancelled_)
+    Resume();
 }
 
 void ThrottlingURLLoader::OnReceiveResponse(
@@ -201,12 +257,17 @@ void ThrottlingURLLoader::OnReceiveResponse(
     mojom::DownloadedTempFilePtr downloaded_file) {
   DCHECK_EQ(DEFERRED_NONE, deferred_stage_);
   DCHECK(!loader_cancelled_);
+  DCHECK(deferring_throttles_.empty());
 
-  if (throttle_) {
+  if (!throttles_.empty()) {
     bool deferred = false;
-    throttle_->WillProcessResponse(&deferred);
-    if (loader_cancelled_)
-      return;
+    for (auto& entry : throttles_) {
+      auto* throttle = entry.throttle.get();
+      bool throttle_deferred = false;
+      throttle->WillProcessResponse(&throttle_deferred);
+      if (!HandleThrottleResult(throttle, throttle_deferred, &deferred))
+        return;
+    }
 
     if (deferred) {
       deferred_stage_ = DEFERRED_RESPONSE;
@@ -226,12 +287,17 @@ void ThrottlingURLLoader::OnReceiveRedirect(
     const ResourceResponseHead& response_head) {
   DCHECK_EQ(DEFERRED_NONE, deferred_stage_);
   DCHECK(!loader_cancelled_);
+  DCHECK(deferring_throttles_.empty());
 
-  if (throttle_) {
+  if (!throttles_.empty()) {
     bool deferred = false;
-    throttle_->WillRedirectRequest(redirect_info, &deferred);
-    if (loader_cancelled_)
-      return;
+    for (auto& entry : throttles_) {
+      auto* throttle = entry.throttle.get();
+      bool throttle_deferred = false;
+      throttle->WillRedirectRequest(redirect_info, &throttle_deferred);
+      if (!HandleThrottleResult(throttle, throttle_deferred, &deferred))
+        return;
+    }
 
     if (deferred) {
       deferred_stage_ = DEFERRED_REDIRECT;
@@ -308,8 +374,6 @@ void ThrottlingURLLoader::OnClientConnectionError() {
 }
 
 void ThrottlingURLLoader::CancelWithError(int error_code) {
-  // TODO(yzshen): Support a mode that cancellation also deletes the disk cache
-  // entry.
   if (loader_cancelled_)
     return;
 
@@ -332,12 +396,6 @@ void ThrottlingURLLoader::Resume() {
                start_info_->request_id, start_info_->options,
                std::move(start_info_->start_loader_callback),
                start_info_->url_request, std::move(start_info_->task_runner));
-
-      if (priority_info_) {
-        auto priority_info = std::move(priority_info_);
-        url_loader_->SetPriority(priority_info->priority,
-                                 priority_info->intra_priority_value);
-      }
       break;
     }
     case DEFERRED_REDIRECT: {
@@ -359,5 +417,41 @@ void ThrottlingURLLoader::Resume() {
   }
   deferred_stage_ = DEFERRED_NONE;
 }
+
+void ThrottlingURLLoader::PauseReadingBodyFromNet(URLLoaderThrottle* throttle) {
+  if (pausing_reading_body_from_net_throttles_.empty() && url_loader_)
+    url_loader_->PauseReadingBodyFromNet();
+
+  pausing_reading_body_from_net_throttles_.insert(throttle);
+}
+
+void ThrottlingURLLoader::ResumeReadingBodyFromNet(
+    URLLoaderThrottle* throttle) {
+  auto iter = pausing_reading_body_from_net_throttles_.find(throttle);
+  if (iter == pausing_reading_body_from_net_throttles_.end())
+    return;
+
+  pausing_reading_body_from_net_throttles_.erase(iter);
+  if (pausing_reading_body_from_net_throttles_.empty() && url_loader_)
+    url_loader_->ResumeReadingBodyFromNet();
+}
+
+ThrottlingURLLoader::ThrottleEntry::ThrottleEntry(
+    ThrottlingURLLoader* loader,
+    std::unique_ptr<URLLoaderThrottle> the_throttle)
+    : delegate(
+          base::MakeUnique<ForwardingThrottleDelegate>(loader,
+                                                       the_throttle.get())),
+      throttle(std::move(the_throttle)) {
+  throttle->set_delegate(delegate.get());
+}
+
+ThrottlingURLLoader::ThrottleEntry::ThrottleEntry(ThrottleEntry&& other) =
+    default;
+
+ThrottlingURLLoader::ThrottleEntry::~ThrottleEntry() = default;
+
+ThrottlingURLLoader::ThrottleEntry& ThrottlingURLLoader::ThrottleEntry::
+operator=(ThrottleEntry&& other) = default;
 
 }  // namespace content

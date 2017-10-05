@@ -16,7 +16,6 @@ source_set("autofill") {
     "form_suggestion_controller.mm",
     "form_suggestion_label.h",
     "form_suggestion_label.mm",
-    "form_suggestion_provider.h",
     "form_suggestion_tab_helper.h",
     "form_suggestion_tab_helper.mm",
     "form_suggestion_view.h",
@@ -28,14 +27,6 @@ source_set("autofill") {
     "validation_rules_storage_factory.h",
   ]
   deps = [
-    "resources:autofill_card_american_express",
-    "resources:autofill_card_diners",
-    "resources:autofill_card_discover",
-    "resources:autofill_card_generic",
-    "resources:autofill_card_jcb",
-    "resources:autofill_card_mastercard",
-    "resources:autofill_card_unionpay",
-    "resources:autofill_card_visa",
     "resources:autofill_close",
     "resources:autofill_close_pressed",
     "resources:autofill_keyboard_background",
@@ -77,8 +68,6 @@ source_set("autofill") {
 source_set("autofill_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "autofill_agent.h",
-    "autofill_agent.mm",
     "autofill_controller.h",
     "autofill_controller.mm",
     "autofill_tab_helper.h",

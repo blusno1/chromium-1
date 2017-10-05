@@ -18,7 +18,7 @@
 #include "base/test/histogram_tester.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "build/build_config.h"
-#include "components/safe_browsing_db/test_database_manager.h"
+#include "components/safe_browsing/db/test_database_manager.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
@@ -38,8 +38,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/test/cancelling_navigation_throttle.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/test_navigation_throttle.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -255,7 +255,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     auto simulator = content::NavigationSimulator::CreateRendererInitiated(
         GURL("https://example.test/disallowed.html"), subframe);
     simulator->Commit();
-    return simulator->GetLastThrottleCheckResult() ==
+    return simulator->GetLastThrottleCheckResult().action() ==
                    content::NavigationThrottle::PROCEED
                ? simulator->GetFinalRenderFrameHost()
                : nullptr;
@@ -280,7 +280,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
         content::NavigationSimulator::CreateRendererInitiated(first_url, rfh);
     navigation_simulator_->Start();
     auto result = navigation_simulator_->GetLastThrottleCheckResult();
-    if (result == content::NavigationThrottle::CANCEL)
+    if (result.action() == content::NavigationThrottle::CANCEL)
       navigation_simulator_.reset();
     return result;
   }
@@ -289,7 +289,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
       const GURL& new_url) {
     navigation_simulator_->Redirect(new_url);
     auto result = navigation_simulator_->GetLastThrottleCheckResult();
-    if (result == content::NavigationThrottle::CANCEL)
+    if (result.action() == content::NavigationThrottle::CANCEL)
       navigation_simulator_.reset();
     return result;
   }
@@ -408,34 +408,35 @@ class SubresourceFilterSafeBrowsingActivationThrottleParamTest
 class SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling
     : public SubresourceFilterSafeBrowsingActivationThrottleTest,
       public ::testing::WithParamInterface<
-          std::tuple<content::CancellingNavigationThrottle::CancelTime,
-                     content::CancellingNavigationThrottle::ResultSynchrony>> {
+          std::tuple<content::TestNavigationThrottle::ThrottleMethod,
+                     content::TestNavigationThrottle::ResultSynchrony>> {
  public:
   SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling() {
-    std::tie(cancel_time_, result_sync_) = GetParam();
+    std::tie(throttle_method_, result_sync_) = GetParam();
   }
   ~SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling()
       override {}
 
   void DidStartNavigation(content::NavigationHandle* handle) override {
-    handle->RegisterThrottleForTesting(
-        base::MakeUnique<content::CancellingNavigationThrottle>(
-            handle, cancel_time_, result_sync_));
+    auto throttle = base::MakeUnique<content::TestNavigationThrottle>(handle);
+    throttle->SetResponse(throttle_method_, result_sync_,
+                          content::NavigationThrottle::CANCEL);
+    handle->RegisterThrottleForTesting(std::move(throttle));
     SubresourceFilterSafeBrowsingActivationThrottleTest::DidStartNavigation(
         handle);
   }
 
-  content::CancellingNavigationThrottle::CancelTime cancel_time() {
-    return cancel_time_;
+  content::TestNavigationThrottle::ThrottleMethod throttle_method() {
+    return throttle_method_;
   }
 
-  content::CancellingNavigationThrottle::ResultSynchrony result_sync() {
+  content::TestNavigationThrottle::ResultSynchrony result_sync() {
     return result_sync_;
   }
 
  private:
-  content::CancellingNavigationThrottle::CancelTime cancel_time_;
-  content::CancellingNavigationThrottle::ResultSynchrony result_sync_;
+  content::TestNavigationThrottle::ThrottleMethod throttle_method_;
+  content::TestNavigationThrottle::ResultSynchrony result_sync_;
 
   DISALLOW_COPY_AND_ASSIGN(
       SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling);
@@ -798,34 +799,6 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
                             0);
 }
 
-TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
-       ExperimentalMetadata) {
-  const GURL url("https://example.test/");
-
-  // Set the list metadata for |url| to be experimental.
-  safe_browsing::ThreatMetadata metadata;
-  metadata.experimental = true;
-  fake_safe_browsing_database()->AddBlacklistedUrl(
-      url, safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER, metadata);
-
-  // Navigate without an experimental config.
-  SimulateStartAndExpectProceed(url);
-  SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-            *observer()->GetPageActivationForLastCommittedLoad());
-
-  // Navigate with an experimental config.
-  Configuration config(ActivationLevel::ENABLED,
-                       ActivationScope::ACTIVATION_LIST,
-                       ActivationList::SUBRESOURCE_FILTER);
-  config.activation_conditions.experimental = true;
-  scoped_configuration()->ResetConfiguration(std::move(config));
-  SimulateStartAndExpectProceed(url);
-  SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
-            *observer()->GetPageActivationForLastCommittedLoad());
-}
-
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,
        ActivateForScopeType) {
   const ActivationScopeTestData& test_data = GetParam();
@@ -1137,13 +1110,13 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling,
        Cancel) {
   const GURL url(kURL);
-  SCOPED_TRACE(::testing::Message() << "CancelTime: " << cancel_time()
+  SCOPED_TRACE(::testing::Message() << "ThrottleMethod: " << throttle_method()
                                     << " ResultSynchrony: " << result_sync());
   ConfigureForMatch(url);
   content::NavigationThrottle::ThrottleCheckResult result =
       SimulateStart(url, main_rfh());
-  if (cancel_time() ==
-      content::CancellingNavigationThrottle::WILL_START_REQUEST) {
+  if (throttle_method() ==
+      content::TestNavigationThrottle::WILL_START_REQUEST) {
     EXPECT_EQ(content::NavigationThrottle::CANCEL, result);
     tester().ExpectTotalCount(kSafeBrowsingNavigationDelay, 0);
     return;
@@ -1151,8 +1124,8 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling,
   EXPECT_EQ(content::NavigationThrottle::PROCEED, result);
 
   result = SimulateRedirect(GURL(kRedirectURL));
-  if (cancel_time() ==
-      content::CancellingNavigationThrottle::WILL_REDIRECT_REQUEST) {
+  if (throttle_method() ==
+      content::TestNavigationThrottle::WILL_REDIRECT_REQUEST) {
     EXPECT_EQ(content::NavigationThrottle::CANCEL, result);
     tester().ExpectTotalCount(kSafeBrowsingNavigationDelay, 0);
     return;
@@ -1171,12 +1144,11 @@ INSTANTIATE_TEST_CASE_P(
     SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling,
     ::testing::Combine(
         ::testing::Values(
-            content::CancellingNavigationThrottle::WILL_START_REQUEST,
-            content::CancellingNavigationThrottle::WILL_REDIRECT_REQUEST,
-            content::CancellingNavigationThrottle::WILL_PROCESS_RESPONSE),
-        ::testing::Values(
-            content::CancellingNavigationThrottle::SYNCHRONOUS,
-            content::CancellingNavigationThrottle::ASYNCHRONOUS)));
+            content::TestNavigationThrottle::WILL_START_REQUEST,
+            content::TestNavigationThrottle::WILL_REDIRECT_REQUEST,
+            content::TestNavigationThrottle::WILL_PROCESS_RESPONSE),
+        ::testing::Values(content::TestNavigationThrottle::SYNCHRONOUS,
+                          content::TestNavigationThrottle::ASYNCHRONOUS)));
 
 INSTANTIATE_TEST_CASE_P(
     ActivationLevelTest,

@@ -41,7 +41,7 @@
 #include "core/css/StyleMedia.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DOMImplementation.h"
-#include "core/dom/FrameRequestCallback.h"
+#include "core/dom/FrameRequestCallbackCollection.h"
 #include "core/dom/Modulator.h"
 #include "core/dom/SandboxFlags.h"
 #include "core/dom/ScriptedIdleTaskController.h"
@@ -51,6 +51,7 @@
 #include "core/dom/events/DOMWindowEventQueue.h"
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/Editor.h"
+#include "core/editing/FrameSelection.h"
 #include "core/events/HashChangeEvent.h"
 #include "core/events/MessageEvent.h"
 #include "core/events/PageTransitionEvent.h"
@@ -124,12 +125,12 @@ class PostMessageTimer final
   }
 
   MessageEvent* Event() const { return event_; }
-  SecurityOrigin* TargetOrigin() const { return target_origin_.Get(); }
+  SecurityOrigin* TargetOrigin() const { return target_origin_.get(); }
   std::unique_ptr<SourceLocation> TakeLocation() {
     return std::move(location_);
   }
   UserGestureToken* GetUserGestureToken() const {
-    return user_gesture_token_.Get();
+    return user_gesture_token_.get();
   }
   void ContextDestroyed(ExecutionContext* destroyed_context) override {
     SuspendableTimer::ContextDestroyed(destroyed_context);
@@ -328,6 +329,8 @@ Document* LocalDOMWindow::InstallNewDocument(const String& mime_type,
   document_->UpdateViewportDescription();
 
   if (GetFrame()->GetPage() && GetFrame()->View()) {
+    GetFrame()->GetPage()->GetChromeClient().InstallSupplements(*GetFrame());
+
     if (ScrollingCoordinator* scrolling_coordinator =
             GetFrame()->GetPage()->GetScrollingCoordinator()) {
       scrolling_coordinator->ScrollableAreaScrollbarLayerDidChange(
@@ -416,8 +419,7 @@ void LocalDOMWindow::EnqueuePopstateEvent(
   DispatchEvent(PopStateEvent::Create(std::move(state_object), history()));
 }
 
-void LocalDOMWindow::StatePopped(
-    PassRefPtr<SerializedScriptValue> state_object) {
+void LocalDOMWindow::StatePopped(RefPtr<SerializedScriptValue> state_object) {
   if (!GetFrame())
     return;
 
@@ -1328,18 +1330,22 @@ void LocalDOMWindow::resizeTo(int width, int height) const {
   page->GetChromeClient().SetWindowRectWithAdjustment(update, *GetFrame());
 }
 
-int LocalDOMWindow::requestAnimationFrame(FrameRequestCallback* callback) {
-  callback->use_legacy_time_base_ = false;
+int LocalDOMWindow::requestAnimationFrame(V8FrameRequestCallback* callback) {
+  FrameRequestCallbackCollection::V8FrameCallback* frame_callback =
+      FrameRequestCallbackCollection::V8FrameCallback::Create(callback);
+  frame_callback->SetUseLegacyTimeBase(false);
   if (Document* doc = document())
-    return doc->RequestAnimationFrame(callback);
+    return doc->RequestAnimationFrame(frame_callback);
   return 0;
 }
 
 int LocalDOMWindow::webkitRequestAnimationFrame(
-    FrameRequestCallback* callback) {
-  callback->use_legacy_time_base_ = true;
+    V8FrameRequestCallback* callback) {
+  FrameRequestCallbackCollection::V8FrameCallback* frame_callback =
+      FrameRequestCallbackCollection::V8FrameCallback::Create(callback);
+  frame_callback->SetUseLegacyTimeBase(true);
   if (Document* document = this->document())
-    return document->RequestAnimationFrame(callback);
+    return document->RequestAnimationFrame(frame_callback);
   return 0;
 }
 

@@ -29,6 +29,7 @@ namespace extensions {
 
 namespace {
 
+const char kManifestUrl[] = "http://www.chromium.org/manifest.json";
 const char kAppUrl[] = "http://www.chromium.org/index.html";
 const char kAlternativeAppUrl[] = "http://www.notchromium.org";
 const char kAppScope[] = "http://www.chromium.org/scope/";
@@ -297,8 +298,9 @@ class TestBookmarkAppHelper : public BookmarkAppHelper {
     extension_ = extension;
   }
 
-  void CompleteGetManifest(const content::Manifest& manifest) {
-    BookmarkAppHelper::OnDidGetManifest(GURL(), manifest);
+  void CompleteGetManifest(const char* manifest_url,
+                           const content::Manifest& manifest) {
+    BookmarkAppHelper::OnDidGetManifest(GURL(manifest_url), manifest);
   }
 
   void CompleteIconDownload(
@@ -334,7 +336,7 @@ TEST_F(BookmarkAppHelperExtensionServiceTest, CreateBookmarkApp) {
       CreateSquareBitmapWithColor(kIconSizeSmall, SK_ColorRED));
   helper.CompleteIconDownload(true, icon_map);
 
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_TRUE(helper.extension());
   const Extension* extension =
       service_->GetInstalledExtension(helper.extension()->id());
@@ -367,12 +369,12 @@ TEST_F(BookmarkAppHelperExtensionServiceTest, CreateBookmarkAppWithManifest) {
   manifest.start_url = GURL(kAppUrl);
   manifest.name = base::NullableString16(base::UTF8ToUTF16(kAppTitle), false);
   manifest.scope = GURL(kAppScope);
-  helper.CompleteGetManifest(manifest);
+  helper.CompleteGetManifest(kManifestUrl, manifest);
 
   std::map<GURL, std::vector<SkBitmap> > icon_map;
   helper.CompleteIconDownload(true, icon_map);
 
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_TRUE(helper.extension());
   const Extension* extension =
       service_->GetInstalledExtension(helper.extension()->id());
@@ -402,11 +404,11 @@ TEST_F(BookmarkAppHelperExtensionServiceTest,
   content::Manifest manifest;
   manifest.start_url = GURL(kAppUrl);
   manifest.name = base::NullableString16(base::UTF8ToUTF16(kAppTitle), false);
-  helper.CompleteGetManifest(manifest);
+  helper.CompleteGetManifest(kManifestUrl, manifest);
 
   std::map<GURL, std::vector<SkBitmap>> icon_map;
   helper.CompleteIconDownload(true, icon_map);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_TRUE(helper.extension());
 
   const Extension* extension =
@@ -427,10 +429,10 @@ TEST_F(BookmarkAppHelperExtensionServiceTest,
   helper.Create(base::Bind(&TestBookmarkAppHelper::CreationComplete,
                            base::Unretained(&helper)));
 
-  helper.CompleteGetManifest(content::Manifest());
+  helper.CompleteGetManifest(kManifestUrl, content::Manifest());
   std::map<GURL, std::vector<SkBitmap>> icon_map;
   helper.CompleteIconDownload(true, icon_map);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_TRUE(helper.extension());
 
   const Extension* extension =
@@ -455,7 +457,7 @@ TEST_F(BookmarkAppHelperExtensionServiceTest, CreateBookmarkAppNoContents) {
   helper.Create(base::Bind(&TestBookmarkAppHelper::CreationComplete,
                            base::Unretained(&helper)));
 
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_TRUE(helper.extension());
   const Extension* extension =
       service_->GetInstalledExtension(helper.extension()->id());
@@ -496,7 +498,7 @@ TEST_F(BookmarkAppHelperExtensionServiceTest, CreateAndUpdateBookmarkApp) {
       CreateIconInfoWithBitmap(kIconSizeSmall, SK_ColorRED));
 
   extensions::CreateOrUpdateBookmarkApp(service_, &web_app_info);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   {
     EXPECT_EQ(1u, registry()->enabled_extensions().size());
@@ -517,7 +519,7 @@ TEST_F(BookmarkAppHelperExtensionServiceTest, CreateAndUpdateBookmarkApp) {
   web_app_info.scope = GURL(kAppAlternativeScope);
 
   extensions::CreateOrUpdateBookmarkApp(service_, &web_app_info);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   {
     EXPECT_EQ(1u, registry()->enabled_extensions().size());
@@ -546,7 +548,7 @@ TEST_F(BookmarkAppHelperExtensionServiceTest, GetWebApplicationInfo) {
   web_app_info.scope = GURL(kAppScope);
 
   extensions::CreateOrUpdateBookmarkApp(service_, &web_app_info);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   EXPECT_EQ(1u, registry()->enabled_extensions().size());
   base::RunLoop run_loop;

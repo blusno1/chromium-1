@@ -14,7 +14,6 @@
 #include "chrome/browser/chromeos/tether/tether_service_factory.h"
 #include "chrome/browser/cryptauth/chrome_cryptauth_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
@@ -159,7 +158,6 @@ void TetherService::StartTetherIfPossible() {
   PA_LOG(INFO) << "Starting up Tether component.";
   initializer_ = chromeos::tether::InitializerImpl::Factory::NewInstance(
       cryptauth_service_, notification_presenter_.get(), profile_->GetPrefs(),
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile_),
       network_state_handler_,
       chromeos::NetworkHandler::Get()->managed_network_configuration_handler(),
       chromeos::NetworkConnect::Get(),
@@ -214,6 +212,15 @@ void TetherService::SuspendImminent() {
 
 void TetherService::SuspendDone(const base::TimeDelta& sleep_duration) {
   suspended_ = false;
+
+  // If there was a previous Initializer instance in the process of an
+  // asynchronous shutdown, that session is stale by this point. Kill it now, so
+  // that the next session can start up immediately.
+  if (initializer_) {
+    initializer_->RemoveObserver(this);
+    initializer_.reset();
+  }
+
   UpdateTetherTechnologyState();
 }
 
@@ -347,6 +354,7 @@ TetherService::GetTetherTechnologyState() {
     case OTHER_OR_UNKNOWN:
     case BLE_NOT_PRESENT:
     case BLE_ADVERTISING_NOT_SUPPORTED:
+    case WIFI_NOT_PRESENT:
     case SCREEN_LOCKED:
     case NO_AVAILABLE_HOSTS:
     case CELLULAR_DISABLED:
@@ -438,6 +446,11 @@ bool TetherService::IsBluetoothPowered() const {
   return IsBluetoothPresent() && adapter_->IsPowered();
 }
 
+bool TetherService::IsWifiPresent() const {
+  return network_state_handler_->IsTechnologyAvailable(
+      chromeos::NetworkTypePattern::WiFi());
+}
+
 bool TetherService::IsCellularAvailableButNotEnabled() const {
   return (network_state_handler_->IsTechnologyAvailable(
               chromeos::NetworkTypePattern::Cellular()) &&
@@ -459,6 +472,9 @@ TetherService::TetherFeatureState TetherService::GetTetherFeatureState() {
 
   if (!IsBluetoothPresent())
     return BLE_NOT_PRESENT;
+
+  if (!IsWifiPresent())
+    return WIFI_NOT_PRESENT;
 
   if (!GetIsBleAdvertisingSupportedPref())
     return BLE_ADVERTISING_NOT_SUPPORTED;

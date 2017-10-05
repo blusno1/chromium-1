@@ -1,3 +1,4 @@
+self._Runtime = Runtime;
 require=function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f;}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e);},l,l.exports,e,t,n,r);}return n[o].exports;}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s;}({"../audits/accessibility/accesskeys":[function(require,module,exports){
 
 
@@ -3480,7 +3481,8 @@ category:'UX',
 name:'password-inputs-can-be-pasted-into',
 description:'Allows users to paste into password fields',
 failureDescription:'Prevents users to paste into password fields',
-helpText:'',
+helpText:'Preventing password pasting undermines good security policy. '+
+'[Learn more](https://www.ncsc.gov.uk/blog-post/let-them-paste-passwords)',
 requiredArtifacts:['PasswordInputsWithPreventedPaste']};
 
 }
@@ -8885,12 +8887,16 @@ throw new Error(
 if(typeof auditDefinition.meta.failureDescription!=='string'&&
 auditDefinition.meta.informative!==true&&
 auditDefinition.meta.scoringMode!==Audit.SCORING_MODES.NUMERIC){
-log.warn('config',`${auditName} has no failureDescription and should.`);
+throw new Error(`${auditName} has no failureDescription and should.`);
 }
 
 if(typeof auditDefinition.meta.helpText!=='string'){
 throw new Error(
 `${auditName} has no meta.helpText property, or the property is not a string.`);
+
+}else if(auditDefinition.meta.helpText===''){
+throw new Error(
+`${auditName} has an empty meta.helpText string. Please add a description for the UI.`);
 
 }
 
@@ -10714,9 +10720,14 @@ if(typeof maxWaitMs!=='number')maxWaitMs=Driver.MAX_WAIT_FOR_FULLY_LOADED;
 
 
 return this._beginNetworkStatusMonitoring(url).
-then(_=>this.sendCommand('Page.enable')).
-then(_=>this.sendCommand('Emulation.setScriptExecutionDisabled',{value:disableJS})).
-then(_=>this.sendCommand('Page.navigate',{url})).
+then(_=>{
+
+
+
+this.sendCommand('Page.enable');
+this.sendCommand('Emulation.setScriptExecutionDisabled',{value:disableJS});
+this.sendCommand('Page.navigate',{url});
+}).
 then(_=>waitForLoad&&this._waitForFullyLoaded(pauseAfterLoadMs,
 networkQuietThresholdMs,cpuQuietThresholdMs,maxWaitMs)).
 then(_=>this._endNetworkStatusMonitoring());
@@ -48901,6 +48912,6 @@ calculateSpeedIndexes};
 
 },{"image-ssim":105}],115:[function(require,module,exports){
 module.exports={
-"version":"2.3.0"};
+"version":"2.3.1"};
 
 },{}]},{},[35]);

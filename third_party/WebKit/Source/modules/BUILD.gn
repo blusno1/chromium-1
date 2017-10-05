@@ -36,10 +36,7 @@ config("modules_implementation") {
 
 make_names("module_names") {
   in_files = [ "indexeddb/IndexedDBNames.json5" ]
-  outputs = [
-    "$blink_modules_output_dir/IndexedDBNames.cpp",
-    "$blink_modules_output_dir/IndexedDBNames.h",
-  ]
+  output_dir = blink_modules_output_dir
   deps = []  # Don't use default deps (otherwise it will be circular).
 }
 
@@ -80,6 +77,7 @@ target("jumbo_" + modules_target_type, "modules") {
     "//third_party/WebKit/Source:non_test_config",
     "//third_party/WebKit/Source:inside_blink",
     "//third_party/WebKit/Source/core:blink_core_pch",
+    "//tools/v8_context_snapshot:use_v8_context_snapshot",
   ]
 
   deps = [
@@ -180,10 +178,6 @@ target("jumbo_" + modules_target_type, "modules") {
 
 jumbo_source_set("modules_testing") {
   sources = [
-    "$bindings_modules_v8_output_dir/V8InternalsPartial.cpp",
-    "$bindings_modules_v8_output_dir/V8InternalsPartial.h",
-    "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.cpp",
-    "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.h",
     "accessibility/testing/InternalsAccessibility.cpp",
     "accessibility/testing/InternalsAccessibility.h",
     "fetch/testing/InternalsFetch.cpp",
@@ -209,6 +203,21 @@ jumbo_source_set("modules_testing") {
     "webaudio/testing/InternalsWebAudio.cpp",
     "webaudio/testing/InternalsWebAudio.h",
   ]
+  if (snake_case_source_files) {
+    sources += [
+      "$bindings_modules_v8_output_dir/v8_internals_partial.cc",
+      "$bindings_modules_v8_output_dir/v8_internals_partial.h",
+      "$bindings_modules_v8_output_dir/v8_worker_internals_partial.cc",
+      "$bindings_modules_v8_output_dir/v8_worker_internals_partial.h",
+    ]
+  } else {
+    sources += [
+      "$bindings_modules_v8_output_dir/V8InternalsPartial.cpp",
+      "$bindings_modules_v8_output_dir/V8InternalsPartial.h",
+      "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.cpp",
+      "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.h",
+    ]
+  }
 
   configs += [
     "//third_party/WebKit/Source:config",
@@ -243,7 +252,6 @@ jumbo_source_set("unit_tests") {
     "canvas2d/CanvasRenderingContext2DTest.cpp",
     "compositorworker/AnimationWorkletGlobalScopeTest.cpp",
     "compositorworker/AnimationWorkletThreadTest.cpp",
-    "compositorworker/CompositorWorkerThreadTest.cpp",
     "credentialmanager/CredentialsContainerTest.cpp",
     "credentialmanager/PasswordCredentialTest.cpp",
     "csspaint/PaintRenderingContext2DTest.cpp",

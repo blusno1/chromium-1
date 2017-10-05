@@ -6,13 +6,13 @@
 
 #include <stddef.h>
 #include <memory>
-#include <queue>
 #include <string>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/queue.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/system_monitor/system_monitor.h"
@@ -218,11 +218,13 @@ class MockMediaStreamDispatcherHost : public MediaStreamDispatcherHost,
 
   mojo::BindingSet<mojom::MediaStreamDispatcher> bindings_;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  std::queue<base::Closure> quit_closures_;
+  base::queue<base::Closure> quit_closures_;
 };
 
 class MockMediaStreamUIProxy : public FakeMediaStreamUIProxy {
  public:
+  MockMediaStreamUIProxy()
+      : FakeMediaStreamUIProxy(/*tests_use_fake_render_frame_hosts=*/true) {}
   void OnStarted(
       base::OnceClosure stop,
       MediaStreamUIProxy::WindowIdCallback window_id_callback) override {
@@ -238,21 +240,22 @@ class MediaStreamDispatcherHostTest : public testing::Test {
   MediaStreamDispatcherHostTest()
       : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
         origin_(GURL("https://test.com")) {
-    audio_manager_.reset(new media::MockAudioManager(
-        base::MakeUnique<media::TestAudioThread>()));
-    audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
+    audio_manager_ = std::make_unique<media::MockAudioManager>(
+        std::make_unique<media::TestAudioThread>());
+    audio_system_ =
+        std::make_unique<media::AudioSystemImpl>(audio_manager_.get());
     // Make sure we use fake devices to avoid long delays.
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kUseFakeDeviceForMediaStream);
     auto mock_video_capture_provider =
-        base::MakeUnique<MockVideoCaptureProvider>();
+        std::make_unique<MockVideoCaptureProvider>();
     mock_video_capture_provider_ = mock_video_capture_provider.get();
     // Create our own MediaStreamManager.
-    media_stream_manager_ = base::MakeUnique<MediaStreamManager>(
+    media_stream_manager_ = std::make_unique<MediaStreamManager>(
         audio_system_.get(), audio_manager_->GetTaskRunner(),
         std::move(mock_video_capture_provider));
 
-    host_ = base::MakeUnique<MockMediaStreamDispatcherHost>(
+    host_ = std::make_unique<MockMediaStreamDispatcherHost>(
         browser_context_.GetMediaDeviceIDSalt(),
         base::ThreadTaskRunnerHandle::Get(), media_stream_manager_.get());
     mojom::MediaStreamDispatcherPtr dispatcher =
@@ -313,13 +316,18 @@ class MediaStreamDispatcherHostTest : public testing::Test {
   void TearDown() override { host_.reset(); }
 
  protected:
+  std::unique_ptr<FakeMediaStreamUIProxy> CreateMockUI(bool expect_started) {
+    std::unique_ptr<MockMediaStreamUIProxy> fake_ui =
+        std::make_unique<MockMediaStreamUIProxy>();
+    if (expect_started)
+      EXPECT_CALL(*fake_ui, MockOnStarted(_));
+    return fake_ui;
+  }
+
   virtual void SetupFakeUI(bool expect_started) {
-    stream_ui_ = new MockMediaStreamUIProxy();
-    if (expect_started) {
-      EXPECT_CALL(*stream_ui_, MockOnStarted(_));
-    }
-    media_stream_manager_->UseFakeUIForTests(
-        std::unique_ptr<FakeMediaStreamUIProxy>(stream_ui_));
+    media_stream_manager_->UseFakeUIFactoryForTests(
+        base::Bind(&MediaStreamDispatcherHostTest::CreateMockUI,
+                   base::Unretained(this), expect_started));
   }
 
   void GenerateStreamAndWaitForResult(int render_frame_id,
@@ -418,7 +426,6 @@ class MediaStreamDispatcherHostTest : public testing::Test {
   TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<media::AudioManager> audio_manager_;
   std::unique_ptr<media::AudioSystem> audio_system_;
-  MockMediaStreamUIProxy* stream_ui_;
   TestBrowserContext browser_context_;
   media::AudioDeviceDescriptions audio_device_descriptions_;
   std::vector<std::string> stub_video_device_ids_;
@@ -513,7 +520,6 @@ TEST_F(MediaStreamDispatcherHostTest, GenerateStreamsFromSameRenderId) {
   const int session_id1 = host_->video_devices_.front().session_id;
 
   // Generate second stream.
-  SetupFakeUI(true);
   GenerateStreamAndWaitForResult(kRenderId, kPageRequestId + 1, controls);
 
   // Check the latest generated stream.
@@ -529,10 +535,10 @@ TEST_F(MediaStreamDispatcherHostTest, GenerateStreamsFromSameRenderId) {
 
 TEST_F(MediaStreamDispatcherHostTest,
        GenerateStreamAndOpenDeviceFromSameRenderId) {
+  SetupFakeUI(true);
   StreamControls controls(false, true);
 
   // Generate first stream.
-  SetupFakeUI(true);
   GenerateStreamAndWaitForResult(kRenderId, kPageRequestId, controls);
 
   EXPECT_EQ(host_->audio_devices_.size(), 0u);
@@ -575,7 +581,6 @@ TEST_F(MediaStreamDispatcherHostTest, GenerateStreamsDifferentRenderId) {
       host_->CreateInterfacePtrAndBind();
   host_->SetMediaStreamDispatcherForTesting(kRenderId + 1,
                                             std::move(dispatcher));
-  SetupFakeUI(true);
   GenerateStreamAndWaitForResult(kRenderId + 1, kPageRequestId + 1, controls);
 
   // Check the latest generated stream.
@@ -642,7 +647,6 @@ TEST_F(MediaStreamDispatcherHostTest, GenerateStreamsWithSourceId) {
     StreamControls controls(true, true);
     controls.video.device_id = source_id;
 
-    SetupFakeUI(true);
     GenerateStreamAndWaitForResult(kRenderId, kPageRequestId, controls);
     EXPECT_EQ(host_->video_devices_[0].id, source_id);
   }
@@ -776,12 +780,12 @@ TEST_F(MediaStreamDispatcherHostTest, CancelPendingStreams) {
 TEST_F(MediaStreamDispatcherHostTest, StopGeneratedStreams) {
   StreamControls controls(false, true);
 
+  SetupFakeUI(true);
+
   // Create first group of streams.
   size_t generated_streams = 3;
-  for (size_t i = 0; i < generated_streams; ++i) {
-    SetupFakeUI(true);
+  for (size_t i = 0; i < generated_streams; ++i)
     GenerateStreamAndWaitForResult(kRenderId, kPageRequestId + i, controls);
-  }
 
   media_stream_manager_->CancelAllRequests(kProcessId);
   base::RunLoop().RunUntilIdle();
@@ -791,10 +795,16 @@ TEST_F(MediaStreamDispatcherHostTest, CloseFromUI) {
   StreamControls controls(false, true);
 
   base::Closure close_callback;
-  auto stream_ui = base::MakeUnique<MockMediaStreamUIProxy>();
-  EXPECT_CALL(*stream_ui, MockOnStarted(_))
-      .WillOnce(SaveArg<0>(&close_callback));
-  media_stream_manager_->UseFakeUIForTests(std::move(stream_ui));
+  media_stream_manager_->UseFakeUIFactoryForTests(base::Bind(
+      [](base::Closure* close_callback) {
+        std::unique_ptr<FakeMediaStreamUIProxy> stream_ui =
+            std::make_unique<MockMediaStreamUIProxy>();
+        EXPECT_CALL(*static_cast<MockMediaStreamUIProxy*>(stream_ui.get()),
+                    MockOnStarted(_))
+            .WillOnce(SaveArg<0>(close_callback));
+        return stream_ui;
+      },
+      &close_callback));
 
   GenerateStreamAndWaitForResult(kRenderId, kPageRequestId, controls);
 

@@ -5,7 +5,10 @@
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 
 #include "ash/focus_cycler.h"
+#include "ash/root_window_controller.h"
+#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_notifier.h"
@@ -21,11 +24,10 @@
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
-#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
+#include "chrome/browser/chromeos/login/ui/internet_detail_dialog.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/ui/preloaded_web_view.h"
 #include "chrome/browser/chromeos/login/ui/preloaded_web_view_factory.h"
-#include "chrome/browser/chromeos/login/ui/proxy_settings_dialog.h"
 #include "chrome/browser/chromeos/login/ui/web_contents_forced_title.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -44,6 +46,7 @@
 #include "chromeos/network/network_state_handler.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/password_manager/core/browser/password_manager.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
@@ -83,7 +86,6 @@ const char kAccelNameDeviceRequisitionRemora[] = "device_requisition_remora";
 const char kAccelNameDeviceRequisitionShark[] = "device_requisition_shark";
 const char kAccelNameAppLaunchBailout[] = "app_launch_bailout";
 const char kAccelNameAppLaunchNetworkConfig[] = "app_launch_network_config";
-const char kAccelNameToggleEasyBootstrap[] = "toggle_easy_bootstrap";
 const char kAccelNameBootstrappingSlave[] = "bootstrapping_slave";
 
 // A class to change arrow key traversal behavior when it's alive.
@@ -144,23 +146,12 @@ WebUILoginView::WebUILoginView(const WebViewSettings& settings)
   }
   accel_map_[ui::Accelerator(ui::VKEY_V, ui::EF_ALT_DOWN)] =
       kAccelNameVersion;
-
-  // Devices with forced re-enrollment enabled shouldn't be able to powerwash.
-  const AutoEnrollmentController::FRERequirement requirement =
-      AutoEnrollmentController::GetFRERequirement();
-  if (requirement == AutoEnrollmentController::NOT_REQUIRED ||
-      requirement == AutoEnrollmentController::EXPLICITLY_NOT_REQUIRED) {
-    accel_map_[ui::Accelerator(ui::VKEY_R,
-                               ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
-                                   ui::EF_SHIFT_DOWN)] = kAccelNameReset;
-  }
-
+  accel_map_[ui::Accelerator(
+      ui::VKEY_R, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
+      kAccelNameReset;
   accel_map_[ui::Accelerator(ui::VKEY_X,
       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
       kAccelNameEnableDebugging;
-  accel_map_[ui::Accelerator(
-      ui::VKEY_B, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
-      kAccelNameToggleEasyBootstrap;
 
   accel_map_[ui::Accelerator(
       ui::VKEY_D, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
@@ -188,12 +179,8 @@ WebUILoginView::WebUILoginView(const WebViewSettings& settings)
   for (AccelMap::iterator i(accel_map_.begin()); i != accel_map_.end(); ++i)
     AddAccelerator(i->first);
 
-  if (!ash_util::IsRunningInMash() &&
-      ash::Shell::Get()->HasPrimaryStatusArea()) {
-    ash::Shell::Get()->system_tray_notifier()->AddStatusAreaFocusObserver(this);
-  } else {
-    NOTIMPLEMENTED();
-  }
+  if (!ash_util::IsRunningInMash())
+    ash::Shell::Get()->system_tray_notifier()->AddSystemTrayFocusObserver(this);
 }
 
 WebUILoginView::~WebUILoginView() {
@@ -206,14 +193,9 @@ WebUILoginView::~WebUILoginView() {
   if (keyboard::KeyboardController::GetInstance())
     keyboard::KeyboardController::GetInstance()->RemoveObserver(this);
 
-  if (!ash_util::IsRunningInMash() &&
-      ash::Shell::Get()->HasPrimaryStatusArea()) {
-    ash::Shell::Get()->system_tray_notifier()->RemoveStatusAreaFocusObserver(
+  if (!ash_util::IsRunningInMash()) {
+    ash::Shell::Get()->system_tray_notifier()->RemoveSystemTrayFocusObserver(
         this);
-    ash::StatusAreaWidgetDelegate::GetPrimaryInstance()
-        ->set_default_last_focusable_child(false);
-  } else {
-    NOTIMPLEMENTED();
   }
 
   // Clear any delegates we have set on the WebView.
@@ -370,22 +352,6 @@ OobeUI* WebUILoginView::GetOobeUI() {
     return nullptr;
 
   return static_cast<OobeUI*>(GetWebUI()->GetController());
-}
-
-void WebUILoginView::OpenProxySettings(const std::string& network_id) {
-  auto* network_state_handler = NetworkHandler::Get()->network_state_handler();
-  const NetworkState* network;
-  if (!network_id.empty())
-    network = network_state_handler->GetNetworkStateFromGuid(network_id);
-  else
-    network = network_state_handler->DefaultNetwork();
-  if (!network) {
-    LOG(ERROR) << "Network not found: " << network_id;
-    return;
-  }
-  ProxySettingsDialog* dialog = new ProxySettingsDialog(
-      ProfileHelper::GetSigninProfile(), *network, nullptr, GetNativeWindow());
-  dialog->Show();
 }
 
 void WebUILoginView::OnPostponedShow() {
@@ -603,7 +569,7 @@ void WebUILoginView::HandleLockScreenAppFocusOut(bool reverse) {
   AboutToRequestFocusFromTabTraversal(reverse);
 }
 
-void WebUILoginView::OnFocusOut(bool reverse) {
+void WebUILoginView::OnFocusLeavingSystemTray(bool reverse) {
   if (!reverse && !lock_screen_app_focus_handler_.is_null()) {
     lock_screen_app_focus_handler_.Run(reverse);
     return;
@@ -618,14 +584,34 @@ bool WebUILoginView::MoveFocusToSystemTray(bool reverse) {
   if (ash_util::IsRunningInMash())
     return true;
 
-  ash::SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
+  // The focus should not move to the system tray if voice interaction OOOBE is
+  // active.
+  if (LoginDisplayHost::default_host() &&
+      LoginDisplayHost::default_host()->IsVoiceInteractionOobe()) {
+    return false;
+  }
+
+  // If shift+tab is used (|reverse| is true) and views-based shelf is shown,
+  // focus goes to the shelf widget. If views-based shelf is disabled, focus
+  // goes to the system tray, because the web-UI shelf has already been
+  // traversed when we reach here.
+  ash::Shelf* shelf = ash::Shelf::ForWindow(GetWidget()->GetNativeWindow());
+  if (!reverse && ash::ShelfWidget::IsUsingMdLoginShelf()) {
+    shelf->shelf_widget()->set_default_last_focusable_child(reverse);
+    ash::Shell::Get()->focus_cycler()->FocusWidget(shelf->shelf_widget());
+    return true;
+  }
+
+  ash::SystemTray* tray =
+      ash::RootWindowController::ForWindow(GetWidget()->GetNativeWindow())
+          ->GetSystemTray();
   if (!tray || !tray->GetWidget()->IsVisible() || !tray->visible())
     return false;
 
-  ash::StatusAreaWidgetDelegate::GetPrimaryInstance()
+  shelf->GetStatusAreaWidget()
+      ->status_area_widget_delegate()
       ->set_default_last_focusable_child(reverse);
-  ash::Shell::Get()->focus_cycler()->RotateFocus(
-      reverse ? ash::FocusCycler::BACKWARD : ash::FocusCycler::FORWARD);
+  ash::Shell::Get()->focus_cycler()->FocusWidget(shelf->GetStatusAreaWidget());
   return true;
 }
 

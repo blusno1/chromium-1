@@ -5,6 +5,7 @@
 #include "net/socket/udp_socket.h"
 
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -271,16 +272,7 @@ TEST_F(UDPSocketTest, PartialRecv) {
                              &recv_from_address_, recv_callback.callback());
   rv = recv_callback.GetResult(rv);
 
-#if defined(OS_WIN)
-  // On Windows Recv() returns ERR_MSG_TOO_BIG.
-  // TODO(sergeyu): Consider making this behavior consistent on all platforms.
   EXPECT_EQ(rv, ERR_MSG_TOO_BIG);
-#else   // !OS_WIN
-  EXPECT_EQ(rv, kPartialReadSize);
-#endif  // !OS_WIN
-
-  EXPECT_EQ(test_packet.substr(0, kPartialReadSize),
-            std::string(buffer->data(), kPartialReadSize));
 
   // Send a different message again.
   std::string second_packet("Second packet");
@@ -362,7 +354,8 @@ static const int kBindRetries = 10;
 
 class TestPrng {
  public:
-  explicit TestPrng(const std::deque<int>& numbers) : numbers_(numbers) {}
+  explicit TestPrng(const base::circular_deque<int>& numbers)
+      : numbers_(numbers) {}
   int GetNext(int /* min */, int /* max */) {
     DCHECK(!numbers_.empty());
     int rv = numbers_.front();
@@ -370,7 +363,7 @@ class TestPrng {
     return rv;
   }
  private:
-  std::deque<int> numbers_;
+  base::circular_deque<int> numbers_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPrng);
 };
@@ -380,7 +373,7 @@ TEST_F(UDPSocketTest, ConnectRandomBind) {
   IPEndPoint peer_address(IPAddress::IPv4Localhost(), 53);
 
   // Create and connect sockets and save port numbers.
-  std::deque<int> used_ports;
+  base::circular_deque<int> used_ports;
   for (int i = 0; i < kBindRetries; ++i) {
     UDPClientSocket* socket = new UDPClientSocket(
         DatagramSocket::DEFAULT_BIND, RandIntCallback(), NULL, NetLogSource());

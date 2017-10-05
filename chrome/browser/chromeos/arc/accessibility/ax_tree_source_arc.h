@@ -54,6 +54,8 @@ class AXTreeSourceArc
 
   void Focus(aura::Window* window);
 
+  int32_t window_id() const { return window_id_; }
+
  private:
   class FocusStealer;
 
@@ -73,6 +75,14 @@ class AXTreeSourceArc
   void SerializeNode(mojom::AccessibilityNodeInfoData* node,
                      ui::AXNodeData* out_data) const override;
 
+  // Returns bounds of a node which can be passed to AXNodeData.location. Bounds
+  // are returned in the following coordinates depending on whether it's root or
+  // not.
+  // - Root node is relative to its container, i.e. focused window.
+  // - Non-root node is relative to the root node of this tree.
+  const gfx::Rect GetBounds(mojom::AccessibilityNodeInfoData* node,
+                            aura::Window* focused_window) const;
+
   // AXHostDelegate overrides.
   void PerformAction(const ui::AXActionData& data) override;
 
@@ -84,6 +94,7 @@ class AXTreeSourceArc
   std::map<int32_t, int32_t> parent_map_;
   std::unique_ptr<AXTreeArcSerializer> current_tree_serializer_;
   int32_t root_id_;
+  int32_t window_id_;
   int32_t focused_node_id_;
 
   // A delegate that handles accessibility actions on behalf of this tree. The

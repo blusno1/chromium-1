@@ -4,10 +4,13 @@
 
 package org.chromium.android_webview;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.Build;
+import android.support.annotation.VisibleForTesting;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,6 +34,7 @@ import org.chromium.ui.display.DisplayAndroid;
  * is owned by AwContents.java and AutofillProviderAndroid is owned by native
  * AwContents.
  */
+@TargetApi(Build.VERSION_CODES.O)
 public class AwAutofillProvider extends AutofillProvider {
     private static class FocusField {
         public final short fieldIndex;
@@ -63,15 +67,17 @@ public class AwAutofillProvider extends AutofillProvider {
         }
 
         public void fillViewStructure(ViewStructure structure) {
-            structure.setClassName(mFormData.mName);
             structure.setWebDomain(mFormData.mHost);
+            structure.setHtmlInfo(structure.newHtmlInfoBuilder("form")
+                                          .addAttribute("name", mFormData.mName)
+                                          .build());
             int index = structure.addChildCount(mFormData.mFields.size());
             short fieldIndex = 0;
             for (FormFieldData field : mFormData.mFields) {
                 ViewStructure child = structure.newChild(index++);
                 int virtualId = toVirtualId(sessionId, fieldIndex++);
                 child.setAutofillId(structure.getAutofillId(), virtualId);
-                if (field.mAutocompleteAttr != null) {
+                if (field.mAutocompleteAttr != null && !field.mAutocompleteAttr.isEmpty()) {
                     child.setAutofillHints(field.mAutocompleteAttr.split(" +"));
                 }
                 child.setHint(field.mPlaceholder);
@@ -190,7 +196,15 @@ public class AwAutofillProvider extends AutofillProvider {
     private long mNativeAutofillProvider;
 
     public AwAutofillProvider(Context context, ViewGroup containerView) {
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
         mAutofillManager = new AwAutofillManager(context);
+        mContainerView = containerView;
+    }
+
+    @VisibleForTesting
+    public AwAutofillProvider(ViewGroup containerView, AwAutofillManager manager) {
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        mAutofillManager = manager;
         mContainerView = containerView;
     }
 
@@ -269,6 +283,7 @@ public class AwAutofillProvider extends AutofillProvider {
 
     private void notifyVirtualValueChanged(int index) {
         AutofillValue autofillValue = mRequest.getFieldNewValue(index);
+        if (autofillValue == null) return;
         mAutofillManager.notifyVirtualValueChanged(
                 mContainerView, mRequest.getVirtualId((short) index), autofillValue);
     }

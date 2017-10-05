@@ -38,7 +38,7 @@
 #include "core/dom/MessagePort.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/origin_trials/OriginTrials.h"
+#include "core/origin_trials/origin_trials.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "modules/background_fetch/BackgroundFetchClickEvent.h"
@@ -231,13 +231,13 @@ void ServiceWorkerGlobalScopeProxy::DispatchExtendableMessageEvent(
     int event_id,
     const WebString& message,
     const WebSecurityOrigin& source_origin,
-    WebMessagePortChannelArray web_channels,
+    WebVector<MessagePortChannel> channels,
     const WebServiceWorkerClientInfo& client) {
   DCHECK(WorkerGlobalScope()->IsContextThread());
   WebSerializedScriptValue value =
       WebSerializedScriptValue::FromString(message);
-  MessagePortArray* ports = MessagePort::ToMessagePortArray(
-      worker_global_scope_, std::move(web_channels));
+  MessagePortArray* ports =
+      MessagePort::EntanglePorts(*worker_global_scope_, std::move(channels));
   String origin;
   if (!source_origin.IsUnique())
     origin = source_origin.ToString();
@@ -258,13 +258,13 @@ void ServiceWorkerGlobalScopeProxy::DispatchExtendableMessageEvent(
     int event_id,
     const WebString& message,
     const WebSecurityOrigin& source_origin,
-    WebMessagePortChannelArray web_channels,
+    WebVector<MessagePortChannel> channels,
     std::unique_ptr<WebServiceWorker::Handle> handle) {
   DCHECK(WorkerGlobalScope()->IsContextThread());
   WebSerializedScriptValue value =
       WebSerializedScriptValue::FromString(message);
-  MessagePortArray* ports = MessagePort::ToMessagePortArray(
-      worker_global_scope_, std::move(web_channels));
+  MessagePortArray* ports =
+      MessagePort::EntanglePorts(*worker_global_scope_, std::move(channels));
   String origin;
   if (!source_origin.IsUnique())
     origin = source_origin.ToString();
@@ -601,9 +601,6 @@ void ServiceWorkerGlobalScopeProxy::DidInitializeWorkerContext() {
 void ServiceWorkerGlobalScopeProxy::DidLoadInstalledScript(
     const ContentSecurityPolicyResponseHeaders& csp_headers_on_worker_thread,
     const String& referrer_policy_on_worker_thread) {
-  // This should be called before DidCreateWorkerGlobalScope().
-  DCHECK(!worker_global_scope_);
-
   // Post a task to the main thread to set CSP and ReferrerPolicy on the shadow
   // page.
   DCHECK(embedded_worker_);

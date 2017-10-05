@@ -91,8 +91,11 @@ class CONTENT_EXPORT ServiceWorkerURLLoaderJob : public mojom::URLLoader,
   bool WasCanceled() const;
 
  private:
+  class StreamWaiter;
+
   // For FORWARD_TO_SERVICE_WORKER case.
   void StartRequest();
+  scoped_refptr<storage::BlobHandle> CreateRequestBodyBlob();
   void DidPrepareFetchEvent(scoped_refptr<ServiceWorkerVersion> version);
   void DidDispatchFetchEvent(
       ServiceWorkerStatusCode status,
@@ -105,6 +108,7 @@ class CONTENT_EXPORT ServiceWorkerURLLoaderJob : public mojom::URLLoader,
   // |body_as_blob| is kept around until BlobDataHandle is created from
   // blob_uuid just to make sure the blob is kept alive.
   void StartResponse(const ServiceWorkerResponse& response,
+                     scoped_refptr<ServiceWorkerVersion> version,
                      blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
                      storage::mojom::BlobPtr body_as_blob,
                      mojom::URLLoaderRequest request,
@@ -124,6 +128,8 @@ class CONTENT_EXPORT ServiceWorkerURLLoaderJob : public mojom::URLLoader,
   void FollowRedirect() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
+  void PauseReadingBodyFromNet() override;
+  void ResumeReadingBodyFromNet() override;
 
   // mojom::URLLoaderClient for Blob response reading (used only when
   // the SW response had valid blob UUID):
@@ -150,6 +156,7 @@ class CONTENT_EXPORT ServiceWorkerURLLoaderJob : public mojom::URLLoader,
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter_;
   base::WeakPtr<storage::BlobStorageContext> blob_storage_context_;
   std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
+  std::unique_ptr<StreamWaiter> stream_waiter_;
 
   bool did_navigation_preload_ = false;
   ResourceResponseHead response_head_;

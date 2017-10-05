@@ -34,7 +34,6 @@
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8ContextSnapshot.h"
-#include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "bindings/core/v8/V8GCForContextDispose.h"
 #include "bindings/core/v8/V8HTMLDocument.h"
 #include "bindings/core/v8/V8Initializer.h"
@@ -52,6 +51,7 @@
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/bindings/ConditionalFeatures.h"
 #include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/V8DOMActivityLogger.h"
 #include "platform/bindings/V8DOMWrapper.h"
 #include "platform/bindings/V8PrivateProperty.h"
 #include "platform/heap/Handle.h"
@@ -71,13 +71,13 @@ void LocalWindowProxy::DisposeContext(Lifecycle next_status,
   if (lifecycle_ != Lifecycle::kContextIsInitialized)
     return;
 
-  ScriptState::Scope scope(script_state_.Get());
+  ScriptState::Scope scope(script_state_.get());
   v8::Local<v8::Context> context = script_state_->GetContext();
   // The embedder could run arbitrary code in response to the
   // willReleaseScriptContext callback, so all disposing should happen after
   // it returns.
   GetFrame()->Client()->WillReleaseScriptContext(context, world_->GetWorldId());
-  MainThreadDebugger::Instance()->ContextWillBeDestroyed(script_state_.Get());
+  MainThreadDebugger::Instance()->ContextWillBeDestroyed(script_state_.get());
 
   if (next_status == Lifecycle::kGlobalObjectIsDetached) {
     v8::Local<v8::Context> context = script_state_->GetContext();
@@ -127,12 +127,17 @@ void LocalWindowProxy::Initialize() {
                                                          : non_main_frame_hist);
 
   ScriptForbiddenScope::AllowUserAgentScript allow_script;
-
+  // Inspector may request V8 interruption to process DevTools protocol
+  // commands, processing can force JavaScript execution. Since JavaScript
+  // evaluation is forbiden during creating of snapshot, we should ignore any
+  // inspector interruption to avoid JavaScript execution.
+  InspectorTaskRunner::IgnoreInterruptsScope inspector_ignore_interrupts(
+      MainThreadDebugger::Instance()->TaskRunner());
   v8::HandleScope handle_scope(GetIsolate());
 
   CreateContext();
 
-  ScriptState::Scope scope(script_state_.Get());
+  ScriptState::Scope scope(script_state_.get());
   v8::Local<v8::Context> context = script_state_->GetContext();
   if (global_proxy_.IsEmpty()) {
     global_proxy_.Set(GetIsolate(), context->Global());
@@ -165,12 +170,12 @@ void LocalWindowProxy::Initialize() {
   {
     TRACE_EVENT1("v8", "ContextCreatedNotification", "IsMainFrame",
                  GetFrame()->IsMainFrame());
-    MainThreadDebugger::Instance()->ContextCreated(script_state_.Get(),
+    MainThreadDebugger::Instance()->ContextCreated(script_state_.get(),
                                                    GetFrame(), origin);
     GetFrame()->Client()->DidCreateScriptContext(context, world_->GetWorldId());
 
     InstallConditionalFeaturesOnGlobal(&V8Window::wrapperTypeInfo,
-                                       script_state_.Get());
+                                       script_state_.get());
 
     if (world_->IsMainWorld()) {
       // For the main world, install any remaining conditional bindings (i.e.
@@ -178,7 +183,7 @@ void LocalWindowProxy::Initialize() {
       // bindings cannot be enabled until the execution context is available
       // (e.g. parsing the document, inspecting HTTP headers).
       InstallConditionalFeatures(&V8Window::wrapperTypeInfo,
-                                 script_state_.Get(), v8::Local<v8::Object>(),
+                                 script_state_.get(), v8::Local<v8::Object>(),
                                  v8::Local<v8::Function>());
       GetFrame()->Loader().DispatchDidClearWindowObjectInMainWorld();
     }
@@ -296,7 +301,7 @@ void LocalWindowProxy::UpdateDocumentProperty() {
   TRACE_EVENT1("v8", "LocalWindowProxy::UpdateDocumentProperty", "IsMainFrame",
                GetFrame()->IsMainFrame());
 
-  ScriptState::Scope scope(script_state_.Get());
+  ScriptState::Scope scope(script_state_.get());
   v8::Local<v8::Context> context = script_state_->GetContext();
   v8::Local<v8::Value> document_wrapper =
       ToV8(GetFrame()->GetDocument(), context->Global(), GetIsolate());
@@ -432,11 +437,10 @@ static v8::Local<v8::Value> GetNamedProperty(
   if (items->HasExactlyOneItem()) {
     HTMLElement* element = items->Item(0);
     DCHECK(element);
-    Frame* frame = isHTMLIFrameElement(*element)
-                       ? toHTMLIFrameElement(*element).ContentFrame()
-                       : 0;
-    if (frame)
-      return ToV8(frame->DomWindow(), creation_context, isolate);
+    if (auto* iframe = ToHTMLIFrameElementOrNull(*element)) {
+      if (Frame* frame = iframe->ContentFrame())
+        return ToV8(frame->DomWindow(), creation_context, isolate);
+    }
     return ToV8(element, creation_context, isolate);
   }
   return ToV8(items, creation_context, isolate);
@@ -477,7 +481,7 @@ void LocalWindowProxy::NamedItemAdded(HTMLDocument* document,
   if (lifecycle_ != Lifecycle::kContextIsInitialized)
     return;
 
-  ScriptState::Scope scope(script_state_.Get());
+  ScriptState::Scope scope(script_state_.get());
   v8::Local<v8::Object> document_wrapper =
       world_->DomDataStore().Get(document, GetIsolate());
   document_wrapper
@@ -501,7 +505,7 @@ void LocalWindowProxy::NamedItemRemoved(HTMLDocument* document,
 
   if (document->HasNamedItem(name))
     return;
-  ScriptState::Scope scope(script_state_.Get());
+  ScriptState::Scope scope(script_state_.get());
   v8::Local<v8::Object> document_wrapper =
       world_->DomDataStore().Get(document, GetIsolate());
   document_wrapper

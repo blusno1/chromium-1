@@ -205,10 +205,18 @@ const IDNTestCase idn_cases[] = {
      false},
     // Devanagari + Latin
     {"xn--ab-3ofh8fqbj6h.in", L"ab\x0939\x093f\x0928\x094d\x0926\x0940.in",
-     true},
+     false},
     // Thai + Latin
     {"xn--ab-jsi9al4bxdb6n.th",
-     L"ab\x0e20\x0e32\x0e29\x0e32\x0e44\x0e17\x0e22.th", true},
+     L"ab\x0e20\x0e32\x0e29\x0e32\x0e44\x0e17\x0e22.th", false},
+    // Armenian + Latin
+    {"xn--bs-red.com", L"b\x057ds.com", false},
+    // Tibetan + Latin
+    {"xn--foo-vkm.com", L"foo\x0f37.com", false},
+    // Oriya + Latin
+    {"xn--fo-h3g.com", L"fo\x0b66.com", false},
+    // Gujarati + Latin
+    {"xn--fo-isg.com", L"fo\x0ae6.com", false},
     // <vitamin in Katakana>b1.com
     {"xn--b1-xi4a7cvc9f.com",
      L"\x30d3\x30bf\x30df\x30f3"
@@ -248,6 +256,17 @@ const IDNTestCase idn_cases[] = {
      L"\x0300"
      L"abc.jp",
      false},
+
+    // The following three are detected by |dangerous_pattern| regex, but
+    // can be regarded as an extension of blocking repeated diacritic marks.
+    // i followed by U+0307 (combining dot above)
+    {"xn--pixel-8fd.com", L"pi\x0307xel.com", false},
+    // U+0131 (dotless i) followed by U+0307
+    {"xn--pxel-lza43z.com", L"p\x0131\x0307xel.com", false},
+    // j followed by U+0307 (combining dot above)
+    {"xn--jack-qwc.com", L"j\x0307" L"ack.com", false},
+    // l followed by U+0307
+    {"xn--lace-qwc.com", L"l\x0307" L"ace.com", false},
 
     // Mixed script confusable
     // google with Armenian Small Letter Oh(U+0585)

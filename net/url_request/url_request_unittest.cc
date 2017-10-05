@@ -168,7 +168,8 @@ const base::string16 kUser(ASCIIToUTF16("user"));
 const base::FilePath::CharType kTestFilePath[] =
     FILE_PATH_LITERAL("net/data/url_request_unittest");
 
-#if !BUILDFLAG(DISABLE_FTP_SUPPORT) && !defined(OS_ANDROID)
+#if !BUILDFLAG(DISABLE_FTP_SUPPORT) && !defined(OS_ANDROID) && \
+    !defined(OS_FUCHSIA)
 // Test file used in most FTP tests.
 const char kFtpTestFile[] = "BullRunSpeech.txt";
 #endif
@@ -281,7 +282,8 @@ void TestLoadTimingCacheHitNoNetwork(
   EXPECT_TRUE(load_timing_info.proxy_resolve_end.is_null());
 }
 
-#if !BUILDFLAG(DISABLE_FTP_SUPPORT) && !defined(OS_ANDROID)
+#if !BUILDFLAG(DISABLE_FTP_SUPPORT) && !defined(OS_ANDROID) && \
+    !defined(OS_FUCHSIA)
 // Tests load timing in the case that there is no HTTP response.  This can be
 // used to test in the case of errors or non-HTTP requests.
 void TestLoadTimingNoHttpResponse(
@@ -836,12 +838,29 @@ class URLRequestTest : public PlatformTest {
     return protocol_handler_;
   }
 
+  // Creates a temp test file and writes |data| to the file. The file will be
+  // deleted after the test completes.
+  void CreateTestFile(const char* data,
+                      size_t data_size,
+                      base::FilePath* test_file) {
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    // Get an absolute path since |temp_dir| can contain a symbolic link. As of
+    // now, Mac and Android bots return a path with a symbolic link.
+    base::FilePath absolute_temp_dir =
+        base::MakeAbsoluteFilePath(temp_dir_.GetPath());
+
+    ASSERT_TRUE(base::CreateTemporaryFileInDir(absolute_temp_dir, test_file));
+    ASSERT_EQ(static_cast<int>(data_size),
+              base::WriteFile(*test_file, data, data_size));
+  }
+
  protected:
   TestNetLog net_log_;
   TestNetworkDelegate default_network_delegate_;  // Must outlive URLRequest.
   URLRequestJobFactoryImpl* job_factory_impl_;
   std::unique_ptr<URLRequestJobFactory> job_factory_;
   TestURLRequestContext default_context_;
+  base::ScopedTempDir temp_dir_;
 };
 
 // This NetworkDelegate is picky about what files are accessible. Only
@@ -947,35 +966,27 @@ TEST_F(URLRequestTest, DataURLImageTest) {
 
 #if !BUILDFLAG(DISABLE_FILE_SUPPORT)
 TEST_F(URLRequestTest, FileTest) {
-  base::FilePath app_path;
+  const char kTestFileContent[] = "Hello";
+  base::FilePath test_file;
+  ASSERT_NO_FATAL_FAILURE(
+      CreateTestFile(kTestFileContent, sizeof(kTestFileContent), &test_file));
 
-#if defined(OS_ANDROID)
-  // Android devices are not guaranteed to be able to read /proc/self/exe
-  // Use /etc/hosts instead
-  app_path = base::FilePath("/etc/hosts");
-#else
-  PathService::Get(base::FILE_EXE, &app_path);
-#endif  // OS_ANDROID
-
-  GURL app_url = FilePathToFileURL(app_path);
+  GURL test_url = FilePathToFileURL(test_file);
 
   TestDelegate d;
   {
     std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
-        app_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+        test_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
 
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
     base::RunLoop().Run();
 
-    int64_t file_size = -1;
-    EXPECT_TRUE(base::GetFileSize(app_path, &file_size));
-
     EXPECT_TRUE(!r->is_pending());
     EXPECT_EQ(1, d.response_started_count());
     EXPECT_FALSE(d.received_data_before_response());
-    EXPECT_EQ(d.bytes_received(), static_cast<int>(file_size));
+    EXPECT_EQ(d.bytes_received(), static_cast<int>(sizeof(kTestFileContent)));
     EXPECT_EQ("", r->GetSocketAddress().host());
     EXPECT_EQ(0, r->GetSocketAddress().port());
 
@@ -985,14 +996,17 @@ TEST_F(URLRequestTest, FileTest) {
 }
 
 TEST_F(URLRequestTest, FileTestCancel) {
-  base::FilePath app_path;
-  PathService::Get(base::FILE_EXE, &app_path);
-  GURL app_url = FilePathToFileURL(app_path);
+  const char kTestFileContent[] = "Hello";
+  base::FilePath test_file;
+  ASSERT_NO_FATAL_FAILURE(
+      CreateTestFile(kTestFileContent, sizeof(kTestFileContent), &test_file));
+
+  GURL test_url = FilePathToFileURL(test_file);
 
   TestDelegate d;
   {
     std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
-        app_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+        test_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
 
     r->Start();
     EXPECT_TRUE(r->is_pending());
@@ -1008,14 +1022,10 @@ TEST_F(URLRequestTest, FileTestFullSpecifiedRange) {
   std::unique_ptr<char[]> buffer(new char[buffer_size]);
   FillBuffer(buffer.get(), buffer_size);
 
-  base::FilePath temp_path;
-  EXPECT_TRUE(base::CreateTemporaryFile(&temp_path));
-  GURL temp_url = FilePathToFileURL(temp_path);
-  EXPECT_EQ(static_cast<int>(buffer_size),
-            base::WriteFile(temp_path, buffer.get(), buffer_size));
-
-  int64_t file_size;
-  EXPECT_TRUE(base::GetFileSize(temp_path, &file_size));
+  base::FilePath test_file;
+  ASSERT_NO_FATAL_FAILURE(
+      CreateTestFile(buffer.get(), buffer_size, &test_file));
+  GURL temp_url = FilePathToFileURL(test_file);
 
   const size_t first_byte_position = 500;
   const size_t last_byte_position = buffer_size - first_byte_position;
@@ -1045,8 +1055,6 @@ TEST_F(URLRequestTest, FileTestFullSpecifiedRange) {
     // Don't use EXPECT_EQ, it will print out a lot of garbage if check failed.
     EXPECT_TRUE(partial_buffer_string == d.data_received());
   }
-
-  EXPECT_TRUE(base::DeleteFile(temp_path, false));
 }
 
 TEST_F(URLRequestTest, FileTestHalfSpecifiedRange) {
@@ -1054,13 +1062,10 @@ TEST_F(URLRequestTest, FileTestHalfSpecifiedRange) {
   std::unique_ptr<char[]> buffer(new char[buffer_size]);
   FillBuffer(buffer.get(), buffer_size);
 
-  base::FilePath temp_path;
-  EXPECT_TRUE(base::CreateTemporaryFile(&temp_path));
-  GURL temp_url = FilePathToFileURL(temp_path);
-  EXPECT_TRUE(base::WriteFile(temp_path, buffer.get(), buffer_size));
-
-  int64_t file_size;
-  EXPECT_TRUE(base::GetFileSize(temp_path, &file_size));
+  base::FilePath test_file;
+  ASSERT_NO_FATAL_FAILURE(
+      CreateTestFile(buffer.get(), buffer_size, &test_file));
+  GURL temp_url = FilePathToFileURL(test_file);
 
   const size_t first_byte_position = 500;
   const size_t last_byte_position = buffer_size - 1;
@@ -1089,8 +1094,6 @@ TEST_F(URLRequestTest, FileTestHalfSpecifiedRange) {
     // Don't use EXPECT_EQ, it will print out a lot of garbage if check failed.
     EXPECT_TRUE(partial_buffer_string == d.data_received());
   }
-
-  EXPECT_TRUE(base::DeleteFile(temp_path, false));
 }
 
 TEST_F(URLRequestTest, FileTestMultipleRanges) {
@@ -1098,13 +1101,10 @@ TEST_F(URLRequestTest, FileTestMultipleRanges) {
   std::unique_ptr<char[]> buffer(new char[buffer_size]);
   FillBuffer(buffer.get(), buffer_size);
 
-  base::FilePath temp_path;
-  EXPECT_TRUE(base::CreateTemporaryFile(&temp_path));
-  GURL temp_url = FilePathToFileURL(temp_path);
-  EXPECT_TRUE(base::WriteFile(temp_path, buffer.get(), buffer_size));
-
-  int64_t file_size;
-  EXPECT_TRUE(base::GetFileSize(temp_path, &file_size));
+  base::FilePath test_file;
+  ASSERT_NO_FATAL_FAILURE(
+      CreateTestFile(buffer.get(), buffer_size, &test_file));
+  GURL temp_url = FilePathToFileURL(test_file);
 
   TestDelegate d;
   {
@@ -1120,28 +1120,20 @@ TEST_F(URLRequestTest, FileTestMultipleRanges) {
     base::RunLoop().Run();
     EXPECT_TRUE(d.request_failed());
   }
-
-  EXPECT_TRUE(base::DeleteFile(temp_path, false));
 }
 
 TEST_F(URLRequestTest, AllowFileURLs) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  // Get an absolute path since |temp_dir| can contain a symbolic link. As of
-  // now, Mac and Android bots return a path with a symbolic link.
-  base::FilePath absolute_temp_dir =
-      base::MakeAbsoluteFilePath(temp_dir.GetPath());
-
+  std::string test_data("monkey");
   base::FilePath test_file;
-  ASSERT_TRUE(base::CreateTemporaryFileInDir(absolute_temp_dir, &test_file));
+  ASSERT_NO_FATAL_FAILURE(
+      CreateTestFile(test_data.data(), test_data.size(), &test_file));
+
   // The directory part of the path returned from CreateTemporaryFileInDir()
   // can be slightly different from |absolute_temp_dir| on Windows.
   // Example: C:\\Users\\CHROME~2 -> C:\\Users\\chrome-bot
   // Hence the test should use the directory name of |test_file|, rather than
   // |absolute_temp_dir|, for whitelisting.
   base::FilePath real_temp_dir = test_file.DirName();
-  std::string test_data("monkey");
-  base::WriteFile(test_file, test_data.data(), test_data.size());
   GURL test_file_url = FilePathToFileURL(test_file);
   {
     TestDelegate d;
@@ -1175,11 +1167,10 @@ TEST_F(URLRequestTest, AllowFileURLs) {
 #if defined(OS_POSIX) && !defined(OS_FUCHSIA)  // Because of symbolic links.
 
 TEST_F(URLRequestTest, SymlinksToFiles) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   // Get an absolute path since temp_dir can contain a symbolic link.
   base::FilePath absolute_temp_dir =
-      base::MakeAbsoluteFilePath(temp_dir.GetPath());
+      base::MakeAbsoluteFilePath(temp_dir_.GetPath());
 
   // Create a good directory (will be whitelisted) and a good file.
   base::FilePath good_dir = absolute_temp_dir.AppendASCII("good");
@@ -1241,11 +1232,10 @@ TEST_F(URLRequestTest, SymlinksToFiles) {
 }
 
 TEST_F(URLRequestTest, SymlinksToDirs) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   // Get an absolute path since temp_dir can contain a symbolic link.
   base::FilePath absolute_temp_dir =
-      base::MakeAbsoluteFilePath(temp_dir.GetPath());
+      base::MakeAbsoluteFilePath(temp_dir_.GetPath());
 
   // Create a good directory (will be whitelisted).
   base::FilePath good_dir = absolute_temp_dir.AppendASCII("good");
@@ -4889,7 +4879,7 @@ TEST_F(URLRequestTestHTTP, GetTest_NoCache) {
 // search is used to estimate that maximum number of cookies that are accepted
 // by the browser. Beyond the maximum number, the request will fail with
 // ERR_RESPONSE_HEADERS_TOO_BIG.
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
 // http://crbug.com/177916
 #define MAYBE_GetTest_ManyCookies DISABLED_GetTest_ManyCookies
 #else
@@ -7153,17 +7143,8 @@ class TestNetworkErrorLoggingDelegate : public NetworkErrorLoggingDelegate {
     std::string value;
   };
 
-  struct NetworkError {
-    NetworkError() {}
-    ~NetworkError() {}
-
-    url::Origin origin;
-    Error error;
-    NetworkErrorLoggingDelegate::ErrorDetails details;
-  };
-
   const std::vector<Header>& headers() { return headers_; }
-  const std::vector<NetworkError>& errors() { return errors_; }
+  const std::vector<ErrorDetails>& errors() { return errors_; }
 
   // NetworkErrorLoggingDelegate implementation:
 
@@ -7180,19 +7161,13 @@ class TestNetworkErrorLoggingDelegate : public NetworkErrorLoggingDelegate {
     headers_.push_back(header);
   }
 
-  void OnNetworkError(const url::Origin& origin,
-                      Error error,
-                      ErrorDetailsCallback details_callback) override {
-    NetworkError network_error;
-    network_error.origin = origin;
-    network_error.error = error;
-    std::move(details_callback).Run(&network_error.details);
-    errors_.push_back(network_error);
+  void OnNetworkError(const ErrorDetails& details) override {
+    errors_.push_back(details);
   }
 
  private:
   std::vector<Header> headers_;
-  std::vector<NetworkError> errors_;
+  std::vector<ErrorDetails> errors_;
 };
 
 std::unique_ptr<test_server::HttpResponse> SendNelHeader(
@@ -10748,7 +10723,7 @@ static const struct OCSPVerifyTestData {
   bool has_revocation_status;
   OCSPRevocationStatus cert_status;
 } kOCSPVerifyData[] = {
-
+    // 0
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10756,6 +10731,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::GOOD},
 
+    // 1
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_OLD}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10763,6 +10739,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 2
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10770,6 +10747,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 3
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_LONG}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10777,6 +10755,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 4
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_LONG}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10784,6 +10763,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 5
     {{{SpawnedTestServer::SSLOptions::OCSP_TRY_LATER,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10791,6 +10771,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 6
     {{{SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10798,6 +10779,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 7
     {{{SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE_DATA,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10805,6 +10787,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 8
     {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
        SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10812,6 +10795,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 9
     {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10819,6 +10803,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 10
     {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
        SpawnedTestServer::SSLOptions::OCSP_DATE_OLD}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10826,6 +10811,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 11
     {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
        SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10833,6 +10819,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 12
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_BEFORE_CERT,
@@ -10840,6 +10827,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 13
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_AFTER_CERT,
@@ -10847,6 +10835,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 14
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_AFTER_CERT,
@@ -10854,27 +10843,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
-    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
-       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
-     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
-     OCSPVerifyResult::PROVIDED,
-     true,
-     OCSPRevocationStatus::REVOKED},
-
-    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
-       SpawnedTestServer::SSLOptions::OCSP_DATE_OLD}},
-     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
-     OCSPVerifyResult::INVALID_DATE,
-     false,
-     OCSPRevocationStatus::UNKNOWN},
-
-    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
-       SpawnedTestServer::SSLOptions::OCSP_DATE_LONG}},
-     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
-     OCSPVerifyResult::INVALID_DATE,
-     false,
-     OCSPRevocationStatus::UNKNOWN},
-
+    // 15
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10882,6 +10851,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::GOOD},
 
+    // 16
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_OLD},
       {SpawnedTestServer::SSLOptions::OCSP_OK,
@@ -10891,6 +10861,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::GOOD},
 
+    // 17
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY},
       {SpawnedTestServer::SSLOptions::OCSP_OK,
@@ -10900,6 +10871,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::GOOD},
 
+    // 18
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_LONG},
       {SpawnedTestServer::SSLOptions::OCSP_OK,
@@ -10909,6 +10881,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::GOOD},
 
+    // 19
     {{{SpawnedTestServer::SSLOptions::OCSP_OK,
        SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY},
       {SpawnedTestServer::SSLOptions::OCSP_OK,
@@ -10920,6 +10893,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 20
     {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID},
       {SpawnedTestServer::SSLOptions::OCSP_REVOKED,
@@ -10931,6 +10905,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::REVOKED},
 
+    // 21
     {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID},
       {SpawnedTestServer::SSLOptions::OCSP_OK,
@@ -10940,6 +10915,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 22
     {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID},
       {SpawnedTestServer::SSLOptions::OCSP_REVOKED,
@@ -10951,6 +10927,7 @@ static const struct OCSPVerifyTestData {
      true,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 23
     {{{SpawnedTestServer::SSLOptions::OCSP_MISMATCHED_SERIAL,
        SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10958,6 +10935,7 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+    // 24
     {{{SpawnedTestServer::SSLOptions::OCSP_MISMATCHED_SERIAL,
        SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY}},
      SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
@@ -10965,6 +10943,34 @@ static const struct OCSPVerifyTestData {
      false,
      OCSPRevocationStatus::UNKNOWN},
 
+// These tests fail when using NSS for certificate verification, as NSS fails
+// and doesn't return the partial path. As a result the OCSP checks being done
+// at the CertVerifyProc layer cannot access the issuer certificate.
+#if !defined(USE_NSS_CERTS)
+    // 25
+    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::REVOKED},
+
+    // 26
+    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_OLD}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    // 27
+    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_LONG}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+#endif
 };
 
 class HTTPSOCSPVerifyTest
@@ -11340,10 +11346,12 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
 }
 #endif  // !defined(OS_IOS)
 
-#if !BUILDFLAG(DISABLE_FTP_SUPPORT) && !defined(OS_ANDROID)
-// These tests aren't passing on Android.  Either the RemoteTestServer isn't
-// starting up successfully, or it can't access the test files.
-// TODO(mmenke):  Fix this.  See http://crbug.com/495220
+#if !BUILDFLAG(DISABLE_FTP_SUPPORT) && !defined(OS_ANDROID) && \
+    !defined(OS_FUCHSIA)
+// FTP uses a second TCP connection with the port number allocated dynamically
+// on the server side, so it would be hard to make RemoteTestServer proxy FTP
+// connections reliably. FTP tests are disabled on platforms that use
+// RemoteTestServer. See http://crbug.com/495220
 class URLRequestTestFTP : public URLRequestTest {
  public:
   URLRequestTestFTP()

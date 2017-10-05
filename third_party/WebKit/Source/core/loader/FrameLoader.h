@@ -220,6 +220,8 @@ class CORE_EXPORT FrameLoader final {
 
   static void SetReferrerForFrameRequest(FrameLoadRequest&);
 
+  void ClientDroppedNavigation();
+
  private:
   bool PrepareRequestForThisFrame(FrameLoadRequest&);
   FrameLoadType DetermineFrameLoadType(const FrameLoadRequest&);
@@ -242,7 +244,7 @@ class CORE_EXPORT FrameLoader final {
                  HistoryItem*);
 
   void LoadInSameDocument(const KURL&,
-                          PassRefPtr<SerializedScriptValue> state_object,
+                          RefPtr<SerializedScriptValue> state_object,
                           FrameLoadType,
                           HistoryItem*,
                           ClientRedirectPolicy,

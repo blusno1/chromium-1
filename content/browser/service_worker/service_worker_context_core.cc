@@ -39,6 +39,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -141,8 +142,7 @@ class ClearAllServiceWorkersHelper
       ServiceWorkerVersion* version(version_itr.second);
       if (version->running_status() == EmbeddedWorkerStatus::STARTING ||
           version->running_status() == EmbeddedWorkerStatus::RUNNING) {
-        version->StopWorker(
-            base::Bind(&ClearAllServiceWorkersHelper::OnResult, this));
+        version->StopWorker(base::BindOnce(&base::DoNothing));
       }
     }
     for (const auto& registration_info : registrations) {
@@ -425,7 +425,7 @@ ServiceWorkerProviderHost* ServiceWorkerContextCore::GetProviderHostByClientID(
 
 void ServiceWorkerContextCore::RegisterServiceWorker(
     const GURL& script_url,
-    const ServiceWorkerRegistrationOptions& options,
+    const blink::mojom::ServiceWorkerRegistrationOptions& options,
     ServiceWorkerProviderHost* provider_host,
     const RegistrationCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -518,7 +518,8 @@ void ServiceWorkerContextCore::RegistrationComplete(
     ServiceWorkerRegistration* registration) {
   if (status != SERVICE_WORKER_OK) {
     DCHECK(!registration);
-    callback.Run(status, status_message, kInvalidServiceWorkerRegistrationId);
+    callback.Run(status, status_message,
+                 blink::mojom::kInvalidServiceWorkerRegistrationId);
     return;
   }
 
@@ -541,7 +542,8 @@ void ServiceWorkerContextCore::UpdateComplete(
     ServiceWorkerRegistration* registration) {
   if (status != SERVICE_WORKER_OK) {
     DCHECK(!registration);
-    callback.Run(status, status_message, kInvalidServiceWorkerRegistrationId);
+    callback.Run(status, status_message,
+                 blink::mojom::kInvalidServiceWorkerRegistrationId);
     return;
   }
 

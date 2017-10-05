@@ -75,9 +75,6 @@ enum FileSystemType {
   // such as MTP or PTP.
   kFileSystemTypeDeviceMedia,
 
-  // Indicates a synthetic iTunes filesystem.
-  kFileSystemTypeItunes,
-
   // Indicates a Drive filesystem which provides access to Google Drive.
   kFileSystemTypeDrive,
 
@@ -125,6 +122,8 @@ enum FileSystemType {
 
   // A filesystem to provide access to documents providers in ARC.
   kFileSystemTypeArcDocumentsProvider,
+
+  kFileSystemTypeLast = kFileSystemTypeArcDocumentsProvider,
 
   // --------------------------------------------------------------------
   // Marks the end of internal type enum. (This is not the actual fs type)

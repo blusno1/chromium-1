@@ -5,10 +5,11 @@
 #include "components/password_manager/core/browser/password_manager.h"
 
 #include <stddef.h>
+
 #include <map>
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
@@ -83,27 +84,34 @@ bool IsSignupForm(const PasswordForm& form) {
   return !form.new_password_element.empty() && form.password_element.empty();
 }
 
-// Tries to convert the |server_field_type| to a PasswordFormFieldPredictionType
-// stored in |type|. Returns true if the conversion was made.
-bool ServerTypeToPrediction(autofill::ServerFieldType server_field_type,
-                            autofill::PasswordFormFieldPredictionType* type) {
-  switch (server_field_type) {
-    case autofill::USERNAME:
-    case autofill::USERNAME_AND_EMAIL_ADDRESS:
-      *type = autofill::PREDICTION_USERNAME;
-      return true;
+// Tries to find if at least one of the values from |server_field_predictions|
+// can be converted from AutofillQueryResponseContents::Field::FieldPrediction
+// to a PasswordFormFieldPredictionType stored in |type|. Returns true if the
+// conversion was made.
+bool ServerPredictionsToPasswordFormPrediction(
+    std::vector<autofill::AutofillQueryResponseContents::Field::FieldPrediction>
+        server_field_predictions,
+    autofill::PasswordFormFieldPredictionType* type) {
+  for (auto const& server_field_prediction : server_field_predictions) {
+    switch (server_field_prediction.type()) {
+      case autofill::USERNAME:
+      case autofill::USERNAME_AND_EMAIL_ADDRESS:
+        *type = autofill::PREDICTION_USERNAME;
+        return true;
 
-    case autofill::PASSWORD:
-      *type = autofill::PREDICTION_CURRENT_PASSWORD;
-      return true;
+      case autofill::PASSWORD:
+        *type = autofill::PREDICTION_CURRENT_PASSWORD;
+        return true;
 
-    case autofill::ACCOUNT_CREATION_PASSWORD:
-      *type = autofill::PREDICTION_NEW_PASSWORD;
-      return true;
+      case autofill::ACCOUNT_CREATION_PASSWORD:
+        *type = autofill::PREDICTION_NEW_PASSWORD;
+        return true;
 
-    default:
-      return false;
+      default:
+        break;
+    }
   }
+  return false;
 }
 
 // Returns true if the |field_type| is known to be possibly
@@ -210,6 +218,9 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterStringPref(prefs::kSyncPasswordLengthAndHashSalt,
                                std::string(),
                                PrefRegistry::NO_REGISTRATION_FLAGS);
+  registry->RegisterBooleanPref(
+      prefs::kWasAutoSignInFirstRunExperienceShown, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
 #if defined(OS_MACOSX)
   registry->RegisterIntegerPref(
       prefs::kKeychainMigrationStatus,
@@ -287,10 +298,9 @@ void PasswordManager::SetGenerationElementAndReasonForForm(
   // If there is no corresponding PasswordFormManager, we create one. This is
   // not the common case, and should only happen when there is a bug in our
   // ability to detect forms.
-  auto manager = base::MakeUnique<PasswordFormManager>(
+  auto manager = std::make_unique<PasswordFormManager>(
       this, client_, driver->AsWeakPtr(), form,
-      base::WrapUnique(new FormSaverImpl(client_->GetPasswordStore())),
-      nullptr);
+      std::make_unique<FormSaverImpl>(client_->GetPasswordStore()), nullptr);
   manager->Init(nullptr);
   pending_login_managers_.push_back(std::move(manager));
 }
@@ -549,10 +559,10 @@ void PasswordManager::CreatePendingLoginManagers(
 
     if (logger)
       logger->LogFormSignatures(Logger::STRING_ADDING_SIGNATURE, *iter);
-    auto manager = base::MakeUnique<PasswordFormManager>(
+    auto manager = std::make_unique<PasswordFormManager>(
         this, client_,
         (driver ? driver->AsWeakPtr() : base::WeakPtr<PasswordManagerDriver>()),
-        *iter, base::WrapUnique(new FormSaverImpl(client_->GetPasswordStore())),
+        *iter, std::make_unique<FormSaverImpl>(client_->GetPasswordStore()),
         nullptr);
     manager->Init(nullptr);
     pending_login_managers_.push_back(std::move(manager));
@@ -919,7 +929,8 @@ void PasswordManager::ProcessAutofillPredictions(
       logger->LogFormStructure(Logger::STRING_SERVER_PREDICTIONS, *form);
     for (const auto& field : *form) {
       autofill::PasswordFormFieldPredictionType prediction_type;
-      if (ServerTypeToPrediction(field->server_type(), &prediction_type)) {
+      if (ServerPredictionsToPasswordFormPrediction(field->server_predictions(),
+                                                    &prediction_type)) {
         predictions[form->ToFormData()][*field] = prediction_type;
       }
       // Certain fields are annotated by the browsers as "not passwords" i.e.

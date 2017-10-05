@@ -28,7 +28,6 @@
 #include "content/common/frame_message_enums.h"
 #include "content/common/frame_owner_properties.h"
 #include "content/common/frame_replication_state.h"
-#include "content/common/message_port.h"
 #include "content/common/navigation_gesture.h"
 #include "content/common/navigation_params.h"
 #include "content/common/savable_subframe.h"
@@ -53,6 +52,7 @@
 #include "ipc/ipc_platform_file.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "ppapi/features/features.h"
+#include "third_party/WebKit/common/message_port/message_port_channel.h"
 #include "third_party/WebKit/public/platform/WebFeaturePolicy.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
@@ -216,7 +216,6 @@ IPC_STRUCT_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
   IPC_STRUCT_TRAITS_MEMBER(nav_entry_id)
-  IPC_STRUCT_TRAITS_MEMBER(frame_unique_name)
   IPC_STRUCT_TRAITS_MEMBER(item_sequence_number)
   IPC_STRUCT_TRAITS_MEMBER(document_sequence_number)
   IPC_STRUCT_TRAITS_MEMBER(url)
@@ -229,8 +228,8 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
   IPC_STRUCT_TRAITS_MEMBER(socket_address)
 IPC_STRUCT_TRAITS_END()
 
-// Parameters structure for FrameHostMsg_DidCommitProvisionalLoad, which has
-// too many data parameters to be reasonably put in a predefined IPC message.
+// Parameters structure for mojom::FrameHost::DidCommitProvisionalLoad.
+// TODO(https://crbug.com/729021): Convert this to a Mojo struct.
 IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
                              content::FrameNavigateParams)
   IPC_STRUCT_TRAITS_PARENT(content::FrameNavigateParams)
@@ -342,7 +341,7 @@ IPC_STRUCT_BEGIN(FrameMsg_PostMessage_Params)
   IPC_STRUCT_MEMBER(base::string16, target_origin)
 
   // Information about the MessagePorts this message contains.
-  IPC_STRUCT_MEMBER(std::vector<content::MessagePort>, message_ports)
+  IPC_STRUCT_MEMBER(std::vector<blink::MessagePortChannel>, message_ports)
 IPC_STRUCT_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::SourceLocation)
@@ -762,6 +761,11 @@ IPC_MESSAGE_ROUTED0(FrameMsg_SwapIn)
 // Instructs the frame to stop the load in progress, if any.
 IPC_MESSAGE_ROUTED0(FrameMsg_Stop)
 
+// PlzNavigate
+// Informs the renderer that the browser stopped processing a renderer-initiated
+// navigation. It does not stop ongoing loads in the current page.
+IPC_MESSAGE_ROUTED0(FrameMsg_DroppedNavigation)
+
 // A message sent to RenderFrameProxy to indicate that its corresponding
 // RenderFrame has started loading a document.
 IPC_MESSAGE_ROUTED0(FrameMsg_DidStartLoading)
@@ -1114,12 +1118,6 @@ IPC_MESSAGE_ROUTED3(FrameHostMsg_DidStartProvisionalLoad,
 // Sent when the renderer fails a provisional load with an error.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_DidFailProvisionalLoadWithError,
                     FrameHostMsg_DidFailProvisionalLoadWithError_Params)
-
-// Notifies the browser that a frame in the view has changed. This message
-// has a lot of parameters and is packed/unpacked by functions defined in
-// render_messages.h.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_DidCommitProvisionalLoad,
-                    FrameHostMsg_DidCommitProvisionalLoad_Params)
 
 // Notifies the browser that a document has been loaded.
 IPC_MESSAGE_ROUTED0(FrameHostMsg_DidFinishDocumentLoad)
@@ -1724,8 +1722,6 @@ IPC_MESSAGE_ROUTED3(FrameHostMsg_FindMatchRects_Reply,
 IPC_MESSAGE_ROUTED2(FrameHostMsg_GetNearestFindResult_Reply,
                     int /* nfr_request_id */,
                     float /* distance */)
-
-IPC_MESSAGE_ROUTED0(FrameHostMsg_NavigationHandledByEmbedder)
 #endif
 
 // Adding a new message? Stick to the sort order above: first platform

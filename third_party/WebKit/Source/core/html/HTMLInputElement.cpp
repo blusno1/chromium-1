@@ -34,7 +34,6 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/css/StyleChangeReason.h"
 #include "core/dom/AXObjectCache.h"
@@ -55,8 +54,6 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCollection.h"
-#include "core/html/HTMLDataListElement.h"
-#include "core/html/HTMLDataListOptionsCollection.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/HTMLOptionElement.h"
@@ -64,15 +61,17 @@
 #include "core/html/forms/DateTimeChooser.h"
 #include "core/html/forms/FileInputType.h"
 #include "core/html/forms/FormController.h"
+#include "core/html/forms/HTMLDataListElement.h"
+#include "core/html/forms/HTMLDataListOptionsCollection.h"
 #include "core/html/forms/InputType.h"
 #include "core/html/forms/SearchInputType.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutTheme.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "platform/Language.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/wtf/MathExtras.h"
 
@@ -954,10 +953,8 @@ void HTMLInputElement::setChecked(bool now_checked,
 
   if (RadioButtonGroupScope* scope = GetRadioButtonGroupScope())
     scope->UpdateCheckedState(this);
-  if (GetLayoutObject())
-    LayoutTheme::GetTheme().ControlStateChanged(*GetLayoutObject(),
-                                                kCheckedControlState);
-
+  if (LayoutObject* o = GetLayoutObject())
+    o->InvalidateIfControlStateChanged(kCheckedControlState);
   SetNeedsValidityCheck();
 
   // Ideally we'd do this from the layout tree (matching
@@ -991,9 +988,8 @@ void HTMLInputElement::setIndeterminate(bool new_value) {
 
   PseudoStateChanged(CSSSelector::kPseudoIndeterminate);
 
-  if (GetLayoutObject())
-    LayoutTheme::GetTheme().ControlStateChanged(*GetLayoutObject(),
-                                                kCheckedControlState);
+  if (LayoutObject* o = GetLayoutObject())
+    o->InvalidateIfControlStateChanged(kCheckedControlState);
 }
 
 int HTMLInputElement::size() const {

@@ -9,7 +9,9 @@
 #include "core/dom/Element.h"
 #include "core/dom/Range.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrame.h"
@@ -60,7 +62,7 @@ void InputMethodControllerTest::CreateHTMLWithCompositionInputEventListeners() {
   Element* editable =
       InsertHTMLElement("<div id='sample' contenteditable></div>", "sample");
   Element* script = GetDocument().createElement("script");
-  script->setInnerHTML(
+  script->SetInnerHTMLFromString(
       "document.getElementById('sample').addEventListener('beforeinput', "
       "  event => document.title = `beforeinput.data:${event.data};`);"
       "document.getElementById('sample').addEventListener('input', "
@@ -81,14 +83,14 @@ void InputMethodControllerTest::CreateHTMLWithCompositionEndEventListener(
 
   switch (type) {
     case kNoSelection:
-      script->setInnerHTML(
+      script->SetInnerHTMLFromString(
           // If the caret position is set before firing 'compositonend' event
           // (and it should), the final caret position will be reset to null.
           "document.getElementById('sample').addEventListener('compositionend',"
           "  event => getSelection().removeAllRanges());");
       break;
     case kCaretSelection:
-      script->setInnerHTML(
+      script->SetInnerHTMLFromString(
           // If the caret position is set before firing 'compositonend' event
           // (and it should), the final caret position will be reset to [3,3].
           "document.getElementById('sample').addEventListener('compositionend',"
@@ -98,7 +100,7 @@ void InputMethodControllerTest::CreateHTMLWithCompositionEndEventListener(
           "});");
       break;
     case kRangeSelection:
-      script->setInnerHTML(
+      script->SetInnerHTMLFromString(
           // If the caret position is set before firing 'compositonend' event
           // (and it should), the final caret position will be reset to [2,4].
           "document.getElementById('sample').addEventListener('compositionend',"
@@ -119,7 +121,7 @@ void InputMethodControllerTest::CreateHTMLWithCompositionEndEventListener(
 
 TEST_F(InputMethodControllerTest, BackspaceFromEndOfInput) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   input->setValue("fooX");
   GetDocument().UpdateStyleAndLayout();
@@ -287,21 +289,21 @@ TEST_F(InputMethodControllerTest, SetCompositionKeepingStyle) {
   // Subtract a character.
   Controller().SetComposition(String("12345789"), ime_text_spans, 8, 8);
   EXPECT_STREQ("abc1<b>2</b>3457<b>8</b>9d<b>e</b>f",
-               div->innerHTML().Utf8().data());
+               div->InnerHTMLAsString().Utf8().data());
   EXPECT_EQ(11u, Controller().GetSelectionOffsets().Start());
   EXPECT_EQ(11u, Controller().GetSelectionOffsets().End());
 
   // Append a character.
   Controller().SetComposition(String("123456789"), ime_text_spans, 9, 9);
   EXPECT_STREQ("abc1<b>2</b>34567<b>8</b>9d<b>e</b>f",
-               div->innerHTML().Utf8().data());
+               div->InnerHTMLAsString().Utf8().data());
   EXPECT_EQ(12u, Controller().GetSelectionOffsets().Start());
   EXPECT_EQ(12u, Controller().GetSelectionOffsets().End());
 
   // Subtract and append characters.
   Controller().SetComposition(String("123hello789"), ime_text_spans, 11, 11);
   EXPECT_STREQ("abc1<b>2</b>3hello7<b>8</b>9d<b>e</b>f",
-               div->innerHTML().Utf8().data());
+               div->InnerHTMLAsString().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest, SetCompositionWithEmojiKeepingStyle) {
@@ -319,11 +321,13 @@ TEST_F(InputMethodControllerTest, SetCompositionWithEmojiKeepingStyle) {
   // surrogate pair to the previous one.
   Controller().SetComposition(String::FromUTF8("\xF0\x9F\x8F\xAB"),
                               ime_text_spans, 2, 2);
-  EXPECT_STREQ("<b>\xF0\x9F\x8F\xAB</b>", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("<b>\xF0\x9F\x8F\xAB</b>",
+               div->InnerHTMLAsString().Utf8().data());
 
   Controller().SetComposition(String::FromUTF8("\xF0\x9F\x8F\xA0"),
                               ime_text_spans, 2, 2);
-  EXPECT_STREQ("<b>\xF0\x9F\x8F\xA0</b>", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("<b>\xF0\x9F\x8F\xA0</b>",
+               div->InnerHTMLAsString().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest,
@@ -344,11 +348,11 @@ TEST_F(InputMethodControllerTest,
   Controller().SetComposition(String::FromUTF8("\xE0\xB0\x83\xE0\xB0\x83"),
                               ime_text_spans, 2, 2);
   EXPECT_STREQ("<b>\xE0\xB0\x83\xE0\xB0\x83</b>",
-               div->innerHTML().Utf8().data());
+               div->InnerHTMLAsString().Utf8().data());
 
   Controller().SetComposition(String::FromUTF8("\xE0\xB0\x83"), ime_text_spans,
                               1, 1);
-  EXPECT_STREQ("<b>\xE0\xB0\x83</b>", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("<b>\xE0\xB0\x83</b>", div->InnerHTMLAsString().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest, FinishComposingTextKeepingStyle) {
@@ -363,10 +367,12 @@ TEST_F(InputMethodControllerTest, FinishComposingTextKeepingStyle) {
   Controller().SetCompositionFromExistingText(ime_text_spans, 3, 12);
 
   Controller().SetComposition(String("123hello789"), ime_text_spans, 11, 11);
-  EXPECT_STREQ("abc1<b>2</b>3hello7<b>8</b>9", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("abc1<b>2</b>3hello7<b>8</b>9",
+               div->InnerHTMLAsString().Utf8().data());
 
   Controller().FinishComposingText(InputMethodController::kKeepSelection);
-  EXPECT_STREQ("abc1<b>2</b>3hello7<b>8</b>9", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("abc1<b>2</b>3hello7<b>8</b>9",
+               div->InnerHTMLAsString().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest, CommitTextKeepingStyle) {
@@ -381,7 +387,8 @@ TEST_F(InputMethodControllerTest, CommitTextKeepingStyle) {
   Controller().SetCompositionFromExistingText(ime_text_spans, 3, 12);
 
   Controller().CommitText(String("123789"), ime_text_spans, 0);
-  EXPECT_STREQ("abc1<b>2</b>37<b>8</b>9", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("abc1<b>2</b>37<b>8</b>9",
+               div->InnerHTMLAsString().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest, InsertTextWithNewLine) {
@@ -392,7 +399,7 @@ TEST_F(InputMethodControllerTest, InsertTextWithNewLine) {
                                        Color(255, 0, 0), false, 0));
 
   Controller().CommitText(String("hello\nworld"), ime_text_spans, 0);
-  EXPECT_STREQ("hello<div>world</div>", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("hello<div>world</div>", div->InnerHTMLAsString().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest, InsertTextWithNewLineIncrementally) {
@@ -402,11 +409,11 @@ TEST_F(InputMethodControllerTest, InsertTextWithNewLineIncrementally) {
   Vector<ImeTextSpan> ime_text_spans;
   Controller().CommitText("a", ime_text_spans, 0);
   Controller().SetComposition("bcd", ime_text_spans, 0, 2);
-  EXPECT_STREQ("abcd", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("abcd", div->InnerHTMLAsString().Utf8().data());
 
   Controller().CommitText(String("bcd\nefgh\nijkl"), ime_text_spans, 0);
   EXPECT_STREQ("abcd<div>efgh</div><div>ijkl</div>",
-               div->innerHTML().Utf8().data());
+               div->InnerHTMLAsString().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest, SelectionOnConfirmExistingText) {
@@ -433,7 +440,7 @@ TEST_F(InputMethodControllerTest, SelectionOnConfirmExistingText) {
 
 TEST_F(InputMethodControllerTest, DeleteBySettingEmptyComposition) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   input->setValue("foo ");
   GetDocument().UpdateStyleAndLayout();
@@ -493,7 +500,7 @@ TEST_F(InputMethodControllerTest,
 }
 
 TEST_F(InputMethodControllerTest, ConfirmPasswordComposition) {
-  HTMLInputElement* input = toHTMLInputElement(InsertHTMLElement(
+  HTMLInputElement* input = ToHTMLInputElement(InsertHTMLElement(
       "<input id='sample' type='password' size='24'>", "sample"));
 
   Vector<ImeTextSpan> ime_text_spans;
@@ -507,7 +514,7 @@ TEST_F(InputMethodControllerTest, ConfirmPasswordComposition) {
 
 TEST_F(InputMethodControllerTest, DeleteSurroundingTextWithEmptyText) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   input->setValue("");
   GetDocument().UpdateStyleAndLayout();
@@ -536,7 +543,7 @@ TEST_F(InputMethodControllerTest, DeleteSurroundingTextWithEmptyText) {
 
 TEST_F(InputMethodControllerTest, DeleteSurroundingTextWithRangeSelection) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   input->setValue("hello");
   GetDocument().UpdateStyleAndLayout();
@@ -576,7 +583,7 @@ TEST_F(InputMethodControllerTest, DeleteSurroundingTextWithRangeSelection) {
 
 TEST_F(InputMethodControllerTest, DeleteSurroundingTextWithCursorSelection) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   input->setValue("hello");
   GetDocument().UpdateStyleAndLayout();
@@ -645,7 +652,7 @@ TEST_F(InputMethodControllerTest, DeleteSurroundingTextWithCursorSelection) {
 TEST_F(InputMethodControllerTest,
        DeleteSurroundingTextWithMultiCodeTextOnTheLeft) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   // U+2605 == "black star". It takes up 1 space.
   input->setValue(String::FromUTF8("foo\xE2\x98\x85"));
@@ -711,7 +718,7 @@ TEST_F(InputMethodControllerTest,
 TEST_F(InputMethodControllerTest,
        DeleteSurroundingTextWithMultiCodeTextOnTheRight) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   // U+2605 == "black star". It takes up 1 space.
   input->setValue(String::FromUTF8("\xE2\x98\x85 foo"));
@@ -777,7 +784,7 @@ TEST_F(InputMethodControllerTest,
 TEST_F(InputMethodControllerTest,
        DeleteSurroundingTextWithMultiCodeTextOnBothSides) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   // "trophy" + "trophy".
   input->setValue(String::FromUTF8("\xF0\x9F\x8F\x86\xF0\x9F\x8F\x86"));
@@ -823,7 +830,7 @@ TEST_F(InputMethodControllerTest, DeleteSurroundingTextForMultipleNodes) {
 TEST_F(InputMethodControllerTest,
        DeleteSurroundingTextInCodePointsWithMultiCodeTextOnTheLeft) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   // 'a' + "black star" + SPACE + "trophy" + SPACE + composed text (U+0E01
   // "ka kai" + U+0E49 "mai tho").
@@ -858,7 +865,7 @@ TEST_F(InputMethodControllerTest,
 TEST_F(InputMethodControllerTest,
        DeleteSurroundingTextInCodePointsWithMultiCodeTextOnTheRight) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   // 'a' + "black star" + SPACE + "trophy" + SPACE + composed text
   input->setValue(String::FromUTF8(
@@ -877,7 +884,7 @@ TEST_F(InputMethodControllerTest,
 TEST_F(InputMethodControllerTest,
        DeleteSurroundingTextInCodePointsWithMultiCodeTextOnBothSides) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   // 'a' + "black star" + SPACE + "trophy" + SPACE + composed text
   input->setValue(String::FromUTF8(
@@ -904,7 +911,7 @@ TEST_F(InputMethodControllerTest, DeleteSurroundingTextInCodePointsWithImage) {
 TEST_F(InputMethodControllerTest,
        DeleteSurroundingTextInCodePointsWithInvalidSurrogatePair) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   // 'a' + high surrogate of "trophy" + "black star" + low surrogate of "trophy"
   // + SPACE
@@ -941,7 +948,7 @@ TEST_F(InputMethodControllerTest,
 
 TEST_F(InputMethodControllerTest, SetCompositionForInputWithNewCaretPositions) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   input->setValue("hello");
   GetDocument().UpdateStyleAndLayout();
@@ -1170,7 +1177,7 @@ TEST_F(InputMethodControllerTest, CompositionInputEventIsComposing) {
   Element* editable =
       InsertHTMLElement("<div id='sample' contenteditable></div>", "sample");
   Element* script = GetDocument().createElement("script");
-  script->setInnerHTML(
+  script->SetInnerHTMLFromString(
       "document.getElementById('sample').addEventListener('beforeinput', "
       "  event => document.title = "
       "  `beforeinput.isComposing:${event.isComposing};`);"
@@ -1345,7 +1352,7 @@ TEST_F(InputMethodControllerTest, FinishCompositionRemovedRange) {
   EXPECT_EQ(kWebTextInputTypeText, Controller().TextInputType());
 
   // Remove element 'a'.
-  input_a->setOuterHTML("", ASSERT_NO_EXCEPTION);
+  input_a->SetOuterHTMLFromString("", ASSERT_NO_EXCEPTION);
   EXPECT_EQ(kWebTextInputTypeNone, Controller().TextInputType());
 
   GetDocument().getElementById("b")->focus();
@@ -1505,7 +1512,7 @@ TEST_F(InputMethodControllerTest, SelectionWhenFocusChangeFinishesComposition) {
 
 TEST_F(InputMethodControllerTest, SetEmptyCompositionShouldNotMoveCaret) {
   HTMLTextAreaElement* textarea =
-      toHTMLTextAreaElement(InsertHTMLElement("<textarea id='txt'>", "txt"));
+      ToHTMLTextAreaElement(InsertHTMLElement("<textarea id='txt'>", "txt"));
 
   textarea->setValue("abc\n");
   GetDocument().UpdateStyleAndLayout();
@@ -1532,19 +1539,19 @@ TEST_F(InputMethodControllerTest, WhitespaceFixup) {
 
   // The space at the beginning of the string should have been converted to an
   // nbsp
-  EXPECT_STREQ("&nbsp;text blah", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("&nbsp;text blah", div->InnerHTMLAsString().Utf8().data());
 
   // Delete "blah"
   Controller().SetCompositionFromExistingText(empty_ime_text_spans, 6, 10);
   Controller().CommitText(String(""), empty_ime_text_spans, 0);
 
   // The space at the end of the string should have been converted to an nbsp
-  EXPECT_STREQ("&nbsp;text&nbsp;", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("&nbsp;text&nbsp;", div->InnerHTMLAsString().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest, CommitEmptyTextDeletesSelection) {
   HTMLInputElement* input =
-      toHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
+      ToHTMLInputElement(InsertHTMLElement("<input id='sample'>", "sample"));
 
   input->setValue("Abc Def Ghi");
   GetDocument().UpdateStyleAndLayout();
@@ -1829,7 +1836,7 @@ TEST_F(InputMethodControllerTest,
   Controller().SetCompositionFromExistingText(empty_ime_text_spans, 13, 25);
   Controller().CommitText(String("content"), empty_ime_text_spans, 0);
 
-  EXPECT_STREQ("This is some content", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("This is some content", div->InnerHTMLAsString().Utf8().data());
 
   // Verify marker was removed
   EXPECT_EQ(0u, GetDocument().Markers().Markers().size());
@@ -1852,7 +1859,7 @@ TEST_F(InputMethodControllerTest,
   Controller().SetCompositionFromExistingText(empty_ime_text_spans, 13, 25);
   Controller().CommitText(String("content"), empty_ime_text_spans, 0);
 
-  EXPECT_STREQ("This is some content", div->innerHTML().Utf8().data());
+  EXPECT_STREQ("This is some content", div->InnerHTMLAsString().Utf8().data());
 
   // Verify marker is under "some "
   EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
@@ -2312,6 +2319,41 @@ TEST_F(InputMethodControllerTest,
   EXPECT_EQ(25u, GetDocument().Markers().Markers()[2]->EndOffset());
 }
 
+TEST_F(InputMethodControllerTest,
+       CommitNotMisspellingSuggestionMarkerWithSpellCheckingDisabled) {
+  InsertHTMLElement(
+      "<div id='sample' contenteditable spellcheck='false'>text</div>",
+      "sample");
+
+  Vector<ImeTextSpan> ime_text_spans;
+  // Try to commit a non-misspelling suggestion marker.
+  ime_text_spans.push_back(ImeTextSpan(ImeTextSpan::Type::kSuggestion, 0, 5,
+                                       Color::kTransparent, false,
+                                       Color::kTransparent));
+  Controller().CommitText("hello", ime_text_spans, 1);
+
+  // The marker should have been added.
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+}
+
+TEST_F(InputMethodControllerTest,
+       CommitMisspellingSuggestionMarkerWithSpellCheckingDisabled) {
+  InsertHTMLElement(
+      "<div id='sample' contenteditable spellcheck='false'>text</div>",
+      "sample");
+
+  Vector<ImeTextSpan> ime_text_spans;
+  // Try to commit a non-misspelling suggestion marker.
+  ime_text_spans.push_back(
+      ImeTextSpan(ImeTextSpan::Type::kMisspellingSuggestion, 0, 5,
+                  Color::kTransparent, false, Color::kTransparent));
+  Controller().CommitText("hello", ime_text_spans, 1);
+
+  // The marker should not have been added since the div has spell checking
+  // disabled.
+  EXPECT_EQ(0u, GetDocument().Markers().Markers().size());
+}
+
 // For http://crbug.com/712761
 TEST_F(InputMethodControllerTest, TextInputTypeAtBeforeEditable) {
   GetDocument().body()->setContentEditable("true", ASSERT_NO_EXCEPTION);
@@ -2328,7 +2370,7 @@ TEST_F(InputMethodControllerTest, TextInputTypeAtBeforeEditable) {
 
 // http://crbug.com/721666
 TEST_F(InputMethodControllerTest, MaxLength) {
-  HTMLInputElement* input = toHTMLInputElement(
+  HTMLInputElement* input = ToHTMLInputElement(
       InsertHTMLElement("<input id='a' maxlength='4'/>", "a"));
 
   EXPECT_EQ(kWebTextInputTypeText, Controller().TextInputType());
@@ -2352,6 +2394,107 @@ TEST_F(InputMethodControllerTest, InputModeOfFocusedElement) {
       "b")
       ->focus();
   EXPECT_EQ(kWebTextInputModeDefault, Controller().InputModeOfFocusedElement());
+}
+
+TEST_F(InputMethodControllerTest, CompositionUnderlineSpansMultipleNodes) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable><b>t</b>est</div>", "sample");
+  Vector<ImeTextSpan> ime_text_spans;
+  ime_text_spans.push_back(ImeTextSpan(ImeTextSpan::Type::kComposition, 0, 4,
+                                       Color(255, 0, 0), false, 0));
+  Controller().SetCompositionFromExistingText(Vector<ImeTextSpan>(), 0, 4);
+  Controller().SetComposition("test", ime_text_spans, 0, 4);
+
+  Node* b = div->firstChild();
+  Node* text1 = b->firstChild();
+  Node* text2 = b->nextSibling();
+
+  const DocumentMarkerVector& text1_markers =
+      GetDocument().Markers().MarkersFor(text1, DocumentMarker::kComposition);
+  EXPECT_EQ(1u, text1_markers.size());
+  EXPECT_EQ(0u, text1_markers[0]->StartOffset());
+  EXPECT_EQ(1u, text1_markers[0]->EndOffset());
+
+  const DocumentMarkerVector& text2_markers =
+      GetDocument().Markers().MarkersFor(text2, DocumentMarker::kComposition);
+  EXPECT_EQ(1u, text2_markers.size());
+  EXPECT_EQ(0u, text2_markers[0]->StartOffset());
+  EXPECT_EQ(3u, text2_markers[0]->EndOffset());
+}
+
+// The following tests are for http://crbug.com/766680.
+
+TEST_F(InputMethodControllerTest, SetCompositionDeletesMarkupBeforeText) {
+  Element* div = InsertHTMLElement(
+      "<div id='div' contenteditable='true'><img />test</div>", "div");
+  // Select the contents of the div element.
+  GetFrame().Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(EphemeralRange::RangeOfContents(*div))
+          .Build());
+
+  Controller().SetComposition("t", Vector<ImeTextSpan>(), 0, 1);
+
+  EXPECT_EQ(1u, div->CountChildren());
+  Text* text = ToText(div->firstChild());
+  EXPECT_EQ("t", text->data());
+}
+
+TEST_F(InputMethodControllerTest, SetCompositionDeletesMarkupAfterText) {
+  Element* div = InsertHTMLElement(
+      "<div id='div' contenteditable='true'>test<img /></div>", "div");
+  // Select the contents of the div element.
+  GetFrame().Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(EphemeralRange::RangeOfContents(*div))
+          .Build());
+
+  Controller().SetComposition("t", Vector<ImeTextSpan>(), 0, 1);
+
+  EXPECT_EQ(1u, div->CountChildren());
+  Text* text = ToText(div->firstChild());
+  EXPECT_EQ("t", text->data());
+}
+
+TEST_F(InputMethodControllerTest,
+       SetCompositionDeletesMarkupBeforeAndAfterText) {
+  Element* div = InsertHTMLElement(
+      "<div id='div' contenteditable='true'><img />test<img /></div>", "div");
+  // Select the contents of the div element.
+  GetFrame().Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(EphemeralRange::RangeOfContents(*div))
+          .Build());
+
+  Controller().SetComposition("t", Vector<ImeTextSpan>(), 0, 1);
+
+  EXPECT_EQ(1u, div->CountChildren());
+  Text* text = ToText(div->firstChild());
+  EXPECT_EQ("t", text->data());
+}
+
+TEST_F(InputMethodControllerTest,
+       SetCompositionWithPartialGraphemeWithCompositionUnderlineDoesntCrash) {
+  InsertHTMLElement("<div id='sample' contenteditable></div>", "sample");
+
+  Vector<ImeTextSpan> ime_text_spans;
+  ime_text_spans.push_back(ImeTextSpan(ImeTextSpan::Type::kComposition, 0, 1,
+                                       Color(255, 0, 0), false, 0));
+  Controller().CommitText(" ", ime_text_spans, 0);
+  // Add character U+094D: 'DEVANAGARI SIGN VIRAMA'
+  Controller().SetComposition(String::FromUTF8("\xE0\xA5\x8D"), ime_text_spans,
+                              1, 1);
+}
+
+TEST_F(
+    InputMethodControllerTest,
+    SetCompositionWithPartialGraphemeWithoutCompositionUnderlineDoesntCrash) {
+  InsertHTMLElement("<div id='sample' contenteditable></div>", "sample");
+
+  Controller().CommitText(" ", Vector<ImeTextSpan>(), 0);
+  // Add character U+094D: 'DEVANAGARI SIGN VIRAMA'
+  Controller().SetComposition(String::FromUTF8("\xE0\xA5\x8D"),
+                              Vector<ImeTextSpan>(), 1, 1);
 }
 
 }  // namespace blink

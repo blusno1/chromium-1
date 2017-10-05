@@ -44,6 +44,22 @@ namespace net {
 
 namespace {
 
+class CookieStoreIOSCookieChangedSubscription
+    : public CookieStore::CookieChangedSubscription {
+ public:
+  CookieStoreIOSCookieChangedSubscription(
+      std::unique_ptr<CookieStore::CookieChangedCallbackList::Subscription>
+          subscription)
+      : subscription_(std::move(subscription)) {}
+  ~CookieStoreIOSCookieChangedSubscription() override {}
+
+ private:
+  std::unique_ptr<CookieStore::CookieChangedCallbackList::Subscription>
+      subscription_;
+
+  DISALLOW_COPY_AND_ASSIGN(CookieStoreIOSCookieChangedSubscription);
+};
+
 #pragma mark NotificationTrampoline
 
 // NotificationTrampoline dispatches cookie notifications to all the existing
@@ -690,12 +706,12 @@ CookieStoreIOS::AddCallbackForCookie(const GURL& gurl,
   std::pair<GURL, std::string> key(gurl, name);
   if (hook_map_.count(key) == 0) {
     UpdateCacheForCookieFromSystem(gurl, name, nullptr, nullptr);
-    if (hook_map_.count(key) == 0)
-      hook_map_[key] = base::MakeUnique<CookieChangedCallbackList>();
+    hook_map_[key] = std::make_unique<CookieChangedCallbackList>();
   }
 
   DCHECK(hook_map_.find(key) != hook_map_.end());
-  return hook_map_[key]->Add(callback);
+  return std::make_unique<CookieStoreIOSCookieChangedSubscription>(
+      hook_map_[key]->Add(callback));
 }
 
 std::unique_ptr<net::CookieStore::CookieChangedSubscription>
@@ -747,7 +763,7 @@ bool CookieStoreIOS::GetSystemCookies(
   NSArray* nscookies = system_store_->GetCookiesForURL(url);
   bool found_cookies = false;
   for (NSHTTPCookie* nscookie in nscookies) {
-    if (nscookie.name.UTF8String == name) {
+    if (base::SysNSStringToUTF8(nscookie.name) == name) {
       net::CanonicalCookie canonical_cookie = CanonicalCookieFromSystemCookie(
           nscookie, creation_time_manager_->GetCreationTime(nscookie));
       cookies->push_back(canonical_cookie);

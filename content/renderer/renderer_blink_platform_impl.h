@@ -19,7 +19,9 @@
 #include "components/viz/client/client_shared_bitmap_manager.h"
 #include "content/child/blink_platform_impl.h"
 #include "content/common/content_export.h"
+#include "content/common/file_utilities.mojom.h"
 #include "content/common/possibly_associated_interface_ptr.h"
+#include "content/common/web_database.mojom.h"
 #include "content/public/common/url_loader_factory.mojom.h"
 #include "content/renderer/origin_trials/web_trial_token_validator_impl.h"
 #include "content/renderer/top_level_blame_context.h"
@@ -89,9 +91,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   unsigned long long VisitedLinkHash(const char* canonicalURL,
                                      size_t length) override;
   bool IsLinkVisited(unsigned long long linkHash) override;
-  void CreateMessageChannel(
-      std::unique_ptr<blink::WebMessagePortChannel>* channel1,
-      std::unique_ptr<blink::WebMessagePortChannel>* channel2) override;
   blink::WebPrescientNetworking* PrescientNetworking() override;
   void CacheMetadata(const blink::WebURL&,
                      base::Time,
@@ -244,7 +243,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
       const blink::WebURLRequest& request,
-      base::SingleThreadTaskRunner* task_runner) override;
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
 
   void RequestPurgeMemory() override;
 
@@ -268,6 +267,9 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   // Use the data previously set via SetMockDevice...DataForTesting() and send
   // them to the registered listener.
   void SendFakeDeviceEventDataForTesting(blink::WebPlatformEventType type);
+
+  // Return the mojo interface for making WebDatabaseHost calls.
+  mojom::WebDatabaseHost& GetWebDatabaseHost();
 
   std::unique_ptr<blink::WebThread> main_thread_;
   std::unique_ptr<service_manager::Connector> connector_;
@@ -299,7 +301,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   WebPublicSuffixListImpl public_suffix_list_;
 
   scoped_refptr<base::SingleThreadTaskRunner> default_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner_;
   scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   scoped_refptr<QuotaMessageFilter> quota_message_filter_;
@@ -324,6 +325,11 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   std::unique_ptr<BlinkInterfaceProviderImpl> blink_interface_provider_;
 
   PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory> url_loader_factory_;
+
+  mojom::WebDatabaseHostPtrInfo web_database_host_info_;
+  scoped_refptr<mojom::ThreadSafeWebDatabaseHostPtr> web_database_host_;
+
+  mojom::FileUtilitiesHostPtrInfo file_utilities_host_info_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererBlinkPlatformImpl);
 };

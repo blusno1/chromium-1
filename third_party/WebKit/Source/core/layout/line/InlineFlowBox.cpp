@@ -1106,12 +1106,6 @@ inline void InlineFlowBox::AddTextBoxVisualOverflow(
           std::max(bottom_glyph_overflow, emphasis_mark_height);
   }
 
-  // If letter-spacing is negative, we should factor that into right layout
-  // overflow. Even in RTL, letter-spacing is applied to the right, so this is
-  // not an issue with left overflow.
-  right_glyph_overflow -=
-      std::min(0.0f, style.GetFont().GetFontDescription().LetterSpacing());
-
   LayoutRectOutsets text_shadow_logical_outsets;
   if (ShadowList* text_shadow = style.TextShadow()) {
     text_shadow_logical_outsets =
@@ -1281,8 +1275,12 @@ void InlineFlowBox::ComputeOverflow(
             flow->LogicalVisualOverflowRect(line_top, line_bottom));
       LayoutRect child_layout_overflow =
           flow->LogicalLayoutOverflowRect(line_top, line_bottom);
-      child_layout_overflow.Move(
-          flow->BoxModelObject().RelativePositionLogicalOffset());
+      child_layout_overflow.Unite(
+          LogicalFrameRectIncludingLineHeight(line_top, line_bottom));
+      if (flow->BoxModelObject().IsRelPositioned()) {
+        child_layout_overflow.Move(
+            flow->BoxModelObject().RelativePositionLogicalOffset());
+      }
       logical_layout_overflow.Unite(child_layout_overflow);
     } else {
       AddReplacedChildOverflow(curr, logical_layout_overflow,
@@ -1508,7 +1506,7 @@ LayoutUnit InlineFlowBox::PlaceEllipsisBox(bool ltr,
   // otherwise iterate from right to left. Varying the order allows us to
   // correctly hide the boxes following the ellipsis.
   LayoutUnit relative_offset =
-      BoxModelObject().IsInline()
+      BoxModelObject().IsInline() && BoxModelObject().IsRelPositioned()
           ? BoxModelObject().RelativePositionLogicalOffset().Width()
           : LayoutUnit();
   logical_left_offset += relative_offset;

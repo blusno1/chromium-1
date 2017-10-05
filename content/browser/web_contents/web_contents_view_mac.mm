@@ -90,6 +90,7 @@ content::ScreenInfo GetNSViewScreenInfo(NSView* view) {
   content::ScreenInfo results;
   results.device_scale_factor = static_cast<int>(display.device_scale_factor());
   results.color_space = display.color_space();
+  results.color_space.GetICCProfile(&results.icc_profile);
   results.depth = display.color_depth();
   results.depth_per_component = display.depth_per_component();
   results.is_monochrome = display.is_monochrome();
@@ -528,10 +529,9 @@ void WebContentsViewMac::CloseTab() {
 - (void)mouseEvent:(NSEvent*)theEvent {
   WebContentsImpl* webContents = [self webContents];
   if (webContents && webContents->GetDelegate()) {
-    NSPoint location = [NSEvent mouseLocation];
     webContents->GetDelegate()->ContentsMouseEvent(
-        webContents, gfx::Point(location.x, location.y),
-        [theEvent type] == NSMouseMoved, [theEvent type] == NSMouseExited);
+        webContents, [theEvent type] == NSMouseMoved,
+        [theEvent type] == NSMouseExited);
   }
 }
 

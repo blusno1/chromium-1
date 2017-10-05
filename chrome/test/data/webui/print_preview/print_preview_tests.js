@@ -64,7 +64,8 @@ cr.define('print_preview_test', function() {
 
     printPreview.initialize();
     return nativeLayer.whenCalled('getInitialSettings').then(function() {
-      printPreview.destinationStore_.startLoadLocalDestinations();
+      printPreview.destinationStore_.startLoadDestinations(
+          print_preview.PrinterType.LOCAL_PRINTER);
       return Promise.all([
         nativeLayer.whenCalled('getPrinters'),
         nativeLayer.whenCalled('getPrinterCapabilities')
@@ -102,8 +103,10 @@ cr.define('print_preview_test', function() {
    */
   function getCddTemplate(printerId, opt_printerName) {
     return {
-      printerId: printerId,
-      printerName: opt_printerName || '',
+      printer: {
+        deviceName: printerId,
+        printerName: opt_printerName || '',
+      },
       capabilities: {
         version: '1.0',
         printer: {
@@ -150,7 +153,9 @@ cr.define('print_preview_test', function() {
    */
   function getPdfPrinter() {
     return {
-      printerId: 'Save as PDF',
+      printer: {
+        deviceName: 'Save as PDF',
+      },
       capabilities: {
         version: '1.0',
         printer: {
@@ -236,7 +241,7 @@ cr.define('print_preview_test', function() {
       // Add a listener for the animation end event.
       var element = $(elementId);
       element.addEventListener('animationend', function f(e) {
-        element.removeEventListener(f, 'animationend');
+        element.removeEventListener('animationend', f);
         resolve();
       });
     });
@@ -315,19 +320,20 @@ cr.define('print_preview_test', function() {
     });
 
     setup(function() {
-      initialSettings = new print_preview.NativeInitialSettings(
-        false /*isInKioskAutoPrintMode*/,
-        false /*isInAppKioskMode*/,
-        ',' /*thousandsDelimeter*/,
-        '.' /*decimalDelimeter*/,
-        1 /*unitType*/,
-        true /*isDocumentModifiable*/,
-        'title' /*documentTitle*/,
-        true /*documentHasSelection*/,
-        false /*selectionOnly*/,
-        'FooDevice' /*systemDefaultDestinationId*/,
-        null /*serializedAppStateStr*/,
-        null /*serializedDefaultDestinationSelectionRulesStr*/);
+      initialSettings = {
+        isInKioskAutoPrintMode: false,
+        isInAppKioskMode: false,
+        thousandsDelimeter: ',',
+        decimalDelimeter: '.',
+        unitType: 1,
+        previewModifiable: true,
+        documentTitle: 'title',
+        documentHasSelection: true,
+        shouldPrintSelectionOnly: false,
+        printerName: 'FooDevice',
+        serializedAppStateStr: null,
+        serializedDefaultDestinationSelectionRulesStr: null
+      };
 
       localDestinationInfos = [
         { printerName: 'FooName', deviceName: 'FooDevice' },
@@ -422,7 +428,7 @@ cr.define('print_preview_test', function() {
 
     // Test restore settings with one destination.
     test('RestoreLocalDestination', function() {
-      initialSettings.serializedAppStateStr_ = JSON.stringify({
+      initialSettings.serializedAppStateStr = JSON.stringify({
         version: 2,
         recentDestinations: [
           {
@@ -444,7 +450,7 @@ cr.define('print_preview_test', function() {
     test('RestoreMultipleDestinations', function() {
       var origin = cr.isChromeOS ? 'chrome_os' : 'local';
 
-      initialSettings.serializedAppStateStr_ = JSON.stringify({
+      initialSettings.serializedAppStateStr = JSON.stringify({
         version: 2,
         recentDestinations: [
           {
@@ -518,7 +524,7 @@ cr.define('print_preview_test', function() {
 
     test('DefaultDestinationSelectionRules', function() {
       // It also makes sure these rules do override system default destination.
-      initialSettings.serializedDefaultDestinationSelectionRulesStr_ =
+      initialSettings.serializedDefaultDestinationSelectionRulesStr =
           JSON.stringify({namePattern: '.*Bar.*'});
       return setupSettingsAndDestinationsWithCapabilities(
           getCddTemplate('BarDevice', 'BarName')).then(function() {
@@ -529,7 +535,7 @@ cr.define('print_preview_test', function() {
 
     test('SystemDialogLinkIsHiddenInAppKioskMode', function() {
       if (!cr.isChromeOS)
-        initialSettings.isInAppKioskMode_ = true;
+        initialSettings.isInAppKioskMode = true;
       nativeLayer.setLocalDestinationCapabilities(getCddTemplate('FooDevice'));
       setInitialSettings();
       return nativeLayer.whenCalled('getInitialSettings').then(
@@ -565,8 +571,8 @@ cr.define('print_preview_test', function() {
     // the fit to page option.
     test('PrintToPDFSelectedCapabilities', function() {
       // Setup initial settings
-      initialSettings.isDocumentModifiable_ = false;
-      initialSettings.systemDefaultDestinationId_ = 'Save as PDF';
+      initialSettings.previewModifiable = false;
+      initialSettings.printerName = 'Save as PDF';
 
       // Set PDF printer
       nativeLayer.setLocalDestinationCapabilities(getPdfPrinter());
@@ -627,7 +633,7 @@ cr.define('print_preview_test', function() {
     // When the source is 'PDF', depending on the selected destination printer,
     // we show/hide the fit to page option and hide media size selection.
     test('SourceIsPDFCapabilities', function() {
-      initialSettings.isDocumentModifiable_ = false;
+      initialSettings.previewModifiable = false;
       return setupSettingsAndDestinationsWithCapabilities().then(function() {
         var otherOptions = $('other-options-settings');
         var scalingSettings = $('scaling-settings');
@@ -661,7 +667,7 @@ cr.define('print_preview_test', function() {
     // When the source is 'PDF', depending on the selected destination printer,
     // we show/hide the fit to page option and hide media size selection.
     test('ScalingUnchecksFitToPage', function() {
-      initialSettings.isDocumentModifiable_ = false;
+      initialSettings.previewModifiable = false;
       // Wait for preview to load.
       return Promise.all([setupSettingsAndDestinationsWithCapabilities(),
                           nativeLayer.whenCalled('getPreview')]).then(
@@ -705,7 +711,7 @@ cr.define('print_preview_test', function() {
     // When the number of copies print preset is set for source 'PDF', we update
     // the copies value if capability is supported by printer.
     test('CheckNumCopiesPrintPreset', function() {
-      initialSettings.isDocumentModifiable_ = false;
+      initialSettings.previewModifiable = false;
       return setupSettingsAndDestinationsWithCapabilities().then(function() {
         // Indicate that the number of copies print preset is set for source
         // PDF.
@@ -723,7 +729,7 @@ cr.define('print_preview_test', function() {
     // When the duplex print preset is set for source 'PDF', we update the
     // duplex setting if capability is supported by printer.
     test('CheckDuplexPrintPreset', function() {
-      initialSettings.isDocumentModifiable_ = false;
+      initialSettings.previewModifiable = false;
       return setupSettingsAndDestinationsWithCapabilities().then(function() {
         // Indicate that the duplex print preset is set to 'long edge' for
         // source PDF.
@@ -1240,7 +1246,7 @@ cr.define('print_preview_test', function() {
     test('InitIssuesOneRequest', function() {
       // Load in a bunch of recent destinations with non null capabilities.
       var origin = cr.isChromeOS ? 'chrome_os' : 'local';
-      initialSettings.serializedAppStateStr_ = JSON.stringify({
+      initialSettings.serializedAppStateStr = JSON.stringify({
         version: 2,
         recentDestinations: [1, 2, 3].map(function(i) {
           return {
@@ -1342,7 +1348,7 @@ cr.define('print_preview_test', function() {
           function(args) {
             // Sanity check some printing argument values.
             var printTicketStore = args.printTicketStore;
-            expectEquals(barDevice.printerId, args.destination.id);
+            expectEquals(barDevice.printer.deviceName, args.destination.id);
             expectEquals(
                 getDefaultOrientation(barDevice) == 'LANDSCAPE',
                 printTicketStore.landscape.getValue());
@@ -1393,7 +1399,7 @@ cr.define('print_preview_test', function() {
     // instead of the most recently used destination works.
     test('SystemDefaultPrinterPolicy', function() {
       // Add recent destination.
-      initialSettings.serializedAppStateStr_ = JSON.stringify({
+      initialSettings.serializedAppStateStr = JSON.stringify({
         version: 2,
         recentDestinations: [
           {
@@ -1425,16 +1431,16 @@ cr.define('print_preview_test', function() {
       });
     });
 
-    // Test that Mac "Open PDF in Preview" link is treated correctly as a
-    // local printer. See crbug.com/741341 and crbug.com/741528
     if (cr.isMac) {
+      // Test that Mac "Open PDF in Preview" link is treated correctly as a
+      // local printer. See crbug.com/741341 and crbug.com/741528
       test('MacOpenPDFInPreview', function() {
         var device = getPdfPrinter();
-        initialSettings.systemDefaultDestinationId_ = device.printerId;
+        initialSettings.printerName = device.printer.deviceName;
         return setupSettingsAndDestinationsWithCapabilities(device).
             then(function() {
               assertEquals(
-                device.printerId,
+                device.printer.deviceName,
                 printPreview.destinationStore_.selectedDestination.id);
               return nativeLayer.whenCalled('getPreview');
             }).then(function() {
@@ -1459,7 +1465,42 @@ cr.define('print_preview_test', function() {
                   return nativeLayer.whenCalled('hidePreview');
                 });
       });
-    }
+
+      // Test that the OpenPDFInPreview link is correctly disabled when the
+      // print ticket is invalid.
+      test('MacOpenPDFInPreviewBadPrintTicket', function() {
+        var device = getPdfPrinter();
+        initialSettings.printerName = device.printer.deviceName;
+        return Promise.all([
+          setupSettingsAndDestinationsWithCapabilities(device),
+          nativeLayer.whenCalled('getPreview')
+        ]).then(function() {
+          var openPdfPreviewLink = $('open-pdf-in-preview-link');
+          checkElementDisplayed(openPdfPreviewLink, true);
+          expectFalse(openPdfPreviewLink.disabled);
+          var pageSettings = $('page-settings');
+          checkSectionVisible(pageSettings, true);
+          nativeLayer.resetResolver('getPreview');
+
+          // Set page settings to a bad value
+          pageSettings.querySelector('.page-settings-custom-input').value =
+              'abc';
+          pageSettings.querySelector('.page-settings-custom-radio').click();
+
+          // No new preview
+          nativeLayer.whenCalled('getPreview').then(function() {
+            assertTrue(false);
+          });
+
+          // Expect disabled print button and Pdf in preview link
+          var printButton = $('print-header').querySelector('button.print');
+          checkElementDisplayed(printButton, true);
+          expectTrue(printButton.disabled);
+          checkElementDisplayed(openPdfPreviewLink, true);
+          expectTrue(openPdfPreviewLink.disabled);
+        });
+      });
+    }  // cr.isMac
 
     // Test that the system dialog link works correctly on Windows
     if (cr.isWindows) {
@@ -1492,6 +1533,40 @@ cr.define('print_preview_test', function() {
                   return nativeLayer.whenCalled('hidePreview');
                 });
       });
-    }
+
+      // Test that the System Dialog link is correctly disabled when the
+      // print ticket is invalid.
+      test('WinSystemDialogLinkBadPrintTicket', function() {
+        return Promise.all([
+          setupSettingsAndDestinationsWithCapabilities(),
+          nativeLayer.whenCalled('getPreview')
+        ]).then(function() {
+          var systemDialogLink = $('system-dialog-link');
+          checkElementDisplayed(systemDialogLink, true);
+          expectFalse(systemDialogLink.disabled);
+
+          var pageSettings = $('page-settings');
+          checkSectionVisible(pageSettings, true);
+          nativeLayer.resetResolver('getPreview');
+
+          // Set page settings to a bad value
+          pageSettings.querySelector('.page-settings-custom-input').value =
+              'abc';
+          pageSettings.querySelector('.page-settings-custom-radio').click();
+
+          // No new preview
+          nativeLayer.whenCalled('getPreview').then(function() {
+            assertTrue(false);
+          });
+
+          // Expect disabled print button and Pdf in preview link
+          var printButton = $('print-header').querySelector('button.print');
+          checkElementDisplayed(printButton, true);
+          expectTrue(printButton.disabled);
+          checkElementDisplayed(systemDialogLink, true);
+          expectTrue(systemDialogLink.disabled);
+        });
+      });
+    }  // cr.isWindows
   });
 });

@@ -71,21 +71,24 @@ class ModuleScriptLoaderTestModulator final : public DummyModulator {
   ~ModuleScriptLoaderTestModulator() override {}
 
   SecurityOrigin* GetSecurityOrigin() override {
-    return security_origin_.Get();
+    return security_origin_.get();
   }
 
-  ScriptState* GetScriptState() override { return script_state_.Get(); }
+  ScriptState* GetScriptState() override { return script_state_.get(); }
 
-  ScriptModule CompileModule(const String& script,
-                             const String& url_str,
-                             AccessControlStatus access_control_status,
-                             const TextPosition& position,
-                             ExceptionState& exception_state) override {
-    ScriptState::Scope scope(script_state_.Get());
-    return ScriptModule::Compile(
-        script_state_->GetIsolate(), "export default 'foo';", "",
-        access_control_status, TextPosition::MinimumPosition(),
-        exception_state);
+  ScriptModule CompileModule(
+      const String& script,
+      const String& url_str,
+      AccessControlStatus access_control_status,
+      WebURLRequest::FetchCredentialsMode credentials_mode,
+      const String& nonce,
+      ParserDisposition parser_state,
+      const TextPosition& position,
+      ExceptionState& exception_state) override {
+    ScriptState::Scope scope(script_state_.get());
+    return ScriptModule::Compile(script_state_->GetIsolate(), script, url_str,
+                                 access_control_status, credentials_mode, nonce,
+                                 parser_state, position, exception_state);
   }
 
   void SetModuleRequests(const Vector<String>& requests) {
@@ -102,7 +105,7 @@ class ModuleScriptLoaderTestModulator final : public DummyModulator {
   }
 
   ModuleScriptFetcher* CreateModuleScriptFetcher() override {
-    auto* execution_context = ExecutionContext::From(script_state_.Get());
+    auto* execution_context = ExecutionContext::From(script_state_.get());
     if (execution_context->IsDocument())
       return new DocumentModuleScriptFetcher(Fetcher());
     auto* global_scope = ToWorkletGlobalScope(execution_context);

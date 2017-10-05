@@ -58,10 +58,10 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
                                       LayoutUnit position,
                                       NGLineBoxFragmentBuilder*);
 
-  void ApplyTextAlign(ETextAlign,
+  void ApplyTextAlign(const NGLineInfo&,
+                      ETextAlign,
                       LayoutUnit* line_left,
-                      LayoutUnit inline_size,
-                      LayoutUnit available_width);
+                      LayoutUnit inline_size);
   bool ApplyJustify(NGLineInfo*);
 
   LayoutUnit ComputeContentSize(const NGLineInfo&,
@@ -79,6 +79,7 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
   FontBaseline baseline_type_ = FontBaseline::kAlphabeticBaseline;
 
   unsigned is_horizontal_writing_mode_ : 1;
+  unsigned quirks_mode_ : 1;
 
   std::unique_ptr<NGExclusionSpace> exclusion_space_;
   Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats_;

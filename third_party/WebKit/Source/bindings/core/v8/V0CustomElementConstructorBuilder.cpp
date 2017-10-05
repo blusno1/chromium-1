@@ -36,8 +36,6 @@
 #include "bindings/core/v8/V8HTMLElement.h"
 #include "bindings/core/v8/V8SVGElement.h"
 #include "bindings/core/v8/string_or_dictionary.h"
-#include "core/HTMLNames.h"
-#include "core/SVGNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementRegistrationOptions.h"
 #include "core/frame/UseCounter.h"
@@ -45,6 +43,8 @@
 #include "core/html/custom/V0CustomElementDescriptor.h"
 #include "core/html/custom/V0CustomElementException.h"
 #include "core/html/custom/V0CustomElementProcessingStack.h"
+#include "core/html_names.h"
+#include "core/svg_names.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/V0CustomElementBinding.h"
 #include "platform/bindings/V8PerContextData.h"
@@ -154,7 +154,7 @@ V0CustomElementConstructorBuilder::CreateCallbacks() {
       RetrieveCallback("attributeChangedCallback");
 
   callbacks_ = V8V0CustomElementLifecycleCallbacks::Create(
-      script_state_.Get(), prototype_, created, attached, detached,
+      script_state_.get(), prototype_, created, attached, detached,
       attribute_changed);
   return callbacks_.Get();
 }
@@ -289,7 +289,7 @@ bool V0CustomElementConstructorBuilder::DidRegisterDefinition() const {
 }
 
 ScriptValue V0CustomElementConstructorBuilder::BindingsReturnValue() const {
-  return ScriptValue(script_state_.Get(), constructor_);
+  return ScriptValue(script_state_.get(), constructor_);
 }
 
 bool V0CustomElementConstructorBuilder::HasValidPrototypeChainFor(
@@ -346,7 +346,7 @@ static void ConstructCustomElement(
   V0CustomElementProcessingStack::CallbackDeliveryScope delivery_scope;
   Element* element = document->createElementNS(
       namespace_uri, tag_name,
-      StringOrDictionary::fromString(maybe_type->IsNull() ? g_null_atom : type),
+      StringOrDictionary::FromString(maybe_type->IsNull() ? g_null_atom : type),
       exception_state);
   if (element) {
     UseCounter::Count(document, WebFeature::kV0CustomElementsConstruct);

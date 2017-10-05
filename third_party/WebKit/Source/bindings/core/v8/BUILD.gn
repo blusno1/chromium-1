@@ -71,6 +71,12 @@ bindings_core_generated_union_type_files = [
   "$bindings_core_v8_output_dir/string_or_dictionary.h",
   "$bindings_core_v8_output_dir/string_or_float.cc",
   "$bindings_core_v8_output_dir/string_or_float.h",
+  "$bindings_core_v8_output_dir/string_or_trusted_html.cc",
+  "$bindings_core_v8_output_dir/string_or_trusted_html.h",
+  "$bindings_core_v8_output_dir/string_or_trusted_script_url.cc",
+  "$bindings_core_v8_output_dir/string_or_trusted_script_url.h",
+  "$bindings_core_v8_output_dir/string_or_trusted_url.cc",
+  "$bindings_core_v8_output_dir/string_or_trusted_url.h",
   "$bindings_core_v8_output_dir/string_or_unrestricted_double_sequence.cc",
   "$bindings_core_v8_output_dir/string_or_unrestricted_double_sequence.h",
   "$bindings_core_v8_output_dir/usv_string_sequence_sequence_or_usv_string_usv_string_record_or_usv_string.cc",
@@ -101,6 +107,8 @@ generated_core_testing_callback_function_files = [
 ]
 
 generated_core_callback_function_files = [
+  "$bindings_core_v8_output_dir/v8_frame_request_callback.h",
+  "$bindings_core_v8_output_dir/v8_frame_request_callback.cc",
   "$bindings_core_v8_output_dir/v8_function_string_callback.cc",
   "$bindings_core_v8_output_dir/v8_function_string_callback.h",
   "$bindings_core_v8_output_dir/v8_idle_request_callback.cc",
@@ -135,13 +143,23 @@ if (is_win || use_jumbo_build) {
   bindings_core_generated_interface_files =
       [ "$bindings_core_v8_output_dir/V8GeneratedCoreBindings.cpp" ]
 } else {
-  bindings_core_generated_interface_files =
-      process_file_template(
-          core_definition_idl_files,
-          [
-            "$bindings_core_v8_output_dir/V8{{source_name_part}}.cpp",
-            "$bindings_core_v8_output_dir/V8{{source_name_part}}.h",
-          ])
+  if (snake_case_source_files) {
+    bindings_core_generated_interface_files =
+        process_file_template(
+            core_definition_idl_files,
+            [
+              "$bindings_core_v8_output_dir/v8_{{source_name_part}}.cc",
+              "$bindings_core_v8_output_dir/v8_{{source_name_part}}.h",
+            ])
+  } else {
+    bindings_core_generated_interface_files =
+        process_file_template(
+            core_definition_idl_files,
+            [
+              "$bindings_core_v8_output_dir/V8{{source_name_part}}.cpp",
+              "$bindings_core_v8_output_dir/V8{{source_name_part}}.h",
+            ])
+  }
 }
 
 group("bindings_core_v8_generated") {
@@ -189,13 +207,23 @@ idl_impl("bindings_core_impl_generated") {
 # |core_dictionary_idl_files| and |core_testing_dictionary_idl_files|, we need
 # to do some manual processing because the generated files are used in
 # different targets.
-generated_core_testing_dictionary_files =
-    process_file_template(
-        core_testing_dictionary_idl_files,
-        [
-          "$blink_core_output_dir/testing/{{source_name_part}}.cpp",
-          "$blink_core_output_dir/testing/{{source_name_part}}.h",
-        ])
+if (snake_case_source_files) {
+  generated_core_testing_dictionary_files =
+      process_file_template(
+          core_testing_dictionary_idl_files,
+          [
+            "$blink_core_output_dir/testing/{{source_name_part}}.cc",
+            "$blink_core_output_dir/testing/{{source_name_part}}.h",
+          ])
+} else {
+  generated_core_testing_dictionary_files =
+      process_file_template(
+          core_testing_dictionary_idl_files,
+          [
+            "$blink_core_output_dir/testing/{{source_name_part}}.cpp",
+            "$blink_core_output_dir/testing/{{source_name_part}}.h",
+          ])
+}
 
 # Compile the non-test sources generated above.
 blink_core_sources("bindings_core_impl") {

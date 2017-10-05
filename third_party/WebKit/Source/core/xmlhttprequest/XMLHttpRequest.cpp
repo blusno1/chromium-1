@@ -43,6 +43,7 @@
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/FormData.h"
 #include "core/html/HTMLDocument.h"
@@ -59,22 +60,23 @@
 #include "core/url/URLSearchParams.h"
 #include "core/xmlhttprequest/XMLHttpRequestUpload.h"
 #include "platform/FileMetadata.h"
-#include "platform/HTTPNames.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/blob/BlobData.h"
 #include "platform/exported/WrappedResourceResponse.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/http_names.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/TextResourceDecoderOptions.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/NetworkLog.h"
 #include "platform/network/ParsedContentType.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/wtf/Assertions.h"
@@ -315,7 +317,7 @@ XMLHttpRequest::XMLHttpRequest(
       response_array_buffer_failure_(false) {}
 
 XMLHttpRequest::~XMLHttpRequest() {
-  binary_response_builder_.Clear();
+  binary_response_builder_ = nullptr;
   length_downloaded_to_file_ = 0;
   ReportMemoryUsageToV8();
 }
@@ -327,7 +329,7 @@ Document* XMLHttpRequest::GetDocument() const {
 
 SecurityOrigin* XMLHttpRequest::GetSecurityOrigin() const {
   return isolated_world_security_origin_
-             ? isolated_world_security_origin_.Get()
+             ? isolated_world_security_origin_.get()
              : GetExecutionContext()->GetSecurityOrigin();
 }
 
@@ -442,7 +444,7 @@ Blob* XMLHttpRequest::ResponseBlob() {
         size = binary_response_builder_->size();
         blob_data->SetContentType(
             FinalResponseMIMETypeWithFallback().LowerASCII());
-        binary_response_builder_.Clear();
+        binary_response_builder_ = nullptr;
         ReportMemoryUsageToV8();
       }
       response_blob_ =
@@ -472,7 +474,7 @@ DOMArrayBuffer* XMLHttpRequest::ResponseArrayBuffer() {
       // https://xhr.spec.whatwg.org/#arraybuffer-response allows clearing
       // of the 'received bytes' payload when the response buffer allocation
       // fails.
-      binary_response_builder_.Clear();
+      binary_response_builder_ = nullptr;
       ReportMemoryUsageToV8();
       // Mark allocation as failed; subsequent calls to the accessor must
       // continue to report |null|.
@@ -779,43 +781,43 @@ void XMLHttpRequest::send(
     ExceptionState& exception_state) {
   probe::willSendXMLHttpOrFetchNetworkRequest(GetExecutionContext(), Url());
 
-  if (body.isNull()) {
+  if (body.IsNull()) {
     send(String(), exception_state);
     return;
   }
 
-  if (body.isArrayBuffer()) {
-    send(body.getAsArrayBuffer(), exception_state);
+  if (body.IsArrayBuffer()) {
+    send(body.GetAsArrayBuffer(), exception_state);
     return;
   }
 
-  if (body.isArrayBufferView()) {
-    send(body.getAsArrayBufferView().View(), exception_state);
+  if (body.IsArrayBufferView()) {
+    send(body.GetAsArrayBufferView().View(), exception_state);
     return;
   }
 
-  if (body.isBlob()) {
-    send(body.getAsBlob(), exception_state);
+  if (body.IsBlob()) {
+    send(body.GetAsBlob(), exception_state);
     return;
   }
 
-  if (body.isDocument()) {
-    send(body.getAsDocument(), exception_state);
+  if (body.IsDocument()) {
+    send(body.GetAsDocument(), exception_state);
     return;
   }
 
-  if (body.isFormData()) {
-    send(body.getAsFormData(), exception_state);
+  if (body.IsFormData()) {
+    send(body.GetAsFormData(), exception_state);
     return;
   }
 
-  if (body.isURLSearchParams()) {
-    send(body.getAsURLSearchParams(), exception_state);
+  if (body.IsURLSearchParams()) {
+    send(body.GetAsURLSearchParams(), exception_state);
     return;
   }
 
-  DCHECK(body.isString());
-  send(body.getAsString(), exception_state);
+  DCHECK(body.IsString());
+  send(body.GetAsString(), exception_state);
 }
 
 bool XMLHttpRequest::AreMethodAndURLValidForSend() {
@@ -1112,6 +1114,17 @@ void XMLHttpRequest::CreateRequest(RefPtr<EncodedFormData> http_body,
   if (async_) {
     UseCounter::Count(&execution_context,
                       WebFeature::kXMLHttpRequestAsynchronous);
+    if (GetExecutionContext()->IsDocument()) {
+      // Update histogram for usage of async xhr within pagedismissal.
+      auto pagedismissal = GetDocument()->PageDismissalEventBeingDispatched();
+      if (pagedismissal != Document::kNoDismissal) {
+        UseCounter::Count(GetDocument(), WebFeature::kAsyncXhrInPageDismissal);
+        DEFINE_STATIC_LOCAL(EnumerationHistogram,
+                            asyncxhr_pagedismissal_histogram,
+                            ("XHR.Async.PageDismissal", 5));
+        asyncxhr_pagedismissal_histogram.Count(pagedismissal);
+      }
+    }
     if (upload_)
       request.SetReportUploadProgress(true);
 
@@ -1126,6 +1139,16 @@ void XMLHttpRequest::CreateRequest(RefPtr<EncodedFormData> http_body,
 
   // Use count for XHR synchronous requests.
   UseCounter::Count(&execution_context, WebFeature::kXMLHttpRequestSynchronous);
+  if (GetExecutionContext()->IsDocument()) {
+    // Update histogram for usage of sync xhr within pagedismissal.
+    auto pagedismissal = GetDocument()->PageDismissalEventBeingDispatched();
+    if (pagedismissal != Document::kNoDismissal) {
+      UseCounter::Count(GetDocument(), WebFeature::kSyncXhrInPageDismissal);
+      DEFINE_STATIC_LOCAL(EnumerationHistogram, syncxhr_pagedismissal_histogram,
+                          ("XHR.Sync.PageDismissal", 5));
+      syncxhr_pagedismissal_histogram.Count(pagedismissal);
+    }
+  }
   ThreadableLoader::LoadResourceSynchronously(execution_context, request, *this,
                                               options, resource_loader_options);
 
@@ -1244,7 +1267,7 @@ void XMLHttpRequest::ClearResponse() {
 
   // These variables may referred by the response accessors. So, we can clear
   // this only when we clear the response holder variables above.
-  binary_response_builder_.Clear();
+  binary_response_builder_ = nullptr;
   response_array_buffer_.Clear();
   response_array_buffer_failure_ = false;
 

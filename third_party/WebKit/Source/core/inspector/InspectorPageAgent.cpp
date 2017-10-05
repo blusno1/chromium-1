@@ -35,7 +35,6 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptRegexp.h"
 #include "build/build_config.h"
-#include "core/HTMLNames.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
@@ -49,6 +48,7 @@
 #include "core/html/imports/HTMLImportLoader.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/html/parser/TextResourceDecoder.h"
+#include "core/html_names.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorCSSAgent.h"
@@ -104,8 +104,10 @@ String ScheduledNavigationReasonToProtocol(ScheduledNavigation::Reason reason) {
   using ReasonEnum =
       protocol::Page::FrameScheduledNavigationNotification::ReasonEnum;
   switch (reason) {
-    case ScheduledNavigation::Reason::kFormSubmission:
-      return ReasonEnum::FormSubmission;
+    case ScheduledNavigation::Reason::kFormSubmissionGet:
+      return ReasonEnum::FormSubmissionGet;
+    case ScheduledNavigation::Reason::kFormSubmissionPost:
+      return ReasonEnum::FormSubmissionPost;
     case ScheduledNavigation::Reason::kHttpHeaderRefresh:
       return ReasonEnum::HttpHeaderRefresh;
     case ScheduledNavigation::Reason::kFrameNavigation:

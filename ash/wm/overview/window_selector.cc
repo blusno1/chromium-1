@@ -506,6 +506,15 @@ void WindowSelector::SetSplitViewOverviewOverlayVisible(
   split_view_overview_overlay_->SetVisible(visible, event_location);
 }
 
+WindowGrid* WindowSelector::GetGridWithRootWindow(aura::Window* root_window) {
+  for (std::unique_ptr<WindowGrid>& grid : grid_list_) {
+    if (grid->root_window() == root_window)
+      return grid.get();
+  }
+
+  return nullptr;
+}
+
 void WindowSelector::RemoveWindowSelectorItem(WindowSelectorItem* item) {
   if (item->GetWindow()->HasObserver(this)) {
     item->GetWindow()->RemoveObserver(this);
@@ -555,6 +564,7 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
     return false;
 
   switch (key_event.key_code()) {
+    case ui::VKEY_BROWSER_BACK:
     case ui::VKEY_ESCAPE:
       CancelSelection();
       break;

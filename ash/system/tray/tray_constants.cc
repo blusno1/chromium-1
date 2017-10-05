@@ -39,7 +39,7 @@ const int kTrayLabelItemVerticalPaddingVerticalAlignment = 4;
 
 const int kTrayMenuBottomRowPadding = 3;
 const int kTrayMenuBottomRowPaddingBetweenItems = -1;
-const int kTrayMenuMinimumWidth = 352;
+const int kTrayMenuWidth = 360;
 
 const int kTrayPopupAutoCloseDelayInSeconds = 2;
 const int kTrayPopupAutoCloseDelayForTextInSeconds = 5;
@@ -69,6 +69,8 @@ const SkColor kHeaderBackgroundColor = SkColorSetRGB(0xf5, 0xf5, 0xf5);
 
 const SkColor kHeaderTextColorNormal = SkColorSetARGB(0x7f, 0, 0, 0);
 const SkColor kHeaderTextColorHover = SkColorSetARGB(0xd3, 0, 0, 0);
+
+const SkColor kMobileNotConnectedXIconColor = SkColorSetRGB(0xb2, 0xb2, 0xb2);
 
 const int kTrayPopupMinWidth = 300;
 const int kTrayPopupMaxWidth = 500;

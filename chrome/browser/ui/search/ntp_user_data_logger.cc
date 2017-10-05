@@ -40,6 +40,140 @@ void RecordSyncSessionMetrics(content::WebContents* contents) {
       sessions);
 }
 
+// This enum must match the numbering for NewTabPageVoiceAction in enums.xml.
+// Do not reorder or remove items, only add new items before VOICE_ACTION_MAX.
+enum VoiceAction {
+  // Activated by clicking on the fakebox icon.
+  VOICE_ACTION_ACTIVATE_FAKEBOX = 0,
+  // Activated by keyboard shortcut.
+  VOICE_ACTION_ACTIVATE_KEYBOARD = 1,
+  // Close the voice overlay by a user's explicit action.
+  VOICE_ACTION_CLOSE_OVERLAY = 2,
+  // Submitted voice query.
+  VOICE_ACTION_QUERY_SUBMITTED = 3,
+  // Clicked on support link in error message.
+  VOICE_ACTION_SUPPORT_LINK_CLICKED = 4,
+  // Retried by clicking Try Again link.
+  VOICE_ACTION_TRY_AGAIN_LINK = 5,
+  // Retried by clicking microphone button.
+  VOICE_ACTION_TRY_AGAIN_MIC_BUTTON = 6,
+
+  VOICE_ACTION_MAX
+};
+
+// Converts |NTPLoggingEventType| to a |VoiceAction|, if the value
+// is an action value. Otherwise, |VOICE_ACTION_MAX| is returned.
+VoiceAction LoggingEventToVoiceAction(NTPLoggingEventType event) {
+  switch (event) {
+    case NTP_VOICE_ACTION_ACTIVATE_FAKEBOX:
+      return VOICE_ACTION_ACTIVATE_FAKEBOX;
+    case NTP_VOICE_ACTION_ACTIVATE_KEYBOARD:
+      return VOICE_ACTION_ACTIVATE_KEYBOARD;
+    case NTP_VOICE_ACTION_CLOSE_OVERLAY:
+      return VOICE_ACTION_CLOSE_OVERLAY;
+    case NTP_VOICE_ACTION_QUERY_SUBMITTED:
+      return VOICE_ACTION_QUERY_SUBMITTED;
+    case NTP_VOICE_ACTION_SUPPORT_LINK_CLICKED:
+      return VOICE_ACTION_SUPPORT_LINK_CLICKED;
+    case NTP_VOICE_ACTION_TRY_AGAIN_LINK:
+      return VOICE_ACTION_TRY_AGAIN_LINK;
+    case NTP_VOICE_ACTION_TRY_AGAIN_MIC_BUTTON:
+      return VOICE_ACTION_TRY_AGAIN_MIC_BUTTON;
+    default:
+      NOTREACHED();
+      return VOICE_ACTION_MAX;
+  }
+}
+
+// This enum must match the numbering for NewTabPageVoiceError in enums.xml.
+// Do not reorder or remove items, only add new items before VOICE_ERROR_MAX.
+enum VoiceError {
+  VOICE_ERROR_ABORTED = 0,
+  VOICE_ERROR_AUDIO_CAPTURE = 1,
+  VOICE_ERROR_BAD_GRAMMAR = 2,
+  VOICE_ERROR_LANGUAGE_NOT_SUPPORTED = 3,
+  VOICE_ERROR_NETWORK = 4,
+  VOICE_ERROR_NO_MATCH = 5,
+  VOICE_ERROR_NO_SPEECH = 6,
+  VOICE_ERROR_NOT_ALLOWED = 7,
+  VOICE_ERROR_OTHER = 8,
+  VOICE_ERROR_SERVICE_NOT_ALLOWED = 9,
+
+  VOICE_ERROR_MAX
+};
+
+// Converts |NTPLoggingEventType| to a |VoiceError|, if the value
+// is an error value. Otherwise, |VOICE_ERROR_MAX| is returned.
+VoiceError LoggingEventToVoiceError(NTPLoggingEventType event) {
+  switch (event) {
+    case NTP_VOICE_ERROR_ABORTED:
+      return VOICE_ERROR_ABORTED;
+    case NTP_VOICE_ERROR_AUDIO_CAPTURE:
+      return VOICE_ERROR_AUDIO_CAPTURE;
+    case NTP_VOICE_ERROR_BAD_GRAMMAR:
+      return VOICE_ERROR_BAD_GRAMMAR;
+    case NTP_VOICE_ERROR_LANGUAGE_NOT_SUPPORTED:
+      return VOICE_ERROR_LANGUAGE_NOT_SUPPORTED;
+    case NTP_VOICE_ERROR_NETWORK:
+      return VOICE_ERROR_NETWORK;
+    case NTP_VOICE_ERROR_NO_MATCH:
+      return VOICE_ERROR_NO_MATCH;
+    case NTP_VOICE_ERROR_NO_SPEECH:
+      return VOICE_ERROR_NO_SPEECH;
+    case NTP_VOICE_ERROR_NOT_ALLOWED:
+      return VOICE_ERROR_NOT_ALLOWED;
+    case NTP_VOICE_ERROR_OTHER:
+      return VOICE_ERROR_OTHER;
+    case NTP_VOICE_ERROR_SERVICE_NOT_ALLOWED:
+      return VOICE_ERROR_SERVICE_NOT_ALLOWED;
+    default:
+      NOTREACHED();
+      return VOICE_ERROR_MAX;
+  }
+}
+
+// This enum must match the numbering for NewTabPageLogoShown in enums.xml.
+// Do not reorder or remove items, and only add new items before
+// LOGO_IMPRESSION_TYPE_MAX.
+enum LogoImpressionType {
+  // Static Doodle image.
+  LOGO_IMPRESSION_TYPE_STATIC = 0,
+  // Call-to-action Doodle image.
+  LOGO_IMPRESSION_TYPE_CTA = 1,
+
+  LOGO_IMPRESSION_TYPE_MAX
+};
+
+// This enum must match the numbering for NewTabPageLogoClick in enums.xml.
+// Do not reorder or remove items, and only add new items before
+// LOGO_CLICK_TYPE_MAX.
+enum LogoClickType {
+  // Static Doodle image.
+  LOGO_CLICK_TYPE_STATIC = 0,
+  // Call-to-action Doodle image.
+  LOGO_CLICK_TYPE_CTA = 1,
+  // Animated Doodle image.
+  LOGO_CLICK_TYPE_ANIMATED = 2,
+
+  LOGO_CLICK_TYPE_MAX
+};
+
+// Converts |NTPLoggingEventType| to a |LogoClickType|, if the value
+// is an error value. Otherwise, |LOGO_CLICK_TYPE_MAX| is returned.
+LogoClickType LoggingEventToLogoClick(NTPLoggingEventType event) {
+  switch (event) {
+    case NTP_STATIC_LOGO_CLICKED:
+      return LOGO_CLICK_TYPE_STATIC;
+    case NTP_CTA_LOGO_CLICKED:
+      return LOGO_CLICK_TYPE_CTA;
+    case NTP_ANIMATED_LOGO_CLICKED:
+      return LOGO_CLICK_TYPE_ANIMATED;
+    default:
+      NOTREACHED();
+      return LOGO_CLICK_TYPE_MAX;
+  }
+}
+
 }  // namespace
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(NTPUserDataLogger);
@@ -93,11 +227,59 @@ void NTPUserDataLogger::LogEvent(NTPLoggingEventType event,
     case NTP_ALL_TILES_LOADED:
       EmitNtpStatistics(time);
       break;
+    case NTP_VOICE_ACTION_ACTIVATE_FAKEBOX:
+    case NTP_VOICE_ACTION_ACTIVATE_KEYBOARD:
+    case NTP_VOICE_ACTION_CLOSE_OVERLAY:
+    case NTP_VOICE_ACTION_QUERY_SUBMITTED:
+    case NTP_VOICE_ACTION_SUPPORT_LINK_CLICKED:
+    case NTP_VOICE_ACTION_TRY_AGAIN_LINK:
+    case NTP_VOICE_ACTION_TRY_AGAIN_MIC_BUTTON:
+      UMA_HISTOGRAM_ENUMERATION("NewTabPage.VoiceActions",
+                                LoggingEventToVoiceAction(event),
+                                VOICE_ACTION_MAX);
+      break;
+    case NTP_VOICE_ERROR_ABORTED:
+    case NTP_VOICE_ERROR_AUDIO_CAPTURE:
+    case NTP_VOICE_ERROR_BAD_GRAMMAR:
+    case NTP_VOICE_ERROR_LANGUAGE_NOT_SUPPORTED:
+    case NTP_VOICE_ERROR_NETWORK:
+    case NTP_VOICE_ERROR_NO_MATCH:
+    case NTP_VOICE_ERROR_NO_SPEECH:
+    case NTP_VOICE_ERROR_NOT_ALLOWED:
+    case NTP_VOICE_ERROR_OTHER:
+    case NTP_VOICE_ERROR_SERVICE_NOT_ALLOWED:
+      UMA_HISTOGRAM_ENUMERATION("NewTabPage.VoiceErrors",
+                                LoggingEventToVoiceError(event),
+                                VOICE_ERROR_MAX);
+      break;
+    case NTP_STATIC_LOGO_SHOWN_FROM_CACHE:
+      RecordDoodleImpression(time, /*is_cta=*/false, /*from_cache=*/true);
+      break;
+    case NTP_STATIC_LOGO_SHOWN_FRESH:
+      RecordDoodleImpression(time, /*is_cta=*/false, /*from_cache=*/false);
+      break;
+    case NTP_CTA_LOGO_SHOWN_FROM_CACHE:
+      RecordDoodleImpression(time, /*is_cta=*/true, /*from_cache=*/true);
+      break;
+    case NTP_CTA_LOGO_SHOWN_FRESH:
+      RecordDoodleImpression(time, /*is_cta=*/true, /*from_cache=*/false);
+      break;
+    case NTP_STATIC_LOGO_CLICKED:
+    case NTP_CTA_LOGO_CLICKED:
+    case NTP_ANIMATED_LOGO_CLICKED:
+      UMA_HISTOGRAM_ENUMERATION("NewTabPage.LogoClick",
+                                LoggingEventToLogoClick(event),
+                                LOGO_CLICK_TYPE_MAX);
+      break;
+    case NTP_ONE_GOOGLE_BAR_SHOWN:
+      UMA_HISTOGRAM_LOAD_TIME("NewTabPage.OneGoogleBar.ShownTime", time);
+      break;
   }
 }
 
 void NTPUserDataLogger::LogMostVisitedImpression(
     int position,
+    ntp_tiles::TileTitleSource tile_title_source,
     ntp_tiles::TileSource tile_source,
     ntp_tiles::TileVisualType tile_type) {
   if ((position >= kNumMostVisited) || impression_was_logged_[position]) {
@@ -106,13 +288,16 @@ void NTPUserDataLogger::LogMostVisitedImpression(
   impression_was_logged_[position] = true;
   impression_tile_source_[position] = tile_source;
   impression_tile_type_[position] = tile_type;
+  impression_tile_title_source_[position] = tile_title_source;
 }
 
 void NTPUserDataLogger::LogMostVisitedNavigation(
     int position,
+    ntp_tiles::TileTitleSource tile_title_source,
     ntp_tiles::TileSource tile_source,
     ntp_tiles::TileVisualType tile_type) {
-  ntp_tiles::metrics::RecordTileClick(position, tile_source, tile_type);
+  ntp_tiles::metrics::RecordTileClick(position, tile_title_source, tile_source,
+                                      tile_type);
 
   // Records the action. This will be available as a time-stamped stream
   // server-side and can be used to compute time-to-long-dwell.
@@ -121,9 +306,11 @@ void NTPUserDataLogger::LogMostVisitedNavigation(
 
 NTPUserDataLogger::NTPUserDataLogger(content::WebContents* contents)
     : content::WebContentsObserver(contents),
+      impression_tile_title_source_(kNumMostVisited),
       impression_tile_source_(kNumMostVisited),
       impression_tile_type_(kNumMostVisited),
       has_emitted_(false),
+      should_record_doodle_load_time_(true),
       during_startup_(!AfterStartupTaskUtils::IsBrowserStartupComplete()) {
   // We record metrics about session data here because when this class typically
   // emits metrics it is too late. This session data would theoretically have
@@ -147,6 +334,7 @@ void NTPUserDataLogger::NavigatedFromURLToURL(const GURL& from,
     impression_was_logged_.reset();
     tiles_received_time_ = base::TimeDelta();
     has_emitted_ = false;
+    should_record_doodle_load_time_ = true;
   }
 }
 
@@ -177,9 +365,10 @@ void NTPUserDataLogger::EmitNtpStatistics(base::TimeDelta load_time) {
     }
     // No URL and rappor service passed - not interested in favicon-related
     // Rappor metrics.
-    ntp_tiles::metrics::RecordTileImpression(i, impression_tile_source_[i],
-                                             impression_tile_type_[i], GURL(),
-                                             /*rappor_service=*/nullptr);
+    ntp_tiles::metrics::RecordTileImpression(
+        i, impression_tile_title_source_[i], impression_tile_source_[i],
+        impression_tile_type_[i], GURL(),
+        /*rappor_service=*/nullptr);
     ++tiles_count;
   }
   ntp_tiles::metrics::RecordPageImpression(tiles_count);
@@ -239,4 +428,25 @@ void NTPUserDataLogger::EmitNtpStatistics(base::TimeDelta load_time) {
 
   has_emitted_ = true;
   during_startup_ = false;
+}
+
+void NTPUserDataLogger::RecordDoodleImpression(base::TimeDelta time,
+                                               bool is_cta,
+                                               bool from_cache) {
+  LogoImpressionType logo_type =
+      is_cta ? LOGO_IMPRESSION_TYPE_CTA : LOGO_IMPRESSION_TYPE_STATIC;
+  UMA_HISTOGRAM_ENUMERATION("NewTabPage.LogoShown", logo_type,
+                            LOGO_IMPRESSION_TYPE_MAX);
+  if (from_cache) {
+    UMA_HISTOGRAM_ENUMERATION("NewTabPage.LogoShown.FromCache", logo_type,
+                              LOGO_IMPRESSION_TYPE_MAX);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("NewTabPage.LogoShown.Fresh", logo_type,
+                              LOGO_IMPRESSION_TYPE_MAX);
+  }
+
+  if (should_record_doodle_load_time_) {
+    UMA_HISTOGRAM_MEDIUM_TIMES("NewTabPage.LogoShownTime2", time);
+    should_record_doodle_load_time_ = false;
+  }
 }

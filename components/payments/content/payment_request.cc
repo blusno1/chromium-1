@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "components/payments/content/can_make_payment_query_factory.h"
@@ -22,6 +23,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 
 namespace payments {
 
@@ -92,6 +94,7 @@ void PaymentRequest::Init(mojom::PaymentRequestClientPtr client,
         std::vector<mojom::PaymentMethodDataPtr>(), this,
         delegate_->GetApplicationLocale());
     state_ = base::MakeUnique<PaymentRequestState>(
+        web_contents_->GetBrowserContext(), top_level_origin_, frame_origin_,
         spec_.get(), this, delegate_->GetApplicationLocale(),
         delegate_->GetPersonalDataManager(), delegate_.get(), &journey_logger_);
     return;
@@ -114,6 +117,7 @@ void PaymentRequest::Init(mojom::PaymentRequestClientPtr client,
       std::move(options), std::move(details), std::move(method_data), this,
       delegate_->GetApplicationLocale());
   state_ = base::MakeUnique<PaymentRequestState>(
+      web_contents_->GetBrowserContext(), top_level_origin_, frame_origin_,
       spec_.get(), this, delegate_->GetApplicationLocale(),
       delegate_->GetPersonalDataManager(), delegate_.get(), &journey_logger_);
 
@@ -154,6 +158,14 @@ void PaymentRequest::Show() {
     LOG(ERROR) << "A PaymentRequest UI is already showing";
     journey_logger_.SetNotShown(
         JourneyLogger::NOT_SHOWN_REASON_CONCURRENT_REQUESTS);
+    client_->OnError(mojom::PaymentErrorReason::USER_CANCEL);
+    OnConnectionTerminated();
+    return;
+  }
+
+  if (!delegate_->IsBrowserWindowActive()) {
+    LOG(ERROR) << "Cannot show PaymentRequest UI in a background tab";
+    journey_logger_.SetNotShown(JourneyLogger::NOT_SHOWN_REASON_OTHER);
     client_->OnError(mojom::PaymentErrorReason::USER_CANCEL);
     OnConnectionTerminated();
     return;
@@ -233,30 +245,8 @@ void PaymentRequest::Complete(mojom::PaymentComplete result) {
 }
 
 void PaymentRequest::CanMakePayment() {
-  bool can_make_payment = state()->CanMakePayment();
-  if (delegate_->IsIncognito()) {
-    client_->OnCanMakePayment(
-        mojom::CanMakePaymentQueryResult::CAN_MAKE_PAYMENT);
-    journey_logger_.SetCanMakePaymentValue(true);
-  } else if (CanMakePaymentQueryFactory::GetInstance()
-                 ->GetForContext(web_contents_->GetBrowserContext())
-                 ->CanQuery(top_level_origin_, frame_origin_,
-                            spec()->stringified_method_data())) {
-    client_->OnCanMakePayment(
-        can_make_payment
-            ? mojom::CanMakePaymentQueryResult::CAN_MAKE_PAYMENT
-            : mojom::CanMakePaymentQueryResult::CANNOT_MAKE_PAYMENT);
-    journey_logger_.SetCanMakePaymentValue(can_make_payment);
-  } else if (OriginSecurityChecker::IsOriginLocalhostOrFile(frame_origin_)) {
-    client_->OnCanMakePayment(
-        can_make_payment
-            ? mojom::CanMakePaymentQueryResult::WARNING_CAN_MAKE_PAYMENT
-            : mojom::CanMakePaymentQueryResult::WARNING_CANNOT_MAKE_PAYMENT);
-    journey_logger_.SetCanMakePaymentValue(can_make_payment);
-  } else {
-    client_->OnCanMakePayment(
-        mojom::CanMakePaymentQueryResult::QUERY_QUOTA_EXCEEDED);
-  }
+  state()->CanMakePayment(base::BindOnce(
+      &PaymentRequest::CanMakePaymentCallback, weak_ptr_factory_.GetWeakPtr()));
 
   if (observer_for_testing_)
     observer_for_testing_->OnCanMakePaymentCalled();
@@ -332,6 +322,44 @@ void PaymentRequest::RecordFirstAbortReason(
     has_recorded_completion_ = true;
     journey_logger_.SetAborted(abort_reason);
   }
+}
+
+void PaymentRequest::CanMakePaymentCallback(bool can_make_payment) {
+  if (CanMakePaymentQueryFactory::GetInstance()
+          ->GetForContext(web_contents_->GetBrowserContext())
+          ->CanQuery(top_level_origin_, frame_origin_,
+                     spec()->stringified_method_data())) {
+    RespondToCanMakePaymentQuery(can_make_payment, false);
+  } else if (OriginSecurityChecker::IsOriginLocalhostOrFile(frame_origin_)) {
+    RespondToCanMakePaymentQuery(can_make_payment, true);
+  } else {
+    client_->OnCanMakePayment(
+        mojom::CanMakePaymentQueryResult::QUERY_QUOTA_EXCEEDED);
+  }
+
+  if (observer_for_testing_)
+    observer_for_testing_->OnCanMakePaymentReturned();
+}
+
+void PaymentRequest::RespondToCanMakePaymentQuery(bool can_make_payment,
+                                                  bool warn_localhost_or_file) {
+  if (delegate_->IsIncognito()) {
+    can_make_payment =
+        spec()->HasBasicCardMethodName() ||
+        base::FeatureList::IsEnabled(features::kServiceWorkerPaymentApps);
+  }
+
+  mojom::CanMakePaymentQueryResult positive =
+      warn_localhost_or_file
+          ? mojom::CanMakePaymentQueryResult::WARNING_CAN_MAKE_PAYMENT
+          : mojom::CanMakePaymentQueryResult::CAN_MAKE_PAYMENT;
+  mojom::CanMakePaymentQueryResult negative =
+      warn_localhost_or_file
+          ? mojom::CanMakePaymentQueryResult::WARNING_CANNOT_MAKE_PAYMENT
+          : mojom::CanMakePaymentQueryResult::CANNOT_MAKE_PAYMENT;
+
+  client_->OnCanMakePayment(can_make_payment ? positive : negative);
+  journey_logger_.SetCanMakePaymentValue(can_make_payment);
 }
 
 }  // namespace payments

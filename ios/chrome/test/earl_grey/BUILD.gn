@@ -29,9 +29,9 @@ chrome_ios_eg_test("ios_chrome_integration_egtests") {
     "//ios/chrome/browser/metrics:eg_tests",
     "//ios/chrome/browser/net:eg_tests",
     "//ios/chrome/browser/ntp_tiles:eg_tests",
+    "//ios/chrome/browser/passwords:eg_tests",
   ]
 }
-
 chrome_ios_eg_test("ios_chrome_payments_egtests") {
   deps = [
     ":test_support",
@@ -73,8 +73,8 @@ chrome_ios_eg_test("ios_chrome_ui_egtests") {
     "//ios/chrome/browser/ui/qr_scanner:eg_tests",
     "//ios/chrome/browser/ui/sad_tab:eg_tests",
     "//ios/chrome/browser/ui/safe_mode:eg_tests",
+    "//ios/chrome/browser/ui/settings/sync_utils:eg_tests",
     "//ios/chrome/browser/ui/stack_view:eg_tests",
-    "//ios/chrome/browser/ui/sync:eg_tests",
     "//ios/chrome/browser/ui/tab_switcher:eg_tests",
     "//ios/chrome/browser/ui/tabs:eg_tests",
     "//ios/chrome/browser/ui/toolbar:eg_tests",
@@ -194,6 +194,7 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/authentication:authentication_ui",
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/commands:commands",
+    "//ios/chrome/browser/ui/content_suggestions:content_suggestions",
     "//ios/chrome/browser/ui/omnibox:omnibox_internal",
     "//ios/chrome/browser/ui/payments:payments_ui",
     "//ios/chrome/browser/ui/settings:settings",

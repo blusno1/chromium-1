@@ -21,15 +21,15 @@
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
-#include "chrome/browser/chromeos/profiles/multiprofiles_intro_dialog.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
-#include "chrome/browser/ui/ash/multi_user/user_switch_util.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -95,7 +95,7 @@ ash::mojom::UserSessionPtr UserToUserSession(const User& user) {
   session->user_info->avatar = user.GetImage();
   if (session->user_info->avatar.isNull()) {
     session->user_info->avatar =
-        *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+        *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_LOGIN_DEFAULT_USER);
   }
 
@@ -118,13 +118,17 @@ ash::mojom::UserSessionPtr UserToUserSession(const User& user) {
   return session;
 }
 
-void DoSwitchUser(const AccountId& account_id) {
-  UserManager::Get()->SwitchActiveUser(account_id);
+void DoSwitchUser(const AccountId& account_id, bool switch_user) {
+  if (switch_user)
+    UserManager::Get()->SwitchActiveUser(account_id);
 }
 
 // Callback for the dialog that warns the user about multi-profile, which has
 // a "never show again" checkbox.
-void OnAcceptMultiProfileIntro(bool never_show_again) {
+void OnAcceptMultiprofilesIntroDialog(bool accept, bool never_show_again) {
+  if (!accept)
+    return;
+
   PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
   prefs->SetBoolean(prefs::kMultiProfileNeverShowIntro, never_show_again);
   chromeos::UserAddingScreen::Get()->Start();
@@ -219,8 +223,17 @@ void SessionControllerClient::RunUnlockAnimation(
   session_controller_->RunUnlockAnimation(animation_finished_callback);
 }
 
+void SessionControllerClient::ShowTeleportWarningDialog(
+    base::OnceCallback<void(bool, bool)> on_accept) {
+  session_controller_->ShowTeleportWarningDialog(std::move(on_accept));
+}
+
 void SessionControllerClient::RequestLockScreen() {
   DoLockScreen();
+}
+
+void SessionControllerClient::RequestSignOut() {
+  chrome::AttemptUserExit();
 }
 
 void SessionControllerClient::SwitchActiveUser(const AccountId& account_id) {
@@ -233,7 +246,7 @@ void SessionControllerClient::CycleActiveUser(
 }
 
 void SessionControllerClient::ShowMultiProfileLogin() {
-  if (!IsMultiProfileEnabled())
+  if (!IsMultiProfileAvailable())
     return;
 
   // Only regular non-supervised users could add other users to current session.
@@ -263,9 +276,8 @@ void SessionControllerClient::ShowMultiProfileLogin() {
         break;
     }
     if (show_intro) {
-      base::Callback<void(bool)> on_accept =
-          base::Bind(&OnAcceptMultiProfileIntro);
-      chromeos::ShowMultiprofilesIntroDialog(on_accept);
+      session_controller_->ShowMultiprofilesIntroDialog(
+          base::Bind(&OnAcceptMultiprofilesIntroDialog));
     } else {
       chromeos::UserAddingScreen::Get()->Start();
     }
@@ -273,24 +285,14 @@ void SessionControllerClient::ShowMultiProfileLogin() {
 }
 
 // static
-bool SessionControllerClient::IsMultiProfileEnabled() {
+bool SessionControllerClient::IsMultiProfileAvailable() {
   if (!profiles::IsMultipleProfilesEnabled() || !UserManager::IsInitialized())
     return false;
-  size_t admitted_users_to_be_added =
+  size_t users_logged_in = UserManager::Get()->GetLoggedInUsers().size();
+  // Does not include users that are logged in.
+  size_t users_available_to_add =
       UserManager::Get()->GetUsersAllowedForMultiProfile().size();
-  size_t logged_in_users = UserManager::Get()->GetLoggedInUsers().size();
-  if (logged_in_users == 0) {
-    // The shelf gets created on the login screen and as such we have to create
-    // all multi profile items of the the system tray menu before the user logs
-    // in. For special cases like Kiosk mode and / or guest mode this isn't a
-    // problem since either the browser gets restarted and / or the flag is not
-    // allowed, but for an "ephermal" user (see crbug.com/312324) it is not
-    // decided yet if they could add other users to their session or not.
-    // TODO(skuhne): As soon as the issue above needs to be resolved, this logic
-    // should change.
-    logged_in_users = 1;
-  }
-  return (admitted_users_to_be_added + logged_in_users) > 1;
+  return (users_logged_in + users_available_to_add) > 1;
 }
 
 void SessionControllerClient::ActiveUserChanged(const User* active_user) {
@@ -318,12 +320,11 @@ void SessionControllerClient::UserAddedToSession(const User* added_user) {
   SendUserSession(*added_user);
 }
 
-void SessionControllerClient::UserChangedChildStatus(User* user) {
-  SendUserSession(*user);
+void SessionControllerClient::OnUserImageChanged(const User& user) {
+  SendUserSession(user);
 }
 
-void SessionControllerClient::OnUserImageChanged(
-    const user_manager::User& user) {
+void SessionControllerClient::OnChildStatusChanged(const User& user) {
   SendUserSession(user);
 }
 
@@ -382,7 +383,14 @@ void SessionControllerClient::DoSwitchActiveUser(const AccountId& account_id) {
   if (account_id == UserManager::Get()->GetActiveUser()->GetAccountId())
     return;
 
-  TrySwitchingActiveUser(base::Bind(&DoSwitchUser, account_id));
+  // |client| may be null in tests.
+  SessionControllerClient* client = SessionControllerClient::Get();
+  if (client) {
+    SessionControllerClient::Get()->session_controller_->CanSwitchActiveUser(
+        base::Bind(&DoSwitchUser, account_id));
+  } else {
+    DoSwitchUser(account_id, true);
+  }
 }
 
 // static

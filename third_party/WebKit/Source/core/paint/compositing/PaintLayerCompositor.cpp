@@ -56,10 +56,8 @@
 #include "core/paint/compositing/GraphicsLayerUpdater.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/geometry/FloatRect.h"
-#include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
@@ -68,6 +66,7 @@
 #include "platform/graphics/paint/TransformDisplayItem.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/json/JSONValues.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
@@ -171,7 +170,7 @@ static LayoutVideo* FindFullscreenVideoLayoutObject(Document& document) {
       return nullptr;
     fullscreen_element = Fullscreen::FullscreenElementFrom(*content_document);
   }
-  if (!isHTMLVideoElement(fullscreen_element))
+  if (!IsHTMLVideoElement(fullscreen_element))
     return nullptr;
   LayoutObject* layout_object = fullscreen_element->GetLayoutObject();
   if (!layout_object)
@@ -209,6 +208,7 @@ void PaintLayerCompositor::UpdateIfNeededRecursiveInternal(
   LocalFrameView* view = layout_view_.GetFrameView();
   if (view->ShouldThrottleRendering())
     return;
+  view->ResetNeedsForcedCompositingUpdate();
 
   for (Frame* child =
            layout_view_.GetFrameView()->GetFrame().Tree().FirstChild();
@@ -663,8 +663,7 @@ void PaintLayerCompositor::PaintInvalidationOnCompositingChange(
   // to the previous frame's compositing state when changing the compositing
   // backing of the layer.
   DisableCompositingQueryAsserts disabler;
-  // FIXME: We should not allow paint invalidation out of paint invalidation
-  // state. crbug.com/457415
+  // We have to do immediate paint invalidation because compositing will change.
   DisablePaintInvalidationStateAsserts paint_invalidation_assertisabler;
 
   ObjectPaintInvalidator(layer->GetLayoutObject())
@@ -1088,6 +1087,9 @@ bool PaintLayerCompositor::RequiresScrollCornerLayer() const {
 }
 
 void PaintLayerCompositor::UpdateOverflowControlsLayers() {
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+    return;
+
   GraphicsLayer* controls_parent = overflow_controls_host_layer_.get();
   // Main frame scrollbars should always be stuck to the sides of the screen (in
   // overscroll and in pinch-zoom), so make the parent for the scrollbars be the

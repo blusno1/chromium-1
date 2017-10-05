@@ -9,7 +9,6 @@
 #include "core/css/parser/CSSParserContext.h"
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "core/css/properties/CSSPropertyGridUtils.h"
-#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -39,13 +38,11 @@ CSSValueList* ConsumeImplicitAutoFlow(CSSParserTokenRange& range,
 }  // namespace
 
 bool CSSShorthandPropertyAPIGrid::ParseShorthand(
-    CSSPropertyID,
     bool important,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     const CSSParserLocalContext&,
     HeapVector<CSSProperty, 256>& properties) const {
-  DCHECK(RuntimeEnabledFeatures::CSSGridLayoutEnabled());
   DCHECK_EQ(shorthandForProperty(CSSPropertyGrid).length(), 6u);
 
   CSSParserTokenRange range_copy = range;

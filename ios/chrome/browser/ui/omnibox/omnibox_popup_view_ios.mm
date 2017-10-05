@@ -19,8 +19,9 @@
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/experimental_flags.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_popup_material_view_controller.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_popup_mediator.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_popup_presenter.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_popup_view_controller.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_popup_view_suggestions_delegate.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -52,10 +53,17 @@ OmniboxPopupViewIOS::OmniboxPopupViewIOS(
       base::MakeUnique<image_fetcher::IOSImageDataFetcherWrapper>(
           browser_state->GetRequestContext());
 
-  popup_controller_.reset([[OmniboxPopupMaterialViewController alloc]
+  mediator_.reset([[OmniboxPopupMediator alloc]
       initWithFetcher:std::move(imageFetcher)
              delegate:this]);
+  popup_controller_.reset([[OmniboxPopupViewController alloc] init]);
   [popup_controller_ setIncognito:browser_state->IsOffTheRecord()];
+
+  [mediator_ setIncognito:browser_state->IsOffTheRecord()];
+  [mediator_ setConsumer:popup_controller_];
+  [popup_controller_ setImageRetriever:mediator_];
+  [popup_controller_ setDelegate:mediator_];
+
   presenter_.reset([[OmniboxPopupPresenter alloc]
       initWithPopupPositioner:positioner
           popupViewController:popup_controller_]);
@@ -79,14 +87,15 @@ void OmniboxPopupViewIOS::UpdateEditViewIcon() {
 void OmniboxPopupViewIOS::UpdatePopupAppearance() {
   const AutocompleteResult& result = model_->result();
 
+  // TODO(crbug.com/762597): this logic should move to PopupCoordinator.
   if (!is_open_ && !result.empty()) {
     // The popup is not currently open and there are results to display. Update
     // and animate the cells
-    [popup_controller_ updateMatches:result withAnimation:YES];
+    [mediator_ updateMatches:result withAnimation:YES];
   } else {
     // The popup is already displayed or there are no results to display. Update
     // the cells without animating.
-    [popup_controller_ updateMatches:result withAnimation:NO];
+    [mediator_ updateMatches:result withAnimation:NO];
   }
   is_open_ = !result.empty();
 
@@ -104,15 +113,25 @@ gfx::Rect OmniboxPopupViewIOS::GetTargetBounds() {
   return gfx::Rect();
 }
 
-void OmniboxPopupViewIOS::SetTextAlignment(NSTextAlignment alignment) {
-  [popup_controller_ setTextAlignment:alignment];
-}
-
 bool OmniboxPopupViewIOS::IsOpen() const {
   return is_open_;
 }
 
-#pragma mark - OmniboxPopupMaterialViewControllerDelegate
+OmniboxPopupModel* OmniboxPopupViewIOS::model() const {
+  return model_.get();
+}
+
+#pragma mark - OmniboxPopupProvider
+
+bool OmniboxPopupViewIOS::IsPopupOpen() {
+  return is_open_;
+}
+
+void OmniboxPopupViewIOS::SetTextAlignment(NSTextAlignment alignment) {
+  [popup_controller_ setTextAlignment:alignment];
+}
+
+#pragma mark - OmniboxPopupViewControllerDelegate
 
 bool OmniboxPopupViewIOS::IsStarredMatch(const AutocompleteMatch& match) const {
   return model_->IsStarredMatch(match);

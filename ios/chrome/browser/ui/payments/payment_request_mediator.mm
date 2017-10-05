@@ -126,7 +126,7 @@ using ::payment_request_util::GetShippingSectionTitle;
   return item;
 }
 
-- (CollectionViewItem*)shippingSectionHeaderItem {
+- (PaymentsTextItem*)shippingSectionHeaderItem {
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
   item.text = GetShippingSectionTitle(self.paymentRequest->shipping_type());
   return item;
@@ -177,7 +177,7 @@ using ::payment_request_util::GetShippingSectionTitle;
   return item;
 }
 
-- (CollectionViewItem*)paymentMethodSectionHeaderItem {
+- (PaymentsTextItem*)paymentMethodSectionHeaderItem {
   if (!self.paymentRequest->selected_payment_method())
     return nil;
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
@@ -195,14 +195,20 @@ using ::payment_request_util::GetShippingSectionTitle;
     item.methodDetail = base::SysUTF16ToNSString(paymentMethod->GetSublabel());
 
     switch (paymentMethod->type()) {
-      case payments::PaymentInstrument::Type::AUTOFILL:
+      case payments::PaymentInstrument::Type::AUTOFILL: {
         item.methodTypeIcon = NativeImage(paymentMethod->icon_resource_id());
         break;
-      case payments::PaymentInstrument::Type::NATIVE_MOBILE_APP:
+      }
+      case payments::PaymentInstrument::Type::NATIVE_MOBILE_APP: {
         payments::IOSPaymentInstrument* mobileApp =
             static_cast<payments::IOSPaymentInstrument*>(paymentMethod);
         item.methodTypeIcon = mobileApp->icon_image();
         break;
+      }
+      case payments::PaymentInstrument::Type::SERVICE_WORKER_APP: {
+        NOTIMPLEMENTED();
+        break;
+      }
     }
 
     item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
@@ -221,7 +227,7 @@ using ::payment_request_util::GetShippingSectionTitle;
   return item;
 }
 
-- (CollectionViewItem*)contactInfoSectionHeaderItem {
+- (PaymentsTextItem*)contactInfoSectionHeaderItem {
   if (!self.paymentRequest->selected_contact_profile())
     return nil;
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];

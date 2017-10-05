@@ -270,7 +270,7 @@ class TestFormStructure : public FormStructure {
       AutofillField* form_field = field(i);
       ASSERT_TRUE(form_field);
       form_field->set_heuristic_type(heuristic_types[i]);
-      form_field->set_server_type(server_types[i]);
+      form_field->set_overall_server_type(server_types[i]);
     }
 
     UpdateAutofillCount();
@@ -1309,13 +1309,13 @@ TEST_F(AutofillMetricsTest, QualityMetrics_BasedOnAutocomplete) {
 
   AutofillQueryResponseContents response;
   // Server response will match with autocomplete.
-  response.add_field()->set_autofill_type(NAME_LAST);
+  response.add_field()->set_overall_type_prediction(NAME_LAST);
   // Server response will NOT match with autocomplete.
-  response.add_field()->set_autofill_type(NAME_FIRST);
+  response.add_field()->set_overall_type_prediction(NAME_FIRST);
   // Server response will have no data.
-  response.add_field()->set_autofill_type(NO_SERVER_DATA);
+  response.add_field()->set_overall_type_prediction(NO_SERVER_DATA);
   // Not logged.
-  response.add_field()->set_autofill_type(NAME_MIDDLE);
+  response.add_field()->set_overall_type_prediction(NAME_MIDDLE);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -3166,6 +3166,231 @@ TEST_F(AutofillMetricsTest, CreditCardGetRealPanDuration) {
     histogram_tester.ExpectTotalCount(
         "Autofill.UnmaskPrompt.GetRealPanDuration.Failure", 1);
   }
+}
+
+TEST_F(AutofillMetricsTest,
+       CreditCardSubmittedWithoutSelectingSuggestionsNoCard) {
+  EnableWalletSync();
+  // Create a local card for testing, card number is 4111111111111111.
+  personal_data_->RecreateCreditCards(
+      true /* include_local_credit_card */,
+      false /* include_masked_server_credit_card */,
+      false /* include_full_server_credit_card */);
+
+  // Set up our form data.
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.origin = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+
+  FormFieldData field;
+  std::vector<ServerFieldType> field_types;
+  test::CreateTestFormField("Month", "card_month", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_MONTH);
+  test::CreateTestFormField("Year", "card_year", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  test::CreateTestFormField("Credit card", "card", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_NUMBER);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  // Simulating submission with suggestion shown, but not selected.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+  autofill_manager_->OnQueryFormFieldAutofill(0, form, field, gfx::RectF());
+  autofill_manager_->SubmitForm(form, TimeTicks::Now());
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_NO_CARD,
+      1);
+}
+
+TEST_F(AutofillMetricsTest,
+       CreditCardSubmittedWithoutSelectingSuggestionsUnknownCard) {
+  EnableWalletSync();
+  // Create a local card for testing, card number is 4111111111111111.
+  personal_data_->RecreateCreditCards(
+      true /* include_local_credit_card */,
+      false /* include_masked_server_credit_card */,
+      false /* include_full_server_credit_card */);
+
+  // Set up our form data.
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.origin = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+
+  FormFieldData field;
+  std::vector<ServerFieldType> field_types;
+  test::CreateTestFormField("Month", "card_month", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_MONTH);
+  test::CreateTestFormField("Year", "card_year", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  test::CreateTestFormField("Credit card", "card", "5105105105105100", "text",
+                            &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_NUMBER);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  // Simulating submission with suggestion shown, but not selected.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+  autofill_manager_->OnQueryFormFieldAutofill(0, form, field, gfx::RectF());
+  autofill_manager_->SubmitForm(form, TimeTicks::Now());
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_UNKNOWN_CARD,
+      1);
+}
+
+TEST_F(AutofillMetricsTest,
+       CreditCardSubmittedWithoutSelectingSuggestionsKnownCard) {
+  EnableWalletSync();
+  // Create a local card for testing, card number is 4111111111111111.
+  personal_data_->RecreateCreditCards(
+      true /* include_local_credit_card */,
+      false /* include_masked_server_credit_card */,
+      false /* include_full_server_credit_card */);
+
+  // Set up our form data.
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.origin = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+
+  FormFieldData field;
+  std::vector<ServerFieldType> field_types;
+  test::CreateTestFormField("Month", "card_month", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_MONTH);
+  test::CreateTestFormField("Year", "card_year", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  test::CreateTestFormField("Credit card", "card", "4111111111111111", "text",
+                            &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_NUMBER);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  // Simulating submission with suggestion shown, but not selected.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+  autofill_manager_->OnQueryFormFieldAutofill(0, form, field, gfx::RectF());
+  autofill_manager_->SubmitForm(form, TimeTicks::Now());
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_KNOWN_CARD,
+      1);
+}
+
+TEST_F(AutofillMetricsTest,
+       ShouldNotLogSubmitWithoutSelectingSuggestionsIfSuggestionFilled) {
+  EnableWalletSync();
+  // Create a local card for testing, card number is 4111111111111111.
+  personal_data_->RecreateCreditCards(
+      true /* include_local_credit_card */,
+      false /* include_masked_server_credit_card */,
+      false /* include_full_server_credit_card */);
+
+  // Set up our form data.
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.origin = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+
+  FormFieldData field;
+  std::vector<ServerFieldType> field_types;
+  test::CreateTestFormField("Month", "card_month", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_MONTH);
+  test::CreateTestFormField("Year", "card_year", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  test::CreateTestFormField("Credit card", "card", "4111111111111111", "text",
+                            &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_NUMBER);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  // Simulating submission with suggestion shown and selected.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+  autofill_manager_->OnQueryFormFieldAutofill(0, form, field, gfx::RectF());
+  std::string guid("10000000-0000-0000-0000-000000000001");
+  autofill_manager_->FillOrPreviewForm(
+      AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
+      autofill_manager_->MakeFrontendID(guid, std::string()));
+
+  autofill_manager_->SubmitForm(form, TimeTicks::Now());
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_KNOWN_CARD,
+      0);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_UNKNOWN_CARD,
+      0);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_NO_CARD,
+      0);
+}
+
+TEST_F(AutofillMetricsTest, ShouldNotLogFormEventNoCardForAddressForm) {
+  EnableWalletSync();
+  // Create a profile.
+  personal_data_->RecreateProfile();
+  // Set up our form data.
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.origin = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+
+  FormFieldData field;
+  std::vector<ServerFieldType> field_types;
+  test::CreateTestFormField("State", "state", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(ADDRESS_HOME_STATE);
+  test::CreateTestFormField("City", "city", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(ADDRESS_HOME_CITY);
+  test::CreateTestFormField("Street", "street", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(ADDRESS_HOME_STREET_ADDRESS);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  // Simulating submission with no filled data.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+  autofill_manager_->OnQueryFormFieldAutofill(0, form, field, gfx::RectF());
+  autofill_manager_->SubmitForm(form, TimeTicks::Now());
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address",
+      AutofillMetrics::FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_NO_CARD,
+      0);
 }
 
 // Test that we log submitted form events for credit cards.
@@ -5268,10 +5493,10 @@ class AutofillMetricsParseQueryResponseTest : public testing::Test {
 
 TEST_F(AutofillMetricsParseQueryResponseTest, ServerHasData) {
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(7);
-  response.add_field()->set_autofill_type(30);
-  response.add_field()->set_autofill_type(9);
-  response.add_field()->set_autofill_type(0);
+  response.add_field()->set_overall_type_prediction(7);
+  response.add_field()->set_overall_type_prediction(30);
+  response.add_field()->set_overall_type_prediction(9);
+  response.add_field()->set_overall_type_prediction(0);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -5287,10 +5512,10 @@ TEST_F(AutofillMetricsParseQueryResponseTest, ServerHasData) {
 // logging.
 TEST_F(AutofillMetricsParseQueryResponseTest, OneFormNoServerData) {
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(0);
-  response.add_field()->set_autofill_type(0);
-  response.add_field()->set_autofill_type(9);
-  response.add_field()->set_autofill_type(0);
+  response.add_field()->set_overall_type_prediction(0);
+  response.add_field()->set_overall_type_prediction(0);
+  response.add_field()->set_overall_type_prediction(9);
+  response.add_field()->set_overall_type_prediction(0);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -5307,7 +5532,7 @@ TEST_F(AutofillMetricsParseQueryResponseTest, OneFormNoServerData) {
 TEST_F(AutofillMetricsParseQueryResponseTest, AllFormsNoServerData) {
   AutofillQueryResponseContents response;
   for (int i = 0; i < 4; ++i) {
-    response.add_field()->set_autofill_type(0);
+    response.add_field()->set_overall_type_prediction(0);
   }
 
   std::string response_string;
@@ -5324,10 +5549,10 @@ TEST_F(AutofillMetricsParseQueryResponseTest, AllFormsNoServerData) {
 // UMA metric to say there is data.
 TEST_F(AutofillMetricsParseQueryResponseTest, PartialNoServerData) {
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(0);
-  response.add_field()->set_autofill_type(10);
-  response.add_field()->set_autofill_type(0);
-  response.add_field()->set_autofill_type(11);
+  response.add_field()->set_overall_type_prediction(0);
+  response.add_field()->set_overall_type_prediction(10);
+  response.add_field()->set_overall_type_prediction(0);
+  response.add_field()->set_overall_type_prediction(11);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));

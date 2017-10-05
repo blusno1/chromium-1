@@ -4,14 +4,15 @@
 
 #include "core/frame/csp/ContentSecurityPolicy.h"
 
+#include "core/dom/Document.h"
 #include "core/frame/csp/CSPDirectiveList.h"
 #include "core/html/HTMLScriptElement.h"
 #include "core/testing/NullExecutionContext.h"
 #include "platform/Crypto.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -941,29 +942,29 @@ TEST_F(ContentSecurityPolicyTest, ShouldEnforceEmbeddersPolicy) {
     ResourceResponse response;
     response.SetURL(KURL(kParsedURLString, test.resource_url));
     EXPECT_EQ(ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
-                  response, secure_origin.Get()),
+                  response, secure_origin.get()),
               test.inherits);
 
     response.SetHTTPHeaderField(HTTPNames::Allow_CSP_From, AtomicString("*"));
     EXPECT_TRUE(ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
-        response, secure_origin.Get()));
+        response, secure_origin.get()));
 
     response.SetHTTPHeaderField(HTTPNames::Allow_CSP_From,
                                 AtomicString("* not a valid header"));
     EXPECT_EQ(ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
-                  response, secure_origin.Get()),
+                  response, secure_origin.get()),
               test.inherits);
 
     response.SetHTTPHeaderField(HTTPNames::Allow_CSP_From,
                                 AtomicString("http://example.test"));
     EXPECT_EQ(ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
-                  response, secure_origin.Get()),
+                  response, secure_origin.get()),
               test.inherits);
 
     response.SetHTTPHeaderField(HTTPNames::Allow_CSP_From,
                                 AtomicString("https://example.test"));
     EXPECT_TRUE(ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
-        response, secure_origin.Get()));
+        response, secure_origin.get()));
   }
 }
 

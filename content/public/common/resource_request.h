@@ -131,6 +131,10 @@ struct CONTENT_EXPORT ResourceRequest {
   // to that file will be provided in ResponseInfo::download_file_path.
   bool download_to_file = false;
 
+  // True if the request can work after the fetch group is terminated.
+  // https://fetch.spec.whatwg.org/#request-keepalive-flag
+  bool keepalive = false;
+
   // True if the request was user initiated.
   bool has_user_gesture = false;
 
@@ -151,13 +155,6 @@ struct CONTENT_EXPORT ResourceRequest {
 
   // True if |frame_id| is the main frame of a RenderView.
   bool is_main_frame = false;
-
-  // True if |parent_render_frame_id| is the main frame of a RenderView.
-  bool parent_is_main_frame = false;
-
-  // Identifies the parent frame of the frame that sent the request.
-  // -1 if unknown / invalid.
-  int parent_render_frame_id = -1;
 
   ui::PageTransition transition_type = ui::PAGE_TRANSITION_LINK;
 

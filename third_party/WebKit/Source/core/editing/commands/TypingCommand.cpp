@@ -25,16 +25,19 @@
 
 #include "core/editing/commands/TypingCommand.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/PlainTextRange.h"
 #include "core/editing/SelectionModifier.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/BreakBlockquoteCommand.h"
 #include "core/editing/commands/DeleteSelectionCommand.h"
@@ -46,6 +49,7 @@
 #include "core/events/TextEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBRElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 
 namespace blink {
@@ -118,9 +122,23 @@ bool CanAppendNewLineFeedToSelection(const VisibleSelection& selection) {
   if (!element)
     return false;
 
+  const Document& document = element->GetDocument();
   BeforeTextInsertedEvent* event =
       BeforeTextInsertedEvent::Create(String("\n"));
   element->DispatchEvent(event);
+  // event may invalidate frame or selection
+  if (!document.GetFrame() || document.GetFrame()->GetDocument() != &document) {
+    // editing/inserting/insert-linebreak-remove-frame-on-webkitBeforeTextInserted.html
+    // and
+    // editing/inserting/insert-paragraph-remove-frame-on-webkitBeforeTextInserted.html
+    // reaches here.
+    return false;
+  }
+  if (!selection.IsValidFor(document)) {
+    // editing/inserting/insert-seperator-disconnect-nodes-on-webkitBeforeTextInserted.html
+    // reaches here.
+    return false;
+  }
   return event->GetText().length();
 }
 
@@ -275,7 +293,8 @@ void TypingCommand::InsertText(Document& document,
 void TypingCommand::AdjustSelectionAfterIncrementalInsertion(
     LocalFrame* frame,
     const size_t selection_start,
-    const size_t text_length) {
+    const size_t text_length,
+    EditingState* editing_state) {
   if (!IsIncrementalInsertion())
     return;
 
@@ -286,7 +305,15 @@ void TypingCommand::AdjustSelectionAfterIncrementalInsertion(
   Element* element = frame->Selection()
                          .ComputeVisibleSelectionInDOMTreeDeprecated()
                          .RootEditableElement();
-  DCHECK(element);
+
+  // TODO(editing-dev): The text insertion should probably always leave the
+  // selection in an editable region, but we know of at least one case where it
+  // doesn't (see test case in crbug.com/767599). Return early in this case to
+  // avoid a crash.
+  if (!element) {
+    editing_state->Abort();
+    return;
+  }
 
   const size_t end = selection_start + text_length;
   const size_t start =
@@ -322,13 +349,36 @@ void TypingCommand::InsertText(
       CreateVisibleSelection(passed_selection_for_insertion);
 
   String new_text = text;
-  if (composition_type != kTextCompositionUpdate)
+  if (composition_type != kTextCompositionUpdate) {
     new_text = DispatchBeforeTextInsertedEvent(text, selection_for_insertion);
+    // event handler might destroy document.
+    if (!document.GetFrame() ||
+        document.GetFrame()->GetDocument() != &document) {
+      // editing/inserting/insert-text-remove-iframe-on-webkitBeforeTextInserted-event.html
+      // reaches here.
+      return;
+    }
+  }
 
   if (composition_type == kTextCompositionConfirm) {
     if (DispatchTextInputEvent(frame, new_text) !=
         DispatchEventResult::kNotCanceled)
       return;
+    // event handler might destroy document.
+    if (!document.GetFrame() ||
+        document.GetFrame()->GetDocument() != &document) {
+      // editing/inserting/insert-text-remove-iframe-on-textInput-event.html
+      // reaches here.
+      return;
+    }
+  }
+
+  if (!selection_for_insertion.IsValidFor(document)) {
+    // editing/inserting/insert-text-nodes-disconnect-on-textinput-event.html
+    // and
+    // editing/inserting/insert-text-nodes-disconnect-on-webkitBeforeTextInserted-event.html
+    // reaches here.
+    return;
   }
 
   // Do nothing if no need to delete and insert.
@@ -560,8 +610,9 @@ void TypingCommand::InsertText(const String& text,
       if (editing_state->IsAborted())
         return;
 
-      AdjustSelectionAfterIncrementalInsertion(
-          GetDocument().GetFrame(), selection_start, insertion_length);
+      AdjustSelectionAfterIncrementalInsertion(GetDocument().GetFrame(),
+                                               selection_start,
+                                               insertion_length, editing_state);
       selection_start += insertion_length;
     }
 
@@ -579,7 +630,8 @@ void TypingCommand::InsertText(const String& text,
       return;
 
     AdjustSelectionAfterIncrementalInsertion(GetDocument().GetFrame(),
-                                             selection_start, text.length());
+                                             selection_start, text.length(),
+                                             editing_state);
     return;
   }
 
@@ -591,7 +643,8 @@ void TypingCommand::InsertText(const String& text,
       return;
 
     AdjustSelectionAfterIncrementalInsertion(GetDocument().GetFrame(),
-                                             selection_start, insertion_length);
+                                             selection_start, insertion_length,
+                                             editing_state);
   }
 }
 
@@ -667,7 +720,7 @@ bool TypingCommand::MakeEditableRootEmpty(EditingState* editing_state) {
     return false;
 
   if (root->firstChild() == root->lastChild()) {
-    if (isHTMLBRElement(root->firstChild())) {
+    if (IsHTMLBRElement(root->firstChild())) {
       // If there is a single child and it could be a placeholder, leave it
       // alone.
       if (root->GetLayoutObject() &&

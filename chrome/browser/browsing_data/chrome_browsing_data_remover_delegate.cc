@@ -174,7 +174,7 @@ bool WebsiteSettingsFilterAdapter(
   return predicate.Run(url);
 }
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 void ClearNaClCacheOnIOThread(const base::Closure& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -339,7 +339,7 @@ ChromeBrowsingDataRemoverDelegate::ChromeBrowsingDataRemoverDelegate(
       clear_form_(sub_task_forward_callback_),
       clear_history_(sub_task_forward_callback_),
       clear_keyword_data_(sub_task_forward_callback_),
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
       clear_nacl_cache_(sub_task_forward_callback_),
       clear_pnacl_cache_(sub_task_forward_callback_),
 #endif
@@ -886,7 +886,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     // in content/browser.
     web_cache::WebCacheManager::GetInstance()->ClearCache();
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
     clear_nacl_cache_.Start();
 
     BrowserThread::PostTask(
@@ -1025,7 +1025,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
               chromeos::attestation::KEY_USER,
               cryptohome::Identification(user->GetAccountId()),
               chromeos::attestation::kContentProtectionKeyPrefix,
-              base::Bind(
+              base::BindOnce(
                   &ChromeBrowsingDataRemoverDelegate::OnClearPlatformKeys,
                   weak_ptr_factory_.GetWeakPtr()));
     }
@@ -1124,7 +1124,7 @@ bool ChromeBrowsingDataRemoverDelegate::AllDone() {
          !clear_form_.is_pending() && !clear_history_.is_pending() &&
          !clear_hostname_resolution_cache_.is_pending() &&
          !clear_keyword_data_.is_pending() &&
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
          !clear_nacl_cache_.is_pending() && !clear_pnacl_cache_.is_pending() &&
 #endif
          !clear_network_predictor_.is_pending() &&
@@ -1179,9 +1179,8 @@ void ChromeBrowsingDataRemoverDelegate::OnClearedCookies() {
 
 #if defined(OS_CHROMEOS)
 void ChromeBrowsingDataRemoverDelegate::OnClearPlatformKeys(
-    chromeos::DBusMethodCallStatus call_status,
-    bool result) {
-  LOG_IF(ERROR, call_status != chromeos::DBUS_METHOD_CALL_SUCCESS || !result)
+    base::Optional<bool> result) {
+  LOG_IF(ERROR, !result.has_value() || !result.value())
       << "Failed to clear platform keys.";
   clear_platform_keys_.GetCompletionCallback().Run();
 }

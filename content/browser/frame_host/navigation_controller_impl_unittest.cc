@@ -683,7 +683,10 @@ void CheckNavigationEntryMatchLoadParams(
   EXPECT_EQ(load_params.referrer.policy, entry->GetReferrer().policy);
   EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
       entry->GetTransitionType(), load_params.transition_type));
-  EXPECT_EQ(load_params.extra_headers, entry->extra_headers());
+  std::string extra_headers_crlf;
+  base::ReplaceChars(load_params.extra_headers, "\n", "\r\n",
+                     &extra_headers_crlf);
+  EXPECT_EQ(extra_headers_crlf, entry->extra_headers());
 
   EXPECT_EQ(load_params.is_renderer_initiated, entry->is_renderer_initiated());
   EXPECT_EQ(load_params.base_url_for_data_url, entry->GetBaseURLForDataURL());
@@ -720,7 +723,7 @@ TEST_F(NavigationControllerTest, LoadURLWithParams) {
   load_params.referrer =
       Referrer(GURL("http://referrer"), blink::kWebReferrerPolicyDefault);
   load_params.transition_type = ui::PAGE_TRANSITION_GENERATED;
-  load_params.extra_headers = "content-type: text/plain";
+  load_params.extra_headers = "content-type: text/plain;\nX-Foo: Bar";
   load_params.load_type = NavigationController::LOAD_TYPE_DEFAULT;
   load_params.is_renderer_initiated = true;
   load_params.override_user_agent = NavigationController::UA_OVERRIDE_TRUE;
@@ -814,7 +817,7 @@ TEST_F(NavigationControllerTest, LoadURL_SamePage) {
   const base::Time timestamp = controller.GetVisibleEntry()->GetTimestamp();
   EXPECT_FALSE(timestamp.is_null());
 
-  const std::string new_extra_headers("Foo: Bar");
+  const std::string new_extra_headers("Foo: Bar\nBar: Baz");
   controller.LoadURL(
       url1, Referrer(), ui::PAGE_TRANSITION_TYPED, new_extra_headers);
   entry_id = controller.GetPendingEntry()->GetUniqueID();
@@ -837,7 +840,10 @@ TEST_F(NavigationControllerTest, LoadURL_SamePage) {
   EXPECT_FALSE(controller.CanGoForward());
 
   // The extra headers should have been updated.
-  EXPECT_EQ(new_extra_headers, controller.GetVisibleEntry()->extra_headers());
+  std::string new_extra_headers_crlf;
+  base::ReplaceChars(new_extra_headers, "\n", "\r\n", &new_extra_headers_crlf);
+  EXPECT_EQ(new_extra_headers_crlf,
+            controller.GetVisibleEntry()->extra_headers());
 
   // The timestamp should have been updated.
   //
@@ -2225,7 +2231,6 @@ TEST_F(NavigationControllerTest, NewSubframe) {
   {
     FrameHostMsg_DidCommitProvisionalLoad_Params params;
     params.nav_entry_id = 0;
-    params.frame_unique_name = unique_name;
     params.did_create_new_entry = false;
     params.url = subframe_url;
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -2248,7 +2253,6 @@ TEST_F(NavigationControllerTest, NewSubframe) {
   const GURL url2("http://foo2");
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = 0;
-  params.frame_unique_name = unique_name;
   params.did_create_new_entry = true;
   params.url = url2;
   params.transition = ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
@@ -2303,7 +2307,6 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   {
     FrameHostMsg_DidCommitProvisionalLoad_Params params;
     params.nav_entry_id = 0;
-    params.frame_unique_name = unique_name0;
     params.did_create_new_entry = false;
     params.url = url2;
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -2348,7 +2351,6 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   {
     FrameHostMsg_DidCommitProvisionalLoad_Params params;
     params.nav_entry_id = 0;
-    params.frame_unique_name = unique_name1;
     params.did_create_new_entry = false;
     params.url = url3;
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -2398,7 +2400,6 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   {
     FrameHostMsg_DidCommitProvisionalLoad_Params params;
     params.nav_entry_id = 0;
-    params.frame_unique_name = unique_name2;
     params.did_create_new_entry = false;
     params.url = url4;
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -2461,7 +2462,6 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   {
     FrameHostMsg_DidCommitProvisionalLoad_Params params;
     params.nav_entry_id = 0;
-    params.frame_unique_name = unique_name;
     params.did_create_new_entry = false;
     params.url = subframe_url;
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -2489,7 +2489,6 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   int64_t document_sequence_number2 = GenerateSequenceNumber();
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = 0;
-  params.frame_unique_name = unique_name;
   params.did_create_new_entry = true;
   params.url = url2;
   params.transition = ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
@@ -2519,7 +2518,6 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   int64_t item_sequence_number3 = GenerateSequenceNumber();
   int64_t document_sequence_number3 = GenerateSequenceNumber();
   params.nav_entry_id = 0;
-  params.frame_unique_name = unique_name;
   params.did_create_new_entry = true;
   params.url = url3;
   params.transition = ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
@@ -2543,7 +2541,6 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   // Go back one.
   controller.GoBack();
   params.nav_entry_id = entry2->GetUniqueID();
-  params.frame_unique_name = unique_name;
   params.did_create_new_entry = false;
   params.url = url2;
   params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -2564,7 +2561,6 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   // Go back one more.
   controller.GoBack();
   params.nav_entry_id = entry1->GetUniqueID();
-  params.frame_unique_name = unique_name;
   params.did_create_new_entry = false;
   params.url = subframe_url;
   params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -3860,7 +3856,6 @@ TEST_F(NavigationControllerTest, SameSubframe) {
   const GURL subframe_url("http://www.google.com/#");
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = 0;
-  params.frame_unique_name = unique_name;
   params.did_create_new_entry = false;
   params.url = subframe_url;
   params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -4035,7 +4030,6 @@ TEST_F(NavigationControllerTest, SubframeWhilePending) {
   const GURL url1_sub("http://foo/subframe");
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = 0;
-  params.frame_unique_name = unique_name;
   params.did_create_new_entry = false;
   params.url = url1_sub;
   params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;

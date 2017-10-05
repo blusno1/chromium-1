@@ -71,6 +71,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   void UpdateGpuInfo(const gpu::GPUInfo& gpu_info);
   void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info);
+  gpu::GpuFeatureInfo GetGpuFeatureInfo() const;
 
   void AppendRendererCommandLine(base::CommandLine* command_line) const;
 
@@ -209,8 +210,6 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   // Try to switch to SwiftShader rendering, if possible and necessary.
   void EnableSwiftShaderIfNecessary();
-
-  bool IsGpuSchedulerEnabled() const;
 
   // Helper to extract the domain from a given URL.
   std::string GetDomainFromURL(const GURL& url) const;

@@ -84,7 +84,7 @@ void RecordWhetherOpenDidPrefetch(net::CacheType cache_type, bool result) {
 
 bool CanOmitEmptyFile(int file_index) {
   DCHECK_GE(file_index, 0);
-  DCHECK_LT(file_index, kSimpleEntryFileCount);
+  DCHECK_LT(file_index, kSimpleEntryNormalFileCount);
   return file_index == simple_util::GetFileIndexFromStreamIndex(2);
 }
 
@@ -490,6 +490,7 @@ void SimpleSynchronousEntry::ReadSparseData(
 
       int len_to_read = std::min(buf_len, range_len_after_offset);
       if (!ReadSparseRange(found_range, net_offset, len_to_read, buf)) {
+        Doom();
         *out_result = net::ERR_CACHE_READ_FAILURE;
         return;
       }
@@ -508,6 +509,7 @@ void SimpleSynchronousEntry::ReadSparseData(
     int range_len = base::saturated_cast<int>(found_range->length);
     int len_to_read = std::min(buf_len - read_so_far, range_len);
     if (!ReadSparseRange(found_range, 0, len_to_read, buf + read_so_far)) {
+      Doom();
       *out_result = net::ERR_CACHE_READ_FAILURE;
       return;
     }
@@ -533,6 +535,7 @@ void SimpleSynchronousEntry::WriteSparseData(
   int appended_so_far = 0;
 
   if (!sparse_file_open() && !CreateSparseFile()) {
+    Doom();
     *out_result = net::ERR_CACHE_WRITE_FAILURE;
     return;
   }
@@ -565,6 +568,7 @@ void SimpleSynchronousEntry::WriteSparseData(
 
       int len_to_write = std::min(buf_len, range_len_after_offset);
       if (!WriteSparseRange(found_range, net_offset, len_to_write, buf)) {
+        Doom();
         *out_result = net::ERR_CACHE_WRITE_FAILURE;
         return;
       }
@@ -583,6 +587,7 @@ void SimpleSynchronousEntry::WriteSparseData(
       if (!AppendSparseRange(offset + written_so_far,
                              len_to_append,
                              buf + written_so_far)) {
+        Doom();
         *out_result = net::ERR_CACHE_WRITE_FAILURE;
         return;
       }
@@ -595,6 +600,7 @@ void SimpleSynchronousEntry::WriteSparseData(
                           0,
                           len_to_write,
                           buf + written_so_far)) {
+      Doom();
       *out_result = net::ERR_CACHE_WRITE_FAILURE;
       return;
     }
@@ -607,6 +613,7 @@ void SimpleSynchronousEntry::WriteSparseData(
     if (!AppendSparseRange(offset + written_so_far,
                            len_to_append,
                            buf + written_so_far)) {
+      Doom();
       *out_result = net::ERR_CACHE_WRITE_FAILURE;
       return;
     }
@@ -782,7 +789,7 @@ void SimpleSynchronousEntry::Close(
       break;
     }
   }
-  for (int i = 0; i < kSimpleEntryFileCount; ++i) {
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     if (empty_file_omitted_[i])
       continue;
 
@@ -828,7 +835,7 @@ SimpleSynchronousEntry::SimpleSynchronousEntry(net::CacheType cache_type,
       key_(key),
       have_open_files_(false),
       initialized_(false) {
-  for (int i = 0; i < kSimpleEntryFileCount; ++i)
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i)
     empty_file_omitted_[i] = false;
 }
 
@@ -892,7 +899,7 @@ bool SimpleSynchronousEntry::MaybeCreateFile(
 }
 
 bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
-  for (int i = 0; i < kSimpleEntryFileCount; ++i) {
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     File::Error error;
     if (!MaybeOpenFile(i, &error)) {
       // TODO(juliatuttle,gavinp): Remove one each of these triplets of
@@ -922,7 +929,7 @@ bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
   have_open_files_ = true;
 
   base::TimeDelta entry_age = base::Time::Now() - base::Time::UnixEpoch();
-  for (int i = 0; i < kSimpleEntryFileCount; ++i) {
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     if (empty_file_omitted_[i]) {
       out_entry_stat->set_data_size(i + 1, 0);
       continue;
@@ -973,7 +980,7 @@ bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
 }
 
 bool SimpleSynchronousEntry::CreateFiles(SimpleEntryStat* out_entry_stat) {
-  for (int i = 0; i < kSimpleEntryFileCount; ++i) {
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     File::Error error;
     if (!MaybeCreateFile(i, FILE_NOT_REQUIRED, &error)) {
       // TODO(juliatuttle,gavinp): Remove one each of these triplets of
@@ -1004,8 +1011,8 @@ bool SimpleSynchronousEntry::CreateFiles(SimpleEntryStat* out_entry_stat) {
   base::Time creation_time = Time::Now();
   out_entry_stat->set_last_modified(creation_time);
   out_entry_stat->set_last_used(creation_time);
-  for (int i = 0; i < kSimpleEntryStreamCount; ++i)
-      out_entry_stat->set_data_size(i, 0);
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i)
+    out_entry_stat->set_data_size(i, 0);
 
   files_created_ = true;
 
@@ -1025,7 +1032,7 @@ void SimpleSynchronousEntry::CloseFile(int index) {
 }
 
 void SimpleSynchronousEntry::CloseFiles() {
-  for (int i = 0; i < kSimpleEntryFileCount; ++i)
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i)
     CloseFile(i);
 }
 
@@ -1105,7 +1112,7 @@ int SimpleSynchronousEntry::InitializeForOpen(
     DLOG(WARNING) << "Could not open platform files for entry.";
     return net::ERR_FAILED;
   }
-  for (int i = 0; i < kSimpleEntryFileCount; ++i) {
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     if (empty_file_omitted_[i])
       continue;
 
@@ -1204,7 +1211,7 @@ int SimpleSynchronousEntry::InitializeForCreate(
     DLOG(WARNING) << "Could not create platform files.";
     return net::ERR_FILE_EXISTS;
   }
-  for (int i = 0; i < kSimpleEntryFileCount; ++i) {
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     if (empty_file_omitted_[i])
       continue;
 
@@ -1395,7 +1402,7 @@ bool SimpleSynchronousEntry::DeleteFilesForEntryHash(
     const FilePath& path,
     const uint64_t entry_hash) {
   bool result = true;
-  for (int i = 0; i < kSimpleEntryFileCount; ++i) {
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     if (!DeleteFileForEntryHash(path, entry_hash, i) && !CanOmitEmptyFile(i))
       result = false;
   }
@@ -1410,7 +1417,7 @@ bool SimpleSynchronousEntry::TruncateFilesForEntryHash(
     const FilePath& path,
     const uint64_t entry_hash) {
   bool result = true;
-  for (int i = 0; i < kSimpleEntryFileCount; ++i) {
+  for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     FilePath filename_to_truncate =
         path.AppendASCII(GetFilenameFromEntryHashAndFileIndex(entry_hash, i));
     if (!TruncatePath(filename_to_truncate))

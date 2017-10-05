@@ -30,10 +30,8 @@
 #include <memory>
 #include "core/CoreExport.h"
 #include "core/dom/SynchronousMutationObserver.h"
-#include "core/editing/EphemeralRange.h"
+#include "core/editing/Forward.h"
 #include "core/editing/SetSelectionOptions.h"
-#include "core/editing/VisiblePosition.h"
-#include "core/editing/VisibleSelection.h"
 #include "core/layout/ScrollAlignment.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
@@ -43,6 +41,7 @@
 namespace blink {
 
 class DisplayItemClient;
+class Element;
 class LayoutBlock;
 class LocalFrame;
 class FrameCaret;
@@ -145,7 +144,7 @@ class CORE_EXPORT FrameSelection final
   void DidChangeFocus();
 
   SelectionInDOMTree GetSelectionInDOMTree() const;
-  bool IsDirectional() const { return GetSelectionInDOMTree().IsDirectional(); }
+  bool IsDirectional() const;
 
   void DocumentAttached(Document*);
 
@@ -182,6 +181,11 @@ class CORE_EXPORT FrameSelection final
   void UpdateSecureKeyboardEntryIfActive();
 
   // Returns true if a word is selected.
+  bool SelectWordAroundCaret();
+
+  // TODO(editing-dev): We should replace |SelectWordAroundPosition()|
+  // with |SelectWordAroundCaret()|.
+  // Returns true if a word is selected.
   bool SelectWordAroundPosition(const VisiblePosition&);
 
 #ifndef NDEBUG
@@ -196,10 +200,8 @@ class CORE_EXPORT FrameSelection final
   String SelectedText() const;
   String SelectedTextForClipboard() const;
 
-  // The bounds are clipped to the viewport as this is what callers expect.
   // This returns last layouted selection bounds of LayoutSelection rather than
   // SelectionEditor keeps.
-  LayoutRect Bounds() const;
   LayoutRect UnclippedBounds() const;
 
   // TODO(tkent): This function has a bug that scrolling doesn't work well in
@@ -228,10 +230,8 @@ class CORE_EXPORT FrameSelection final
  private:
   friend class CaretDisplayItemClientTest;
   friend class FrameSelectionTest;
-  friend class PaintControllerPaintTestForSlimmingPaintV1AndV2;
+  friend class PaintControllerPaintTestBase;
   friend class SelectionControllerTest;
-  FRIEND_TEST_ALL_PREFIXES(PaintControllerPaintTestForSlimmingPaintV1AndV2,
-                           FullDocumentPaintingWithCaret);
 
   explicit FrameSelection(LocalFrame&);
 

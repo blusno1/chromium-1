@@ -9,17 +9,46 @@
 
 #include "core/dom/Attribute.h"
 #include "core/dom/CharacterData.h"
+#include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ProcessingInstruction.h"
+#include "core/dom/ShadowRootInit.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/html/HTMLCollection.h"
+#include "core/html/HTMLTemplateElement.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
 namespace {
 
+void ConvertTemplatesToShadowRoots(HTMLElement& element) {
+  // |element| and descendant elements can have TEMPLATE element with
+  // |data-mode="open"|, which is required. Each elemnt can have only one
+  // TEMPLATE element.
+  HTMLCollection* const templates = element.getElementsByTagName("template");
+  HeapVector<Member<Element>> template_vector;
+  for (Element* template_element : *templates)
+    template_vector.push_back(template_element);
+  for (Element* template_element : template_vector) {
+    const AtomicString& data_mode = template_element->getAttribute("data-mode");
+    DCHECK_EQ(data_mode, "open");
+
+    Element* const parent = template_element->parentElement();
+    parent->removeChild(template_element);
+
+    Document* const document = element.ownerDocument();
+    ShadowRoot& shadow_root =
+        parent->AttachShadowRootInternal(ShadowRootType::kOpen);
+    Node* const fragment =
+        document->importNode(ToHTMLTemplateElement(template_element)->content(),
+                             true, ASSERT_NO_EXCEPTION);
+    shadow_root.AppendChild(fragment);
+  }
+}
+
 // Parse selection text notation into Selection object.
-template <typename Strategy>
 class Parser final {
   STACK_ALLOCATED();
 
@@ -28,21 +57,21 @@ class Parser final {
   ~Parser() = default;
 
   // Set |selection_text| as inner HTML of |element| and returns
-  // |SelectionTemplate<Strategy>| marked up within |selection_text|.
-  SelectionTemplate<Strategy> SetSelectionText(
-      HTMLElement* element,
-      const std::string& selection_text) {
-    element->setInnerHTML(String::FromUTF8(selection_text.c_str()));
+  // |SelectionInDOMTree| marked up within |selection_text|.
+  SelectionInDOMTree SetSelectionText(HTMLElement* element,
+                                      const std::string& selection_text) {
+    element->SetInnerHTMLFromString(String::FromUTF8(selection_text.c_str()));
+    ConvertTemplatesToShadowRoots(*element);
     Traverse(element);
     if (anchor_node_ && focus_node_) {
-      return typename SelectionTemplate<Strategy>::Builder()
-          .Collapse(PositionTemplate<Strategy>(anchor_node_, anchor_offset_))
-          .Extend(PositionTemplate<Strategy>(focus_node_, focus_offset_))
+      return typename SelectionInDOMTree::Builder()
+          .Collapse(Position(anchor_node_, anchor_offset_))
+          .Extend(Position(focus_node_, focus_offset_))
           .Build();
     }
     DCHECK(focus_node_) << "Need just '|', or '^' and '|'";
-    return typename SelectionTemplate<Strategy>::Builder()
-        .Collapse(PositionTemplate<Strategy>(focus_node_, focus_offset_))
+    return typename SelectionInDOMTree::Builder()
+        .Collapse(Position(focus_node_, focus_offset_))
         .Build();
   }
 
@@ -90,7 +119,13 @@ class Parser final {
   }
 
   void HandleElementNode(Element* element) {
-    Node* runner = element->firstChild();
+    if (ShadowRoot* shadow_root = element->ShadowRootIfV1())
+      HandleChildren(shadow_root);
+    HandleChildren(element);
+  }
+
+  void HandleChildren(ContainerNode* node) {
+    Node* runner = node->firstChild();
     while (runner) {
       Node* const next_sibling = runner->nextSibling();
       // |Traverse()| may remove |runner|.
@@ -308,11 +343,16 @@ class Serializer final {
 
 }  // namespace
 
+void SelectionSample::ConvertTemplatesToShadowRootsForTesring(
+    HTMLElement& element) {
+  ConvertTemplatesToShadowRoots(element);
+}
+
 SelectionInDOMTree SelectionSample::SetSelectionText(
     HTMLElement* element,
     const std::string& selection_text) {
   SelectionInDOMTree selection =
-      Parser<EditingStrategy>().SetSelectionText(element, selection_text);
+      Parser().SetSelectionText(element, selection_text);
   DCHECK(!selection.IsNone()) << "|selection_text| should container caret "
                                  "marker '|' or selection marker '^' and "
                                  "'|'.";
@@ -323,6 +363,12 @@ std::string SelectionSample::GetSelectionText(
     const ContainerNode& root,
     const SelectionInDOMTree& selection) {
   return Serializer<EditingStrategy>(selection).Serialize(root);
+}
+
+std::string SelectionSample::GetSelectionTextInFlatTree(
+    const ContainerNode& root,
+    const SelectionInFlatTree& selection) {
+  return Serializer<EditingInFlatTreeStrategy>(selection).Serialize(root);
 }
 
 }  // namespace blink

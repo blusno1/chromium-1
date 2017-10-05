@@ -12,8 +12,9 @@ var SiteSettingsPref;
 
 /**
  * An example empty pref.
- * TODO(patricialor): Use the values from settings.ContentSettingsTypes (see
- * site_settings/constants.js) as the keys for these instead.
+ * TODO(https://crbug.com/742706): Use the values from
+ * settings.ContentSettingsTypes (see site_settings/constants.js) as the keys
+ * for these instead.
  * @type {SiteSettingsPref}
  */
 var prefsEmpty = {
@@ -31,6 +32,7 @@ var prefsEmpty = {
     plugins: {},
     images: {},
     popups: {},
+    protectedContent: {},
     sound: {},
     unsandboxed_plugins: {},
   },
@@ -48,6 +50,7 @@ var prefsEmpty = {
     plugins: [],
     images: [],
     popups: [],
+    protectedContent: [],
     sound: [],
     unsandboxed_plugins: [],
   },
@@ -65,7 +68,6 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
     super([
       'fetchUsbDevices',
       'fetchZoomLevels',
-      'getCookieDetails',
       'getDefaultValueForContentType',
       'getExceptionList',
       'getOriginPermissions',
@@ -73,8 +75,6 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       'isPatternValid',
       'observeProtocolHandlers',
       'observeProtocolHandlersEnabledState',
-      'reloadCookies',
-      'removeCookie',
       'removeProtocolHandler',
       'removeUsbDevice',
       'removeZoomLevel',
@@ -100,9 +100,6 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
 
     /** @private {!Array<!ProtocolEntry>} */
     this.protocolHandlers_ = [];
-
-    /** @private {?CookieList} */
-    this.cookieDetails_ = null;
 
     /** @private {boolean} */
     this.isOriginValid_ = true;
@@ -215,19 +212,6 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
   }
 
   /** @override */
-  getCookieDetails(site) {
-    this.methodCalled('getCookieDetails', site);
-    return Promise.resolve(this.cookieDetails_  || {id: '', children: []});
-  }
-
-  /**
-   * @param {!CookieList} cookieList
-   */
-  setCookieDetails(cookieList) {
-    this.cookieDetails_ = cookieList;
-  }
-
-  /** @override */
   getDefaultValueForContentType(contentType) {
     this.methodCalled('getDefaultValueForContentType', contentType);
 
@@ -266,6 +250,8 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
     } else if (
         contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS) {
       pref = this.prefs_.defaults.unsandboxed_plugins;
+    } else if (contentType == settings.ContentSettingsTypes.PROTECTED_CONTENT) {
+      pref = this.prefs_.defaults.protectedContent;
     } else {
       console.log('getDefault received unknown category: ' + contentType);
     }
@@ -427,16 +413,6 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
   fetchZoomLevels() {
     cr.webUIListenerCallback('onZoomLevelsChanged', this.zoomList_);
     this.methodCalled('fetchZoomLevels');
-  }
-
-  /** @override */
-  reloadCookies() {
-    return Promise.resolve({id: null, children: []});
-  }
-
-  /** @override */
-  removeCookie(path) {
-    this.methodCalled('removeCookie', path);
   }
 
   /** @override */

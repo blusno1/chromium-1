@@ -23,8 +23,6 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/set_time_dialog.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
-#include "chrome/browser/chromeos/ui/choose_mobile_network_dialog.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
@@ -40,6 +38,10 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/tether_constants.h"
+#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
+#include "components/arc/common/net.mojom.h"
+#include "components/arc/instance_holder.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/common/service_manager_connection.h"
@@ -373,9 +375,13 @@ void SystemTrayClient::ShowNetworkConfigure(const std::string& network_id) {
 }
 
 void SystemTrayClient::ShowNetworkCreate(const std::string& type) {
-  int container_id = GetDialogParentContainerId();
   if (type == shill::kTypeCellular) {
-    chromeos::ChooseMobileNetworkDialog::ShowDialogInContainer(container_id);
+    const chromeos::NetworkState* cellular =
+        chromeos::NetworkHandler::Get()
+            ->network_state_handler()
+            ->FirstNetworkByType(chromeos::NetworkTypePattern::Primitive(type));
+    std::string network_id = cellular ? cellular->guid() : "";
+    ShowNetworkSettingsHelper(network_id, false /* show_configure */);
     return;
   }
   chromeos::NetworkConfigView::ShowForType(type);
@@ -408,9 +414,30 @@ void SystemTrayClient::ShowNetworkSettingsHelper(const std::string& network_id,
     return;
   if (!LoginState::Get()->IsUserLoggedIn()) {
     DCHECK(!network_id.empty());
-    chromeos::LoginDisplayHost::default_host()->OpenProxySettings(network_id);
+    chromeos::LoginDisplayHost::default_host()->OpenInternetDetailDialog(
+        network_id);
     return;
   }
+
+  // Special case: clicking on a connected ARCVPN will ask Android to
+  // show the settings dialog.
+  const chromeos::NetworkState* network_state =
+      chromeos::NetworkHandler::Get()
+          ->network_state_handler()
+          ->GetNetworkStateFromGuid(network_id);
+  if (network_state && network_state->type() == shill::kTypeVPN &&
+      network_state->vpn_provider_type() == shill::kProviderArcVpn) {
+    auto* net_instance = ARC_GET_INSTANCE_FOR_METHOD(
+        arc::ArcServiceManager::Get()->arc_bridge_service()->net(),
+        ConfigureAndroidVpn);
+    if (!net_instance) {
+      LOG(ERROR) << "User requested VPN configuration but API is unavailable";
+      return;
+    }
+    net_instance->ConfigureAndroidVpn();
+    return;
+  }
+
   std::string page = chrome::kInternetSubPage;
   if (!network_id.empty()) {
     page = chrome::kNetworkDetailSubPage;
@@ -421,18 +448,6 @@ void SystemTrayClient::ShowNetworkSettingsHelper(const std::string& network_id,
   }
   base::RecordAction(base::UserMetricsAction("OpenInternetOptionsDialog"));
   ShowSettingsSubPageForActiveUser(page);
-}
-
-void SystemTrayClient::ShowProxySettings() {
-  LoginState* login_state = LoginState::Get();
-  // User is not logged in.
-  CHECK(!login_state->IsUserLoggedIn() ||
-        login_state->GetLoggedInUserType() == LoginState::LOGGED_IN_USER_NONE);
-  chromeos::LoginDisplayHost::default_host()->OpenProxySettings("");
-}
-
-void SystemTrayClient::SignOut() {
-  chrome::AttemptUserExit();
 }
 
 void SystemTrayClient::RequestRestartForUpdate() {

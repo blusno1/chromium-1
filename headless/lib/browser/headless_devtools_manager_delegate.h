@@ -39,9 +39,11 @@ class HeadlessDevToolsManagerDelegate
   ~HeadlessDevToolsManagerDelegate() override;
 
   // DevToolsManagerDelegate implementation:
-  base::DictionaryValue* HandleCommand(content::DevToolsAgentHost* agent_host,
-                                       base::DictionaryValue* command) override;
+  bool HandleCommand(content::DevToolsAgentHost* agent_host,
+                     int session_id,
+                     base::DictionaryValue* command) override;
   bool HandleAsyncCommand(content::DevToolsAgentHost* agent_host,
+                          int session_id,
                           base::DictionaryValue* command,
                           const CommandCallback& callback) override;
   scoped_refptr<content::DevToolsAgentHost> CreateNewTarget(

@@ -7,6 +7,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
 #include "base/stl_util.h"
+#include "build/build_config.h"
 #include "crypto/openssl_util.h"
 #include "net/base/ip_address.h"
 #include "net/cert/asn1_util.h"
@@ -39,7 +40,31 @@ bool GeneralizedTimeToBaseTime(const der::GeneralizedTime& generalized,
   exploded.hour = generalized.hours;
   exploded.minute = generalized.minutes;
   exploded.second = generalized.seconds;
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
+  if (base::Time::FromUTCExploded(exploded, result))
+    return true;
+
+  if (sizeof(time_t) == 4) {
+    // Fail on obviously bad dates before trying the 32-bit hacks.
+    if (!exploded.HasValidValues())
+      return false;
+
+    // Hack to handle dates that can't be converted on 32-bit systems.
+    // TODO(mattm): consider consolidating this with
+    // SaturatedTimeFromUTCExploded from cookie_util.cc
+    if (generalized.year >= 2038) {
+      *result = base::Time::Max();
+      return true;
+    }
+    if (generalized.year < 1970) {
+      *result = base::Time::Min();
+      return true;
+    }
+  }
+  return false;
+#else
   return base::Time::FromUTCExploded(exploded, result);
+#endif
 }
 
 // Sets |value| to the Value from a DER Sequence Tag-Length-Value and return
@@ -178,8 +203,10 @@ bool X509Certificate::GetSubjectAltName(
   if (!subject_alt_names)
     return false;
 
-  if (dns_names)
-    *dns_names = subject_alt_names->dns_names;
+  if (dns_names) {
+    for (const auto& dns_name : subject_alt_names->dns_names)
+      dns_names->push_back(dns_name.as_string());
+  }
   if (ip_addrs) {
     for (const IPAddress& addr : subject_alt_names->ip_addresses) {
       ip_addrs->push_back(
@@ -427,9 +454,9 @@ X509Certificate::OSCertHandle X509Certificate::ReadOSCertHandleFromPickle(
 }
 
 // static
-bool X509Certificate::WriteOSCertHandleToPickle(OSCertHandle cert_handle,
+void X509Certificate::WriteOSCertHandleToPickle(OSCertHandle cert_handle,
                                                 base::Pickle* pickle) {
-  return pickle->WriteData(
+  pickle->WriteData(
       reinterpret_cast<const char*>(CRYPTO_BUFFER_data(cert_handle)),
       CRYPTO_BUFFER_len(cert_handle));
 }

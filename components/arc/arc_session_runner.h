@@ -9,6 +9,8 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -65,15 +67,6 @@ class ArcSessionRunner : public ArcSession::Observer,
   // when this function is called, MessageLoop is no longer exists.
   void OnShutdown();
 
-  // Returns whether currently ARC instance is running or stopped respectively.
-  // Note that, both can return false at same time when, e.g., starting
-  // or stopping ARC instance.
-  bool IsRunning() const;
-  bool IsStopped() const;
-
-  // Returns whether LoginScreen instance is starting.
-  bool IsLoginScreenInstanceStarting() const;
-
   // Returns the current ArcSession instance for testing purpose.
   ArcSession* GetArcSessionForTesting() { return arc_session_.get(); }
 
@@ -83,43 +76,6 @@ class ArcSessionRunner : public ArcSession::Observer,
   void SetRestartDelayForTesting(const base::TimeDelta& restart_delay);
 
  private:
-  // The possible states.  In the normal flow, the state changes in the
-  // following sequence:
-  //
-  // STOPPED
-  //   RequestStart() ->
-  // STARTING
-  //   OnSessionReady() ->
-  // RUNNING
-  //
-  // The ArcSession state machine can be thought of being substates of
-  // ArcBridgeService's STARTING state.
-  // ArcBridgeService's state machine can be stopped at any phase.
-  //
-  // *
-  //   RequestStop() ->
-  // STOPPING
-  //   OnSessionStopped() ->
-  // STOPPED
-  enum class State {
-    // ARC instance is not currently running.
-    STOPPED,
-
-    // Request to start ARC instance for login screen is received. Starting an
-    // ARC instance.
-    STARTING_FOR_LOGIN_SCREEN,
-
-    // Request to start ARC instance is received. Starting an ARC instance.
-    STARTING,
-
-    // ARC instance has finished initializing, and is now ready for interaction
-    // with other services.
-    RUNNING,
-
-    // Request to stop ARC instance is recieved. Stopping the ARC instance.
-    STOPPING,
-  };
-
   // Starts to run an ARC instance.
   void StartArcSession();
 
@@ -127,8 +83,7 @@ class ArcSessionRunner : public ArcSession::Observer,
   void RestartArcSession();
 
   // ArcSession::Observer:
-  void OnSessionReady() override;
-  void OnSessionStopped(ArcStopReason reason) override;
+  void OnSessionStopped(ArcStopReason reason, bool was_running) override;
 
   // chromeos::SessionManagerClient::Observer:
   void EmitLoginPromptVisibleCalled() override;
@@ -148,9 +103,6 @@ class ArcSessionRunner : public ArcSession::Observer,
 
   // Factory to inject a fake ArcSession instance for testing.
   ArcSessionFactory factory_;
-
-  // Current runner's state.
-  State state_ = State::STOPPED;
 
   // ArcSession object for currently running ARC instance. This should be
   // nullptr if the state is STOPPED, otherwise non-nullptr.

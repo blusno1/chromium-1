@@ -30,7 +30,7 @@
 
 #include "public/platform/WebRuntimeFeatures.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/Assertions.h"
 
 namespace blink {
@@ -68,6 +68,10 @@ void WebRuntimeFeatures::EnableOriginTrialControlledFeatures(bool enable) {
   RuntimeEnabledFeatures::SetOriginTrialControlledFeaturesEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableOriginManifest(bool enable) {
+  RuntimeEnabledFeatures::SetOriginManifestEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableOutOfBlinkCORS(bool enable) {
   RuntimeEnabledFeatures::SetOutOfBlinkCORSEnabled(enable);
 }
@@ -76,16 +80,16 @@ void WebRuntimeFeatures::EnableAccelerated2dCanvas(bool enable) {
   RuntimeEnabledFeatures::SetAccelerated2dCanvasEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableAllowActivationDelegationAttr(bool enable) {
+  RuntimeEnabledFeatures::SetAllowActivationDelegationAttrEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableAudioOutputDevices(bool enable) {
   RuntimeEnabledFeatures::SetAudioOutputDevicesEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableCanvas2dImageChromium(bool enable) {
   RuntimeEnabledFeatures::SetCanvas2dImageChromiumEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableColorCorrectRendering(bool enable) {
-  RuntimeEnabledFeatures::SetColorCorrectRenderingEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableCompositedSelectionUpdate(bool enable) {
@@ -98,6 +102,10 @@ bool WebRuntimeFeatures::IsCompositedSelectionUpdateEnabled() {
 
 void WebRuntimeFeatures::EnableCompositorTouchAction(bool enable) {
   RuntimeEnabledFeatures::SetCompositorTouchActionEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableCompositorImageAnimations(bool enable) {
+  RuntimeEnabledFeatures::SetCompositorImageAnimationsEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableCSSHexAlphaColor(bool enable) {
@@ -180,6 +188,10 @@ void WebRuntimeFeatures::EnableMediaSession(bool enable) {
   RuntimeEnabledFeatures::SetMediaSessionEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableModernMediaControls(bool enable) {
+  RuntimeEnabledFeatures::SetModernMediaControlsEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableModuleScripts(bool enable) {
   RuntimeEnabledFeatures::SetModuleScriptsEnabled(enable);
 }
@@ -234,6 +246,10 @@ void WebRuntimeFeatures::EnableOriginTrials(bool enable) {
 
 bool WebRuntimeFeatures::IsOriginTrialsEnabled() {
   return RuntimeEnabledFeatures::OriginTrialsEnabled();
+}
+
+void WebRuntimeFeatures::EnableOverflowIconsForMediaControls(bool enable) {
+  RuntimeEnabledFeatures::SetOverflowIconsForMediaControlsEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnablePagePopup(bool enable) {
@@ -464,6 +480,14 @@ void WebRuntimeFeatures::EnableMediaEngagementBypassAutoplayPolicies(
     bool enable) {
   RuntimeEnabledFeatures::SetMediaEngagementBypassAutoplayPoliciesEnabled(
       enable);
+}
+
+void WebRuntimeFeatures::EnableV8ContextSnapshot(bool enable) {
+  RuntimeEnabledFeatures::SetV8ContextSnapshotEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableAutomationControlled(bool enable) {
+  RuntimeEnabledFeatures::SetAutomationControlledEnabled(enable);
 }
 
 }  // namespace blink

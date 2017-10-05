@@ -8,6 +8,7 @@
 #include <string>
 
 #include "ash/login_status.h"
+#include "ash/public/cpp/session_types.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "base/logging.h"
@@ -81,6 +82,12 @@ void TestSessionControllerClient::SetShouldLockScreenAutomatically(
   controller_->SetSessionInfo(session_info_->Clone());
 }
 
+void TestSessionControllerClient::SetAddUserSessionPolicy(
+    AddUserSessionPolicy policy) {
+  session_info_->add_user_session_policy = policy;
+  controller_->SetSessionInfo(session_info_->Clone());
+}
+
 void TestSessionControllerClient::SetSessionState(
     session_manager::SessionState state) {
   session_info_->state = state;
@@ -140,6 +147,10 @@ void TestSessionControllerClient::UnlockScreen() {
 
 void TestSessionControllerClient::RequestLockScreen() {
   SetSessionState(session_manager::SessionState::LOCKED);
+}
+
+void TestSessionControllerClient::RequestSignOut() {
+  Reset();
 }
 
 void TestSessionControllerClient::SwitchActiveUser(

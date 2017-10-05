@@ -218,7 +218,6 @@ NetworkQualityEstimator::NetworkQualityEstimator(
     NetLog* net_log)
     : params_(std::move(params)),
       use_localhost_requests_(false),
-      use_small_responses_(false),
       disable_offline_check_(false),
       add_default_platform_observations_(true),
       tick_clock_(new base::DefaultTickClock()),
@@ -677,8 +676,7 @@ void NetworkQualityEstimator::SetUseLocalHostRequestsForTesting(
 void NetworkQualityEstimator::SetUseSmallResponsesForTesting(
     bool use_small_responses) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  use_small_responses_ = use_small_responses;
-  throughput_analyzer_->SetUseSmallResponsesForTesting(use_small_responses_);
+  params_->SetUseSmallResponsesForTesting(use_small_responses);
 }
 
 void NetworkQualityEstimator::DisableOfflineCheckForTesting(
@@ -760,6 +758,9 @@ void NetworkQualityEstimator::OnConnectionTypeChanged(
   last_connection_change_ = tick_clock_->NowTicks();
   downstream_throughput_kbps_observations_.Clear();
   rtt_ms_observations_.Clear();
+
+  if (external_estimate_provider_)
+    external_estimate_provider_->ClearCachedEstimate();
 
 #if defined(OS_ANDROID)
   if (params_->weight_multiplier_per_signal_strength_level() < 1.0 &&

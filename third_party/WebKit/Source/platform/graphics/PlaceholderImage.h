@@ -9,7 +9,7 @@
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageOrientation.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -24,9 +24,9 @@ class ImageObserver;
 // A generated placeholder image that shows a translucent gray rectangle.
 class PLATFORM_EXPORT PlaceholderImage final : public Image {
  public:
-  static PassRefPtr<PlaceholderImage> Create(ImageObserver* observer,
-                                             const IntSize& size) {
-    return AdoptRef(new PlaceholderImage(observer, size));
+  static RefPtr<PlaceholderImage> Create(ImageObserver* observer,
+                                         const IntSize& size) {
+    return WTF::AdoptRef(new PlaceholderImage(observer, size));
   }
 
   ~PlaceholderImage() override;

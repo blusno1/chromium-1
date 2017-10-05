@@ -175,7 +175,6 @@ class TaggingDecrypter : public QuicDecrypter {
 
   QuicStringPiece GetKey() const override { return QuicStringPiece(); }
   QuicStringPiece GetNoncePrefix() const override { return QuicStringPiece(); }
-  const char* cipher_name() const override { return "Tagging"; }
   // Use a distinct value starting with 0xFFFFFF, which is never used by TLS.
   uint32_t cipher_id() const override { return 0xFFFFFFF0; }
 
@@ -210,7 +209,6 @@ class StrictTaggingDecrypter : public TaggingDecrypter {
   // TaggingQuicDecrypter
   uint8_t GetTag(QuicStringPiece ciphertext) override { return tag_; }
 
-  const char* cipher_name() const override { return "StrictTagging"; }
   // Use a distinct value starting with 0xFFFFFF, which is never used by TLS.
   uint32_t cipher_id() const override { return 0xFFFFFFF1; }
 
@@ -740,8 +738,6 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
         .WillRepeatedly(Return(kDefaultTCPMSS));
     EXPECT_CALL(*send_algorithm_, PacingRate(_))
         .WillRepeatedly(Return(QuicBandwidth::Zero()));
-    ON_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-        .WillByDefault(Return(true));
     EXPECT_CALL(*send_algorithm_, HasReliableBandwidthEstimate())
         .Times(AnyNumber());
     EXPECT_CALL(*send_algorithm_, BandwidthEstimate())
@@ -903,7 +899,7 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
                                      QuicPacketNumber* last_packet) {
     QuicByteCount packet_size;
     EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-        .WillOnce(DoAll(SaveArg<3>(&packet_size), Return(true)));
+        .WillOnce(SaveArg<3>(&packet_size));
     connection_.SendStreamDataWithString(id, data, offset, state, nullptr);
     if (last_packet != nullptr) {
       *last_packet = creator_->packet_number();
@@ -1040,7 +1036,12 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
                                              ConnectionCloseSource::FROM_SELF));
     // Call ProcessDataPacket rather than ProcessPacket, as we should not get a
     // packet call to the visitor.
-    ProcessDataPacket(6000);
+    if (FLAGS_quic_restart_flag_quic_enable_accept_random_ipn) {
+      ProcessDataPacket(kMaxRandomInitialPacketNumber + 6000);
+    } else {
+      ProcessDataPacket(6000);
+    }
+
     EXPECT_FALSE(QuicConnectionPeer::GetConnectionClosePacket(&connection_) ==
                  nullptr);
   }
@@ -1233,7 +1234,6 @@ TEST_P(QuicConnectionTest, PeerAddressChangeAtServer) {
 }
 
 TEST_P(QuicConnectionTest, PeerAddressChangeAtClient) {
-  FLAGS_quic_reloadable_flag_quic_disable_peer_migration_on_client = true;
   EXPECT_CALL(visitor_, OnSuccessfulVersionNegotiation(_));
   set_perspective(Perspective::IS_CLIENT);
   EXPECT_EQ(Perspective::IS_CLIENT, connection_.perspective());
@@ -1443,9 +1443,14 @@ TEST_P(QuicConnectionTest, PacketsOutOfOrderWithAdditionsAndLeastAwaiting) {
 TEST_P(QuicConnectionTest, RejectPacketTooFarOut) {
   EXPECT_CALL(visitor_, OnConnectionClosed(QUIC_INVALID_PACKET_HEADER, _,
                                            ConnectionCloseSource::FROM_SELF));
+
   // Call ProcessDataPacket rather than ProcessPacket, as we should not get a
   // packet call to the visitor.
-  ProcessDataPacket(6000);
+  if (FLAGS_quic_restart_flag_quic_enable_accept_random_ipn) {
+    ProcessDataPacket(kMaxRandomInitialPacketNumber + 6000);
+  } else {
+    ProcessDataPacket(6000);
+  }
   EXPECT_FALSE(QuicConnectionPeer::GetConnectionClosePacket(&connection_) ==
                nullptr);
 }
@@ -1510,8 +1515,7 @@ TEST_P(QuicConnectionTest, AckReceiptCausesAckSend) {
   QuicPacketNumber original;
   QuicByteCount packet_size;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(
-          DoAll(SaveArg<2>(&original), SaveArg<3>(&packet_size), Return(true)));
+      .WillOnce(DoAll(SaveArg<2>(&original), SaveArg<3>(&packet_size)));
   connection_.SendStreamDataWithString(3, "foo", 0, NO_FIN, nullptr);
   QuicAckFrame frame = ConstructAckFrame(original, original);
   // First nack triggers early retransmit.
@@ -1523,7 +1527,7 @@ TEST_P(QuicConnectionTest, AckReceiptCausesAckSend) {
   QuicPacketNumber retransmission;
   EXPECT_CALL(*send_algorithm_,
               OnPacketSent(_, _, _, packet_size - kQuicVersionSize, _))
-      .WillOnce(DoAll(SaveArg<2>(&retransmission), Return(true)));
+      .WillOnce(SaveArg<2>(&retransmission));
 
   ProcessAckPacket(&frame);
 
@@ -1831,7 +1835,7 @@ TEST_P(QuicConnectionTest, RecordSentTimeBeforePacketSent) {
   // the send_algorithm.  Make sure that it is set to the correct value.
   QuicTime actual_recorded_send_time = QuicTime::Zero();
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<0>(&actual_recorded_send_time), Return(true)));
+      .WillOnce(SaveArg<0>(&actual_recorded_send_time));
 
   // First send without any pause and check the result.
   QuicTime expected_recorded_send_time = clock_.Now();
@@ -1848,7 +1852,7 @@ TEST_P(QuicConnectionTest, RecordSentTimeBeforePacketSent) {
   expected_recorded_send_time = clock_.Now();
 
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<0>(&actual_recorded_send_time), Return(true)));
+      .WillOnce(SaveArg<0>(&actual_recorded_send_time));
   connection_.SendStreamDataWithString(2, "baz", 0, NO_FIN, nullptr);
   EXPECT_EQ(expected_recorded_send_time, actual_recorded_send_time)
       << "Expected time = " << expected_recorded_send_time.ToDebuggingValue()
@@ -2363,8 +2367,7 @@ TEST_P(QuicConnectionTest, RetransmitNackedLargestObserved) {
   QuicPacketNumber largest_observed;
   QuicByteCount packet_size;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<2>(&largest_observed), SaveArg<3>(&packet_size),
-                      Return(true)));
+      .WillOnce(DoAll(SaveArg<2>(&largest_observed), SaveArg<3>(&packet_size)));
   connection_.SendStreamDataWithString(3, "foo", 0, NO_FIN, nullptr);
 
   QuicAckFrame frame = ConstructAckFrame(1, largest_observed);
@@ -2534,8 +2537,6 @@ TEST_P(QuicConnectionTest, MultipleAcks) {
 TEST_P(QuicConnectionTest, DontLatchUnackedPacket) {
   SendStreamDataToPeer(1, "foo", 0, NO_FIN, nullptr);  // Packet 1;
   // From now on, we send acks, so the send algorithm won't mark them pending.
-  ON_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillByDefault(Return(false));
   SendAckPacketToPeer();  // Packet 2
 
   EXPECT_CALL(visitor_, OnSuccessfulVersionNegotiation(_));
@@ -2572,12 +2573,8 @@ TEST_P(QuicConnectionTest, DontLatchUnackedPacket) {
   frame = InitAckFrame(3);
   ProcessAckPacket(&frame);
 
-  ON_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillByDefault(Return(true));
   SendStreamDataToPeer(1, "bar", 3, NO_FIN, nullptr);  // Packet 4
   EXPECT_EQ(4u, stop_waiting()->least_unacked);
-  ON_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillByDefault(Return(false));
   SendAckPacketToPeer();  // Packet 5
   if (GetParam().no_stop_waiting) {
     // Expect no stop waiting frame is sent.
@@ -2588,8 +2585,6 @@ TEST_P(QuicConnectionTest, DontLatchUnackedPacket) {
 
   // Send two data packets at the end, and ensure if the last one is acked,
   // the least unacked is raised above the ack packets.
-  ON_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillByDefault(Return(true));
   SendStreamDataToPeer(1, "bar", 6, NO_FIN, nullptr);  // Packet 6
   SendStreamDataToPeer(1, "bar", 9, NO_FIN, nullptr);  // Packet 7
 
@@ -2807,12 +2802,12 @@ TEST_P(QuicConnectionTest, TestRetransmitOrder) {
 
   QuicByteCount first_packet_size;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<3>(&first_packet_size), Return(true)));
+      .WillOnce(SaveArg<3>(&first_packet_size));
 
   connection_.SendStreamDataWithString(3, "first_packet", 0, NO_FIN, nullptr);
   QuicByteCount second_packet_size;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<3>(&second_packet_size), Return(true)));
+      .WillOnce(SaveArg<3>(&second_packet_size));
   connection_.SendStreamDataWithString(3, "second_packet", 12, NO_FIN, nullptr);
   EXPECT_NE(first_packet_size, second_packet_size);
   // Advance the clock by huge time to make sure packets will be retransmitted.
@@ -3074,7 +3069,7 @@ TEST_P(QuicConnectionTest, SendMtuDiscoveryPacket) {
   const size_t new_mtu = kDefaultMaxPacketSize + 100;
   QuicByteCount mtu_probe_size;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<3>(&mtu_probe_size), Return(true)));
+      .WillOnce(SaveArg<3>(&mtu_probe_size));
   connection_.SendMtuDiscoveryPacket(new_mtu);
   EXPECT_EQ(new_mtu, mtu_probe_size);
   EXPECT_EQ(1u, creator_->packet_number());
@@ -3084,8 +3079,8 @@ TEST_P(QuicConnectionTest, SendMtuDiscoveryPacket) {
   const string data(kDefaultMaxPacketSize + 1, '.');
   QuicByteCount size_before_mtu_change;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<3>(&size_before_mtu_change), Return(true)))
-      .WillOnce(Return(true));
+      .Times(2)
+      .WillOnce(SaveArg<3>(&size_before_mtu_change));
   connection_.SendStreamDataWithString(3, data, 0, FIN, nullptr);
   EXPECT_EQ(3u, creator_->packet_number());
   EXPECT_EQ(kDefaultMaxPacketSize, size_before_mtu_change);
@@ -3134,7 +3129,7 @@ TEST_P(QuicConnectionTest, MtuDiscoveryEnabled) {
   ASSERT_TRUE(connection_.GetMtuDiscoveryAlarm()->IsSet());
   QuicByteCount probe_size;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<3>(&probe_size), Return(true)));
+      .WillOnce(SaveArg<3>(&probe_size));
   connection_.GetMtuDiscoveryAlarm()->Fire();
   EXPECT_EQ(kMtuDiscoveryTargetPacketSizeHigh, probe_size);
 
@@ -3220,8 +3215,7 @@ TEST_P(QuicConnectionTest, MtuDiscoveryFailed) {
     }
 
     // Fire the alarm.  The alarm should cause a packet to be sent.
-    EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-        .WillOnce(Return(true));
+    EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _));
     connection_.GetMtuDiscoveryAlarm()->Fire();
     // Record the packet number of the MTU discovery packet in order to
     // mark it as NACK'd.
@@ -3263,7 +3257,7 @@ TEST_P(QuicConnectionTest, MtuDiscoveryWriterLimited) {
   ASSERT_TRUE(connection_.GetMtuDiscoveryAlarm()->IsSet());
   QuicByteCount probe_size;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<3>(&probe_size), Return(true)));
+      .WillOnce(SaveArg<3>(&probe_size));
   connection_.GetMtuDiscoveryAlarm()->Fire();
   EXPECT_EQ(mtu_limit, probe_size);
 
@@ -5211,7 +5205,7 @@ TEST_P(QuicConnectionTest, OnPathDegrading) {
   const size_t kMinTimeoutsBeforePathDegrading = 2;
 
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-      .WillOnce(DoAll(SaveArg<3>(&packet_size), Return(true)));
+      .WillOnce(SaveArg<3>(&packet_size));
   connection_.SendStreamDataWithString(3, "packet", 0, NO_FIN, nullptr);
   size_t num_timeouts =
       kMinTimeoutsBeforePathDegrading +
@@ -5308,8 +5302,7 @@ TEST_P(QuicConnectionTest, SendDataAndBecomeApplicationLimited) {
   {
     InSequence seq;
     EXPECT_CALL(visitor_, WillingAndAbleToWrite()).WillRepeatedly(Return(true));
-    EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-        .WillOnce(Return(true));
+    EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _));
     EXPECT_CALL(visitor_, WillingAndAbleToWrite())
         .WillRepeatedly(Return(false));
   }
@@ -5323,8 +5316,7 @@ TEST_P(QuicConnectionTest, NotBecomeApplicationLimitedIfMoreDataAvailable) {
   EXPECT_CALL(*send_algorithm_, OnApplicationLimited(_)).Times(0);
   {
     InSequence seq;
-    EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-        .WillOnce(Return(true));
+    EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _));
     EXPECT_CALL(visitor_, WillingAndAbleToWrite()).WillRepeatedly(Return(true));
   }
 
@@ -5371,7 +5363,6 @@ TEST_P(QuicConnectionTest, CloseConnectionForStatelessReject) {
 
 // Regression test for b/63620844.
 TEST_P(QuicConnectionTest, FailedToWriteHandshakePacket) {
-  FLAGS_quic_reloadable_flag_quic_clear_packet_before_handed_over = true;
   SimulateNextPacketTooLarge();
   EXPECT_CALL(visitor_, OnConnectionClosed(QUIC_PACKET_WRITE_ERROR, _,
                                            ConnectionCloseSource::FROM_SELF))

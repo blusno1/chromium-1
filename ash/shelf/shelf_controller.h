@@ -39,6 +39,10 @@ class ShelfController : public mojom::ShelfController,
 
   ShelfModel* model() { return &model_; }
 
+  bool should_synchronize_shelf_models() const {
+    return should_synchronize_shelf_models_;
+  }
+
   // mojom::ShelfController:
   void AddObserver(mojom::ShelfObserverAssociatedPtrInfo observer) override;
   void AddShelfItem(int32_t index, const ShelfItem& item) override;
@@ -77,6 +81,9 @@ class ShelfController : public mojom::ShelfController,
 
   // Bindings for the ShelfController interface.
   mojo::BindingSet<mojom::ShelfController> bindings_;
+
+  // True if Ash and Chrome should synchronize separate ShelfModel instances.
+  bool should_synchronize_shelf_models_ = false;
 
   // True when applying changes from the remote ShelfModel owned by Chrome.
   // Changes to the local ShelfModel should not be reported during this time.

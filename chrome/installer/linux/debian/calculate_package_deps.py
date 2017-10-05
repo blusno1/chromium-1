@@ -7,6 +7,7 @@
 are satisfiable on all supported debian-based distros.
 """
 
+import argparse
 import json
 import os
 import re
@@ -16,13 +17,19 @@ import sys
 import deb_version
 import package_version_interval
 
-if len(sys.argv) != 5:
-  print 'Usage: %s binary_path sysroot_path arch dep_file' % sys.argv[0]
-  sys.exit(1)
-binary = os.path.abspath(sys.argv[1])
-sysroot = os.path.abspath(sys.argv[2])
-arch = sys.argv[3]
-dep_filename = sys.argv[4]
+parser = argparse.ArgumentParser()
+parser.add_argument('binary')
+parser.add_argument('sysroot')
+parser.add_argument('arch')
+parser.add_argument('dep_filename')
+parser.add_argument('--distro-check', action='store_true')
+args = parser.parse_args()
+
+binary = os.path.abspath(args.binary)
+sysroot = os.path.abspath(args.sysroot)
+arch = args.arch
+dep_filename = os.path.abspath(args.dep_filename)
+distro_check = args.distro_check
 
 cmd = ['dpkg-shlibdeps']
 if arch == 'x64':
@@ -34,6 +41,9 @@ elif arch == 'x86':
 elif arch == 'arm':
   cmd.extend(['-l%s/usr/lib/arm-linux-gnueabihf' % sysroot,
               '-l%s/lib/arm-linux-gnueabihf' % sysroot])
+elif arch == 'mipsel':
+  cmd.extend(['-l%s/usr/lib/mipsel-linux-gnu' % sysroot,
+              '-l%s/lib/mipsel-linux-gnu' % sysroot])
 else:
   print 'Unsupported architecture ' + arch
   sys.exit(1)
@@ -50,33 +60,37 @@ if exit_code != 0:
 
 deps_str = stdout.replace('shlibs:Depends=', '').replace('\n', '')
 deps = deps_str.split(', ')
-package_intervals = {}
+interval_sets = []
 if deps_str != '':
   for dep in deps:
-    (package, interval) = package_version_interval.parse_dep(dep)
-    package_intervals[package] = interval
+    interval_sets.append(package_version_interval.parse_interval_set(dep))
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-deps_file = os.path.join(script_dir, 'dist-package-versions.json')
+deps_file = os.path.join(script_dir, 'dist_package_versions.json')
 distro_package_versions = json.load(open(deps_file))
 
 ret_code = 0
-for distro in distro_package_versions:
-  for package in package_intervals:
-    if package not in distro_package_versions[distro]:
-      print >> sys.stderr, (
-          'Unexpected new dependency %s on distro %s caused by binary %s' % (
-              package, distro, os.path.basename(binary)))
-      ret_code = 1
-      continue
-    distro_version = deb_version.DebVersion(
-        distro_package_versions[distro][package])
-    if not package_intervals[package].contains(distro_version):
-      print >> sys.stderr, 'Dependency on package %s not satisfiable on %s' % (
-          package, distro)
-      ret_code = 1
+if distro_check:
+  for distro in distro_package_versions:
+    for interval_set in interval_sets:
+      dep_satisfiable = False
+      for interval in interval_set.intervals:
+        package = interval.package
+        if package not in distro_package_versions[distro]:
+          continue
+        distro_version = deb_version.DebVersion(
+            distro_package_versions[distro][package])
+        if interval.contains(distro_version):
+          dep_satisfiable = True
+          break
+      if not dep_satisfiable:
+        print >> sys.stderr, (
+            'Dependency %s not satisfiable on distro %s caused by binary %s' % (
+                interval_set.formatted(), distro, os.path.basename(binary)))
+        ret_code = 1
 if ret_code == 0:
   with open(dep_filename, 'w') as dep_file:
-    dep_file.write(package_version_interval.format_package_intervals(
-        package_intervals))
+    lines = [interval_set.formatted() + '\n'
+           for interval_set in interval_sets]
+    dep_file.write(''.join(sorted(lines)))
 sys.exit(ret_code)

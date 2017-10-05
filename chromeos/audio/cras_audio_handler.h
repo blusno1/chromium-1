@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <queue>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -78,6 +79,9 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
 
     // Called when output channel remixing changed.
     virtual void OnOuputChannelRemixingChanged(bool mono_on);
+
+    // Called when hotword is detected.
+    virtual void OnHotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec);
 
    protected:
     AudioObserver();
@@ -294,6 +298,7 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
   void ActiveOutputNodeChanged(uint64_t node_id) override;
   void ActiveInputNodeChanged(uint64_t node_id) override;
   void OutputNodeVolumeChanged(uint64_t node_id, int volume) override;
+  void HotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec) override;
 
   // AudioPrefObserver overrides.
   void OnAudioPolicyPrefChanged() override;
@@ -521,7 +526,8 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
   // SetOutputVolumePercentWithoutNotifyingObservers() for which we're still
   // waiting for OutputNodeVolumeChanged() calls. These are used to suppress
   // notifications for those changes.
-  std::deque<AutomatedVolumeChangeReason> automated_volume_change_reasons_;
+  base::circular_deque<AutomatedVolumeChangeReason>
+      automated_volume_change_reasons_;
 
   bool initializing_audio_state_ = false;
   int init_volume_;

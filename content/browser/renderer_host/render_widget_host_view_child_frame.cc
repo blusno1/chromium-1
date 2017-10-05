@@ -14,8 +14,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -45,6 +45,7 @@
 #include "ui/touch_selection/touch_selection_controller.h"
 
 #if defined(USE_AURA)
+#include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/env.h"
 #endif
 
@@ -80,7 +81,7 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       current_surface_scale_factor_(1.f),
       frame_connector_(nullptr),
       background_color_(SK_ColorWHITE),
-      destroy_was_called_(false),
+      scroll_bubbling_state_(NO_ACTIVE_GESTURE_SCROLL),
       weak_factory_(this) {
   if (!IsUsingMus()) {
     GetHostFrameSinkManager()->RegisterFrameSinkId(frame_sink_id_, this);
@@ -93,14 +94,6 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
 }
 
 RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
-  // This is diagnostic code to capture a stacktrace in the case where this
-  // class is destructed without calling Destroy(). This code will be removed
-  // once a representative sample of stack traces are collected (or we determine
-  // that this isn't actually happening).
-  // https://crbug.com/762511 .
-  if (!destroy_was_called_)
-    base::debug::DumpWithoutCrashing();
-
   // TODO(wjmaclean): The next two lines are a speculative fix for
   // https://crbug.com/760074, based on the theory that perhaps something is
   // destructing the class without calling Destroy() first.
@@ -130,6 +123,11 @@ void RenderWidgetHostViewChildFrame::
     auto* manager = root_view->GetTouchSelectionControllerClientManager();
     if (manager)
       manager->RemoveObserver(this);
+  } else {
+    // We should never get here, but maybe we are? Test this out with a
+    // diagnostic we can track. If we do get here, it would explain
+    // https://crbug.com/760074.
+    base::debug::DumpWithoutCrashing();
   }
 
   selection_controller_client_.reset();
@@ -149,33 +147,42 @@ void RenderWidgetHostViewChildFrame::SetFrameConnectorDelegate(
     DetachFromTouchSelectionClientManagerIfNecessary();
   }
   frame_connector_ = frame_connector;
-  if (frame_connector_) {
-    RenderWidgetHostViewBase* parent_view =
-        frame_connector_->GetParentRenderWidgetHostView();
-    if (parent_view) {
-      DCHECK(parent_view->GetFrameSinkId().is_valid());
-      SetParentFrameSinkId(parent_view->GetFrameSinkId());
-    }
+  if (!frame_connector_)
+    return;
 
-    auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
-    if (root_view) {
-      // Make sure we're not using the zero-valued default for
-      // current_device_scale_factor_.
-      current_device_scale_factor_ = root_view->current_device_scale_factor();
-      if (current_device_scale_factor_ == 0.f)
-        current_device_scale_factor_ = 1.f;
+  RenderWidgetHostViewBase* parent_view =
+      frame_connector_->GetParentRenderWidgetHostView();
 
-      auto* manager = root_view->GetTouchSelectionControllerClientManager();
-      if (manager) {
-        // We have managers in Aura and Android, as well as outside of content/.
-        // There is no manager for Mac OS.
-        selection_controller_client_ =
-            base::MakeUnique<TouchSelectionControllerClientChildFrame>(this,
-                                                                       manager);
-        manager->AddObserver(this);
-      }
+  if (parent_view) {
+    DCHECK(parent_view->GetFrameSinkId().is_valid() || IsUsingMus());
+    SetParentFrameSinkId(parent_view->GetFrameSinkId());
+  }
+
+  auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
+  if (root_view) {
+    // Make sure we're not using the zero-valued default for
+    // current_device_scale_factor_.
+    current_device_scale_factor_ = root_view->current_device_scale_factor();
+    if (current_device_scale_factor_ == 0.f)
+      current_device_scale_factor_ = 1.f;
+
+    auto* manager = root_view->GetTouchSelectionControllerClientManager();
+    if (manager) {
+      // We have managers in Aura and Android, as well as outside of content/.
+      // There is no manager for Mac OS.
+      selection_controller_client_ =
+          base::MakeUnique<TouchSelectionControllerClientChildFrame>(this,
+                                                                     manager);
+      manager->AddObserver(this);
     }
   }
+
+#if defined(USE_AURA)
+  if (IsUsingMus()) {
+    frame_connector_->EmbedRendererWindowTreeClientInParent(
+        GetWindowTreeClientFromRenderer());
+  }
+#endif
 }
 
 void RenderWidgetHostViewChildFrame::OnManagerWillDestroy(
@@ -370,7 +377,6 @@ void RenderWidgetHostViewChildFrame::RenderProcessGone(
 }
 
 void RenderWidgetHostViewChildFrame::Destroy() {
-  destroy_was_called_ = true;
   // FrameSinkIds registered with RenderWidgetHostInputEventRouter
   // have already been cleared when RenderWidgetHostViewBase notified its
   // observers of our impending destruction.
@@ -458,14 +464,32 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
       frame_connector_->BubbleScrollEvent(event);
     }
   } else {
+    // Consumption of the first GestureScrollUpdate determines whether to
+    // bubble the sequence of GestureScrollUpdates.
+    // If the child consumed some scroll, then stopped consuming once it could
+    // no longer scroll, we don't want to bubble those unconsumed GSUs as we
+    // want the user to start a new gesture in order to scroll the parent.
+    // Unfortunately, this is only effective for touch scrolling as wheel
+    // scrolling wraps GSUs in GSB/GSE pairs.
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
+      DCHECK_EQ(NO_ACTIVE_GESTURE_SCROLL, scroll_bubbling_state_);
+      scroll_bubbling_state_ = AWAITING_FIRST_UPDATE;
+    } else if (scroll_bubbling_state_ == AWAITING_FIRST_UPDATE &&
+               event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
+      scroll_bubbling_state_ = (should_bubble ? BUBBLE : SCROLL_CHILD);
+    } else if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+               event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
+      scroll_bubbling_state_ = NO_ACTIVE_GESTURE_SCROLL;
+    }
+
     // GestureScrollBegin is consumed by the target frame and not forwarded,
     // because we don't know whether we will need to bubble scroll until we
-    // receive a GestureScrollUpdate ACK. GestureScrollUpdate with unused
-    // scroll extent is forwarded for bubbling, while GestureScrollEnd is
-    // always forwarded and handled according to current scroll state in the
-    // RenderWidgetHostInputEventRouter.
+    // receive a GestureScrollUpdate ACK. GestureScrollUpdates are forwarded
+    // for bubbling if the first GSU has unused scroll extent,
+    // while GestureScrollEnd is always forwarded and handled according to
+    // current scroll state in the RenderWidgetHostInputEventRouter.
     if ((event.GetType() == blink::WebInputEvent::kGestureScrollUpdate &&
-         should_bubble) ||
+         scroll_bubbling_state_ == BUBBLE) ||
         event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
         event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
       frame_connector_->BubbleScrollEvent(event);
@@ -511,7 +535,7 @@ void RenderWidgetHostViewChildFrame::SetParentFrameSinkId(
 
 void RenderWidgetHostViewChildFrame::ProcessCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   current_surface_size_ = frame.size_in_pixels();
   current_surface_scale_factor_ = frame.device_scale_factor();
 
@@ -562,7 +586,7 @@ void RenderWidgetHostViewChildFrame::SendSurfaceInfoToEmbedderImpl(
 
 void RenderWidgetHostViewChildFrame::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   TRACE_EVENT0("content",
                "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
@@ -871,12 +895,9 @@ InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
   // in case the root needs to prevent the child from scrolling. For example,
   // if the root has started an overscroll gesture, it needs to process the
   // scroll events that would normally be processed by the child.
-  // TODO(mcnee): Once BrowserPlugin is removed, investigate routing these
-  // GestureScrollUpdates directly to the root RWHV during an overscroll
-  // gesture. The way resending of scroll events from a plugin works would cause
-  // issues with this approach in terms of valid input streams.
-  // See crbug.com/751782
-  if (frame_connector_ &&
+  // TODO(mcnee): With scroll-latching enabled, the child would not scroll
+  // in this case. Remove this once scroll-latching lands. crbug.com/751782
+  if (!wheel_scroll_latching_enabled() && frame_connector_ &&
       input_event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
     const blink::WebGestureEvent& gesture_event =
         static_cast<const blink::WebGestureEvent&>(input_event);

@@ -15,14 +15,20 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method fetch
 [Worker]     method get
 [Worker]     method getIds
-[Worker] interface BackgroundFetchRegistration
+[Worker] interface BackgroundFetchRegistration : EventTarget
 [Worker]     attribute @@toStringTag
+[Worker]     getter downloadTotal
+[Worker]     getter downloaded
 [Worker]     getter icons
 [Worker]     getter id
+[Worker]     getter onprogress
 [Worker]     getter title
 [Worker]     getter totalDownloadSize
+[Worker]     getter uploadTotal
+[Worker]     getter uploaded
 [Worker]     method abort
 [Worker]     method constructor
+[Worker]     setter onprogress
 [Worker] interface BarcodeDetector
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
@@ -843,6 +849,15 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method moveTo
 [Worker]     method quadraticCurveTo
 [Worker]     method rect
+[Worker] interface PaymentInstruments
+[Worker]     attribute @@toStringTag
+[Worker]     method clear
+[Worker]     method constructor
+[Worker]     method delete
+[Worker]     method get
+[Worker]     method has
+[Worker]     method keys
+[Worker]     method set
 [Worker] interface PerformanceEntry
 [Worker]     attribute @@toStringTag
 [Worker]     getter duration
@@ -862,6 +877,27 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method getEntries
 [Worker]     method getEntriesByName
 [Worker]     method getEntriesByType
+[Worker] interface PerformanceResourceTiming : PerformanceEntry
+[Worker]     attribute @@toStringTag
+[Worker]     getter connectEnd
+[Worker]     getter connectStart
+[Worker]     getter decodedBodySize
+[Worker]     getter domainLookupEnd
+[Worker]     getter domainLookupStart
+[Worker]     getter encodedBodySize
+[Worker]     getter fetchStart
+[Worker]     getter initiatorType
+[Worker]     getter nextHopProtocol
+[Worker]     getter redirectEnd
+[Worker]     getter redirectStart
+[Worker]     getter requestStart
+[Worker]     getter responseEnd
+[Worker]     getter responseStart
+[Worker]     getter secureConnectionStart
+[Worker]     getter serverTiming
+[Worker]     getter transferSize
+[Worker]     getter workerStart
+[Worker]     method constructor
 [Worker] interface PerformanceServerTiming
 [Worker]     attribute @@toStringTag
 [Worker]     getter description
@@ -1031,6 +1067,23 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter encoding
 [Worker]     method constructor
 [Worker]     method encode
+[Worker] interface TrustedHTML
+[Worker]     static method escape
+[Worker]     static method unsafelyCreate
+[Worker]     attribute @@toStringTag
+[Worker]     method constructor
+[Worker]     method toString
+[Worker] interface TrustedScriptURL
+[Worker]     static method unsafelyCreate
+[Worker]     attribute @@toStringTag
+[Worker]     method constructor
+[Worker]     method toString
+[Worker] interface TrustedURL
+[Worker]     static method create
+[Worker]     static method unsafelyCreate
+[Worker]     attribute @@toStringTag
+[Worker]     method constructor
+[Worker]     method toString
 [Worker] interface URL
 [Worker]     static method createObjectURL
 [Worker]     static method revokeObjectURL
@@ -2330,7 +2383,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     setter onopen
 [Worker] interface WorkerGlobalScope : EventTarget
 [Worker]     attribute @@toStringTag
-[Worker]     getter addressSpace
 [Worker]     getter caches
 [Worker]     getter crypto
 [Worker]     getter indexedDB

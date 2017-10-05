@@ -10,23 +10,23 @@
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/switches.h"
-#include "cc/output/compositor_frame_metadata.h"
-#include "cc/output/output_surface_client.h"
-#include "cc/output/software_output_device.h"
-#include "cc/output/software_renderer.h"
-#include "cc/output/texture_mailbox_deleter.h"
 #include "cc/raster/raster_buffer_provider.h"
+#include "cc/resources/layer_tree_resource_provider.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/pixel_test_output_surface.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/test/test_in_process_context_provider.h"
 #include "cc/test/test_shared_bitmap_manager.h"
-#include "cc/trees/blocking_task_runner.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "components/viz/service/display/gl_renderer.h"
+#include "components/viz/service/display/output_surface_client.h"
+#include "components/viz/service/display/software_output_device.h"
+#include "components/viz/service/display/software_renderer.h"
+#include "components/viz/service/display/texture_mailbox_deleter.h"
 #include "components/viz/test/paths.h"
 #include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -37,12 +37,11 @@ namespace cc {
 PixelTest::PixelTest()
     : device_viewport_size_(gfx::Size(200, 200)),
       disable_picture_quad_image_filtering_(false),
-      output_surface_client_(new FakeOutputSurfaceClient),
-      main_thread_task_runner_(
-          BlockingTaskRunner::Create(base::ThreadTaskRunnerHandle::Get())) {}
-PixelTest::~PixelTest() {}
+      output_surface_client_(new FakeOutputSurfaceClient) {}
 
-bool PixelTest::RunPixelTest(RenderPassList* pass_list,
+PixelTest::~PixelTest() = default;
+
+bool PixelTest::RunPixelTest(viz::RenderPassList* pass_list,
                              const base::FilePath& ref_file,
                              const PixelComparator& comparator) {
   return RunPixelTestWithReadbackTarget(pass_list, pass_list->back().get(),
@@ -50,8 +49,8 @@ bool PixelTest::RunPixelTest(RenderPassList* pass_list,
 }
 
 bool PixelTest::RunPixelTestWithReadbackTarget(
-    RenderPassList* pass_list,
-    RenderPass* target,
+    viz::RenderPassList* pass_list,
+    viz::RenderPass* target,
     const base::FilePath& ref_file,
     const PixelComparator& comparator) {
   return RunPixelTestWithReadbackTargetAndArea(
@@ -59,8 +58,8 @@ bool PixelTest::RunPixelTestWithReadbackTarget(
 }
 
 bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
-    RenderPassList* pass_list,
-    RenderPass* target,
+    viz::RenderPassList* pass_list,
+    viz::RenderPass* target,
     const base::FilePath& ref_file,
     const PixelComparator& comparator,
     const gfx::Rect* copy_rect) {
@@ -92,11 +91,11 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
   return PixelsMatchReference(ref_file, comparator);
 }
 
-bool PixelTest::RunPixelTest(RenderPassList* pass_list,
+bool PixelTest::RunPixelTest(viz::RenderPassList* pass_list,
                              std::vector<SkColor>* ref_pixels,
                              const PixelComparator& comparator) {
   base::RunLoop run_loop;
-  RenderPass* target = pass_list->back().get();
+  viz::RenderPass* target = pass_list->back().get();
 
   std::unique_ptr<viz::CopyOutputRequest> request =
       std::make_unique<viz::CopyOutputRequest>(
@@ -173,12 +172,17 @@ void PixelTest::SetUpGLRenderer(bool flipped_output_surface) {
   constexpr bool delegated_sync_points_required = false;
   resource_provider_ = std::make_unique<DisplayResourceProvider>(
       output_surface_->context_provider(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(),
-      delegated_sync_points_required,
-      settings_.enable_color_correct_rasterization,
+      gpu_memory_buffer_manager_.get(), delegated_sync_points_required,
       settings_.resource_settings);
 
-  texture_mailbox_deleter_ = std::make_unique<TextureMailboxDeleter>(
+  child_context_provider_ = new TestInProcessContextProvider(nullptr);
+  child_context_provider_->BindToCurrentThread();
+  child_resource_provider_ = std::make_unique<LayerTreeResourceProvider>(
+      child_context_provider_.get(), shared_bitmap_manager_.get(),
+      gpu_memory_buffer_manager_.get(), true,
+      settings_.resource_settings);
+
+  texture_mailbox_deleter_ = std::make_unique<viz::TextureMailboxDeleter>(
       base::ThreadTaskRunnerHandle::Get());
 
   renderer_ = std::make_unique<viz::GLRenderer>(
@@ -194,18 +198,17 @@ void PixelTest::EnableExternalStencilTest() {
 }
 
 void PixelTest::SetUpSoftwareRenderer() {
-  output_surface_.reset(
-      new PixelTestOutputSurface(std::make_unique<SoftwareOutputDevice>()));
+  output_surface_.reset(new PixelTestOutputSurface(
+      std::make_unique<viz::SoftwareOutputDevice>()));
   output_surface_->BindToClient(output_surface_client_.get());
   shared_bitmap_manager_.reset(new TestSharedBitmapManager());
   constexpr bool delegated_sync_points_required =
       false;  // Meaningless for software.
   resource_provider_ = std::make_unique<DisplayResourceProvider>(
       nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
-      main_thread_task_runner_.get(), delegated_sync_points_required,
-      settings_.enable_color_correct_rasterization,
+      delegated_sync_points_required,
       settings_.resource_settings);
-  auto renderer = std::make_unique<SoftwareRenderer>(
+  auto renderer = std::make_unique<viz::SoftwareRenderer>(
       &renderer_settings_, output_surface_.get(), resource_provider_.get());
   software_renderer_ = renderer.get();
   renderer_ = std::move(renderer);

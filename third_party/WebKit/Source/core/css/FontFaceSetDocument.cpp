@@ -479,7 +479,7 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
   style->GetFont().Update(style->GetFont().GetFontSelector());
 
   GetDocument()->UpdateActiveStyle();
-  GetDocument()->EnsureStyleResolver().ComputeFont(style.Get(), *parsed_style);
+  GetDocument()->EnsureStyleResolver().ComputeFont(style.get(), *parsed_style);
 
   font = style->GetFont();
   font.Update(GetDocument()->GetStyleEngine().GetFontSelector());
@@ -571,11 +571,15 @@ DEFINE_TRACE(FontFaceSetDocument) {
   visitor->Trace(failed_fonts_);
   visitor->Trace(non_css_connected_faces_);
   visitor->Trace(async_runner_);
-  EventTargetWithInlineData::Trace(visitor);
   Supplement<Document>::Trace(visitor);
   SuspendableObject::Trace(visitor);
   FontFace::LoadFontCallback::Trace(visitor);
   FontFaceSet::Trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(FontFaceSetDocument) {
+  FontFaceSet::TraceWrappers(visitor);
+  Supplement<Document>::TraceWrappers(visitor);
 }
 
 }  // namespace blink

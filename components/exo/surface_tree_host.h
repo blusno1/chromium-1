@@ -83,7 +83,6 @@ class SurfaceTreeHost : public SurfaceDelegate,
 
   // Overridden from SurfaceDelegate:
   void OnSurfaceCommit() override;
-  void OnSurfaceContentSizeChanged() override;
   bool IsSurfaceSynchronized() const override;
   void OnSetFrame(SurfaceFrameType type) override {}
 
@@ -104,9 +103,11 @@ class SurfaceTreeHost : public SurfaceDelegate,
   // Overridden from ui::ContextFactoryObserver:
   void OnLostResources() override;
 
- private:
+ protected:
+  // Call this to submit a compositor frame.
   void SubmitCompositorFrame();
 
+ private:
   Surface* root_surface_ = nullptr;
   std::unique_ptr<aura::Window> host_window_;
   std::unique_ptr<LayerTreeFrameSinkHolder> layer_tree_frame_sink_holder_;

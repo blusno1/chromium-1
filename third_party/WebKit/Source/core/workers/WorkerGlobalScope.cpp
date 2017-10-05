@@ -53,9 +53,9 @@
 #include "core/workers/WorkerThread.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/InstanceCounters.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -378,7 +378,7 @@ WorkerGlobalScope::WorkerGlobalScope(
       v8_cache_options_(kV8CacheOptionsDefault),
       thread_(thread),
       event_queue_(WorkerEventQueue::Create(this)),
-      timers_(TaskRunnerHelper::Get(TaskType::kTimer, this)),
+      timers_(TaskRunnerHelper::Get(TaskType::kJavascriptTimer, this)),
       time_origin_(time_origin),
       font_selector_(OffscreenFontSelector::Create()) {
   InstanceCounters::IncrementCounter(
@@ -450,6 +450,11 @@ DEFINE_TRACE(WorkerGlobalScope) {
   SecurityContext::Trace(visitor);
   WorkerOrWorkletGlobalScope::Trace(visitor);
   Supplementable<WorkerGlobalScope>::Trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(WorkerGlobalScope) {
+  EventTargetWithInlineData::TraceWrappers(visitor);
+  Supplementable<WorkerGlobalScope>::TraceWrappers(visitor);
 }
 
 }  // namespace blink

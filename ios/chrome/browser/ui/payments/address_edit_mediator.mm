@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
+#include "components/autofill/core/browser/address_i18n.h"
 #include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_profile.h"
@@ -21,6 +22,7 @@
 #include "components/autofill/core/browser/country_combobox_model.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/payments/payment_request.h"
@@ -135,10 +137,9 @@
 
 - (void)formatValueForEditorField:(EditorField*)field {
   if (field.autofillUIType == AutofillUITypeProfileHomePhoneWholeNumber) {
-    field.value =
-        base::SysUTF8ToNSString(payments::data_util::FormatPhoneForDisplay(
-            base::SysNSStringToUTF8(field.value),
-            base::SysNSStringToUTF8(self.selectedCountryCode)));
+    field.value = base::SysUTF8ToNSString(autofill::i18n::FormatPhoneForDisplay(
+        base::SysNSStringToUTF8(field.value),
+        base::SysNSStringToUTF8(self.selectedCountryCode)));
   }
 }
 
@@ -174,7 +175,15 @@
   // Notify the view controller asynchronously to allow for the view to update.
   __weak AddressEditMediator* weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
-    [weakSelf.consumer setOptions:@[ [regions allKeys] ]
+    NSMutableArray<NSString*>* values =
+        [[NSMutableArray alloc] initWithArray:[regions allKeys]];
+    // If the field contains no value, insert an empty value at the beginning
+    // of the list of options, as the first option is selected when the UI
+    // opens. Otherwise, it would be impossible for the user to select the first
+    // option without selecting another option first.
+    if (!weakSelf.regionField.value)
+      [values insertObject:@"" atIndex:0];
+    [weakSelf.consumer setOptions:@[ values ]
                    forEditorField:weakSelf.regionField];
   });
 }
@@ -262,17 +271,19 @@
         NOTREACHED();
         return @[];
       }
-      AutofillUIType autofillUIType = AutofillUITypeFromAutofillType(
-          autofill::GetFieldTypeFromString(autofillType));
+      autofill::ServerFieldType serverFieldType =
+          autofill::GetFieldTypeFromString(autofillType);
+      AutofillUIType autofillUIType =
+          AutofillUITypeFromAutofillType(serverFieldType);
 
       NSNumber* fieldKey = [NSNumber numberWithInt:autofillUIType];
       EditorField* field = self.fieldsMap[fieldKey];
       if (!field) {
         NSString* value =
-            [self fieldValueFromProfile:self.address
-                              fieldType:autofill::GetFieldTypeFromString(
-                                            autofillType)];
-        BOOL required = autofillUIType != AutofillUITypeProfileCompanyName;
+            [self fieldValueFromProfile:self.address fieldType:serverFieldType];
+
+        BOOL required = autofill::i18n::IsFieldRequired(
+            serverFieldType, base::SysNSStringToUTF8(self.selectedCountryCode));
         field =
             [[EditorField alloc] initWithAutofillUIType:autofillUIType
                                               fieldType:EditorFieldTypeTextField
@@ -339,7 +350,7 @@
     NSString* value =
         self.address
             ? base::SysUTF16ToNSString(
-                  payments::data_util::GetFormattedPhoneNumberForDisplay(
+                  autofill::i18n::GetFormattedPhoneNumberForDisplay(
                       *self.address, _paymentRequest->GetApplicationLocale()))
             : nil;
     field = [[EditorField alloc]

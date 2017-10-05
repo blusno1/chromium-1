@@ -48,6 +48,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/storage_partition.h"
@@ -75,6 +76,10 @@
 #if defined(OS_ANDROID)
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/crash_dump_observer_android.h"
+#if !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#include "components/cdm/browser/media_drm_storage_impl.h"
+#include "url/origin.h"
+#endif  // !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 #else
 #include "chromecast/browser/memory_pressure_controller_impl.h"
 #endif  // defined(OS_ANDROID)
@@ -107,6 +112,25 @@ static std::unique_ptr<service_manager::Service> CreateMediaService(
 }
 #endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
 
+#if defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+void CreateMediaDrmStorage(content::RenderFrameHost* render_frame_host,
+                           ::media::mojom::MediaDrmStorageRequest request) {
+  DVLOG(1) << __func__;
+  PrefService* pref_service = CastBrowserProcess::GetInstance()->pref_service();
+  DCHECK(pref_service);
+
+  url::Origin origin = render_frame_host->GetLastCommittedOrigin();
+  if (origin.unique()) {
+    DVLOG(1) << __func__ << ": Unique origin.";
+    return;
+  }
+
+  // The object will be deleted on connection error, or when the frame navigates
+  // away.
+  new cdm::MediaDrmStorageImpl(render_frame_host, pref_service, origin,
+                               std::move(request));
+}
+#endif  // defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 }  // namespace
 
 CastContentBrowserClient::CastContentBrowserClient()
@@ -263,12 +287,15 @@ void CastContentBrowserClient::RenderProcessWillLaunch(
                  base::Unretained(this), host->GetID()));
 
 #if defined(OS_ANDROID)
+  // Cast on Android always allows persisting data.
+  //
   // Cast on Android build always uses kForceVideoOverlays command line switch
   // such that secure codecs can always be rendered.
+  //
   // TODO(yucliu): On Clank, secure codecs support is tied to AndroidOverlay.
   // Remove kForceVideoOverlays and swtich to the Clank model for secure codecs
   // support.
-  host->AddFilter(new cdm::CdmMessageFilterAndroid(true));
+  host->AddFilter(new cdm::CdmMessageFilterAndroid(true, true));
 #endif  // defined(OS_ANDROID)
 }
 
@@ -408,7 +435,6 @@ void CastContentBrowserClient::AllowCertificateError(
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
     content::ResourceType resource_type,
-    bool overridable,
     bool strict_enforcement,
     bool expired_previous_decision,
     const base::Callback<void(content::CertificateRequestResultType)>&
@@ -450,7 +476,7 @@ void CastContentBrowserClient::SelectClientCertificate(
       base::BindOnce(
           &CastContentBrowserClient::SelectClientCertificateOnIOThread,
           base::Unretained(this), requesting_url,
-          web_contents->GetRenderProcessHost()->GetID(),
+          web_contents->GetMainFrame()->GetProcess()->GetID(),
           base::SequencedTaskRunnerHandle::Get(),
           base::Bind(
               &content::ClientCertificateDelegate::ContinueWithCertificate,
@@ -522,6 +548,15 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
 #endif  // !defined(OS_ANDROID)
 }
 
+void CastContentBrowserClient::ExposeInterfacesToMediaService(
+    service_manager::BinderRegistry* registry,
+    content::RenderFrameHost* render_frame_host) {
+#if defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+  registry->AddInterface(
+      base::BindRepeating(&CreateMediaDrmStorage, render_frame_host));
+#endif
+}
+
 void CastContentBrowserClient::RegisterInProcessServices(
     StaticServiceMap* services) {
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
@@ -535,7 +570,7 @@ void CastContentBrowserClient::RegisterInProcessServices(
 std::unique_ptr<base::Value>
 CastContentBrowserClient::GetServiceManifestOverlay(
     base::StringPiece service_name) {
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   int id = -1;
   if (service_name == content::mojom::kBrowserServiceName)
     id = IDR_CAST_CONTENT_BROWSER_MANIFEST_OVERLAY;

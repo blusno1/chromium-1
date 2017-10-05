@@ -51,6 +51,8 @@ namespace {
 constexpr const char kContextKeyIsCameraPresent[] = "isCameraPresent";
 constexpr const char kContextKeyProfilePictureDataURL[] =
     "profilePictureDataURL";
+constexpr const char kContextKeyIsProfilePictureAvailable[] =
+    "isProfilePictureAvailable";
 constexpr const char kContextKeySelectedImageIndex[] = "selectedImageIndex";
 constexpr const char kContextKeySelectedImageURL[] = "selectedImageURL";
 
@@ -95,6 +97,8 @@ void UserImageScreen::OnScreenReady() {
 void UserImageScreen::OnPhotoTaken(const std::string& raw_data) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   user_photo_ = gfx::ImageSkia();
+  std::vector<unsigned char> photo_data(raw_data.begin(), raw_data.end());
+  user_photo_data_ = base::RefCountedBytes::TakeVector(&photo_data);
   ImageDecoder::Cancel(this);
   ImageDecoder::Start(this, raw_data);
 }
@@ -126,16 +130,20 @@ void UserImageScreen::OnImageAccepted() {
   UserImageManager* image_manager = GetUserImageManager();
   int uma_index = 0;
   switch (selected_image_) {
-    case user_manager::User::USER_IMAGE_EXTERNAL:
+    case user_manager::User::USER_IMAGE_EXTERNAL: {
       // Photo decoding may not have been finished yet.
       if (user_photo_.isNull()) {
         accept_photo_after_decoding_ = true;
         return;
       }
-      image_manager->SaveUserImage(user_manager::UserImage::CreateAndEncode(
-          user_photo_, user_manager::UserImage::FORMAT_JPEG));
+      std::unique_ptr<user_manager::UserImage> user_image =
+          base::MakeUnique<user_manager::UserImage>(
+              user_photo_, user_photo_data_.get(),
+              user_manager::UserImage::FORMAT_PNG);
+      user_image->MarkAsSafe();
+      image_manager->SaveUserImage(std::move(user_image));
       uma_index = default_user_image::kHistogramImageFromCamera;
-      break;
+    } break;
     case user_manager::User::USER_IMAGE_PROFILE:
       image_manager->SaveUserImageFromProfileImage();
       uma_index = default_user_image::kHistogramImageFromProfile;
@@ -221,8 +229,15 @@ void UserImageScreen::Show() {
       kContextKeySelectedImageURL,
       default_user_image::GetDefaultImageUrl(selected_image_));
 
-  // Start fetching the profile image.
-  GetUserImageManager()->DownloadProfileImage(kProfileDownloadReason);
+  const user_manager::User* user = GetUser();
+  // Active Directory accounts do not use a profile image so skip the download
+  // and inform the UI that no profile image exists.
+  if (user && user->IsActiveDirectoryUser()) {
+    GetContextEditor().SetBoolean(kContextKeyIsProfilePictureAvailable, false);
+  } else {
+    // Start fetching the profile image.
+    GetUserImageManager()->DownloadProfileImage(kProfileDownloadReason);
+  }
 }
 
 void UserImageScreen::Hide() {

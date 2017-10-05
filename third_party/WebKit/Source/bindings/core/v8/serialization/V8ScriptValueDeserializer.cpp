@@ -24,7 +24,6 @@
 #include "core/offscreencanvas/OffscreenCanvas.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "core/typed_arrays/DOMSharedArrayBuffer.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/DateMath.h"
 #include "public/platform/WebBlobInfo.h"
@@ -138,7 +137,7 @@ v8::Local<v8::Value> V8ScriptValueDeserializer::Deserialize() {
   v8::Local<v8::Context> context = script_state_->GetContext();
 
   size_t version_envelope_size =
-      ReadVersionEnvelope(serialized_script_value_.Get(), &version_);
+      ReadVersionEnvelope(serialized_script_value_.get(), &version_);
   if (version_envelope_size) {
     const void* blink_envelope;
     bool read_envelope = ReadRawBytes(version_envelope_size, &blink_envelope);
@@ -225,8 +224,12 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
       if (!ReadUint32(&index) || index >= blob_info_array_->size())
         return nullptr;
       const WebBlobInfo& info = (*blob_info_array_)[index];
-      return Blob::Create(
-          GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size()));
+      auto blob_handle = info.GetBlobHandle();
+      if (!blob_handle) {
+        blob_handle =
+            GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size());
+      }
+      return Blob::Create(blob_handle);
     }
     case kFileTag:
       return ReadFile();
@@ -523,9 +526,14 @@ File* V8ScriptValueDeserializer::ReadFileIndex() {
   const WebBlobInfo& info = (*blob_info_array_)[index];
   // FIXME: transition WebBlobInfo.lastModified to be milliseconds-based also.
   double last_modified_ms = info.LastModified() * kMsPerSecond;
-  return File::CreateFromIndexedSerialization(
-      info.FilePath(), info.FileName(), info.size(), last_modified_ms,
-      GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size()));
+  auto blob_handle = info.GetBlobHandle();
+  if (!blob_handle) {
+    blob_handle =
+        GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size());
+  }
+  return File::CreateFromIndexedSerialization(info.FilePath(), info.FileName(),
+                                              info.size(), last_modified_ms,
+                                              blob_handle);
 }
 
 RefPtr<BlobDataHandle> V8ScriptValueDeserializer::GetOrCreateBlobDataHandle(

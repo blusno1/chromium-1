@@ -92,8 +92,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsDetached() const override { return !node_; }
   bool IsAXNodeObject() const final { return true; }
 
-  void GetSparseAXAttributes(AXSparseAttributeClient&) const override;
-
   // Check object role or purpose.
   bool IsAnchor() const final;
   bool IsControllingVideoElement() const;
@@ -128,7 +126,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsModal() const final;
   bool IsRequired() const final;
   bool IsControl() const;
-  bool CanSupportAriaReadOnly() const;
   AXRestriction Restriction() const override;
 
   // Properties of static elements.
@@ -151,9 +148,9 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   // Only used when invalidState() returns InvalidStateOther.
   String AriaInvalidValue() const final;
   String ValueDescription() const override;
-  float ValueForRange() const override;
-  float MaxValueForRange() const override;
-  float MinValueForRange() const override;
+  bool ValueForRange(float* out_value) const override;
+  bool MaxValueForRange(float* out_value) const override;
+  bool MinValueForRange(float* out_value) const override;
   String StringValue() const override;
 
   // ARIA attributes.

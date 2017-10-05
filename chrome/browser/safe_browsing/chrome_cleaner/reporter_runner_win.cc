@@ -607,7 +607,8 @@ void MaybeScanAndPrompt(const SwReporterInvocation& reporter_invocation) {
   DCHECK(prefs);
 
   // Don't show the prompt again if it's been shown before for this profile and
-  // for the current variations seed.
+  // for the current variations seed. The seed preference will be updated once
+  // the prompt is shown.
   const std::string incoming_seed = GetIncomingSRTSeed();
   const std::string old_seed = prefs->GetString(prefs::kSwReporterPromptSeed);
   if (!incoming_seed.empty() && incoming_seed == old_seed) {
@@ -615,9 +616,6 @@ void MaybeScanAndPrompt(const SwReporterInvocation& reporter_invocation) {
     RecordPromptNotShownWithReasonHistogram(NO_PROMPT_REASON_ALREADY_PROMPTED);
     return;
   }
-
-  if (!incoming_seed.empty() && incoming_seed != old_seed)
-    prefs->SetString(prefs::kSwReporterPromptSeed, incoming_seed);
 
   if (g_testing_delegate_) {
     g_testing_delegate_->TriggerPrompt();
@@ -700,7 +698,9 @@ class ReporterRunner : public chrome::BrowserListObserver {
     // There's nothing to do if the invocation parameters and version of the
     // reporter have not changed, we just keep running the tasks that are
     // running now.
-    if (instance_->pending_invocations_ == invocations &&
+    if (std::equal(instance_->pending_invocations_.begin(),
+                   instance_->pending_invocations_.end(), invocations.begin(),
+                   invocations.end()) &&
         instance_->version_.IsValid() && instance_->version_ == version)
       return;
 
@@ -730,7 +730,7 @@ class ReporterRunner : public chrome::BrowserListObserver {
   void ScheduleNextInvocation() {
     DCHECK(!current_invocations_.empty());
     auto next_invocation = current_invocations_.front();
-    current_invocations_.pop();
+    current_invocations_.pop_front();
 
     AppendInvocationSpecificSwitches(&next_invocation);
 
@@ -955,9 +955,16 @@ class ReporterRunner : public chrome::BrowserListObserver {
                             Now().ToInternalValue());
     }
 
-    if (ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled())
+    if (ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()) {
       next_invocation->command_line.AppendSwitch(
           chrome_cleaner::kEnableCrashReportingSwitch);
+    }
+
+    const std::string group_name = GetSRTFieldTrialGroupName();
+    if (!group_name.empty()) {
+      next_invocation->command_line.AppendSwitchASCII(
+          chrome_cleaner::kSRTPromptFieldTrialGroupNameSwitch, group_name);
+    }
   }
 
   // Adds switches to be sent to the Software Reporter when the user opted into

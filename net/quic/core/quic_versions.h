@@ -25,7 +25,6 @@ enum QuicVersion {
   QUIC_VERSION_UNSUPPORTED = 0,
 
   QUIC_VERSION_35 = 35,  // Allows endpoints to independently set stream limit.
-  QUIC_VERSION_36 = 36,  // Add support to force HOL blocking.
   QUIC_VERSION_37 = 37,  // Add perspective into null encryption.
   QUIC_VERSION_38 = 38,  // PADDING frame is a 1-byte frame with type 0x00.
                          // Respect NSTP connection option.
@@ -33,12 +32,17 @@ enum QuicVersion {
                          // endian. Dot not ack acks. Send a connection level
                          // WINDOW_UPDATE every 20 sent packets which do not
                          // contain retransmittable frames.
-  QUIC_VERSION_40 = 40,  // RST_STREAM, ACK and STREAM frames match IETF format.
-  QUIC_VERSION_41 = 41,  // Use IETF packet header format.
+  QUIC_VERSION_41 = 41,  // RST_STREAM, ACK and STREAM frames match IETF format.
+  QUIC_VERSION_42 = 42,  // Use IETF packet header format.
 
   // IMPORTANT: if you are adding to this list, follow the instructions at
   // http://sites/quic/adding-and-removing-versions
 };
+
+// Representation of the on-the-wire QUIC version number. Will be written/read
+// to the wire in network-byte-order.
+using QuicVersionLabel = uint32_t;
+using QuicVersionLabelVector = std::vector<QuicVersionLabel>;
 
 // This vector contains QUIC versions which we currently support.
 // This should be ordered such that the highest supported version is the first
@@ -48,8 +52,8 @@ enum QuicVersion {
 // IMPORTANT: if you are adding to this list, follow the instructions at
 // http://sites/quic/adding-and-removing-versions
 static const QuicVersion kSupportedQuicVersions[] = {
-    QUIC_VERSION_41, QUIC_VERSION_40, QUIC_VERSION_39, QUIC_VERSION_38,
-    QUIC_VERSION_37, QUIC_VERSION_36, QUIC_VERSION_35};
+    QUIC_VERSION_42, QUIC_VERSION_41, QUIC_VERSION_39,
+    QUIC_VERSION_38, QUIC_VERSION_37, QUIC_VERSION_35};
 
 typedef std::vector<QuicVersion> QuicVersionVector;
 
@@ -70,15 +74,21 @@ FilterSupportedVersions(QuicVersionVector versions);
 QUIC_EXPORT_PRIVATE QuicVersionVector
 VersionOfIndex(const QuicVersionVector& versions, int index);
 
-// QuicTag is written to and read from the wire, but we prefer to use
+// QuicVersionLabel is written to and read from the wire, but we prefer to use
 // the more readable QuicVersion at other levels.
-// Helper function which translates from a QuicVersion to a QuicTag. Returns 0
-// if QuicVersion is unsupported.
-QUIC_EXPORT_PRIVATE QuicTag QuicVersionToQuicTag(const QuicVersion version);
+// Helper function which translates from a QuicVersion to a QuicVersionLabel.
+// Returns 0 if |version| is unsupported.
+QUIC_EXPORT_PRIVATE QuicVersionLabel
+QuicVersionToQuicVersionLabel(const QuicVersion version);
 
-// Returns appropriate QuicVersion from a QuicTag.
+// Helper function which translates from a QuicVersionLabel to a std::string.
+QUIC_EXPORT_PRIVATE std::string QuicVersionLabelToString(
+    QuicVersionLabel version_label);
+
+// Returns appropriate QuicVersion from a QuicVersionLabel.
 // Returns QUIC_VERSION_UNSUPPORTED if version_tag cannot be understood.
-QUIC_EXPORT_PRIVATE QuicVersion QuicTagToQuicVersion(const QuicTag version_tag);
+QUIC_EXPORT_PRIVATE QuicVersion
+QuicVersionLabelToQuicVersion(QuicVersionLabel version_label);
 
 // Helper function which translates from a QuicVersion to a string.
 // Returns strings corresponding to enum names (e.g. QUIC_VERSION_6).

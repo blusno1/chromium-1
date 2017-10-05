@@ -48,6 +48,7 @@ test.text.setUp = function() {
     networkError: 'Network error',
     noTranslation: 'No translation',
     noVoice: 'No voice',
+    otherError: 'Unknown error',
     permissionError: 'Permission error',
     ready: 'Ready',
     tryAgain: 'Try again',
@@ -95,15 +96,9 @@ test.text.testShowErrorMessageWithLink = function() {
 
 
 /**
- * Test updating the text with an error message containing a callback.
+ * Test updating the text with an error message containing a "Try Again" link.
  */
-test.text.testShowErrorMessageWithCallback = function() {
-  // Mock the restart callback.
-  let restartCalled = false;
-  test.text.stubs.replace(speech, 'restart', function() {
-    restartCalled = true;
-  });
-
+test.text.testShowErrorMessageWithTryAgainLink = function() {
   // Display the try again error.
   const tryAgainError = RecognitionError.NO_MATCH;
   text.showErrorMessage(tryAgainError);
@@ -112,12 +107,6 @@ test.text.testShowErrorMessageWithCallback = function() {
           'Try again</a>',
       text.interim_.innerHTML);
   assertEquals('', text.final_.innerHTML);
-
-  // Assert the callback is called when the link element is clicked.
-  assert(!restartCalled);
-  assertEquals(1, text.interim_.children.length);
-  text.interim_.children[0].click();
-  assert(restartCalled);
 };
 
 
@@ -187,10 +176,13 @@ test.text.testReadyMessage = function() {
 
 
 /**
- * Test showing the listening message when the ready message is shown.
+ * Test showing the listening message when the ready message is shown,
+ * and results have not yet been received.
  */
 test.text.testListeningMessageWhenReady = function() {
   text.interim_.textContent = 'Ready';
+  test.text.stubs.replace(speech, 'isRecognizing', () => true);
+  test.text.stubs.replace(speech, 'hasReceivedResults', () => false);
 
   test.text.clock.setTime(1);
   text.startListeningMessageAnimation_();
@@ -208,10 +200,13 @@ test.text.testListeningMessageWhenReady = function() {
 
 
 /**
- * Test not showing the listening message when the ready message is not shown.
+ * Test not showing the listening message when the ready message is shown,
+ * but results were already received.
  */
-test.text.testListeningMessageWhenNotReady = function() {
-  text.interim_.textContent = 'some text';
+test.text.testListeningMessageWhenReadyButResultsAlreadyReceived = function() {
+  text.interim_.textContent = 'Ready';
+  test.text.stubs.replace(speech, 'isRecognizing', () => true);
+  test.text.stubs.replace(speech, 'hasReceivedResults', () => true);
 
   test.text.clock.setTime(1);
   text.startListeningMessageAnimation_();
@@ -222,7 +217,32 @@ test.text.testListeningMessageWhenNotReady = function() {
   test.text.clock.advanceTime(2000);
   test.text.clock.pendingTimeouts.shift().callback();
 
-  assertEquals('some text', text.interim_.textContent);
+  // The message was *not* changed to "Listening".
+  assertEquals('Ready', text.interim_.textContent);
+  assertEquals('', text.final_.textContent);
+  assertEquals(0, test.text.clock.pendingTimeouts.length);
+};
+
+
+/**
+ * Test showing the listening message when the ready message is not shown,
+ * and results have not yet been received.
+ */
+test.text.testListeningMessageWhenNotReady = function() {
+  text.interim_.textContent = 'some text';
+  test.text.stubs.replace(speech, 'isRecognizing', () => true);
+  test.text.stubs.replace(speech, 'hasReceivedResults', () => false);
+
+  test.text.clock.setTime(1);
+  text.startListeningMessageAnimation_();
+
+  assertEquals(1, test.text.clock.pendingTimeouts.length);
+  assertEquals(2001, test.text.clock.pendingTimeouts[0].activationTime);
+
+  test.text.clock.advanceTime(2000);
+  test.text.clock.pendingTimeouts.shift().callback();
+
+  assertEquals('Listening', text.interim_.textContent);
   assertEquals('', text.final_.textContent);
   assertEquals(0, test.text.clock.pendingTimeouts.length);
 };
@@ -230,7 +250,7 @@ test.text.testListeningMessageWhenNotReady = function() {
 /**
  * Test not showing the listening message when the ready message is spoken.
  */
-test.text.testListeningMessageWhenNotReady = function() {
+test.text.testListeningMessageWhenReadySpoken = function() {
   // Show the "Ready" message.
   text.interim_.textContent = 'Ready';
   assertEquals('', text.final_.textContent);

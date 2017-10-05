@@ -39,6 +39,8 @@ public interface AutocompleteEditTextModelBase {
         int getHighlightColor();
         /** @see TextView#setCursorVisible(boolean) */
         void setCursorVisible(boolean visible);
+        /** @see TextView#isFocused() */
+        boolean isFocused();
         /** @see TextView#sendAccessibilityEventUnchecked(AccessibilityEvent) */
         void sendAccessibilityEventUnchecked(AccessibilityEvent event);
 
@@ -72,6 +74,9 @@ public interface AutocompleteEditTextModelBase {
          * @param selEnd Selection end.
          */
         void onUpdateSelectionForTesting(int selStart, int selEnd);
+
+        /** @return The package name of the current keyboard app. */
+        String getKeyboardPackageName();
     }
 
     /**

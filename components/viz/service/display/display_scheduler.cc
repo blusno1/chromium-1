@@ -9,8 +9,8 @@
 #include "base/auto_reset.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/output/output_surface.h"
 #include "components/viz/common/surfaces/surface_info.h"
+#include "components/viz/service/display/output_surface.h"
 
 namespace viz {
 
@@ -119,10 +119,17 @@ void DisplayScheduler::ProcessSurfaceDamage(const SurfaceId& surface_id,
   bool valid_ack = ack.sequence_number != BeginFrameArgs::kInvalidFrameNumber;
   if (valid_ack) {
     auto it = surface_states_.find(surface_id);
-    if (it != surface_states_.end())
+    // Ignore stray acknowledgments for prior BeginFrames, to ensure we don't
+    // override a newer sequence number in the surface state. We may receive
+    // such stray acks e.g. when a CompositorFrame activates in a later
+    // BeginFrame than it was created.
+    if (it != surface_states_.end() &&
+        (it->second.last_ack.source_id != ack.source_id ||
+         it->second.last_ack.sequence_number < ack.sequence_number)) {
       it->second.last_ack = ack;
-    else
+    } else {
       valid_ack = false;
+    }
   }
 
   bool pending_surfaces_changed = false;

@@ -27,7 +27,6 @@
 
 #include <stdio.h>
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/CharacterData.h"
@@ -41,14 +40,19 @@
 #include "core/editing/CaretDisplayItemClient.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameCaret.h"
 #include "core/editing/GranularityStrategy.h"
 #include "core/editing/InputMethodController.h"
 #include "core/editing/LayoutSelection.h"
+#include "core/editing/Position.h"
 #include "core/editing/SelectionController.h"
 #include "core/editing/SelectionEditor.h"
 #include "core/editing/SelectionModifier.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/TextAffinity.h"
+#include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/TypingCommand.h"
 #include "core/editing/iterators/TextIterator.h"
@@ -61,6 +65,7 @@
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLSelectElement.h"
+#include "core/html_names.h"
 #include "core/input/ContextMenuAllowedScope.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestRequest.h"
@@ -602,7 +607,7 @@ void FrameSelection::SelectFrameElementInParentIfFullySelected() {
       Position(owner_element_parent, owner_element_node_index));
   VisiblePosition after_owner_element = CreateVisiblePosition(
       Position(owner_element_parent, owner_element_node_index + 1),
-      VP_UPSTREAM_IF_POSSIBLE);
+      TextAffinity::kUpstreamIfPossible);
 
   SelectionInDOMTree::Builder builder;
   builder
@@ -632,9 +637,8 @@ static Node* NonBoundaryShadowTreeRootNode(const Position& position) {
 }
 
 void FrameSelection::SelectAll(SetSelectionBy set_selection_by) {
-  if (isHTMLSelectElement(GetDocument().FocusedElement())) {
-    HTMLSelectElement* select_element =
-        toHTMLSelectElement(GetDocument().FocusedElement());
+  if (auto* select_element =
+          ToHTMLSelectElementOrNull(GetDocument().FocusedElement())) {
     if (select_element->CanSelectAll()) {
       select_element->SelectAll();
       return;
@@ -898,15 +902,6 @@ String FrameSelection::SelectedTextForClipboard() const {
                  .Build());
 }
 
-LayoutRect FrameSelection::Bounds() const {
-  LocalFrameView* view = frame_->View();
-  if (!view)
-    return LayoutRect();
-
-  return Intersection(UnclippedBounds(),
-                      LayoutRect(view->VisibleContentRect()));
-}
-
 LayoutRect FrameSelection::UnclippedBounds() const {
   LocalFrameView* view = frame_->View();
   LayoutViewItem layout_view = frame_->ContentLayoutItem();
@@ -977,7 +972,7 @@ void FrameSelection::SetSelectionFromNone() {
   if (HTMLBodyElement* body =
           Traversal<HTMLBodyElement>::FirstChild(*document_element)) {
     SetSelection(SelectionInDOMTree::Builder()
-                     .Collapse(FirstPositionInOrBeforeNode(body))
+                     .Collapse(FirstPositionInOrBeforeNode(*body))
                      .Build());
   }
 }
@@ -1024,6 +1019,15 @@ void FrameSelection::ScheduleVisualUpdate() const {
 void FrameSelection::ScheduleVisualUpdateForPaintInvalidationIfNeeded() const {
   if (LocalFrameView* frame_view = frame_->View())
     frame_view->ScheduleVisualUpdateForPaintInvalidationIfNeeded();
+}
+
+bool FrameSelection::SelectWordAroundCaret() {
+  const VisibleSelection& selection = ComputeVisibleSelectionInDOMTree();
+  // TODO(editing-dev): The use of VisibleSelection needs to be audited. See
+  // http://crbug.com/657237 for more details.
+  if (!selection.IsCaret())
+    return false;
+  return SelectWordAroundPosition(selection.VisibleStart());
 }
 
 bool FrameSelection::SelectWordAroundPosition(const VisiblePosition& position) {
@@ -1163,6 +1167,10 @@ base::Optional<int> FrameSelection::LayoutSelectionEnd() const {
 
 void FrameSelection::ClearLayoutSelection() {
   layout_selection_->ClearSelection();
+}
+
+bool FrameSelection::IsDirectional() const {
+  return GetSelectionInDOMTree().IsDirectional();
 }
 
 }  // namespace blink

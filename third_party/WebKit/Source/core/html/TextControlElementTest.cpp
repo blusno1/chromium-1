@@ -7,6 +7,7 @@
 #include <memory>
 #include "core/dom/Document.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/Position.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTextAreaElement.h"
@@ -42,12 +43,12 @@ void TextControlElementTest::SetUp() {
       DummyPageHolder::Create(IntSize(800, 600), &page_clients);
 
   document_ = &dummy_page_holder_->GetDocument();
-  document_->documentElement()->setInnerHTML(
+  document_->documentElement()->SetInnerHTMLFromString(
       "<body><textarea id=textarea></textarea><input id=input /></body>");
   document_->View()->UpdateAllLifecyclePhases();
   text_control_ = ToTextControlElement(document_->getElementById("textarea"));
   text_control_->focus();
-  input_ = toHTMLInputElement(document_->getElementById("input"));
+  input_ = ToHTMLInputElement(document_->getElementById("input"));
 }
 
 TEST_F(TextControlElementTest, SetSelectionRange) {
@@ -79,7 +80,7 @@ TEST_F(TextControlElementTest, SetSelectionRangeDoesNotCauseLayout) {
 
 TEST_F(TextControlElementTest, IndexForPosition) {
   HTMLInputElement* input =
-      toHTMLInputElement(GetDocument().getElementById("input"));
+      ToHTMLInputElement(GetDocument().getElementById("input"));
   input->setValue("Hello");
   HTMLElement* inner_editor = input->InnerEditorElement();
   EXPECT_EQ(5u, TextControlElement::IndexForPosition(

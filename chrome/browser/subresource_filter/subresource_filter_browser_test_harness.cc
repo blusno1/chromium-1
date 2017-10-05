@@ -23,8 +23,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
-#include "components/safe_browsing_db/util.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/db/util.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
@@ -101,16 +101,16 @@ GURL SubresourceFilterBrowserTest::GetTestUrl(
 }
 
 void SubresourceFilterBrowserTest::ConfigureAsPhishingURL(const GURL& url) {
-  database_helper_->MarkUrlAsMatchingListWithId(
-      url, safe_browsing::GetUrlSocEngId(),
-      safe_browsing::ThreatPatternType::NONE);
+  safe_browsing::ThreatMetadata metadata;
+  database_helper_->MarkUrlAsMatchingListIdWithMetadata(
+      url, safe_browsing::GetUrlSocEngId(), metadata);
 }
 
 void SubresourceFilterBrowserTest::ConfigureAsSubresourceFilterOnlyURL(
     const GURL& url) {
-  database_helper_->MarkUrlAsMatchingListWithId(
-      url, safe_browsing::GetUrlSubresourceFilterId(),
-      safe_browsing::ThreatPatternType::NONE);
+  safe_browsing::ThreatMetadata metadata;
+  database_helper_->MarkUrlAsMatchingListIdWithMetadata(
+      url, safe_browsing::GetUrlSubresourceFilterId(), metadata);
 }
 
 content::WebContents* SubresourceFilterBrowserTest::web_contents() const {

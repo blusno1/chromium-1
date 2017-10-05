@@ -22,10 +22,10 @@
 #include "core/svg/SVGImageElement.h"
 
 #include "core/CSSPropertyNames.h"
-#include "core/SVGNames.h"
 #include "core/css/StyleChangeReason.h"
 #include "core/layout/LayoutImageResource.h"
 #include "core/layout/svg/LayoutSVGImage.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -83,6 +83,11 @@ bool SVGImageElement::CurrentFrameHasSingleSecurityOrigin() const {
     }
   }
   return true;
+}
+
+ScriptPromise SVGImageElement::decode(ScriptState* script_state,
+                                      ExceptionState& exception_state) {
+  return GetImageLoader().Decode(script_state, exception_state);
 }
 
 void SVGImageElement::CollectStyleForPresentationAttribute(

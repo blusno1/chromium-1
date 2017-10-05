@@ -48,11 +48,10 @@ void DelegateImpl::ShowManagedProvisionNotification() {
       user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId();
   notifier_id.profile_id = account_id.GetUserEmail();
   message_center::RichNotificationData optional_fields;
-  optional_fields.clickable = false;
   optional_fields.never_timeout = true;
 
   message_center::MessageCenter::Get()->AddNotification(
-      base::MakeUnique<message_center::Notification>(
+      std::make_unique<message_center::Notification>(
           message_center::NOTIFICATION_TYPE_SIMPLE,
           kManagedProvisionNotificationId,
           l10n_util::GetStringUTF16(
@@ -107,7 +106,7 @@ ArcProvisionNotificationService::ArcProvisionNotificationService(
     content::BrowserContext* context,
     ArcBridgeService* bridge_service)
     : ArcProvisionNotificationService(context,
-                                      base::MakeUnique<DelegateImpl>()) {}
+                                      std::make_unique<DelegateImpl>()) {}
 
 ArcProvisionNotificationService::~ArcProvisionNotificationService() {
   // Make sure no notification is left being shown.

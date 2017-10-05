@@ -4,7 +4,7 @@
 
 #include "ash/app_list/app_list_presenter_delegate.h"
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
@@ -114,14 +114,16 @@ void AppListPresenterDelegate::Init(app_list::AppListView* view,
       ->UpdateAutoHideState();
   view_ = view;
   aura::Window* root_window = Shell::GetRootWindowForDisplayId(display_id);
-  aura::Window* container = RootWindowController::ForWindow(root_window)
-                                ->GetContainer(kShellWindowId_AppListContainer);
 
-  view->Initialize(container, current_apps_page,
-                   Shell::Get()
-                       ->tablet_mode_controller()
-                       ->IsTabletModeWindowManagerEnabled(),
-                   IsSideShelf(root_window));
+  app_list::AppListView::InitParams params;
+  params.parent = RootWindowController::ForWindow(root_window)
+                      ->GetContainer(kShellWindowId_AppListContainer);
+  params.initial_apps_page = current_apps_page;
+  params.is_tablet_mode = Shell::Get()
+                              ->tablet_mode_controller()
+                              ->IsTabletModeWindowManagerEnabled();
+  params.is_side_shelf = IsSideShelf(root_window);
+  view->Initialize(params);
 
   if (!is_fullscreen_app_list_enabled_) {
     view->MaybeSetAnchorPoint(GetCenterOfDisplayForWindow(
@@ -199,7 +201,8 @@ base::TimeDelta AppListPresenterDelegate::GetVisibilityAnimationDuration(
     if (view_->GetBoundsInScreen().y() >
         Shelf::ForWindow(root_window)->GetIdealBounds().y())
       return base::TimeDelta::FromMilliseconds(0);
-    return animation_duration_fullscreen(IsSideShelf(root_window));
+    return GetAnimationDurationFullscreen(IsSideShelf(root_window),
+                                          view_->is_fullscreen());
   }
   return is_visible ? base::TimeDelta::FromMilliseconds(0)
                     : animation_duration();

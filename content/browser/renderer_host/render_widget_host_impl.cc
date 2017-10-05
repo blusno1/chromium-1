@@ -30,7 +30,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
-#include "cc/output/compositor_frame.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
@@ -90,6 +90,7 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
+#include "ui/display/screen.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -362,15 +363,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   latency_tracker_.SetDelegate(delegate_);
   DCHECK(base::TaskScheduler::GetInstance())
       << "Ref. Prerequisite section of post_task.h";
-#if defined(OS_WIN)
-  // Update the display color profile cache so that it is likely to be up to
-  // date when the renderer process requests the color profile.
-  if (gfx::ICCProfile::CachedProfilesNeedUpdate()) {
-    base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-        base::Bind(&gfx::ICCProfile::UpdateCachedProfilesOnBackgroundThread));
-  }
-#endif
 
   std::pair<RoutingIDWidgetMap::iterator, bool> result =
       g_routing_id_widget_map.Get().insert(std::make_pair(
@@ -612,7 +604,7 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_RequestMove, OnRequestMove)
     IPC_MESSAGE_HANDLER(ViewHostMsg_SetTooltipText, OnSetTooltipText)
     IPC_MESSAGE_HANDLER(ViewHostMsg_DidNotProduceFrame, DidNotProduceFrame)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateRect, OnUpdateRect)
+    IPC_MESSAGE_HANDLER(ViewHostMsg_ResizeOrRepaint_ACK, OnResizeOrRepaintACK)
     IPC_MESSAGE_HANDLER(ViewHostMsg_SetCursor, OnSetCursor)
     IPC_MESSAGE_HANDLER(ViewHostMsg_AutoscrollStart, OnAutoscrollStart)
     IPC_MESSAGE_HANDLER(ViewHostMsg_AutoscrollFling, OnAutoscrollFling)
@@ -711,7 +703,8 @@ void RenderWidgetHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
   // 1. WasResized -> Send ViewMsg_Resize to render
   // 2. WasResized -> do nothing as resize_ack_pending_ is true
   // 3. WasHidden
-  // 4. OnUpdateRect from (1) processed. Does NOT invoke WasResized as view
+  // 4. OnResizeOrRepaintACK from (1) processed. Does NOT invoke WasResized as
+  // view
   //    is hidden. Now renderer/browser out of sync with what they think size
   //    is.
   // By invoking WasResized the renderer is updated as necessary. WasResized
@@ -755,9 +748,18 @@ bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
     // ScaleToCeiledSize(new_size, device_scale_factor) ??
     resize_params->physical_backing_size = view_->GetPhysicalBackingSize();
     resize_params->top_controls_height = view_->GetTopControlsHeight();
+    resize_params->bottom_controls_height = view_->GetBottomControlsHeight();
+    if (IsUseZoomForDSFEnabled() && display::Screen::GetScreen()) {
+      const display::Display& display =
+          display::Screen::GetScreen()->GetPrimaryDisplay();
+      if (display.id() != display::kInvalidDisplayId) {
+        float device_scale = display.device_scale_factor();
+        resize_params->top_controls_height *= device_scale;
+        resize_params->bottom_controls_height *= device_scale;
+      }
+    }
     resize_params->browser_controls_shrink_blink_size =
         view_->DoBrowserControlsShrinkBlinkSize();
-    resize_params->bottom_controls_height = view_->GetBottomControlsHeight();
     resize_params->visible_viewport_size = view_->GetVisibleViewportSize();
     viz::LocalSurfaceId local_surface_id = view_->GetLocalSurfaceId();
     if (local_surface_id.is_valid())
@@ -954,7 +956,7 @@ void RenderWidgetHostImpl::WaitForSurface() {
 
   // The view_size will be current_size_ for auto-sized views and otherwise the
   // size of the view_. (For auto-sized views, current_size_ is updated during
-  // UpdateRect messages.)
+  // ResizeACK messages.)
   gfx::Size view_size = current_size_;
   if (!auto_resize_enabled_) {
     // Get the desired size from the current view bounds.
@@ -1004,7 +1006,7 @@ void RenderWidgetHostImpl::WaitForSurface() {
     TRACE_EVENT0("renderer_host", "WaitForSurface::WaitForSingleTaskToRun");
     if (ui::WindowResizeHelperMac::Get()->WaitForSingleTaskToRun(time_left)) {
       // For auto-resized views, current_size_ determines the view_size and it
-      // may have changed during the handling of an UpdateRect message.
+      // may have changed during the handling of an ResizeACK message.
       if (auto_resize_enabled_)
         view_size = current_size_;
       if (view_->HasAcceleratedSurface(view_size))
@@ -2007,16 +2009,16 @@ void RenderWidgetHostImpl::DidNotProduceFrame(const viz::BeginFrameAck& ack) {
     view_->OnDidNotProduceFrame(modified_ack);
 }
 
-void RenderWidgetHostImpl::OnUpdateRect(
-    const ViewHostMsg_UpdateRect_Params& params) {
-  TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::OnUpdateRect");
+void RenderWidgetHostImpl::OnResizeOrRepaintACK(
+    const ViewHostMsg_ResizeOrRepaint_ACK_Params& params) {
+  TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::OnResizeOrRepaintACK");
   TimeTicks paint_start = TimeTicks::Now();
 
   // Update our knowledge of the RenderWidget's size.
   current_size_ = params.view_size;
 
   bool is_resize_ack =
-      ViewHostMsg_UpdateRect_Flags::is_resize_ack(params.flags);
+      ViewHostMsg_ResizeOrRepaint_ACK_Flags::is_resize_ack(params.flags);
 
   // resize_ack_pending_ needs to be cleared before we call DidPaintRect, since
   // that will end up reaching GetBackingStore.
@@ -2026,7 +2028,7 @@ void RenderWidgetHostImpl::OnUpdateRect(
   }
 
   bool is_repaint_ack =
-      ViewHostMsg_UpdateRect_Flags::is_repaint_ack(params.flags);
+      ViewHostMsg_ResizeOrRepaint_ACK_Flags::is_repaint_ack(params.flags);
   if (is_repaint_ack) {
     DCHECK(repaint_ack_pending_);
     TRACE_EVENT_ASYNC_END0(
@@ -2038,15 +2040,16 @@ void RenderWidgetHostImpl::OnUpdateRect(
 
   DCHECK(!params.view_size.IsEmpty());
 
-  DidUpdateBackingStore(params, paint_start);
+  DidCompleteResizeOrRepaint(params, paint_start);
 
   if (auto_resize_enabled_) {
     bool post_callback = new_auto_size_.IsEmpty();
     new_auto_size_ = params.view_size;
     if (post_callback) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::BindOnce(&RenderWidgetHostImpl::DelayedAutoResized,
-                                    weak_factory_.GetWeakPtr()));
+          FROM_HERE,
+          base::BindOnce(&RenderWidgetHostImpl::DelayedAutoResized,
+                         weak_factory_.GetWeakPtr(), params.sequence_number));
     }
   }
 
@@ -2054,18 +2057,18 @@ void RenderWidgetHostImpl::OnUpdateRect(
   // support asynchronous painting, this is equivalent to
   // MPArch.RWH_TotalPaintTime.
   TimeDelta delta = TimeTicks::Now() - paint_start;
-  UMA_HISTOGRAM_TIMES("MPArch.RWH_OnMsgUpdateRect", delta);
+  UMA_HISTOGRAM_TIMES("MPArch.RWH_OnMsgResizeOrRepaintACK", delta);
 }
 
-void RenderWidgetHostImpl::DidUpdateBackingStore(
-    const ViewHostMsg_UpdateRect_Params& params,
+void RenderWidgetHostImpl::DidCompleteResizeOrRepaint(
+    const ViewHostMsg_ResizeOrRepaint_ACK_Params& params,
     const TimeTicks& paint_start) {
-  TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::DidUpdateBackingStore");
+  TRACE_EVENT0("renderer_host",
+               "RenderWidgetHostImpl::DidCompleteResizeOrRepaint");
 
   NotificationService::current()->Notify(
-      NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE,
-      Source<RenderWidgetHost>(this),
-      NotificationService::NoDetails());
+      NOTIFICATION_RENDER_WIDGET_HOST_DID_COMPLETE_RESIZE_OR_REPAINT,
+      Source<RenderWidgetHost>(this), NotificationService::NoDetails());
 
   // We don't need to update the view if the view is hidden. We must do this
   // early return after the ACK is sent, however, or the renderer will not send
@@ -2075,7 +2078,7 @@ void RenderWidgetHostImpl::DidUpdateBackingStore(
 
   // If we got a resize ack, then perhaps we have another resize to send?
   bool is_resize_ack =
-      ViewHostMsg_UpdateRect_Flags::is_resize_ack(params.flags);
+      ViewHostMsg_ResizeOrRepaint_ACK_Flags::is_resize_ack(params.flags);
   if (is_resize_ack)
     WasResized();
 }
@@ -2427,7 +2430,7 @@ bool RenderWidgetHostImpl::GotResponseToLockMouseRequest(bool allowed) {
   return true;
 }
 
-void RenderWidgetHostImpl::DelayedAutoResized() {
+void RenderWidgetHostImpl::DelayedAutoResized(uint64_t sequence_number) {
   gfx::Size new_size = new_auto_size_;
   // Clear the new_auto_size_ since the empty value is used as a flag to
   // indicate that no callback is in progress (i.e. without this line
@@ -2438,6 +2441,12 @@ void RenderWidgetHostImpl::DelayedAutoResized() {
 
   if (delegate_)
     delegate_->ResizeDueToAutoResize(this, new_size);
+
+  viz::LocalSurfaceId local_surface_id(view_->GetLocalSurfaceId());
+  if (local_surface_id.is_valid()) {
+    Send(new ViewMsg_SetLocalSurfaceIdForAutoResize(
+        routing_id_, sequence_number, local_surface_id));
+  }
 }
 
 void RenderWidgetHostImpl::DetachDelegate() {
@@ -2610,7 +2619,7 @@ void RenderWidgetHostImpl::SetNeedsBeginFrame(bool needs_begin_frame) {
 
 void RenderWidgetHostImpl::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame,
+    viz::CompositorFrame frame,
     viz::mojom::HitTestRegionListPtr hit_test_region_list,
     uint64_t submit_time) {
   // TODO(gklassen): Route hit-test data to appropriate HitTestAggregator.

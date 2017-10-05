@@ -830,7 +830,6 @@ images/script-counter-imageDimensionChanged-crash.html
 images/size-failure.html
 images/style-access-during-imageChanged-crash.html
 images/text-content-crash.html
-http/tests/devtools/console/only-one-deprecation-warning.html
 media/track/opera/interfaces/TextTrackList/onremovetrack.html
 media/track/track-css-cue-pseudo-class.html
 media/video-error-does-not-exist.html
@@ -980,6 +979,14 @@ virtual/gpu/fast/canvas/feimage-with-foreignobject-taint-canvas-2.html
 virtual/gpu-rasterization/images/drag-image-descendant-painting-sibling.html
 virtual/layout_ng/fast/block/float/floats-not-cleared-crash.html
 virtual/layout_ng/fast/block/float/positioned-float-crash.html
+
+# Include //media/OWNERS on review of changes to media-gpu-accelerated SmokeTests coverage.
+virtual/media-gpu-accelerated/media/video-autoplay.html
+virtual/media-gpu-accelerated/http/tests/media/media-source/mediasource-play.html
+virtual/media-gpu-accelerated/http/tests/media/media-source/mediasource-config-change-mp4-av-audio-bitrate.html
+virtual/media-gpu-accelerated/http/tests/media/media-source/mediasource-config-change-mp4-av-framesize.html
+virtual/media-gpu-accelerated/http/tests/media/media-source/mediasource-config-change-mp4-v-framerate.html
+
 virtual/layout_ng/fast/block/margin-collapse/019.html
 virtual/mojo-loading/http/tests/htmlimports/csp-block-import.html
 virtual/mojo-localstorage/external/wpt/webstorage/storage_enumerate.html
@@ -992,7 +999,6 @@ virtual/stable/http/tests/navigation/location-assign-adds-history-item.html
 virtual/stable/http/tests/navigation/replacestate-base-legal.html
 virtual/stable/http/tests/navigation/useragent.php
 virtual/stable/web-animations-api/additive-animations-unsupported.html
-virtual/stable/webexposed/global-interface-listing-compositor-worker.html
 virtual/stable/webexposed/internal-properties-should-not-be-exposed.html
 virtual/threaded/animations/stability/pseudo-element-animation-with-marker-crash.html
 virtual/threaded/printing/page-and-element-geometry-match.html

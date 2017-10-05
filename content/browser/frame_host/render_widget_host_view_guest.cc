@@ -294,7 +294,7 @@ void RenderWidgetHostViewGuest::SendSurfaceInfoToEmbedderImpl(
 
 void RenderWidgetHostViewGuest::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewGuest::OnSwapCompositorFrame");
 
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
@@ -659,7 +659,7 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
 
   if (blink::WebInputEvent::IsKeyboardEventType(event->GetType())) {
     NativeWebKeyboardEvent keyboard_event(
-        *static_cast<const blink::WebKeyboardEvent*>(event));
+        *static_cast<const blink::WebKeyboardEvent*>(event), GetNativeView());
     host_->ForwardKeyboardEvent(keyboard_event);
     return;
   }

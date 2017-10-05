@@ -8,8 +8,8 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/base/trace_helper.h"
 #include "platform/scheduler/base/virtual_time_domain.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate.h"
@@ -106,12 +106,11 @@ WebViewSchedulerImpl::WebViewSchedulerImpl(
       page_visible_(true),
       disable_background_timer_throttling_(disable_background_timer_throttling),
       allow_virtual_time_to_advance_(true),
-      virtual_time_paused_(false),
-      have_seen_loading_task_(false),
       virtual_time_(false),
       is_audio_playing_(false),
       reported_background_throttling_since_navigation_(false),
       has_active_connection_(false),
+      nested_runloop_(false),
       background_time_budget_pool_(nullptr),
       delegate_(delegate) {
   renderer_scheduler->AddWebViewScheduler(this);
@@ -140,18 +139,22 @@ void WebViewSchedulerImpl::SetPageVisible(bool page_visible) {
 
 std::unique_ptr<WebFrameSchedulerImpl>
 WebViewSchedulerImpl::CreateWebFrameSchedulerImpl(
-    base::trace_event::BlameContext* blame_context) {
+    base::trace_event::BlameContext* blame_context,
+    WebFrameScheduler::FrameType frame_type) {
   MaybeInitializeBackgroundCPUTimeBudgetPool();
   std::unique_ptr<WebFrameSchedulerImpl> frame_scheduler(
-      new WebFrameSchedulerImpl(renderer_scheduler_, this, blame_context));
+      new WebFrameSchedulerImpl(renderer_scheduler_, this, blame_context,
+                                frame_type));
   frame_scheduler->SetPageVisible(page_visible_);
   frame_schedulers_.insert(frame_scheduler.get());
   return frame_scheduler;
 }
 
 std::unique_ptr<blink::WebFrameScheduler>
-WebViewSchedulerImpl::CreateFrameScheduler(blink::BlameContext* blame_context) {
-  return CreateWebFrameSchedulerImpl(blame_context);
+WebViewSchedulerImpl::CreateFrameScheduler(
+    blink::BlameContext* blame_context,
+    WebFrameScheduler::FrameType frame_type) {
+  return CreateWebFrameSchedulerImpl(blame_context, frame_type);
 }
 
 void WebViewSchedulerImpl::Unregister(WebFrameSchedulerImpl* frame_scheduler) {
@@ -177,10 +180,15 @@ void WebViewSchedulerImpl::EnableVirtualTime() {
   renderer_scheduler_->GetVirtualTimeDomain()->SetCanAdvanceVirtualTime(
       allow_virtual_time_to_advance_);
 
+  if (!allow_virtual_time_to_advance_) {
+    renderer_scheduler_->VirtualTimePaused();
+    NotifyVirtualTimePaused();
+  }
+
   renderer_scheduler_->EnableVirtualTime();
   virtual_time_control_task_queue_ = WebTaskRunnerImpl::Create(
       renderer_scheduler_->VirtualTimeControlTaskQueue());
-  ApplyVirtualTimePolicyToTimers();
+  ApplyVirtualTimePolicy();
 
   initial_virtual_time_ = renderer_scheduler_->GetVirtualTimeDomain()->Now();
 }
@@ -191,21 +199,7 @@ void WebViewSchedulerImpl::DisableVirtualTimeForTesting() {
   virtual_time_ = false;
   renderer_scheduler_->DisableVirtualTimeForTesting();
   virtual_time_control_task_queue_ = nullptr;
-  ApplyVirtualTimePolicyToTimers();
-}
-
-void WebViewSchedulerImpl::ApplyVirtualTimePolicyToTimers() {
-  bool virtual_time_should_be_paused =
-      virtual_time_ && !allow_virtual_time_to_advance_;
-  if (virtual_time_should_be_paused == virtual_time_paused_)
-    return;
-
-  if (virtual_time_should_be_paused) {
-    renderer_scheduler_->VirtualTimePaused();
-  } else {
-    renderer_scheduler_->VirtualTimeResumed();
-  }
-  virtual_time_paused_ = virtual_time_should_be_paused;
+  ApplyVirtualTimePolicy();
 }
 
 void WebViewSchedulerImpl::SetAllowVirtualTimeToAdvance(
@@ -222,7 +216,12 @@ void WebViewSchedulerImpl::SetAllowVirtualTimeToAdvance(
 
   renderer_scheduler_->GetVirtualTimeDomain()->SetCanAdvanceVirtualTime(
       allow_virtual_time_to_advance);
-  ApplyVirtualTimePolicyToTimers();
+
+  if (allow_virtual_time_to_advance) {
+    renderer_scheduler_->VirtualTimeResumed();
+  } else {
+    renderer_scheduler_->VirtualTimePaused();
+  }
 }
 
 bool WebViewSchedulerImpl::VirtualTimeAllowedToAdvance() const {
@@ -231,44 +230,53 @@ bool WebViewSchedulerImpl::VirtualTimeAllowedToAdvance() const {
 
 void WebViewSchedulerImpl::DidStartLoading(unsigned long identifier) {
   pending_loads_.insert(identifier);
-  have_seen_loading_task_ = true;
-  ApplyVirtualTimePolicyForLoading();
+  ApplyVirtualTimePolicy();
 }
 
 void WebViewSchedulerImpl::DidStopLoading(unsigned long identifier) {
   pending_loads_.erase(identifier);
-  ApplyVirtualTimePolicyForLoading();
+  ApplyVirtualTimePolicy();
 }
 
 void WebViewSchedulerImpl::IncrementBackgroundParserCount() {
   background_parser_count_++;
-  ApplyVirtualTimePolicyForLoading();
+  ApplyVirtualTimePolicy();
 }
 
 void WebViewSchedulerImpl::DecrementBackgroundParserCount() {
   background_parser_count_--;
   DCHECK_GE(background_parser_count_, 0);
-  ApplyVirtualTimePolicyForLoading();
+  ApplyVirtualTimePolicy();
 }
 
 void WebViewSchedulerImpl::WillNavigateBackForwardSoon(
     WebFrameSchedulerImpl* frame_scheduler) {
   expect_backward_forwards_navigation_.insert(frame_scheduler);
-  ApplyVirtualTimePolicyForLoading();
+  ApplyVirtualTimePolicy();
 }
 
 void WebViewSchedulerImpl::DidBeginProvisionalLoad(
     WebFrameSchedulerImpl* frame_scheduler) {
   expect_backward_forwards_navigation_.erase(frame_scheduler);
   provisional_loads_.insert(frame_scheduler);
-  ApplyVirtualTimePolicyForLoading();
+  ApplyVirtualTimePolicy();
 }
 
 void WebViewSchedulerImpl::DidEndProvisionalLoad(
     WebFrameSchedulerImpl* frame_scheduler) {
   expect_backward_forwards_navigation_.erase(frame_scheduler);
   provisional_loads_.erase(frame_scheduler);
-  ApplyVirtualTimePolicyForLoading();
+  ApplyVirtualTimePolicy();
+}
+
+void WebViewSchedulerImpl::OnBeginNestedRunLoop() {
+  nested_runloop_ = true;
+  ApplyVirtualTimePolicy();
+}
+
+void WebViewSchedulerImpl::OnExitNestedRunLoop() {
+  nested_runloop_ = false;
+  ApplyVirtualTimePolicy();
 }
 
 void WebViewSchedulerImpl::SetVirtualTimePolicy(VirtualTimePolicy policy) {
@@ -284,12 +292,7 @@ void WebViewSchedulerImpl::SetVirtualTimePolicy(VirtualTimePolicy policy) {
       break;
 
     case VirtualTimePolicy::DETERMINISTIC_LOADING:
-      // If we're using VirtualTimePolicy::DETERMINISTIC_LOADING it's because
-      // we're expecting a network fetch. We reset |have_seen_loading_task_| to
-      // avoid a race between the load starting and virtual time budget
-      // expiring.
-      have_seen_loading_task_ = false;
-      ApplyVirtualTimePolicyForLoading();
+      ApplyVirtualTimePolicy();
       break;
   }
 }
@@ -335,18 +338,20 @@ void WebViewSchedulerImpl::RequestBeginMainFrameNotExpected(bool new_state) {
   delegate_->RequestBeginMainFrameNotExpected(new_state);
 }
 
-void WebViewSchedulerImpl::ApplyVirtualTimePolicyForLoading() {
+void WebViewSchedulerImpl::ApplyVirtualTimePolicy() {
   if (virtual_time_policy_ != VirtualTimePolicy::DETERMINISTIC_LOADING) {
     return;
   }
 
   // We pause virtual time until we've seen a loading task posted, because
   // otherwise we could advance virtual time arbitarially far before the
-  // first load arrives.
-  SetAllowVirtualTimeToAdvance(
-      pending_loads_.size() == 0 && background_parser_count_ == 0 &&
-      provisional_loads_.empty() && have_seen_loading_task_ &&
-      expect_backward_forwards_navigation_.empty());
+  // first load arrives.  We also pause virtual time while the run loop is
+  // nested because that implies something modal is happening such as the
+  // DevTools debugger pausing the system.
+  SetAllowVirtualTimeToAdvance(pending_loads_.size() == 0 &&
+                               background_parser_count_ == 0 &&
+                               provisional_loads_.empty() && !nested_runloop_ &&
+                               expect_backward_forwards_navigation_.empty());
 }
 
 bool WebViewSchedulerImpl::IsAudioPlaying() const {
@@ -376,7 +381,6 @@ void WebViewSchedulerImpl::AsValueInto(
                     disable_background_timer_throttling_);
   state->SetBoolean("allow_virtual_time_to_advance",
                     allow_virtual_time_to_advance_);
-  state->SetBoolean("have_seen_loading_task", have_seen_loading_task_);
   state->SetBoolean("virtual_time", virtual_time_);
   state->SetBoolean("is_audio_playing", is_audio_playing_);
   state->SetBoolean("reported_background_throttling_since_navigation",
@@ -463,6 +467,10 @@ void WebViewSchedulerImpl::UpdateBackgroundBudgetPoolThrottlingState() {
   } else {
     background_time_budget_pool_->EnableThrottling(&lazy_now);
   }
+}
+
+size_t WebViewSchedulerImpl::FrameCount() const {
+  return frame_schedulers_.size();
 }
 
 // static

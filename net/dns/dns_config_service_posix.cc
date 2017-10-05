@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -117,17 +118,18 @@ class DnsConfigWatcher {
 };
 #endif  // defined(OS_IOS)
 
+ConfigParsePosixResult ReadDnsConfig(DnsConfig* dns_config) {
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 #if !defined(OS_ANDROID)
-ConfigParsePosixResult ReadDnsConfig(DnsConfig* config) {
   ConfigParsePosixResult result;
-  config->unhandled_options = false;
+  dns_config->unhandled_options = false;
 // TODO(fuchsia): Use res_ninit() when it's implemented on Fuchsia.
 #if defined(OS_OPENBSD) || defined(OS_FUCHSIA)
   // Note: res_ninit in glibc always returns 0 and sets RES_INIT.
   // res_init behaves the same way.
   memset(&_res, 0, sizeof(_res));
   if (res_init() == 0) {
-    result = ConvertResStateToDnsConfig(_res, config);
+    result = ConvertResStateToDnsConfig(_res, dns_config);
   } else {
     result = CONFIG_PARSE_POSIX_RES_INIT_FAILED;
   }
@@ -135,7 +137,7 @@ ConfigParsePosixResult ReadDnsConfig(DnsConfig* config) {
   struct __res_state res;
   memset(&res, 0, sizeof(res));
   if (res_ninit(&res) == 0) {
-    result = ConvertResStateToDnsConfig(res, config);
+    result = ConvertResStateToDnsConfig(res, dns_config);
   } else {
     result = CONFIG_PARSE_POSIX_RES_INIT_FAILED;
   }
@@ -154,15 +156,14 @@ ConfigParsePosixResult ReadDnsConfig(DnsConfig* config) {
       break;
     case CONFIG_PARSE_POSIX_UNHANDLED_OPTIONS:
       LOG(WARNING) << "dns_config has unhandled options!";
-      config->unhandled_options = true;
+      dns_config->unhandled_options = true;
     default:
       return error;
   }
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
   // Override timeout value to match default setting on Windows.
-  config->timeout = base::TimeDelta::FromMilliseconds(kDnsDefaultTimeoutMs);
+  dns_config->timeout = base::TimeDelta::FromMilliseconds(kDnsDefaultTimeoutMs);
   return result;
-}
 #else  // defined(OS_ANDROID)
 // Theoretically, this is bad. __system_property_get is not a supported API
 // (but it's currently visible to anyone using Bionic), and the properties
@@ -173,7 +174,6 @@ ConfigParsePosixResult ReadDnsConfig(DnsConfig* config) {
 // won't end.
 // TODO(juliatuttle): Depend on libcutils, then switch this (and other uses of
 //                    __system_property_get) to property_get.
-ConfigParsePosixResult ReadDnsConfig(DnsConfig* dns_config) {
   dns_config->nameservers.clear();
 
   if (base::android::BuildInfo::GetInstance()->sdk_int() >=
@@ -209,8 +209,8 @@ ConfigParsePosixResult ReadDnsConfig(DnsConfig* dns_config) {
   }
 
   return CONFIG_PARSE_POSIX_OK;
-}
 #endif  // !defined(OS_ANDROID)
+}
 
 }  // namespace
 
@@ -317,7 +317,6 @@ class DnsConfigServicePosix::ConfigReader : public SerialWorker {
     }
     UMA_HISTOGRAM_ENUMERATION("AsyncDNS.ConfigParsePosix",
                               result, CONFIG_PARSE_POSIX_MAX);
-    UMA_HISTOGRAM_BOOLEAN("AsyncDNS.ConfigParseResult", success_);
     UMA_HISTOGRAM_TIMES("AsyncDNS.ConfigParseDuration",
                         base::TimeTicks::Now() - start_time);
   }
@@ -360,6 +359,8 @@ class DnsConfigServicePosix::HostsReader : public SerialWorker {
 
   void DoWork() override {
     base::TimeTicks start_time = base::TimeTicks::Now();
+    base::ScopedBlockingCall scoped_blocking_call(
+        base::BlockingType::MAY_BLOCK);
     success_ = ParseHostsFile(file_path_hosts_, &hosts_);
     UMA_HISTOGRAM_BOOLEAN("AsyncDNS.HostParseResult", success_);
     UMA_HISTOGRAM_TIMES("AsyncDNS.HostsParseDuration",
@@ -449,7 +450,7 @@ void DnsConfigServicePosix::SetDnsConfigForTesting(
   dns_config_for_testing_ = dns_config;
   // Reset ConfigReader to bind new DnsConfig for testing.
   config_reader_->Cancel();
-  config_reader_ = make_scoped_refptr(new ConfigReader(this));
+  config_reader_ = base::MakeRefCounted<ConfigReader>(this);
 }
 
 void DnsConfigServicePosix::SetHostsFilePathForTesting(
@@ -458,7 +459,7 @@ void DnsConfigServicePosix::SetHostsFilePathForTesting(
   file_path_hosts_ = file_path;
   // Reset HostsReader to bind new hosts file path.
   hosts_reader_->Cancel();
-  hosts_reader_ = make_scoped_refptr(new HostsReader(this));
+  hosts_reader_ = base::MakeRefCounted<HostsReader>(this);
   // If watching, reset to bind new hosts file path and resume watching.
   if (watcher_) {
     watcher_.reset(new Watcher(this));

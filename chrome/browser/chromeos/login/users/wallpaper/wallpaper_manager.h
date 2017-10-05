@@ -36,15 +36,19 @@ class UserImage;
 
 namespace chromeos {
 
-class WallpaperManager
-    : public wallpaper::WallpaperManagerBase,
-      public ash::mojom::WallpaperPicker,
-      public content::NotificationObserver,
-      public user_manager::UserManager::UserSessionStateObserver,
-      public wm::ActivationChangeObserver,
-      public aura::WindowObserver {
+class WallpaperManager : public wallpaper::WallpaperManagerBase,
+                         public ash::mojom::WallpaperPicker,
+                         public content::NotificationObserver,
+                         public user_manager::UserManager::Observer,
+                         public wm::ActivationChangeObserver,
+                         public aura::WindowObserver {
  public:
   class PendingWallpaper;
+
+  // Needed to avoid ambiguity of WallpaperManager::Observer. This can be
+  // removed when either WallpaperManagerBase::Observer or UserManager::Observer
+  // is moved its own header file.
+  using Observer = wallpaper::WallpaperManagerBase::Observer;
 
   ~WallpaperManager() override;
 
@@ -107,8 +111,8 @@ class WallpaperManager
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // user_manager::UserManager::UserSessionStateObserver:
-  void UserChangedChildStatus(user_manager::User* user) override;
+  // user_manager::UserManager::Observer:
+  void OnChildStatusChanged(const user_manager::User& user) override;
 
   // wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,
@@ -217,6 +221,7 @@ class WallpaperManager
       const base::FilePath& customized_default_wallpaper_file_large,
       std::unique_ptr<gfx::ImageSkia> large_wallpaper_image) override;
   void RecordWallpaperAppType() override;
+  bool CanGetWallpaperFilesId() const override;
 
   mojo::Binding<ash::mojom::WallpaperPicker> binding_;
 

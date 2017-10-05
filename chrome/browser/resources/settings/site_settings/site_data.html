@@ -39,7 +39,8 @@
         notify-dom-change>
       <div class="settings-box two-line" first$="[[!index]]" id="siteItem"
           on-tap="onSiteTap_" actionable>
-        <div class="favicon-image" style$="[[computeSiteIcon(item.site)]]">
+        <div class="favicon-image"
+            style$="background-image: [[favicon_(item.site)]]">
         </div>
         <div class="middle">
           [[item.site]]
@@ -62,7 +63,7 @@
       <div slot="title">
         $i18n{siteSettingsCookieRemoveDialogTitle}
       </div>
-      <div slot="body">[[confirmationDeleteMsg_]]</div>
+      <div slot="body">$i18n{siteSettingsCookieRemoveMultipleConfirmation}</div>
       <div slot="button-container">
         <paper-button class="cancel-button" on-tap="onCloseDialog_">
           $i18n{cancel}

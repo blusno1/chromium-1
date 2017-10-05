@@ -4,12 +4,13 @@
 
 #include "core/paint/BoxPaintInvalidator.h"
 
-#include "core/HTMLNames.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "core/layout/LayoutView.h"
+#include "core/paint/PaintControllerPaintTest.h"
 #include "core/paint/PaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -18,13 +19,10 @@
 
 namespace blink {
 
-class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
-                                private ScopedRootLayerScrollingForTest,
-                                public RenderingTest {
+class BoxPaintInvalidatorTest : public PaintControllerPaintTest {
  public:
   BoxPaintInvalidatorTest()
-      : ScopedRootLayerScrollingForTest(GetParam()),
-        RenderingTest(SingleChildLocalFrameClient::Create()) {}
+      : PaintControllerPaintTest(SingleChildLocalFrameClient::Create()) {}
 
  protected:
   const RasterInvalidationTracking* GetRasterInvalidationTracking() const {
@@ -38,12 +36,10 @@ class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
   PaintInvalidationReason ComputePaintInvalidationReason(
       const LayoutBox& box,
       const LayoutRect& old_visual_rect,
-      const LayoutPoint& old_location,
-      const LayoutPoint& new_location) {
+      const LayoutPoint& old_location) {
     PaintInvalidatorContext context;
     context.old_visual_rect = old_visual_rect;
     context.old_location = old_location;
-    context.new_location = new_location;
     return BoxPaintInvalidator(box, context).ComputePaintInvalidationReason();
   }
 
@@ -57,12 +53,11 @@ class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
     auto& target = *GetDocument().getElementById("target");
     const auto& box = *ToLayoutBox(target.GetLayoutObject());
     LayoutRect visual_rect = box.VisualRect();
+    LayoutPoint location = box.LocationInBacking();
 
     // No geometry change.
-    EXPECT_EQ(
-        PaintInvalidationReason::kNone,
-        ComputePaintInvalidationReason(box, visual_rect, visual_rect.Location(),
-                                       visual_rect.Location()));
+    EXPECT_EQ(PaintInvalidationReason::kNone,
+              ComputePaintInvalidationReason(box, visual_rect, location));
 
     target.setAttribute(
         HTMLNames::styleAttr,
@@ -72,10 +67,8 @@ class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
     box.GetMutableForPainting().SetVisualRect(
         LayoutRect(visual_rect.Location(), box.Size()));
 
-    EXPECT_EQ(
-        PaintInvalidationReason::kGeometry,
-        ComputePaintInvalidationReason(box, visual_rect, visual_rect.Location(),
-                                       box.VisualRect().Location()));
+    EXPECT_EQ(PaintInvalidationReason::kGeometry,
+              ComputePaintInvalidationReason(box, visual_rect, location));
   }
 
  private:
@@ -120,7 +113,9 @@ class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
   }
 };
 
-INSTANTIATE_TEST_CASE_P(All, BoxPaintInvalidatorTest, ::testing::Bool());
+INSTANTIATE_TEST_CASE_P(All,
+                        BoxPaintInvalidatorTest,
+                        ::testing::Values(0, kRootLayerScrolling));
 
 TEST_P(BoxPaintInvalidatorTest, SlowMapToVisualRectInAncestorSpaceLayoutView) {
   SetBodyInnerHTML(
@@ -165,18 +160,15 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonPaintingNothing) {
   // No geometry change.
   EXPECT_EQ(
       PaintInvalidationReason::kNone,
-      ComputePaintInvalidationReason(box, visual_rect, visual_rect.Location(),
-                                     visual_rect.Location()));
+      ComputePaintInvalidationReason(box, visual_rect, visual_rect.Location()));
 
   // Location change.
   EXPECT_EQ(PaintInvalidationReason::kNone,
             ComputePaintInvalidationReason(
-                box, visual_rect, visual_rect.Location() + LayoutSize(10, 20),
-                visual_rect.Location()));
+                box, visual_rect, visual_rect.Location() + LayoutSize(10, 20)));
 
   // Visual rect size change.
   LayoutRect old_visual_rect = visual_rect;
-  LayoutRect new_visual_rect = box.VisualRect();
   target.setAttribute(HTMLNames::styleAttr, "width: 200px");
   GetDocument().View()->UpdateLifecycleToLayoutClean();
   // Simulate that PaintInvalidator updates visual rect.
@@ -185,8 +177,7 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonPaintingNothing) {
 
   EXPECT_EQ(PaintInvalidationReason::kNone,
             ComputePaintInvalidationReason(box, old_visual_rect,
-                                           old_visual_rect.Location(),
-                                           new_visual_rect.Location()));
+                                           old_visual_rect.Location()));
 }
 
 TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonBasic) {
@@ -205,46 +196,42 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonBasic) {
   // No geometry change.
   EXPECT_EQ(
       PaintInvalidationReason::kNone,
-      ComputePaintInvalidationReason(box, visual_rect, visual_rect.Location(),
-                                     visual_rect.Location()));
+      ComputePaintInvalidationReason(box, visual_rect, visual_rect.Location()));
 
   // Location change.
   EXPECT_EQ(PaintInvalidationReason::kGeometry,
             ComputePaintInvalidationReason(
-                box, visual_rect, visual_rect.Location() + LayoutSize(10, 20),
-                visual_rect.Location()));
+                box, visual_rect, visual_rect.Location() + LayoutSize(10, 20)));
 
   // Visual rect size change.
   LayoutRect old_visual_rect = visual_rect;
-  LayoutRect new_visual_rect = box.VisualRect();
   target.setAttribute(HTMLNames::styleAttr, "background: blue; width: 200px");
   GetDocument().View()->UpdateLifecycleToLayoutClean();
   // Simulate that PaintInvalidator updates visual rect.
   box.GetMutableForPainting().SetVisualRect(
       LayoutRect(visual_rect.Location(), box.Size()));
+
   EXPECT_EQ(PaintInvalidationReason::kIncremental,
             ComputePaintInvalidationReason(box, old_visual_rect,
-                                           old_visual_rect.Location(),
-                                           new_visual_rect.Location()));
+                                           old_visual_rect.Location()));
 
   // Visual rect size change, with location in backing different from location
   // of visual rect.
   LayoutPoint fake_location = visual_rect.Location() + LayoutSize(10, 20);
-  EXPECT_EQ(PaintInvalidationReason::kGeometry,
-            ComputePaintInvalidationReason(box, old_visual_rect, fake_location,
-                                           fake_location));
+  box.GetMutableForPainting().SetLocationInBacking(fake_location);
+  EXPECT_EQ(
+      PaintInvalidationReason::kGeometry,
+      ComputePaintInvalidationReason(box, old_visual_rect, fake_location));
 
   // Should use the existing full paint invalidation reason regardless of
   // geometry change.
   box.SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kStyle);
   EXPECT_EQ(
       PaintInvalidationReason::kStyle,
-      ComputePaintInvalidationReason(box, visual_rect, visual_rect.Location(),
-                                     visual_rect.Location()));
+      ComputePaintInvalidationReason(box, visual_rect, visual_rect.Location()));
   EXPECT_EQ(PaintInvalidationReason::kStyle,
             ComputePaintInvalidationReason(
-                box, visual_rect, visual_rect.Location() + LayoutSize(10, 20),
-                visual_rect.Location()));
+                box, visual_rect, visual_rect.Location() + LayoutSize(10, 20)));
 }
 
 TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonOtherCases) {
@@ -451,7 +438,7 @@ TEST_P(BoxPaintInvalidatorTest, ResizeRotatedChild) {
   Element* target = GetDocument().getElementById("target");
   target->setAttribute(HTMLNames::styleAttr,
                        "transform: rotate(45deg); width: 200px");
-  target->setInnerHTML(
+  target->SetInnerHTMLFromString(
       "<div id=child style='width: 50px; height: 50px; background: "
       "red'></div>");
   GetDocument().View()->UpdateAllLifecyclePhases();
@@ -654,7 +641,7 @@ TEST_P(BoxPaintInvalidatorTest, CompositedBackgroundAttachmentLocalResize) {
   Element* target = GetDocument().getElementById("target");
   target->setAttribute(HTMLNames::classAttr, "border local-background");
   target->setAttribute(HTMLNames::styleAttr, "will-change: transform");
-  target->setInnerHTML(
+  target->SetInnerHTMLFromString(
       "<div id=child style='width: 500px; height: 500px'></div>",
       ASSERT_NO_EXCEPTION);
   Element* child = GetDocument().getElementById("child");
@@ -709,7 +696,7 @@ TEST_P(BoxPaintInvalidatorTest,
   target->setAttribute(HTMLNames::classAttr,
                        "border local-background gradient");
   target->setAttribute(HTMLNames::styleAttr, "will-change: transform");
-  target->setInnerHTML(
+  target->SetInnerHTMLFromString(
       "<div id='child' style='width: 500px; height: 500px'></div>",
       ASSERT_NO_EXCEPTION);
   Element* child = GetDocument().getElementById("child");
@@ -759,7 +746,7 @@ TEST_P(BoxPaintInvalidatorTest,
 TEST_P(BoxPaintInvalidatorTest, NonCompositedBackgroundAttachmentLocalResize) {
   Element* target = GetDocument().getElementById("target");
   target->setAttribute(HTMLNames::classAttr, "border local-background");
-  target->setInnerHTML(
+  target->SetInnerHTMLFromString(
       "<div id=child style='width: 500px; height: 500px'></div>",
       ASSERT_NO_EXCEPTION);
   Element* child = GetDocument().getElementById("child");
@@ -793,8 +780,8 @@ TEST_P(BoxPaintInvalidatorTest, CompositedSolidBackgroundResize) {
   EnableCompositing();
   Element* target = GetDocument().getElementById("target");
   target->setAttribute(HTMLNames::classAttr, "solid-composited-scroller");
-  target->setInnerHTML("<div style='height: 500px'></div>",
-                       ASSERT_NO_EXCEPTION);
+  target->SetInnerHTMLFromString("<div style='height: 500px'></div>",
+                                 ASSERT_NO_EXCEPTION);
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   // Resize the scroller.

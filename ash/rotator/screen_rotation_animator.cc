@@ -4,7 +4,7 @@
 
 #include "ash/rotator/screen_rotation_animator.h"
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/rotator/screen_rotation_animation.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
@@ -14,8 +14,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
 #include "ui/compositor/layer.h"

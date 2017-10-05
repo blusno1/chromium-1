@@ -9,6 +9,7 @@ import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
+import("//net/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//ppapi/features/features.gni")
 import("//services/catalog/public/tools/catalog.gni")
@@ -29,10 +30,18 @@ static_library("test_support") {
   }
 
   sources = [
+    "../browser/accessibility/accessibility_event_recorder.cc",
+    "../browser/accessibility/accessibility_event_recorder.h",
+    "../browser/accessibility/accessibility_event_recorder_mac.mm",
+    "../browser/accessibility/accessibility_event_recorder_win.cc",
     "../browser/background_fetch/background_fetch_embedded_worker_test_helper.cc",
     "../browser/background_fetch/background_fetch_embedded_worker_test_helper.h",
     "../browser/background_fetch/background_fetch_test_base.cc",
     "../browser/background_fetch/background_fetch_test_base.h",
+    "../browser/background_fetch/background_fetch_test_browser_context.cc",
+    "../browser/background_fetch/background_fetch_test_browser_context.h",
+    "../browser/background_fetch/mock_background_fetch_delegate.cc",
+    "../browser/background_fetch/mock_background_fetch_delegate.h",
     "../browser/download/mock_download_file.cc",
     "../browser/download/mock_download_file.h",
     "../browser/download/mock_download_item_impl.cc",
@@ -58,14 +67,16 @@ static_library("test_support") {
     "../public/test/browsing_data_remover_test_util.h",
     "../public/test/cache_test_util.cc",
     "../public/test/cache_test_util.h",
-    "../public/test/cancelling_navigation_throttle.cc",
-    "../public/test/cancelling_navigation_throttle.h",
     "../public/test/content_test_suite_base.cc",
     "../public/test/content_test_suite_base.h",
+    "../public/test/controllable_http_response.cc",
+    "../public/test/controllable_http_response.h",
     "../public/test/download_test_observer.cc",
     "../public/test/download_test_observer.h",
     "../public/test/fake_download_item.cc",
     "../public/test/fake_download_item.h",
+    "../public/test/fake_service_worker_context.cc",
+    "../public/test/fake_service_worker_context.h",
     "../public/test/fake_speech_recognition_manager.cc",
     "../public/test/fake_speech_recognition_manager.h",
     "../public/test/find_test_utils.cc",
@@ -90,8 +101,6 @@ static_library("test_support") {
     "../public/test/mock_render_thread.h",
     "../public/test/mock_resource_context.cc",
     "../public/test/mock_resource_context.h",
-    "../public/test/mock_service_worker_context.cc",
-    "../public/test/mock_service_worker_context.h",
     "../public/test/navigation_handle_observer.cc",
     "../public/test/navigation_handle_observer.h",
     "../public/test/navigation_simulator.cc",
@@ -128,6 +137,8 @@ static_library("test_support") {
     "../public/test/test_launcher.h",
     "../public/test/test_navigation_observer.cc",
     "../public/test/test_navigation_observer.h",
+    "../public/test/test_navigation_throttle.cc",
+    "../public/test/test_navigation_throttle.h",
     "../public/test/test_navigation_throttle_inserter.cc",
     "../public/test/test_navigation_throttle_inserter.h",
     "../public/test/test_notification_tracker.cc",
@@ -167,6 +178,8 @@ static_library("test_support") {
     "content_browser_sanity_checker.h",
     "content_test_suite.cc",
     "content_test_suite.h",
+    "did_commit_provisional_load_interceptor.cc",
+    "did_commit_provisional_load_interceptor.h",
     "dummy_render_widget_host_delegate.h",
     "dwrite_font_fake_sender_win.cc",
     "dwrite_font_fake_sender_win.h",
@@ -627,10 +640,6 @@ test("content_browsertests") {
   sources = [
     "../app/mojo/mojo_browsertest.cc",
     "../browser/accessibility/accessibility_action_browsertest.cc",
-    "../browser/accessibility/accessibility_event_recorder.cc",
-    "../browser/accessibility/accessibility_event_recorder.h",
-    "../browser/accessibility/accessibility_event_recorder_mac.mm",
-    "../browser/accessibility/accessibility_event_recorder_win.cc",
     "../browser/accessibility/accessibility_ipc_error_browsertest.cc",
     "../browser/accessibility/accessibility_mode_browsertest.cc",
     "../browser/accessibility/cross_platform_accessibility_browsertest.cc",
@@ -739,6 +748,7 @@ test("content_browsertests") {
     "../browser/site_per_process_browsertest.cc",
     "../browser/site_per_process_browsertest.h",
     "../browser/site_per_process_mac_browsertest.mm",
+    "../browser/snapshot_browsertest.cc",
     "../browser/storage_partition_impl_browsertest.cc",
     "../browser/top_document_isolation_browsertest.cc",
     "../browser/tracing/background_tracing_manager_browsertest.cc",
@@ -967,7 +977,10 @@ test("content_browsertests") {
 
   if (is_mac) {
     sources += [ "../renderer/external_popup_menu_browsertest.cc" ]
-    deps += [ "//content/shell:content_shell" ]
+    deps += [
+      "//content/shell:content_shell",
+      "//third_party/ocmock",
+    ]
     data += [ "$root_out_dir/Content Shell.app/" ]
   }
 
@@ -1072,6 +1085,11 @@ test("content_browsertests") {
       # The cast shell has plugin support but no pdf, causing data URL PDF tests
       # to fail.
       "../browser/frame_host/data_url_navigation_browsertest.cc",
+
+      # The multi-window tests don't work on cast_shell. Since there's little
+      # added value in running the single-window test on this platform, just
+      # exclude them all.
+      "../browser/snapshot_browsertest.cc",
     ]
   }
 }
@@ -1391,6 +1409,8 @@ test("content_unittests") {
     "../browser/web_contents/web_drag_dest_mac_unittest.mm",
     "../browser/web_contents/web_drag_source_mac_unittest.mm",
     "../browser/webauth/authenticator_impl_unittest.cc",
+    "../browser/webauth/cbor/cbor_values_unittest.cc",
+    "../browser/webauth/cbor/cbor_writer_unittest.cc",
     "../browser/websockets/websocket_manager_unittest.cc",
     "../browser/webui/i18n_source_stream_unittest.cc",
     "../browser/webui/url_data_manager_backend_unittest.cc",
@@ -1435,6 +1455,7 @@ test("content_unittests") {
     "../common/content_switches_internal_unittest.cc",
     "../common/cross_site_document_classifier_unittest.cc",
     "../common/cursors/webcursor_unittest.cc",
+    "../common/devtools/devtools_network_controller_unittest.cc",
     "../common/dom_storage/dom_storage_map_unittest.cc",
     "../common/feature_policy/feature_policy_unittest.cc",
     "../common/indexed_db/indexed_db_key_unittest.cc",
@@ -1443,7 +1464,6 @@ test("content_unittests") {
     "../common/input/input_param_traits_unittest.cc",
     "../common/input/touch_event_stream_validator_unittest.cc",
     "../common/inter_process_time_ticks_converter_unittest.cc",
-    "../common/mac/app_nap_activity_unittest.mm",
     "../common/mac/attributed_string_coder_unittest.mm",
     "../common/mac/font_descriptor_unittest.mm",
     "../common/manifest_util_unittest.cc",
@@ -1471,7 +1491,6 @@ test("content_unittests") {
     "../network/network_context_unittest.cc",
     "../network/network_service_unittest.cc",
     "../network/url_loader_unittest.cc",
-    "../public/common/sandbox_type_unittest.cc",
     "../public/common/simple_url_loader_unittest.cc",
     "../public/common/url_utils_unittest.cc",
     "../public/test/referrer_unittest.cc",
@@ -1565,6 +1584,7 @@ test("content_unittests") {
     "//components/offline_pages/features:features",
     "//components/rappor:test_support",
     "//components/ukm:test_support",
+    "//components/viz/client",
     "//components/viz/common",
     "//components/viz/host",
     "//components/viz/service",
@@ -1621,6 +1641,8 @@ test("content_unittests") {
     "//services/file/public/interfaces",
     "//services/metrics/public/interfaces",
     "//services/network/public/interfaces:interfaces",
+    "//services/proxy_resolver/public/cpp:cpp_browser",
+    "//services/proxy_resolver/public/cpp:cpp_utility",
     "//services/service_manager/public/cpp:service_test_support",
     "//services/video_capture/public/interfaces",
     "//skia",
@@ -1660,6 +1682,12 @@ test("content_unittests") {
 
   if (is_posix && !is_fuchsia) {
     sources += [ "../browser/posix_file_descriptor_info_impl_unittest.cc" ]
+  }
+
+  if (enable_net_mojo) {
+    sources += [ "../public/test/url_request_context_builder_mojo_unittest.cc" ]
+
+    deps += [ "//net:net_utility_services" ]
   }
 
   if (enable_plugins) {
@@ -1726,6 +1754,7 @@ test("content_unittests") {
       "../renderer/media/rtc_peer_connection_handler_unittest.cc",
       "../renderer/media/speech_recognition_audio_sink_unittest.cc",
       "../renderer/media/user_media_client_impl_unittest.cc",
+      "../renderer/media/video_track_adapter_unittest.cc",
       "../renderer/media/webmediaplayer_ms_unittest.cc",
       "../renderer/media/webrtc/media_stream_remote_video_source_unittest.cc",
       "../renderer/media/webrtc/media_stream_track_metrics_unittest.cc",

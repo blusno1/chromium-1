@@ -610,6 +610,40 @@ var availableTests = [
         }, result);
       }));
   },
+  function getPropertiesCellularDefault() {
+    chrome.networkingPrivate.getProperties(
+      kCellularGuid,
+      callbackPass(function(result) {
+        assertEq({
+          Cellular: {
+            AllowRoaming: false,
+            Carrier: 'Cellular1_Carrier',
+            ESN: "test_esn",
+            Family: 'GSM',
+            HomeProvider: {
+              Code: '000000',
+              Country: 'us',
+              Name: 'Cellular1_Provider'
+            },
+            ICCID: "test_iccid",
+            IMEI: "test_imei",
+            MDN: "test_mdn",
+            MEID: "test_meid",
+            MIN: "test_min",
+            ModelID:"test_model_id",
+            SIMLockStatus: {LockEnabled: true, LockType: '', RetriesLeft: 3},
+            SignalStrength: 0,
+          },
+          Connectable: false,
+          ConnectionState: ConnectionStateType.NOT_CONNECTED,
+          GUID: kCellularGuid,
+          Name: 'Cellular1_Provider (us)',
+          Priority: 0,
+          Source: 'None',
+          Type: NetworkType.CELLULAR,
+        }, result);
+      }));
+  },
   function getManagedProperties() {
     chrome.networkingPrivate.getManagedProperties(
       'stub_wifi2',
@@ -742,8 +776,10 @@ var availableTests = [
           assertEq(network_guid, result.GUID);
           var new_properties = {
             Priority: 1,
+            Type: 'VPN',
             VPN: {
-              Host: 'vpn.host1'
+              Host: 'vpn.host1',
+              Type: 'OpenVPN',
             }
           };
           chrome.networkingPrivate.setProperties(
@@ -941,6 +977,31 @@ var availableTests = [
                       simState.newPin = kDefaultPin;
                       chrome.networkingPrivate.setCellularSimState(
                           kCellularGuid, simState, networkCallbackPass());
+                    }));
+              }));
+        }));
+  },
+  function selectCellularMobileNetwork() {
+    chrome.networkingPrivate.getProperties(
+        kCellularGuid, callbackPass(function(result) {
+          // Ensure that there are two found networks and the first is selected.
+          assertTrue(!!result.Cellular.FoundNetworks);
+          assertTrue(result.Cellular.FoundNetworks.length >= 2);
+          assertTrue(result.Cellular.FoundNetworks[0].Status == 'current');
+          assertTrue(result.Cellular.FoundNetworks[1].Status == 'available');
+          // Select the second network
+          var secondNetworkId = result.Cellular.FoundNetworks[1].NetworkId;
+          chrome.networkingPrivate.selectCellularMobileNetwork(
+              kCellularGuid, secondNetworkId, callbackPass(function() {
+                chrome.networkingPrivate.getProperties(
+                    kCellularGuid, callbackPass(function(result) {
+                      // Ensure that the second network is selected.
+                      assertTrue(!!result.Cellular.FoundNetworks);
+                      assertTrue(result.Cellular.FoundNetworks.length >= 2);
+                      assertEq(
+                          'available', result.Cellular.FoundNetworks[0].Status);
+                      assertEq(
+                          'current', result.Cellular.FoundNetworks[1].Status);
                     }));
               }));
         }));

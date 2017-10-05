@@ -5,6 +5,7 @@
 #ifndef LineLayoutItem_h
 #define LineLayoutItem_h
 
+#include "core/editing/PositionWithAffinity.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutObjectInlines.h"
 #include "core/layout/LayoutText.h"
@@ -252,6 +253,8 @@ class LineLayoutItem {
   bool IsInFlowPositioned() const {
     return layout_object_->IsInFlowPositioned();
   }
+
+  bool IsRelPositioned() const { return layout_object_->IsRelPositioned(); }
 
   // TODO(dgrogan/eae): Can we change this to GlobalToLocal and vice versa
   // instead of having 4 methods? See localToAbsoluteQuad below.

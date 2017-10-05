@@ -7,7 +7,9 @@
 #include "base/bind.h"
 #include "chromeos/components/tether/active_host.h"
 #include "chromeos/components/tether/active_host_network_state_updater.h"
+#include "chromeos/components/tether/ble_advertisement_device_queue.h"
 #include "chromeos/components/tether/ble_connection_manager.h"
+#include "chromeos/components/tether/ble_synchronizer.h"
 #include "chromeos/components/tether/crash_recovery_manager.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
 #include "chromeos/components/tether/disconnect_tethering_request_sender.h"
@@ -64,7 +66,6 @@ std::unique_ptr<Initializer> InitializerImpl::Factory::NewInstance(
     cryptauth::CryptAuthService* cryptauth_service,
     NotificationPresenter* notification_presenter,
     PrefService* pref_service,
-    ProfileOAuth2TokenService* token_service,
     NetworkStateHandler* network_state_handler,
     ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
     NetworkConnect* network_connect,
@@ -74,7 +75,7 @@ std::unique_ptr<Initializer> InitializerImpl::Factory::NewInstance(
     factory_instance_ = new Factory();
   }
   return factory_instance_->BuildInstance(
-      cryptauth_service, notification_presenter, pref_service, token_service,
+      cryptauth_service, notification_presenter, pref_service,
       network_state_handler, managed_network_configuration_handler,
       network_connect, network_connection_handler, adapter);
 }
@@ -96,14 +97,13 @@ std::unique_ptr<Initializer> InitializerImpl::Factory::BuildInstance(
     cryptauth::CryptAuthService* cryptauth_service,
     NotificationPresenter* notification_presenter,
     PrefService* pref_service,
-    ProfileOAuth2TokenService* token_service,
     NetworkStateHandler* network_state_handler,
     ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
     NetworkConnect* network_connect,
     NetworkConnectionHandler* network_connection_handler,
     scoped_refptr<device::BluetoothAdapter> adapter) {
   return base::WrapUnique(new InitializerImpl(
-      cryptauth_service, notification_presenter, pref_service, token_service,
+      cryptauth_service, notification_presenter, pref_service,
       network_state_handler, managed_network_configuration_handler,
       network_connect, network_connection_handler, adapter));
 }
@@ -112,7 +112,6 @@ InitializerImpl::InitializerImpl(
     cryptauth::CryptAuthService* cryptauth_service,
     NotificationPresenter* notification_presenter,
     PrefService* pref_service,
-    ProfileOAuth2TokenService* token_service,
     NetworkStateHandler* network_state_handler,
     ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
     NetworkConnect* network_connect,
@@ -121,7 +120,6 @@ InitializerImpl::InitializerImpl(
     : cryptauth_service_(cryptauth_service),
       notification_presenter_(notification_presenter),
       pref_service_(pref_service),
-      token_service_(token_service),
       network_state_handler_(network_state_handler),
       managed_network_configuration_handler_(
           managed_network_configuration_handler),
@@ -129,20 +127,10 @@ InitializerImpl::InitializerImpl(
       network_connection_handler_(network_connection_handler),
       adapter_(adapter),
       weak_ptr_factory_(this) {
-  if (!token_service_->RefreshTokenIsAvailable(
-          cryptauth_service_->GetAccountId())) {
-    PA_LOG(INFO) << "Refresh token not yet available; "
-                 << "waiting for valid token to initializing tether feature.";
-    token_service_->AddObserver(this);
-    return;
-  }
-
-  PA_LOG(INFO) << "Refresh token is available; initializing tether feature.";
   CreateComponent();
 }
 
 InitializerImpl::~InitializerImpl() {
-  token_service_->RemoveObserver(this);
   network_state_handler_->set_tether_sort_delegate(nullptr);
 
   if (disconnect_tethering_request_sender_)
@@ -154,9 +142,8 @@ InitializerImpl::~InitializerImpl() {
 // TODO(khorimoto): Refactor this flow.
 void InitializerImpl::RequestShutdown() {
   // If shutdown has already happened, there is nothing else to do.
-  if (status() != Initializer::Status::ACTIVE) {
+  if (status() != Initializer::Status::ACTIVE)
     return;
-  }
 
   // If there is an active connection, it needs to be disconnected before the
   // Tether component is shut down.
@@ -172,54 +159,29 @@ void InitializerImpl::RequestShutdown() {
         base::Bind(&OnDisconnectErrorDuringShutdown));
   }
 
-  // If the Tether component is not in the process of sending a
-  // DisconnectTetheringRequest, shut down now.
-  if (!disconnect_tethering_request_sender_ ||
-      !disconnect_tethering_request_sender_->HasPendingRequests()) {
+  if (!IsAsyncShutdownRequired()) {
     TransitionToStatus(Initializer::Status::SHUT_DOWN);
     return;
   }
 
-  // If a DisconnectTetheringRequest is currently being sent, the Tether
-  // component must finish sending it before shutting down completely to ensure
-  // that the ex-active host turns off its Wi-Fi hotspot (see crbug.com/754097).
   TransitionToStatus(Initializer::Status::SHUTTING_DOWN);
   StartAsynchronousShutdown();
 }
 
-void InitializerImpl::OnRefreshTokensLoaded() {
-  if (!token_service_->RefreshTokenIsAvailable(
-          cryptauth_service_->GetAccountId())) {
-    // If a token for the active account is still not available, continue
-    // waiting for a new token.
-    return;
-  }
-
-  PA_LOG(INFO) << "Refresh token has loaded; initializing tether feature.";
-
-  token_service_->RemoveObserver(this);
-  CreateComponent();
+void InitializerImpl::OnAllAdvertisementsUnregistered() {
+  FinishAsynchronousShutdownIfPossible();
 }
 
 void InitializerImpl::OnPendingDisconnectRequestsComplete() {
-  DCHECK(status() == Initializer::Status::SHUTTING_DOWN);
-  disconnect_tethering_request_sender_->RemoveObserver(this);
+  FinishAsynchronousShutdownIfPossible();
+}
 
-  // Shutdown has completed. It is now safe to delete the objects that were
-  // shutting down asynchronously.
-  disconnect_tethering_request_sender_.reset();
-  ble_connection_manager_.reset();
-  remote_beacon_seed_fetcher_.reset();
-  local_device_data_provider_.reset();
-  tether_host_fetcher_.reset();
-
-  TransitionToStatus(Initializer::Status::SHUT_DOWN);
+void InitializerImpl::OnDiscoverySessionStateChanged(
+    bool discovery_session_active) {
+  FinishAsynchronousShutdownIfPossible();
 }
 
 void InitializerImpl::CreateComponent() {
-  PA_LOG(INFO) << "Successfully set Bluetooth advertisement interval. "
-               << "Initializing tether feature.";
-
   network_list_sorter_ = base::MakeUnique<NetworkListSorter>();
   network_state_handler_->set_tether_sort_delegate(network_list_sorter_.get());
   tether_host_fetcher_ =
@@ -229,9 +191,17 @@ void InitializerImpl::CreateComponent() {
   remote_beacon_seed_fetcher_ =
       base::MakeUnique<cryptauth::RemoteBeaconSeedFetcher>(
           cryptauth_service_->GetCryptAuthDeviceManager());
+  ble_advertisement_device_queue_ =
+      base::MakeUnique<BleAdvertisementDeviceQueue>();
+  ble_synchronizer_ = base::MakeUnique<BleSynchronizer>(adapter_);
+  ble_advertiser_ = base::MakeUnique<BleAdvertiser>(
+      local_device_data_provider_.get(), remote_beacon_seed_fetcher_.get(),
+      ble_synchronizer_.get());
+  ble_scanner_ = base::MakeUnique<BleScanner>(
+      adapter_, local_device_data_provider_.get(), ble_synchronizer_.get());
   ble_connection_manager_ = base::MakeUnique<BleConnectionManager>(
-      cryptauth_service_, adapter_, local_device_data_provider_.get(),
-      remote_beacon_seed_fetcher_.get());
+      cryptauth_service_, adapter_, ble_advertisement_device_queue_.get(),
+      ble_advertiser_.get(), ble_scanner_.get());
   disconnect_tethering_request_sender_ =
       base::MakeUnique<DisconnectTetheringRequestSenderImpl>(
           ble_connection_manager_.get(), tether_host_fetcher_.get());
@@ -310,6 +280,32 @@ void InitializerImpl::CreateComponent() {
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
+bool InitializerImpl::IsAsyncShutdownRequired() {
+  // All of the asynchronous shutdown procedures depend on Bluetooth. If
+  // Bluetooth is off, there is no way to complete these tasks.
+  if (!adapter_->IsPowered())
+    return false;
+
+  // If there are pending disconnection requests, they must be sent before the
+  // component shuts down.
+  if (disconnect_tethering_request_sender_ &&
+      disconnect_tethering_request_sender_->HasPendingRequests()) {
+    return true;
+  }
+
+  // The BLE scanner must shut down completely before the component shuts down.
+  if (ble_scanner_ && ble_scanner_->ShouldDiscoverySessionBeActive() !=
+                          ble_scanner_->IsDiscoverySessionActive()) {
+    return true;
+  }
+
+  // The BLE advertiser must unregister all of its advertisements.
+  if (ble_advertiser_ && ble_advertiser_->AreAdvertisementsRegistered())
+    return true;
+
+  return false;
+}
+
 void InitializerImpl::OnPreCrashStateRestored() {
   // |crash_recovery_manager_| is no longer needed since it has completed.
   crash_recovery_manager_.reset();
@@ -322,18 +318,20 @@ void InitializerImpl::StartAsynchronousShutdown() {
   DCHECK(status() == Initializer::Status::SHUTTING_DOWN);
   DCHECK(disconnect_tethering_request_sender_->HasPendingRequests());
 
-  // Currently, the only task which needs to be performed asynchronously during
-  // shutdown is the DisconnectTetheringRequestSender. Observer this class so
-  // that when it finishes sending messages, Initializer can shut down.
+  // |ble_scanner_| and |disconnect_tethering_request_sender_| require
+  // asynchronous shutdowns, so start observering these objects. Once they
+  // notify observers that they are finished shutting down, asynchronous
+  // shutdown will complete.
+  ble_advertiser_->AddObserver(this);
+  ble_scanner_->AddObserver(this);
   disconnect_tethering_request_sender_->AddObserver(this);
 
-  // All objects which are not dependencies of
+  // All objects which are not dependencies of |ble_scanner_| and
   // |disconnect_tethering_request_sender_| are no longer needed, so delete
   // them.
   crash_recovery_manager_.reset();
   network_connection_handler_tether_delegate_.reset();
   tether_network_disconnection_handler_.reset();
-  network_configuration_remover_.reset();
   tether_connector_.reset();
   host_connection_metrics_logger_.reset();
   host_scan_scheduler_.reset();
@@ -352,6 +350,35 @@ void InitializerImpl::StartAsynchronousShutdown() {
   tether_host_response_recorder_.reset();
   network_state_handler_->set_tether_sort_delegate(nullptr);
   network_list_sorter_.reset();
+}
+
+void InitializerImpl::FinishAsynchronousShutdownIfPossible() {
+  DCHECK(status() == Initializer::Status::SHUTTING_DOWN);
+
+  // If the asynchronous shutdown is not yet complete (i.e., only some of the
+  // shutdown requirements are complete), do not shut down yet.
+  if (IsAsyncShutdownRequired())
+    return;
+
+  ble_advertiser_->RemoveObserver(this);
+  ble_scanner_->RemoveObserver(this);
+  disconnect_tethering_request_sender_->RemoveObserver(this);
+
+  // Shutdown has completed. It is now safe to delete the objects that were
+  // shutting down asynchronously.
+  wifi_hotspot_disconnector_.reset();
+  network_configuration_remover_.reset();
+  disconnect_tethering_request_sender_.reset();
+  ble_connection_manager_.reset();
+  ble_scanner_.reset();
+  ble_advertiser_.reset();
+  ble_synchronizer_.reset();
+  ble_advertisement_device_queue_.reset();
+  remote_beacon_seed_fetcher_.reset();
+  local_device_data_provider_.reset();
+  tether_host_fetcher_.reset();
+
+  TransitionToStatus(Initializer::Status::SHUT_DOWN);
 }
 
 }  // namespace tether

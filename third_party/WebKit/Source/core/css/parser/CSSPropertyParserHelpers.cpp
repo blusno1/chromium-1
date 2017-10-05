@@ -26,7 +26,7 @@
 #include "core/css/properties/CSSPropertyBoxShadowUtils.h"
 #include "core/css/properties/CSSPropertyTransformUtils.h"
 #include "core/frame/UseCounter.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -43,7 +43,7 @@ bool AddCSSPaintArgument(const Vector<CSSParserToken>& tokens,
   if (!token_range.AtEnd()) {
     RefPtr<CSSVariableData> unparsed_css_variable_data =
         CSSVariableData::Create(token_range, false, false);
-    if (unparsed_css_variable_data.Get()) {
+    if (unparsed_css_variable_data.get()) {
       variable_data->push_back(std::move(unparsed_css_variable_data));
       return true;
     }
@@ -1455,7 +1455,7 @@ static CSSValue* ConsumeImageSet(CSSParserTokenRange& range,
                                  const CSSParserContext* context) {
   CSSParserTokenRange range_copy = range;
   CSSParserTokenRange args = ConsumeFunction(range_copy);
-  CSSImageSetValue* image_set = CSSImageSetValue::Create();
+  CSSImageSetValue* image_set = CSSImageSetValue::Create(context->Mode());
   do {
     AtomicString url_value = ConsumeUrlAsStringView(args).ToAtomicString();
     if (url_value.IsNull())
@@ -1653,7 +1653,7 @@ const CSSValue* ParseLonghandViaAPI(CSSPropertyID unresolved_property,
 
   const CSSPropertyAPI& api = CSSPropertyAPI::Get(property);
   const CSSValue* result = api.ParseSingleValue(
-      property, range, context,
+      range, context,
       CSSParserLocalContext(isPropertyAlias(unresolved_property),
                             current_shorthand));
   return result;

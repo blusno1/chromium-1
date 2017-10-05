@@ -67,14 +67,14 @@ v8::Local<v8::Object> RectToV8Object(v8::Isolate* isolate,
 // Adjust the bounding box of a node from local to global coordinates,
 // walking up the parent hierarchy to offset by frame offsets and
 // scroll offsets.
-static gfx::Rect ComputeGlobalNodeBounds(
-    TreeCache* cache,
-    ui::AXNode* node,
-    gfx::RectF local_bounds = gfx::RectF()) {
+static gfx::Rect ComputeGlobalNodeBounds(TreeCache* cache,
+                                         ui::AXNode* node,
+                                         gfx::RectF local_bounds = gfx::RectF(),
+                                         bool* offscreen = nullptr) {
   gfx::RectF bounds = local_bounds;
 
   while (node) {
-    bounds = cache->tree.RelativeToTreeBounds(node, bounds);
+    bounds = cache->tree.RelativeToTreeBounds(node, bounds, offscreen);
 
     TreeCache* previous_cache = cache;
     ui::AXNode* parent = cache->owner->GetParent(cache->tree.root(), &cache);
@@ -1020,7 +1020,12 @@ void AutomationInternalCustomBindings::GetState(
        focused_cache == cache && focused_node == node) ||
       cache->tree.data().focus_id == node->id();
   if (focused)
-    state.Set("focused", true);
+    state.Set(ToString(api::automation::STATE_TYPE_FOCUSED), true);
+
+  bool offscreen = false;
+  ComputeGlobalNodeBounds(cache, node, gfx::RectF(), &offscreen);
+  if (offscreen)
+    state.Set(ToString(api::automation::STATE_TYPE_OFFSCREEN), true);
 
   args.GetReturnValue().Set(state.Build());
 }

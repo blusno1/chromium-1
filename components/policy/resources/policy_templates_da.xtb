@@ -53,6 +53,7 @@ Hvis denne politik er angivet, vises loginskærmen i den landestandard, der er a
 
       Hvis denne politik ikke angives, er standardfrekvensen tre timer. Den laveste
       tilladte frekvens er 60 sekunder.</translation>
+<translation id="1204263402976895730">Aktiverede virksomhedsprintere</translation>
 <translation id="1221359380862872747">Indlæs de angivne webadresser ved demologin</translation>
 <translation id="123081309365616809">Aktivér casting af indhold til enheden</translation>
 <translation id="1265053460044691532">Begræns den tid, hvor en bruger, der er godkendt via SAML, kan logge på offline</translation>
@@ -78,6 +79,7 @@ Hvis denne politik er angivet, vises loginskærmen i den landestandard, der er a
 
       Hvis denne politik er angivet til falsk, tillader <ph name="PRODUCT_NAME" /> ikke, at der startes gæsteprofiler.</translation>
 <translation id="1363275621236827384">Aktivér forespørgsler til Quirks Server om hardwareprofiler</translation>
+<translation id="1393485621820363363">Aktiverede virksomhedsprintere for enheder</translation>
 <translation id="1397855852561539316">Foreslået webadresse fra standardsøgemaskinen</translation>
 <translation id="1426410128494586442">Ja</translation>
 <translation id="1427655258943162134">Adresse eller webadresse på proxyserveren</translation>
@@ -238,6 +240,7 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
 <translation id="2024476116966025075">Konfigurer det påkrævede domænenavn for klienter med fjernadgang</translation>
 <translation id="2030905906517501646">Søgeord til standardsøgemaskine</translation>
 <translation id="203096360153626918">Denne politik påvirker ikke Android-apps. De kan åbnes i fuldskærmstilstand, selv hvis denne politik angives som <ph name="FALSE" />.</translation>
+<translation id="2043770014371753404">Deaktiverede virksomhedsprintere</translation>
 <translation id="206623763829450685">Angiver, hvilke skemaer for HTTP-godkendelse der understøttes af <ph name="PRODUCT_NAME" />.
 
           Mulige værdier er "grundlæggende", "sammenfatning", "NTLM" og "forhandling". Flere værdier adskilles med kommaer.
@@ -287,6 +290,15 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
       Hvis denne indstilling er konfigureret, bliver brugere, der anvender hurtig oplåsning, anmodet om at indtaste deres adgangskode på låseskærmen afhængigt af denne indstilling.
 
       Hvis denne indstilling ikke er konfigureret, bliver brugere, der anvender hurtig oplåsning, anmodet om at indtaste deres adgangskode på låseskærmen hver dag.</translation>
+<translation id="2194470398825717446">Denne politik er udfaset i M61. Brug EcryptfsMigrationStrategy i stedet.
+
+      Angiver, hvordan en enhed skal opføre sig, hvis den blev leveret med ecryptfs-kryptering og skal skifte til ext4-kryptering.
+
+      Hvis du indstiller denne politik til "DisallowArc", deaktiveres Android-apps for alle brugere på enheden (inklusive dem, der allerede har ext4-kryptering), og der tilbydes ikke migrering fra ecryptfs- til ext4-kryptering til nogen brugere.
+
+      Hvis du indstiller denne politik til "AllowMigration", bliver brugere med ecryptfs-hovedmapper tilbudt at migrere disse til ext4-kryptering, hvor det er nødvendigt (i øjeblikket når Android N bliver tilgængeligt på enheden).
+
+      Denne politik gælder ikke for terminalapps – disse migreres automatisk. Hvis denne politik endnu ikke er angivet, opfører enheden sig, som om "DisallowArc" er valgt.</translation>
 <translation id="2201555246697292490">Konfigurer hvidlisten for indbyggede beskedhosts</translation>
 <translation id="2204753382813641270">Administrer, hvornår hylden skjules automatisk</translation>
 <translation id="2208976000652006649">Parametre for søgewebadresse, som anvender POST</translation>
@@ -528,13 +540,6 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
           Politikkens værdi skal angives i millisekunder. Værdierne reduceres, så de er mindre end eller lig med skærmslukforsinkelsen (hvis angivet) og inaktivitetsforsinkelsen.</translation>
 <translation id="2987155890997901449">Aktivér ARC</translation>
 <translation id="2987227569419001736">Kontrollér brugen af Web Bluetooth API</translation>
-<translation id="2998881342848488968">Denne politik giver <ph name="PRODUCT_OS_NAME" /> tilladelse til at omgå enhver proxy, der kræver godkendelse via en loginportal.
-
-      Denne politik træder kun i kraft, hvis der er konfigureret en proxy (f.eks. via en politik, af en bruger på chrome://settings eller via udvidelser).
-
-      Hvis du aktiverer denne indstilling, vises alle godkendelsessider med loginportal (dvs. alle websider, der kræver adgang via en loginside, indtil <ph name="PRODUCT_NAME" /> registrerer en internetforbindelse) i et separat vindue, og alle politikindstillinger og -begrænsninger for den aktuelle bruger ignoreres.
-
-      Hvis du deaktiverer denne indstilling eller undlader at indstille den, vises alle godkendelsessider i loginportalen i en (almindelig) ny browserfane ved hjælp af brugerens proxyindstillinger.</translation>
 <translation id="3001534538097271560">Hvis denne politik angives som Falsk, forhindres brugerne i at sende visse former for systemoplysninger og sideindhold til Googles servere. Hvis denne indstilling er angivet som Sand eller ikke er angivet, kan brugerne sende visse former for systemoplysninger og sideindhold til Beskyttet browsing som en hjælp til at registrere skadelige apps og websites. Se https://developers.google.com/safe-browsing for flere oplysninger om Beskyttet browsing.</translation>
 <translation id="3016255526521614822">Hvidlistedeapps til notatskrivning er tilladt på <ph name="PRODUCT_OS_NAME" />-låseskærmen</translation>
 <translation id="3021409116652377124">Deaktiver pluginsøgning</translation>
@@ -595,6 +600,7 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
 <translation id="3219421230122020860">Inkognitotilstand er tilgængelig</translation>
 <translation id="3220624000494482595">Hvis terminalappen er en Android-app, har den ingen kontrol over <ph name="PRODUCT_OS_NAME" />-versionen, selv hvis denne politik angives som <ph name="TRUE" />.</translation>
 <translation id="3236046242843493070">Webadressemønstre, der tillader installation af udvidelser, apps og brugerscripts fra</translation>
+<translation id="3240609035816615922">Adgangspolitik for konfiguration af printere.</translation>
 <translation id="3243309373265599239">Angiver den tid uden brugerinput, der udløser skærmnedtoning, når strømforsyningen er tilsluttet.
 
           Hvis denne politik indstilles til end højere værdi end nul, angives den tid, som brugeren skal forblive inaktiv i, før <ph name="PRODUCT_OS_NAME" /> nedtoner skærmen.
@@ -625,6 +631,9 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
 <translation id="3322771899429619102">Giver dig mulighed for at oprette en liste med webadressemønstre, der angiver websites, som har tilladelse til at benytte nøglegenerering. Hvis et webadressemønster findes i "KeygenBlockedForUrls", tilsidesættes disse undtagelser.
 
           Hvis denne politik ikke angives, anvendes den globale standardværdi på alle websites, enten fra politikken "DefaultKeygenSetting", hvis den er angivet, eller brugerens personlige konfiguration.</translation>
+<translation id="332771718998993005">Beslut dig for et navn, der angives som en destination for <ph name="PRODUCT_NAME" />.
+
+          Hvis denne politik er angivet som en udfyldt streng, anvendes strengen som navnet på destinationen for <ph name="PRODUCT_NAME" />. Hvis ikke, er navnet på destinationen det samme som navnet på enheden. Hvis denne politik ikke er angivet, er navnet på destinationen det samme som navnet på enheden, og enhedsejeren (eller en bruger fra domænet, som administrerer enheden) kan ændre det. Navnet må højst indeholde 24 tegn.</translation>
 <translation id="3381968327636295719">Brug værtsbrowseren som standard</translation>
 <translation id="3417418267404583991">Hvis denne politik er angivet til sand eller ikke er konfigureret, aktiverer <ph name="PRODUCT_OS_NAME" /> gæstelogins. Gæstelogins er anonyme brugersessioner, der ikke kræver en adgangskode,
 
@@ -662,6 +671,7 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
 
           Denne politik respekteres, hvis politikken "DefaultSearchProviderEnabled" er aktiveret.</translation>
 <translation id="350797926066071931">Aktiver Oversæt</translation>
+<translation id="3512226956150568738">Hvis klientens enhedsmodel allerede understøttede ARC, inden det blev nødvendigt at migrere til ext4 for at køre ARC, og hvis politikken ArcEnabled er angivet som sand, opfører denne valgmulighed sig som AskUser (værdi 3). I alle andre tilfælde (hvis enhedsmodellen ikke tidligere understøttede ARC, eller hvis politikken ArcEnabled er angivet som falsk), svarer denne værdi til DisallowArc (værdi 0).</translation>
 <translation id="3528000905991875314">Aktiver alternative fejlsider</translation>
 <translation id="3547954654003013442">Proxyindstillinger</translation>
 <translation id="3591584750136265240">Konfigurer adfærden for logingodkendelse</translation>
@@ -708,6 +718,11 @@ Hvis du aktiverer denne indstilling, tjekker <ph name="PRODUCT_NAME" /> altid ve
 Hvis denne indstilling deaktiveres, tjekker <ph name="PRODUCT_NAME" /> aldrig se om den er standardbrowseren, og deaktivere brugerens kontrol over denne indstilling. 
 
 Hvis denne indstilling ikke er angivet, vil <ph name="PRODUCT_NAME" /> tillade brugere at tjekke, om den er standardbrowseren, og om der skal vises underretninger til brugeren, når den ikke er det.</translation>
+<translation id="379602782757302612">Giver dig mulighed for at angive, hvilke udvidelser brugerne IKKE kan installere. Udvidelser, der allerede er installeret, deaktiveres, hvis de er sortlistet, og brugeren kan ikke aktivere dem. Når en udvidelse fjernes fra sortlisten efter at have været deaktiveret på grund af den, aktiveres udvidelsen automatisk igen.
+
+          Værdien * på en sortliste betyder, at alle udvidelser er sortlistet, medmindre de udtrykkeligt er angivet på hvidlisten.
+
+          Hvis denne politik ikke er angivet, kan brugeren installere alle udvidelser i <ph name="PRODUCT_NAME" />.</translation>
 <translation id="3800626789999016379">Konfigurerer den mappe, som <ph name="PRODUCT_NAME" /> bruger til at downloade filer.
 
       Hvis du angiver denne politik, vil <ph name="PRODUCT_NAME" /> bruge den angivne mappe, uanset om brugeren har angivet en eller aktiveret flaget for at blive bedt om en downloadplacering hver gang.
@@ -844,6 +859,7 @@ Hvis denne indstilling ikke er angivet, vil <ph name="PRODUCT_NAME" /> tillade b
       Bemærk! Automatisk genstart er kun aktiveret mens loginskærmen vises eller en terminalapp kører. Dette vil ændre sig med tiden, og politikken vil altid være gældende, uanset om en bestemt type kører eller ej.
 
       Denne politikværdi skal angives i sekunder. Værdierne skal være minimum 3600 (en time).</translation>
+<translation id="4203879074082863035">Det er kun printerne på hvidlisten, der vises til brugere</translation>
 <translation id="420512303455129789">En ordbog, der knytter webadresser til en boolesk markering, angiver, om adgang til hosten tillades (sand) eller blokeres (falsk).
 
           <ph name="PRODUCT_NAME" /> bruger selv politikken internt.</translation>
@@ -1047,8 +1063,10 @@ Mens selve politikken understøttes på ovenstående platforme, kan den funktion
 <translation id="5052081091120171147">Denne politik tvinger import af browserhistorikken fra den aktuelle standardbrowser, hvis den er aktiveret. Hvis denne politik er aktiveret, påvirker den også dialogboksen for import. Hvis den er deaktiveret, importeres der ikke nogen browserdata. Hvis den ikke er angivet, kan brugeren blive spurgt, om der skal importeres, ellers sker importen automatisk.</translation>
 <translation id="5056708224511062314">Luppen er deaktiveret</translation>
 <translation id="5067143124345820993">Login til brugerens hvidliste</translation>
+<translation id="5068140065960598044">Cloudpolitikken for <ph name="PRODUCT_NAME" /> tilsidesætter maskinpolitikken.</translation>
 <translation id="5085647276663819155">Deaktiver udskriftsvisning</translation>
 <translation id="5105313908130842249">Skærmlåsforsinkelse, når batteriet bruges</translation>
+<translation id="5108031557082757679">Deaktiverede virksomhedsprintere for enheder</translation>
 <translation id="5130288486815037971">Afgør, om RC4-krypteringsprogrammer i TLS aktiveres</translation>
 <translation id="5141670636904227950">Indstil standardtype for lup til aktiveret på loginskærmen</translation>
 <translation id="5142301680741828703">Gengiv altid følgende webadressemønstre i <ph name="PRODUCT_FRAME_NAME" /></translation>
@@ -1098,6 +1116,9 @@ Hvis denne politik slås fra eller indstilles til False (falsk), er udviklertils
           Værdien for politikken aktiveres inden for millisekunder. Værdierne er låste til mindre end eller det samme som inaktivitetsforsinkelsen.</translation>
 <translation id="5307432759655324440">Inkognitotilstandens tilgængelighed</translation>
 <translation id="5318185076587284965">Aktivér brugen af relæservere for hosten for fjernadgang</translation>
+<translation id="5323128137188992869">Tillad, at indhold castes til enheden via <ph name="PRODUCT_NAME" />.
+
+          Hvis denne politik er angivet som Falsk, kan brugerne ikke caste indhold til deres enheder. Hvis denne politik er angivet som Sand, kan brugerne caste indhold. Hvis politikken ikke er angivet, kan brugerne ikke caste indhold til tilmeldte Chrome OS-enheder, men de kan caste indhold til enheder, der ikke er tilmeldt.</translation>
 <translation id="5330684698007383292">Tillad, at <ph name="PRODUCT_FRAME_NAME" /> håndterer følgende indholdstyper</translation>
 <translation id="5365946944967967336">Vis knap til startsiden på værktøjslinjen</translation>
 <translation id="5366977351895725771">Hvis dette er angivet som falsk, vil oprettelse af administrerede brugere være deaktiveret for denne bruger. Alle eksisterende administrerede brugere vil stadig være tilgængelige.
@@ -1303,6 +1324,7 @@ Hvis denne politik slås fra eller indstilles til False (falsk), er udviklertils
 <translation id="6111936128861357925">Tillad det ekstra dinosaurspil</translation>
 <translation id="6114416803310251055">frarådet</translation>
 <translation id="6133088669883929098">Tillad alle websites at anvende nøglegenerering</translation>
+<translation id="6139485614509308022">Hvis politikken "OffHours" er angivet, ignoreres de angivne enhedspolitikker (brug standardindstillingerne for disse politikker) i de angivne tidsrum. Enhedspolitikker anvendes igen af Chrome hver gang tidsrummet for "OffHours" starter eller slutter. Brugeren underrettes og tvinges til at logge ud, når tidspunktet for "OffHours" slutter, og indstillinger for enhedspolitikker ændres (dvs. når brugeren ikke er logget ind med en tilladt konto).</translation>
 <translation id="6145799962557135888">Giver dig mulighed for at oprette en liste med webadressemønstre, der angiver websites, der får lov til at køre JavaScript. Hvis denne politik ikke angives, anvendes den globale standardværdi på alle websites, enten fra politikken "DefaultJavaScriptSetting", hvis den er indstillet, eller brugerens personlige konfiguration.</translation>
 <translation id="614662973812186053">Denne politik styrer også indsamling af brugs- og diagnosticeringsdata i Android.</translation>
 <translation id="6155936611791017817">Indstil standardtilstand for den store markør på loginskærmen</translation>
@@ -1332,6 +1354,7 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
 <translation id="6211428344788340116">Rapportér tidspunkter for aktivitet på enheden.
 
       Hvis denne indstilling ikke er angivet eller er angivet til Sand, rapporterer tilmeldte enheder de tidsperioder, hvor en bruger er aktiv på enheden. Hvis den er er angivet til Falsk, registreres og rapporteres tidspunkter for aktivitet ikke på enheden.</translation>
+<translation id="6212868225782276239">Alle printere vises, bortset fra dem på sortlisten.</translation>
 <translation id="6219965209794245435">Denne politik tvinger formulardataene for AutoFyld til at blive importeret fra den foregående standardbrowser, hvis politikken er aktiveret. Hvis denne politik er aktiveret, påvirker den også importdialogboksen.
 
       Hvis den er deaktiveret, importeres formulardata for AutoFyld ikke.
@@ -1469,6 +1492,13 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
           Hvis du angiver denne politik, kan brugerne ikke ændre eller tilsidesætte den.
 
           Hvis denne politik ikke angives, vil talefeedback være deaktiveret, men brugeren kan når som helst slå funktionen til.</translation>
+<translation id="6922040258551909078">
+      Hvis politikken er angivet som sand, har Cloudpolitikken forrang, hvis den er i konflikt med maskinpolitikken.
+      Hvis politikken er angivet som falsk eller ikke er konfigureret, har maskinpolitikken forrang, hvis den er i konflikt med Cloudpolitikken.
+      Du kan finde flere oplysninger om prioritering af politikker på: https://support.google.com/chrome?p=set_chrome_policies_for_devices
+
+      Denne politik er ikke tilgængelig i Windows-forekomster, der ikke er tilknyttet et <ph name="MS_AD_NAME" />-domæne.
+      </translation>
 <translation id="6922884955650325312">Bloker <ph name="FLASH_PLUGIN_NAME" />-pluginnet</translation>
 <translation id="6923366716660828830">Angiver navnet på standardsøgemaskinen. Hvis det ikke udfyldes eller angives, vil det hostname, der er angivet af søgewebadressen, blive anvendt. Denne politik overvejes kun, hvis politikken "DefaultSearchProviderEnabled" er aktiveret.</translation>
 <translation id="6931242315485576290">Deaktiver synkronisering af data med Google</translation>
@@ -1537,6 +1567,7 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
 <translation id="7132877481099023201">Webadresser, der får adgang til videooptagelsesenheder, uden at du skal give tilladelse hertil.</translation>
 <translation id="7167436895080860385">Tillad, at brugerne kan se adgangskoder i adgangskodeadministratoren</translation>
 <translation id="7173856672248996428">Efemerisk profil</translation>
+<translation id="717630378807352957">Tillad alle printere fra konfigurationsfilen.</translation>
 <translation id="7185078796915954712">TLS 1.3</translation>
 <translation id="718956142899066210">Forbindelsestyper, der tillades til opdateringer</translation>
 <translation id="7194407337890404814">Standardsøgemaskinens navn</translation>
@@ -1579,6 +1610,7 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
 
       Hvis politikken er angivet som Falsk, vises automatisk genererede forslag til indhold ikke på siden Ny fane.</translation>
 <translation id="7323896582714668701">Yderligere kommandolinjeparametre for <ph name="PRODUCT_NAME" /></translation>
+<translation id="7326394567531622570">Minder om Wipe (værdi 2), men forsøger at bevare logintokens, så brugeren ikke behøver at logge ind igen.</translation>
 <translation id="7329842439428490522">Angiver den tid uden brugerinput, der udløser skærmsluk, når batteriet bruges.
 
           Hvis denne politik indstilles til en værdi, der er højere end nul, angives den tid, som brugeren skal være inaktiv, før <ph name="PRODUCT_OS_NAME" /> slukker skærmen.
@@ -1605,6 +1637,7 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
       Hvis denne politik ikke er indstillet, anvender den automatiske oprydningsfunktion standardstrategien. Denne strategi er i øjeblikket "RemoveLRUIfDormant".</translation>
 <translation id="7336878834592315572">Behold cookies under sessionen</translation>
 <translation id="7340034977315324840">Rapportér tidspunkter for aktiviteter på enheden</translation>
+<translation id="7343497214039883642">Fil til konfiguration af virksomhedsprintere for enheder</translation>
 <translation id="7384999953864505698">Tillader QUIC-protokol</translation>
 <translation id="7417972229667085380">Den procentdel, som inaktivitetsforsinkelsen i præsentationstilstand skaleres efter (udfases)</translation>
 <translation id="7421483919690710988">Angiv størrelsen på mediediskcache i bytes</translation>
@@ -1614,7 +1647,6 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
       Hvis politikken ikke indstilles eller indstilles til falsk, aktiveres <ph name="TLS_FALSE_START" />. Hvis den indstilles til sand, deaktiveres <ph name="TLS_FALSE_START" />.</translation>
 <translation id="7433714841194914373">Aktiver Direkte</translation>
 <translation id="7443616896860707393">Påmindelser om HTTP Basic Auth med krydsoprindelse</translation>
-<translation id="7468416082528382842">Placering af Windows-registreringsdatabase:</translation>
 <translation id="7469554574977894907">Aktiver søgeforslag</translation>
 <translation id="7474249562477552702">Om certifikater med SHA-1-signatur, som er udstedt af lokale tillidsankre, er tilladt eller ej</translation>
 <translation id="7485481791539008776">Regler for valg af standardprinter</translation>
@@ -1788,6 +1820,7 @@ Dynamisk opdatering af denne politik understøttes i M56 og nyere versioner.</tr
       Hvis denne politik ikke indstilles, bruger enheden som standard et 24-timers urformat.</translation>
 <translation id="8114382167597081590">Gennemtving ikke Begrænset tilstand på YouTube</translation>
 <translation id="8118665053362250806">Angiv størrelse på mediediskcache</translation>
+<translation id="8124468781472887384">Adgangspolitik for konfiguration af printere til enheder.</translation>
 <translation id="8135937294926049787">Angiver den tid uden brugerinput, der udløser skærmsluk, når strømforsyningen er tilsluttet.
 
           Hvis denne politik indstilles til en højere værdi end nul, angives den tid, hvor brugeren skal være inaktiv, før <ph name="PRODUCT_OS_NAME" /> slukker skærmen.
@@ -1894,7 +1927,6 @@ Dynamisk opdatering af denne politik understøttes i M56 og nyere versioner.</tr
 <translation id="8424255554404582727">Angiv en standardrotation for visningen, som genanvendes ved hver genstart</translation>
 <translation id="8426231401662877819">Roter skærmen 90 grader med uret</translation>
 <translation id="8451988835943702790">Brug siden Ny fane som startside</translation>
-<translation id="8458790683633857482">Angiver en række politikker, der overgives til ARC-kørselstiden. Værdien skal være en gyldig JSON.</translation>
 <translation id="8465065632133292531">Parametre for direkte webadresse, som bruger POST</translation>
 <translation id="847472800012384958">Tillad ikke, at websites viser pop op-vinduer</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2005,6 +2037,7 @@ Dynamisk opdatering af denne politik understøttes i M56 og nyere versioner.</tr
 <translation id="9096086085182305205">Hvidliste til godkendelse af server</translation>
 <translation id="9098553063150791878">Politikker for HTTP-godkendelse</translation>
 <translation id="9105265795073104888">Det er kun bestemte muligheder for proxykonfiguration, der er tilgængelige for Android-apps. Android-apps kan vælge at anvende proxyen. Du kan ikke tvinge dem til at anvende en proxy.</translation>
+<translation id="9112727953998243860">Fil til konfiguration af virksomhedsprintere</translation>
 <translation id="9112897538922695510">Giver dig mulighed for at registrere en liste over protokolhandlere. Dette kan kun være en anbefalet politik. Egenskaben |protocol| skal indstilles til ordningen, f.eks. "mailto", og egenskaben |url| bør indstilles til webadressemønsteret for den applikation, der handler ordningen. Dette mønster kan omfatte et "%s", som, hvis det findes, erstattes med den handlede webadresse.
 
           De protokolhandlere, der er registreret via politikker, flettes med dem, der er registreret af brugeren, og begge er tilgængelige og kan anvendes. Brugeren kan tilsidesætte protokolhandlere, der er installeret via en politik, ved at installere en ny standardhandler, men kan ikke fjerne en protokolhandler, der er registreret via en politik.</translation>

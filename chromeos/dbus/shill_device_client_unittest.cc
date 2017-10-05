@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
@@ -133,21 +135,6 @@ TEST_F(ShillDeviceClientTest, GetProperties) {
   // Call method.
   client_->GetProperties(dbus::ObjectPath(kExampleDevicePath),
                          base::Bind(&ExpectDictionaryValueResult, &value));
-  // Run the message loop.
-  base::RunLoop().RunUntilIdle();
-}
-
-TEST_F(ShillDeviceClientTest, ProposeScan) {
-  // Create response.
-  std::unique_ptr<dbus::Response> response(dbus::Response::CreateEmpty());
-
-  // Set expectations.
-  PrepareForMethodCall(shill::kProposeScanFunction,
-                       base::Bind(&ExpectNoArgument),
-                       response.get());
-  // Call method.
-  client_->ProposeScan(dbus::ObjectPath(kExampleDevicePath),
-                       base::Bind(&ExpectNoResultValue));
   // Run the message loop.
   base::RunLoop().RunUntilIdle();
 }

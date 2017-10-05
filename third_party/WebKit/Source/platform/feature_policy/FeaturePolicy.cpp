@@ -3,9 +3,9 @@
 
 #include "platform/feature_policy/FeaturePolicy.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/json/JSONValues.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/ASCIICType.h"
 #include "platform/wtf/BitVector.h"
@@ -212,7 +212,7 @@ const FeatureNameMap& GetDefaultFeatureNameMap() {
     default_feature_name_map.Set("usb", WebFeaturePolicyFeature::kUsb);
     default_feature_name_map.Set("camera", WebFeaturePolicyFeature::kCamera);
     default_feature_name_map.Set("encrypted-media",
-                                 WebFeaturePolicyFeature::kEme);
+                                 WebFeaturePolicyFeature::kEncryptedMedia);
     default_feature_name_map.Set("microphone",
                                  WebFeaturePolicyFeature::kMicrophone);
     default_feature_name_map.Set("speaker", WebFeaturePolicyFeature::kSpeaker);

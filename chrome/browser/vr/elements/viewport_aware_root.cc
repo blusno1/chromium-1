@@ -6,24 +6,57 @@
 
 #include <cmath>
 
-#include "cc/base/math_util.h"
+#include "ui/gfx/geometry/angle_conversions.h"
 
 namespace vr {
+
+namespace {
+
+bool ElementHasVisibleChildren(UiElement* element) {
+  for (auto& child : element->children()) {
+    // Note that we do NOT use IsVisible here. IsVisible takes inherited opacity
+    // into consideration. However, the parent element (the viewport aware root
+    // element) might be invisible at first due to opacity animation, which
+    // makes all children becomes invisible even if it has children that become
+    // visible immediately when animation starts.
+    if (child->opacity() > 0.f) {
+      if (child->draw_phase() != kPhaseNone)
+        return true;
+      if (ElementHasVisibleChildren(child.get()))
+        return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
 
 // static
 const float ViewportAwareRoot::kViewportRotationTriggerDegrees = 55.0f;
 
 ViewportAwareRoot::ViewportAwareRoot() {
-  set_viewport_aware(true);
   SetTransitionedProperties({OPACITY});
 }
 
 ViewportAwareRoot::~ViewportAwareRoot() = default;
 
+void ViewportAwareRoot::OnBeginFrame(const base::TimeTicks& time,
+                                     const gfx::Vector3dF& head_direction) {
+  UiElement::OnBeginFrame(time, head_direction);
+  AdjustRotationForHeadPose(head_direction);
+}
+
 void ViewportAwareRoot::AdjustRotationForHeadPose(
     const gfx::Vector3dF& look_at) {
-  DCHECK(viewport_aware());
   DCHECK(!look_at.IsZero());
+
+  bool has_visible_children = HasVisibleChildren();
+  if (has_visible_children && !children_visible_)
+    Reset();
+  children_visible_ = has_visible_children;
+
+  if (!children_visible_)
+    return;
 
   gfx::Vector3dF rotated_center_vector{0.f, 0.f, -1.0f};
   LocalTransform().TransformVector(&rotated_center_vector);
@@ -36,8 +69,7 @@ void ViewportAwareRoot::AdjustRotationForHeadPose(
   }
   viewport_aware_total_rotation_ += degrees;
   viewport_aware_total_rotation_ = fmod(viewport_aware_total_rotation_, 360.0f);
-  SetRotate(0.f, 1.f, 0.f,
-            cc::MathUtil::Deg2Rad(viewport_aware_total_rotation_));
+  SetRotate(0.f, 1.f, 0.f, gfx::DegToRad(viewport_aware_total_rotation_));
 
   // Immediately hide the element.
   SetVisibleImmediately(false);
@@ -46,7 +78,16 @@ void ViewportAwareRoot::AdjustRotationForHeadPose(
   SetVisible(true);
 }
 
-void ViewportAwareRoot::OnUpdatedInheritedProperties() {
+void ViewportAwareRoot::Reset() {
+  viewport_aware_total_rotation_ = 0.f;
+  SetRotate(0.f, 1.f, 0.f, gfx::DegToRad(viewport_aware_total_rotation_));
+}
+
+bool ViewportAwareRoot::HasVisibleChildren() {
+  return ElementHasVisibleChildren(this);
+}
+
+void ViewportAwareRoot::OnUpdatedWorldSpaceTransform() {
   // We must not inherit a transform.
   DCHECK(parent()->world_space_transform().IsIdentity());
 }

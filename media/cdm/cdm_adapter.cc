@@ -435,10 +435,9 @@ CdmAdapter::~CdmAdapter() {}
 CdmWrapper* CdmAdapter::CreateCdmInstance(const std::string& key_system) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  CreateCdmFunc create_cdm_func =
-      CdmModule::GetInstance()->GetCreateCdmFunc(key_system);
+  CreateCdmFunc create_cdm_func = CdmModule::GetInstance()->GetCreateCdmFunc();
   if (!create_cdm_func) {
-    DVLOG(1) << "Cannot get CreateCdmFunc for " + key_system;
+    LOG(ERROR) << "Failed to get CreateCdmFunc!";
     return nullptr;
   }
 
@@ -1014,13 +1013,14 @@ cdm::FileIO* CdmAdapter::CreateFileIO(cdm::FileIOClient* client) {
   return file_io.release();
 }
 
-void CdmAdapter::RequestStorageId() {
-  helper_->GetStorageId(
-      base::Bind(&CdmAdapter::OnStorageIdObtained, weak_factory_.GetWeakPtr()));
+void CdmAdapter::RequestStorageId(uint32_t version) {
+  helper_->GetStorageId(version, base::Bind(&CdmAdapter::OnStorageIdObtained,
+                                            weak_factory_.GetWeakPtr()));
 }
 
-void CdmAdapter::OnStorageIdObtained(const std::vector<uint8_t>& storage_id) {
-  cdm_->OnStorageId(storage_id.data(), storage_id.size());
+void CdmAdapter::OnStorageIdObtained(uint32_t version,
+                                     const std::vector<uint8_t>& storage_id) {
+  cdm_->OnStorageId(version, storage_id.data(), storage_id.size());
 }
 
 bool CdmAdapter::AudioFramesDataToAudioFrames(

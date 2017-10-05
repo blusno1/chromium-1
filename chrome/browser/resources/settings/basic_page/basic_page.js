@@ -99,6 +99,10 @@ Polymer({
     currentRoute_: Object,
   },
 
+  hostAttributes: {
+    role: 'main',
+  },
+
   listeners: {
     'subpage-expand': 'onSubpageExpanded_',
   },
@@ -111,7 +115,7 @@ Polymer({
       this.showChromeCleanup = false;
     });
 
-    this.addEventListener('change-password-clicked', e => {
+    this.addEventListener('change-password-dismissed', e => {
       this.showChangePassword = false;
     });
 

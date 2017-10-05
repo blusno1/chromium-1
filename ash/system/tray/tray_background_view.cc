@@ -7,10 +7,13 @@
 #include <algorithm>
 
 #include "ash/ash_constants.h"
+#include "ash/focus_cycler.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
+#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
@@ -26,6 +29,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/transform.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -113,6 +117,7 @@ class TrayBackground : public views::Background {
  private:
   // Overridden from views::Background.
   void Paint(gfx::Canvas* canvas, views::View* view) const override {
+    gfx::ScopedCanvas scoped_canvas(canvas);
     cc::PaintFlags background_flags;
     background_flags.setAntiAlias(true);
     background_flags.setColor(color_);
@@ -265,10 +270,22 @@ void TrayBackgroundView::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void TrayBackgroundView::AboutToRequestFocusFromTabTraversal(bool reverse) {
+  Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
   StatusAreaWidgetDelegate* delegate =
-      StatusAreaWidgetDelegate::GetPrimaryInstance();
-  if (delegate && delegate->ShouldFocusOut(reverse))
+      shelf->GetStatusAreaWidget()->status_area_widget_delegate();
+  if (!delegate || !delegate->ShouldFocusOut(reverse))
+    return;
+  // Focus shelf widget when shift+tab is used and views-based shelf is shown.
+  if (reverse && ShelfWidget::IsUsingMdLoginShelf()) {
+    shelf->shelf_widget()->set_default_last_focusable_child(reverse);
+    Shell::Get()->focus_cycler()->FocusWidget(shelf->shelf_widget());
+  } else {
+    // Focus should leave the system tray if:
+    // 1) Tab is used, or
+    // 2) Shift+tab is used but views-based shelf is disabled. The shelf is not
+    // part of the system tray in this case.
     Shell::Get()->system_tray_notifier()->NotifyFocusOut(reverse);
+  }
 }
 
 void TrayBackgroundView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -345,7 +362,7 @@ TrayBubbleView* TrayBackgroundView::GetBubbleView() {
 
 void TrayBackgroundView::CloseBubble() {}
 
-void TrayBackgroundView::ShowBubble() {}
+void TrayBackgroundView::ShowBubble(bool show_by_click) {}
 
 void TrayBackgroundView::UpdateAfterShelfAlignmentChange() {
   tray_container_->UpdateAfterShelfAlignmentChange();

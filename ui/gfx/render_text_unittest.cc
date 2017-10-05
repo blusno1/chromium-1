@@ -1075,7 +1075,10 @@ TEST_P(RenderTextTest, ElidedObscuredText) {
   std::unique_ptr<RenderText> expected_render_text(CreateRenderTextInstance());
   expected_render_text->SetFontList(FontList("serif, Sans serif, 12px"));
   expected_render_text->SetDisplayRect(Rect(0, 0, 9999, 100));
-  expected_render_text->SetText(UTF8ToUTF16("**\u2026"));
+  const base::char16 elided_obscured_text[] = {
+      RenderText::kPasswordReplacementChar,
+      RenderText::kPasswordReplacementChar, 0x2026, 0};
+  expected_render_text->SetText(elided_obscured_text);
 
   RenderText* render_text = GetRenderText();
   render_text->SetFontList(FontList("serif, Sans serif, 12px"));
@@ -1085,7 +1088,7 @@ TEST_P(RenderTextTest, ElidedObscuredText) {
   render_text->SetObscured(true);
   render_text->SetText(UTF8ToUTF16("abcdef"));
   EXPECT_EQ(UTF8ToUTF16("abcdef"), render_text->text());
-  EXPECT_EQ(UTF8ToUTF16("**\u2026"), render_text->GetDisplayText());
+  EXPECT_EQ(elided_obscured_text, render_text->GetDisplayText());
 }
 
 #endif  // !defined(OS_MACOSX)

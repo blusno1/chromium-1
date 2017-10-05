@@ -36,11 +36,14 @@
 class AccountId;
 class ScopedKeepAlive;
 
+namespace ash {
+class FocusRingController;
+}
+
 namespace chromeos {
 
 class ArcKioskController;
 class DemoAppLauncher;
-class FocusRingController;
 class WebUILoginDisplay;
 class WebUILoginView;
 
@@ -66,7 +69,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   WebUILoginView* GetWebUILoginView() const override;
   void BeforeSessionStart() override;
   void Finalize(base::OnceClosure completion_callback) override;
-  void OpenProxySettings(const std::string& network_id) override;
+  void OpenInternetDetailDialog(const std::string& network_id) override;
   void SetStatusAreaVisible(bool visible) override;
   void StartWizard(OobeScreen first_screen) override;
   WizardController* GetWizardController() override;
@@ -284,7 +287,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
 
   // A focus ring controller to draw focus ring around view for keyboard
   // driven oobe.
-  std::unique_ptr<FocusRingController> focus_ring_controller_;
+  std::unique_ptr<ash::FocusRingController> focus_ring_controller_;
 
   // Handles special keys for keyboard driven oobe.
   std::unique_ptr<KeyboardDrivenOobeKeyHandler>
@@ -298,6 +301,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
 
   // True when request to play startup sound was sent to
   // SoundsManager.
+  // After OOBE is completed, this is always initialized with true.
   bool startup_sound_played_ = false;
 
   // Keeps a copy of the old Drag'n'Drop client, so that it would be disabled

@@ -29,15 +29,17 @@
 
 #include "core/editing/SelectionController.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/events/Event.h"
 #include "core/editing/EditingBoundary.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/RenderedPosition.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/SetSelectionOptions.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/markers/DocumentMarkerController.h"
@@ -45,12 +47,12 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/AutoReset.h"
 #include "public/platform/WebMenuSourceType.h"
@@ -71,20 +73,10 @@ SelectionController::SelectionController(LocalFrame& frame)
 DEFINE_TRACE(SelectionController) {
   visitor->Trace(frame_);
   visitor->Trace(original_base_in_flat_tree_);
-  SynchronousMutationObserver::Trace(visitor);
+  DocumentShutdownObserver::Trace(visitor);
 }
 
 namespace {
-
-SelectionInDOMTree ConvertToSelectionInDOMTree(
-    const SelectionInFlatTree& selection_in_flat_tree) {
-  return SelectionInDOMTree::Builder()
-      .SetAffinity(selection_in_flat_tree.Affinity())
-      .SetBaseAndExtent(ToPositionInDOMTree(selection_in_flat_tree.Base()),
-                        ToPositionInDOMTree(selection_in_flat_tree.Extent()))
-      .SetIsDirectional(selection_in_flat_tree.IsDirectional())
-      .Build();
-}
 
 DispatchEventResult DispatchSelectStart(Node* node) {
   if (!node || !node->GetLayoutObject())
@@ -299,7 +291,7 @@ bool SelectionController::HandleSingleClick(
   const PositionInFlatTreeWithAffinity& position_to_use =
       visible_hit_position.IsNull()
           ? CreateVisiblePosition(
-                PositionInFlatTree::FirstPositionInOrBeforeNode(inner_node))
+                PositionInFlatTree::FirstPositionInOrBeforeNode(*inner_node))
                 .ToPositionWithAffinity()
           : visible_hit_position.ToPositionWithAffinity();
   const VisibleSelectionInFlatTree& selection =
@@ -396,8 +388,11 @@ bool SelectionController::HandleSingleClick(
     return false;
   }
 
-  if (has_editable_style && event.Event().FromTouch()) {
-    frame_->GetTextSuggestionController().HandlePotentialMisspelledWordTap(
+  // SelectionControllerTest_SetCaretAtHitTestResultWithDisconnectedPosition
+  // makes the IsValidFor() check fail.
+  if (has_editable_style && event.Event().FromTouch() &&
+      position_to_use.IsValidFor(*frame_->GetDocument())) {
+    frame_->GetTextSuggestionController().HandlePotentialSuggestionTap(
         position_to_use.GetPosition());
   }
 
@@ -565,6 +560,12 @@ bool SelectionController::SelectClosestWordFromHitTestResult(
                                 .Build(),
                             TextGranularity::kWord)
                       : VisibleSelectionInFlatTree();
+
+  // TODO(editing-dev): Fix CreateVisibleSelectionWithGranularity() to not
+  // return invalid ranges. Until we do that, we need this check here to avoid a
+  // renderer crash when we call PlainText() below (see crbug.com/735774).
+  if (new_selection.IsNone() || new_selection.Start() > new_selection.End())
+    return false;
 
   HandleVisibility visibility = HandleVisibility::kNotVisible;
   if (select_input_event_type == SelectInputEventType::kTouch) {
@@ -850,12 +851,13 @@ void SelectionController::SetNonDirectionalSelectionIfNeeded(
 void SelectionController::SetCaretAtHitTestResult(
     const HitTestResult& hit_test_result) {
   Node* inner_node = hit_test_result.InnerNode();
+  DCHECK(inner_node);
   const VisiblePositionInFlatTree& visible_hit_pos =
       VisiblePositionOfHitTestResult(hit_test_result);
   const VisiblePositionInFlatTree& visible_pos =
       visible_hit_pos.IsNull()
           ? CreateVisiblePosition(
-                PositionInFlatTree::FirstPositionInOrBeforeNode(inner_node))
+                PositionInFlatTree::FirstPositionInOrBeforeNode(*inner_node))
           : visible_hit_pos;
 
   if (visible_pos.IsNull()) {

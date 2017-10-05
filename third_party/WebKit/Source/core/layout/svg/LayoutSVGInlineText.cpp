@@ -27,7 +27,6 @@
 #include "core/css/FontSize.h"
 #include "core/css/StyleEngine.h"
 #include "core/editing/TextAffinity.h"
-#include "core/editing/VisiblePosition.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/layout/svg/LayoutSVGText.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
@@ -56,7 +55,7 @@ LayoutSVGInlineText::LayoutSVGInlineText(Node* n, RefPtr<StringImpl> string)
       scaling_factor_(1) {}
 
 void LayoutSVGInlineText::SetTextInternal(RefPtr<StringImpl> text) {
-  LayoutText::SetTextInternal(std::move(text));
+  LayoutText::SetTextInternal(NormalizeWhitespace(std::move(text)));
   if (LayoutSVGText* text_layout_object =
           LayoutSVGText::LocateLayoutSVGTextAncestor(this))
     text_layout_object->SubtreeTextDidChange();
@@ -203,9 +202,10 @@ PositionWithAffinity LayoutSVGInlineText::PositionForPoint(
   int offset = closest_distance_box->OffsetForPositionInFragment(
       *closest_distance_fragment,
       LayoutUnit(absolute_point.X() - closest_distance_position), true);
-  return CreatePositionWithAffinity(
-      offset + closest_distance_box->Start(),
-      offset > 0 ? VP_UPSTREAM_IF_POSSIBLE : TextAffinity::kDownstream);
+  return CreatePositionWithAffinity(offset + closest_distance_box->Start(),
+                                    offset > 0
+                                        ? TextAffinity::kUpstreamIfPossible
+                                        : TextAffinity::kDownstream);
 }
 
 namespace {
@@ -419,13 +419,6 @@ LayoutRect LayoutSVGInlineText::AbsoluteVisualRect() const {
 
 FloatRect LayoutSVGInlineText::VisualRectInLocalSVGCoordinates() const {
   return Parent()->VisualRectInLocalSVGCoordinates();
-}
-
-RefPtr<StringImpl> LayoutSVGInlineText::OriginalText() const {
-  RefPtr<StringImpl> result = LayoutText::OriginalText();
-  if (!result)
-    return nullptr;
-  return NormalizeWhitespace(std::move(result));
 }
 
 }  // namespace blink

@@ -4,9 +4,9 @@
 
 #include "chrome/browser/extensions/api/feedback_private/chrome_feedback_private_delegate.h"
 
+#include <memory>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/feedback/feedback_uploader_chrome.h"
@@ -41,7 +41,7 @@ ChromeFeedbackPrivateDelegate::GetStrings(
     content::BrowserContext* browser_context,
     bool from_crash) const {
   std::unique_ptr<base::DictionaryValue> dict =
-      base::MakeUnique<base::DictionaryValue>();
+      std::make_unique<base::DictionaryValue>();
 
 #define SET_STRING(id, idr) dict->SetString(id, l10n_util::GetStringUTF16(idr))
   SET_STRING("page-title", from_crash
@@ -107,25 +107,52 @@ ChromeFeedbackPrivateDelegate::CreateSystemLogsFetcher(
 std::unique_ptr<system_logs::SystemLogsSource>
 ChromeFeedbackPrivateDelegate::CreateSingleLogSource(
     api::feedback_private::LogSource source_type) const {
+  using SupportedLogFileSource =
+      system_logs::SingleLogFileLogSource::SupportedSource;
+  using SupportedDebugDaemonSource =
+      system_logs::SingleDebugDaemonLogSource::SupportedSource;
+
   switch (source_type) {
+    // These map to SupportedLogFileSources.
     case api::feedback_private::LOG_SOURCE_MESSAGES:
-      return base::MakeUnique<system_logs::SingleLogFileLogSource>(
-          system_logs::SingleLogFileLogSource::SupportedSource::kMessages);
+      return std::make_unique<system_logs::SingleLogFileLogSource>(
+          SupportedLogFileSource::kMessages);
     case api::feedback_private::LOG_SOURCE_UILATEST:
-      return base::MakeUnique<system_logs::SingleLogFileLogSource>(
-          system_logs::SingleLogFileLogSource::SupportedSource::kUiLatest);
-    case api::feedback_private::LOG_SOURCE_DRMMODETEST:
-      return base::MakeUnique<system_logs::SingleDebugDaemonLogSource>(
-          system_logs::SingleDebugDaemonLogSource::SupportedSource::kModetest);
-    case api::feedback_private::LOG_SOURCE_LSUSB:
-      return base::MakeUnique<system_logs::SingleDebugDaemonLogSource>(
-          system_logs::SingleDebugDaemonLogSource::SupportedSource::kLsusb);
+      return std::make_unique<system_logs::SingleLogFileLogSource>(
+          SupportedLogFileSource::kUiLatest);
     case api::feedback_private::LOG_SOURCE_ATRUSLOG:
-      return base::MakeUnique<system_logs::SingleLogFileLogSource>(
-          system_logs::SingleLogFileLogSource::SupportedSource::kAtrusLog);
+      return std::make_unique<system_logs::SingleLogFileLogSource>(
+          SupportedLogFileSource::kAtrusLog);
     case api::feedback_private::LOG_SOURCE_NETLOG:
-      return base::MakeUnique<system_logs::SingleLogFileLogSource>(
-          system_logs::SingleLogFileLogSource::SupportedSource::kNetLog);
+      return std::make_unique<system_logs::SingleLogFileLogSource>(
+          SupportedLogFileSource::kNetLog);
+    case api::feedback_private::LOG_SOURCE_EVENTLOG:
+      return std::make_unique<system_logs::SingleLogFileLogSource>(
+          SupportedLogFileSource::kEventLog);
+    case api::feedback_private::LOG_SOURCE_UPDATEENGINELOG:
+      return std::make_unique<system_logs::SingleLogFileLogSource>(
+          SupportedLogFileSource::kUpdateEngineLog);
+    case api::feedback_private::LOG_SOURCE_POWERDLATEST:
+      return std::make_unique<system_logs::SingleLogFileLogSource>(
+          SupportedLogFileSource::kPowerdLatest);
+    case api::feedback_private::LOG_SOURCE_POWERDPREVIOUS:
+      return std::make_unique<system_logs::SingleLogFileLogSource>(
+          SupportedLogFileSource::kPowerdPrevious);
+
+    // These map to SupportedDebugDaemonSources.
+    case api::feedback_private::LOG_SOURCE_DRMMODETEST:
+      return std::make_unique<system_logs::SingleDebugDaemonLogSource>(
+          SupportedDebugDaemonSource::kModetest);
+    case api::feedback_private::LOG_SOURCE_LSUSB:
+      return std::make_unique<system_logs::SingleDebugDaemonLogSource>(
+          SupportedDebugDaemonSource::kLsusb);
+    case api::feedback_private::LOG_SOURCE_LSPCI:
+      return std::make_unique<system_logs::SingleDebugDaemonLogSource>(
+          SupportedDebugDaemonSource::kLspci);
+    case api::feedback_private::LOG_SOURCE_IFCONFIG:
+      return std::make_unique<system_logs::SingleDebugDaemonLogSource>(
+          SupportedDebugDaemonSource::kIfconfig);
+
     case api::feedback_private::LOG_SOURCE_NONE:
     default:
       NOTREACHED() << "Unknown log source type.";

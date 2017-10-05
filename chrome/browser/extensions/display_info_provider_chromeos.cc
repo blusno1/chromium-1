@@ -645,11 +645,23 @@ DisplayInfoProviderChromeOS::GetAllDisplaysInfo(bool single_unified) {
     NOTIMPLEMENTED();
     return DisplayInfoProvider::DisplayUnitInfoList();
   }
+  DisplayUnitInfoList all_displays;
+
   display::DisplayManager* display_manager =
       ash::Shell::Get()->display_manager();
 
-  if (!display_manager->IsInUnifiedMode())
-    return DisplayInfoProvider::GetAllDisplaysInfo(single_unified);
+  if (!display_manager->IsInUnifiedMode()) {
+    all_displays = DisplayInfoProvider::GetAllDisplaysInfo(single_unified);
+    if (IsTabletModeWindowManagerEnabled()) {
+      // Set is_tablet_mode for displays with has_accelerometer_support.
+      for (auto& display : all_displays) {
+        if (display.has_accelerometer_support) {
+          display.is_tablet_mode = std::make_unique<bool>(true);
+        }
+      }
+    }
+    return all_displays;
+  }
 
   // Chrome OS specific: get displays for unified mode.
   std::vector<display::Display> displays;
@@ -665,7 +677,6 @@ DisplayInfoProviderChromeOS::GetAllDisplaysInfo(bool single_unified) {
     primary_id = displays[0].id();
   }
 
-  DisplayUnitInfoList all_displays;
   for (const display::Display& display : displays) {
     system_display::DisplayUnitInfo unit_info =
         CreateDisplayUnitInfo(display, primary_id);
@@ -764,7 +775,7 @@ bool DisplayInfoProviderChromeOS::OverscanCalibrationComplete(
 bool DisplayInfoProviderChromeOS::ShowNativeTouchCalibration(
     const std::string& id,
     std::string* error,
-    const DisplayInfoProvider::TouchCalibrationCallback& callback) {
+    DisplayInfoProvider::TouchCalibrationCallback callback) {
   if (ash_util::IsRunningInMash()) {
     // TODO(crbug.com/682402): Mash support.
     NOTIMPLEMENTED();
@@ -784,7 +795,8 @@ bool DisplayInfoProviderChromeOS::ShowNativeTouchCalibration(
     return false;
   }
 
-  GetTouchCalibrator()->StartCalibration(display, callback);
+  GetTouchCalibrator()->StartCalibration(
+      display, false /* is_custom_calibration */, std::move(callback));
   return true;
 }
 
@@ -806,8 +818,8 @@ bool DisplayInfoProviderChromeOS::StartCustomTouchCalibration(
   touch_calibration_target_id_ = id;
   custom_touch_calibration_active_ = true;
 
-  // Enable un-transformed touch input.
-  ash::Shell::Get()->touch_transformer_controller()->SetForCalibration(true);
+  GetTouchCalibrator()->StartCalibration(
+      display, true /* is_custom_calibration */, base::Callback<void(bool)>());
   return true;
 }
 
@@ -870,8 +882,7 @@ bool DisplayInfoProviderChromeOS::CompleteCustomTouchCalibration(
   }
 
   gfx::Size display_size(bounds.width, bounds.height);
-  ash::Shell::Get()->display_manager()->SetTouchCalibrationData(
-      display.id(), calibration_points, display_size);
+  GetTouchCalibrator()->CompleteCalibration(calibration_points, display_size);
   return true;
 }
 
@@ -890,14 +901,15 @@ bool DisplayInfoProviderChromeOS::ClearTouchCalibration(const std::string& id,
     return false;
   }
 
-  ash::Shell::Get()->display_manager()->ClearTouchCalibrationData(display.id());
+  ash::Shell::Get()->display_manager()->ClearTouchCalibrationData(
+      display.id(), base::nullopt);
   return true;
 }
 
 bool DisplayInfoProviderChromeOS::IsNativeTouchCalibrationActive(
     std::string* error) {
   // If native touch calibration UX is active, set error and return false.
-  if (GetTouchCalibrator()->is_calibrating()) {
+  if (GetTouchCalibrator()->IsCalibrating()) {
     *error = kNativeTouchCalibrationActiveError;
     return true;
   }

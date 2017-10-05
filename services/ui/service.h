@@ -27,6 +27,7 @@
 #include "services/ui/public/interfaces/display_manager.mojom.h"
 #include "services/ui/public/interfaces/gpu.mojom.h"
 #include "services/ui/public/interfaces/ime/ime.mojom.h"
+#include "services/ui/public/interfaces/remote_event_dispatcher.mojom.h"
 #include "services/ui/public/interfaces/user_access_manager.mojom.h"
 #include "services/ui/public/interfaces/user_activity_monitor.mojom.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
@@ -91,6 +92,9 @@ class Service : public service_manager::Service,
   // as opposed to inside the Window Manager's process.
   explicit Service(const InProcessConfig* config = nullptr);
   ~Service() override;
+
+  // Call if the ui::Service is being run as a standalone process.
+  void set_running_standalone(bool value) { running_standalone_ = value; }
 
  private:
   // Holds InterfaceRequests received before the first WindowTreeHost Display
@@ -170,6 +174,9 @@ class Service : public service_manager::Service,
 
   void BindWindowServerTestRequest(mojom::WindowServerTestRequest request);
 
+  void BindRemoteEventDispatcherRequest(
+      mojom::RemoteEventDispatcherRequest request);
+
   std::unique_ptr<ws::WindowServer> window_server_;
   std::unique_ptr<PlatformEventSource> event_source_;
   using PendingRequests = std::vector<std::unique_ptr<PendingRequest>>;
@@ -222,6 +229,8 @@ class Service : public service_manager::Service,
   bool is_gpu_ready_ = false;
 
   bool in_destructor_ = false;
+
+  bool running_standalone_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Service);
 };

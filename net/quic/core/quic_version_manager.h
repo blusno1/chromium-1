@@ -31,16 +31,14 @@ class QUIC_EXPORT_PRIVATE QuicVersionManager {
   }
 
  private:
-  // FLAGS_quic_enable_version_41
+  // FLAGS_quic_enable_version_42
+  bool enable_version_42_;
+  // FLAGS_quic_reloadable_flag_quic_enable_version_41
   bool enable_version_41_;
-  // FLAGS_quic_reloadable_flag_quic_enable_version_40
-  bool enable_version_40_;
   // FLAGS_quic_reloadable_flag_quic_enable_version_39
   bool enable_version_39_;
   // FLAGS_quic_reloadable_flag_quic_enable_version_38
   bool enable_version_38_;
-  // FLAGS_quic_reloadable_flag_quic_disable_version_36
-  bool disable_version_36_;
   // The list of versions that may be supported.
   QuicVersionVector allowed_supported_versions_;
   // This vector contains QUIC versions which are currently supported based on

@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "ash/accessibility/accessibility_controller.h"
+#include "ash/accessibility/accessibility_focus_ring_controller.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/autoclick/mus/public/interfaces/autoclick.mojom.h"
 #include "ash/public/cpp/ash_pref_names.h"
@@ -46,10 +47,8 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
-#include "chrome/browser/chromeos/ui/accessibility_focus_ring_controller.h"
 #include "chrome/browser/extensions/api/braille_display_private/stub_braille_controller.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
@@ -394,13 +393,6 @@ void AccessibilityManager::OnLargeCursorChanged() {
                                           IsLargeCursorEnabled(),
                                           ash::A11Y_NOTIFICATION_NONE);
   NotifyAccessibilityStatusChanged(details);
-}
-
-bool AccessibilityManager::IsIncognitoAllowed() {
-  return profile_ != NULL &&
-         profile_->GetProfileType() != Profile::GUEST_PROFILE &&
-         IncognitoModePrefs::GetAvailability(profile_->GetPrefs()) !=
-             IncognitoModePrefs::DISABLED;
 }
 
 bool AccessibilityManager::IsLargeCursorEnabled() const {
@@ -1478,9 +1470,9 @@ void AccessibilityManager::PostUnloadChromeVox() {
   // Do any teardown work needed immediately after ChromeVox actually unloads.
   PlayEarcon(SOUND_SPOKEN_FEEDBACK_DISABLED, PlaySoundOption::ALWAYS);
   // Clear the accessibility focus ring.
-  AccessibilityFocusRingController::GetInstance()->SetFocusRing(
+  ash::AccessibilityFocusRingController::GetInstance()->SetFocusRing(
       std::vector<gfx::Rect>(),
-      AccessibilityFocusRingController::PERSIST_FOCUS_RING);
+      ash::AccessibilityFocusRingController::PERSIST_FOCUS_RING);
 
   if (chromevox_panel_) {
     chromevox_panel_->Close();

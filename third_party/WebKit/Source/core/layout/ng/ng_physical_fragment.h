@@ -9,15 +9,21 @@
 #include "core/layout/ng/geometry/ng_physical_offset.h"
 #include "core/layout/ng/geometry/ng_physical_size.h"
 #include "core/layout/ng/ng_break_token.h"
-#include "core/loader/resource/ImageResourceObserver.h"
-#include "platform/graphics/paint/DisplayItemClient.h"
+#include "platform/geometry/LayoutRect.h"
 #include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class ComputedStyle;
 class LayoutObject;
+class Node;
 struct NGPixelSnappedPhysicalBoxStrut;
+
+class NGPhysicalFragment;
+
+struct CORE_EXPORT NGPhysicalFragmentTraits {
+  static void Destruct(const NGPhysicalFragment*);
+};
 
 // The NGPhysicalFragment contains the output geometry from layout. The
 // fragment stores all of its information in the physical coordinate system for
@@ -30,18 +36,8 @@ struct NGPixelSnappedPhysicalBoxStrut;
 // Layout code should only access geometry information through the
 // NGFragment wrapper classes which transforms information into the logical
 // coordinate system.
-//
-// NGPhysicalFragment is an ImageResourceObserver, which means that it gets
-// notified when associated images are changed.
-// This is used for 2 main use cases:
-// - reply to 'background-image' as we need to invalidate the background in this
-//   case.
-//   (See https://drafts.csswg.org/css-backgrounds-3/#the-background-image)
-// - image (<img>, svg <image>) or video (<video>) elements that are
-//   placeholders for displaying them.
-class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
-                                       public DisplayItemClient,
-                                       public ImageResourceObserver {
+class CORE_EXPORT NGPhysicalFragment
+    : public RefCounted<NGPhysicalFragment, NGPhysicalFragmentTraits> {
  public:
   enum NGFragmentType {
     kFragmentBox = 0,
@@ -51,7 +47,7 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
     // enough to store.
   };
 
-  ~NGPhysicalFragment();
+  virtual ~NGPhysicalFragment();
 
   NGFragmentType Type() const { return static_cast<NGFragmentType>(type_); }
   bool IsContainer() const {
@@ -79,7 +75,7 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
     return offset_;
   }
 
-  NGBreakToken* BreakToken() const { return break_token_.Get(); }
+  NGBreakToken* BreakToken() const { return break_token_.get(); }
   const ComputedStyle& Style() const;
   Node* GetNode() const;
 
@@ -87,13 +83,8 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
   // with LegacyLayout.
   LayoutObject* GetLayoutObject() const { return layout_object_; }
 
-  // DisplayItemClient methods.
-  String DebugName() const override { return "NGPhysicalFragment"; }
-
   // TODO(layout-dev): Implement when we have oveflow support.
-  bool HasOverflowClip() const { return false; }
-  LayoutRect VisualRect() const { return visual_rect_; }
-  LayoutRect VisualOverflowRect() const { return VisualRect(); }
+  LayoutRect LocalVisualRect() const { return visual_rect_; }
 
   // Update visual rect for this fragment.
   // This is called not only after layout, but also after transform changes,
@@ -121,8 +112,7 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
     DumpType = 0x8,
     DumpOffset = 0x10,
     DumpSize = 0x20,
-    DumpOverflow = 0x40,
-    DumpTextOffsets = 0x80,
+    DumpTextOffsets = 0x40,
     DumpAll = -1
   };
   typedef int DumpFlags;
@@ -132,13 +122,6 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
 #ifndef NDEBUG
   void ShowFragmentTree() const;
 #endif
-
-  // Override RefCounted's deref() to ensure operator delete is called on the
-  // appropriate subclass type.
-  void Deref() const {
-    if (DerefBase())
-      Destroy();
-  }
 
  protected:
   NGPhysicalFragment(LayoutObject* layout_object,
@@ -162,6 +145,7 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
   unsigned border_edge_ : 4;  // NGBorderEdges::Physical
 
  private:
+  friend struct NGPhysicalFragmentTraits;
   void Destroy() const;
 };
 

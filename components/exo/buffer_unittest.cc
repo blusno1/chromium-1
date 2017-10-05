@@ -10,7 +10,7 @@
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
 #include "components/viz/common/gpu/context_provider.h"
-#include "components/viz/common/quads/single_release_callback.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/khronos/GLES2/gl2.h"
@@ -30,10 +30,10 @@ void Release(int* release_call_count) {
 
 TEST_F(BufferTest, ReleaseCallback) {
   gfx::Size buffer_size(256, 256);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
   auto surface_tree_host =
-      base::MakeUnique<SurfaceTreeHost>("BufferTest", nullptr);
+      std::make_unique<SurfaceTreeHost>("BufferTest", nullptr);
   LayerTreeFrameSinkHolder* frame_sink_holder =
       surface_tree_host->layer_tree_frame_sink_holder();
 
@@ -68,10 +68,10 @@ TEST_F(BufferTest, ReleaseCallback) {
 
 TEST_F(BufferTest, IsLost) {
   gfx::Size buffer_size(256, 256);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
   auto surface_tree_host =
-      base::MakeUnique<SurfaceTreeHost>("BufferTest", nullptr);
+      std::make_unique<SurfaceTreeHost>("BufferTest", nullptr);
   LayerTreeFrameSinkHolder* frame_sink_holder =
       surface_tree_host->layer_tree_frame_sink_holder();
 
@@ -124,10 +124,10 @@ TEST_F(BufferTest, IsLost) {
 TEST_F(BufferTest, OnLostResources) {
   // Create a Buffer and use it to produce a Texture.
   constexpr gfx::Size buffer_size(256, 256);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
   auto surface_tree_host =
-      base::MakeUnique<SurfaceTreeHost>("BufferTest", nullptr);
+      std::make_unique<SurfaceTreeHost>("BufferTest", nullptr);
   LayerTreeFrameSinkHolder* frame_sink_holder =
       surface_tree_host->layer_tree_frame_sink_holder();
 

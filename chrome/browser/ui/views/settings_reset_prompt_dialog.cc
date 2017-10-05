@@ -6,8 +6,10 @@
 
 #include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_controller.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/insets.h"
@@ -17,19 +19,18 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
-namespace safe_browsing {
+namespace chrome {
 
-// static
-void SettingsResetPromptController::ShowSettingsResetPrompt(
+void ShowSettingsResetPrompt(
     Browser* browser,
-    SettingsResetPromptController* controller) {
+    safe_browsing::SettingsResetPromptController* controller) {
   SettingsResetPromptDialog* dialog = new SettingsResetPromptDialog(controller);
   // The dialog will delete itself, as implemented in
   // |DialogDelegateView::DeleteDelegate()|, when its widget is closed.
   dialog->Show(browser);
 }
 
-}  // namespace safe_browsing
+}  // namespace chrome
 
 namespace {
 constexpr int kDialogWidth = 448;
@@ -47,7 +48,7 @@ SettingsResetPromptDialog::SettingsResetPromptDialog(
   views::StyledLabel* dialog_label =
       new views::StyledLabel(controller_->GetMainText(), /*listener=*/nullptr);
   views::StyledLabel::RangeStyleInfo url_style;
-  url_style.weight = gfx::Font::Weight::BOLD;
+  url_style.text_style = STYLE_EMPHASIZED;
   dialog_label->AddStyleRange(controller_->GetMainTextUrlRange(), url_style);
   AddChildView(dialog_label);
 }

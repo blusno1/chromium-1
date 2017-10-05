@@ -24,23 +24,24 @@
 
 #include "core/html/HTMLFormControlElement.h"
 
+#include "core/dom/AXObjectCache.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/UseCounter.h"
-#include "core/html/HTMLDataListElement.h"
-#include "core/html/HTMLFieldSetElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
-#include "core/html/HTMLLegendElement.h"
 #include "core/html/ValidityState.h"
+#include "core/html/forms/HTMLDataListElement.h"
+#include "core/html/forms/HTMLFieldSetElement.h"
+#include "core/html/forms/HTMLLegendElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutTheme.h"
 #include "core/page/Page.h"
 #include "core/page/ValidationMessageClient.h"
 #include "platform/EventDispatchForbiddenScope.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/text/BidiTextRun.h"
 #include "platform/wtf/Vector.h"
 
@@ -114,10 +115,10 @@ void HTMLFormControlElement::UpdateAncestorDisabledState() const {
   ContainerNode* highest_legend_ancestor = nullptr;
   for (HTMLElement* ancestor = Traversal<HTMLElement>::FirstAncestor(*this);
        ancestor; ancestor = Traversal<HTMLElement>::FirstAncestor(*ancestor)) {
-    if (isHTMLLegendElement(*ancestor))
+    if (IsHTMLLegendElement(*ancestor))
       highest_legend_ancestor = ancestor;
-    if (isHTMLFieldSetElement(*ancestor) && ancestor->IsDisabledFormControl())
-      highest_disabled_field_set_ancestor = toHTMLFieldSetElement(ancestor);
+    if (IsHTMLFieldSetElement(*ancestor) && ancestor->IsDisabledFormControl())
+      highest_disabled_field_set_ancestor = ToHTMLFieldSetElement(ancestor);
   }
   ancestor_disabled_state_ =
       (highest_disabled_field_set_ancestor &&
@@ -161,9 +162,8 @@ void HTMLFormControlElement::ParseAttribute(
       SetNeedsWillValidateCheck();
       PseudoStateChanged(CSSSelector::kPseudoReadOnly);
       PseudoStateChanged(CSSSelector::kPseudoReadWrite);
-      if (GetLayoutObject())
-        LayoutTheme::GetTheme().ControlStateChanged(*GetLayoutObject(),
-                                                    kReadOnlyControlState);
+      if (LayoutObject* o = GetLayoutObject())
+        o->InvalidateIfControlStateChanged(kReadOnlyControlState);
     }
   } else if (name == requiredAttr) {
     if (params.old_value.IsNull() != params.new_value.IsNull())
@@ -185,15 +185,23 @@ void HTMLFormControlElement::DisabledAttributeChanged() {
   SetNeedsWillValidateCheck();
   PseudoStateChanged(CSSSelector::kPseudoDisabled);
   PseudoStateChanged(CSSSelector::kPseudoEnabled);
-  if (GetLayoutObject())
-    LayoutTheme::GetTheme().ControlStateChanged(*GetLayoutObject(),
-                                                kEnabledControlState);
+  if (LayoutObject* o = GetLayoutObject())
+    o->InvalidateIfControlStateChanged(kEnabledControlState);
+
+  // TODO(dmazzoni): http://crbug.com/699438.
+  // Replace |CheckedStateChanged| with a generic tree changed event.
+  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
+    cache->CheckedStateChanged(this);
 }
 
 void HTMLFormControlElement::RequiredAttributeChanged() {
   SetNeedsValidityCheck();
   PseudoStateChanged(CSSSelector::kPseudoRequired);
   PseudoStateChanged(CSSSelector::kPseudoOptional);
+  // TODO(dmazzoni): http://crbug.com/699438.
+  // Replace |CheckedStateChanged| with a generic tree changed event.
+  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
+    cache->CheckedStateChanged(this);
 }
 
 bool HTMLFormControlElement::IsReadOnly() const {
@@ -331,6 +339,12 @@ bool HTMLFormControlElement::IsDisabledFormControl() const {
   if (FastHasAttribute(disabledAttr))
     return true;
 
+  // Since the MHTML is loaded in sandboxing mode with form submission and
+  // script execution disabled, we should gray out all form control elements
+  // to indicate that the form cannot be worked on.
+  if (GetDocument().Fetcher()->Archive())
+    return true;
+
   if (ancestor_disabled_state_ == kAncestorDisabledStateUnknown)
     UpdateAncestorDisabledState();
   return ancestor_disabled_state_ == kAncestorDisabledStateDisabled;
@@ -395,9 +409,9 @@ void HTMLFormControlElement::WillCallDefaultEventHandler(const Event& event) {
   // LayoutTheme::isFocused().  Inform LayoutTheme if
   // shouldHaveFocusAppearance() changes.
   if (old_should_have_focus_appearance != ShouldHaveFocusAppearance() &&
-      GetLayoutObject())
-    LayoutTheme::GetTheme().ControlStateChanged(*GetLayoutObject(),
-                                                kFocusControlState);
+      GetLayoutObject()) {
+    GetLayoutObject()->InvalidateIfControlStateChanged(kFocusControlState);
+  }
 }
 
 int HTMLFormControlElement::tabIndex() const {

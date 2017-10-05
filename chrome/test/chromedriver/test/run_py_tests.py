@@ -71,24 +71,16 @@ _NEGATIVE_FILTER = [
     'ChromeDriverTest.testAlertOnNewWindow',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1882
     'PerfTest.testColdExecuteScript',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
+    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
 ]
 
 _VERSION_SPECIFIC_FILTER = {}
 _VERSION_SPECIFIC_FILTER['HEAD'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
-    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
-]
-_VERSION_SPECIFIC_FILTER['61'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
-    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
-]
-_VERSION_SPECIFIC_FILTER['60'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
-    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
-]
-_VERSION_SPECIFIC_FILTER['59'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=717
-    'ChromeDriverTest.testCloseWindowUsingJavascript',
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=764519
+    'MobileEmulationCapabilityTest.testDeviceName',
+    'MobileEmulationCapabilityTest.testNetworkConnectionTypeIsAppliedToAllTabs',
+    'MobileEmulationCapabilityTest.testNetworkConnectionTypeIsAppliedToAllTabsImmediately',
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -109,6 +101,9 @@ _OS_SPECIFIC_FILTER['mac'] = [
     'MobileEmulationCapabilityTest.testTapElement',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1945
     'ChromeDriverTest.testWindowFullScreen',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
+    'ChromeDriverPageLoadTimeoutTest.testHistoryNavigationWithPageLoadTimeout',
+    'ChromeDriverPageLoadTimeoutTest.testRefreshWithPageLoadTimeout',
 ]
 
 _DESKTOP_NEGATIVE_FILTER = [

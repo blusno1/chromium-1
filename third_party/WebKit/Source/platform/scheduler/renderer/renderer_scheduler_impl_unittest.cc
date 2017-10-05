@@ -4,11 +4,11 @@
 
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -24,13 +24,20 @@
 #include "platform/scheduler/renderer/auto_advancing_virtual_time_domain.h"
 #include "platform/scheduler/renderer/budget_pool.h"
 #include "platform/scheduler/renderer/web_frame_scheduler_impl.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 namespace scheduler {
+// To avoid symbol collisions in jumbo builds.
+namespace renderer_scheduler_impl_unittest {
 
-namespace {
+using ScopedStopLoadingInBackgroundAndroidForTest =
+    ScopedRuntimeEnabledFeatureForTest<
+        RuntimeEnabledFeatures::StopLoadingInBackgroundAndroidEnabled,
+        RuntimeEnabledFeatures::SetStopLoadingInBackgroundAndroidEnabled>;
+
 class FakeInputEvent : public blink::WebInputEvent {
  public:
   explicit FakeInputEvent(blink::WebInputEvent::Type event_type,
@@ -201,8 +208,6 @@ class ScopedAutoAdvanceNowEnabler {
   DISALLOW_COPY_AND_ASSIGN(ScopedAutoAdvanceNowEnabler);
 };
 
-};  // namespace
-
 class RendererSchedulerImplForTest : public RendererSchedulerImpl {
  public:
   using RendererSchedulerImpl::OnIdlePeriodEnded;
@@ -262,13 +267,21 @@ class RendererSchedulerImplTest : public ::testing::Test {
 
   RendererSchedulerImplTest()
       : clock_(new base::SimpleTestTickClock()),
-        fake_task_(FROM_HERE, base::Bind([] {}), base::TimeTicks(), true) {
+        fake_task_(TaskQueue::PostedTask(base::Bind([] {}),
+                                         FROM_HERE,
+                                         base::TimeDelta(),
+                                         true),
+                   base::TimeTicks()) {
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
   }
 
   RendererSchedulerImplTest(base::MessageLoop* message_loop)
       : clock_(new base::SimpleTestTickClock()),
-        fake_task_(FROM_HERE, base::Bind([] {}), base::TimeTicks(), true),
+        fake_task_(TaskQueue::PostedTask(base::Bind([] {}),
+                                         FROM_HERE,
+                                         base::TimeDelta(),
+                                         true),
+                   base::TimeTicks()),
         message_loop_(message_loop) {
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
   }
@@ -278,15 +291,15 @@ class RendererSchedulerImplTest : public ::testing::Test {
   void SetUp() override {
     if (message_loop_) {
       main_task_runner_ = SchedulerTqmDelegateImpl::Create(
-          message_loop_.get(), base::MakeUnique<TestTimeSource>(clock_.get()));
+          message_loop_.get(), std::make_unique<TestTimeSource>(clock_.get()));
     } else {
-      mock_task_runner_ = make_scoped_refptr(
-          new cc::OrderedSimpleTaskRunner(clock_.get(), false));
+      mock_task_runner_ = base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(
+          clock_.get(), false);
       main_task_runner_ = SchedulerTqmDelegateForTest::Create(
-          mock_task_runner_, base::MakeUnique<TestTimeSource>(clock_.get()));
+          mock_task_runner_, std::make_unique<TestTimeSource>(clock_.get()));
     }
     Initialize(
-        base::MakeUnique<RendererSchedulerImplForTest>(main_task_runner_));
+        std::make_unique<RendererSchedulerImplForTest>(main_task_runner_));
   }
 
   void Initialize(std::unique_ptr<RendererSchedulerImplForTest> scheduler) {
@@ -298,6 +311,7 @@ class RendererSchedulerImplTest : public ::testing::Test {
         MainThreadTaskQueue::QueueType::FRAME_LOADING_CONTROL);
     idle_task_runner_ = scheduler_->IdleTaskRunner();
     timer_task_runner_ = scheduler_->TimerTaskQueue();
+    v8_task_runner_ = scheduler_->V8TaskQueue();
     fake_queue_ = scheduler_->NewLoadingTaskQueue(
         MainThreadTaskQueue::QueueType::FRAME_LOADING);
   }
@@ -603,6 +617,7 @@ class RendererSchedulerImplTest : public ::testing::Test {
   // - 'M': Loading Control task
   // - 'I': Idle task
   // - 'T': Timer task
+  // - 'V': V8 task
   void PostTestTasks(std::vector<std::string>* run_order,
                      const std::string& task_descriptor) {
     std::istringstream stream(task_descriptor);
@@ -635,6 +650,10 @@ class RendererSchedulerImplTest : public ::testing::Test {
           timer_task_runner_->PostTask(
               FROM_HERE, base::Bind(&AppendToVectorTestTask, run_order, task));
           break;
+        case 'V':
+          v8_task_runner_->PostTask(
+              FROM_HERE, base::Bind(&AppendToVectorTestTask, run_order, task));
+          break;
         default:
           NOTREACHED();
       }
@@ -662,9 +681,9 @@ class RendererSchedulerImplTest : public ::testing::Test {
         RendererSchedulerImpl::kEndIdleWhenHiddenDelayMillis);
   }
 
-  static base::TimeDelta stop_timers_when_backgrounded_delay() {
+  static base::TimeDelta stop_when_backgrounded_delay() {
     return base::TimeDelta::FromMilliseconds(
-        RendererSchedulerImpl::kStopTimersWhenBackgroundedDelayMillis);
+        RendererSchedulerImpl::kStopWhenBackgroundedDelayMillis);
   }
 
   static base::TimeDelta rails_response_time() {
@@ -708,6 +727,7 @@ class RendererSchedulerImplTest : public ::testing::Test {
   scoped_refptr<base::SingleThreadTaskRunner> loading_control_task_runner_;
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> timer_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> v8_task_runner_;
   bool simulate_timer_task_ran_;
   bool simulate_compositor_task_ran_;
   uint64_t next_begin_frame_number_ = viz::BeginFrameArgs::kStartingFrameNumber;
@@ -1838,10 +1858,10 @@ class RendererSchedulerImplWithMockSchedulerTest
     : public RendererSchedulerImplTest {
  public:
   void SetUp() override {
-    mock_task_runner_ = make_scoped_refptr(
-        new cc::OrderedSimpleTaskRunner(clock_.get(), false));
+    mock_task_runner_ =
+        base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(clock_.get(), false);
     main_task_runner_ = SchedulerTqmDelegateForTest::Create(
-        mock_task_runner_, base::MakeUnique<TestTimeSource>(clock_.get()));
+        mock_task_runner_, std::make_unique<TestTimeSource>(clock_.get()));
     mock_scheduler_ = new RendererSchedulerImplForTest(main_task_runner_);
     Initialize(base::WrapUnique(mock_scheduler_));
   }
@@ -2433,7 +2453,7 @@ TEST_F(RendererSchedulerImplTest, MultipleStopsNeedMultipleResumes) {
 }
 
 TEST_F(RendererSchedulerImplTest, PauseRenderer) {
-  scheduler_->SetTimerQueueStoppingWhenBackgroundedEnabled(true);
+  scheduler_->SetStoppingWhenBackgroundedEnabled(true);
   // Assume that the renderer is backgrounded.
   scheduler_->SetRendererBackgrounded(true);
 
@@ -2560,7 +2580,7 @@ TEST_F(RendererSchedulerImplTest, ShutdownPreventsPostingOfNewTasks) {
 }
 
 TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedTimerSuspension) {
-  scheduler_->SetTimerQueueStoppingWhenBackgroundedEnabled(true);
+  scheduler_->SetStoppingWhenBackgroundedEnabled(true);
 
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "T1 T2");
@@ -2584,7 +2604,7 @@ TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedTimerSuspension) {
   EXPECT_THAT(run_order, ::testing::ElementsAre(std::string("T3")));
 
   // Advance the time until after the scheduled timer queue suspension.
-  now = base::TimeTicks() + stop_timers_when_backgrounded_delay() +
+  now = base::TimeTicks() + stop_when_backgrounded_delay() +
         base::TimeDelta::FromMilliseconds(10);
   run_order.clear();
   clock_->SetNowTicks(now);
@@ -2592,12 +2612,13 @@ TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedTimerSuspension) {
   ASSERT_TRUE(run_order.empty());
 
   // Timer tasks should be paused until the foregrounded signal.
-  PostTestTasks(&run_order, "T4 T5");
+  PostTestTasks(&run_order, "T4 T5 V1");
   now += base::TimeDelta::FromSeconds(10);
   clock_->SetNowTicks(now);
   RunUntilIdle();
-  EXPECT_THAT(run_order, ::testing::ElementsAre());
+  EXPECT_THAT(run_order, ::testing::ElementsAre(std::string("V1")));
 
+  run_order.clear();
   scheduler_->SetRendererBackgrounded(false);
   RunUntilIdle();
   EXPECT_THAT(run_order,
@@ -2608,6 +2629,59 @@ TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedTimerSuspension) {
   PostTestTasks(&run_order, "T6");
   RunUntilIdle();
   EXPECT_THAT(run_order, ::testing::ElementsAre(std::string("T6")));
+}
+
+TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedLoadingSuspension) {
+  ScopedStopLoadingInBackgroundAndroidForTest stop_loading_enabler(true);
+
+  scheduler_->SetStoppingWhenBackgroundedEnabled(true);
+
+  std::vector<std::string> run_order;
+  PostTestTasks(&run_order, "L1 L2");
+
+  base::TimeTicks now;
+
+  // The background signal will not immediately suspend the loading queue.
+  scheduler_->SetRendererBackgrounded(true);
+  now += base::TimeDelta::FromMilliseconds(1100);
+  clock_->SetNowTicks(now);
+  RunUntilIdle();
+  EXPECT_THAT(run_order,
+              ::testing::ElementsAre(std::string("L1"), std::string("L2")));
+
+  run_order.clear();
+  PostTestTasks(&run_order, "L3");
+
+  now += base::TimeDelta::FromSeconds(1);
+  clock_->SetNowTicks(now);
+  RunUntilIdle();
+  EXPECT_THAT(run_order, ::testing::ElementsAre(std::string("L3")));
+
+  // Advance the time until after the scheduled loading queue suspension.
+  now = base::TimeTicks() + stop_when_backgrounded_delay() +
+        base::TimeDelta::FromMilliseconds(10);
+  run_order.clear();
+  clock_->SetNowTicks(now);
+  RunUntilIdle();
+  ASSERT_TRUE(run_order.empty());
+
+  // Loading tasks should be paused until the foregrounded signal.
+  PostTestTasks(&run_order, "L4 L5");
+  now += base::TimeDelta::FromSeconds(10);
+  clock_->SetNowTicks(now);
+  RunUntilIdle();
+  EXPECT_THAT(run_order, ::testing::ElementsAre());
+
+  scheduler_->SetRendererBackgrounded(false);
+  RunUntilIdle();
+  EXPECT_THAT(run_order,
+              ::testing::ElementsAre(std::string("L4"), std::string("L5")));
+
+  // Subsequent loading tasks should fire as usual.
+  run_order.clear();
+  PostTestTasks(&run_order, "L6");
+  RunUntilIdle();
+  EXPECT_THAT(run_order, ::testing::ElementsAre(std::string("L6")));
 }
 
 TEST_F(RendererSchedulerImplTest,
@@ -3784,6 +3858,8 @@ TEST_F(RendererSchedulerImplTest, EnableVirtualTime) {
             scheduler_->GetVirtualTimeDomain());
   EXPECT_EQ(scheduler_->VirtualTimeControlTaskQueue()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
+  EXPECT_EQ(scheduler_->V8TaskQueue()->GetTimeDomain(),
+            scheduler_->GetVirtualTimeDomain());
 
   // The main control task queue remains in the real time domain.
   EXPECT_EQ(scheduler_->ControlTaskQueue()->GetTimeDomain(),
@@ -3838,6 +3914,8 @@ TEST_F(RendererSchedulerImplTest, DisableVirtualTimeForTesting) {
             scheduler_->real_time_domain());
   EXPECT_EQ(scheduler_->ControlTaskQueue()->GetTimeDomain(),
             scheduler_->real_time_domain());
+  EXPECT_EQ(scheduler_->V8TaskQueue()->GetTimeDomain(),
+            scheduler_->real_time_domain());
   EXPECT_FALSE(scheduler_->VirtualTimeControlTaskQueue());
 }
 
@@ -3851,7 +3929,8 @@ TEST_F(RendererSchedulerImplTest, Tracing) {
   scheduler_->AddWebViewScheduler(web_view_scheduler1.get());
 
   std::unique_ptr<WebFrameSchedulerImpl> web_frame_scheduler =
-      web_view_scheduler1->CreateWebFrameSchedulerImpl(nullptr);
+      web_view_scheduler1->CreateWebFrameSchedulerImpl(
+          nullptr, WebFrameScheduler::FrameType::kSubframe);
 
   std::unique_ptr<WebViewSchedulerImpl> web_view_scheduler2 = base::WrapUnique(
       new WebViewSchedulerImpl(nullptr, nullptr, scheduler_.get(), false));
@@ -3875,14 +3954,10 @@ TEST_F(RendererSchedulerImplTest, Tracing) {
   EXPECT_TRUE(value);
 }
 
-namespace {
-
 void RecordingTimeTestTask(std::vector<base::TimeTicks>* run_times,
                            base::SimpleTestTickClock* clock) {
   run_times->push_back(clock->NowTicks());
 }
-
-}  // namespace
 
 // TODO(altimin@): Re-enable after splitting the timer policy into separate
 // policies.
@@ -4106,5 +4181,6 @@ TEST_F(RendererSchedulerImplTest, LoadingControlTasks) {
                                    std::string("L5"), std::string("L6")));
 }
 
+}  // namespace renderer_scheduler_impl_unittest
 }  // namespace scheduler
 }  // namespace blink

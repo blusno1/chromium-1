@@ -81,6 +81,7 @@ import org.chromium.content.browser.test.util.KeyUtils;
 import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.ui.test.util.UiRestriction;
 import org.chromium.ui.touch_selection.SelectionEventType;
 
@@ -1283,6 +1284,7 @@ public class ContextualSearchManagerTest {
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @DisableIf.Build(supported_abis_includes = "arm64-v8a", message = "crbug.com/765403")
     public void testSwipeExpand() throws InterruptedException, TimeoutException {
         assertNoSearchesLoaded();
         clickWordNode("intelligence");
@@ -1859,6 +1861,7 @@ public class ContextualSearchManagerTest {
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
+    @DisableIf.Build(supported_abis_includes = "arm64-v8a", message = "crbug.com/765403")
     public void testSearchTermResolutionError() throws InterruptedException, TimeoutException {
         clickWordNode("states");
         assertSearchTermRequested();
@@ -2835,6 +2838,7 @@ public class ContextualSearchManagerTest {
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
+    @DisableIf.Device(type = {UiDisableIf.PHONE}) // Flaking on phones crbug.com/765796
     public void testPanelDismissedOnToggleFullscreen()
             throws InterruptedException, TimeoutException {
         // Simulate a tap and assert that the panel peeks.
@@ -2933,6 +2937,8 @@ public class ContextualSearchManagerTest {
     @SmallTest
     @Feature({"ContextualSearch"})
     public void testQuickActionCaptionAndImage() throws InterruptedException, TimeoutException {
+        mPanel.getAnimationHandler().enableTestingMode();
+
         // Simulate a tap to show the Bar, then set the quick action data.
         simulateTapSearch("search");
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -2940,8 +2946,6 @@ public class ContextualSearchManagerTest {
             public void run() {
                 mPanel.onSearchTermResolved("search", null, "tel:555-555-5555",
                         QuickActionCategory.PHONE);
-                // Finish all running animations.
-                mPanel.onUpdateAnimation(System.currentTimeMillis(), true);
             }
         });
 

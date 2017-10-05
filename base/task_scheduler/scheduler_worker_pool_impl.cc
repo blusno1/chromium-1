@@ -85,11 +85,12 @@ class SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl
 #endif
 
   // BlockingObserver:
-  void BlockingScopeEntered(BlockingType blocking_type) override;
-  void BlockingScopeExited(BlockingType blocking_type) override;
+  void BlockingStarted(BlockingType blocking_type) override;
+  void BlockingTypeUpgraded() override;
+  void BlockingEnded() override;
 
-  void MayBlockScopeEntered();
-  void WillBlockScopeEntered();
+  void MayBlockEntered();
+  void WillBlockEntered();
 
   // Returns true iff this worker has been within a MAY_BLOCK ScopedBlockingCall
   // for more than |outer_->MayBlockThreshold()|. The worker capacity must be
@@ -131,6 +132,10 @@ class SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl
   // Time when MayBlockScopeEntered() was last called. Reset when
   // BlockingScopeExited() is called. Access synchronized by |outer_->lock_|.
   TimeTicks may_block_start_time_;
+
+  // Whether this worker is currently running a task (i.e. GetWork() has
+  // returned a non-empty sequence and DidRunTask() hasn't been called yet).
+  bool is_running_task_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SchedulerWorkerDelegateImpl);
 };
@@ -338,6 +343,7 @@ void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::OnMainEntry(
 scoped_refptr<Sequence>
 SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::GetWork(
     SchedulerWorker* worker) {
+  DCHECK(!is_running_task_);
   {
     AutoSchedulerLock auto_lock(outer_->lock_);
 
@@ -406,10 +412,17 @@ SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::GetWork(
     DCHECK(!outer_->idle_workers_stack_.Contains(worker));
   }
 #endif
+
+  is_running_task_ = true;
   return sequence;
 }
 
 void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::DidRunTask() {
+  DCHECK(may_block_start_time_.is_null());
+  DCHECK(!incremented_worker_capacity_since_blocked_);
+  DCHECK(is_running_task_);
+  is_running_task_ = false;
+
   ++num_tasks_since_last_wait_;
   ++num_tasks_since_last_detach_;
 }
@@ -505,32 +518,62 @@ void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::
 }
 #endif
 
-void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::BlockingScopeEntered(
+void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::BlockingStarted(
     BlockingType blocking_type) {
+  // Blocking calls made outside of tasks should not influence the capacity
+  // count as no task is running.
+  if (!is_running_task_)
+    return;
+
   switch (blocking_type) {
     case BlockingType::MAY_BLOCK:
-      MayBlockScopeEntered();
+      MayBlockEntered();
       break;
     case BlockingType::WILL_BLOCK:
-      WillBlockScopeEntered();
+      WillBlockEntered();
       break;
   }
 }
 
-void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::BlockingScopeExited(
-    BlockingType blocking_type) {
+void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::
+    BlockingTypeUpgraded() {
+  {
+    AutoSchedulerLock auto_lock(outer_->lock_);
+
+    // Don't do anything if a MAY_BLOCK ScopedBlockingCall instantiated in the
+    // same scope already caused the worker capacity to be incremented.
+    if (incremented_worker_capacity_since_blocked_)
+      return;
+
+    // Cancel the effect of a MAY_BLOCK ScopedBlockingCall instantiated in the
+    // same scope.
+    if (!may_block_start_time_.is_null()) {
+      may_block_start_time_ = TimeTicks();
+      --outer_->num_pending_may_block_workers_;
+    }
+  }
+
+  WillBlockEntered();
+}
+
+void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::BlockingEnded() {
+  // Ignore blocking calls made outside of tasks.
+  if (!is_running_task_)
+    return;
+
   AutoSchedulerLock auto_lock(outer_->lock_);
-  if (incremented_worker_capacity_since_blocked_)
+  if (incremented_worker_capacity_since_blocked_) {
     outer_->DecrementWorkerCapacityLockRequired();
-  else if (!may_block_start_time_.is_null())
+  } else {
+    DCHECK(!may_block_start_time_.is_null());
     --outer_->num_pending_may_block_workers_;
+  }
 
   incremented_worker_capacity_since_blocked_ = false;
   may_block_start_time_ = TimeTicks();
 }
 
-void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::
-    MayBlockScopeEntered() {
+void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::MayBlockEntered() {
   AutoSchedulerLock auto_lock(outer_->lock_);
 
   DCHECK(!incremented_worker_capacity_since_blocked_);
@@ -544,8 +587,7 @@ void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::
   }
 }
 
-void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::
-    WillBlockScopeEntered() {
+void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::WillBlockEntered() {
   std::unique_ptr<PriorityQueue::Transaction> shared_transaction(
       outer_->shared_priority_queue_.BeginTransaction());
   AutoSchedulerLock auto_lock(outer_->lock_);

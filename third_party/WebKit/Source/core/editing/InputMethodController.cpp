@@ -34,10 +34,14 @@
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/SetSelectionOptions.h"
 #include "core/editing/commands/TypingCommand.h"
 #include "core/editing/markers/DocumentMarkerController.h"
+#include "core/editing/markers/SuggestionMarkerProperties.h"
+#include "core/editing/spellcheck/SpellChecker.h"
 #include "core/editing/state_machines/BackwardCodePointStateMachine.h"
 #include "core/editing/state_machines/ForwardCodePointStateMachine.h"
 #include "core/events/CompositionEvent.h"
@@ -180,9 +184,9 @@ AtomicString GetInputModeAttribute(Element* element) {
     return AtomicString();
 
   bool query_attribute = false;
-  if (isHTMLInputElement(*element)) {
-    query_attribute = toHTMLInputElement(*element).SupportsInputModeAttribute();
-  } else if (isHTMLTextAreaElement(*element)) {
+  if (auto* input = ToHTMLInputElementOrNull(*element)) {
+    query_attribute = input->SupportsInputModeAttribute();
+  } else if (IsHTMLTextAreaElement(*element)) {
     query_attribute = true;
   } else {
     element->GetDocument().UpdateStyleAndLayoutTree();
@@ -289,6 +293,22 @@ Element* RootEditableElementOfSelection(const FrameSelection& frameSelection) {
   return RootEditableElementOf(visibleSeleciton.Start());
 }
 
+std::pair<ContainerNode*, PlainTextRange> PlainTextRangeForEphemeralRange(
+    const EphemeralRange& range) {
+  if (range.IsNull())
+    return {};
+  ContainerNode* const editable =
+      RootEditableElementOrTreeScopeRootNodeOf(range.StartPosition());
+  DCHECK(editable);
+  return std::make_pair(editable, PlainTextRange::Create(*editable, range));
+}
+
+StyleableMarker::Thickness BoolIsThickToStyleableMarkerThickness(
+    bool is_thick) {
+  return is_thick ? StyleableMarker::Thickness::kThick
+                  : StyleableMarker::Thickness::kThin;
+}
+
 }  // anonymous namespace
 
 InputMethodController* InputMethodController::Create(LocalFrame& frame) {
@@ -301,12 +321,12 @@ InputMethodController::InputMethodController(LocalFrame& frame)
 InputMethodController::~InputMethodController() = default;
 
 bool InputMethodController::IsAvailable() const {
-  return GetFrame().GetDocument();
+  return LifecycleContext();
 }
 
 Document& InputMethodController::GetDocument() const {
   DCHECK(IsAvailable());
-  return *GetFrame().GetDocument();
+  return *LifecycleContext();
 }
 
 bool InputMethodController::HasComposition() const {
@@ -352,10 +372,10 @@ bool IsTextTooLongAt(const Position& position) {
   const Element* element = EnclosingTextControl(position);
   if (!element)
     return false;
-  if (isHTMLInputElement(element))
-    return toHTMLInputElement(element)->TooLong();
-  if (isHTMLTextAreaElement(element))
-    return toHTMLTextAreaElement(element)->TooLong();
+  if (auto* input = ToHTMLInputElementOrNull(element))
+    return input->TooLong();
+  if (auto* textarea = ToHTMLTextAreaElementOrNull(element))
+    return textarea->TooLong();
   return false;
 }
 
@@ -405,15 +425,8 @@ bool InputMethodController::FinishComposingText(
     return true;
   }
 
-  Element* root_editable_element =
-      GetFrame()
-          .Selection()
-          .ComputeVisibleSelectionInDOMTreeDeprecated()
-          .RootEditableElement();
-  if (!root_editable_element)
-    return false;
   PlainTextRange composition_range =
-      PlainTextRange::Create(*root_editable_element, *composition_range_);
+      PlainTextRangeForEphemeralRange(CompositionEphemeralRange()).second;
   if (composition_range.IsNull())
     return false;
 
@@ -496,11 +509,42 @@ void InputMethodController::AddImeTextSpans(
     if (ephemeral_line_range.IsNull())
       continue;
 
-    GetDocument().Markers().AddCompositionMarker(
-        ephemeral_line_range, ime_text_span.UnderlineColor(),
-        ime_text_span.Thick() ? StyleableMarker::Thickness::kThick
-                              : StyleableMarker::Thickness::kThin,
-        ime_text_span.BackgroundColor());
+    switch (ime_text_span.GetType()) {
+      case ImeTextSpan::Type::kComposition:
+        GetDocument().Markers().AddCompositionMarker(
+            ephemeral_line_range, ime_text_span.UnderlineColor(),
+            BoolIsThickToStyleableMarkerThickness(ime_text_span.Thick()),
+            ime_text_span.BackgroundColor());
+        break;
+      case ImeTextSpan::Type::kSuggestion:
+      case ImeTextSpan::Type::kMisspellingSuggestion:
+        const SuggestionMarker::SuggestionType suggestion_type =
+            ime_text_span.GetType() == ImeTextSpan::Type::kMisspellingSuggestion
+                ? SuggestionMarker::SuggestionType::kMisspelling
+                : SuggestionMarker::SuggestionType::kNotMisspelling;
+
+        // If spell-checking is disabled for an element, we ignore suggestion
+        // markers used to mark misspelled words, but allow other ones (e.g.,
+        // markers added by an IME to allow picking between multiple possible
+        // words, none of which is necessarily misspelled).
+        if (suggestion_type == SuggestionMarker::SuggestionType::kMisspelling &&
+            !SpellChecker::IsSpellCheckingEnabledAt(
+                ephemeral_line_range.StartPosition()))
+          continue;
+
+        GetDocument().Markers().AddSuggestionMarker(
+            ephemeral_line_range,
+            SuggestionMarkerProperties::Builder()
+                .SetType(suggestion_type)
+                .SetSuggestions(ime_text_span.Suggestions())
+                .SetHighlightColor(ime_text_span.SuggestionHighlightColor())
+                .SetUnderlineColor(ime_text_span.UnderlineColor())
+                .SetThickness(BoolIsThickToStyleableMarkerThickness(
+                    ime_text_span.Thick()))
+                .SetBackgroundColor(ime_text_span.BackgroundColor())
+                .Build());
+        break;
+    }
   }
 }
 
@@ -721,18 +765,27 @@ void InputMethodController::SetComposition(
   // We shouldn't close typing in the middle of setComposition.
   SetEditableSelectionOffsets(selected_range, TypingContinuation::kContinue);
 
+  // Even though we would've returned already if SetComposition() were called
+  // with an empty string, the composition range could still be empty right now
+  // due to Unicode grapheme cluster position normalization (e.g. if
+  // SetComposition() were passed an extending character which doesn't allow a
+  // grapheme cluster break immediately before.
+  if (!HasComposition())
+    return;
+
   if (ime_text_spans.IsEmpty()) {
     GetDocument().Markers().AddCompositionMarker(
-        EphemeralRange(composition_range_), Color::kBlack,
+        CompositionEphemeralRange(), Color::kBlack,
         StyleableMarker::Thickness::kThin,
         LayoutTheme::GetTheme().PlatformDefaultCompositionBackgroundColor());
     return;
   }
 
-  const PlainTextRange composition_plain_text_range =
-      PlainTextRange::Create(*base_node->parentNode(), *composition_range_);
-  AddImeTextSpans(ime_text_spans, base_node->parentNode(),
-                  composition_plain_text_range.Start());
+  const std::pair<ContainerNode*, PlainTextRange>&
+      root_element_and_plain_text_range =
+          PlainTextRangeForEphemeralRange(CompositionEphemeralRange());
+  AddImeTextSpans(ime_text_spans, root_element_and_plain_text_range.first,
+                  root_element_and_plain_text_range.second.Start());
 }
 
 PlainTextRange InputMethodController::CreateSelectionRangeForSetComposition(
@@ -804,12 +857,7 @@ String InputMethodController::ComposingText() const {
 PlainTextRange InputMethodController::GetSelectionOffsets() const {
   EphemeralRange range = FirstEphemeralRangeOf(
       GetFrame().Selection().ComputeVisibleSelectionInDOMTreeDeprecated());
-  if (range.IsNull())
-    return PlainTextRange();
-  ContainerNode* const editable = RootEditableElementOrTreeScopeRootNodeOf(
-      GetFrame().Selection().ComputeVisibleSelectionInDOMTree().Base());
-  DCHECK(editable);
-  return PlainTextRange::Create(*editable, range);
+  return PlainTextRangeForEphemeralRange(range).second;
 }
 
 EphemeralRange InputMethodController::EphemeralRangeForOffsets(
@@ -1110,22 +1158,19 @@ WebTextInputInfo InputMethodController::TextInputInfo() const {
 
   EphemeralRange first_range = FirstEphemeralRangeOf(
       GetFrame().Selection().ComputeVisibleSelectionInDOMTreeDeprecated());
-  if (first_range.IsNotNull()) {
-    PlainTextRange plain_text_range(
-        PlainTextRange::Create(*element, first_range));
-    if (plain_text_range.IsNotNull()) {
-      info.selection_start = plain_text_range.Start();
-      info.selection_end = plain_text_range.End();
-    }
+  PlainTextRange selection_plain_text_range =
+      PlainTextRangeForEphemeralRange(first_range).second;
+  if (selection_plain_text_range.IsNotNull()) {
+    info.selection_start = selection_plain_text_range.Start();
+    info.selection_end = selection_plain_text_range.End();
   }
 
   EphemeralRange range = CompositionEphemeralRange();
-  if (range.IsNotNull()) {
-    PlainTextRange plain_text_range(PlainTextRange::Create(*element, range));
-    if (plain_text_range.IsNotNull()) {
-      info.composition_start = plain_text_range.Start();
-      info.composition_end = plain_text_range.End();
-    }
+  PlainTextRange composition_plain_text_range =
+      PlainTextRangeForEphemeralRange(range).second;
+  if (composition_plain_text_range.IsNotNull()) {
+    info.composition_start = composition_plain_text_range.Start();
+    info.composition_end = composition_plain_text_range.End();
   }
 
   return info;
@@ -1184,6 +1229,9 @@ int InputMethodController::TextInputFlags() const {
 }
 
 int InputMethodController::ComputeWebTextInputNextPreviousFlags() const {
+  if (!IsAvailable())
+    return kWebTextInputFlagNone;
+
   Element* const element = GetDocument().FocusedElement();
   if (!element)
     return kWebTextInputFlagNone;
@@ -1258,11 +1306,10 @@ WebTextInputType InputMethodController::TextInputType() const {
   if (!element)
     return kWebTextInputTypeNone;
 
-  if (isHTMLInputElement(*element)) {
-    HTMLInputElement& input = toHTMLInputElement(*element);
-    const AtomicString& type = input.type();
+  if (auto* input = ToHTMLInputElementOrNull(*element)) {
+    const AtomicString& type = input->type();
 
-    if (input.IsDisabledOrReadOnly())
+    if (input->IsDisabledOrReadOnly())
       return kWebTextInputTypeNone;
 
     if (type == InputTypeNames::password)
@@ -1283,8 +1330,8 @@ WebTextInputType InputMethodController::TextInputType() const {
     return kWebTextInputTypeNone;
   }
 
-  if (isHTMLTextAreaElement(*element)) {
-    if (toHTMLTextAreaElement(*element).IsDisabledOrReadOnly())
+  if (auto* textarea = ToHTMLTextAreaElementOrNull(*element)) {
+    if (textarea->IsDisabledOrReadOnly())
       return kWebTextInputTypeNone;
     return kWebTextInputTypeTextArea;
   }
@@ -1308,7 +1355,7 @@ void InputMethodController::WillChangeFocus() {
 DEFINE_TRACE(InputMethodController) {
   visitor->Trace(frame_);
   visitor->Trace(composition_range_);
-  SynchronousMutationObserver::Trace(visitor);
+  DocumentShutdownObserver::Trace(visitor);
 }
 
 }  // namespace blink

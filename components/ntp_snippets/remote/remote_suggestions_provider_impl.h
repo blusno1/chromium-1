@@ -20,10 +20,12 @@
 #include "base/optional.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
+#include "components/ntp_snippets/logger.h"
 #include "components/ntp_snippets/remote/cached_image_fetcher.h"
 #include "components/ntp_snippets/remote/json_to_categories.h"
 #include "components/ntp_snippets/remote/prefetched_pages_tracker.h"
@@ -70,7 +72,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
       std::unique_ptr<RemoteSuggestionsDatabase> database,
       std::unique_ptr<RemoteSuggestionsStatusService> status_service,
       std::unique_ptr<PrefetchedPagesTracker> prefetched_pages_tracker,
-      std::unique_ptr<BreakingNewsListener> breaking_news_raw_data_provider);
+      std::unique_ptr<BreakingNewsListener> breaking_news_raw_data_provider,
+      Logger* debug_logger,
+      std::unique_ptr<base::OneShotTimer> fetch_timeout_timer);
 
   ~RemoteSuggestionsProviderImpl() override;
 
@@ -87,6 +91,7 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
 
   // RemoteSuggestionsProvider implementation.
   void RefetchInTheBackground(FetchStatusCallback callback) override;
+  void RefetchWhileDisplaying(FetchStatusCallback callback) override;
 
   // TODO(fhorschig): Remove this getter when there is an interface for the
   // fetcher that allows better mocks.
@@ -119,8 +124,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
       DismissedSuggestionsCallback callback) override;
   void ClearDismissedSuggestionsForDebugging(Category category) override;
 
-  // Returns the maximum number of suggestions that will be shown at once.
-  static int GetMaxSuggestionCountForTesting();
+  // Returns the maximum number of suggestions we expect to receive from the
+  // server during a normal (not fetch-more) fetch..
+  static int GetMaxNormalFetchSuggestionCountForTesting();
 
   // Available suggestions, only for unit tests.
   // TODO(treib): Get rid of this. Tests should use a fake observer instead.
@@ -164,6 +170,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
                            CallsSchedulerWhenSignedIn);
   FRIEND_TEST_ALL_PREFIXES(RemoteSuggestionsProviderImplTest,
                            CallsSchedulerWhenSignedOut);
+  FRIEND_TEST_ALL_PREFIXES(
+      RemoteSuggestionsProviderImplTest,
+      ShouldNotSetExclusiveCategoryWhenFetchingSuggestions);
 
   // Possible state transitions:
   //       NOT_INITED --------+
@@ -358,9 +367,10 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   void UpdatePushedSuggestionsSubscriptionDueToStatusChange(
       RemoteSuggestionsStatus new_status);
 
-  // Converts the cached suggestions in the given |category| to content
-  // suggestions and notifies the observer.
-  void NotifyNewSuggestions(Category category, const CategoryContent& content);
+  // Converts the given |suggestions| to content suggestions and notifies the
+  // observer with them for category |category|.
+  void NotifyNewSuggestions(Category category,
+                            const RemoteSuggestion::PtrVector& suggestions);
 
   // Updates the internal status for |category| to |category_status_| and
   // notifies the content suggestions observer if it changed.
@@ -377,11 +387,20 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   void RestoreCategoriesFromPrefs();
   void StoreCategoriesToPrefs();
 
-  // Absence of fetched category corresponds to fetching all categories.
-  RequestParams BuildFetchParams(
-      base::Optional<Category> fetched_category) const;
+  // If |fetched_category| is nullopt, fetches all categories. Otherwise,
+  // fetches at most |count_to_fetch| suggestions only from |fetched_category|.
+  // TODO(vitaliii): Also support |count_to_fetch| when |fetched_category| is
+  // nullopt.
+  RequestParams BuildFetchParams(base::Optional<Category> fetched_category,
+                                 int count_to_fetch) const;
 
   void MarkEmptyCategoriesAsLoading();
+
+  bool AreArticlesAvailable();
+  void NotifyRefetchWhileDisplayingStarted();
+  void NotifyRefetchWhileDisplayingFailedOrTimeouted();
+  void OnRefetchWhileDisplayingFinished(FetchStatusCallback callback,
+                                        Status status);
 
   State state_;
 
@@ -442,6 +461,12 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // Listens for BreakingNews updates (e.g. through GCM) and notifies the
   // provider.
   std::unique_ptr<BreakingNewsListener> breaking_news_raw_data_provider_;
+
+  // Additional logging, accesible through snippets-internals.
+  Logger* debug_logger_;
+
+  // A Timer for canceling too long fetches.
+  std::unique_ptr<base::OneShotTimer> fetch_timeout_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(RemoteSuggestionsProviderImpl);
 };

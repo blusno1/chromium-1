@@ -9,12 +9,14 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "components/favicon/ios/web_favicon_driver.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -42,6 +44,7 @@
 #import "ios/chrome/browser/tabs/tab_model_selected_tab_observer.h"
 #import "ios/chrome/browser/tabs/tab_model_synced_window_delegate.h"
 #import "ios/chrome/browser/tabs/tab_model_web_state_list_delegate.h"
+#import "ios/chrome/browser/tabs/tab_model_web_usage_enabled_observer.h"
 #import "ios/chrome/browser/tabs/tab_parenting_observer.h"
 #import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -57,7 +60,6 @@
 #import "ios/web/public/serializable_user_data_manager.h"
 #include "ios/web/public/web_state/session_certificate_policy_cache.h"
 #include "ios/web/public/web_thread.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -155,6 +157,9 @@ void CleanCertificatePolicyCache(
 
   // The delegate for sync.
   std::unique_ptr<TabModelSyncedWindowDelegate> _syncedWindowDelegate;
+
+  // The observer that sends kTabModelNewTabWillOpenNotification notifications.
+  TabModelNotificationObserver* _tabModelNotificationObserver;
 
   // Counters for metrics.
   WebStateListMetricsObserver* _webStateListMetricsObserver;
@@ -313,7 +318,12 @@ void CleanCertificatePolicyCache(
     _webStateListObservers.push_back(std::move(webStateListMetricsObserver));
 
     _webStateListObservers.push_back(
-        base::MakeUnique<TabModelNotificationObserver>(self));
+        base::MakeUnique<TabModelWebUsageEnabledObserver>(self));
+
+    auto tabModelNotificationObserver =
+        base::MakeUnique<TabModelNotificationObserver>(self);
+    _tabModelNotificationObserver = tabModelNotificationObserver.get();
+    _webStateListObservers.push_back(std::move(tabModelNotificationObserver));
 
     for (const auto& webStateListObserver : _webStateListObservers)
       _webStateList->AddObserver(webStateListObserver.get());
@@ -569,7 +579,8 @@ void CleanCertificatePolicyCache(
   UnregisterTabModelFromChromeBrowserState(_browserState, self);
   _browserState = nullptr;
 
-  // Clear weak pointer to WebStateListMetricsObserver before destroying it.
+  // Clear weak pointer to observers before destroying them.
+  _tabModelNotificationObserver = nullptr;
   _webStateListMetricsObserver = nullptr;
 
   // Close all tabs. Do this in an @autoreleasepool as WebStateList observers
@@ -643,6 +654,16 @@ void CleanCertificatePolicyCache(
   DCHECK(_browserState);
   DCHECK(window);
 
+  // Disable sending the kTabModelNewTabWillOpenNotification notification
+  // while restoring a session as it breaks the BVC (see crbug.com/763964).
+  base::ScopedClosureRunner enableTabModelNotificationObserver;
+  if (_tabModelNotificationObserver) {
+    _tabModelNotificationObserver->SetDisabled(true);
+    enableTabModelNotificationObserver.ReplaceClosure(
+        base::BindOnce(&TabModelNotificationObserver::SetDisabled,
+                       base::Unretained(_tabModelNotificationObserver), false));
+  }
+
   if (!window.sessions.count)
     return NO;
 
@@ -668,8 +689,19 @@ void CleanCertificatePolicyCache(
 
   for (int index = oldCount; index < _webStateList->count(); ++index) {
     web::WebState* webState = _webStateList->GetWebStateAt(index);
-    PagePlaceholderTabHelper::FromWebState(webState)
-        ->AddPlaceholderForNextNavigation();
+    web::NavigationItem* visible_item =
+        webState->GetNavigationManager()->GetVisibleItem();
+
+    if (!(visible_item &&
+          visible_item->GetVirtualURL() == GURL(kChromeUINewTabURL))) {
+      PagePlaceholderTabHelper::FromWebState(webState)
+          ->AddPlaceholderForNextNavigation();
+    }
+
+    if (visible_item && visible_item->GetVirtualURL().is_valid()) {
+      favicon::WebFaviconDriver::FromWebState(webState)->FetchFavicon(
+          visible_item->GetVirtualURL(), /*is_same_document=*/false);
+    }
 
     // Restore the CertificatePolicyCache (note that webState is invalid after
     // passing it via move semantic to -initWithWebState:model:).
@@ -695,6 +727,7 @@ void CleanCertificatePolicyCache(
     _tabUsageRecorder->InitialRestoredTabs(self.currentTab.webState,
                                            restoredWebStates);
   }
+
   return closedNTPTab;
 }
 

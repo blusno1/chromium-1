@@ -18,6 +18,7 @@
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_off_hours_controller.h"
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
+#include "chrome/browser/chromeos/tpm_firmware_update.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -878,7 +879,7 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
 
   if (policy.has_device_off_hours()) {
     auto off_hours_policy =
-        off_hours::ConvertPolicyProtoToValue(policy.device_off_hours());
+        ConvertOffHoursProtoToValue(policy.device_off_hours());
     if (off_hours_policy)
       policies->Set(key::kDeviceOffHours, POLICY_LEVEL_MANDATORY,
                     POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
@@ -941,6 +942,14 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     policies->Set(key::kDeviceNativePrintersWhitelist, POLICY_LEVEL_MANDATORY,
                   POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
                   std::move(whitelist), nullptr);
+  }
+
+  if (policy.has_tpm_firmware_update_settings()) {
+    policies->Set(key::kTPMFirmwareUpdateSettings, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                  chromeos::tpm_firmware_update::DecodeSettingsProto(
+                      policy.tpm_firmware_update_settings()),
+                  nullptr);
   }
 }
 }  // namespace

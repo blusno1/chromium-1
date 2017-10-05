@@ -67,7 +67,7 @@
 
 namespace blink {
 
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::Serialize(
+RefPtr<SerializedScriptValue> SerializedScriptValue::Serialize(
     v8::Isolate* isolate,
     v8::Local<v8::Value> value,
     const SerializeOptions& options,
@@ -76,7 +76,7 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValue::Serialize(
                                                          options, exception);
 }
 
-PassRefPtr<SerializedScriptValue>
+RefPtr<SerializedScriptValue>
 SerializedScriptValue::SerializeAndSwallowExceptions(
     v8::Isolate* isolate,
     v8::Local<v8::Value> value) {
@@ -88,11 +88,11 @@ SerializedScriptValue::SerializeAndSwallowExceptions(
   return serialized;
 }
 
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::Create() {
-  return AdoptRef(new SerializedScriptValue);
+RefPtr<SerializedScriptValue> SerializedScriptValue::Create() {
+  return WTF::AdoptRef(new SerializedScriptValue);
 }
 
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::Create(
+RefPtr<SerializedScriptValue> SerializedScriptValue::Create(
     const String& data) {
   CheckedNumeric<size_t> data_buffer_size = data.length();
   data_buffer_size *= 2;
@@ -102,8 +102,8 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValue::Create(
   DataBufferPtr data_buffer = AllocateBuffer(data_buffer_size.ValueOrDie());
   data.CopyTo(reinterpret_cast<UChar*>(data_buffer.get()), 0, data.length());
 
-  return AdoptRef(new SerializedScriptValue(std::move(data_buffer),
-                                            data_buffer_size.ValueOrDie()));
+  return WTF::AdoptRef(new SerializedScriptValue(
+      std::move(data_buffer), data_buffer_size.ValueOrDie()));
 }
 
 // Versions 16 and below (prior to April 2017) used ntohs() to byte-swap SSV
@@ -217,9 +217,8 @@ static void SwapWiredDataIfNeeded(uint8_t* buffer, size_t buffer_size) {
     uchars[i] = ntohs(uchars[i]);
 }
 
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::Create(
-    const char* data,
-    size_t length) {
+RefPtr<SerializedScriptValue> SerializedScriptValue::Create(const char* data,
+                                                            size_t length) {
   if (!data)
     return Create();
 
@@ -227,10 +226,11 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValue::Create(
   std::copy(data, data + length, data_buffer.get());
   SwapWiredDataIfNeeded(data_buffer.get(), length);
 
-  return AdoptRef(new SerializedScriptValue(std::move(data_buffer), length));
+  return WTF::AdoptRef(
+      new SerializedScriptValue(std::move(data_buffer), length));
 }
 
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::Create(
+RefPtr<SerializedScriptValue> SerializedScriptValue::Create(
     RefPtr<const SharedBuffer> buffer) {
   if (!buffer)
     return Create();
@@ -245,7 +245,7 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValue::Create(
   });
   SwapWiredDataIfNeeded(data_buffer.get(), buffer->size());
 
-  return AdoptRef(
+  return WTF::AdoptRef(
       new SerializedScriptValue(std::move(data_buffer), buffer->size()));
 }
 
@@ -277,7 +277,7 @@ SerializedScriptValue::~SerializedScriptValue() {
   }
 }
 
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::NullValue() {
+RefPtr<SerializedScriptValue> SerializedScriptValue::NullValue() {
   // The format here may fall a bit out of date, because we support
   // deserializing SSVs written by old browser versions.
   static const uint8_t kNullData[] = {0xFF, 17, 0xFF, 13, '0', 0x00};
@@ -511,8 +511,8 @@ ArrayBufferArray SerializedScriptValue::ExtractNonSharedArrayBuffers(
   // Copy the non-shared array buffers into result, and remove them from
   // array_buffers.
   result.AppendRange(non_shared_begin, array_buffers.end());
-  array_buffers.erase(non_shared_begin - array_buffers.begin(),
-                      array_buffers.end() - non_shared_begin);
+  array_buffers.EraseAt(non_shared_begin - array_buffers.begin(),
+                        array_buffers.end() - non_shared_begin);
   return result;
 }
 

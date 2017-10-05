@@ -27,6 +27,9 @@ const uint32_t kDefaultMaxScheduledDownloads = 15;
 // Default value for maximum retry count.
 const uint32_t kDefaultMaxRetryCount = 5;
 
+// Default value for maximum resumption count.
+const uint32_t kDefaultMaxResumptionCount = 15;
+
 // Default value for file keep alive time, keep the file alive for 12 hours by
 // default.
 const base::TimeDelta kDefaultFileKeepAliveTime =
@@ -52,6 +55,14 @@ const base::TimeDelta kDefaultWindowEndTime = base::TimeDelta::FromHours(8);
 // disconnected to connected.
 const base::TimeDelta kDefaultNetworkChangeDelay =
     base::TimeDelta::FromSeconds(5);
+
+// The default delay to notify the observer after a navigation completes.
+const base::TimeDelta kDefaultNavigationCompletionDelay =
+    base::TimeDelta::FromSeconds(30);
+
+// The default timeout for a navigation.
+const base::TimeDelta kDefaultNavigationTimeoutDelay =
+    base::TimeDelta::FromSeconds(300);
 
 // The default value of download retry delay when the download is failed.
 const base::TimeDelta kDefaultDownloadRetryDelay =
@@ -80,6 +91,8 @@ std::unique_ptr<Configuration> Configuration::CreateFromFinch() {
       kMaxScheduledDownloadsConfig, kDefaultMaxScheduledDownloads);
   config->max_retry_count =
       GetFinchConfigUInt(kMaxRetryCountConfig, kDefaultMaxRetryCount);
+  config->max_resumption_count =
+      GetFinchConfigUInt(kMaxResumptionCountConfig, kDefaultMaxResumptionCount);
   config->file_keep_alive_time =
       base::TimeDelta::FromMinutes(base::saturated_cast<int>(
           GetFinchConfigUInt(kFileKeepAliveTimeMinutesConfig,
@@ -102,6 +115,14 @@ std::unique_ptr<Configuration> Configuration::CreateFromFinch() {
       base::TimeDelta::FromMilliseconds(base::saturated_cast<int>(
           GetFinchConfigUInt(kNetworkChangeDelayMsConfig,
                              kDefaultNetworkChangeDelay.InMilliseconds())));
+  config->navigation_completion_delay =
+      base::TimeDelta::FromSeconds(base::saturated_cast<int>(
+          GetFinchConfigUInt(kNavigationCompletionDelaySecondsConfig,
+                             kDefaultNavigationCompletionDelay.InSeconds())));
+  config->navigation_timeout_delay =
+      base::TimeDelta::FromSeconds(base::saturated_cast<int>(
+          GetFinchConfigUInt(kNavigationTimeoutDelaySecondsConfig,
+                             kDefaultNavigationTimeoutDelay.InSeconds())));
   config->download_retry_delay =
       base::TimeDelta::FromMilliseconds(base::saturated_cast<int>(
           GetFinchConfigUInt(kDownloadRetryDelayMsConfig,
@@ -114,12 +135,15 @@ Configuration::Configuration()
       max_running_downloads(kDefaultMaxRunningDownloads),
       max_scheduled_downloads(kDefaultMaxScheduledDownloads),
       max_retry_count(kDefaultMaxRetryCount),
+      max_resumption_count(kDefaultMaxResumptionCount),
       file_keep_alive_time(kDefaultFileKeepAliveTime),
       max_file_keep_alive_time(kDefaultMaxFileKeepAliveTime),
       file_cleanup_window(kDefaultFileCleanupWindow),
       window_start_time(kDefaultWindowStartTime),
       window_end_time(kDefaultWindowEndTime),
       network_change_delay(kDefaultNetworkChangeDelay),
+      navigation_completion_delay(kDefaultNavigationCompletionDelay),
+      navigation_timeout_delay(kDefaultNavigationTimeoutDelay),
       download_retry_delay(kDefaultDownloadRetryDelay) {}
 
 }  // namespace download

@@ -36,7 +36,6 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -51,6 +50,7 @@
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/image-encoders/ImageEncoder.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/PtrUtil.h"
@@ -184,7 +184,7 @@ void ImageBuffer::ResetCanvas(PaintCanvas* canvas) const {
     client_->RestoreCanvasMatrixClipStack(canvas);
 }
 
-PassRefPtr<StaticBitmapImage> ImageBuffer::NewImageSnapshot(
+RefPtr<StaticBitmapImage> ImageBuffer::NewImageSnapshot(
     AccelerationHint hint,
     SnapshotReason reason) const {
   if (snapshot_state_ == kInitialSnapshotState)
@@ -391,7 +391,7 @@ bool ImageBuffer::GetImageData(Multiply multiplied,
 
   // If color correct rendering is enabled but color canvas extensions is not,
   // unpremul must be done in gamma encoded color space.
-  if (CanvasColorParams::ColorCorrectRenderingInSRGBOnly())
+  if (!RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled())
     info = info.makeColorSpace(nullptr);
   snapshot->PaintImageForCurrentFrame().GetSkImage()->readPixels(
       info, result.Data(), bytes_per_pixel * rect.Width(), rect.X(), rect.Y());
@@ -516,7 +516,7 @@ void ImageBuffer::SetSurface(std::unique_ptr<ImageBufferSurface> surface) {
         image->PaintImageForCurrentFrame().GetSkImage();
     // Must tear down AcceleratedStaticBitmapImage before calling
     // makeNonTextureImage()
-    image.Clear();
+    image = nullptr;
     image = StaticBitmapImage::Create(texture_image->makeNonTextureImage());
   }
   surface->Canvas()->drawImage(image->PaintImageForCurrentFrame(), 0, 0);

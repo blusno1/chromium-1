@@ -41,6 +41,7 @@ class PaymentRequest : public mojom::PaymentRequest,
   class ObserverForTest {
    public:
     virtual void OnCanMakePaymentCalled() = 0;
+    virtual void OnCanMakePaymentReturned() = 0;
     virtual void OnNotSupportedError() = 0;
     virtual void OnConnectionTerminated() = 0;
     virtual void OnAbortCalled() = 0;
@@ -76,7 +77,7 @@ class PaymentRequest : public mojom::PaymentRequest,
   void OnShippingOptionIdSelected(std::string shipping_option_id) override;
   void OnShippingAddressSelected(mojom::PaymentAddressPtr address) override;
 
-  // Called when the user explicitely cancelled the flow. Will send a message
+  // Called when the user explicitly cancelled the flow. Will send a message
   // to the renderer which will indirectly destroy this object (through
   // OnConnectionTerminated).
   void UserCancelled();
@@ -104,6 +105,18 @@ class PaymentRequest : public mojom::PaymentRequest,
   // Request. This is necessary since the aborts cascade into one another with
   // the first one being the most precise.
   void RecordFirstAbortReason(JourneyLogger::AbortReason completion_status);
+
+  // The PaymentRequestState::CanMakePaymentCallback. Checks for query quota and
+  // may send QUERY_QUOTA_EXCEEDED.
+  void CanMakePaymentCallback(bool can_make_payment);
+
+  // Sends either CAN_MAKE_PAYMENT or CANNOT_MAKE_PAYMENT to the renderer,
+  // depending on |can_make_payment| value. Never sends QUERY_QUOTA_EXCEEDED.
+  // Does not check query quota, but does check for incognito mode. If
+  // |warn_localhost_or_file| is true, then sends WARNING_CAN_MAKE_PAYMENT or
+  // WARNING_CANNOT_MAKE_PAYMENT version of the values instead.
+  void RespondToCanMakePaymentQuery(bool can_make_payment,
+                                    bool warn_localhost_or_file);
 
   content::WebContents* web_contents_;
   std::unique_ptr<PaymentRequestDelegate> delegate_;

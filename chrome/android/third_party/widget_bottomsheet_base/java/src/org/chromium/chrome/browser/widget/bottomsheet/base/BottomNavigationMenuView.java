@@ -241,14 +241,13 @@ public class BottomNavigationMenuView extends LinearLayout implements MenuView {
         int menuWidth = Math.min(layoutWidth, layoutHeight);
         if (menuWidth != mMenuWidth) {
             mMenuWidth = menuWidth;
-            int iconWidths = 0;
-            for (BottomNavigationItemView item : mButtons) {
-                iconWidths += item.getWidth() - (item.getPaddingLeft() + item.getPaddingRight());
-            }
+            int itemWidth = menuWidth / mButtons.length;
+            for (int i = 0; i < mButtons.length; i++) {
+                BottomNavigationItemView item = mButtons[i];
 
-            int padding = (menuWidth - iconWidths) / (mButtons.length * 2);
-            for (BottomNavigationItemView item : mButtons) {
-                item.setPadding(padding, item.getPaddingTop(), padding, item.getPaddingBottom());
+                LayoutParams layoutParams = (LayoutParams) item.getLayoutParams();
+                layoutParams.width = itemWidth;
+                item.setLayoutParams(layoutParams);
             }
         }
     }

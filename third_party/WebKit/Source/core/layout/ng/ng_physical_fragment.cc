@@ -59,20 +59,13 @@ void AppendFragmentToString(const NGPhysicalFragment* fragment,
     has_content =
         AppendFragmentOffsetAndSize(fragment, builder, flags, has_content);
 
-    const auto* box = ToNGPhysicalBoxFragment(fragment);
-    if (flags & NGPhysicalFragment::DumpOverflow) {
-      if (has_content)
-        builder->Append(" ");
-      builder->Append("overflow:");
-      builder->Append(box->OverflowSize().ToString());
-      has_content = true;
-    }
     builder->Append("\n");
 
+    const auto* box = ToNGPhysicalBoxFragment(fragment);
     if (flags & NGPhysicalFragment::DumpSubtree) {
       const auto& children = box->Children();
       for (unsigned i = 0; i < children.size(); i++)
-        AppendFragmentToString(children[i].Get(), builder, flags, indent + 2);
+        AppendFragmentToString(children[i].get(), builder, flags, indent + 2);
     }
     return;
   }
@@ -90,7 +83,7 @@ void AppendFragmentToString(const NGPhysicalFragment* fragment,
       const auto* line_box = ToNGPhysicalLineBoxFragment(fragment);
       const auto& children = line_box->Children();
       for (unsigned i = 0; i < children.size(); i++)
-        AppendFragmentToString(children[i].Get(), builder, flags, indent + 2);
+        AppendFragmentToString(children[i].get(), builder, flags, indent + 2);
       return;
     }
   }
@@ -127,6 +120,11 @@ void AppendFragmentToString(const NGPhysicalFragment* fragment,
 }
 
 }  // namespace
+
+// static
+void NGPhysicalFragmentTraits::Destruct(const NGPhysicalFragment* fragment) {
+  fragment->Destroy();
+}
 
 NGPhysicalFragment::NGPhysicalFragment(LayoutObject* layout_object,
                                        const ComputedStyle& style,

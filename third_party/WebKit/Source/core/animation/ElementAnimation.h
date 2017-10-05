@@ -43,7 +43,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ExecutionContext.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Allocator.h"
 
@@ -72,9 +71,9 @@ class ElementAnimation {
                               exception_state))
       return nullptr;
 
-    if (options.isKeyframeAnimationOptions()) {
+    if (options.IsKeyframeAnimationOptions()) {
       Animation* animation = animateInternal(element, effect, timing);
-      animation->setId(options.getAsKeyframeAnimationOptions().id());
+      animation->setId(options.GetAsKeyframeAnimationOptions().id());
       return animation;
     }
     return animateInternal(element, effect, timing);

@@ -28,6 +28,7 @@
 #include "sql/connection.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 
 namespace content {
 
@@ -66,6 +67,9 @@ const size_t kMaxCacheSize = 2 * 1024 * 1024;
 const unsigned kMaxStorageAreaCount = 50;
 const size_t kMaxCacheSize = 20 * 1024 * 1024;
 #endif
+
+static const uint8_t kUTF16Format = 0;
+static const uint8_t kLatin1Format = 1;
 
 std::vector<uint8_t> CreateMetaDataKey(const url::Origin& origin) {
   auto serialized_origin = leveldb::StdStringToUint8Vector(origin.Serialize());
@@ -257,6 +261,58 @@ class LocalStorageContextMojo::LevelDBWrapperHolder final
       return;
     }
     std::move(callback).Run(nullptr);
+  }
+
+  std::vector<LevelDBWrapperImpl::Change> FixUpData(
+      const LevelDBWrapperImpl::ValueMap& data) override {
+    std::vector<LevelDBWrapperImpl::Change> changes;
+    // Chrome M61/M62 had a bug where keys that should have been encoded as
+    // Latin1 were instead encoded as UTF16. Fix this by finding any 8-bit only
+    // keys, and re-encode those. If two encodings of the key exist, the Latin1
+    // encoded value should take precedence.
+    size_t fix_count = 0;
+    for (const auto& it : data) {
+      // Skip over any Latin1 encoded keys, or unknown encodings/corrupted data.
+      if (it.first.empty() || it.first[0] != kUTF16Format)
+        continue;
+      // Check if key is actually 8-bit safe.
+      bool is_8bit = true;
+      for (size_t i = 1; i < it.first.size(); i += sizeof(base::char16)) {
+        // Don't just cast to char16* as that could be undefined behavior.
+        // Instead use memcpy for the conversion, which compilers will generally
+        // optimize away anyway.
+        base::char16 char_val;
+        memcpy(&char_val, it.first.data() + i, sizeof(base::char16));
+        if (char_val & 0xff00) {
+          is_8bit = false;
+          break;
+        }
+      }
+      if (!is_8bit)
+        continue;
+      // Found a key that should have been encoded differently. Decode and
+      // re-encode.
+      std::vector<uint8_t> key(1 + (it.first.size() - 1) / 2);
+      key[0] = kLatin1Format;
+      for (size_t in = 1, out = 1; in < it.first.size();
+           in += sizeof(base::char16), out++) {
+        base::char16 char_val;
+        memcpy(&char_val, it.first.data() + in, sizeof(base::char16));
+        key[out] = char_val;
+      }
+      // Delete incorrect key.
+      changes.push_back(std::make_pair(it.first, base::nullopt));
+      fix_count++;
+      // Check if correct key already exists in data.
+      auto new_it = data.find(key);
+      if (new_it != data.end())
+        continue;
+      // Update value for correct key.
+      changes.push_back(std::make_pair(key, it.second));
+    }
+    UMA_HISTOGRAM_BOOLEAN("LocalStorageContext.MigrationFixUpNeeded",
+                          fix_count != 0);
+    return changes;
   }
 
   void OnMapLoaded(leveldb::mojom::DatabaseError error) override {
@@ -481,7 +537,7 @@ bool LocalStorageContextMojo::OnMemoryDump(
     return true;
 
   std::string context_name =
-      base::StringPrintf("dom_storage/localstorage_0x%" PRIXPTR,
+      base::StringPrintf("site_storage/localstorage_0x%" PRIXPTR,
                          reinterpret_cast<uintptr_t>(this));
 
   // Account for leveldb memory usage, which actually lives in the file service.
@@ -523,8 +579,21 @@ bool LocalStorageContextMojo::OnMemoryDump(
 // static
 std::vector<uint8_t> LocalStorageContextMojo::MigrateString(
     const base::string16& input) {
-  static const uint8_t kUTF16Format = 0;
-
+  // TODO(mek): Deduplicate this somehow with the code in
+  // LocalStorageCachedArea::String16ToUint8Vector.
+  bool is_8bit = true;
+  for (const auto& c : input) {
+    if (c & 0xff00) {
+      is_8bit = false;
+      break;
+    }
+  }
+  if (is_8bit) {
+    std::vector<uint8_t> result(input.size() + 1);
+    result[0] = kLatin1Format;
+    std::copy(input.begin(), input.end(), result.begin() + 1);
+    return result;
+  }
   const uint8_t* data = reinterpret_cast<const uint8_t*>(input.data());
   std::vector<uint8_t> result;
   result.reserve(input.size() * sizeof(base::char16) + 1);
@@ -611,7 +680,7 @@ void LocalStorageContextMojo::OnDirectoryOpened(
   // Default write_buffer_size is 4 MB but that might leave a 3.999
   // memory allocation in RAM from a log file recovery.
   options.write_buffer_size = 64 * 1024;
-  options.block_cache = leveldb_env::SharedWebBlockCache();
+  options.block_cache = leveldb_chrome::GetSharedWebBlockCache();
   leveldb_service_->OpenWithOptions(
       std::move(options), std::move(directory_clone), "leveldb",
       memory_dump_id_, MakeRequest(&database_),
@@ -855,6 +924,11 @@ void LocalStorageContextMojo::OnGotMetaData(
   for (const auto& it : level_db_wrappers_) {
     if (origins.find(it.first) != origins.end())
       continue;
+    // Skip any origins that definitely don't have any data.
+    if (!it.second->level_db_wrapper()->has_pending_load_tasks() &&
+        it.second->level_db_wrapper()->empty()) {
+      continue;
+    }
     LocalStorageUsageInfo info;
     info.origin = it.first.GetURL();
     info.last_modified = now;

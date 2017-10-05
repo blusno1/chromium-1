@@ -16,7 +16,6 @@ import org.chromium.chrome.browser.ntp.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.widget.displaystyle.DisplayStyleObserver;
 import org.chromium.chrome.browser.widget.displaystyle.DisplayStyleObserverAdapter;
 import org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
@@ -51,21 +50,16 @@ public class ContextualSuggestionsCardViewHolder extends NewTabPageViewHolder {
                 (ViewGroup.MarginLayoutParams) itemView.getLayoutParams(), startMargin);
 
         mDisplayStyleObserver =
-                new DisplayStyleObserverAdapter(itemView, uiConfig, new DisplayStyleObserver() {
-                    @Override
-                    public void onDisplayStyleChanged(UiConfig.DisplayStyle newDisplayStyle) {
-                        updateCardWidth(newDisplayStyle);
-                    }
-                });
+                new DisplayStyleObserverAdapter(itemView, uiConfig, this::updateCardWidth);
         mSuggestionsBinder.updateFieldsVisibility(/* showHeadline = */ true,
-                /* showDescription = */ false, /* showThumbnail = */ true,
-                /* showThumbnailVideoOverlay = */ false, /* headerMaxLines = */ 3);
+                /* showThumbnail = */ true, /* showThumbnailVideoOverlay = */ false);
     }
 
     public void onBindViewHolder(SnippetArticle suggestion) {
         mSuggestion = suggestion;
         mDisplayStyleObserver.attach();
         mSuggestionsBinder.updateViewInformation(mSuggestion);
+        refreshOfflineBadgeVisibility();
     }
 
     @Override
@@ -76,9 +70,8 @@ public class ContextualSuggestionsCardViewHolder extends NewTabPageViewHolder {
     }
 
     private static View getCardView(ViewGroup recyclerView) {
-        int res = FeatureUtilities.isChromeHomeModernEnabled()
-                ? R.layout.content_suggestions_card_modern
-                : R.layout.contextual_suggestions_card;
+        int res = FeatureUtilities.isChromeHomeEnabled() ? R.layout.content_suggestions_card_modern
+                                                         : R.layout.contextual_suggestions_card;
 
         return LayoutInflater.from(recyclerView.getContext()).inflate(res, recyclerView, false);
     }
@@ -100,6 +93,11 @@ public class ContextualSuggestionsCardViewHolder extends NewTabPageViewHolder {
 
         params.width = (int) (screenSizePx * CARD_WIDTH_TO_WINDOW_SIZE_RATIO);
         itemView.setLayoutParams(params);
+    }
+
+    public void refreshOfflineBadgeVisibility() {
+        boolean visible = mSuggestion.getOfflinePageOfflineId() != null;
+        mSuggestionsBinder.updateOfflineBadgeVisibility(visible);
     }
 
     private class InteractionsDelegate implements ContextMenuManager.Delegate, View.OnClickListener,

@@ -11,6 +11,7 @@
 #include "platform/fonts/NGTextFragmentPaintInfo.h"
 #include "platform/fonts/shaping/ShapeResult.h"
 #include "platform/wtf/text/StringView.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -61,7 +62,7 @@ class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
   unsigned Length() const { return end_offset_ - start_offset_; }
   StringView Text() const { return StringView(text_, start_offset_, Length()); }
 
-  const ShapeResult* TextShapeResult() const { return shape_result_.Get(); }
+  const ShapeResult* TextShapeResult() const { return shape_result_.get(); }
 
   // Deprecating ItemIndex in favor of storing and accessing each component;
   // e.g., text, style, ShapeResult, etc. Currently used for CreateBidiRuns and
@@ -93,7 +94,7 @@ class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
   }
 
   RefPtr<NGPhysicalFragment> CloneWithoutOffset() const {
-    return AdoptRef(new NGPhysicalTextFragment(
+    return WTF::AdoptRef(new NGPhysicalTextFragment(
         layout_object_, Style(), text_, item_index_, start_offset_, end_offset_,
         size_, expansion_, LineOrientation(), EndEffect(), shape_result_));
   }

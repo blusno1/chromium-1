@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "build/build_config.h"
 #include "components/autofill/content/common/autofill_agent.mojom.h"
 #include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
@@ -25,10 +26,13 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#include "components/autofill/content/renderer/page_passwords_analyser.h"
+#endif
+
 namespace blink {
 class WebFormElementObserver;
 class WebInputElement;
-class WebSecurityOrigin;
 }
 
 namespace autofill {
@@ -149,9 +153,10 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   bool logging_state_active() const { return logging_state_active_; }
 
- protected:
-  virtual bool OriginCanAccessPasswordManager(
-      const blink::WebSecurityOrigin& origin);
+  // Determine whether the current frame is allowed to access the password
+  // manager. For example, frames with about:blank documents or documents with
+  // unique origins aren't allowed access.
+  virtual bool FrameCanAccessPasswordManager();
 
  private:
   class FormElementObserverCallback;
@@ -316,6 +321,10 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   FormsPredictionsMap form_predictions_;
 
   AutofillAgent* autofill_agent_;  // Weak reference.
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  PagePasswordsAnalyser page_passwords_analyser_;
+#endif
 
   mojom::PasswordManagerDriverPtr password_manager_driver_;
 

@@ -28,6 +28,7 @@
 #include "chromeos/settings/timezone_settings.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "components/arc/arc_prefs.h"
 #include "components/arc/intent_helper/font_size_util.h"
 #include "components/onc/onc_pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -158,7 +159,10 @@ class ArcSettingsServiceImpl
   void SyncLocationServiceEnabled() const;
   void SyncProxySettings() const;
   void SyncReportingConsent() const;
+  void SyncSelectToSpeakEnabled() const;
+  void SyncSmsConnectEnabled() const;
   void SyncSpokenFeedbackEnabled() const;
+  void SyncSwitchAccessEnabled() const;
   void SyncTimeZone() const;
   void SyncTimeZoneByGeolocation() const;
   void SyncUse24HourClock() const;
@@ -222,8 +226,7 @@ ArcSettingsServiceImpl::ArcSettingsServiceImpl(
 ArcSettingsServiceImpl::~ArcSettingsServiceImpl() {
   StopObservingSettingsChanges();
 
-  if (arc_bridge_service_->app()->has_instance())
-    arc_bridge_service_->app()->RemoveObserver(this);
+  arc_bridge_service_->app()->RemoveObserver(this);
 
   ArcSessionManager* arc_session_manager = ArcSessionManager::Get();
   if (arc_session_manager)
@@ -246,8 +249,12 @@ void ArcSettingsServiceImpl::OnPrefChanged(const std::string& pref_name) const {
     SyncFocusHighlightEnabled();
   } else if (pref_name == ash::prefs::kAccessibilityLargeCursorEnabled) {
     SyncAccessibilityLargeMouseCursorEnabled();
+  } else if (pref_name == ash::prefs::kAccessibilitySelectToSpeakEnabled) {
+    SyncSelectToSpeakEnabled();
   } else if (pref_name == ash::prefs::kAccessibilitySpokenFeedbackEnabled) {
     SyncSpokenFeedbackEnabled();
+  } else if (pref_name == ash::prefs::kAccessibilitySwitchAccessEnabled) {
+    SyncSwitchAccessEnabled();
   } else if (pref_name == ash::prefs::kAccessibilityVirtualKeyboardEnabled) {
     SyncAccessibilityVirtualKeyboardEnabled();
   } else if (pref_name == prefs::kArcBackupRestoreEnabled) {
@@ -256,14 +263,16 @@ void ArcSettingsServiceImpl::OnPrefChanged(const std::string& pref_name) const {
   } else if (pref_name == prefs::kArcLocationServiceEnabled) {
     if (ShouldSyncLocationServiceEnabled())
       SyncLocationServiceEnabled();
-  } else if (pref_name == prefs::kUse24HourClock) {
+  } else if (pref_name == ::prefs::kUse24HourClock) {
     SyncUse24HourClock();
-  } else if (pref_name == prefs::kResolveTimezoneByGeolocation) {
+  } else if (pref_name == ::prefs::kResolveTimezoneByGeolocation) {
     SyncTimeZoneByGeolocation();
-  } else if (pref_name == prefs::kWebKitDefaultFixedFontSize ||
-             pref_name == prefs::kWebKitDefaultFontSize ||
-             pref_name == prefs::kWebKitMinimumFontSize) {
+  } else if (pref_name == ::prefs::kWebKitDefaultFixedFontSize ||
+             pref_name == ::prefs::kWebKitDefaultFontSize ||
+             pref_name == ::prefs::kWebKitMinimumFontSize) {
     SyncFontSize();
+  } else if (pref_name == prefs::kSmsConnectEnabled) {
+    SyncSmsConnectEnabled();
   } else if (pref_name == proxy_config::prefs::kProxy) {
     SyncProxySettings();
   } else {
@@ -300,15 +309,18 @@ void ArcSettingsServiceImpl::StartObservingSettingsChanges() {
   // Keep these lines ordered lexicographically.
   AddPrefToObserve(ash::prefs::kAccessibilityFocusHighlightEnabled);
   AddPrefToObserve(ash::prefs::kAccessibilityLargeCursorEnabled);
+  AddPrefToObserve(ash::prefs::kAccessibilitySelectToSpeakEnabled);
   AddPrefToObserve(ash::prefs::kAccessibilitySpokenFeedbackEnabled);
+  AddPrefToObserve(ash::prefs::kAccessibilitySwitchAccessEnabled);
   AddPrefToObserve(ash::prefs::kAccessibilityVirtualKeyboardEnabled);
   AddPrefToObserve(prefs::kArcBackupRestoreEnabled);
   AddPrefToObserve(prefs::kArcLocationServiceEnabled);
-  AddPrefToObserve(prefs::kResolveTimezoneByGeolocation);
-  AddPrefToObserve(prefs::kUse24HourClock);
-  AddPrefToObserve(prefs::kWebKitDefaultFixedFontSize);
-  AddPrefToObserve(prefs::kWebKitDefaultFontSize);
-  AddPrefToObserve(prefs::kWebKitMinimumFontSize);
+  AddPrefToObserve(prefs::kSmsConnectEnabled);
+  AddPrefToObserve(::prefs::kResolveTimezoneByGeolocation);
+  AddPrefToObserve(::prefs::kUse24HourClock);
+  AddPrefToObserve(::prefs::kWebKitDefaultFixedFontSize);
+  AddPrefToObserve(::prefs::kWebKitDefaultFontSize);
+  AddPrefToObserve(::prefs::kWebKitMinimumFontSize);
   AddPrefToObserve(proxy_config::prefs::kProxy);
   AddPrefToObserve(onc::prefs::kDeviceOpenNetworkConfiguration);
   AddPrefToObserve(onc::prefs::kOpenNetworkConfiguration);
@@ -347,7 +359,10 @@ void ArcSettingsServiceImpl::SyncBootTimeSettings() const {
   SyncFontSize();
   SyncProxySettings();
   SyncReportingConsent();
+  SyncSelectToSpeakEnabled();
+  SyncSmsConnectEnabled();
   SyncSpokenFeedbackEnabled();
+  SyncSwitchAccessEnabled();
   SyncTimeZone();
   SyncTimeZoneByGeolocation();
   SyncUse24HourClock();
@@ -412,9 +427,9 @@ void ArcSettingsServiceImpl::SyncFocusHighlightEnabled() const {
 }
 
 void ArcSettingsServiceImpl::SyncFontSize() const {
-  int default_size = GetIntegerPref(prefs::kWebKitDefaultFontSize);
-  int default_fixed_size = GetIntegerPref(prefs::kWebKitDefaultFixedFontSize);
-  int minimum_size = GetIntegerPref(prefs::kWebKitMinimumFontSize);
+  int default_size = GetIntegerPref(::prefs::kWebKitDefaultFontSize);
+  int default_fixed_size = GetIntegerPref(::prefs::kWebKitDefaultFixedFontSize);
+  int minimum_size = GetIntegerPref(::prefs::kWebKitMinimumFontSize);
 
   double android_scale = ConvertFontSizeChromeToAndroid(
       default_size, default_fixed_size, minimum_size);
@@ -427,7 +442,7 @@ void ArcSettingsServiceImpl::SyncFontSize() const {
 
 void ArcSettingsServiceImpl::SyncLocale() const {
   const PrefService::Preference* pref =
-      registrar_.prefs()->FindPreference(prefs::kApplicationLocale);
+      registrar_.prefs()->FindPreference(::prefs::kApplicationLocale);
   DCHECK(pref);
   std::string locale;
   bool value_exists = pref->GetValue()->GetAsString(&locale);
@@ -518,10 +533,28 @@ void ArcSettingsServiceImpl::SyncReportingConsent() const {
                         extras);
 }
 
+void ArcSettingsServiceImpl::SyncSelectToSpeakEnabled() const {
+  SendBoolPrefSettingsBroadcast(
+      ash::prefs::kAccessibilitySelectToSpeakEnabled,
+      "org.chromium.arc.intent_helper.SET_SELECT_TO_SPEAK_ENABLED");
+}
+
+void ArcSettingsServiceImpl::SyncSmsConnectEnabled() const {
+  SendBoolPrefSettingsBroadcast(
+      prefs::kSmsConnectEnabled,
+      "org.chromium.arc.intent_helper.SET_SMS_CONNECT_ENABLED");
+}
+
 void ArcSettingsServiceImpl::SyncSpokenFeedbackEnabled() const {
   SendBoolPrefSettingsBroadcast(
       ash::prefs::kAccessibilitySpokenFeedbackEnabled,
       "org.chromium.arc.intent_helper.SET_SPOKEN_FEEDBACK_ENABLED");
+}
+
+void ArcSettingsServiceImpl::SyncSwitchAccessEnabled() const {
+  SendBoolPrefSettingsBroadcast(
+      ash::prefs::kAccessibilitySwitchAccessEnabled,
+      "org.chromium.arc.intent_helper.SET_SWITCH_ACCESS_ENABLED");
 }
 
 void ArcSettingsServiceImpl::SyncTimeZone() const {
@@ -533,8 +566,8 @@ void ArcSettingsServiceImpl::SyncTimeZone() const {
 }
 
 void ArcSettingsServiceImpl::SyncTimeZoneByGeolocation() const {
-  const PrefService::Preference* pref =
-      registrar_.prefs()->FindPreference(prefs::kResolveTimezoneByGeolocation);
+  const PrefService::Preference* pref = registrar_.prefs()->FindPreference(
+      ::prefs::kResolveTimezoneByGeolocation);
   DCHECK(pref);
   bool setTimeZoneByGeolocation = false;
   bool value_exists = pref->GetValue()->GetAsBoolean(&setTimeZoneByGeolocation);
@@ -547,7 +580,7 @@ void ArcSettingsServiceImpl::SyncTimeZoneByGeolocation() const {
 
 void ArcSettingsServiceImpl::SyncUse24HourClock() const {
   const PrefService::Preference* pref =
-      registrar_.prefs()->FindPreference(prefs::kUse24HourClock);
+      registrar_.prefs()->FindPreference(::prefs::kUse24HourClock);
   DCHECK(pref);
   bool use24HourClock = false;
   bool value_exists = pref->GetValue()->GetAsBoolean(&use24HourClock);
@@ -645,7 +678,7 @@ ArcSettingsService::~ArcSettingsService() {
 
 void ArcSettingsService::OnInstanceReady() {
   impl_ =
-      base::MakeUnique<ArcSettingsServiceImpl>(context_, arc_bridge_service_);
+      std::make_unique<ArcSettingsServiceImpl>(context_, arc_bridge_service_);
 }
 
 void ArcSettingsService::OnInstanceClosed() {

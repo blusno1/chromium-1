@@ -108,7 +108,7 @@ WTF::Optional<LayoutUnit> CalculateFragmentationOffset(
          parent_space.WritingMode());
 
   if (parent_space.HasBlockFragmentation()) {
-    return parent_space.FragmentainerSpaceAvailable() - origin_block_offset;
+    return parent_space.FragmentainerSpaceAtBfcStart() - origin_block_offset;
   }
 
   return WTF::nullopt;
@@ -124,7 +124,7 @@ RefPtr<NGConstraintSpace> CreateConstraintSpaceForFloat(
   NGConstraintSpaceBuilder builder(parent_space);
 
   if (fragmentation_offset) {
-    builder.SetFragmentainerSpaceAvailable(fragmentation_offset.value())
+    builder.SetFragmentainerSpaceAtBfcStart(fragmentation_offset.value())
         .SetFragmentationType(parent_space.BlockFragmentationType());
   } else {
     builder.SetFragmentationType(NGFragmentationType::kFragmentNone);
@@ -168,9 +168,9 @@ LayoutUnit ComputeInlineSizeForUnpositionedFloat(
   // we fragment.
   if (is_same_writing_mode) {
     WTF::Optional<MinMaxSize> min_max_size;
-    if (NeedMinMaxSize(*space.Get(), style))
+    if (NeedMinMaxSize(*space.get(), style))
       min_max_size = unpositioned_float->node.ComputeMinMaxSize();
-    return ComputeInlineSizeForFragment(*space.Get(), style, min_max_size);
+    return ComputeInlineSizeForFragment(*space.get(), style, min_max_size);
   }
 
   // If we are performing layout on a float to determine its inline size it
@@ -234,7 +234,7 @@ NGPositionedFloat PositionFloat(LayoutUnit origin_block_offset,
     RefPtr<NGConstraintSpace> space = CreateConstraintSpaceForFloat(
         *unpositioned_float, parent_space, fragmentation_offset);
     layout_result = unpositioned_float->node.Layout(
-        *space, unpositioned_float->token.Get());
+        *space, unpositioned_float->token.get());
   }
 
   DCHECK(layout_result->PhysicalFragment());
@@ -289,7 +289,7 @@ const Vector<NGPositionedFloat> PositionFloats(
 
   for (auto& unpositioned_float : unpositioned_floats) {
     positioned_floats.push_back(PositionFloat(
-        origin_block_offset, parent_bfc_block_offset, unpositioned_float.Get(),
+        origin_block_offset, parent_bfc_block_offset, unpositioned_float.get(),
         space, parent_inline_size, exclusion_space));
   }
 

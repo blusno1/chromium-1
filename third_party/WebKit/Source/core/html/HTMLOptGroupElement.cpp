@@ -25,13 +25,13 @@
 
 #include "core/html/HTMLOptGroupElement.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/shadow/ShadowElementNames.h"
+#include "core/html_names.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/CharacterNames.h"
 
@@ -94,9 +94,9 @@ Node::InsertionNotificationRequest HTMLOptGroupElement::InsertedInto(
 }
 
 void HTMLOptGroupElement::RemovedFrom(ContainerNode* insertion_point) {
-  if (isHTMLSelectElement(*insertion_point)) {
+  if (auto* select = ToHTMLSelectElementOrNull(*insertion_point)) {
     if (!parentNode())
-      toHTMLSelectElement(insertion_point)->OptGroupInsertedOrRemoved(*this);
+      select->OptGroupInsertedOrRemoved(*this);
   }
   HTMLElement::RemovedFrom(insertion_point);
 }
@@ -155,7 +155,7 @@ void HTMLOptGroupElement::UpdateGroupLabel() {
 }
 
 HTMLDivElement& HTMLOptGroupElement::OptGroupLabelElement() const {
-  return *toHTMLDivElementOrDie(UserAgentShadowRoot()->getElementById(
+  return *ToHTMLDivElementOrDie(UserAgentShadowRoot()->getElementById(
       ShadowElementNames::OptGroupLabel()));
 }
 

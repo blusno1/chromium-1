@@ -92,7 +92,7 @@ void StopServiceWorkerOnIO(scoped_refptr<ServiceWorkerContextWrapper> context,
                            int64_t version_id) {
   if (content::ServiceWorkerVersion* version =
           context->GetLiveVersion(version_id)) {
-    version->StopWorker(base::Bind(&StatusNoOp));
+    version->StopWorker(base::BindOnce(&base::DoNothing));
   }
 }
 
@@ -108,6 +108,10 @@ void GetDevToolsRouteInfoOnIO(
             callback, version->embedded_worker()->process_id(),
             version->embedded_worker()->worker_devtools_agent_route_id()));
   }
+}
+
+Response CreateDomainNotEnabledErrorResponse() {
+  return Response::Error("ServiceWorker domain not enabled");
 }
 
 Response CreateContextErrorResponse() {
@@ -215,7 +219,7 @@ Response ServiceWorkerHandler::Disable() {
 
 Response ServiceWorkerHandler::Unregister(const std::string& scope_url) {
   if (!enabled_)
-    return Response::OK();
+    return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
   context_->UnregisterServiceWorker(GURL(scope_url), base::Bind(&ResultNoOp));
@@ -224,7 +228,7 @@ Response ServiceWorkerHandler::Unregister(const std::string& scope_url) {
 
 Response ServiceWorkerHandler::StartWorker(const std::string& scope_url) {
   if (!enabled_)
-    return Response::OK();
+    return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
   context_->StartServiceWorker(GURL(scope_url), base::Bind(&StatusNoOp));
@@ -233,7 +237,7 @@ Response ServiceWorkerHandler::StartWorker(const std::string& scope_url) {
 
 Response ServiceWorkerHandler::SkipWaiting(const std::string& scope_url) {
   if (!enabled_)
-    return Response::OK();
+    return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
   context_->SkipWaitingWorker(GURL(scope_url));
@@ -242,7 +246,7 @@ Response ServiceWorkerHandler::SkipWaiting(const std::string& scope_url) {
 
 Response ServiceWorkerHandler::StopWorker(const std::string& version_id) {
   if (!enabled_)
-    return Response::OK();
+    return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
   int64_t id = 0;
@@ -253,10 +257,24 @@ Response ServiceWorkerHandler::StopWorker(const std::string& version_id) {
   return Response::OK();
 }
 
+void ServiceWorkerHandler::StopAllWorkers(
+    std::unique_ptr<StopAllWorkersCallback> callback) {
+  if (!enabled_) {
+    callback->sendFailure(CreateDomainNotEnabledErrorResponse());
+    return;
+  }
+  if (!context_) {
+    callback->sendFailure(CreateContextErrorResponse());
+    return;
+  }
+  context_->StopAllServiceWorkers(base::BindOnce(
+      &StopAllWorkersCallback::sendSuccess, std::move(callback)));
+}
+
 Response ServiceWorkerHandler::UpdateRegistration(
     const std::string& scope_url) {
   if (!enabled_)
-    return Response::OK();
+    return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
   context_->UpdateRegistration(GURL(scope_url));
@@ -265,7 +283,7 @@ Response ServiceWorkerHandler::UpdateRegistration(
 
 Response ServiceWorkerHandler::InspectWorker(const std::string& version_id) {
   if (!enabled_)
-    return Response::OK();
+    return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
 
@@ -293,7 +311,7 @@ Response ServiceWorkerHandler::DeliverPushMessage(
     const std::string& registration_id,
     const std::string& data) {
   if (!enabled_)
-    return Response::OK();
+    return CreateDomainNotEnabledErrorResponse();
   if (!render_frame_host_)
     return CreateContextErrorResponse();
   int64_t id = 0;
@@ -314,7 +332,7 @@ Response ServiceWorkerHandler::DispatchSyncEvent(
     const std::string& tag,
     bool last_chance) {
   if (!enabled_)
-    return Response::OK();
+    return CreateDomainNotEnabledErrorResponse();
   if (!render_frame_host_)
     return CreateContextErrorResponse();
   int64_t id = 0;
@@ -329,7 +347,7 @@ Response ServiceWorkerHandler::DispatchSyncEvent(
 
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
                           base::BindOnce(&DispatchSyncEventOnIO, context_,
-                                         make_scoped_refptr(sync_context),
+                                         base::WrapRefCounted(sync_context),
                                          GURL(origin), id, tag, last_chance));
   return Response::OK();
 }

@@ -24,20 +24,20 @@
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_state.h"
 #include "cc/layers/layer.h"
-#include "cc/quads/debug_border_draw_quad.h"
-#include "cc/quads/render_pass.h"
+#include "cc/resources/layer_tree_resource_provider.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/layer_tree_settings.h"
-#include "cc/trees/mutable_properties.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/proxy.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
-#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/quads/debug_border_draw_quad.h"
+#include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/traced_value.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/quad_f.h"
@@ -73,9 +73,9 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       clip_tree_index_(ClipTree::kInvalidNodeId),
       scroll_tree_index_(ScrollTree::kInvalidNodeId),
       current_draw_mode_(DRAW_MODE_NONE),
-      mutable_properties_(MutableProperty::kNone),
       debug_info_(nullptr),
       has_will_change_transform_hint_(false),
+      trilinear_filtering_(false),
       needs_push_properties_(false),
       scrollbars_hidden_(false),
       needs_show_scrollbars_(false),
@@ -102,6 +102,9 @@ void LayerImpl::SetHasWillChangeTransformHint(bool has_will_change) {
   has_will_change_transform_hint_ = has_will_change;
 }
 
+void LayerImpl::SetTrilinearFiltering(bool trilinear_filtering) {
+  trilinear_filtering_ = trilinear_filtering;
+}
 
 MutatorHost* LayerImpl::GetMutatorHost() const {
   return layer_tree_impl_ ? layer_tree_impl_->mutator_host() : nullptr;
@@ -173,7 +176,7 @@ void LayerImpl::PopulateScaledSharedQuadState(viz::SharedQuadState* state,
 }
 
 bool LayerImpl::WillDraw(DrawMode draw_mode,
-                         ResourceProvider* resource_provider) {
+                         LayerTreeResourceProvider* resource_provider) {
   // WillDraw/DidDraw must be matched.
   DCHECK_NE(DRAW_MODE_NONE, draw_mode);
   DCHECK_EQ(DRAW_MODE_NONE, current_draw_mode_);
@@ -181,7 +184,7 @@ bool LayerImpl::WillDraw(DrawMode draw_mode,
   return true;
 }
 
-void LayerImpl::DidDraw(ResourceProvider* resource_provider) {
+void LayerImpl::DidDraw(LayerTreeResourceProvider* resource_provider) {
   DCHECK_NE(DRAW_MODE_NONE, current_draw_mode_);
   current_draw_mode_ = DRAW_MODE_NONE;
 }
@@ -211,20 +214,20 @@ void LayerImpl::GetDebugBorderProperties(SkColor* color, float* width) const {
 }
 
 void LayerImpl::AppendDebugBorderQuad(
-    RenderPass* render_pass,
-    const gfx::Size& bounds,
+    viz::RenderPass* render_pass,
+    const gfx::Rect& quad_rect,
     const viz::SharedQuadState* shared_quad_state,
     AppendQuadsData* append_quads_data) const {
   SkColor color;
   float width;
   GetDebugBorderProperties(&color, &width);
-  AppendDebugBorderQuad(render_pass, bounds, shared_quad_state,
+  AppendDebugBorderQuad(render_pass, quad_rect, shared_quad_state,
                         append_quads_data, color, width);
 }
 
 void LayerImpl::AppendDebugBorderQuad(
-    RenderPass* render_pass,
-    const gfx::Size& bounds,
+    viz::RenderPass* render_pass,
+    const gfx::Rect& quad_rect,
     const viz::SharedQuadState* shared_quad_state,
     AppendQuadsData* append_quads_data,
     SkColor color,
@@ -232,10 +235,9 @@ void LayerImpl::AppendDebugBorderQuad(
   if (!ShowDebugBorders(DebugBorderType::LAYER))
     return;
 
-  gfx::Rect quad_rect(bounds);
   gfx::Rect visible_quad_rect(quad_rect);
-  DebugBorderDrawQuad* debug_border_quad =
-      render_pass->CreateAndAppendDrawQuad<DebugBorderDrawQuad>();
+  auto* debug_border_quad =
+      render_pass->CreateAndAppendDrawQuad<viz::DebugBorderDrawQuad>();
   debug_border_quad->SetNew(
       shared_quad_state, quad_rect, visible_quad_rect, color, width);
   if (contents_opaque()) {
@@ -251,8 +253,8 @@ void LayerImpl::AppendDebugBorderQuad(
       return;
     gfx::Rect visible_fill_rect =
         gfx::IntersectRects(visible_quad_rect, fill_rect);
-    DebugBorderDrawQuad* fill_quad =
-        render_pass->CreateAndAppendDrawQuad<DebugBorderDrawQuad>();
+    auto* fill_quad =
+        render_pass->CreateAndAppendDrawQuad<viz::DebugBorderDrawQuad>();
     fill_quad->SetNew(shared_quad_state, fill_rect, visible_fill_rect,
                       fill_color, fill_width);
   }
@@ -327,6 +329,7 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->clip_tree_index_ = clip_tree_index_;
   layer->scroll_tree_index_ = scroll_tree_index_;
   layer->has_will_change_transform_hint_ = has_will_change_transform_hint_;
+  layer->trilinear_filtering_ = trilinear_filtering_;
   layer->scrollbars_hidden_ = scrollbars_hidden_;
   if (needs_show_scrollbars_)
     layer->needs_show_scrollbars_ = needs_show_scrollbars_;
@@ -342,7 +345,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->SetBounds(bounds_);
   if (scrollable_)
     layer->SetScrollable(scroll_container_bounds_);
-  layer->SetMutableProperties(mutable_properties_);
 
   // If the main thread commits multiple times before the impl thread actually
   // draws, then damage tracking will become incorrect if we simply clobber the
@@ -485,10 +487,6 @@ void LayerImpl::ResetChangeTracking() {
 
 bool LayerImpl::has_copy_requests_in_target_subtree() {
   return GetEffectTree().Node(effect_tree_index())->subtree_has_copy_request;
-}
-
-gfx::ScrollOffset LayerImpl::ScrollOffsetForAnimation() const {
-  return CurrentScrollOffset();
 }
 
 bool LayerImpl::IsActive() const {
@@ -641,27 +639,14 @@ void LayerImpl::SetElementId(ElementId element_id) {
   if (element_id == element_id_)
     return;
 
-  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
-               "LayerImpl::SetElementId", "element",
-               element_id.AsValue().release());
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"), "LayerImpl::SetElementId",
+               "element", element_id.AsValue().release());
 
   layer_tree_impl_->RemoveFromElementMap(this);
   element_id_ = element_id;
   layer_tree_impl_->AddToElementMap(this);
 
   SetNeedsPushProperties();
-}
-
-void LayerImpl::SetMutableProperties(uint32_t properties) {
-  if (mutable_properties_ == properties)
-    return;
-
-  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
-               "LayerImpl::SetMutableProperties", "properties", properties);
-
-  mutable_properties_ = properties;
-  // If this layer is already in the element map, update its properties.
-  layer_tree_impl_->AddToElementMap(this);
 }
 
 void LayerImpl::SetPosition(const gfx::PointF& position) {
@@ -751,9 +736,6 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   if (element_id_)
     element_id_.AddToTracedValue(state);
 
-  if (mutable_properties_ != MutableProperty::kNone)
-    state->SetInteger("mutable_properties", mutable_properties_);
-
   MathUtil::AddToTracedValue("scroll_offset", CurrentScrollOffset(), state);
 
   if (!ScreenSpaceTransform().IsIdentity())
@@ -781,6 +763,8 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
 
   state->SetBoolean("has_will_change_transform_hint",
                     has_will_change_transform_hint());
+
+  state->SetBoolean("trilinear_filtering", trilinear_filtering());
 
   if (debug_info_) {
     std::string str;

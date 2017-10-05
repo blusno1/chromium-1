@@ -5,13 +5,20 @@
 #ifndef CHROME_BROWSER_SAFE_BROWSING_CHROME_PASSWORD_PROTECTION_SERVICE_H_
 #define CHROME_BROWSER_SAFE_BROWSING_CHROME_PASSWORD_PROTECTION_SERVICE_H_
 
+#include <map>
+
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "components/safe_browsing/password_protection/password_protection_service.h"
+#include "components/safe_browsing/triggers/trigger_manager.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
 #include "ui/base/ui_features.h"
+#include "url/origin.h"
 
+struct AccountInfo;
+class PrefChangeRegistrar;
 class PrefService;
+class PrefChangeRegistrar;
 class Profile;
 
 namespace content {
@@ -27,14 +34,13 @@ class ChromePasswordProtectionService;
 
 using OnWarningDone =
     base::OnceCallback<void(PasswordProtectionService::WarningAction)>;
+using url::Origin;
 
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 // Shows the platform-specific password reuse modal dialog.
 void ShowPasswordReuseModalWarningDialog(
     content::WebContents* web_contents,
     ChromePasswordProtectionService* service,
     OnWarningDone done_callback);
-#endif  // !OS_MACOSX || MAC_VIEWS_BROWSER
 
 // ChromePasswordProtectionService extends PasswordProtectionService by adding
 // access to SafeBrowsingNaivigationObserverManager and Profile.
@@ -46,13 +52,22 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
    public:
     // Called when user clicks on the "Change Password" button on
     // chrome://settings page.
-    virtual void OnStartingGaiaPasswordChange() {}
+    virtual void OnStartingGaiaPasswordChange() = 0;
 
     // Called when user completes the Gaia password reset.
-    virtual void OnGaiaPasswordChanged() {}
+    virtual void OnGaiaPasswordChanged() = 0;
 
     // Called when user marks the site as legitimate.
-    virtual void OnMarkingSiteAsLegitimate(const GURL& url) {}
+    virtual void OnMarkingSiteAsLegitimate(const GURL& url) = 0;
+
+    // Only to be used by tests. Subclasses must override to manually call the
+    // respective button click handler.
+    virtual void InvokeActionForTesting(
+        ChromePasswordProtectionService::WarningAction action) = 0;
+
+    // Only to be used by tests.
+    virtual ChromePasswordProtectionService::WarningUIType
+    GetObserverType() = 0;
 
    protected:
     virtual ~Observer() = default;
@@ -63,16 +78,46 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
 
   ~ChromePasswordProtectionService() override;
 
+  static ChromePasswordProtectionService* GetPasswordProtectionService(
+      Profile* profile);
+
   static bool ShouldShowChangePasswordSettingUI(Profile* profile);
 
   void ShowModalWarning(content::WebContents* web_contents,
                         const std::string& verdict_token) override;
+
+  // Called when user interacts with password protection UIs.
+  void OnUserAction(content::WebContents* web_contents,
+                    PasswordProtectionService::WarningUIType ui_type,
+                    PasswordProtectionService::WarningAction action) override;
 
   // Called during the construction of Observer subclass.
   virtual void AddObserver(Observer* observer);
 
   // Called during the destruction of the observer subclass.
   virtual void RemoveObserver(Observer* observer);
+
+  // Starts collecting threat details if user has extended reporting enabled and
+  // is not in incognito mode.
+  void MaybeStartThreatDetailsCollection(content::WebContents* web_contents,
+                                         const std::string& token);
+
+  // Sends threat details if user has extended reporting enabled and is not in
+  // incognito mode.
+  void MaybeFinishCollectingThreatDetails(content::WebContents* web_contents,
+                                          bool did_proceed);
+
+  const std::map<Origin, int64_t>& unhandled_password_reuses() const {
+    return unhandled_password_reuses_;
+  }
+
+  // Called when sync user's Gaia password changed.
+  void OnGaiaPasswordChanged();
+
+  // If user has clicked through any Safe Browsing interstitial on this given
+  // |web_contents|.
+  bool UserClickedThroughSBInterstitial(
+      content::WebContents* web_contents) override;
 
  protected:
   // PasswordProtectionService overrides.
@@ -106,11 +151,17 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
       PasswordProtectionService::RequestOutcome outcome,
       const LoginReputationClientResponse* response) override;
 
-  // Update security state for the current |web_contents| based on
+  // Updates security state for the current |web_contents| based on
   // |threat_type|, such that page info bubble will show appropriate status
   // when user clicks on the security chip.
   void UpdateSecurityState(SBThreatType threat_type,
                            content::WebContents* web_contents) override;
+
+  // Sets |account_info_| based on |profile_|.
+  void InitializeAccountInfo();
+
+  // Gets change password URl based on |account_info_|.
+  GURL GetChangePasswordURL();
 
   FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceTest,
                            VerifyUserPopulationForPasswordOnFocusPing);
@@ -126,8 +177,13 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
                            VerifyGetSyncAccountType);
   FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceTest,
                            VerifyUpdateSecurityState);
+  FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceTest,
+                           VerifyGetChangePasswordURL);
 
  private:
+  friend class MockChromePasswordProtectionService;
+  friend class ChromePasswordProtectionServiceBrowserTest;
+
   // Gets prefs associated with |profile_|.
   PrefService* GetPrefs();
 
@@ -150,7 +206,6 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
           ReputationVerdict verdict,
       const std::string& verdict_token);
 
-  friend class MockChromePasswordProtectionService;
   // Constructor used for tests only.
   ChromePasswordProtectionService(
       Profile* profile,
@@ -158,11 +213,19 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
       scoped_refptr<SafeBrowsingUIManager> ui_manager);
 
   scoped_refptr<SafeBrowsingUIManager> ui_manager_;
+  TriggerManager* trigger_manager_;
   // Profile associated with this instance.
   Profile* profile_;
+  // AccountInfo associated with this |profile_|.
+  std::unique_ptr<AccountInfo> account_info_;
   scoped_refptr<SafeBrowsingNavigationObserverManager>
       navigation_observer_manager_;
   base::ObserverList<Observer> observer_list_;
+  std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
+  // The map of password reuse origin of top-level frame to navigation ID. These
+  // are password reuses that user hasn't chosen to change password, or
+  // mark site as legitimate yet.
+  std::map<Origin, int64_t> unhandled_password_reuses_;
   DISALLOW_COPY_AND_ASSIGN(ChromePasswordProtectionService);
 };
 

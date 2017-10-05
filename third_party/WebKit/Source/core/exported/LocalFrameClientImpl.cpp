@@ -35,7 +35,6 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "core/CoreInitializer.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/events/MessageEvent.h"
@@ -54,6 +53,7 @@
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLPlugInElement.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/DevToolsEmulator.h"
 #include "core/layout/HitTestResult.h"
@@ -63,7 +63,6 @@
 #include "core/loader/HistoryItem.h"
 #include "core/page/Page.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
@@ -71,6 +70,7 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/plugins/PluginData.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StringExtras.h"
 #include "platform/wtf/text/CString.h"
@@ -907,11 +907,9 @@ void LocalFrameClientImpl::DispatchWillStartUsingPeerConnectionHandler(
   web_frame_->Client()->WillStartUsingPeerConnectionHandler(handler);
 }
 
-bool LocalFrameClientImpl::AllowWebGL(bool enabled_per_settings) {
-  if (web_frame_->Client())
-    return web_frame_->Client()->AllowWebGL(enabled_per_settings);
-
-  return enabled_per_settings;
+bool LocalFrameClientImpl::ShouldBlockWebGL() {
+  DCHECK(web_frame_->Client());
+  return web_frame_->Client()->ShouldBlockWebGL();
 }
 
 void LocalFrameClientImpl::DispatchWillInsertBody() {

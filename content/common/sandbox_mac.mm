@@ -12,6 +12,9 @@
 #include <signal.h>
 #include <sys/param.h>
 
+#include <algorithm>
+#include <iterator>
+
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_util.h"
@@ -32,14 +35,15 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
-#include "content/grit/content_resources.h"
-#include "content/public/common/content_client.h"
-#include "content/public/common/content_switches.h"
-#include "media/gpu/vt_video_decode_accelerator_mac.h"
 #include "sandbox/mac/sandbox_compiler.h"
-#include "third_party/icu/source/common/unicode/uchar.h"
-#include "ui/base/layout.h"
-#include "ui/gl/init/gl_factory.h"
+#include "services/service_manager/sandbox/mac/common.sb.h"
+#include "services/service_manager/sandbox/mac/gpu.sb.h"
+#include "services/service_manager/sandbox/mac/nacl_loader.sb.h"
+#include "services/service_manager/sandbox/mac/ppapi.sb.h"
+#include "services/service_manager/sandbox/mac/renderer.sb.h"
+#include "services/service_manager/sandbox/mac/utility.sb.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
+#include "services/service_manager/sandbox/switches.h"
 
 namespace content {
 namespace {
@@ -48,24 +52,34 @@ namespace {
 bool gSandboxIsActive = false;
 
 struct SandboxTypeToResourceIDMapping {
-  SandboxType sandbox_type;
-  int sandbox_profile_resource_id;
+  service_manager::SandboxType sandbox_type;
+  const char* seatbelt_policy_string;
 };
 
 // Mapping from sandbox process types to resource IDs containing the sandbox
 // profile for all process types known to content.
 // TODO(tsepez): Implement profile for SANDBOX_TYPE_NETWORK.
 SandboxTypeToResourceIDMapping kDefaultSandboxTypeToResourceIDMapping[] = {
-    {SANDBOX_TYPE_NO_SANDBOX, -1},
-    {SANDBOX_TYPE_RENDERER, IDR_RENDERER_SANDBOX_PROFILE},
-    {SANDBOX_TYPE_UTILITY, IDR_UTILITY_SANDBOX_PROFILE},
-    {SANDBOX_TYPE_GPU, IDR_GPU_SANDBOX_PROFILE},
-    {SANDBOX_TYPE_PPAPI, IDR_PPAPI_SANDBOX_PROFILE},
-    {SANDBOX_TYPE_NETWORK, -1},
+    {service_manager::SANDBOX_TYPE_NO_SANDBOX, nullptr},
+    {service_manager::SANDBOX_TYPE_RENDERER,
+     service_manager::kSeatbeltPolicyString_renderer},
+    {service_manager::SANDBOX_TYPE_UTILITY,
+     service_manager::kSeatbeltPolicyString_utility},
+    {service_manager::SANDBOX_TYPE_GPU,
+     service_manager::kSeatbeltPolicyString_gpu},
+    {service_manager::SANDBOX_TYPE_PPAPI,
+     service_manager::kSeatbeltPolicyString_ppapi},
+    {service_manager::SANDBOX_TYPE_NETWORK, nullptr},
+    {service_manager::SANDBOX_TYPE_CDM,
+     service_manager::kSeatbeltPolicyString_ppapi},
+    {service_manager::SANDBOX_TYPE_NACL_LOADER,
+     service_manager::kSeatbeltPolicyString_nacl_loader},
+    {service_manager::SANDBOX_TYPE_PDF_COMPOSITOR,
+     service_manager::kSeatbeltPolicyString_ppapi},
 };
 
-static_assert(arraysize(kDefaultSandboxTypeToResourceIDMapping) == \
-              size_t(SANDBOX_TYPE_AFTER_LAST_TYPE), \
+static_assert(arraysize(kDefaultSandboxTypeToResourceIDMapping) ==
+                  size_t(service_manager::SANDBOX_TYPE_AFTER_LAST_TYPE),
               "sandbox type to resource id mapping incorrect");
 
 }  // namespace
@@ -82,7 +96,6 @@ const char* Sandbox::kSandboxHomedirAsLiteral = "USER_HOMEDIR_AS_LITERAL";
 const char* Sandbox::kSandboxLoggingPathAsLiteral = "LOG_FILE_PATH";
 const char* Sandbox::kSandboxOSVersion = "OS_VERSION";
 const char* Sandbox::kSandboxPermittedDir = "PERMITTED_DIR";
-
 const char* Sandbox::kSandboxElCapOrLater = "ELCAP_OR_LATER";
 const char* Sandbox::kSandboxMacOS1013 = "MACOS_1013";
 
@@ -95,7 +108,7 @@ const char* Sandbox::kSandboxMacOS1013 = "MACOS_1013";
 //     10.5.6, 10.6.0
 
 // static
-void Sandbox::SandboxWarmup(int sandbox_type) {
+void Sandbox::SandboxWarmup(service_manager::SandboxType sandbox_type) {
   base::mac::ScopedNSAutoreleasePool scoped_pool;
 
   { // CGColorSpaceCreateWithName(), CGBitmapContextCreate() - 10.5.6
@@ -154,22 +167,13 @@ void Sandbox::SandboxWarmup(int sandbox_type) {
   }
 
   // Process-type dependent warm-up.
-  if (sandbox_type == SANDBOX_TYPE_UTILITY) {
+  if (sandbox_type == service_manager::SANDBOX_TYPE_UTILITY) {
     // CFTimeZoneCopyZone() tries to read /etc and /private/etc/localtime - 10.8
     // Needed by Media Galleries API Picasa - crbug.com/151701
     CFTimeZoneCopySystem();
   }
 
-  if (sandbox_type == SANDBOX_TYPE_GPU) {
-    // Preload either the desktop GL or the osmesa so, depending on the
-    // --use-gl flag.
-    gl::init::InitializeGLOneOff();
-
-    // Preload VideoToolbox.
-    media::InitializeVideoToolbox();
-  }
-
-  if (sandbox_type == SANDBOX_TYPE_PPAPI) {
+  if (sandbox_type == service_manager::SANDBOX_TYPE_PPAPI) {
     // Preload AppKit color spaces used for Flash/ppapi. http://crbug.com/348304
     NSColor* color = [NSColor controlTextColor];
     [color colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
@@ -178,49 +182,22 @@ void Sandbox::SandboxWarmup(int sandbox_type) {
 
 // Load the appropriate template for the given sandbox type.
 // Returns the template as a string or an empty string on error.
-std::string LoadSandboxTemplate(int sandbox_type) {
+std::string LoadSandboxTemplate(service_manager::SandboxType sandbox_type) {
   // We use a custom sandbox definition to lock things down as tightly as
   // possible.
-  int sandbox_profile_resource_id = -1;
+  auto* it = std::find_if(
+      std::begin(kDefaultSandboxTypeToResourceIDMapping),
+      std::end(kDefaultSandboxTypeToResourceIDMapping),
+      [sandbox_type](const SandboxTypeToResourceIDMapping& element) {
+        return element.sandbox_type == sandbox_type;
+      });
 
-  // Find resource id for sandbox profile to use for the specific sandbox type.
-  for (size_t i = 0;
-       i < arraysize(kDefaultSandboxTypeToResourceIDMapping);
-       ++i) {
-    if (kDefaultSandboxTypeToResourceIDMapping[i].sandbox_type ==
-        sandbox_type) {
-      sandbox_profile_resource_id =
-          kDefaultSandboxTypeToResourceIDMapping[i].sandbox_profile_resource_id;
-      break;
-    }
-  }
-  if (sandbox_profile_resource_id == -1) {
-    // Check if the embedder knows about this sandbox process type.
-    bool sandbox_type_found =
-        GetContentClient()->GetSandboxProfileForSandboxType(
-            sandbox_type, &sandbox_profile_resource_id);
-    CHECK(sandbox_type_found) << "Unknown sandbox type " << sandbox_type;
-  }
-
-  base::StringPiece sandbox_definition =
-      GetContentClient()->GetDataResource(
-          sandbox_profile_resource_id, ui::SCALE_FACTOR_NONE);
-  if (sandbox_definition.empty()) {
-    LOG(FATAL) << "Failed to load the sandbox profile (resource id "
-               << sandbox_profile_resource_id << ")";
-    return std::string();
-  }
-
-  base::StringPiece common_sandbox_definition =
-      GetContentClient()->GetDataResource(
-          IDR_COMMON_SANDBOX_PROFILE, ui::SCALE_FACTOR_NONE);
-  if (common_sandbox_definition.empty()) {
-    LOG(FATAL) << "Failed to load the common sandbox profile";
-    return std::string();
-  }
+  CHECK(it != std::end(kDefaultSandboxTypeToResourceIDMapping))
+      << "Unknown sandbox type " << sandbox_type;
+  base::StringPiece sandbox_definition = it->seatbelt_policy_string;
 
   // Prefix sandbox_data with common_sandbox_prefix_data.
-  std::string sandbox_profile = common_sandbox_definition.as_string();
+  std::string sandbox_profile = service_manager::kSeatbeltPolicyString_common;
   sandbox_definition.AppendToString(&sandbox_profile);
   return sandbox_profile;
 }
@@ -228,20 +205,18 @@ std::string LoadSandboxTemplate(int sandbox_type) {
 // Turns on the OS X sandbox for this process.
 
 // static
-bool Sandbox::EnableSandbox(int sandbox_type,
+bool Sandbox::EnableSandbox(service_manager::SandboxType sandbox_type,
                             const base::FilePath& allowed_dir) {
-  // Sanity - currently only SANDBOX_TYPE_UTILITY supports a directory being
+  // Sanity - currently only some sandboxes support a directory being
   // passed in.
-  if (sandbox_type < SANDBOX_TYPE_AFTER_LAST_TYPE &&
-      sandbox_type != SANDBOX_TYPE_UTILITY) {
+  if (sandbox_type != service_manager::SANDBOX_TYPE_UTILITY) {
     DCHECK(allowed_dir.empty())
         << "Only SANDBOX_TYPE_UTILITY allows a custom directory parameter.";
   }
 
   std::string sandbox_data = LoadSandboxTemplate(sandbox_type);
-  if (sandbox_data.empty()) {
+  if (sandbox_data.empty())
     return false;
-  }
 
   sandbox::SandboxCompiler compiler(sandbox_data);
 
@@ -258,7 +233,7 @@ bool Sandbox::EnableSandbox(int sandbox_type,
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
   bool enable_logging =
-      command_line->HasSwitch(switches::kEnableSandboxLogging);;
+      command_line->HasSwitch(service_manager::switches::kEnableSandboxLogging);
   if (!compiler.InsertBooleanParam(kSandboxEnableLogging, enable_logging))
     return false;
 

@@ -42,7 +42,6 @@
 #include "core/paint/ScrollbarManager.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
 #include "platform/PlatformFrameView.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimationHost.h"
 #include "platform/animation/CompositorAnimationTimeline.h"
 #include "platform/geometry/IntRect.h"
@@ -50,6 +49,8 @@
 #include "platform/graphics/Color.h"
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/graphics/GraphicsLayerClient.h"
+#include "platform/graphics/paint/PropertyTreeState.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/scroll/SmoothScrollSequencer.h"
@@ -154,7 +155,7 @@ class CORE_EXPORT LocalFrameView final
 
   Scrollbar* CreateScrollbar(ScrollbarOrientation);
 
-  void SetContentsSize(const IntSize&);
+  void SetLayoutOverflowSize(const IntSize&);
 
   void UpdateLayout();
   bool DidFirstLayout() const;
@@ -183,8 +184,15 @@ class CORE_EXPORT LocalFrameView final
   void UpdateGeometry() override;
 
   // Marks this frame, and ancestor frames, as needing one intersection
-  // observervation. This overrides throttling for one frame.
+  // observervation. This overrides throttling for one frame, up to
+  // kLayoutClean.
   void SetNeedsIntersectionObservation();
+  // Marks this frame, and ancestor frames, as needing a mandatory compositing
+  // update. This overrides throttling for one frame, up to kCompositingClean.
+  void SetNeedsForcedCompositingUpdate();
+  void ResetNeedsForcedCompositingUpdate() {
+    needs_forced_compositing_update_ = false;
+  }
 
   // Methods for getting/setting the size Blink should use to layout the
   // contents.
@@ -205,6 +213,7 @@ class CORE_EXPORT LocalFrameView final
   void UpdateAcceleratedCompositingSettings();
 
   void RecalcOverflowAfterStyleChange();
+  void UpdateCountersAfterStyleChange();
 
   bool IsEnclosedInCompositingLayer() const;
 
@@ -481,7 +490,7 @@ class CORE_EXPORT LocalFrameView final
   // The window that hosts the LocalFrameView. The LocalFrameView will
   // communicate scrolls and repaints to the host window in the window's
   // coordinate space.
-  PlatformChromeClient* GetChromeClient() const;
+  PlatformChromeClient* GetChromeClient() const override;
 
   SmoothScrollSequencer* GetSmoothScrollSequencer() const override;
 
@@ -655,7 +664,9 @@ class CORE_EXPORT LocalFrameView final
                               const IntPoint&) const;
 
   // Handles painting of the contents of the view as well as the scrollbars.
-  void Paint(GraphicsContext&, const CullRect&) const override;
+  void Paint(GraphicsContext&,
+             const GlobalPaintFlags,
+             const CullRect&) const override;
   // Paints, and also updates the lifecycle to in-paint and paint clean
   // beforehand.  Call this for painting use-cases outside of the lifecycle.
   void PaintWithLifecycleUpdate(GraphicsContext&,
@@ -722,23 +733,23 @@ class CORE_EXPORT LocalFrameView final
     pre_translation_ = std::move(pre_translation);
   }
   TransformPaintPropertyNode* PreTranslation() const {
-    return pre_translation_.Get();
+    return pre_translation_.get();
   }
   void SetScrollNode(RefPtr<ScrollPaintPropertyNode> scroll_node) {
     scroll_node_ = std::move(scroll_node);
   }
-  ScrollPaintPropertyNode* ScrollNode() const { return scroll_node_.Get(); }
+  ScrollPaintPropertyNode* ScrollNode() const { return scroll_node_.get(); }
   void SetScrollTranslation(
       RefPtr<TransformPaintPropertyNode> scroll_translation) {
     scroll_translation_ = std::move(scroll_translation);
   }
   TransformPaintPropertyNode* ScrollTranslation() const {
-    return scroll_translation_.Get();
+    return scroll_translation_.get();
   }
   void SetContentClip(RefPtr<ClipPaintPropertyNode> content_clip) {
     content_clip_ = std::move(content_clip);
   }
-  ClipPaintPropertyNode* ContentClip() const { return content_clip_.Get(); }
+  ClipPaintPropertyNode* ContentClip() const { return content_clip_.get(); }
 
   // The property tree state that should be used for painting contents. These
   // properties are either created by this LocalFrameView or are inherited from
@@ -962,7 +973,6 @@ class CORE_EXPORT LocalFrameView final
 
   bool ContentsInCompositedLayer() const;
 
-  void UpdateCounters();
   void ForceLayoutParentViewIfNeeded();
   void PerformPreLayoutTasks();
   bool PerformLayout(bool in_subtree_layout);
@@ -1163,7 +1173,7 @@ class CORE_EXPORT LocalFrameView final
 
   ScrollOffset pending_scroll_delta_;
   ScrollOffset scroll_offset_;
-  IntSize contents_size_;
+  IntSize layout_overflow_size_;
 
   bool scrollbars_suppressed_;
 
@@ -1219,10 +1229,6 @@ class CORE_EXPORT LocalFrameView final
       HeapLinkedHashSet<WeakMember<ScrollableArea>>;
   AnchoringAdjustmentQueue anchoring_adjustment_queue_;
 
-  // TODO(bokan): Temporary to get more information about crash in
-  // crbug.com/745686.
-  bool in_perform_scroll_anchoring_adjustments_;
-
   // ScrollbarManager holds the Scrollbar instances.
   ScrollbarManager scrollbar_manager_;
 
@@ -1231,6 +1237,7 @@ class CORE_EXPORT LocalFrameView final
   bool allows_layout_invalidation_after_layout_clean_;
   bool forcing_layout_parent_view_;
   bool needs_intersection_observation_;
+  bool needs_forced_compositing_update_;
 
   Member<ElementVisibilityObserver> visibility_observer_;
 

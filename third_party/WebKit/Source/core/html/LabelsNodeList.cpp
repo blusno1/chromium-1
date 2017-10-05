@@ -23,11 +23,11 @@
 
 #include "core/html/LabelsNodeList.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Element.h"
 #include "core/dom/NodeRareData.h"
 #include "core/html/HTMLLabelElement.h"
 #include "core/html/LabelableElement.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -42,8 +42,8 @@ LabelsNodeList::LabelsNodeList(ContainerNode& owner_node)
 LabelsNodeList::~LabelsNodeList() {}
 
 bool LabelsNodeList::ElementMatches(const Element& element) const {
-  return isHTMLLabelElement(element) &&
-         toHTMLLabelElement(element).control() == ownerNode();
+  return IsHTMLLabelElement(element) &&
+         ToHTMLLabelElement(element).control() == ownerNode();
 }
 
 }  // namespace blink

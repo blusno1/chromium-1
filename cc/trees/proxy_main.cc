@@ -13,14 +13,13 @@
 #include "cc/base/completion_event.h"
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/benchmarks/benchmark_instrumentation.h"
-#include "cc/output/layer_tree_frame_sink.h"
-#include "cc/output/swap_promise.h"
 #include "cc/resources/ui_resource_manager.h"
-#include "cc/trees/blocking_task_runner.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/proxy_impl.h"
 #include "cc/trees/scoped_abort_remaining_swap_promises.h"
+#include "cc/trees/swap_promise.h"
 
 namespace cc {
 
@@ -178,11 +177,6 @@ void ProxyMain::BeginMainFrame(
   layer_tree_host_->ApplyScrollAndScale(
       begin_main_frame_state->scroll_info.get());
 
-  if (begin_main_frame_state->begin_frame_callbacks) {
-    for (auto& callback : *begin_main_frame_state->begin_frame_callbacks)
-      callback.Run();
-  }
-
   layer_tree_host_->WillBeginMainFrame();
 
   // See LayerTreeHostClient::BeginMainFrame for more documentation on
@@ -278,12 +272,6 @@ void ProxyMain::BeginMainFrame(
     TRACE_EVENT0("cc", "ProxyMain::BeginMainFrame::commit");
 
     DebugScopedSetMainThreadBlocked main_thread_blocked(task_runner_provider_);
-
-    // This CapturePostTasks should be destroyed before CommitComplete() is
-    // called since that goes out to the embedder, and we want the embedder
-    // to receive its callbacks before that.
-    BlockingTaskRunner::CapturePostTasks blocked(
-        task_runner_provider_->blocking_main_thread_task_runner());
 
     bool hold_commit_for_activation = commit_waits_for_activation_;
     commit_waits_for_activation_ = false;
@@ -469,7 +457,7 @@ void ProxyMain::Stop() {
 }
 
 void ProxyMain::SetMutator(std::unique_ptr<LayerTreeMutator> mutator) {
-  TRACE_EVENT0("compositor-worker", "ThreadProxy::SetMutator");
+  TRACE_EVENT0("cc", "ThreadProxy::SetMutator");
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&ProxyImpl::InitializeMutatorOnImpl,
                                 base::Unretained(proxy_impl_.get()),

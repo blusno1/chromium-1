@@ -155,7 +155,6 @@ class Internals final : public GarbageCollected<Internals>,
 
   unsigned updateStyleAndReturnAffectedElementCount(ExceptionState&) const;
   unsigned needsLayoutCount(ExceptionState&) const;
-  unsigned forceLayoutCount(ExceptionState&) const;
   unsigned hitTestCount(Document*, ExceptionState&) const;
   unsigned hitTestCacheHits(Document*, ExceptionState&) const;
   Element* elementFromPoint(Document*,
@@ -270,6 +269,7 @@ class Internals final : public GarbageCollected<Internals>,
 
   int lastSpellCheckRequestSequence(Document*, ExceptionState&);
   int lastSpellCheckProcessedSequence(Document*, ExceptionState&);
+  void cancelCurrentSpellCheckRequest(Document*, ExceptionState&);
   String idleTimeSpellCheckerState(Document*, ExceptionState&);
   void runIdleTimeSpellChecker(Document*, ExceptionState&);
 

@@ -209,7 +209,7 @@ ShapeResult::ShapeResult(const ShapeResult& other)
       has_vertical_offsets_(other.has_vertical_offsets_) {
   runs_.ReserveCapacity(other.runs_.size());
   for (const auto& run : other.runs_)
-    runs_.push_back(base::MakeUnique<RunInfo>(*run));
+    runs_.push_back(std::make_unique<RunInfo>(*run));
 }
 
 ShapeResult::~ShapeResult() {}
@@ -376,8 +376,8 @@ void ShapeResult::FallbackFonts(
     if (runs_[i] && runs_[i]->font_data_ &&
         runs_[i]->font_data_ != primary_font_ &&
         !runs_[i]->font_data_->IsTextOrientationFallbackOf(
-            primary_font_.Get())) {
-      fallback->insert(runs_[i]->font_data_.Get());
+            primary_font_.get())) {
+      fallback->insert(runs_[i]->font_data_.get());
     }
   }
 }
@@ -390,6 +390,7 @@ void ShapeResult::ApplySpacingImpl(
     int text_start_offset) {
   float offset = 0;
   float total_space = 0;
+  float space = 0;
   for (auto& run : runs_) {
     if (!run)
       continue;
@@ -405,7 +406,7 @@ void ShapeResult::ApplySpacingImpl(
         continue;
       }
 
-      float space = spacing.ComputeSpacing(
+      space = spacing.ComputeSpacing(
           run_start_index + glyph_data.character_index, offset);
       glyph_data.advance += space;
       total_space_for_run += space;
@@ -426,6 +427,20 @@ void ShapeResult::ApplySpacingImpl(
     total_space += total_space_for_run;
   }
   width_ += total_space;
+
+  // The spacing on the right of the last glyph does not affect the glyph
+  // bounding box. Thus, the glyph bounding box becomes smaller than the advance
+  // if the letter spacing is positve, or larger if negative.
+  if (space) {
+    total_space -= space;
+
+    // TODO(kojii): crbug.com/768284: There are cases where
+    // InlineTextBox::LogicalWidth() is round down of ShapeResult::Width() in
+    // LayoutUnit. Ceiling the width did not help. Add 1px to avoid cut-off.
+    if (space < 0)
+      total_space += 1;
+  }
+
   // Glyph bounding box is in logical space.
   glyph_bounding_box_.SetWidth(glyph_bounding_box_.Width() + total_space);
 }
@@ -435,7 +450,7 @@ void ShapeResult::ApplySpacing(ShapeResultSpacing<String>& spacing,
   ApplySpacingImpl(spacing, text_start_offset);
 }
 
-PassRefPtr<ShapeResult> ShapeResult::ApplySpacingToCopy(
+RefPtr<ShapeResult> ShapeResult::ApplySpacingToCopy(
     ShapeResultSpacing<TextRun>& spacing,
     const TextRun& run) const {
   unsigned index_of_sub_run = spacing.Text().IndexOfSubRun(run);
@@ -483,7 +498,7 @@ void ShapeResult::ComputeGlyphPositions(ShapeResult::RunInfo* run,
                                         hb_buffer_t* harf_buzz_buffer,
                                         FloatRect* glyph_bounding_box) {
   DCHECK_EQ(is_horizontal_run, run->IsHorizontal());
-  const SimpleFontData* current_font_data = run->font_data_.Get();
+  const SimpleFontData* current_font_data = run->font_data_.get();
   const hb_glyph_info_t* glyph_infos =
       hb_buffer_get_glyph_infos(harf_buzz_buffer, 0);
   const hb_glyph_position_t* glyph_positions =
@@ -619,6 +634,43 @@ void ShapeResult::InsertRun(std::unique_ptr<ShapeResult::RunInfo> run_to_insert,
     runs_.push_back(std::move(run));
 }
 
+// Moves runs at (run_size_before, end) to the front of |runs_|.
+//
+// Runs in RTL result are in visual order, and that new runs should be
+// prepended. This function adjusts the run order after runs were appended.
+void ShapeResult::ReorderRtlRuns(unsigned run_size_before) {
+  DCHECK(Rtl());
+  DCHECK_GT(runs_.size(), run_size_before);
+  if (runs_.size() == run_size_before + 1) {
+    if (!run_size_before)
+      return;
+    std::unique_ptr<RunInfo> new_run(std::move(runs_.back()));
+    runs_.Shrink(runs_.size() - 1);
+    runs_.push_front(std::move(new_run));
+    return;
+  }
+
+  // |push_front| is O(n) that we should not call it multiple times.
+  // Create a new list in the correct order and swap it.
+  Vector<std::unique_ptr<RunInfo>> new_runs;
+  new_runs.ReserveInitialCapacity(runs_.size());
+  for (unsigned i = run_size_before; i < runs_.size(); i++)
+    new_runs.push_back(std::move(runs_[i]));
+
+  // Recompute |start_index_| in the decreasing order.
+  unsigned index = num_characters_;
+  for (auto it = new_runs.rbegin(); it != new_runs.rend(); it++) {
+    auto& run = *it;
+    run->start_index_ = index;
+    index += run->num_characters_;
+  }
+
+  // Then append existing runs.
+  for (unsigned i = 0; i < run_size_before; i++)
+    new_runs.push_back(std::move(runs_[i]));
+  runs_.swap(new_runs);
+}
+
 void ShapeResult::CopyRange(unsigned start_offset,
                             unsigned end_offset,
                             ShapeResult* target) const {
@@ -626,6 +678,7 @@ void ShapeResult::CopyRange(unsigned start_offset,
     return;
 
   unsigned index = target->num_characters_;
+  unsigned target_run_size_before = target->runs_.size();
   float total_width = 0;
   for (const auto& run : runs_) {
     unsigned run_start = run->start_index_;
@@ -643,6 +696,15 @@ void ShapeResult::CopyRange(unsigned start_offset,
       target->runs_.push_back(std::move(sub_run));
     }
   }
+
+  if (target->runs_.size() == target_run_size_before)
+    return;
+
+  // Runs in RTL result are in visual order, and that new runs should be
+  // prepended. Reorder appended runs.
+  DCHECK_EQ(Rtl(), target->Rtl());
+  if (target->Rtl())
+    target->ReorderRtlRuns(target_run_size_before);
 
   // Compute new glyph bounding box.
   // If |start_offset| or |end_offset| are the start/end of |this|, use
@@ -667,7 +729,7 @@ void ShapeResult::CopyRange(unsigned start_offset,
   target->num_characters_ = index;
 }
 
-PassRefPtr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
+RefPtr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
     const Font* font,
     const TextRun& text_run,
     float position_offset,
@@ -675,7 +737,7 @@ PassRefPtr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
   const SimpleFontData* font_data = font->PrimaryFont();
   // Tab characters are always LTR or RTL, not TTB, even when
   // isVerticalAnyUpright().
-  std::unique_ptr<ShapeResult::RunInfo> run = base::MakeUnique<RunInfo>(
+  std::unique_ptr<ShapeResult::RunInfo> run = std::make_unique<RunInfo>(
       font_data, text_run.Rtl() ? HB_DIRECTION_RTL : HB_DIRECTION_LTR,
       HB_SCRIPT_COMMON, 0, count, count);
   float position = text_run.XPos() + position_offset;

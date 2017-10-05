@@ -156,6 +156,7 @@ const CGFloat kPopoverAnchorHorizontalPadding = 10.0;
 
 @implementation ToolbarView
 
+@synthesize delegate = delegate_;
 @synthesize animatingTransition = animatingTransition_;
 @synthesize hitTestBoundsContraintRelaxed = hitTestBoundsContraintRelaxed_;
 
@@ -181,10 +182,6 @@ const CGFloat kPopoverAnchorHorizontalPadding = 10.0;
   return hitView;
 }
 
-- (void)setDelegate:(id<ToolbarFrameDelegate>)delegate {
-  delegate_.reset(delegate);
-}
-
 - (void)setFrame:(CGRect)frame {
   CGRect oldFrame = self.frame;
   [super setFrame:frame];
@@ -202,6 +199,11 @@ const CGFloat kPopoverAnchorHorizontalPadding = 10.0;
   if (self.animatingTransition)
     return (id<CAAction>)[NSNull null];
   return [super actionForLayer:layer forKey:event];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  [delegate_ traitCollectionDidChange];
 }
 
 @end
@@ -229,9 +231,6 @@ const CGFloat kPopoverAnchorHorizontalPadding = 10.0;
 
 // Whether the share button should be visible in the toolbar.
 - (BOOL)shareButtonShouldBeVisible;
-
-// Update share button visibility and |standardButtons_| array.
-- (void)updateStandardButtons;
 
 // Returns an animation for |button| for a toolbar transition animation with
 // |style|.  |button|'s frame will be interpolated between its layout in the
@@ -889,7 +888,7 @@ const CGFloat kPopoverAnchorHorizontalPadding = 10.0;
   } else {
     InterfaceIdiom idiom = IsIPadIdiom() ? IPAD_IDIOM : IPHONE_IDIOM;
     CGFloat shadowHeight = kShadowViewFrame[idiom].size.height;
-    CGFloat shadowVerticalOffset = [[self class] toolbarDropShadowHeight];
+    CGFloat shadowVerticalOffset = 0.0;
     beginFrame = CGRectOffset(beginBounds, 0.0,
                               beginBounds.size.height - shadowVerticalOffset);
     beginFrame.size.height = shadowHeight;
@@ -1012,10 +1011,6 @@ const CGFloat kPopoverAnchorHorizontalPadding = 10.0;
     base::RecordAction(UserMetricsAction("MobileToolbarShareMenu"));
   else
     NOTREACHED();
-}
-
-+ (CGFloat)toolbarDropShadowHeight {
-  return 0.0;
 }
 
 - (uint32_t)snapshotHash {

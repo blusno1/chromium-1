@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <ostream>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -22,6 +23,7 @@ struct ParamTraits;
 namespace gfx {
 
 class ICCProfile;
+class ICCProfileCache;
 
 // Used to represet a color space for the purpose of color conversion.
 // This is designed to be safe and compact enough to send over IPC
@@ -195,6 +197,7 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // Populate |icc_profile| with an ICC profile that represents this color
   // space. Returns false if this space is not representable.
   bool GetICCProfile(ICCProfile* icc_profile) const;
+  bool GetICCProfileData(std::vector<char>* data) const;
 
   void GetPrimaryMatrix(SkMatrix44* to_XYZD50) const;
   bool GetTransferFunction(SkColorSpaceTransferFn* fn) const;
@@ -230,6 +233,7 @@ class COLOR_SPACE_EXPORT ColorSpace {
   sk_sp<SkColorSpace> icc_profile_sk_color_space_;
 
   friend class ICCProfile;
+  friend class ICCProfileCache;
   friend class ColorTransform;
   friend class ColorTransformInternal;
   friend class ColorSpaceWin;

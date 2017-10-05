@@ -31,7 +31,6 @@
 #include "cc/layers/performance_properties.h"
 #include "cc/layers/render_surface_impl.h"
 #include "cc/layers/touch_action_region.h"
-#include "cc/resources/resource_provider.h"
 #include "cc/tiles/tile_priority.h"
 #include "cc/trees/element_id.h"
 #include "cc/trees/mutator_host_client.h"
@@ -52,14 +51,18 @@ class TracedValue;
 class DictionaryValue;
 }
 
+namespace viz {
+class RenderPass;
+}
+
 namespace cc {
 
 class AppendQuadsData;
 class LayerTreeImpl;
+class LayerTreeResourceProvider;
 class MicroBenchmarkImpl;
 class MutatorHost;
 class PrioritizedTile;
-class RenderPass;
 class ScrollbarLayerImplBase;
 class SimpleEnclosedRegion;
 class Tile;
@@ -84,7 +87,6 @@ class CC_EXPORT LayerImpl {
   int id() const { return layer_id_; }
 
   // Interactions with attached animations.
-  gfx::ScrollOffset ScrollOffsetForAnimation() const;
   bool IsActive() const;
 
   void SetHasTransformNode(bool val) { has_transform_node_ = val; }
@@ -138,10 +140,10 @@ class CC_EXPORT LayerImpl {
   // WillDraw/DidDraw must call the base class version only if WillDraw
   // returns true.
   virtual bool WillDraw(DrawMode draw_mode,
-                        ResourceProvider* resource_provider);
-  virtual void AppendQuads(RenderPass* render_pass,
+                        LayerTreeResourceProvider* resource_provider);
+  virtual void AppendQuads(viz::RenderPass* render_pass,
                            AppendQuadsData* append_quads_data) {}
-  virtual void DidDraw(ResourceProvider* resource_provider);
+  virtual void DidDraw(LayerTreeResourceProvider* resource_provider);
 
   // Verify that the resource ids in the quad are valid.
   void ValidateQuadResources(viz::DrawQuad* quad) const {
@@ -190,9 +192,6 @@ class CC_EXPORT LayerImpl {
   // Stable identifier for clients. See comment in cc/trees/element_id.h.
   void SetElementId(ElementId element_id);
   ElementId element_id() const { return element_id_; }
-
-  void SetMutableProperties(uint32_t properties);
-  uint32_t mutable_properties() const { return mutable_properties_; }
 
   void SetPosition(const gfx::PointF& position);
   gfx::PointF position() const { return position_; }
@@ -422,6 +421,9 @@ class CC_EXPORT LayerImpl {
     return has_will_change_transform_hint_;
   }
 
+  void SetTrilinearFiltering(bool trilinear_filtering);
+  bool trilinear_filtering() const { return trilinear_filtering_; }
+
   MutatorHost* GetMutatorHost() const;
 
   ElementListType GetElementTypeForAnimation() const;
@@ -445,12 +447,12 @@ class CC_EXPORT LayerImpl {
   // Get the color and size of the layer's debug border.
   virtual void GetDebugBorderProperties(SkColor* color, float* width) const;
 
-  void AppendDebugBorderQuad(RenderPass* render_pass,
-                             const gfx::Size& bounds,
+  void AppendDebugBorderQuad(viz::RenderPass* render_pass,
+                             const gfx::Rect& quad_rect,
                              const viz::SharedQuadState* shared_quad_state,
                              AppendQuadsData* append_quads_data) const;
-  void AppendDebugBorderQuad(RenderPass* render_pass,
-                             const gfx::Size& bounds,
+  void AppendDebugBorderQuad(viz::RenderPass* render_pass,
+                             const gfx::Rect& quad_rect,
                              const viz::SharedQuadState* shared_quad_state,
                              AppendQuadsData* append_quads_data,
                              SkColor color,
@@ -534,7 +536,6 @@ class CC_EXPORT LayerImpl {
   TransformTree& GetTransformTree() const;
 
   ElementId element_id_;
-  uint32_t mutable_properties_;
   // Rect indicating what was repainted/updated during update.
   // Note that plugin layers bypass this and leave it empty.
   // This is in the layer's space.
@@ -554,6 +555,7 @@ class CC_EXPORT LayerImpl {
   base::trace_event::ConvertableToTraceFormat* debug_info_;
 
   bool has_will_change_transform_hint_ : 1;
+  bool trilinear_filtering_ : 1;
   bool needs_push_properties_ : 1;
   bool scrollbars_hidden_ : 1;
 

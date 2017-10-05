@@ -244,7 +244,7 @@ HarfBuzzFace* FontPlatformData::GetHarfBuzzFace() const {
     harf_buzz_face_ =
         HarfBuzzFace::Create(const_cast<FontPlatformData*>(this), UniqueID());
 
-  return harf_buzz_face_.Get();
+  return harf_buzz_face_.get();
 }
 
 static inline bool TableHasSpace(hb_face_t* face,
@@ -325,7 +325,7 @@ bool FontPlatformData::FontContainsCharacter(UChar32 character) {
 
 #endif
 
-PassRefPtr<OpenTypeVerticalData> FontPlatformData::VerticalData() const {
+RefPtr<OpenTypeVerticalData> FontPlatformData::VerticalData() const {
   return FontCache::GetFontCache()->GetVerticalData(Typeface()->uniqueID(),
                                                     *this);
 }

@@ -21,14 +21,11 @@
 class ArcAppLauncher;
 class Profile;
 
-namespace user_prefs {
-class PrefRegistrySyncable;
-}
-
 namespace arc {
 
 class ArcAndroidManagementChecker;
 class ArcAuthContext;
+class ArcDataRemover;
 class ArcPaiStarter;
 class ArcTermsOfServiceNegotiator;
 enum class ProvisioningResult : int;
@@ -144,9 +141,6 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // Returns true if OOBE flow is active currently.
   static bool IsOobeOptInActive();
 
-  // It is called from chrome/browser/prefs/browser_prefs.cc.
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-
   static void DisableUIForTesting();
   static void EnableCheckAndroidManagementForTesting();
 
@@ -179,11 +173,6 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // services to subscribe the handler instance directly. Instead, they can
   // subscribe to ArcSessionManager, and ArcSessionManager proxies the event.
   void NotifyArcPlayStoreEnabledChanged(bool enabled);
-
-  // Returns true if ARC instance is running/stopped, respectively.
-  // See ArcSessionRunner::IsRunning()/IsStopped() for details.
-  bool IsSessionRunning() const;
-  bool IsSessionStopped() const;
 
   // Called from ARC support platform app when user cancels signing.
   void CancelAuthCode();
@@ -343,7 +332,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // If not requested, just skipping the data removal, and moves to
   // MaybeReenableArc() directly.
   void MaybeStartArcDataRemoval();
-  void OnArcDataRemoved(bool success);
+  void OnArcDataRemoved(base::Optional<bool> success);
 
   // On ARC session stopped and/or data removal completion, this is called
   // so that, if necessary, ARC session is restarted.
@@ -380,6 +369,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   base::OneShotTimer arc_sign_in_timer_;
 
   std::unique_ptr<ArcSupportHost> support_host_;
+  std::unique_ptr<ArcDataRemover> data_remover_;
 
   std::unique_ptr<ArcTermsOfServiceNegotiator> terms_of_service_negotiator_;
 

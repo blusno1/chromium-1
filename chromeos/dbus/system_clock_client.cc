@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -66,8 +68,8 @@ class SystemClockClientImpl : public SystemClockClient {
         base::Bind(&SystemClockClientImpl::TimeUpdatedConnected,
                    weak_ptr_factory_.GetWeakPtr()));
     system_clock_proxy_->WaitForServiceToBeAvailable(
-        base::Bind(&SystemClockClientImpl::ServiceInitiallyAvailable,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&SystemClockClientImpl::ServiceInitiallyAvailable,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
  private:

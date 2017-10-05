@@ -12,6 +12,7 @@
 #include <keyboard-configuration-unstable-v1-server-protocol.h>
 #include <keyboard-extension-unstable-v1-server-protocol.h>
 #include <linux/input.h>
+#include <pointer-gestures-unstable-v1-server-protocol.h>
 #include <presentation-time-server-protocol.h>
 #include <remote-shell-unstable-v1-server-protocol.h>
 #include <secure-output-unstable-v1-server-protocol.h>
@@ -30,12 +31,15 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iterator>
+#include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
+#include "ash/public/interfaces/window_state_type.mojom.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
@@ -68,6 +72,7 @@
 #include "components/exo/notification_surface_manager.h"
 #include "components/exo/pointer.h"
 #include "components/exo/pointer_delegate.h"
+#include "components/exo/pointer_gesture_pinch_delegate.h"
 #include "components/exo/shared_memory.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/sub_surface.h"
@@ -89,11 +94,11 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/wm/core/coordinate_conversion.h"
+#include "ui/wm/core/window_animations.h"
 
 #if defined(USE_OZONE)
 #include <drm_fourcc.h>
 #include <linux-dmabuf-unstable-v1-server-protocol.h>
-#include <wayland-drm-server-protocol.h>
 #if defined(OS_CHROMEOS)
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -305,7 +310,7 @@ void surface_frame(wl_client* client,
 
   // base::Unretained is safe as the resource owns the callback.
   auto cancelable_callback =
-      base::MakeUnique<base::CancelableCallback<void(base::TimeTicks)>>(
+      std::make_unique<base::CancelableCallback<void(base::TimeTicks)>>(
           base::Bind(&HandleSurfaceFrameCallback,
                      base::Unretained(callback_resource)));
 
@@ -575,128 +580,6 @@ void bind_shm(wl_client* client, void* data, uint32_t version, uint32_t id) {
 #if defined(USE_OZONE)
 
 ////////////////////////////////////////////////////////////////////////////////
-// wl_drm_interface:
-
-const struct drm_supported_format {
-  uint32_t drm_format;
-  gfx::BufferFormat buffer_format;
-} drm_supported_formats[] = {
-    {WL_DRM_FORMAT_RGB565, gfx::BufferFormat::BGR_565},
-    {WL_DRM_FORMAT_XBGR8888, gfx::BufferFormat::RGBX_8888},
-    {WL_DRM_FORMAT_ABGR8888, gfx::BufferFormat::RGBA_8888},
-    {WL_DRM_FORMAT_XRGB8888, gfx::BufferFormat::BGRX_8888},
-    {WL_DRM_FORMAT_ARGB8888, gfx::BufferFormat::BGRA_8888},
-    {WL_DRM_FORMAT_NV12, gfx::BufferFormat::YUV_420_BIPLANAR},
-    {WL_DRM_FORMAT_YVU420, gfx::BufferFormat::YVU_420}};
-
-void drm_authenticate(wl_client* client, wl_resource* resource, uint32_t id) {
-  wl_drm_send_authenticated(resource);
-}
-
-void drm_create_buffer(wl_client* client,
-                       wl_resource* resource,
-                       uint32_t id,
-                       uint32_t name,
-                       int32_t width,
-                       int32_t height,
-                       uint32_t stride,
-                       uint32_t format) {
-  wl_resource_post_error(resource, WL_DRM_ERROR_INVALID_NAME,
-                         "GEM names are not supported");
-}
-
-void drm_create_planar_buffer(wl_client* client,
-                              wl_resource* resource,
-                              uint32_t id,
-                              uint32_t name,
-                              int32_t width,
-                              int32_t height,
-                              uint32_t format,
-                              int32_t offset0,
-                              int32_t stride0,
-                              int32_t offset1,
-                              int32_t stride1,
-                              int32_t offset2,
-                              int32_t stride3) {
-  wl_resource_post_error(resource, WL_DRM_ERROR_INVALID_NAME,
-                         "GEM names are not supported");
-}
-
-void drm_create_prime_buffer(wl_client* client,
-                             wl_resource* resource,
-                             uint32_t id,
-                             int32_t name,
-                             int32_t width,
-                             int32_t height,
-                             uint32_t format,
-                             int32_t offset0,
-                             int32_t stride0,
-                             int32_t offset1,
-                             int32_t stride1,
-                             int32_t offset2,
-                             int32_t stride2) {
-  const auto* supported_format =
-      std::find_if(drm_supported_formats,
-                   drm_supported_formats + arraysize(drm_supported_formats),
-                   [format](const drm_supported_format& supported_format) {
-                     return supported_format.drm_format == format;
-                   });
-  if (supported_format ==
-      (drm_supported_formats + arraysize(drm_supported_formats))) {
-    wl_resource_post_error(resource, WL_DRM_ERROR_INVALID_FORMAT,
-                           "invalid format 0x%x", format);
-    return;
-  }
-
-  std::vector<gfx::NativePixmapPlane> planes;
-  planes.emplace_back(stride0, offset0, 0, 0);
-  planes.emplace_back(stride1, offset1, 0, 0);
-  planes.emplace_back(stride2, offset2, 0, 0);
-  std::vector<base::ScopedFD> fds;
-
-  size_t num_planes =
-      gfx::NumberOfPlanesForBufferFormat(supported_format->buffer_format);
-  planes.resize(num_planes);
-  fds.push_back(base::ScopedFD(name));
-
-  std::unique_ptr<Buffer> buffer =
-      GetUserDataAs<Display>(resource)->CreateLinuxDMABufBuffer(
-          gfx::Size(width, height), supported_format->buffer_format, planes,
-          std::move(fds));
-  if (!buffer) {
-    wl_resource_post_no_memory(resource);
-    return;
-  }
-
-  wl_resource* buffer_resource =
-      wl_resource_create(client, &wl_buffer_interface, 1, id);
-
-  buffer->set_release_callback(base::Bind(&HandleBufferReleaseCallback,
-                                          base::Unretained(buffer_resource)));
-
-  SetImplementation(buffer_resource, &buffer_implementation, std::move(buffer));
-}
-
-const struct wl_drm_interface drm_implementation = {
-    drm_authenticate, drm_create_buffer, drm_create_planar_buffer,
-    drm_create_prime_buffer};
-
-const uint32_t drm_version = 2;
-
-void bind_drm(wl_client* client, void* data, uint32_t version, uint32_t id) {
-  wl_resource* resource = wl_resource_create(
-      client, &wl_drm_interface, std::min(version, drm_version), id);
-
-  wl_resource_set_implementation(resource, &drm_implementation, data, nullptr);
-
-  if (version >= 2)
-    wl_drm_send_capabilities(resource, WL_DRM_CAPABILITY_PRIME);
-
-  for (const auto& supported_format : drm_supported_formats)
-    wl_drm_send_format(resource, supported_format.drm_format);
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // linux_buffer_params_interface:
 
 const struct dmabuf_supported_format {
@@ -929,7 +812,7 @@ void linux_dmabuf_create_params(wl_client* client,
                                 wl_resource* resource,
                                 uint32_t id) {
   std::unique_ptr<LinuxBufferParams> linux_buffer_params =
-      base::MakeUnique<LinuxBufferParams>(GetUserDataAs<Display>(resource));
+      std::make_unique<LinuxBufferParams>(GetUserDataAs<Display>(resource));
 
   wl_resource* linux_buffer_params_resource =
       wl_resource_create(client, &zwp_linux_buffer_params_v1_interface, 2, id);
@@ -1188,7 +1071,7 @@ void HandleShellSurfaceCloseCallback(wl_resource* resource) {
 uint32_t HandleShellSurfaceConfigureCallback(
     wl_resource* resource,
     const gfx::Size& size,
-    ash::wm::WindowStateType state_type,
+    ash::mojom::WindowStateType state_type,
     bool resizing,
     bool activated,
     const gfx::Vector2d& origin_offset) {
@@ -1269,7 +1152,7 @@ wl_output_transform OutputTransform(display::Display::Rotation rotation) {
 
 class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
  public:
-  WaylandPrimaryDisplayObserver(wl_resource* output_resource)
+  explicit WaylandPrimaryDisplayObserver(wl_resource* output_resource)
       : output_resource_(output_resource) {
     display::Screen::GetScreen()->AddObserver(this);
     SendDisplayMetrics();
@@ -1348,7 +1231,7 @@ void bind_output(wl_client* client, void* data, uint32_t version, uint32_t id) {
       client, &wl_output_interface, std::min(version, output_version), id);
 
   SetImplementation(resource, nullptr,
-                    base::MakeUnique<WaylandPrimaryDisplayObserver>(resource));
+                    std::make_unique<WaylandPrimaryDisplayObserver>(resource));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1719,15 +1602,15 @@ uint32_t HandleXdgToplevelV6ConfigureCallback(
     wl_resource* resource,
     wl_resource* surface_resource,
     const gfx::Size& size,
-    ash::wm::WindowStateType state_type,
+    ash::mojom::WindowStateType state_type,
     bool resizing,
     bool activated,
     const gfx::Vector2d& origin_offset) {
   wl_array states;
   wl_array_init(&states);
-  if (state_type == ash::wm::WINDOW_STATE_TYPE_MAXIMIZED)
+  if (state_type == ash::mojom::WindowStateType::MAXIMIZED)
     AddXdgToplevelV6State(&states, ZXDG_TOPLEVEL_V6_STATE_MAXIMIZED);
-  if (state_type == ash::wm::WINDOW_STATE_TYPE_FULLSCREEN)
+  if (state_type == ash::mojom::WindowStateType::FULLSCREEN)
     AddXdgToplevelV6State(&states, ZXDG_TOPLEVEL_V6_STATE_FULLSCREEN);
   if (resizing)
     AddXdgToplevelV6State(&states, ZXDG_TOPLEVEL_V6_STATE_RESIZING);
@@ -1857,15 +1740,15 @@ void AddXdgSurfaceV5State(wl_array* states, xdg_surface_state state) {
 uint32_t HandleXdgSurfaceV5ConfigureCallback(
     wl_resource* resource,
     const gfx::Size& size,
-    ash::wm::WindowStateType state_type,
+    ash::mojom::WindowStateType state_type,
     bool resizing,
     bool activated,
     const gfx::Vector2d& origin_offset) {
   wl_array states;
   wl_array_init(&states);
-  if (state_type == ash::wm::WINDOW_STATE_TYPE_MAXIMIZED)
+  if (state_type == ash::mojom::WindowStateType::MAXIMIZED)
     AddXdgSurfaceV5State(&states, XDG_SURFACE_STATE_MAXIMIZED);
-  if (state_type == ash::wm::WINDOW_STATE_TYPE_FULLSCREEN)
+  if (state_type == ash::mojom::WindowStateType::FULLSCREEN)
     AddXdgSurfaceV5State(&states, XDG_SURFACE_STATE_FULLSCREEN);
   if (resizing)
     AddXdgSurfaceV5State(&states, XDG_SURFACE_STATE_RESIZING);
@@ -2211,8 +2094,12 @@ void remote_surface_set_window_type(wl_client* client,
                                     uint32_t type) {
   if (type == ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_SYSTEM_UI) {
     auto* widget = GetUserDataAs<ShellSurface>(resource)->GetWidget();
-    if (widget)
+    if (widget) {
       widget->GetNativeWindow()->SetProperty(ash::kShowInOverviewKey, false);
+
+      wm::SetWindowVisibilityAnimationType(
+          widget->GetNativeWindow(), wm::WINDOW_VISIBILITY_ANIMATION_TYPE_FADE);
+    }
   }
 }
 
@@ -2496,25 +2383,25 @@ void HandleRemoteSurfaceCloseCallback(wl_resource* resource) {
 
 void HandleRemoteSurfaceStateChangedCallback(
     wl_resource* resource,
-    ash::wm::WindowStateType old_state_type,
-    ash::wm::WindowStateType new_state_type) {
+    ash::mojom::WindowStateType old_state_type,
+    ash::mojom::WindowStateType new_state_type) {
   DCHECK_NE(old_state_type, new_state_type);
 
   uint32_t state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_NORMAL;
   switch (new_state_type) {
-    case ash::wm::WINDOW_STATE_TYPE_MINIMIZED:
+    case ash::mojom::WindowStateType::MINIMIZED:
       state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_MINIMIZED;
       break;
-    case ash::wm::WINDOW_STATE_TYPE_MAXIMIZED:
+    case ash::mojom::WindowStateType::MAXIMIZED:
       state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_MAXIMIZED;
       break;
-    case ash::wm::WINDOW_STATE_TYPE_FULLSCREEN:
+    case ash::mojom::WindowStateType::FULLSCREEN:
       state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_FULLSCREEN;
       break;
-    case ash::wm::WINDOW_STATE_TYPE_PINNED:
+    case ash::mojom::WindowStateType::PINNED:
       state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_PINNED;
       break;
-    case ash::wm::WINDOW_STATE_TYPE_TRUSTED_PINNED:
+    case ash::mojom::WindowStateType::TRUSTED_PINNED:
       state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_TRUSTED_PINNED;
       break;
     default:
@@ -2528,7 +2415,7 @@ void HandleRemoteSurfaceStateChangedCallback(
 uint32_t HandleRemoteSurfaceConfigureCallback(
     wl_resource* resource,
     const gfx::Size& size,
-    ash::wm::WindowStateType state_type,
+    ash::mojom::WindowStateType state_type,
     bool resizing,
     bool activated,
     const gfx::Vector2d& origin_offset) {
@@ -2626,7 +2513,7 @@ void bind_remote_shell(wl_client* client,
                          std::min(version, remote_shell_version), id);
 
   SetImplementation(resource, &remote_shell_implementation,
-                    base::MakeUnique<WaylandRemoteShell>(
+                    std::make_unique<WaylandRemoteShell>(
                         static_cast<Display*>(data), resource));
 }
 
@@ -2705,7 +2592,7 @@ void aura_shell_get_aura_surface(wl_client* client,
       wl_resource_create(client, &zaura_surface_interface, 1, id);
 
   SetImplementation(aura_surface_resource, &aura_surface_implementation,
-                    base::MakeUnique<AuraSurface>(surface));
+                    std::make_unique<AuraSurface>(surface));
 }
 
 const struct zaura_shell_interface aura_shell_implementation = {
@@ -2963,7 +2850,7 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
   DataOffer* OnDataOffer() override {
     wl_resource* data_offer_resource =
         wl_resource_create(client_, &wl_data_offer_interface, 1, 0);
-    std::unique_ptr<DataOffer> data_offer = base::MakeUnique<DataOffer>(
+    std::unique_ptr<DataOffer> data_offer = std::make_unique<DataOffer>(
         new WaylandDataOfferDelegate(data_offer_resource));
     data_offer->SetProperty(kDataOfferResourceKey, data_offer_resource);
     SetImplementation(data_offer_resource, &data_offer_implementation,
@@ -3037,7 +2924,7 @@ void data_device_manager_create_data_source(wl_client* client,
   wl_resource* data_source_resource =
       wl_resource_create(client, &wl_data_device_interface, 1, id);
   SetImplementation(data_source_resource, &data_source_implementation,
-                    base::MakeUnique<DataSource>(
+                    std::make_unique<DataSource>(
                         new WaylandDataSourceDelegate(data_source_resource)));
 }
 
@@ -3501,7 +3388,7 @@ void seat_get_pointer(wl_client* client, wl_resource* resource, uint32_t id) {
 
   SetImplementation(
       pointer_resource, &pointer_implementation,
-      base::MakeUnique<Pointer>(new WaylandPointerDelegate(pointer_resource)));
+      std::make_unique<Pointer>(new WaylandPointerDelegate(pointer_resource)));
 }
 
 void seat_get_keyboard(wl_client* client, wl_resource* resource, uint32_t id) {
@@ -3512,7 +3399,7 @@ void seat_get_keyboard(wl_client* client, wl_resource* resource, uint32_t id) {
 
   WaylandKeyboardDelegate* delegate =
       new WaylandKeyboardDelegate(keyboard_resource);
-  std::unique_ptr<Keyboard> keyboard = base::MakeUnique<Keyboard>(delegate);
+  std::unique_ptr<Keyboard> keyboard = std::make_unique<Keyboard>(delegate);
   keyboard->AddObserver(delegate);
   SetImplementation(keyboard_resource, &keyboard_implementation,
                     std::move(keyboard));
@@ -3531,7 +3418,7 @@ void seat_get_touch(wl_client* client, wl_resource* resource, uint32_t id) {
 
   SetImplementation(
       touch_resource, &touch_implementation,
-      base::MakeUnique<Touch>(new WaylandTouchDelegate(touch_resource)));
+      std::make_unique<Touch>(new WaylandTouchDelegate(touch_resource)));
 }
 
 void seat_release(wl_client* client, wl_resource* resource) {
@@ -3676,7 +3563,7 @@ void viewporter_get_viewport(wl_client* client,
       client, &wp_viewport_interface, wl_resource_get_version(resource), id);
 
   SetImplementation(viewport_resource, &viewport_implementation,
-                    base::MakeUnique<Viewport>(surface));
+                    std::make_unique<Viewport>(surface));
 }
 
 const struct wp_viewporter_interface viewporter_implementation = {
@@ -3730,7 +3617,7 @@ void presentation_feedback(wl_client* client,
                          wl_resource_get_version(resource), id);
 
   // base::Unretained is safe as the resource owns the callback.
-  auto cancelable_callback = base::MakeUnique<
+  auto cancelable_callback = std::make_unique<
       base::CancelableCallback<void(base::TimeTicks, base::TimeDelta)>>(
       base::Bind(&HandleSurfacePresentationCallback,
                  base::Unretained(presentation_feedback_resource)));
@@ -3830,7 +3717,7 @@ void secure_output_get_security(wl_client* client,
       wl_resource_create(client, &zcr_security_v1_interface, 1, id);
 
   SetImplementation(security_resource, &security_implementation,
-                    base::MakeUnique<Security>(surface));
+                    std::make_unique<Security>(surface));
 }
 
 const struct zcr_secure_output_v1_interface secure_output_implementation = {
@@ -3946,7 +3833,7 @@ void alpha_compositing_get_blending(wl_client* client,
       wl_resource_create(client, &zcr_blending_v1_interface, 1, id);
 
   SetImplementation(blending_resource, &blending_implementation,
-                    base::MakeUnique<Blending>(surface));
+                    std::make_unique<Blending>(surface));
 }
 
 const struct zcr_alpha_compositing_v1_interface
@@ -4098,12 +3985,9 @@ void gaming_input_get_gaming_seat(wl_client* client,
       wl_resource_create(client, &zcr_gaming_seat_v2_interface,
                          wl_resource_get_version(resource), id);
 
-  base::Thread* gaming_input_thread = GetUserDataAs<base::Thread>(resource);
-
   SetImplementation(gaming_seat_resource, &gaming_seat_implementation,
-                    base::MakeUnique<GamingSeat>(
-                        new WaylandGamingSeatDelegate(gaming_seat_resource),
-                        gaming_input_thread->task_runner().get()));
+                    std::make_unique<GamingSeat>(
+                        new WaylandGamingSeatDelegate(gaming_seat_resource)));
 }
 
 void gaming_input_destroy(wl_client* client, wl_resource* resource) {
@@ -4120,53 +4004,8 @@ void bind_gaming_input(wl_client* client,
   wl_resource* resource =
       wl_resource_create(client, &zcr_gaming_input_v2_interface, version, id);
 
-  std::unique_ptr<base::Thread> gaming_input_thread(
-      new base::Thread("Exo gaming input polling thread."));
-  gaming_input_thread->StartWithOptions(
-      base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
-
-  SetImplementation(resource, &gaming_input_implementation,
-                    std::move(gaming_input_thread));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// dummy interface for gaming_input_v1:
-/* Following is a dummy interface for gaming_input_v1.
- * It makes sure the "old" android with v1 interface won't break. However, "old"
- * android will not receive any gamepad input. This interface implementation
- * should be removed once android is updated.
- */
-// TODO(jkwang): Remove the following interface function once android updated.
-void gamepad_v1_destroy_DEPRECATED(wl_client* client, wl_resource* resource) {
-  wl_resource_destroy(resource);
-}
-
-const struct zcr_gamepad_v1_interface gamepad_v1_implementation = {
-    gamepad_v1_destroy_DEPRECATED};
-
-void gaming_input_v1_get_gamepad_DEPRECATED(wl_client* client,
-                                            wl_resource* resource,
-                                            uint32_t id,
-                                            wl_resource* seat) {
-  wl_resource* gamepad_resource = wl_resource_create(
-      client, &zcr_gamepad_v1_interface, wl_resource_get_version(resource), id);
-
-  wl_resource_set_implementation(gamepad_resource, &gamepad_v1_implementation,
-                                 NULL, NULL);
-}
-
-const struct zcr_gaming_input_v1_interface gaming_input_v1_implementation = {
-    gaming_input_v1_get_gamepad_DEPRECATED};
-
-void bind_gaming_input_v1_DEPRECATED(wl_client* client,
-                                     void* data,
-                                     uint32_t version,
-                                     uint32_t id) {
-  wl_resource* resource =
-      wl_resource_create(client, &zcr_gaming_input_v1_interface, version, id);
-
-  wl_resource_set_implementation(resource, &gaming_input_v1_implementation,
-                                 NULL, NULL);
+  wl_resource_set_implementation(resource, &gaming_input_implementation,
+                                 nullptr, nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4240,7 +4079,7 @@ void stylus_get_touch_stylus(wl_client* client,
 
   SetImplementation(
       stylus_resource, &touch_stylus_implementation,
-      base::MakeUnique<WaylandTouchStylusDelegate>(stylus_resource, touch));
+      std::make_unique<WaylandTouchStylusDelegate>(stylus_resource, touch));
 }
 
 const struct zcr_stylus_v2_interface stylus_v2_implementation = {
@@ -4254,6 +4093,95 @@ void bind_stylus_v2(wl_client* client,
       wl_resource_create(client, &zcr_stylus_v2_interface, version, id);
   wl_resource_set_implementation(resource, &stylus_v2_implementation, data,
                                  nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// pointer_gesture_swipe_v1 interface:
+
+void pointer_gestures_get_swipe_gesture(wl_client* client,
+                                        wl_resource* resource,
+                                        uint32_t id,
+                                        wl_resource* pointer_resource) {
+  NOTIMPLEMENTED();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// pointer_gesture_pinch_v1 interface:
+
+class WaylandPointerGesturePinchDelegate : public PointerGesturePinchDelegate {
+ public:
+  WaylandPointerGesturePinchDelegate(wl_resource* resource, Pointer* pointer)
+      : resource_(resource), pointer_(pointer) {
+    pointer_->SetGesturePinchDelegate(this);
+  }
+
+  ~WaylandPointerGesturePinchDelegate() override {
+    if (pointer_)
+      pointer_->SetGesturePinchDelegate(nullptr);
+  }
+  void OnPointerDestroying(Pointer* pointer) override { pointer_ = nullptr; }
+  void OnPointerPinchBegin(uint32_t unique_touch_event_id,
+                           base::TimeTicks time_stamp,
+                           Surface* surface) override {
+    wl_resource* surface_resource = GetSurfaceResource(surface);
+    DCHECK(surface_resource);
+    zwp_pointer_gesture_pinch_v1_send_begin(resource_, unique_touch_event_id,
+                                            TimeTicksToMilliseconds(time_stamp),
+                                            surface_resource, 2);
+  }
+  void OnPointerPinchUpdate(base::TimeTicks time_stamp, float scale) override {
+    zwp_pointer_gesture_pinch_v1_send_update(
+        resource_, TimeTicksToMilliseconds(time_stamp), 0, 0,
+        wl_fixed_from_double(scale), 0);
+  }
+  void OnPointerPinchEnd(uint32_t unique_touch_event_id,
+                         base::TimeTicks time_stamp) override {
+    zwp_pointer_gesture_pinch_v1_send_end(resource_, unique_touch_event_id,
+                                          TimeTicksToMilliseconds(time_stamp),
+                                          0);
+  }
+
+ private:
+  wl_resource* const resource_;
+  Pointer* pointer_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandPointerGesturePinchDelegate);
+};
+
+void pointer_gesture_pinch_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct zwp_pointer_gesture_pinch_v1_interface
+    pointer_gesture_pinch_implementation = {pointer_gesture_pinch_destroy};
+
+void pointer_gestures_get_pinch_gesture(wl_client* client,
+                                        wl_resource* resource,
+                                        uint32_t id,
+                                        wl_resource* pointer_resource) {
+  Pointer* pointer = GetUserDataAs<Pointer>(pointer_resource);
+  wl_resource* pointer_gesture_pinch_resource = wl_resource_create(
+      client, &zwp_pointer_gesture_pinch_v1_interface, 1, id);
+  SetImplementation(pointer_gesture_pinch_resource,
+                    &pointer_gesture_pinch_implementation,
+                    base::MakeUnique<WaylandPointerGesturePinchDelegate>(
+                        pointer_gesture_pinch_resource, pointer));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// pointer_gestures_v1 interface:
+
+const struct zwp_pointer_gestures_v1_interface pointer_gestures_implementation =
+    {pointer_gestures_get_swipe_gesture, pointer_gestures_get_pinch_gesture};
+
+void bind_pointer_gestures(wl_client* client,
+                           void* data,
+                           uint32_t version,
+                           uint32_t id) {
+  wl_resource* resource = wl_resource_create(
+      client, &zwp_pointer_gestures_v1_interface, version, id);
+  wl_resource_set_implementation(resource, &pointer_gestures_implementation,
+                                 data, nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4368,7 +4296,7 @@ void keyboard_configuration_get_keyboard_device_configuration(
   SetImplementation(
       keyboard_device_configuration_resource,
       &keyboard_device_configuration_implementation,
-      base::MakeUnique<WaylandKeyboardDeviceConfigurationDelegate>(
+      std::make_unique<WaylandKeyboardDeviceConfigurationDelegate>(
           keyboard_device_configuration_resource, keyboard));
 }
 
@@ -4450,7 +4378,7 @@ void stylus_tools_get_stylus_tool(wl_client* client,
       wl_resource_create(client, &zcr_stylus_tool_v1_interface, 1, id);
 
   SetImplementation(stylus_tool_resource, &stylus_tool_implementation,
-                    base::MakeUnique<StylusTool>(surface));
+                    std::make_unique<StylusTool>(surface));
 }
 
 const struct zcr_stylus_tools_v1_interface stylus_tools_implementation = {
@@ -4472,7 +4400,8 @@ void bind_stylus_tools(wl_client* client,
 
 class WaylandExtendedKeyboardImpl : public KeyboardObserver {
  public:
-  WaylandExtendedKeyboardImpl(Keyboard* keyboard) : keyboard_(keyboard) {
+  explicit WaylandExtendedKeyboardImpl(Keyboard* keyboard)
+      : keyboard_(keyboard) {
     keyboard_->AddObserver(this);
     keyboard_->SetNeedKeyboardKeyAcks(true);
   }
@@ -4536,7 +4465,7 @@ void keyboard_extension_get_extended_keyboard(wl_client* client,
 
   SetImplementation(extended_keyboard_resource,
                     &extended_keyboard_implementation,
-                    base::MakeUnique<WaylandExtendedKeyboardImpl>(keyboard));
+                    std::make_unique<WaylandExtendedKeyboardImpl>(keyboard));
 }
 
 const struct zcr_keyboard_extension_v1_interface
@@ -4565,8 +4494,6 @@ Server::Server(Display* display)
                    compositor_version, display_, bind_compositor);
   wl_global_create(wl_display_.get(), &wl_shm_interface, 1, display_, bind_shm);
 #if defined(USE_OZONE)
-  wl_global_create(wl_display_.get(), &wl_drm_interface, drm_version, display_,
-                   bind_drm);
   wl_global_create(wl_display_.get(), &zwp_linux_dmabuf_v1_interface, 2,
                    display_, bind_linux_dmabuf);
 #endif
@@ -4598,14 +4525,14 @@ Server::Server(Display* display)
                    remote_shell_version, display_, bind_remote_shell);
   wl_global_create(wl_display_.get(), &zaura_shell_interface, 1, display_,
                    bind_aura_shell);
-  wl_global_create(wl_display_.get(), &zcr_gaming_input_v1_interface, 1,
-                   display_, bind_gaming_input_v1_DEPRECATED);
   wl_global_create(wl_display_.get(), &zcr_gaming_input_v2_interface, 1,
                    display_, bind_gaming_input);
   wl_global_create(wl_display_.get(), &zcr_stylus_v1_interface, 2, display_,
                    bind_stylus_v1_DEPRECATED);
   wl_global_create(wl_display_.get(), &zcr_stylus_v2_interface, 1, display_,
                    bind_stylus_v2);
+  wl_global_create(wl_display_.get(), &zwp_pointer_gestures_v1_interface, 1,
+                   display_, bind_pointer_gestures);
   wl_global_create(wl_display_.get(), &zcr_keyboard_configuration_v1_interface,
                    2, display_, bind_keyboard_configuration);
   wl_global_create(wl_display_.get(), &zcr_stylus_tools_v1_interface, 1,

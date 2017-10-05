@@ -29,7 +29,7 @@
 #include "platform/scheduler/renderer/task_cost_estimator.h"
 #include "platform/scheduler/renderer/user_model.h"
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
-#include "platform/scheduler/util/state_tracer.h"
+#include "platform/scheduler/util/tracing_helper.h"
 #include "public/platform/scheduler/renderer/renderer_scheduler.h"
 
 namespace base {
@@ -40,6 +40,11 @@ class ConvertableToTraceFormat;
 
 namespace blink {
 namespace scheduler {
+namespace renderer_scheduler_impl_unittest {
+class RendererSchedulerImplForTest;
+class RendererSchedulerImplTest;
+FORWARD_DECLARE_TEST(RendererSchedulerImplTest, Tracing);
+}  // namespace renderer_scheduler_impl_unittest
 class AutoAdvancingVirtualTimeDomain;
 class RenderWidgetSchedulingState;
 class WebViewSchedulerImpl;
@@ -121,7 +126,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void ResumeTimerQueue() override;
   void VirtualTimePaused() override;
   void VirtualTimeResumed() override;
-  void SetTimerQueueStoppingWhenBackgroundedEnabled(bool enabled) override;
+  void SetStoppingWhenBackgroundedEnabled(bool enabled) override;
   void SetTopLevelBlameContext(
       base::trace_event::BlameContext* blame_context) override;
   void SetRAILModeObserver(RAILModeObserver* observer) override;
@@ -137,6 +142,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   // SchedulerHelper::Observer implementation:
   void OnTriedToExecuteBlockedTask() override;
   void OnBeginNestedRunLoop() override;
+  void OnExitNestedRunLoop() override;
 
   // QueueingTimeEstimator::Client implementation:
   void OnQueueingTimeForWindowEstimated(base::TimeDelta queueing_time,
@@ -146,6 +152,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   scoped_refptr<MainThreadTaskQueue> CompositorTaskQueue();
   scoped_refptr<MainThreadTaskQueue> LoadingTaskQueue();
   scoped_refptr<MainThreadTaskQueue> TimerTaskQueue();
+  scoped_refptr<MainThreadTaskQueue> V8TaskQueue();
 
   // Returns a new task queue created with given params.
   scoped_refptr<MainThreadTaskQueue> NewTaskQueue(
@@ -250,16 +257,17 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> LoadingTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner> TimerTaskRunner() override;
 
  private:
   friend class RenderWidgetSchedulingState;
   friend class RendererMetricsHelper;
 
   friend class RendererMetricsHelperTest;
-  friend class RendererSchedulerImplForTest;
-  friend class RendererSchedulerImplTest;
-  FRIEND_TEST_ALL_PREFIXES(RendererSchedulerImplTest, Tracing);
+  friend class renderer_scheduler_impl_unittest::RendererSchedulerImplForTest;
+  friend class renderer_scheduler_impl_unittest::RendererSchedulerImplTest;
+  FRIEND_TEST_ALL_PREFIXES(
+      renderer_scheduler_impl_unittest::RendererSchedulerImplTest,
+      Tracing);
 
   enum class ExpensiveTaskPolicy { RUN, BLOCK, THROTTLE };
 
@@ -429,10 +437,10 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   // defined by RAILS.
   static const int kRailsResponseTimeMillis = 50;
 
-  // The amount of time to wait before suspending shared timers after the
-  // renderer has been backgrounded. This is used only if background suspension
-  // of shared timers is enabled.
-  static const int kStopTimersWhenBackgroundedDelayMillis = 5 * 60 * 1000;
+  // The amount of time to wait before suspending shared timers, and loading
+  // etc. after the renderer has been backgrounded. This is used only if
+  // background suspension is enabled.
+  static const int kStopWhenBackgroundedDelayMillis = 5 * 60 * 1000;
 
   // The time we should stay in a priority-escalated mode after a call to
   // DidAnimateForInputOnCompositorThread().
@@ -442,7 +450,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   // sets |policy_may_need_update_|. Note |any_thread_lock_| must be
   // locked.
   void EnsureUrgentPolicyUpdatePostedOnMainThread(
-      const tracked_objects::Location& from_here);
+      const base::Location& from_here);
 
   // Update the policy if a new signal has arrived. Must be called from the main
   // thread.
@@ -528,6 +536,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
 
   scoped_refptr<MainThreadTaskQueue> default_loading_task_queue_;
   scoped_refptr<MainThreadTaskQueue> default_timer_task_queue_;
+  scoped_refptr<MainThreadTaskQueue> v8_task_queue_;
 
   // Note |virtual_time_domain_| is lazily created.
   std::unique_ptr<AutoAdvancingVirtualTimeDomain> virtual_time_domain_;
@@ -570,8 +579,8 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     bool renderer_hidden;
     bool renderer_backgrounded;
     bool renderer_paused;
-    bool timer_queue_stopping_when_backgrounded_enabled;
-    bool timer_queue_stopped_when_backgrounded;
+    bool stopping_when_backgrounded_enabled;
+    bool stopped_when_backgrounded;
     bool was_shutdown;
     bool loading_tasks_seem_expensive;
     bool timer_tasks_seem_expensive;
@@ -595,8 +604,12 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     WakeUpBudgetPool* wake_up_budget_pool;                // Not owned.
     RendererMetricsHelper metrics_helper;
     RendererProcessType process_type;
-    StateTracer use_case_tracer;
-    StateTracer backgrounding_tracer;
+    StateTracer<kTracingCategoryNameDefault> use_case_tracer;
+    StateTracer<kTracingCategoryNameDefault> backgrounding_tracer;
+    StateTracer<kTracingCategoryNameDefault> audio_playing_tracer;
+    StateTracer<kTracingCategoryNameDefault> touchstart_expected_soon_tracer;
+    StateTracer<kTracingCategoryNameInfo> loading_tasks_seem_expensive_tracer;
+    StateTracer<kTracingCategoryNameInfo> timer_tasks_seem_expensive_tracer;
   };
 
   struct AnyThread {

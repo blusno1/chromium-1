@@ -143,7 +143,6 @@
 #include "base/strings/string_piece.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "components/metrics/daily_event.h"
 #include "components/metrics/environment_recorder.h"
@@ -362,10 +361,8 @@ bool MetricsService::has_unsent_logs() const {
 
 void MetricsService::RecordDelta(const base::HistogramBase& histogram,
                                  const base::HistogramSamples& snapshot) {
-  histogram.ValidateHistogramContents(true, -1);
   log_manager_.current_log()->RecordHistogramDelta(histogram.histogram_name(),
                                                    snapshot);
-  histogram.ValidateHistogramContents(true, -2);
 }
 
 void MetricsService::HandleIdleSinceLastTransmission(bool in_idle) {

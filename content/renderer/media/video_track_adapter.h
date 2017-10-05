@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "content/common/content_export.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "media/base/video_frame.h"
 #include "ui/gfx/geometry/size.h"
@@ -28,6 +29,8 @@ struct CONTENT_EXPORT VideoTrackAdapterSettings {
                             double max_frame_rate);
   VideoTrackAdapterSettings(const VideoTrackAdapterSettings& other);
   VideoTrackAdapterSettings& operator=(const VideoTrackAdapterSettings& other);
+  bool operator==(const VideoTrackAdapterSettings& other) const;
+
   int max_width;
   int max_height;
   double min_aspect_ratio;
@@ -65,6 +68,8 @@ class VideoTrackAdapter
                 VideoCaptureDeliverFrameCB frame_callback,
                 const VideoTrackAdapterSettings& settings);
   void RemoveTrack(const MediaStreamVideoTrack* track);
+  void ReconfigureTrack(const MediaStreamVideoTrack* track,
+                        const VideoTrackAdapterSettings& settings);
 
   // Delivers |frame| to all tracks that have registered a callback.
   // Must be called on the IO-thread.
@@ -85,12 +90,12 @@ class VideoTrackAdapter
 
   void SetSourceFrameSize(const gfx::Size& source_frame_size);
 
-  static void CalculateTargetSize(bool is_rotated,
-                                  const gfx::Size& input_size,
-                                  const gfx::Size& max_frame_size,
-                                  double min_aspect_ratio,
-                                  double max_aspect_ratio,
-                                  gfx::Size* desired_size);
+  // Exported for testing.
+  CONTENT_EXPORT static void CalculateTargetSize(
+      bool is_rotated,
+      const gfx::Size& input_size,
+      const VideoTrackAdapterSettings& settings,
+      gfx::Size* desired_size);
 
  private:
   virtual ~VideoTrackAdapter();
@@ -100,6 +105,8 @@ class VideoTrackAdapter
                     VideoCaptureDeliverFrameCB frame_callback,
                     const VideoTrackAdapterSettings& settings);
   void RemoveTrackOnIO(const MediaStreamVideoTrack* track);
+  void ReconfigureTrackOnIO(const MediaStreamVideoTrack* track,
+                            const VideoTrackAdapterSettings& settings);
 
   void StartFrameMonitoringOnIO(
     const OnMutedCallback& on_muted_state_callback,

@@ -19,7 +19,6 @@ import android.text.TextUtils;
 import android.util.Pair;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -27,9 +26,10 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.download.ui.BackendProvider;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryAdapter;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
@@ -39,6 +39,7 @@ import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
+import org.chromium.content.browser.BrowserStartupController;
 import org.chromium.net.ConnectionType;
 import org.chromium.net.NetworkChangeNotifierAutoDetect;
 import org.chromium.net.RegistrationPolicyAlwaysRegister;
@@ -192,10 +193,13 @@ public class DownloadManagerService
         ThreadUtils.assertOnUiThread();
         Context appContext = ContextUtils.getApplicationContext();
         if (sDownloadManagerService == null) {
+            // TODO(crbug.com/765327): Remove temporary fix after flag is no longer being used.
             DownloadNotifier downloadNotifier =
-                    CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_DOWNLOADS_FOREGROUND)
-                    ? new SystemDownloadNotifier2(appContext)
-                    : new SystemDownloadNotifier(appContext);
+                    (!BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
+                                    .isStartupSuccessfullyCompleted()
+                            || !ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_FOREGROUND))
+                    ? new SystemDownloadNotifier(appContext)
+                    : new SystemDownloadNotifier2(appContext);
             sDownloadManagerService = new DownloadManagerService(
                     appContext, downloadNotifier, new Handler(), UPDATE_DELAY_MILLIS);
         }
@@ -933,7 +937,14 @@ public class DownloadManagerService
     @Override
     public void cancelDownload(ContentId id, boolean isOffTheRecord) {
         nativeCancelDownload(getNativeDownloadManagerService(), id.id, isOffTheRecord);
-        removeDownloadProgress(id.id);
+        DownloadProgress progress = mDownloadProgressMap.get(id.id);
+        if (progress != null) {
+            DownloadInfo info =
+                    DownloadInfo.Builder.fromDownloadInfo(progress.mDownloadItem.getDownloadInfo())
+                            .build();
+            onDownloadCancelled(info);
+            removeDownloadProgress(id.id);
+        }
         recordDownloadFinishedUMA(DOWNLOAD_STATUS_CANCELLED, id.id, 0);
     }
 
@@ -1373,16 +1384,18 @@ public class DownloadManagerService
      */
     @Override
     public void broadcastDownloadAction(DownloadItem downloadItem, String action) {
-        if (CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_DOWNLOADS_FOREGROUND)) {
-            Intent intent = DownloadNotificationFactory.buildActionIntent(mContext, action,
-                    LegacyHelpers.buildLegacyContentId(false, downloadItem.getId()),
-                    downloadItem.getDownloadInfo().isOffTheRecord());
-            mContext.startService(intent);
-        } else {
+        if (!BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
+                        .isStartupSuccessfullyCompleted()
+                || !ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_FOREGROUND)) {
             Intent intent = DownloadNotificationService.buildActionIntent(mContext, action,
                     LegacyHelpers.buildLegacyContentId(false, downloadItem.getId()),
                     downloadItem.getDownloadInfo().isOffTheRecord());
             mContext.sendBroadcast(intent);
+        } else {
+            Intent intent = DownloadNotificationFactory.buildActionIntent(mContext, action,
+                    LegacyHelpers.buildLegacyContentId(false, downloadItem.getId()),
+                    downloadItem.getDownloadInfo().isOffTheRecord());
+            mContext.startService(intent);
         }
     }
 

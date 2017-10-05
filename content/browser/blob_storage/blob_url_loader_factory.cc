@@ -57,7 +57,7 @@ class BlobURLLoader : public storage::MojoBlobReader::Delegate,
     base::SequencedTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::BindOnce(&BlobURLLoader::Start, weak_factory_.GetWeakPtr(),
-                       request, make_scoped_refptr(file_system_context)));
+                       request, base::WrapRefCounted(file_system_context)));
   }
 
  private:
@@ -106,6 +106,9 @@ class BlobURLLoader : public storage::MojoBlobReader::Delegate,
 
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override {}
+
+  void PauseReadingBodyFromNet() override {}
+  void ResumeReadingBodyFromNet() override {}
 
   // storage::MojoBlobReader::Delegate implementation:
   mojo::ScopedDataPipeProducerHandle PassDataPipe() override {

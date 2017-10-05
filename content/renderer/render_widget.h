@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <queue>
@@ -275,7 +274,7 @@ class CONTENT_EXPORT RenderWidget
   bool WillHandleGestureEvent(const blink::WebGestureEvent& event) override;
   bool WillHandleMouseEvent(const blink::WebMouseEvent& event) override;
 
-  // RenderWidgetScreenMetricsDelegate
+  // RenderWidgetScreenMetricsEmulatorDelegate
   void Redraw() override;
   void Resize(const ResizeParams& resize_params) override;
   void SetScreenMetricsEmulationParameters(
@@ -458,6 +457,8 @@ class CONTENT_EXPORT RenderWidget
     TTFAP_5MIN_AFTER_BACKGROUNDED,
   };
 
+  void DidResizeOrRepaintAck();
+
  protected:
   // Friend RefCounted so that the dtor can be non-public. Using this class
   // without ref-counting is an error.
@@ -524,6 +525,9 @@ class CONTENT_EXPORT RenderWidget
   void OnClose();
   void OnCreatingNewAck();
   virtual void OnResize(const ResizeParams& params);
+  void OnSetLocalSurfaceIdForAutoResize(
+      uint64_t sequence_number,
+      const viz::LocalSurfaceId& local_surface_id);
   void OnEnableDeviceEmulation(const blink::WebDeviceEmulationParams& params);
   void OnDisableDeviceEmulation();
   virtual void OnWasHidden();
@@ -681,7 +685,7 @@ class CONTENT_EXPORT RenderWidget
   // The size of the visible viewport in DPI-adjusted pixels.
   gfx::Size visible_viewport_size_;
 
-  // Flags for the next ViewHostMsg_UpdateRect message.
+  // Flags for the next ViewHostMsg_ResizeOrRepaint_ACK message.
   int next_paint_flags_;
 
   // Whether the WebWidget is in auto resize mode, which is used for example
@@ -691,6 +695,9 @@ class CONTENT_EXPORT RenderWidget
   // True if we need to send an UpdateRect message to notify the browser about
   // an already-completed auto-resize.
   bool need_update_rect_for_auto_resize_;
+
+  // The sequence number used for ViewHostMsg_UpdateRect.
+  uint64_t resize_or_repaint_ack_num_ = 0;
 
   // Set to true if we should ignore RenderWidget::Show calls.
   bool did_show_;

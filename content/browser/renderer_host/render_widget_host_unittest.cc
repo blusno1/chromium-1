@@ -147,7 +147,7 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
 
   // Allow poking at a few private members.
   using RenderWidgetHostImpl::GetResizeParams;
-  using RenderWidgetHostImpl::OnUpdateRect;
+  using RenderWidgetHostImpl::OnResizeOrRepaintACK;
   using RenderWidgetHostImpl::RendererExited;
   using RenderWidgetHostImpl::SetInitialRenderSizeParams;
   using RenderWidgetHostImpl::old_resize_params_;
@@ -257,12 +257,12 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
 
 namespace  {
 
-cc::CompositorFrame MakeCompositorFrame(float scale_factor, gfx::Size size) {
-  cc::CompositorFrame frame;
+viz::CompositorFrame MakeCompositorFrame(float scale_factor, gfx::Size size) {
+  viz::CompositorFrame frame;
   frame.metadata.device_scale_factor = scale_factor;
   frame.metadata.begin_frame_ack = viz::BeginFrameAck(0, 1, true);
 
-  std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> pass = viz::RenderPass::Create();
   pass->SetNew(1, gfx::Rect(size), gfx::Rect(), gfx::Transform());
   frame.render_pass_list.push_back(std::move(pass));
   if (!size.IsEmpty()) {
@@ -300,12 +300,21 @@ class TestView : public TestRenderWidgetHostView {
         acked_event_count_(0),
         gesture_event_type_(-1),
         use_fake_physical_backing_size_(false),
-        ack_result_(INPUT_EVENT_ACK_STATE_UNKNOWN) {
-  }
+        ack_result_(INPUT_EVENT_ACK_STATE_UNKNOWN),
+        top_controls_height_(0.f),
+        bottom_controls_height_(0.f) {}
 
   // Sets the bounds returned by GetViewBounds.
   void set_bounds(const gfx::Rect& bounds) {
     bounds_ = bounds;
+  }
+
+  void set_top_controls_height(float top_controls_height) {
+    top_controls_height_ = top_controls_height;
+  }
+
+  void set_bottom_controls_height(float bottom_controls_height) {
+    bottom_controls_height_ = bottom_controls_height;
   }
 
   const WebTouchEvent& acked_event() const { return acked_event_; }
@@ -334,6 +343,10 @@ class TestView : public TestRenderWidgetHostView {
 
   // RenderWidgetHostView override.
   gfx::Rect GetViewBounds() const override { return bounds_; }
+  float GetTopControlsHeight() const override { return top_controls_height_; }
+  float GetBottomControlsHeight() const override {
+    return bottom_controls_height_;
+  }
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override {
     acked_event_ = touch.event;
@@ -367,6 +380,8 @@ class TestView : public TestRenderWidgetHostView {
   bool use_fake_physical_backing_size_;
   gfx::Size mock_physical_backing_size_;
   InputEventAckState ack_result_;
+  float top_controls_height_;
+  float bottom_controls_height_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestView);
@@ -940,10 +955,10 @@ TEST_F(RenderWidgetHostTest, Resize) {
   EXPECT_TRUE(host_->resize_ack_pending_);
   EXPECT_EQ(original_size.size(), host_->old_resize_params_->new_size);
   EXPECT_TRUE(process_->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID));
-  ViewHostMsg_UpdateRect_Params params;
-  params.flags = ViewHostMsg_UpdateRect_Flags::IS_RESIZE_ACK;
+  ViewHostMsg_ResizeOrRepaint_ACK_Params params;
+  params.flags = ViewHostMsg_ResizeOrRepaint_ACK_Flags::IS_RESIZE_ACK;
   params.view_size = original_size.size();
-  host_->OnUpdateRect(params);
+  host_->OnResizeOrRepaintACK(params);
   EXPECT_FALSE(host_->resize_ack_pending_);
 
   // Send out a update that's not a resize ack after setting resize ack pending
@@ -956,7 +971,7 @@ TEST_F(RenderWidgetHostTest, Resize) {
   EXPECT_TRUE(host_->resize_ack_pending_);
   params.flags = 0;
   params.view_size = gfx::Size(100, 100);
-  host_->OnUpdateRect(params);
+  host_->OnResizeOrRepaintACK(params);
   EXPECT_TRUE(host_->resize_ack_pending_);
   EXPECT_EQ(second_size.size(), host_->old_resize_params_->new_size);
 
@@ -974,18 +989,18 @@ TEST_F(RenderWidgetHostTest, Resize) {
   // this isn't the second_size, the message handler should immediately send
   // a new resize message for the new size to the renderer.
   process_->sink().ClearMessages();
-  params.flags = ViewHostMsg_UpdateRect_Flags::IS_RESIZE_ACK;
+  params.flags = ViewHostMsg_ResizeOrRepaint_ACK_Flags::IS_RESIZE_ACK;
   params.view_size = original_size.size();
-  host_->OnUpdateRect(params);
+  host_->OnResizeOrRepaintACK(params);
   EXPECT_TRUE(host_->resize_ack_pending_);
   EXPECT_EQ(third_size.size(), host_->old_resize_params_->new_size);
   EXPECT_TRUE(process_->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID));
 
   // Send the resize ack for the latest size.
   process_->sink().ClearMessages();
-  params.flags = ViewHostMsg_UpdateRect_Flags::IS_RESIZE_ACK;
+  params.flags = ViewHostMsg_ResizeOrRepaint_ACK_Flags::IS_RESIZE_ACK;
   params.view_size = third_size.size();
-  host_->OnUpdateRect(params);
+  host_->OnResizeOrRepaintACK(params);
   EXPECT_FALSE(host_->resize_ack_pending_);
   EXPECT_EQ(third_size.size(), host_->old_resize_params_->new_size);
   EXPECT_FALSE(process_->sink().GetFirstMessageMatching(ViewMsg_Resize::ID));
@@ -1098,7 +1113,8 @@ TEST_F(RenderWidgetHostTest, ResizeThenCrash) {
 TEST_F(RenderWidgetHostTest, Background) {
   std::unique_ptr<RenderWidgetHostViewBase> view;
 #if defined(USE_AURA)
-  view.reset(new RenderWidgetHostViewAura(host_.get(), false));
+  view.reset(new RenderWidgetHostViewAura(
+      host_.get(), false, false /* enable_surface_synchronization */));
   // TODO(derat): Call this on all platforms: http://crbug.com/102450.
   view->InitAsChild(NULL);
 #elif defined(OS_ANDROID)
@@ -1136,9 +1152,9 @@ TEST_F(RenderWidgetHostTest, HiddenPaint) {
 
   // Send it an update as from the renderer.
   process_->sink().ClearMessages();
-  ViewHostMsg_UpdateRect_Params params;
+  ViewHostMsg_ResizeOrRepaint_ACK_Params params;
   params.view_size = gfx::Size(100, 100);
-  host_->OnUpdateRect(params);
+  host_->OnResizeOrRepaintACK(params);
 
   // Now unhide.
   process_->sink().ClearMessages();
@@ -1722,7 +1738,7 @@ TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
   // Start the timer and immediately send a CompositorFrame with the
   // content_source_id of the new page. The timeout shouldn't fire.
   host_->StartNewContentRenderingTimeout(5);
-  cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+  viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
   frame.metadata.content_source_id = 5;
   host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr, 0);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -1784,7 +1800,7 @@ TEST_F(RenderWidgetHostTest, SwapCompositorFrameWithBadSourceId) {
 
   {
     // First swap a frame with an invalid ID.
-    cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+    viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
     frame.metadata.begin_frame_ack = viz::BeginFrameAck(0, 1, true);
     frame.metadata.content_source_id = 99;
     host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr,
@@ -1796,7 +1812,7 @@ TEST_F(RenderWidgetHostTest, SwapCompositorFrameWithBadSourceId) {
 
   {
     // Test with a valid content ID as a control.
-    cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+    viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
     frame.metadata.content_source_id = 100;
     host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr,
                                  0);
@@ -1809,7 +1825,7 @@ TEST_F(RenderWidgetHostTest, SwapCompositorFrameWithBadSourceId) {
     // We also accept frames with higher content IDs, to cover the case where
     // the browser process receives a compositor frame for a new page before
     // the corresponding DidCommitProvisionalLoad (it's a race).
-    cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+    viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
     frame.metadata.content_source_id = 101;
     host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr,
                                  0);
@@ -2576,6 +2592,30 @@ TEST_F(RenderWidgetHostTest, ResizeParams) {
   EXPECT_EQ(physical_backing_size, resize_params.physical_backing_size);
 }
 
+TEST_F(RenderWidgetHostTest, ResizeParamsDeviceScale) {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->AppendSwitchASCII(switches::kEnableUseZoomForDSF, "true");
+
+  DCHECK(display::Screen::GetScreen());
+  const display::Display& display =
+      display::Screen::GetScreen()->GetPrimaryDisplay();
+  DCHECK(display.id() != display::kInvalidDisplayId);
+
+  float device_scale = display.device_scale_factor();
+
+  float top_controls_height = 10.0f;
+  float bottom_controls_height = 20.0f;
+  view_->set_top_controls_height(top_controls_height);
+  view_->set_bottom_controls_height(bottom_controls_height);
+
+  ResizeParams resize_params;
+  host_->GetResizeParams(&resize_params);
+  EXPECT_EQ(top_controls_height * device_scale,
+            resize_params.top_controls_height);
+  EXPECT_EQ(bottom_controls_height * device_scale,
+            resize_params.bottom_controls_height);
+}
+
 // Make sure no dragging occurs after renderer exited. See crbug.com/704832.
 TEST_F(RenderWidgetHostTest, RendererExitedNoDrag) {
   host_->SetView(new TestView(host_.get()));
@@ -2660,7 +2700,7 @@ TEST_F(RenderWidgetHostTest, FrameToken_MessageThenFrame) {
   EXPECT_EQ(1u, host_->queued_messages_.size());
   EXPECT_EQ(0u, host_->processed_frame_messages_count());
 
-  cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+  viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
   frame.metadata.frame_token = frame_token;
   host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr, 0);
   EXPECT_EQ(0u, host_->queued_messages_.size());
@@ -2680,7 +2720,7 @@ TEST_F(RenderWidgetHostTest, FrameToken_FrameThenMessage) {
   EXPECT_EQ(0u, host_->queued_messages_.size());
   EXPECT_EQ(0u, host_->processed_frame_messages_count());
 
-  cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+  viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
   frame.metadata.frame_token = frame_token;
   host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr, 0);
   EXPECT_EQ(0u, host_->queued_messages_.size());
@@ -2718,7 +2758,7 @@ TEST_F(RenderWidgetHostTest, FrameToken_MultipleMessagesThenTokens) {
   EXPECT_EQ(2u, host_->queued_messages_.size());
   EXPECT_EQ(0u, host_->processed_frame_messages_count());
 
-  cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+  viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
   frame.metadata.frame_token = frame_token1;
   host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr, 0);
   EXPECT_EQ(1u, host_->queued_messages_.size());
@@ -2747,7 +2787,7 @@ TEST_F(RenderWidgetHostTest, FrameToken_MultipleTokensThenMessages) {
   EXPECT_EQ(0u, host_->queued_messages_.size());
   EXPECT_EQ(0u, host_->processed_frame_messages_count());
 
-  cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+  viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
   frame.metadata.frame_token = frame_token1;
   host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr, 0);
   EXPECT_EQ(0u, host_->queued_messages_.size());
@@ -2796,7 +2836,7 @@ TEST_F(RenderWidgetHostTest, FrameToken_DroppedFrame) {
   EXPECT_EQ(2u, host_->queued_messages_.size());
   EXPECT_EQ(0u, host_->processed_frame_messages_count());
 
-  cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+  viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
   frame.metadata.frame_token = frame_token2;
   host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr, 0);
   EXPECT_EQ(0u, host_->queued_messages_.size());
@@ -2831,7 +2871,7 @@ TEST_F(RenderWidgetHostTest, FrameToken_RendererCrash) {
   EXPECT_EQ(0u, host_->processed_frame_messages_count());
   host_->Init();
 
-  cc::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
+  viz::CompositorFrame frame = MakeCompositorFrame(1.f, frame_size);
   frame.metadata.frame_token = frame_token2;
   host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr, 0);
   EXPECT_EQ(0u, host_->queued_messages_.size());

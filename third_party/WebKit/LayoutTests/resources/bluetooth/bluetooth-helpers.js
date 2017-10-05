@@ -1,5 +1,43 @@
 'use strict';
 
+function loadScript(path) {
+  let script = document.createElement('script');
+  let promise = new Promise(resolve => script.onload = resolve);
+  script.src = path;
+  script.async = false;
+  document.head.appendChild(script);
+  return promise;
+}
+
+function loadScripts(paths) {
+  let chain = Promise.resolve();
+  for (let path of paths) {
+    chain = chain.then(() => loadScript(path));
+  }
+  return chain;
+}
+
+function loadChromiumResources() {
+  let root = window.location.pathname.match(/.*LayoutTests/);
+  let resource_prefix = `${root}/resources`;
+  return loadScripts([
+    `${resource_prefix}/mojo-helpers.js`,
+    `${resource_prefix}/bluetooth/web-bluetooth-test.js`,
+  ]);
+}
+
+// These tests rely on the User Agent providing an implementation of the
+// Web Bluetooth Testing API.
+// https://docs.google.com/document/d/1Nhv_oVDCodd1pEH_jj9k8gF4rPGb_84VYaZ9IG8M_WY/edit?ts=59b6d823#heading=h.7nki9mck5t64
+function bluetooth_test(func, name, properties) {
+  Promise.resolve()
+    .then(() => {
+      // Chromium Testing API
+      if (window.chrome !== undefined) return loadChromiumResources();
+    })
+    .then(() => promise_test(func, name, properties));
+}
+
 // HCI Error Codes. Used for simulateGATT[Dis]ConnectionResponse.
 // For a complete list of possible error codes see
 // BT 4.2 Vol 2 Part D 1.3 List Of Error Codes.
@@ -265,7 +303,7 @@ function runGarbageCollection()
   return new Promise(
       function(resolve, reject) {
         GCController.collect();
-        setTimeout(resolve, 0);
+        step_timeout(resolve, 0);
       });
 }
 
@@ -349,9 +387,9 @@ function assert_no_events(object, event_name) {
       assert_unreached('Object should not fire an event.');
     };
     object.addEventListener(event_name, event_listener);
-    // TODO(ortuno): Remove timeout.
+    // TODO: Remove timeout.
     // http://crbug.com/543884
-    setTimeout(() => {
+    step_timeout(() => {
       object.removeEventListener(event_name, event_listener);
       resolve();
     }, 100);
@@ -484,7 +522,6 @@ function setUpHealthThermometerAndHeartRateDevices() {
 // 'characteristic_user_description' descriptor.
 // The device has been connected to and its attributes are ready to be
 // discovered.
-// TODO(crbug.com/719816): Add descriptors.
 function getHealthThermometerDevice(options) {
   let result;
   return getConnectedHealthThermometerDevice(options)
@@ -570,7 +607,7 @@ function getUserDescriptionDescriptor() {
 // including the |fake_peripheral|.
 function populateHealthThermometerFakes(fake_peripheral) {
   let fake_generic_access, fake_health_thermometer, fake_measurement_interval,
-      fake_user_description, fake_temperature_measurement,
+      fake_user_description, fake_cccd, fake_temperature_measurement,
       fake_temperature_type;
   return fake_peripheral.addFakeService({uuid: 'generic_access'})
     .then(_ => fake_generic_access = _)
@@ -587,6 +624,10 @@ function populateHealthThermometerFakes(fake_peripheral) {
       uuid: 'gatt.characteristic_user_description',
     }))
     .then(_ => fake_user_description = _)
+    .then(() => fake_measurement_interval.addFakeDescriptor({
+      uuid: 'gatt.client_characteristic_configuration',
+    }))
+    .then(_ => fake_cccd = _)
     .then(() => fake_health_thermometer.addFakeCharacteristic({
       uuid: 'temperature_measurement',
       properties: ['indicate'],
@@ -602,6 +643,7 @@ function populateHealthThermometerFakes(fake_peripheral) {
       fake_generic_access,
       fake_health_thermometer,
       fake_measurement_interval,
+      fake_cccd,
       fake_user_description,
       fake_temperature_measurement,
       fake_temperature_type,
@@ -642,7 +684,7 @@ function getHealthThermometerDeviceWithServicesDiscovered(options) {
     }))
     .then(() => populateHealthThermometerFakes(fake_peripheral))
     .then(_ => fakes = _)
-    .then(() => new Promise(resolve => {
+    .then(() => new Promise((resolve, reject) => {
       let iframe = document.createElement('iframe');
       function messageHandler(messageEvent) {
         if (messageEvent.data === 'Ready') {
@@ -654,8 +696,7 @@ function getHealthThermometerDeviceWithServicesDiscovered(options) {
           window.removeEventListener('message', messageHandler);
           resolve();
         } else {
-          console.log(messageEvent.data);
-          resolve();
+          reject(new Error(`Unexpected message: {messageEvent.data}`));
         }
       }
       window.addEventListener('message', messageHandler);

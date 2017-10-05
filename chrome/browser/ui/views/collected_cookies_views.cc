@@ -57,9 +57,6 @@ namespace {
 const int kInfobarVerticalPadding = 3;
 const int kInfobarHorizontalPadding = 8;
 
-// Width of the infobar frame.
-const int kInfobarBorderSize = 1;
-
 // Dimensions of the tree views.
 const int kTreeViewWidth = 400;
 const int kTreeViewHeight = 125;
@@ -79,6 +76,7 @@ void StartNewButtonColumnSet(views::GridLayout* layout,
       provider->GetDistanceMetric(views::DISTANCE_BUTTON_MAX_LINKABLE_WIDTH);
 
   views::ColumnSet* column_set = layout->AddColumnSet(column_layout_id);
+  column_set->AddPaddingColumn(100.0, 0);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER, 0,
                         views::GridLayout::USE_PREF, 0, 0);
   column_set->AddPaddingColumn(0, button_padding);
@@ -91,14 +89,55 @@ void StartNewButtonColumnSet(views::GridLayout* layout,
 
 }  // namespace
 
+// This DrawingProvider keeps track of a set of ui::TreeModelNode*s which are
+// considered "invalidated", and marks them as such by lightening their text
+// color and adding auxiliary text to them.
+class CookiesTreeViewDrawingProvider : public views::TreeViewDrawingProvider {
+ public:
+  explicit CookiesTreeViewDrawingProvider(
+      const base::string16& invalidated_text)
+      : invalidated_text_(invalidated_text) {}
+  ~CookiesTreeViewDrawingProvider() override {}
+
+  void MarkNodeAsInvalidated(ui::TreeModelNode* node);
+
+  SkColor GetTextColorForNode(views::TreeView* tree_view,
+                              ui::TreeModelNode* node) override;
+  base::string16 GetAuxiliaryTextForNode(views::TreeView* tree_view,
+                                         ui::TreeModelNode* node) override;
+
+ private:
+  base::string16 invalidated_text_;
+  std::set<ui::TreeModelNode*> invalidated_nodes_;
+};
+
+void CookiesTreeViewDrawingProvider::MarkNodeAsInvalidated(
+    ui::TreeModelNode* node) {
+  invalidated_nodes_.insert(node);
+}
+
+SkColor CookiesTreeViewDrawingProvider::GetTextColorForNode(
+    views::TreeView* tree_view,
+    ui::TreeModelNode* node) {
+  SkColor color = TreeViewDrawingProvider::GetTextColorForNode(tree_view, node);
+  if (invalidated_nodes_.find(node) != invalidated_nodes_.end())
+    color = SkColorSetA(color, 0x80);
+  return color;
+}
+
+base::string16 CookiesTreeViewDrawingProvider::GetAuxiliaryTextForNode(
+    views::TreeView* tree_view,
+    ui::TreeModelNode* node) {
+  if (invalidated_nodes_.find(node) != invalidated_nodes_.end())
+    return invalidated_text_;
+  return TreeViewDrawingProvider::GetAuxiliaryTextForNode(tree_view, node);
+}
+
 // A custom view that conditionally displays an infobar.
 class InfobarView : public views::View {
  public:
   InfobarView() {
     content_ = new views::View;
-    SkColor border_color = SK_ColorGRAY;
-    content_->SetBorder(
-        views::CreateSolidBorder(kInfobarBorderSize, border_color));
 
     info_image_ = new views::ImageView();
     info_image_->SetImage(gfx::CreateVectorIcon(vector_icons::kInfoOutlineIcon,
@@ -220,6 +259,13 @@ CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// CollectedCookiesViews, views::WidgetDelegate implementation:
+
+bool CollectedCookiesViews::ShouldShowCloseButton() const {
+  return false;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // CollectedCookiesViews, views::DialogDelegate implementation:
 
 base::string16 CollectedCookiesViews::GetWindowTitle() const {
@@ -227,7 +273,7 @@ base::string16 CollectedCookiesViews::GetWindowTitle() const {
 }
 
 int CollectedCookiesViews::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_CANCEL;
+  return ui::DIALOG_BUTTON_OK;
 }
 
 base::string16 CollectedCookiesViews::GetDialogButtonLabel(
@@ -235,7 +281,7 @@ base::string16 CollectedCookiesViews::GetDialogButtonLabel(
   return l10n_util::GetStringUTF16(IDS_CLOSE);
 }
 
-bool CollectedCookiesViews::Cancel() {
+bool CollectedCookiesViews::Accept() {
   // If the user closes our parent tab while we're still open, this method will
   // (eventually) be called in response to a WebContentsDestroyed() call from
   // the WebContentsImpl to its observers.  But since the InfoBarService is also
@@ -368,8 +414,14 @@ views::View* CollectedCookiesViews::CreateAllowedPane() {
 
   allowed_cookies_tree_model_ =
       content_settings->allowed_local_shared_objects().CreateCookiesTreeModel();
+  std::unique_ptr<CookiesTreeViewDrawingProvider> allowed_drawing_provider =
+      base::MakeUnique<CookiesTreeViewDrawingProvider>(
+          l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_BLOCKED_AUX_TEXT));
+  allowed_cookies_drawing_provider_ = allowed_drawing_provider.get();
   allowed_cookies_tree_ = new views::TreeView();
   allowed_cookies_tree_->SetModel(allowed_cookies_tree_model_.get());
+  allowed_cookies_tree_->SetDrawingProvider(
+      std::move(allowed_drawing_provider));
   allowed_cookies_tree_->SetRootShown(false);
   allowed_cookies_tree_->SetEditable(false);
   allowed_cookies_tree_->set_auto_expand_children(true);
@@ -435,8 +487,14 @@ views::View* CollectedCookiesViews::CreateBlockedPane() {
   blocked_label_->SizeToFit(kTreeViewWidth);
   blocked_cookies_tree_model_ =
       content_settings->blocked_local_shared_objects().CreateCookiesTreeModel();
+  std::unique_ptr<CookiesTreeViewDrawingProvider> blocked_drawing_provider =
+      base::MakeUnique<CookiesTreeViewDrawingProvider>(
+          l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_ALLOWED_AUX_TEXT));
+  blocked_cookies_drawing_provider_ = blocked_drawing_provider.get();
   blocked_cookies_tree_ = new views::TreeView();
   blocked_cookies_tree_->SetModel(blocked_cookies_tree_model_.get());
+  blocked_cookies_tree_->SetDrawingProvider(
+      std::move(blocked_drawing_provider));
   blocked_cookies_tree_->SetRootShown(false);
   blocked_cookies_tree_->SetEditable(false);
   blocked_cookies_tree_->set_auto_expand_children(true);
@@ -551,6 +609,12 @@ void CollectedCookiesViews::AddContentException(views::TreeView* tree_view,
       CookieSettingsFactory::GetForProfile(profile).get(), setting);
   infobar_->UpdateVisibility(true, setting, host_node->GetTitle());
   status_changed_ = true;
+
+  CookiesTreeViewDrawingProvider* provider =
+      (tree_view == allowed_cookies_tree_) ? allowed_cookies_drawing_provider_
+                                           : blocked_cookies_drawing_provider_;
+  provider->MarkNodeAsInvalidated(tree_view->GetSelectedNode());
+  tree_view->SchedulePaint();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

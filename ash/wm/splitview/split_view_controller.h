@@ -22,7 +22,7 @@ namespace ash {
 
 class SplitViewControllerTest;
 class SplitViewDivider;
-class WindowSelectorTest;
+class SplitViewWindowSelectorTest;
 
 // The controller for the split view. It snaps a window to left/right side of
 // the screen. It also observes the two snapped windows and decides when to exit
@@ -49,6 +49,9 @@ class ASH_EXPORT SplitViewController : public aura::WindowObserver,
   // Returns true if split view mode is supported. Currently the split view
   // mode is only supported in tablet mode (tablet mode).
   static bool ShouldAllowSplitView();
+
+  // Returns true if |window| can be activated and snapped.
+  static bool CanSnap(aura::Window* window);
 
   // Returns true if split view mode is active.
   bool IsSplitViewModeActive() const;
@@ -79,6 +82,9 @@ class ASH_EXPORT SplitViewController : public aura::WindowObserver,
   void Resize(const gfx::Point& location_in_screen);
   void EndResize(const gfx::Point& location_in_screen);
 
+  // Ends the split view mode.
+  void EndSplitView();
+
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
@@ -86,8 +92,9 @@ class ASH_EXPORT SplitViewController : public aura::WindowObserver,
   void OnWindowDestroying(aura::Window* window) override;
 
   // ash::wm::WindowStateObserver:
-  void OnPostWindowStateTypeChange(ash::wm::WindowState* window_state,
-                                   ash::wm::WindowStateType old_type) override;
+  void OnPostWindowStateTypeChange(
+      ash::wm::WindowState* window_state,
+      ash::mojom::WindowStateType old_type) override;
 
   // wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,
@@ -107,10 +114,7 @@ class ASH_EXPORT SplitViewController : public aura::WindowObserver,
 
  private:
   friend class SplitViewControllerTest;
-  friend class WindowSelectorTest;
-
-  // Ends the split view mode.
-  void EndSplitView();
+  friend class SplitViewWindowSelectorTest;
 
   // Starts/Stops observing |window|.
   void StartObserving(aura::Window* window);

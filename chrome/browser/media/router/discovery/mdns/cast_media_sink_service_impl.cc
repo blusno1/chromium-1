@@ -5,14 +5,23 @@
 #include "chrome/browser/media/router/discovery/mdns/cast_media_sink_service_impl.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/time/default_clock.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/discovery/media_sink_service_base.h"
+#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/common/media_router/discovery/media_sink_internal.h"
 #include "chrome/common/media_router/discovery/media_sink_service.h"
 #include "chrome/common/media_router/media_sink.h"
+#include "components/cast_channel/cast_channel_enum.h"
 #include "components/cast_channel/cast_socket_service.h"
+#include "components/cast_channel/logger.h"
 #include "components/net_log/chrome_net_log.h"
 #include "net/base/backoff_entry.h"
+#include "net/base/net_errors.h"
+#include "net/url_request/url_request_context.h"
+#include "net/url_request/url_request_context_getter.h"
 
 namespace {
 
@@ -34,6 +43,113 @@ media_router::MediaSinkInternal CreateCastSinkFromDialSink(
   return media_router::MediaSinkInternal(sink, extra_data);
 }
 
+void RecordError(cast_channel::ChannelError channel_error,
+                 cast_channel::LastError last_error) {
+  media_router::MediaRouterChannelError error_code =
+      media_router::MediaRouterChannelError::UNKNOWN;
+
+  switch (channel_error) {
+    // TODO(crbug.com/767204): Add in errors for transient socket and timeout
+    // errors, but only after X number of occurences.
+    case cast_channel::ChannelError::UNKNOWN:
+      error_code = media_router::MediaRouterChannelError::UNKNOWN;
+      break;
+    case cast_channel::ChannelError::AUTHENTICATION_ERROR:
+      error_code = media_router::MediaRouterChannelError::AUTHENTICATION;
+      break;
+    case cast_channel::ChannelError::CONNECT_ERROR:
+      error_code = media_router::MediaRouterChannelError::CONNECT;
+      break;
+    case cast_channel::ChannelError::CONNECT_TIMEOUT:
+      error_code = media_router::MediaRouterChannelError::CONNECT_TIMEOUT;
+      break;
+    case cast_channel::ChannelError::PING_TIMEOUT:
+      error_code = media_router::MediaRouterChannelError::PING_TIMEOUT;
+      break;
+    default:
+      // Do nothing and let the standard launch failure issue surface.
+      break;
+  }
+
+  // If we have details, we may override the generic error codes set above.
+  // TODO(crbug.com/767204): Expand and refine below as we see more actual
+  // reports.
+
+  // General certificate errors
+  if ((last_error.challenge_reply_error ==
+           cast_channel::ChallengeReplyError::PEER_CERT_EMPTY ||
+       last_error.challenge_reply_error ==
+           cast_channel::ChallengeReplyError::FINGERPRINT_NOT_FOUND ||
+       last_error.challenge_reply_error ==
+           cast_channel::ChallengeReplyError::CERT_PARSING_FAILED ||
+       last_error.challenge_reply_error ==
+           cast_channel::ChallengeReplyError::CANNOT_EXTRACT_PUBLIC_KEY) ||
+      (last_error.net_return_value <=
+           net::ERR_CERT_COMMON_NAME_INVALID &&  // CERT_XXX errors
+       last_error.net_return_value > net::ERR_CERT_END) ||
+      last_error.channel_event ==
+          cast_channel::ChannelEvent::SSL_SOCKET_CONNECT_FAILED ||
+      last_error.channel_event ==
+          cast_channel::ChannelEvent::SEND_AUTH_CHALLENGE_FAILED ||
+      last_error.channel_event ==
+          cast_channel::ChannelEvent::AUTH_CHALLENGE_REPLY_INVALID) {
+    error_code = media_router::MediaRouterChannelError::GENERAL_CERTIFICATE;
+  }
+
+  // Certificate timing errors
+  if (last_error.channel_event ==
+          cast_channel::ChannelEvent::SSL_CERT_EXCESSIVE_LIFETIME ||
+      last_error.net_return_value == net::ERR_CERT_DATE_INVALID) {
+    error_code = media_router::MediaRouterChannelError::CERTIFICATE_TIMING;
+  }
+
+  // Network/firewall access denied
+  if (last_error.net_return_value == net::ERR_NETWORK_ACCESS_DENIED) {
+    error_code = media_router::MediaRouterChannelError::NETWORK;
+  }
+
+  // Authentication errors (assumed active ssl manipulation)
+  if (last_error.challenge_reply_error ==
+          cast_channel::ChallengeReplyError::CERT_NOT_SIGNED_BY_TRUSTED_CA ||
+      last_error.challenge_reply_error ==
+          cast_channel::ChallengeReplyError::SIGNED_BLOBS_MISMATCH) {
+    error_code = media_router::MediaRouterChannelError::AUTHENTICATION;
+  }
+
+  media_router::CastAnalytics::RecordDeviceChannelError(error_code);
+}
+
+// Parameter names.
+constexpr char kParamNameInitialDelayInMilliSeconds[] = "initial_delay_in_ms";
+constexpr char kParamNameMaxRetryAttempts[] = "max_retry_attempts";
+constexpr char kParamNameExponential[] = "exponential";
+constexpr char kParamNameConnectTimeoutInSeconds[] =
+    "connect_timeout_in_seconds";
+constexpr char kParamNamePingIntervalInSeconds[] = "ping_interval_in_seconds";
+constexpr char kParamNameLivenessTimeoutInSeconds[] =
+    "liveness_timeout_in_seconds";
+constexpr char kParamNameDynamicTimeoutDeltaInSeconds[] =
+    "dynamic_timeout_delta_in_seconds";
+
+// Default values if field trial parameter is not specified.
+constexpr int kDefaultInitialDelayInMilliSeconds = 15 * 1000;  // 15 seconds
+// TODO(zhaobin): Remove this when we switch to use max delay instead of max
+// number of retry attempts to decide when to stop retry.
+constexpr int kDefaultMaxRetryAttempts = 3;
+constexpr double kDefaultExponential = 1.0;
+constexpr int kDefaultConnectTimeoutInSeconds = 10;
+constexpr int kDefaultPingIntervalInSeconds = 5;
+constexpr int kDefaultLivenessTimeoutInSeconds =
+    kDefaultPingIntervalInSeconds * 2;
+constexpr int kDefaultDynamicTimeoutDeltaInSeconds = 0;
+
+// Max allowed values
+constexpr int kMaxConnectTimeoutInSeconds = 30;
+constexpr int kMaxLivenessTimeoutInSeconds = 60;
+
+// Max failure count allowed for a Cast channel.
+constexpr int kMaxFailureCount = 100;
+
 }  // namespace
 
 namespace media_router {
@@ -47,54 +163,59 @@ bool IsNetworkIdUnknownOrDisconnected(const std::string& network_id) {
 
 }  // namespace
 
-// static
-const net::BackoffEntry::Policy CastMediaSinkServiceImpl::kBackoffPolicy = {
-    // Number of initial errors (in sequence) to ignore before going into
-    // exponential backoff.
-    0,
-
-    // Initial delay (in ms) once backoff starts. It should be longer than
-    // Cast
-    // socket's liveness timeout |kConnectLivenessTimeoutSecs| (10 seconds).
-    kDelayInSeconds * 1000,  // 15 seconds
-
-    // Factor by which the delay will be multiplied on each subsequent
-    // failure.
-    1.0,
-
-    // Fuzzing percentage: 50% will spread delays randomly between 50%--100%
-    // of
-    // the nominal time.
-    0.5,  // 50%
-
-    // Maximum delay (in ms) during exponential backoff.
-    30 * 1000,  // 30 seconds
-
-    // Time to keep an entry from being discarded even when it has no
-    // significant state, -1 to never discard. (Not applicable.)
-    -1,
-
-    // False means that initial_delay_ms is the first delay once we start
-    // exponential backoff, i.e., there is no delay after subsequent
-    // successful
-    // requests.
-    false,
-};
-
 CastMediaSinkServiceImpl::CastMediaSinkServiceImpl(
     const OnSinksDiscoveredCallback& callback,
     cast_channel::CastSocketService* cast_socket_service,
-    DiscoveryNetworkMonitor* network_monitor)
+    DiscoveryNetworkMonitor* network_monitor,
+    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner)
     : MediaSinkServiceBase(callback),
       cast_socket_service_(cast_socket_service),
       network_monitor_(network_monitor),
-      backoff_policy_(&kBackoffPolicy),
-      task_runner_(content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::IO)) {
+      task_runner_(task_runner),
+      url_request_context_getter_(std::move(url_request_context_getter)),
+      clock_(new base::DefaultClock()) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(cast_socket_service_);
   DCHECK(network_monitor_);
   network_monitor_->AddObserver(this);
+  cast_socket_service_->AddObserver(this);
+
+  retry_params_ = RetryParams::GetFromFieldTrialParam();
+  open_params_ = OpenParams::GetFromFieldTrialParam();
+
+  backoff_policy_ = {
+      // Number of initial errors (in sequence) to ignore before going into
+      // exponential backoff.
+      0,
+
+      // Initial delay (in ms) once backoff starts. It should be longer than
+      // Cast
+      // socket's liveness timeout |kConnectLivenessTimeoutSecs| (10 seconds).
+      retry_params_.initial_delay_in_milliseconds,
+
+      // Factor by which the delay will be multiplied on each subsequent
+      // failure.
+      retry_params_.multiply_factor,
+
+      // Fuzzing percentage: 50% will spread delays randomly between 50%--100%
+      // of
+      // the nominal time.
+      0.5,  // 50%
+
+      // Maximum delay (in ms) during exponential backoff.
+      30 * 1000,  // 30 seconds
+
+      // Time to keep an entry from being discarded even when it has no
+      // significant state, -1 to never discard. (Not applicable.)
+      -1,
+
+      // False means that initial_delay_ms is the first delay once we start
+      // exponential backoff, i.e., there is no delay after subsequent
+      // successful
+      // requests.
+      false,
+  };
 }
 
 CastMediaSinkServiceImpl::~CastMediaSinkServiceImpl() {
@@ -106,6 +227,11 @@ CastMediaSinkServiceImpl::~CastMediaSinkServiceImpl() {
 void CastMediaSinkServiceImpl::SetTaskRunnerForTest(
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   task_runner_ = task_runner;
+}
+
+void CastMediaSinkServiceImpl::SetClockForTest(
+    std::unique_ptr<base::Clock> clock) {
+  clock_ = std::move(clock);
 }
 
 // MediaSinkService implementation
@@ -143,7 +269,8 @@ void CastMediaSinkServiceImpl::RecordDeviceCounts() {
 }
 
 void CastMediaSinkServiceImpl::OpenChannels(
-    std::vector<MediaSinkInternal> cast_sinks) {
+    std::vector<MediaSinkInternal> cast_sinks,
+    SinkSource sink_source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   known_ip_endpoints_.clear();
@@ -152,7 +279,8 @@ void CastMediaSinkServiceImpl::OpenChannels(
     const net::IPEndPoint& ip_endpoint = cast_sink.cast_data().ip_endpoint;
     known_ip_endpoints_.insert(ip_endpoint);
     OpenChannel(ip_endpoint, cast_sink,
-                base::MakeUnique<net::BackoffEntry>(backoff_policy_));
+                base::MakeUnique<net::BackoffEntry>(&backoff_policy_),
+                sink_source);
   }
 
   MediaSinkServiceBase::RestartTimer();
@@ -165,8 +293,11 @@ void CastMediaSinkServiceImpl::OnError(const cast_channel::CastSocket& socket,
            << cast_channel::ChannelErrorToString(error_state)
            << " [channel_id]: " << socket.id();
 
-  net::IPEndPoint ip_endpoint = socket.ip_endpoint();
+  cast_channel::LastError last_error =
+      cast_socket_service_->GetLogger()->GetLastError(socket.id());
+  RecordError(error_state, last_error);
 
+  net::IPEndPoint ip_endpoint = socket.ip_endpoint();
   // Need a PostTask() here because RemoveSocket() will release the memory of
   // |socket|. Need to make sure all tasks on |socket| finish before deleting
   // the object.
@@ -184,7 +315,7 @@ void CastMediaSinkServiceImpl::OnError(const cast_channel::CastSocket& socket,
   }
 
   std::unique_ptr<net::BackoffEntry> backoff_entry(
-      new net::BackoffEntry(backoff_policy_));
+      new net::BackoffEntry(&backoff_policy_));
 
   DVLOG(2) << "OnError starts reopening cast channel: "
            << ip_endpoint.ToString();
@@ -192,7 +323,7 @@ void CastMediaSinkServiceImpl::OnError(const cast_channel::CastSocket& socket,
   auto cast_sink_it = current_sinks_map_.find(ip_endpoint.address());
   if (cast_sink_it != current_sinks_map_.end()) {
     OnChannelErrorMayRetry(cast_sink_it->second, std::move(backoff_entry),
-                           error_state);
+                           error_state, SinkSource::kConnectionRetry);
     return;
   }
 
@@ -225,15 +356,47 @@ void CastMediaSinkServiceImpl::OnNetworksChanged(
   if (cache_entry == sink_cache_.end())
     return;
 
+  metrics_.RecordCachedSinksAvailableCount(cache_entry->second.size());
+
   DVLOG(2) << "Cache restored " << cache_entry->second.size()
            << " sink(s) for network " << network_id;
-  OpenChannels(cache_entry->second);
+  OpenChannels(cache_entry->second, SinkSource::kNetworkCache);
+}
+
+cast_channel::CastSocketOpenParams
+CastMediaSinkServiceImpl::CreateCastSocketOpenParams(
+    const net::IPEndPoint& ip_endpoint) {
+  int connect_timeout_in_seconds = open_params_.connect_timeout_in_seconds;
+  int liveness_timeout_in_seconds = open_params_.liveness_timeout_in_seconds;
+  int delta_in_seconds = open_params_.dynamic_timeout_delta_in_seconds;
+
+  auto it = failure_count_map_.find(ip_endpoint);
+  if (it != failure_count_map_.end()) {
+    int failure_count = it->second;
+    connect_timeout_in_seconds =
+        std::min(connect_timeout_in_seconds + failure_count * delta_in_seconds,
+                 kMaxConnectTimeoutInSeconds);
+    liveness_timeout_in_seconds =
+        std::min(liveness_timeout_in_seconds + failure_count * delta_in_seconds,
+                 kMaxLivenessTimeoutInSeconds);
+  }
+
+  return cast_channel::CastSocketOpenParams(
+      ip_endpoint,
+      url_request_context_getter_.get()
+          ? url_request_context_getter_->GetURLRequestContext()->net_log()
+          : nullptr,
+      base::TimeDelta::FromSeconds(connect_timeout_in_seconds),
+      base::TimeDelta::FromSeconds(liveness_timeout_in_seconds),
+      base::TimeDelta::FromSeconds(open_params_.ping_interval_in_seconds),
+      cast_channel::CastDeviceCapability::NONE);
 }
 
 void CastMediaSinkServiceImpl::OpenChannel(
     const net::IPEndPoint& ip_endpoint,
     const MediaSinkInternal& cast_sink,
-    std::unique_ptr<net::BackoffEntry> backoff_entry) {
+    std::unique_ptr<net::BackoffEntry> backoff_entry,
+    SinkSource sink_source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!pending_for_open_ip_endpoints_.insert(ip_endpoint).second) {
     DVLOG(2) << "Pending opening request for " << ip_endpoint.ToString()
@@ -244,16 +407,20 @@ void CastMediaSinkServiceImpl::OpenChannel(
   DVLOG(2) << "Start OpenChannel " << ip_endpoint.ToString()
            << " name: " << cast_sink.sink().name();
 
+  cast_channel::CastSocketOpenParams open_params =
+      CreateCastSocketOpenParams(ip_endpoint);
   cast_socket_service_->OpenSocket(
-      ip_endpoint, g_browser_process->net_log(),
+      open_params,
       base::BindOnce(&CastMediaSinkServiceImpl::OnChannelOpened, AsWeakPtr(),
-                     cast_sink, std::move(backoff_entry)),
-      this);
+                     cast_sink, std::move(backoff_entry), sink_source,
+                     clock_->Now()));
 }
 
 void CastMediaSinkServiceImpl::OnChannelOpened(
     const MediaSinkInternal& cast_sink,
     std::unique_ptr<net::BackoffEntry> backoff_entry,
+    SinkSource sink_source,
+    base::Time start_time,
     cast_channel::CastSocket* socket) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(socket);
@@ -263,27 +430,34 @@ void CastMediaSinkServiceImpl::OnChannelOpened(
   if (backoff_entry)
     backoff_entry->InformOfRequest(succeeded);
 
+  CastAnalytics::RecordDeviceChannelOpenDuration(succeeded,
+                                                 clock_->Now() - start_time);
+
   if (succeeded) {
-    OnChannelOpenSucceeded(cast_sink, socket);
+    OnChannelOpenSucceeded(cast_sink, socket, sink_source);
   } else {
     OnChannelErrorMayRetry(cast_sink, std::move(backoff_entry),
-                           socket->error_state());
+                           socket->error_state(), sink_source);
   }
 }
 
 void CastMediaSinkServiceImpl::OnChannelErrorMayRetry(
     MediaSinkInternal cast_sink,
     std::unique_ptr<net::BackoffEntry> backoff_entry,
-    cast_channel::ChannelError error_state) {
+    cast_channel::ChannelError error_state,
+    SinkSource sink_source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const net::IPEndPoint& ip_endpoint = cast_sink.cast_data().ip_endpoint;
   OnChannelOpenFailed(ip_endpoint);
 
-  if (!backoff_entry || backoff_entry->failure_count() > kMaxAttempts) {
+  if (!backoff_entry ||
+      backoff_entry->failure_count() > retry_params_.max_retry_attempts) {
     DVLOG(1) << "Fail to open channel after all retry attempts: "
              << ip_endpoint.ToString() << " [error_state]: "
              << cast_channel::ChannelErrorToString(error_state);
+
+    CastAnalytics::RecordCastChannelConnectResult(false);
     return;
   }
 
@@ -296,15 +470,18 @@ void CastMediaSinkServiceImpl::OnChannelErrorMayRetry(
       FROM_HERE,
       base::BindOnce(&CastMediaSinkServiceImpl::OpenChannel, AsWeakPtr(),
                      ip_endpoint, std::move(cast_sink),
-                     std::move(backoff_entry)),
+                     std::move(backoff_entry), sink_source),
       delay);
 }
 
 void CastMediaSinkServiceImpl::OnChannelOpenSucceeded(
     MediaSinkInternal cast_sink,
-    cast_channel::CastSocket* socket) {
+    cast_channel::CastSocket* socket,
+    SinkSource sink_source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(socket);
+
+  CastAnalytics::RecordCastChannelConnectResult(true);
 
   media_router::CastSinkExtraData extra_data = cast_sink.cast_data();
   extra_data.capabilities = cast_channel::CastDeviceCapability::AUDIO_OUT;
@@ -317,8 +494,16 @@ void CastMediaSinkServiceImpl::OnChannelOpenSucceeded(
 
   // Add or update existing cast sink.
   auto& ip_address = cast_sink.cast_data().ip_endpoint.address();
+  auto sink_it = current_sinks_map_.find(ip_address);
+  if (sink_it == current_sinks_map_.end()) {
+    metrics_.RecordResolvedFromSource(sink_source);
+  } else if (sink_it->second.cast_data().discovered_by_dial &&
+             !cast_sink.cast_data().discovered_by_dial) {
+    metrics_.RecordResolvedFromSource(SinkSource::kDialMdns);
+  }
   current_sinks_map_[ip_address] = cast_sink;
 
+  failure_count_map_.erase(cast_sink.cast_data().ip_endpoint);
   MediaSinkServiceBase::RestartTimer();
 }
 
@@ -326,6 +511,9 @@ void CastMediaSinkServiceImpl::OnChannelOpenFailed(
     const net::IPEndPoint& ip_endpoint) {
   auto& ip_address = ip_endpoint.address();
   current_sinks_map_.erase(ip_address);
+
+  int failure_count = ++failure_count_map_[ip_endpoint];
+  failure_count_map_[ip_endpoint] = std::min(failure_count, kMaxFailureCount);
   MediaSinkServiceBase::RestartTimer();
 }
 
@@ -336,13 +524,132 @@ void CastMediaSinkServiceImpl::OnDialSinkAdded(const MediaSinkInternal& sink) {
   if (base::ContainsKey(current_sinks_map_, ip_endpoint.address())) {
     DVLOG(2) << "Sink discovered by mDNS, skip adding [name]: "
              << sink.sink().name();
+    metrics_.RecordResolvedFromSource(SinkSource::kMdnsDial);
     return;
   }
 
   // TODO(crbug.com/753175): Dual discovery should not try to open cast channel
   // for non-Cast device.
   OpenChannel(ip_endpoint, CreateCastSinkFromDialSink(sink),
-              base::MakeUnique<net::BackoffEntry>(backoff_policy_));
+              base::MakeUnique<net::BackoffEntry>(&backoff_policy_),
+              SinkSource::kDial);
+}
+
+void CastMediaSinkServiceImpl::AttemptConnection(
+    const std::vector<MediaSinkInternal>& cast_sinks) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  for (const auto& cast_sink : cast_sinks) {
+    const net::IPEndPoint& ip_endpoint = cast_sink.cast_data().ip_endpoint;
+    if (!base::ContainsKey(current_sinks_map_, ip_endpoint.address())) {
+      OpenChannel(ip_endpoint, cast_sink,
+                  base::MakeUnique<net::BackoffEntry>(&backoff_policy_),
+                  SinkSource::kConnectionRetry);
+    }
+  }
+}
+
+CastMediaSinkServiceImpl::RetryParams::RetryParams()
+    : initial_delay_in_milliseconds(kDefaultInitialDelayInMilliSeconds),
+      max_retry_attempts(kDefaultMaxRetryAttempts),
+      multiply_factor(kDefaultExponential) {}
+CastMediaSinkServiceImpl::RetryParams::~RetryParams() = default;
+
+bool CastMediaSinkServiceImpl::RetryParams::Validate() {
+  if (max_retry_attempts < 0 || max_retry_attempts > 100) {
+    return false;
+  }
+  if (initial_delay_in_milliseconds <= 0 ||
+      initial_delay_in_milliseconds > 60 * 1000 /* 1 min */) {
+    return false;
+  }
+  if (multiply_factor < 1.0 || multiply_factor > 5.0)
+    return false;
+
+  return true;
+}
+
+// static
+CastMediaSinkServiceImpl::RetryParams
+CastMediaSinkServiceImpl::RetryParams::GetFromFieldTrialParam() {
+  RetryParams params;
+  params.max_retry_attempts = base::GetFieldTrialParamByFeatureAsInt(
+      kEnableCastDiscovery, kParamNameMaxRetryAttempts,
+      kDefaultMaxRetryAttempts);
+  params.initial_delay_in_milliseconds = base::GetFieldTrialParamByFeatureAsInt(
+      kEnableCastDiscovery, kParamNameInitialDelayInMilliSeconds,
+      kDefaultInitialDelayInMilliSeconds);
+  params.multiply_factor = base::GetFieldTrialParamByFeatureAsDouble(
+      kEnableCastDiscovery, kParamNameExponential, kDefaultExponential);
+
+  DVLOG(2) << "Parameters: "
+           << " [initial_delay_ms]: " << params.initial_delay_in_milliseconds
+           << " [max_retry_attempts]: " << params.max_retry_attempts
+           << " [exponential]: " << params.multiply_factor;
+
+  if (!params.Validate())
+    return RetryParams();
+
+  return params;
+}
+
+CastMediaSinkServiceImpl::OpenParams::OpenParams()
+    : connect_timeout_in_seconds(kDefaultConnectTimeoutInSeconds),
+      ping_interval_in_seconds(kDefaultPingIntervalInSeconds),
+      liveness_timeout_in_seconds(kDefaultLivenessTimeoutInSeconds),
+      dynamic_timeout_delta_in_seconds(kDefaultDynamicTimeoutDeltaInSeconds) {}
+CastMediaSinkServiceImpl::OpenParams::~OpenParams() = default;
+
+bool CastMediaSinkServiceImpl::OpenParams::Validate() {
+  if (connect_timeout_in_seconds <= 0 ||
+      connect_timeout_in_seconds > kMaxConnectTimeoutInSeconds) {
+    return false;
+  }
+  if (liveness_timeout_in_seconds <= 0 ||
+      liveness_timeout_in_seconds > kMaxLivenessTimeoutInSeconds) {
+    return false;
+  }
+  if (ping_interval_in_seconds <= 0 ||
+      ping_interval_in_seconds > liveness_timeout_in_seconds) {
+    return false;
+  }
+  if (dynamic_timeout_delta_in_seconds < 0 ||
+      dynamic_timeout_delta_in_seconds > kMaxConnectTimeoutInSeconds) {
+    return false;
+  }
+
+  return true;
+}
+
+// static
+CastMediaSinkServiceImpl::OpenParams
+CastMediaSinkServiceImpl::OpenParams::GetFromFieldTrialParam() {
+  OpenParams params;
+  params.connect_timeout_in_seconds = base::GetFieldTrialParamByFeatureAsInt(
+      kEnableCastDiscovery, kParamNameConnectTimeoutInSeconds,
+      kDefaultConnectTimeoutInSeconds);
+  params.ping_interval_in_seconds = base::GetFieldTrialParamByFeatureAsInt(
+      kEnableCastDiscovery, kParamNamePingIntervalInSeconds,
+      kDefaultPingIntervalInSeconds);
+  params.liveness_timeout_in_seconds = base::GetFieldTrialParamByFeatureAsInt(
+      kEnableCastDiscovery, kParamNameLivenessTimeoutInSeconds,
+      kDefaultLivenessTimeoutInSeconds);
+  params.dynamic_timeout_delta_in_seconds =
+      base::GetFieldTrialParamByFeatureAsInt(
+          kEnableCastDiscovery, kParamNameDynamicTimeoutDeltaInSeconds,
+          kDefaultDynamicTimeoutDeltaInSeconds);
+
+  DVLOG(2) << "Parameters: "
+           << " [connect_timeout]: " << params.connect_timeout_in_seconds
+           << " [ping_interval]: " << params.ping_interval_in_seconds
+           << " [liveness_timeout]: " << params.liveness_timeout_in_seconds
+           << " [dynamic_timeout_delta]: "
+           << params.dynamic_timeout_delta_in_seconds;
+
+  if (!params.Validate())
+    return OpenParams();
+
+  return params;
 }
 
 }  // namespace media_router

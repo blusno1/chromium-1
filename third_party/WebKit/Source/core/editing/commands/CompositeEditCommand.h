@@ -28,7 +28,7 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
-#include "core/editing/VisibleSelection.h"
+#include "core/editing/Forward.h"
 #include "core/editing/commands/EditCommand.h"
 #include "core/editing/commands/EditingState.h"
 #include "core/editing/commands/UndoStep.h"
@@ -56,7 +56,6 @@ class CORE_EXPORT CompositeEditCommand : public EditCommand {
   const SelectionForUndoStep& EndingSelection() const {
     return ending_selection_;
   }
-  VisibleSelection EndingVisibleSelection() const;
 
   void SetStartingSelection(const SelectionForUndoStep&);
   void SetStartingSelection(const VisibleSelection&);
@@ -90,6 +89,7 @@ class CORE_EXPORT CompositeEditCommand : public EditCommand {
  protected:
   explicit CompositeEditCommand(Document&);
 
+  VisibleSelection EndingVisibleSelection() const;
   //
   // sugary-sweet convenience functions to help create and apply edit commands
   // in composite commands
@@ -214,8 +214,8 @@ class CORE_EXPORT CompositeEditCommand : public EditCommand {
                                      Node* outer_node,
                                      Element* block_element,
                                      EditingState*);
-  void CleanupAfterDeletion(EditingState*,
-                            VisiblePosition destination = VisiblePosition());
+  void CleanupAfterDeletion(EditingState*, VisiblePosition destination);
+  void CleanupAfterDeletion(EditingState*);
 
   bool BreakOutOfEmptyListItem(EditingState*);
   bool BreakOutOfEmptyMailBlockquotedParagraph(EditingState*);

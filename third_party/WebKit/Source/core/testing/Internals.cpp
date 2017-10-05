@@ -36,8 +36,6 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/V8IteratorResultValue.h"
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
-#include "core/SVGNames.h"
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/css/SelectRuleFeatureSet.h"
@@ -59,12 +57,17 @@
 #include "core/dom/TreeScope.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/PlainTextRange.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/SurroundingText.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/markers/DocumentMarker.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/markers/SpellCheckMarker.h"
+#include "core/editing/markers/SuggestionMarkerProperties.h"
 #include "core/editing/markers/TextMatchMarker.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/IdleSpellCheckCallback.h"
@@ -93,6 +96,7 @@
 #include "core/html/forms/FormController.h"
 #include "core/html/forms/TextControlInnerElements.h"
 #include "core/html/shadow/ShadowElementNames.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/input/KeyboardEventManager.h"
 #include "core/inspector/MainThreadDebugger.h"
@@ -114,6 +118,7 @@
 #include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGImageElement.h"
+#include "core/svg_names.h"
 #include "core/testing/CallbackFunctionTest.h"
 #include "core/testing/DictionaryTest.h"
 #include "core/testing/GCObservation.h"
@@ -134,7 +139,6 @@
 #include "platform/InstanceCounters.h"
 #include "platform/Language.h"
 #include "platform/LayoutLocale.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/bindings/V8ThrowException.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
@@ -145,6 +149,7 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
 #include "platform/network/NetworkStateNotifier.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ProgrammaticScrollAnimator.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/testing/URLTestHelpers.h"
@@ -200,6 +205,12 @@ static WTF::Optional<DocumentMarker::MarkerType> MarkerTypeFrom(
     return DocumentMarker::kGrammar;
   if (DeprecatedEqualIgnoringCase(marker_type, "TextMatch"))
     return DocumentMarker::kTextMatch;
+  if (DeprecatedEqualIgnoringCase(marker_type, "Composition"))
+    return DocumentMarker::kComposition;
+  if (DeprecatedEqualIgnoringCase(marker_type, "ActiveSuggestion"))
+    return DocumentMarker::kActiveSuggestion;
+  if (DeprecatedEqualIgnoringCase(marker_type, "Suggestion"))
+    return DocumentMarker::kSuggestion;
   return WTF::nullopt;
 }
 
@@ -338,14 +349,6 @@ unsigned Internals::needsLayoutCount(ExceptionState& exception_state) const {
   return needs_layout_objects;
 }
 
-unsigned Internals::forceLayoutCount(ExceptionState& exception_state) const {
-  if (document_)
-    return document_->ForceLayoutCountForTesting();
-  exception_state.ThrowDOMException(kInvalidAccessError,
-                                    "No context document is available.");
-  return 0;
-}
-
 unsigned Internals::hitTestCount(Document* doc,
                                  ExceptionState& exception_state) const {
   if (!doc) {
@@ -473,8 +476,8 @@ bool Internals::isValidContentSelect(Element* insertion_point,
     return false;
   }
 
-  return isHTMLContentElement(*insertion_point) &&
-         toHTMLContentElement(*insertion_point).IsSelectValid();
+  return IsHTMLContentElement(*insertion_point) &&
+         ToHTMLContentElement(*insertion_point).IsSelectValid();
 }
 
 Node* Internals::treeScopeRootNode(Node* node) {
@@ -557,10 +560,10 @@ void Internals::advanceTimeForImage(Element* image,
   }
 
   ImageResourceContent* resource = nullptr;
-  if (isHTMLImageElement(*image)) {
-    resource = toHTMLImageElement(*image).CachedImage();
-  } else if (isSVGImageElement(*image)) {
-    resource = toSVGImageElement(*image).CachedImage();
+  if (auto* html_image = ToHTMLImageElementOrNull(*image)) {
+    resource = html_image->CachedImage();
+  } else if (auto* svg_image = ToSVGImageElementOrNull(*image)) {
+    resource = svg_image->CachedImage();
   } else {
     exception_state.ThrowDOMException(
         kInvalidAccessError, "The element provided is not a image element.");
@@ -588,10 +591,10 @@ void Internals::advanceImageAnimation(Element* image,
   DCHECK(image);
 
   ImageResourceContent* resource = nullptr;
-  if (isHTMLImageElement(*image)) {
-    resource = toHTMLImageElement(*image).CachedImage();
-  } else if (isSVGImageElement(*image)) {
-    resource = toSVGImageElement(*image).CachedImage();
+  if (auto* html_image = ToHTMLImageElementOrNull(*image)) {
+    resource = html_image->CachedImage();
+  } else if (auto* svg_image = ToSVGImageElementOrNull(*image)) {
+    resource = svg_image->CachedImage();
   } else {
     exception_state.ThrowDOMException(
         kInvalidAccessError, "The element provided is not a image element.");
@@ -824,19 +827,17 @@ bool Internals::isValidationMessageVisible(Element* element) {
 void Internals::selectColorInColorChooser(Element* element,
                                           const String& color_value) {
   DCHECK(element);
-  if (!isHTMLInputElement(*element))
-    return;
   Color color;
   if (!color.SetFromString(color_value))
     return;
-  toHTMLInputElement(*element).SelectColorInColorChooser(color);
+  if (auto* input = ToHTMLInputElementOrNull(*element))
+    input->SelectColorInColorChooser(color);
 }
 
 void Internals::endColorChooser(Element* element) {
   DCHECK(element);
-  if (!isHTMLInputElement(*element))
-    return;
-  toHTMLInputElement(*element).EndColorChooser();
+  if (auto* input = ToHTMLInputElementOrNull(*element))
+    input->EndColorChooser();
 }
 
 bool Internals::hasAutofocusRequest(Document* document) {
@@ -1190,8 +1191,15 @@ void Internals::addSuggestionMarker(
           const EphemeralRange& range, Color underline_color,
           StyleableMarker::Thickness thickness, Color background_color) {
         document_marker_controller.AddSuggestionMarker(
-            range, suggestions, suggestion_highlight_color, underline_color,
-            thickness, background_color);
+            range,
+            SuggestionMarkerProperties::Builder()
+                .SetType(SuggestionMarker::SuggestionType::kNotMisspelling)
+                .SetSuggestions(suggestions)
+                .SetHighlightColor(suggestion_highlight_color)
+                .SetUnderlineColor(underline_color)
+                .SetThickness(thickness)
+                .SetBackgroundColor(background_color)
+                .Build());
       });
 }
 
@@ -1284,8 +1292,8 @@ String Internals::viewportAsText(Document* document,
 bool Internals::elementShouldAutoComplete(Element* element,
                                           ExceptionState& exception_state) {
   DCHECK(element);
-  if (isHTMLInputElement(*element))
-    return toHTMLInputElement(*element).ShouldAutocomplete();
+  if (auto* input = ToHTMLInputElementOrNull(*element))
+    return input->ShouldAutocomplete();
 
   exception_state.ThrowDOMException(kInvalidNodeTypeError,
                                     "The element provided is not an INPUT.");
@@ -1303,14 +1311,14 @@ String Internals::suggestedValue(Element* element,
   }
 
   String suggested_value;
-  if (isHTMLInputElement(*element))
-    suggested_value = toHTMLInputElement(*element).SuggestedValue();
+  if (auto* input = ToHTMLInputElementOrNull(*element))
+    return input->SuggestedValue();
 
-  if (isHTMLTextAreaElement(*element))
-    suggested_value = toHTMLTextAreaElement(*element).SuggestedValue();
+  if (auto* textarea = ToHTMLTextAreaElementOrNull(*element))
+    return textarea->SuggestedValue();
 
-  if (isHTMLSelectElement(*element))
-    suggested_value = toHTMLSelectElement(*element).SuggestedValue();
+  if (auto* select = ToHTMLSelectElementOrNull(*element))
+    return select->SuggestedValue();
 
   return suggested_value;
 }
@@ -1326,27 +1334,27 @@ void Internals::setSuggestedValue(Element* element,
     return;
   }
 
-  if (isHTMLInputElement(*element))
-    toHTMLInputElement(*element).SetSuggestedValue(value);
+  if (auto* input = ToHTMLInputElementOrNull(*element))
+    input->SetSuggestedValue(value);
 
-  if (isHTMLTextAreaElement(*element))
-    toHTMLTextAreaElement(*element).SetSuggestedValue(value);
+  if (auto* textarea = ToHTMLTextAreaElementOrNull(*element))
+    textarea->SetSuggestedValue(value);
 
-  if (isHTMLSelectElement(*element))
-    toHTMLSelectElement(*element).SetSuggestedValue(value);
+  if (auto* select = ToHTMLSelectElementOrNull(*element))
+    select->SetSuggestedValue(value);
 }
 
 void Internals::setEditingValue(Element* element,
                                 const String& value,
                                 ExceptionState& exception_state) {
   DCHECK(element);
-  if (!isHTMLInputElement(*element)) {
+  if (!IsHTMLInputElement(*element)) {
     exception_state.ThrowDOMException(kInvalidNodeTypeError,
                                       "The element provided is not an INPUT.");
     return;
   }
 
-  toHTMLInputElement(*element).SetEditingValue(value);
+  ToHTMLInputElement(*element).SetEditingValue(value);
 }
 
 void Internals::setAutofilled(Element* element,
@@ -1609,6 +1617,21 @@ int Internals::lastSpellCheckProcessedSequence(
   }
 
   return requester->LastProcessedSequence();
+}
+
+void Internals::cancelCurrentSpellCheckRequest(
+    Document* document,
+    ExceptionState& exception_state) {
+  SpellCheckRequester* requester = GetSpellCheckRequester(document);
+
+  if (!requester) {
+    exception_state.ThrowDOMException(
+        kInvalidAccessError,
+        "No spell check requestor can be obtained for the provided document.");
+    return;
+  }
+
+  requester->CancelCheck();
 }
 
 String Internals::idleTimeSpellCheckerState(Document* document,
@@ -2089,7 +2112,8 @@ bool Internals::canHyphenate(const AtomicString& locale) {
 }
 
 void Internals::setMockHyphenation(const AtomicString& locale) {
-  LayoutLocale::SetHyphenationForTesting(locale, AdoptRef(new MockHyphenation));
+  LayoutLocale::SetHyphenationForTesting(locale,
+                                         WTF::AdoptRef(new MockHyphenation));
 }
 
 bool Internals::isOverwriteModeEnabled(Document* document) {
@@ -2582,8 +2606,8 @@ void Internals::updateLayoutIgnorePendingStylesheetsAndRunPostLayoutTasks(
     document = document_;
   } else if (node->IsDocumentNode()) {
     document = ToDocument(node);
-  } else if (isHTMLIFrameElement(*node)) {
-    document = toHTMLIFrameElement(*node).contentDocument();
+  } else if (auto* iframe = ToHTMLIFrameElementOrNull(*node)) {
+    document = iframe->contentDocument();
   }
 
   if (!document) {
@@ -2881,7 +2905,8 @@ DOMRect* Internals::selectionBounds(ExceptionState& exception_state) {
     return nullptr;
   }
 
-  return DOMRect::FromFloatRect(FloatRect(GetFrame()->Selection().Bounds()));
+  return DOMRect::FromFloatRect(
+      FloatRect(GetFrame()->Selection().UnclippedBounds()));
 }
 
 String Internals::markerTextForListItem(Element* element) {
@@ -2896,12 +2921,12 @@ String Internals::getImageSourceURL(Element* element) {
 
 void Internals::forceImageReload(Element* element,
                                  ExceptionState& exception_state) {
-  if (!element || !isHTMLImageElement(*element)) {
+  if (!element || !IsHTMLImageElement(*element)) {
     exception_state.ThrowDOMException(
         kInvalidAccessError, "The element should be HTMLImageElement.");
   }
 
-  toHTMLImageElement(*element).ForceReload();
+  ToHTMLImageElement(*element).ForceReload();
 }
 
 String Internals::selectMenuListText(HTMLSelectElement* select) {
@@ -2917,16 +2942,16 @@ String Internals::selectMenuListText(HTMLSelectElement* select) {
 
 bool Internals::isSelectPopupVisible(Node* node) {
   DCHECK(node);
-  if (!isHTMLSelectElement(*node))
-    return false;
-  return toHTMLSelectElement(*node).PopupIsVisible();
+  if (auto* select = ToHTMLSelectElementOrNull(*node))
+    return select->PopupIsVisible();
+  return false;
 }
 
 bool Internals::selectPopupItemStyleIsRtl(Node* node, int item_index) {
-  if (!node || !isHTMLSelectElement(*node))
+  if (!node || !IsHTMLSelectElement(*node))
     return false;
 
-  HTMLSelectElement& select = toHTMLSelectElement(*node);
+  HTMLSelectElement& select = ToHTMLSelectElement(*node);
   if (item_index < 0 ||
       static_cast<size_t>(item_index) >= select.GetListItems().size())
     return false;
@@ -2936,10 +2961,10 @@ bool Internals::selectPopupItemStyleIsRtl(Node* node, int item_index) {
 }
 
 int Internals::selectPopupItemStyleFontHeight(Node* node, int item_index) {
-  if (!node || !isHTMLSelectElement(*node))
+  if (!node || !IsHTMLSelectElement(*node))
     return false;
 
-  HTMLSelectElement& select = toHTMLSelectElement(*node);
+  HTMLSelectElement& select = ToHTMLSelectElement(*node);
   if (item_index < 0 ||
       static_cast<size_t>(item_index) >= select.GetListItems().size())
     return false;
@@ -2997,13 +3022,13 @@ void Internals::setShouldRevealPassword(Element* element,
                                         bool reveal,
                                         ExceptionState& exception_state) {
   DCHECK(element);
-  if (!isHTMLInputElement(element)) {
+  if (!IsHTMLInputElement(element)) {
     exception_state.ThrowDOMException(kInvalidNodeTypeError,
                                       "The element provided is not an INPUT.");
     return;
   }
 
-  return toHTMLInputElement(*element).SetShouldRevealPassword(reveal);
+  return ToHTMLInputElement(*element).SetShouldRevealPassword(reveal);
 }
 
 namespace {

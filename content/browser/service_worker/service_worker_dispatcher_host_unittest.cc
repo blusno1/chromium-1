@@ -35,6 +35,9 @@
 #include "content/test/test_content_browser_client.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+
+using blink::MessagePortChannel;
 
 namespace content {
 
@@ -47,10 +50,10 @@ static void SaveStatusCallback(bool* called,
   *out = status;
 }
 
-void SetUpDummyMessagePort(std::vector<MessagePort>* ports) {
+void SetUpDummyMessagePort(std::vector<MessagePortChannel>* ports) {
   // Let the other end of the pipe close.
   mojo::MessagePipe pipe;
-  ports->push_back(MessagePort(std::move(pipe.handle0)));
+  ports->push_back(MessagePortChannel(std::move(pipe.handle0)));
 }
 
 struct RemoteProviderInfo {
@@ -176,11 +179,11 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
   }
 
   void SetUpRegistration(const GURL& scope, const GURL& script_url) {
-    registration_ =
-        new ServiceWorkerRegistration(ServiceWorkerRegistrationOptions(scope),
-                                      1L, helper_->context()->AsWeakPtr());
+    registration_ = new ServiceWorkerRegistration(
+        blink::mojom::ServiceWorkerRegistrationOptions(scope), 1L,
+        context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(registration_.get(), script_url, 1L,
-                                        helper_->context()->AsWeakPtr());
+                                        context()->AsWeakPtr());
     std::vector<ServiceWorkerDatabase::ResourceRecord> records;
     records.push_back(
         ServiceWorkerDatabase::ResourceRecord(10, version_->script_url(), 100));
@@ -192,11 +195,12 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     version_->SetStatus(ServiceWorkerVersion::INSTALLING);
 
     // Make the registration findable via storage functions.
-    helper_->context()->storage()->LazyInitialize(base::Bind(&base::DoNothing));
+    context()->storage()->LazyInitializeForTest(
+        base::BindOnce(&base::DoNothing));
     base::RunLoop().RunUntilIdle();
     bool called = false;
     ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_MAX_VALUE;
-    helper_->context()->storage()->StoreRegistration(
+    context()->storage()->StoreRegistration(
         registration_.get(), version_.get(),
         base::Bind(&SaveStatusCallback, &called, &status));
     base::RunLoop().RunUntilIdle();
@@ -223,8 +227,8 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     std::unique_ptr<ServiceWorkerProviderHost> host =
         CreateProviderHostForServiceWorkerContext(
             helper_->mock_render_process_id(),
-            true /* is_parent_frame_secure */, version,
-            helper_->context()->AsWeakPtr(), &remote_endpoint_);
+            true /* is_parent_frame_secure */, version, context()->AsWeakPtr(),
+            &remote_endpoint_);
     provider_host_ = host.get();
     helper_->SimulateAddProcessToPattern(pattern,
                                          helper_->mock_render_process_id());
@@ -234,16 +238,15 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
   void SendRegister(mojom::ServiceWorkerContainerHost* container_host,
                     GURL pattern,
                     GURL worker_url) {
-    ServiceWorkerRegistrationOptions options(pattern);
+    auto options = blink::mojom::ServiceWorkerRegistrationOptions::New(pattern);
     container_host->Register(
-        worker_url, options,
-        base::BindOnce(
-            [](blink::mojom::ServiceWorkerErrorType error,
-               const base::Optional<std::string>& error_msg,
-               const base::Optional<ServiceWorkerRegistrationObjectInfo>&
-                   registration,
-               const base::Optional<ServiceWorkerVersionAttributes>&
-                   attributes) {}));
+        worker_url, std::move(options),
+        base::BindOnce([](blink::mojom::ServiceWorkerErrorType error,
+                          const base::Optional<std::string>& error_msg,
+                          blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+                              registration,
+                          const base::Optional<ServiceWorkerVersionAttributes>&
+                              attributes) {}));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -252,18 +255,17 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
                 GURL worker_url,
                 blink::mojom::ServiceWorkerErrorType expected) {
     blink::mojom::ServiceWorkerErrorType error;
-    ServiceWorkerRegistrationOptions options(pattern);
+    auto options = blink::mojom::ServiceWorkerRegistrationOptions::New(pattern);
     container_host->Register(
-        worker_url, options,
-        base::BindOnce(
-            [](blink::mojom::ServiceWorkerErrorType* out_error,
-               blink::mojom::ServiceWorkerErrorType error,
-               const base::Optional<std::string>& error_msg,
-               const base::Optional<ServiceWorkerRegistrationObjectInfo>&
-                   registration,
-               const base::Optional<ServiceWorkerVersionAttributes>&
-                   attributes) { *out_error = error; },
-            &error));
+        worker_url, std::move(options),
+        base::BindOnce([](blink::mojom::ServiceWorkerErrorType* out_error,
+                          blink::mojom::ServiceWorkerErrorType error,
+                          const base::Optional<std::string>& error_msg,
+                          blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+                              registration,
+                          const base::Optional<ServiceWorkerVersionAttributes>&
+                              attributes) { *out_error = error; },
+                       &error));
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(expected, error);
   }
@@ -288,13 +290,12 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
                            GURL document_url) {
     container_host->GetRegistration(
         document_url,
-        base::BindOnce(
-            [](blink::mojom::ServiceWorkerErrorType error,
-               const base::Optional<std::string>& error_msg,
-               const base::Optional<ServiceWorkerRegistrationObjectInfo>&
-                   registration,
-               const base::Optional<ServiceWorkerVersionAttributes>&
-                   attributes) {}));
+        base::BindOnce([](blink::mojom::ServiceWorkerErrorType error,
+                          const base::Optional<std::string>& error_msg,
+                          blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+                              registration,
+                          const base::Optional<ServiceWorkerVersionAttributes>&
+                              attributes) {}));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -304,15 +305,14 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     blink::mojom::ServiceWorkerErrorType error;
     container_host->GetRegistration(
         document_url,
-        base::BindOnce(
-            [](blink::mojom::ServiceWorkerErrorType* out_error,
-               blink::mojom::ServiceWorkerErrorType error,
-               const base::Optional<std::string>& error_msg,
-               const base::Optional<ServiceWorkerRegistrationObjectInfo>&
-                   registration,
-               const base::Optional<ServiceWorkerVersionAttributes>&
-                   attributes) { *out_error = error; },
-            &error));
+        base::BindOnce([](blink::mojom::ServiceWorkerErrorType* out_error,
+                          blink::mojom::ServiceWorkerErrorType error,
+                          const base::Optional<std::string>& error_msg,
+                          blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+                              registration,
+                          const base::Optional<ServiceWorkerVersionAttributes>&
+                              attributes) { *out_error = error; },
+                       &error));
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(expected, error);
   }
@@ -321,8 +321,8 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     container_host->GetRegistrations(base::BindOnce(
         [](blink::mojom::ServiceWorkerErrorType error,
            const base::Optional<std::string>& error_msg,
-           const base::Optional<
-               std::vector<ServiceWorkerRegistrationObjectInfo>>& infos,
+           base::Optional<std::vector<
+               blink::mojom::ServiceWorkerRegistrationObjectInfoPtr>> infos,
            const base::Optional<std::vector<ServiceWorkerVersionAttributes>>&
                attrs) {}));
     base::RunLoop().RunUntilIdle();
@@ -335,8 +335,8 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
         [](blink::mojom::ServiceWorkerErrorType* out_error,
            blink::mojom::ServiceWorkerErrorType error,
            const base::Optional<std::string>& error_msg,
-           const base::Optional<
-               std::vector<ServiceWorkerRegistrationObjectInfo>>& infos,
+           base::Optional<std::vector<
+               blink::mojom::ServiceWorkerRegistrationObjectInfoPtr>> infos,
            const base::Optional<std::vector<ServiceWorkerVersionAttributes>>&
                attrs) { *out_error = error; },
         &error));
@@ -348,7 +348,7 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
       scoped_refptr<ServiceWorkerVersion> worker,
       const base::string16& message,
       const url::Origin& source_origin,
-      const std::vector<MessagePort>& sent_message_ports,
+      const std::vector<MessagePortChannel>& sent_message_ports,
       ServiceWorkerProviderHost* sender_provider_host,
       const ServiceWorkerDispatcherHost::StatusCallback& callback) {
     dispatcher_host_->DispatchExtendableMessageEvent(
@@ -427,7 +427,8 @@ TEST_F(ServiceWorkerDispatcherHostTest,
   const int64_t kRegistrationId = 999;  // Dummy value
   scoped_refptr<ServiceWorkerRegistration> registration(
       new ServiceWorkerRegistration(
-          ServiceWorkerRegistrationOptions(GURL("https://www.example.com/")),
+          blink::mojom::ServiceWorkerRegistrationOptions(
+              GURL("https://www.example.com/")),
           kRegistrationId, context()->AsWeakPtr()));
   Unregister(kProviderId, kRegistrationId,
              ServiceWorkerMsg_ServiceWorkerUnregistrationError::ID);
@@ -666,7 +667,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedAndDestroyed) {
     // ProviderHost should be created before OnProviderCreated.
     navigation_handle_core->DidPreCreateProviderHost(
         ServiceWorkerProviderHost::PreCreateNavigationHost(
-            helper_->context()->AsWeakPtr(), true /* are_ancestors_secure */,
+            context()->AsWeakPtr(), true /* are_ancestors_secure */,
             base::Callback<WebContents*(void)>()));
   }
 
@@ -691,7 +692,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedAndDestroyed) {
     // ProviderHost should be created before OnProviderCreated.
     navigation_handle_core->DidPreCreateProviderHost(
         ServiceWorkerProviderHost::PreCreateNavigationHost(
-            helper_->context()->AsWeakPtr(), true /* are_ancestors_secure */,
+            context()->AsWeakPtr(), true /* are_ancestors_secure */,
             base::Callback<WebContents*(void)>()));
   }
 
@@ -875,7 +876,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent) {
   EXPECT_EQ(base::TimeDelta::FromSeconds(6), remaining_time);
 
   // Dispatch ExtendableMessageEvent.
-  std::vector<MessagePort> ports;
+  std::vector<MessagePortChannel> ports;
   SetUpDummyMessagePort(&ports);
   called = false;
   status = SERVICE_WORKER_ERROR_MAX_VALUE;
@@ -903,7 +904,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent_Fail) {
 
   // Try to dispatch ExtendableMessageEvent. This should fail to start the
   // worker and to dispatch the event.
-  std::vector<MessagePort> ports;
+  std::vector<MessagePortChannel> ports;
   SetUpDummyMessagePort(&ports);
   bool called = false;
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_MAX_VALUE;

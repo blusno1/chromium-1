@@ -63,8 +63,8 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
 
   sk_sp<PaintImageGenerator> CreateGenerator(size_t index);
 
-  PassRefPtr<SharedBuffer> Data();
-  void SetData(PassRefPtr<SharedBuffer> data, bool all_data_received);
+  RefPtr<SharedBuffer> Data();
+  void SetData(RefPtr<SharedBuffer> data, bool all_data_received);
 
   bool IsSizeAvailable();
   bool HasEmbeddedColorSpace() const;
@@ -83,7 +83,7 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
   explicit DeferredImageDecoder(std::unique_ptr<ImageDecoder> metadata_decoder);
 
   friend class DeferredImageDecoderTest;
-  ImageFrameGenerator* FrameGenerator() { return frame_generator_.Get(); }
+  ImageFrameGenerator* FrameGenerator() { return frame_generator_.get(); }
 
   void ActivateLazyDecoding();
   void PrepareLazyDecodedFrames();

@@ -27,7 +27,6 @@
 
 #include <memory>
 
-#include "core/HTMLNames.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/RemoteFrame.h"
@@ -38,6 +37,7 @@
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutEmbeddedObject.h"
 #include "core/layout/LayoutHTMLCanvas.h"
@@ -65,19 +65,19 @@
 #include "core/plugins/PluginView.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/LengthFunctions.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/CompositorFilterOperations.h"
-#include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/ClipDisplayItem.h"
+#include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/WebLayerStickyPositionConstraint.h"
@@ -115,7 +115,7 @@ static IntRect BackgroundRect(const LayoutObject& layout_object) {
 
 static inline bool IsCompositedCanvas(const LayoutObject& layout_object) {
   if (layout_object.IsCanvas()) {
-    HTMLCanvasElement* canvas = toHTMLCanvasElement(layout_object.GetNode());
+    HTMLCanvasElement* canvas = ToHTMLCanvasElement(layout_object.GetNode());
     if (CanvasRenderingContext* context = canvas->RenderingContext())
       return context->IsComposited();
   }
@@ -124,7 +124,7 @@ static inline bool IsCompositedCanvas(const LayoutObject& layout_object) {
 
 static inline bool IsPlaceholderCanvas(const LayoutObject& layout_object) {
   if (layout_object.IsCanvas()) {
-    HTMLCanvasElement* canvas = toHTMLCanvasElement(layout_object.GetNode());
+    HTMLCanvasElement* canvas = ToHTMLCanvasElement(layout_object.GetNode());
     return canvas->SurfaceLayerBridge();
   }
   return false;
@@ -162,6 +162,33 @@ static inline bool IsAcceleratedContents(LayoutObject& layout_object) {
           ToLayoutEmbeddedObject(layout_object)
               .RequiresAcceleratedCompositing()) ||
          layout_object.IsVideo();
+}
+
+// Returns true if the compositor will be responsible for applying the sticky
+// position offset for this composited layer.
+static bool UsesCompositedStickyPosition(PaintLayer& layer) {
+  return layer.GetLayoutObject().Style()->HasStickyConstrainedPosition() &&
+         (layer.AncestorOverflowLayer()->IsRootLayer()
+              ? layer.GetLayoutObject().View()->GetFrameView()->IsScrollable()
+              : layer.AncestorOverflowLayer()->NeedsCompositedScrolling());
+}
+
+// Returns the sticky position offset that should be removed from a given layer
+// for use in CompositedLayerMapping.
+//
+// If the layer is not using composited sticky position, this will return
+// FloatPoint().
+static FloatPoint StickyPositionOffsetForLayer(PaintLayer& layer) {
+  if (!UsesCompositedStickyPosition(layer))
+    return FloatPoint();
+
+  const StickyConstraintsMap& constraints_map = layer.AncestorOverflowLayer()
+                                                    ->GetScrollableArea()
+                                                    ->GetStickyConstraintsMap();
+  const StickyPositionScrollingConstraints& constraints =
+      constraints_map.at(&layer);
+
+  return FloatPoint(constraints.GetOffsetForStickyPosition(constraints_map));
 }
 
 CompositedLayerMapping::CompositedLayerMapping(PaintLayer& layer)
@@ -288,18 +315,10 @@ void CompositedLayerMapping::UpdateBackdropFilters(const ComputedStyle& style) {
       OwningLayer().CreateCompositorFilterOperationsForBackdropFilter(style));
 }
 
-bool CompositedLayerMapping::UsesCompositedStickyPosition() const {
-  return GetLayoutObject().Style()->HasStickyConstrainedPosition() &&
-         (owning_layer_.AncestorOverflowLayer()->IsRootLayer()
-              ? GetLayoutObject().View()->GetFrameView()->IsScrollable()
-              : owning_layer_.AncestorOverflowLayer()
-                    ->NeedsCompositedScrolling());
-}
-
 void CompositedLayerMapping::UpdateStickyConstraints(
     const ComputedStyle& style) {
   WebLayerStickyPositionConstraint web_constraint;
-  if (!UsesCompositedStickyPosition()) {
+  if (!UsesCompositedStickyPosition(owning_layer_)) {
     // Clear the previous sticky position constraint - if set.
     graphics_layer_->SetStickyPositionConstraint(web_constraint);
     return;
@@ -403,7 +422,7 @@ void CompositedLayerMapping::
 void CompositedLayerMapping::UpdateContentsOpaque() {
   if (IsCompositedCanvas(GetLayoutObject())) {
     CanvasRenderingContext* context =
-        toHTMLCanvasElement(GetLayoutObject().GetNode())->RenderingContext();
+        ToHTMLCanvasElement(GetLayoutObject().GetNode())->RenderingContext();
     WebLayer* layer = context ? context->PlatformLayer() : nullptr;
     // Determine whether the external texture layer covers the whole graphics
     // layer. This may not be the case if there are box decorations or
@@ -798,12 +817,12 @@ bool CompositedLayerMapping::UpdateGraphicsLayerConfiguration() {
         ToHTMLMediaElement(layout_object.GetNode());
     graphics_layer_->SetContentsToPlatformLayer(media_element->PlatformLayer());
   } else if (IsPlaceholderCanvas(layout_object)) {
-    HTMLCanvasElement* canvas = toHTMLCanvasElement(layout_object.GetNode());
+    HTMLCanvasElement* canvas = ToHTMLCanvasElement(layout_object.GetNode());
     graphics_layer_->SetContentsToPlatformLayer(
         canvas->SurfaceLayerBridge()->GetWebLayer());
     layer_config_changed = true;
   } else if (IsCompositedCanvas(layout_object)) {
-    HTMLCanvasElement* canvas = toHTMLCanvasElement(layout_object.GetNode());
+    HTMLCanvasElement* canvas = ToHTMLCanvasElement(layout_object.GetNode());
     if (CanvasRenderingContext* context = canvas->RenderingContext())
       graphics_layer_->SetContentsToPlatformLayer(context->PlatformLayer());
     layer_config_changed = true;
@@ -841,7 +860,8 @@ static IntRect ClipBox(LayoutBox& layout_object) {
 static LayoutPoint ComputeOffsetFromCompositedAncestor(
     const PaintLayer* layer,
     const PaintLayer* composited_ancestor,
-    const LayoutPoint& local_representative_point_for_fragmentation) {
+    const LayoutPoint& local_representative_point_for_fragmentation,
+    const FloatPoint& offset_for_sticky_position) {
   // Add in the offset of the composited bounds from the coordinate space of
   // the PaintLayer, since visualOffsetFromAncestor() requires the pre-offset
   // input to be in the space of the PaintLayer. We also need to add in this
@@ -867,6 +887,7 @@ static LayoutPoint ComputeOffsetFromCompositedAncestor(
                     .SubpixelAccumulation());
   }
   offset.MoveBy(-local_representative_point_for_fragmentation);
+  offset.MoveBy(-LayoutPoint(offset_for_sticky_position));
   return offset;
 }
 
@@ -882,9 +903,14 @@ void CompositedLayerMapping::ComputeBoundsOfOwningLayer(
     local_representative_point_for_fragmentation =
         ToLayoutInline(owning_layer_.GetLayoutObject()).FirstLineBoxTopLeft();
   }
+  // Blink will already have applied any necessary offset for sticky positioned
+  // elements. If the compositor is handling sticky offsets for this layer, we
+  // need to remove the Blink-side offset to avoid double-counting.
+  FloatPoint offset_for_sticky_position =
+      StickyPositionOffsetForLayer(owning_layer_);
   offset_from_composited_ancestor = ComputeOffsetFromCompositedAncestor(
       &owning_layer_, composited_ancestor,
-      local_representative_point_for_fragmentation);
+      local_representative_point_for_fragmentation, offset_for_sticky_position);
   snapped_offset_from_composited_ancestor =
       IntPoint(offset_from_composited_ancestor.X().Round(),
                offset_from_composited_ancestor.Y().Round());
@@ -1189,25 +1215,8 @@ void CompositedLayerMapping::UpdateMainGraphicsLayerGeometry(
     const IntRect& relative_compositing_bounds,
     const IntRect& local_compositing_bounds,
     const IntPoint& graphics_layer_parent_location) {
-  // Find and remove the offset applied for sticky position if the compositor
-  // will shift the layer for sticky position to avoid offsetting the layer
-  // twice.
-  FloatSize offset_for_sticky_position;
-  if (UsesCompositedStickyPosition()) {
-    const StickyConstraintsMap& constraints_map =
-        owning_layer_.AncestorOverflowLayer()
-            ->GetScrollableArea()
-            ->GetStickyConstraintsMap();
-    const StickyPositionScrollingConstraints& constraints =
-        constraints_map.at(&owning_layer_);
-
-    offset_for_sticky_position =
-        constraints.GetOffsetForStickyPosition(constraints_map);
-  }
-  graphics_layer_->SetPosition(
-      FloatPoint(relative_compositing_bounds.Location() -
-                 graphics_layer_parent_location) -
-      offset_for_sticky_position);
+  graphics_layer_->SetPosition(FloatPoint(
+      relative_compositing_bounds.Location() - graphics_layer_parent_location));
   graphics_layer_->SetOffsetFromLayoutObject(
       ToIntSize(local_compositing_bounds.Location()));
 
@@ -1662,6 +1671,7 @@ void CompositedLayerMapping::UpdateForegroundLayerGeometry(
     foreground_layer_->SetNeedsDisplay();
   }
   foreground_layer_->SetOffsetFromLayoutObject(foreground_offset);
+  foreground_layer_->SetShouldHitTest(true);
 
   // NOTE: there is some more configuring going on in
   // updateScrollingLayerGeometry().
@@ -1848,7 +1858,7 @@ void CompositedLayerMapping::UpdateDrawsContent() {
   bool in_overlay_fullscreen_video = false;
   if (GetLayoutObject().IsVideo()) {
     HTMLVideoElement* video_element =
-        toHTMLVideoElement(GetLayoutObject().GetNode());
+        ToHTMLVideoElement(GetLayoutObject().GetNode());
     if (video_element->IsFullscreen() &&
         video_element->UsesOverlayFullscreenVideo())
       in_overlay_fullscreen_video = true;
@@ -1872,7 +1882,7 @@ void CompositedLayerMapping::UpdateDrawsContent() {
 
   if (has_painted_content && IsCompositedCanvas(GetLayoutObject())) {
     CanvasRenderingContext* context =
-        toHTMLCanvasElement(GetLayoutObject().GetNode())->RenderingContext();
+        ToHTMLCanvasElement(GetLayoutObject().GetNode())->RenderingContext();
     // Content layer may be null if context is lost.
     if (WebLayer* content_layer = context->PlatformLayer()) {
       Color bg_color(Color::kTransparent);
@@ -2749,7 +2759,7 @@ bool CompositedLayerMapping::ContainsPaintedContent() const {
     // Now look at the body's layoutObject.
     HTMLElement* body = layout_object.GetDocument().body();
     LayoutObject* body_object =
-        isHTMLBodyElement(body) ? body->GetLayoutObject() : 0;
+        IsHTMLBodyElement(body) ? body->GetLayoutObject() : 0;
     if (body_object &&
         HasBoxDecorationsOrBackgroundImage(body_object->StyleRef()))
       return true;
@@ -3143,14 +3153,11 @@ void CompositedLayerMapping::DoPaintTask(
     // FIXME: Is it correct to clip to dirtyRect in slimming paint mode?
     // FIXME: Combine similar code here and LayerClipRecorder.
     dirty_rect.Intersect(paint_info.local_clip_rect_for_squashed_layer);
-    context.GetPaintController().CreateAndAppend<ClipDisplayItem>(
-        graphics_layer, DisplayItem::kClipLayerOverflowControls, dirty_rect);
-
+    ClipRecorder clip_recorder(context, graphics_layer,
+                               DisplayItem::kClipLayerOverflowControls,
+                               dirty_rect);
     PaintLayerPainter(*paint_info.paint_layer)
         .Paint(context, painting_info, paint_layer_flags);
-    context.GetPaintController().EndItem<EndClipDisplayItem>(
-        graphics_layer, DisplayItem::ClipTypeToEndClipType(
-                            DisplayItem::kClipLayerOverflowControls));
   }
 }
 
@@ -3182,28 +3189,24 @@ IntRect CompositedLayerMapping::RecomputeInterestRect(
     const GraphicsLayer* graphics_layer) const {
   FloatRect graphics_layer_bounds(FloatPoint(), graphics_layer->Size());
 
-  IntSize offset_from_anchor_layout_object;
+  FloatSize offset_from_anchor_layout_object;
   const LayoutBoxModelObject* anchor_layout_object;
   if (graphics_layer == squashing_layer_.get()) {
-    // TODO(chrishtr): this is a speculative fix for crbug.com/561306. However,
-    // it should never be the case that m_squashingLayer exists,
-    // yet m_squashedLayers.size() == 0. There must be a bug elsewhere.
-    if (squashed_layers_.size() == 0)
-      return IntRect();
     // All squashed layers have the same clip and transform space, so we can use
     // the first squashed layer's layoutObject to map the squashing layer's
     // bounds into viewport space, with offsetFromAnchorLayoutObject to
     // translate squashing layer's bounds into the first squashed layer's space.
-    anchor_layout_object = &squashed_layers_[0].paint_layer->GetLayoutObject();
+    anchor_layout_object =
+        &owning_layer_.EnclosingTransformedAncestor()->GetLayoutObject();
     offset_from_anchor_layout_object =
-        squashed_layers_[0].offset_from_layout_object;
+        ToFloatSize(FloatPoint(SquashingOffsetFromTransformedAncestor()));
   } else {
     DCHECK(graphics_layer == graphics_layer_.get() ||
            graphics_layer == scrolling_contents_layer_.get());
     anchor_layout_object = &owning_layer_.GetLayoutObject();
-    offset_from_anchor_layout_object = graphics_layer->OffsetFromLayoutObject();
-    AdjustForCompositedScrolling(graphics_layer,
-                                 offset_from_anchor_layout_object);
+    IntSize offset = graphics_layer->OffsetFromLayoutObject();
+    AdjustForCompositedScrolling(graphics_layer, offset);
+    offset_from_anchor_layout_object = FloatSize(offset);
   }
 
   // Start with the bounds of the graphics layer in the space of the anchor
@@ -3226,12 +3229,12 @@ IntRect CompositedLayerMapping::RecomputeInterestRect(
   FloatRect visible_content_rect(graphics_layer_bounds_in_root_view_space);
   root_view->GetFrameView()->ClipPaintRect(&visible_content_rect);
 
-  IntRect enclosing_graphics_layer_bounds(
+  FloatRect enclosing_graphics_layer_bounds(
       EnclosingIntRect(graphics_layer_bounds));
 
   // Map the visible content rect from root view space to local graphics layer
   // space.
-  IntRect local_interest_rect;
+  FloatRect local_interest_rect;
   // If the visible content rect is empty, then it makes no sense to map it back
   // since there is nothing to map.
   if (!visible_content_rect.IsEmpty()) {
@@ -3257,7 +3260,7 @@ IntRect CompositedLayerMapping::RecomputeInterestRect(
     local_interest_rect.Inflate(kPixelDistanceToRecord);
     local_interest_rect.Intersect(enclosing_graphics_layer_bounds);
   }
-  return local_interest_rect;
+  return EnclosingIntRect(local_interest_rect);
 }
 
 static const int kMinimumDistanceBeforeRepaint = 512;
@@ -3611,7 +3614,7 @@ void CompositedLayerMapping::RemoveLayerFromSquashingGraphicsLayer(
   if (layer_index == squashed_layers_.size())
     return;
 
-  squashed_layers_.erase(layer_index);
+  squashed_layers_.EraseAt(layer_index);
 }
 
 #if DCHECK_IS_ON()
@@ -3645,8 +3648,9 @@ void CompositedLayerMapping::FinishAccumulatingSquashingLayers(
           squashed_layers_[i].paint_layer);
     }
 
-    squashed_layers_.erase(next_squashed_layer_index,
-                           squashed_layers_.size() - next_squashed_layer_index);
+    squashed_layers_.EraseAt(
+        next_squashed_layer_index,
+        squashed_layers_.size() - next_squashed_layer_index);
   }
 }
 

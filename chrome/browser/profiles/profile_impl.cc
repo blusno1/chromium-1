@@ -35,6 +35,8 @@
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_contents_service_factory.h"
+#include "chrome/browser/background_fetch/background_fetch_delegate_factory.h"
+#include "chrome/browser/background_fetch/background_fetch_delegate_impl.h"
 #include "chrome/browser/background_sync/background_sync_controller_factory.h"
 #include "chrome/browser/background_sync/background_sync_controller_impl.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -1060,6 +1062,10 @@ content::PermissionManager* ProfileImpl::GetPermissionManager() {
   return PermissionManagerFactory::GetForProfile(this);
 }
 
+content::BackgroundFetchDelegate* ProfileImpl::GetBackgroundFetchDelegate() {
+  return BackgroundFetchDelegateFactory::GetForProfile(this);
+}
+
 content::BackgroundSyncController* ProfileImpl::GetBackgroundSyncController() {
   return BackgroundSyncControllerFactory::GetForProfile(this);
 }
@@ -1250,11 +1256,6 @@ PrefProxyConfigTracker* ProfileImpl::GetProxyConfigTracker() {
 
 chrome_browser_net::Predictor* ProfileImpl::GetNetworkPredictor() {
   return predictor_;
-}
-
-DevToolsNetworkControllerHandle*
-ProfileImpl::GetDevToolsNetworkControllerHandle() {
-  return io_data_.GetDevToolsNetworkControllerHandle();
 }
 
 void ProfileImpl::ClearNetworkingHistorySince(

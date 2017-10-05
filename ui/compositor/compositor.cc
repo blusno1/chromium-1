@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include <algorithm>
-#include <deque>
 #include <utility>
 
 #include "base/bind.h"
@@ -27,7 +26,7 @@
 #include "cc/base/switches.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
-#include "cc/output/latency_info_swap_promise.h"
+#include "cc/trees/latency_info_swap_promise.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
@@ -49,7 +48,6 @@
 #include "ui/compositor/layer_animator_collection.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display_switches.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/icc_profile.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
@@ -100,6 +98,9 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   settings.use_occlusion_for_tile_prioritization = true;
   refresh_rate_ = context_factory_->GetRefreshRate();
   settings.main_frame_before_activation_enabled = false;
+
+  // Disable edge anti-aliasing in order to increase support for HW overlays.
+  settings.enable_edge_anti_aliasing = false;
 
   if (command_line->HasSwitch(switches::kLimitFps)) {
     std::string fps_str =
@@ -158,9 +159,6 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
 
   settings.use_layer_lists =
       command_line->HasSwitch(cc::switches::kUIEnableLayerLists);
-
-  settings.enable_color_correct_rasterization =
-      base::FeatureList::IsEnabled(features::kColorCorrectRendering);
 
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.
@@ -305,11 +303,6 @@ void Compositor::SetRootLayer(Layer* root_layer) {
 
 cc::AnimationTimeline* Compositor::GetAnimationTimeline() const {
   return animation_timeline_.get();
-}
-
-void Compositor::SetHostHasTransparentBackground(
-    bool host_has_transparent_background) {
-  host_->set_has_transparent_background(host_has_transparent_background);
 }
 
 void Compositor::ScheduleFullRedraw() {

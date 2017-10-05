@@ -7,12 +7,13 @@
 
 #include "components/password_manager/core/browser/credential_manager_impl.h"
 
-namespace credential_manager {
+namespace web {
+class WebState;
+}
 
 // Owned by PasswordController. It is responsible for registering and handling
 // callbacks for JS methods |navigator.credentials.*|.
-// TODO(crbug.com/435047): Implement JSCredentialManager responsible for
-// sending results back to website. Expected flow of CredentialManager class:
+// Expected flow of CredentialManager class:
 // 0. Add script command callbacks, initialize JSCredentialManager
 // 1. A command is sent from JavaScript to the browser.
 // 2. HandleScriptCommand is called, it parses the message and constructs a
@@ -25,7 +26,8 @@ namespace credential_manager {
 //     website.
 class CredentialManager {
  public:
-  explicit CredentialManager(password_manager::PasswordManagerClient* client);
+  CredentialManager(password_manager::PasswordManagerClient* client,
+                    web::WebState* web_state);
   ~CredentialManager();
 
  private:
@@ -46,10 +48,9 @@ class CredentialManager {
   void SendStoreResponse(int promise_id);
 
   password_manager::CredentialManagerImpl impl_;
+  web::WebState* web_state_;
 
   DISALLOW_COPY_AND_ASSIGN(CredentialManager);
 };
-
-}  // namespace credential_manager
 
 #endif  // IOS_CHROME_BROWSER_PASSWORDS_CREDENTIAL_MANAGER_H_

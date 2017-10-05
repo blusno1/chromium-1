@@ -20,9 +20,9 @@
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/gl_helper.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
 #include "components/viz/common/quads/texture_mailbox.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
@@ -380,9 +380,12 @@ bool IsMus() {
 ////////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostViewAura, public:
 
-RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
-                                                   bool is_guest_view_hack)
+RenderWidgetHostViewAura::RenderWidgetHostViewAura(
+    RenderWidgetHost* host,
+    bool is_guest_view_hack,
+    bool enable_surface_synchronization)
     : host_(RenderWidgetHostImpl::From(host)),
+      enable_surface_synchronization_(enable_surface_synchronization),
       window_(nullptr),
       in_shutdown_(false),
       in_bounds_changed_(false),
@@ -403,7 +406,8 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
       is_guest_view_hack_(is_guest_view_hack),
       device_scale_factor_(0.0f),
       event_handler_(new RenderWidgetHostViewEventHandler(host_, this, this)),
-      frame_sink_id_(host_->AllocateFrameSinkId(is_guest_view_hack_)),
+      frame_sink_id_(IsMus() ? viz::FrameSinkId()
+                             : host_->AllocateFrameSinkId(is_guest_view_hack_)),
       weak_ptr_factory_(this) {
   if (!is_guest_view_hack_)
     host_->SetView(this);
@@ -771,16 +775,10 @@ void RenderWidgetHostViewAura::FocusedNodeTouched(
     const gfx::Point& location_dips_screen,
     bool editable) {
 #if defined(OS_WIN)
-  RenderViewHost* rvh = RenderViewHost::From(host_);
-  if (rvh && rvh->GetDelegate())
-    rvh->GetDelegate()->SetIsVirtualKeyboardRequested(editable);
-
   ui::OnScreenKeyboardDisplayManager* osk_display_manager =
       ui::OnScreenKeyboardDisplayManager::GetInstance();
   DCHECK(osk_display_manager);
   if (editable && host_->GetView() && host_->delegate()) {
-    if (keyboard_observer_)
-      osk_display_manager->RemoveObserver(keyboard_observer_.get());
     keyboard_observer_.reset(new WinScreenKeyboardObserver(
         this, location_dips_screen, device_scale_factor_, window_));
     virtual_keyboard_requested_ =
@@ -916,7 +914,7 @@ void RenderWidgetHostViewAura::DidCreateNewRendererCompositorFrameSink(
 
 void RenderWidgetHostViewAura::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewAura::OnSwapCompositorFrame");
 
   // Override the background color to the current compositor background.
@@ -1587,13 +1585,6 @@ bool RenderWidgetHostViewAura::HasHitTestMask() const {
 void RenderWidgetHostViewAura::GetHitTestMask(gfx::Path* mask) const {
 }
 
-void RenderWidgetHostViewAura::OnFirstSurfaceActivation(
-    const viz::SurfaceInfo& surface_info) {
-  if (!is_guest_view_hack_)
-    return;
-  host_->GetView()->OnFirstSurfaceActivation(surface_info);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostViewAura, ui::EventHandler implementation:
 
@@ -1709,14 +1700,18 @@ void RenderWidgetHostViewAura::FocusedNodeChanged(
   if (!editable && virtual_keyboard_requested_) {
     virtual_keyboard_requested_ = false;
 
-    RenderViewHost* rvh = RenderViewHost::From(host_);
-    if (rvh && rvh->GetDelegate())
-      rvh->GetDelegate()->SetIsVirtualKeyboardRequested(false);
-
     DCHECK(ui::OnScreenKeyboardDisplayManager::GetInstance());
     ui::OnScreenKeyboardDisplayManager::GetInstance()->DismissVirtualKeyboard();
   }
 #endif
+}
+
+void RenderWidgetHostViewAura::ScheduleEmbed(
+    ui::mojom::WindowTreeClientPtr client,
+    base::OnceCallback<void(const base::UnguessableToken&)> callback) {
+  DCHECK(IsMus());
+  aura::WindowPortMus::Get(window_)->ScheduleEmbed(std::move(client),
+                                                   std::move(callback));
 }
 
 void RenderWidgetHostViewAura::OnScrollEvent(ui::ScrollEvent* event) {
@@ -1921,16 +1916,9 @@ void RenderWidgetHostViewAura::CreateAuraWindow(aura::client::WindowType type) {
   if (!IsMus())
     return;
 
-  // Connect to the renderer, pass it a WindowTreeClient interface request
-  // and embed that client inside our mus window.
-  mojom::RenderWidgetWindowTreeClientFactoryPtr factory;
-  BindInterface(host_->GetProcess(), &factory);
-
-  ui::mojom::WindowTreeClientPtr window_tree_client;
-  factory->CreateWindowTreeClientForRenderWidget(
-      host_->GetRoutingID(), mojo::MakeRequest(&window_tree_client));
+  // Embed the renderer into the Window.
   aura::WindowPortMus::Get(window_)->Embed(
-      std::move(window_tree_client),
+      GetWindowTreeClientFromRenderer(),
       ui::mojom::kEmbedFlagEmbedderInterceptsEvents,
       base::Bind(&EmbedCallback));
 }
@@ -1945,7 +1933,8 @@ void RenderWidgetHostViewAura::CreateDelegatedFrameHostClient() {
         base::MakeUnique<DelegatedFrameHostClientAura>(this);
   }
   delegated_frame_host_ = base::MakeUnique<DelegatedFrameHost>(
-      frame_sink_id_, delegated_frame_host_client_.get());
+      frame_sink_id_, delegated_frame_host_client_.get(),
+      enable_surface_synchronization_);
   if (renderer_compositor_frame_sink_) {
     delegated_frame_host_->DidCreateNewRendererCompositorFrameSink(
         renderer_compositor_frame_sink_);

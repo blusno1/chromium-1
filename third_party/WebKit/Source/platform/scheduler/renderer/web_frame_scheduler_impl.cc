@@ -4,8 +4,9 @@
 
 #include "platform/scheduler/renderer/web_frame_scheduler_impl.h"
 
+#include <memory>
 #include "base/trace_event/blame_context.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/base/real_time_domain.h"
 #include "platform/scheduler/base/trace_helper.h"
 #include "platform/scheduler/base/virtual_time_domain.h"
@@ -35,7 +36,8 @@ WebFrameSchedulerImpl::ActiveConnectionHandleImpl::
 WebFrameSchedulerImpl::WebFrameSchedulerImpl(
     RendererSchedulerImpl* renderer_scheduler,
     WebViewSchedulerImpl* parent_web_view_scheduler,
-    base::trace_event::BlameContext* blame_context)
+    base::trace_event::BlameContext* blame_context,
+    WebFrameScheduler::FrameType frame_type)
     : renderer_scheduler_(renderer_scheduler),
       parent_web_view_scheduler_(parent_web_view_scheduler),
       blame_context_(blame_context),
@@ -43,6 +45,7 @@ WebFrameSchedulerImpl::WebFrameSchedulerImpl(
       page_visible_(true),
       frame_paused_(false),
       cross_origin_(false),
+      frame_type_(frame_type),
       active_connection_count_(0),
       weak_factory_(this) {}
 
@@ -130,6 +133,10 @@ void WebFrameSchedulerImpl::SetFrameVisible(bool frame_visible) {
   UpdateThrottling(was_throttled);
 }
 
+bool WebFrameSchedulerImpl::IsFrameVisible() const {
+  return frame_visible_;
+}
+
 void WebFrameSchedulerImpl::SetCrossOrigin(bool cross_origin) {
   DCHECK(parent_web_view_scheduler_);
   if (cross_origin_ == cross_origin)
@@ -137,6 +144,14 @@ void WebFrameSchedulerImpl::SetCrossOrigin(bool cross_origin) {
   bool was_throttled = ShouldThrottleTimers();
   cross_origin_ = cross_origin;
   UpdateThrottling(was_throttled);
+}
+
+bool WebFrameSchedulerImpl::IsCrossOrigin() const {
+  return cross_origin_;
+}
+
+WebFrameScheduler::FrameType WebFrameSchedulerImpl::GetFrameType() const {
+  return frame_type_;
 }
 
 RefPtr<blink::WebTaskRunner> WebFrameSchedulerImpl::LoadingTaskRunner() {
@@ -318,6 +333,10 @@ void WebFrameSchedulerImpl::AsValueInto(
   state->SetBoolean("frame_visible", frame_visible_);
   state->SetBoolean("page_visible", page_visible_);
   state->SetBoolean("cross_origin", cross_origin_);
+  state->SetString("frame_type",
+                   frame_type_ == WebFrameScheduler::FrameType::kMainFrame
+                       ? "MainFrame"
+                       : "Subframe");
   if (loading_task_queue_) {
     state->SetString("loading_task_queue",
                      trace_helper::PointerToString(loading_task_queue_.get()));
@@ -370,6 +389,10 @@ void WebFrameSchedulerImpl::SetPageVisible(bool page_visible) {
   }
 }
 
+bool WebFrameSchedulerImpl::IsPageVisible() const {
+  return page_visible_;
+}
+
 void WebFrameSchedulerImpl::SetPaused(bool frame_paused) {
   DCHECK(parent_web_view_scheduler_);
   if (frame_paused_ == frame_paused)
@@ -394,7 +417,7 @@ void WebFrameSchedulerImpl::OnFirstMeaningfulPaint() {
 
 std::unique_ptr<WebFrameScheduler::ActiveConnectionHandle>
 WebFrameSchedulerImpl::OnActiveConnectionCreated() {
-  return base::MakeUnique<WebFrameSchedulerImpl::ActiveConnectionHandleImpl>(
+  return std::make_unique<WebFrameSchedulerImpl::ActiveConnectionHandleImpl>(
       this);
 }
 
@@ -420,6 +443,10 @@ void WebFrameSchedulerImpl::UpdateThrottling(bool was_throttled) {
 
 base::WeakPtr<WebFrameSchedulerImpl> WebFrameSchedulerImpl::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();
+}
+
+bool WebFrameSchedulerImpl::IsExemptFromThrottling() const {
+  return has_active_connection();
 }
 
 }  // namespace scheduler

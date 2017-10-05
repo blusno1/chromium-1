@@ -39,6 +39,7 @@
 #include "content/public/child/request_peer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/referrer.h"
 #include "content/public/common/resource_request.h"
 #include "content/public/common/resource_request_body.h"
 #include "content/public/common/service_worker_modes.h"
@@ -185,35 +186,6 @@ net::RequestPriority ConvertWebKitPriorityToNetPriority(
       NOTREACHED();
       return net::LOW;
   }
-}
-
-blink::WebReferrerPolicy NetReferrerPolicyToBlinkReferrerPolicy(
-    net::URLRequest::ReferrerPolicy net_policy) {
-  switch (net_policy) {
-    case net::URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
-      return blink::kWebReferrerPolicyNoReferrerWhenDowngrade;
-    case net::URLRequest::
-        REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN:
-      return blink::
-          kWebReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin;
-    case net::URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN:
-      return blink::kWebReferrerPolicyOriginWhenCrossOrigin;
-    case net::URLRequest::NEVER_CLEAR_REFERRER:
-      return blink::kWebReferrerPolicyAlways;
-    case net::URLRequest::ORIGIN:
-      return blink::kWebReferrerPolicyOrigin;
-    case net::URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN:
-      return blink::kWebReferrerPolicySameOrigin;
-    case net::URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
-      return blink::kWebReferrerPolicyStrictOrigin;
-    case net::URLRequest::NO_REFERRER:
-      return blink::kWebReferrerPolicyNever;
-    case net::URLRequest::MAX_REFERRER_POLICY:
-      NOTREACHED();
-      return blink::kWebReferrerPolicyDefault;
-  }
-  NOTREACHED();
-  return blink::kWebReferrerPolicyDefault;
 }
 
 // Extracts info from a data scheme URL |url| into |info| and |data|. Returns
@@ -419,6 +391,9 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
   // We can optimize the handling of data URLs in most cases.
   bool CanHandleDataURLRequestLocally(const WebURLRequest& request) const;
   void HandleDataURL();
+
+  static net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag(
+      const blink::WebURLRequest& request);
 
   WebURLLoaderImpl* loader_;
 
@@ -640,6 +615,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   resource_request->request_body =
       GetRequestBodyForWebURLRequest(request).get();
   resource_request->download_to_file = request.DownloadToFile();
+  resource_request->keepalive = request.GetKeepalive();
   resource_request->has_user_gesture = request.HasUserGesture();
   resource_request->enable_load_timing = true;
   resource_request->enable_upload_progress = request.ReportUploadProgress();
@@ -681,8 +657,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
 
     resource_dispatcher_->StartSync(
         std::move(resource_request), request.RequestorID(),
-        extra_data->frame_origin(), sync_load_response,
-        request.GetLoadingIPCType(), url_loader_factory_,
+        extra_data->frame_origin(), GetTrafficAnnotationTag(request),
+        sync_load_response, request.GetLoadingIPCType(), url_loader_factory_,
         extra_data->TakeURLLoaderThrottles());
     return;
   }
@@ -691,7 +667,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
                          TRACE_EVENT_FLAG_FLOW_OUT);
   request_id_ = resource_dispatcher_->StartAsync(
       std::move(resource_request), request.RequestorID(), task_runner_,
-      extra_data->frame_origin(), false /* is_sync */,
+      extra_data->frame_origin(), GetTrafficAnnotationTag(request),
+      false /* is_sync */,
       base::MakeUnique<WebURLLoaderImpl::RequestPeerImpl>(this),
       request.GetLoadingIPCType(), url_loader_factory_,
       extra_data->TakeURLLoaderThrottles(), std::move(consumer_handle));
@@ -723,7 +700,8 @@ bool WebURLLoaderImpl::Context::OnReceivedRedirect(
   return client_->WillFollowRedirect(
       url_, redirect_info.new_site_for_cookies,
       WebString::FromUTF8(redirect_info.new_referrer),
-      NetReferrerPolicyToBlinkReferrerPolicy(redirect_info.new_referrer_policy),
+      Referrer::NetReferrerPolicyToBlinkReferrerPolicy(
+          redirect_info.new_referrer_policy),
       WebString::FromUTF8(redirect_info.new_method), response,
       report_raw_headers_);
 }
@@ -1022,6 +1000,116 @@ void WebURLLoaderImpl::Context::HandleDataURL() {
 
   OnCompletedRequest(error_code, false, base::TimeTicks::Now(), 0, data.size(),
                      data.size());
+}
+
+// static
+net::NetworkTrafficAnnotationTag
+WebURLLoaderImpl::Context::GetTrafficAnnotationTag(
+    const blink::WebURLRequest& request) {
+  switch (request.GetRequestContext()) {
+    case WebURLRequest::kRequestContextUnspecified:
+    case WebURLRequest::kRequestContextAudio:
+    case WebURLRequest::kRequestContextBeacon:
+    case WebURLRequest::kRequestContextCSPReport:
+    case WebURLRequest::kRequestContextDownload:
+    case WebURLRequest::kRequestContextEventSource:
+    case WebURLRequest::kRequestContextFetch:
+    case WebURLRequest::kRequestContextFont:
+    case WebURLRequest::kRequestContextForm:
+    case WebURLRequest::kRequestContextFrame:
+    case WebURLRequest::kRequestContextHyperlink:
+    case WebURLRequest::kRequestContextIframe:
+    case WebURLRequest::kRequestContextImage:
+    case WebURLRequest::kRequestContextImageSet:
+    case WebURLRequest::kRequestContextImport:
+    case WebURLRequest::kRequestContextInternal:
+    case WebURLRequest::kRequestContextLocation:
+    case WebURLRequest::kRequestContextManifest:
+    case WebURLRequest::kRequestContextPing:
+    case WebURLRequest::kRequestContextPrefetch:
+    case WebURLRequest::kRequestContextScript:
+    case WebURLRequest::kRequestContextServiceWorker:
+    case WebURLRequest::kRequestContextSharedWorker:
+    case WebURLRequest::kRequestContextSubresource:
+    case WebURLRequest::kRequestContextStyle:
+    case WebURLRequest::kRequestContextTrack:
+    case WebURLRequest::kRequestContextVideo:
+    case WebURLRequest::kRequestContextWorker:
+    case WebURLRequest::kRequestContextXMLHttpRequest:
+    case WebURLRequest::kRequestContextXSLT:
+      return net::DefineNetworkTrafficAnnotation("blink_resource_loader", R"(
+      semantics {
+        sender: "Blink Resource Loader"
+        description:
+          "Blink-initiated request, which includes all resources for "
+          "normal page loads, chrome URLs, and downloads."
+        trigger:
+          "The user navigates to a URL or downloads a file. Also when a "
+          "webpage, ServiceWorker, or chrome:// uses any network communication."
+        data: "Anything the initiator wants to send."
+        destination: OTHER
+      }
+      policy {
+        cookies_allowed: YES
+        cookies_store: "user"
+        setting: "These requests cannot be disabled in settings."
+        policy_exception_justification:
+          "Not implemented. Without these requests, Chrome will be unable "
+          "to load any webpage."
+      })");
+
+    case WebURLRequest::kRequestContextEmbed:
+    case WebURLRequest::kRequestContextObject:
+    case WebURLRequest::kRequestContextPlugin:
+      return net::DefineNetworkTrafficAnnotation(
+          "blink_extension_resource_loader", R"(
+        semantics {
+          sender: "Blink Resource Loader"
+          description:
+            "Blink-initiated request for resources required for NaCl instances "
+            "tagged with <embed> or <object>, or installed extensions."
+          trigger:
+            "An extension or NaCl instance may initiate a request at any time, "
+            "even in the background."
+          data: "Anything the initiator wants to send."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: YES
+          cookies_store: "user"
+          setting:
+            "These requests cannot be disabled in settings, but they are "
+            "sent only if user installs extensions."
+          chrome_policy {
+            ExtensionInstallBlacklist {
+              ExtensionInstallBlacklist: {
+                entries: '*'
+              }
+            }
+          }
+        })");
+
+    case WebURLRequest::kRequestContextFavicon:
+      return net::DefineNetworkTrafficAnnotation("favicon_loader", R"(
+        semantics {
+          sender: "Blink Resource Loader"
+          description:
+            "Chrome sends a request to download favicon for a URL."
+          trigger:
+            "Navigating to a URL."
+          data: "None."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: YES
+          cookies_store: "user"
+          setting: "These requests cannot be disabled in settings."
+          policy_exception_justification:
+            "Not implemented."
+        })");
+  }
+
+  return net::NetworkTrafficAnnotationTag::NotReached();
 }
 
 // WebURLLoaderImpl::RequestPeerImpl ------------------------------------------

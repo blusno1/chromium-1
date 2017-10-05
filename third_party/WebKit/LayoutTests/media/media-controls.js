@@ -49,6 +49,15 @@ function overlayCastButton(videoElement)
     return button;
 }
 
+function overflowButton(videoElement)
+{
+    var controlID = '-internal-media-controls-overflow-button';
+    var button = mediaControlsElement(window.internals.shadowRoot(videoElement).firstChild, controlID);
+    if (!button)
+        throw 'Failed to find cast button';
+    return button;
+}
+
 function mediaControlsElement(first, id)
 {
     for (var element = first; element; element = element.nextSibling) {
@@ -154,6 +163,18 @@ function isClosedCaptionsButtonVisible(currentMediaElement)
     return false;
 }
 
+function toggleClosedCaptionsButton(videoElement) {
+    return mediaControlsButton(videoElement, 'toggle-closed-captions-button');
+}
+
+function playButton(videoElement) {
+    return mediaControlsButton(videoElement, 'play-button');
+}
+
+function muteButton(videoElement) {
+    return mediaControlsButton(videoElement, 'mute-button');
+}
+
 function clickAtCoordinates(x, y)
 {
     eventSender.mouseMoveTo(x, y);
@@ -240,4 +261,16 @@ function isVisible(button) {
     var computedStyle = getComputedStyle(button);
     return computedStyle.display !== "none" &&
            computedStyle.visibility === "visible";
+}
+
+function checkButtonHasClass(button, className) {
+  assert_true(button.classList.contains(className));
+}
+
+function checkButtonNotHasClass(button, className) {
+  assert_false(button.classList.contains(className));
+}
+
+function checkControlsClassName(videoElement, className) {
+  assert_equals(window.internals.shadowRoot(videoElement).firstChild.className, className);
 }

@@ -123,7 +123,7 @@ bool BbrSender::InSlowStart() const {
   return mode_ == STARTUP;
 }
 
-bool BbrSender::OnPacketSent(QuicTime sent_time,
+void BbrSender::OnPacketSent(QuicTime sent_time,
                              QuicByteCount bytes_in_flight,
                              QuicPacketNumber packet_number,
                              QuicByteCount bytes,
@@ -140,7 +140,6 @@ bool BbrSender::OnPacketSent(QuicTime sent_time,
 
   sampler_->OnPacketSent(sent_time, packet_number, bytes, bytes_in_flight,
                          is_retransmittable);
-  return is_retransmittable == HAS_RETRANSMITTABLE_DATA;
 }
 
 QuicTime::Delta BbrSender::TimeUntilSend(QuicTime /* now */,
@@ -204,16 +203,10 @@ void BbrSender::SetFromConfig(const QuicConfig& config,
       config.HasClientRequestedIndependentOption(kBBRR, perspective)) {
     rate_based_recovery_ = true;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_ack_aggregation_bytes4 &&
-      config.HasClientRequestedIndependentOption(kBBR1, perspective)) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_ack_aggregation_bytes4, 1,
-                      2);
+  if (config.HasClientRequestedIndependentOption(kBBR1, perspective)) {
     max_aggregation_bytes_multiplier_ = 1.5;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_ack_aggregation_bytes4 &&
-      config.HasClientRequestedIndependentOption(kBBR2, perspective)) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_ack_aggregation_bytes4, 2,
-                      2);
+  if (config.HasClientRequestedIndependentOption(kBBR2, perspective)) {
     max_aggregation_bytes_multiplier_ = 2;
   }
 }

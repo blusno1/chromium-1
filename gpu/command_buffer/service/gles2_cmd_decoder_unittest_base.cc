@@ -242,7 +242,8 @@ void GLES2DecoderTestBase::InitDecoderWithWorkarounds(
   // we can use the ContextGroup to figure out how the real GLES2Decoder
   // will initialize itself.
   command_buffer_service_.reset(new FakeCommandBufferServiceBase());
-  mock_decoder_.reset(new MockGLES2Decoder(command_buffer_service_.get()));
+  mock_decoder_.reset(
+      new MockGLES2Decoder(command_buffer_service_.get(), &outputter_));
 
   EXPECT_TRUE(group_->Initialize(mock_decoder_.get(), init.context_type,
                                  DisallowedFeatures()));
@@ -484,8 +485,8 @@ void GLES2DecoderTestBase::InitDecoderWithWorkarounds(
       normalized_init.lose_context_when_out_of_memory;
   attribs.context_type = init.context_type;
 
-  decoder_.reset(
-      GLES2Decoder::Create(this, command_buffer_service_.get(), group_.get()));
+  decoder_.reset(GLES2Decoder::Create(this, command_buffer_service_.get(),
+                                      &outputter_, group_.get()));
   decoder_->SetIgnoreCachedStateForTest(ignore_cached_state_for_test_);
   decoder_->GetLogger()->set_log_synthesized_gl_errors(false);
   ASSERT_TRUE(decoder_->Initialize(surface_, context_, false,
@@ -2270,7 +2271,7 @@ void GLES2DecoderPassthroughTestBase::SetUp() {
   command_buffer_service_.reset(new FakeCommandBufferServiceBase());
 
   decoder_.reset(new GLES2DecoderPassthroughImpl(
-      this, command_buffer_service_.get(), group_.get()));
+      this, command_buffer_service_.get(), &outputter_, group_.get()));
   ASSERT_TRUE(group_->Initialize(decoder_.get(),
                                  context_creation_attribs_.context_type,
                                  DisallowedFeatures()));
@@ -2285,6 +2286,7 @@ void GLES2DecoderPassthroughTestBase::SetUp() {
   shared_memory_address_ =
       reinterpret_cast<int8_t*>(buffer->memory()) + shared_memory_offset_;
   shared_memory_base_ = buffer->memory();
+  shared_memory_size_ = kSharedBufferSize - shared_memory_offset_;
 
   decoder_->MakeCurrent();
   decoder_->BeginDecoding();
@@ -2307,6 +2309,10 @@ GLint GLES2DecoderPassthroughTestBase::GetGLError() {
   cmd.Init(shared_memory_id_, shared_memory_offset_);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   return static_cast<GLint>(*GetSharedMemoryAs<GLenum*>());
+}
+
+void GLES2DecoderPassthroughTestBase::InjectGLError(GLenum error) {
+  decoder_->InjectDriverError(error);
 }
 
 void GLES2DecoderPassthroughTestBase::DoBindBuffer(GLenum target,
@@ -2347,6 +2353,65 @@ void GLES2DecoderPassthroughTestBase::DoBufferSubData(GLenum target,
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
 }
 
+void GLES2DecoderPassthroughTestBase::DoBindTexture(GLenum target,
+                                                    GLuint client_id) {
+  cmds::BindTexture cmd;
+  cmd.Init(target, client_id);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
+void GLES2DecoderPassthroughTestBase::DoTexImage2D(
+    GLenum target,
+    GLint level,
+    GLenum internal_format,
+    GLsizei width,
+    GLsizei height,
+    GLint border,
+    GLenum format,
+    GLenum type,
+    uint32_t shared_memory_id,
+    uint32_t shared_memory_offset) {
+  cmds::TexImage2D cmd;
+  cmd.Init(target, level, internal_format, width, height, format, type,
+           shared_memory_id, shared_memory_offset);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
+void GLES2DecoderPassthroughTestBase::DoBindFramebuffer(GLenum target,
+                                                        GLuint client_id) {
+  cmds::BindFramebuffer cmd;
+  cmd.Init(target, client_id);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
+void GLES2DecoderPassthroughTestBase::DoFramebufferTexture2D(
+    GLenum target,
+    GLenum attachment,
+    GLenum textarget,
+    GLuint texture_client_id,
+    GLint level) {
+  cmds::FramebufferTexture2D cmd;
+  cmd.Init(target, attachment, textarget, texture_client_id, level);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
+void GLES2DecoderPassthroughTestBase::DoFramebufferRenderbuffer(
+    GLenum target,
+    GLenum attachment,
+    GLenum renderbuffertarget,
+    GLuint renderbuffer) {
+  cmds::FramebufferRenderbuffer cmd;
+  cmd.Init(target, attachment, renderbuffertarget, renderbuffer);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
+void GLES2DecoderPassthroughTestBase::DoBindRenderbuffer(GLenum target,
+                                                         GLuint client_id) {
+  cmds::BindRenderbuffer cmd;
+  cmd.Init(target, client_id);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
 // GCC requires these declarations, but MSVC requires they not be present
 #ifndef COMPILER_MSVC
 const size_t GLES2DecoderPassthroughTestBase::kSharedBufferSize;
@@ -2356,6 +2421,9 @@ const int32_t GLES2DecoderPassthroughTestBase::kInvalidSharedMemoryId;
 
 const uint32_t GLES2DecoderPassthroughTestBase::kNewClientId;
 const GLuint GLES2DecoderPassthroughTestBase::kClientBufferId;
+const GLuint GLES2DecoderPassthroughTestBase::kClientTextureId;
+const GLuint GLES2DecoderPassthroughTestBase::kClientFramebufferId;
+const GLuint GLES2DecoderPassthroughTestBase::kClientRenderbufferId;
 #endif
 
 }  // namespace gles2

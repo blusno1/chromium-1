@@ -27,7 +27,6 @@
 
 #include <memory>
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
@@ -39,15 +38,16 @@
 #include "core/html/media/MediaCustomControlsFullscreenDetector.h"
 #include "core/html/media/MediaRemotingInterstitial.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutVideo.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
+#include "platform/runtime_enabled_features.h"
 #include "public/platform/WebCanvas.h"
 
 namespace blink {
@@ -67,7 +67,6 @@ enum VideoPersistenceControlsType {
 
 inline HTMLVideoElement::HTMLVideoElement(Document& document)
     : HTMLMediaElement(videoTag, document),
-      media_remoting_status_(MediaRemotingStatus::kNotStarted),
       remoting_interstitial_(nullptr) {
   if (document.GetSettings()) {
     default_poster_url_ =
@@ -510,8 +509,6 @@ ScriptPromise HTMLVideoElement::CreateImageBitmap(
 
 void HTMLVideoElement::MediaRemotingStarted(
     const WebString& remote_device_friendly_name) {
-  DCHECK(media_remoting_status_ == MediaRemotingStatus::kNotStarted);
-  media_remoting_status_ = MediaRemotingStatus::kStarted;
   if (!remoting_interstitial_) {
     remoting_interstitial_ = new MediaRemotingInterstitial(*this);
     ShadowRoot& shadow_root = EnsureUserAgentShadowRoot();
@@ -522,12 +519,8 @@ void HTMLVideoElement::MediaRemotingStarted(
 }
 
 void HTMLVideoElement::MediaRemotingStopped() {
-  DCHECK(media_remoting_status_ == MediaRemotingStatus::kDisabled ||
-         media_remoting_status_ == MediaRemotingStatus::kStarted);
-  if (media_remoting_status_ != MediaRemotingStatus::kDisabled)
-    media_remoting_status_ = MediaRemotingStatus::kNotStarted;
-  DCHECK(remoting_interstitial_);
-  remoting_interstitial_->Hide();
+  if (remoting_interstitial_)
+    remoting_interstitial_->Hide();
 }
 
 WebMediaPlayer::DisplayType HTMLVideoElement::DisplayType() const {
@@ -537,9 +530,12 @@ WebMediaPlayer::DisplayType HTMLVideoElement::DisplayType() const {
 }
 
 void HTMLVideoElement::DisableMediaRemoting() {
-  media_remoting_status_ = MediaRemotingStatus::kDisabled;
   if (GetWebMediaPlayer())
     GetWebMediaPlayer()->RequestRemotePlaybackDisabled(true);
+}
+
+bool HTMLVideoElement::IsRemotingInterstitialVisible() const {
+  return remoting_interstitial_ && remoting_interstitial_->IsVisible();
 }
 
 }  // namespace blink

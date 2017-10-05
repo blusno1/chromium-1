@@ -75,8 +75,6 @@
 #include "components/metrics/net/cellular_logic_helper.h"
 #include "components/metrics/net/net_metrics_log_uploader.h"
 #include "components/metrics/net/network_metrics_provider.h"
-#include "components/metrics/profiler/profiler_metrics_provider.h"
-#include "components/metrics/profiler/tracking_synchronizer.h"
 #include "components/metrics/stability_metrics_helper.h"
 #include "components/metrics/ui/screen_info_metrics_provider.h"
 #include "components/metrics/url_constants.h"
@@ -140,6 +138,10 @@
 #include "components/signin/core/browser/signin_status_metrics_provider.h"
 #endif  // !defined(OS_CHROMEOS)
 
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#include "chrome/browser/metrics/upgrade_metrics_provider.h"
+#endif  //  !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+
 namespace {
 
 // This specifies the amount of time to wait for all renderers to send their
@@ -176,6 +178,21 @@ void RegisterFileMetricsPreferences(PrefRegistrySimple* registry) {
 #endif
 }
 
+// crbug/760317: Attempt to remove all files in a directory but then report
+// on how successful that was.
+bool DeleteDirectoryAndReport(const base::FilePath& path, bool recursive) {
+  bool success = base::DeleteFile(path, recursive);
+  int64_t dir_size = base::ComputeDirectorySize(path);
+  if (success) {
+    UMA_HISTOGRAM_MEMORY_KB("UMA.MetricsService.DeletedDirectorySize.Success",
+                            dir_size);
+  } else {
+    UMA_HISTOGRAM_MEMORY_KB("UMA.MetricsService.DeletedDirectorySize.Failure",
+                            dir_size);
+  }
+  return success;
+}
+
 // Constructs the name of a persistent metrics file from a directory and metrics
 // name, and either registers that file as associated with a previous run if
 // metrics reporting is enabled, or deletes it if not.
@@ -191,10 +208,10 @@ void RegisterOrRemovePreviousRunMetricsFile(
 
   if (metrics_reporting_enabled) {
     // Enable reading any existing saved metrics.
-    file_metrics_provider->RegisterSource(
+    file_metrics_provider->RegisterSource(metrics::FileMetricsProvider::Params(
         metrics_file,
         metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_FILE,
-        association, metrics_name);
+        association, metrics_name));
   } else {
     // When metrics reporting is not enabled, any existing file should be
     // deleted in order to preserve user privacy.
@@ -229,10 +246,11 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
         ChromeMetricsServiceClient::kBrowserMetricsName);
     if (metrics_reporting_enabled) {
       file_metrics_provider->RegisterSource(
-          browser_metrics_upload_dir,
-          metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_DIR,
-          metrics::FileMetricsProvider::ASSOCIATE_INTERNAL_PROFILE,
-          ChromeMetricsServiceClient::kBrowserMetricsName);
+          metrics::FileMetricsProvider::Params(
+              browser_metrics_upload_dir,
+              metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_DIR,
+              metrics::FileMetricsProvider::ASSOCIATE_INTERNAL_PROFILE,
+              ChromeMetricsServiceClient::kBrowserMetricsName));
 
       base::FilePath active_path;
       base::GlobalHistogramAllocator::ConstructFilePaths(
@@ -241,10 +259,10 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
       // Register data that will be populated for the current run. "Active"
       // files need an empty "prefs_key" because they update the file itself.
       file_metrics_provider->RegisterSource(
-          active_path,
-          metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ACTIVE_FILE,
-          metrics::FileMetricsProvider::ASSOCIATE_CURRENT_RUN,
-          base::StringPiece());
+          metrics::FileMetricsProvider::Params(
+              active_path,
+              metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ACTIVE_FILE,
+              metrics::FileMetricsProvider::ASSOCIATE_CURRENT_RUN));
     } else {
       // When metrics reporting is not enabled, any existing files should be
       // deleted in order to preserve user privacy.
@@ -252,7 +270,7 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
           FROM_HERE,
           {base::MayBlock(), base::TaskPriority::BACKGROUND,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-          base::BindOnce(base::IgnoreResult(&base::DeleteFile),
+          base::BindOnce(base::IgnoreResult(&DeleteDirectoryAndReport),
                          base::Passed(&browser_metrics_upload_dir),
                          /*recursive=*/true));
     }
@@ -262,11 +280,11 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
   // Read metrics file from setup.exe.
   base::FilePath program_dir;
   base::PathService::Get(base::DIR_EXE, &program_dir);
-  file_metrics_provider->RegisterSource(
+  file_metrics_provider->RegisterSource(metrics::FileMetricsProvider::Params(
       program_dir.AppendASCII(installer::kSetupHistogramAllocatorName),
       metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_DIR,
       metrics::FileMetricsProvider::ASSOCIATE_CURRENT_RUN,
-      installer::kSetupHistogramAllocatorName);
+      installer::kSetupHistogramAllocatorName));
 #endif
 
   return file_metrics_provider;
@@ -328,12 +346,9 @@ ChromeMetricsServiceClient::ChromeMetricsServiceClient(
     : metrics_state_manager_(state_manager),
       waiting_for_collect_final_metrics_step_(false),
       num_async_histogram_fetches_in_progress_(0),
-      profiler_metrics_provider_(nullptr),
 #if BUILDFLAG(ENABLE_PLUGINS)
       plugin_metrics_provider_(nullptr),
 #endif
-      start_time_(base::TimeTicks::Now()),
-      has_uploaded_profiler_data_(false),
       weak_ptr_factory_(this) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RecordCommandLineMetrics();
@@ -455,15 +470,7 @@ void ChromeMetricsServiceClient::CollectFinalMetricsForLog(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   collect_final_metrics_done_callback_ = done_callback;
-
-  if (ShouldIncludeProfilerDataInLog()) {
-    // Fetch profiler data. This will call into
-    // |FinishedReceivingProfilerData()| when the task completes.
-    metrics::TrackingSynchronizer::FetchProfilerDataAsynchronously(
-        weak_ptr_factory_.GetWeakPtr());
-  } else {
-    CollectFinalHistograms();
-  }
+  CollectFinalHistograms();
 }
 
 std::unique_ptr<metrics::MetricsLogUploader>
@@ -574,10 +581,6 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       base::MakeUnique<metrics::DriveMetricsProvider>(
           chrome::FILE_LOCAL_STATE));
 
-  profiler_metrics_provider_ = new metrics::ProfilerMetricsProvider();
-  metrics_service_->RegisterMetricsProvider(
-      std::unique_ptr<metrics::MetricsProvider>(profiler_metrics_provider_));
-
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new metrics::CallStackProfileMetricsProvider));
@@ -667,6 +670,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new CertificateReportingMetricsProvider()));
+
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(new UpgradeMetricsProvider()));
+#endif  //! defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 }
 
 void ChromeMetricsServiceClient::RegisterUKMProviders() {
@@ -679,40 +687,6 @@ void ChromeMetricsServiceClient::RegisterUKMProviders() {
   ukm_service_->RegisterMetricsProvider(
       base::MakeUnique<variations::FieldTrialsProvider>(nullptr,
                                                         kUKMFieldTrialSuffix));
-}
-
-bool ChromeMetricsServiceClient::ShouldIncludeProfilerDataInLog() {
-  // Upload profiler data at most once per session.
-  if (has_uploaded_profiler_data_)
-    return false;
-
-  // For each log, flip a fair coin. Thus, profiler data is sent with the first
-  // log with probability 50%, with the second log with probability 25%, and so
-  // on. As a result, uploaded data is biased toward earlier logs.
-  // TODO(isherman): Explore other possible algorithms, and choose one that
-  // might be more appropriate.  For example, it might be reasonable to include
-  // profiler data with some fixed probability, so that a given client might
-  // upload profiler data more than once; but on average, clients won't upload
-  // too much data.
-  if (base::RandDouble() < 0.5)
-    return false;
-
-  has_uploaded_profiler_data_ = true;
-  return true;
-}
-
-void ChromeMetricsServiceClient::ReceivedProfilerData(
-    const metrics::ProfilerDataAttributes& attributes,
-    const tracked_objects::ProcessDataPhaseSnapshot& process_data_phase,
-    const metrics::ProfilerEvents& past_events) {
-  profiler_metrics_provider_->RecordProfilerData(
-      process_data_phase, attributes.process_id, attributes.process_type,
-      attributes.profiling_phase, attributes.phase_start - start_time_,
-      attributes.phase_finish - start_time_, past_events);
-}
-
-void ChromeMetricsServiceClient::FinishedReceivingProfilerData() {
-  CollectFinalHistograms();
 }
 
 void ChromeMetricsServiceClient::CollectFinalHistograms() {

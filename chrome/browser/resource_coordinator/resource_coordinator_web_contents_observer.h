@@ -28,8 +28,8 @@ class ResourceCoordinatorWebContentsObserver
   static bool IsEnabled();
 
   resource_coordinator::ResourceCoordinatorInterface*
-  tab_resource_coordinator() {
-    return tab_resource_coordinator_.get();
+  page_resource_coordinator() {
+    return page_resource_coordinator_.get();
   }
 
   // WebContentsObserver implementation.
@@ -38,7 +38,7 @@ class ResourceCoordinatorWebContentsObserver
   void WebContentsDestroyed() override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void TitleWasSet(content::NavigationEntry* entry, bool explicit_set) override;
+  void TitleWasSet(content::NavigationEntry* entry) override;
   void DidUpdateFaviconURL(
       const std::vector<content::FaviconURL>& candidates) override;
 
@@ -58,7 +58,7 @@ class ResourceCoordinatorWebContentsObserver
       ResourceCoordinatorWebContentsObserver>;
 
   std::unique_ptr<resource_coordinator::ResourceCoordinatorInterface>
-      tab_resource_coordinator_;
+      page_resource_coordinator_;
   ukm::SourceId ukm_source_id_;
 
   // Favicon and title are set when a page is loaded, we only want to send

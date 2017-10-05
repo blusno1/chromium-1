@@ -126,8 +126,6 @@
 #include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/permission_bubble/chooser_bubble_delegate.h"
-#include "chrome/browser/ui/search/search_delegate.h"
-#include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/status_bubble.h"
@@ -232,10 +230,6 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #endif
 
-#if defined(USE_ASH)
-#include "ash/shell.h"  // nogncheck
-#endif
-
 using base::TimeDelta;
 using base::UserMetricsAction;
 using content::NativeWebKeyboardEvent;
@@ -284,19 +278,6 @@ const extensions::Extension* GetExtensionForOrigin(
   return nullptr;
 #endif
 }
-
-// Stores a pointer to the Browser in the WebContents.
-struct BrowserLink : public base::SupportsUserData::Data {
-  static const char kKey[];
-
-  explicit BrowserLink(Browser* browser) : browser(browser) {}
-  ~BrowserLink() override = default;
-
-  Browser* browser;
-};
-
-// static
-const char BrowserLink::kKey[] = "BrowserLink";
 
 }  // namespace
 
@@ -426,8 +407,6 @@ Browser::Browser(const CreateParams& params)
 
   toolbar_model_.reset(new ToolbarModelImpl(toolbar_model_delegate_.get(),
                                             content::kMaxURLDisplayChars));
-  search_model_.reset(new SearchModel());
-  search_delegate_.reset(new SearchDelegate(search_model_.get()));
 
   extension_registry_observer_.Add(
       extensions::ExtensionRegistry::Get(profile_));
@@ -591,13 +570,6 @@ Browser::~Browser() {
     select_file_dialog_->ListenerDestroyed();
 }
 
-// static
-Browser* Browser::FromWebContents(content::WebContents* web_contents) {
-  const BrowserLink* link =
-      static_cast<BrowserLink*>(web_contents->GetUserData(&BrowserLink::kKey));
-  return link ? link->browser : nullptr;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // Getters & Setters
 
@@ -668,7 +640,9 @@ base::string16 Browser::GetWindowTitleFromWebContents(
     title = contents->GetTitle();
     FormatTitleForDisplay(&title);
   }
-  if (title.empty())
+
+  // If there is no title, leave it empty for apps.
+  if (title.empty() && !is_app())
     title = CoreTabHelper::GetDefaultTitle();
 
 #if defined(OS_MACOSX)
@@ -1049,7 +1023,6 @@ void Browser::TabDetachedAt(WebContents* contents, int index) {
 
 void Browser::TabDeactivated(WebContents* contents) {
   exclusive_access_manager_->OnTabDeactivated(contents);
-  search_delegate_->OnTabDeactivated(contents);
   SearchTabHelper::FromWebContents(contents)->OnTabDeactivated();
 
   // Save what the user's currently typing, so it can be restored when we
@@ -1104,9 +1077,6 @@ void Browser::ActiveTabChanged(WebContents* old_contents,
   // Propagate the profile to the location bar.
   UpdateToolbar((reason & CHANGE_REASON_REPLACED) == 0);
 
-  if (search::IsInstantExtendedAPIEnabled())
-    search_delegate_->OnTabActivated(new_contents);
-
   // Update reload/stop state.
   command_controller_->LoadingStateChanged(new_contents->IsLoading(), true);
 
@@ -1142,10 +1112,6 @@ void Browser::ActiveTabChanged(WebContents* old_contents,
                                        session_tab_helper->session_id(),
                                        base::TimeTicks::Now());
   }
-
-  // This needs to be called after notifying SearchDelegate.
-  if (instant_controller_)
-    instant_controller_->ActiveTabChanged();
 
   SearchTabHelper::FromWebContents(new_contents)->OnTabActivated();
 }
@@ -1498,8 +1464,8 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
   if (params.user_gesture)
     nav_params.window_action = chrome::NavigateParams::SHOW_WINDOW;
   nav_params.user_gesture = params.user_gesture;
-  bool is_popup =
-      PopupBlockerTabHelper::ConsiderForPopupBlocking(params.disposition);
+  bool is_popup = source && PopupBlockerTabHelper::ConsiderForPopupBlocking(
+                                params.disposition);
   if (is_popup && PopupBlockerTabHelper::MaybeBlockPopup(
                       source, base::Optional<GURL>(), nav_params, &params,
                       blink::mojom::WindowFeatures())) {
@@ -1509,7 +1475,7 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
   chrome::Navigate(&nav_params);
 
   if (is_popup && nav_params.target_contents)
-    PopupTracker::CreateForWebContents(nav_params.target_contents);
+    PopupTracker::CreateForWebContents(nav_params.target_contents, source);
 
   return nav_params.target_contents;
 }
@@ -1553,10 +1519,10 @@ void Browser::AddNewContents(WebContents* source,
                              bool* was_blocked) {
   // At this point the |new_contents| is beyond the popup blocker, but we use
   // the same logic for determining if the popup tracker needs to be attached.
-  if (PopupBlockerTabHelper::ConsiderForPopupBlocking(disposition))
-    PopupTracker::CreateForWebContents(new_contents);
+  if (source && PopupBlockerTabHelper::ConsiderForPopupBlocking(disposition))
+    PopupTracker::CreateForWebContents(new_contents, source);
   chrome::AddWebContents(this, source, new_contents, disposition, initial_rect,
-                         user_gesture, was_blocked);
+                         user_gesture);
 }
 
 void Browser::ActivateContents(WebContents* contents) {
@@ -1603,7 +1569,6 @@ void Browser::UpdateTargetURL(WebContents* source, const GURL& url) {
 }
 
 void Browser::ContentsMouseEvent(WebContents* source,
-                                 const gfx::Point& location,
                                  bool motion,
                                  bool exited) {
   exclusive_access_manager_->OnUserInput();
@@ -1613,7 +1578,7 @@ void Browser::ContentsMouseEvent(WebContents* source,
     return;
 
   if (source == tab_strip_model_->GetActiveWebContents()) {
-    GetStatusBubble()->MouseMoved(location, exited);
+    GetStatusBubble()->MouseMoved(exited);
     if (exited)
       GetStatusBubble()->SetURL(GURL());
   }
@@ -2384,14 +2349,6 @@ void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
     zoom::ZoomController::FromWebContents(web_contents)->RemoveObserver(this);
     content_translate_driver.RemoveObserver(this);
   }
-
-  // Update the back-link from the WebContents to Browser.
-  if (set_delegate) {
-    web_contents->SetUserData(BrowserLink::kKey,
-                              base::MakeUnique<BrowserLink>(this));
-  } else {
-    web_contents->RemoveUserData(BrowserLink::kKey);
-  }
 }
 
 void Browser::CloseFrame() {
@@ -2422,9 +2379,6 @@ void Browser::TabDetachedAtImpl(content::WebContents* contents,
   if (find_bar_controller_.get() && index == tab_strip_model_->active_index()) {
     find_bar_controller_->ChangeWebContents(NULL);
   }
-
-  // Stop observing search model changes for this tab.
-  search_delegate_->OnTabDetached(contents);
 
   for (size_t i = 0; i < interstitial_observers_.size(); i++) {
     if (interstitial_observers_[i]->web_contents() != contents)

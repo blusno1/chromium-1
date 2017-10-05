@@ -17,7 +17,6 @@
 #include "ash/accessibility_delegate.h"
 #include "ash/app_list/app_list_delegate_impl.h"
 #include "ash/ash_constants.h"
-#include "ash/ash_switches.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/cast_config_controller.h"
 #include "ash/display/ash_display_controller.h"
@@ -50,8 +49,10 @@
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/magnifier/partial_magnification_controller.h"
 #include "ash/media_controller.h"
+#include "ash/message_center/message_center_controller.h"
 #include "ash/new_window_controller.h"
 #include "ash/palette_delegate.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -79,6 +80,7 @@
 #include "ash/system/network/vpn_list.h"
 #include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/palette/palette_tray.h"
+#include "ash/system/power/peripheral_battery_notifier.h"
 #include "ash/system/power/power_event_observer.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/video_activity_notifier.h"
@@ -90,8 +92,8 @@
 #include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray_caps_lock.h"
-#include "ash/system/web_notification/message_center_controller.h"
 #include "ash/touch/ash_touch_transform_controller.h"
+#include "ash/touch/touch_devices_controller.h"
 #include "ash/tray_action/tray_action.h"
 #include "ash/utility/screenshot_controller.h"
 #include "ash/virtual_keyboard_controller.h"
@@ -347,6 +349,7 @@ void Shell::RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   TrayCapsLock::RegisterProfilePrefs(registry, for_test);
   BluetoothPowerController::RegisterProfilePrefs(registry);
   LockScreenController::RegisterProfilePrefs(registry, for_test);
+  TouchDevicesController::RegisterProfilePrefs(registry);
 }
 
 views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
@@ -582,8 +585,8 @@ void Shell::NotifyVoiceInteractionContextEnabled(bool enabled) {
     observer.OnVoiceInteractionContextEnabled(enabled);
 }
 
-void Shell::NotifyVoiceInteractionSetupCompleted() {
-  voice_interaction_setup_completed_ = true;
+void Shell::NotifyVoiceInteractionSetupCompleted(bool completed) {
+  voice_interaction_setup_completed_ = completed;
   for (auto& observer : shell_observers_)
     observer.OnVoiceInteractionSetupCompleted();
 }
@@ -779,14 +782,6 @@ Shell::~Shell() {
   // ShelfWindowWatcher has window observers and a pointer to the shelf model.
   shelf_window_watcher_.reset();
 
-  // ShelfItemDelegate subclasses it owns have complex cleanup to run (e.g. ARC
-  // shelf items in Chrome) so explicitly shutdown early.
-  shelf_model()->DestroyItemDelegates();
-
-  // Notify the ShellDelegate that the shelf is shutting down.
-  // TODO(msw): Refine ChromeLauncherController lifetime management.
-  shell_delegate_->ShelfShutdown();
-
   // Removes itself as an observer of |pref_service_|.
   shelf_controller_.reset();
 
@@ -828,6 +823,9 @@ Shell::~Shell() {
   // BluetoothPowerController depends on the PrefService and must be destructed
   // before it.
   bluetooth_power_controller_ = nullptr;
+  // TouchDevicesController depends on the PrefService and must be destructed
+  // before it.
+  touch_devices_controller_ = nullptr;
   // NightLightController depeneds on the PrefService and must be destructed
   // before it. crbug.com/724231.
   night_light_controller_ = nullptr;
@@ -846,6 +844,8 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   if (NightLightController::IsFeatureEnabled())
     night_light_controller_ = base::MakeUnique<NightLightController>();
+
+  touch_devices_controller_ = std::make_unique<TouchDevicesController>();
 
   bluetooth_power_controller_ = base::MakeUnique<BluetoothPowerController>();
 
@@ -1022,8 +1022,7 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   lock_state_controller_ =
       base::MakeUnique<LockStateController>(shutdown_controller_.get());
-  power_button_controller_.reset(
-      new PowerButtonController(lock_state_controller_.get()));
+  power_button_controller_ = std::make_unique<PowerButtonController>();
   // Pass the initial display state to PowerButtonController.
   power_button_controller_->OnDisplayModeChanged(
       display_configurator_->cached_displays());
@@ -1121,6 +1120,7 @@ void Shell::Init(const ShellInitParams& init_params) {
     cursor_manager_->SetCursor(ui::CursorType::kPointer);
   }
 
+  peripheral_battery_notifier_ = base::MakeUnique<PeripheralBatteryNotifier>();
   power_event_observer_.reset(new PowerEventObserver());
   user_activity_notifier_.reset(
       new ui::UserActivityPowerManagerNotifier(user_activity_detector_.get()));
@@ -1266,10 +1266,6 @@ void Shell::InitializeShelf() {
   // Must occur after SessionController creation and user login.
   DCHECK(session_controller());
   DCHECK_GT(session_controller()->NumberOfLoggedInUsers(), 0);
-
-  // Notify the ShellDelegate that the shelf is being initialized.
-  // TODO(msw): Refine ChromeLauncherController lifetime management.
-  shell_delegate_->ShelfInit();
 
   if (!shelf_window_watcher_)
     shelf_window_watcher_ = base::MakeUnique<ShelfWindowWatcher>(shelf_model());

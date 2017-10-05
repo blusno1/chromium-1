@@ -10,10 +10,10 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "cc/ipc/cc_param_traits.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/quads/picture_draw_quad.h"
-#include "cc/quads/render_pass_draw_quad.h"
 #include "cc/resources/resource_provider.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/picture_draw_quad.h"
+#include "components/viz/common/quads/render_pass_draw_quad.h"
 #include "ipc/ipc_message.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/effects/SkBlurImageFilter.h"
@@ -22,25 +22,25 @@
 #include "base/file_descriptor_posix.h"
 #endif
 
-using cc::CompositorFrame;
-using cc::DebugBorderDrawQuad;
-using viz::DrawQuad;
+using viz::CompositorFrame;
 using cc::FilterOperation;
 using cc::FilterOperations;
-using cc::PictureDrawQuad;
-using cc::RenderPass;
-using cc::RenderPassDrawQuad;
 using cc::ResourceProvider;
-using cc::SolidColorDrawQuad;
-using cc::SurfaceDrawQuad;
-using cc::TextureDrawQuad;
-using cc::TileDrawQuad;
-using cc::StreamVideoDrawQuad;
-using cc::YUVVideoDrawQuad;
 using gfx::Transform;
+using viz::DebugBorderDrawQuad;
+using viz::DrawQuad;
+using viz::PictureDrawQuad;
+using viz::RenderPass;
+using viz::RenderPassDrawQuad;
 using viz::ResourceId;
 using viz::SharedQuadState;
+using viz::SolidColorDrawQuad;
+using viz::StreamVideoDrawQuad;
+using viz::SurfaceDrawQuad;
+using viz::TextureDrawQuad;
+using viz::TileDrawQuad;
 using viz::TransferableResource;
+using viz::YUVVideoDrawQuad;
 
 namespace content {
 namespace {
@@ -91,8 +91,8 @@ class CCParamTraitsTest : public testing::Test {
     EXPECT_EQ(a->sorting_context_id, b->sorting_context_id);
   }
 
-  void Compare(const viz::DrawQuad* a, const viz::DrawQuad* b) {
-    ASSERT_NE(viz::DrawQuad::INVALID, a->material);
+  void Compare(const DrawQuad* a, const DrawQuad* b) {
+    ASSERT_NE(DrawQuad::INVALID, a->material);
     ASSERT_EQ(a->material, b->material);
     EXPECT_EQ(a->rect.ToString(), b->rect.ToString());
     EXPECT_EQ(a->visible_rect.ToString(), b->visible_rect.ToString());
@@ -101,42 +101,42 @@ class CCParamTraitsTest : public testing::Test {
     Compare(a->shared_quad_state, b->shared_quad_state);
 
     switch (a->material) {
-      case viz::DrawQuad::DEBUG_BORDER:
+      case DrawQuad::DEBUG_BORDER:
         Compare(DebugBorderDrawQuad::MaterialCast(a),
                 DebugBorderDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::PICTURE_CONTENT:
+      case DrawQuad::PICTURE_CONTENT:
         Compare(PictureDrawQuad::MaterialCast(a),
                 PictureDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::RENDER_PASS:
+      case DrawQuad::RENDER_PASS:
         Compare(RenderPassDrawQuad::MaterialCast(a),
                 RenderPassDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::TEXTURE_CONTENT:
+      case DrawQuad::TEXTURE_CONTENT:
         Compare(TextureDrawQuad::MaterialCast(a),
                 TextureDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::TILED_CONTENT:
+      case DrawQuad::TILED_CONTENT:
         Compare(TileDrawQuad::MaterialCast(a), TileDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::SOLID_COLOR:
+      case DrawQuad::SOLID_COLOR:
         Compare(SolidColorDrawQuad::MaterialCast(a),
                 SolidColorDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::STREAM_VIDEO_CONTENT:
+      case DrawQuad::STREAM_VIDEO_CONTENT:
         Compare(StreamVideoDrawQuad::MaterialCast(a),
                 StreamVideoDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::SURFACE_CONTENT:
+      case DrawQuad::SURFACE_CONTENT:
         Compare(SurfaceDrawQuad::MaterialCast(a),
                 SurfaceDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::YUV_VIDEO_CONTENT:
+      case DrawQuad::YUV_VIDEO_CONTENT:
         Compare(YUVVideoDrawQuad::MaterialCast(a),
                 YUVVideoDrawQuad::MaterialCast(b));
         break;
-      case viz::DrawQuad::INVALID:
+      case DrawQuad::INVALID:
         break;
     }
   }
@@ -154,6 +154,7 @@ class CCParamTraitsTest : public testing::Test {
     EXPECT_EQ(a->filters_scale, b->filters_scale);
     EXPECT_EQ(a->filters_origin, b->filters_origin);
     EXPECT_EQ(a->tex_coord_rect, b->tex_coord_rect);
+    EXPECT_EQ(a->force_anti_aliasing_off, b->force_anti_aliasing_off);
   }
 
   void Compare(const SolidColorDrawQuad* a, const SolidColorDrawQuad* b) {
@@ -169,6 +170,9 @@ class CCParamTraitsTest : public testing::Test {
 
   void Compare(const SurfaceDrawQuad* a, const SurfaceDrawQuad* b) {
     EXPECT_EQ(a->surface_id, b->surface_id);
+    EXPECT_EQ(a->surface_draw_quad_type, b->surface_draw_quad_type);
+    EXPECT_EQ(a->fallback_quad, b->fallback_quad);
+    EXPECT_EQ(a->default_background_color, b->default_background_color);
   }
 
   void Compare(const TextureDrawQuad* a, const TextureDrawQuad* b) {
@@ -193,6 +197,7 @@ class CCParamTraitsTest : public testing::Test {
     EXPECT_EQ(a->texture_size, b->texture_size);
     EXPECT_EQ(a->swizzle_contents, b->swizzle_contents);
     EXPECT_EQ(a->nearest_neighbor, b->nearest_neighbor);
+    EXPECT_EQ(a->force_anti_aliasing_off, b->force_anti_aliasing_off);
   }
 
   void Compare(const YUVVideoDrawQuad* a, const YUVVideoDrawQuad* b) {
@@ -301,21 +306,22 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       FilterOperation::CreateBrightnessFilter(arbitrary_float2));
 
   std::unique_ptr<RenderPass> child_pass_in = RenderPass::Create();
-  child_pass_in->SetAll(child_id, arbitrary_rect2, arbitrary_rect3,
-                        arbitrary_matrix2, arbitrary_filters1,
-                        arbitrary_filters2, arbitrary_color_space,
-                        arbitrary_bool2, arbitrary_bool3, arbitrary_bool4);
+  child_pass_in->SetAll(
+      child_id, arbitrary_rect2, arbitrary_rect3, arbitrary_matrix2,
+      arbitrary_filters1, arbitrary_filters2, arbitrary_color_space,
+      arbitrary_bool2, arbitrary_bool3, arbitrary_bool4, arbitrary_bool5);
 
   std::unique_ptr<RenderPass> child_pass_cmp = RenderPass::Create();
-  child_pass_cmp->SetAll(child_id, arbitrary_rect2, arbitrary_rect3,
-                         arbitrary_matrix2, arbitrary_filters1,
-                         arbitrary_filters2, arbitrary_color_space,
-                         arbitrary_bool2, arbitrary_bool3, arbitrary_bool4);
+  child_pass_cmp->SetAll(
+      child_id, arbitrary_rect2, arbitrary_rect3, arbitrary_matrix2,
+      arbitrary_filters1, arbitrary_filters2, arbitrary_color_space,
+      arbitrary_bool2, arbitrary_bool3, arbitrary_bool4, arbitrary_bool5);
 
   std::unique_ptr<RenderPass> pass_in = RenderPass::Create();
   pass_in->SetAll(root_id, arbitrary_rect1, arbitrary_rect2, arbitrary_matrix1,
                   arbitrary_filters2, arbitrary_filters1, arbitrary_color_space,
-                  arbitrary_bool1, arbitrary_bool2, arbitrary_bool3);
+                  arbitrary_bool1, arbitrary_bool2, arbitrary_bool3,
+                  arbitrary_bool4);
 
   SharedQuadState* shared_state1_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state1_in->SetAll(arbitrary_matrix1, arbitrary_rect1, arbitrary_rect1,
@@ -327,7 +333,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   pass_cmp->SetAll(root_id, arbitrary_rect1, arbitrary_rect2, arbitrary_matrix1,
                    arbitrary_filters2, arbitrary_filters1,
                    arbitrary_color_space, arbitrary_bool1, arbitrary_bool2,
-                   arbitrary_bool3);
+                   arbitrary_bool3, arbitrary_bool4);
 
   SharedQuadState* shared_state1_cmp =
       pass_cmp->CreateAndAppendSharedQuadState();
@@ -355,7 +361,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
                         arbitrary_rect1_inside_rect1, arbitrary_bool1, child_id,
                         arbitrary_resourceid2, arbitrary_rectf1,
                         arbitrary_size1, arbitrary_vector2df2,
-                        arbitrary_pointf2, arbitrary_rectf1);
+                        arbitrary_pointf2, arbitrary_rectf1, arbitrary_bool2);
   pass_cmp->CopyFromAndAppendRenderPassDrawQuad(renderpass_in,
                                                 renderpass_in->render_pass_id);
 
@@ -368,8 +374,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       pass_cmp->CreateAndAppendSharedQuadState();
   *shared_state3_cmp = *shared_state3_in;
 
-  SolidColorDrawQuad* solidcolor_in =
-      pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  auto* solidcolor_in = pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
   solidcolor_in->SetAll(shared_state3_in, arbitrary_rect3,
                         arbitrary_rect2_inside_rect3, arbitrary_bool1,
                         arbitrary_color, arbitrary_bool2);
@@ -390,8 +395,8 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       pass_in->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
   surface_in->SetAll(shared_state3_in, arbitrary_rect2,
                      arbitrary_rect1_inside_rect2, arbitrary_bool1,
-                     arbitrary_surface_id, cc::SurfaceDrawQuadType::PRIMARY,
-                     nullptr);
+                     arbitrary_surface_id, viz::SurfaceDrawQuadType::PRIMARY,
+                     SK_ColorWHITE, nullptr);
   pass_cmp->CopyFromAndAppendDrawQuad(surface_in);
 
   TextureDrawQuad* texture_in =
@@ -407,7 +412,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   tile_in->SetAll(shared_state3_in, arbitrary_rect2,
                   arbitrary_rect1_inside_rect2, arbitrary_bool1,
                   arbitrary_resourceid3, arbitrary_rectf1, arbitrary_size1,
-                  arbitrary_bool2, arbitrary_bool3);
+                  arbitrary_bool2, arbitrary_bool3, arbitrary_bool4);
   pass_cmp->CopyFromAndAppendDrawQuad(tile_in);
 
   YUVVideoDrawQuad* yuvvideo_in =
@@ -428,10 +433,9 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   Compare(pass_cmp.get(), pass_in.get());
   ASSERT_EQ(3u, pass_in->shared_quad_state_list.size());
   ASSERT_EQ(8u, pass_in->quad_list.size());
-  for (cc::SharedQuadStateList::ConstIterator
-           cmp_iterator = pass_cmp->shared_quad_state_list.begin(),
-           in_iterator = pass_in->shared_quad_state_list.begin();
-       in_iterator != pass_in->shared_quad_state_list.end();
+  for (auto cmp_iterator = pass_cmp->shared_quad_state_list.cbegin(),
+            in_iterator = pass_in->shared_quad_state_list.cbegin();
+       in_iterator != pass_in->shared_quad_state_list.cend();
        ++cmp_iterator, ++in_iterator) {
     Compare(*cmp_iterator, *in_iterator);
   }
@@ -473,10 +477,9 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   Compare(pass_cmp.get(), pass_out.get());
   ASSERT_EQ(3u, pass_out->shared_quad_state_list.size());
   ASSERT_EQ(8u, pass_out->quad_list.size());
-  for (cc::SharedQuadStateList::ConstIterator
-           cmp_iterator = pass_cmp->shared_quad_state_list.begin(),
-           out_iterator = pass_out->shared_quad_state_list.begin();
-       out_iterator != pass_out->shared_quad_state_list.end();
+  for (auto cmp_iterator = pass_cmp->shared_quad_state_list.cbegin(),
+            out_iterator = pass_out->shared_quad_state_list.cbegin();
+       out_iterator != pass_out->shared_quad_state_list.cend();
        ++cmp_iterator, ++out_iterator) {
     Compare(*cmp_iterator, *out_iterator);
   }
@@ -500,7 +503,7 @@ TEST_F(CCParamTraitsTest, UnusedSharedQuadStates) {
   std::unique_ptr<RenderPass> pass_in = RenderPass::Create();
   pass_in->SetAll(1, gfx::Rect(100, 100), gfx::Rect(), gfx::Transform(),
                   FilterOperations(), FilterOperations(),
-                  gfx::ColorSpace::CreateSRGB(), false, false, false);
+                  gfx::ColorSpace::CreateSRGB(), false, false, false, false);
 
   // The first SharedQuadState is used.
   SharedQuadState* shared_state1_in = pass_in->CreateAndAppendSharedQuadState();
@@ -508,8 +511,7 @@ TEST_F(CCParamTraitsTest, UnusedSharedQuadStates) {
                            gfx::Rect(), false, true, 1.f, SkBlendMode::kSrcOver,
                            0);
 
-  SolidColorDrawQuad* quad1 =
-      pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  auto* quad1 = pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
   quad1->SetAll(shared_state1_in, gfx::Rect(10, 10), gfx::Rect(10, 10), false,
                 SK_ColorRED, false);
 
@@ -530,8 +532,7 @@ TEST_F(CCParamTraitsTest, UnusedSharedQuadStates) {
                            gfx::Rect(), false, true, 1.f, SkBlendMode::kSrcOver,
                            0);
 
-  SolidColorDrawQuad* quad2 =
-      pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  auto* quad2 = pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
   quad2->SetAll(shared_state4_in, gfx::Rect(10, 10), gfx::Rect(10, 10), false,
                 SK_ColorRED, false);
 

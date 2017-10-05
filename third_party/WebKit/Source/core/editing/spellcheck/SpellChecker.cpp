@@ -26,7 +26,6 @@
 
 #include "core/editing/spellcheck/SpellChecker.h"
 
-#include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/clipboard/DataObject.h"
 #include "core/dom/Document.h"
@@ -38,6 +37,8 @@
 #include "core/editing/Editor.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/CompositeEditCommand.h"
 #include "core/editing/commands/ReplaceSelectionCommand.h"
@@ -52,6 +53,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLInputElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutTextControl.h"
 #include "core/loader/EmptyClients.h"
 #include "core/page/Page.h"
@@ -347,6 +349,12 @@ void SpellChecker::MarkAndReplaceFor(
     // "editing/spelling/spellcheck-async-mutation.html" reaches here.
     return;
   }
+
+  // Clear the stale markers.
+  RemoveMarkers(checking_range, DocumentMarker::MisspellingMarkers());
+
+  if (!results.size())
+    return;
 
   TextCheckingParagraph paragraph(checking_range, checking_range);
 
@@ -783,13 +791,12 @@ bool SpellChecker::IsSpellCheckingEnabledAt(const Position& position) {
   if (position.IsNull())
     return false;
   if (TextControlElement* text_control = EnclosingTextControl(position)) {
-    if (isHTMLInputElement(text_control)) {
-      HTMLInputElement& input = toHTMLInputElement(*text_control);
+    if (auto* input = ToHTMLInputElementOrNull(text_control)) {
       // TODO(tkent): The following password type check should be done in
       // HTMLElement::spellcheck(). crbug.com/371567
-      if (input.type() == InputTypeNames::password)
+      if (input->type() == InputTypeNames::password)
         return false;
-      if (!input.IsFocusedElementInDocument())
+      if (!input->IsFocusedElementInDocument())
         return false;
     }
   }

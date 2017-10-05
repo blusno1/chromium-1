@@ -8,10 +8,10 @@
 
 #include <memory>
 #include <set>
-#include <stack>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/stack.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -252,7 +252,7 @@ void SetFaviconImpl(Profile* profile,
       FaviconServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS);
   if (favicon_source == bookmarks_helper::FROM_UI) {
-    favicon_service->SetFavicons(node->url(), icon_url, favicon_base::FAVICON,
+    favicon_service->SetFavicons({node->url()}, icon_url, favicon_base::FAVICON,
                                  image);
     } else {
       browser_sync::ProfileSyncService* pss =
@@ -417,7 +417,7 @@ void FindNodeInVerifier(BookmarkModel* foreign_model,
                         const BookmarkNode* foreign_node,
                         const BookmarkNode** result) {
   // Climb the tree.
-  std::stack<int> path;
+  base::stack<int> path;
   const BookmarkNode* walker = foreign_node;
   while (walker != foreign_model->root_node()) {
     path.push(walker->parent()->GetIndexOf(walker));

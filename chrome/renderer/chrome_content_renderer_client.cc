@@ -35,6 +35,7 @@
 #include "chrome/common/pepper_permission_util.h"
 #include "chrome/common/plugin.mojom.h"
 #include "chrome/common/prerender_types.h"
+#include "chrome/common/profiling/memlog_allocator_shim.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/secure_origin_whitelist.h"
 #include "chrome/common/url_constants.h"
@@ -128,6 +129,7 @@
 #include "third_party/WebKit/public/platform/scheduler/renderer_process_type.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
+#include "third_party/WebKit/public/web/WebHeap.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebPluginParams.h"
@@ -142,7 +144,7 @@
 #include "chrome/renderer/sandbox_status_extension_android.h"
 #endif
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
 #include "components/nacl/renderer/nacl_helper.h"
 #endif
@@ -377,15 +379,17 @@ ChromeContentRendererClient::ChromeContentRendererClient()
       ChromeExtensionsRendererClient::GetInstance());
 #endif
 #if BUILDFLAG(ENABLE_PLUGINS)
-  for (size_t i = 0; i < arraysize(kPredefinedAllowedCameraDeviceOrigins); ++i)
-    allowed_camera_device_origins_.insert(
-        kPredefinedAllowedCameraDeviceOrigins[i]);
-  for (size_t i = 0; i < arraysize(kPredefinedAllowedCompositorOrigins); ++i)
-    allowed_compositor_origins_.insert(kPredefinedAllowedCompositorOrigins[i]);
+  for (const char* origin : kPredefinedAllowedCameraDeviceOrigins)
+    allowed_camera_device_origins_.insert(origin);
+  for (const char* origin : kPredefinedAllowedCompositorOrigins)
+    allowed_compositor_origins_.insert(origin);
 #endif
 #if BUILDFLAG(ENABLE_PRINTING)
   printing::SetAgent(GetUserAgent());
 #endif
+
+  profiling::SetGCHeapAllocationHookFunctions(
+      &blink::WebHeap::SetAllocationHook, &blink::WebHeap::SetFreeHook);
 }
 
 ChromeContentRendererClient::~ChromeContentRendererClient() = default;
@@ -555,7 +559,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
   new PepperHelper(render_frame);
 #endif
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   new nacl::NaClHelper(render_frame);
 #endif
 
@@ -653,13 +657,15 @@ void ChromeContentRendererClient::RenderViewCreated(
 }
 
 SkBitmap* ChromeContentRendererClient::GetSadPluginBitmap() {
-  return const_cast<SkBitmap*>(ResourceBundle::GetSharedInstance().
-      GetImageNamed(IDR_SAD_PLUGIN).ToSkBitmap());
+  return const_cast<SkBitmap*>(ui::ResourceBundle::GetSharedInstance()
+                                   .GetImageNamed(IDR_SAD_PLUGIN)
+                                   .ToSkBitmap());
 }
 
 SkBitmap* ChromeContentRendererClient::GetSadWebViewBitmap() {
-  return const_cast<SkBitmap*>(ResourceBundle::GetSharedInstance().
-      GetImageNamed(IDR_SAD_WEBVIEW).ToSkBitmap());
+  return const_cast<SkBitmap*>(ui::ResourceBundle::GetSharedInstance()
+                                   .GetImageNamed(IDR_SAD_WEBVIEW)
+                                   .ToSkBitmap());
 }
 
 bool ChromeContentRendererClient::OverrideCreatePlugin(
@@ -804,7 +810,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
       }
       case ChromeViewHostMsg_GetPluginInfo_Status::kAllowed:
       case ChromeViewHostMsg_GetPluginInfo_Status::kPlayImportantContent: {
-#if !defined(DISABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS)
         const bool is_nacl_plugin =
             info.name == ASCIIToUTF16(nacl::kNaClPluginName);
         const bool is_nacl_mime_type =
@@ -862,7 +868,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             break;
           }
         }
-#endif  // !defined(DISABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS)
 
         // Report PDF load metrics. Since the PDF plugin is comprised of an
         // extension that loads a second plugin, avoid double counting by
@@ -1053,7 +1059,7 @@ GURL ChromeContentRendererClient::GetNaClContentHandlerURL(
   return GURL();
 }
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 //  static
 bool ChromeContentRendererClient::IsNaClAllowed(
     const GURL& manifest_url,
@@ -1130,7 +1136,7 @@ bool ChromeContentRendererClient::IsNaClAllowed(
   }
   return is_nacl_allowed;
 }
-#endif  // defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 
 bool ChromeContentRendererClient::HasErrorPage(int http_status_code) {
   // Use an internal error page, if we have one for the status code.
@@ -1203,7 +1209,7 @@ bool ChromeContentRendererClient::RunIdleHandlerWhenWidgetsHidden() {
   return !IsStandaloneExtensionProcess();
 }
 
-bool ChromeContentRendererClient::AllowStoppingTimersWhenProcessBackgrounded() {
+bool ChromeContentRendererClient::AllowStoppingWhenProcessBackgrounded() {
 #if defined(OS_ANDROID)
   return true;
 #else
@@ -1638,19 +1644,12 @@ GURL ChromeContentRendererClient::OverrideFlashEmbedWithHTML(const GURL& url) {
   }
 
   GURL corrected_url = GURL(url_str);
-  // Unless we're on an Android device, we don't modify any URLs that contain
-  // the enablejsapi=1 parameter since the page may be interacting with the
-  // YouTube Flash player in Javascript and we don't want to break working
-  // content. If we're on an Android device and the URL contains the
-  // enablejsapi=1 parameter, we do override the URL.
-  if (corrected_url.query().find("enablejsapi=1") != std::string::npos) {
-#if defined(OS_ANDROID)
+  // Chrome used to only rewrite embeds with enablejsapi=1 on mobile for
+  // backward compatibility but with Flash embeds deprecated by YouTube, they
+  // are rewritten on all platforms. However, a different result is used in
+  // order to keep track of how popular they are.
+  if (corrected_url.query().find("enablejsapi=1") != std::string::npos)
     result = internal::SUCCESS_ENABLEJSAPI;
-#else
-    RecordYouTubeRewriteUMA(internal::FAILURE_ENABLEJSAPI);
-    return GURL();
-#endif
-  }
 
   // Change the path to use the YouTube HTML5 API
   std::string path = corrected_url.path();

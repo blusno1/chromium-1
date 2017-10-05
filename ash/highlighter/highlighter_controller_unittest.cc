@@ -22,16 +22,14 @@ class HighlighterControllerTest : public AshTestBase {
 
   void SetUp() override {
     AshTestBase::SetUp();
-    controller_ = base::MakeUnique<HighlighterController>();
-    controller_test_api_ =
-        base::MakeUnique<HighlighterControllerTestApi>(controller_.get());
+    controller_test_api_ = base::MakeUnique<HighlighterControllerTestApi>(
+        Shell::Get()->highlighter_controller());
   }
 
   void TearDown() override {
-    // This needs to be called first to remove the event handler before the
+    // This needs to be called first to reset the controller state before the
     // shell instance gets torn down.
     controller_test_api_.reset();
-    controller_.reset();
     AshTestBase::TearDown();
   }
 
@@ -46,7 +44,6 @@ class HighlighterControllerTest : public AshTestBase {
     GetEventGenerator().ReleaseTouch();
   }
 
-  std::unique_ptr<HighlighterController> controller_;
   std::unique_ptr<HighlighterControllerTestApi> controller_test_api_;
 
  private:
@@ -168,6 +165,7 @@ TEST_F(HighlighterControllerTest, HighlighterGestures) {
   GetEventGenerator().MoveTouch(gfx::Point(200, 200));
   GetEventGenerator().ReleaseTouch();
   EXPECT_FALSE(controller_test_api_->handle_selection_called());
+  EXPECT_TRUE(controller_test_api_->handle_failed_selection_called());
 
   // An almost horizontal stroke is recognized
   controller_test_api_->ResetSelection();
@@ -176,6 +174,7 @@ TEST_F(HighlighterControllerTest, HighlighterGestures) {
   GetEventGenerator().MoveTouch(gfx::Point(300, 102));
   GetEventGenerator().ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
 
   // Horizontal stroke selection rectangle should:
   //   have the same horizontal center line as the stroke bounding box,
@@ -192,6 +191,7 @@ TEST_F(HighlighterControllerTest, HighlighterGestures) {
   GetEventGenerator().MoveTouch(gfx::Point(100, 100));
   GetEventGenerator().ReleaseTouch();
   EXPECT_FALSE(controller_test_api_->handle_selection_called());
+  EXPECT_TRUE(controller_test_api_->handle_failed_selection_called());
 
   // An almost closed G-like shape is recognized
   controller_test_api_->ResetSelection();
@@ -203,6 +203,7 @@ TEST_F(HighlighterControllerTest, HighlighterGestures) {
   GetEventGenerator().MoveTouch(gfx::Point(200, 20));
   GetEventGenerator().ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_EQ("0,0 200x100", controller_test_api_->selection().ToString());
 
   // A closed diamond shape is recognized
@@ -215,6 +216,7 @@ TEST_F(HighlighterControllerTest, HighlighterGestures) {
   GetEventGenerator().MoveTouch(gfx::Point(100, 50));
   GetEventGenerator().ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_EQ("0,50 200x200", controller_test_api_->selection().ToString());
 }
 
@@ -246,6 +248,7 @@ TEST_F(HighlighterControllerTest, HighlighterGesturesScaled) {
       controller_test_api_->ResetSelection();
       TraceRect(original_rect);
       EXPECT_TRUE(controller_test_api_->handle_selection_called());
+      EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
 
       const gfx::Rect selection = controller_test_api_->selection();
       EXPECT_TRUE(inflated.Contains(selection));
@@ -266,6 +269,7 @@ TEST_F(HighlighterControllerTest, HighlighterGesturesRotated) {
   controller_test_api_->ResetSelection();
   TraceRect(trace);
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_EQ("200,100 400x300", controller_test_api_->selection().ToString());
 
   // Rotate to 90 degrees
@@ -273,6 +277,7 @@ TEST_F(HighlighterControllerTest, HighlighterGesturesRotated) {
   controller_test_api_->ResetSelection();
   TraceRect(trace);
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_EQ("100,900 300x400", controller_test_api_->selection().ToString());
 
   // Rotate to 180 degrees
@@ -280,6 +285,7 @@ TEST_F(HighlighterControllerTest, HighlighterGesturesRotated) {
   controller_test_api_->ResetSelection();
   TraceRect(trace);
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_EQ("900,600 400x300", controller_test_api_->selection().ToString());
 
   // Rotate to 270 degrees
@@ -287,6 +293,7 @@ TEST_F(HighlighterControllerTest, HighlighterGesturesRotated) {
   controller_test_api_->ResetSelection();
   TraceRect(trace);
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_EQ("600,200 300x400", controller_test_api_->selection().ToString());
 }
 
@@ -307,6 +314,7 @@ TEST_F(HighlighterControllerTest, InterruptedStroke) {
   GetEventGenerator().ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->IsWaitingToResumeStroke());
   EXPECT_FALSE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_FALSE(controller_test_api_->IsFadingAway());
 
   GetEventGenerator().MoveTouch(gfx::Point(0, 200));
@@ -315,6 +323,7 @@ TEST_F(HighlighterControllerTest, InterruptedStroke) {
   GetEventGenerator().ReleaseTouch();
   EXPECT_FALSE(controller_test_api_->IsWaitingToResumeStroke());
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_EQ("0,100 300x100", controller_test_api_->selection().ToString());
 
   // Repeat the same gesture, but simulate a timeout after the gap. This should
@@ -326,12 +335,94 @@ TEST_F(HighlighterControllerTest, InterruptedStroke) {
   GetEventGenerator().ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->IsWaitingToResumeStroke());
   EXPECT_FALSE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_FALSE(controller_test_api_->IsFadingAway());
 
   controller_test_api_->SimulateInterruptedStrokeTimeout();
   EXPECT_FALSE(controller_test_api_->IsWaitingToResumeStroke());
   EXPECT_TRUE(controller_test_api_->handle_selection_called());
+  EXPECT_FALSE(controller_test_api_->handle_failed_selection_called());
   EXPECT_TRUE(controller_test_api_->IsFadingAway());
+}
+
+// Test that the selection is never crossing the screen bounds.
+TEST_F(HighlighterControllerTest, SelectionInsideScreen) {
+  controller_test_api_->SetEnabled(true);
+  GetEventGenerator().EnterPenPointerMode();
+
+  constexpr float display_scales[] = {1.f, 1.5f, 2.0f};
+
+  for (size_t i = 0; i < sizeof(display_scales) / sizeof(float); ++i) {
+    std::string display_spec =
+        base::StringPrintf("1000x1000*%.2f", display_scales[i]);
+    SCOPED_TRACE(display_spec);
+    UpdateDisplay(display_spec);
+
+    const gfx::Rect screen(0, 0, 1000, 1000);
+
+    // Rectangle completely offscreen.
+    controller_test_api_->ResetSelection();
+    TraceRect(gfx::Rect(-100, -100, 10, 10));
+    controller_test_api_->SimulateInterruptedStrokeTimeout();
+    EXPECT_TRUE(controller_test_api_->handle_failed_selection_called());
+
+    // Rectangle crossing the left edge.
+    controller_test_api_->ResetSelection();
+    TraceRect(gfx::Rect(-100, 100, 200, 200));
+    controller_test_api_->SimulateInterruptedStrokeTimeout();
+    EXPECT_TRUE(controller_test_api_->handle_selection_called());
+    EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
+
+    // Rectangle crossing the top edge.
+    controller_test_api_->ResetSelection();
+    TraceRect(gfx::Rect(100, -100, 200, 200));
+    controller_test_api_->SimulateInterruptedStrokeTimeout();
+    EXPECT_TRUE(controller_test_api_->handle_selection_called());
+    EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
+
+    // Rectangle crossing the right edge.
+    controller_test_api_->ResetSelection();
+    TraceRect(gfx::Rect(900, 100, 200, 200));
+    controller_test_api_->SimulateInterruptedStrokeTimeout();
+    EXPECT_TRUE(controller_test_api_->handle_selection_called());
+    EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
+
+    // Rectangle crossing the bottom edge.
+    controller_test_api_->ResetSelection();
+    TraceRect(gfx::Rect(100, 900, 200, 200));
+    controller_test_api_->SimulateInterruptedStrokeTimeout();
+    EXPECT_TRUE(controller_test_api_->handle_selection_called());
+    EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
+
+    // Horizontal stroke completely offscreen.
+    controller_test_api_->ResetSelection();
+    GetEventGenerator().MoveTouch(gfx::Point(0, -100));
+    GetEventGenerator().PressTouch();
+    GetEventGenerator().MoveTouch(gfx::Point(1000, -100));
+    GetEventGenerator().ReleaseTouch();
+    controller_test_api_->SimulateInterruptedStrokeTimeout();
+    EXPECT_TRUE(controller_test_api_->handle_failed_selection_called());
+
+    // Horizontal stroke along the top edge of the screen.
+    controller_test_api_->ResetSelection();
+    GetEventGenerator().MoveTouch(gfx::Point(0, 0));
+    GetEventGenerator().PressTouch();
+    GetEventGenerator().MoveTouch(gfx::Point(1000, 0));
+    GetEventGenerator().ReleaseTouch();
+    controller_test_api_->SimulateInterruptedStrokeTimeout();
+    EXPECT_TRUE(controller_test_api_->handle_selection_called());
+    EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
+
+    // Horizontal stroke along the bottom edge of the screen.
+    controller_test_api_->ResetSelection();
+    GetEventGenerator().MoveTouch(gfx::Point(0, 999));
+    GetEventGenerator().PressTouch();
+    GetEventGenerator().MoveTouch(gfx::Point(1000, 999));
+    GetEventGenerator().ReleaseTouch();
+    controller_test_api_->SimulateInterruptedStrokeTimeout();
+    EXPECT_TRUE(controller_test_api_->handle_selection_called());
+    EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
+  }
 }
 
 }  // namespace ash

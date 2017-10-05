@@ -208,19 +208,11 @@ ContentViewCore::ContentViewCore(
   InitWebContents();
 }
 
-void ContentViewCore::AddObserver(ContentViewCoreObserver* observer) {
-  observer_list_.AddObserver(observer);
-}
-
-void ContentViewCore::RemoveObserver(ContentViewCoreObserver* observer) {
-  observer_list_.RemoveObserver(observer);
-}
-
 ContentViewCore::~ContentViewCore() {
-  for (auto& observer : observer_list_)
-    observer.OnContentViewCoreDestroyed();
-  observer_list_.Clear();
-
+  for (auto* host : web_contents_->GetAllRenderWidgetHosts()) {
+    static_cast<RenderWidgetHostViewAndroid*>(host->GetView())
+        ->OnContentViewCoreDestroyed();
+  }
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> j_obj = java_ref_.get(env);
   java_ref_.reset();
@@ -542,16 +534,6 @@ void ContentViewCore::DidStopFlinging() {
     Java_ContentViewCore_onNativeFlingStopped(env, obj);
 }
 
-ScopedJavaLocalRef<jobject> ContentViewCore::GetContext() const {
-  JNIEnv* env = AttachCurrentThread();
-
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return ScopedJavaLocalRef<jobject>();
-
-  return Java_ContentViewCore_getContext(env, obj);
-}
-
 gfx::Size ContentViewCore::GetViewSize() const {
   gfx::Size size = GetViewportSizeDip();
   if (DoBrowserControlsShrinkBlinkSize())
@@ -611,26 +593,6 @@ void ContentViewCore::SendScreenRectsAndResizeWidget() {
     web_contents_->SendScreenRects();
     view->WasResized();
   }
-}
-
-void ContentViewCore::MoveRangeSelectionExtent(const gfx::PointF& extent) {
-  if (!web_contents_)
-    return;
-
-  web_contents_->MoveRangeSelectionExtent(gfx::ToRoundedPoint(extent));
-}
-
-void ContentViewCore::SelectBetweenCoordinates(const gfx::PointF& base,
-                                               const gfx::PointF& extent) {
-  if (!web_contents_)
-    return;
-
-  gfx::Point base_point = gfx::ToRoundedPoint(base);
-  gfx::Point extent_point = gfx::ToRoundedPoint(extent);
-  if (base_point == extent_point)
-    return;
-
-  web_contents_->SelectRange(base_point, extent_point);
 }
 
 ui::WindowAndroid* ContentViewCore::GetWindowAndroid() const {
@@ -817,21 +779,6 @@ void ContentViewCore::DoubleTap(JNIEnv* env,
   SendGestureEvent(event);
 }
 
-void ContentViewCore::ResolveTapDisambiguation(JNIEnv* env,
-                                               const JavaParamRef<jobject>& obj,
-                                               jlong time_ms,
-                                               jfloat x,
-                                               jfloat y,
-                                               jboolean is_long_press) {
-  RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
-  if (!rwhv)
-    return;
-
-  rwhv->ResolveTapDisambiguation(time_ms / 1000.0,
-                                 gfx::Point(x / dpi_scale_, y / dpi_scale_),
-                                 is_long_press);
-}
-
 void ContentViewCore::PinchBegin(JNIEnv* env,
                                  const JavaParamRef<jobject>& obj,
                                  jlong time_ms,
@@ -986,6 +933,12 @@ jint ContentViewCore::GetCurrentRenderProcessId(
     const JavaParamRef<jobject>& obj) {
   return GetRenderProcessIdFromRenderViewHost(
       web_contents_->GetRenderViewHost());
+}
+
+jboolean ContentViewCore::UsingSynchronousCompositing(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  return content::GetContentClient()->UsingSynchronousCompositing();
 }
 
 void ContentViewCore::SetBackgroundOpaque(JNIEnv* env,

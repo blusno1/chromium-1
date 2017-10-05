@@ -50,7 +50,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/metrics/single_sample_metrics.h"
@@ -103,12 +102,11 @@
 #include "content/browser/payments/payment_manager.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_service_impl.h"
-#include "content/browser/profiler_message_filter.h"
 #include "content/browser/push_messaging/push_messaging_manager.h"
 #include "content/browser/quota_dispatcher_host.h"
 #include "content/browser/renderer_host/clipboard_message_filter.h"
 #include "content/browser/renderer_host/database_message_filter.h"
-#include "content/browser/renderer_host/file_utilities_message_filter.h"
+#include "content/browser/renderer_host/file_utilities_host_impl.h"
 #include "content/browser/renderer_host/media/audio_input_renderer_host.h"
 #include "content/browser/renderer_host/media/audio_renderer_host.h"
 #include "content/browser/renderer_host/media/media_stream_dispatcher_host.h"
@@ -124,6 +122,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/browser/renderer_host/text_input_client_message_filter.h"
+#include "content/browser/renderer_host/web_database_host_impl.h"
 #include "content/browser/resolve_proxy_msg_helper.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_dispatcher_host.h"
@@ -183,6 +182,7 @@
 #include "ipc/ipc_logging.h"
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
+#include "media/mojo/services/video_decode_perf_history.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -228,7 +228,6 @@
 #endif
 
 #if defined(OS_MACOSX)
-#include "content/browser/bootstrap_sandbox_manager_mac.h"
 #include "content/browser/mach_broker_mac.h"
 #endif
 
@@ -260,16 +259,6 @@
 #define IntToStringType base::IntToString16
 #else
 #define IntToStringType base::IntToString
-#endif
-
-// This is temporary to try to locate a core trampler.
-// TODO(bcwhite):  Remove when crbug/736675 is resolved.
-#if defined(OS_ANDROID)
-#include "base/metrics/statistics_recorder.h"
-#define VALIDATE_ALL_HISTOGRAMS(x) \
-  base::StatisticsRecorder::ValidateAllHistograms(x)
-#else
-#define VALIDATE_ALL_HISTOGRAMS(x)
 #endif
 
 namespace content {
@@ -442,7 +431,9 @@ class RendererSandboxedProcessLauncherDelegate
   }
 #endif  // OS_WIN
 
-  SandboxType GetSandboxType() override { return SANDBOX_TYPE_RENDERER; }
+  service_manager::SandboxType GetSandboxType() override {
+    return service_manager::SANDBOX_TYPE_RENDERER;
+  }
 };
 
 const char kSessionStorageHolderKey[] = "kSessionStorageHolderKey";
@@ -872,9 +863,6 @@ class SiteProcessCountTracker : public base::SupportsUserData::Data,
 bool ShouldUseSiteProcessTracking(BrowserContext* browser_context,
                                   StoragePartition* dest_partition,
                                   const GURL& site_url) {
-  if (site_url.is_empty())
-    return false;
-
   // TODO(alexmos): Sites should be tracked separately for each
   // StoragePartition.  For now, track them only in the default one.
   StoragePartition* default_partition =
@@ -888,12 +876,18 @@ bool ShouldUseSiteProcessTracking(BrowserContext* browser_context,
 bool ShouldTrackProcessForSite(BrowserContext* browser_context,
                                RenderProcessHost* render_process_host,
                                const GURL& site_url) {
+  if (site_url.is_empty())
+    return false;
+
   return ShouldUseSiteProcessTracking(
       browser_context, render_process_host->GetStoragePartition(), site_url);
 }
 
 bool ShouldFindReusableProcessHostForSite(BrowserContext* browser_context,
                                           const GURL& site_url) {
+  if (site_url.is_empty())
+    return false;
+
   return ShouldUseSiteProcessTracking(
       browser_context,
       BrowserContext::GetStoragePartitionForSite(browser_context, site_url),
@@ -1324,10 +1318,6 @@ RenderProcessHostImpl::RenderProcessHostImpl(
       GetID(), storage_partition_impl_->GetServiceWorkerContext()));
 
   AddObserver(indexed_db_factory_.get());
-#if defined(OS_MACOSX)
-  if (BootstrapSandboxManager::ShouldEnable())
-    AddObserver(BootstrapSandboxManager::GetInstance());
-#endif
 
   InitializeChannelProxy();
 }
@@ -1725,8 +1715,7 @@ void RenderProcessHostImpl::CreateMessageFilters() {
       blob_storage_context.get()));
   AddFilter(new BlobDispatcherHost(
       GetID(), blob_storage_context,
-      make_scoped_refptr(storage_partition_impl_->GetFileSystemContext())));
-  AddFilter(new FileUtilitiesMessageFilter(GetID()));
+      base::WrapRefCounted(storage_partition_impl_->GetFileSystemContext())));
   AddFilter(new DatabaseMessageFilter(
       GetID(), storage_partition_impl_->GetDatabaseTracker()));
 #if defined(OS_MACOSX)
@@ -1753,18 +1742,8 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   AddFilter(service_worker_filter.get());
 
   AddFilter(new SharedWorkerMessageFilter(
-      GetID(), resource_context,
-      WorkerStoragePartition(
-          storage_partition_impl_->GetURLRequestContext(),
-          storage_partition_impl_->GetMediaURLRequestContext(),
-          storage_partition_impl_->GetAppCacheService(),
-          storage_partition_impl_->GetQuotaManager(),
-          storage_partition_impl_->GetFileSystemContext(),
-          storage_partition_impl_->GetDatabaseTracker(),
-          storage_partition_impl_->GetIndexedDBContext(),
-          storage_partition_impl_->GetServiceWorkerContext()),
-      base::Bind(&RenderWidgetHelper::GetNextRoutingID,
-                 base::Unretained(widget_helper_.get()))));
+      GetID(), base::Bind(&RenderWidgetHelper::GetNextRoutingID,
+                          base::Unretained(widget_helper_.get()))));
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   p2p_socket_dispatcher_host_ = new P2PSocketDispatcherHost(
@@ -1786,7 +1765,6 @@ void RenderProcessHostImpl::CreateMessageFilters() {
       resource_context, service_worker_context, browser_context);
   AddFilter(notification_message_filter_.get());
 
-  AddFilter(new ProfilerMessageFilter(PROCESS_TYPE_RENDERER));
   AddFilter(new HistogramMessageFilter());
 #if defined(OS_ANDROID)
   synchronous_compositor_filter_ =
@@ -1892,17 +1870,28 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
 
   registry->AddInterface(
       base::Bind(&BackgroundFetchServiceImpl::Create, GetID(),
-                 make_scoped_refptr(
+                 base::WrapRefCounted(
                      storage_partition_impl_->GetBackgroundFetchContext())));
 
   registry->AddInterface(base::Bind(&RenderProcessHostImpl::CreateMusGpuRequest,
                                     base::Unretained(this)));
+
+  registry->AddInterface(
+      base::Bind(
+          &WebDatabaseHostImpl::Create,
+          base::WrapRefCounted(storage_partition_impl_->GetDatabaseTracker())),
+      storage_partition_impl_->GetDatabaseTracker()->task_runner());
 
   MediaStreamManager* media_stream_manager =
       BrowserMainLoop::GetInstance()->media_stream_manager();
 
   registry->AddInterface(
       base::Bind(&VideoCaptureHost::Create, GetID(), media_stream_manager));
+
+  registry->AddInterface(
+      base::Bind(&FileUtilitiesHostImpl::Create, GetID()),
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   registry->AddInterface(base::Bind(
@@ -1948,6 +1937,9 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
         base::Bind(&BlobRegistryWrapper::Bind,
                    storage_partition_impl_->GetBlobRegistry(), GetID()));
   }
+
+  registry->AddInterface(
+      base::Bind(&media::VideoDecodePerfHistory::BindRequest));
 
   ServiceManagerConnection* service_manager_connection =
       BrowserContext::GetServiceManagerConnectionFor(browser_context_);
@@ -2422,6 +2414,9 @@ static void AppendCompositorCommandLineFlags(base::CommandLine* command_line) {
   if (IsCheckerImagingEnabled())
     command_line->AppendSwitch(cc::switches::kEnableCheckerImaging);
 
+  if (IsGpuAsyncWorkerContextEnabled())
+    command_line->AppendSwitch(switches::kEnableGpuAsyncWorkerContext);
+
   command_line->AppendSwitchASCII(
       switches::kContentImageTextureTarget,
       viz::BufferToTextureTargetMapToString(CreateBufferToTextureTargetMap()));
@@ -2502,11 +2497,11 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDefaultTileWidth,
     switches::kDefaultTileHeight,
     switches::kDisable2dCanvasImageChromium,
-    switches::kDisable3DAPIs,
     switches::kDisableAcceleratedJpegDecoding,
     switches::kDisableAcceleratedVideoDecode,
     switches::kDisableBackgroundTimerThrottling,
     switches::kDisableBreakpad,
+    switches::kDisableBrowserSideNavigation,
     switches::kDisablePreferCompositingToLCDText,
     switches::kDisableDatabases,
     switches::kDisableDisplayList2dCanvas,
@@ -2533,7 +2528,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableSeccompFilterSandbox,
     switches::kDisableSharedWorkers,
     switches::kDisableSkiaRuntimeOpts,
-    switches::kDisableSlimmingPaintInvalidation,
     switches::kDisableSmoothScrolling,
     switches::kDisableSpeechAPI,
     switches::kDisableThreadedCompositing,
@@ -2543,7 +2537,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableV8IdleTasks,
     switches::kDisableWebGLImageChromium,
     switches::kDomAutomationController,
+    switches::kEnableAutomation,
     switches::kEnableBrowserSideNavigation,
+    switches::kEnableCompositorImageAnimations,
     switches::kEnableDisplayList2dCanvas,
     switches::kEnableDistanceFieldText,
     switches::kEnableExperimentalCanvasFeatures,
@@ -2567,8 +2563,8 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnablePreferCompositingToLCDText,
     switches::kEnableRGBA4444Textures,
     switches::kEnableSkiaBenchmarking,
+    switches::kEnableSlimmingPaintV175,
     switches::kEnableSlimmingPaintV2,
-    switches::kEnableSlimmingPaintInvalidation,
     switches::kEnableSmoothScrolling,
     switches::kEnableStatsTable,
     switches::kEnableThreadedCompositing,
@@ -2608,7 +2604,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kOverridePluginPowerSaverForTesting,
     switches::kPassiveListenersDefault,
     switches::kPpapiInProcess,
-    switches::kProfilerTiming,
     switches::kReducedReferrerGranularity,
     switches::kReduceSecurityForTesting,
     switches::kRegisterPepperPlugins,
@@ -2655,6 +2650,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
 
 #if BUILDFLAG(ENABLE_PLUGINS)
     switches::kEnablePepperTesting,
+#endif
+#if BUILDFLAG(ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION)
+    switches::kDisableMojoRenderer,
 #endif
 #if BUILDFLAG(ENABLE_WEBRTC)
     switches::kDisableWebRtcHWDecoding,
@@ -2917,10 +2915,6 @@ void RenderProcessHostImpl::OnChannelConnected(int32_t peer_pid) {
       IPC::Logging::GetInstance()->Enabled()));
 #endif
 
-  tracked_objects::ThreadData::Status status =
-      tracked_objects::ThreadData::status();
-  Send(new ChildProcessMsg_SetProfilerStatus(status));
-
   // Inform AudioInputRendererHost about the new render process PID.
   // AudioInputRendererHost is reference counted, so its lifetime is
   // guaranteed during the lifetime of the closure.
@@ -2996,8 +2990,6 @@ void RenderProcessHostImpl::Cleanup() {
   }
   delayed_cleanup_needed_ = false;
 
-  VALIDATE_ALL_HISTOGRAMS(61);
-
   // Records the time when the process starts kept alive by the ref count for
   // UMA.
   if (listeners_.IsEmpty() && keep_alive_ref_count_ > 0 &&
@@ -3025,8 +3017,6 @@ void RenderProcessHostImpl::Cleanup() {
 
   DCHECK_EQ(0, pending_views_);
 
-  VALIDATE_ALL_HISTOGRAMS(62);
-
   // If the process associated with this RenderProcessHost is still alive,
   // notify all observers that the process has exited cleanly, even though it
   // will be destroyed a bit later. Observers shouldn't rely on this process
@@ -3037,16 +3027,11 @@ void RenderProcessHostImpl::Cleanup() {
           this, base::TERMINATION_STATUS_NORMAL_TERMINATION, 0);
     }
   }
-
-  VALIDATE_ALL_HISTOGRAMS(63);
-
   for (auto& observer : observers_)
     observer.RenderProcessHostDestroyed(this);
   NotificationService::current()->Notify(
       NOTIFICATION_RENDERER_PROCESS_TERMINATED,
       Source<RenderProcessHost>(this), NotificationService::NoDetails());
-
-  VALIDATE_ALL_HISTOGRAMS(64);
 
   if (connection_filter_id_ !=
         ServiceManagerConnection::kInvalidConnectionFilterId) {
@@ -3056,8 +3041,6 @@ void RenderProcessHostImpl::Cleanup() {
     service_manager_connection->RemoveConnectionFilter(connection_filter_id_);
     connection_filter_id_ =
         ServiceManagerConnection::kInvalidConnectionFilterId;
-
-    VALIDATE_ALL_HISTOGRAMS(65);
   }
 
 #ifndef NDEBUG
@@ -3066,8 +3049,6 @@ void RenderProcessHostImpl::Cleanup() {
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
   deleting_soon_ = true;
 
-  VALIDATE_ALL_HISTOGRAMS(66);
-
   // It's important not to wait for the DeleteTask to delete the channel
   // proxy. Kill it off now. That way, in case the profile is going away, the
   // rest of the objects attached to this RenderProcessHost start going
@@ -3075,21 +3056,15 @@ void RenderProcessHostImpl::Cleanup() {
   // OnChannelClosed() to IPC::ChannelProxy::Context on the IO thread.
   ResetChannelProxy();
 
-  VALIDATE_ALL_HISTOGRAMS(67);
-
   // Its important to remove the kSessionStorageHolder after the channel
   // has been reset to avoid deleting the underlying namespaces prior
   // to processing ipcs referring to them.
   DCHECK(!channel_);
   RemoveUserData(kSessionStorageHolderKey);
 
-  VALIDATE_ALL_HISTOGRAMS(68);
-
   // Remove ourself from the list of renderer processes so that we can't be
   // reused in between now and when the Delete task runs.
   UnregisterHost(GetID());
-
-  VALIDATE_ALL_HISTOGRAMS(69);
 
   instance_weak_factory_.reset(
       new base::WeakPtrFactory<RenderProcessHostImpl>(this));
@@ -3602,7 +3577,8 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
   // Make sure the chosen process is in the correct StoragePartition for the
   // SiteInstance.
   CHECK(render_process_host->InSameStoragePartition(
-      BrowserContext::GetStoragePartition(browser_context, site_instance)));
+      BrowserContext::GetStoragePartition(browser_context, site_instance,
+                                          false /* can_create */)));
 
   return render_process_host;
 }
@@ -3653,7 +3629,6 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
   // It should not be possible for a process death notification to come in while
   // we are dying.
   DCHECK(!deleting_soon_);
-  VALIDATE_ALL_HISTOGRAMS(10);
 
   // child_process_launcher_ can be NULL in single process mode or if fast
   // termination happened.
@@ -3678,8 +3653,6 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
 
   RendererClosedDetails details(status, exit_code);
 
-  VALIDATE_ALL_HISTOGRAMS(20);
-
   child_process_launcher_.reset();
   is_dead_ = true;
   if (route_provider_binding_.is_bound())
@@ -3689,8 +3662,6 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
   ResetChannelProxy();
 
   UpdateProcessPriority();
-
-  VALIDATE_ALL_HISTOGRAMS(30);
 
   within_process_died_observer_ = true;
   NotificationService::current()->Notify(
@@ -3702,8 +3673,6 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
 
   RemoveUserData(kSessionStorageHolderKey);
 
-  VALIDATE_ALL_HISTOGRAMS(40);
-
   base::IDMap<IPC::Listener*>::iterator iter(&listeners_);
   while (!iter.IsAtEnd()) {
     iter.GetCurrentValue()->OnMessageReceived(FrameHostMsg_RenderProcessGone(
@@ -3711,16 +3680,12 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
     iter.Advance();
   }
 
-  VALIDATE_ALL_HISTOGRAMS(50);
-
   // Initialize a new ChannelProxy in case this host is re-used for a new
   // process. This ensures that new messages can be sent on the host ASAP (even
   // before Init()) and they'll eventually reach the new process.
   //
   // Note that this may have already been called by one of the above observers
   EnableSendQueue();
-
-  VALIDATE_ALL_HISTOGRAMS(60);
 
   // It's possible that one of the calls out to the observers might have caused
   // this object to be no longer needed.
@@ -3738,7 +3703,6 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
 
   // This object is not deleted at this point and might be reused later.
   // TODO(darin): clean this up
-  VALIDATE_ALL_HISTOGRAMS(99);
 }
 
 size_t RenderProcessHost::GetActiveViewCount() {

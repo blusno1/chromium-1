@@ -37,8 +37,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewStructure;
-import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.animation.AnimationUtils;
 import android.view.autofill.AutofillValue;
@@ -46,11 +44,11 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.textclassifier.TextClassifier;
 import android.webkit.JavascriptInterface;
-import android.webkit.ValueCallback;
 
 import org.chromium.android_webview.permission.AwGeolocationCallback;
 import org.chromium.android_webview.permission.AwPermissionRequest;
 import org.chromium.android_webview.renderer_priority.RendererPriority;
+import org.chromium.base.Callback;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -78,6 +76,7 @@ import org.chromium.content_public.browser.NavigationHistory;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.navigation_controller.LoadURLType;
 import org.chromium.content_public.browser.navigation_controller.UserAgentOverrideOption;
+import org.chromium.content_public.common.BrowserSideNavigationPolicy;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.device.gamepad.GamepadList;
@@ -549,7 +548,10 @@ public class AwContents implements SmartClipProvider {
         public boolean shouldIgnoreNavigation(NavigationParams navigationParams) {
             final String url = navigationParams.url;
             boolean ignoreNavigation = false;
-            if (mDeferredShouldOverrideUrlLoadingIsPendingForPopup) {
+            // Disable old path for sending shouldoverrideurlloadings for popups when
+            // plznavigate is enabled. The callback will come through NavigatorRequest.
+            if (!BrowserSideNavigationPolicy.isBrowserSideNavigationEnabled()
+                    && mDeferredShouldOverrideUrlLoadingIsPendingForPopup) {
                 mDeferredShouldOverrideUrlLoadingIsPendingForPopup = false;
                 // If this is used for all navigations in future, cases for application initiated
                 // load, redirect and backforward should also be filtered out.
@@ -1048,10 +1050,19 @@ public class AwContents implements SmartClipProvider {
      * ^^^^^^^^^  See the native class declaration for more details on relative object lifetimes.
      */
     private void setNewAwContents(long newAwContentsPtr) {
-        // Move the text classifier to the new ContentViewCore.
-        TextClassifier textClassifier =
-                mContentViewCore == null ? null : mContentViewCore.getCustomTextClassifier();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            setNewAwContentsPreO(newAwContentsPtr);
+        } else {
+            // Move the TextClassifier to the new ContentViewCore.
+            TextClassifier textClassifier =
+                    mContentViewCore == null ? null : mContentViewCore.getCustomTextClassifier();
+            setNewAwContentsPreO(newAwContentsPtr);
+            if (textClassifier != null) mContentViewCore.setTextClassifier(textClassifier);
+        }
+    }
 
+    // Helper for setNewAwContents containing everything which applies to pre-O.
+    private void setNewAwContentsPreO(long newAwContentsPtr) {
         if (mNativeAwContents != 0) {
             destroyNatives();
             mContentViewCore = null;
@@ -1083,8 +1094,6 @@ public class AwContents implements SmartClipProvider {
         installWebContentsObserver();
         mSettings.setWebContents(webContents);
         if (mAutofillProvider != null) mAutofillProvider.setWebContents(webContents);
-
-        if (textClassifier != null) mContentViewCore.setTextClassifier(textClassifier);
 
         final float dipScale = mWindowAndroid.getWindowAndroid().getDisplay().getDipScale();
         mDisplayObserver.onDIPScaleChanged(dipScale);
@@ -1458,7 +1467,7 @@ public class AwContents implements SmartClipProvider {
     }
 
     private void requestVisitedHistoryFromClient() {
-        ValueCallback<String[]> callback = value -> {
+        Callback<String[]> callback = value -> {
             if (value != null) {
                 // Replace null values with empty strings, because they can't be represented as
                 // native strings.
@@ -1656,7 +1665,8 @@ public class AwContents implements SmartClipProvider {
             requestVisitedHistoryFromClient();
         }
 
-        if (params.getLoadUrlType() == LoadURLType.DATA && params.getBaseUrl() != null) {
+        if (!BrowserSideNavigationPolicy.isBrowserSideNavigationEnabled()
+                && params.getLoadUrlType() == LoadURLType.DATA && params.getBaseUrl() != null) {
             // Data loads with a base url will be resolved in Blink, and not cause an onPageStarted
             // event to be sent. Sending the callback directly from here.
             mContentsClient.getCallbackHelper().postOnPageStarted(params.getBaseUrl());
@@ -2021,7 +2031,7 @@ public class AwContents implements SmartClipProvider {
     }
 
     public void saveWebArchive(
-            final String basename, boolean autoname, final ValueCallback<String> callback) {
+            final String basename, boolean autoname, final Callback<String> callback) {
         if (TRACE) Log.i(TAG, "%s saveWebArchive=%s", this, basename);
         if (!autoname) {
             saveWebArchiveInternal(basename, callback);
@@ -2260,7 +2270,7 @@ public class AwContents implements SmartClipProvider {
     /**
      * @see ContentViewCore.evaluateJavaScript(String, JavaScriptCallback)
      */
-    public void evaluateJavaScript(String script, final ValueCallback<String> callback) {
+    public void evaluateJavaScript(String script, final Callback<String> callback) {
         if (TRACE) Log.i(TAG, "%s evaluateJavascript=%s", this, script);
         if (isDestroyedOrNoOperation(WARN)) return;
         JavaScriptCallback jsCallback = null;
@@ -2270,19 +2280,19 @@ public class AwContents implements SmartClipProvider {
                 // application callback is executed without any native code on the stack. This
                 // so that any exception thrown by the application callback won't have to be
                 // propagated through a native call stack.
-                mHandler.post(() -> callback.onReceiveValue(jsonResult));
+                mHandler.post(() -> callback.onResult(jsonResult));
             };
         }
 
         mWebContents.evaluateJavaScript(script, jsCallback);
     }
 
-    public void evaluateJavaScriptForTests(String script, final ValueCallback<String> callback) {
+    public void evaluateJavaScriptForTests(String script, final Callback<String> callback) {
         if (TRACE) Log.i(TAG, "%s evaluateJavascriptForTests=%s", this, script);
         if (isDestroyedOrNoOperation(NO_WARN)) return;
         JavaScriptCallback jsCallback = null;
         if (callback != null) {
-            jsCallback = jsonResult -> callback.onReceiveValue(jsonResult);
+            jsCallback = jsonResult -> callback.onResult(jsonResult);
         }
 
         mWebContents.evaluateJavaScriptForTests(script, jsCallback);
@@ -2611,22 +2621,7 @@ public class AwContents implements SmartClipProvider {
      * @return The AccessibilityNodeProvider, if available, or null otherwise.
      */
     public AccessibilityNodeProvider getAccessibilityNodeProvider() {
-        return isDestroyedOrNoOperation(WARN) ? null
-                : mContentViewCore.getAccessibilityNodeProvider();
-    }
-
-    /**
-     * @see android.webkit.WebView#onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo)
-     */
-    public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
-        // TODO(boliu): remove this method.
-    }
-
-    /**
-     * @see android.webkit.WebView#onInitializeAccessibilityEvent(AccessibilityEvent)
-     */
-    public void onInitializeAccessibilityEvent(AccessibilityEvent event) {
-     // TODO(boliu): remove this method.
+        return mAwViewMethods.getAccessibilityNodeProvider();
     }
 
     public boolean supportsAccessibilityAction(int action) {
@@ -2638,8 +2633,7 @@ public class AwContents implements SmartClipProvider {
      * @see android.webkit.WebView#performAccessibilityAction(int, Bundle)
      */
     public boolean performAccessibilityAction(int action, Bundle arguments) {
-        return isDestroyedOrNoOperation(WARN) ? false
-                : mContentViewCore.performAccessibilityAction(action, arguments);
+        return mAwViewMethods.performAccessibilityAction(action, arguments);
     }
 
     /**
@@ -2771,10 +2765,9 @@ public class AwContents implements SmartClipProvider {
 
     /** Callback for generateMHTML. */
     @CalledByNative
-    private static void generateMHTMLCallback(
-            String path, long size, ValueCallback<String> callback) {
+    private static void generateMHTMLCallback(String path, long size, Callback<String> callback) {
         if (callback == null) return;
-        callback.onReceiveValue(size < 0 ? null : path);
+        callback.onResult(size < 0 ? null : path);
     }
 
     @CalledByNative
@@ -2989,7 +2982,7 @@ public class AwContents implements SmartClipProvider {
     /**
      * Determine if it's suitable to show the interstitial for browsers and main UIs. If the WebView
      * is close to full-screen, we assume the app is using it as the main UI, so we show the same
-     * interstital Chrome uses. Otherwise, we assume the WebView is part of a larger composed page,
+     * interstitial Chrome uses. Otherwise, we assume the WebView is part of a larger composed page,
      * and will show a different interstitial.
      * @return true if the WebView should display the large interstitial
      */
@@ -3005,12 +2998,12 @@ public class AwContents implements SmartClipProvider {
 
     @VisibleForTesting
     public void evaluateJavaScriptOnInterstitialForTesting(
-            String script, final ValueCallback<String> callback) {
+            String script, final Callback<String> callback) {
         if (TRACE) Log.i(TAG, "%s evaluateJavaScriptOnInterstitialForTesting=%s", this, script);
         if (isDestroyedOrNoOperation(WARN)) return;
         JavaScriptCallback jsCallback = null;
         if (callback != null) {
-            jsCallback = jsonResult -> callback.onReceiveValue(jsonResult);
+            jsCallback = jsonResult -> callback.onResult(jsonResult);
         }
 
         nativeEvaluateJavaScriptOnInterstitialForTesting(mNativeAwContents, script, jsCallback);
@@ -3044,11 +3037,11 @@ public class AwContents implements SmartClipProvider {
         }
     }
 
-    private void saveWebArchiveInternal(String path, final ValueCallback<String> callback) {
+    private void saveWebArchiveInternal(String path, final Callback<String> callback) {
         if (path == null || isDestroyedOrNoOperation(WARN)) {
             if (callback == null) return;
 
-            ThreadUtils.runOnUiThread(() -> callback.onReceiveValue(null));
+            ThreadUtils.runOnUiThread(() -> callback.onResult(null));
         } else {
             nativeGenerateMHTML(mNativeAwContents, path, callback);
         }
@@ -3458,6 +3451,19 @@ public class AwContents implements SmartClipProvider {
             if (isDestroyedOrNoOperation(NO_WARN)) return;
             nativeOnComputeScroll(mNativeAwContents, AnimationUtils.currentAnimationTimeMillis());
         }
+
+        @Override
+        public AccessibilityNodeProvider getAccessibilityNodeProvider() {
+            return isDestroyedOrNoOperation(WARN) ? null
+                                                  : mContentViewCore.getAccessibilityNodeProvider();
+        }
+
+        @Override
+        public boolean performAccessibilityAction(final int action, final Bundle arguments) {
+            return isDestroyedOrNoOperation(WARN)
+                    ? false
+                    : mContentViewCore.performAccessibilityAction(action, arguments);
+        }
     }
 
     // Return true if the GeolocationPermissionAPI should be used.
@@ -3494,7 +3500,7 @@ public class AwContents implements SmartClipProvider {
 
     private native void nativeDocumentHasImages(long nativeAwContents, Message message);
     private native void nativeGenerateMHTML(
-            long nativeAwContents, String path, ValueCallback<String> callback);
+            long nativeAwContents, String path, Callback<String> callback);
 
     private native void nativeAddVisitedLinks(long nativeAwContents, String[] visitedLinks);
     private native void nativeZoomBy(long nativeAwContents, float delta);

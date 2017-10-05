@@ -314,15 +314,6 @@ class TestImporterTest(LoggingTestCase):
             '  external/wpt/baz\n\n',
             description)
 
-    def test_cc_part(self):
-        directory_owners = {
-            ('someone@chromium.org',): ['external/wpt/foo', 'external/wpt/bar'],
-            ('x@chromium.org', 'y@chromium.org'): ['external/wpt/baz'],
-        }
-        self.assertEqual(
-            TestImporter._cc_part(directory_owners),
-            ['--cc=someone@chromium.org', '--cc=x@chromium.org', '--cc=y@chromium.org'])
-
     def test_generate_manifest_successful_run(self):
         # This test doesn't test any aspect of the real manifest script, it just
         # asserts that TestImporter._generate_manifest would invoke the script.
@@ -336,7 +327,8 @@ class TestImporterTest(LoggingTestCase):
             [
                 [
                     'python',
-                    blink_path + '/Tools/Scripts/webkitpy/thirdparty/wpt/wpt/manifest',
+                    blink_path + '/Tools/Scripts/webkitpy/thirdparty/wpt/wpt/wpt',
+                    'manifest',
                     '--work',
                     '--tests-root',
                     blink_path + '/LayoutTests/external/wpt',
@@ -347,6 +339,17 @@ class TestImporterTest(LoggingTestCase):
                     blink_path + '/LayoutTests/external/WPT_BASE_MANIFEST.json',
                 ]
             ])
+
+    def test_only_wpt_manifest_changed(self):
+        host = MockHost()
+        git = host.git()
+        git.changed_files = lambda: ['third_party/WebKit/LayoutTests/external/WPT_BASE_MANIFEST.json',
+                                     'third_party/WebKit/LayoutTests/external/wpt/foo/x.html']
+        importer = TestImporter(host)
+        self.assertFalse(importer._only_wpt_manifest_changed())
+
+        git.changed_files = lambda: ['third_party/WebKit/LayoutTests/external/WPT_BASE_MANIFEST.json']
+        self.assertTrue(importer._only_wpt_manifest_changed())
 
     def test_delete_orphaned_baselines_basic(self):
         host = MockHost()

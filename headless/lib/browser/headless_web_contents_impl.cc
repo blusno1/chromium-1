@@ -31,8 +31,8 @@
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
-#include "headless/lib/browser/headless_devtools_client_impl.h"
 #include "headless/lib/browser/headless_tab_socket_impl.h"
+#include "headless/public/internal/headless_devtools_client_impl.h"
 #include "printing/features/features.h"
 
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
@@ -279,7 +279,7 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
       agent_host_(content::DevToolsAgentHost::GetOrCreateFor(web_contents)),
       inject_mojo_services_into_isolated_world_(false),
       browser_context_(browser_context),
-      render_process_host_(web_contents->GetRenderProcessHost()),
+      render_process_host_(web_contents->GetMainFrame()->GetProcess()),
       weak_ptr_factory_(this) {
 #if BUILDFLAG(ENABLE_BASIC_PRINTING) && !defined(CHROME_MULTIPLE_DLL_CHILD)
   HeadlessPrintManager::CreateForWebContents(web_contents);

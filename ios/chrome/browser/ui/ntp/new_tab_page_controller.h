@@ -36,6 +36,7 @@ std::string FragmentFromIdentifier(ntp_home::PanelIdentifier panel);
 @protocol IncognitoViewControllerDelegate;
 @protocol NewTabPagePanelProtocol;
 @protocol OmniboxFocuser;
+@protocol SnackbarCommands;
 @class TabModel;
 @protocol UrlLoader;
 
@@ -89,7 +90,9 @@ std::string FragmentFromIdentifier(ntp_home::PanelIdentifier panel);
               dispatcher:(id<ApplicationCommands,
                              BrowserCommands,
                              OmniboxFocuser,
-                             UrlLoader>)dispatcher;
+                             SnackbarCommands,
+                             UrlLoader>)dispatcher
+           safeAreaInset:(UIEdgeInsets)safeAreaInset;
 
 // Select a panel based on the given |panelType|.
 - (void)selectPanel:(ntp_home::PanelIdentifier)panelType;
@@ -109,8 +112,6 @@ std::string FragmentFromIdentifier(ntp_home::PanelIdentifier panel);
 @class NewTabPageView;
 
 @interface NewTabPageController (TestSupport)
-@property(nonatomic, strong) NewTabPageView* ntpView;
-
 - (id<NewTabPagePanelProtocol>)currentController;
 - (BookmarkHomeTabletNTPController*)bookmarkController;
 - (GoogleLandingViewController*)googleLandingController;

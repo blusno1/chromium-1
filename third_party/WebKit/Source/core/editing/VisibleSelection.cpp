@@ -30,7 +30,10 @@
 #include "core/dom/Element.h"
 #include "core/dom/Range.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/SelectionAdjuster.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/editing/iterators/CharacterIterator.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/wtf/Assertions.h"
@@ -622,7 +625,7 @@ static Element* LowestEditableAncestor(Node* node) {
   while (node) {
     if (HasEditableStyle(*node))
       return RootEditableElement(*node);
-    if (isHTMLBodyElement(*node))
+    if (IsHTMLBodyElement(*node))
       break;
     node = node->parentNode();
   }
@@ -827,6 +830,38 @@ template <typename Strategy>
 bool VisibleSelectionTemplate<Strategy>::operator==(
     const VisibleSelectionTemplate<Strategy>& other) const {
   return EqualSelectionsAlgorithm<Strategy>(*this, other);
+}
+
+template <typename Strategy>
+VisiblePositionTemplate<Strategy>
+VisibleSelectionTemplate<Strategy>::VisibleStart() const {
+  return CreateVisiblePosition(
+      Start(), IsRange() ? TextAffinity::kDownstream : Affinity());
+}
+
+template <typename Strategy>
+VisiblePositionTemplate<Strategy>
+VisibleSelectionTemplate<Strategy>::VisibleEnd() const {
+  return CreateVisiblePosition(
+      End(), IsRange() ? TextAffinity::kUpstream : Affinity());
+}
+
+template <typename Strategy>
+VisiblePositionTemplate<Strategy>
+VisibleSelectionTemplate<Strategy>::VisibleBase() const {
+  return CreateVisiblePosition(
+      base_, IsRange() ? (IsBaseFirst() ? TextAffinity::kUpstream
+                                        : TextAffinity::kDownstream)
+                       : Affinity());
+}
+
+template <typename Strategy>
+VisiblePositionTemplate<Strategy>
+VisibleSelectionTemplate<Strategy>::VisibleExtent() const {
+  return CreateVisiblePosition(
+      extent_, IsRange() ? (IsBaseFirst() ? TextAffinity::kDownstream
+                                          : TextAffinity::kUpstream)
+                         : Affinity());
 }
 
 template <typename Strategy>

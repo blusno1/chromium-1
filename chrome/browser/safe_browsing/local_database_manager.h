@@ -27,10 +27,10 @@
 #include "chrome/browser/safe_browsing/protocol_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/safebrowsing.pb.h"
-#include "components/safe_browsing_db/util.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/safebrowsing.pb.h"
+#include "components/safe_browsing/db/util.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -134,7 +134,6 @@ class LocalSafeBrowsingDatabaseManager
   bool MatchMalwareIP(const std::string& ip_address) override;
   bool MatchDownloadWhitelistUrl(const GURL& url) override;
   bool MatchDownloadWhitelistString(const std::string& str) override;
-  bool MatchModuleWhitelistString(const std::string& str) override;
   bool IsMalwareKillSwitchOn() override;
   bool IsCsdWhitelistKillSwitchOn() override;
   void CancelCheck(Client* client) override;
@@ -358,9 +357,6 @@ class LocalSafeBrowsingDatabaseManager
 
   // Indicate if the unwanted software blacklist should be enabled.
   bool enable_unwanted_software_blacklist_;
-
-  // Indicate if the module whitelist should be enabled.
-  bool enable_module_whitelist_;
 
   // The sequenced task runner for running safe browsing database operations.
   scoped_refptr<base::SequencedTaskRunner> safe_browsing_task_runner_;

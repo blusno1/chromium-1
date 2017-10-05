@@ -18,7 +18,6 @@
 #include "ash/shell/toplevel_window.h"
 #include "ash/wm/window_state.h"
 #include "base/memory/ptr_util.h"
-#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/user_manager/user_info_impl.h"
 #include "ui/aura/window.h"
@@ -50,8 +49,6 @@ class PaletteDelegateImpl : public PaletteDelegate {
       done.Run();
   }
   void CancelPartialScreenshot() override {}
-  void ShowMetalayer(base::OnceClosure done) override {}
-  void HideMetalayer() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaletteDelegateImpl);
@@ -65,14 +62,6 @@ ShellDelegateImpl::~ShellDelegateImpl() {}
 
 ::service_manager::Connector* ShellDelegateImpl::GetShellConnector() const {
   return nullptr;
-}
-
-bool ShellDelegateImpl::IsIncognitoAllowed() const {
-  return true;
-}
-
-bool ShellDelegateImpl::IsMultiProfilesEnabled() const {
-  return false;
 }
 
 bool ShellDelegateImpl::IsRunningInForcedAppMode() const {
@@ -91,23 +80,11 @@ void ShellDelegateImpl::PreInit() {}
 
 void ShellDelegateImpl::PreShutdown() {}
 
-void ShellDelegateImpl::Exit() {
-  base::RunLoop::QuitCurrentWhenIdleDeprecated();
-}
-
 std::unique_ptr<keyboard::KeyboardUI> ShellDelegateImpl::CreateKeyboardUI() {
   return base::MakeUnique<TestKeyboardUI>();
 }
 
 void ShellDelegateImpl::OpenUrlFromArc(const GURL& url) {}
-
-void ShellDelegateImpl::ShelfInit() {
-  Shelf* shelf = Shell::GetPrimaryRootWindowController()->shelf();
-  shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
-}
-
-void ShellDelegateImpl::ShelfShutdown() {}
 
 NetworkingConfigDelegate* ShellDelegateImpl::GetNetworkingConfigDelegate() {
   return nullptr;
@@ -137,15 +114,6 @@ base::string16 ShellDelegateImpl::GetProductName() const {
 
 gfx::Image ShellDelegateImpl::GetDeprecatedAcceleratorImage() const {
   return gfx::Image();
-}
-
-bool ShellDelegateImpl::GetTouchscreenEnabled(
-    TouchscreenEnabledSource source) const {
-  return true;
-}
-
-void ShellDelegateImpl::SetTouchscreenEnabled(bool enabled,
-                                              TouchscreenEnabledSource source) {
 }
 
 ui::InputDeviceControllerClient*

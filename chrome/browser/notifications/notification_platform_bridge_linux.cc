@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
 #include "base/i18n/number_formatting.h"
 #include "base/metrics/histogram_macros.h"
@@ -30,6 +31,8 @@
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/shell_integration_linux.h"
+#include "chrome/grit/chrome_unscaled_resources.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
@@ -38,8 +41,10 @@
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
 #include "net/base/escape.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace {
@@ -77,6 +82,12 @@ const char kSettingsButtonId[] = "settings";
 const int kMaxImageWidth = 200;
 const int kMaxImageHeight = 100;
 
+// Notification on-screen time, in milliseconds.
+const int32_t kExpireTimeout = 25000;
+
+// The maximum amount of characters for displaying the full origin path.
+const size_t kMaxAllowedOriginLength = 28;
+
 // The values in this enumeration correspond to those of the
 // Linux.NotificationPlatformBridge.InitializationStatus histogram, so
 // the ordering should not be changed.  New error codes should be
@@ -109,6 +120,15 @@ gfx::Image DeepCopyImage(const gfx::Image& image) {
     return gfx::Image();
   std::unique_ptr<gfx::ImageSkia> image_skia(image.CopyImageSkia());
   return gfx::Image(*image_skia);
+}
+
+void EscapeUnsafeCharacters(std::string* message) {
+  // Canonical's notification development guidelines recommends only
+  // escaping the '&', '<', and '>' characters:
+  // https://wiki.ubuntu.com/NotificationDevelopmentGuidelines
+  base::ReplaceChars(*message, "&", "&amp;", message);
+  base::ReplaceChars(*message, "<", "&lt;", message);
+  base::ReplaceChars(*message, ">", "&gt;", message);
 }
 
 int NotificationPriorityToFdoUrgency(int priority) {
@@ -196,6 +216,7 @@ class ResourceFile {
   explicit ResourceFile(const base::FilePath& file_path)
       : file_path_(file_path) {
     DCHECK(!file_path.empty());
+    DCHECK(file_path.IsAbsolute());
   }
   ~ResourceFile() { base::DeleteFile(file_path_, false); }
 
@@ -258,15 +279,21 @@ class NotificationPlatformBridgeLinuxImpl
   // count will go to 0 and the object would be prematurely
   // destructed.
   void Init() {
+    product_logo_png_bytes_ =
+        gfx::Image(*ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+                       IDR_PRODUCT_LOGO_256))
+            .As1xPNGBytes();
     PostTaskToTaskRunnerThread(base::BindOnce(
         &NotificationPlatformBridgeLinuxImpl::InitOnTaskRunner, this));
   }
 
-  void Display(NotificationCommon::Type notification_type,
-               const std::string& notification_id,
-               const std::string& profile_id,
-               bool is_incognito,
-               const Notification& notification) override {
+  void Display(
+      NotificationCommon::Type notification_type,
+      const std::string& notification_id,
+      const std::string& profile_id,
+      bool is_incognito,
+      const Notification& notification,
+      std::unique_ptr<NotificationCommon::Metadata> metadata) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     // Notifications contain gfx::Image's which have reference counts
     // that are not thread safe.  Because of this, we duplicate the
@@ -364,9 +391,7 @@ class NotificationPlatformBridgeLinuxImpl
   };
 
   ~NotificationPlatformBridgeLinuxImpl() override {
-    DCHECK(!bus_);
-    DCHECK(!notification_proxy_);
-    DCHECK(notifications_.empty());
+    DCHECK(clean_up_on_task_runner_called_);
   }
 
   void Observe(int type,
@@ -407,7 +432,7 @@ class NotificationPlatformBridgeLinuxImpl
       bus_options.bus_type = dbus::Bus::SESSION;
       bus_options.connection_type = dbus::Bus::PRIVATE;
       bus_options.dbus_task_runner = task_runner_;
-      bus_ = make_scoped_refptr(new dbus::Bus(bus_options));
+      bus_ = base::MakeRefCounted<dbus::Bus>(bus_options);
     }
 
     notification_proxy_ =
@@ -466,7 +491,11 @@ class NotificationPlatformBridgeLinuxImpl
       bus_->ShutdownAndBlock();
     bus_ = nullptr;
     notification_proxy_ = nullptr;
+    product_logo_png_bytes_ = nullptr;
+    product_logo_file_.reset();
+    product_logo_file_watcher_.reset();
     notifications_.clear();
+    clean_up_on_task_runner_called_ = true;
   }
 
   // Makes the "Notify" call to D-Bus.
@@ -493,13 +522,18 @@ class NotificationPlatformBridgeLinuxImpl
     dbus::MethodCall method_call(kFreedesktopNotificationsName, kMethodNotify);
     dbus::MessageWriter writer(&method_call);
 
-    // app_name passed implicitly via desktop-entry.
-    writer.AppendString("");
+    // app_name
+    writer.AppendString(l10n_util::GetStringUTF8(IDS_PRODUCT_NAME));
 
     writer.AppendUint32(data->dbus_id);
 
-    // app_icon passed implicitly via desktop-entry.
-    writer.AppendString("");
+    // app_icon
+    if (!product_logo_file_) {
+      RewriteProductLogoFile();
+    }
+    writer.AppendString(
+        product_logo_file_ ? "file://" + product_logo_file_->file_path().value()
+                           : "");
 
     writer.AppendString(
         base::UTF16ToUTF8(CreateNotificationTitle(*notification)));
@@ -510,11 +544,23 @@ class NotificationPlatformBridgeLinuxImpl
           base::ContainsKey(capabilities_, kCapabilityBodyMarkup);
 
       if (notification->UseOriginAsContextMessage()) {
-        std::string url_display_text = net::EscapeForHTML(
+        std::string url_display_text =
             base::UTF16ToUTF8(url_formatter::FormatUrlForSecurityDisplay(
                 notification->origin_url(),
-                url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS)));
-        if (base::ContainsKey(capabilities_, kCapabilityBodyHyperlinks)) {
+                url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
+        if (url_display_text.size() > kMaxAllowedOriginLength) {
+          std::string domain_and_registry =
+              net::registry_controlled_domains::GetDomainAndRegistry(
+                  notification->origin_url(),
+                  net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+          // localhost, raw IPs etc. are not handled by GetDomainAndRegistry.
+          if (!domain_and_registry.empty()) {
+            url_display_text = domain_and_registry;
+          }
+        }
+        EscapeUnsafeCharacters(&url_display_text);
+        if (body_markup &&
+            base::ContainsKey(capabilities_, kCapabilityBodyHyperlinks)) {
           body << "<a href=\""
                << net::EscapePath(notification->origin_url().spec()) << "\">"
                << url_display_text << "</a>";
@@ -525,16 +571,18 @@ class NotificationPlatformBridgeLinuxImpl
         std::string context =
             base::UTF16ToUTF8(notification->context_message());
         if (body_markup)
-          context = net::EscapeForHTML(context);
+          EscapeUnsafeCharacters(&context);
         body << context;
       }
 
       std::string message = base::UTF16ToUTF8(notification->message());
       if (body_markup)
-        message = net::EscapeForHTML(message);
-      if (body.tellp())
-        body << "\n";
-      body << message;
+        EscapeUnsafeCharacters(&message);
+      if (!message.empty()) {
+        if (body.tellp())
+          body << "\n";
+        body << message;
+      }
 
       if (notification->type() == message_center::NOTIFICATION_TYPE_MULTIPLE) {
         for (const auto& item : notification->items()) {
@@ -604,6 +652,14 @@ class NotificationPlatformBridgeLinuxImpl
         NotificationPriorityToFdoUrgency(notification->priority()));
     hints_writer.CloseContainer(&urgency_writer);
 
+    if (notification->silent()) {
+      dbus::MessageWriter suppress_sound_writer(nullptr);
+      hints_writer.OpenDictEntry(&suppress_sound_writer);
+      suppress_sound_writer.AppendString("suppress-sound");
+      suppress_sound_writer.AppendVariantOfBool(true);
+      hints_writer.CloseContainer(&suppress_sound_writer);
+    }
+
     std::unique_ptr<base::Environment> env = base::Environment::Create();
     base::FilePath desktop_file(
         shell_integration_linux::GetDesktopName(env.get()));
@@ -634,8 +690,12 @@ class NotificationPlatformBridgeLinuxImpl
 
     const int32_t kExpireTimeoutDefault = -1;
     const int32_t kExpireTimeoutNever = 0;
-    writer.AppendInt32(notification->never_timeout() ? kExpireTimeoutNever
-                                                     : kExpireTimeoutDefault);
+    writer.AppendInt32(
+        notification->never_timeout()
+            ? kExpireTimeoutNever
+            : base::ContainsKey(capabilities_, kCapabilityPersistence)
+                  ? kExpireTimeoutDefault
+                  : kExpireTimeout);
 
     std::unique_ptr<dbus::Response> response =
         notification_proxy_->CallMethodAndBlock(
@@ -815,6 +875,15 @@ class NotificationPlatformBridgeLinuxImpl
     connected_signals_barrier_.Run();
   }
 
+  void OnProductLogoFileChanged(const base::FilePath& path, bool error) {
+    // |error| should always be false on Linux.
+    DCHECK(!error);
+    // This callback runs whenever the file is deleted or modified.
+    // In either case, we want to rewrite the file.
+    product_logo_file_.reset();
+    product_logo_file_watcher_.reset();
+  }
+
   void RecordMetricsForCapabilities() {
     // Histogram macros must be called with the same name for each
     // callsite, so we can't roll the below into a nice loop.
@@ -847,6 +916,25 @@ class NotificationPlatformBridgeLinuxImpl
                           base::ContainsKey(capabilities_, kCapabilitySound));
   }
 
+  void RewriteProductLogoFile() {
+    product_logo_file_watcher_.reset();
+    product_logo_file_ = WriteDataToTmpFile(product_logo_png_bytes_);
+    if (!product_logo_file_)
+      return;
+    // Temporary files may periodically get cleaned up on Linux.
+    // Watch for file deletion and rewrite the file in case we have a
+    // long-running Chrome process.
+    product_logo_file_watcher_ = std::make_unique<base::FilePathWatcher>();
+    if (!product_logo_file_watcher_->Watch(
+            product_logo_file_->file_path(), false,
+            base::Bind(
+                &NotificationPlatformBridgeLinuxImpl::OnProductLogoFileChanged,
+                this))) {
+      product_logo_file_.reset();
+      product_logo_file_watcher_.reset();
+    }
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Members used only on the UI thread.
 
@@ -874,6 +962,10 @@ class NotificationPlatformBridgeLinuxImpl
 
   base::Closure connected_signals_barrier_;
 
+  scoped_refptr<base::RefCountedMemory> product_logo_png_bytes_;
+  std::unique_ptr<ResourceFile> product_logo_file_;
+  std::unique_ptr<base::FilePathWatcher> product_logo_file_watcher_;
+
   // A std::set<std::unique_ptr<T>> doesn't work well because
   // eg. std::set::erase(T) would require a std::unique_ptr<T>
   // argument, so the data would get double-destructed.
@@ -881,6 +973,8 @@ class NotificationPlatformBridgeLinuxImpl
   using UnorderedUniqueSet = std::unordered_map<T*, std::unique_ptr<T>>;
 
   UnorderedUniqueSet<NotificationData> notifications_;
+
+  bool clean_up_on_task_runner_called_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationPlatformBridgeLinuxImpl);
 };
@@ -901,9 +995,10 @@ void NotificationPlatformBridgeLinux::Display(
     const std::string& notification_id,
     const std::string& profile_id,
     bool is_incognito,
-    const Notification& notification) {
+    const Notification& notification,
+    std::unique_ptr<NotificationCommon::Metadata> metadata) {
   impl_->Display(notification_type, notification_id, profile_id, is_incognito,
-                 notification);
+                 notification, std::move(metadata));
 }
 
 void NotificationPlatformBridgeLinux::Close(

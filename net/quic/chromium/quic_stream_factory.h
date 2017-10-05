@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <list>
 #include <map>
 #include <set>
@@ -100,6 +99,15 @@ enum QuicConnectionMigrationStatus {
   MIGRATION_STATUS_DISABLED,
   MIGRATION_STATUS_NO_ALTERNATE_NETWORK,
   MIGRATION_STATUS_MAX
+};
+
+enum QuicPlatformNotification {
+  NETWORK_CONNECTED,
+  NETWORK_MADE_DEFAULT,
+  NETWORK_DISCONNECTED,
+  NETWORK_SOON_TO_DISCONNECT,
+  NETWORK_IP_ADDRESS_CHANGED,
+  NETWORK_NOTIFICATION_MAX
 };
 
 // Encapsulates a pending request for a QuicHttpStream.
@@ -208,14 +216,13 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       size_t max_packet_length,
       const std::string& user_agent_id,
       bool store_server_configs_in_properties,
-      bool close_sessions_on_ip_change,
       bool mark_quic_broken_when_network_blackholes,
       int idle_connection_timeout_seconds,
       int reduced_ping_timeout_seconds,
+      bool connect_using_default_network,
       bool migrate_sessions_on_network_change,
       bool migrate_sessions_early,
       bool allow_server_migration,
-      bool force_hol_blocking,
       bool race_cert_verification,
       bool estimate_initial_rtt,
       const QuicTagVector& connection_options,
@@ -331,8 +338,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   // NetworkChangeNotifier::IPAddressObserver methods:
 
-  // Until the servers support roaming, close all connections when the local
-  // IP address changes.
+  // Called when local IP address changes. Must not be called if
+  // |migrate_sessions_on_network_change_| is true.
   void OnIPAddressChanged() override;
 
   // NetworkChangeNotifier::NetworkObserver methods:
@@ -527,14 +534,18 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   QuicTime::Delta ping_timeout_;
   QuicTime::Delta reduced_ping_timeout_;
 
+  base::TimeTicks most_recent_path_degrading_timestamp_;
+  base::TimeTicks most_recent_network_disconnected_timestamp_;
+
   // If more than |yield_after_packets_| packets have been read or more than
   // |yield_after_duration_| time has passed, then
   // QuicChromiumPacketReader::StartReading() yields by doing a PostTask().
   int yield_after_packets_;
   QuicTime::Delta yield_after_duration_;
 
-  // Set if all sessions should be closed when any local IP address changes.
-  const bool close_sessions_on_ip_change_;
+  // Set if sockets should explicitly use default network to connect and
+  // NetworkHandle is supported.
+  const bool connect_using_default_network_;
 
   // Set if migration should be attempted on active sessions when primary
   // interface changes.
@@ -547,9 +558,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // If set, allows migration of connection to server-specified alternate
   // server address.
   const bool allow_server_migration_;
-
-  // If set, force HOL blocking.  For measurement purposes.
-  const bool force_hol_blocking_;
 
   // Set if cert verification is to be raced with host resolution.
   bool race_cert_verification_;

@@ -4,6 +4,7 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
@@ -21,55 +22,29 @@ blink_platform_msa_files = [ "graphics/cpu/mips/WebGLImageConversionMSA.h" ]
 
 blink_platform_sse_files = [ "graphics/cpu/x86/WebGLImageConversionSSE.h" ]
 
-action("font_family_names") {
-  script = "../build/scripts/make_names.py"
-
-  font_family_names_in = "fonts/FontFamilyNames.json5"
-  inputs = make_names_files + [ font_family_names_in ]
-
-  outputs = [
-    "$blink_platform_output_dir/FontFamilyNames.cpp",
-    "$blink_platform_output_dir/FontFamilyNames.h",
-  ]
-
-  args = [
-    rebase_path(font_family_names_in, root_build_dir),
-    "--output_dir",
-    rebase_path(blink_platform_output_dir, root_build_dir),
-  ]
+make_names("font_family_names") {
+  in_files = [ "fonts/font_family_names.json5" ]
+  output_dir = blink_platform_output_dir
 }
 
-action("http_names") {
-  script = "../build/scripts/make_names.py"
-
-  http_names_in = "network/HTTPNames.json5"
-  inputs = make_names_files + [ http_names_in ]
-
-  outputs = [
-    "$blink_platform_output_dir/HTTPNames.cpp",
-    "$blink_platform_output_dir/HTTPNames.h",
-  ]
-
-  args = [
-    rebase_path(http_names_in, root_build_dir),
-    "--output_dir",
-    rebase_path(blink_platform_output_dir, root_build_dir),
-  ]
+make_names("http_names") {
+  in_files = [ "network/http_names.json5" ]
+  output_dir = blink_platform_output_dir
 }
 
 action("runtime_enabled_features") {
   script = "../build/scripts/make_runtime_features.py"
 
-  runtime_enabled_features_json5 = "RuntimeEnabledFeatures.json5"
+  runtime_enabled_features_json5 = "runtime_enabled_features.json5"
   inputs = scripts_for_json5_files + [
              runtime_enabled_features_json5,
-             "../build/scripts/templates/RuntimeEnabledFeatures.cpp.tmpl",
-             "../build/scripts/templates/RuntimeEnabledFeatures.h.tmpl",
+             "../build/scripts/templates/runtime_enabled_features.cc.tmpl",
+             "../build/scripts/templates/runtime_enabled_features.h.tmpl",
            ]
 
   outputs = [
-    "$blink_platform_output_dir/RuntimeEnabledFeatures.cpp",
-    "$blink_platform_output_dir/RuntimeEnabledFeatures.h",
+    "$blink_platform_output_dir/runtime_enabled_features.cc",
+    "$blink_platform_output_dir/runtime_enabled_features.h",
   ]
 
   args = [
@@ -246,7 +221,7 @@ config("blink_platform_pch") {
   }
 }
 
-component("platform") {
+jumbo_component("platform") {
   visibility = []  # Allow re-assignment of list.
   visibility = [
     "//components/pdf/common:interfaces_blink",
@@ -500,6 +475,8 @@ component("platform") {
     "audio/mac/FFTFrameMac.cpp",
     "bindings/ActiveScriptWrappable.cpp",
     "bindings/ActiveScriptWrappable.h",
+    "bindings/CallbackFunctionBase.cpp",
+    "bindings/CallbackFunctionBase.h",
     "bindings/ConditionalFeatures.cpp",
     "bindings/ConditionalFeatures.h",
     "bindings/DOMDataStore.h",
@@ -523,6 +500,7 @@ component("platform") {
     "bindings/StringResource.cpp",
     "bindings/StringResource.h",
     "bindings/ToV8.h",
+    "bindings/TraceWrapperBase.h",
     "bindings/TraceWrapperMember.h",
     "bindings/TraceWrapperV8Reference.h",
     "bindings/V0CustomElementBinding.cpp",
@@ -530,6 +508,8 @@ component("platform") {
     "bindings/V8Binding.cpp",
     "bindings/V8Binding.h",
     "bindings/V8BindingMacros.h",
+    "bindings/V8DOMActivityLogger.cpp",
+    "bindings/V8DOMActivityLogger.h",
     "bindings/V8DOMWrapper.cpp",
     "bindings/V8DOMWrapper.h",
     "bindings/V8GlobalValueMap.h",
@@ -578,6 +558,7 @@ component("platform") {
     "exported/WebAudioBus.cpp",
     "exported/WebAudioDevice.cpp",
     "exported/WebBlobData.cpp",
+    "exported/WebBlobInfo.cpp",
     "exported/WebCORS.cpp",
     "exported/WebCORSPreflightResultCache.cpp",
     "exported/WebCache.cpp",
@@ -620,7 +601,6 @@ component("platform") {
     "exported/WebMediaStreamSource.cpp",
     "exported/WebMediaStreamTrack.cpp",
     "exported/WebMemoryCoordinator.cpp",
-    "exported/WebMessagePortChannelClient.cpp",
     "exported/WebMixedContent.cpp",
     "exported/WebNetworkStateNotifier.cpp",
     "exported/WebPasswordCredential.cpp",
@@ -716,6 +696,7 @@ component("platform") {
     "fonts/FontGlobalContext.cpp",
     "fonts/FontGlobalContext.h",
     "fonts/FontMetrics.h",
+    "fonts/FontOrientation.cpp",
     "fonts/FontOrientation.h",
     "fonts/FontPlatformData.cpp",
     "fonts/FontPlatformData.h",
@@ -726,9 +707,13 @@ component("platform") {
     "fonts/FontSelector.cpp",
     "fonts/FontSelector.h",
     "fonts/FontSelectorClient.h",
+    "fonts/FontSmoothingMode.cpp",
     "fonts/FontSmoothingMode.h",
+    "fonts/FontVariantEastAsian.cpp",
     "fonts/FontVariantEastAsian.h",
+    "fonts/FontVariantNumeric.cpp",
     "fonts/FontVariantNumeric.h",
+    "fonts/FontWidthVariant.cpp",
     "fonts/FontWidthVariant.h",
     "fonts/GenericFontFamilySettings.cpp",
     "fonts/GenericFontFamilySettings.h",
@@ -746,7 +731,9 @@ component("platform") {
     "fonts/SmallCapsIterator.h",
     "fonts/SymbolsIterator.cpp",
     "fonts/SymbolsIterator.h",
+    "fonts/TextRenderingMode.cpp",
     "fonts/TextRenderingMode.h",
+    "fonts/TypesettingFeatures.cpp",
     "fonts/TypesettingFeatures.h",
     "fonts/UTF16TextIterator.cpp",
     "fonts/UTF16TextIterator.h",
@@ -830,6 +817,7 @@ component("platform") {
     "geometry/FloatQuad.h",
     "geometry/FloatRect.cpp",
     "geometry/FloatRect.h",
+    "geometry/FloatRectOutsets.cpp",
     "geometry/FloatRectOutsets.h",
     "geometry/FloatRoundedRect.cpp",
     "geometry/FloatRoundedRect.h",
@@ -893,9 +881,6 @@ component("platform") {
     "graphics/CompositorElementId.h",
     "graphics/CompositorFilterOperations.cpp",
     "graphics/CompositorFilterOperations.h",
-    "graphics/CompositorMutableProperties.h",
-    "graphics/CompositorMutation.h",
-    "graphics/CompositorMutationsTarget.h",
     "graphics/CompositorMutator.h",
     "graphics/CompositorMutatorClient.cpp",
     "graphics/CompositorMutatorClient.h",
@@ -933,6 +918,8 @@ component("platform") {
     "graphics/GraphicsTypes.cpp",
     "graphics/GraphicsTypes.h",
     "graphics/GraphicsTypes3D.h",
+    "graphics/HighContrastImageClassifier.cpp",
+    "graphics/HighContrastImageClassifier.h",
     "graphics/HighContrastSettings.h",
     "graphics/Image.cpp",
     "graphics/Image.h",
@@ -1011,6 +998,8 @@ component("platform") {
     "graphics/VideoFrameSubmitter.cpp",
     "graphics/VideoFrameSubmitter.h",
     "graphics/WebGraphicsContext3DProviderWrapper.h",
+    "graphics/compositing/CompositedLayerRasterInvalidator.cpp",
+    "graphics/compositing/CompositedLayerRasterInvalidator.h",
     "graphics/compositing/ContentLayerClientImpl.cpp",
     "graphics/compositing/ContentLayerClientImpl.h",
     "graphics/compositing/PaintArtifactCompositor.cpp",
@@ -1401,6 +1390,7 @@ component("platform") {
     "text/TextRunIterator.h",
     "text/TextStream.cpp",
     "text/TextStream.h",
+    "text/Truncation.h",
     "text/UnicodeBidi.h",
     "text/UnicodeRange.cpp",
     "text/UnicodeRange.h",
@@ -1474,6 +1464,17 @@ component("platform") {
              get_target_outputs(":instrumentation_probes") +
              get_target_outputs(":runtime_enabled_features")
 
+  if (is_win && is_component_build) {
+    # https://crbug.com/764823 - Mixing certain //url/ headers and
+    # using url::RawCanonOutputT<char> in one translation unit breaks
+    # the Windows component build. These files use RawCanonOutput.
+    jumbo_excluded_sources = [
+      "LinkHash.cpp",
+      "weborigin/KURL.cpp",
+      "weborigin/OriginAccessEntry.cpp",
+      "weborigin/SecurityOrigin.cpp",
+    ]
+  }
   configs += [
     ":blink_platform_pch",
     ":blink_platform_config",
@@ -1521,6 +1522,7 @@ component("platform") {
     "//third_party/WebKit/Source/platform/heap",
     "//third_party/WebKit/Source/platform/instrumentation",
     "//third_party/WebKit/Source/platform/loader",
+    "//third_party/WebKit/Source/platform/media",
     "//third_party/WebKit/Source/platform/scheduler",
     "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/WebKit/public:offscreen_canvas_mojo_bindings_blink",
@@ -1573,7 +1575,9 @@ component("platform") {
       "/wd4724",  # Modulo by 0.
     ]
   } else {
-    sources -= [ "text/LocaleWin.cpp" ]
+    if (!snake_case_source_files) {
+      sources -= [ "text/LocaleWin.cpp" ]
+    }
   }
 
   if (is_android) {
@@ -1587,7 +1591,9 @@ component("platform") {
     ]
     set_sources_assignment_filter(sources_assignment_filter)
   } else {
-    sources -= [ "scroll/ScrollbarThemeAndroid.cpp" ]
+    if (!snake_case_source_files) {
+      sources -= [ "scroll/ScrollbarThemeAndroid.cpp" ]
+    }
   }
 
   if (is_fuchsia) {
@@ -1670,6 +1676,7 @@ static_library("test_support") {
     "testing/PaintPrinters.cpp",
     "testing/PaintPrinters.h",
     "testing/PaintPropertyTestHelpers.h",
+    "testing/PaintTestConfigurations.h",
     "testing/PictureMatchers.cpp",
     "testing/PictureMatchers.h",
     "testing/PlatformTestPrinters.cpp",
@@ -1737,7 +1744,6 @@ test("blink_platform_unittests") {
     "LayoutUnitTest.cpp",
     "LifecycleContextTest.cpp",
     "LongTaskDetectorTest.cpp",
-    "MemoryCoordinatorTest.cpp",
     "PODArenaTest.cpp",
     "PODFreeListArenaTest.cpp",
     "PODIntervalTreeTest.cpp",
@@ -1769,6 +1775,7 @@ test("blink_platform_unittests") {
     "fonts/AcceptLanguagesResolverTest.cpp",
     "fonts/FontCacheTest.cpp",
     "fonts/FontDescriptionTest.cpp",
+    "fonts/FontFamilyTest.cpp",
     "fonts/FontPlatformDataTest.cpp",
     "fonts/FontSelectionTypesTest.cpp",
     "fonts/FontTest.cpp",
@@ -1778,6 +1785,7 @@ test("blink_platform_unittests") {
     "fonts/ScriptRunIteratorTest.cpp",
     "fonts/SmallCapsIteratorTest.cpp",
     "fonts/SymbolsIteratorTest.cpp",
+    "fonts/TypesettingFeaturesTest.cpp",
     "fonts/UnicodeRangeSetTest.cpp",
     "fonts/android/FontCacheAndroidTest.cpp",
     "fonts/mac/FontFamilyMatcherMacTest.mm",
@@ -1806,16 +1814,16 @@ test("blink_platform_unittests") {
     "geometry/RegionTest.cpp",
     "graphics/BitmapImageTest.cpp",
     "graphics/CompositorElementIdTest.cpp",
-    "graphics/CompositorMutatorClientTest.cpp",
     "graphics/ContiguousContainerTest.cpp",
     "graphics/DecodingImageGeneratorTest.cpp",
     "graphics/DeferredImageDecoderTestWoPlatform.cpp",
     "graphics/GraphicsContextTest.cpp",
+    "graphics/HighContrastImageClassifierTest.cpp",
     "graphics/ImageBufferTest.cpp",
     "graphics/PaintInvalidationReasonTest.cpp",
     "graphics/RecordingImageBufferSurfaceTest.cpp",
     "graphics/VideoFrameSubmitterTest.cpp",
-    "graphics/compositing/ContentLayerClientImplTest.cpp",
+    "graphics/compositing/CompositedLayerRasterInvalidatorTest.cpp",
     "graphics/compositing/PaintArtifactCompositorTest.cpp",
     "graphics/compositing/PaintChunksToCcLayerTest.cpp",
     "graphics/filters/FECompositeTest.cpp",

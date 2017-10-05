@@ -21,6 +21,7 @@ class FrameCaptionButtonContainerView;
 class HeaderPainter;
 }
 
+// Provides the BrowserNonClientFrameView for Chrome OS.
 class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
                                      public ash::ShellObserver,
                                      public ash::TabletModeObserver,
@@ -83,7 +84,7 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
                            ToggleTabletModeRelayout);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
                            AvatarDisplayOnTeleportedWindow);
-  FRIEND_TEST_ALL_PREFIXES(ImmersiveModeControllerAshTestTabletMode,
+  FRIEND_TEST_ALL_PREFIXES(ImmersiveModeControllerAshTestHostedApp,
                            FrameLayout);
 
   friend class BrowserHeaderPainterAsh;

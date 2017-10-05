@@ -18,6 +18,9 @@ base::AtomicSequenceNumber s_next_id_;
 base::AtomicSequenceNumber s_next_content_id_;
 }  // namespace
 
+const int PaintImage::kNonLazyStableId = -1;
+const size_t PaintImage::kDefaultFrameIndex = 0u;
+
 PaintImage::PaintImage() = default;
 PaintImage::PaintImage(const PaintImage& other) = default;
 PaintImage::PaintImage(PaintImage&& other) = default;
@@ -35,8 +38,7 @@ bool PaintImage::operator==(const PaintImage& other) const {
          completion_state_ == other.completion_state_ &&
          subset_rect_ == other.subset_rect_ &&
          frame_index_ == other.frame_index_ &&
-         is_multipart_ == other.is_multipart_ &&
-         sk_image_id_ == other.sk_image_id_;
+         is_multipart_ == other.is_multipart_;
 }
 
 PaintImage::Id PaintImage::GetNextId() {
@@ -48,26 +50,6 @@ PaintImage::ContentId PaintImage::GetNextContentId() {
 }
 
 const sk_sp<SkImage>& PaintImage::GetSkImage() const {
-  if (cached_sk_image_)
-    return cached_sk_image_;
-
-  if (sk_image_) {
-    cached_sk_image_ = sk_image_;
-  } else if (paint_record_) {
-    cached_sk_image_ = SkImage::MakeFromPicture(
-        ToSkPicture(paint_record_, gfx::RectToSkRect(paint_record_rect_)),
-        SkISize::Make(paint_record_rect_.width(), paint_record_rect_.height()),
-        nullptr, nullptr, SkImage::BitDepth::kU8, SkColorSpace::MakeSRGB());
-  } else if (paint_image_generator_) {
-    cached_sk_image_ =
-        SkImage::MakeFromGenerator(base::MakeUnique<SkiaPaintImageGenerator>(
-            paint_image_generator_, frame_index_, sk_image_id_));
-  }
-
-  if (!subset_rect_.IsEmpty() && cached_sk_image_) {
-    cached_sk_image_ =
-        cached_sk_image_->makeSubset(gfx::RectToSkIRect(subset_rect_));
-  }
   return cached_sk_image_;
 }
 
@@ -87,13 +69,39 @@ PaintImage PaintImage::MakeSubset(const gfx::Rect& subset) const {
   // Store the subset from the original image.
   result.subset_rect_.Offset(subset_rect_.x(), subset_rect_.y());
 
-  // Creating the |cached_sk_image_| is an optimization to allow re-use of the
-  // original decode for image subsets in skia, for cases that rely on skia's
-  // image decode cache.
-  // TODO(khushalsagar): Remove this when we no longer have such cases. See
-  // crbug.com/753639.
+  // Creating the |cached_sk_image_| using the SkImage from the original
+  // PaintImage is an optimization to allow re-use of the original decode for
+  // image subsets in skia, for cases that rely on skia's image decode cache.
   result.cached_sk_image_ =
       GetSkImage()->makeSubset(gfx::RectToSkIRect(subset));
+  return result;
+}
+
+void PaintImage::CreateSkImage() {
+  DCHECK(!cached_sk_image_);
+
+  if (sk_image_) {
+    cached_sk_image_ = sk_image_;
+  } else if (paint_record_) {
+    cached_sk_image_ = SkImage::MakeFromPicture(
+        ToSkPicture(paint_record_, gfx::RectToSkRect(paint_record_rect_)),
+        SkISize::Make(paint_record_rect_.width(), paint_record_rect_.height()),
+        nullptr, nullptr, SkImage::BitDepth::kU8, SkColorSpace::MakeSRGB());
+  } else if (paint_image_generator_) {
+    cached_sk_image_ =
+        SkImage::MakeFromGenerator(base::MakeUnique<SkiaPaintImageGenerator>(
+            paint_image_generator_, frame_index_));
+  }
+
+  if (!subset_rect_.IsEmpty() && cached_sk_image_) {
+    cached_sk_image_ =
+        cached_sk_image_->makeSubset(gfx::RectToSkIRect(subset_rect_));
+  }
+}
+
+PaintImage PaintImage::MakeStatic() const {
+  PaintImage result(*this);
+  result.repetition_count_ = kAnimationNone;
   return result;
 }
 
@@ -118,7 +126,8 @@ SkImageInfo PaintImage::CreateDecodeImageInfo(const SkISize& size,
 
 bool PaintImage::Decode(void* memory,
                         SkImageInfo* info,
-                        sk_sp<SkColorSpace> color_space) const {
+                        sk_sp<SkColorSpace> color_space,
+                        size_t frame_index) const {
   // We only support decode to supported decode size.
   DCHECK(info->dimensions() == GetSupportedDecodeSize(info->dimensions()));
 
@@ -129,13 +138,15 @@ bool PaintImage::Decode(void* memory,
   // requested size into the space of the original image. For now, fallback to
   // DecodeFromSkImage().
   if (paint_image_generator_ && subset_rect_.IsEmpty())
-    return DecodeFromGenerator(memory, info, std::move(color_space));
-  return DecodeFromSkImage(memory, info, std::move(color_space));
+    return DecodeFromGenerator(memory, info, std::move(color_space),
+                               frame_index);
+  return DecodeFromSkImage(memory, info, std::move(color_space), frame_index);
 }
 
 bool PaintImage::DecodeFromGenerator(void* memory,
                                      SkImageInfo* info,
-                                     sk_sp<SkColorSpace> color_space) const {
+                                     sk_sp<SkColorSpace> color_space,
+                                     size_t frame_index) const {
   DCHECK(subset_rect_.IsEmpty());
 
   // First convert the info to have the requested color space, since the decoder
@@ -151,7 +162,7 @@ bool PaintImage::DecodeFromGenerator(void* memory,
 
     bool result = paint_image_generator_->GetPixels(n32info, n32memory.get(),
                                                     n32info.minRowBytes(),
-                                                    frame_index(), unique_id());
+                                                    frame_index, unique_id());
     if (!result)
       return false;
 
@@ -172,13 +183,14 @@ bool PaintImage::DecodeFromGenerator(void* memory,
   }
 
   return paint_image_generator_->GetPixels(*info, memory, info->minRowBytes(),
-                                           frame_index(), unique_id());
+                                           frame_index, unique_id());
 }
 
 bool PaintImage::DecodeFromSkImage(void* memory,
                                    SkImageInfo* info,
-                                   sk_sp<SkColorSpace> color_space) const {
-  auto image = GetSkImage();
+                                   sk_sp<SkColorSpace> color_space,
+                                   size_t frame_index) const {
+  auto image = GetSkImageForFrame(frame_index);
   DCHECK(image);
   if (color_space) {
     image =
@@ -192,6 +204,11 @@ bool PaintImage::DecodeFromSkImage(void* memory,
                                   SkImage::kDisallow_CachingHint);
   *info = info->makeColorSpace(std::move(color_space));
   return result;
+}
+
+bool PaintImage::ShouldAnimate() const {
+  return animation_type_ == AnimationType::ANIMATED &&
+         repetition_count_ != kAnimationNone && FrameCount() > 1;
 }
 
 PaintImage::FrameKey PaintImage::GetKeyForFrame(size_t frame_index) const {
@@ -225,6 +242,19 @@ size_t PaintImage::FrameCount() const {
              : 1u;
 }
 
+sk_sp<SkImage> PaintImage::GetSkImageForFrame(size_t index) const {
+  DCHECK_LT(index, FrameCount());
+
+  if (index == frame_index_)
+    return GetSkImage();
+
+  sk_sp<SkImage> image = SkImage::MakeFromGenerator(
+      base::MakeUnique<SkiaPaintImageGenerator>(paint_image_generator_, index));
+  if (!subset_rect_.IsEmpty())
+    image = image->makeSubset(gfx::RectToSkIRect(subset_rect_));
+  return image;
+}
+
 std::string PaintImage::ToString() const {
   std::ostringstream str;
   str << "sk_image_: " << sk_image_ << " paint_record_: " << paint_record_
@@ -235,8 +265,7 @@ std::string PaintImage::ToString() const {
       << " completion_state_: " << static_cast<int>(completion_state_)
       << " subset_rect_: " << subset_rect_.ToString()
       << " frame_index_: " << frame_index_
-      << " is_multipart_: " << is_multipart_
-      << " sk_image_id_: " << sk_image_id_;
+      << " is_multipart_: " << is_multipart_;
   return str.str();
 }
 

@@ -30,7 +30,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -74,14 +73,15 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/favicon/core/favicon_driver_observer.h"
+#include "components/nacl/common/features.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/util.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -469,9 +469,8 @@ class NewTabNavigationOrSwapObserver {
     if (swap_observer_)
       return true;
     WebContents* new_tab = content::Details<WebContents>(details).ptr();
-    // Get the TabStripModel. Assume this is attached to a Browser.
     TabStripModel* tab_strip_model =
-        Browser::FromWebContents(new_tab)->tab_strip_model();
+        chrome::FindBrowserWithWebContents(new_tab)->tab_strip_model();
     swap_observer_.reset(new NavigationOrSwapObserver(tab_strip_model,
                                                       new_tab));
     swap_observer_->set_did_start_loading();
@@ -1056,7 +1055,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPage) {
 
   ChannelDestructionWatcher channel_close_watcher;
   channel_close_watcher.WatchChannel(
-      GetActiveWebContents()->GetRenderProcessHost());
+      GetActiveWebContents()->GetMainFrame()->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
   fcp_waiter->Wait();
@@ -1174,7 +1173,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPageRemovesPending) {
 
   ChannelDestructionWatcher channel_close_watcher;
   channel_close_watcher.WatchChannel(
-      GetActiveWebContents()->GetRenderProcessHost());
+      GetActiveWebContents()->GetMainFrame()->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -1291,7 +1290,7 @@ IN_PROC_BROWSER_TEST_F(
 
   ChannelDestructionWatcher channel_close_watcher;
   channel_close_watcher.WatchChannel(
-      GetActiveWebContents()->GetRenderProcessHost());
+      GetActiveWebContents()->GetMainFrame()->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -2047,8 +2046,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                    1);
 
   ChannelDestructionWatcher channel_close_watcher;
-  channel_close_watcher.WatchChannel(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost());
+  channel_close_watcher.WatchChannel(browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetMainFrame()
+                                         ->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -2062,8 +2064,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
       FINAL_STATUS_USED, 2);
 
   ChannelDestructionWatcher channel_close_watcher;
-  channel_close_watcher.WatchChannel(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost());
+  channel_close_watcher.WatchChannel(browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetMainFrame()
+                                         ->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -2759,8 +2764,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTestWithExtensions, WebNavigation) {
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
 
   ChannelDestructionWatcher channel_close_watcher;
-  channel_close_watcher.WatchChannel(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost());
+  channel_close_watcher.WatchChannel(browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetMainFrame()
+                                         ->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -2780,8 +2788,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTestWithExtensions, TabsApi) {
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
 
   ChannelDestructionWatcher channel_close_watcher;
-  channel_close_watcher.WatchChannel(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost());
+  channel_close_watcher.WatchChannel(browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetMainFrame()
+                                         ->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -3908,8 +3919,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxBrowserTest,
       GetAutocompleteActionPredictor()->IsPrerenderAbandonedForTesting());
 }
 
-// Can't run tests with NaCl plugins if built with DISABLE_NACL.
-#if !defined(DISABLE_NACL)
+// Can't run tests with NaCl plugins if built without ENABLE_NACL.
+#if BUILDFLAG(ENABLE_NACL)
 class PrerenderBrowserTestWithNaCl : public PrerenderBrowserTest {
  public:
   PrerenderBrowserTestWithNaCl() {}
@@ -3944,7 +3955,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTestWithNaCl,
                                                    &display_test_result));
   ASSERT_TRUE(display_test_result);
 }
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 
 }  // namespace prerender
 

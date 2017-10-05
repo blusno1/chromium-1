@@ -44,6 +44,8 @@ js2gtest("browser_tests_js_webui") {
     "../../../browser/ui/webui/sync_internals_browsertest.js",
     "../chromeos/oobe_webui_browsertest.js",
     "//third_party/axe-core/axe.js",
+    "a11y/accessibility_audit_rules.js",
+    "a11y/accessibility_test.js",
     "about_invalidations_browsertest.js",
     "accessibility_audit_browsertest.js",
     "assertions.js",
@@ -54,6 +56,7 @@ js2gtest("browser_tests_js_webui") {
     "cr_elements/cr_elements_browsertest.js",
     "engagement/site_engagement_browsertest.js",
     "extensions/cr_extensions_browsertest.js",
+    "interventions_internals_browsertest.js",
     "load_time_data_browsertest.js",
     "md_bookmarks/md_bookmarks_browsertest.js",
     "md_downloads/downloads_browsertest.js",
@@ -72,14 +75,11 @@ js2gtest("browser_tests_js_webui") {
     "net_internals/main.js",
     "net_internals/net_internals_test.js",
     "net_internals/prerender_view.js",
-    "net_internals/sdch_view.js",
     "net_internals/timeline_view.js",
     "ntp4.js",
     "polymer_browser_test_base.js",
     "sandboxstatus_browsertest.js",
     "settings/a11y/about_a11y_test.js",
-    "settings/a11y/accessibility_audit_rules.js",
-    "settings/a11y/accessibility_test.js",
     "settings/a11y/basic_a11y_test.js",
     "settings/a11y/edit_dictionary_a11y_test.js",
     "settings/a11y/manage_profile_a11y_test.js",
@@ -103,6 +103,8 @@ js2gtest("browser_tests_js_webui") {
     "text_defaults_browsertest.js",
     "webui_resource_async_browsertest.js",
   ]
+
+  extra_js_files = [ "//chrome/browser/resources/md_downloads/constants.js" ]
 
   if (is_chromeos) {
     sources += [
@@ -140,17 +142,16 @@ js2gtest("browser_tests_js_webui") {
 js2gtest("unit_tests_js") {
   test_type = "unit"
   sources = [
-    "../../../browser/resources/md_downloads/action_service_unittest.gtestjs",
-    "../../../browser/resources/print_preview/data/measurement_system_unittest.gtestjs",
+    "../../../browser/resources/md_downloads/search_service_unittest.gtestjs",
     "../../../browser/resources/print_preview/print_preview_utils_unittest.gtestjs",
     "../../../renderer/resources/extensions/notifications_custom_bindings.gtestjs",
     "../unit/framework_unittest.gtestjs",
   ]
   extra_js_files = [
-    "../../../browser/resources/md_downloads/action_service.js",
     "../../../browser/resources/md_downloads/browser_proxy.js",
     "../../../browser/resources/print_preview/data/measurement_system.js",
     "../../../browser/resources/print_preview/print_preview_utils.js",
+    "../../../browser/resources/md_downloads/search_service.js",
     "../../../renderer/resources/extensions/notifications_custom_bindings.js",
     "../../../renderer/resources/extensions/notifications_test_util.js",
     "//ui/webui/resources/js/cr.js",

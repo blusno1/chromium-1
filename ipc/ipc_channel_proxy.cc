@@ -294,7 +294,7 @@ void ChannelProxy::Context::OnRemoveFilter(MessageFilter* filter) {
 // Called on the listener's thread
 void ChannelProxy::Context::AddFilter(MessageFilter* filter) {
   base::AutoLock auto_lock(pending_filters_lock_);
-  pending_filters_.push_back(make_scoped_refptr(filter));
+  pending_filters_.push_back(base::WrapRefCounted(filter));
   ipc_task_runner_->PostTask(
       FROM_HERE, base::Bind(&Context::OnAddFilter, this));
 }
@@ -530,6 +530,10 @@ void ChannelProxy::SendInternal(Message* message) {
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   Logging::GetInstance()->OnSendMessage(message);
 #endif
+
+  // See https://crbug.com/766032. This is to ensure that senders of oversized
+  // messages can be caught more easily in the wild.
+  CHECK_LE(message->size(), Channel::kMaximumMessageSize);
 
   context_->Send(message);
 }

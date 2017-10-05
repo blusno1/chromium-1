@@ -21,6 +21,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -45,6 +46,7 @@
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/content_paths.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -62,7 +64,6 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/test/url_request/url_request_slow_download_job.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "ppapi/features/features.h"
@@ -487,6 +488,7 @@ net::EmbeddedTestServer::HandleRequestCallback CreateRedirectHandler(
 std::unique_ptr<net::test_server::HttpResponse>
 HandleRequestAndSendBasicResponse(
     const std::string& relative_url,
+    net::HttpStatusCode code,
     const base::StringPairs& headers,
     const std::string& content_type,
     const std::string& body,
@@ -498,6 +500,7 @@ HandleRequestAndSendBasicResponse(
       response->AddCustomHeader(pair.first, pair.second);
     response->set_content_type(content_type);
     response->set_content(body);
+    response->set_code(code);
   }
   return std::move(response);
 }
@@ -506,11 +509,12 @@ HandleRequestAndSendBasicResponse(
 // HTTP 200 status code, a Content-Type header and a body.
 net::EmbeddedTestServer::HandleRequestCallback CreateBasicResponseHandler(
     const std::string& relative_url,
+    net::HttpStatusCode code,
     const base::StringPairs& headers,
     const std::string& content_type,
     const std::string& body) {
-  return base::Bind(&HandleRequestAndSendBasicResponse, relative_url, headers,
-                    content_type, body);
+  return base::Bind(&HandleRequestAndSendBasicResponse, relative_url, code,
+                    headers, content_type, body);
 }
 
 // Helper class to "flatten" handling of
@@ -578,10 +582,9 @@ class DownloadContentTest : public ContentBrowserTest {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&net::URLRequestSlowDownloadJob::AddUrlHandler));
-    base::FilePath mock_base(GetTestFilePath("download", ""));
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&net::URLRequestMockHTTPJob::AddUrlHandlers, mock_base));
+    base::FilePath test_data_dir;
+    ASSERT_TRUE(PathService::Get(content::DIR_TEST_DATA, &test_data_dir));
+    embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
     ASSERT_TRUE(embedded_test_server()->Start());
     const std::string real_host =
         embedded_test_server()->host_port_pair().host();
@@ -825,8 +828,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, MultiDownload) {
   ASSERT_EQ(DownloadItem::IN_PROGRESS, download1->GetState());
 
   // Start the second download and wait until it's done.
-  GURL url(net::URLRequestMockHTTPJob::GetMockUrl("download-test.lib"));
-  DownloadItem* download2 = StartDownloadAndReturnItem(shell(), url);
+  DownloadItem* download2 = StartDownloadAndReturnItem(
+      shell(), embedded_test_server()->GetURL("/download/download-test.lib"));
   WaitForCompletion(download2);
 
   ASSERT_EQ(DownloadItem::IN_PROGRESS, download1->GetState());
@@ -873,9 +876,9 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadOctetStream) {
   PluginServiceImpl::GetInstance()->RegisterInternalPlugin(plugin_info, false);
 
   // The following is served with a Content-Type of application/octet-stream.
-  GURL url(
-      net::URLRequestMockHTTPJob::GetMockUrl("octet-stream.abc"));
-  NavigateToURLAndWaitForDownload(shell(), url, DownloadItem::COMPLETE);
+  NavigateToURLAndWaitForDownload(
+      shell(), embedded_test_server()->GetURL("/download/download-test.lib"),
+      DownloadItem::COMPLETE);
 }
 #endif
 
@@ -891,7 +894,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelAtFinalRename) {
 
   // Create a download
   NavigateToURL(shell(),
-                net::URLRequestMockHTTPJob::GetMockUrl("download-test.lib"));
+                embedded_test_server()->GetURL("/download/download-test.lib"));
 
   // Wait until the first (intermediate file) rename and execute the callback.
   file_factory->WaitForSomeCallback();
@@ -911,7 +914,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelAtFinalRename) {
   download_manager->GetAllDownloads(&items);
   ASSERT_EQ(1u, items.size());
   items[0]->Cancel(true);
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   // Check state.
   EXPECT_EQ(DownloadItem::CANCELLED, items[0]->GetState());
@@ -940,7 +943,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelAtRelease) {
 
   // Create a download
   NavigateToURL(shell(),
-                net::URLRequestMockHTTPJob::GetMockUrl("download-test.lib"));
+                embedded_test_server()->GetURL("/download/download-test.lib"));
 
   // Wait until the first (intermediate file) rename and execute the callback.
   file_factory->WaitForSomeCallback();
@@ -1053,7 +1056,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ShutdownAtRelease) {
 
   // Create a download
   NavigateToURL(shell(),
-                net::URLRequestMockHTTPJob::GetMockUrl("download-test.lib"));
+                embedded_test_server()->GetURL("/download/download-test.lib"));
 
   // Wait until the first (intermediate file) rename and execute the callback.
   file_factory->WaitForSomeCallback();
@@ -1081,7 +1084,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ShutdownAtRelease) {
   ASSERT_EQ(1u, items.size());
   items[0]->Cancel(true);
   EXPECT_EQ(DownloadItem::IN_PROGRESS, items[0]->GetState());
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
   EXPECT_EQ(DownloadItem::IN_PROGRESS, items[0]->GetState());
 
   MockDownloadItemObserver observer;
@@ -1502,7 +1505,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RecoverFromInitFileError) {
   // quiesced before clearing and injecting the new errors, as the
   // InjectErrors() routine alters the currently in use download file
   // factory.
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   // Clear the old errors list.
   injector->ClearError();
@@ -1544,7 +1547,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   // quiesced before clearing and injecting the new errors, as the
   // InjectErrors() routine alters the currently in use download file
   // factory.
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   // Clear the old errors list.
   injector->ClearError();
@@ -1581,7 +1584,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RecoverFromFinalRenameError) {
   // quiesced before clearing and injecting the new errors, as the
   // InjectErrors() routine alters the currently in use download file
   // factory, which is a download sequence object.
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   // Clear the old errors list.
   injector->ClearError();
@@ -1659,7 +1662,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelInterruptedDownload) {
   ASSERT_TRUE(PathExists(intermediate_path));
 
   download->Cancel(true /* user_cancel */);
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   // The intermediate file should now be gone.
   EXPECT_FALSE(PathExists(intermediate_path));
@@ -1680,7 +1683,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveInterruptedDownload) {
   ASSERT_TRUE(PathExists(intermediate_path));
 
   download->Remove();
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   // The intermediate file should now be gone.
   EXPECT_FALSE(PathExists(intermediate_path));
@@ -1701,7 +1704,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveCompletedDownload) {
   base::FilePath target_path(download->GetTargetFilePath());
   EXPECT_TRUE(PathExists(target_path));
   download->Remove();
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   // The file should still exist.
   EXPECT_TRUE(PathExists(target_path));
@@ -1740,7 +1743,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveResumingDownload) {
   request_start_handler.RespondWith(std::string(), net::OK);
 
   // The intermediate file should now be gone.
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
   EXPECT_FALSE(PathExists(intermediate_path));
 
   parameters.ClearInjectedErrors();
@@ -1790,7 +1793,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelResumingDownload) {
 
   // The intermediate file should now be gone.
   RunAllPendingInMessageLoop(BrowserThread::IO);
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
   EXPECT_FALSE(PathExists(intermediate_path));
 
   parameters.ClearInjectedErrors();
@@ -1832,7 +1835,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveResumedDownload) {
   download->Remove();
 
   // The intermediate file should now be gone.
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
   EXPECT_FALSE(PathExists(intermediate_path));
   EXPECT_FALSE(PathExists(target_path));
   EXPECT_TRUE(EnsureNoPendingDownloads());
@@ -1864,7 +1867,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelResumedDownload) {
   download->Cancel(true);
 
   // The intermediate file should now be gone.
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
   EXPECT_FALSE(PathExists(intermediate_path));
   EXPECT_FALSE(PathExists(target_path));
   EXPECT_TRUE(EnsureNoPendingDownloads());
@@ -2321,8 +2324,9 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ReferrerForHTTPS) {
       net::EmbeddedTestServer::Type::TYPE_HTTPS);
   net::EmbeddedTestServer http_origin(net::EmbeddedTestServer::Type::TYPE_HTTP);
   https_origin.ServeFilesFromDirectory(GetTestFilePath("download", ""));
-  http_origin.RegisterRequestHandler(CreateBasicResponseHandler(
-      "/download", base::StringPairs(), "application/octet-stream", "Hello"));
+  http_origin.RegisterRequestHandler(
+      CreateBasicResponseHandler("/download", net::HTTP_OK, base::StringPairs(),
+                                 "application/octet-stream", "Hello"));
   ASSERT_TRUE(https_origin.InitializeAndListen());
   ASSERT_TRUE(http_origin.InitializeAndListen());
 
@@ -2358,7 +2362,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CookiePolicy) {
   cookie_header.push_back(
       std::make_pair(std::string("Set-Cookie"), std::string("A=B")));
   origin_one.RegisterRequestHandler(CreateBasicResponseHandler(
-      "/foo", cookie_header, "application/octet-stream", "abcd"));
+      "/foo", net::HTTP_OK, cookie_header, "application/octet-stream", "abcd"));
   ASSERT_TRUE(origin_one.Start());
 
   origin_two.RegisterRequestHandler(
@@ -2419,8 +2423,9 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
       CreateRedirectHandler("/ping", origin_two.GetURL("/download")));
   origin_one.StartAcceptingConnections();
 
-  origin_two.RegisterRequestHandler(CreateBasicResponseHandler(
-      "/download", base::StringPairs(), "application/octet-stream", "Hello"));
+  origin_two.RegisterRequestHandler(
+      CreateBasicResponseHandler("/download", net::HTTP_OK, base::StringPairs(),
+                                 "application/octet-stream", "Hello"));
   origin_two.StartAcceptingConnections();
 
   NavigateToURLAndWaitForDownload(
@@ -2468,8 +2473,9 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
       CreateRedirectHandler("/ping", origin_two.GetURL("/pong")));
   origin_two.RegisterRequestHandler(
       CreateRedirectHandler("/pong", origin_one.GetURL("/download")));
-  origin_one.RegisterRequestHandler(CreateBasicResponseHandler(
-      "/download", base::StringPairs(), "application/octet-stream", "Hello"));
+  origin_one.RegisterRequestHandler(
+      CreateBasicResponseHandler("/download", net::HTTP_OK, base::StringPairs(),
+                                 "application/octet-stream", "Hello"));
 
   origin_one.StartAcceptingConnections();
   origin_two.StartAcceptingConnections();
@@ -2650,16 +2656,17 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadAttributeSameSiteCookie) {
 // The content body is empty. Make sure this case is handled properly and we
 // don't regress on http://crbug.com/320394.
 IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadGZipWithNoContent) {
-  GURL url = net::URLRequestMockHTTPJob::GetMockUrl("empty.bin");
-  NavigateToURLAndWaitForDownload(shell(), url, DownloadItem::COMPLETE);
+  NavigateToURLAndWaitForDownload(
+      shell(), embedded_test_server()->GetURL("/download/empty.bin"),
+      DownloadItem::COMPLETE);
   // That's it. This should work without crashing.
 }
 
 // Make sure that sniffed MIME types are correctly passed through to the
 // download item.
 IN_PROC_BROWSER_TEST_F(DownloadContentTest, SniffedMimeType) {
-  GURL url = net::URLRequestMockHTTPJob::GetMockUrl("gzip-content.gz");
-  DownloadItem* item = StartDownloadAndReturnItem(shell(), url);
+  DownloadItem* item = StartDownloadAndReturnItem(
+      shell(), embedded_test_server()->GetURL("/download/gzip-content.gz"));
   WaitForCompletion(item);
 
   EXPECT_STREQ("application/x-gzip", item->GetMimeType().c_str());
@@ -2749,8 +2756,7 @@ IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, ParallelDownloadComplete) {
 }
 
 // Verify parallel download resumption.
-IN_PROC_BROWSER_TEST_F(ParallelDownloadTest,
-                       DISABLED_ParallelDownloadResumption) {
+IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, ParallelDownloadResumption) {
   EXPECT_TRUE(base::FeatureList::IsEnabled(features::kParallelDownloading));
 
   TestDownloadRequestHandler request_handler;
@@ -2845,6 +2851,95 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadIgnoresXFO) {
 
   EXPECT_EQ(FILE_PATH_LITERAL("foo"),
             downloads[0]->GetTargetFilePath().BaseName().value());
+}
+
+// Verify that the response body of non-successful server response can be
+// downloaded to a file, when |fetch_error_body| sets to true.
+IN_PROC_BROWSER_TEST_F(DownloadContentTest, FetchErrorResponseBody) {
+  net::EmbeddedTestServer server;
+  const std::string kNotFoundURL = "/404notfound";
+  const std::string kNotFoundResponseBody = "This is response body.";
+
+  server.RegisterRequestHandler(CreateBasicResponseHandler(
+      kNotFoundURL, net::HTTP_NOT_FOUND, base::StringPairs(), "text/html",
+      kNotFoundResponseBody));
+  ASSERT_TRUE(server.Start());
+  GURL url = server.GetURL(kNotFoundURL);
+
+  std::unique_ptr<DownloadUrlParameters> download_parameters(
+      DownloadUrlParameters::CreateForWebContentsMainFrame(
+          shell()->web_contents(), url, TRAFFIC_ANNOTATION_FOR_TESTS));
+  // Fetch non-successful response body.
+  download_parameters->set_fetch_error_body(true);
+
+  DownloadManager* download_manager = DownloadManagerForShell(shell());
+  std::unique_ptr<DownloadTestObserver> observer(CreateWaiter(shell(), 1));
+  download_manager->DownloadUrl(std::move(download_parameters));
+  observer->WaitForFinished();
+  std::vector<DownloadItem*> items;
+  download_manager->GetAllDownloads(&items);
+  EXPECT_EQ(1u, items.size());
+
+  // Verify the error response body in the file.
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string file_content;
+    ASSERT_TRUE(
+        base::ReadFileToString(items[0]->GetTargetFilePath(), &file_content));
+    EXPECT_EQ(kNotFoundResponseBody, file_content);
+  }
+}
+
+// Verify the case that the first response is HTTP 200, and then interrupted,
+// and the second response is HTTP 404, the response body of 404 should be
+// fetched.
+IN_PROC_BROWSER_TEST_F(DownloadContentTest, FetchErrorResponseBodyResumption) {
+  const std::string kNotFoundResponseBody = "This is 404 response body.";
+  GURL url;
+
+  TestDownloadRequestHandler server;
+  TestDownloadRequestHandler::Parameters server_params =
+      TestDownloadRequestHandler::Parameters::WithSingleInterruption();
+  url = server.url();
+  server.StartServing(server_params);
+
+  // Wait for an interrupted download.
+  std::unique_ptr<DownloadUrlParameters> download_parameters(
+      DownloadUrlParameters::CreateForWebContentsMainFrame(
+          shell()->web_contents(), url, TRAFFIC_ANNOTATION_FOR_TESTS));
+  download_parameters->set_fetch_error_body(true);
+  DownloadManager* download_manager = DownloadManagerForShell(shell());
+
+  std::unique_ptr<DownloadTestObserver> observer;
+  observer.reset(new content::DownloadTestObserverInterrupted(
+      download_manager, 1,
+      content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
+
+  download_manager->DownloadUrl(std::move(download_parameters));
+  observer->WaitForFinished();
+
+  std::vector<DownloadItem*> items;
+  download_manager->GetAllDownloads(&items);
+  EXPECT_EQ(1u, items.size());
+
+  // Now server will start to response 404 with empty body.
+  const std::string k404ResponseHeader = "HTTP/1.1 404 Not found\r\n\r\n";
+  server.StartServingStaticResponse(k404ResponseHeader);
+  DownloadItem* download = items[0];
+
+  // The fetch error body should be cached in download item. The download should
+  // start from beginning.
+  download->Resume();
+  WaitForCompletion(download);
+
+  // The file should be empty.
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string file_content;
+    ASSERT_TRUE(
+        base::ReadFileToString(items[0]->GetTargetFilePath(), &file_content));
+    EXPECT_EQ(std::string(), file_content);
+  }
 }
 
 }  // namespace content

@@ -71,25 +71,25 @@ class VrShellDelegate : public device::GvrDelegateProvider {
   void SetDeviceId(unsigned int device_id) override;
   void RequestWebVRPresent(device::mojom::VRSubmitFrameClientPtr submit_client,
                            device::mojom::VRPresentationProviderRequest request,
-                           const base::Callback<void(bool)>& callback) override;
+                           device::mojom::VRDisplayInfoPtr display_info,
+                           base::Callback<void(bool)> callback) override;
   void OnDisplayAdded(device::VRDisplayImpl* display) override;
   void OnDisplayRemoved(device::VRDisplayImpl* display) override;
   void OnListeningForActivateChanged(device::VRDisplayImpl* display) override;
-  void CreateVRDisplayInfo(
-      gvr::GvrApi* gvr_api,
-      const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
-      uint32_t device_id) override;
   void GetNextMagicWindowPose(
       gvr::GvrApi* gvr_api,
       device::VRDisplayImpl* display,
-      device::mojom::VRDisplay::GetNextMagicWindowPoseCallback callback)
-      override;
+      device::mojom::VRMagicWindowProvider::GetPoseCallback callback) override;
 
   void OnActivateDisplayHandled(bool will_not_present);
   void OnFocusedAndActivatable(device::VRDisplayImpl* display);
   void OnLostFocusedAndActivatable();
   void SetListeningForActivate(bool listening);
-  void SetPresentResult(bool success);
+  void OnPresentResult(device::mojom::VRSubmitFrameClientPtr submit_client,
+                       device::mojom::VRPresentationProviderRequest request,
+                       device::mojom::VRDisplayInfoPtr display_info,
+                       base::Callback<void(bool)> callback,
+                       bool success);
 
   std::unique_ptr<VrCoreInfo> MakeVrCoreInfo(JNIEnv* env);
 
@@ -97,8 +97,6 @@ class VrShellDelegate : public device::GvrDelegateProvider {
   unsigned int device_id_ = 0;
   VrShell* vr_shell_ = nullptr;
   base::Callback<void(bool)> present_callback_;
-  device::mojom::VRSubmitFrameClientPtr submit_client_;
-  device::mojom::VRPresentationProviderRequest presentation_provider_request_;
   bool pending_successful_present_request_ = false;
 
   std::map<content::RenderWidgetHost*, device::VRDisplayImpl*> displays_;

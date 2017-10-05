@@ -39,11 +39,6 @@ FakeRendererScheduler::IdleTaskRunner() {
   return nullptr;
 }
 
-scoped_refptr<base::SingleThreadTaskRunner>
-FakeRendererScheduler::TimerTaskRunner() {
-  return nullptr;
-}
-
 std::unique_ptr<RenderWidgetSchedulingState>
 FakeRendererScheduler::NewRenderWidgetSchedulingState() {
   return nullptr;
@@ -112,8 +107,7 @@ void FakeRendererScheduler::VirtualTimePaused() {}
 
 void FakeRendererScheduler::VirtualTimeResumed() {}
 
-void FakeRendererScheduler::SetTimerQueueStoppingWhenBackgroundedEnabled(
-    bool enabled) {}
+void FakeRendererScheduler::SetStoppingWhenBackgroundedEnabled(bool enabled) {}
 
 void FakeRendererScheduler::SetTopLevelBlameContext(
     base::trace_event::BlameContext* blame_context) {}

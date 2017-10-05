@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <queue>
 #include <set>
 #include <utility>
 
 #include "base/callback_helpers.h"
+#include "base/containers/queue.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
@@ -55,6 +55,7 @@
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -226,7 +227,7 @@ void ExecuteScriptWaitForTitle(content::WebContents* web_contents,
 
 #if defined (USE_AURA)
 views::View* FindWebView(views::View* view) {
-  std::queue<views::View*> queue;
+  base::queue<views::View*> queue;
   queue.push(view);
   while (!queue.empty()) {
     views::View* current = queue.front();
@@ -680,8 +681,10 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
     guest_observer.Wait();
     content::Source<content::NavigationController> source =
         guest_observer.source();
-    EXPECT_TRUE(source->GetWebContents()->GetRenderProcessHost()->
-        IsForGuestsOnly());
+    EXPECT_TRUE(source->GetWebContents()
+                    ->GetMainFrame()
+                    ->GetProcess()
+                    ->IsForGuestsOnly());
 
     content::WebContents* guest_web_contents = source->GetWebContents();
     return guest_web_contents;
@@ -718,7 +721,8 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
     // Wait for interstitial page to be shown in guest.
     content::WebContents* guest_web_contents =
         GetGuestViewManager()->WaitForSingleGuestCreated();
-    ASSERT_TRUE(guest_web_contents->GetRenderProcessHost()->IsForGuestsOnly());
+    ASSERT_TRUE(
+        guest_web_contents->GetMainFrame()->GetProcess()->IsForGuestsOnly());
     content::WaitForInterstitialAttach(guest_web_contents);
   }
 
@@ -1557,6 +1561,11 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestWebRequestAPI) {
   TestHelper("testWebRequestAPI", "web_view/shim", NEEDS_TEST_SERVER);
 }
 
+IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestWebRequestAPIOnlyForInstance) {
+  TestHelper("testWebRequestAPIOnlyForInstance", "web_view/shim",
+             NEEDS_TEST_SERVER);
+}
+
 IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestWebRequestAPIWithHeaders) {
   TestHelper("testWebRequestAPIWithHeaders",
              "web_view/shim",
@@ -1661,8 +1670,10 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestRemoveWebviewOnExit) {
 
   content::Source<content::NavigationController> source =
       guest_observer.source();
-  EXPECT_TRUE(source->GetWebContents()->GetRenderProcessHost()->
-      IsForGuestsOnly());
+  EXPECT_TRUE(source->GetWebContents()
+                  ->GetMainFrame()
+                  ->GetProcess()
+                  ->IsForGuestsOnly());
 
   ASSERT_TRUE(guest_loaded_listener.WaitUntilSatisfied());
 
@@ -2607,19 +2618,19 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadPermission) {
   // 1. Guest requests a download that its embedder denies.
   EXPECT_TRUE(content::ExecuteScript(guest_web_contents,
                                      "startDownload('download-link-1')"));
-  mock_delegate->WaitForCanDownload(false); // Expect to not allow.
+  mock_delegate->WaitForCanDownload(false);  // Expect to not allow.
   mock_delegate->Reset();
 
   // 2. Guest requests a download that its embedder allows.
   EXPECT_TRUE(content::ExecuteScript(guest_web_contents,
                                      "startDownload('download-link-2')"));
-  mock_delegate->WaitForCanDownload(true); // Expect to allow.
+  mock_delegate->WaitForCanDownload(true);  // Expect to allow.
   mock_delegate->Reset();
 
   // 3. Guest requests a download that its embedder ignores, this implies deny.
   EXPECT_TRUE(content::ExecuteScript(guest_web_contents,
                                      "startDownload('download-link-3')"));
-  mock_delegate->WaitForCanDownload(false); // Expect to not allow.
+  mock_delegate->WaitForCanDownload(false);  // Expect to not allow.
   completion_observer->WaitForFinished();
 }
 
@@ -2633,7 +2644,7 @@ const char kDownloadPathPrefix[] = "/download_cookie_isolation_test";
 // the request with an HTTP 403. The body of the response is the value of the
 // Cookie header.
 std::unique_ptr<net::test_server::HttpResponse> HandleDownloadRequestWithCookie(
-    std::queue<net::HttpStatusCode>* status_codes,
+    base::queue<net::HttpStatusCode>* status_codes,
     const net::test_server::HttpRequest& request) {
   if (!base::StartsWith(request.relative_url, kDownloadPathPrefix,
                         base::CompareCase::SENSITIVE)) {
@@ -2727,7 +2738,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
   // These are the status codes to be returned by
   // HandleDownloadRequestWithCookie. The first two requests are going to result
   // in interrupted downloads. The next two requests are going to succeed.
-  std::queue<net::HttpStatusCode> status_codes;
+  base::queue<net::HttpStatusCode> status_codes;
   status_codes.push(net::HTTP_INTERNAL_SERVER_ERROR);
   status_codes.push(net::HTTP_INTERNAL_SERVER_ERROR);
   status_codes.push(net::HTTP_OK);
@@ -2815,7 +2826,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
   // These are the status codes to be returned by
   // HandleDownloadRequestWithCookie. The first two requests are going to result
   // in interrupted downloads. The next two requests are going to succeed.
-  std::queue<net::HttpStatusCode> status_codes;
+  base::queue<net::HttpStatusCode> status_codes;
   status_codes.push(net::HTTP_INTERNAL_SERVER_ERROR);
   status_codes.push(net::HTTP_INTERNAL_SERVER_ERROR);
 
@@ -2872,7 +2883,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation_CrossSession) {
-  std::queue<net::HttpStatusCode> status_codes;
+  base::queue<net::HttpStatusCode> status_codes;
   status_codes.push(net::HTTP_OK);
   status_codes.push(net::HTTP_OK);
 
@@ -3226,7 +3237,7 @@ IN_PROC_BROWSER_TEST_P(
   Profile* profile = browser()->profile();
   int rules_registry_id =
       extensions::WebViewGuest::GetOrGenerateRulesRegistryID(
-          guest->owner_web_contents()->GetRenderProcessHost()->GetID(),
+          guest->owner_web_contents()->GetMainFrame()->GetProcess()->GetID(),
           guest->view_instance_id());
 
   extensions::RulesRegistryService* registry_service =
@@ -3234,14 +3245,14 @@ IN_PROC_BROWSER_TEST_P(
   extensions::TestRulesRegistry* rules_registry =
       new extensions::TestRulesRegistry(
           content::BrowserThread::UI, "ui", rules_registry_id);
-  registry_service->RegisterRulesRegistry(make_scoped_refptr(rules_registry));
+  registry_service->RegisterRulesRegistry(base::WrapRefCounted(rules_registry));
 
   EXPECT_TRUE(registry_service->GetRulesRegistry(
       rules_registry_id, "ui").get());
 
   // Kill the embedder's render process, so the webview will go as well.
   base::Process process = base::Process::DeprecatedGetProcessFromHandle(
-        embedder_web_contents->GetRenderProcessHost()->GetHandle());
+      embedder_web_contents->GetMainFrame()->GetProcess()->GetHandle());
   process.Terminate(0, false);
   observer->WaitForEmbedderRenderProcessTerminate();
 
@@ -3263,7 +3274,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_WebViewWebRequestRegistryHasNoCache) {
       extensions::RulesRegistryService::Get(profile);
   int rules_registry_id =
       extensions::WebViewGuest::GetOrGenerateRulesRegistryID(
-          guest->owner_web_contents()->GetRenderProcessHost()->GetID(),
+          guest->owner_web_contents()->GetMainFrame()->GetProcess()->GetID(),
           guest->view_instance_id());
 
   // Get an existing registered rule for the guest.
@@ -3650,9 +3661,9 @@ class WebViewGuestScrollTest
   }
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(WebViewGuestScrollTest);
-
   base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebViewGuestScrollTest);
 };
 
 class WebViewGuestScrollTouchTest : public WebViewGuestScrollTest {
@@ -3742,7 +3753,8 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest,
                                 embedder_scroll_location);
     content::SimulateMouseWheelEvent(embedder_contents,
                                      embedder_scroll_location,
-                                     gfx::Vector2d(0, -scroll_magnitude));
+                                     gfx::Vector2d(0, -scroll_magnitude),
+                                     blink::WebMouseWheelEvent::kPhaseBegan);
     waiter.WaitForScrollChange(expected_offset);
   }
 
@@ -3766,7 +3778,8 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest,
                                 blink::WebInputEvent::kMouseMove,
                                 guest_scroll_location);
     content::SimulateMouseWheelEvent(embedder_contents, guest_scroll_location,
-                                     gfx::Vector2d(0, scroll_magnitude));
+                                     gfx::Vector2d(0, scroll_magnitude),
+                                     blink::WebMouseWheelEvent::kPhaseChanged);
 
     waiter.WaitForScrollChange(gfx::Vector2dF());
   }
@@ -3859,7 +3872,7 @@ IN_PROC_BROWSER_TEST_F(WebViewGuestTouchFocusTest,
     gfx::Point point(10, 10);
     FocusChangeWaiter focus_waiter(guest_contents, false);
     SendRoutedTouchTapSequence(embedder_contents, point);
-    SendRoutedGestureTapSequence(embedder_contents,point);
+    SendRoutedGestureTapSequence(embedder_contents, point);
     focus_waiter.WaitForFocusChange();
     EXPECT_FALSE(IsWebContentsBrowserPluginFocused(guest_contents));
   }

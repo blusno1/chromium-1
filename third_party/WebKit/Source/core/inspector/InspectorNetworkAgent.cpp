@@ -55,10 +55,8 @@
 #include "core/probe/CoreProbes.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/xmlhttprequest/XMLHttpRequest.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/blob/BlobData.h"
 #include "platform/loader/fetch/FetchInitiatorInfo.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceError.h"
@@ -67,10 +65,12 @@
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/loader/fetch/UniqueIdentifier.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/NetworkStateNotifier.h"
 #include "platform/network/WebSocketHandshakeRequest.h"
 #include "platform/network/WebSocketHandshakeResponse.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -197,7 +197,7 @@ class InspectorFileReaderLoaderClient final : public FileReaderLoaderClient {
 
  private:
   void Dispose() {
-    raw_data_.Clear();
+    raw_data_ = nullptr;
     delete this;
   }
 
@@ -386,7 +386,7 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
   if (response.IsNull())
     return nullptr;
 
-  double status;
+  int status;
   String status_text;
   if (response.GetResourceLoadInfo() &&
       response.GetResourceLoadInfo()->http_status_code) {
@@ -947,7 +947,7 @@ void InspectorNetworkAgent::WillLoadXHR(XMLHttpRequest* xhr,
   pending_request_type_ = InspectorPageAgent::kXHRResource;
   pending_xhr_replay_data_ = XHRReplayData::Create(
       xhr->GetExecutionContext(), method, UrlWithoutFragment(url), async,
-      form_data.Get(), include_credentials);
+      form_data.get(), include_credentials);
   for (const auto& header : headers)
     pending_xhr_replay_data_->AddHeader(header.key, header.value);
 }
@@ -1432,7 +1432,7 @@ Response InspectorNetworkAgent::getCertificate(
   for (auto& resource : resources_data_->Resources()) {
     RefPtr<SecurityOrigin> resource_origin =
         SecurityOrigin::Create(resource->RequestedURL());
-    if (resource_origin->IsSameSchemeHostPort(security_origin.Get()) &&
+    if (resource_origin->IsSameSchemeHostPort(security_origin.get()) &&
         resource->Certificate().size()) {
       for (auto& cert : resource->Certificate())
         certificate->get()->addItem(Base64Encode(cert.Latin1()));

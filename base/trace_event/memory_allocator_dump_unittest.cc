@@ -185,9 +185,8 @@ TEST(MemoryAllocatorDumpTest, ReadValues) {
 
   MemoryAllocatorDump::Entry expected_scalar("one", "byte", 1);
   MemoryAllocatorDump::Entry expected_string("one", "object", "one");
-  EXPECT_THAT(
-      dump->entries_for_testing(),
-      ElementsAre(Eq(ByRef(expected_scalar)), Eq(ByRef(expected_string))));
+  EXPECT_THAT(dump->entries(), ElementsAre(Eq(ByRef(expected_scalar)),
+                                           Eq(ByRef(expected_string))));
 }
 
 TEST(MemoryAllocatorDumpTest, MovingAnEntry) {
@@ -217,7 +216,6 @@ TEST(MemoryAllocatorDumpTest, ForbidStringsInBackgroundModeDeathTest) {
   MemoryAllocatorDump* dump = pmd.CreateAllocatorDump("malloc");
   ASSERT_DEATH(dump->AddString("foo", "bar", "baz"), "");
 }
-
 #endif
 
 }  // namespace trace_event

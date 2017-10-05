@@ -59,6 +59,7 @@ NGInlineLayoutAlgorithm::NGInlineLayoutAlgorithm(
           break_token),
       is_horizontal_writing_mode_(
           blink::IsHorizontalWritingMode(space.WritingMode())) {
+  quirks_mode_ = !inline_node.GetLayoutObject()->GetDocument().InNoQuirksMode();
   unpositioned_floats_ = ConstraintSpace().UnpositionedFloats();
 
   if (!is_horizontal_writing_mode_)
@@ -158,7 +159,7 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
   // Compute heights of all inline items by placing the dominant baseline at 0.
   // The baseline is adjusted after the height of the line box is computed.
   NGInlineBoxState* box =
-      box_states_.OnBeginPlaceItems(&line_style, baseline_type_);
+      box_states_.OnBeginPlaceItems(&line_style, baseline_type_, quirks_mode_);
 
   // Place items from line-left to line-right along with the baseline.
   // Items are already bidi-reordered to the visual order.
@@ -169,22 +170,27 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
     const NGInlineItem& item = *item_result.item;
     if (item.Type() == NGInlineItem::kText ||
         item.Type() == NGInlineItem::kControl) {
-      DCHECK(item.GetLayoutObject()->IsText());
+      DCHECK(item.GetLayoutObject()->IsText() ||
+             item.GetLayoutObject()->IsLayoutNGListItem());
       DCHECK(!box->text_metrics.IsEmpty());
       DCHECK(item.Style());
       text_builder.SetStyle(item.Style());
       text_builder.SetSize(
           {item_result.inline_size, box->text_metrics.LineHeight()});
       if (item_result.shape_result) {
+        if (quirks_mode_)
+          box->ActivateTextMetrics();
         // Take all used fonts into account if 'line-height: normal'.
         if (box->include_used_fonts && item.Type() == NGInlineItem::kText) {
-          box->AccumulateUsedFonts(item_result.shape_result.Get(),
+          box->AccumulateUsedFonts(item_result.shape_result.get(),
                                    baseline_type_);
         }
         text_builder.SetEndEffect(item_result.text_end_effect);
         text_builder.SetShapeResult(std::move(item_result.shape_result));
         text_builder.SetExpansion(item_result.expansion);
       } else {
+        if (quirks_mode_ && line_box.Children().IsEmpty())
+          box->ActivateTextMetrics();
         DCHECK(!item.TextShapeResult());  // kControl or unit tests.
       }
       RefPtr<NGPhysicalTextFragment> text_fragment =
@@ -197,7 +203,9 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
       // Compute text metrics for all inline boxes since even empty inlines
       // influence the line height.
       // https://drafts.csswg.org/css2/visudet.html#line-height
-      box->ComputeTextMetrics(*item.Style(), baseline_type_);
+      box->ComputeTextMetrics(*item.Style(), baseline_type_, quirks_mode_);
+      if (quirks_mode_ && item_result.needs_box_when_empty)
+        box->ActivateTextMetrics();
       if (ShouldCreateBoxFragment(item, item_result))
         box->SetNeedsBoxFragment(item_result.needs_box_when_empty);
     } else if (item.Type() == NGInlineItem::kCloseTag) {
@@ -206,6 +214,8 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
         if (item_result.needs_box_when_empty)
           box->SetNeedsBoxFragment(true);
         box->SetLineRightForBoxFragment(item, item_result, position);
+        if (quirks_mode_)
+          box->ActivateTextMetrics();
       }
       box = box_states_.OnCloseTag(item, &line_box, box, baseline_type_);
       continue;
@@ -265,8 +275,8 @@ bool NGInlineLayoutAlgorithm::PlaceItems(
   // indivisual items do not change their relative position to the line box.
   LayoutUnit inline_size = position;
   if (text_align != ETextAlign::kJustify) {
-    ApplyTextAlign(text_align, &line_offset.inline_offset, inline_size,
-                   line_info->AvailableWidth());
+    ApplyTextAlign(*line_info, text_align, &line_offset.inline_offset,
+                   inline_size);
   }
 
   line_box.SetInlineSize(inline_size);
@@ -296,30 +306,32 @@ NGInlineBoxState* NGInlineLayoutAlgorithm::PlaceAtomicInline(
   NGInlineBoxState* box =
       box_states_.OnOpenTag(item, *item_result, line_box, position);
 
+  DCHECK(item_result->layout_result);
+  DCHECK(item_result->layout_result->PhysicalFragment());
   NGBoxFragment fragment(
       ConstraintSpace().WritingMode(),
       ToNGPhysicalBoxFragment(*item_result->layout_result->PhysicalFragment()));
   NGLineHeightMetrics metrics = fragment.BaselineMetrics(
-      {line_info.UseFirstLineStyle()
-           ? NGBaselineAlgorithmType::kAtomicInlineForFirstLine
-           : NGBaselineAlgorithmType::kAtomicInline,
-       baseline_type_});
+      {NGBaselineAlgorithmType::kAtomicInline, baseline_type_},
+      ConstraintSpace());
   box->metrics.Unite(metrics);
 
-  // TODO(kojii): Figure out what to do with OOF in NGLayoutResult.
-  // Floats are ok because atomic inlines are BFC?
-
-  // TODO(kojii): Try to eliminate the wrapping text fragment and use the
-  // |fragment| directly. Currently |CopyFragmentDataToLayoutBlockFlow|
-  // requires a text fragment.
-  NGTextFragmentBuilder text_builder(Node(), &style,
-                                     ConstraintSpace().WritingMode());
-  text_builder.SetSize({fragment.InlineSize(), metrics.LineHeight()});
   LayoutUnit line_top = item_result->margins.block_start - metrics.ascent;
-  RefPtr<NGPhysicalTextFragment> text_fragment = text_builder.ToTextFragment(
-      item_result->item_index, item_result->start_offset,
-      item_result->end_offset);
-  line_box->AddChild(std::move(text_fragment), {position, line_top});
+  if (!RuntimeEnabledFeatures::LayoutNGPaintFragmentsEnabled()) {
+    // |CopyFragmentDataToLayoutBox| needs to know if a box fragment is an
+    // atomic inline, and its item_index. Add a text fragment as a marker.
+    NGTextFragmentBuilder text_builder(Node(), &style,
+                                       ConstraintSpace().WritingMode());
+    text_builder.SetSize({fragment.InlineSize(), metrics.LineHeight()});
+    RefPtr<NGPhysicalTextFragment> text_fragment = text_builder.ToTextFragment(
+        item_result->item_index, item_result->start_offset,
+        item_result->end_offset);
+    line_box->AddChild(std::move(text_fragment), {position, line_top});
+    // We need the box fragment as well to compute VisualRect() correctly.
+  }
+
+  line_box->AddChild(std::move(item_result->layout_result),
+                     {position, line_top});
 
   return box_states_.OnCloseTag(item, line_box, box, baseline_type_);
 }
@@ -348,7 +360,7 @@ bool NGInlineLayoutAlgorithm::ApplyJustify(NGLineInfo* line_info) {
 
   // Compute the spacing to justify.
   ShapeResultSpacing<String> spacing(line_text);
-  spacing.SetExpansion(expansion, Node().BaseDirection(),
+  spacing.SetExpansion(expansion, line_info->BaseDirection(),
                        line_info->LineStyle().GetTextJustify());
   if (!spacing.HasExpansion())
     return false;  // no expansion opportunities exist.
@@ -379,13 +391,12 @@ bool NGInlineLayoutAlgorithm::ApplyJustify(NGLineInfo* line_info) {
   return true;
 }
 
-void NGInlineLayoutAlgorithm::ApplyTextAlign(ETextAlign text_align,
+void NGInlineLayoutAlgorithm::ApplyTextAlign(const NGLineInfo& line_info,
+                                             ETextAlign text_align,
                                              LayoutUnit* line_left,
-                                             LayoutUnit inline_size,
-                                             LayoutUnit available_width) {
-  bool is_base_ltr = IsLtr(Node().BaseDirection());
-  // TODO(kojii): Investigate handling trailing spaces for 'white-space:
-  // pre|pre-wrap'. Refer to LayoutBlockFlow::UpdateLogicalWidthForAlignment().
+                                             LayoutUnit inline_size) {
+  bool is_base_ltr = IsLtr(line_info.BaseDirection());
+  LayoutUnit available_width = line_info.AvailableWidth();
   while (true) {
     switch (text_align) {
       case ETextAlign::kLeft:
@@ -486,16 +497,17 @@ void NGInlineLayoutAlgorithm::PropagateBaselinesFromChildren() {
   for (const auto& request : requests) {
     switch (request.algorithm_type) {
       case NGBaselineAlgorithmType::kAtomicInline:
-      case NGBaselineAlgorithmType::kAtomicInlineForFirstLine:
+        // Propagate from the last line box.
         for (unsigned i = container_builder_.Children().size(); i--;) {
-          if (AddBaseline(request, container_builder_.Children()[i].Get(),
+          if (AddBaseline(request, container_builder_.Children()[i].get(),
                           container_builder_.Offsets()[i].block_offset))
             break;
         }
         break;
       case NGBaselineAlgorithmType::kFirstLine:
+        // Propagate from the first line box.
         for (unsigned i = 0; i < container_builder_.Children().size(); i++) {
-          if (AddBaseline(request, container_builder_.Children()[i].Get(),
+          if (AddBaseline(request, container_builder_.Children()[i].get(),
                           container_builder_.Offsets()[i].block_offset))
             break;
         }
@@ -554,7 +566,7 @@ RefPtr<NGLayoutResult> NGInlineLayoutAlgorithm::Layout() {
 
   // TODO(kojii): Check if the line box width should be content or available.
   NGLogicalSize size(max_inline_size_, content_size_);
-  container_builder_.SetSize(size).SetOverflowSize(size);
+  container_builder_.SetSize(size).SetIntrinsicBlockSize(content_size_);
 
   // TODO(crbug.com/716930): We may be an empty LayoutInline due to splitting.
   // Margin struts shouldn't need to be passed through like this once we've

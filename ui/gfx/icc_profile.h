@@ -43,18 +43,9 @@ class COLOR_SPACE_EXPORT ICCProfile {
   // Returns true if this profile was successfully parsed by SkICC.
   bool IsValid() const;
 
-  // Returns the color profile of the monitor that can best represent color.
-  // This profile should be used for creating content that does not know on
-  // which monitor it will be displayed.
-  static ICCProfile FromBestMonitor();
 #if defined(OS_MACOSX)
   static ICCProfile FromCGColorSpace(CGColorSpaceRef cg_color_space);
 #endif
-
-  // This will recover a ICCProfile from a compact ColorSpace representation.
-  // Internally, this will make an effort to create an identical ICCProfile
-  // to the one that created |color_space|, but this is not guaranteed.
-  static ICCProfile FromColorSpace(const gfx::ColorSpace& color_space);
 
   // Create directly from profile data.
   static ICCProfile FromData(const void* icc_profile, size_t size);
@@ -73,13 +64,6 @@ class COLOR_SPACE_EXPORT ICCProfile {
   // Histogram how we this was approximated by a gfx::ColorSpace. Only
   // histogram a given profile once per display.
   void HistogramDisplay(int64_t display_id) const;
-
-#if defined(OS_WIN)
-  // This will read monitor ICC profiles from disk and cache the results for the
-  // other functions to read. This should not be called on the UI or IO thread.
-  static void UpdateCachedProfilesOnBackgroundThread();
-  static bool CachedProfilesNeedUpdate();
-#endif
 
  private:
   // This must match ICCProfileAnalyzeResult enum in histograms.xml.
@@ -102,25 +86,19 @@ class COLOR_SPACE_EXPORT ICCProfile {
   friend ICCProfile ICCProfileForTestingColorSpin();
   friend ICCProfile ICCProfileForTestingGenericRGB();
   friend ICCProfile ICCProfileForTestingSRGB();
-  friend ICCProfile ICCProfileForTestingNoAnalyticTrFn();
-  friend ICCProfile ICCProfileForTestingA2BOnly();
-  friend ICCProfile ICCProfileForTestingOvershoot();
   friend ICCProfile ICCProfileForLayoutTests();
   static const uint64_t test_id_adobe_rgb_;
   static const uint64_t test_id_color_spin_;
   static const uint64_t test_id_generic_rgb_;
   static const uint64_t test_id_srgb_;
-  static const uint64_t test_id_no_analytic_tr_fn_;
-  static const uint64_t test_id_a2b_only_;
-  static const uint64_t test_id_overshoot_;
 
   // Populate |icc_profile| with the ICCProfile corresponding to id |id|. Return
   // false if |id| is not in the cache.
   static bool FromId(uint64_t id, ICCProfile* icc_profile);
 
   // This method is used to hard-code the |id_| to a specific value, and is
-  // used by test methods to ensure that they don't conflict with the values
-  // generated in the browser.
+  // used by layout test methods to ensure that they don't conflict with the
+  // values generated in the browser.
   static ICCProfile FromDataWithId(const void* icc_profile,
                                    size_t size,
                                    uint64_t id);

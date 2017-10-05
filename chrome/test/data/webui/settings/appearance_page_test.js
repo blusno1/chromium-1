@@ -9,6 +9,8 @@ class TestAppearanceBrowserProxy extends TestBrowserProxy {
       'getDefaultZoom',
       'getThemeInfo',
       'isSupervised',
+      'isWallpaperSettingVisible',
+      'isWallpaperPolicyControlled',
       'openWallpaperManager',
       'useDefaultTheme',
       'useSystemTheme',
@@ -23,6 +25,12 @@ class TestAppearanceBrowserProxy extends TestBrowserProxy {
 
     /** @private */
     this.isHomeUrlValid_ = true;
+
+    /** @private */
+    this.isWallpaperSettingVisible_ = true;
+
+    /** @private */
+    this.isWallpaperPolicyControlled_ = false;
   }
 
   /** @override */
@@ -41,6 +49,18 @@ class TestAppearanceBrowserProxy extends TestBrowserProxy {
   isSupervised() {
     this.methodCalled('isSupervised');
     return this.isSupervised_;
+  }
+
+  /** @override */
+  isWallpaperSettingVisible() {
+    this.methodCalled('isWallpaperSettingVisible');
+    return Promise.resolve(this.isWallpaperSettingVisible_);
+  }
+
+  /** @override */
+  isWallpaperPolicyControlled() {
+    this.methodCalled('isWallpaperPolicyControlled');
+    return Promise.resolve(this.isWallpaperPolicyControlled_);
   }
 
   /** @override */
@@ -80,6 +100,11 @@ class TestAppearanceBrowserProxy extends TestBrowserProxy {
   setValidStartupPageResponse(isValid) {
     this.isHomeUrlValid_ = isValid;
   }
+
+  /** @param {boolean} Whether the wallpaper is policy controlled. */
+  setIsWallpaperPolicyControlled(isPolicyControlled) {
+    this.isWallpaperPolicyControlled_ = isPolicyControlled;
+  }
 }
 
 var appearancePage = null;
@@ -105,6 +130,10 @@ function createAppearancePage() {
     },
   });
 
+  appearancePage.set('pageVisibility', {
+    setWallpaper: true,
+  });
+
   document.body.appendChild(appearancePage);
   Polymer.dom.flush();
 }
@@ -120,10 +149,40 @@ suite('AppearanceHandler', function() {
 
   if (cr.isChromeOS) {
     test('wallpaperManager', function() {
-      var button = appearancePage.$.wallpaperButton;
-      assertTrue(!!button);
-      MockInteractions.tap(button);
-      return appearanceBrowserProxy.whenCalled('openWallpaperManager');
+      appearanceBrowserProxy.setIsWallpaperPolicyControlled(false);
+      // TODO(dschuyler): This should notice the policy change without needing
+      // the page to be recreated.
+      createAppearancePage();
+      return appearanceBrowserProxy.whenCalled('isWallpaperPolicyControlled')
+          .then(() => {
+            var button = appearancePage.$.wallpaperButton;
+            assertTrue(!!button);
+            assertFalse(button.disabled);
+            MockInteractions.tap(button);
+            return appearanceBrowserProxy.whenCalled('openWallpaperManager');
+          });
+    });
+
+    test('wallpaperSettingVisible', function() {
+      appearancePage.set("pageVisibility.setWallpaper", false);
+      return appearanceBrowserProxy.whenCalled('isWallpaperSettingVisible')
+          .then(function() {
+            Polymer.dom.flush();
+            assertTrue(appearancePage.$$('#wallpaperButton').hidden);
+          });
+    });
+
+    test('wallpaperPolicyControlled', function() {
+      // Should show the wallpaper policy indicator and disable the toggle
+      // button if the wallpaper is policy controlled.
+      appearanceBrowserProxy.setIsWallpaperPolicyControlled(true);
+      createAppearancePage();
+      return appearanceBrowserProxy.whenCalled('isWallpaperPolicyControlled')
+          .then(function() {
+            Polymer.dom.flush();
+            assertFalse(appearancePage.$$('#wallpaperPolicyIndicator').hidden);
+            assertTrue(appearancePage.$$('#wallpaperButton').disabled);
+          });
     });
   } else {
     test('noWallpaperManager', function() {

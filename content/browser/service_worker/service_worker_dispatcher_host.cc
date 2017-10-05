@@ -41,6 +41,7 @@
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
 #include "url/gurl.h"
 
+using blink::MessagePortChannel;
 using blink::WebServiceWorkerError;
 
 namespace content {
@@ -163,8 +164,6 @@ bool ServiceWorkerDispatcherHost::OnMessageReceived(
                         OnUpdateServiceWorker)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_UnregisterServiceWorker,
                         OnUnregisterServiceWorker)
-    IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_GetRegistrationForReady,
-                        OnGetRegistrationForReady)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_PostMessageToWorker,
                         OnPostMessageToWorker)
     IPC_MESSAGE_HANDLER(EmbeddedWorkerHostMsg_CountFeature, OnCountFeature)
@@ -172,10 +171,6 @@ bool ServiceWorkerDispatcherHost::OnMessageReceived(
                         OnIncrementServiceWorkerRefCount)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_DecrementServiceWorkerRefCount,
                         OnDecrementServiceWorkerRefCount)
-    IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_IncrementRegistrationRefCount,
-                        OnIncrementRegistrationRefCount)
-    IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_DecrementRegistrationRefCount,
-                        OnDecrementRegistrationRefCount)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_TerminateWorker, OnTerminateWorker)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_EnableNavigationPreload,
                         OnEnableNavigationPreload)
@@ -214,9 +209,14 @@ void ServiceWorkerDispatcherHost::RegisterServiceWorkerHandle(
 }
 
 void ServiceWorkerDispatcherHost::RegisterServiceWorkerRegistrationHandle(
-    std::unique_ptr<ServiceWorkerRegistrationHandle> handle) {
+    ServiceWorkerRegistrationHandle* handle) {
   int handle_id = handle->handle_id();
-  registration_handles_.AddWithID(std::move(handle), handle_id);
+  registration_handles_.AddWithID(base::WrapUnique(handle), handle_id);
+}
+
+void ServiceWorkerDispatcherHost::UnregisterServiceWorkerRegistrationHandle(
+    int handle_id) {
+  registration_handles_.Remove(handle_id);
 }
 
 ServiceWorkerHandle* ServiceWorkerDispatcherHost::FindServiceWorkerHandle(
@@ -236,23 +236,21 @@ ServiceWorkerHandle* ServiceWorkerDispatcherHost::FindServiceWorkerHandle(
   return nullptr;
 }
 
-ServiceWorkerRegistrationHandle*
-ServiceWorkerDispatcherHost::GetOrCreateRegistrationHandle(
+blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+ServiceWorkerDispatcherHost::CreateRegistrationObjectInfo(
     base::WeakPtr<ServiceWorkerProviderHost> provider_host,
     ServiceWorkerRegistration* registration) {
   DCHECK(provider_host);
   ServiceWorkerRegistrationHandle* existing_handle =
       FindRegistrationHandle(provider_host->provider_id(), registration->id());
   if (existing_handle) {
-    existing_handle->IncrementRefCount();
-    return existing_handle;
+    return existing_handle->CreateObjectInfo();
   }
-  std::unique_ptr<ServiceWorkerRegistrationHandle> new_handle(
-      new ServiceWorkerRegistrationHandle(GetContext()->AsWeakPtr(),
-                                          provider_host, registration));
-  ServiceWorkerRegistrationHandle* new_handle_ptr = new_handle.get();
-  RegisterServiceWorkerRegistrationHandle(std::move(new_handle));
-  return new_handle_ptr;
+  // ServiceWorkerRegistrationHandle ctor will register itself into
+  // |registration_handles_|.
+  auto* new_handle = new ServiceWorkerRegistrationHandle(
+      GetContext()->AsWeakPtr(), this, provider_host, registration);
+  return new_handle->CreateObjectInfo();
 }
 
 base::WeakPtr<ServiceWorkerDispatcherHost>
@@ -407,35 +405,6 @@ void ServiceWorkerDispatcherHost::OnUnregisterServiceWorker(
       registration->pattern(),
       base::Bind(&ServiceWorkerDispatcherHost::UnregistrationComplete, this,
                  thread_id, request_id));
-}
-
-void ServiceWorkerDispatcherHost::OnGetRegistrationForReady(
-    int thread_id,
-    int request_id,
-    int provider_id) {
-  TRACE_EVENT0("ServiceWorker",
-               "ServiceWorkerDispatcherHost::OnGetRegistrationForReady");
-  if (!GetContext())
-    return;
-  ServiceWorkerProviderHost* provider_host =
-      GetContext()->GetProviderHost(render_process_id_, provider_id);
-  if (!provider_host) {
-    bad_message::ReceivedBadMessage(
-        this, bad_message::SWDH_GET_REGISTRATION_FOR_READY_NO_HOST);
-    return;
-  }
-  if (!provider_host->IsContextAlive())
-    return;
-
-  TRACE_EVENT_ASYNC_BEGIN0(
-      "ServiceWorker", "ServiceWorkerDispatcherHost::GetRegistrationForReady",
-      request_id);
-  if (!provider_host->GetRegistrationForReady(base::Bind(
-          &ServiceWorkerDispatcherHost::GetRegistrationForReadyComplete,
-          this, thread_id, request_id, provider_host->AsWeakPtr()))) {
-    bad_message::ReceivedBadMessage(
-        this, bad_message::SWDH_GET_REGISTRATION_FOR_READY_ALREADY_IN_PROGRESS);
-  }
 }
 
 void ServiceWorkerDispatcherHost::OnEnableNavigationPreload(
@@ -666,7 +635,7 @@ void ServiceWorkerDispatcherHost::OnPostMessageToWorker(
     int provider_id,
     const base::string16& message,
     const url::Origin& source_origin,
-    const std::vector<MessagePort>& sent_message_ports) {
+    const std::vector<MessagePortChannel>& sent_message_ports) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnPostMessageToWorker");
   if (!GetContext())
@@ -687,7 +656,7 @@ void ServiceWorkerDispatcherHost::OnPostMessageToWorker(
   }
 
   DispatchExtendableMessageEvent(
-      make_scoped_refptr(handle->version()), message, source_origin,
+      base::WrapRefCounted(handle->version()), message, source_origin,
       sent_message_ports, sender_provider_host,
       base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
 }
@@ -696,7 +665,7 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
     scoped_refptr<ServiceWorkerVersion> worker,
     const base::string16& message,
     const url::Origin& source_origin,
-    const std::vector<MessagePort>& sent_message_ports,
+    const std::vector<MessagePortChannel>& sent_message_ports,
     ServiceWorkerProviderHost* sender_provider_host,
     const StatusCallback& callback) {
   switch (sender_provider_host->provider_type()) {
@@ -795,7 +764,7 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEventInternal(
     scoped_refptr<ServiceWorkerVersion> worker,
     const base::string16& message,
     const url::Origin& source_origin,
-    const std::vector<MessagePort>& sent_message_ports,
+    const std::vector<MessagePortChannel>& sent_message_ports,
     const base::Optional<base::TimeDelta>& timeout,
     const StatusCallback& callback,
     const SourceInfo& source_info) {
@@ -821,7 +790,7 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEventInternal(
                      this, worker, message, source_origin, sent_message_ports,
                      ExtendableMessageEventSource(source_info), timeout,
                      callback),
-      base::Bind(
+      base::BindOnce(
           &ServiceWorkerDispatcherHost::DidFailToDispatchExtendableMessageEvent<
               SourceInfo>,
           this, sent_message_ports, source_info, callback));
@@ -832,7 +801,7 @@ void ServiceWorkerDispatcherHost::
         scoped_refptr<ServiceWorkerVersion> worker,
         const base::string16& message,
         const url::Origin& source_origin,
-        const std::vector<MessagePort>& sent_message_ports,
+        const std::vector<MessagePortChannel>& sent_message_ports,
         const ExtendableMessageEventSource& source,
         const base::Optional<base::TimeDelta>& timeout,
         const StatusCallback& callback) {
@@ -849,7 +818,7 @@ void ServiceWorkerDispatcherHost::
   mojom::ExtendableMessageEventPtr event = mojom::ExtendableMessageEvent::New();
   event->message = message;
   event->source_origin = source_origin;
-  event->message_ports = MessagePort::ReleaseHandles(sent_message_ports);
+  event->message_ports = MessagePortChannel::ReleaseHandles(sent_message_ports);
   event->source = source;
 
   // Hide the client url if the client has a unique origin.
@@ -866,7 +835,7 @@ void ServiceWorkerDispatcherHost::
 
 template <typename SourceInfo>
 void ServiceWorkerDispatcherHost::DidFailToDispatchExtendableMessageEvent(
-    const std::vector<MessagePort>& sent_message_ports,
+    const std::vector<MessagePortChannel>& sent_message_ports,
     const SourceInfo& source_info,
     const StatusCallback& callback,
     ServiceWorkerStatusCode status) {
@@ -907,11 +876,9 @@ ServiceWorkerDispatcherHost::FindRegistrationHandle(int provider_id,
 void ServiceWorkerDispatcherHost::GetRegistrationObjectInfoAndVersionAttributes(
     base::WeakPtr<ServiceWorkerProviderHost> provider_host,
     ServiceWorkerRegistration* registration,
-    ServiceWorkerRegistrationObjectInfo* out_info,
+    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr* out_info,
     ServiceWorkerVersionAttributes* out_attrs) {
-  ServiceWorkerRegistrationHandle* handle =
-      GetOrCreateRegistrationHandle(provider_host, registration);
-  *out_info = handle->GetObjectInfo();
+  *out_info = CreateRegistrationObjectInfo(provider_host, registration);
 
   out_attrs->installing = provider_host->GetOrCreateServiceWorkerHandle(
       registration->installing_version());
@@ -949,15 +916,6 @@ void ServiceWorkerDispatcherHost::UpdateComplete(
         base::ASCIIToUTF16(kServiceWorkerUpdateErrorPrefix) + error_message));
     return;
   }
-
-  ServiceWorkerRegistration* registration =
-      GetContext()->GetLiveRegistration(registration_id);
-  DCHECK(registration);
-
-  ServiceWorkerRegistrationObjectInfo info;
-  ServiceWorkerVersionAttributes attrs;
-  GetRegistrationObjectInfoAndVersionAttributes(provider_host->AsWeakPtr(),
-                                                registration, &info, &attrs);
 
   Send(new ServiceWorkerMsg_ServiceWorkerUpdated(thread_id, request_id));
 }
@@ -1000,36 +958,6 @@ void ServiceWorkerDispatcherHost::OnDecrementServiceWorkerRefCount(
     handles_.Remove(handle_id);
 }
 
-void ServiceWorkerDispatcherHost::OnIncrementRegistrationRefCount(
-    int registration_handle_id) {
-  TRACE_EVENT0("ServiceWorker",
-               "ServiceWorkerDispatcherHost::OnIncrementRegistrationRefCount");
-  ServiceWorkerRegistrationHandle* handle =
-      registration_handles_.Lookup(registration_handle_id);
-  if (!handle) {
-    bad_message::ReceivedBadMessage(
-        this, bad_message::SWDH_INCREMENT_REGISTRATION_BAD_HANDLE);
-    return;
-  }
-  handle->IncrementRefCount();
-}
-
-void ServiceWorkerDispatcherHost::OnDecrementRegistrationRefCount(
-    int registration_handle_id) {
-  TRACE_EVENT0("ServiceWorker",
-               "ServiceWorkerDispatcherHost::OnDecrementRegistrationRefCount");
-  ServiceWorkerRegistrationHandle* handle =
-      registration_handles_.Lookup(registration_handle_id);
-  if (!handle) {
-    bad_message::ReceivedBadMessage(
-        this, bad_message::SWDH_DECREMENT_REGISTRATION_BAD_HANDLE);
-    return;
-  }
-  handle->DecrementRefCount();
-  if (handle->HasNoRefCount())
-    registration_handles_.Remove(registration_handle_id);
-}
-
 void ServiceWorkerDispatcherHost::UnregistrationComplete(
     int thread_id,
     int request_id,
@@ -1052,27 +980,6 @@ void ServiceWorkerDispatcherHost::UnregistrationComplete(
   Send(new ServiceWorkerMsg_ServiceWorkerUnregistered(thread_id,
                                                       request_id,
                                                       is_success));
-}
-
-void ServiceWorkerDispatcherHost::GetRegistrationForReadyComplete(
-    int thread_id,
-    int request_id,
-    base::WeakPtr<ServiceWorkerProviderHost> provider_host,
-    ServiceWorkerRegistration* registration) {
-  DCHECK(registration);
-  TRACE_EVENT_ASYNC_END1(
-      "ServiceWorker", "ServiceWorkerDispatcherHost::GetRegistrationForReady",
-      request_id, "Registration ID",
-      registration ? registration->id() : kInvalidServiceWorkerRegistrationId);
-  if (!GetContext())
-    return;
-
-  ServiceWorkerRegistrationObjectInfo info;
-  ServiceWorkerVersionAttributes attrs;
-  GetRegistrationObjectInfoAndVersionAttributes(
-      provider_host, registration, &info, &attrs);
-  Send(new ServiceWorkerMsg_DidGetRegistrationForReady(
-        thread_id, request_id, info, attrs));
 }
 
 ServiceWorkerContextCore* ServiceWorkerDispatcherHost::GetContext() {
@@ -1165,8 +1072,7 @@ void ServiceWorkerDispatcherHost::OnTerminateWorker(int handle_id) {
                                     bad_message::SWDH_TERMINATE_BAD_HANDLE);
     return;
   }
-  handle->version()->StopWorker(
-      base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+  handle->version()->StopWorker(base::BindOnce(&base::DoNothing));
 }
 
 }  // namespace content

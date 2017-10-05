@@ -35,7 +35,7 @@
 #include "platform/PlatformExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebMediaStreamCenterClient.h"
 
@@ -44,6 +44,7 @@ namespace blink {
 class AudioSourceProvider;
 class MediaStreamComponent;
 class MediaStreamDescriptor;
+class MediaStreamSource;
 class WebMediaStream;
 class WebMediaStreamCenter;
 
@@ -68,6 +69,8 @@ class PLATFORM_EXPORT MediaStreamCenter final
 
   void DidCreateMediaStreamAndTracks(MediaStreamDescriptor*);
   void DidStopLocalMediaStream(MediaStreamDescriptor*);
+
+  void DidStopMediaStreamSource(MediaStreamSource*);
 
   // blink::WebMediaStreamCenterClient
   void StopLocalMediaStream(const WebMediaStream&) override;

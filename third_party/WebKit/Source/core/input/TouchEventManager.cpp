@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "core/dom/Document.h"
+#include "core/dom/FlatTreeTraversal.h"
 #include "core/events/TouchEvent.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/EventHandlerRegistry.h"
@@ -517,9 +518,9 @@ void TouchEventManager::UpdateTouchAttributeMapsForPointerDown(
       Node* node = result.InnerNode();
       if (!node)
         return;
-      if (isHTMLCanvasElement(node)) {
+      if (auto* canvas = ToHTMLCanvasElementOrNull(node)) {
         HitTestCanvasResult* hit_test_canvas_result =
-            toHTMLCanvasElement(node)->GetControlAndIdIfHitRegionExists(
+            canvas->GetControlAndIdIfHitRegionExists(
                 result.PointInInnerNodeFrame());
         if (hit_test_canvas_result->GetControl())
           node = hit_test_canvas_result->GetControl();

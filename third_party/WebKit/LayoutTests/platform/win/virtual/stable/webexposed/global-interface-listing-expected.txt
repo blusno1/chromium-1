@@ -385,10 +385,6 @@ interface CSSStyleSheet : StyleSheet
 interface CSSSupportsRule : CSSConditionRule
     attribute @@toStringTag
     method constructor
-interface CSSViewportRule : CSSRule
-    attribute @@toStringTag
-    getter style
-    method constructor
 interface Cache
     attribute @@toStringTag
     method add
@@ -1637,6 +1633,8 @@ interface HTMLBodyElement : HTMLElement
     getter background
     getter bgColor
     getter link
+    getter onafterprint
+    getter onbeforeprint
     getter onbeforeunload
     getter onblur
     getter onerror
@@ -1664,6 +1662,8 @@ interface HTMLBodyElement : HTMLElement
     setter background
     setter bgColor
     setter link
+    setter onafterprint
+    setter onbeforeprint
     setter onbeforeunload
     setter onblur
     setter onerror
@@ -2084,6 +2084,8 @@ interface HTMLFrameElement : HTMLElement
 interface HTMLFrameSetElement : HTMLElement
     attribute @@toStringTag
     getter cols
+    getter onafterprint
+    getter onbeforeprint
     getter onbeforeunload
     getter onblur
     getter onerror
@@ -2107,6 +2109,8 @@ interface HTMLFrameSetElement : HTMLElement
     getter rows
     method constructor
     setter cols
+    setter onafterprint
+    setter onbeforeprint
     setter onbeforeunload
     setter onblur
     setter onerror
@@ -3713,7 +3717,6 @@ interface Navigator
     getter connection
     getter cookieEnabled
     getter credentials
-    getter deviceMemory
     getter doNotTrack
     getter geolocation
     getter hardwareConcurrency
@@ -3897,6 +3900,12 @@ interface OscillatorNode : AudioScheduledSourceNode
     method constructor
     method setPeriodicWave
     setter type
+interface OverconstrainedError
+    attribute @@toStringTag
+    getter constraint
+    getter message
+    getter name
+    method constructor
 interface PageTransitionEvent : Event
     attribute @@toStringTag
     getter persisted
@@ -6193,11 +6202,15 @@ interface VisualViewport : EventTarget
     getter height
     getter offsetLeft
     getter offsetTop
+    getter onresize
+    getter onscroll
     getter pageLeft
     getter pageTop
     getter scale
     getter width
     method constructor
+    setter onresize
+    setter onscroll
 interface WaveShaperNode : AudioNode
     attribute @@toStringTag
     getter curve
@@ -7917,12 +7930,14 @@ interface webkitURL
     getter navigator
     getter offscreenBuffering
     getter onabort
+    getter onafterprint
     getter onanimationend
     getter onanimationiteration
     getter onanimationstart
     getter onappinstalled
     getter onauxclick
     getter onbeforeinstallprompt
+    getter onbeforeprint
     getter onbeforeunload
     getter onblur
     getter oncancel
@@ -8059,7 +8074,6 @@ interface webkitURL
     method focus
     method gc
     method getComputedStyle
-    method getMatchedCSSRules
     method getSelection
     method matchMedia
     method moveBy
@@ -8097,12 +8111,14 @@ interface webkitURL
     setter name
     setter offscreenBuffering
     setter onabort
+    setter onafterprint
     setter onanimationend
     setter onanimationiteration
     setter onanimationstart
     setter onappinstalled
     setter onauxclick
     setter onbeforeinstallprompt
+    setter onbeforeprint
     setter onbeforeunload
     setter onblur
     setter oncancel

@@ -8,9 +8,9 @@
 #include "base/callback_helpers.h"
 #include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/gl_helper.h"
-#include "components/viz/common/quads/copy_output_result.h"
-#include "components/viz/common/quads/single_release_callback.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/browser_main_loop.h"
@@ -101,7 +101,7 @@ void PrepareTextureCopyOutputResult(
 
   gl_helper->CropScaleReadbackAndCleanMailbox(
       texture_mailbox.mailbox(), texture_mailbox.sync_token(), result->size(),
-      gfx::Rect(result->size()), dst_size_in_pixel, pixels, color_type,
+      dst_size_in_pixel, pixels, color_type,
       base::Bind(&CopyFromCompositingSurfaceFinished, callback,
                  base::Passed(&release_callback), base::Passed(&bitmap)),
       viz::GLHelper::SCALER_QUALITY_GOOD);

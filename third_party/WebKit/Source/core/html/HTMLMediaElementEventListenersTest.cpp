@@ -11,7 +11,7 @@
 #include "core/html/media/MediaCustomControlsFullscreenDetector.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/testing/EmptyWebMediaPlayer.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -56,7 +56,7 @@ class HTMLMediaElementEventListenersTest : public ::testing::Test {
   Document& GetDocument() { return page_holder_->GetDocument(); }
   void DestroyDocument() { page_holder_.reset(); }
   HTMLVideoElement* Video() {
-    return toHTMLVideoElement(GetDocument().QuerySelector("video"));
+    return ToHTMLVideoElement(GetDocument().QuerySelector("video"));
   }
   MockWebMediaPlayer* WebMediaPlayer() {
     return static_cast<MockWebMediaPlayer*>(Video()->GetWebMediaPlayer());
@@ -79,7 +79,8 @@ class HTMLMediaElementEventListenersTest : public ::testing::Test {
 
 TEST_F(HTMLMediaElementEventListenersTest, RemovingFromDocumentCollectsAll) {
   EXPECT_EQ(Video(), nullptr);
-  GetDocument().body()->setInnerHTML("<body><video controls></video></body>");
+  GetDocument().body()->SetInnerHTMLFromString(
+      "<body><video controls></video></body>");
   EXPECT_NE(Video(), nullptr);
   EXPECT_TRUE(Video()->HasEventListeners());
   EXPECT_NE(Controls(), nullptr);
@@ -89,7 +90,7 @@ TEST_F(HTMLMediaElementEventListenersTest, RemovingFromDocumentCollectsAll) {
   WeakPersistent<MediaControls> weak_persistent_controls = Controls();
   {
     Persistent<HTMLVideoElement> persistent_video = Video();
-    GetDocument().body()->setInnerHTML("");
+    GetDocument().body()->SetInnerHTMLFromString("");
 
     // When removed from the document, the event listeners should have been
     // dropped.
@@ -110,7 +111,8 @@ TEST_F(HTMLMediaElementEventListenersTest, RemovingFromDocumentCollectsAll) {
 TEST_F(HTMLMediaElementEventListenersTest,
        ReInsertingInDocumentCollectsControls) {
   EXPECT_EQ(Video(), nullptr);
-  GetDocument().body()->setInnerHTML("<body><video controls></video></body>");
+  GetDocument().body()->SetInnerHTMLFromString(
+      "<body><video controls></video></body>");
   EXPECT_NE(Video(), nullptr);
   EXPECT_TRUE(Video()->HasEventListeners());
   EXPECT_NE(Controls(), nullptr);
@@ -144,7 +146,7 @@ TEST_F(HTMLMediaElementEventListenersTest,
   RuntimeEnabledFeatures::SetVideoFullscreenDetectionEnabled(true);
 
   EXPECT_EQ(Video(), nullptr);
-  GetDocument().body()->setInnerHTML("<body><video></video</body>");
+  GetDocument().body()->SetInnerHTMLFromString("<body><video></video</body>");
   Video()->SetSrc("http://example.com");
 
   testing::RunPendingTasks();

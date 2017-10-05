@@ -31,14 +31,9 @@
 #include "core/editing/VisibleUnits.h"
 
 #include "core/editing/EditingUtilities.h"
-#include "core/editing/iterators/BackwardsCharacterIterator.h"
-#include "core/editing/iterators/BackwardsTextBuffer.h"
-#include "core/editing/iterators/CharacterIterator.h"
-#include "core/editing/iterators/ForwardsTextBuffer.h"
-#include "core/editing/iterators/SimplifiedBackwardsTextIterator.h"
+#include "core/editing/VisiblePosition.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/text/TextBoundaries.h"
-#include "platform/text/TextBreakIterator.h"
 
 namespace blink {
 
@@ -160,7 +155,7 @@ Position EndOfWordPosition(const VisiblePosition& position, EWordSide side) {
 
 VisiblePosition EndOfWord(const VisiblePosition& position, EWordSide side) {
   return CreateVisiblePosition(EndOfWordPosition(position, side),
-                               VP_UPSTREAM_IF_POSSIBLE);
+                               TextAffinity::kUpstreamIfPossible);
 }
 
 PositionInFlatTree EndOfWordPosition(const VisiblePositionInFlatTree& position,
@@ -171,13 +166,14 @@ PositionInFlatTree EndOfWordPosition(const VisiblePositionInFlatTree& position,
 VisiblePositionInFlatTree EndOfWord(const VisiblePositionInFlatTree& position,
                                     EWordSide side) {
   return CreateVisiblePosition(EndOfWordPosition(position, side),
-                               VP_UPSTREAM_IF_POSSIBLE);
+                               TextAffinity::kUpstreamIfPossible);
 }
 
 VisiblePosition NextWordPosition(const VisiblePosition& c) {
   DCHECK(c.IsValid()) << c;
-  VisiblePosition next = CreateVisiblePosition(
-      NextBoundary(c, NextWordPositionBoundary), VP_UPSTREAM_IF_POSSIBLE);
+  VisiblePosition next =
+      CreateVisiblePosition(NextBoundary(c, NextWordPositionBoundary),
+                            TextAffinity::kUpstreamIfPossible);
   return HonorEditingBoundaryAtOrAfter(next, c.DeepEquivalent());
 }
 

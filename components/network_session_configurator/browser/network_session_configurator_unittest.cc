@@ -59,7 +59,8 @@ TEST_F(NetworkSessionConfiguratorTest, Defaults) {
   EXPECT_FALSE(params_.ignore_certificate_errors);
   EXPECT_EQ(0u, params_.testing_fixed_http_port);
   EXPECT_EQ(0u, params_.testing_fixed_https_port);
-  EXPECT_FALSE(params_.enable_tcp_fast_open_for_ssl);
+  EXPECT_EQ(params_.tcp_fast_open_mode,
+            net::HttpNetworkSession::Params::TcpFastOpenMode::DISABLED);
   EXPECT_FALSE(params_.enable_user_alternate_protocol_ports);
 
   EXPECT_TRUE(params_.enable_http2);
@@ -68,7 +69,6 @@ TEST_F(NetworkSessionConfiguratorTest, Defaults) {
   EXPECT_FALSE(params_.enable_quic);
   EXPECT_EQ("Chrome/52.0.2709.0 Linux x86_64", params_.quic_user_agent_id);
   EXPECT_EQ(0u, params_.origins_to_force_quic_on.size());
-  EXPECT_FALSE(params_.quic_force_hol_blocking);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, Http2FieldTrialHttp2Disable) {
@@ -91,16 +91,15 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
   EXPECT_EQ(net::QuicTagVector(), params_.quic_connection_options);
   EXPECT_EQ(net::QuicTagVector(), params_.quic_client_connection_options);
   EXPECT_FALSE(params_.enable_server_push_cancellation);
-  EXPECT_FALSE(params_.quic_close_sessions_on_ip_change);
   EXPECT_EQ(net::kIdleConnectionTimeoutSeconds,
             params_.quic_idle_connection_timeout_seconds);
   EXPECT_EQ(net::kPingTimeoutSecs, params_.quic_reduced_ping_timeout_seconds);
   EXPECT_FALSE(params_.quic_race_cert_verification);
   EXPECT_FALSE(params_.quic_estimate_initial_rtt);
+  EXPECT_FALSE(params_.quic_connect_using_default_network);
   EXPECT_FALSE(params_.quic_migrate_sessions_on_network_change);
   EXPECT_FALSE(params_.quic_migrate_sessions_early);
   EXPECT_FALSE(params_.quic_allow_server_migration);
-  EXPECT_FALSE(params_.quic_force_hol_blocking);
 
   net::HttpNetworkSession::Params default_params;
   EXPECT_EQ(default_params.quic_supported_versions,
@@ -149,18 +148,6 @@ TEST_F(NetworkSessionConfiguratorTest, RetryWithoutAltSvcOnQuicErrors) {
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.retry_without_alt_svc_on_quic_errors);
-}
-
-TEST_F(NetworkSessionConfiguratorTest,
-       QuicCloseSessionsOnIpChangeFromFieldTrialParams) {
-  std::map<std::string, std::string> field_trial_params;
-  field_trial_params["close_sessions_on_ip_change"] = "true";
-  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
-
-  ParseFieldTrials();
-
-  EXPECT_TRUE(params_.quic_close_sessions_on_ip_change);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
@@ -236,6 +223,18 @@ TEST_F(NetworkSessionConfiguratorTest, QuicEstimateInitialRtt) {
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.quic_estimate_initial_rtt);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
+       QuicConnectUsingDefaultNetworkFromFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["connect_using_default_network"] = "true";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(params_.quic_connect_using_default_network);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
@@ -380,23 +379,28 @@ TEST_F(NetworkSessionConfiguratorTest, Http2SettingsFromFieldTrialParams) {
   EXPECT_EQ(expected_settings, params_.http2_settings);
 }
 
+TEST_F(NetworkSessionConfiguratorTest, TCPFastOpenEnabled) {
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  command_line.AppendSwitch(switches::kEnableTcpFastOpen);
+  ParseCommandLineAndFieldTrials(command_line);
+  EXPECT_EQ(params_.tcp_fast_open_mode,
+            net::HttpNetworkSession::Params::TcpFastOpenMode::ENABLED_FOR_ALL);
+}
+
 TEST_F(NetworkSessionConfiguratorTest, TCPFastOpenHttpsEnabled) {
   base::FieldTrialList::CreateFieldTrial("TCPFastOpen", "HttpsEnabled");
 
   ParseFieldTrials();
+  EXPECT_EQ(
+      params_.tcp_fast_open_mode,
+      net::HttpNetworkSession::Params::TcpFastOpenMode::ENABLED_FOR_SSL_ONLY);
 
-  EXPECT_TRUE(params_.enable_tcp_fast_open_for_ssl);
-}
-
-TEST_F(NetworkSessionConfiguratorTest, QuicForceHolBlocking) {
-  std::map<std::string, std::string> field_trial_params;
-  field_trial_params["force_hol_blocking"] = "true";
-  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
-
-  ParseFieldTrials();
-
-  EXPECT_TRUE(params_.quic_force_hol_blocking);
+  // Make sure that the command line flag overrides the field trial.
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  command_line.AppendSwitch(switches::kEnableTcpFastOpen);
+  ParseCommandLineAndFieldTrials(command_line);
+  EXPECT_EQ(params_.tcp_fast_open_mode,
+            net::HttpNetworkSession::Params::TcpFastOpenMode::ENABLED_FOR_ALL);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, ForceQuic) {

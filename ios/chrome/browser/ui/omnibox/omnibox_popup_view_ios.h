@@ -12,10 +12,12 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/string16.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_popup_material_view_controller.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_popup_mediator.h"
+#include "ios/chrome/browser/ui/omnibox/omnibox_popup_provider.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_popup_view_controller.h"
 
 class OmniboxEditModel;
-@class OmniboxPopupMaterialViewController;
+@class OmniboxPopupViewController;
 class OmniboxPopupModel;
 class OmniboxPopupViewSuggestionsDelegate;
 @protocol OmniboxPopupPositioner;
@@ -28,13 +30,17 @@ class ChromeBrowserState;
 
 // iOS implementation of AutocompletePopupView.
 class OmniboxPopupViewIOS : public OmniboxPopupView,
-                            public OmniboxPopupMaterialViewControllerDelegate {
+                            public OmniboxPopupMediatorDelegate,
+                            public OmniboxPopupProvider {
  public:
   OmniboxPopupViewIOS(ios::ChromeBrowserState* browser_state,
                       OmniboxEditModel* edit_model,
                       OmniboxPopupViewSuggestionsDelegate* delegate,
                       id<OmniboxPopupPositioner> positioner);
   ~OmniboxPopupViewIOS() override;
+
+  // Popup model used for this.
+  OmniboxPopupModel* model() const;
 
   // AutocompletePopupView implementation.
   bool IsOpen() const override;
@@ -47,9 +53,12 @@ class OmniboxPopupViewIOS : public OmniboxPopupView,
   void OnDragCanceled() override {}
 
   void UpdateEditViewIcon();
-  void SetTextAlignment(NSTextAlignment alignment);
 
-  // OmniboxPopupMaterialViewControllerDelegate implementation.
+  // OmniboxPopupProvider implemetation.
+  void SetTextAlignment(NSTextAlignment alignment) override;
+  bool IsPopupOpen() override;
+
+  // OmniboxPopupViewControllerDelegate implementation.
   bool IsStarredMatch(const AutocompleteMatch& match) const override;
   void OnMatchSelected(const AutocompleteMatch& match, size_t row) override;
   void OnMatchSelectedForAppending(const AutocompleteMatch& match) override;
@@ -59,8 +68,9 @@ class OmniboxPopupViewIOS : public OmniboxPopupView,
  private:
   std::unique_ptr<OmniboxPopupModel> model_;
   OmniboxPopupViewSuggestionsDelegate* delegate_;  // weak
+  base::scoped_nsobject<OmniboxPopupMediator> mediator_;
   base::scoped_nsobject<OmniboxPopupPresenter> presenter_;
-  base::scoped_nsobject<OmniboxPopupMaterialViewController> popup_controller_;
+  base::scoped_nsobject<OmniboxPopupViewController> popup_controller_;
   bool is_open_;
 };
 

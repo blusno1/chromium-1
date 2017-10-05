@@ -3376,7 +3376,7 @@ void WebGL2RenderingContextBase::drawArraysInstanced(GLenum mode,
   }
 
   ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
-                                                   drawing_buffer_.Get());
+                                                   drawing_buffer_.get());
   ClearIfComposited();
   ContextGL()->DrawArraysInstancedANGLE(mode, first, count, instance_count);
   MarkContextChanged(kCanvasChanged);
@@ -3397,7 +3397,7 @@ void WebGL2RenderingContextBase::drawElementsInstanced(GLenum mode,
   }
 
   ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
-                                                   drawing_buffer_.Get());
+                                                   drawing_buffer_.get());
   ClearIfComposited();
   ContextGL()->DrawElementsInstancedANGLE(
       mode, count, type, reinterpret_cast<void*>(static_cast<intptr_t>(offset)),
@@ -3421,7 +3421,7 @@ void WebGL2RenderingContextBase::drawRangeElements(GLenum mode,
   }
 
   ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
-                                                   drawing_buffer_.Get());
+                                                   drawing_buffer_.get());
   ClearIfComposited();
   ContextGL()->DrawRangeElements(
       mode, start, end, count, type,
@@ -3434,7 +3434,7 @@ void WebGL2RenderingContextBase::drawBuffers(const Vector<GLenum>& buffers) {
     return;
 
   ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
-                                                   drawing_buffer_.Get());
+                                                   drawing_buffer_.get());
   GLsizei n = buffers.size();
   const GLenum* bufs = buffers.data();
   for (GLsizei i = 0; i < n; ++i) {
@@ -3537,6 +3537,9 @@ void WebGL2RenderingContextBase::clearBufferiv(GLenum buffer,
                            src_offset))
     return;
 
+  ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
+                                                   drawing_buffer_.get());
+
   ContextGL()->ClearBufferiv(buffer, drawbuffer,
                              value.View()->DataMaybeShared() + src_offset);
 }
@@ -3548,6 +3551,9 @@ void WebGL2RenderingContextBase::clearBufferiv(GLenum buffer,
   if (isContextLost() ||
       !ValidateClearBuffer("clearBufferiv", buffer, value.size(), src_offset))
     return;
+
+  ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
+                                                   drawing_buffer_.get());
 
   ContextGL()->ClearBufferiv(buffer, drawbuffer, value.data() + src_offset);
 }
@@ -3562,6 +3568,9 @@ void WebGL2RenderingContextBase::clearBufferuiv(
                            src_offset))
     return;
 
+  ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
+                                                   drawing_buffer_.get());
+
   ContextGL()->ClearBufferuiv(buffer, drawbuffer,
                               value.View()->DataMaybeShared() + src_offset);
 }
@@ -3573,6 +3582,9 @@ void WebGL2RenderingContextBase::clearBufferuiv(GLenum buffer,
   if (isContextLost() ||
       !ValidateClearBuffer("clearBufferuiv", buffer, value.size(), src_offset))
     return;
+
+  ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
+                                                   drawing_buffer_.get());
 
   ContextGL()->ClearBufferuiv(buffer, drawbuffer, value.data() + src_offset);
 }
@@ -3587,6 +3599,15 @@ void WebGL2RenderingContextBase::clearBufferfv(
                            src_offset))
     return;
 
+  // As of this writing the default back buffer will always have an
+  // RGB(A)/UNSIGNED_BYTE color attachment, so only clearBufferfv can
+  // be used with it and consequently the emulation should only be
+  // needed here. However, as support for extended color spaces is
+  // added, the type of the back buffer might change, so do the
+  // emulation for all clearBuffer entry points instead of just here.
+  ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
+                                                   drawing_buffer_.get());
+
   ContextGL()->ClearBufferfv(buffer, drawbuffer,
                              value.View()->DataMaybeShared() + src_offset);
 }
@@ -3598,6 +3619,15 @@ void WebGL2RenderingContextBase::clearBufferfv(GLenum buffer,
   if (isContextLost() ||
       !ValidateClearBuffer("clearBufferfv", buffer, value.size(), src_offset))
     return;
+
+  // As of this writing the default back buffer will always have an
+  // RGB(A)/UNSIGNED_BYTE color attachment, so only clearBufferfv can
+  // be used with it and consequently the emulation should only be
+  // needed here. However, as support for extended color spaces is
+  // added, the type of the back buffer might change, so do the
+  // emulation for all clearBuffer entry points instead of just here.
+  ScopedRGBEmulationColorMask emulation_color_mask(this, color_mask_,
+                                                   drawing_buffer_.get());
 
   ContextGL()->ClearBufferfv(buffer, drawbuffer, value.data() + src_offset);
 }

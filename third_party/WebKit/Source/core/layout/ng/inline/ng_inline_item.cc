@@ -31,9 +31,7 @@ NGInlineItem::NGInlineItem(NGInlineItemType type,
       layout_object_(layout_object),
       type_(type),
       bidi_level_(UBIDI_LTR),
-      shape_options_(kPreContext | kPostContext),
-      rotate_sideways_(false),
-      fallback_priority_(FontFallbackPriority::kInvalid) {
+      shape_options_(kPreContext | kPostContext) {
   DCHECK_GE(end, start);
 }
 
@@ -142,7 +140,8 @@ bool NGInlineItem::HasStartEdge() const {
 bool NGInlineItem::HasEndEdge() const {
   DCHECK(Type() == kOpenTag || Type() == kCloseTag);
   // TODO(kojii): Should use break token when NG has its own tree building.
-  return !ToLayoutInline(GetLayoutObject())->Continuation();
+  return !GetLayoutObject()->IsLayoutInline() ||
+         !ToLayoutInline(GetLayoutObject())->Continuation();
 }
 
 NGInlineItemRange::NGInlineItemRange(Vector<NGInlineItem>* items,

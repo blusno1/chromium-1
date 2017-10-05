@@ -8,6 +8,7 @@
 #ifndef UI_GFX_VECTOR_ICON_TYPES_H_
 #define UI_GFX_VECTOR_ICON_TYPES_H_
 
+#include "base/macros.h"
 #include "third_party/skia/include/core/SkScalar.h"
 #include "ui/gfx/animation/tween.h"
 
@@ -21,6 +22,8 @@ const int kReferenceSizeDip = 48;
 enum CommandType {
   // A new <path> element. For the first path, this is assumed.
   NEW_PATH,
+  // Sets the alpha for the current path.
+  PATH_COLOR_ALPHA,
   // Sets the color for the current path.
   PATH_COLOR_ARGB,
   // Sets the path to clear mode (Skia's kClear_Mode).
@@ -79,10 +82,15 @@ struct PathElement {
 };
 
 struct VectorIcon {
+  VectorIcon() = default;
+
   bool is_empty() const { return !path; }
 
   const gfx::PathElement* path;
   const gfx::PathElement* path_1x;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(VectorIcon);
 };
 
 }  // namespace gfx

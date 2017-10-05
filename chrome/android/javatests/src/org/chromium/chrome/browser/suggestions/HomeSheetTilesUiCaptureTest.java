@@ -8,7 +8,6 @@ import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.action.ViewActions.longClick;
 import static android.support.test.espresso.matcher.ViewMatchers.withText;
 
-import static org.chromium.chrome.test.BottomSheetTestRule.ENABLE_CHROME_HOME;
 import static org.chromium.chrome.test.BottomSheetTestRule.waitForWindowUpdates;
 
 import android.support.test.filters.MediumTest;
@@ -18,12 +17,11 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.ScreenShooter;
-import org.chromium.base.test.util.parameter.CommandLineParameter;
 import org.chromium.chrome.browser.ntp.NtpUiCaptureTestData;
+import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.test.ScreenShooter;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
 import org.chromium.chrome.test.BottomSheetTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -32,13 +30,10 @@ import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependencies
 import org.chromium.ui.test.util.UiRestriction;
 
 /**
- * Tests for the appearance of the tiles in the home sheet.
+ * Tests for the appearance of the tile suggestions in the home sheet.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
-// TODO(https://crbug.com/754778) improve annotation processor. We need to remove the currently
-// registered Feature flags to be able to change them later.
-@CommandLineFlags.Remove(ENABLE_CHROME_HOME)
 public class HomeSheetTilesUiCaptureTest {
     @Rule
     public BottomSheetTestRule mActivityRule = new BottomSheetTestRule();
@@ -57,13 +52,13 @@ public class HomeSheetTilesUiCaptureTest {
 
     @Before
     public void setup() throws InterruptedException {
+        ChromePreferenceManager.getInstance().setNewTabPageGenericSigninPromoDismissed(true);
         mActivityRule.startMainActivityOnBlankPage();
     }
 
     @Test
     @MediumTest
     @Feature({"UiCatalogue"})
-    @CommandLineParameter(ENABLE_CHROME_HOME)
     @ScreenShooter.Directory("HomeSheetTiles")
     public void testAppearance() {
         mActivityRule.setSheetState(BottomSheet.SHEET_STATE_FULL, false);
@@ -74,7 +69,6 @@ public class HomeSheetTilesUiCaptureTest {
     @Test
     @MediumTest
     @Feature({"UiCatalogue"})
-    @CommandLineParameter(ENABLE_CHROME_HOME)
     @ScreenShooter.Directory("HomeSheetTiles")
     public void testContextMenu() {
         mActivityRule.setSheetState(BottomSheet.SHEET_STATE_FULL, false);

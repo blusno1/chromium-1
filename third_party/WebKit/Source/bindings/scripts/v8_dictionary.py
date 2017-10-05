@@ -71,7 +71,7 @@ def dictionary_context(dictionary, interfaces_info):
 
     for member in members:
         if member['runtime_enabled_feature_name']:
-            includes.add('platform/RuntimeEnabledFeatures.h')
+            includes.add('platform/runtime_enabled_features.h')
             break
 
     cpp_class = v8_utilities.cpp_name(dictionary)
@@ -208,16 +208,13 @@ def member_impl_context(member, interfaces_info, header_includes,
     def has_method_expression():
         if nullable_indicator_name:
             return nullable_indicator_name
-        elif idl_type.is_union_type:
-            return '!%s_.isNull()' % cpp_name
-        elif idl_type.is_enum or idl_type.is_string_type:
+        if idl_type.is_union_type or idl_type.is_enum or idl_type.is_string_type:
             return '!%s_.IsNull()' % cpp_name
-        elif idl_type.name in ['Any', 'Object']:
+        if idl_type.name in ['Any', 'Object']:
             return '!({0}_.IsEmpty() || {0}_.IsNull() || {0}_.IsUndefined())'.format(cpp_name)
-        elif idl_type.name == 'Dictionary':
+        if idl_type.name == 'Dictionary':
             return '!%s_.IsUndefinedOrNull()' % cpp_name
-        else:
-            return '%s_' % cpp_name
+        return '%s_' % cpp_name
 
     cpp_default_value = None
     if member.default_value and not member.default_value.is_null:
@@ -234,6 +231,12 @@ def member_impl_context(member, interfaces_info, header_includes,
     if idl_type.is_array_buffer_view_or_typed_array:
         setter_value += '.View()'
 
+    non_null_type = idl_type.inner_type if idl_type.is_nullable else idl_type
+    setter_inline = 'inline ' if (
+        non_null_type.is_basic_type or
+        non_null_type.is_enum or
+        non_null_type.is_wrapper_type) else ''
+
     return {
         'cpp_default_value': cpp_default_value,
         'cpp_name': cpp_name,
@@ -247,6 +250,7 @@ def member_impl_context(member, interfaces_info, header_includes,
         'null_setter_name': null_setter_name_for_dictionary_member(member),
         'nullable_indicator_name': nullable_indicator_name,
         'rvalue_cpp_type': idl_type.cpp_type_args(used_as_rvalue_type=True),
+        'setter_inline': setter_inline,
         'setter_name': setter_name_for_dictionary_member(member),
         'setter_value': setter_value,
     }

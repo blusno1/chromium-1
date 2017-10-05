@@ -23,9 +23,9 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/features.h"
 #include "components/safe_browsing/password_protection/password_protection_request.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_account_fetcher_service.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -92,8 +92,6 @@ class MockChromePasswordProtectionService
 class ChromePasswordProtectionServiceTest
     : public ChromeRenderViewHostTestHarness {
  public:
-  typedef std::map<std::string, std::string> Parameters;
-
   ChromePasswordProtectionServiceTest() {}
 
   void SetUp() override {
@@ -167,17 +165,18 @@ class ChromePasswordProtectionServiceTest
     service_->RequestFinished(request, false, std::move(response));
   }
 
-  void SetUpSyncAccount(const std::string& hosted_domain) {
+  void SetUpSyncAccount(const std::string& hosted_domain,
+                        const std::string& account_id,
+                        const std::string& email) {
     FakeAccountFetcherService* account_fetcher_service =
         static_cast<FakeAccountFetcherService*>(
             AccountFetcherServiceFactory::GetForProfile(profile()));
     AccountTrackerService* account_tracker_service =
         AccountTrackerServiceFactory::GetForProfile(profile());
     account_fetcher_service->FakeUserInfoFetchSuccess(
-        account_tracker_service->PickAccountIdForAccount(kTestAccountID,
-                                                         kTestEmail),
-        kTestEmail, kTestAccountID, hosted_domain, "full_name", "given_name",
-        "locale", "http://picture.example.com/picture.jpg");
+        account_tracker_service->PickAccountIdForAccount(account_id, email),
+        email, account_id, hosted_domain, "full_name", "given_name", "locale",
+        "http://picture.example.com/picture.jpg");
   }
 
  protected:
@@ -194,7 +193,6 @@ class ChromePasswordProtectionServiceTest
 TEST_F(ChromePasswordProtectionServiceTest,
        VerifyUserPopulationForPasswordOnFocusPing) {
   // Password field on focus pinging is enabled on !incognito && SBER.
-
   PasswordProtectionService::RequestOutcome reason;
   service_->ConfigService(false /*incognito*/, false /*SBER*/);
   EXPECT_FALSE(
@@ -220,16 +218,18 @@ TEST_F(ChromePasswordProtectionServiceTest,
        VerifyUserPopulationForProtectedPasswordEntryPing) {
   // Protected password entry pinging is enabled for all safe browsing users.
   PasswordProtectionService::RequestOutcome reason;
-
   service_->ConfigService(false /*incognito*/, false /*SBER*/);
   EXPECT_TRUE(
       service_->IsPingingEnabled(kProtectedPasswordEntryPinging, &reason));
+
   service_->ConfigService(false /*incognito*/, true /*SBER*/);
   EXPECT_TRUE(
       service_->IsPingingEnabled(kProtectedPasswordEntryPinging, &reason));
+
   service_->ConfigService(true /*incognito*/, false /*SBER*/);
   EXPECT_TRUE(
       service_->IsPingingEnabled(kProtectedPasswordEntryPinging, &reason));
+
   service_->ConfigService(true /*incognito*/, true /*SBER*/);
   EXPECT_TRUE(
       service_->IsPingingEnabled(kProtectedPasswordEntryPinging, &reason));
@@ -239,11 +239,15 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyGetSyncAccountType) {
   SigninManagerBase* signin_manager = static_cast<SigninManagerBase*>(
       SigninManagerFactory::GetForProfile(profile()));
   signin_manager->SetAuthenticatedAccountInfo(kTestAccountID, kTestEmail);
-  SetUpSyncAccount(std::string(AccountTrackerService::kNoHostedDomainFound));
+  SetUpSyncAccount(std::string(AccountTrackerService::kNoHostedDomainFound),
+                   std::string(kTestAccountID), std::string(kTestEmail));
+  service_->InitializeAccountInfo();
   EXPECT_EQ(LoginReputationClientRequest::PasswordReuseEvent::GMAIL,
             service_->GetSyncAccountType());
 
-  SetUpSyncAccount("example.edu");
+  SetUpSyncAccount("example.edu", std::string(kTestAccountID),
+                   std::string(kTestEmail));
+  service_->InitializeAccountInfo();
   EXPECT_EQ(LoginReputationClientRequest::PasswordReuseEvent::GSUITE,
             service_->GetSyncAccountType());
 }
@@ -253,22 +257,31 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyUpdateSecurityState) {
   NavigateAndCommit(url);
   SBThreatType current_threat_type = SB_THREAT_TYPE_UNUSED;
   ASSERT_FALSE(service_->ui_manager()->IsUrlWhitelistedOrPendingForWebContents(
-      url, false, web_contents()->GetController().GetVisibleEntry(),
+      url, false, web_contents()->GetController().GetLastCommittedEntry(),
       web_contents(), false, &current_threat_type));
   EXPECT_EQ(SB_THREAT_TYPE_UNUSED, current_threat_type);
 
+  // Cache a verdict for this URL.
+  LoginReputationClientResponse verdict_proto;
+  verdict_proto.set_verdict_type(LoginReputationClientResponse::PHISHING);
+  verdict_proto.set_cache_duration_sec(600);
+  verdict_proto.set_cache_expression("password_reuse_url.com/");
+  service_->CacheVerdict(url,
+                         LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
+                         &verdict_proto, base::Time::Now());
+
   service_->UpdateSecurityState(SB_THREAT_TYPE_PASSWORD_REUSE, web_contents());
   ASSERT_TRUE(service_->ui_manager()->IsUrlWhitelistedOrPendingForWebContents(
-      url, false, web_contents()->GetController().GetVisibleEntry(),
+      url, false, web_contents()->GetController().GetLastCommittedEntry(),
       web_contents(), false, &current_threat_type));
   EXPECT_EQ(SB_THREAT_TYPE_PASSWORD_REUSE, current_threat_type);
 
   service_->UpdateSecurityState(safe_browsing::SB_THREAT_TYPE_SAFE,
                                 web_contents());
   current_threat_type = SB_THREAT_TYPE_UNUSED;
-  ASSERT_FALSE(service_->ui_manager()->IsUrlWhitelistedOrPendingForWebContents(
-      url, false, web_contents()->GetController().GetVisibleEntry(),
-      web_contents(), false, &current_threat_type));
+  service_->ui_manager()->IsUrlWhitelistedOrPendingForWebContents(
+      url, false, web_contents()->GetController().GetLastCommittedEntry(),
+      web_contents(), false, &current_threat_type);
   EXPECT_EQ(SB_THREAT_TYPE_UNUSED, current_threat_type);
   LoginReputationClientResponse verdict;
   EXPECT_EQ(
@@ -406,6 +419,20 @@ TEST_F(ChromePasswordProtectionServiceTest,
     EXPECT_EQ("token2", reuse_lookup.verdict_token());
     t++;
   }
+}
+
+TEST_F(ChromePasswordProtectionServiceTest, VerifyGetChangePasswordURL) {
+  SigninManagerBase* signin_manager = static_cast<SigninManagerBase*>(
+      SigninManagerFactory::GetForProfile(profile()));
+  signin_manager->SetAuthenticatedAccountInfo(kTestAccountID, kTestEmail);
+  SetUpSyncAccount("example.com", std::string(kTestAccountID),
+                   std::string(kTestEmail));
+  service_->InitializeAccountInfo();
+  EXPECT_EQ(GURL("https://accounts.google.com/"
+                 "AccountChooser?Email=foo%40example.com&continue=https%3A%2F%"
+                 "2Fmyaccount.google.com%2Fsigninoptions%2Fpassword%3Futm_"
+                 "source%3DGoogle%26utm_campaign%3DPhishGuard&hl=en"),
+            service_->GetChangePasswordURL());
 }
 
 }  // namespace safe_browsing

@@ -7,6 +7,8 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <string>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -36,6 +38,7 @@
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/drag_messages.h"
+#include "content/common/input/ime_text_span_conversions.h"
 #include "content/common/input_messages.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/text_input_state.h"
@@ -62,26 +65,15 @@ namespace content {
 
 namespace {
 
-ui::ImeTextSpan::Type ConvertWebTypeToUiType(blink::WebImeTextSpan::Type type) {
-  switch (type) {
-    case blink::WebImeTextSpan::Type::kComposition:
-      return ui::ImeTextSpan::Type::kComposition;
-    case blink::WebImeTextSpan::Type::kSuggestion:
-      return ui::ImeTextSpan::Type::kSuggestion;
-  }
-
-  NOTREACHED();
-  return ui::ImeTextSpan::Type::kComposition;
-}
-
 std::vector<ui::ImeTextSpan> ConvertToUiImeTextSpan(
     const std::vector<blink::WebImeTextSpan>& ime_text_spans) {
   std::vector<ui::ImeTextSpan> ui_ime_text_spans;
   for (const auto& ime_text_span : ime_text_spans) {
     ui_ime_text_spans.emplace_back(ui::ImeTextSpan(
-        ConvertWebTypeToUiType(ime_text_span.type), ime_text_span.start_offset,
-        ime_text_span.end_offset, ime_text_span.underline_color,
-        ime_text_span.thick, ime_text_span.background_color,
+        ConvertWebImeTextSpanTypeToUiType(ime_text_span.type),
+        ime_text_span.start_offset, ime_text_span.end_offset,
+        ime_text_span.underline_color, ime_text_span.thick,
+        ime_text_span.background_color,
         ime_text_span.suggestion_highlight_color, ime_text_span.suggestions));
   }
   return ui_ime_text_spans;
@@ -637,10 +629,7 @@ std::unique_ptr<IPC::Message> BrowserPluginGuest::UpdateInstanceIdIfNecessary(
   bool read_success = iter.ReadBytes(&data, remaining_bytes);
   CHECK(read_success)
       << "Unexpected failure reading remaining IPC::Message payload.";
-  bool write_success = new_msg->WriteBytes(data, remaining_bytes);
-  CHECK(write_success)
-      << "Unexpected failure writing remaining IPC::Message payload.";
-
+  new_msg->WriteBytes(data, remaining_bytes);
   return new_msg;
 }
 
@@ -1087,10 +1076,9 @@ void BrowserPluginGuest::OnUpdateGeometry(
   GetWebContents()->SendScreenRects();
   if (local_surface_id_ != local_surface_id) {
     local_surface_id_ = local_surface_id;
-    web_contents()
-        ->GetRenderWidgetHostView()
-        ->GetRenderWidgetHost()
-        ->WasResized();
+    RenderWidgetHostView* view = web_contents()->GetRenderWidgetHostView();
+    if (view)
+      view->GetRenderWidgetHost()->WasResized();
   }
 }
 
@@ -1120,7 +1108,7 @@ void BrowserPluginGuest::OnShowPopup(
 
 void BrowserPluginGuest::OnShowWidget(int route_id,
                                       const gfx::Rect& initial_rect) {
-  int process_id = GetWebContents()->GetRenderProcessHost()->GetID();
+  int process_id = GetWebContents()->GetMainFrame()->GetProcess()->GetID();
   GetWebContents()->ShowCreatedWidget(process_id, route_id, initial_rect);
 }
 

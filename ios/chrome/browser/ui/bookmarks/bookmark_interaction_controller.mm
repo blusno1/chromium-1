@@ -26,6 +26,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_navigation_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #include "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/browser/ui/url_loader.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -67,8 +68,10 @@ using bookmarks::BookmarkNode;
 
 @property(nonatomic, strong) BookmarkMediator* mediator;
 
+@property(nonatomic, readonly, weak) id<ApplicationCommands> dispatcher;
+
 // Builds a controller and brings it on screen.
-- (void)presentBookmarkForTab:(Tab*)tab;
+- (void)presentBookmarkForBookmarkedTab:(Tab*)tab;
 
 // Dismisses the bookmark browser.
 - (void)dismissBookmarkBrowserAnimated:(BOOL)animated;
@@ -83,10 +86,12 @@ using bookmarks::BookmarkNode;
 @synthesize bookmarkEditor = _bookmarkEditor;
 @synthesize bookmarkModel = _bookmarkModel;
 @synthesize mediator = _mediator;
+@synthesize dispatcher = _dispatcher;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                               loader:(id<UrlLoader>)loader
-                    parentController:(UIViewController*)parentController {
+                    parentController:(UIViewController*)parentController
+                          dispatcher:(id<ApplicationCommands>)dispatcher {
   self = [super init];
   if (self) {
     // Bookmarks are always opened with the main browser state, even in
@@ -95,6 +100,7 @@ using bookmarks::BookmarkNode;
     _browserState = browserState->GetOriginalChromeBrowserState();
     _loader = loader;
     _parentController = parentController;
+    _dispatcher = dispatcher;
     _bookmarkModel =
         ios::BookmarkModelFactory::GetForBrowserState(_browserState);
     _mediator = [[BookmarkMediator alloc] initWithBrowserState:_browserState];
@@ -109,7 +115,7 @@ using bookmarks::BookmarkNode;
   _bookmarkEditor.delegate = nil;
 }
 
-- (void)presentBookmarkForTab:(Tab*)tab {
+- (void)presentBookmarkForBookmarkedTab:(Tab*)tab {
   DCHECK(!self.bookmarkBrowser && !self.bookmarkEditor);
   DCHECK(tab);
 
@@ -134,17 +140,14 @@ using bookmarks::BookmarkNode;
                                 completion:nil];
 }
 
-- (void)presentBookmarkForTab:(Tab*)tab
-          currentlyBookmarked:(BOOL)bookmarked
-                       inView:(UIView*)parentView
-                   originRect:(CGRect)origin {
+- (void)presentBookmarkForTab:(Tab*)tab currentlyBookmarked:(BOOL)bookmarked {
   if (!self.bookmarkModel->loaded())
     return;
   if (!tab)
     return;
 
   if (bookmarked) {
-    [self presentBookmarkForTab:tab];
+    [self presentBookmarkForBookmarkedTab:tab];
   } else {
     __weak BookmarkInteractionController* weakSelf = self;
     __weak Tab* weakTab = tab;
@@ -152,7 +155,7 @@ using bookmarks::BookmarkNode;
       BookmarkInteractionController* strongSelf = weakSelf;
       if (!strongSelf || !weakTab)
         return;
-      [strongSelf presentBookmarkForTab:weakTab];
+      [strongSelf presentBookmarkForBookmarkedTab:weakTab];
     };
     [self.mediator addBookmarkWithTitle:tab.title
                                     URL:tab.lastCommittedURL
@@ -166,11 +169,17 @@ using bookmarks::BookmarkNode;
       [[BookmarkControllerFactory alloc] init];
   self.bookmarkBrowser = [bookmarkControllerFactory
       bookmarkControllerWithBrowserState:_currentBrowserState
-                                  loader:_loader];
+                                  loader:_loader
+                              dispatcher:self.dispatcher];
   self.bookmarkBrowser.homeDelegate = self;
 
   if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
     [self.bookmarkBrowser setRootNode:self.bookmarkModel->root_node()];
+    // If cache is present then reconstruct the last visited bookmark from
+    // cache.
+    if (bookmark_utils_ios::GetBookmarkUIPositionCache(self.bookmarkModel)) {
+      self.bookmarkBrowser.isReconstructingFromCache = YES;
+    }
     UINavigationController* navController = [[UINavigationController alloc]
         initWithRootViewController:self.bookmarkBrowser];
     [navController setModalPresentationStyle:UIModalPresentationFormSheet];
@@ -233,28 +242,81 @@ using bookmarks::BookmarkNode;
 
 #pragma mark - BookmarkHomeViewControllerDelegate
 
+- (void)
+bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
+                        navigationToUrls:(const std::vector<GURL>&)urls {
+  [self bookmarkHomeViewControllerWantsDismissal:controller
+                                navigationToUrls:urls
+                                     inIncognito:_currentBrowserState
+                                                     ->IsOffTheRecord()];
+}
+
 - (void)bookmarkHomeViewControllerWantsDismissal:
             (BookmarkHomeViewController*)controller
-                                 navigationToUrl:(const GURL&)url {
+                                navigationToUrls:(const std::vector<GURL>&)urls
+                                     inIncognito:(BOOL)inIncognito {
   [self dismissBookmarkBrowserAnimated:YES];
 
-  if (url != GURL()) {
-    new_tab_page_uma::RecordAction(_browserState,
-                                   new_tab_page_uma::ACTION_OPENED_BOOKMARK);
-    base::RecordAction(
-        base::UserMetricsAction("MobileBookmarkManagerEntryOpened"));
+  if (urls.empty())
+    return;
 
-    if (url.SchemeIs(url::kJavaScriptScheme)) {  // bookmarklet
-      NSString* jsToEval = [base::SysUTF8ToNSString(url.GetContent())
-          stringByRemovingPercentEncoding];
-      [_loader loadJavaScriptFromLocationBar:jsToEval];
+  BOOL openInForegroundTab = YES;
+  for (const GURL& url : urls) {
+    DCHECK(url.is_valid());
+    // TODO(crbug.com/695749): Force url to open in non-incognito mode. if
+    // !IsURLAllowedInIncognito(url).
+
+    if (openInForegroundTab) {
+      // Only open the first URL in foreground tab.
+      openInForegroundTab = NO;
+
+      // TODO(crbug.com/695749): See if we need different metrics for 'Open
+      // all', 'Open all in incognito' and 'Open in incognito'.
+      new_tab_page_uma::RecordAction(_browserState,
+                                     new_tab_page_uma::ACTION_OPENED_BOOKMARK);
+      base::RecordAction(
+          base::UserMetricsAction("MobileBookmarkManagerEntryOpened"));
+
+      if (inIncognito == _currentBrowserState->IsOffTheRecord()) {
+        // Open in current tab if target tab mode is same as current tab mode.
+        [self openURLInCurrentTab:url];
+      } else {
+        // Open in new tab if target tab mode is different from current tab
+        // mode.
+        [self openURLInNewTab:url inIncognito:inIncognito inBackground:NO];
+      }
     } else {
-      [_loader loadURL:url
-                   referrer:web::Referrer()
-                 transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
-          rendererInitiated:NO];
+      // Open other URLs (if any) in background tabs.
+      [self openURLInNewTab:url inIncognito:inIncognito inBackground:YES];
     }
+  }  // end for
+}
+
+#pragma mark - Private
+
+- (void)openURLInCurrentTab:(const GURL&)url {
+  if (url.SchemeIs(url::kJavaScriptScheme)) {  // bookmarklet
+    NSString* jsToEval = [base::SysUTF8ToNSString(url.GetContent())
+        stringByRemovingPercentEncoding];
+    [_loader loadJavaScriptFromLocationBar:jsToEval];
+    return;
   }
+  [_loader loadURL:url
+               referrer:web::Referrer()
+             transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
+      rendererInitiated:NO];
+}
+
+- (void)openURLInNewTab:(const GURL&)url
+            inIncognito:(BOOL)inIncognito
+           inBackground:(BOOL)inBackground {
+  // TODO(crbug.com/695749):  Open bookmarklet in new tab doesn't work.  See how
+  // to deal with this later.
+  [_loader webPageOrderedOpen:url
+                     referrer:web::Referrer()
+                  inIncognito:inIncognito
+                 inBackground:inBackground
+                     appendTo:kLastTab];
 }
 
 @end

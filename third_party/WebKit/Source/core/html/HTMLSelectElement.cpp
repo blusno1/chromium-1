@@ -34,7 +34,6 @@
 #include "bindings/core/v8/html_element_or_long.h"
 #include "bindings/core/v8/html_option_element_or_html_opt_group_element.h"
 #include "build/build_config.h"
-#include "core/HTMLNames.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
@@ -44,6 +43,7 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
@@ -58,6 +58,7 @@
 #include "core/html/forms/FormController.h"
 #include "core/html/forms/PopupMenu.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -70,7 +71,6 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/SpatialNavigation.h"
-#include "core/paint/PaintLayerScrollableArea.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/text/PlatformLocale.h"
 
@@ -132,9 +132,9 @@ bool HTMLSelectElement::HasPlaceholderLabelOption() const {
 
   // TODO(tkent): This function is called in CSS selector matching. Using
   // listItems() might have performance impact.
-  if (GetListItems().size() == 0 || !isHTMLOptionElement(GetListItems()[0]))
+  if (GetListItems().size() == 0 || !IsHTMLOptionElement(GetListItems()[0]))
     return false;
-  return toHTMLOptionElement(GetListItems()[0])->value().IsEmpty();
+  return ToHTMLOptionElement(GetListItems()[0])->value().IsEmpty();
 }
 
 String HTMLSelectElement::validationMessage() const {
@@ -206,17 +206,17 @@ void HTMLSelectElement::add(
     const HTMLElementOrLong& before,
     ExceptionState& exception_state) {
   HTMLElement* element_to_insert;
-  DCHECK(!element.isNull());
-  if (element.isHTMLOptionElement())
-    element_to_insert = element.getAsHTMLOptionElement();
+  DCHECK(!element.IsNull());
+  if (element.IsHTMLOptionElement())
+    element_to_insert = element.GetAsHTMLOptionElement();
   else
-    element_to_insert = element.getAsHTMLOptGroupElement();
+    element_to_insert = element.GetAsHTMLOptGroupElement();
 
   HTMLElement* before_element;
-  if (before.isHTMLElement())
-    before_element = before.getAsHTMLElement();
-  else if (before.isLong())
-    before_element = options()->item(before.getAsLong());
+  if (before.IsHTMLElement())
+    before_element = before.GetAsHTMLElement();
+  else if (before.IsLong())
+    before_element = options()->item(before.GetAsLong());
   else
     before_element = nullptr;
 
@@ -379,14 +379,14 @@ void HTMLSelectElement::SetOption(unsigned index,
     return;
   }
   HTMLOptionElementOrHTMLOptGroupElement element;
-  element.setHTMLOptionElement(option);
+  element.SetHTMLOptionElement(option);
   HTMLElementOrLong before;
   // Out of array bounds? First insert empty dummies.
   if (diff > 0) {
     setLength(index, exception_state);
     // Replace an existing entry?
   } else if (diff < 0) {
-    before.setHTMLElement(options()->item(index + 1));
+    before.SetHTMLElement(options()->item(index + 1));
     remove(index);
   }
   if (exception_state.HadException())
@@ -471,15 +471,15 @@ HTMLOptionElement* HTMLSelectElement::NextValidOption(int list_index,
        list_index += direction) {
     --skip;
     HTMLElement* element = list_items[list_index];
-    if (!isHTMLOptionElement(*element))
+    if (!IsHTMLOptionElement(*element))
       continue;
-    if (toHTMLOptionElement(*element).IsDisplayNone())
+    if (ToHTMLOptionElement(*element).IsDisplayNone())
       continue;
     if (element->IsDisabledFormControl())
       continue;
     if (!UsesMenuList() && !element->GetLayoutObject())
       continue;
-    last_good_option = toHTMLOptionElement(element);
+    last_good_option = ToHTMLOptionElement(element);
     if (skip <= 0)
       break;
   }
@@ -560,10 +560,11 @@ void HTMLSelectElement::SaveLastSelection() {
   }
 
   last_on_change_selection_.clear();
-  for (auto& element : GetListItems())
+  for (auto& element : GetListItems()) {
     last_on_change_selection_.push_back(
-        isHTMLOptionElement(*element) &&
-        toHTMLOptionElement(element)->Selected());
+        IsHTMLOptionElement(*element) &&
+        ToHTMLOptionElement(element)->Selected());
+  }
 }
 
 void HTMLSelectElement::SetActiveSelectionAnchor(HTMLOptionElement* option) {
@@ -650,8 +651,8 @@ void HTMLSelectElement::ListBoxOnChange() {
   bool fire_on_change = false;
   for (unsigned i = 0; i < items.size(); ++i) {
     HTMLElement* element = items[i];
-    bool selected = isHTMLOptionElement(*element) &&
-                    toHTMLOptionElement(element)->Selected();
+    bool selected = IsHTMLOptionElement(*element) &&
+                    ToHTMLOptionElement(element)->Selected();
     if (selected != last_on_change_selection_[i])
       fire_on_change = true;
     last_on_change_selection_[i] = selected;
@@ -752,7 +753,7 @@ void HTMLSelectElement::RecalcListItems() const {
     // We should ignore nested optgroup elements. The HTML parser flatten
     // them.  However we need to ignore nested optgroups built by DOM APIs.
     // This behavior matches to IE and Firefox.
-    if (isHTMLOptGroupElement(current)) {
+    if (IsHTMLOptGroupElement(current)) {
       if (current.parentNode() != this) {
         current_element = ElementTraversal::NextSkippingChildren(current, this);
         continue;
@@ -764,10 +765,10 @@ void HTMLSelectElement::RecalcListItems() const {
       }
     }
 
-    if (isHTMLOptionElement(current))
+    if (IsHTMLOptionElement(current))
       list_items_.push_back(&current);
 
-    if (isHTMLHRElement(current))
+    if (IsHTMLHRElement(current))
       list_items_.push_back(&current);
 
     // In conforming HTML code, only <optgroup> and <option> will be found
@@ -852,7 +853,7 @@ void HTMLSelectElement::setSelectedIndex(int index) {
 int HTMLSelectElement::SelectedListIndex() const {
   int index = 0;
   for (const auto& item : GetListItems()) {
-    if (isHTMLOptionElement(item) && toHTMLOptionElement(item)->Selected())
+    if (IsHTMLOptionElement(item) && ToHTMLOptionElement(item)->Selected())
       return index;
     ++index;
   }
@@ -877,43 +878,31 @@ void HTMLSelectElement::ScrollToOption(HTMLOptionElement* option) {
     return;
   if (UsesMenuList())
     return;
-  if (GetLayoutObject()) {
-    if (GetDocument().Lifecycle().GetState() >=
-        DocumentLifecycle::kLayoutClean) {
-      ToLayoutListBox(GetLayoutObject())->ScrollToRect(option->BoundingBox());
-      return;
-    }
-    // Make sure the LayoutObject will be laid out.
-    GetLayoutObject()->SetNeedsLayout(
-        LayoutInvalidationReason::kMenuOptionsChanged);
-  }
+  bool has_pending_task = option_to_scroll_to_;
+  // We'd like to keep an HTMLOptionElement reference rather than the index of
+  // the option because the task should work even if unselected option is
+  // inserted before executing scrollToOptionTask().
   option_to_scroll_to_ = option;
-  // ScrollToOptionAfterLayout() should be called if this element is rendered.
+  if (!has_pending_task) {
+    TaskRunnerHelper::Get(TaskType::kUserInteraction, &GetDocument())
+        ->PostTask(BLINK_FROM_HERE,
+                   WTF::Bind(&HTMLSelectElement::ScrollToOptionTask,
+                             WrapPersistent(this)));
+  }
 }
 
-void HTMLSelectElement::ScrollToOptionAfterLayout(
-    PaintLayerScrollableArea& scrollable_area) {
+void HTMLSelectElement::ScrollToOptionTask() {
   HTMLOptionElement* option = option_to_scroll_to_.Release();
-  if (!option || UsesMenuList())
+  if (!option || !isConnected())
     return;
-  LayoutBox* option_box = option->GetLayoutBox();
-  if (!option_box)
+  // optionRemoved() makes sure m_optionToScrollTo doesn't have an option with
+  // another owner.
+  DCHECK_EQ(option->OwnerSelectElement(), this);
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  if (!GetLayoutObject() || !GetLayoutObject()->IsListBox())
     return;
-
-  // We can't use PaintLayerScrollableArea::ScrollIntoView(), which needs
-  // absolute coordinate. We are unable to compute absolute positions because
-  // ancestors' layout aren't fixed yet.
-  LayoutSize option_offset;
-  for (LayoutObject* container = option_box; container != GetLayoutObject();
-       container = container->Container()) {
-    if (!container->Container())
-      return;
-    option_offset += container->OffsetFromContainer(container->Container());
-  }
-  scrollable_area.ScrollLocalRectIntoView(
-      LayoutRect(LayoutPoint() + option_offset, option_box->Size()),
-      ScrollAlignment::kAlignToEdgeIfNeeded,
-      ScrollAlignment::kAlignToEdgeIfNeeded, false);
+  LayoutRect bounds = option->BoundingBox();
+  ToLayoutListBox(GetLayoutObject())->ScrollToRect(bounds);
 }
 
 void HTMLSelectElement::OptionSelectionStateChanged(HTMLOptionElement* option,
@@ -1102,9 +1091,9 @@ FormControlState HTMLSelectElement::SaveFormControlState() const {
   size_t length = items.size();
   FormControlState state;
   for (unsigned i = 0; i < length; ++i) {
-    if (!isHTMLOptionElement(*items[i]))
+    if (!IsHTMLOptionElement(*items[i]))
       continue;
-    HTMLOptionElement* option = toHTMLOptionElement(items[i]);
+    HTMLOptionElement* option = ToHTMLOptionElement(items[i]);
     if (!option->Selected())
       continue;
     state.Append(option->value());
@@ -1121,9 +1110,9 @@ size_t HTMLSelectElement::SearchOptionsForValue(const String& value,
   const ListItems& items = GetListItems();
   size_t loop_end_index = std::min(items.size(), list_index_end);
   for (size_t i = list_index_start; i < loop_end_index; ++i) {
-    if (!isHTMLOptionElement(items[i]))
+    if (!IsHTMLOptionElement(items[i]))
       continue;
-    if (toHTMLOptionElement(items[i])->value() == value)
+    if (ToHTMLOptionElement(items[i])->value() == value)
       return i;
   }
   return kNotFound;
@@ -1143,17 +1132,17 @@ void HTMLSelectElement::RestoreFormControlState(const FormControlState& state) {
   DCHECK_GE(state.ValueSize(), 2u);
   if (!IsMultiple()) {
     size_t index = state[1].ToUInt();
-    if (index < items_size && isHTMLOptionElement(items[index]) &&
-        toHTMLOptionElement(items[index])->value() == state[0]) {
-      toHTMLOptionElement(items[index])->SetSelectedState(true);
-      toHTMLOptionElement(items[index])->SetDirty(true);
-      last_on_change_option_ = toHTMLOptionElement(items[index]);
+    if (index < items_size && IsHTMLOptionElement(items[index]) &&
+        ToHTMLOptionElement(items[index])->value() == state[0]) {
+      ToHTMLOptionElement(items[index])->SetSelectedState(true);
+      ToHTMLOptionElement(items[index])->SetDirty(true);
+      last_on_change_option_ = ToHTMLOptionElement(items[index]);
     } else {
       size_t found_index = SearchOptionsForValue(state[0], 0, items_size);
       if (found_index != kNotFound) {
-        toHTMLOptionElement(items[found_index])->SetSelectedState(true);
-        toHTMLOptionElement(items[found_index])->SetDirty(true);
-        last_on_change_option_ = toHTMLOptionElement(items[found_index]);
+        ToHTMLOptionElement(items[found_index])->SetSelectedState(true);
+        ToHTMLOptionElement(items[found_index])->SetDirty(true);
+        last_on_change_option_ = ToHTMLOptionElement(items[found_index]);
       }
     }
   } else {
@@ -1161,10 +1150,10 @@ void HTMLSelectElement::RestoreFormControlState(const FormControlState& state) {
     for (size_t i = 0; i < state.ValueSize(); i += 2) {
       const String& value = state[i];
       const size_t index = state[i + 1].ToUInt();
-      if (index < items_size && isHTMLOptionElement(items[index]) &&
-          toHTMLOptionElement(items[index])->value() == value) {
-        toHTMLOptionElement(items[index])->SetSelectedState(true);
-        toHTMLOptionElement(items[index])->SetDirty(true);
+      if (index < items_size && IsHTMLOptionElement(items[index]) &&
+          ToHTMLOptionElement(items[index])->value() == value) {
+        ToHTMLOptionElement(items[index])->SetSelectedState(true);
+        ToHTMLOptionElement(items[index])->SetDirty(true);
         start_index = index + 1;
       } else {
         size_t found_index =
@@ -1173,8 +1162,8 @@ void HTMLSelectElement::RestoreFormControlState(const FormControlState& state) {
           found_index = SearchOptionsForValue(value, 0, start_index);
         if (found_index == kNotFound)
           continue;
-        toHTMLOptionElement(items[found_index])->SetSelectedState(true);
-        toHTMLOptionElement(items[found_index])->SetDirty(true);
+        ToHTMLOptionElement(items[found_index])->SetSelectedState(true);
+        ToHTMLOptionElement(items[found_index])->SetDirty(true);
         start_index = found_index + 1;
       }
     }
@@ -1434,9 +1423,9 @@ void HTMLSelectElement::UpdateSelectedState(HTMLOptionElement* clicked_option,
 
 HTMLOptionElement* HTMLSelectElement::EventTargetOption(const Event& event) {
   Node* target_node = event.target()->ToNode();
-  if (!target_node || !isHTMLOptionElement(*target_node))
+  if (!target_node || !IsHTMLOptionElement(*target_node))
     return nullptr;
-  return toHTMLOptionElement(target_node);
+  return ToHTMLOptionElement(target_node);
 }
 
 int HTMLSelectElement::ListIndexForOption(const HTMLOptionElement& option) {

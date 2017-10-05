@@ -20,12 +20,12 @@
 #include "content/public/common/url_constants.h"
 #include "content/shell/android/shell_descriptors.h"
 #include "content/shell/browser/shell.h"
-#include "content/shell/browser/shell_access_token_store.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
 #include "content/shell/browser/shell_net_log.h"
 #include "content/shell/common/shell_switches.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
+#include "device/geolocation/access_token_store.h"
 #include "device/geolocation/geolocation_delegate.h"
 #include "device/geolocation/geolocation_provider.h"
 #include "net/base/filename_util.h"
@@ -62,25 +62,6 @@
 namespace content {
 
 namespace {
-
-// A provider of services for Geolocation.
-class ShellGeolocationDelegate : public device::GeolocationDelegate {
- public:
-  explicit ShellGeolocationDelegate(ShellBrowserContext* context)
-      : context_(context) {}
-
-  // Since content shell is a test executable, rather than an end-user program,
-  // don't make calls to the network geolocation API.
-  bool UseNetworkLocationProviders() override { return false; }
-
-  scoped_refptr<device::AccessTokenStore> CreateAccessTokenStore() final {
-    return new ShellAccessTokenStore(context_);
-  }
-
- private:
-  ShellBrowserContext* context_;
-  DISALLOW_COPY_AND_ASSIGN(ShellGeolocationDelegate);
-};
 
 GURL GetStartupURL() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -185,7 +166,8 @@ int ShellBrowserMainParts::PreCreateThreads() {
             switches::kCrashDumpsDir);
     breakpad::CrashDumpObserver::GetInstance()->RegisterClient(
         base::MakeUnique<breakpad::ChildProcessCrashObserver>(
-            crash_dumps_dir, kAndroidMinidumpDescriptor));
+            crash_dumps_dir, kAndroidMinidumpDescriptor,
+            base::Bind(&base::DoNothing)));
   }
 
   return 0;
@@ -195,8 +177,6 @@ int ShellBrowserMainParts::PreCreateThreads() {
 void ShellBrowserMainParts::PreMainMessageLoopRun() {
   net_log_.reset(new ShellNetLog("content_shell"));
   InitializeBrowserContexts();
-  device::GeolocationProvider::SetGeolocationDelegate(
-      new ShellGeolocationDelegate(browser_context()));
   Shell::Initialize();
   net::NetModule::SetResourceProvider(PlatformResourceProvider);
   ShellDevToolsManagerDelegate::StartHttpHandler(browser_context_.get());

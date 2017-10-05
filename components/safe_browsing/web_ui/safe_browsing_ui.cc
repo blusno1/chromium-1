@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/base64url.h"
 #include "base/callback.h"
 #include "base/i18n/time_formatting.h"
@@ -28,7 +29,7 @@
 #include "content/public/browser/browser_context.h"
 
 #if SAFE_BROWSING_DB_LOCAL
-#include "components/safe_browsing_db/v4_local_database_manager.h"
+#include "components/safe_browsing/db/v4_local_database_manager.h"
 #endif
 
 using base::Time;
@@ -233,28 +234,28 @@ std::string AddFullHashCacheInfo(
 #endif
 
 std::string ParseThreatDetailsInfo(
-    ClientSafeBrowsingReportRequest* client_safe_browsing_report_request) {
+    const ClientSafeBrowsingReportRequest& report) {
   std::string report_request_parsed;
   base::DictionaryValue report_request;
-  if (client_safe_browsing_report_request->has_type()) {
-    report_request.SetInteger(
-        "type", static_cast<int>(client_safe_browsing_report_request->type()));
+  if (report.has_type()) {
+    report_request.SetInteger("type", static_cast<int>(report.type()));
   }
-  if (client_safe_browsing_report_request->has_page_url())
-    report_request.SetString("page_url",
-                             client_safe_browsing_report_request->page_url());
-  if (client_safe_browsing_report_request->has_client_country()) {
-    report_request.SetString(
-        "client_country",
-        client_safe_browsing_report_request->client_country());
+  if (report.has_page_url())
+    report_request.SetString("page_url", report.page_url());
+  if (report.has_client_country()) {
+    report_request.SetString("client_country", report.client_country());
   }
-  if (client_safe_browsing_report_request->has_repeat_visit()) {
-    report_request.SetInteger(
-        "repeat_visit", client_safe_browsing_report_request->repeat_visit());
+  if (report.has_repeat_visit()) {
+    report_request.SetInteger("repeat_visit", report.repeat_visit());
   }
-  if (client_safe_browsing_report_request->has_did_proceed()) {
-    report_request.SetInteger(
-        "did_proceed", client_safe_browsing_report_request->did_proceed());
+  if (report.has_did_proceed()) {
+    report_request.SetInteger("did_proceed", report.did_proceed());
+  }
+  std::string serialized;
+  if (report.SerializeToString(&serialized)) {
+    std::string base64_encoded;
+    base::Base64Encode(serialized, &base64_encoded);
+    report_request.SetString("csbrr(base64)", base64_encoded);
   }
 
   base::Value* report_request_tree = &report_request;
@@ -363,7 +364,7 @@ void SafeBrowsingUIHandler::GetSentThreatDetails(const base::ListValue* args) {
 
   for (const auto& report : reports) {
     sent_reports.GetList().push_back(
-        base::Value(ParseThreatDetailsInfo(report.get())));
+        base::Value(ParseThreatDetailsInfo(*report.get())));
 
     AllowJavascript();
     std::string callback_id;
@@ -376,7 +377,7 @@ void SafeBrowsingUIHandler::NotifyThreatDetailsJsListener(
     ClientSafeBrowsingReportRequest* threat_detail) {
   AllowJavascript();
   FireWebUIListener("threat-details-update",
-                    base::Value(ParseThreatDetailsInfo(threat_detail)));
+                    base::Value(ParseThreatDetailsInfo(*threat_detail)));
 }
 
 void SafeBrowsingUIHandler::RegisterMessages() {

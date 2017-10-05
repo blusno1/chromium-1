@@ -20,6 +20,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test_shell_delegate.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/run_loop.h"
 #include "components/prefs/pref_service.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
@@ -59,56 +60,51 @@ using ShelfControllerTest = AshTestBase;
 
 TEST_F(ShelfControllerTest, IntializesAppListItemDelegate) {
   ShelfModel* model = Shell::Get()->shelf_controller()->model();
-  EXPECT_EQ(2, model->item_count());
+  EXPECT_EQ(1, model->item_count());
   EXPECT_EQ(kAppListId, model->items()[0].id.app_id);
   EXPECT_TRUE(model->GetShelfItemDelegate(ShelfID(kAppListId)));
-  // Chrome initializes the delegate for the browser shortcut item.
-  const char kChromeAppId[] = "mgndgikekgjfcpckkfioiadnlibdjbkf";
-  EXPECT_EQ(kChromeAppId, model->items()[1].id.app_id);
-  EXPECT_FALSE(model->GetShelfItemDelegate(ShelfID(kChromeAppId)));
 }
 
-TEST_F(ShelfControllerTest, ShelfModelChangesInClassicAsh) {
-  if (Shell::GetAshConfig() == Config::MASH)
+TEST_F(ShelfControllerTest, ShelfModelChangesWithoutSync) {
+  ShelfController* controller = Shell::Get()->shelf_controller();
+  if (controller->should_synchronize_shelf_models())
     return;
 
-  ShelfController* controller = Shell::Get()->shelf_controller();
   TestShelfObserver observer;
   mojom::ShelfObserverAssociatedPtr observer_ptr;
   mojo::AssociatedBinding<mojom::ShelfObserver> binding(
       &observer, mojo::MakeIsolatedRequest(&observer_ptr));
   controller->AddObserver(observer_ptr.PassInterface());
 
-  // ShelfModel creates app list and browser shortcut items.
-  EXPECT_EQ(2, controller->model()->item_count());
-
-  // In classic ash, the observer should not be notified of ShelfModel changes.
+  // The ShelfModel should be initialized with a single item for the AppList.
+  // Without syncing, the observer should not be notified of ShelfModel changes.
+  EXPECT_EQ(1, controller->model()->item_count());
   EXPECT_EQ(0u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 
-  // Add a ShelfModel item; |observer| should not be notified in classic ash.
+  // Add a ShelfModel item; |observer| should not be notified without sync.
   ShelfItem item;
   item.type = TYPE_PINNED_APP;
   item.id = ShelfID("foo");
   int index = controller->model()->Add(item);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(3, controller->model()->item_count());
+  EXPECT_EQ(2, controller->model()->item_count());
   EXPECT_EQ(0u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 
-  // Remove a ShelfModel item; |observer| should not be notified in classic ash.
+  // Remove a ShelfModel item; |observer| should not be notified without sync.
   controller->model()->RemoveItemAt(index);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, controller->model()->item_count());
+  EXPECT_EQ(1, controller->model()->item_count());
   EXPECT_EQ(0u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 }
 
-TEST_F(ShelfControllerTest, ShelfModelChangesInMash) {
-  if (Shell::GetAshConfig() != Config::MASH)
+TEST_F(ShelfControllerTest, ShelfModelChangesWithSync) {
+  ShelfController* controller = Shell::Get()->shelf_controller();
+  if (!controller->should_synchronize_shelf_models())
     return;
 
-  ShelfController* controller = Shell::Get()->shelf_controller();
   TestShelfObserver observer;
   mojom::ShelfObserverAssociatedPtr observer_ptr;
   mojo::AssociatedBinding<mojom::ShelfObserver> binding(
@@ -116,44 +112,43 @@ TEST_F(ShelfControllerTest, ShelfModelChangesInMash) {
   controller->AddObserver(observer_ptr.PassInterface());
   base::RunLoop().RunUntilIdle();
 
-  // ShelfModel creates app list and browser shortcut items.
-  EXPECT_EQ(2, controller->model()->item_count());
+  // The ShelfModel should be initialized with a single item for the AppList.
+  // When syncing, the observer is immediately notified of existing shelf items.
+  EXPECT_EQ(1, controller->model()->item_count());
+  EXPECT_EQ(1u, observer.added_count());
+  EXPECT_EQ(0u, observer.removed_count());
 
-  // In mash, the observer is immediately notified of existing shelf items.
+  // Add a ShelfModel item; |observer| should be notified when syncing.
+  ShelfItem item;
+  item.type = TYPE_PINNED_APP;
+  item.id = ShelfID("foo");
+  int index = controller->model()->Add(item);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(2, controller->model()->item_count());
   EXPECT_EQ(2u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 
-  // Add a ShelfModel item; |observer| should be notified in mash.
-  ShelfItem item;
-  item.type = TYPE_PINNED_APP;
-  item.id = ShelfID("foo");
-  int index = controller->model()->Add(item);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(3, controller->model()->item_count());
-  EXPECT_EQ(3u, observer.added_count());
-  EXPECT_EQ(0u, observer.removed_count());
-
-  // Remove a ShelfModel item; |observer| should be notified in mash.
+  // Remove a ShelfModel item; |observer| should be notified when syncing.
   controller->model()->RemoveItemAt(index);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, controller->model()->item_count());
-  EXPECT_EQ(3u, observer.added_count());
+  EXPECT_EQ(1, controller->model()->item_count());
+  EXPECT_EQ(2u, observer.added_count());
   EXPECT_EQ(1u, observer.removed_count());
 
   // Simulate adding an item remotely; Ash should apply the change.
   // |observer| is not notified; see mojom::ShelfController for rationale.
   controller->AddShelfItem(index, item);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(3, controller->model()->item_count());
-  EXPECT_EQ(3u, observer.added_count());
+  EXPECT_EQ(2, controller->model()->item_count());
+  EXPECT_EQ(2u, observer.added_count());
   EXPECT_EQ(1u, observer.removed_count());
 
   // Simulate removing an item remotely; Ash should apply the change.
   // |observer| is not notified; see mojom::ShelfController for rationale.
   controller->RemoveShelfItem(item.id);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, controller->model()->item_count());
-  EXPECT_EQ(3u, observer.added_count());
+  EXPECT_EQ(1, controller->model()->item_count());
+  EXPECT_EQ(2u, observer.added_count());
   EXPECT_EQ(1u, observer.removed_count());
 }
 
@@ -282,6 +277,29 @@ TEST_F(ShelfControllerPrefsTest, ShelfSettingsValidAfterDisplaySwap) {
             GetShelfForDisplay(internal_display_id)->auto_hide_behavior());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
             GetShelfForDisplay(external_display_id)->auto_hide_behavior());
+}
+
+TEST_F(ShelfControllerPrefsTest, ShelfSettingsInTabletMode) {
+  Shelf* shelf = GetPrimaryShelf();
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  SetShelfAlignmentPref(prefs, GetPrimaryDisplay().id(), SHELF_ALIGNMENT_LEFT);
+  SetShelfAutoHideBehaviorPref(prefs, GetPrimaryDisplay().id(),
+                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  ASSERT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
+  ASSERT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+
+  // Verify after entering tablet mode, the shelf alignment is bottom and the
+  // auto hide behavior is never.
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+
+  // Verify after exiting tablet mode, the shelf alignment and auto hide
+  // behavior get their stored pref values.
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
 }
 
 }  // namespace

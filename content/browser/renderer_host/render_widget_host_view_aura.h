@@ -94,7 +94,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   //
   // TODO(lazyboy): Remove |is_guest_view_hack| once BrowserPlugin has migrated
   // to use RWHVChildFrame (http://crbug.com/330264).
-  RenderWidgetHostViewAura(RenderWidgetHost* host, bool is_guest_view_hack);
+  RenderWidgetHostViewAura(RenderWidgetHost* host,
+                           bool is_guest_view_hack,
+                           bool enable_surface_synchronization);
 
   // RenderWidgetHostView implementation.
   void InitAsChild(gfx::NativeView parent_view) override;
@@ -174,7 +176,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
       override;
   void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
-                             cc::CompositorFrame frame) override;
+                             viz::CompositorFrame frame) override;
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
   void DidStopFlinging() override;
@@ -202,6 +204,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   void FocusedNodeChanged(bool is_editable_node,
                           const gfx::Rect& node_bounds_in_screen) override;
+  void ScheduleEmbed(ui::mojom::WindowTreeClientPtr client,
+                     base::OnceCallback<void(const base::UnguessableToken&)>
+                         callback) override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -259,7 +264,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void OnWindowTargetVisibilityChanged(bool visible) override;
   bool HasHitTestMask() const override;
   void GetHitTestMask(gfx::Path* mask) const override;
-  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
 
   // Overridden from ui::EventHandler:
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -391,6 +395,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            ForwardsBeginFrameAcks);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
                            VirtualKeyboardFocusEnsureCaretInRect);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
+                           CompositorFrameSinkChange);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
+                           SurfaceChanges);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, PopupMenuTest);
   FRIEND_TEST_ALL_PREFIXES(WebContentsViewAuraTest,
                            WebContentsViewReparent);
@@ -493,6 +501,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // The model object.
   RenderWidgetHostImpl* const host_;
+
+  const bool enable_surface_synchronization_;
 
   aura::Window* window_;
 

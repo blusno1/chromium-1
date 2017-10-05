@@ -15,13 +15,12 @@
 
 namespace settings {
 
+using safe_browsing::ChromePasswordProtectionService;
+
 ChangePasswordHandler::ChangePasswordHandler(Profile* profile)
-    : profile_(profile), service_(nullptr) {
-  if (g_browser_process && g_browser_process->safe_browsing_service()) {
-    service_ = g_browser_process->safe_browsing_service()
-                   ->GetPasswordProtectionService(profile_);
-  }
-}
+    : profile_(profile),
+      service_(nullptr),
+      password_protection_observer_(this) {}
 
 ChangePasswordHandler::~ChangePasswordHandler() {}
 
@@ -35,8 +34,47 @@ void ChangePasswordHandler::RegisterMessages() {
                                    base::Unretained(this)));
 }
 
+void ChangePasswordHandler::OnJavascriptAllowed() {
+  service_ = safe_browsing::ChromePasswordProtectionService::
+      GetPasswordProtectionService(profile_);
+  if (service_)
+    password_protection_observer_.Add(service_);
+}
+
+void ChangePasswordHandler::OnJavascriptDisallowed() {
+  password_protection_observer_.RemoveAll();
+}
+
+void ChangePasswordHandler::OnGaiaPasswordChanged() {
+  FireWebUIListener("change-password-on-dismiss");
+}
+
+void ChangePasswordHandler::OnMarkingSiteAsLegitimate(const GURL& url) {
+  if (!ChromePasswordProtectionService::ShouldShowChangePasswordSettingUI(
+          profile_)) {
+    FireWebUIListener("change-password-on-dismiss");
+  }
+}
+
+void ChangePasswordHandler::InvokeActionForTesting(
+    ChromePasswordProtectionService::WarningAction action) {
+  if (!ChromePasswordProtectionService::ShouldShowChangePasswordSettingUI(
+          profile_))
+    return;
+
+  DCHECK_EQ(ChromePasswordProtectionService::CHANGE_PASSWORD, action);
+  base::ListValue value;
+  HandleChangePassword(&value);
+}
+
+ChromePasswordProtectionService::WarningUIType
+ChangePasswordHandler::GetObserverType() {
+  return ChromePasswordProtectionService::CHROME_SETTINGS;
+}
+
 void ChangePasswordHandler::HandleChangePasswordPageShown(
     const base::ListValue* args) {
+  AllowJavascript();
   if (service_) {
     service_->OnWarningShown(
         web_ui()->GetWebContents(),
@@ -46,7 +84,7 @@ void ChangePasswordHandler::HandleChangePasswordPageShown(
 
 void ChangePasswordHandler::HandleChangePassword(const base::ListValue* args) {
   if (service_) {
-    service_->OnWarningDone(
+    service_->OnUserAction(
         web_ui()->GetWebContents(),
         safe_browsing::PasswordProtectionService::CHROME_SETTINGS,
         safe_browsing::PasswordProtectionService::CHANGE_PASSWORD);

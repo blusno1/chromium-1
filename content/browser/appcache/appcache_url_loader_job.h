@@ -73,13 +73,14 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
                                 bool is_fallback) override;
   void DeliverNetworkResponse() override;
   void DeliverErrorResponse() override;
-  const GURL& GetURL() const override;
   AppCacheURLLoaderJob* AsURLLoaderJob() override;
 
   // mojom::URLLoader implementation:
   void FollowRedirect() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
+  void PauseReadingBodyFromNet() override;
+  void ResumeReadingBodyFromNet() override;
 
   // mojom::URLLoaderClient implementation.
   // These methods are called by the network loader for subresource requests

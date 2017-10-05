@@ -13,10 +13,10 @@
 #include "base/time/time.h"
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/ui/search/search_ipc_router.h"
-#include "chrome/browser/ui/search/search_model.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
 #include "components/ntp_tiles/tile_source.h"
+#include "components/ntp_tiles/tile_title_source.h"
 #include "components/ntp_tiles/tile_visual_type.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/browser/reload_type.h"
@@ -47,10 +47,6 @@ class SearchTabHelper : public content::WebContentsObserver,
  public:
   ~SearchTabHelper() override;
 
-  SearchModel* model() {
-    return &model_;
-  }
-
   // Invoked when the omnibox input state is changed in some way that might
   // affect the search mode.
   void OmniboxInputStateChanged();
@@ -72,20 +68,16 @@ class SearchTabHelper : public content::WebContentsObserver,
   friend class content::WebContentsUserData<SearchTabHelper>;
   friend class SearchIPCRouterTest;
 
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, ChromeIdentityCheckMatch);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnChromeIdentityCheckMatch);
+                           ChromeIdentityCheckMatchSlightlyDifferentGmail);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnChromeIdentityCheckMatchSlightlyDifferentGmail);
+                           ChromeIdentityCheckMatchSlightlyDifferentGmail2);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, ChromeIdentityCheckMismatch);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnChromeIdentityCheckMatchSlightlyDifferentGmail2);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, OnChromeIdentityCheckMismatch);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnChromeIdentityCheckSignedOutMismatch);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnHistorySyncCheckSyncing);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnHistorySyncCheckNotSyncing);
-  FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest, HandleTabChangedEvents);
+                           ChromeIdentityCheckSignedOutMismatch);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, HistorySyncCheckSyncing);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, HistorySyncCheckNotSyncing);
 
   explicit SearchTabHelper(content::WebContents* web_contents);
 
@@ -109,22 +101,21 @@ class SearchTabHelper : public content::WebContentsObserver,
   void OnUndoAllMostVisitedDeletions() override;
   void OnLogEvent(NTPLoggingEventType event, base::TimeDelta time) override;
   void OnLogMostVisitedImpression(int position,
+                                  ntp_tiles::TileTitleSource tile_title_source,
                                   ntp_tiles::TileSource tile_source,
                                   ntp_tiles::TileVisualType tile_type) override;
   void OnLogMostVisitedNavigation(int position,
+                                  ntp_tiles::TileTitleSource tile_title_source,
                                   ntp_tiles::TileSource tile_source,
                                   ntp_tiles::TileVisualType tile_type) override;
   void PasteIntoOmnibox(const base::string16& text) override;
-  void OnChromeIdentityCheck(const base::string16& identity) override;
-  void OnHistorySyncCheck() override;
+  bool ChromeIdentityCheck(const base::string16& identity) override;
+  bool HistorySyncCheck() override;
 
   // Overridden from InstantServiceObserver:
   void ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) override;
   void MostVisitedItemsChanged(
       const std::vector<InstantMostVisitedItem>& items) override;
-
-  // Sets the mode of the model based on the current URL of web_contents().
-  void UpdateMode();
 
   OmniboxView* GetOmniboxView();
   const OmniboxView* GetOmniboxView() const;
@@ -136,9 +127,6 @@ class SearchTabHelper : public content::WebContentsObserver,
   bool IsInputInProgress() const;
 
   const bool is_search_enabled_;
-
-  // Model object for UI that cares about search state.
-  SearchModel model_;
 
   content::WebContents* web_contents_;
 

@@ -6,6 +6,7 @@
 #include "base/logging.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -16,13 +17,15 @@
 
 namespace {
 // Shadow opacity for the BookmarkContextBar.
-CGFloat kShadowOpacity = 0.2f;
+const CGFloat kShadowOpacity = 0.2f;
 // Horizontal margin for the contents of BookmarkContextBar.
-CGFloat kHorizontalMargin = 8.0f;
+const CGFloat kHorizontalMargin = 8.0f;
+// Height of the part of the toolbar containing content.
+const CGFloat kToolbarHeight = 48.0f;
 }  // namespace
 
-@interface BookmarkContextBar () {
-}
+@interface BookmarkContextBar ()
+
 // Button at the leading position.
 @property(nonatomic, strong) UIButton* leadingButton;
 // Button at the center position.
@@ -73,7 +76,7 @@ CGFloat kHorizontalMargin = 8.0f;
   [button setTitleColor:disabledColor forState:UIControlStateDisabled];
 }
 
-- (void)initStyleForButton:(UIButton*)button {
+- (void)configureStyleForButton:(UIButton*)button {
   [button setBackgroundColor:[UIColor whiteColor]];
   [button setTitleColor:[[MDCPalette bluePalette] tint500]
                forState:UIControlStateNormal];
@@ -91,7 +94,7 @@ CGFloat kHorizontalMargin = 8.0f;
   if (self) {
     self.accessibilityIdentifier = @"context_bar";
     _leadingButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [self initStyleForButton:_leadingButton];
+    [self configureStyleForButton:_leadingButton];
     _leadingButton.contentHorizontalAlignment =
         UseRTLLayout() ? UIControlContentHorizontalAlignmentRight
                        : UIControlContentHorizontalAlignmentLeft;
@@ -101,7 +104,7 @@ CGFloat kHorizontalMargin = 8.0f;
     _leadingButton.accessibilityIdentifier = @"context_bar_leading_button";
 
     _centerButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [self initStyleForButton:_centerButton];
+    [self configureStyleForButton:_centerButton];
     _centerButton.contentHorizontalAlignment =
         UIControlContentHorizontalAlignmentCenter;
     [_centerButton addTarget:self
@@ -110,7 +113,7 @@ CGFloat kHorizontalMargin = 8.0f;
     _centerButton.accessibilityIdentifier = @"context_bar_center_button";
 
     _trailingButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [self initStyleForButton:_trailingButton];
+    [self configureStyleForButton:_trailingButton];
     _trailingButton.contentHorizontalAlignment =
         UseRTLLayout() ? UIControlContentHorizontalAlignmentLeft
                        : UIControlContentHorizontalAlignmentRight;
@@ -129,16 +132,13 @@ CGFloat kHorizontalMargin = 8.0f;
     [self addSubview:_stackView];
     _stackView.translatesAutoresizingMaskIntoConstraints = NO;
     _stackView.layoutMarginsRelativeArrangement = YES;
-    [NSLayoutConstraint activateConstraints:@[
-      [_stackView.layoutMarginsGuide.leadingAnchor
-          constraintEqualToAnchor:self.leadingAnchor
-                         constant:kHorizontalMargin],
-      [_stackView.layoutMarginsGuide.trailingAnchor
-          constraintEqualToAnchor:self.trailingAnchor
-                         constant:-kHorizontalMargin],
-      [_stackView.topAnchor constraintEqualToAnchor:self.topAnchor],
-      [_stackView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-    ]];
+    PinToSafeArea(_stackView, self);
+    [_stackView.heightAnchor constraintEqualToConstant:kToolbarHeight].active =
+        YES;
+
+    _stackView.layoutMarginsRelativeArrangement = YES;
+    _stackView.layoutMargins =
+        UIEdgeInsetsMake(0, kHorizontalMargin, 0, kHorizontalMargin);
 
     [self setBackgroundColor:[UIColor whiteColor]];
     [[self layer] setShadowOpacity:kShadowOpacity];

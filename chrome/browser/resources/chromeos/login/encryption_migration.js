@@ -50,6 +50,11 @@ Polymer({
     batteryPercent: {type: Number, value: 0},
 
     /**
+     * Necessary battery level to start migration in percent.
+     */
+    necessaryBatteryPercent: {type: Number, value: 0},
+
+    /**
      * True if the battery level is enough to start migration.
      */
     isEnoughBattery: {type: Boolean, value: true},
@@ -58,6 +63,11 @@ Polymer({
      * True if the device is charging.
      */
     isCharging: {type: Boolean, value: false},
+
+    /**
+     * True if the migration was skipped.
+     */
+    isSkipped: {type: Boolean, value: false},
 
     /**
      * Formatted string of the current available space size.
@@ -134,6 +144,16 @@ Polymer({
   },
 
   /**
+   * Returns true if the 'Update' button should be disabled.
+   * @param {boolean} isEnoughBattery
+   * @param {boolean} isSkipped
+   * @private
+   */
+  isUpdateDisabled_: function(isEnoughBattery, isSkipped) {
+    return !isEnoughBattery || isSkipped;
+  },
+
+  /**
    * Computes the label shown under progress bar.
    * @param {number} progress
    * @return {string}
@@ -155,11 +175,13 @@ Polymer({
 
   /**
    * Computes the label to show the necessary battery level for migration.
+   * @param {number} necessaryBatteryPercent
    * @return {string}
    * @private
    */
-  computeNecessaryBatteryLevelLabel_: function() {
-    return this.i18n('migrationNecessaryBatteryLevelLabel', 30);
+  computeNecessaryBatteryLevelLabel_: function(necessaryBatteryPercent) {
+    return this.i18n(
+        'migrationNecessaryBatteryLevelLabel', necessaryBatteryPercent);
   },
 
   /**
@@ -195,6 +217,7 @@ Polymer({
    * @private
    */
   onSkip_: function() {
+    this.isSkipped = true;
     this.fire('skip');
   },
 

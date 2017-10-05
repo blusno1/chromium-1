@@ -26,7 +26,6 @@
 
 #include <limits>
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/RawDataDocumentParser.h"
 #include "core/dom/events/EventListener.h"
 #include "core/events/MouseEvent.h"
@@ -45,6 +44,7 @@
 #include "core/html/HTMLHtmlElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLMetaElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
@@ -357,11 +357,13 @@ void ImageDocument::ImageClicked(int x, int y) {
     UpdateStyleAndLayout();
 
     double scale = this->Scale();
+    double device_scale_factor =
+        GetFrame()->View()->GetChromeClient()->WindowToViewportScalar(1.f);
 
-    float scroll_x =
-        image_x / scale - static_cast<float>(GetFrame()->View()->Width()) / 2;
-    float scroll_y =
-        image_y / scale - static_cast<float>(GetFrame()->View()->Height()) / 2;
+    float scroll_x = (image_x * device_scale_factor) / scale -
+                     static_cast<float>(GetFrame()->View()->Width()) / 2;
+    float scroll_y = (image_y * device_scale_factor) / scale -
+                     static_cast<float>(GetFrame()->View()->Height()) / 2;
 
     GetFrame()->View()->LayoutViewportScrollableArea()->SetScrollOffset(
         ScrollOffset(scroll_x, scroll_y), kProgrammaticScroll);

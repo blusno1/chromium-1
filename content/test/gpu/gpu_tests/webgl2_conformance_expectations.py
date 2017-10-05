@@ -51,6 +51,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # All platforms.
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
     self.Fail('conformance2/glsl3/tricky-loop-conditions.html', bug=483282)
+    self.Fail('conformance2/glsl3/array-length-side-effects.html',
+        bug=2142) # angle bug ID
 
     # This test needs to be rewritten to measure its expected
     # performance; it's currently too flaky even on release bots.
@@ -71,11 +73,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     # Need to implement new lifetime/deletion semantics.
     self.Fail('conformance2/vertex_arrays/vertex-array-object.html', bug=739604)
-
-    self.Fail('conformance/glsl/misc/uninitialized-local-global-variables.html',
-        bug=1966) # angle bug ID
-    self.Fail('conformance2/glsl3/uninitialized-local-global-variables.html',
-        bug=1966) # angle bug ID
 
     # Windows only.
     self.Fail('conformance2/buffers/uniform-buffers.html',
@@ -300,10 +297,10 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance/renderbuffers/framebuffer-state-restoration.html',
         ['passthrough', 'opengl', 'intel'], bug=602688)
 
-    # Mac only.
-    self.Fail('conformance2/renderbuffers/' +
-        'multisampled-depth-renderbuffer-initialization.html',
-        ['mac'], bug=696126)
+    # Passthrough command decoder / Linux / OpenGL / NVIDIA
+    self.Fail('conformance/textures/image_bitmap_from_video/' +
+        'tex-2d-rgba-rgba-unsigned_short_5_5_5_1.html',
+        ['linux', 'passthrough', 'opengl', 'nvidia'], bug=766918)
 
     # Regressions in 10.12.4.
     self.Fail('conformance2/textures/misc/tex-base-level-bug.html',
@@ -321,6 +318,10 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac', 'nvidia', 'intel'], bug=630800)
 
     # Mac Retina NVIDIA
+    self.Fail('deqp/functional/gles3/shaderindexing/mat_01.html',
+        ['mac', ('nvidia', 0xfe9)], bug=728271)
+    self.Fail('deqp/functional/gles3/shaderindexing/tmp.html',
+        ['mac', ('nvidia', 0xfe9)], bug=728271)
     self.Fail('deqp/functional/gles3/fbomultisample*',
         ['mac', ('nvidia', 0xfe9)], bug=641209)
     self.Fail('deqp/functional/gles3/framebufferblit/' +
@@ -643,6 +644,10 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         'integer-cubemap-texture-sampling.html',
         ['mac', 'intel'], bug=658930)
 
+    self.Fail('conformance2/renderbuffers/' +
+        'multisampled-depth-renderbuffer-initialization.html',
+        ['mac', 'intel'], bug=731877)
+
     # Linux only.
     self.Flaky('conformance/textures/video/' +
                'tex-2d-rgba-rgba-unsigned_byte.html',
@@ -670,9 +675,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Flaky('deqp/functional/gles3/texturespecification/' +
         'random_teximage2d_2d.html',
         ['linux', 'amd', 'intel'], bug=618447)
-    self.Fail('conformance2/renderbuffers/' +
-        'multisampled-depth-renderbuffer-initialization.html',
-        ['linux', 'amd', 'intel'], bug=738244) # WebGL 2.0.1
     self.Fail('conformance2/rendering/clipping-wide-points.html',
         ['linux', 'amd', 'intel'], bug=662644) # WebGL 2.0.1
 
@@ -791,6 +793,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     # Linux AMD only.
     # It looks like AMD shader compiler rejects many valid ES3 semantics.
+    self.Fail('conformance2/attribs/gl-vertex-attrib-normalized-int.html',
+        ['linux', 'amd'], bug=766776)
     self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
         ['linux', 'amd'], bug=483282)
     self.Fail('conformance2/glsl3/vector-dynamic-indexing-swizzled-lvalue.html',

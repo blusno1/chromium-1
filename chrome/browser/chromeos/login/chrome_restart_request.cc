@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <vector>
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -50,7 +50,6 @@
 #include "ui/compositor/compositor_switches.h"
 #include "ui/display/display_switches.h"
 #include "ui/events/event_switches.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/ozone/public/ozone_switches.h"
 #include "ui/wm/core/wm_core_switches.h"
@@ -99,7 +98,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableRGBA4444Textures,
     ::switches::kDisableSeccompFilterSandbox,
     ::switches::kDisableSetuidSandbox,
-    ::switches::kDisableSlimmingPaintInvalidation,
     ::switches::kDisableThreadedScrolling,
     ::switches::kDisableTouchDragDrop,
     ::switches::kDisableZeroCopy,
@@ -120,8 +118,8 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnablePinch,
     ::switches::kEnablePreferCompositingToLCDText,
     ::switches::kEnableRGBA4444Textures,
+    ::switches::kEnableSlimmingPaintV175,
     ::switches::kEnableSlimmingPaintV2,
-    ::switches::kEnableSlimmingPaintInvalidation,
     ::switches::kEnableTouchDragDrop,
     ::switches::kEnableUnifiedDesktop,
     ::switches::kEnableUseZoomForDSF,

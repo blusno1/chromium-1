@@ -7,6 +7,7 @@
 #include "content/browser/download/download_stats.h"
 #include "content/browser/download/download_utils.h"
 #include "content/public/browser/download_url_parameters.h"
+#include "net/http/http_status_code.h"
 #include "net/log/net_log_with_source.h"
 
 namespace content {
@@ -44,20 +45,26 @@ mojom::NetworkRequestStatus ConvertInterruptReasonToMojoNetworkRequestStatus(
 
 }  // namespace
 
-DownloadResponseHandler::DownloadResponseHandler(DownloadUrlParameters* params,
-                                                 Delegate* delegate,
-                                                 bool is_parallel_request)
+DownloadResponseHandler::DownloadResponseHandler(
+    ResourceRequest* resource_request,
+    Delegate* delegate,
+    std::unique_ptr<DownloadSaveInfo> save_info,
+    bool is_parallel_request,
+    bool is_transient,
+    bool fetch_error_body)
     : delegate_(delegate),
       started_(false),
-      save_info_(base::MakeUnique<DownloadSaveInfo>(params->GetSaveInfo())),
-      url_chain_(1, params->url()),
-      guid_(params->guid()),
-      method_(params->method()),
-      referrer_(params->referrer().url),
-      is_transient_(params->is_transient()),
+      save_info_(std::move(save_info)),
+      url_chain_(1, resource_request->url),
+      method_(resource_request->method),
+      referrer_(resource_request->referrer),
+      is_transient_(is_transient),
+      fetch_error_body_(fetch_error_body),
       has_strong_validators_(false) {
   if (!is_parallel_request)
     RecordDownloadCount(UNTHROTTLED_COUNT);
+  if (resource_request->request_initiator.has_value())
+    origin_ = resource_request->request_initiator.value().GetURL();
 }
 
 DownloadResponseHandler::~DownloadResponseHandler() = default;
@@ -66,16 +73,30 @@ void DownloadResponseHandler::OnReceiveResponse(
     const ResourceResponseHead& head,
     const base::Optional<net::SSLInfo>& ssl_info,
     mojom::DownloadedTempFilePtr downloaded_file) {
-  if (head.headers)
-    RecordDownloadHttpResponseCode(head.headers->response_code());
-
   create_info_ = CreateDownloadCreateInfo(head);
 
   if (ssl_info)
     cert_status_ = ssl_info->cert_status;
 
-  if (head.headers)
+  // TODO(xingliu): Do not use http cache.
+  // Sets page transition type correctly and call
+  // |RecordDownloadSourcePageTransitionType| here.
+  if (head.headers) {
     has_strong_validators_ = head.headers->HasStrongValidators();
+    RecordDownloadHttpResponseCode(head.headers->response_code());
+    RecordDownloadContentDisposition(create_info_->content_disposition);
+  }
+
+  // Blink verifies that the requester of this download is allowed to set a
+  // suggested name for the security origin of the downlaod URL. However, this
+  // assumption doesn't hold if there were cross origin redirects. Therefore,
+  // clear the suggested_name for such requests.
+  if (origin_.is_valid() && !create_info_->url_chain.back().SchemeIsBlob() &&
+      !create_info_->url_chain.back().SchemeIs(url::kAboutScheme) &&
+      !create_info_->url_chain.back().SchemeIs(url::kDataScheme) &&
+      origin_ != create_info_->url_chain.back().GetOrigin()) {
+    create_info_->save_info->suggested_name.clear();
+  }
 
   if (create_info_->result != DOWNLOAD_INTERRUPT_REASON_NONE)
     OnResponseStarted(mojom::DownloadStreamHandlePtr());
@@ -90,9 +111,10 @@ DownloadResponseHandler::CreateDownloadCreateInfo(
       base::Time::Now(), net::NetLogWithSource(), std::move(save_info_));
 
   DownloadInterruptReason result =
-      head.headers ? HandleSuccessfulServerResponse(
-                         *head.headers, create_info->save_info.get())
-                   : DOWNLOAD_INTERRUPT_REASON_NONE;
+      head.headers
+          ? HandleSuccessfulServerResponse(
+                *head.headers, create_info->save_info.get(), fetch_error_body_)
+          : DOWNLOAD_INTERRUPT_REASON_NONE;
 
   create_info->result = result;
   if (result == DOWNLOAD_INTERRUPT_REASON_NONE)
@@ -101,15 +123,12 @@ DownloadResponseHandler::CreateDownloadCreateInfo(
   create_info->connection_info = head.connection_info;
   create_info->url_chain = url_chain_;
   create_info->referrer_url = referrer_;
-  create_info->guid = guid_;
   create_info->transient = is_transient_;
   create_info->response_headers = head.headers;
   create_info->offset = create_info->save_info->offset;
   create_info->mime_type = head.mime_type;
-  if (head.headers &&
-      !head.headers->GetMimeType(&create_info->original_mime_type)) {
-    create_info->original_mime_type.clear();
-  }
+
+  HandleResponseHeaders(head.headers.get(), create_info.get());
   return create_info;
 }
 
@@ -119,6 +138,7 @@ void DownloadResponseHandler::OnReceiveRedirect(
   url_chain_.push_back(redirect_info.new_url);
   method_ = redirect_info.new_method;
   referrer_ = GURL(redirect_info.new_referrer);
+  delegate_->OnReceiveRedirect();
 }
 
 void DownloadResponseHandler::OnDataDownloaded(int64_t data_length,

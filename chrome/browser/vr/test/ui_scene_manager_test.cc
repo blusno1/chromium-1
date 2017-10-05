@@ -6,10 +6,13 @@
 
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/vr/elements/rect.h"
+#include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/test/constants.h"
 #include "chrome/browser/vr/test/fake_ui_element_renderer.h"
+#include "chrome/browser/vr/ui.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_manager.h"
+#include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 
 namespace vr {
@@ -33,25 +36,40 @@ UiSceneManagerTest::UiSceneManagerTest() {}
 UiSceneManagerTest::~UiSceneManagerTest() {}
 
 void UiSceneManagerTest::SetUp() {
-  browser_ = base::MakeUnique<MockBrowserInterface>();
+  browser_ = base::MakeUnique<testing::NiceMock<MockBrowserInterface>>();
+  content_input_delegate_ =
+      base::MakeUnique<testing::NiceMock<MockContentInputDelegate>>();
 }
 
 void UiSceneManagerTest::MakeManager(InCct in_cct, InWebVr in_web_vr) {
   scene_ = base::MakeUnique<UiScene>();
+  model_ = base::MakeUnique<Model>();
+
+  UiInitialState ui_initial_state;
+  ui_initial_state.in_cct = in_cct;
+  ui_initial_state.in_web_vr = in_web_vr;
+  ui_initial_state.web_vr_autopresentation_expected = false;
   manager_ = base::MakeUnique<UiSceneManager>(browser_.get(), scene_.get(),
-                                              &content_input_delegate_, in_cct,
-                                              in_web_vr, kNotAutopresented);
+                                              content_input_delegate_.get(),
+                                              model_.get(), ui_initial_state);
 }
 
 void UiSceneManagerTest::MakeAutoPresentedManager() {
   scene_ = base::MakeUnique<UiScene>();
-  manager_ = base::MakeUnique<UiSceneManager>(
-      browser_.get(), scene_.get(), &content_input_delegate_, kNotInCct,
-      kNotInWebVr, kAutopresented);
+  model_ = base::MakeUnique<Model>();
+
+  UiInitialState ui_initial_state;
+  ui_initial_state.in_cct = false;
+  ui_initial_state.in_web_vr = false;
+  ui_initial_state.web_vr_autopresentation_expected = true;
+  manager_ = base::MakeUnique<UiSceneManager>(browser_.get(), scene_.get(),
+                                              content_input_delegate_.get(),
+                                              model_.get(), ui_initial_state);
 }
 
 bool UiSceneManagerTest::IsVisible(UiElementName name) const {
-  scene_->root_element().UpdateInheritedProperties();
+  scene_->root_element().UpdateComputedOpacityRecursive();
+  scene_->root_element().UpdateWorldSpaceTransformRecursive();
   UiElement* element = scene_->GetUiElementByName(name);
   if (!element)
     return false;
@@ -62,24 +80,31 @@ bool UiSceneManagerTest::IsVisible(UiElementName name) const {
 void UiSceneManagerTest::VerifyElementsVisible(
     const std::string& trace_context,
     const std::set<UiElementName>& names) const {
-  scene_->root_element().UpdateInheritedProperties();
+  scene_->root_element().UpdateComputedOpacityRecursive();
+  scene_->root_element().UpdateWorldSpaceTransformRecursive();
   SCOPED_TRACE(trace_context);
   for (auto name : names) {
     SCOPED_TRACE(name);
     auto* element = scene_->GetUiElementByName(name);
-    EXPECT_NE(nullptr, element);
-    EXPECT_TRUE(element->IsVisible() && IsElementFacingCamera(element));
+    ASSERT_NE(nullptr, element);
+    EXPECT_TRUE(element->IsVisible());
+    EXPECT_TRUE(IsElementFacingCamera(element));
+    EXPECT_NE(kPhaseNone, element->draw_phase());
   }
 }
 
 bool UiSceneManagerTest::VerifyVisibility(const std::set<UiElementName>& names,
                                           bool visible) const {
-  scene_->root_element().UpdateInheritedProperties();
+  scene_->root_element().UpdateComputedOpacityRecursive();
+  scene_->root_element().UpdateWorldSpaceTransformRecursive();
   for (auto name : names) {
     SCOPED_TRACE(name);
     auto* element = scene_->GetUiElementByName(name);
     EXPECT_NE(nullptr, element);
-    if (element->IsVisible() != visible) {
+    if (!element || element->IsVisible() != visible) {
+      return false;
+    }
+    if (!element || (visible && element->draw_phase() == kPhaseNone)) {
       return false;
     }
   }
@@ -89,12 +114,13 @@ bool UiSceneManagerTest::VerifyVisibility(const std::set<UiElementName>& names,
 bool UiSceneManagerTest::VerifyRequiresLayout(
     const std::set<UiElementName>& names,
     bool requires_layout) const {
-  scene_->root_element().UpdateInheritedProperties();
+  scene_->root_element().UpdateComputedOpacityRecursive();
+  scene_->root_element().UpdateWorldSpaceTransformRecursive();
   for (auto name : names) {
     SCOPED_TRACE(name);
     auto* element = scene_->GetUiElementByName(name);
     EXPECT_NE(nullptr, element);
-    if (element->requires_layout() != requires_layout) {
+    if (!element || element->requires_layout() != requires_layout) {
       return false;
     }
   }
@@ -102,7 +128,6 @@ bool UiSceneManagerTest::VerifyRequiresLayout(
 }
 
 void UiSceneManagerTest::CheckRendererOpacityRecursive(
-    const std::set<UiElementName>& exceptions,
     UiElement* element) {
   // Disable all opacity animation for testing.
   element->SetTransitionedProperties({});
@@ -114,23 +139,19 @@ void UiSceneManagerTest::CheckRendererOpacityRecursive(
   OnBeginFrame();
 
   FakeUiElementRenderer renderer;
-  element->Render(&renderer, kProjMatrix);
+  if (element->draw_phase() != kPhaseNone) {
+    element->Render(&renderer, kProjMatrix);
+  }
 
-  // We only do opacity verification when |renderer| is called and the element
-  // is not an element in |exceptions| that we explicitly want to exclude.
   // It is expected that some elements doesn't render anything (such as root
   // elements). So skipping verify these elements should be fine.
-  // There are also elements that has special rules for opacity, such as
-  // ScreenDimmer which uses a constant opacity when rendering. We need to
-  // make exception for these elements too.
-  if (renderer.called() &&
-      exceptions.find(element->name()) == exceptions.end()) {
+  if (renderer.called()) {
     EXPECT_FLOAT_EQ(renderer.opacity(), element->computed_opacity())
         << "element name: " << element->name();
   }
 
   for (auto& child : element->children()) {
-    CheckRendererOpacityRecursive(exceptions, child.get());
+    CheckRendererOpacityRecursive(child.get());
   }
 }
 
@@ -148,13 +169,10 @@ void UiSceneManagerTest::OnBeginFrame() {
   scene_->OnBeginFrame(base::TimeTicks(), gfx::Vector3dF(0.f, 0.f, -1.0f));
 }
 
-SkColor UiSceneManagerTest::GetBackgroundColor() const {
+void UiSceneManagerTest::GetBackgroundColor(SkColor* background_color) const {
   Rect* front =
       static_cast<Rect*>(scene_->GetUiElementByName(kBackgroundFront));
-  EXPECT_NE(nullptr, front);
-  if (!front)
-    return SK_ColorBLACK;
-
+  ASSERT_NE(nullptr, front);
   SkColor color = front->edge_color();
 
   // While returning background color, ensure that all background panel elements
@@ -162,14 +180,12 @@ SkColor UiSceneManagerTest::GetBackgroundColor() const {
   for (auto name : {kBackgroundFront, kBackgroundLeft, kBackgroundBack,
                     kBackgroundRight, kBackgroundTop, kBackgroundBottom}) {
     const Rect* panel = static_cast<Rect*>(scene_->GetUiElementByName(name));
-    EXPECT_NE(nullptr, panel);
-    if (!panel)
-      return SK_ColorBLACK;
+    ASSERT_NE(nullptr, panel);
     EXPECT_EQ(panel->center_color(), color);
     EXPECT_EQ(panel->edge_color(), color);
   }
 
-  return color;
+  *background_color = color;
 }
 
 }  // namespace vr

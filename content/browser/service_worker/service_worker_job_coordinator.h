@@ -5,14 +5,15 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_JOB_COORDINATOR_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_JOB_COORDINATOR_H_
 
-#include <deque>
 #include <map>
 #include <memory>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "content/browser/service_worker/service_worker_register_job.h"
 #include "content/browser/service_worker/service_worker_unregister_job.h"
 #include "content/common/content_export.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -28,7 +29,7 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
   ~ServiceWorkerJobCoordinator();
 
   void Register(const GURL& script_url,
-                const ServiceWorkerRegistrationOptions& options,
+                const blink::mojom::ServiceWorkerRegistrationOptions& options,
                 ServiceWorkerProviderHost* provider_host,
                 const ServiceWorkerRegisterJob::RegistrationCallback& callback);
 
@@ -52,8 +53,6 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
   void FinishJob(const GURL& pattern, ServiceWorkerRegisterJobBase* job);
 
  private:
-  friend class ServiceWorkerJobTest;
-
   class JobQueue {
    public:
     JobQueue();
@@ -66,8 +65,11 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
     ServiceWorkerRegisterJobBase* Push(
         std::unique_ptr<ServiceWorkerRegisterJobBase> job);
 
-    // Returns the first job in the queue.
-    ServiceWorkerRegisterJobBase* front() { return jobs_.front().get(); }
+    // Dooms the installing worker of the running register/update job if a
+    // register/update job is scheduled to run after it. This corresponds to
+    // the "Terminate installing worker" steps at the beginning of the spec's
+    // [[Update]] and [[Install]] algorithms.
+    void DoomInstallingWorkerIfNeeded();
 
     // Starts the first job in the queue.
     void StartOneJob();
@@ -85,43 +87,15 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
     void ClearForShutdown();
 
    private:
-    std::deque<std::unique_ptr<ServiceWorkerRegisterJobBase>> jobs_;
+    base::circular_deque<std::unique_ptr<ServiceWorkerRegisterJobBase>> jobs_;
 
     DISALLOW_COPY_AND_ASSIGN(JobQueue);
   };
-
-  // Calls JobQueue::Push() and returns the return value.
-  ServiceWorkerRegisterJobBase* PushOntoJobQueue(
-      const GURL& pattern,
-      std::unique_ptr<ServiceWorkerRegisterJobBase> job);
-
-  // The job timeout timer periodically calls MaybeTimeoutJobs(), which aborts
-  // the jobs that are taking an excessively long time to complete.
-  void StartJobTimeoutTimer();
-  void MaybeTimeoutJobs();
-
-  base::TimeDelta GetTickDuration(base::TimeTicks start_time) const;
 
   // The ServiceWorkerContextCore object should always outlive the
   // job coordinator, the core owns the coordinator.
   base::WeakPtr<ServiceWorkerContextCore> context_;
   std::map<GURL, JobQueue> job_queues_;
-
-  // The job timeout timer interval.
-  static constexpr base::TimeDelta kTimeoutTimerDelay =
-      base::TimeDelta::FromMinutes(5);
-
-  // The amount of time a running job is given to complete before it is timed
-  // out. This value was chosen conservatively based on the timeout for starting
-  // a new worker (ServiceWorkerVersion::kStartNewWorkerTimeout = 5 minutes) and
-  // the timeout for the 'install' event (ServiceWorkerVersion::kRequestTimeout
-  // = 5 minutes).
-  static constexpr base::TimeDelta kJobTimeout =
-      base::TimeDelta::FromMinutes(30);
-
-  // Starts running whenever there is a non-empty job queue and continues
-  // until all jobs are completed or aborted.
-  base::RepeatingTimer job_timeout_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerJobCoordinator);
 };

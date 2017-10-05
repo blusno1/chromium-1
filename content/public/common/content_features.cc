@@ -9,6 +9,11 @@ namespace features {
 
 // All features in alphabetical order.
 
+// Enables the allowActivationDelegation attribute on iframes.
+// https://www.chromestatus.com/features/6025124331388928
+const base::Feature kAllowActivationDelegationAttr{
+    "AllowActivationDelegationAttr", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables content-initiated, main frame navigations to data URLs.
 // TODO(meacer): Remove when the deprecation is complete.
 //               https://www.chromestatus.com/feature/5669602927312896
@@ -30,6 +35,11 @@ const base::Feature kAsyncWheelEvents{"AsyncWheelEvents",
 const base::Feature kBlockCredentialedSubresources{
     "BlockCredentialedSubresources", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Puts save-data header in the holdback mode. This disables sending of
+// save-data header to origins, and to the renderer processes within Chrome.
+const base::Feature kDataSaverHoldback{"DataSaverHoldback",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables brotli "Accept-Encoding" advertising and "Content-Encoding" support.
 // Brotli format specification: http://www.ietf.org/id/draft-alakuijala-brotli
 const base::Feature kBrotliEncoding{"brotli-encoding",
@@ -37,7 +47,7 @@ const base::Feature kBrotliEncoding{"brotli-encoding",
 
 // Enables browser side navigation (aka PlzNavigate). http://crbug.com/368813
 const base::Feature kBrowserSideNavigation{"browser-side-navigation",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Toggles whether the buggy RSA parser is used.
 //
@@ -110,7 +120,7 @@ const base::Feature kGamepadExtensions{"GamepadExtensions",
 // Causes the implementations of guests (inner WebContents) to use
 // out-of-process iframes.
 const base::Feature kGuestViewCrossProcessFrames{
-    "GuestViewCrossProcessFrames", base::FEATURE_DISABLED_BY_DEFAULT};
+    "GuestViewCrossProcessFrames", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables BlinkGC heap compaction.
 const base::Feature kHeapCompaction{"HeapCompaction",
@@ -133,10 +143,6 @@ const base::Feature kLoadingWithMojo {
       base::FEATURE_ENABLED_BY_DEFAULT
 #endif
 };
-
-// Enables the old algorithm for processing audio constraints in getUserMedia().
-const base::Feature kMediaStreamOldAudioConstraints{
-    "MediaStreamOldAudioConstraints", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the memory coordinator.
 // WARNING:
@@ -166,15 +172,8 @@ const base::Feature kMojoInputMessages{"MojoInputMessages",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables/disables hardware video encode acceleration using Mojo (falls back).
-// TODO(mcasas): remove after https://crbug.com/736517 is closed.
-const base::Feature kMojoVideoEncodeAccelerator {
-  "MojoVideoEncodeAccelerator",
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-};
+const base::Feature kMojoVideoEncodeAccelerator{
+    "MojoVideoEncodeAccelerator", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // ES6 Modules.
 const base::Feature kModuleScripts{"ModuleScripts",
@@ -182,11 +181,15 @@ const base::Feature kModuleScripts{"ModuleScripts",
 
 // ES6 Modules dynamic imports.
 const base::Feature kModuleScriptsDynamicImport{
-    "ModuleScriptsDynamicImport", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ModuleScriptsDynamicImport", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Resource fetch optimizations for workers. See crbug.com/443374
 const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Origin Manifest. See crbug.com/751996
+const base::Feature kOriginManifest{"OriginManifest",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Origin Trials for controlling access to feature/API experiments.
 const base::Feature kOriginTrials{"OriginTrials",
@@ -455,6 +458,10 @@ const base::Feature kDeviceMonitorMac{"DeviceMonitorMac",
 const base::Feature kMacV2Sandbox{"MacV2Sandbox",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
+
+// Enables to use a snapshot file in creating V8 contexts.
+const base::Feature kV8ContextSnapshot{"V8ContextSnapshot",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsMojoBlobsEnabled() {
   return base::FeatureList::IsEnabled(features::kMojoBlobs) ||

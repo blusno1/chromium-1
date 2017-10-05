@@ -25,11 +25,8 @@
 namespace base {
 class DictionaryValue;
 class ListValue;
-class Value;
-}
-
-namespace tracked_objects {
 class Location;
+class Value;
 }
 
 namespace chromeos {
@@ -94,9 +91,9 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Add/remove observers.
   void AddObserver(NetworkStateHandlerObserver* observer,
-                   const tracked_objects::Location& from_here);
+                   const base::Location& from_here);
   void RemoveObserver(NetworkStateHandlerObserver* observer,
-                      const tracked_objects::Location& from_here);
+                      const base::Location& from_here);
 
   // Returns the state for technology |type|. Only
   // NetworkTypePattern::Primitive, ::Mobile, ::Ethernet, and ::Tether are
@@ -439,6 +436,12 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Ensure a valid GUID for NetworkState.
   void UpdateGuid(NetworkState* network);
+
+  // Cellular networks may not have an associated Shill Service (e.g. when the
+  // SIM is locked or a mobile network is not available). To simplify the UI,
+  // if a Cellular Device exists |cellular_networks| will be modified to contain
+  // exactly one network, creating a default network if necessary.
+  void EnsureCellularNetwork(ManagedStateList* cellular_networks);
 
   // Sends NetworkListChanged() to observers and logs an event.
   void NotifyNetworkListChanged();

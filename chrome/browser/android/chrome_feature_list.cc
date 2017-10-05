@@ -18,6 +18,7 @@
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_tiles/constants.h"
 #include "components/offline_pages/core/offline_page_feature.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/payments/core/features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
@@ -40,14 +41,17 @@ namespace {
 const base::Feature* kFeaturesExposedToJava[] = {
     &autofill::kAutofillScanCardholderName,
     &features::kCopylessPaste,
+    &features::kDownloadsForeground,
     &features::kImportantSitesInCbd,
     &features::kMaterialDesignIncognitoNTP,
     &features::kServiceWorkerPaymentApps,
     &features::kSiteNotificationChannels,
     &features::kSimplifiedFullscreenUI,
+    &features::kSoundContentSetting,
     &features::kVrShell,
     &features::kWebPayments,
     &features::kTabsInCbd,
+    &kAllowReaderForAccessibility,
     &kAndroidPayIntegrationV1,
     &kAndroidPayIntegrationV2,
     &kAndroidPaymentApps,
@@ -57,15 +61,16 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kCCTPostMessageAPI,
     &kCCTRedirectPreconnect,
     &kChromeHomeFeature,
+    &kChromeHomeDestroySuggestions,
     &kChromeHomeDoodle,
     &kChromeHomeExpandButton,
-    &kChromeHomeModernLayout,
+    &kChromeHomePromo,
     &kChromeHomeSwipeLogic,
+    &kChromeMemexFeature,
     &kContentSuggestionsLargeThumbnail,
     &kContentSuggestionsScrollToLoad,
-    &kContentSuggestionsVideoOverlay,
     &kContentSuggestionsSettings,
-    &kContentSuggestionsShowSummary,
+    &kContentSuggestionsThumbnailDominantColor,
     &kContextualSearchSingleActions,
     &kContextualSearchUrlActions,
     &kContextualSuggestionsCarousel,
@@ -88,6 +93,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kPayWithGoogleV1,
     &kPhysicalWebFeature,
     &kPhysicalWebSharing,
+    &kProgressBarThrottleFeature,
     &kPwaImprovedSplashScreen,
     &kPwaPersistentNotification,
     &kReaderModeInCCT,
@@ -116,6 +122,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &offline_pages::kOfflinePagesCTFeature,    // See crbug.com/620421.
     &offline_pages::kOfflinePagesCTV2Feature,  // See crbug.com/734753.
     &offline_pages::kOfflinePagesSharingFeature,
+    &omnibox::kAndroidChromeHomePersonalizedSuggestions,
     &password_manager::features::kViewPasswords,
     &subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI,
 };
@@ -133,6 +140,9 @@ const base::Feature* FindFeatureExposedToJava(const std::string& feature_name) {
 }  // namespace
 
 // Alphabetical:
+const base::Feature kAllowReaderForAccessibility = {
+    "AllowReaderForAccessibility", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kAndroidPayIntegrationV1{"AndroidPayIntegrationV1",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -160,17 +170,23 @@ const base::Feature kCCTRedirectPreconnect{"CCTRedirectPreconnect",
 const base::Feature kChromeHomeFeature{"ChromeHome",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kChromeHomeDestroySuggestions{
+    "ChromeHomeDestroySuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kChromeHomeDoodle{"ChromeHomeDoodle",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kChromeHomeExpandButton{"ChromeHomeExpandButton",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kChromeHomeModernLayout{"ChromeHomeModernLayout",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kChromeHomePromo{"ChromeHomePromo",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kChromeHomeSwipeLogic{"ChromeHomeSwipeLogic",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kChromeMemexFeature{"ChromeMemex",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kContentSuggestionsLargeThumbnail{
     "ContentSuggestionsLargeThumbnail", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -178,14 +194,12 @@ const base::Feature kContentSuggestionsLargeThumbnail{
 const base::Feature kContentSuggestionsScrollToLoad{
     "ContentSuggestionsScrollToLoad", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kContentSuggestionsVideoOverlay{
-    "ContentSuggestionsVideoOverlay", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kContentSuggestionsSettings{
     "ContentSuggestionsSettings", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kContentSuggestionsShowSummary{
-    "ContentSuggestionsShowSummary", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kContentSuggestionsThumbnailDominantColor{
+    "ContentSuggestionsThumbnailDominantColor",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kContextualSearchSingleActions{
     "ContextualSearchSingleActions", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -252,7 +266,7 @@ const base::Feature kOmniboxSpareRenderer{"OmniboxSpareRenderer",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPayWithGoogleV1{"PayWithGoogleV1",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kPhysicalWebFeature{"PhysicalWeb",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
@@ -260,11 +274,14 @@ const base::Feature kPhysicalWebFeature{"PhysicalWeb",
 const base::Feature kPhysicalWebSharing{"PhysicalWebSharing",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kProgressBarThrottleFeature{
+    "ProgressBarThrottle", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kPwaImprovedSplashScreen{"PwaImprovedSplashScreen",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPwaPersistentNotification{
-    "PwaPersistentNotification", base::FEATURE_DISABLED_BY_DEFAULT};
+    "PwaPersistentNotification", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kReaderModeInCCT{"ReaderModeInCCT",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
@@ -303,7 +320,7 @@ const base::Feature kWebVRCardboardSupport{"WebVRCardboardSupport",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kXGEOVisibleNetworks{"XGEOVisibleNetworks",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 static jboolean IsInitialized(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   return !!base::FeatureList::GetInstance();

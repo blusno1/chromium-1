@@ -20,9 +20,9 @@
 #include "modules/fetch/BlobBytesConsumer.h"
 #include "modules/fetch/FormDataBytesConsumer.h"
 #include "modules/fetch/Headers.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/EncodedFormData.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 
 namespace blink {
@@ -138,7 +138,7 @@ RequestInit::RequestInit(ExecutionContext* context,
     }
   }
 
-  if (attached_credential.Get() || !is_body_set || v8_body->IsUndefined() ||
+  if (attached_credential.get() || !is_body_set || v8_body->IsUndefined() ||
       v8_body->IsNull())
     return;
 

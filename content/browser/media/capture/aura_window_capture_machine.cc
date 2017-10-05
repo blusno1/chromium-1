@@ -9,9 +9,9 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/gl_helper.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/public/browser/browser_thread.h"
@@ -80,15 +80,15 @@ bool AuraWindowCaptureMachine::InternalStart(
   // Update capture size.
   UpdateCaptureSize();
 
-  // Start observing for GL context losses.
-  ImageTransportFactory::GetInstance()->GetContextFactory()->AddObserver(this);
-
   // Start observing compositor updates.
   aura::WindowTreeHost* const host = desktop_window_->GetHost();
   ui::Compositor* const compositor = host ? host->compositor() : nullptr;
   if (!compositor)
     return false;
   compositor->AddAnimationObserver(this);
+
+  // Start observing for GL context losses.
+  compositor->context_factory()->AddObserver(this);
 
   DCHECK(!wake_lock_);
   // Request Wake Lock. In some testing contexts, the service manager
@@ -159,17 +159,16 @@ void AuraWindowCaptureMachine::InternalStop(const base::Closure& callback) {
   // Stop observing compositor and window events.
   if (desktop_window_) {
     if (aura::WindowTreeHost* host = desktop_window_->GetHost()) {
-      if (ui::Compositor* compositor = host->compositor())
+      if (ui::Compositor* compositor = host->compositor()) {
         compositor->RemoveAnimationObserver(this);
+        compositor->context_factory()->RemoveObserver(this);
+      }
     }
     desktop_window_->RemoveObserver(this);
     desktop_window_ = NULL;
     cursor_renderer_.reset();
   }
 
-  // Stop observing for GL context losses.
-  ImageTransportFactory::GetInstance()->GetContextFactory()->RemoveObserver(
-      this);
   OnLostResources();
 
   callback.Run();
@@ -341,20 +340,29 @@ bool AuraWindowCaptureMachine::ProcessCopyOutputResponse(
     return false;
   }
 
-  gfx::Rect result_rect(result->size());
-  if (!yuv_readback_pipeline_ ||
-      yuv_readback_pipeline_->scaler()->SrcSize() != result_rect.size() ||
-      yuv_readback_pipeline_->scaler()->SrcSubrect() != result_rect ||
-      yuv_readback_pipeline_->scaler()->DstSize() != region_in_frame.size()) {
-    yuv_readback_pipeline_.reset(gl_helper->CreateReadbackPipelineYUV(
-        viz::GLHelper::SCALER_QUALITY_FAST, result_rect.size(), result_rect,
-        region_in_frame.size(), true, true));
+  if (!yuv_readback_pipeline_)
+    yuv_readback_pipeline_ = gl_helper->CreateReadbackPipelineYUV(true, true);
+  viz::GLHelper::ScalerInterface* const scaler =
+      yuv_readback_pipeline_->scaler();
+  const gfx::Vector2d scale_from(result->size().width(),
+                                 result->size().height());
+  const gfx::Vector2d scale_to(region_in_frame.width(),
+                               region_in_frame.height());
+  if (scale_from == scale_to) {
+    if (scaler)
+      yuv_readback_pipeline_->SetScaler(nullptr);
+  } else if (!scaler || !scaler->IsSameScaleRatio(scale_from, scale_to)) {
+    std::unique_ptr<viz::GLHelper::ScalerInterface> scaler =
+        gl_helper->CreateScaler(viz::GLHelper::SCALER_QUALITY_FAST, scale_from,
+                                scale_to, false, false);
+    DCHECK(scaler);  // Arguments to CreateScaler() should never be invalid.
+    yuv_readback_pipeline_->SetScaler(std::move(scaler));
   }
 
   cursor_renderer_->SnapshotCursorState(region_in_frame);
   yuv_readback_pipeline_->ReadbackYUV(
-      texture_mailbox.mailbox(), texture_mailbox.sync_token(),
-      video_frame->visible_rect(),
+      texture_mailbox.mailbox(), texture_mailbox.sync_token(), result->size(),
+      gfx::Rect(region_in_frame.size()),
       video_frame->stride(media::VideoFrame::kYPlane),
       video_frame->data(media::VideoFrame::kYPlane),
       video_frame->stride(media::VideoFrame::kUPlane),
@@ -436,8 +444,10 @@ void AuraWindowCaptureMachine::OnWindowRemovingFromRootWindow(
   DCHECK(window == desktop_window_);
 
   if (aura::WindowTreeHost* host = window->GetHost()) {
-    if (ui::Compositor* compositor = host->compositor())
+    if (ui::Compositor* compositor = host->compositor()) {
       compositor->RemoveAnimationObserver(this);
+      compositor->context_factory()->RemoveObserver(this);
+    }
   }
 }
 
@@ -466,6 +476,7 @@ void AuraWindowCaptureMachine::OnCompositingShuttingDown(
     ui::Compositor* compositor) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   compositor->RemoveAnimationObserver(this);
+  compositor->context_factory()->RemoveObserver(this);
 }
 
 void AuraWindowCaptureMachine::OnLostResources() {

@@ -7,12 +7,28 @@
 #include "net/quic/core/quic_error_codes.h"
 #include "net/quic/core/quic_tag.h"
 #include "net/quic/core/quic_types.h"
+#include "net/quic/platform/api/quic_endian.h"
+#include "net/quic/platform/api/quic_flag_utils.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 
 using std::string;
 
 namespace net {
+namespace {
+
+// Constructs a version label from the 4 bytes such that the on-the-wire
+// order will be: d, c, b, a.
+QuicVersionLabel MakeVersionLabel(char a, char b, char c, char d) {
+  if (!FLAGS_quic_reloadable_flag_quic_use_net_byte_order_version_label) {
+    return MakeQuicTag(a, b, c, d);
+  }
+  QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_use_net_byte_order_version_label,
+                    1, 10);
+  return MakeQuicTag(d, c, b, a);
+}
+
+}  // namespace
 
 QuicVersionVector AllSupportedVersions() {
   QuicVersionVector supported_versions;
@@ -30,15 +46,15 @@ QuicVersionVector FilterSupportedVersions(QuicVersionVector versions) {
   QuicVersionVector filtered_versions(versions.size());
   filtered_versions.clear();  // Guaranteed by spec not to change capacity.
   for (QuicVersion version : versions) {
-    if (version == QUIC_VERSION_41) {
-      if (GetQuicFlag(FLAGS_quic_enable_version_41) &&
-          FLAGS_quic_reloadable_flag_quic_enable_version_40 &&
+    if (version == QUIC_VERSION_42) {
+      if (GetQuicFlag(FLAGS_quic_enable_version_42) &&
+          FLAGS_quic_reloadable_flag_quic_enable_version_41 &&
           FLAGS_quic_reloadable_flag_quic_enable_version_39 &&
           FLAGS_quic_reloadable_flag_quic_enable_version_38) {
         filtered_versions.push_back(version);
       }
-    } else if (version == QUIC_VERSION_40) {
-      if (FLAGS_quic_reloadable_flag_quic_enable_version_40 &&
+    } else if (version == QUIC_VERSION_41) {
+      if (FLAGS_quic_reloadable_flag_quic_enable_version_41 &&
           FLAGS_quic_reloadable_flag_quic_enable_version_39 &&
           FLAGS_quic_reloadable_flag_quic_enable_version_38) {
         filtered_versions.push_back(version);
@@ -50,10 +66,6 @@ QuicVersionVector FilterSupportedVersions(QuicVersionVector versions) {
       }
     } else if (version == QUIC_VERSION_38) {
       if (FLAGS_quic_reloadable_flag_quic_enable_version_38) {
-        filtered_versions.push_back(version);
-      }
-    } else if (version == QUIC_VERSION_36) {
-      if (!FLAGS_quic_reloadable_flag_quic_disable_version_36) {
         filtered_versions.push_back(version);
       }
     } else {
@@ -74,22 +86,20 @@ QuicVersionVector VersionOfIndex(const QuicVersionVector& versions, int index) {
   return version;
 }
 
-QuicTag QuicVersionToQuicTag(const QuicVersion version) {
+QuicVersionLabel QuicVersionToQuicVersionLabel(const QuicVersion version) {
   switch (version) {
     case QUIC_VERSION_35:
-      return MakeQuicTag('Q', '0', '3', '5');
-    case QUIC_VERSION_36:
-      return MakeQuicTag('Q', '0', '3', '6');
+      return MakeVersionLabel('Q', '0', '3', '5');
     case QUIC_VERSION_37:
-      return MakeQuicTag('Q', '0', '3', '7');
+      return MakeVersionLabel('Q', '0', '3', '7');
     case QUIC_VERSION_38:
-      return MakeQuicTag('Q', '0', '3', '8');
+      return MakeVersionLabel('Q', '0', '3', '8');
     case QUIC_VERSION_39:
-      return MakeQuicTag('Q', '0', '3', '9');
-    case QUIC_VERSION_40:
-      return MakeQuicTag('Q', '0', '4', '0');
+      return MakeVersionLabel('Q', '0', '3', '9');
     case QUIC_VERSION_41:
-      return MakeQuicTag('Q', '0', '4', '1');
+      return MakeVersionLabel('Q', '0', '4', '1');
+    case QUIC_VERSION_42:
+      return MakeVersionLabel('Q', '0', '4', '2');
     default:
       // This shold be an ERROR because we should never attempt to convert an
       // invalid QuicVersion to be written to the wire.
@@ -98,15 +108,25 @@ QuicTag QuicVersionToQuicTag(const QuicVersion version) {
   }
 }
 
-QuicVersion QuicTagToQuicVersion(const QuicTag version_tag) {
+string QuicVersionLabelToString(QuicVersionLabel version_label) {
+  if (!FLAGS_quic_reloadable_flag_quic_use_net_byte_order_version_label) {
+    return QuicTagToString(version_label);
+  }
+  QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_use_net_byte_order_version_label,
+                    2, 10);
+  return QuicTagToString(QuicEndian::HostToNet32(version_label));
+}
+
+QuicVersion QuicVersionLabelToQuicVersion(QuicVersionLabel version_label) {
   for (size_t i = 0; i < arraysize(kSupportedQuicVersions); ++i) {
-    if (version_tag == QuicVersionToQuicTag(kSupportedQuicVersions[i])) {
+    if (version_label ==
+        QuicVersionToQuicVersionLabel(kSupportedQuicVersions[i])) {
       return kSupportedQuicVersions[i];
     }
   }
   // Reading from the client so this should not be considered an ERROR.
-  QUIC_DLOG(INFO) << "Unsupported QuicTag version: "
-                  << QuicTagToString(version_tag);
+  QUIC_DLOG(INFO) << "Unsupported QuicVersionLabel version: "
+                  << QuicVersionLabelToString(version_label);
   return QUIC_VERSION_UNSUPPORTED;
 }
 
@@ -117,12 +137,11 @@ QuicVersion QuicTagToQuicVersion(const QuicTag version_tag) {
 string QuicVersionToString(const QuicVersion version) {
   switch (version) {
     RETURN_STRING_LITERAL(QUIC_VERSION_35);
-    RETURN_STRING_LITERAL(QUIC_VERSION_36);
     RETURN_STRING_LITERAL(QUIC_VERSION_37);
     RETURN_STRING_LITERAL(QUIC_VERSION_38);
     RETURN_STRING_LITERAL(QUIC_VERSION_39);
-    RETURN_STRING_LITERAL(QUIC_VERSION_40);
     RETURN_STRING_LITERAL(QUIC_VERSION_41);
+    RETURN_STRING_LITERAL(QUIC_VERSION_42);
     default:
       return "QUIC_VERSION_UNSUPPORTED";
   }

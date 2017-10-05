@@ -16,7 +16,11 @@ class HighlighterSelectionObserver {
  public:
   virtual ~HighlighterSelectionObserver() {}
 
+  // |rect| is the selected rectangle in screen pixes, clipped to screen bounds
+  // if necessary.
   virtual void HandleSelection(const gfx::Rect& rect) = 0;
+  virtual void HandleFailedSelection() = 0;
+  virtual void HandleEnabledStateChange(bool enabled) = 0;
 };
 
 }  // namespace ash

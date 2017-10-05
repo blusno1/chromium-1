@@ -28,13 +28,13 @@
 
 #include "core/layout/LayoutImage.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/PseudoElement.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLAreaElement.h"
 #include "core/html/HTMLImageElement.h"
+#include "core/html_names.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutView.h"
 #include "core/loader/resource/ImageResourceContent.h"
@@ -98,9 +98,9 @@ void LayoutImage::ImageChanged(WrappedImagePtr new_image, const IntRect* rect) {
   if (new_image != image_resource_->ImagePtr())
     return;
 
-  if (IsGeneratedContent() && isHTMLImageElement(GetNode()) &&
+  if (IsGeneratedContent() && IsHTMLImageElement(GetNode()) &&
       image_resource_->ErrorOccurred()) {
-    toHTMLImageElement(GetNode())->EnsureFallbackForGeneratedContent();
+    ToHTMLImageElement(GetNode())->EnsureFallbackForGeneratedContent();
     return;
   }
 
@@ -267,8 +267,7 @@ LayoutUnit LayoutImage::MinimumReplacedHeight() const {
 }
 
 HTMLMapElement* LayoutImage::ImageMap() const {
-  HTMLImageElement* i =
-      isHTMLImageElement(GetNode()) ? toHTMLImageElement(GetNode()) : 0;
+  HTMLImageElement* i = ToHTMLImageElementOrNull(GetNode());
   return i ? i->GetTreeScope().GetImageMap(i->FastGetAttribute(usemapAttr)) : 0;
 }
 

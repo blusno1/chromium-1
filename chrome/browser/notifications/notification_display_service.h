@@ -36,9 +36,11 @@ class NotificationDisplayService : public KeyedService {
   ~NotificationDisplayService() override;
 
   // Displays the |notification| identified by |notification_id|.
-  virtual void Display(NotificationCommon::Type notification_type,
-                       const std::string& notification_id,
-                       const Notification& notification) = 0;
+  virtual void Display(
+      NotificationCommon::Type notification_type,
+      const std::string& notification_id,
+      const Notification& notification,
+      std::unique_ptr<NotificationCommon::Metadata> metadata = nullptr) = 0;
 
   // Closes the notification identified by |notification_id|.
   virtual void Close(NotificationCommon::Type notification_type,
@@ -65,16 +67,20 @@ class NotificationDisplayService : public KeyedService {
   bool ShouldDisplayOverFullscreen(const GURL& origin,
                                    NotificationCommon::Type notification_type);
 
- protected:
+  // Returns the notification handler that was registered for the given type.
+  // May return null.
   NotificationHandler* GetNotificationHandler(
       NotificationCommon::Type notification_type);
 
- private:
   // Registers an implementation object to handle notification operations
   // for |notification_type|.
   void AddNotificationHandler(NotificationCommon::Type notification_type,
                               std::unique_ptr<NotificationHandler> handler);
 
+  // Removes an implementation object added via AddNotificationHandler.
+  void RemoveNotificationHandler(NotificationCommon::Type notification_type);
+
+ private:
   std::map<NotificationCommon::Type, std::unique_ptr<NotificationHandler>>
       notification_handlers_;
   Profile* profile_;

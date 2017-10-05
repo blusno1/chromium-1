@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "ui/accessibility/platform/ax_platform_node_win.h"
+
+#include <vector>
+
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
@@ -166,6 +169,10 @@ IAccessible2UsageObserver::IAccessible2UsageObserver() {
 
 IAccessible2UsageObserver::~IAccessible2UsageObserver() {
 }
+
+AXHypertext::AXHypertext() {}
+AXHypertext::AXHypertext(const AXHypertext& other) = default;
+AXHypertext::~AXHypertext() {}
 
 // static
 base::ObserverList<IAccessible2UsageObserver>&
@@ -618,7 +625,8 @@ int AXPlatformNodeWin::GetIndexInParent() {
 base::string16 AXPlatformNodeWin::GetText() {
   if (IsChildOfLeaf())
     return AXPlatformNodeBase::GetText();
-  return hypertext_;
+
+  return hypertext_.hypertext;
 }
 
 //
@@ -1002,7 +1010,7 @@ STDMETHODIMP AXPlatformNodeWin::get_accValue(VARIANT var_id, BSTR* value) {
   }
 
   //
-  // Document special case (Use the document's url)
+  // Document special case (Use the document's URL)
   //
   if (target->GetData().role == AX_ROLE_ROOT_WEB_AREA ||
       target->GetData().role == AX_ROLE_WEB_AREA) {
@@ -1068,58 +1076,37 @@ STDMETHODIMP AXPlatformNodeWin::put_accValue(VARIANT var_id,
 STDMETHODIMP AXPlatformNodeWin::get_accSelection(VARIANT* selected) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ACC_SELECTION);
   COM_OBJECT_VALIDATE_1_ARG(selected);
-
-  if (GetData().role != AX_ROLE_LIST_BOX)
-    return E_NOTIMPL;
-
-  unsigned long selected_count = 0;
-  for (auto i = 0; i < delegate_->GetChildCount(); ++i) {
-    AXPlatformNodeWin* node = static_cast<AXPlatformNodeWin*>(
+  std::vector<base::win::ScopedComPtr<IDispatch>> selected_nodes;
+  for (int i = 0; i < delegate_->GetChildCount(); ++i) {
+    auto* node = static_cast<AXPlatformNodeWin*>(
         FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
-
     if (node && node->GetData().HasState(AX_STATE_SELECTED))
-      ++selected_count;
+      selected_nodes.emplace_back(node);
   }
 
-  if (selected_count == 0) {
+  if (selected_nodes.empty()) {
     selected->vt = VT_EMPTY;
     return S_OK;
   }
 
-  if (selected_count == 1) {
-    for (auto i = 0; i < delegate_->GetChildCount(); ++i) {
-      AXPlatformNodeWin* node = static_cast<AXPlatformNodeWin*>(
-          FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
-
-      if (node && node->GetData().HasState(AX_STATE_SELECTED)) {
-        selected->vt = VT_DISPATCH;
-        selected->pdispVal = node;
-        node->AddRef();
-        return S_OK;
+  if (selected_nodes.size() == 1) {
+    selected->vt = VT_DISPATCH;
+    selected->pdispVal = selected_nodes[0].Detach();
+    return S_OK;
       }
-    }
-  }
 
   // Multiple items are selected.
-  base::win::EnumVariant* enum_variant =
-      new base::win::EnumVariant(selected_count);
-  enum_variant->AddRef();
-  unsigned long index = 0;
-  for (auto i = 0; i < delegate_->GetChildCount(); ++i) {
-    AXPlatformNodeWin* node = static_cast<AXPlatformNodeWin*>(
-        FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
-
-    if (node && node->GetData().HasState(AX_STATE_SELECTED)) {
-      enum_variant->ItemAt(index)->vt = VT_DISPATCH;
-      enum_variant->ItemAt(index)->pdispVal = node;
-      node->AddRef();
-      ++index;
-    }
+      LONG selected_count = static_cast<LONG>(selected_nodes.size());
+      auto* enum_variant = new base::win::EnumVariant(selected_count);
+      enum_variant->AddRef();
+      for (LONG i = 0; i < selected_count; ++i) {
+        enum_variant->ItemAt(i)->vt = VT_DISPATCH;
+        enum_variant->ItemAt(i)->pdispVal = selected_nodes[i].Detach();
   }
   selected->vt = VT_UNKNOWN;
-  selected->punkVal = static_cast<IUnknown*>(
-      static_cast<base::win::IUnknownImpl*>(enum_variant));
-  return S_OK;
+  HRESULT hr = enum_variant->QueryInterface(IID_PPV_ARGS(&V_UNKNOWN(selected)));
+  enum_variant->Release();
+  return hr;
 }
 
 STDMETHODIMP AXPlatformNodeWin::accSelect(
@@ -2275,7 +2262,11 @@ STDMETHODIMP AXPlatformNodeWin::get_table(IUnknown** table) {
 //
 
 STDMETHODIMP AXPlatformNodeWin::get_nCharacters(LONG* n_characters) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_CHARACTERS);
   COM_OBJECT_VALIDATE_1_ARG(n_characters);
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes |
+                                       ui::AXMode::kInlineTextBoxes);
+
   base::string16 text = TextForIAccessibleText();
   *n_characters = static_cast<LONG>(text.size());
 
@@ -2283,32 +2274,68 @@ STDMETHODIMP AXPlatformNodeWin::get_nCharacters(LONG* n_characters) {
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_caretOffset(LONG* offset) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CARET_OFFSET);
   COM_OBJECT_VALIDATE_1_ARG(offset);
-  *offset = static_cast<LONG>(GetIntAttribute(AX_ATTR_TEXT_SEL_END));
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+  *offset = 0;
+
+  if (!HasCaret())
+    return S_FALSE;
+
+  int selection_start, selection_end;
+  GetSelectionOffsets(&selection_start, &selection_end);
+  // The caret is always at the end of the selection.
+  *offset = selection_end;
+  if (*offset < 0)
+    return S_FALSE;
+
   return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_nSelections(LONG* n_selections) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_SELECTIONS);
   COM_OBJECT_VALIDATE_1_ARG(n_selections);
-  int sel_start = GetIntAttribute(AX_ATTR_TEXT_SEL_START);
-  int sel_end = GetIntAttribute(AX_ATTR_TEXT_SEL_END);
-  if (sel_start != sel_end)
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+
+  *n_selections = 0;
+  int selection_start, selection_end;
+  GetSelectionOffsets(&selection_start, &selection_end);
+  if (selection_start >= 0 && selection_end >= 0 &&
+      selection_start != selection_end) {
     *n_selections = 1;
-  else
-    *n_selections = 0;
+  }
   return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_selection(LONG selection_index,
                                               LONG* start_offset,
                                               LONG* end_offset) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SELECTION);
   COM_OBJECT_VALIDATE_2_ARGS(start_offset, end_offset);
-  if (selection_index != 0)
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+
+  if (!start_offset || !end_offset || selection_index != 0)
     return E_INVALIDARG;
 
-  *start_offset = static_cast<LONG>(GetIntAttribute(AX_ATTR_TEXT_SEL_START));
-  *end_offset = static_cast<LONG>(GetIntAttribute(AX_ATTR_TEXT_SEL_END));
-  return S_OK;
+  *start_offset = 0;
+  *end_offset = 0;
+  int selection_start, selection_end;
+  GetSelectionOffsets(&selection_start, &selection_end);
+  if (selection_start >= 0 && selection_end >= 0 &&
+      selection_start != selection_end) {
+    // We should ignore the direction of the selection when exposing start and
+    // end offsets. According to the IA2 Spec the end offset is always increased
+    // by one past the end of the selection. This wouldn't make sense if
+    // end < start.
+    if (selection_end < selection_start)
+      std::swap(selection_start, selection_end);
+
+    *start_offset = selection_start;
+    *end_offset = selection_end;
+    return S_OK;
+  }
+
+  return E_INVALIDARG;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_text(LONG start_offset,
@@ -2325,7 +2352,7 @@ STDMETHODIMP AXPlatformNodeWin::get_text(LONG start_offset,
     start_offset = static_cast<LONG>(sel_end);
   }
   if (end_offset == IA2_TEXT_OFFSET_LENGTH) {
-    end_offset = static_cast<LONG>(text_str.size());
+    end_offset = len;
   } else if (end_offset == IA2_TEXT_OFFSET_CARET) {
     end_offset = static_cast<LONG>(sel_end);
   }
@@ -2439,11 +2466,19 @@ STDMETHODIMP AXPlatformNodeWin::get_offsetAtPoint(
 
 STDMETHODIMP AXPlatformNodeWin::addSelection(LONG start_offset,
                                              LONG end_offset) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_ADD_SELECTION);
+  COM_OBJECT_VALIDATE();
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+
   // We only support one selection.
   return setSelection(0, start_offset, end_offset);
 }
 
 STDMETHODIMP AXPlatformNodeWin::removeSelection(LONG selection_index) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_REMOVE_SELECTION);
+  COM_OBJECT_VALIDATE();
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+
   if (selection_index != 0)
     return E_INVALIDARG;
   // Simply collapse the selection to the position of the caret if a caret is
@@ -3367,6 +3402,66 @@ std::vector<base::string16> AXPlatformNodeWin::ComputeIA2Attributes() {
   return result;
 }
 
+base::string16 AXPlatformNodeWin::GetValue() {
+  base::string16 value = AXPlatformNodeBase::GetValue();
+
+  // If this doesn't have a value and is linked then set its value to the URL
+  // attribute. This allows screen readers to read an empty link's
+  // destination.
+  // TODO(dougt): Look into ensuring that on click handlers correctly provide
+  // a value here.
+  if (value.empty() && (MSAAState() & STATE_SYSTEM_LINKED))
+    value = GetString16Attribute(ui::AX_ATTR_URL);
+
+  return value;
+}
+
+AXHypertext AXPlatformNodeWin::ComputeHypertext() {
+  AXHypertext result;
+
+  if (IsSimpleTextControl()) {
+    result.hypertext = GetValue();
+    return result;
+  }
+
+  int child_count = delegate_->GetChildCount();
+
+  if (!child_count) {
+    if (IsRichTextControl()) {
+      // We don't want to expose any associated label in IA2 Hypertext.
+      return result;
+    }
+    result.hypertext = GetString16Attribute(ui::AX_ATTR_NAME);
+    return result;
+  }
+
+  // Construct the hypertext for this node, which contains the concatenation
+  // of all of the static text and widespace of this node's children and an
+  // embedded object character for all the other children. Build up a map from
+  // the character index of each embedded object character to the id of the
+  // child object it points to.
+  base::string16 hypertext;
+  for (int i = 0; i < child_count; ++i) {
+    auto* child = static_cast<AXPlatformNodeWin*>(
+        FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
+
+    DCHECK(child);
+    // Similar to Firefox, we don't expose text-only objects in IA2 hypertext.
+    if (child->IsTextOnlyObject()) {
+      hypertext += child->GetString16Attribute(ui::AX_ATTR_NAME);
+    } else {
+      int32_t char_offset = static_cast<int32_t>(hypertext.size());
+      int32_t child_unique_id = child->unique_id();
+      int32_t index = static_cast<int32_t>(result.hyperlinks.size());
+      result.hyperlink_offset_to_index[char_offset] = index;
+      result.hyperlinks.push_back(child_unique_id);
+      hypertext += kEmbeddedCharacter;
+    }
+  }
+  result.hypertext = hypertext;
+  return result;
+}
+
 bool AXPlatformNodeWin::ShouldNodeHaveReadonlyStateByDefault(
     const AXNodeData& data) const {
   switch (data.role) {
@@ -3462,7 +3557,8 @@ int AXPlatformNodeWin::MSAAState() {
       msaa_state |= STATE_SYSTEM_HOTTRACKED;
   }
 
-  // TODO(dougt) Why do we set any state on AX_ROLE_IGNORED?
+  // If the role is IGNORED, we want these elements to be invisible so that
+  // these nodes are hidden from the screen reader.
   if (data.HasState(AX_STATE_INVISIBLE) || GetData().role == AX_ROLE_IGNORED) {
     msaa_state |= STATE_SYSTEM_INVISIBLE;
   }
@@ -3476,7 +3572,7 @@ int AXPlatformNodeWin::MSAAState() {
     msaa_state |= STATE_SYSTEM_MULTISELECTABLE;
   }
 
-  if (data.HasState(AX_STATE_OFFSCREEN))
+  if (delegate_->IsOffscreen())
     msaa_state |= STATE_SYSTEM_OFFSCREEN;
 
   if (data.HasState(AX_STATE_PROTECTED))
@@ -3620,7 +3716,7 @@ void AXPlatformNodeWin::HandleSpecialTextOffset(LONG* offset) {
   if (*offset == IA2_TEXT_OFFSET_LENGTH) {
     *offset = static_cast<LONG>(GetText().length());
   } else if (*offset == IA2_TEXT_OFFSET_CARET) {
-    get_caretOffset(offset);
+    *offset = static_cast<LONG>(GetIntAttribute(AX_ATTR_TEXT_SEL_END));
   }
 }
 
@@ -3748,14 +3844,14 @@ bool AXPlatformNodeWin::IsHyperlink() {
 AXPlatformNodeWin* AXPlatformNodeWin::GetHyperlinkFromHypertextOffset(
     int offset) {
   std::map<int32_t, int32_t>::iterator iterator =
-      hyperlink_offset_to_index_.find(offset);
-  if (iterator == hyperlink_offset_to_index_.end())
+      hypertext_.hyperlink_offset_to_index.find(offset);
+  if (iterator == hypertext_.hyperlink_offset_to_index.end())
     return nullptr;
 
   int32_t index = iterator->second;
   DCHECK_GE(index, 0);
-  DCHECK_LT(index, static_cast<int32_t>(hyperlinks_.size()));
-  int32_t id = hyperlinks_[index];
+  DCHECK_LT(index, static_cast<int32_t>(hypertext_.hyperlinks.size()));
+  int32_t id = hypertext_.hyperlinks[index];
   auto* hyperlink =
       static_cast<AXPlatformNodeWin*>(AXPlatformNodeWin::GetFromUniqueId(id));
   if (!hyperlink)
@@ -3765,20 +3861,20 @@ AXPlatformNodeWin* AXPlatformNodeWin::GetHyperlinkFromHypertextOffset(
 
 int32_t AXPlatformNodeWin::GetHyperlinkIndexFromChild(
     AXPlatformNodeWin* child) {
-  if (hyperlinks_.empty())
+  if (hypertext_.hyperlinks.empty())
     return -1;
 
-  auto iterator =
-      std::find(hyperlinks_.begin(), hyperlinks_.end(), child->unique_id());
-  if (iterator == hyperlinks_.end())
+  auto iterator = std::find(hypertext_.hyperlinks.begin(),
+                            hypertext_.hyperlinks.end(), child->unique_id());
+  if (iterator == hypertext_.hyperlinks.end())
     return -1;
 
-  return static_cast<int32_t>(iterator - hyperlinks_.begin());
+  return static_cast<int32_t>(iterator - hypertext_.hyperlinks.begin());
 }
 
 int32_t AXPlatformNodeWin::GetHypertextOffsetFromHyperlinkIndex(
     int32_t hyperlink_index) {
-  for (auto& offset_index : hyperlink_offset_to_index_) {
+  for (auto& offset_index : hypertext_.hyperlink_offset_to_index) {
     if (offset_index.second == hyperlink_index)
       return offset_index.first;
   }
@@ -3911,8 +4007,8 @@ bool AXPlatformNodeWin::IsSameHypertextCharacter(size_t old_char_index,
                                                  size_t new_char_index) {
   // For anything other than the "embedded character", we just compare the
   // characters directly.
-  base::char16 old_ch = old_hypertext_[old_char_index];
-  base::char16 new_ch = hypertext_[new_char_index];
+  base::char16 old_ch = old_hypertext_.hypertext[old_char_index];
+  base::char16 new_ch = hypertext_.hypertext[new_char_index];
   if (old_ch != new_ch)
     return false;
   if (old_ch == new_ch && new_ch != kEmbeddedCharacter)
@@ -3921,22 +4017,23 @@ bool AXPlatformNodeWin::IsSameHypertextCharacter(size_t old_char_index,
   // If it's an embedded character, they're only identical if the child id
   // the hyperlink points to is the same.
   std::map<int32_t, int32_t>& old_offset_to_index =
-      old_hyperlink_offset_to_index_;
-  std::vector<int32_t>& old_hyperlinks = old_hyperlinks_;
-  int32_t old_hyperlinks_count = static_cast<int32_t>(old_hyperlinks.size());
+      old_hypertext_.hyperlink_offset_to_index;
+  std::vector<int32_t>& old_hyperlinks = old_hypertext_.hyperlinks;
+  int32_t old_hyperlinkscount = static_cast<int32_t>(old_hyperlinks.size());
   std::map<int32_t, int32_t>::iterator iter;
   iter = old_offset_to_index.find((int32_t)old_char_index);
   int old_index = (iter != old_offset_to_index.end()) ? iter->second : -1;
-  int old_child_id = (old_index >= 0 && old_index < old_hyperlinks_count)
+  int old_child_id = (old_index >= 0 && old_index < old_hyperlinkscount)
                          ? old_hyperlinks[old_index]
                          : -1;
 
-  std::map<int32_t, int32_t>& new_offset_to_index = hyperlink_offset_to_index_;
-  std::vector<int32_t>& new_hyperlinks = hyperlinks_;
-  int32_t new_hyperlinks_count = static_cast<int32_t>(new_hyperlinks.size());
+  std::map<int32_t, int32_t>& new_offset_to_index =
+      hypertext_.hyperlink_offset_to_index;
+  std::vector<int32_t>& new_hyperlinks = hypertext_.hyperlinks;
+  int32_t new_hyperlinkscount = static_cast<int32_t>(new_hyperlinks.size());
   iter = new_offset_to_index.find((int32_t)new_char_index);
   int new_index = (iter != new_offset_to_index.end()) ? iter->second : -1;
-  int new_child_id = (new_index >= 0 && new_index < new_hyperlinks_count)
+  int new_child_id = (new_index >= 0 && new_index < new_hyperlinkscount)
                          ? new_hyperlinks[new_index]
                          : -1;
 
@@ -3950,7 +4047,7 @@ void AXPlatformNodeWin::ComputeHypertextRemovedAndInserted(int* start,
   *old_len = 0;
   *new_len = 0;
 
-  const base::string16& old_text = old_hypertext_;
+  const base::string16& old_text = old_hypertext_.hypertext;
   const base::string16& new_text = GetText();
 
   size_t common_prefix = 0;

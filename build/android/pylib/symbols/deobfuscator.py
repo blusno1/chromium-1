@@ -6,14 +6,16 @@ import logging
 import os
 import subprocess
 import threading
+import time
 import uuid
 
 from devil.utils import reraiser_thread
 from pylib import constants
 
 
-_MINIUMUM_TIMEOUT = 5.0  # Large enough to account for process start-up.
+_MINIUMUM_TIMEOUT = 3.0
 _PER_LINE_TIMEOUT = .002  # Should be able to process 500 lines per second.
+_PROCESS_START_TIMEOUT = 10.0
 
 
 class Deobfuscator(object):
@@ -21,13 +23,16 @@ class Deobfuscator(object):
     script_path = os.path.join(
         constants.GetOutDirectory(), 'bin', 'java_deobfuscate')
     cmd = [script_path, mapping_path]
-    # Start process eagerly to hide start-up latency.
-    self._proc = subprocess.Popen(
-        cmd, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        close_fds=True)
     # Allow only one thread to call TransformLines() at a time.
     self._lock = threading.Lock()
     self._closed_called = False
+    # Assign to None so that attribute exists if Popen() throws.
+    self._proc = None
+    # Start process eagerly to hide start-up latency.
+    self._proc_start_time = time.time()
+    self._proc = subprocess.Popen(
+        cmd, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        close_fds=True)
 
   def IsClosed(self):
     return self._closed_called or self._proc.returncode is not None
@@ -69,14 +74,14 @@ class Deobfuscator(object):
           break
         out_lines.append(line)
 
-    if not self.IsReady():
-      logging.warning('Having to wait for Java deobfuscation.')
+    if self.IsBusy():
+      logging.warning('deobfuscator: Having to wait for Java deobfuscation.')
 
     # Allow only one thread to operate at a time.
     with self._lock:
       if self.IsClosed():
         if not self._closed_called:
-          logging.warning('java_deobfuscate process exited with code=%d.',
+          logging.warning('deobfuscator: Process exited with code=%d.',
                           self._proc.returncode)
           self.Close()
         return lines
@@ -90,18 +95,21 @@ class Deobfuscator(object):
         self._proc.stdin.write('\n'.join(lines))
         self._proc.stdin.write('\n{}\n'.format(eof_line))
         self._proc.stdin.flush()
-        timeout = max(_MINIUMUM_TIMEOUT, len(lines) * _PER_LINE_TIMEOUT)
+        time_since_proc_start = time.time() - self._proc_start_time
+        timeout = (max(0, _PROCESS_START_TIMEOUT - time_since_proc_start) +
+                   max(_MINIUMUM_TIMEOUT, len(lines) * _PER_LINE_TIMEOUT))
         reader_thread.join(timeout)
         if self.IsClosed():
-          logging.warning('Close() called by another thread during join().')
+          logging.warning(
+              'deobfuscator: Close() called by another thread during join().')
           return lines
         if reader_thread.is_alive():
-          logging.error('java_deobfuscate timed out.')
+          logging.error('deobfuscator: Timed out.')
           self.Close()
           return lines
         return out_lines
       except IOError:
-        logging.exception('Exception during java_deobfuscate')
+        logging.exception('deobfuscator: Exception during java_deobfuscate')
         self.Close()
         return lines
 
@@ -113,11 +121,15 @@ class Deobfuscator(object):
       self._proc.wait()
 
   def __del__(self):
-    if not self._closed_called:
-      logging.error('Forgot to Close() deobfuscator')
+    # self._proc is None when Popen() fails.
+    if not self._closed_called and self._proc:
+      logging.error('deobfuscator: Forgot to Close()')
 
 
 class DeobfuscatorPool(object):
+  # As of Sep 2017, each instance requires about 500MB of RAM, as measured by:
+  # /usr/bin/time -v out/Release/bin/java_deobfuscate \
+  #     out/Release/apks/ChromePublic.apk.mapping
   def __init__(self, mapping_path, pool_size=4):
     self._mapping_path = mapping_path
     self._pool = [Deobfuscator(mapping_path) for _ in xrange(pool_size)]
@@ -130,7 +142,7 @@ class DeobfuscatorPool(object):
       # Restart any closed Deobfuscators.
       for i, d in enumerate(self._pool):
         if d.IsClosed():
-          logging.warning('Restarting closed Deobfuscator instance.')
+          logging.warning('deobfuscator: Restarting closed instance.')
           self._pool[i] = Deobfuscator(self._mapping_path)
 
       selected = next((x for x in self._pool if x.IsReady()), self._pool[0])

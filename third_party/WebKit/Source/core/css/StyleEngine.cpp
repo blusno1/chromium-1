@@ -29,7 +29,6 @@
 
 #include "core/css/StyleEngine.h"
 
-#include "core/HTMLNames.h"
 #include "core/css/CSSDefaultStyleSheets.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSStyleSheet.h"
@@ -51,6 +50,7 @@
 #include "core/html/HTMLLinkElement.h"
 #include "core/html/HTMLSlotElement.h"
 #include "core/html/imports/HTMLImportsController.h"
+#include "core/html_names.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
@@ -100,9 +100,10 @@ TreeScopeStyleSheetCollection& StyleEngine::EnsureStyleSheetCollectionFor(
 
   StyleSheetCollectionMap::AddResult result =
       style_sheet_collection_map_.insert(&tree_scope, nullptr);
-  if (result.is_new_entry)
+  if (result.is_new_entry) {
     result.stored_value->value =
         new ShadowTreeStyleSheetCollection(ToShadowRoot(tree_scope));
+  }
   return *result.stored_value->value.Get();
 }
 
@@ -151,7 +152,7 @@ WebStyleSheetId StyleEngine::InjectAuthorSheet(
 void StyleEngine::RemoveInjectedAuthorSheet(WebStyleSheetId author_sheet_id) {
   for (size_t i = 0; i < injected_author_style_sheets_.size(); ++i) {
     if (injected_author_style_sheets_[i].first == author_sheet_id) {
-      injected_author_style_sheets_.erase(i);
+      injected_author_style_sheets_.EraseAt(i);
       MarkDocumentDirty();
     }
   }
@@ -607,13 +608,15 @@ CSSStyleSheet* StyleEngine::ParseSheet(Element& element,
 void StyleEngine::CollectScopedStyleFeaturesTo(RuleFeatureSet& features) const {
   HeapHashSet<Member<const StyleSheetContents>>
       visited_shared_style_sheet_contents;
-  if (GetDocument().GetScopedStyleResolver())
+  if (GetDocument().GetScopedStyleResolver()) {
     GetDocument().GetScopedStyleResolver()->CollectFeaturesTo(
         features, visited_shared_style_sheet_contents);
+  }
   for (TreeScope* tree_scope : active_tree_scopes_) {
-    if (ScopedStyleResolver* resolver = tree_scope->GetScopedStyleResolver())
+    if (ScopedStyleResolver* resolver = tree_scope->GetScopedStyleResolver()) {
       resolver->CollectFeaturesTo(features,
                                   visited_shared_style_sheet_contents);
+    }
   }
 }
 
@@ -780,14 +783,16 @@ void StyleEngine::ScheduleSiblingInvalidationsForElement(
 
   if (element.HasClass()) {
     const SpaceSplitString& class_names = element.ClassNames();
-    for (size_t i = 0; i < class_names.size(); i++)
+    for (size_t i = 0; i < class_names.size(); i++) {
       features.CollectSiblingInvalidationSetForClass(
           invalidation_lists, element, class_names[i], min_direct_adjacent);
+    }
   }
 
-  for (const Attribute& attribute : element.Attributes())
+  for (const Attribute& attribute : element.Attributes()) {
     features.CollectSiblingInvalidationSetForAttribute(
         invalidation_lists, element, attribute.GetName(), min_direct_adjacent);
+  }
 
   features.CollectUniversalSiblingInvalidationSet(invalidation_lists,
                                                   min_direct_adjacent);
@@ -813,9 +818,11 @@ void StyleEngine::ScheduleInvalidationsForInsertedSibling(
                                          1);
 
   for (unsigned i = 1; before_element && i <= affected_siblings;
-       i++, before_element = ElementTraversal::PreviousSibling(*before_element))
+       i++, before_element =
+                ElementTraversal::PreviousSibling(*before_element)) {
     ScheduleSiblingInvalidationsForElement(*before_element, *scheduling_parent,
                                            i);
+  }
 }
 
 void StyleEngine::ScheduleInvalidationsForRemovedSibling(
@@ -835,9 +842,11 @@ void StyleEngine::ScheduleInvalidationsForRemovedSibling(
                                          1);
 
   for (unsigned i = 1; before_element && i <= affected_siblings;
-       i++, before_element = ElementTraversal::PreviousSibling(*before_element))
+       i++, before_element =
+                ElementTraversal::PreviousSibling(*before_element)) {
     ScheduleSiblingInvalidationsForElement(*before_element, *scheduling_parent,
                                            i);
+  }
 }
 
 void StyleEngine::ScheduleNthPseudoInvalidations(ContainerNode& nth_parent) {
@@ -860,18 +869,21 @@ void StyleEngine::ScheduleRuleSetInvalidationsForElement(
 
   InvalidationLists invalidation_lists;
   for (const auto& rule_set : rule_sets) {
-    if (!id.IsNull())
+    if (!id.IsNull()) {
       rule_set->Features().CollectInvalidationSetsForId(invalidation_lists,
                                                         element, id);
+    }
     if (class_names) {
       unsigned class_name_count = class_names->size();
-      for (size_t i = 0; i < class_name_count; i++)
+      for (size_t i = 0; i < class_name_count; i++) {
         rule_set->Features().CollectInvalidationSetsForClass(
             invalidation_lists, element, (*class_names)[i]);
+      }
     }
-    for (const Attribute& attribute : element.Attributes())
+    for (const Attribute& attribute : element.Attributes()) {
       rule_set->Features().CollectInvalidationSetsForAttribute(
           invalidation_lists, element, attribute.GetName());
+    }
   }
   style_invalidator_.ScheduleInvalidationSetsForNode(invalidation_lists,
                                                      element);
@@ -881,9 +893,10 @@ void StyleEngine::ScheduleTypeRuleSetInvalidations(
     ContainerNode& node,
     const HeapHashSet<Member<RuleSet>>& rule_sets) {
   InvalidationLists invalidation_lists;
-  for (const auto& rule_set : rule_sets)
+  for (const auto& rule_set : rule_sets) {
     rule_set->Features().CollectTypeRuleInvalidationSet(invalidation_lists,
                                                         node);
+  }
   DCHECK(invalidation_lists.siblings.IsEmpty());
   style_invalidator_.ScheduleInvalidationSetsForNode(invalidation_lists, node);
 
@@ -906,10 +919,11 @@ void StyleEngine::ScheduleTypeRuleSetInvalidations(
 
 void StyleEngine::InvalidateSlottedElements(HTMLSlotElement& slot) {
   for (auto& node : slot.GetDistributedNodes()) {
-    if (node->IsElementNode())
+    if (node->IsElementNode()) {
       node->SetNeedsStyleRecalc(kLocalStyleChange,
                                 StyleChangeReasonForTracing::Create(
                                     StyleChangeReason::kStyleSheetChange));
+    }
   }
 }
 
@@ -946,8 +960,8 @@ void StyleEngine::ScheduleInvalidationsForRuleSets(
   Element* element = ElementTraversal::FirstChild(*stay_within);
   while (element) {
     ScheduleRuleSetInvalidationsForElement(*element, rule_sets);
-    if (invalidate_slotted && isHTMLSlotElement(element))
-      InvalidateSlottedElements(toHTMLSlotElement(*element));
+    if (invalidate_slotted && IsHTMLSlotElement(element))
+      InvalidateSlottedElements(ToHTMLSlotElement(*element));
 
     if (element->GetStyleChangeType() < kSubtreeStyleChange)
       element = ElementTraversal::Next(*element, stay_within);
@@ -1163,11 +1177,12 @@ void StyleEngine::ApplyRuleSetChanges(
 
 const MediaQueryEvaluator& StyleEngine::EnsureMediaQueryEvaluator() {
   if (!media_query_evaluator_) {
-    if (GetDocument().GetFrame())
+    if (GetDocument().GetFrame()) {
       media_query_evaluator_ =
           new MediaQueryEvaluator(GetDocument().GetFrame());
-    else
+    } else {
       media_query_evaluator_ = new MediaQueryEvaluator("all");
+    }
   }
   return *media_query_evaluator_;
 }
@@ -1223,6 +1238,43 @@ void StyleEngine::CustomPropertyRegistered() {
     resolver_->InvalidateMatchedPropertiesCache();
 }
 
+void StyleEngine::MarkForWhitespaceReattachment() {
+  for (auto element : whitespace_reattach_set_) {
+    if (!element->GetLayoutObject())
+      continue;
+    element->SetChildNeedsReattachLayoutTree();
+    element->MarkAncestorsWithChildNeedsReattachLayoutTree();
+  }
+}
+
+void StyleEngine::NodeWillBeRemoved(Node& node) {
+  if (node.IsElementNode()) {
+    style_invalidator_.RescheduleSiblingInvalidationsAsDescendants(
+        ToElement(node));
+  }
+
+  // Mark closest ancestor with with LayoutObject to have all whitespace
+  // children being considered for re-attachment during the layout tree build.
+
+  LayoutObject* layout_object = node.GetLayoutObject();
+  // The removed node does not have a layout object. No sibling whitespace nodes
+  // will change rendering.
+  if (!layout_object)
+    return;
+  // Floating or out-of-flow elements do not affect whitespace siblings.
+  if (layout_object->IsFloatingOrOutOfFlowPositioned())
+    return;
+  layout_object = layout_object->Parent();
+  while (layout_object->IsAnonymous())
+    layout_object = layout_object->Parent();
+  DCHECK(layout_object);
+  DCHECK(layout_object->GetNode());
+  if (layout_object->GetNode()->IsElementNode()) {
+    whitespace_reattach_set_.insert(ToElement(layout_object->GetNode()));
+    GetDocument().ScheduleLayoutTreeUpdateIfNeeded();
+  }
+}
+
 DEFINE_TRACE(StyleEngine) {
   visitor->Trace(document_);
   visitor->Trace(injected_author_style_sheets_);
@@ -1237,6 +1289,7 @@ DEFINE_TRACE(StyleEngine) {
   visitor->Trace(media_query_evaluator_);
   visitor->Trace(global_rule_set_);
   visitor->Trace(style_invalidator_);
+  visitor->Trace(whitespace_reattach_set_);
   visitor->Trace(font_selector_);
   visitor->Trace(text_to_sheet_cache_);
   visitor->Trace(sheet_to_text_cache_);

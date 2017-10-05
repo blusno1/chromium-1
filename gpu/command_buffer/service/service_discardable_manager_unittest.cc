@@ -7,6 +7,7 @@
 #include "gpu/command_buffer/client/client_test_helper.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
 #include "gpu/command_buffer/service/gpu_service_test.h"
+#include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
@@ -67,7 +68,7 @@ class ServiceDiscardableManagerTest : public GpuServiceTest {
  protected:
   void SetUp() override {
     GpuServiceTest::SetUp();
-    decoder_.reset(new MockGLES2Decoder(&command_buffer_service_));
+    decoder_.reset(new MockGLES2Decoder(&command_buffer_service_, &outputter_));
     feature_info_ = new FeatureInfo();
     context_group_ = scoped_refptr<ContextGroup>(new ContextGroup(
         gpu_preferences_, false, &mailbox_manager_, nullptr, nullptr, nullptr,
@@ -114,6 +115,7 @@ class ServiceDiscardableManagerTest : public GpuServiceTest {
   }
 
   MailboxManagerImpl mailbox_manager_;
+  TraceOutputter outputter_;
   ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
   GpuPreferences gpu_preferences_;
@@ -200,11 +202,8 @@ TEST_F(ServiceDiscardableManagerTest, UnlockInvalid) {
 
 TEST_F(ServiceDiscardableManagerTest, Limits) {
   // Size textures so that four fit in the discardable manager.
-  const size_t cache_size_limit = 4 * 1024 * 1024;
-  const size_t texture_size = cache_size_limit / 4;
+  const size_t texture_size = ServiceDiscardableManager::kMaxSize / 4;
   const size_t large_texture_size = 3 * texture_size;
-
-  discardable_manager_.SetCacheSizeLimitForTesting(cache_size_limit);
 
   // Create 4 textures, this should fill up the discardable cache.
   for (int i = 1; i < 5; ++i) {

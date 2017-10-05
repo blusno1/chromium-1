@@ -9,10 +9,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_view_delegate.h"
+#include "ui/app_list/pagination_model.h"
 #include "ui/app_list/search_result.h"
 #include "ui/app_list/vector_icons/vector_icons.h"
 #include "ui/app_list/views/search_result_container_view.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -45,25 +48,25 @@ constexpr SkColor kSearchRatingStarColor =
 SearchResultTileItemView::SearchResultTileItemView(
     SearchResultContainerView* result_container,
     AppListViewDelegate* view_delegate,
+    PaginationModel* pagination_model,
     bool is_suggested_app,
     bool is_fullscreen_app_list_enabled,
     bool is_play_store_search_enabled)
     : is_suggested_app_(is_suggested_app),
       result_container_(result_container),
       view_delegate_(view_delegate),
+      pagination_model_(pagination_model),
       is_fullscreen_app_list_enabled_(is_fullscreen_app_list_enabled) {
   // When |item_| is null, the tile is invisible. Calling SetSearchResult with a
   // non-null item makes the tile visible.
   SetVisible(false);
 
   if (is_play_store_search_enabled) {
-    const gfx::FontList& base_font =
-        ui::ResourceBundle::GetSharedInstance().GetFontList(
-            ui::ResourceBundle::BaseFont);
-
+    const gfx::FontList& font = FullscreenAppListAppTitleFont();
     rating_ = new views::Label;
     rating_->SetEnabledColor(kSearchAppRatingColor);
-    rating_->SetFontList(base_font);
+    rating_->SetFontList(font);
+    rating_->SetLineHeight(font.GetHeight());
     rating_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
     rating_->SetVisible(false);
     AddChildView(rating_);
@@ -78,7 +81,8 @@ SearchResultTileItemView::SearchResultTileItemView(
 
     price_ = new views::Label;
     price_->SetEnabledColor(kSearchAppPriceColor);
-    price_->SetFontList(base_font);
+    price_->SetFontList(font);
+    price_->SetLineHeight(font.GetHeight());
     price_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     price_->SetVisible(false);
     AddChildView(price_);
@@ -115,14 +119,12 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
   SetPrice(item_->formatted_price());
 
   if (is_fullscreen_app_list_enabled_) {
-    const gfx::FontList& base_font =
-        ui::ResourceBundle::GetSharedInstance().GetFontList(
-            ui::ResourceBundle::BaseFont);
-
+    const gfx::FontList& font = FullscreenAppListAppTitleFont();
     if (item_->display_type() == SearchResult::DISPLAY_RECOMMENDATION) {
       set_is_recommendation(true);
 
-      title()->SetFontList(base_font.DeriveWithSizeDelta(1));
+      title()->SetFontList(font);
+      title()->SetLineHeight(font.GetHeight());
       title()->SetEnabledColor(kGridTitleColorFullscreen);
     } else if (item_->display_type() == SearchResult::DISPLAY_TILE) {
       // Set solid color background to avoid broken text. See crbug.com/746563.
@@ -136,7 +138,8 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
       }
       title()->SetBackground(
           views::CreateSolidBackground(kCardBackgroundColorFullscreen));
-      title()->SetFontList(base_font.DeriveWithSizeDelta(1));
+      title()->SetFontList(font);
+      title()->SetLineHeight(font.GetHeight());
       title()->SetEnabledColor(kSearchTitleColor);
     }
 
@@ -160,8 +163,12 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
   }
 
   base::string16 accessible_name = title()->text();
-  if (rating_ && rating_->visible())
-    accessible_name += base::UTF8ToUTF16(", ") + rating_->text();
+  if (rating_ && rating_->visible()) {
+    accessible_name +=
+        base::UTF8ToUTF16(", ") +
+        l10n_util::GetStringFUTF16(IDS_APP_ACCESSIBILITY_STAR_RATING_ARC,
+                                   rating_->text());
+  }
   if (price_ && price_->visible())
     accessible_name += base::UTF8ToUTF16(", ") + price_->text();
   SetAccessibleName(accessible_name);
@@ -220,6 +227,17 @@ bool SearchResultTileItemView::OnKeyPressed(const ui::KeyEvent& event) {
   }
 
   return false;
+}
+
+void SearchResultTileItemView::OnFocus() {
+  if (pagination_model_ && is_recommendation() &&
+      view_delegate_->GetModel()->state() == AppListModel::STATE_APPS) {
+    // Go back to first page when app in suggestions container is focused.
+    pagination_model_->SelectPage(0, false);
+  } else if (!is_recommendation()) {
+    ScrollRectToVisible(GetLocalBounds());
+  }
+  TileItemView::OnFocus();
 }
 
 void SearchResultTileItemView::OnIconChanged() {

@@ -32,7 +32,6 @@
 
 #include <memory>
 #include "core/loader/resource/MockImageResourceObserver.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/graphics/BitmapImage.h"
@@ -46,6 +45,7 @@
 #include "platform/loader/fetch/UniqueIdentifier.h"
 #include "platform/loader/testing/MockFetchContext.h"
 #include "platform/loader/testing/MockResourceClient.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/test/fake_web_task_runner.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/ScopedMockedURL.h"
@@ -475,6 +475,10 @@ TEST(ImageResourceTest, CancelOnRemoveObserver) {
   ScopedMockedURLLoad scoped_mocked_url_load(test_url, GetTestFilePath());
 
   ResourceFetcher* fetcher = CreateFetcher();
+  scheduler::FakeWebTaskRunner* task_runner =
+      static_cast<scheduler::FakeWebTaskRunner*>(
+          fetcher->Context().GetLoadingTaskRunner().get());
+  task_runner->SetTime(1);
 
   // Emulate starting a real load.
   ImageResource* image_resource = ImageResource::CreateForTest(test_url);
@@ -495,7 +499,7 @@ TEST(ImageResourceTest, CancelOnRemoveObserver) {
 
   // Trigger the cancel timer, ensure the load was cancelled and the resource
   // was evicted from the cache.
-  blink::testing::RunPendingTasks();
+  task_runner->RunUntilIdle();
   EXPECT_EQ(ResourceStatus::kLoadError, image_resource->GetStatus());
   EXPECT_FALSE(GetMemoryCache()->ResourceForURL(test_url));
 }

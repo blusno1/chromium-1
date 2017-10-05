@@ -5,6 +5,7 @@
 #import "ios/clean/chrome/browser/ui/ntp/ntp_coordinator.h"
 
 #include "base/logging.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/broadcaster/chrome_broadcaster.h"
 #import "ios/chrome/browser/ui/browser_list/browser.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
@@ -14,9 +15,13 @@
 #import "ios/clean/chrome/browser/ui/bookmarks/bookmarks_coordinator.h"
 #import "ios/clean/chrome/browser/ui/commands/ntp_commands.h"
 #import "ios/clean/chrome/browser/ui/ntp/ntp_home_coordinator.h"
+#import "ios/clean/chrome/browser/ui/ntp/ntp_incognito_coordinator.h"
 #import "ios/clean/chrome/browser/ui/ntp/ntp_mediator.h"
+#import "ios/clean/chrome/browser/ui/ntp/ntp_metrics_recorder.h"
 #import "ios/clean/chrome/browser/ui/ntp/ntp_view_controller.h"
 #import "ios/clean/chrome/browser/ui/recent_tabs/recent_tabs_coordinator.h"
+
+class PrefService;
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -28,6 +33,8 @@
 @property(nonatomic, strong) NTPHomeCoordinator* homeCoordinator;
 @property(nonatomic, strong) BookmarksCoordinator* bookmarksCoordinator;
 @property(nonatomic, strong) RecentTabsCoordinator* recentTabsCoordinator;
+@property(nonatomic, strong) NTPIncognitoCoordinator* incognitoCoordinator;
+@property(nonatomic, strong) NTPMetricsRecorder* metricsRecorder;
 @end
 
 @implementation NTPCoordinator
@@ -36,13 +43,17 @@
 @synthesize homeCoordinator = _homeCoordinator;
 @synthesize bookmarksCoordinator = _bookmarksCoordinator;
 @synthesize recentTabsCoordinator = _recentTabsCoordinator;
+@synthesize incognitoCoordinator = _incognitoCoordinator;
+@synthesize metricsRecorder = _metricsRecorder;
 
 - (void)start {
   if (self.started)
     return;
 
   self.viewController = [[NTPViewController alloc] init];
-  self.mediator = [[NTPMediator alloc] initWithConsumer:self.viewController];
+  self.mediator = [[NTPMediator alloc]
+      initWithConsumer:self.viewController
+           inIncognito:self.browser->browser_state()->IsOffTheRecord()];
 
   // NTPCommands
   [self.dispatcher startDispatchingToTarget:self
@@ -52,6 +63,13 @@
       broadcastValue:@"selectedNTPPanel"
             ofObject:self.viewController
             selector:@selector(broadcastSelectedNTPPanel:)];
+
+  PrefService* prefs =
+      ios::ChromeBrowserState::FromBrowserState(self.browser->browser_state())
+          ->GetPrefs();
+  self.metricsRecorder = [[NTPMetricsRecorder alloc] initWithPrefService:prefs];
+  [self.dispatcher registerMetricsRecorder:self.metricsRecorder
+                               forSelector:@selector(showNTPHomePanel)];
   [super start];
 }
 
@@ -60,6 +78,8 @@
   [self.browser->broadcaster()
       stopBroadcastingForSelector:@selector(broadcastSelectedNTPPanel:)];
   [self.dispatcher stopDispatchingToTarget:self];
+  [self.dispatcher
+      deregisterMetricsRecordingForSelector:@selector(showNTPHomePanel)];
 }
 
 - (void)childCoordinatorDidStart:(BrowserCoordinator*)coordinator {
@@ -89,6 +109,9 @@
                                         animated:YES
                                       completion:nil];
     }
+
+  } else if (coordinator == self.incognitoCoordinator) {
+    self.viewController.incognitoViewController = coordinator.viewController;
   }
 }
 
@@ -130,6 +153,14 @@
     [self addChildCoordinator:self.recentTabsCoordinator];
   }
   [self.recentTabsCoordinator start];
+}
+
+- (void)showNTPIncognitoPanel {
+  if (!self.incognitoCoordinator) {
+    self.incognitoCoordinator = [[NTPIncognitoCoordinator alloc] init];
+    [self addChildCoordinator:self.incognitoCoordinator];
+  }
+  [self.incognitoCoordinator start];
 }
 
 @end

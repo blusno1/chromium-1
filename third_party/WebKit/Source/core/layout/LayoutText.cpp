@@ -26,7 +26,9 @@
 
 #include <algorithm>
 #include "core/dom/AXObjectCache.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/Text.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/iterators/TextIterator.h"
@@ -75,10 +77,8 @@ static SecureTextTimerMap* g_secure_text_timers = nullptr;
 class SecureTextTimer final : public TimerBase {
  public:
   SecureTextTimer(LayoutText* layout_text)
-      : TimerBase(Platform::Current()
-                      ->CurrentThread()
-                      ->Scheduler()
-                      ->TimerTaskRunner()),
+      : TimerBase(TaskRunnerHelper::Get(TaskType::kUserInteraction,
+                                        &layout_text->GetDocument())),
         layout_text_(layout_text),
         last_typed_character_offset_(-1) {}
 
@@ -532,11 +532,12 @@ static PositionWithAffinity CreatePositionWithAffinityForBox(
       affinity = TextAffinity::kDownstream;
       break;
     case kAlwaysUpstream:
-      affinity = VP_UPSTREAM_IF_POSSIBLE;
+      affinity = TextAffinity::kUpstreamIfPossible;
       break;
     case kUpstreamIfPositionIsNotAtStart:
-      affinity = offset > box->CaretMinOffset() ? VP_UPSTREAM_IF_POSSIBLE
-                                                : TextAffinity::kDownstream;
+      affinity = offset > box->CaretMinOffset()
+                     ? TextAffinity::kUpstreamIfPossible
+                     : TextAffinity::kDownstream;
       break;
   }
   int text_start_offset =
@@ -1395,22 +1396,6 @@ bool LayoutText::IsAllCollapsibleWhitespace() const {
   return true;
 }
 
-bool LayoutText::IsRenderedCharacter(int offset_in_node) const {
-  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
-    if (offset_in_node < static_cast<int>(box->Start()) &&
-        !ContainsReversedText()) {
-      // The offset we're looking for is before this node this means the offset
-      // must be in content that is not laid out. Return false.
-      return false;
-    }
-    if (offset_in_node >= static_cast<int>(box->Start()) &&
-        offset_in_node < static_cast<int>(box->Start() + box->Len()))
-      return true;
-  }
-
-  return false;
-}
-
 bool LayoutText::ContainsOnlyWhitespace(unsigned from, unsigned len) const {
   DCHECK(text_);
   StringImpl& text = *text_.Impl();
@@ -1449,7 +1434,7 @@ void LayoutText::SetTextWithOffset(RefPtr<StringImpl> text,
                                    unsigned offset,
                                    unsigned len,
                                    bool force) {
-  if (!force && Equal(text_.Impl(), text.Get()))
+  if (!force && Equal(text_.Impl(), text.get()))
     return;
 
   unsigned old_len = TextLength();
@@ -1643,7 +1628,7 @@ void LayoutText::SecureText(UChar mask) {
 void LayoutText::SetText(RefPtr<StringImpl> text, bool force) {
   DCHECK(text);
 
-  if (!force && Equal(text_.Impl(), text.Get()))
+  if (!force && Equal(text_.Impl(), text.get()))
     return;
 
   SetTextInternal(std::move(text));

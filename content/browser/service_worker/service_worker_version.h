@@ -46,18 +46,20 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+namespace blink {
+class MessagePortChannel;
+}
+
 namespace net {
 class HttpResponseInfo;
 }
 
 namespace content {
 
-class MessagePort;
 class ServiceWorkerContextCore;
 class ServiceWorkerInstalledScriptsSender;
 class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
-class ServiceWorkerURLRequestJob;
 struct ServiceWorkerClientInfo;
 struct ServiceWorkerVersionInfo;
 
@@ -70,7 +72,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
     : public base::RefCounted<ServiceWorkerVersion>,
       public EmbeddedWorkerInstance::Listener {
  public:
-  using StatusCallback = base::Callback<void(ServiceWorkerStatusCode)>;
+  // TODO(crbug.com/755477): LegacyStatusCallback which does not use
+  // OnceCallback is deprecated and should be removed soon.
+  using LegacyStatusCallback = base::Callback<void(ServiceWorkerStatusCode)>;
+  using StatusCallback = base::OnceCallback<void(ServiceWorkerStatusCode)>;
   using SimpleEventCallback =
       base::Callback<void(ServiceWorkerStatusCode, base::Time)>;
 
@@ -203,11 +208,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // This returns OK (success) if the worker is already running.
   // |purpose| is recorded in UMA.
   void StartWorker(ServiceWorkerMetrics::EventType purpose,
-                   const StatusCallback& callback);
+                   StatusCallback callback);
 
   // Stops an embedded worker for this version.
-  // This returns OK (success) if the worker is already stopped.
-  void StopWorker(const StatusCallback& callback);
+  void StopWorker(base::OnceClosure callback);
 
   // Skips waiting and forces this version to become activated.
   void SkipWaitingFromDevTools();
@@ -229,7 +233,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // |purpose| is used for UMA.
   void RunAfterStartWorker(ServiceWorkerMetrics::EventType purpose,
                            base::OnceClosure task,
-                           const StatusCallback& error_callback);
+                           StatusCallback error_callback);
 
   // Call this while the worker is running before dispatching an event to the
   // worker. This informs ServiceWorkerVersion about the event in progress. The
@@ -245,12 +249,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // killed before the request finishes. In this case, the caller should not
   // call FinishRequest.
   int StartRequest(ServiceWorkerMetrics::EventType event_type,
-                   const StatusCallback& error_callback);
+                   StatusCallback error_callback);
 
   // Same as StartRequest, but allows the caller to specify a custom timeout for
   // the event, as well as the behavior for when the request times out.
   int StartRequestWithCustomTimeout(ServiceWorkerMetrics::EventType event_type,
-                                    const StatusCallback& error_callback,
+                                    StatusCallback error_callback,
                                     const base::TimeDelta& timeout,
                                     TimeoutBehavior timeout_behavior);
 
@@ -309,12 +313,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   base::WeakPtr<ServiceWorkerContextCore> context() const { return context_; }
 
-  // Adds and removes |request_job| as a dependent job not to stop the
-  // ServiceWorker while |request_job| is reading the stream of the fetch event
-  // response from the ServiceWorker.
-  void AddStreamingURLRequestJob(const ServiceWorkerURLRequestJob* request_job);
-  void RemoveStreamingURLRequestJob(
-      const ServiceWorkerURLRequestJob* request_job);
+  // Called when the browser process starts/finishes reading a fetch event
+  // response via Mojo data pipe from the service worker. We try to not stop the
+  // service worker while there is an ongoing response.
+  void OnStreamResponseStarted();
+  void OnStreamResponseFinished();
 
   // Adds and removes Listeners.
   void AddListener(Listener* listener);
@@ -333,7 +336,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void SetStartWorkerStatusCode(ServiceWorkerStatusCode status);
 
   // Sets this version's status to REDUNDANT and deletes its resources.
-  // The version must not have controllees.
   void Doom();
   bool is_redundant() const { return status_ == REDUNDANT; }
 
@@ -467,7 +469,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   };
 
   struct PendingRequest {
-    PendingRequest(const StatusCallback& error_callback,
+    PendingRequest(StatusCallback error_callback,
                    base::Time time,
                    const base::TimeTicks& time_ticks,
                    ServiceWorkerMetrics::EventType event_type);
@@ -593,7 +595,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void OnPostMessageToClient(
       const std::string& client_uuid,
       const base::string16& message,
-      const std::vector<MessagePort>& sent_message_ports);
+      const std::vector<blink::MessagePortChannel>& sent_message_ports);
   void OnFocusClient(int request_id, const std::string& client_uuid);
   void OnNavigateClient(int request_id,
                         const std::string& client_uuid,
@@ -612,7 +614,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
       ServiceWorkerMetrics::EventType purpose,
       Status prestart_status,
       bool is_browser_startup_complete,
-      const StatusCallback& callback,
+      StatusCallback callback,
       ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void StartWorkerInternal();
@@ -699,7 +701,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   Status status_ = NEW;
   std::unique_ptr<EmbeddedWorkerInstance> embedded_worker_;
   std::vector<StatusCallback> start_callbacks_;
-  std::vector<StatusCallback> stop_callbacks_;
+  std::vector<base::OnceClosure> stop_callbacks_;
   std::vector<base::OnceClosure> status_change_callbacks_;
 
   // Holds in-flight requests, including requests due to outstanding push,
@@ -717,7 +719,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::unique_ptr<ServiceWorkerInstalledScriptsSender>
       installed_scripts_sender_;
 
-  std::set<const ServiceWorkerURLRequestJob*> streaming_url_request_jobs_;
+  // The number of fetch event responses that the service worker is streaming to
+  // the browser process. We try to not stop the service worker while there is
+  // an ongoing response.
+  int pending_stream_response_count_ = 0;
 
   // Keeps track of the provider hosting this running service worker for this
   // version. |provider_host_| is always valid as long as this version is

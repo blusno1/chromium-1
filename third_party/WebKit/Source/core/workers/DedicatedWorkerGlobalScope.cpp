@@ -36,9 +36,9 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/origin_trials/OriginTrialContext.h"
+#include "core/workers/DedicatedWorkerObjectProxy.h"
 #include "core/workers/DedicatedWorkerThread.h"
 #include "core/workers/GlobalScopeCreationParams.h"
-#include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/WorkerClients.h"
 #include "platform/bindings/ScriptState.h"
 
@@ -90,7 +90,7 @@ void DedicatedWorkerGlobalScope::postMessage(
     const MessagePortArray& ports,
     ExceptionState& exception_state) {
   // Disentangle the port in preparation for sending it to the remote context.
-  MessagePortChannelArray channels = MessagePort::DisentanglePorts(
+  auto channels = MessagePort::DisentanglePorts(
       ExecutionContext::From(script_state), ports, exception_state);
   if (exception_state.HadException())
     return;
@@ -98,7 +98,7 @@ void DedicatedWorkerGlobalScope::postMessage(
                                                 std::move(channels));
 }
 
-InProcessWorkerObjectProxy& DedicatedWorkerGlobalScope::WorkerObjectProxy()
+DedicatedWorkerObjectProxy& DedicatedWorkerGlobalScope::WorkerObjectProxy()
     const {
   return static_cast<DedicatedWorkerThread*>(GetThread())->WorkerObjectProxy();
 }

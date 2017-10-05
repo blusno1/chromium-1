@@ -6,6 +6,7 @@
 
 #include "base/allocator/allocator_shim.h"
 #include "base/allocator/features.h"
+#include "base/allocator/partition_allocator/partition_alloc.h"
 #include "base/debug/debugging_flags.h"
 #include "base/debug/stack_trace.h"
 #include "base/synchronization/lock.h"
@@ -34,6 +35,12 @@ constexpr int kSendBufferSize = 65536;
 // Prime since this is used like a hash table. Numbers of this magnitude seemed
 // to provide sufficient parallelism to avoid lock overhead in ad-hoc testing.
 constexpr int kNumSendBuffers = 17;
+
+// Functions set by a callback if the GC heap exists in the current process.
+// This function pointers can be used to hook or unhook the oilpan allocations.
+// It will be null in the browser process.
+SetGCAllocHookFunction g_hook_gc_alloc = nullptr;
+SetGCFreeHookFunction g_hook_gc_free = nullptr;
 
 class SendBuffer {
  public:
@@ -78,7 +85,7 @@ void DoSend(const void* address, const void* data, size_t size) {
 void* HookAlloc(const AllocatorDispatch* self, size_t size, void* context) {
   const AllocatorDispatch* const next = self->next;
   void* ptr = next->alloc_function(next, size, context);
-  AllocatorShimLogAlloc(ptr, size);
+  AllocatorShimLogAlloc(AllocatorType::kMalloc, ptr, size, nullptr);
   return ptr;
 }
 
@@ -88,7 +95,7 @@ void* HookZeroInitAlloc(const AllocatorDispatch* self,
                         void* context) {
   const AllocatorDispatch* const next = self->next;
   void* ptr = next->alloc_zero_initialized_function(next, n, size, context);
-  AllocatorShimLogAlloc(ptr, n * size);
+  AllocatorShimLogAlloc(AllocatorType::kMalloc, ptr, n * size, nullptr);
   return ptr;
 }
 
@@ -98,7 +105,7 @@ void* HookAllocAligned(const AllocatorDispatch* self,
                        void* context) {
   const AllocatorDispatch* const next = self->next;
   void* ptr = next->alloc_aligned_function(next, alignment, size, context);
-  AllocatorShimLogAlloc(ptr, size);
+  AllocatorShimLogAlloc(AllocatorType::kMalloc, ptr, size, nullptr);
   return ptr;
 }
 
@@ -110,7 +117,7 @@ void* HookRealloc(const AllocatorDispatch* self,
   void* ptr = next->realloc_function(next, address, size, context);
   AllocatorShimLogFree(address);
   if (size > 0)  // realloc(size == 0) means free()
-    AllocatorShimLogAlloc(ptr, size);
+    AllocatorShimLogAlloc(AllocatorType::kMalloc, ptr, size, nullptr);
   return ptr;
 }
 
@@ -136,7 +143,7 @@ unsigned HookBatchMalloc(const AllocatorDispatch* self,
   unsigned count =
       next->batch_malloc_function(next, size, results, num_requested, context);
   for (unsigned i = 0; i < count; ++i)
-    AllocatorShimLogAlloc(results[i], size);
+    AllocatorShimLogAlloc(AllocatorType::kMalloc, results[i], size, nullptr);
   return count;
 }
 
@@ -173,27 +180,68 @@ AllocatorDispatch g_memlog_hooks = {
 };
 #endif  // BUILDFLAG(USE_ALLOCATOR_SHIM)
 
+void HookPartitionAlloc(void* address, size_t size, const char* type) {
+  AllocatorShimLogAlloc(AllocatorType::kPartitionAlloc, address, size, type);
+}
+
+void HookPartitionFree(void* address) {
+  AllocatorShimLogFree(address);
+}
+
+void HookGCAlloc(uint8_t* address, size_t size, const char* type) {
+  AllocatorShimLogAlloc(AllocatorType::kOilpan, address, size, type);
+}
+
+void HookGCFree(uint8_t* address) {
+  AllocatorShimLogFree(address);
+}
+
 }  // namespace
 
 void InitAllocatorShim(MemlogSenderPipe* sender_pipe) {
-  g_send_buffers = new SendBuffer[kNumSendBuffers];
+  // Must be done before hooking any functions that make stack traces.
+  base::debug::EnableInProcessStackDumping();
 
+  g_send_buffers = new SendBuffer[kNumSendBuffers];
   g_sender_pipe = sender_pipe;
+
 #if BUILDFLAG(USE_ALLOCATOR_SHIM)
+  // Normal malloc allocator shim.
   base::allocator::InsertAllocatorDispatch(&g_memlog_hooks);
 #endif
+
+  // PartitionAlloc allocator shim.
+  base::PartitionAllocHooks::SetAllocationHook(&HookPartitionAlloc);
+  base::PartitionAllocHooks::SetFreeHook(&HookPartitionFree);
+
+  // GC (Oilpan) allocator shim.
+  if (g_hook_gc_alloc && g_hook_gc_free) {
+    g_hook_gc_alloc(&HookGCAlloc);
+    g_hook_gc_free(&HookGCFree);
+  }
 }
 
 void StopAllocatorShimDangerous() {
   g_send_buffers = nullptr;
+  base::PartitionAllocHooks::SetAllocationHook(nullptr);
+  base::PartitionAllocHooks::SetFreeHook(nullptr);
+
+  if (g_hook_gc_alloc && g_hook_gc_free) {
+    g_hook_gc_alloc(nullptr);
+    g_hook_gc_free(nullptr);
+  }
 }
 
-void AllocatorShimLogAlloc(void* address, size_t sz) {
+void AllocatorShimLogAlloc(AllocatorType type,
+                           void* address,
+                           size_t sz,
+                           const char* context) {
   if (!g_send_buffers)
     return;
   if (address) {
-    constexpr size_t max_message_size =
-        sizeof(AllocPacket) + kMaxStackEntries * sizeof(uint64_t);
+    constexpr size_t max_message_size = sizeof(AllocPacket) +
+                                        kMaxStackEntries * sizeof(uint64_t) +
+                                        kMaxContextLen;
     static_assert(max_message_size < kSendBufferSize,
                   "We can't have a message size that exceeds the pipe write "
                   "buffer size.");
@@ -221,14 +269,22 @@ void AllocatorShimLogAlloc(void* address, size_t sz) {
     for (size_t i = 0; i < frame_count; i++)
       stack[i] = (uint64_t)frames[i];
 
+    size_t context_len = context ? strnlen(context, kMaxContextLen) : 0;
+
     alloc_packet->op = kAllocPacketType;
-    alloc_packet->time = 0;  // TODO(brettw) add timestamp.
+    alloc_packet->allocator = type;
     alloc_packet->address = (uint64_t)address;
     alloc_packet->size = sz;
     alloc_packet->stack_len = static_cast<uint32_t>(frame_count);
+    alloc_packet->context_byte_len = static_cast<uint32_t>(context_len);
 
-    DoSend(address, message,
-           sizeof(AllocPacket) + alloc_packet->stack_len * sizeof(uint64_t));
+    char* message_end = reinterpret_cast<char*>(&stack[frame_count]);
+    if (context_len > 0) {
+      memcpy(message_end, context, context_len);
+      message_end += context_len;
+    }
+
+    DoSend(address, message, message_end - message);
   }
 }
 
@@ -238,10 +294,22 @@ void AllocatorShimLogFree(void* address) {
   if (address) {
     FreePacket free_packet;
     free_packet.op = kFreePacketType;
-    free_packet.time = 0;  // TODO(brettw) add timestamp.
     free_packet.address = (uint64_t)address;
 
     DoSend(address, &free_packet, sizeof(FreePacket));
+  }
+}
+
+void SetGCHeapAllocationHookFunctions(SetGCAllocHookFunction hook_alloc,
+                                      SetGCFreeHookFunction hook_free) {
+  g_hook_gc_alloc = hook_alloc;
+  g_hook_gc_free = hook_free;
+
+  if (g_sender_pipe) {
+    // If starting the memlog pipe beat Blink initialization, hook the
+    // functions now.
+    g_hook_gc_alloc(&HookGCAlloc);
+    g_hook_gc_free(&HookGCFree);
   }
 }
 

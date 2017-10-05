@@ -26,7 +26,7 @@ class HTMLInputElementTest : public ::testing::Test {
   HTMLInputElement& TestElement() {
     Element* element = GetDocument().getElementById("test");
     DCHECK(element);
-    return toHTMLInputElement(*element);
+    return ToHTMLInputElement(*element);
   }
 
  private:
@@ -38,16 +38,16 @@ class HTMLInputElementTest : public ::testing::Test {
 };
 
 TEST_F(HTMLInputElementTest, FilteredDataListOptionsNoList) {
-  GetDocument().documentElement()->setInnerHTML("<input id=test>");
+  GetDocument().documentElement()->SetInnerHTMLFromString("<input id=test>");
   EXPECT_TRUE(TestElement().FilteredDataListOptions().IsEmpty());
 
-  GetDocument().documentElement()->setInnerHTML(
+  GetDocument().documentElement()->SetInnerHTMLFromString(
       "<input id=test list=dl1><datalist id=dl1></datalist>");
   EXPECT_TRUE(TestElement().FilteredDataListOptions().IsEmpty());
 }
 
 TEST_F(HTMLInputElementTest, FilteredDataListOptionsContain) {
-  GetDocument().documentElement()->setInnerHTML(
+  GetDocument().documentElement()->SetInnerHTMLFromString(
       "<input id=test value=BC list=dl2>"
       "<datalist id=dl2>"
       "<option>AbC DEF</option>"
@@ -59,7 +59,7 @@ TEST_F(HTMLInputElementTest, FilteredDataListOptionsContain) {
   EXPECT_EQ("AbC DEF", options[0]->value().Utf8());
   EXPECT_EQ("ghi", options[1]->value().Utf8());
 
-  GetDocument().documentElement()->setInnerHTML(
+  GetDocument().documentElement()->SetInnerHTMLFromString(
       "<input id=test value=i list=dl2>"
       "<datalist id=dl2>"
       "<option>I</option>"
@@ -73,7 +73,7 @@ TEST_F(HTMLInputElementTest, FilteredDataListOptionsContain) {
 }
 
 TEST_F(HTMLInputElementTest, FilteredDataListOptionsForMultipleEmail) {
-  GetDocument().documentElement()->setInnerHTML(
+  GetDocument().documentElement()->SetInnerHTMLFromString(
       "<input id=test value='foo@example.com, tkent' list=dl3 type=email "
       "multiple>"
       "<datalist id=dl3>"
@@ -103,7 +103,8 @@ TEST_F(HTMLInputElementTest, NoAssertWhenMovedInNewDocument) {
   html->AppendChild(HTMLBodyElement::Create(*document_without_frame));
 
   // Create an input element with type "range" inside a document without frame.
-  toHTMLBodyElement(html->firstChild())->setInnerHTML("<input type='range' />");
+  ToHTMLBodyElement(html->firstChild())
+      ->SetInnerHTMLFromString("<input type='range' />");
   document_without_frame->AppendChild(html);
 
   std::unique_ptr<DummyPageHolder> page_holder = DummyPageHolder::Create();
@@ -152,11 +153,11 @@ TEST_F(HTMLInputElementTest, ImageTypeCrash) {
 
 TEST_F(HTMLInputElementTest, RadioKeyDownDCHECKFailure) {
   // crbug.com/697286
-  GetDocument().body()->setInnerHTML(
+  GetDocument().body()->SetInnerHTMLFromString(
       "<input type=radio name=g><input type=radio name=g>");
   HTMLInputElement& radio1 =
-      toHTMLInputElement(*GetDocument().body()->firstChild());
-  HTMLInputElement& radio2 = toHTMLInputElement(*radio1.nextSibling());
+      ToHTMLInputElement(*GetDocument().body()->firstChild());
+  HTMLInputElement& radio2 = ToHTMLInputElement(*radio1.nextSibling());
   radio1.focus();
   // Make layout-dirty.
   radio2.setAttribute(HTMLNames::styleAttr, "position:fixed");
@@ -168,11 +169,11 @@ TEST_F(HTMLInputElementTest, RadioKeyDownDCHECKFailure) {
 
 TEST_F(HTMLInputElementTest, DateTimeChooserSizeParamRespectsScale) {
   GetDocument().View()->GetFrame().GetPage()->GetVisualViewport().SetScale(2.f);
-  GetDocument().body()->setInnerHTML(
+  GetDocument().body()->SetInnerHTMLFromString(
       "<input type='date' style='width:200px;height:50px' />");
   GetDocument().View()->UpdateAllLifecyclePhases();
   HTMLInputElement* input =
-      toHTMLInputElement(GetDocument().body()->firstChild());
+      ToHTMLInputElement(GetDocument().body()->firstChild());
 
   DateTimeChooserParameters params;
   bool success = input->SetupDateTimeChooserParameters(params);

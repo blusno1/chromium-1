@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.omnibox;
 import android.os.Bundle;
 import android.text.TextUtils;
 
+import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.WarmupManager;
@@ -23,6 +24,8 @@ import java.util.List;
  * Bridge to the native AutocompleteControllerAndroid.
  */
 public class AutocompleteController {
+    private static final String TAG = "cr_Autocomplete";
+
     // Maximum number of search/history suggestions to show.
     private static final int MAX_DEFAULT_SUGGESTION_COUNT = 5;
 
@@ -94,28 +97,17 @@ public class AutocompleteController {
      * @param profile The profile to use for starting the AutocompleteController
      * @param url The URL of the current tab, used to suggest query refinements.
      * @param text The text to query autocomplete suggestions for.
-     * @param preventInlineAutocomplete Whether autocomplete suggestions should be prevented.
-     * @param focusedFromFakebox Whether the user entered the omnibox by tapping the fakebox on the
-     *                           native NTP. This should be false on all other pages.
-     */
-    public void start(Profile profile, String url, String text, boolean preventInlineAutocomplete,
-            boolean focusedFromFakebox) {
-        start(profile, url, text, -1, preventInlineAutocomplete, focusedFromFakebox);
-    }
-
-    /**
-     * Starts querying for omnibox suggestions for a given text.
-     *
-     * @param profile The profile to use for starting the AutocompleteController
-     * @param url The URL of the current tab, used to suggest query refinements.
-     * @param text The text to query autocomplete suggestions for.
-     * @param cursorPosition The position of the cursor within the text.
+     * @param cursorPosition The position of the cursor within the text.  Set to -1 if the cursor is
+     *                     not focussed on the text.
      * @param preventInlineAutocomplete Whether autocomplete suggestions should be prevented.
      * @param focusedFromFakebox Whether the user entered the omnibox by tapping the fakebox on the
      *                           native NTP. This should be false on all other pages.
      */
     public void start(Profile profile, String url, String text, int cursorPosition,
             boolean preventInlineAutocomplete, boolean focusedFromFakebox) {
+        // crbug.com/764749
+        Log.w(TAG, "starting autocomplete controller..[%b][%b]", profile == null,
+                TextUtils.isEmpty(url));
         if (profile == null || TextUtils.isEmpty(url)) return;
 
         mNativeAutocompleteControllerAndroid = nativeInit(profile);
@@ -191,6 +183,8 @@ public class AutocompleteController {
         mCurrentNativeAutocompleteResult = 0;
         mWaitingForSuggestionsToCache = false;
         if (mNativeAutocompleteControllerAndroid != 0) {
+            // crbug.com/764749
+            Log.w(TAG, "stopping autocomplete.");
             nativeStop(mNativeAutocompleteControllerAndroid, clear);
         }
     }

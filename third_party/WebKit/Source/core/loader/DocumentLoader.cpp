@@ -65,16 +65,16 @@
 #include "core/probe/CoreProbes.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
-#include "platform/HTTPNames.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/feature_policy/FeaturePolicy.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/http_names.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/mhtml/ArchiveResource.h"
 #include "platform/mhtml/MHTMLArchive.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
@@ -399,11 +399,10 @@ void DocumentLoader::NotifyFinished(Resource* resource) {
 }
 
 void DocumentLoader::LoadFailed(const ResourceError& error) {
-  if (!error.IsCancellation() && frame_->Owner()) {
-    // FIXME: For now, fallback content doesn't work cross process.
-    if (frame_->Owner()->IsLocal())
-      frame_->DeprecatedLocalOwner()->RenderFallbackContent();
-  }
+  if (!error.IsCancellation() && frame_->Owner())
+    frame_->Owner()->RenderFallbackContent();
+  fetcher_->ClearResourcesFromPreviousFetcher();
+
   HistoryCommitType history_commit_type = LoadTypeToCommitType(load_type_);
   switch (state_) {
     case kNotStarted:
@@ -422,12 +421,10 @@ void DocumentLoader::LoadFailed(const ResourceError& error) {
         frame_->GetDocument()->Parser()->StopParsing();
       state_ = kSentDidFinishLoad;
       GetLocalFrameClient().DispatchDidFailLoad(error, history_commit_type);
-      if (frame_)
-        frame_->GetDocument()->CheckCompleted();
+      GetFrameLoader().DidFinishNavigation();
       break;
     case kSentDidFinishLoad:
-      // TODO(japhet): Why do we need to call DidFinishNavigation() again?
-      GetFrameLoader().DidFinishNavigation();
+      NOTREACHED();
       break;
   }
   DCHECK_EQ(kSentDidFinishLoad, state_);
@@ -678,8 +675,7 @@ void DocumentLoader::CommitNavigation(const AtomicString& mime_type,
   DCHECK(frame_->GetPage());
 
   ParserSynchronizationPolicy parsing_policy = kAllowAsynchronousParsing;
-  if ((substitute_data_.IsValid() && substitute_data_.ForceSynchronousLoad()) ||
-      !Document::ThreadedParsingEnabledForTesting())
+  if (!Document::ThreadedParsingEnabledForTesting())
     parsing_policy = kForceSynchronousParsing;
 
   InstallNewDocument(Url(), owner_document, should_reuse_default_view,
@@ -931,12 +927,6 @@ void DocumentLoader::DidInstallNewDocument(Document* document) {
       document->SetContentLanguage(AtomicString(header_content_language));
   }
 
-  if (settings->GetForceTouchEventFeatureDetectionForInspector()) {
-    OriginTrialContext::From(document)->AddFeature(
-        "ForceTouchEventFeatureDetectionForInspector");
-  }
-  OriginTrialContext::AddTokensFromHeader(
-      document, response_.HttpHeaderField(HTTPNames::Origin_Trial));
   String referrer_policy_header =
       response_.HttpHeaderField(HTTPNames::Referrer_Policy);
   if (!referrer_policy_header.IsNull()) {
@@ -1000,12 +990,11 @@ bool DocumentLoader::ShouldClearWindowName(
     const LocalFrame& frame,
     SecurityOrigin* previous_security_origin,
     const Document& new_document) {
-  if (!previous_security_origin)
+  if (!previous_security_origin || !frame.IsMainFrame() ||
+      frame.Loader().Opener() ||
+      (frame.GetPage() && frame.GetPage()->OpenedByDOM())) {
     return false;
-  if (!frame.IsMainFrame())
-    return false;
-  if (frame.Loader().Opener())
-    return false;
+  }
 
   return !new_document.GetSecurityOrigin()->IsSameSchemeHostPort(
       previous_security_origin);
@@ -1097,15 +1086,9 @@ void DocumentLoader::InstallNewDocument(
   }
 
   if (ShouldClearWindowName(*frame_, previous_security_origin, *document)) {
-    // TODO(andypaicu): experimentalSetNullName will just record the fact
-    // that the name would be nulled and if the name is accessed after we will
-    // fire a UseCounter. If we decide to move forward with this change, we'd
-    // actually clean the name here.
-    // frame_->tree().setName(nullAtom);
-    frame_->Tree().ExperimentalSetNulledName();
+    frame_->Tree().SetName(g_null_atom);
   }
 
-  frame_->GetPage()->GetChromeClient().InstallSupplements(*frame_);
   if (!overriding_url.IsEmpty())
     document->SetBaseURLOverride(overriding_url);
   DidInstallNewDocument(document);
@@ -1114,6 +1097,14 @@ void DocumentLoader::InstallNewDocument(
   // will use stale values from HTMLParserOption.
   if (reason == InstallNewDocumentReason::kNavigation)
     DidCommitNavigation();
+
+  if (document->GetSettings()
+          ->GetForceTouchEventFeatureDetectionForInspector()) {
+    OriginTrialContext::From(document)->AddFeature(
+        "ForceTouchEventFeatureDetectionForInspector");
+  }
+  OriginTrialContext::AddTokensFromHeader(
+      document, response_.HttpHeaderField(HTTPNames::Origin_Trial));
 
   parser_ = document->OpenForNavigation(parsing_policy, mime_type, encoding);
 

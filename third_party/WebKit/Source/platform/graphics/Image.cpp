@@ -27,7 +27,6 @@
 #include "platform/graphics/Image.h"
 
 #include "platform/Length.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatRect.h"
@@ -56,7 +55,9 @@ Image::Image(ImageObserver* observer, bool is_multipart)
     : image_observer_disabled_(false),
       image_observer_(observer),
       stable_image_id_(PaintImage::GetNextId()),
-      is_multipart_(is_multipart) {}
+      is_multipart_(is_multipart),
+      high_contrast_classification_(
+          HighContrastClassification::kNotClassified) {}
 
 Image::~Image() {}
 
@@ -66,7 +67,7 @@ Image* Image::NullImage() {
   return null_image;
 }
 
-PassRefPtr<Image> Image::LoadPlatformResource(const char* name) {
+RefPtr<Image> Image::LoadPlatformResource(const char* name) {
   const WebData& resource = Platform::Current()->GetDataResource(name);
   if (resource.IsEmpty())
     return Image::NullImage();
@@ -83,7 +84,7 @@ bool Image::SupportsType(const String& type) {
 Image::SizeAvailability Image::SetData(RefPtr<SharedBuffer> data,
                                        bool all_data_received) {
   encoded_image_data_ = std::move(data);
-  if (!encoded_image_data_.Get())
+  if (!encoded_image_data_.get())
     return kSizeAvailable;
 
   int length = encoded_image_data_->size();
@@ -339,7 +340,7 @@ void Image::DrawPattern(GraphicsContext& context,
     PlatformInstrumentation::DidDrawLazyPixelRef(image_id);
 }
 
-PassRefPtr<Image> Image::ImageForDefaultFrame() {
+RefPtr<Image> Image::ImageForDefaultFrame() {
   RefPtr<Image> image(this);
 
   return image;
@@ -348,12 +349,8 @@ PassRefPtr<Image> Image::ImageForDefaultFrame() {
 void Image::InitPaintImageBuilder(PaintImageBuilder& builder) {
   auto animation_type = MaybeAnimated() ? PaintImage::AnimationType::ANIMATED
                                         : PaintImage::AnimationType::STATIC;
-  auto completion_state = CurrentFrameIsComplete()
-                              ? PaintImage::CompletionState::DONE
-                              : PaintImage::CompletionState::PARTIALLY_DONE;
   builder.set_id(stable_image_id_)
       .set_animation_type(animation_type)
-      .set_completion_state(completion_state)
       .set_is_multipart(is_multipart_);
 }
 

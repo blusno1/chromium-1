@@ -2,8 +2,6 @@
 # Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-import logging
-
 from page_sets.system_health import platforms
 from page_sets.system_health import story_tags
 from page_sets.system_health import system_health_story
@@ -664,22 +662,32 @@ class GoogleMapsStory(_BrowsingStory):
   URL = 'https://www.maps.google.com/maps'
   _MAPS_SEARCH_BOX_SELECTOR = 'input[aria-label="Search Google Maps"]'
   _MAPS_ZOOM_IN_SELECTOR = '[aria-label="Zoom in"]'
-  _RESTAURANTS_LOADING = ('[class="searchbox searchbox-shadow noprint '
-                          'clear-button-shown loading"]')
   _RESTAURANTS_LOADED = ('[class="searchbox searchbox-shadow noprint '
                          'clear-button-shown"]')
   _RESTAURANTS_LINK = '[data-result-index="1"]'
   _DIRECTIONS_LINK = '[class="section-hero-header-directions-icon"]'
   _DIRECTIONS_FROM_BOX = '[class="tactile-searchbox-input"]'
   _DIRECTIONS_LOADED = '[class="section-directions-trip clearfix selected"]'
+  # Get the current server response hash and store it for use
+  # in _CHECK_RESTAURANTS_UPDATED.
+  _GET_RESTAURANT_RESPONSE_HASH = '''
+    document.querySelectorAll('[data-result-index="1"]')[0]
+        .getAttribute('jstrack')
+  '''
+  # Check if the current restaurant serever response hash is different from
+  # the old one to checks that restaurants started to update. Also wait for
+  # the completion of the loading by waiting for the button to change to loaded.
+  # The response hash gets updated when we scroll or zoom since server provides
+  # a new response for the updated locations with a new hash value.
+  _CHECK_RESTAURANTS_UPDATED = '''
+    (document.querySelectorAll('[data-result-index="1"]')[0]
+        .getAttribute('jstrack') != {{ old_restaurant }})
+    && (document.querySelectorAll(
+          '[class="searchbox searchbox-shadow noprint clear-button-shown"]')[0]
+          != null)
+    '''
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-  TAGS = [story_tags.JAVASCRIPT_HEAVY]
-
-  def CanRunOnBrowser(self, browser_info, _):
-    if not browser_info.HasWebGLSupport():
-      logging.warning('Browser does not support webgl, skipping test')
-      return False
-    return True
+  TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.WEBGL]
 
   def _DidLoadDocument(self, action_runner):
     # Click on the search box.
@@ -694,14 +702,21 @@ class GoogleMapsStory(_BrowsingStory):
     action_runner.Wait(1)
 
     # ZoomIn two times.
+    prev_restaurant_hash = action_runner.EvaluateJavaScript(
+        self._GET_RESTAURANT_RESPONSE_HASH)
     action_runner.ClickElement(selector=self._MAPS_ZOOM_IN_SELECTOR)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADING)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
+    action_runner.WaitForJavaScriptCondition(
+        self._CHECK_RESTAURANTS_UPDATED,
+        old_restaurant=prev_restaurant_hash)
     # This wait is required to fetch the data for all the tiles in the map.
     action_runner.Wait(1)
+
+    prev_restaurant_hash = action_runner.EvaluateJavaScript(
+        self._GET_RESTAURANT_RESPONSE_HASH)
     action_runner.ClickElement(selector=self._MAPS_ZOOM_IN_SELECTOR)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADING)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
+    action_runner.WaitForJavaScriptCondition(
+        self._CHECK_RESTAURANTS_UPDATED,
+        old_restaurant=prev_restaurant_hash)
     # This wait is required to fetch the data for all the tiles in the map.
     action_runner.Wait(1)
 
@@ -709,17 +724,24 @@ class GoogleMapsStory(_BrowsingStory):
     # recording the wpr. If we scroll too fast, the data will not be recorded
     # well. After recording reset it back to the original value to have a more
     # realistic scroll.
+    prev_restaurant_hash = action_runner.EvaluateJavaScript(
+        self._GET_RESTAURANT_RESPONSE_HASH)
     action_runner.RepeatableBrowserDrivenScroll(
         x_scroll_distance_ratio = 0.0, y_scroll_distance_ratio = 0.5,
         repeat_count=2, speed=500, timeout=120, repeat_delay_ms=2000)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADING)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
+    action_runner.WaitForJavaScriptCondition(
+        self._CHECK_RESTAURANTS_UPDATED,
+        old_restaurant=prev_restaurant_hash)
+
+    prev_restaurant_hash = action_runner.EvaluateJavaScript(
+        self._GET_RESTAURANT_RESPONSE_HASH)
     action_runner.RepeatableBrowserDrivenScroll(
         x_scroll_distance_ratio = 0.5, y_scroll_distance_ratio = 0,
         repeat_count=2, speed=500, timeout=120, repeat_delay_ms=2000)
+    action_runner.WaitForJavaScriptCondition(
+        self._CHECK_RESTAURANTS_UPDATED,
+        old_restaurant=prev_restaurant_hash)
 
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADING)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
     # To make the recording more realistic.
     action_runner.Wait(1)
     action_runner.ClickElement(selector=self._RESTAURANTS_LINK)
@@ -752,15 +774,8 @@ class GoogleEarthStory(_BrowsingStory):
   URL = 'https://www.google.co.uk/maps/@51.4655936,-0.0985949,3329a,35y,40.58t/data=!3m1!1e3'
   _EARTH_BUTTON_SELECTOR = '[aria-labelledby="widget-minimap-caption"]'
   _EARTH_ZOOM_IN_SELECTOR = '[aria-label="Zoom in"]'
-  _MAPS_SEARCH_BOX_SELECTOR = 'input[aria-label="Search Google Maps"]'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-  TAGS = [story_tags.JAVASCRIPT_HEAVY]
-
-  def CanRunOnBrowser(self, browser_info, _):
-    if not browser_info.HasWebGLSupport():
-      logging.warning('Browser does not support webgl, skipping test')
-      return False
-    return True
+  TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.WEBGL]
 
   def _DidLoadDocument(self, action_runner):
     # Zommin three times.

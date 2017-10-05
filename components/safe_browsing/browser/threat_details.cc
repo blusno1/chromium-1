@@ -20,8 +20,9 @@
 #include "components/safe_browsing/browser/threat_details_cache.h"
 #include "components/safe_browsing/browser/threat_details_history.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
+#include "components/safe_browsing/db/hit_report.h"
+#include "components/safe_browsing/features.h"
 #include "components/safe_browsing/web_ui/safe_browsing_ui.h"
-#include "components/safe_browsing_db/hit_report.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -85,6 +86,8 @@ ClientSafeBrowsingReportRequest::ReportType GetReportTypeFromSBThreatType(
       return ClientSafeBrowsingReportRequest::URL_CLIENT_SIDE_MALWARE;
     case SB_THREAT_TYPE_AD_SAMPLE:
       return ClientSafeBrowsingReportRequest::AD_SAMPLE;
+    case SB_THREAT_TYPE_PASSWORD_REUSE:
+      return ClientSafeBrowsingReportRequest::URL_PASSWORD_PROTECTION_PHISHING;
     default:  // Gated by SafeBrowsingBlockingPage::ShouldReportThreatDetails.
       NOTREACHED() << "We should not send report for threat type "
                    << threat_type;
@@ -738,6 +741,12 @@ void ThreatDetails::OnCacheCollectionReady() {
     DLOG(ERROR) << "Unable to serialize the threat report.";
     return;
   }
+
+  // For measuring performance impact of ad sampling reports, we may want to
+  // do all the heavy lifting of creating the report but not actually send it.
+  if (report_->type() == ClientSafeBrowsingReportRequest::AD_SAMPLE &&
+      base::FeatureList::IsEnabled(kAdSamplerCollectButDontSendFeature))
+    return;
 
   BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,

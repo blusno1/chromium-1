@@ -154,12 +154,22 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
             bool, True if the C++ type is used as an element of a container.
             Containers can be an array, a sequence, a dictionary or a record.
     """
+
     def string_mode():
         if idl_type.is_nullable:
             return 'kTreatNullAndUndefinedAsNullString'
+        # TODO(lisabelle): Remove these 4 lines when we have fully supported
+        # annoteted types. (crbug.com/714866)
+        # It is because at that time 'TreatNullAs' will only appear in
+        # type_extended_attributes, not in extended_attributes.
         if extended_attributes.get('TreatNullAs') == 'EmptyString':
             return 'kTreatNullAsEmptyString'
         if extended_attributes.get('TreatNullAs') == 'NullString':
+            return 'kTreatNullAsNullString'
+        type_extended_attributes = idl_type.extended_attributes or {}
+        if type_extended_attributes.get('TreatNullAs') == 'EmptyString':
+            return 'kTreatNullAsEmptyString'
+        if type_extended_attributes.get('TreatNullAs') == 'NullString':
             return 'kTreatNullAsNullString'
         return ''
 
@@ -199,7 +209,7 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
         return CPP_SPECIAL_CONVERSION_RULES[base_idl_type]
 
     if base_idl_type == 'SerializedScriptValue':
-        return ('PassRefPtr<%s>' if used_as_rvalue_type else 'RefPtr<%s>') % base_idl_type
+        return 'RefPtr<%s>' % base_idl_type
     if idl_type.is_string_type:
         if not raw_type:
             return 'const String&' if used_as_rvalue_type else 'String'
@@ -233,7 +243,7 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
             if idl_type.is_nullable:
                 return idl_type.inner_type.name
             return idl_type.name
-        idl_type_name = "Or".join(member_cpp_name(member)
+        idl_type_name = 'Or'.join(member_cpp_name(member)
                                   for member in idl_type.member_types)
         return 'const %s&' % idl_type_name if used_as_rvalue_type else idl_type_name
     if idl_type.is_callback_function:
@@ -371,9 +381,9 @@ INCLUDES_FOR_TYPE = {
                            'core/dom/ClassCollection.h',
                            'core/dom/TagCollection.h',
                            'core/html/HTMLCollection.h',
-                           'core/html/HTMLDataListOptionsCollection.h',
                            'core/html/HTMLFormControlsCollection.h',
-                           'core/html/HTMLTableRowsCollection.h']),
+                           'core/html/HTMLTableRowsCollection.h',
+                           'core/html/forms/HTMLDataListOptionsCollection.h']),
     'NodeFilter': set(['bindings/core/v8/V8NodeFilterCondition.h']),
     'NodeList': set(['bindings/core/v8/V8NodeList.h',
                      'core/dom/NameNodeList.h',
@@ -594,20 +604,29 @@ def v8_value_to_cpp_value(idl_type, extended_attributes, v8_value, variable_name
     # Simple types
     idl_type = idl_type.preprocessed_type
     base_idl_type = idl_type.as_union_type.name if idl_type.is_union_type else idl_type.base_type
+    type_extended_attributes = idl_type.extended_attributes or {}
 
     if 'FlexibleArrayBufferView' in extended_attributes:
         if base_idl_type not in ARRAY_BUFFER_VIEW_AND_TYPED_ARRAY_TYPES:
-            raise ValueError("Unrecognized base type for extended attribute 'FlexibleArrayBufferView': %s" % (idl_type.base_type))
+            raise ValueError('Unrecognized base type for extended attribute "FlexibleArrayBufferView": %s' % (idl_type.base_type))
         base_idl_type = 'FlexibleArrayBufferView'
 
     if 'AllowShared' in extended_attributes and not idl_type.is_array_buffer_view_or_typed_array:
-        raise ValueError("Unrecognized base type for extended attribute 'AllowShared': %s" % (idl_type.base_type))
+        raise ValueError('Unrecognized base type for extended attribute "AllowShared": %s' % (idl_type.base_type))
 
     if idl_type.is_integer_type:
         configuration = 'kNormalConversion'
+        # TODO(lisabelle): Remove these 4 lines when we have fully supported
+        # annoteted types.
+        # It is because at that time 'Clamp' and 'EnforceRange' will only
+        # appear in type_extended_attributes, not in extended_attributes.
         if 'EnforceRange' in extended_attributes:
             configuration = 'kEnforceRange'
         elif 'Clamp' in extended_attributes:
+            configuration = 'kClamp'
+        if 'EnforceRange' in type_extended_attributes:
+            configuration = 'kEnforceRange'
+        elif 'Clamp' in type_extended_attributes:
             configuration = 'kClamp'
         arguments = ', '.join([v8_value, 'exceptionState', configuration])
     elif base_idl_type == 'SerializedScriptValue':
@@ -677,7 +696,7 @@ def v8_value_to_local_cpp_value(idl_type, extended_attributes, v8_value, variabl
 
     if 'FlexibleArrayBufferView' in extended_attributes:
         if idl_type.base_type not in ARRAY_BUFFER_VIEW_AND_TYPED_ARRAY_TYPES:
-            raise ValueError("Unrecognized base type for extended attribute 'FlexibleArrayBufferView': %s" % (idl_type.base_type))
+            raise ValueError('Unrecognized base type for extended attribute "FlexibleArrayBufferView": %s' % (idl_type.base_type))
         set_expression = cpp_value
     elif idl_type.is_string_type or idl_type.v8_conversion_needs_exception_state:
         # Types for which conversion can fail and that need error handling.
@@ -735,13 +754,14 @@ IdlTypeBase.use_output_parameter_for_result = property(use_output_parameter_for_
 ################################################################################
 
 def preprocess_idl_type(idl_type):
+    extended_attributes = idl_type.extended_attributes
     if idl_type.is_nullable:
         return IdlNullableType(idl_type.inner_type.preprocessed_type)
     if idl_type.is_enum:
         # Enumerations are internally DOMStrings
-        return IdlType('DOMString')
+        return IdlType('DOMString', extended_attributes)
     if idl_type.base_type in ['any', 'object'] or idl_type.is_custom_callback_function:
-        return IdlType('ScriptValue')
+        return IdlType('ScriptValue', extended_attributes)
     if idl_type.is_callback_function:
         return idl_type
     return idl_type
@@ -1016,7 +1036,7 @@ def union_literal_cpp_value(idl_type, idl_literal):
     else:
         raise ValueError('Unsupported literal type: ' + idl_literal.idl_type)
 
-    return '%s::from%s(%s)' % (idl_type.name, member_type.name,
+    return '%s::From%s(%s)' % (idl_type.name, member_type.name,
                                member_type.literal_cpp_value(idl_literal))
 
 
@@ -1041,7 +1061,7 @@ def cpp_type_has_null_value(idl_type):
     # - String types (String/AtomicString) represent null as a null string,
     #   i.e. one for which String::IsNull() returns true.
     # - Enum types, as they are implemented as Strings.
-    # - Interface types (raw pointer or RefPtr/PassRefPtr) represent null as
+    # - Interface types (raw pointer or RefPtr) represent null as
     #   a null pointer.
     # - Union types, as thier container classes can represent null value.
     # - 'Object' and 'any' type. We use ScriptValue for object type.

@@ -105,7 +105,7 @@ Polymer({
      * The network IP Address.
      * @private
      */
-    IPAddress_: {
+    ipAddress_: {
       type: String,
       value: '',
     },
@@ -219,7 +219,7 @@ Polymer({
     // Set the IPAddress property to the IPV4 Address.
     var ipv4 =
         CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV4);
-    this.IPAddress_ = (ipv4 && ipv4.IPAddress) || '';
+    this.ipAddress_ = (ipv4 && ipv4.IPAddress) || '';
 
     // Update the detail page title.
     this.parentNode.pageTitle = CrOnc.getNetworkName(this.networkProperties);
@@ -229,11 +229,10 @@ Polymer({
     if (!this.didSetFocus_) {
       // Focus a button once the initial state is set.
       this.didSetFocus_ = true;
-      var button = this.$$('#titleDiv .primary-button:not([hidden])');
-      if (!button)
-        button = this.$$('#titleDiv paper-button:not([hidden])');
-      assert(button);  // At least one button will always be visible.
-      button.focus();
+      var button = this.$$('#titleDiv .primary-button:not([hidden])') ||
+          this.$$('#titleDiv paper-button:not([hidden])');
+      if (button)
+        button.focus();
     }
 
     if (this.shouldShowConfigureWhenNetworkLoaded_ &&
@@ -486,14 +485,14 @@ Polymer({
     if (this.connectNotAllowed_(networkProperties, globalPolicy))
       return false;
     var type = networkProperties.Type;
-    if (type == CrOnc.Type.CELLULAR)
+    if (type == CrOnc.Type.CELLULAR || type == CrOnc.Type.TETHER)
       return false;
     if ((type == CrOnc.Type.WI_FI || type == CrOnc.Type.WI_MAX) &&
         networkProperties.ConnectionState !=
             CrOnc.ConnectionState.NOT_CONNECTED) {
       return false;
     }
-    return this.isRemembered_(networkProperties);
+    return true;
   },
 
   /**
@@ -605,12 +604,6 @@ Polymer({
   onViewAccountTap_: function() {
     // startActivate() will show the account page for activated networks.
     this.networkingPrivate.startActivate(this.guid);
-  },
-
-  /** @private */
-  onChooseMobileTap_: function() {
-    // TODO(stevenjb): Integrate ChooseMobileNetworkDialog with WebUI.
-    chrome.send('addNetwork', [this.networkProperties.Type]);
   },
 
   /** @const {string} */
@@ -1018,8 +1011,17 @@ Polymer({
    */
   showCellularSim_: function(networkProperties) {
     return networkProperties.Type == CrOnc.Type.CELLULAR &&
-        this.get('Cellular.Family', this.networkProperties) ==
-        CrOnc.NetworkTechnology.GSM;
+        this.get('Cellular.Family', this.networkProperties) != 'CDMA';
+  },
+
+  /**
+   * @param {string} ipAddress
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @return {boolean}
+   * @private
+   */
+  showIpAddress_: function(ipAddress, networkProperties) {
+    return !!ipAddress && this.isConnectedState_(networkProperties);
   },
 
   /**

@@ -153,7 +153,7 @@ void RunSwitchLanguageTest(const std::string& locale,
                               ProfileManager::GetActiveUserProfile());
 
   // Token writing moves control to BlockingPool and back.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   EXPECT_EQ(data.done, true);
   EXPECT_EQ(data.result.requested_locale, locale);
@@ -1012,7 +1012,7 @@ class WizardControllerBrokenLocalStateTest : public WizardControllerTest {
 
   void SetUpOnMainThread() override {
     PrefServiceFactory factory;
-    factory.set_user_prefs(make_scoped_refptr(new PrefStoreStub()));
+    factory.set_user_prefs(base::MakeRefCounted<PrefStoreStub>());
     local_state_ = factory.Create(new PrefRegistrySimple());
     WizardController::set_local_state_for_testing(local_state_.get());
 

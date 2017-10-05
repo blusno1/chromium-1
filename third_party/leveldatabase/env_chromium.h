@@ -5,16 +5,17 @@
 #ifndef THIRD_PARTY_LEVELDATABASE_ENV_CHROMIUM_H_
 #define THIRD_PARTY_LEVELDATABASE_ENV_CHROMIUM_H_
 
-#include <deque>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/containers/linked_list.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "leveldb/db.h"
@@ -79,18 +80,6 @@ struct Options : public leveldb::Options {
   Options();
 };
 
-enum class SharedReadCache {
-  // Use for databases whose access pattern is dictated by browser code.
-  Default,
-  // Use for databases whose access pattern is directly influenced by Web APIs,
-  // like Indexed DB, etc.
-  Web,
-};
-
-// Return the shared leveldb block cache for web APIs. The caller *does not*
-// own the returned instance.
-extern leveldb::Cache* SharedWebBlockCache();
-
 const char* MethodIDToString(MethodID method);
 
 leveldb::Status MakeIOError(leveldb::Slice filename,
@@ -141,6 +130,8 @@ class RetrierProvider {
       MethodID method) const = 0;
 };
 
+class Semaphore;
+
 class ChromiumEnv : public leveldb::Env,
                     public UMALogger,
                     public RetrierProvider {
@@ -179,6 +170,7 @@ class ChromiumEnv : public leveldb::Env,
                                             leveldb::WritableFile** result);
   virtual leveldb::Status NewLogger(const std::string& fname,
                                     leveldb::Logger** result);
+  void SetReadOnlyFileLimitForTesting(int max_open_files);
 
  protected:
   explicit ChromiumEnv(const std::string& name);
@@ -190,8 +182,6 @@ class ChromiumEnv : public leveldb::Env,
   void RecordOSError(MethodID method, base::File::Error error) const override;
   void RecordBytesRead(int amount) const override;
   void RecordBytesWritten(int amount) const override;
-  void RecordOpenFilesLimit(const std::string& type);
-  base::HistogramBase* GetMaxFDHistogram(const std::string& type) const;
   base::HistogramBase* GetOSErrorHistogram(MethodID method, int limit) const;
   void DeleteBackupFiles(const base::FilePath& dir);
 
@@ -243,9 +233,10 @@ class ChromiumEnv : public leveldb::Env,
     void* arg;
     void (*function)(void*);
   };
-  typedef std::deque<BGItem> BGQueue;
+  using BGQueue = base::circular_deque<BGItem>;
   BGQueue queue_;
   LockTable locks_;
+  std::unique_ptr<Semaphore> file_semaphore_;
 };
 
 // Tracks databases open via OpenDatabase() method and exposes them to
@@ -280,7 +271,22 @@ class DBTracker {
                                const std::string& name,
                                TrackedDB** dbptr);
 
+ private:
+  class MemoryDumpProvider;
+  class TrackedDBImpl;
+
   using DatabaseVisitor = base::RepeatingCallback<void(TrackedDB*)>;
+
+  friend class ChromiumEnvDBTrackerTest;
+  FRIEND_TEST_ALL_PREFIXES(ChromiumEnvDBTrackerTest, IsTrackedDB);
+  FRIEND_TEST_ALL_PREFIXES(ChromiumEnvDBTrackerTest, GetOrCreateAllocatorDump);
+
+  DBTracker();
+  ~DBTracker();
+
+  static base::trace_event::MemoryAllocatorDump* GetOrCreateAllocatorDump(
+      base::trace_event::ProcessMemoryDump* pmd,
+      TrackedDB* db);
 
   // Calls |visitor| for each live database. The database is live from the
   // point it was returned from OpenDatabase() and up until its instance is
@@ -290,19 +296,15 @@ class DBTracker {
   // destroyed (but doesn't lock the databases themselves).
   void VisitDatabases(const DatabaseVisitor& visitor);
 
- private:
-  class TrackedDBImpl;
-  class MemoryDumpProvider;
-
-  DBTracker();
-  ~DBTracker();
+  // Checks if |db| is tracked.
+  bool IsTrackedDB(const leveldb::DB* db) const;
 
   void DatabaseOpened(TrackedDBImpl* database);
   void DatabaseDestroyed(TrackedDBImpl* database);
 
   std::unique_ptr<MemoryDumpProvider> mdp_;
 
-  base::Lock databases_lock_;
+  mutable base::Lock databases_lock_;
   base::LinkedList<TrackedDBImpl> databases_;
 
   DISALLOW_COPY_AND_ASSIGN(DBTracker);
@@ -315,6 +317,9 @@ class DBTracker {
 leveldb::Status OpenDB(const leveldb_env::Options& options,
                        const std::string& name,
                        std::unique_ptr<leveldb::DB>* dbptr);
+
+base::StringPiece MakeStringPiece(const leveldb::Slice& s);
+leveldb::Slice MakeSlice(const base::StringPiece& s);
 
 }  // namespace leveldb_env
 

@@ -24,6 +24,9 @@ constexpr char kMaxScheduledDownloadsConfig[] = "max_scheduled_downloads";
 // Configuration name for maximum retry count.
 constexpr char kMaxRetryCountConfig[] = "max_retry_count";
 
+// Configuration name for maximum resumption count.
+constexpr char kMaxResumptionCountConfig[] = "max_resumption_count";
+
 // Configuration name for file keep alive time.
 constexpr char kFileKeepAliveTimeMinutesConfig[] =
     "file_keep_alive_time_minutes";
@@ -44,6 +47,17 @@ constexpr char kWindowEndTimeSecondsConfig[] = "window_end_time_seconds";
 // Configuration name for the delay to notify network status change, measured in
 // milliseconds.
 constexpr char kNetworkChangeDelayMsConfig[] = "network_change_delay_ms";
+
+// Configuration name for the download resumption delay after a navigation
+// completes, measured in seconds.
+constexpr char kNavigationCompletionDelaySecondsConfig[] =
+    "navigation_completion_delay_seconds";
+
+// Configuration name for the timeout value from the start of a navigation after
+// which if still no response, download service will resume. Measured in
+// seconds.
+constexpr char kNavigationTimeoutDelaySecondsConfig[] =
+    "navigation_timeout_delay_seconds";
 
 // Configuration name for the retry delay when the download is failed, measured
 // in milliseconds.
@@ -74,6 +88,10 @@ struct Configuration {
   // The maximum number of retries before the download is aborted.
   uint32_t max_retry_count;
 
+  // The maximum number of conceptually 'free' resumptions before the download
+  // is aborted.  This is a failsafe to prevent constantly hammering the source.
+  uint32_t max_resumption_count;
+
   // The time that the download service will keep the files around before
   // deleting them if the client hasn't handle the files.
   base::TimeDelta file_keep_alive_time;
@@ -96,6 +114,12 @@ struct Configuration {
 
   // The delay to notify network status changes.
   base::TimeDelta network_change_delay;
+
+  // The delay to notify about the navigation completion.
+  base::TimeDelta navigation_completion_delay;
+
+  // The timeout to wait for after a navigation starts.
+  base::TimeDelta navigation_timeout_delay;
 
   // The delay to retry a download when the download is failed.
   base::TimeDelta download_retry_delay;

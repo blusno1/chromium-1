@@ -29,7 +29,7 @@ struct IconDefinition {
 // https://wicg.github.io/background-fetch/#background-fetch-manager
 struct BackgroundFetchOptions {
   array<IconDefinition> icons;
-  int64 total_download_size;
+  uint64 download_total;
   string title;
 };
 
@@ -38,8 +38,11 @@ struct BackgroundFetchOptions {
 // https://wicg.github.io/background-fetch/#background-fetch-registration
 struct BackgroundFetchRegistration {
   string id;
+  uint64 upload_total;
+  uint64 uploaded;
+  uint64 download_total;
+  uint64 downloaded;
   array<IconDefinition> icons;
-  int64 total_download_size;
   string title;
 };
 
@@ -77,8 +80,8 @@ interface BackgroundFetchService {
       => (BackgroundFetchError error,
           BackgroundFetchRegistration? registration);
 
-  // Gets the sequence of ids for active Background Fetch registrations given
-  // the |service_worker_registration_id|.
+  // Gets the sequence of ids for Background Fetch registrations given the
+  // |service_worker_registration_id|.
   GetIds(int64 service_worker_registration_id, url.mojom.Origin origin)
       => (BackgroundFetchError error,
           array<string> ids);

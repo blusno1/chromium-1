@@ -26,13 +26,13 @@
 #include "platform/graphics/DeferredImageDecoder.h"
 
 #include <memory>
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/graphics/DecodingImageGenerator.h"
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/graphics/ImageFrameGenerator.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/image-decoders/SegmentReader.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 #include "third_party/skia/include/core/SkImage.h"
 
@@ -125,7 +125,7 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator(size_t index) {
   std::vector<FrameMetadata> frames(frame_data_.size());
   for (size_t i = 0; i < frame_data_.size(); ++i) {
     frames[i].complete = frame_data_[i].is_received_;
-    frames[i].duration = frame_data_[i].duration_;
+    frames[i].duration = FrameDurationAtIndex(i);
   }
 
   auto generator = DecodingImageGenerator::Create(
@@ -136,7 +136,7 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator(size_t index) {
   return generator;
 }
 
-PassRefPtr<SharedBuffer> DeferredImageDecoder::Data() {
+RefPtr<SharedBuffer> DeferredImageDecoder::Data() {
   if (!rw_buffer_)
     return nullptr;
   sk_sp<SkROBuffer> ro_buffer(rw_buffer_->makeROBufferSnapshot());
@@ -148,7 +148,7 @@ PassRefPtr<SharedBuffer> DeferredImageDecoder::Data() {
   return shared_buffer;
 }
 
-void DeferredImageDecoder::SetData(PassRefPtr<SharedBuffer> data,
+void DeferredImageDecoder::SetData(RefPtr<SharedBuffer> data,
                                    bool all_data_received) {
   SetDataInternal(std::move(data), all_data_received, true);
 }

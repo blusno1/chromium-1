@@ -38,6 +38,7 @@
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_response_headers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 using net::IOBuffer;
 using net::TestCompletionCallback;
@@ -60,8 +61,17 @@ class KeepHandlesDispatcherHost : public ServiceWorkerDispatcherHost {
     handles_.push_back(std::move(handle));
   }
   void RegisterServiceWorkerRegistrationHandle(
-      std::unique_ptr<ServiceWorkerRegistrationHandle> handle) override {
-    registration_handles_.push_back(std::move(handle));
+      ServiceWorkerRegistrationHandle* handle) override {
+    registration_handles_.push_back(base::WrapUnique(handle));
+  }
+  void UnregisterServiceWorkerRegistrationHandle(int handle_id) override {
+    auto iter = registration_handles_.begin();
+    for (; iter != registration_handles_.end(); ++iter) {
+      if ((*iter)->handle_id() == handle_id)
+        break;
+    }
+    ASSERT_NE(registration_handles_.end(), iter);
+    registration_handles_.erase(iter);
   }
 
   void RemoveHandles() {
@@ -199,13 +209,6 @@ class ServiceWorkerJobTest : public testing::Test {
   ServiceWorkerJobCoordinator* job_coordinator() const {
     return context()->job_coordinator();
   }
-  std::map<GURL, ServiceWorkerJobCoordinator::JobQueue>* job_queues() const {
-    return &(job_coordinator()->job_queues_);
-  }
-  bool is_job_timer_running() {
-    return job_coordinator()->job_timeout_timer_.IsRunning();
-  }
-
   ServiceWorkerStorage* storage() const { return context()->storage(); }
 
  protected:
@@ -220,7 +223,6 @@ class ServiceWorkerJobTest : public testing::Test {
       const GURL& pattern,
       ServiceWorkerStatusCode expected_status = SERVICE_WORKER_OK);
   std::unique_ptr<ServiceWorkerProviderHost> CreateControllee();
-  void TimeOutFirstJob();
 
   TestBrowserThreadBundle browser_thread_bundle_;
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
@@ -234,13 +236,11 @@ scoped_refptr<ServiceWorkerRegistration> ServiceWorkerJobTest::RunRegisterJob(
   scoped_refptr<ServiceWorkerRegistration> registration;
   bool called;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
-      SaveRegistration(expected_status, &called, &registration));
-  EXPECT_TRUE(is_job_timer_running());
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr, SaveRegistration(expected_status, &called, &registration));
   EXPECT_FALSE(called);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
-  EXPECT_FALSE(is_job_timer_running());
   return registration;
 }
 
@@ -279,14 +279,6 @@ ServiceWorkerJobTest::CreateControllee() {
       true /* is_parent_frame_secure */, helper_->context()->AsWeakPtr(),
       &remote_endpoints_.back());
   return host;
-}
-
-void ServiceWorkerJobTest::TimeOutFirstJob() {
-  ServiceWorkerRegisterJob* job = static_cast<ServiceWorkerRegisterJob*>(
-      job_queues()->begin()->second.front());
-  base::TimeDelta duration = base::TimeDelta::FromMinutes(30);
-  job->set_start_time_for_test(base::TimeTicks::Now() - duration);
-  job_coordinator()->MaybeTimeoutJobs();
 }
 
 TEST_F(ServiceWorkerJobTest, SameDocumentSameRegistration) {
@@ -339,7 +331,8 @@ TEST_F(ServiceWorkerJobTest, DifferentMatchDifferentRegistration) {
   scoped_refptr<ServiceWorkerRegistration> original_registration1;
   job_coordinator()->Register(
       GURL("http://www.example.com/service_worker.js"),
-      ServiceWorkerRegistrationOptions(GURL("http://www.example.com/one/")),
+      blink::mojom::ServiceWorkerRegistrationOptions(
+          GURL("http://www.example.com/one/")),
       nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &called1, &original_registration1));
 
@@ -347,7 +340,8 @@ TEST_F(ServiceWorkerJobTest, DifferentMatchDifferentRegistration) {
   scoped_refptr<ServiceWorkerRegistration> original_registration2;
   job_coordinator()->Register(
       GURL("http://www.example.com/service_worker.js"),
-      ServiceWorkerRegistrationOptions(GURL("http://www.example.com/two/")),
+      blink::mojom::ServiceWorkerRegistrationOptions(
+          GURL("http://www.example.com/two/")),
       nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &called2, &original_registration2));
 
@@ -412,43 +406,6 @@ TEST_F(ServiceWorkerJobTest, Register) {
   EXPECT_EQ(valid_scope_2, version_->foreign_fetch_scopes_[1]);
   EXPECT_EQ(1u, version_->foreign_fetch_origins_.size());
   EXPECT_EQ(valid_origin, version_->foreign_fetch_origins_[0]);
-}
-
-// Make sure job timeout timer is working.
-TEST_F(ServiceWorkerJobTest, RegistrationTimeout) {
-  bool called1;
-  scoped_refptr<ServiceWorkerRegistration> registration1;
-  job_coordinator()->Register(
-      GURL("http://www.example.com/service_worker.js"),
-      ServiceWorkerRegistrationOptions(GURL("http://www.example.com/one/")),
-      nullptr,
-      SaveRegistration(SERVICE_WORKER_ERROR_ABORT, &called1, &registration1));
-
-  bool called2;
-  scoped_refptr<ServiceWorkerRegistration> registration2;
-  job_coordinator()->Register(
-      GURL("http://www.example.com/service_worker.js"),
-      ServiceWorkerRegistrationOptions(GURL("http://www.example.com/two/")),
-      nullptr,
-      SaveRegistration(SERVICE_WORKER_ERROR_ABORT, &called2, &registration2));
-
-  EXPECT_EQ(2u, job_queues()->size());
-  EXPECT_FALSE(called1);
-  EXPECT_FALSE(called2);
-
-  // Timeout the first job. The timer should still be running.
-  TimeOutFirstJob();
-  EXPECT_EQ(1u, job_queues()->size());
-  EXPECT_TRUE(called1);
-  EXPECT_FALSE(called2);
-  EXPECT_TRUE(is_job_timer_running());
-
-  // Timeout the second job. The queue should be empty and the timer should be
-  // stopped.
-  TimeOutFirstJob();
-  EXPECT_TRUE(called2);
-  EXPECT_TRUE(job_queues()->empty());
-  EXPECT_FALSE(is_job_timer_running());
 }
 
 // Make sure registrations are cleaned up when they are unregistered.
@@ -602,7 +559,8 @@ TEST_F(ServiceWorkerJobTest, ParallelRegUnreg) {
   bool registration_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration_called, &registration));
 
   bool unregistration_called = false;
@@ -632,7 +590,8 @@ TEST_F(ServiceWorkerJobTest, ParallelRegNewScript) {
   bool registration1_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration1;
   job_coordinator()->Register(
-      script_url1, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url1, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration1_called,
                        &registration1));
 
@@ -640,7 +599,8 @@ TEST_F(ServiceWorkerJobTest, ParallelRegNewScript) {
   bool registration2_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration2;
   job_coordinator()->Register(
-      script_url2, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url2, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration2_called,
                        &registration2));
 
@@ -666,14 +626,16 @@ TEST_F(ServiceWorkerJobTest, ParallelRegSameScript) {
   bool registration1_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration1;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration1_called,
                        &registration1));
 
   bool registration2_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration2;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration2_called,
                        &registration2));
 
@@ -732,14 +694,16 @@ TEST_F(ServiceWorkerJobTest, AbortAll_Register) {
   bool registration_called1 = false;
   scoped_refptr<ServiceWorkerRegistration> registration1;
   job_coordinator()->Register(
-      script_url1, ServiceWorkerRegistrationOptions(pattern1), nullptr,
+      script_url1, blink::mojom::ServiceWorkerRegistrationOptions(pattern1),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_ERROR_ABORT, &registration_called1,
                        &registration1));
 
   bool registration_called2 = false;
   scoped_refptr<ServiceWorkerRegistration> registration2;
   job_coordinator()->Register(
-      script_url2, ServiceWorkerRegistrationOptions(pattern2), nullptr,
+      script_url2, blink::mojom::ServiceWorkerRegistrationOptions(pattern2),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_ERROR_ABORT, &registration_called2,
                        &registration2));
 
@@ -803,7 +767,8 @@ TEST_F(ServiceWorkerJobTest, AbortAll_RegUnreg) {
   bool registration_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_ERROR_ABORT, &registration_called,
                        &registration));
 
@@ -1003,8 +968,9 @@ class UpdateJobTestHelper
     bool called = false;
     job_coordinator()->Register(
         test_origin.Resolve(kScript),
-        ServiceWorkerRegistrationOptions(test_origin.Resolve(kScope)), nullptr,
-        SaveRegistration(SERVICE_WORKER_OK, &called, &registration));
+        blink::mojom::ServiceWorkerRegistrationOptions(
+            test_origin.Resolve(kScope)),
+        nullptr, SaveRegistration(SERVICE_WORKER_OK, &called, &registration));
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(called);
     EXPECT_TRUE(registration.get());
@@ -1035,7 +1001,7 @@ class UpdateJobTestHelper
                      version != registration->active_version();
 
     ASSERT_TRUE(version);
-    observed_versions_.push_back(make_scoped_refptr(version));
+    observed_versions_.push_back(base::WrapRefCounted(version));
     version->AddListener(this);
 
     // Simulate network access.
@@ -1168,7 +1134,7 @@ class EvictIncumbentVersionHelper : public UpdateJobTestHelper {
       // Evict the incumbent worker.
       ASSERT_FALSE(registration->waiting_version());
       registration->DeleteVersion(
-          make_scoped_refptr(registration->active_version()));
+          base::WrapRefCounted(registration->active_version()));
     }
     UpdateJobTestHelper::OnStartWorker(
         embedded_worker_id, version_id, scope, script, pause_after_download,
@@ -1928,7 +1894,7 @@ TEST_F(ServiceWorkerJobTest, ActivateCancelsOnShutdown) {
   // easy to cause a failure with set_force_start_worker_failure after
   // shutdown is simulated. Otherwise our test helper often fails on
   // DCHECK(context)).
-  new_version->StopWorker(base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+  new_version->StopWorker(base::BindOnce(&base::DoNothing));
 
   // Remove the controllee. The new version should be activating, and delayed
   // until the runner runs again.

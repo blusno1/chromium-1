@@ -10,6 +10,7 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/public/cpp/window_state_type.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/window_resizer.h"
@@ -21,7 +22,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/output/layer_tree_frame_sink.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "components/exo/surface.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
@@ -52,29 +53,24 @@ DEFINE_LOCAL_UI_CLASS_PROPERTY_KEY(Surface*, kMainSurfaceKey, nullptr)
 // Application Id set by the client.
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(std::string, kApplicationIdKey, nullptr);
 
-// Maximum amount of time to wait until the window is resized
-// to match the display's orientation in tablet mode.
+// Maximum amount of time to wait for contents that match the display's
+// orientation in tablet mode.
 // TODO(oshima): Looks like android is generating unnecessary frames.
 // Fix it on Android side and reduce the timeout.
-constexpr int kRotationLockTimeoutMs = 2500;
+constexpr int kOrientationLockTimeoutMs = 2500;
 
-// This is a struct for accelerator keys.
-struct Accelerator {
-  ui::KeyboardCode keycode;
-  int modifiers;
-};
+// Maximum amount of time to wait for contents after a change to maximize,
+// fullscreen or pinned state.
+constexpr int kMaximizedOrFullscreenOrPinnedLockTimeoutMs = 100;
 
 // The accelerator keys used to close ShellSurfaces.
-const Accelerator kCloseWindowAccelerators[] = {
+const struct {
+  ui::KeyboardCode keycode;
+  int modifiers;
+} kCloseWindowAccelerators[] = {
     {ui::VKEY_W, ui::EF_CONTROL_DOWN},
     {ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN},
     {ui::VKEY_F4, ui::EF_ALT_DOWN}};
-
-// The accelerator keys reserved to be processed by the focus manager.
-const Accelerator kReservedAccelerators[] = {
-    {ui::VKEY_SPACE, ui::EF_CONTROL_DOWN},
-    {ui::VKEY_SPACE, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN},
-    {ui::VKEY_F13, ui::EF_NONE}};
 
 class CustomFrameView : public views::NonClientFrameView {
  public:
@@ -167,10 +163,7 @@ class CustomWindowTargeter : public aura::WindowTargeter {
           return shadow_underlay;
       }
     }
-    ui::EventTarget* target =
-        aura::WindowTargeter::FindTargetForEvent(root, event);
-    // Do not accept events in ShellSurface window.
-    return target != root ? target : nullptr;
+    return aura::WindowTargeter::FindTargetForEvent(root, event);
   }
 
  private:
@@ -203,18 +196,10 @@ class ShellSurfaceWidget : public views::Widget {
   // Overridden from views::Widget
   void Close() override { shell_surface_->Close(); }
   void OnKeyEvent(ui::KeyEvent* event) override {
-    // TODO(hidehiko): Handle ESC + SHIFT + COMMAND accelerator key
-    // to escape pinned mode.
-    for (const auto& entry : kReservedAccelerators) {
-      // Handle only reserved accelerators.
-      if (event->flags() == entry.modifiers &&
-          event->key_code() == entry.keycode) {
-        if (GetFocusManager()->ProcessAccelerator(ui::Accelerator(*event)))
-          event->StopPropagation();
-      }
-    }
-    // Do not call Widget::OnKeyEvent that eats focus management keys (like the
-    // tab key) as well.
+    // Handle only accelerators. Do not call Widget::OnKeyEvent that eats focus
+    // management keys (like the tab key) as well.
+    if (GetFocusManager()->ProcessAccelerator(ui::Accelerator(*event)))
+      event->SetHandled();
   }
 
  private:
@@ -230,6 +215,20 @@ Orientation SizeToOrientation(const gfx::Size& size) {
 }
 
 }  // namespace
+
+// Surface state associated with each configure request.
+struct ShellSurface::Config {
+  Config(uint32_t serial,
+         const gfx::Vector2d& origin_offset,
+         int resize_component,
+         std::unique_ptr<ui::CompositorLock> compositor_lock);
+  ~Config();
+
+  uint32_t serial;
+  gfx::Vector2d origin_offset;
+  int resize_component;
+  std::unique_ptr<ui::CompositorLock> compositor_lock;
+};
 
 // Helper class used to coalesce a number of changes into one "configure"
 // callback. Callbacks are suppressed while an instance of this class is
@@ -265,6 +264,21 @@ class ShellSurface::ScopedAnimationsDisabled {
 
   DISALLOW_COPY_AND_ASSIGN(ScopedAnimationsDisabled);
 };
+
+////////////////////////////////////////////////////////////////////////////////
+// ShellSurface, Config:
+
+ShellSurface::Config::Config(
+    uint32_t serial,
+    const gfx::Vector2d& origin_offset,
+    int resize_component,
+    std::unique_ptr<ui::CompositorLock> compositor_lock)
+    : serial(serial),
+      origin_offset(origin_offset),
+      resize_component(resize_component),
+      compositor_lock(std::move(compositor_lock)) {}
+
+ShellSurface::Config::~Config() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurface, ScopedConfigure:
@@ -356,6 +370,9 @@ ShellSurface::~ShellSurface() {
   DCHECK(!scoped_configure_);
   if (resizer_)
     EndDrag(false /* revert */);
+  // Remove activation observer before hiding widget to prevent it from
+  // casuing the configure callback to be called.
+  WMHelper::GetInstance()->RemoveActivationObserver(this);
   if (widget_) {
     ash::wm::GetWindowState(widget_->GetNativeWindow())->RemoveObserver(this);
     widget_->GetNativeWindow()->RemoveObserver(this);
@@ -366,7 +383,6 @@ ShellSurface::~ShellSurface() {
       widget_->Hide();
     widget_->CloseNow();
   }
-  WMHelper::GetInstance()->RemoveActivationObserver(this);
   WMHelper::GetInstance()->RemoveDisplayConfigurationObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
   if (parent_)
@@ -383,17 +399,17 @@ void ShellSurface::AcknowledgeConfigure(uint32_t serial) {
   // change to reflect the acknowledgement of configure request with |serial|
   // at the next call to Commit().
   while (!pending_configs_.empty()) {
-    auto config = pending_configs_.front();
+    std::unique_ptr<Config> config = std::move(pending_configs_.front());
     pending_configs_.pop_front();
 
     // Add the config offset to the accumulated offset that will be applied when
     // Commit() is called.
-    pending_origin_offset_ += config.origin_offset;
+    pending_origin_offset_ += config->origin_offset;
 
     // Set the resize direction that will be applied when Commit() is called.
-    pending_resize_component_ = config.resize_component;
+    pending_resize_component_ = config->resize_component;
 
-    if (config.serial == serial)
+    if (config->serial == serial)
       break;
   }
 
@@ -548,10 +564,19 @@ void ShellSurface::SetSystemModal(bool system_modal) {
   if (system_modal == system_modal_)
     return;
 
+  bool non_system_modal_window_was_active = !system_modal_ && widget_ && widget_->IsActive();
+
   system_modal_ = system_modal;
 
-  if (widget_)
+  if (widget_) {
     UpdateSystemModal();
+    // Deactivate to give the focus back to normal windows.
+    if (!system_modal_ && !non_system_modal_window_was_active_) {
+      widget_->Deactivate();
+    }
+  }
+
+  non_system_modal_window_was_active_ = non_system_modal_window_was_active;
 }
 
 void ShellSurface::UpdateSystemModal() {
@@ -744,6 +769,18 @@ void ShellSurface::OnSurfaceCommit() {
 
   SurfaceTreeHost::OnSurfaceCommit();
 
+  if (enabled() && !widget_) {
+    // Defer widget creation until surface contains some contents.
+    if (host_window()->bounds().IsEmpty()) {
+      Configure();
+      return;
+    }
+
+    CreateShellSurfaceWidget(ui::SHOW_STATE_NORMAL);
+  }
+
+  SubmitCompositorFrame();
+
   // Apply the accumulated pending origin offset to reflect acknowledged
   // configure requests.
   origin_offset_ += pending_origin_offset_;
@@ -778,10 +815,17 @@ void ShellSurface::OnSurfaceCommit() {
       if (activatable != CanActivate()) {
         set_can_activate(activatable);
         // Activate or deactivate window if activation state changed.
-        if (activatable)
-          wm::ActivateWindow(widget_->GetNativeWindow());
-        else if (widget_->IsActive())
+        if (activatable) {
+          // Automatically activate only if the window is modal.
+          // Non modal window should be activated by a user action.
+          // TODO(oshima): Non modal system window does not have an associated
+          // task ID, and as a result, it cannot be activated from client side.
+          // Fix this (b/65460424) and remove this if condition.
+          if (system_modal_)
+            wm::ActivateWindow(widget_->GetNativeWindow());
+        } else if (widget_->IsActive()) {
           wm::DeactivateWindow(widget_->GetNativeWindow());
+        }
       }
     }
 
@@ -807,22 +851,9 @@ void ShellSurface::OnSurfaceCommit() {
     }
     orientation_ = pending_orientation_;
     if (expected_orientation_ == orientation_)
-      compositor_lock_.reset();
+      orientation_compositor_lock_.reset();
   } else {
-    compositor_lock_.reset();
-  }
-}
-
-void ShellSurface::OnSurfaceContentSizeChanged() {
-  SurfaceTreeHost::OnSurfaceContentSizeChanged();
-  if (enabled() && !widget_) {
-    // Defer widget creation until surface contains some contents.
-    if (root_surface()->content_size().IsEmpty()) {
-      Configure();
-      return;
-    }
-
-    CreateShellSurfaceWidget(ui::SHOW_STATE_NORMAL);
+    orientation_compositor_lock_.reset();
   }
 }
 
@@ -982,15 +1013,15 @@ gfx::Size ShellSurface::GetMinimumSize() const {
 
 void ShellSurface::OnPreWindowStateTypeChange(
     ash::wm::WindowState* window_state,
-    ash::wm::WindowStateType old_type) {
-  ash::wm::WindowStateType new_type = window_state->GetStateType();
-  if (old_type == ash::wm::WINDOW_STATE_TYPE_MINIMIZED ||
-      new_type == ash::wm::WINDOW_STATE_TYPE_MINIMIZED) {
+    ash::mojom::WindowStateType old_type) {
+  ash::mojom::WindowStateType new_type = window_state->GetStateType();
+  if (old_type == ash::mojom::WindowStateType::MINIMIZED ||
+      new_type == ash::mojom::WindowStateType::MINIMIZED) {
     return;
   }
 
-  if (ash::wm::IsMaximizedOrFullscreenOrPinnedWindowStateType(old_type) ||
-      ash::wm::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
+  if (ash::IsMaximizedOrFullscreenOrPinnedWindowStateType(old_type) ||
+      ash::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
     // When transitioning in/out of maximized or fullscreen mode we need to
     // make sure we have a configure callback before we allow the default
     // cross-fade animations. The configure callback provides a mechanism for
@@ -998,17 +1029,25 @@ void ShellSurface::OnPreWindowStateTypeChange(
     // account and without this cross-fade animations are unreliable.
     // TODO(domlaskowski): For BoundsMode::CLIENT, the configure callback does
     // not yet support window state changes. See crbug.com/699746.
-    if (configure_callback_.is_null() || bounds_mode_ == BoundsMode::CLIENT)
+    if (configure_callback_.is_null() || bounds_mode_ == BoundsMode::CLIENT) {
       scoped_animations_disabled_.reset(new ScopedAnimationsDisabled(this));
+    } else if (widget_) {
+      // Give client a chance to produce a frame that takes state change into
+      // account by acquiring a compositor lock.
+      ui::Compositor* compositor =
+          widget_->GetNativeWindow()->layer()->GetCompositor();
+      configure_compositor_lock_ = compositor->GetCompositorLock(
+          nullptr, base::TimeDelta::FromMilliseconds(
+                       kMaximizedOrFullscreenOrPinnedLockTimeoutMs));
+    }
   }
 }
 
 void ShellSurface::OnPostWindowStateTypeChange(
     ash::wm::WindowState* window_state,
-    ash::wm::WindowStateType old_type) {
-  ash::wm::WindowStateType new_type = window_state->GetStateType();
-  if (ash::wm::IsMaximizedOrFullscreenOrPinnedWindowStateType(old_type) ||
-      ash::wm::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
+    ash::mojom::WindowStateType old_type) {
+  ash::mojom::WindowStateType new_type = window_state->GetStateType();
+  if (ash::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
     Configure();
   }
 
@@ -1181,15 +1220,11 @@ void ShellSurface::OnDisplayMetricsChanged(const display::Display& new_display,
   if (orientation_ == target_orientation)
     return;
   expected_orientation_ = target_orientation;
-  EnsureCompositorIsLocked();
+  EnsureCompositorIsLockedForOrientationChange();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ui::CompositorLockClient overrides:
-
-void ShellSurface::CompositorLockTimedOut() {
-  compositor_lock_.reset();
-}
+// ui::EventHandler overrides:
 
 void ShellSurface::OnMouseEvent(ui::MouseEvent* event) {
   if (!resizer_) {
@@ -1303,6 +1338,13 @@ bool ShellSurface::AcceleratorPressed(const ui::Accelerator& accelerator) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ui::CompositorLockClient overrides:
+
+void ShellSurface::CompositorLockTimedOut() {
+  orientation_compositor_lock_.reset();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // ShellSurface, private:
 
 void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
@@ -1338,6 +1380,10 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   window->SetProperty(aura::client::kAccessibilityFocusFallsbackToWidgetKey,
                       false);
   window->AddChild(host_window());
+  // The window of widget_ is a container window. It doesn't handle pointer
+  // events.
+  window->SetEventTargetingPolicy(
+      ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   window->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter(widget_)));
   SetApplicationId(window, application_id_);
   SetMainSurface(window, root_surface());
@@ -1352,9 +1398,9 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   window_state->set_allow_set_bounds_direct(bounds_mode_ == BoundsMode::CLIENT);
 
   // Notify client of initial state if different than normal.
-  if (window_state->GetStateType() != ash::wm::WINDOW_STATE_TYPE_NORMAL &&
+  if (window_state->GetStateType() != ash::mojom::WindowStateType::NORMAL &&
       !state_changed_callback_.is_null()) {
-    state_changed_callback_.Run(ash::wm::WINDOW_STATE_TYPE_NORMAL,
+    state_changed_callback_.Run(ash::mojom::WindowStateType::NORMAL,
                                 window_state->GetStateType());
   }
 
@@ -1414,8 +1460,8 @@ void ShellSurface::Configure() {
           IsResizing(), widget_->IsActive(), origin_offset);
     } else {
       serial = configure_callback_.Run(gfx::Size(),
-                                       ash::wm::WINDOW_STATE_TYPE_NORMAL, false,
-                                       false, origin_offset);
+                                       ash::mojom::WindowStateType::NORMAL,
+                                       false, false, origin_offset);
     }
   }
 
@@ -1427,7 +1473,9 @@ void ShellSurface::Configure() {
 
   // Apply origin offset and resize component at the first Commit() after this
   // configure request has been acknowledged.
-  pending_configs_.push_back({serial, origin_offset, resize_component});
+  pending_configs_.push_back(
+      std::make_unique<Config>(serial, origin_offset, resize_component,
+                               std::move(configure_compositor_lock_)));
   LOG_IF(WARNING, pending_configs_.size() > 100)
       << "Number of pending configure acks for shell surface has reached: "
       << pending_configs_.size();
@@ -1575,8 +1623,11 @@ bool ShellSurface::IsResizing() const {
 
 gfx::Rect ShellSurface::GetVisibleBounds() const {
   // Use |geometry_| if set, otherwise use the visual bounds of the surface.
-  return geometry_.IsEmpty() ? gfx::Rect(host_window()->bounds().size())
-                             : geometry_;
+  if (!geometry_.IsEmpty())
+    return geometry_;
+
+  return root_surface() ? gfx::Rect(root_surface()->content_size())
+                        : gfx::Rect();
 }
 
 gfx::Point ShellSurface::GetSurfaceOrigin() const {
@@ -1754,7 +1805,7 @@ void ShellSurface::UpdateShadow() {
     bool needs_shadow_underlay = shadow_background_opacity_ > 0.f;
     if (needs_shadow_underlay) {
       if (!shadow_underlay_) {
-        shadow_underlay_ = base::MakeUnique<aura::Window>(nullptr);
+        shadow_underlay_ = std::make_unique<aura::Window>(nullptr);
         shadow_underlay_->set_owned_by_parent(false);
         DCHECK(!shadow_underlay_->owned_by_parent());
         // Ensure the background area inside the shadow is solid black.
@@ -1793,7 +1844,7 @@ void ShellSurface::UpdateShadow() {
       return;
 
     if (!shadow_overlay_) {
-      shadow_overlay_ = base::MakeUnique<aura::Window>(nullptr);
+      shadow_overlay_ = std::make_unique<aura::Window>(nullptr);
       shadow_overlay_->set_owned_by_parent(false);
       DCHECK(!shadow_overlay_->owned_by_parent());
       shadow_overlay_->SetEventTargetingPolicy(
@@ -1838,12 +1889,12 @@ gfx::Point ShellSurface::GetMouseLocation() const {
   return location;
 }
 
-void ShellSurface::EnsureCompositorIsLocked() {
-  if (!compositor_lock_) {
+void ShellSurface::EnsureCompositorIsLockedForOrientationChange() {
+  if (!orientation_compositor_lock_) {
     ui::Compositor* compositor =
       widget_->GetNativeWindow()->layer()->GetCompositor();
-    compositor_lock_ = compositor->GetCompositorLock(
-        this, base::TimeDelta::FromMilliseconds(kRotationLockTimeoutMs));
+    orientation_compositor_lock_ = compositor->GetCompositorLock(
+        this, base::TimeDelta::FromMilliseconds(kOrientationLockTimeoutMs));
   }
 }
 

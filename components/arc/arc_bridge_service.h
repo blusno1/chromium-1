@@ -21,6 +21,7 @@ class AuthInstance;
 class BluetoothInstance;
 class BootPhaseMonitorInstance;
 class CastReceiverInstance;
+class CertStoreInstance;
 class ClipboardInstance;
 class CrashCollectorInstance;
 class EnterpriseReportingInstance;
@@ -30,6 +31,7 @@ class IntentHelperInstance;
 class KioskInstance;
 class LockScreenInstance;
 class MetricsInstance;
+class MidisInstance;
 class NetInstance;
 class NotificationsInstance;
 class ObbMounterInstance;
@@ -69,6 +71,9 @@ class ArcBridgeService {
   InstanceHolder<mojom::CastReceiverInstance>* cast_receiver() {
     return &cast_receiver_;
   }
+  InstanceHolder<mojom::CertStoreInstance>* cert_store() {
+    return &cert_store_;
+  }
   InstanceHolder<mojom::ClipboardInstance>* clipboard() { return &clipboard_; }
   InstanceHolder<mojom::CrashCollectorInstance>* crash_collector() {
     return &crash_collector_;
@@ -88,6 +93,7 @@ class ArcBridgeService {
     return &lock_screen_;
   }
   InstanceHolder<mojom::MetricsInstance>* metrics() { return &metrics_; }
+  InstanceHolder<mojom::MidisInstance>* midis() { return &midis_; }
   InstanceHolder<mojom::NetInstance>* net() { return &net_; }
   InstanceHolder<mojom::NotificationsInstance>* notifications() {
     return &notifications_;
@@ -127,6 +133,7 @@ class ArcBridgeService {
   InstanceHolder<mojom::BluetoothInstance> bluetooth_;
   InstanceHolder<mojom::BootPhaseMonitorInstance> boot_phase_monitor_;
   InstanceHolder<mojom::CastReceiverInstance> cast_receiver_;
+  InstanceHolder<mojom::CertStoreInstance> cert_store_;
   InstanceHolder<mojom::ClipboardInstance> clipboard_;
   InstanceHolder<mojom::CrashCollectorInstance> crash_collector_;
   InstanceHolder<mojom::EnterpriseReportingInstance> enterprise_reporting_;
@@ -136,6 +143,7 @@ class ArcBridgeService {
   InstanceHolder<mojom::KioskInstance> kiosk_;
   InstanceHolder<mojom::LockScreenInstance> lock_screen_;
   InstanceHolder<mojom::MetricsInstance> metrics_;
+  InstanceHolder<mojom::MidisInstance> midis_;
   InstanceHolder<mojom::NetInstance> net_;
   InstanceHolder<mojom::NotificationsInstance> notifications_;
   InstanceHolder<mojom::ObbMounterInstance> obb_mounter_;

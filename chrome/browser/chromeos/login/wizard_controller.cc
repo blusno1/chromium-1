@@ -35,7 +35,6 @@
 #include "chrome/browser/chromeos/customization/customization_document.h"
 #include "chrome/browser/chromeos/device/input_service_proxy.h"
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_check_screen.h"
-#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/helper.h"
@@ -93,6 +92,7 @@
 #include "chromeos/settings/timezone_settings.h"
 #include "chromeos/timezone/timezone_provider.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_prefs.h"
 #include "components/crash/content/app/breakpad_linux.h"
 #include "components/pairing/bluetooth_controller_pairing_controller.h"
 #include "components/pairing/bluetooth_host_pairing_controller.h"
@@ -103,6 +103,7 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_types.h"
+#include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/accelerators/accelerator.h"
 
 using content::BrowserThread;
@@ -248,6 +249,9 @@ WizardController* WizardController::default_controller_ = nullptr;
 bool WizardController::skip_post_login_screens_ = false;
 
 // static
+bool WizardController::skip_enrollment_prompts_ = false;
+
+// static
 bool WizardController::zero_delay_enabled_ = false;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -265,10 +269,12 @@ WizardController::WizardController(LoginDisplayHost* host, OobeUI* oobe_ui)
       session_manager::SessionManager::Get()->IsSessionStarted();
   if (!ash_util::IsRunningInMash()) {
     AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
-    CHECK(accessibility_manager);
-    accessibility_subscription_ = accessibility_manager->RegisterCallback(
-        base::Bind(&WizardController::OnAccessibilityStatusChanged,
-                   base::Unretained(this)));
+    if (accessibility_manager) {
+      // accessibility_manager could be null in Tests.
+      accessibility_subscription_ = accessibility_manager->RegisterCallback(
+          base::Bind(&WizardController::OnAccessibilityStatusChanged,
+                     base::Unretained(this)));
+    }
   } else {
     NOTIMPLEMENTED();
   }
@@ -445,6 +451,10 @@ BaseScreen* WizardController::CreateScreen(OobeScreen screen) {
   }
 
   return nullptr;
+}
+
+void WizardController::SetCurrentScreenForTesting(BaseScreen* screen) {
+  current_screen_ = screen;
 }
 
 void WizardController::ShowNetworkScreen() {
@@ -1365,7 +1375,8 @@ void WizardController::AddNetworkRequested(const std::string& onc_spec) {
 }
 
 void WizardController::RebootHostRequested() {
-  DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart();
+  DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart(
+      power_manager::REQUEST_RESTART_OTHER, "login wizard reboot host");
 }
 
 void WizardController::OnEnableDebuggingScreenRequested() {
@@ -1454,6 +1465,11 @@ bool WizardController::IsOOBEStepToTrack(OobeScreen screen_id) {
 // static
 void WizardController::SkipPostLoginScreensForTesting() {
   skip_post_login_screens_ = true;
+}
+
+// static
+void WizardController::SkipEnrollmentPromptsForTesting() {
+  skip_enrollment_prompts_ = true;
 }
 
 // static
@@ -1594,8 +1610,8 @@ bool WizardController::ShouldShowArcTerms() const {
     VLOG(1) << "Skip ARC Terms of Service screen because ARC is not allowed.";
     return false;
   }
-  if (profile->GetPrefs()->IsManagedPreference(prefs::kArcEnabled) &&
-      !profile->GetPrefs()->GetBoolean(prefs::kArcEnabled)) {
+  if (profile->GetPrefs()->IsManagedPreference(arc::prefs::kArcEnabled) &&
+      !profile->GetPrefs()->GetBoolean(arc::prefs::kArcEnabled)) {
     VLOG(1) << "Skip ARC Terms of Service screen because ARC is disabled.";
     return false;
   }

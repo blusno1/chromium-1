@@ -188,6 +188,35 @@ class V8RuntimeStatsMobileBrowsingBenchmark(
   PLATFORM = 'mobile'
   SUPPORTED_PLATFORMS = [story.expectations.ALL_MOBILE]
 
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        self.DisableStory(
+            'browse:shopping:avito',
+            [story.expectations.ANDROID_ONE],
+            'crbug.com/767970')
+        self.DisableStory(
+            'browse:news:cnn',
+            [story.expectations.ANDROID_ONE],
+            'crbug.com/767970')
+        self.DisableStory(
+            'browse:tech:discourse_infinite_scroll',
+            [story.expectations.ANDROID_ONE],
+            'crbug.com/767970')
+        self.DisableStory(
+            'browse:shopping:lazada',
+            [story.expectations.ANDROID_ONE],
+            'crbug.com/768472')
+        self.DisableStory(
+            'browse:shopping:flipkart',
+            [story.expectations.ALL_MOBILE],
+            'crbug.com/767970')
+        self.DisableStory(
+            'browse:news:cnn',
+            [story.expectations.ALL_MOBILE],
+            'crbug.com/767970')
+    return StoryExpectations()
+
   @classmethod
   def Name(cls):
     return 'v8.runtimestats.browsing_mobile'

@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <memory>
 #include <set>
 #include <string>
@@ -25,16 +24,16 @@
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "cc/cc_export.h"
-#include "cc/resources/release_callback_impl.h"
 #include "cc/resources/return_callback.h"
-#include "cc/resources/single_release_callback_impl.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/quads/shared_bitmap.h"
 #include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/release_callback.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/resource_settings.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
@@ -58,9 +57,19 @@ class SharedBitmapManager;
 }  // namespace viz
 
 namespace cc {
-class BlockingTaskRunner;
 class TextureIdAllocator;
 
+// This class provides abstractions for allocating and transferring resources
+// between modules/threads/processes. It abstracts away GL textures vs
+// GpuMemoryBuffers vs software bitmaps behind a single ResourceId so that
+// code in common can hold onto ResourceIds, as long as the code using them
+// knows the correct type.
+//
+// The resource's underlying type is accessed through Read and Write locks that
+// help to safeguard correct usage with DCHECKs. All resources held in
+// ResourceProvider are immutable - they can not change format or size once
+// they are created, only their contents.
+//
 // This class is not thread-safe and can only be called from the thread it was
 // created on (in practice, the impl thread).
 class CC_EXPORT ResourceProvider
@@ -73,10 +82,10 @@ class CC_EXPORT ResourceProvider
   using ResourceIdMap = std::unordered_map<viz::ResourceId, viz::ResourceId>;
   enum TextureHint {
     TEXTURE_HINT_DEFAULT = 0x0,
-    TEXTURE_HINT_IMMUTABLE = 0x1,
+    TEXTURE_HINT_MIPMAP = 0x1,
     TEXTURE_HINT_FRAMEBUFFER = 0x2,
-    TEXTURE_HINT_IMMUTABLE_FRAMEBUFFER =
-        TEXTURE_HINT_IMMUTABLE | TEXTURE_HINT_FRAMEBUFFER
+    TEXTURE_HINT_MIPMAP_FRAMEBUFFER =
+        TEXTURE_HINT_MIPMAP | TEXTURE_HINT_FRAMEBUFFER
   };
   enum ResourceType {
     RESOURCE_TYPE_GPU_MEMORY_BUFFER,
@@ -87,9 +96,7 @@ class CC_EXPORT ResourceProvider
   ResourceProvider(viz::ContextProvider* compositor_context_provider,
                    viz::SharedBitmapManager* shared_bitmap_manager,
                    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-                   BlockingTaskRunner* blocking_main_thread_task_runner,
                    bool delegated_sync_points_required,
-                   bool enable_color_correct_rasterization,
                    const viz::ResourceSettings& resource_settings);
   ~ResourceProvider() override;
 
@@ -136,7 +143,6 @@ class CC_EXPORT ResourceProvider
   }
   ResourceType GetResourceType(viz::ResourceId id);
   GLenum GetResourceTextureTarget(viz::ResourceId id);
-  bool IsImmutable(viz::ResourceId id);
   TextureHint GetTextureHint(viz::ResourceId id);
 
   // Creates a resource of the default resource type.
@@ -157,16 +163,16 @@ class CC_EXPORT ResourceProvider
   // Wraps an external texture mailbox into a GL resource.
   viz::ResourceId CreateResourceFromTextureMailbox(
       const viz::TextureMailbox& mailbox,
-      std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl);
+      std::unique_ptr<viz::SingleReleaseCallback> release_callback);
 
   viz::ResourceId CreateResourceFromTextureMailbox(
       const viz::TextureMailbox& mailbox,
-      std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl,
+      std::unique_ptr<viz::SingleReleaseCallback> release_callback,
       bool read_lock_fences_enabled);
 
   viz::ResourceId CreateResourceFromTextureMailbox(
       const viz::TextureMailbox& mailbox,
-      std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl,
+      std::unique_ptr<viz::SingleReleaseCallback> release_callback,
       bool read_lock_fences_enabled,
       gfx::BufferFormat buffer_format);
 
@@ -196,9 +202,6 @@ class CC_EXPORT ResourceProvider
     GLenum target() const { return target_; }
     viz::ResourceFormat format() const { return format_; }
     const gfx::Size& size() const { return size_; }
-
-    // Will return an invalid color space unless
-    // |enable_color_correct_rasterization| is true.
     const gfx::ColorSpace& color_space_for_raster() const {
       return color_space_;
     }
@@ -211,6 +214,8 @@ class CC_EXPORT ResourceProvider
     GrPixelConfig PixelConfig() const;
 
     void set_synchronized() { synchronized_ = true; }
+
+    void set_generate_mipmap() { generate_mipmap_ = true; }
 
     // Returns texture id on compositor context, allocating if necessary.
     GLuint GetTexture();
@@ -251,6 +256,7 @@ class CC_EXPORT ResourceProvider
     gpu::SyncToken sync_token_;
     bool has_sync_token_ = false;
     bool synchronized_ = false;
+    bool generate_mipmap_ = false;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedWriteLockGL);
   };
@@ -284,8 +290,6 @@ class CC_EXPORT ResourceProvider
 
     SkBitmap& sk_bitmap() { return sk_bitmap_; }
     bool valid() const { return !!sk_bitmap_.getPixels(); }
-    // Will return the invalid color space unless
-    // |enable_color_correct_rasterization| is true.
     const gfx::ColorSpace& color_space_for_raster() const {
       return color_space_;
     }
@@ -415,6 +419,7 @@ class CC_EXPORT ResourceProvider
       // external resource for others to wait on.
       SYNCHRONIZED,
     };
+    enum MipmapState { INVALID, GENERATE, VALID };
 
     Resource(GLuint texture_id,
              const gfx::Size& size,
@@ -453,11 +458,12 @@ class CC_EXPORT ResourceProvider
     void UpdateSyncToken(const gpu::SyncToken& sync_token);
     int8_t* GetSyncTokenData();
     void WaitSyncToken(gpu::gles2::GLES2Interface* sync_token);
+    void SetGenerateMipmap();
 
     int child_id;
     viz::ResourceId id_in_child;
     GLuint gl_id;
-    ReleaseCallbackImpl release_callback_impl;
+    viz::ReleaseCallback release_callback;
     uint8_t* pixels;
     int lock_for_read_count;
     int imported_count;
@@ -490,6 +496,7 @@ class CC_EXPORT ResourceProvider
     // TODO(skyostil): Use a separate sampler object for filter state.
     GLenum original_filter;
     GLenum filter;
+    GLenum min_filter;
     GLuint image_id;
     TextureHint hint;
     ResourceType type;
@@ -508,6 +515,7 @@ class CC_EXPORT ResourceProvider
     viz::SharedBitmap* shared_bitmap;
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
     gfx::ColorSpace color_space;
+    MipmapState mipmap_state = INVALID;
 
    private:
     SynchronizationState synchronization_state_ = SYNCHRONIZED;
@@ -534,8 +542,6 @@ class CC_EXPORT ResourceProvider
                          GLenum unit,
                          GLenum filter);
 
-  // Will return the invalid color space unless
-  // |enable_color_correct_rasterization| is true.
   gfx::ColorSpace GetResourceColorSpaceForRaster(
       const Resource* resource) const;
 
@@ -559,20 +565,19 @@ class CC_EXPORT ResourceProvider
   struct Settings {
     Settings(viz::ContextProvider* compositor_context_provider,
              bool delegated_sync_points_needed,
-             bool enable_color_correct_rasterization,
              const viz::ResourceSettings& resource_settings);
 
     int max_texture_size = 0;
     bool use_texture_storage_ext = false;
     bool use_texture_format_bgra = false;
     bool use_texture_usage_hint = false;
+    bool use_texture_npot = false;
     bool use_sync_query = false;
     ResourceType default_resource_type = RESOURCE_TYPE_GL_TEXTURE;
     viz::ResourceFormat yuv_resource_format = viz::LUMINANCE_8;
     viz::ResourceFormat yuv_highbit_resource_format = viz::LUMINANCE_8;
     viz::ResourceFormat best_texture_format = viz::RGBA_8888;
     viz::ResourceFormat best_render_buffer_format = viz::RGBA_8888;
-    bool enable_color_correct_rasterization = false;
     bool delegated_sync_points_required = false;
   } const settings_;
 
@@ -587,7 +592,6 @@ class CC_EXPORT ResourceProvider
   viz::ContextProvider* compositor_context_provider_;
   viz::SharedBitmapManager* shared_bitmap_manager_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
-  BlockingTaskRunner* blocking_main_thread_task_runner_;
   viz::ResourceId next_id_;
   int next_child_;
 

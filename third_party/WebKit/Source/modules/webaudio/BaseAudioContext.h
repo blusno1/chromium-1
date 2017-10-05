@@ -55,6 +55,7 @@ class AudioBuffer;
 class AudioBufferSourceNode;
 class AudioContextOptions;
 class AudioListener;
+class AudioWorkletMessagingProxy;
 class BiquadFilterNode;
 class ChannelMergerNode;
 class ChannelSplitterNode;
@@ -122,7 +123,7 @@ class MODULES_EXPORT BaseAudioContext
 
   // Document notification
   void ContextDestroyed(ExecutionContext*) final;
-  bool HasPendingActivity() const final;
+  bool HasPendingActivity() const;
 
   // Cannnot be called from the audio thread.
   AudioDestinationNode* destination() const;
@@ -298,7 +299,7 @@ class MODULES_EXPORT BaseAudioContext
   // Returns true if this thread owns the context's lock.
   bool IsGraphOwner() { return GetDeferredTaskHandler().IsGraphOwner(); }
 
-  using AutoLocker = DeferredTaskHandler::AutoLocker;
+  using GraphAutoLocker = DeferredTaskHandler::GraphAutoLocker;
 
   // Returns the maximum numuber of channels we can support.
   static unsigned MaxNumberOfChannels() { return kMaxNumberOfChannels; }
@@ -332,6 +333,10 @@ class MODULES_EXPORT BaseAudioContext
   // AudioScheduledSourceHandler or a AudioBufferSourceHandler without a user
   // gesture while the AudioContext requires a user gesture.
   void MaybeRecordStartAttempt();
+
+  void SetWorkletMessagingProxy(AudioWorkletMessagingProxy*);
+
+  AudioWorkletMessagingProxy* WorkletMessagingProxy();
 
  protected:
   enum ContextType { kRealtimeContext, kOfflineContext };
@@ -508,6 +513,8 @@ class MODULES_EXPORT BaseAudioContext
 
   Optional<AutoplayStatus> autoplay_status_;
   AudioIOPosition output_position_;
+
+  Member<AudioWorkletMessagingProxy> worklet_messaging_proxy_;
 };
 
 }  // namespace blink

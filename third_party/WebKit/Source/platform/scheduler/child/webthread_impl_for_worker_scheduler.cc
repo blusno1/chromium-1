@@ -4,9 +4,9 @@
 
 #include "platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
 
+#include <memory>
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/default_tick_clock.h"
@@ -63,13 +63,14 @@ void WebThreadImplForWorkerScheduler::InitOnThread(
   // TODO(alexclarke): Do we need to unify virtual time for workers and the
   // main thread?
   task_runner_delegate_ = SchedulerTqmDelegateImpl::Create(
-      thread_->message_loop(), base::MakeUnique<base::DefaultTickClock>());
+      thread_->message_loop(), std::make_unique<base::DefaultTickClock>());
   worker_scheduler_ = CreateWorkerScheduler();
   worker_scheduler_->Init();
   task_queue_ = worker_scheduler_->DefaultTaskQueue();
   idle_task_runner_ = worker_scheduler_->IdleTaskRunner();
   web_scheduler_.reset(new WebSchedulerImpl(
       worker_scheduler_.get(), worker_scheduler_->IdleTaskRunner(),
+      worker_scheduler_->DefaultTaskQueue(),
       worker_scheduler_->DefaultTaskQueue(),
       worker_scheduler_->DefaultTaskQueue()));
   base::MessageLoop::current()->AddDestructionObserver(this);
@@ -104,9 +105,9 @@ blink::WebScheduler* WebThreadImplForWorkerScheduler::Scheduler() const {
   return web_scheduler_.get();
 }
 
-base::SingleThreadTaskRunner* WebThreadImplForWorkerScheduler::GetTaskRunner()
-    const {
-  return task_queue_.get();
+scoped_refptr<base::SingleThreadTaskRunner>
+WebThreadImplForWorkerScheduler::GetTaskRunner() const {
+  return task_queue_;
 }
 
 SingleThreadIdleTaskRunner* WebThreadImplForWorkerScheduler::GetIdleTaskRunner()

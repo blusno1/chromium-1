@@ -11,7 +11,7 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "base/bind.h"
-#include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/logging.h"
@@ -22,6 +22,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/chromeos/arc/boot_phase_monitor/arc_boot_phase_monitor_bridge.h"
+#include "chrome/browser/chromeos/arc/voice_interaction/highlighter_controller_client.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -34,6 +35,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/instance_holder.h"
 #include "components/session_manager/core/session_manager.h"
@@ -69,18 +71,6 @@ constexpr base::TimeDelta kMaxTimeSinceUserInteractionForHistogram =
 
 constexpr int32_t kContextRequestMaxRemainingCount = 2;
 
-void ScreenshotCallback(
-    const mojom::VoiceInteractionFrameworkHost::CaptureFocusedWindowCallback&
-        callback,
-    scoped_refptr<base::RefCountedMemory> data) {
-  if (data.get() == nullptr) {
-    callback.Run(std::vector<uint8_t>{});
-    return;
-  }
-  std::vector<uint8_t> result(data->front(), data->front() + data->size());
-  callback.Run(result);
-}
-
 std::unique_ptr<ui::LayerTreeOwner> CreateLayerTreeForSnapshot(
     aura::Window* root_window) {
   LayerSet blocked_layers;
@@ -107,7 +97,7 @@ std::unique_ptr<ui::LayerTreeOwner> CreateLayerTreeForSnapshot(
                          if (blocked_layers.count(owner->layer()->parent()))
                            return nullptr;
                          if (blocked_layers.count(owner->layer())) {
-                           auto layer = base::MakeUnique<ui::Layer>(
+                           auto layer = std::make_unique<ui::Layer>(
                                ui::LayerType::LAYER_SOLID_COLOR);
                            layer->SetBounds(owner->layer()->bounds());
                            layer->SetColor(SK_ColorBLACK);
@@ -135,23 +125,25 @@ std::unique_ptr<ui::LayerTreeOwner> CreateLayerTreeForSnapshot(
 }
 
 void EncodeAndReturnImage(
-    const ArcVoiceInteractionFrameworkService::CaptureFullscreenCallback&
-        callback,
+    ArcVoiceInteractionFrameworkService::CaptureFullscreenCallback callback,
     std::unique_ptr<ui::LayerTreeOwner> old_layer_owner,
     const gfx::Image& image) {
   old_layer_owner.reset();
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
       base::TaskTraits{base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::Bind(
+      base::BindOnce(
           [](const gfx::Image& image) -> std::vector<uint8_t> {
             std::vector<uint8_t> res;
             gfx::JPEG1xEncodedDataFromImage(image, 100, &res);
             return res;
           },
           image),
-      callback);
+      std::move(callback));
 }
+
+template <typename T>
+void DoNothing(T value) {}
 
 // Singleton factory for ArcVoiceInteractionFrameworkService.
 class ArcVoiceInteractionFrameworkServiceFactory
@@ -183,16 +175,6 @@ class ArcVoiceInteractionFrameworkServiceFactory
   }
 };
 
-void SetVoiceInteractionPrefs(content::BrowserContext* context,
-                              mojom::VoiceInteractionStatusPtr status) {
-  PrefService* prefs = Profile::FromBrowserContext(context)->GetPrefs();
-  prefs->SetBoolean(prefs::kVoiceInteractionPrefSynced, status->configured);
-  prefs->SetBoolean(prefs::kVoiceInteractionEnabled,
-                    status->configured && status->voice_interaction_enabled);
-  prefs->SetBoolean(prefs::kVoiceInteractionContextEnabled,
-                    status->configured && status->context_enabled);
-}
-
 }  // namespace
 
 // static
@@ -210,16 +192,21 @@ KeyedServiceBaseFactory* ArcVoiceInteractionFrameworkService::GetFactory() {
 ArcVoiceInteractionFrameworkService::ArcVoiceInteractionFrameworkService(
     content::BrowserContext* context,
     ArcBridgeService* bridge_service)
-    : context_(context), arc_bridge_service_(bridge_service), binding_(this) {
+    : context_(context),
+      arc_bridge_service_(bridge_service),
+      binding_(this),
+      weak_ptr_factory_(this) {
   arc_bridge_service_->voice_interaction_framework()->AddObserver(this);
   ArcSessionManager::Get()->AddObserver(this);
   session_manager::SessionManager::Get()->AddObserver(this);
+  chromeos::CrasAudioHandler::Get()->AddAudioObserver(this);
 }
 
 ArcVoiceInteractionFrameworkService::~ArcVoiceInteractionFrameworkService() {
+  chromeos::CrasAudioHandler::Get()->RemoveAudioObserver(this);
+  session_manager::SessionManager::Get()->RemoveObserver(this);
   ArcSessionManager::Get()->RemoveObserver(this);
   arc_bridge_service_->voice_interaction_framework()->RemoveObserver(this);
-  session_manager::SessionManager::Get()->RemoveObserver(this);
 }
 
 void ArcVoiceInteractionFrameworkService::OnInstanceReady() {
@@ -234,41 +221,27 @@ void ArcVoiceInteractionFrameworkService::OnInstanceReady() {
 
   if (is_request_pending_) {
     is_request_pending_ = false;
-    framework_instance->StartVoiceInteractionSession();
+    if (is_pending_request_toggle_) {
+      framework_instance->ToggleVoiceInteractionSession(IsHomescreenActive());
+    } else {
+      framework_instance->StartVoiceInteractionSession(IsHomescreenActive());
+    }
   }
+
+  highlighter_client_ = std::make_unique<HighlighterControllerClient>(this);
 }
 
 void ArcVoiceInteractionFrameworkService::OnInstanceClosed() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-}
-
-void ArcVoiceInteractionFrameworkService::CaptureFocusedWindow(
-    const CaptureFocusedWindowCallback& callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  if (!ValidateTimeSinceUserInteraction()) {
-    callback.Run(std::vector<uint8_t>{});
-    return;
-  }
-
-  aura::Window* window =
-      ash::Shell::Get()->activation_client()->GetActiveWindow();
-
-  if (window == nullptr) {
-    callback.Run(std::vector<uint8_t>{});
-    return;
-  }
-  ui::GrabWindowSnapshotAsyncJPEG(
-      window, gfx::Rect(window->bounds().size()),
-      base::Bind(&ScreenshotCallback, callback));
+  highlighter_client_.reset();
 }
 
 void ArcVoiceInteractionFrameworkService::CaptureFullscreen(
-    const CaptureFullscreenCallback& callback) {
+    CaptureFullscreenCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (!ValidateTimeSinceUserInteraction()) {
-    callback.Run(std::vector<uint8_t>{});
+    std::move(callback).Run(std::vector<uint8_t>{});
     return;
   }
 
@@ -280,7 +253,7 @@ void ArcVoiceInteractionFrameworkService::CaptureFullscreen(
   auto old_layer_owner = CreateLayerTreeForSnapshot(window);
   ui::GrabLayerSnapshotAsync(
       old_layer_owner->root(), gfx::Rect(window->bounds().size()),
-      base::Bind(&EncodeAndReturnImage, callback,
+      base::Bind(&EncodeAndReturnImage, base::Passed(std::move(callback)),
                  base::Passed(std::move(old_layer_owner))));
 }
 
@@ -319,7 +292,8 @@ void ArcVoiceInteractionFrameworkService::SetVoiceInteractionState(
         value_prop_accepted &&
         (!prefs->GetUserPrefValue(prefs::kVoiceInteractionEnabled) ||
          prefs->GetBoolean(prefs::kVoiceInteractionEnabled));
-    SetVoiceInteractionEnabled(enable_voice_interaction);
+    SetVoiceInteractionEnabled(enable_voice_interaction,
+                               base::BindOnce(&DoNothing<bool>));
 
     SetVoiceInteractionContextEnabled(
         (enable_voice_interaction &&
@@ -356,14 +330,13 @@ void ArcVoiceInteractionFrameworkService::OnArcPlayStoreEnabledChanged(
     bool enabled) {
   if (enabled)
     return;
+
   PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
-  prefs->SetBoolean(prefs::kArcVoiceInteractionValuePropAccepted, false);
-  mojom::VoiceInteractionStatusPtr status =
-      mojom::VoiceInteractionStatus::New();
-  status->configured = false;
-  status->voice_interaction_enabled = false;
-  status->context_enabled = false;
-  SetVoiceInteractionPrefs(context_, std::move(status));
+  // TODO(xiaohuic): remove deprecated prefs::kVoiceInteractionPrefSynced.
+  prefs->SetBoolean(prefs::kVoiceInteractionPrefSynced, false);
+  SetVoiceInteractionSetupCompletedInternal(false);
+  SetVoiceInteractionEnabled(false, base::BindOnce(&DoNothing<bool>));
+  SetVoiceInteractionContextEnabled(false);
 }
 
 void ArcVoiceInteractionFrameworkService::OnSessionStateChanged() {
@@ -376,40 +349,50 @@ void ArcVoiceInteractionFrameworkService::OnSessionStateChanged() {
 
   // TODO(crbug.com/757012): Avoid using ash::Shell here so that it can work in
   // mash.
-  bool enabled = Profile::FromBrowserContext(context_)->GetPrefs()->GetBoolean(
-      prefs::kVoiceInteractionEnabled);
+  PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
+  bool enabled = prefs->GetBoolean(prefs::kVoiceInteractionEnabled);
   ash::Shell::Get()->NotifyVoiceInteractionEnabled(enabled);
 
-  bool context = ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
-      prefs::kVoiceInteractionContextEnabled);
+  bool context = prefs->GetBoolean(prefs::kVoiceInteractionContextEnabled);
   ash::Shell::Get()->NotifyVoiceInteractionContextEnabled(context);
 
-  if (Profile::FromBrowserContext(context_)->GetPrefs()->GetBoolean(
-          prefs::kArcVoiceInteractionValuePropAccepted))
-    ash::Shell::Get()->NotifyVoiceInteractionSetupCompleted();
+  bool setup_completed =
+      prefs->GetBoolean(prefs::kArcVoiceInteractionValuePropAccepted);
+  ash::Shell::Get()->NotifyVoiceInteractionSetupCompleted(setup_completed);
 
   // We only want notify the status change on first user signed in.
   session_manager::SessionManager::Get()->RemoveObserver(this);
 }
 
+void ArcVoiceInteractionFrameworkService::OnHotwordTriggered(uint64_t tv_sec,
+                                                             uint64_t tv_nsec) {
+  InitiateUserInteraction(false /* is_toggle */);
+}
+
 void ArcVoiceInteractionFrameworkService::StartVoiceInteractionSetupWizard() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  arc::mojom::VoiceInteractionFrameworkInstance* framework_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(
-          arc_bridge_service_->voice_interaction_framework(),
-          StartVoiceInteractionSetupWizard);
-
-  if (!framework_instance)
-    return;
-
-  if (should_start_runtime_flow_) {
-    VLOG(1) << "Starting runtime setup flow.";
-    framework_instance->StartVoiceInteractionSession();
-    return;
-  }
-
-  framework_instance->StartVoiceInteractionSetupWizard();
+  // This screen is shown after the Just-A-Sec screen, which blocks until
+  // application sync'd is received. At that point, framework service should
+  // already be initialized. Here we get a method that is defined in version 1
+  // to ensure the connection is established.
+  // TODO(muyuanli): This is a hack for backward compatibility and should be
+  // removed once Android side is checked in and stablized, then we should
+  // DCHECK the |setting_applied| parameter in the lambda. See
+  // crbug.com/768935.
+  DCHECK(ARC_GET_INSTANCE_FOR_METHOD(
+      arc_bridge_service_->voice_interaction_framework(),
+      StartVoiceInteractionSession));
+  SetVoiceInteractionEnabled(
+      true, base::BindOnce(
+                [](base::OnceClosure next, bool setting_applied) {
+                  if (!setting_applied)
+                    DVLOG(1) << "Not synchronizing settings: version mismatch";
+                  std::move(next).Run();
+                },
+                base::BindOnce(&ArcVoiceInteractionFrameworkService::
+                                   StartVoiceInteractionSetupWizardActivity,
+                               weak_ptr_factory_.GetWeakPtr())));
 }
 
 void ArcVoiceInteractionFrameworkService::ShowVoiceInteractionSettings() {
@@ -436,19 +419,28 @@ void ArcVoiceInteractionFrameworkService::NotifyMetalayerStatusChanged(
 }
 
 void ArcVoiceInteractionFrameworkService::SetVoiceInteractionEnabled(
-    bool enable) {
+    bool enable,
+    VoiceInteractionSettingCompleteCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   ash::Shell::Get()->NotifyVoiceInteractionEnabled(enable);
 
   PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
 
-  // We assume voice interaction is always enabled on in ARC, but we guard
-  // all possible entry points on CrOS side with this flag. In this case,
-  // we only need to set CrOS side flag.
   prefs->SetBoolean(prefs::kVoiceInteractionEnabled, enable);
   if (!enable)
     prefs->SetBoolean(prefs::kVoiceInteractionContextEnabled, false);
+
+  mojom::VoiceInteractionFrameworkInstance* framework_instance =
+      ARC_GET_INSTANCE_FOR_METHOD(
+          arc_bridge_service_->voice_interaction_framework(),
+          SetVoiceInteractionEnabled);
+  if (!framework_instance) {
+    std::move(callback).Run(false);
+    return;
+  }
+  framework_instance->SetVoiceInteractionEnabled(
+      enable, base::BindOnce(std::move(callback), true));
 }
 
 void ArcVoiceInteractionFrameworkService::SetVoiceInteractionContextEnabled(
@@ -469,37 +461,19 @@ void ArcVoiceInteractionFrameworkService::SetVoiceInteractionContextEnabled(
   framework_instance->SetVoiceInteractionContextEnabled(enable);
 }
 
-void ArcVoiceInteractionFrameworkService::UpdateVoiceInteractionPrefs() {
-  if (Profile::FromBrowserContext(context_)->GetPrefs()->GetBoolean(
-          prefs::kVoiceInteractionPrefSynced)) {
-    return;
-  }
-  mojom::VoiceInteractionFrameworkInstance* framework_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(
-          arc_bridge_service_->voice_interaction_framework(),
-          GetVoiceInteractionSettings);
-  if (!framework_instance)
-    return;
-  framework_instance->GetVoiceInteractionSettings(
-      base::Bind(&SetVoiceInteractionPrefs, context_));
-}
-
 void ArcVoiceInteractionFrameworkService::SetVoiceInteractionSetupCompleted() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
-  prefs->SetBoolean(prefs::kArcVoiceInteractionValuePropAccepted, true);
-  SetVoiceInteractionEnabled(true);
-  prefs->SetBoolean(prefs::kVoiceInteractionContextEnabled, true);
-
-  ash::Shell::Get()->NotifyVoiceInteractionSetupCompleted();
+  SetVoiceInteractionSetupCompletedInternal(true);
+  SetVoiceInteractionEnabled(true, base::BindOnce(&DoNothing<bool>));
+  SetVoiceInteractionContextEnabled(true);
 }
 
 void ArcVoiceInteractionFrameworkService::StartSessionFromUserInteraction(
     const gfx::Rect& rect) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!InitiateUserInteraction())
+  if (!InitiateUserInteraction(false /* is_toggle */))
     return;
 
   if (rect.IsEmpty()) {
@@ -508,7 +482,7 @@ void ArcVoiceInteractionFrameworkService::StartSessionFromUserInteraction(
             arc_bridge_service_->voice_interaction_framework(),
             StartVoiceInteractionSession);
     DCHECK(framework_instance);
-    framework_instance->StartVoiceInteractionSession();
+    framework_instance->StartVoiceInteractionSession(IsHomescreenActive());
   } else {
     mojom::VoiceInteractionFrameworkInstance* framework_instance =
         ARC_GET_INSTANCE_FOR_METHOD(
@@ -523,7 +497,7 @@ void ArcVoiceInteractionFrameworkService::StartSessionFromUserInteraction(
 void ArcVoiceInteractionFrameworkService::ToggleSessionFromUserInteraction() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!InitiateUserInteraction())
+  if (!InitiateUserInteraction(true /* is_toggle */))
     return;
 
   mojom::VoiceInteractionFrameworkInstance* framework_instance =
@@ -531,7 +505,7 @@ void ArcVoiceInteractionFrameworkService::ToggleSessionFromUserInteraction() {
           arc_bridge_service_->voice_interaction_framework(),
           ToggleVoiceInteractionSession);
   DCHECK(framework_instance);
-  framework_instance->ToggleVoiceInteractionSession();
+  framework_instance->ToggleVoiceInteractionSession(IsHomescreenActive());
 }
 
 bool ArcVoiceInteractionFrameworkService::ValidateTimeSinceUserInteraction() {
@@ -574,7 +548,8 @@ void ArcVoiceInteractionFrameworkService::StartVoiceInteractionOobe() {
   display_host->StartVoiceInteractionOobe();
 }
 
-bool ArcVoiceInteractionFrameworkService::InitiateUserInteraction() {
+bool ArcVoiceInteractionFrameworkService::InitiateUserInteraction(
+    bool is_toggle) {
   VLOG(1) << "Start voice interaction.";
   PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
   if (!prefs->GetBoolean(prefs::kArcVoiceInteractionValuePropAccepted)) {
@@ -600,12 +575,47 @@ bool ArcVoiceInteractionFrameworkService::InitiateUserInteraction() {
     VLOG(1) << "Instance not ready.";
     SetArcCpuRestriction(false);
     is_request_pending_ = true;
+    is_pending_request_toggle_ = is_toggle;
     return false;
   }
 
   user_interaction_start_time_ = base::TimeTicks::Now();
   context_request_remaining_count_ = kContextRequestMaxRemainingCount;
   return true;
+}
+
+void ArcVoiceInteractionFrameworkService::
+    SetVoiceInteractionSetupCompletedInternal(bool completed) {
+  PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
+  prefs->SetBoolean(prefs::kArcVoiceInteractionValuePropAccepted, completed);
+
+  ash::Shell::Get()->NotifyVoiceInteractionSetupCompleted(completed);
+}
+
+bool ArcVoiceInteractionFrameworkService::IsHomescreenActive() {
+  // Homescreen is considered to be active if there are no active windows.
+  return !ash::Shell::Get()->activation_client()->GetActiveWindow();
+}
+
+void ArcVoiceInteractionFrameworkService::
+    StartVoiceInteractionSetupWizardActivity() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  arc::mojom::VoiceInteractionFrameworkInstance* framework_instance =
+      ARC_GET_INSTANCE_FOR_METHOD(
+          arc_bridge_service_->voice_interaction_framework(),
+          StartVoiceInteractionSetupWizard);
+
+  if (!framework_instance)
+    return;
+
+  if (should_start_runtime_flow_) {
+    should_start_runtime_flow_ = false;
+    VLOG(1) << "Starting runtime setup flow.";
+    framework_instance->StartVoiceInteractionSession(IsHomescreenActive());
+    return;
+  }
+  framework_instance->StartVoiceInteractionSetupWizard();
 }
 
 }  // namespace arc

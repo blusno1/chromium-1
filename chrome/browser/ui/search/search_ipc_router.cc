@@ -108,22 +108,6 @@ void SearchIPCRouter::OnNavigationEntryCommitted() {
   embedded_search_client()->SetPageSequenceNumber(commit_counter_);
 }
 
-void SearchIPCRouter::SendChromeIdentityCheckResult(
-    const base::string16& identity,
-    bool identity_match) {
-  if (!policy_->ShouldProcessChromeIdentityCheck())
-    return;
-
-  embedded_search_client()->ChromeIdentityCheckResult(identity, identity_match);
-}
-
-void SearchIPCRouter::SendHistorySyncCheckResult(bool sync_history) {
-  if (!policy_->ShouldProcessHistorySyncCheck())
-    return;
-
-  embedded_search_client()->HistorySyncCheckResult(sync_history);
-}
-
 void SearchIPCRouter::SetInputInProgress(bool input_in_progress) {
   if (!policy_->ShouldSendSetInputInProgress(is_active_tab_))
     return;
@@ -219,6 +203,7 @@ void SearchIPCRouter::LogEvent(int page_seq_no,
 void SearchIPCRouter::LogMostVisitedImpression(
     int page_seq_no,
     int position,
+    ntp_tiles::TileTitleSource tile_title_source,
     ntp_tiles::TileSource tile_source,
     ntp_tiles::TileVisualType tile_type) {
   if (page_seq_no != commit_counter_)
@@ -228,12 +213,14 @@ void SearchIPCRouter::LogMostVisitedImpression(
   if (!policy_->ShouldProcessLogEvent())
     return;
 
-  delegate_->OnLogMostVisitedImpression(position, tile_source, tile_type);
+  delegate_->OnLogMostVisitedImpression(position, tile_title_source,
+                                        tile_source, tile_type);
 }
 
 void SearchIPCRouter::LogMostVisitedNavigation(
     int page_seq_no,
     int position,
+    ntp_tiles::TileTitleSource tile_title_source,
     ntp_tiles::TileSource tile_source,
     ntp_tiles::TileVisualType tile_type) {
   if (page_seq_no != commit_counter_)
@@ -243,7 +230,8 @@ void SearchIPCRouter::LogMostVisitedNavigation(
   if (!policy_->ShouldProcessLogEvent())
     return;
 
-  delegate_->OnLogMostVisitedNavigation(position, tile_source, tile_type);
+  delegate_->OnLogMostVisitedNavigation(position, tile_title_source,
+                                        tile_source, tile_type);
 }
 
 void SearchIPCRouter::PasteAndOpenDropdown(int page_seq_no,
@@ -257,25 +245,28 @@ void SearchIPCRouter::PasteAndOpenDropdown(int page_seq_no,
   delegate_->PasteIntoOmnibox(text);
 }
 
-void SearchIPCRouter::ChromeIdentityCheck(int page_seq_no,
-                                          const base::string16& identity) {
+void SearchIPCRouter::ChromeIdentityCheck(
+    int page_seq_no,
+    const base::string16& identity,
+    ChromeIdentityCheckCallback callback) {
   if (page_seq_no != commit_counter_)
     return;
 
   if (!policy_->ShouldProcessChromeIdentityCheck())
     return;
 
-  delegate_->OnChromeIdentityCheck(identity);
+  std::move(callback).Run(delegate_->ChromeIdentityCheck(identity));
 }
 
-void SearchIPCRouter::HistorySyncCheck(int page_seq_no) {
+void SearchIPCRouter::HistorySyncCheck(int page_seq_no,
+                                       HistorySyncCheckCallback callback) {
   if (page_seq_no != commit_counter_)
     return;
 
   if (!policy_->ShouldProcessHistorySyncCheck())
     return;
 
-  delegate_->OnHistorySyncCheck();
+  std::move(callback).Run(delegate_->HistorySyncCheck());
 }
 
 void SearchIPCRouter::set_delegate_for_testing(Delegate* delegate) {

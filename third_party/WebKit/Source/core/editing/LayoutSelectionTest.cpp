@@ -6,8 +6,9 @@
 
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/ShadowRootInit.h"
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 #include "platform/wtf/Assertions.h"
@@ -73,6 +74,7 @@ USING_LAYOUTOBJECT_FUNC(IsLayoutInline);
 USING_LAYOUTOBJECT_FUNC(IsBR);
 USING_LAYOUTOBJECT_FUNC(IsListItem);
 USING_LAYOUTOBJECT_FUNC(IsListMarker);
+USING_LAYOUTOBJECT_FUNC(IsLayoutImage);
 
 static IsTypeOf IsLayoutTextFragmentOf(const String& text) {
   return WTF::Bind(
@@ -101,14 +103,18 @@ static bool TestLayoutObject(LayoutObject* object,
                              const String& text,
                              SelectionState state,
                              InvalidateOption invalidate) {
-  if (!TestLayoutObjectState(object, state, invalidate))
-    return false;
-
-  if (!object->IsText())
-    return false;
-  if (text != ToLayoutText(object)->GetText())
-    return false;
-  return true;
+  return TestLayoutObject(
+      object,
+      WTF::Bind(
+          [](const String& text, const LayoutObject& object) {
+            if (!object.IsText())
+              return false;
+            if (text != ToLayoutText(object).GetText())
+              return false;
+            return true;
+          },
+          text),
+      state, invalidate);
 }
 
 #define TEST_NEXT(predicate, state, invalidate)                             \
@@ -204,7 +210,7 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectCrossingShadowBoundary) {
       GetDocument().QuerySelector("div")->attachShadow(
           ToScriptStateForMainWorld(GetDocument().GetFrame()), shadow_root_init,
           ASSERT_NO_EXCEPTION);
-  shadow_root->setInnerHTML(
+  shadow_root->SetInnerHTMLFromString(
       "Foo<slot name='s2'></slot><slot name='s1'></slot>");
 
   Selection().SetSelection(
@@ -372,4 +378,35 @@ TEST_F(LayoutSelectionTest, FirstLetterUpdateSeletion) {
   TEST_NO_NEXT_LAYOUT_OBJECT();
 }
 
+TEST_F(LayoutSelectionTest, CommitAppearanceIfNeededNotCrash) {
+  SetBodyContent("<div id='host'><span>bar<span></div><div>baz</div>");
+  SetShadowContent("foo", "host");
+  UpdateAllLifecyclePhases();
+  // <div id='host'>
+  //   #shadow-root
+  //     foo
+  //   <span>|bar</span>
+  // </div>
+  // <div>baz^</div>
+  // |span| is not in flat tree.
+  Node* const span =
+      ToElement(GetDocument().QuerySelector("#host")->firstChild());
+  DCHECK(span);
+  Node* const baz = GetDocument().body()->firstChild()->nextSibling();
+  DCHECK(baz);
+  Selection().SetSelection(SelectionInDOMTree::Builder()
+                               .SetBaseAndExtent({baz, 1}, {span, 0})
+                               .Build());
+  Selection().CommitAppearanceIfNeeded();
+}
+
+TEST_F(LayoutSelectionTest, SelectImage) {
+  const SelectionInDOMTree& selection =
+      SetSelectionTextToBody("^<img style=\"width:100px; height:100px\"/>|");
+  Selection().SetSelection(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutImage, kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+}
 }  // namespace blink

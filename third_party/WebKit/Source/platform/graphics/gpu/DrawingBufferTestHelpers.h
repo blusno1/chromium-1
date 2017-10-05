@@ -7,10 +7,10 @@
 
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/capabilities.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/CanvasColorParams.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
+#include "platform/runtime_enabled_features.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -387,7 +387,7 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
 
 class DrawingBufferForTests : public DrawingBuffer {
  public:
-  static PassRefPtr<DrawingBufferForTests> Create(
+  static RefPtr<DrawingBufferForTests> Create(
       std::unique_ptr<WebGraphicsContext3DProvider> context_provider,
       DrawingBuffer::Client* client,
       const IntSize& size,
@@ -396,9 +396,9 @@ class DrawingBufferForTests : public DrawingBuffer {
     std::unique_ptr<Extensions3DUtil> extensions_util =
         Extensions3DUtil::Create(context_provider->ContextGL());
     RefPtr<DrawingBufferForTests> drawing_buffer =
-        AdoptRef(new DrawingBufferForTests(std::move(context_provider),
-                                           std::move(extensions_util), client,
-                                           preserve));
+        WTF::AdoptRef(new DrawingBufferForTests(std::move(context_provider),
+                                                std::move(extensions_util),
+                                                client, preserve));
     if (!drawing_buffer->Initialize(
             size, use_multisampling != kDisableMultisampling)) {
       drawing_buffer->BeginDestruction();

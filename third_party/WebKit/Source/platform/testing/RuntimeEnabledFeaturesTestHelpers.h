@@ -5,7 +5,7 @@
 #ifndef RuntimeEnabledFeaturesTestHelpers_h
 #define RuntimeEnabledFeaturesTestHelpers_h
 
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/Assertions.h"
 
 namespace blink {
@@ -37,13 +37,17 @@ typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::SetCompositeOpaqueScrollersEnabled>
     ScopedCompositeOpaqueScrollersForTest;
 typedef ScopedRuntimeEnabledFeatureForTest<
-    RuntimeEnabledFeatures::CompositorWorkerEnabled,
-    RuntimeEnabledFeatures::SetCompositorWorkerEnabled>
-    ScopedCompositorWorkerForTest;
+    RuntimeEnabledFeatures::AnimationWorkletEnabled,
+    RuntimeEnabledFeatures::SetAnimationWorkletEnabled>
+    ScopedAnimationWorkleForTest;
 typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::RootLayerScrollingEnabled,
     RuntimeEnabledFeatures::SetRootLayerScrollingEnabled>
     ScopedRootLayerScrollingForTest;
+typedef ScopedRuntimeEnabledFeatureForTest<
+    RuntimeEnabledFeatures::SlimmingPaintV175Enabled,
+    RuntimeEnabledFeatures::SetSlimmingPaintV175Enabled>
+    ScopedSlimmingPaintV175ForTest;
 typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::SlimmingPaintV2Enabled,
     RuntimeEnabledFeatures::SetSlimmingPaintV2Enabled>
@@ -60,6 +64,18 @@ typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::MojoBlobsEnabled,
     RuntimeEnabledFeatures::SetMojoBlobsEnabled>
     ScopedMojoBlobsForTest;
+typedef ScopedRuntimeEnabledFeatureForTest<
+    RuntimeEnabledFeatures::OverlayScrollbarsEnabled,
+    RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled>
+    ScopedOverlayScrollbarsForTest;
+typedef ScopedRuntimeEnabledFeatureForTest<
+    RuntimeEnabledFeatures::SkipCompositingSmallScrollersEnabled,
+    RuntimeEnabledFeatures::SetSkipCompositingSmallScrollersEnabled>
+    ScopedSkipCompositingSmallScrollersForTest;
+typedef ScopedRuntimeEnabledFeatureForTest<
+    RuntimeEnabledFeatures::CompositeOpaqueScrollersEnabled,
+    RuntimeEnabledFeatures::SetCompositeOpaqueScrollersEnabled>
+    ScopedCompositeOpaqueScrollersForTest;
 
 }  // namespace blink
 

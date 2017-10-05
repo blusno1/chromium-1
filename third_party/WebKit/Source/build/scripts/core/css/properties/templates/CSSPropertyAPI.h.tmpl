@@ -30,19 +30,21 @@ class CSSPropertyAPI {
 
   // Parses and consumes a longhand property value from the token range.
   // Returns nullptr if the input is invalid.
-  virtual const CSSValue* ParseSingleValue(CSSPropertyID,
-                                           CSSParserTokenRange&,
+  virtual const CSSValue* ParseSingleValue(CSSParserTokenRange&,
                                            const CSSParserContext&,
-                                           const CSSParserLocalContext&) const;
+                                           const CSSParserLocalContext&) const {
+    return nullptr;
+  }
   // Parses and consumes entire shorthand value from the token range and adds
   // all constituent parsed longhand properties to the 'properties' set.
   // Returns false if the input is invalid.
-  virtual bool ParseShorthand(CSSPropertyID,
-                              bool important,
+  virtual bool ParseShorthand(bool important,
                               CSSParserTokenRange&,
                               const CSSParserContext&,
                               const CSSParserLocalContext&,
-                              HeapVector<CSSProperty, 256>& properties) const;
+                              HeapVector<CSSProperty, 256>& properties) const {
+    return false;
+  }
 
   virtual bool IsInterpolable() const { return false; }
   virtual bool IsInherited() const { return false; }
@@ -60,6 +62,7 @@ class CSSPropertyAPI {
   virtual void ApplyValue(StyleResolverState&, const CSSValue&) const {
     NOTREACHED();
   }
+  virtual bool IsAffectedByAll() const { return IsEnabled() && IsProperty(); }
 };
 
 {% for api_class_data in api_classes_by_property_id %}

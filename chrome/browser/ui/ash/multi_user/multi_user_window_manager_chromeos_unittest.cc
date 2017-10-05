@@ -10,8 +10,6 @@
 #include "ash/content/shell_content_state.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_environment_content.h"
@@ -21,7 +19,6 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_manager.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
@@ -42,6 +39,7 @@
 #include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/test/base/test_browser_window_aura.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -703,9 +701,6 @@ TEST_F(MultiUserWindowManagerChromeOSTest, ActiveWindowTests) {
   const AccountId account_id_B(AccountId::FromUserEmail("B"));
   const AccountId account_id_C(AccountId::FromUserEmail("C"));
 
-  ::wm::ActivationClient* activation_client =
-      ::wm::GetActivationClient(window(0)->GetRootWindow());
-
   // Set some windows to the active owner.
   multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
   multi_user_window_manager()->SetWindowOwner(window(1), account_id_A);
@@ -714,23 +709,25 @@ TEST_F(MultiUserWindowManagerChromeOSTest, ActiveWindowTests) {
   EXPECT_EQ("S[A], S[A], H[B], H[B]", GetStatus());
 
   // Set the active window for user A to be #1
-  activation_client->ActivateWindow(window(1));
+  ::wm::ActivateWindow(window(1));
 
   // Change to user B and make sure that one of its windows is active.
   StartUserTransitionAnimation(account_id_B);
   EXPECT_EQ("H[A], H[A], S[B], S[B]", GetStatus());
-  EXPECT_TRUE(window(3) == activation_client->GetActiveWindow() ||
-              window(2) == activation_client->GetActiveWindow());
+  EXPECT_TRUE(::wm::IsActiveWindow(window(3)) ||
+              ::wm::IsActiveWindow(window(2)));
   // Set the active window for user B now to be #2
-  activation_client->ActivateWindow(window(2));
+  ::wm::ActivateWindow(window(2));
 
   StartUserTransitionAnimation(account_id_A);
-  EXPECT_EQ(window(1), activation_client->GetActiveWindow());
+  EXPECT_TRUE(::wm::IsActiveWindow(window(1)));
 
   StartUserTransitionAnimation(account_id_B);
-  EXPECT_EQ(window(2), activation_client->GetActiveWindow());
+  EXPECT_TRUE(::wm::IsActiveWindow(window(2)));
 
   StartUserTransitionAnimation(account_id_C);
+  ::wm::ActivationClient* activation_client =
+      ::wm::GetActivationClient(window(0)->GetRootWindow());
   EXPECT_EQ(NULL, activation_client->GetActiveWindow());
 
   // Now test that a minimized window stays minimized upon switch and back.
@@ -740,7 +737,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, ActiveWindowTests) {
   StartUserTransitionAnimation(account_id_B);
   StartUserTransitionAnimation(account_id_A);
   EXPECT_TRUE(wm::GetWindowState(window(0))->IsMinimized());
-  EXPECT_EQ(window(1), activation_client->GetActiveWindow());
+  EXPECT_TRUE(::wm::IsActiveWindow(window(1)));
 }
 
 // Test that Transient windows are handled properly.
@@ -1037,40 +1034,26 @@ TEST_F(MultiUserWindowManagerChromeOSTest, AnimationSteps) {
   EXPECT_FALSE(CoversScreen(window(1)));
   EXPECT_EQ("S[A], H[B], H[C]", GetStatus());
   EXPECT_EQ("A", GetOwnersOfVisibleWindowsAsString());
-  Shelf* shelf = GetPrimaryShelf();
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
   EXPECT_EQ(1.0f, window(0)->layer()->GetTargetOpacity());
-  ShelfWidget* shelf_widget = shelf->shelf_widget();
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
 
   // Start the animation and see that the old window is becoming invisible, the
-  // new one is becoming visible, the background starts transitionining and the
-  // shelf hides.
+  // new one is becoming visible, and the background starts transitionining.
   StartUserTransitionAnimation(account_id_B);
   EXPECT_EQ(kArrowBAccountIdString,
             GetWallpaperUserIdForTest());
   EXPECT_EQ("H[A], S[B], H[C]", GetStatus());
   EXPECT_EQ(0.0f, window(0)->layer()->GetTargetOpacity());
   EXPECT_EQ(1.0f, window(1)->layer()->GetTargetOpacity());
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
 
-  // Staring the next step should show the shelf again, but there are many
-  // subsystems missing (preferences system, ChromeLauncherController, ...)
-  // which should set the shelf to its users state. Since that isn't there we
-  // can only make sure that it stays where it is.
   AdvanceUserTransitionAnimation();
   EXPECT_EQ(kArrowBAccountIdString,
             GetWallpaperUserIdForTest());
   EXPECT_EQ("H[A], S[B], H[C]", GetStatus());
   EXPECT_EQ(0.0f, window(0)->layer()->GetTargetOpacity());
   EXPECT_EQ(1.0f, window(1)->layer()->GetTargetOpacity());
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
 
   // After the finalize the animation of the wallpaper should be finished.
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
   EXPECT_EQ(kBAccountIdString, GetWallpaperUserIdForTest());
 }
 
@@ -1310,96 +1293,6 @@ class TestWindowObserver : public aura::WindowObserver {
   DISALLOW_COPY_AND_ASSIGN(TestWindowObserver);
 };
 
-// Test that switching between users with the shelf in the same place, the shelf
-// will get covered with a black bar instead being hidden and re-shown.
-TEST_F(MultiUserWindowManagerChromeOSTest, TestBlackBarCover) {
-  // We need to ensure this works for external connected monitors as well, so
-  // add a secondary display.
-  UpdateDisplay("500x500,500x500");
-
-  SetUpForThisManyWindows(2);
-
-  const AccountId account_id_A(AccountId::FromUserEmail("A"));
-  const AccountId account_id_B(AccountId::FromUserEmail("B"));
-
-  multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
-  multi_user_window_manager()->SetWindowOwner(window(1), account_id_B);
-
-  // Move the second window to the second display and make sure it is not
-  // maximized for the first part of the test.
-  ASSERT_EQ(2u, display_manager()->GetNumDisplays());
-  window(1)->SetBoundsInScreen(gfx::Rect(0, 0, 100, 100),
-                               display_manager()->GetDisplayAt(1));
-
-  ASSERT_EQ(2u, Shell::GetAllRootWindowControllers().size());
-  Shelf* primary_shelf = Shell::GetAllRootWindowControllers()[0]->shelf();
-  Shelf* secondary_shelf = Shell::GetAllRootWindowControllers()[1]->shelf();
-  ShelfWidget* primary_shelf_widget = primary_shelf->shelf_widget();
-  ShelfWidget* secondary_shelf_widget = secondary_shelf->shelf_widget();
-
-  // Turn the use of delays and animation on.
-  multi_user_window_manager()->SetAnimationSpeedForTest(
-      chrome::MultiUserWindowManagerChromeOS::ANIMATION_SPEED_FAST);
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, primary_shelf->auto_hide_behavior());
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            secondary_shelf->auto_hide_behavior());
-  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
-
-  // First test that with no maximized window we show/hide the shelf.
-  StartUserTransitionAnimation(account_id_B);
-  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, primary_shelf->auto_hide_behavior());
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            secondary_shelf->auto_hide_behavior());
-
-  // Staring the next step should show the shelf again.
-  AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
-
-  AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  primary_shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
-  secondary_shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
-
-  // Now we maximize the windows which will cause the black overlay to show up.
-  wm::GetWindowState(window(0))->Maximize();
-  wm::GetWindowState(window(1))->Maximize();
-  // We set a window observer on both windows to see that no resize is performed
-  // on our test windows.
-  TestWindowObserver window_observer;
-  window(0)->AddObserver(&window_observer);
-  window(1)->AddObserver(&window_observer);
-
-  // Start the animation and see that the shelf gets hidden by the black bar,
-  // and the AutoHide behavior remains as it was.
-  StartUserTransitionAnimation(account_id_A);
-  EXPECT_TRUE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_TRUE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, primary_shelf->auto_hide_behavior());
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            secondary_shelf->auto_hide_behavior());
-
-  // Starting the next step should show the shelf again.
-  AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, primary_shelf->auto_hide_behavior());
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            secondary_shelf->auto_hide_behavior());
-
-  AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
-  window(0)->RemoveObserver(&window_observer);
-  window(1)->RemoveObserver(&window_observer);
-  // No resize should have been done to the window.
-  EXPECT_EQ(0, window_observer.resize_calls());
-}
-
 // Test that switching between different user won't change the activated windows
 // and the property of transient windows.
 TEST_F(MultiUserWindowManagerChromeOSTest, TransientWindowActivationTest) {
@@ -1576,7 +1469,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   activation_client->ActivateWindow(window(2));
   activation_client->ActivateWindow(window(1));
   activation_client->ActivateWindow(window(0));
-  EXPECT_EQ(wm::GetActiveWindow(), window(0));
+  EXPECT_EQ(activation_client->GetActiveWindow(), window(0));
 
   aura::Window::Windows mru_list =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList();
@@ -1588,13 +1481,13 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   multi_user_window_manager()->ActiveUserChanged(
       user_manager()->FindUser(account_id_B));
   EXPECT_EQ("H[A], H[A], H[A]", GetStatus());
-  EXPECT_EQ(wm::GetActiveWindow(), nullptr);
+  EXPECT_EQ(activation_client->GetActiveWindow(), nullptr);
 
   user_manager()->SwitchActiveUser(account_id_A);
   multi_user_window_manager()->ActiveUserChanged(
       user_manager()->FindUser(account_id_A));
   EXPECT_EQ("S[A], S[A], S[A]", GetStatus());
-  EXPECT_EQ(wm::GetActiveWindow(), window(0));
+  EXPECT_EQ(activation_client->GetActiveWindow(), window(0));
 
   mru_list = Shell::Get()->mru_window_tracker()->BuildMruWindowList();
   EXPECT_EQ(mru_list[0], window(0));
@@ -1602,10 +1495,10 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   EXPECT_EQ(mru_list[2], window(2));
 }
 
-// Tests that ChromeNewWindowClient::GetActiveBrowser works properly in
+// Tests that chrome::FindBrowserWithActiveWindow works properly in
 // multi-user scenario, that is it should return the browser with active window
 // associated with it (crbug.com/675265).
-TEST_F(MultiUserWindowManagerChromeOSTest, GetActiveBrowserTest) {
+TEST_F(MultiUserWindowManagerChromeOSTest, FindBrowserWithActiveWindow) {
   SetUpForThisManyWindows(1);
 
   const AccountId account_id_A(AccountId::FromUserEmail("A"));
@@ -1616,28 +1509,25 @@ TEST_F(MultiUserWindowManagerChromeOSTest, GetActiveBrowserTest) {
   multi_user_window_manager()->ActiveUserChanged(
       user_manager()->FindUser(account_id_A));
 
-  ::wm::ActivationClient* activation_client =
-      ::wm::GetActivationClient(window(0)->GetRootWindow());
   multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
   Profile* profile = multi_user_util::GetProfileFromAccountId(account_id_A);
   Browser::CreateParams params(profile, true);
   std::unique_ptr<Browser> browser(CreateTestBrowser(
       CreateTestWindowInShellWithId(0), gfx::Rect(16, 32, 640, 320), &params));
-  aura::Window* browser_native_window = browser->window()->GetNativeWindow();
-  activation_client->ActivateWindow(browser_native_window);
+  browser->window()->Activate();
   // Manually set last active browser in BrowserList for testing.
   BrowserList::GetInstance()->SetLastActive(browser.get());
   EXPECT_EQ(browser.get(), BrowserList::GetInstance()->GetLastActive());
-  EXPECT_EQ(browser_native_window, wm::GetActiveWindow());
-  EXPECT_EQ(browser.get(), ChromeNewWindowClient::GetActiveBrowser());
+  EXPECT_TRUE(browser->window()->IsActive());
+  EXPECT_EQ(browser.get(), chrome::FindBrowserWithActiveWindow());
 
   // Switch to another user's desktop with no active window.
   user_manager()->SwitchActiveUser(account_id_B);
   multi_user_window_manager()->ActiveUserChanged(
       user_manager()->FindUser(account_id_B));
   EXPECT_EQ(browser.get(), BrowserList::GetInstance()->GetLastActive());
-  EXPECT_EQ(nullptr, wm::GetActiveWindow());
-  EXPECT_EQ(nullptr, ChromeNewWindowClient::GetActiveBrowser());
+  EXPECT_FALSE(browser->window()->IsActive());
+  EXPECT_EQ(nullptr, chrome::FindBrowserWithActiveWindow());
 }
 
 }  // namespace ash

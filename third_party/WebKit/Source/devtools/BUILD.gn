@@ -63,6 +63,8 @@ all_devtools_files = [
   "front_end/audits2/lighthouse/renderer/report-renderer.js",
   "front_end/audits2/lighthouse/renderer/util.js",
   "front_end/audits2/module.json",
+  "front_end/audits2_test_runner/Audits2TestRunner.js",
+  "front_end/audits2_test_runner/module.json",
   "front_end/audits_test_runner/AuditsTestRunner.js",
   "front_end/audits_test_runner/module.json",
   "front_end/bindings/BlackboxManager.js",
@@ -153,6 +155,7 @@ all_devtools_files = [
   "front_end/components/module.json",
   "front_end/components/Reload.js",
   "front_end/console/ConsoleContextSelector.js",
+  "front_end/console/ConsoleFilter.js",
   "front_end/console/ConsoleSidebar.js",
   "front_end/console/ConsolePanel.js",
   "front_end/console/ConsolePrompt.js",
@@ -955,7 +958,6 @@ generated_applications = [
 
 generated_non_autostart_non_remote_modules = [
   "$resources_out_dir/animation/animation_module.js",
-  "$resources_out_dir/audits/audits_module.js",
   "$resources_out_dir/audits2/audits2_module.js",
   "$resources_out_dir/changes/changes_module.js",
   "$resources_out_dir/cm/cm_module.js",
@@ -1243,12 +1245,12 @@ group("devtools_eslint") {
     # Needed for isolate script to execute.
     ".eslintignore",
     ".eslintrc.js",
-    "devtools-node-modules/",
     "front_end/",
     "scripts/buildbot/run_eslint.py",
     "scripts/local_node/",
     "//testing/scripts/common.py",
     "//testing/scripts/run_devtools_check.py",
     "//testing/xvfb.py",
+    "//third_party/devtools-node-modules/",
   ]
 }

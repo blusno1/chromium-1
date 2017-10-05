@@ -24,13 +24,13 @@
 
 #include "core/html/ListedElement.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/IdTargetObserver.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/html/HTMLFormControlElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLObjectElement.h"
 #include "core/html/ValidityState.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -115,9 +115,7 @@ HTMLFormElement* ListedElement::FindAssociatedForm(const HTMLElement* element) {
     // 3.2. Abort the "reset the form owner" steps.
     Element* new_form_candidate =
         element->GetTreeScope().getElementById(form_id);
-    return isHTMLFormElement(new_form_candidate)
-               ? toHTMLFormElement(new_form_candidate)
-               : 0;
+    return ToHTMLFormElementOrNull(new_form_candidate);
   }
   // 4. Otherwise, if the form-associated element in question has an ancestor
   // form element, then associate the form-associated element with the nearest

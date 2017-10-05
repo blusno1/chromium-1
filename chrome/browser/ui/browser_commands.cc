@@ -58,6 +58,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/feature_engagement/features.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/live_tab_context.h"
@@ -110,6 +111,11 @@
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"  // nogncheck
+#endif
+
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
+#include "chrome/browser/feature_engagement/incognito_window/incognito_window_tracker.h"
+#include "chrome/browser/feature_engagement/incognito_window/incognito_window_tracker_factory.h"
 #endif
 
 namespace {
@@ -552,6 +558,11 @@ void NewWindow(Browser* browser) {
 }
 
 void NewIncognitoWindow(Browser* browser) {
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
+  feature_engagement::IncognitoWindowTrackerFactory::GetInstance()
+      ->GetForProfile(browser->profile())
+      ->OnIncognitoWindowOpened();
+#endif
   NewEmptyWindow(browser->profile()->GetOffTheRecordProfile());
 }
 
@@ -766,7 +777,8 @@ void BookmarkCurrentPageIgnoringExtensionOverrides(Browser* browser) {
       web_contents->GetBrowserContext()->IsOffTheRecord()) {
     // If we're incognito the favicon may not have been saved. Save it now
     // so that bookmarks have an icon for the page.
-    favicon::ContentFaviconDriver::FromWebContents(web_contents)->SaveFavicon();
+    favicon::ContentFaviconDriver::FromWebContents(web_contents)
+        ->SaveFaviconEvenIfInIncognito();
   }
   bool was_bookmarked_by_user = bookmarks::IsBookmarkedByUser(model, url);
   bookmarks::AddIfNotBookmarked(model, url, title);

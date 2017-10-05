@@ -4,8 +4,8 @@
 
 #include "platform/loader/fetch/ResourceLoadScheduler.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/loader/testing/MockFetchContext.h"
+#include "platform/runtime_enabled_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -33,17 +33,13 @@ class MockClient final : public GarbageCollectedFinalized<MockClient>,
 class ResourceLoadSchedulerTest : public ::testing::Test {
  public:
   void SetUp() override {
-    // TODO(toyoshim): blink_platform_unittests should enable experimental
-    // runtime features by default.
-    DCHECK(!RuntimeEnabledFeatures::ResourceLoadSchedulerEnabled());
-    RuntimeEnabledFeatures::SetResourceLoadSchedulerEnabled(true);
+    DCHECK(RuntimeEnabledFeatures::ResourceLoadSchedulerEnabled());
     scheduler_ = ResourceLoadScheduler::Create(
         MockFetchContext::Create(MockFetchContext::kShouldNotLoadNewResource));
     scheduler()->SetOutstandingLimitForTesting(1);
   }
   void TearDown() override {
     scheduler()->Shutdown();
-    RuntimeEnabledFeatures::SetResourceLoadSchedulerEnabled(false);
   }
 
   ResourceLoadScheduler* scheduler() { return scheduler_; }

@@ -758,9 +758,12 @@ void NavigationControllerImpl::LoadURLWithParams(const LoadURLParams& params) {
 
   // Otherwise, create a pending entry for the main frame.
   if (!entry) {
+    // extra_headers in params are \n separated, navigation entries want \r\n.
+    std::string extra_headers_crlf;
+    base::ReplaceChars(params.extra_headers, "\n", "\r\n", &extra_headers_crlf);
     entry = NavigationEntryImpl::FromNavigationEntry(CreateNavigationEntry(
         params.url, params.referrer, params.transition_type,
-        params.is_renderer_initiated, params.extra_headers, browser_context_));
+        params.is_renderer_initiated, extra_headers_crlf, browser_context_));
     entry->set_source_site_instance(
         static_cast<SiteInstanceImpl*>(params.source_site_instance.get()));
     entry->SetRedirectChain(params.redirect_chain);
@@ -933,8 +936,14 @@ bool NavigationControllerImpl::RendererDidNavigate(
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
 
+  // Grab the corresponding FrameNavigationEntry for a few updates, but only if
+  // the SiteInstance matches (to avoid updating the wrong entry by mistake).
+  // A mismatch can occur if the renderer lies or due to a unique name collision
+  // after a race with an OOPIF (see https://crbug.com/616820).
   FrameNavigationEntry* frame_entry =
       active_entry->GetFrameEntry(rfh->frame_tree_node());
+  if (frame_entry && frame_entry->site_instance() != rfh->GetSiteInstance())
+    frame_entry = nullptr;
   // Update the frame-specific PageState and RedirectChain
   // We may not find a frame_entry in some cases; ignore the PageState if so.
   // TODO(creis): Remove the "if" once https://crbug.com/522193 is fixed.
@@ -1144,7 +1153,7 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
   // does not have any subframe history items.
   if (is_same_document && GetLastCommittedEntry()) {
     FrameNavigationEntry* frame_entry = new FrameNavigationEntry(
-        params.frame_unique_name, params.item_sequence_number,
+        rfh->frame_tree_node()->unique_name(), params.item_sequence_number,
         params.document_sequence_number, rfh->GetSiteInstance(), nullptr,
         params.url, params.referrer, params.method, params.post_id);
     new_entry = GetLastCommittedEntry()->CloneAndReplace(
@@ -1249,7 +1258,7 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
   // Update the FrameNavigationEntry for new main frame commits.
   FrameNavigationEntry* frame_entry =
       new_entry->GetFrameEntry(rfh->frame_tree_node());
-  frame_entry->set_frame_unique_name(params.frame_unique_name);
+  frame_entry->set_frame_unique_name(rfh->frame_tree_node()->unique_name());
   frame_entry->set_item_sequence_number(params.item_sequence_number);
   frame_entry->set_document_sequence_number(params.document_sequence_number);
   frame_entry->set_method(params.method);
@@ -1506,7 +1515,7 @@ void NavigationControllerImpl::RendererDidNavigateNewSubframe(
 
   // Make sure we don't leak frame_entry if new_entry doesn't take ownership.
   scoped_refptr<FrameNavigationEntry> frame_entry(new FrameNavigationEntry(
-      params.frame_unique_name, params.item_sequence_number,
+      rfh->frame_tree_node()->unique_name(), params.item_sequence_number,
       params.document_sequence_number, rfh->GetSiteInstance(), nullptr,
       params.url, params.referrer, params.method, params.post_id));
   std::unique_ptr<NavigationEntryImpl> new_entry =

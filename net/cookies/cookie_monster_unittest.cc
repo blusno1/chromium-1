@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -1015,7 +1016,7 @@ class DeferredCookieTaskTest : public CookieMonsterTest {
   CookieMonster::PersistentCookieStore::LoadedCallback loaded_callback_;
   // Stores the callback passed from the CookieMonster to the
   // PersistentCookieStore::LoadCookiesForKey
-  std::queue<CookieMonster::PersistentCookieStore::LoadedCallback>
+  base::queue<CookieMonster::PersistentCookieStore::LoadedCallback>
       loaded_for_key_callbacks_;
   // base::RunLoop used to wait for PersistentCookieStore::Load to be called.
   base::RunLoop load_run_loop_;
@@ -3213,6 +3214,30 @@ TEST_F(CookieMonsterNotificationTest, NotifyOnUpdate) {
   EXPECT_EQ("abc", cookies[2].Name());
   EXPECT_EQ("ghi", cookies[2].Value());
   EXPECT_EQ(CookieStore::ChangeCause::INSERTED, causes[2]);
+}
+
+TEST_F(CookieMonsterNotificationTest, NotifyDestroyRace) {
+  std::vector<CanonicalCookie> cookies;
+  std::unique_ptr<CookieStore::CookieChangedSubscription> sub(
+      monster()->AddCallbackForCookie(
+          test_url_, "abc",
+          base::Bind(&RecordCookieChanges, &cookies, nullptr)));
+  SetCookie(monster(), test_url_, "abc=def");
+
+  // If the notification is synchronous, there's nothing to test.
+  if (1u == cookies.size())
+    return;
+
+  // At this point a task has been posted to execute the callback,
+  // but the callback has not yet been executed.  If the subscription was
+  // alive when the callback was executed, that would also be valid
+  // behavior.  If the subscription is destroyed, and the posted task is
+  // let run, and the callback actually happens, that is invalid behavior.
+  sub.reset();
+  base::RunLoop().RunUntilIdle();
+
+  // Subscription reset should have blocked delivery.
+  EXPECT_EQ(0u, cookies.size());
 }
 
 TEST_F(CookieMonsterNotificationTest, MultipleNotifies) {

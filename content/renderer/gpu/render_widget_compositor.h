@@ -12,11 +12,11 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "cc/input/browser_controls_state.h"
-#include "cc/output/managed_memory_policy.h"
-#include "cc/output/swap_promise.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "cc/trees/managed_memory_policy.h"
+#include "cc/trees/swap_promise.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "content/common/content_export.h"
 #include "content/renderer/gpu/compositor_dependencies.h"
@@ -93,6 +93,9 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void SetNeedsDisplayOnAllLayers();
   void SetRasterizeOnlyVisibleContent();
   void SetNeedsRedrawRect(gfx::Rect damage_rect);
+
+  bool IsSurfaceSynchronizationEnabled() const;
+
   // Like setNeedsRedraw but forces the frame to be drawn, without early-outs.
   // Redraw will be forced after the next commit
   void SetNeedsForcedRedraw();

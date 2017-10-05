@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/payments/cells/page_info_item.h"
+#import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/ui/payments/cells/price_item.h"
 #import "ios/chrome/browser/ui/payments/payment_request_view_controller_actions.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
@@ -50,7 +51,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSummaryPageInfo = kItemTypeEnumZero,
   ItemTypeSpinner,
   ItemTypeSummaryTotal,
-  ItemTypeShippingTitle,
+  ItemTypeShippingHeader,
   ItemTypeShippingAddress,
   ItemTypeShippingOption,
   ItemTypePaymentHeader,
@@ -109,29 +110,36 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [_payButton setBackgroundColor:[[MDCPalette cr_bluePalette] tint500]];
     [_payButton setTitleColor:[UIColor whiteColor]
                      forState:UIControlStateNormal];
+    [_payButton setTitleColor:[UIColor whiteColor]
+                     forState:UIControlStateDisabled];
     [_payButton setInkColor:[UIColor colorWithWhite:1 alpha:0.2]];
     [_payButton addTarget:self
                    action:@selector(onConfirm)
          forControlEvents:UIControlEventTouchUpInside];
     [_payButton sizeToFit];
-    [_payButton setAutoresizingMask:UIViewAutoresizingFlexibleTrailingMargin() |
-                                    UIViewAutoresizingFlexibleTopMargin |
-                                    UIViewAutoresizingFlexibleBottomMargin];
+    [_payButton setTranslatesAutoresizingMaskIntoConstraints:NO];
 
     // The navigation bar will set the rightBarButtonItem's height to the full
     // height of the bar. We don't want that for the button so we use a UIView
-    // here to contain the button instead and the button is vertically centered
-    // inside the full bar height.
-    UIView* buttonView = [[UIView alloc] initWithFrame:CGRectZero];
+    // here to contain the button where the button is vertically centered inside
+    // the full bar height. Also navigation bar button items are aligned with
+    // the trailing edge of the screen. Make the enclosing view larger and align
+    // the pay button with the leading edge of the enclosing view leaving an
+    // inset on the trailing edge.
+    UIView* buttonView = [[UIView alloc]
+        initWithFrame:CGRectMake(0, 0,
+                                 _payButton.frame.size.width + kButtonEdgeInset,
+                                 _payButton.frame.size.height)];
     [buttonView addSubview:_payButton];
-    // Navigation bar button items are aligned with the trailing edge of the
-    // screen. Make the enclosing view larger here. The pay button will be
-    // aligned with the leading edge of the enclosing view leaving an inset on
-    // the trailing edge.
-    CGRect buttonViewBounds = buttonView.bounds;
-    buttonViewBounds.size.width =
-        [_payButton frame].size.width + kButtonEdgeInset;
-    buttonView.bounds = buttonViewBounds;
+    [NSLayoutConstraint activateConstraints:@[
+      [_payButton.leadingAnchor
+          constraintEqualToAnchor:buttonView.leadingAnchor],
+      [_payButton.centerYAnchor
+          constraintEqualToAnchor:buttonView.centerYAnchor],
+      [_payButton.trailingAnchor
+          constraintEqualToAnchor:buttonView.trailingAnchor
+                         constant:-kButtonEdgeInset],
+    ]];
 
     UIBarButtonItem* payButtonItem =
         [[UIBarButtonItem alloc] initWithCustomView:buttonView];
@@ -193,9 +201,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if ([_dataSource requestShipping]) {
     [model addSectionWithIdentifier:SectionIdentifierShipping];
 
-    CollectionViewItem* shippingSectionHeaderItem =
+    PaymentsTextItem* shippingSectionHeaderItem =
         [_dataSource shippingSectionHeaderItem];
-    [shippingSectionHeaderItem setType:ItemTypeShippingTitle];
+    [shippingSectionHeaderItem setTextColor:[[MDCPalette greyPalette] tint500]];
+    [shippingSectionHeaderItem setType:ItemTypeShippingHeader];
     [model setHeader:shippingSectionHeaderItem
         forSectionWithIdentifier:SectionIdentifierShipping];
 
@@ -331,7 +340,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
             base::mac::ObjCCastStrict<CollectionViewDetailCell>(cell);
         detailCell.detailTextLabel.font = [MDCTypography body2Font];
         detailCell.detailTextLabel.textColor =
-            [[MDCPalette cr_bluePalette] tint700];
+            [[MDCPalette cr_bluePalette] tint500];
       }
       break;
     }
@@ -459,10 +468,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)populatePaymentMethodSection {
   CollectionViewModel* model = self.collectionViewModel;
 
-  CollectionViewItem* paymentMethodSectionHeaderItem =
+  PaymentsTextItem* paymentMethodSectionHeaderItem =
       [_dataSource paymentMethodSectionHeaderItem];
   if (paymentMethodSectionHeaderItem) {
     [paymentMethodSectionHeaderItem setType:ItemTypePaymentHeader];
+    [paymentMethodSectionHeaderItem
+        setTextColor:[[MDCPalette greyPalette] tint500]];
     [model setHeader:paymentMethodSectionHeaderItem
         forSectionWithIdentifier:SectionIdentifierPayment];
   }
@@ -477,10 +488,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)populateContactInfoSection {
   CollectionViewModel* model = self.collectionViewModel;
 
-  CollectionViewItem* contactInfoSectionHeaderItem =
+  PaymentsTextItem* contactInfoSectionHeaderItem =
       [_dataSource contactInfoSectionHeaderItem];
   if (contactInfoSectionHeaderItem) {
     [contactInfoSectionHeaderItem setType:ItemTypeContactInfoHeader];
+    [contactInfoSectionHeaderItem
+        setTextColor:[[MDCPalette greyPalette] tint500]];
     [model setHeader:contactInfoSectionHeaderItem
         forSectionWithIdentifier:SectionIdentifierContactInfo];
   }
@@ -490,6 +503,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   contactInfoItem.accessibilityTraits |= UIAccessibilityTraitButton;
   [model addItem:contactInfoItem
       toSectionWithIdentifier:SectionIdentifierContactInfo];
+}
+
+#pragma mark - UIAccessibilityAction
+
+- (BOOL)accessibilityPerformEscape {
+  [self onCancel];
+  return YES;
 }
 
 @end

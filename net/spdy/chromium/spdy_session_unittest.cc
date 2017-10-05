@@ -3414,8 +3414,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
   // Get a session for |key2|, which should return the session created earlier.
   base::WeakPtr<SpdySession> session2 =
       spdy_session_pool_->FindAvailableSession(
-          key2, GURL(),
-          /* enable_ip_based_pooling = */ true, NetLogWithSource());
+          key2, /* enable_ip_based_pooling = */ true, NetLogWithSource());
   ASSERT_EQ(session1.get(), session2.get());
   EXPECT_FALSE(pool->IsStalled());
 
@@ -5543,10 +5542,12 @@ class SpdySessionReadIfReadyTest
       public testing::WithParamInterface<ReadIfReadySupport> {
  public:
   void SetUp() override {
-    if (GetParam() != READ_IF_READY_DISABLED)
-      scoped_feature_list_.InitAndEnableFeature(Socket::kReadIfReadyExperiment);
-    if (GetParam() == READ_IF_READY_ENABLED_SUPPORTED)
+    if (GetParam() == READ_IF_READY_DISABLED) {
+      scoped_feature_list_.InitAndDisableFeature(
+          Socket::kReadIfReadyExperiment);
+    } else if (GetParam() == READ_IF_READY_ENABLED_SUPPORTED) {
       session_deps_.socket_factory->set_enable_read_if_ready(true);
+    }
     SpdySessionTest::SetUp();
   }
 
@@ -5645,7 +5646,6 @@ TEST_F(SendInitialSettingsOnNewSpdySessionTest, Empty) {
   expected_settings[SETTINGS_HEADER_TABLE_SIZE] = kSpdyMaxHeaderTableSize;
   expected_settings[SETTINGS_MAX_CONCURRENT_STREAMS] =
       kSpdyMaxConcurrentPushedStreams;
-  expected_settings[SETTINGS_MAX_HEADER_LIST_SIZE] = kSpdyMaxHeaderListSize;
   RunInitialSettingsTest(expected_settings);
 }
 
@@ -5660,7 +5660,6 @@ TEST_F(SendInitialSettingsOnNewSpdySessionTest, ProtocolDefault) {
   SettingsMap expected_settings;
   expected_settings[SETTINGS_MAX_CONCURRENT_STREAMS] =
       kSpdyMaxConcurrentPushedStreams;
-  expected_settings[SETTINGS_MAX_HEADER_LIST_SIZE] = kSpdyMaxHeaderListSize;
   RunInitialSettingsTest(expected_settings);
 }
 
@@ -5691,7 +5690,6 @@ TEST_F(SendInitialSettingsOnNewSpdySessionTest, UnknownSettings) {
   expected_settings[SETTINGS_HEADER_TABLE_SIZE] = kSpdyMaxHeaderTableSize;
   expected_settings[SETTINGS_MAX_CONCURRENT_STREAMS] =
       kSpdyMaxConcurrentPushedStreams;
-  expected_settings[SETTINGS_MAX_HEADER_LIST_SIZE] = kSpdyMaxHeaderListSize;
   expected_settings[static_cast<SpdySettingsIds>(7)] = 1234;
   expected_settings[static_cast<SpdySettingsIds>(25)] = 5678;
   RunInitialSettingsTest(expected_settings);

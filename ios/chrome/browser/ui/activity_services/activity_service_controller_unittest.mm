@@ -15,9 +15,10 @@
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_password.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_presentation.h"
-#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_snackbar.h"
 #import "ios/chrome/browser/ui/activity_services/share_to_data.h"
+#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -73,16 +74,16 @@
        completionMessage:(NSString*)message;
 
 // Setter function for mocking during testing
-- (void)setProvidersForTesting:(id<ActivityServicePassword,
-                                   ActivityServicePresentation,
-                                   ActivityServiceSnackbar>)provider;
+- (void)setProvidersForTesting:
+            (id<ActivityServicePassword, ActivityServicePresentation>)provider
+                    dispatcher:(id<SnackbarCommands>)dispatcher;
 @end
 
 @interface FakeActivityServiceControllerTestProvider
     : NSObject<ActivityServicePassword,
                ActivityServicePositioner,
                ActivityServicePresentation,
-               ActivityServiceSnackbar>
+               SnackbarCommands>
 
 @property(nonatomic, readonly, strong) UIViewController* parentViewController;
 @property(nonatomic, readonly, strong)
@@ -159,8 +160,8 @@
   return self.parentViewController.view;
 }
 
-- (void)showSnackbar:(NSString*)message {
-  _latestSnackbarMessage = [message copy];
+- (void)showSnackbarMessage:(MDCSnackbarMessage*)message {
+  _latestSnackbarMessage = [message.text copy];
 }
 
 - (void)resetState {
@@ -272,7 +273,7 @@ class ActivityServiceControllerTest : public PlatformTest {
     FakeActivityServiceControllerTestProvider* provider =
         [[FakeActivityServiceControllerTestProvider alloc]
             initWithParentViewController:nil];
-    [activityController setProvidersForTesting:provider];
+    [activityController setProvidersForTesting:provider dispatcher:provider];
 
     // The following call to |processItemsReturnedFromActivity| should not
     // trigger any calls to the PasswordFormFiller.
@@ -314,8 +315,7 @@ TEST_F(ActivityServiceControllerTest, PresentAndDismissController) {
                          dispatcher:nil
                    passwordProvider:provider
                    positionProvider:provider
-               presentationProvider:provider
-                   snackbarProvider:provider];
+               presentationProvider:provider];
   EXPECT_TRUE(provider.presentActivityServiceViewControllerWasCalled);
   EXPECT_FALSE(provider.activityServiceDidEndPresentingWasCalled);
   EXPECT_TRUE([activityController isActive]);
@@ -448,7 +448,7 @@ TEST_F(ActivityServiceControllerTest, ProcessItemsReturnedSuccessfully) {
       [[FakeActivityServiceControllerTestProvider alloc]
           initWithParentViewController:nil];
   ASSERT_TRUE([provider currentPasswordFormFiller]);
-  [activityController setProvidersForTesting:provider];
+  [activityController setProvidersForTesting:provider dispatcher:nil];
 
   EXPECT_TRUE(provider.fakePasswordFormFiller);
   EXPECT_FALSE(provider.fakePasswordFormFiller.methodCalled);
@@ -580,7 +580,7 @@ TEST_F(ActivityServiceControllerTest, TestShareDidCompleteWithSuccess) {
   FakeActivityServiceControllerTestProvider* provider =
       [[FakeActivityServiceControllerTestProvider alloc]
           initWithParentViewController:nil];
-  [controller setProvidersForTesting:provider];
+  [controller setProvidersForTesting:provider dispatcher:provider];
 
   NSString* completion_message = @"Completion!";
   [controller shareDidComplete:ShareTo::SHARE_SUCCESS
@@ -598,7 +598,7 @@ TEST_F(ActivityServiceControllerTest, TestShareDidCompleteWithCancellation) {
   FakeActivityServiceControllerTestProvider* provider =
       [[FakeActivityServiceControllerTestProvider alloc]
           initWithParentViewController:nil];
-  [controller setProvidersForTesting:provider];
+  [controller setProvidersForTesting:provider dispatcher:provider];
 
   [controller shareDidComplete:ShareTo::SHARE_CANCEL
              completionMessage:@"dummy"];
@@ -616,7 +616,7 @@ TEST_F(ActivityServiceControllerTest, TestShareDidCompleteWithError) {
   FakeActivityServiceControllerTestProvider* provider =
       [[FakeActivityServiceControllerTestProvider alloc]
           initWithParentViewController:nil];
-  [controller setProvidersForTesting:provider];
+  [controller setProvidersForTesting:provider dispatcher:provider];
 
   [controller shareDidComplete:ShareTo::SHARE_ERROR completionMessage:@"dummy"];
 

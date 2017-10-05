@@ -4,12 +4,15 @@
 
 #include "ash/login/lock_screen_controller.h"
 
+#include "ash/login/lock_screen_apps_focus_observer.h"
 #include "ash/login/ui/lock_screen.h"
+#include "ash/login/ui/login_data_dispatcher.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "base/strings/string_number_conversions.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
+#include "chromeos/login/auth/authpolicy_login_helper.h"
 #include "chromeos/login/auth/user_context.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -87,15 +90,17 @@ void LockScreenController::SetAuthType(
 
 void LockScreenController::LoadUsers(std::vector<mojom::LoginUserInfoPtr> users,
                                      bool show_guest) {
-  NOTIMPLEMENTED();
+  DCHECK(DataDispatcher());
+
+  DataDispatcher()->NotifyUsers(users);
 }
 
 void LockScreenController::SetPinEnabledForUser(const AccountId& account_id,
                                                 bool is_enabled) {
   // Chrome will update pin pod state every time user tries to authenticate.
   // LockScreen is destroyed in the case of authentication success.
-  if (ash::LockScreen::IsShown())
-    ash::LockScreen::Get()->SetPinEnabledForUser(account_id, is_enabled);
+  if (DataDispatcher())
+    DataDispatcher()->SetPinEnabledForUser(account_id, is_enabled);
 }
 
 void LockScreenController::AuthenticateUser(
@@ -116,6 +121,11 @@ void LockScreenController::AuthenticateUser(
       account_id, password, authenticated_by_pin, std::move(callback));
   chromeos::SystemSaltGetter::Get()->GetSystemSalt(base::Bind(
       &LockScreenController::OnGetSystemSalt, base::Unretained(this)));
+}
+
+void LockScreenController::HandleFocusLeavingLockScreenApps(bool reverse) {
+  for (auto& observer : lock_screen_apps_focus_observers_)
+    observer.OnFocusLeavingLockScreenApps(reverse);
 }
 
 void LockScreenController::AttemptUnlock(const AccountId& account_id) {
@@ -160,11 +170,37 @@ void LockScreenController::SignOutUser() {
   lock_screen_client_->SignOutUser();
 }
 
+void LockScreenController::CancelAddUser() {
+  if (!lock_screen_client_)
+    return;
+  lock_screen_client_->CancelAddUser();
+}
+
 void LockScreenController::OnMaxIncorrectPasswordAttempted(
     const AccountId& account_id) {
   if (!lock_screen_client_)
     return;
   lock_screen_client_->OnMaxIncorrectPasswordAttempted(account_id);
+}
+
+void LockScreenController::FocusLockScreenApps(bool reverse) {
+  if (!lock_screen_client_)
+    return;
+  lock_screen_client_->FocusLockScreenApps(reverse);
+}
+
+void LockScreenController::AddLockScreenAppsFocusObserver(
+    LockScreenAppsFocusObserver* observer) {
+  lock_screen_apps_focus_observers_.AddObserver(observer);
+}
+
+void LockScreenController::RemoveLockScreenAppsFocusObserver(
+    LockScreenAppsFocusObserver* observer) {
+  lock_screen_apps_focus_observers_.RemoveObserver(observer);
+}
+
+void LockScreenController::FlushForTesting() {
+  lock_screen_client_.FlushForTesting();
 }
 
 void LockScreenController::DoAuthenticateUser(
@@ -187,12 +223,28 @@ void LockScreenController::DoAuthenticateUser(
                       chromeos::Key::KEY_TYPE_SALTED_PBKDF2_AES256_1234);
   }
 
+  if (account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY && !is_pin) {
+    // Try to get kerberos TGT while we have user's password typed on the lock
+    // screen. Using invalid/bad password is fine. Failure to get TGT here is OK
+    // - that could mean e.g. Active Directory server is not reachable.
+    // AuthPolicyCredentialsManager regularly checks TGT status inside the user
+    // session.
+    chromeos::AuthPolicyLoginHelper::TryAuthenticateUser(
+        account_id.GetUserEmail(), account_id.GetObjGuid(), password);
+  }
+
   lock_screen_client_->AuthenticateUser(account_id, hashed_password, is_pin,
                                         std::move(callback));
 }
 
 void LockScreenController::OnGetSystemSalt(const std::string& system_salt) {
   std::move(pending_user_auth_).Run(system_salt);
+}
+
+LoginDataDispatcher* LockScreenController::DataDispatcher() const {
+  if (!ash::LockScreen::IsShown())
+    return nullptr;
+  return ash::LockScreen::Get()->data_dispatcher();
 }
 
 }  // namespace ash

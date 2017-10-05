@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 5310 tests; 5126 PASS, 184 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 5298 tests; 5141 PASS, 157 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS Test driver
 PASS Document interface: attribute domain
 PASS Document interface: attribute referrer
@@ -832,8 +832,8 @@ PASS HTMLBodyElement interface: attribute vLink
 PASS HTMLBodyElement interface: attribute aLink
 PASS HTMLBodyElement interface: attribute bgColor
 PASS HTMLBodyElement interface: attribute background
-FAIL HTMLBodyElement interface: attribute onafterprint assert_true: The prototype object must have a property "onafterprint" expected true got false
-FAIL HTMLBodyElement interface: attribute onbeforeprint assert_true: The prototype object must have a property "onbeforeprint" expected true got false
+PASS HTMLBodyElement interface: attribute onafterprint
+PASS HTMLBodyElement interface: attribute onbeforeprint
 PASS HTMLBodyElement interface: attribute onbeforeunload
 PASS HTMLBodyElement interface: attribute onhashchange
 PASS HTMLBodyElement interface: attribute onlanguagechange
@@ -856,8 +856,8 @@ PASS HTMLBodyElement interface: document.createElement("body") must inherit prop
 PASS HTMLBodyElement interface: document.createElement("body") must inherit property "aLink" with the proper type
 PASS HTMLBodyElement interface: document.createElement("body") must inherit property "bgColor" with the proper type
 PASS HTMLBodyElement interface: document.createElement("body") must inherit property "background" with the proper type
-FAIL HTMLBodyElement interface: document.createElement("body") must inherit property "onafterprint" with the proper type assert_inherits: property "onafterprint" not found in prototype chain
-FAIL HTMLBodyElement interface: document.createElement("body") must inherit property "onbeforeprint" with the proper type assert_inherits: property "onbeforeprint" not found in prototype chain
+PASS HTMLBodyElement interface: document.createElement("body") must inherit property "onafterprint" with the proper type
+PASS HTMLBodyElement interface: document.createElement("body") must inherit property "onbeforeprint" with the proper type
 PASS HTMLBodyElement interface: document.createElement("body") must inherit property "onbeforeunload" with the proper type
 PASS HTMLBodyElement interface: document.createElement("body") must inherit property "onhashchange" with the proper type
 PASS HTMLBodyElement interface: document.createElement("body") must inherit property "onlanguagechange" with the proper type
@@ -4329,9 +4329,7 @@ PASS OffscreenCanvasRenderingContext2D interface object length
 PASS OffscreenCanvasRenderingContext2D interface object name
 PASS OffscreenCanvasRenderingContext2D interface: existence and properties of interface prototype object
 PASS OffscreenCanvasRenderingContext2D interface: existence and properties of interface prototype object's "constructor" property
-FAIL OffscreenCanvasRenderingContext2D interface: operation commit() assert_throws: calling operation with this = null didn't throw TypeError function "function () {
-            fn.apply(obj, args);
-        }" did not throw
+FAIL OffscreenCanvasRenderingContext2D interface: operation commit() assert_throws: calling operation with this = null didn't throw TypeError function "function () {\n            fn.apply(obj, args);\n        }" did not throw
 PASS OffscreenCanvasRenderingContext2D interface: attribute canvas
 PASS OffscreenCanvasRenderingContext2D interface: operation save()
 PASS OffscreenCanvasRenderingContext2D interface: operation restore()
@@ -4552,8 +4550,8 @@ PASS Window interface: attribute ontimeupdate
 PASS Window interface: attribute ontoggle
 PASS Window interface: attribute onvolumechange
 PASS Window interface: attribute onwaiting
-FAIL Window interface: attribute onafterprint assert_own_property: The global object must have a property "onafterprint" expected property "onafterprint" missing
-FAIL Window interface: attribute onbeforeprint assert_own_property: The global object must have a property "onbeforeprint" expected property "onbeforeprint" missing
+PASS Window interface: attribute onafterprint
+PASS Window interface: attribute onbeforeprint
 PASS Window interface: attribute onbeforeunload
 PASS Window interface: attribute onhashchange
 PASS Window interface: attribute onlanguagechange
@@ -4695,8 +4693,8 @@ PASS Window interface: window must inherit property "ontimeupdate" with the prop
 PASS Window interface: window must inherit property "ontoggle" with the proper type
 PASS Window interface: window must inherit property "onvolumechange" with the proper type
 PASS Window interface: window must inherit property "onwaiting" with the proper type
-FAIL Window interface: window must inherit property "onafterprint" with the proper type assert_own_property: expected property "onafterprint" missing
-FAIL Window interface: window must inherit property "onbeforeprint" with the proper type assert_own_property: expected property "onbeforeprint" missing
+PASS Window interface: window must inherit property "onafterprint" with the proper type
+PASS Window interface: window must inherit property "onbeforeprint" with the proper type
 PASS Window interface: window must inherit property "onbeforeunload" with the proper type
 PASS Window interface: window must inherit property "onhashchange" with the proper type
 PASS Window interface: window must inherit property "onlanguagechange" with the proper type
@@ -4899,11 +4897,7 @@ PASS Navigator interface: attribute language
 PASS Navigator interface: attribute languages
 PASS Navigator interface: attribute onLine
 PASS Navigator interface: operation registerProtocolHandler(DOMString, USVString, DOMString)
-FAIL Navigator interface: operation registerContentHandler(DOMString, USVString, DOMString) assert_own_property: interface prototype object missing non-static operation expected property "registerContentHandler" missing
-PASS Navigator interface: operation isProtocolHandlerRegistered(DOMString, USVString)
-FAIL Navigator interface: operation isContentHandlerRegistered(DOMString, USVString) assert_own_property: interface prototype object missing non-static operation expected property "isContentHandlerRegistered" missing
 PASS Navigator interface: operation unregisterProtocolHandler(DOMString, USVString)
-FAIL Navigator interface: operation unregisterContentHandler(DOMString, USVString) assert_own_property: interface prototype object missing non-static operation expected property "unregisterContentHandler" missing
 PASS Navigator interface: attribute cookieEnabled
 PASS Navigator interface: attribute plugins
 PASS Navigator interface: attribute mimeTypes
@@ -4927,16 +4921,8 @@ PASS Navigator interface: window.navigator must inherit property "languages" wit
 PASS Navigator interface: window.navigator must inherit property "onLine" with the proper type
 PASS Navigator interface: window.navigator must inherit property "registerProtocolHandler(DOMString, USVString, DOMString)" with the proper type
 PASS Navigator interface: calling registerProtocolHandler(DOMString, USVString, DOMString) on window.navigator with too few arguments must throw TypeError
-FAIL Navigator interface: window.navigator must inherit property "registerContentHandler(DOMString, USVString, DOMString)" with the proper type assert_inherits: property "registerContentHandler" not found in prototype chain
-FAIL Navigator interface: calling registerContentHandler(DOMString, USVString, DOMString) on window.navigator with too few arguments must throw TypeError assert_inherits: property "registerContentHandler" not found in prototype chain
-PASS Navigator interface: window.navigator must inherit property "isProtocolHandlerRegistered(DOMString, USVString)" with the proper type
-PASS Navigator interface: calling isProtocolHandlerRegistered(DOMString, USVString) on window.navigator with too few arguments must throw TypeError
-FAIL Navigator interface: window.navigator must inherit property "isContentHandlerRegistered(DOMString, USVString)" with the proper type assert_inherits: property "isContentHandlerRegistered" not found in prototype chain
-FAIL Navigator interface: calling isContentHandlerRegistered(DOMString, USVString) on window.navigator with too few arguments must throw TypeError assert_inherits: property "isContentHandlerRegistered" not found in prototype chain
 PASS Navigator interface: window.navigator must inherit property "unregisterProtocolHandler(DOMString, USVString)" with the proper type
 PASS Navigator interface: calling unregisterProtocolHandler(DOMString, USVString) on window.navigator with too few arguments must throw TypeError
-FAIL Navigator interface: window.navigator must inherit property "unregisterContentHandler(DOMString, USVString)" with the proper type assert_inherits: property "unregisterContentHandler" not found in prototype chain
-FAIL Navigator interface: calling unregisterContentHandler(DOMString, USVString) on window.navigator with too few arguments must throw TypeError assert_inherits: property "unregisterContentHandler" not found in prototype chain
 PASS Navigator interface: window.navigator must inherit property "cookieEnabled" with the proper type
 PASS Navigator interface: window.navigator must inherit property "plugins" with the proper type
 PASS Navigator interface: window.navigator must inherit property "mimeTypes" with the proper type
@@ -5006,9 +4992,7 @@ PASS MessageEvent interface: new MessageEvent("message", { data: 5 }) must inher
 FAIL MessageEvent interface: new MessageEvent("message", { data: 5 }) must inherit property "source" with the proper type Unrecognized type WindowProxy
 PASS MessageEvent interface: new MessageEvent("message", { data: 5 }) must inherit property "ports" with the proper type
 PASS MessageEvent interface: new MessageEvent("message", { data: 5 }) must inherit property "initMessageEvent(DOMString, boolean, boolean, any, USVString, DOMString, MessageEventSource, [object Object])" with the proper type
-FAIL MessageEvent interface: calling initMessageEvent(DOMString, boolean, boolean, any, USVString, DOMString, MessageEventSource, [object Object]) on new MessageEvent("message", { data: 5 }) with too few arguments must throw TypeError assert_throws: Called with 0 arguments function "function () {
-            fn.apply(obj, args);
-        }" did not throw
+FAIL MessageEvent interface: calling initMessageEvent(DOMString, boolean, boolean, any, USVString, DOMString, MessageEventSource, [object Object]) on new MessageEvent("message", { data: 5 }) with too few arguments must throw TypeError assert_throws: Called with 0 arguments function "function () {\n            fn.apply(obj, args);\n        }" did not throw
 PASS EventSource interface: existence and properties of interface object
 PASS EventSource interface object length
 PASS EventSource interface object name
@@ -5148,12 +5132,12 @@ PASS Storage interface object length
 PASS Storage interface object name
 PASS Storage interface: existence and properties of interface prototype object
 PASS Storage interface: existence and properties of interface prototype object's "constructor" property
-FAIL Storage interface: attribute length assert_true: property should be enumerable expected true got false
-FAIL Storage interface: operation key(unsigned long) assert_true: property should be enumerable expected true got false
-FAIL Storage interface: operation getItem(DOMString) assert_true: property should be enumerable expected true got false
-FAIL Storage interface: operation setItem(DOMString, DOMString) assert_true: property should be enumerable expected true got false
-FAIL Storage interface: operation removeItem(DOMString) assert_true: property should be enumerable expected true got false
-FAIL Storage interface: operation clear() assert_true: property should be enumerable expected true got false
+PASS Storage interface: attribute length
+PASS Storage interface: operation key(unsigned long)
+PASS Storage interface: operation getItem(DOMString)
+PASS Storage interface: operation setItem(DOMString, DOMString)
+PASS Storage interface: operation removeItem(DOMString)
+PASS Storage interface: operation clear()
 PASS StorageEvent interface: existence and properties of interface object
 PASS StorageEvent interface object length
 PASS StorageEvent interface object name
@@ -5226,8 +5210,8 @@ PASS HTMLFrameSetElement interface: existence and properties of interface protot
 PASS HTMLFrameSetElement interface: existence and properties of interface prototype object's "constructor" property
 PASS HTMLFrameSetElement interface: attribute cols
 PASS HTMLFrameSetElement interface: attribute rows
-FAIL HTMLFrameSetElement interface: attribute onafterprint assert_true: The prototype object must have a property "onafterprint" expected true got false
-FAIL HTMLFrameSetElement interface: attribute onbeforeprint assert_true: The prototype object must have a property "onbeforeprint" expected true got false
+PASS HTMLFrameSetElement interface: attribute onafterprint
+PASS HTMLFrameSetElement interface: attribute onbeforeprint
 PASS HTMLFrameSetElement interface: attribute onbeforeunload
 PASS HTMLFrameSetElement interface: attribute onhashchange
 PASS HTMLFrameSetElement interface: attribute onlanguagechange
@@ -5246,8 +5230,8 @@ PASS HTMLFrameSetElement must be primary interface of document.createElement("fr
 PASS Stringification of document.createElement("frameset")
 PASS HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "cols" with the proper type
 PASS HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "rows" with the proper type
-FAIL HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "onafterprint" with the proper type assert_inherits: property "onafterprint" not found in prototype chain
-FAIL HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "onbeforeprint" with the proper type assert_inherits: property "onbeforeprint" not found in prototype chain
+PASS HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "onafterprint" with the proper type
+PASS HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "onbeforeprint" with the proper type
 PASS HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "onbeforeunload" with the proper type
 PASS HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "onhashchange" with the proper type
 PASS HTMLFrameSetElement interface: document.createElement("frameset") must inherit property "onlanguagechange" with the proper type

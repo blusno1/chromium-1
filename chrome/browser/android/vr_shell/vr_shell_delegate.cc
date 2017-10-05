@@ -11,15 +11,18 @@
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/android/vr_shell/vr_metrics_util.h"
 #include "chrome/browser/android/vr_shell/vr_shell.h"
+#include "chrome/browser/vr/service/vr_device_manager.h"
+#include "chrome/browser/vr/service/vr_service_impl.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/browser/webvr_service_provider.h"
 #include "content/public/common/origin_util.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
 #include "device/vr/android/gvr/gvr_delegate_provider_factory.h"
 #include "device/vr/vr_device.h"
-#include "device/vr/vr_device_manager.h"
 #include "device/vr/vr_display_impl.h"
 #include "jni/VrShellDelegate_jni.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr.h"
@@ -117,12 +120,9 @@ VrShellDelegate* VrShellDelegate::GetNativeVrShellDelegate(
 void VrShellDelegate::SetDelegate(VrShell* vr_shell,
                                   gvr::ViewerType viewer_type) {
   vr_shell_ = vr_shell;
-  device::VRDevice* device = GetDevice();
-  if (device)
-    device->OnChanged();
-
   if (pending_successful_present_request_) {
-    SetPresentResult(true);
+    CHECK(!present_callback_.is_null());
+    base::ResetAndReturn(&present_callback_).Run(true);
   }
   JNIEnv* env = AttachCurrentThread();
   std::unique_ptr<VrCoreInfo> vr_core_info = MakeVrCoreInfo(env);
@@ -132,23 +132,25 @@ void VrShellDelegate::SetDelegate(VrShell* vr_shell,
 void VrShellDelegate::RemoveDelegate() {
   vr_shell_ = nullptr;
   device::VRDevice* device = GetDevice();
-  if (device) {
+  if (device)
     device->OnExitPresent();
-    device->OnChanged();
-  }
 }
 
 void VrShellDelegate::SetPresentResult(JNIEnv* env,
                                        const JavaParamRef<jobject>& obj,
                                        jboolean success) {
-  SetPresentResult(static_cast<bool>(success));
+  CHECK(!present_callback_.is_null());
+  base::ResetAndReturn(&present_callback_).Run(static_cast<bool>(success));
 }
 
-void VrShellDelegate::SetPresentResult(bool success) {
-  CHECK(!present_callback_.is_null());
+void VrShellDelegate::OnPresentResult(
+    device::mojom::VRSubmitFrameClientPtr submit_client,
+    device::mojom::VRPresentationProviderRequest request,
+    device::mojom::VRDisplayInfoPtr display_info,
+    base::Callback<void(bool)> callback,
+    bool success) {
   if (!success) {
-    pending_successful_present_request_ = false;
-    base::ResetAndReturn(&present_callback_).Run(false);
+    std::move(callback).Run(false);
     return;
   }
 
@@ -156,13 +158,17 @@ void VrShellDelegate::SetPresentResult(bool success) {
     // We have to wait until the GL thread is ready since we have to pass it
     // the VRSubmitFrameClient.
     pending_successful_present_request_ = true;
+    present_callback_ =
+        base::Bind(&VrShellDelegate::OnPresentResult, base::Unretained(this),
+                   base::Passed(&submit_client), base::Passed(&request),
+                   base::Passed(&display_info), base::Passed(&callback));
     return;
   }
 
   vr_shell_->ConnectPresentingService(
-      std::move(submit_client_), std::move(presentation_provider_request_));
+      std::move(submit_client), std::move(request), std::move(display_info));
 
-  base::ResetAndReturn(&present_callback_).Run(true);
+  std::move(callback).Run(true);
   pending_successful_present_request_ = false;
 
   device::VRDevice* device = GetDevice();
@@ -225,17 +231,18 @@ void VrShellDelegate::SetDeviceId(unsigned int device_id) {
 void VrShellDelegate::RequestWebVRPresent(
     device::mojom::VRSubmitFrameClientPtr submit_client,
     device::mojom::VRPresentationProviderRequest request,
-    const base::Callback<void(bool)>& callback) {
+    device::mojom::VRDisplayInfoPtr display_info,
+    base::Callback<void(bool)> callback) {
   if (!present_callback_.is_null()) {
     // Can only handle one request at a time. This is also extremely unlikely to
     // happen in practice.
-    callback.Run(false);
+    std::move(callback).Run(false);
     return;
   }
-
-  present_callback_ = std::move(callback);
-  submit_client_ = std::move(submit_client);
-  presentation_provider_request_ = std::move(request);
+  present_callback_ =
+      base::Bind(&VrShellDelegate::OnPresentResult, base::Unretained(this),
+                 base::Passed(&submit_client), base::Passed(&request),
+                 base::Passed(&display_info), base::Passed(&callback));
 
   // If/When VRShell is ready for use it will call SetPresentResult.
   JNIEnv* env = AttachCurrentThread();
@@ -359,7 +366,7 @@ void VrShellDelegate::SetListeningForActivate(bool listening) {
 void VrShellDelegate::GetNextMagicWindowPose(
     gvr::GvrApi* gvr_api,
     device::VRDisplayImpl* display,
-    device::mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) {
+    device::mojom::VRMagicWindowProvider::GetPoseCallback callback) {
   content::RenderFrameHost* host = GetHostForDisplay(display);
   if (vr_shell_ || host == nullptr || !host->GetView()->HasFocus()) {
     std::move(callback).Run(nullptr);
@@ -369,21 +376,8 @@ void VrShellDelegate::GetNextMagicWindowPose(
       device::GvrDelegate::GetVRPosePtrWithNeckModel(gvr_api, nullptr));
 }
 
-void VrShellDelegate::CreateVRDisplayInfo(
-    gvr::GvrApi* gvr_api,
-    const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
-    uint32_t device_id) {
-  if (vr_shell_) {
-    vr_shell_->CreateVRDisplayInfo(callback, device_id);
-    return;
-  }
-  // This is for magic window mode, which doesn't care what the render size is.
-  callback.Run(
-      device::GvrDelegate::CreateDefaultVRDisplayInfo(gvr_api, device_id));
-}
-
 device::VRDevice* VrShellDelegate::GetDevice() {
-  return device::VRDeviceManager::GetInstance()->GetDevice(device_id_);
+  return vr::VRDeviceManager::GetInstance()->GetDevice(device_id_);
 }
 
 // ----------------------------------------------------------------------------
@@ -397,6 +391,8 @@ jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
 static void OnLibraryAvailable(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   device::GvrDelegateProviderFactory::Install(
       new VrShellDelegateProviderFactory);
+  content::WebvrServiceProvider::SetWebvrServiceCallback(
+      base::Bind(&vr::VRServiceImpl::Create));
 }
 
 }  // namespace vr_shell

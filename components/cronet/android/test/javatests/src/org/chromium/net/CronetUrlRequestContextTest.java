@@ -40,8 +40,8 @@ import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
 import org.chromium.net.CronetTestRule.RequiresMinApi;
 import org.chromium.net.TestUrlRequestCallback.ResponseStep;
 import org.chromium.net.impl.CronetEngineBuilderImpl;
-import org.chromium.net.impl.CronetLibraryLoader;
 import org.chromium.net.impl.CronetUrlRequestContext;
+import org.chromium.net.impl.NativeCronetEngineBuilderImpl;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.io.BufferedReader;
@@ -299,6 +299,7 @@ public class CronetUrlRequestContextTest {
     @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet // JavaCronetEngine doesn't support throwing on repeat shutdown()
     public void testMultipleShutdown() throws Exception {
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
         try {
@@ -331,6 +332,7 @@ public class CronetUrlRequestContextTest {
     @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet // JavaCronetEngine doesn't support throwing on shutdown()
     public void testShutdownAfterCancel() throws Exception {
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
@@ -748,6 +750,7 @@ public class CronetUrlRequestContextTest {
     @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testNetLogStartMultipleTimes() throws Exception {
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
         File directory = new File(PathUtils.getDataDirectory());
@@ -774,6 +777,7 @@ public class CronetUrlRequestContextTest {
     @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testBoundedFileNetLogStartMultipleTimes() throws Exception {
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
         File directory = new File(PathUtils.getDataDirectory());
@@ -804,6 +808,7 @@ public class CronetUrlRequestContextTest {
     @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testNetLogStopMultipleTimes() throws Exception {
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
         File directory = new File(PathUtils.getDataDirectory());
@@ -831,6 +836,7 @@ public class CronetUrlRequestContextTest {
     @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testBoundedFileNetLogStopMultipleTimes() throws Exception {
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
         File directory = new File(PathUtils.getDataDirectory());
@@ -1219,6 +1225,7 @@ public class CronetUrlRequestContextTest {
     @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet // Java engine doesn't produce metrics
     public void testGetGlobalMetricsDeltas() throws Exception {
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
 
@@ -1287,19 +1294,30 @@ public class CronetUrlRequestContextTest {
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet
-    public void testSkipLibraryLoading() throws Exception {
+    public void testSetLibraryLoaderIsEnforcedByDefaultEmbeddedProvider() throws Exception {
         CronetEngine.Builder builder = new CronetEngine.Builder(getContext());
         TestBadLibraryLoader loader = new TestBadLibraryLoader();
         builder.setLibraryLoader(loader);
         try {
-            // ensureInitialized() calls native code to check the version right after library load
-            // and will error with the message below if library loading was skipped
-            CronetLibraryLoader.ensureInitialized(getContext().getApplicationContext(),
-                    (CronetEngineBuilderImpl) builder.mBuilderDelegate);
+            builder.build();
             fail("Native library should not be loaded");
         } catch (UnsatisfiedLinkError e) {
             assertTrue(loader.wasCalled());
         }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunNativeCronet
+    public void testSetLibraryLoaderIsIgnoredInNativeCronetEngineBuilderImpl() throws Exception {
+        CronetEngine.Builder builder =
+                new CronetEngine.Builder(new NativeCronetEngineBuilderImpl(getContext()));
+        TestBadLibraryLoader loader = new TestBadLibraryLoader();
+        builder.setLibraryLoader(loader);
+        CronetEngine engine = builder.build();
+        assertNotNull(engine);
+        assertFalse(loader.wasCalled());
     }
 
     // Creates a CronetEngine on another thread and then one on the main thread.  This shouldn't

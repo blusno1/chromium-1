@@ -3,10 +3,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Prints the size of each given file and optionally computes the size of
-   libchrome.so without the dependencies added for building with android NDK.
-   Also breaks down the contents of the APK to determine the installed size
-   and assign size contributions to different classes of file.
+"""Reports binary size and static initializer metrics for an APK.
+
+More information at //docs/speed/binary_size/metrics.md.
 """
 
 import argparse
@@ -250,13 +249,24 @@ def _NormalizeLanguagePaks(translations, normalized_apk_size, factor):
   return normalized_apk_size
 
 
-def _NormalizeResourcesArsc(apk_path, num_translations):
+def _NormalizeResourcesArsc(apk_path, num_arsc_files, num_translations,
+                            out_dir):
   """Estimates the expected overhead of untranslated strings in resources.arsc.
 
   See http://crbug.com/677966 for why this is necessary.
   """
-  aapt_output = _RunAaptDumpResources(apk_path)
+  # If there are multiple .arsc files, use the resource packaged APK instead.
+  if num_arsc_files > 1:
+    if not out_dir:
+      print 'Skipping resources.arsc normalization (output directory required)'
+      return 0
+    ap_name = os.path.basename(apk_path).replace('.apk', '.intermediate.ap_')
+    ap_path = os.path.join(out_dir, 'gen/arsc/apks', ap_name)
+    if not os.path.exists(ap_path):
+      raise Exception('Missing expected file: %s, try rebuilding.' % ap_path)
+    apk_path = ap_path
 
+  aapt_output = _RunAaptDumpResources(apk_path)
   # en-rUS is in the default config and may be cluttered with non-translatable
   # strings, so en-rGB is a better baseline for finding missing translations.
   en_strings = _CreateResourceIdValueMap(aapt_output, 'en-rGB')
@@ -293,28 +303,6 @@ def _RunAaptDumpResources(apk_path):
     raise Exception('Failed running aapt command: "%s" with output "%s".' %
                     (' '.join(cmd), output))
   return output
-
-
-def ReportPerfResult(chart_data, graph_title, trace_title, value, units,
-                     improvement_direction='down', important=True):
-  """Outputs test results in correct format.
-
-  If chart_data is None, it outputs data in old format. If chart_data is a
-  dictionary, formats in chartjson format. If any other format defaults to
-  old format.
-  """
-  if chart_data and isinstance(chart_data, dict):
-    chart_data['charts'].setdefault(graph_title, {})
-    chart_data['charts'][graph_title][trace_title] = {
-        'type': 'scalar',
-        'value': value,
-        'units': units,
-        'improvement_direction': improvement_direction,
-        'important': important
-    }
-  else:
-    perf_tests_results_helper.PrintPerfResult(
-        graph_title, trace_title, [value], units)
 
 
 class _FileGroup(object):
@@ -360,7 +348,7 @@ class _FileGroup(object):
     return self.ComputeExtractedSize() + self.ComputeZippedSize()
 
 
-def PrintApkAnalysis(apk_filename, tool_prefix, chartjson=None):
+def PrintApkAnalysis(apk_filename, tool_prefix, out_dir, chartjson=None):
   """Analyse APK to determine size contributions of different file classes."""
   file_groups = []
 
@@ -433,56 +421,73 @@ def PrintApkAnalysis(apk_filename, tool_prefix, chartjson=None):
   for group in file_groups:
     actual_size = group.ComputeZippedSize()
     install_size = group.ComputeInstallSize()
+    uncompressed_size = group.ComputeUncompressedSize()
 
     total_install_size += group.ComputeExtractedSize()
     zip_overhead -= actual_size
 
-    ReportPerfResult(chartjson, apk_basename + '_Breakdown',
-                     group.name + ' size', actual_size, 'bytes')
-    ReportPerfResult(chartjson, apk_basename + '_InstallBreakdown',
+    perf_tests_results_helper.ReportPerfResult(chartjson,
+                     apk_basename + '_Breakdown', group.name + ' size',
+                     actual_size, 'bytes')
+    perf_tests_results_helper.ReportPerfResult(chartjson,
+                     apk_basename + '_InstallBreakdown',
                      group.name + ' size', install_size, 'bytes')
-    ReportPerfResult(chartjson, apk_basename + '_Uncompressed',
-                     group.name + ' size', group.ComputeUncompressedSize(),
-                     'bytes')
+    # Only a few metrics are compressed in the first place.
+    # To avoid over-reporting, track uncompressed size only for compressed
+    # entries.
+    if uncompressed_size != actual_size:
+      perf_tests_results_helper.ReportPerfResult(chartjson,
+                       apk_basename + '_Uncompressed',
+                       group.name + ' size', uncompressed_size,
+                       'bytes')
 
   # Per-file zip overhead is caused by:
   # * 30 byte entry header + len(file name)
   # * 46 byte central directory entry + len(file name)
   # * 0-3 bytes for zipalign.
-  ReportPerfResult(chartjson, apk_basename + '_Breakdown', 'Zip Overhead',
+  perf_tests_results_helper.ReportPerfResult(chartjson,
+                   apk_basename + '_Breakdown', 'Zip Overhead',
                    zip_overhead, 'bytes')
-  ReportPerfResult(chartjson, apk_basename + '_InstallSize', 'APK size',
+  perf_tests_results_helper.ReportPerfResult(chartjson,
+                   apk_basename + '_InstallSize', 'APK size',
                    total_apk_size, 'bytes')
-  ReportPerfResult(chartjson, apk_basename + '_InstallSize',
+  perf_tests_results_helper.ReportPerfResult(chartjson,
+                   apk_basename + '_InstallSize',
                    'Estimated installed size', total_install_size, 'bytes')
   transfer_size = _CalculateCompressedSize(apk_filename)
-  ReportPerfResult(chartjson, apk_basename + '_TransferSize',
+  perf_tests_results_helper.ReportPerfResult(chartjson,
+                   apk_basename + '_TransferSize',
                    'Transfer size (deflate)', transfer_size, 'bytes')
 
   # Size of main dex vs remaining.
   main_dex_info = java_code.FindByPattern('classes.dex')
   if main_dex_info:
     main_dex_size = main_dex_info.file_size
-    ReportPerfResult(chartjson, apk_basename + '_Specifics',
+    perf_tests_results_helper.ReportPerfResult(chartjson,
+                     apk_basename + '_Specifics',
                      'main dex size', main_dex_size, 'bytes')
     secondary_size = java_code.ComputeUncompressedSize() - main_dex_size
-    ReportPerfResult(chartjson, apk_basename + '_Specifics',
+    perf_tests_results_helper.ReportPerfResult(chartjson,
+                     apk_basename + '_Specifics',
                      'secondary dex size', secondary_size, 'bytes')
 
   # Size of main .so vs remaining.
   main_lib_info = native_code.FindLargest()
   if main_lib_info:
     main_lib_size = main_lib_info.file_size
-    ReportPerfResult(chartjson, apk_basename + '_Specifics',
+    perf_tests_results_helper.ReportPerfResult(chartjson,
+                     apk_basename + '_Specifics',
                      'main lib size', main_lib_size, 'bytes')
     secondary_size = native_code.ComputeUncompressedSize() - main_lib_size
-    ReportPerfResult(chartjson, apk_basename + '_Specifics',
+    perf_tests_results_helper.ReportPerfResult(chartjson,
+                     apk_basename + '_Specifics',
                      'other lib size', secondary_size, 'bytes')
 
     main_lib_section_sizes = _ExtractMainLibSectionSizesFromApk(
         apk_filename, main_lib_info.filename, tool_prefix)
     for metric_name, size in main_lib_section_sizes.iteritems():
-      ReportPerfResult(chartjson, apk_basename + '_MainLibInfo',
+      perf_tests_results_helper.ReportPerfResult(chartjson,
+                       apk_basename + '_MainLibInfo',
                        metric_name, size, 'bytes')
 
   # Main metric that we want to monitor for jumps.
@@ -515,13 +520,15 @@ def PrintApkAnalysis(apk_filename, tool_prefix, chartjson=None):
       # WebView (which supports more locales), but these should mostly be empty
       # so ignore them here.
       num_arsc_translations = num_translations
-    normalized_apk_size += int(
-        _NormalizeResourcesArsc(apk_filename, num_arsc_translations))
+    normalized_apk_size += int(_NormalizeResourcesArsc(
+        apk_filename, arsc.GetNumEntries(), num_arsc_translations, out_dir))
 
-  ReportPerfResult(chartjson, apk_basename + '_Specifics',
+  perf_tests_results_helper.ReportPerfResult(chartjson,
+                   apk_basename + '_Specifics',
                    'normalized apk size', normalized_apk_size, 'bytes')
 
-  ReportPerfResult(chartjson, apk_basename + '_Specifics',
+  perf_tests_results_helper.ReportPerfResult(chartjson,
+                   apk_basename + '_Specifics',
                    'file count', len(apk_contents), 'zip entries')
 
   for info in unknown.AllEntries():
@@ -735,11 +742,12 @@ def _PrintDexAnalysis(apk_filename, chartjson=None):
   graph_title = os.path.basename(apk_filename) + '_Dex'
   dex_metrics = method_count.CONTRIBUTORS_TO_DEX_CACHE
   for key, label in dex_metrics.iteritems():
-    ReportPerfResult(chartjson, graph_title, label, sizes[key], 'entries')
+    perf_tests_results_helper.ReportPerfResult(chartjson, graph_title, label,
+                                               sizes[key], 'entries')
 
   graph_title = '%sCache' % graph_title
-  ReportPerfResult(chartjson, graph_title, 'DexCache', sizes['dex_cache_size'],
-                   'bytes')
+  perf_tests_results_helper.ReportPerfResult(chartjson, graph_title, 'DexCache',
+                                             sizes['dex_cache_size'], 'bytes')
 
 
 def _PrintPatchSizeEstimate(new_apk, builder, bucket, chartjson=None):
@@ -756,10 +764,12 @@ def _PrintPatchSizeEstimate(new_apk, builder, bucket, chartjson=None):
       tmp_name = os.path.join(tmp, 'patch.tmp')
       bsdiff = apk_patch_size_estimator.calculate_bsdiff(
           old_apk, new_apk, None, tmp_name)
-      ReportPerfResult(chartjson, title, 'BSDiff (gzipped)', bsdiff, 'bytes')
+      perf_tests_results_helper.ReportPerfResult(chartjson, title,
+                                'BSDiff (gzipped)', bsdiff, 'bytes')
       fbf = apk_patch_size_estimator.calculate_filebyfile(
           old_apk, new_apk, None, tmp_name)
-      ReportPerfResult(chartjson, title, 'FileByFile (gzipped)', fbf, 'bytes')
+      perf_tests_results_helper.ReportPerfResult(chartjson, title,
+                                'FileByFile (gzipped)', fbf, 'bytes')
 
 
 @contextmanager
@@ -840,13 +850,16 @@ def main():
     argparser.error(
         '--dump-static-initializers requires --chromium-output-directory')
 
-  PrintApkAnalysis(args.apk, tool_prefix, chartjson=chartjson)
+  # Do not add any new metrics without also documenting them in:
+  # //docs/speed/binary_size/metrics.md.
+
+  PrintApkAnalysis(args.apk, tool_prefix, out_dir, chartjson=chartjson)
   _PrintDexAnalysis(args.apk, chartjson=chartjson)
 
   si_count = AnalyzeStaticInitializers(
       args.apk, tool_prefix, args.dump_sis, out_dir)
-  ReportPerfResult(chartjson, 'StaticInitializersCount', 'count', si_count,
-                   'count')
+  perf_tests_results_helper.ReportPerfResult(
+      chartjson, 'StaticInitializersCount', 'count', si_count, 'count')
 
   if args.estimate_patch_size:
     _PrintPatchSizeEstimate(args.apk, args.reference_apk_builder,

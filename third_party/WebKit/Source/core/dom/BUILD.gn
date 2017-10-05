@@ -16,13 +16,16 @@ blink_core_sources("dom") {
     "AccessibleNode.h",
     "AccessibleNodeList.cpp",
     "AccessibleNodeList.h",
-    "AncestorList.h",
     "AnimationWorkletProxyClient.cpp",
     "AnimationWorkletProxyClient.h",
     "Attr.cpp",
     "Attr.h",
     "Attribute.h",
     "AttributeCollection.h",
+    "BlinkMessagePortMessage.cpp",
+    "BlinkMessagePortMessage.h",
+    "BlinkMessagePortMessageStructTraits.cpp",
+    "BlinkMessagePortMessageStructTraits.h",
     "CDATASection.cpp",
     "CDATASection.h",
     "CharacterData.cpp",
@@ -43,8 +46,6 @@ blink_core_sources("dom") {
     "CollectionIndexCache.h",
     "Comment.cpp",
     "Comment.h",
-    "CompositorWorkerProxyClient.cpp",
-    "CompositorWorkerProxyClient.h",
     "ContainerNode.cpp",
     "ContainerNode.h",
     "ContextFeatures.cpp",
@@ -105,6 +106,8 @@ blink_core_sources("dom") {
     "DocumentType.h",
     "DocumentWriteIntervention.cpp",
     "DocumentWriteIntervention.h",
+    "DynamicModuleResolver.cpp",
+    "DynamicModuleResolver.h",
     "Element.cpp",
     "Element.h",
     "ElementData.cpp",
@@ -129,7 +132,6 @@ blink_core_sources("dom") {
     "FirstLetterPseudoElement.h",
     "FlatTreeTraversal.cpp",
     "FlatTreeTraversal.h",
-    "FrameRequestCallback.h",
     "FrameRequestCallbackCollection.cpp",
     "FrameRequestCallbackCollection.h",
     "GlobalEventHandlers.h",
@@ -153,6 +155,8 @@ blink_core_sources("dom") {
     "LiveNodeList.h",
     "LiveNodeListBase.cpp",
     "LiveNodeListBase.h",
+    "LiveNodeListRegistry.cpp",
+    "LiveNodeListRegistry.h",
     "MessageChannel.cpp",
     "MessageChannel.h",
     "MessagePort.cpp",
@@ -335,6 +339,12 @@ blink_core_sources("dom") {
     "events/TreeScopeEventContext.h",
     "events/WindowEventContext.cpp",
     "events/WindowEventContext.h",
+    "trustedtypes/TrustedHTML.cpp",
+    "trustedtypes/TrustedHTML.h",
+    "trustedtypes/TrustedScriptURL.cpp",
+    "trustedtypes/TrustedScriptURL.h",
+    "trustedtypes/TrustedURL.cpp",
+    "trustedtypes/TrustedURL.h",
   ]
 
   jumbo_excluded_sources = [ "Modulator.cpp" ]  # https://crbug.com/716395
@@ -342,5 +352,9 @@ blink_core_sources("dom") {
   configs += [
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
     "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  public_deps = [
+    "//third_party/WebKit/common:mojo_bindings_blink",
   ]
 }

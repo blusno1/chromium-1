@@ -21,14 +21,16 @@
 namespace content {
 
 AccessibilityTreeFormatterBlink::AccessibilityTreeFormatterBlink()
-    : AccessibilityTreeFormatter() {
-}
+    : AccessibilityTreeFormatterBrowser() {}
 
 AccessibilityTreeFormatterBlink::~AccessibilityTreeFormatterBlink() {
 }
 
 const char* const TREE_DATA_ATTRIBUTES[] = {"TreeData.textSelStartOffset",
                                             "TreeData.textSelEndOffset"};
+
+const char* STATE_FOCUSED = "focused";
+const char* STATE_OFFSCREEN = "offscreen";
 
 uint32_t AccessibilityTreeFormatterBlink::ChildCount(
     const BrowserAccessibility& node) const {
@@ -138,7 +140,8 @@ void AccessibilityTreeFormatterBlink::AddProperties(
   dict->SetInteger("boundsWidth", bounds.width());
   dict->SetInteger("boundsHeight", bounds.height());
 
-  gfx::Rect page_bounds = node.GetPageBoundsRect();
+  bool offscreen = false;
+  gfx::Rect page_bounds = node.GetPageBoundsRect(&offscreen);
   dict->SetInteger("pageBoundsX", page_bounds.x());
   dict->SetInteger("pageBoundsY", page_bounds.y());
   dict->SetInteger("pageBoundsWidth", page_bounds.width());
@@ -155,6 +158,9 @@ void AccessibilityTreeFormatterBlink::AddProperties(
     if (node.HasState(state))
       dict->SetBoolean(ui::ToString(state), true);
   }
+
+  if (offscreen)
+    dict->SetBoolean(STATE_OFFSCREEN, true);
 
   for (int attr_index = ui::AX_STRING_ATTRIBUTE_NONE;
        attr_index <= ui::AX_STRING_ATTRIBUTE_LAST;
@@ -260,6 +266,15 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
 
     WriteAttribute(false, ui::ToString(state), &line);
   }
+
+  // Offscreen and Focused states are not in the state list.
+  bool value = false;
+  dict.GetBoolean(STATE_OFFSCREEN, &value);
+  if (value)
+    WriteAttribute(false, STATE_OFFSCREEN, &line);
+  dict.GetBoolean(STATE_FOCUSED, &value);
+  if (value)
+    WriteAttribute(false, STATE_FOCUSED, &line);
 
   WriteAttribute(false,
                  FormatCoordinates("location", "boundsX", "boundsY", dict),

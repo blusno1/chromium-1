@@ -15,7 +15,6 @@
 #include "base/single_thread_task_runner.h"
 #include "chrome/browser/ui/toolbar/chrome_toolbar_model_delegate.h"
 #include "chrome/browser/vr/exit_vr_prompt_choice.h"
-#include "chrome/browser/vr/ui_interface.h"
 #include "chrome/browser/vr/ui_unsupported_mode.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "device/geolocation/public/interfaces/geolocation_config.mojom.h"
@@ -37,8 +36,9 @@ class WindowAndroid;
 }  // namespace ui
 
 namespace vr {
+class BrowserUiInterface;
 class ToolbarHelper;
-class UiInterface;
+class WebContentsEventForwarder;
 }  // namespace vr
 
 namespace vr_shell {
@@ -46,7 +46,6 @@ namespace vr_shell {
 class AndroidUiGestureTarget;
 class VrCompositor;
 class VrGLThread;
-class VrInputManager;
 class VrMetricsHelper;
 class VrShellDelegate;
 class VrWebContentsObserver;
@@ -186,12 +185,10 @@ class VrShell : device::GvrGamepadDataProvider,
   void ProcessContentGesture(std::unique_ptr<blink::WebInputEvent> event);
 
   void SetWebVRSecureOrigin(bool secure_origin);
-  void CreateVRDisplayInfo(
-      const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
-      uint32_t device_id);
   void ConnectPresentingService(
       device::mojom::VRSubmitFrameClientPtr submit_client,
-      device::mojom::VRPresentationProviderRequest request);
+      device::mojom::VRPresentationProviderRequest request,
+      device::mojom::VRDisplayInfoPtr display_info);
 
   // device::GvrGamepadDataProvider implementation.
   void UpdateGamepadData(device::GvrGamepadData) override;
@@ -207,7 +204,7 @@ class VrShell : device::GvrGamepadDataProvider,
 
  private:
   ~VrShell() override;
-  void PostToGlThread(const tracked_objects::Location& from_here,
+  void PostToGlThread(const base::Location& from_here,
                       const base::Closure& task);
   void SetUiState();
 
@@ -236,7 +233,7 @@ class VrShell : device::GvrGamepadDataProvider,
   VrShellDelegate* delegate_provider_ = nullptr;
   base::android::ScopedJavaGlobalRef<jobject> j_vr_shell_;
 
-  std::unique_ptr<VrInputManager> input_manager_;
+  std::unique_ptr<vr::WebContentsEventForwarder> web_contents_event_forwarder_;
   std::unique_ptr<AndroidUiGestureTarget> android_ui_gesture_target_;
   std::unique_ptr<VrMetricsHelper> metrics_helper_;
 
@@ -244,7 +241,7 @@ class VrShell : device::GvrGamepadDataProvider,
   std::unique_ptr<VrGLThread> gl_thread_;
   bool reprojected_rendering_;
 
-  vr::UiInterface* ui_;
+  vr::BrowserUiInterface* ui_;
   std::unique_ptr<vr::ToolbarHelper> toolbar_;
 
   device::mojom::GeolocationConfigPtr geolocation_config_;

@@ -8,6 +8,9 @@
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"  // kSettingsAppId
+#include "content/public/browser/web_contents.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_constants.h"
 
 namespace chromeos {
@@ -22,6 +25,7 @@ AndroidAppsHandler::AndroidAppsHandler(Profile* profile)
 AndroidAppsHandler::~AndroidAppsHandler() {}
 
 void AndroidAppsHandler::RegisterMessages() {
+  // Note: requestAndroidAppsInfo must be called before observers will be added.
   web_ui()->RegisterMessageCallback(
       "requestAndroidAppsInfo",
       base::Bind(&AndroidAppsHandler::HandleRequestAndroidAppsInfo,
@@ -82,11 +86,11 @@ AndroidAppsHandler::BuildAndroidAppsInfo() {
 
 void AndroidAppsHandler::HandleRequestAndroidAppsInfo(
     const base::ListValue* args) {
+  AllowJavascript();
   SendAndroidAppsInfo();
 }
 
 void AndroidAppsHandler::SendAndroidAppsInfo() {
-  AllowJavascript();
   std::unique_ptr<base::DictionaryValue> info = BuildAndroidAppsInfo();
   FireWebUIListener("android-apps-info-update", *info);
 }
@@ -99,7 +103,11 @@ void AndroidAppsHandler::ShowAndroidAppsSettings(const base::ListValue* args) {
 
   // Settings in secondary profile cannot access ARC.
   CHECK(arc::IsArcAllowedForProfile(profile_));
-  arc::LaunchAndroidSettingsApp(profile_, flags);
+  const int64_t display_id =
+      display::Screen::GetScreen()
+          ->GetDisplayNearestView(web_ui()->GetWebContents()->GetNativeView())
+          .id();
+  arc::LaunchAndroidSettingsApp(profile_, flags, display_id);
 }
 
 }  // namespace settings

@@ -35,7 +35,6 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "build/build_config.h"
-#include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/StyleEngine.h"
@@ -58,6 +57,8 @@
 #include "core/html/canvas/CanvasFontCache.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
+#include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/HitTestCanvasResult.h"
@@ -69,7 +70,6 @@
 #include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/CanvasMetrics.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -80,6 +80,7 @@
 #include "platform/graphics/gpu/SharedGpuContext.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/image-encoders/ImageEncoderUtils.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/transforms/AffineTransform.h"
 #include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/PtrUtil.h"
@@ -194,24 +195,26 @@ Node::InsertionNotificationRequest HTMLCanvasElement::InsertedInto(
   return HTMLElement::InsertedInto(node);
 }
 
-void HTMLCanvasElement::setHeight(int value, ExceptionState& exception_state) {
+void HTMLCanvasElement::setHeight(unsigned value,
+                                  ExceptionState& exception_state) {
   if (IsPlaceholderRegistered()) {
     exception_state.ThrowDOMException(
         kInvalidStateError,
         "Cannot resize canvas after call to transferControlToOffscreen().");
     return;
   }
-  SetIntegralAttribute(heightAttr, value);
+  SetUnsignedIntegralAttribute(heightAttr, value, kDefaultHeight);
 }
 
-void HTMLCanvasElement::setWidth(int value, ExceptionState& exception_state) {
+void HTMLCanvasElement::setWidth(unsigned value,
+                                 ExceptionState& exception_state) {
   if (IsPlaceholderRegistered()) {
     exception_state.ThrowDOMException(
         kInvalidStateError,
         "Cannot resize canvas after call to transferControlToOffscreen().");
     return;
   }
-  SetIntegralAttribute(widthAttr, value);
+  SetUnsignedIntegralAttribute(widthAttr, value, kDefaultWidth);
 }
 
 void HTMLCanvasElement::SetSize(const IntSize& new_size) {
@@ -322,18 +325,34 @@ bool HTMLCanvasElement::IsAccelerated() const {
   return context_ && context_->IsAccelerated();
 }
 
-bool HTMLCanvasElement::IsWebGLAllowed() const {
+bool HTMLCanvasElement::IsWebGL1Enabled() const {
   Document& document = GetDocument();
   LocalFrame* frame = document.GetFrame();
-  if (!frame)
-    return false;
-  Settings* settings = frame->GetSettings();
-  // The LocalFrameClient might block creation of a new WebGL context despite
-  // the page settings; in particular, if WebGL contexts were lost one or more
-  // times via the GL_ARB_robustness extension.
-  if (!frame->Client()->AllowWebGL(settings && settings->GetWebGLEnabled()))
-    return false;
-  return true;
+  if (frame) {
+    Settings* settings = frame->GetSettings();
+    if (settings && settings->GetWebGL1Enabled())
+      return true;
+  }
+  return false;
+}
+
+bool HTMLCanvasElement::IsWebGL2Enabled() const {
+  Document& document = GetDocument();
+  LocalFrame* frame = document.GetFrame();
+  if (frame) {
+    Settings* settings = frame->GetSettings();
+    if (settings && settings->GetWebGL2Enabled())
+      return true;
+  }
+  return false;
+}
+
+bool HTMLCanvasElement::IsWebGLBlocked() const {
+  Document& document = GetDocument();
+  LocalFrame* frame = document.GetFrame();
+  if (frame && frame->Client()->ShouldBlockWebGL())
+    return true;
+  return false;
 }
 
 void HTMLCanvasElement::DidDraw(const FloatRect& rect) {
@@ -466,15 +485,18 @@ void HTMLCanvasElement::Reset() {
 
   dirty_rect_ = FloatRect();
 
-  bool ok;
   bool had_image_buffer = GetImageBuffer();
 
-  int w = getAttribute(widthAttr).ToInt(&ok);
-  if (!ok || w < 0)
+  unsigned w = 0;
+  AtomicString value = getAttribute(widthAttr);
+  if (value.IsEmpty() || !ParseHTMLNonNegativeInteger(value, w) ||
+      w > 0x7fffffffu)
     w = kDefaultWidth;
 
-  int h = getAttribute(heightAttr).ToInt(&ok);
-  if (!ok || h < 0)
+  unsigned h = 0;
+  value = getAttribute(heightAttr);
+  if (value.IsEmpty() || !ParseHTMLNonNegativeInteger(value, h) ||
+      h > 0x7fffffffu)
     h = kDefaultHeight;
 
   if (Is2d()) {
@@ -591,7 +613,7 @@ void HTMLCanvasElement::Paint(GraphicsContext& context, const LayoutRect& r) {
 
   if (PlaceholderFrame()) {
     DCHECK(GetDocument().Printing());
-    context.DrawImage(PlaceholderFrame().Get(), PixelSnappedIntRect(r));
+    context.DrawImage(PlaceholderFrame().get(), PixelSnappedIntRect(r));
     return;
   }
 
@@ -896,7 +918,7 @@ bool HTMLCanvasElement::ShouldUseDisplayList() {
   // Rasterization of web contents will blend in the output space. Only embed
   // the canvas as a display list if it intended to do output space blending as
   // well.
-  if (!GetCanvasColorParams().UsesOutputSpaceBlending())
+  if (GetCanvasColorParams().LinearPixelMath())
     return false;
 
   if (RuntimeEnabledFeatures::ForceDisplayList2dCanvasEnabled())
@@ -1201,7 +1223,7 @@ void HTMLCanvasElement::DiscardImageBuffer() {
 
 void HTMLCanvasElement::ClearCopiedImage() {
   if (copied_image_) {
-    copied_image_.Clear();
+    copied_image_ = nullptr;
     UpdateExternallyAllocatedMemory();
   }
 }
@@ -1393,38 +1415,36 @@ bool HTMLCanvasElement::IsSupportedInteractiveCanvasFallback(
 
   // An a element that represents a hyperlink and that does not have any img
   // descendants.
-  if (isHTMLAnchorElement(element))
+  if (IsHTMLAnchorElement(element))
     return !Traversal<HTMLImageElement>::FirstWithin(element);
 
   // A button element
-  if (isHTMLButtonElement(element))
+  if (IsHTMLButtonElement(element))
     return true;
 
   // An input element whose type attribute is in one of the Checkbox or Radio
   // Button states.  An input element that is a button but its type attribute is
   // not in the Image Button state.
-  if (isHTMLInputElement(element)) {
-    const HTMLInputElement& input_element = toHTMLInputElement(element);
-    if (input_element.type() == InputTypeNames::checkbox ||
-        input_element.type() == InputTypeNames::radio ||
-        input_element.IsTextButton())
+  if (auto* input_element = ToHTMLInputElementOrNull(element)) {
+    if (input_element->type() == InputTypeNames::checkbox ||
+        input_element->type() == InputTypeNames::radio ||
+        input_element->IsTextButton())
       return true;
   }
 
   // A select element with a "multiple" attribute or with a display size greater
   // than 1.
-  if (isHTMLSelectElement(element)) {
-    const HTMLSelectElement& select_element = toHTMLSelectElement(element);
-    if (select_element.IsMultiple() || select_element.size() > 1)
+  if (auto* select_element = ToHTMLSelectElementOrNull(element)) {
+    if (select_element->IsMultiple() || select_element->size() > 1)
       return true;
   }
 
   // An option element that is in a list of options of a select element with a
   // "multiple" attribute or with a display size greater than 1.
-  if (isHTMLOptionElement(element) && element.parentNode() &&
-      isHTMLSelectElement(*element.parentNode())) {
+  if (IsHTMLOptionElement(element) && element.parentNode() &&
+      IsHTMLSelectElement(*element.parentNode())) {
     const HTMLSelectElement& select_element =
-        toHTMLSelectElement(*element.parentNode());
+        ToHTMLSelectElement(*element.parentNode());
     if (select_element.IsMultiple() || select_element.size() > 1)
       return true;
   }
@@ -1436,7 +1456,7 @@ bool HTMLCanvasElement::IsSupportedInteractiveCanvasFallback(
 
   // A non-interactive table, caption, thead, tbody, tfoot, tr, td, or th
   // element.
-  if (isHTMLTableElement(element) ||
+  if (IsHTMLTableElement(element) ||
       element.HasTagName(HTMLNames::captionTag) ||
       element.HasTagName(HTMLNames::theadTag) ||
       element.HasTagName(HTMLNames::tbodyTag) ||

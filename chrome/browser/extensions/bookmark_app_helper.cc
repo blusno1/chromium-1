@@ -80,9 +80,10 @@
 #include "base/win/shortcut.h"
 #endif  // defined(OS_WIN)
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
+// gn check complains on Linux Ozone.
 #include "ash/public/cpp/shelf_model.h"  // nogncheck
-#include "ash/shell.h"                   // nogncheck
+#include "ash/shell.h"
 #endif
 
 namespace {
@@ -593,16 +594,19 @@ void BookmarkAppHelper::Create(const CreateBookmarkAppCallback& callback) {
 
 void BookmarkAppHelper::CreateFromAppBanner(
     const CreateBookmarkAppCallback& callback,
+    const GURL& manifest_url,
     const content::Manifest& manifest) {
   DCHECK(!manifest.short_name.is_null() || !manifest.name.is_null());
   DCHECK(manifest.start_url.is_valid());
 
   callback_ = callback;
-  OnDidGetManifest(GURL(), manifest);
+  OnDidGetManifest(manifest_url, manifest);
 }
 
 void BookmarkAppHelper::OnDidGetManifest(const GURL& manifest_url,
                                          const content::Manifest& manifest) {
+  DCHECK(manifest_url.is_valid() || manifest.IsEmpty());
+
   if (contents_->IsBeingDestroyed())
     return;
 
@@ -632,6 +636,11 @@ void BookmarkAppHelper::OnDidGetManifest(const GURL& manifest_url,
       new FaviconDownloader(contents_, web_app_info_icon_urls,
                             base::Bind(&BookmarkAppHelper::OnIconsDownloaded,
                                        weak_factory_.GetWeakPtr())));
+
+  // If the manifest specified icons, don't use the page icons.
+  if (!manifest.icons.empty())
+    favicon_downloader_->SkipPageFavicons();
+
   favicon_downloader_->Start();
 }
 
@@ -742,15 +751,15 @@ void BookmarkAppHelper::FinishInstallation(const Extension* extension) {
     return;
   }
 
-#if !defined(USE_ASH)
+#if !defined(OS_CHROMEOS)
   // Pin the app to the relevant launcher depending on the OS.
   Profile* current_profile = profile_->GetOriginalProfile();
-#endif  // !defined(USE_ASH)
+#endif  // !defined(OS_CHROMEOS)
 
 // On Mac, shortcuts are automatically created for hosted apps when they are
 // installed, so there is no need to create them again.
 #if !defined(OS_MACOSX)
-#if !defined(USE_ASH)
+#if !defined(OS_CHROMEOS)
   web_app::ShortcutLocations creation_locations;
 #if defined(OS_LINUX) || defined(OS_WIN)
   creation_locations.on_desktop = true;
@@ -764,7 +773,7 @@ void BookmarkAppHelper::FinishInstallation(const Extension* extension) {
                            creation_locations, current_profile, extension);
 #else
   ash::Shell::Get()->shelf_model()->PinAppWithID(extension->id());
-#endif  // !defined(USE_ASH)
+#endif  // !defined(OS_CHROMEOS)
 #endif  // !defined(OS_MACOSX)
 
 #if defined(OS_MACOSX)

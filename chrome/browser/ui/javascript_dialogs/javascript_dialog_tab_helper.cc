@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
@@ -35,24 +37,6 @@ bool IsWebContentsForemost(content::WebContents* web_contents) {
 
 }  // namespace
 
-// A note on the interaction between the JavaScriptDialogTabHelper and the
-// JavaScriptDialog classes.
-//
-// Either side can start the process of closing a dialog, and we need to ensure
-// that everything is properly torn down no matter which side initiates.
-//
-// If closing is initiated by the JavaScriptDialogTabHelper, then it will call
-// CloseDialog(), which calls JavaScriptDialog::CloseDialogWithoutCallback().
-// That will clear the callback inside of JavaScriptDialog, and start the
-// JavaScriptDialog on its own path of destruction. CloseDialog() then calls
-// ClearDialogInfo() which removes observers.
-//
-// If closing is initiated by the JavaScriptDialog, which is a self-deleting
-// object, then it will make its callback. The callback will have been wrapped
-// within JavaScriptDialogTabHelper::RunJavaScriptDialog() to be a call to
-// JavaScriptDialogTabHelper::OnDialogClosed(), which, after doing the callback,
-// again calls ClearDialogInfo() to remove observers.
-
 enum class JavaScriptDialogTabHelper::DismissalCause {
   // This is used for a UMA histogram. Please never alter existing values, only
   // append new ones.
@@ -74,7 +58,7 @@ JavaScriptDialogTabHelper::JavaScriptDialogTabHelper(
 
 JavaScriptDialogTabHelper::~JavaScriptDialogTabHelper() {
   if (dialog_) {
-    CloseDialog(false, base::string16(), DismissalCause::TAB_HELPER_DESTROYED);
+    CloseDialog(DismissalCause::TAB_HELPER_DESTROYED, false, base::string16());
   }
 }
 
@@ -93,7 +77,7 @@ void JavaScriptDialogTabHelper::RunJavaScriptDialog(
     content::JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
-    const DialogClosedCallback& callback,
+    DialogClosedCallback callback,
     bool* did_suppress_message) {
   SiteEngagementService* site_engagement_service = SiteEngagementService::Get(
       Profile::FromBrowserContext(alerting_web_contents->GetBrowserContext()));
@@ -147,8 +131,8 @@ void JavaScriptDialogTabHelper::RunJavaScriptDialog(
 
   if (dialog_) {
     // There's already a dialog up; clear it out.
-    CloseDialog(false, base::string16(),
-                DismissalCause::SUBSEQUENT_DIALOG_SHOWN);
+    CloseDialog(DismissalCause::SUBSEQUENT_DIALOG_SHOWN, false,
+                base::string16());
   }
 
   // Enforce sane sizes. ElideRectangleString breaks horizontally, which isn't
@@ -168,13 +152,14 @@ void JavaScriptDialogTabHelper::RunJavaScriptDialog(
 
   base::string16 title = AppModalDialogManager()->GetTitle(
       alerting_web_contents, alerting_frame_url);
-  dialog_callback_ = callback;
+  dialog_callback_ = std::move(callback);
   dialog_type_ = dialog_type;
   dialog_ = JavaScriptDialog::Create(
       parent_web_contents, alerting_web_contents, title, dialog_type,
       truncated_message_text, truncated_default_prompt_text,
-      base::Bind(&JavaScriptDialogTabHelper::OnDialogClosed,
-                 base::Unretained(this), callback));
+      base::Bind(&JavaScriptDialogTabHelper::CloseDialog,
+                 base::Unretained(this),
+                 DismissalCause::DIALOG_BUTTON_CLICKED));
 
   BrowserList::AddObserver(this);
 
@@ -210,7 +195,7 @@ void SaveUnloadUmaStats(
                              engagement_score);
   }
 
-  callback.Run(success, user_input);
+  std::move(callback).Run(success, user_input);
 }
 
 }  // namespace
@@ -218,7 +203,7 @@ void SaveUnloadUmaStats(
 void JavaScriptDialogTabHelper::RunBeforeUnloadDialog(
     content::WebContents* web_contents,
     bool is_reload,
-    const DialogClosedCallback& callback) {
+    DialogClosedCallback callback) {
   // onbeforeunload dialogs are always handled with an app-modal dialog, because
   // - they are critical to the user not losing data
   // - they can be requested for tabs that are not foremost
@@ -232,7 +217,8 @@ void JavaScriptDialogTabHelper::RunBeforeUnloadDialog(
 
   return AppModalDialogManager()->RunBeforeUnloadDialog(
       web_contents, is_reload,
-      base::Bind(&SaveUnloadUmaStats, engagement_score, callback));
+      base::BindOnce(&SaveUnloadUmaStats, engagement_score,
+                     std::move(callback)));
 }
 
 bool JavaScriptDialogTabHelper::HandleJavaScriptDialog(
@@ -240,9 +226,8 @@ bool JavaScriptDialogTabHelper::HandleJavaScriptDialog(
     bool accept,
     const base::string16* prompt_override) {
   if (dialog_) {
-    CloseDialog(accept,
-                prompt_override ? *prompt_override : dialog_->GetUserInput(),
-                DismissalCause::HANDLE_DIALOG_CALLED);
+    CloseDialog(DismissalCause::HANDLE_DIALOG_CALLED, accept,
+                prompt_override ? *prompt_override : dialog_->GetUserInput());
     return true;
   }
 
@@ -255,7 +240,7 @@ void JavaScriptDialogTabHelper::CancelDialogs(
     content::WebContents* web_contents,
     bool reset_state) {
   if (dialog_) {
-    CloseDialog(false, base::string16(), DismissalCause::CANCEL_DIALOGS_CALLED);
+    CloseDialog(DismissalCause::CANCEL_DIALOGS_CALLED, false, base::string16());
   }
 
   // Cancel any app-modal dialogs being run by the app-modal dialog system.
@@ -264,7 +249,7 @@ void JavaScriptDialogTabHelper::CancelDialogs(
 
 void JavaScriptDialogTabHelper::WasHidden() {
   if (dialog_)
-    CloseDialog(false, base::string16(), DismissalCause::TAB_HIDDEN);
+    CloseDialog(DismissalCause::TAB_HIDDEN, false, base::string16());
 }
 
 // This function handles the case where browser-side navigation (PlzNavigate) is
@@ -276,7 +261,7 @@ void JavaScriptDialogTabHelper::DidStartNavigation(
   // Close the dialog if the user started a new navigation. This allows reloads
   // and history navigations to proceed.
   if (dialog_)
-    CloseDialog(false, base::string16(), DismissalCause::TAB_NAVIGATED);
+    CloseDialog(DismissalCause::TAB_NAVIGATED, false, base::string16());
 }
 
 // This function handles the case where browser-side navigation (PlzNavigate) is
@@ -289,12 +274,12 @@ void JavaScriptDialogTabHelper::DidStartNavigationToPendingEntry(
   // Close the dialog if the user started a new navigation. This allows reloads
   // and history navigations to proceed.
   if (dialog_)
-    CloseDialog(false, base::string16(), DismissalCause::TAB_NAVIGATED);
+    CloseDialog(DismissalCause::TAB_NAVIGATED, false, base::string16());
 }
 
 void JavaScriptDialogTabHelper::OnBrowserSetLastActive(Browser* browser) {
   if (dialog_ && !IsWebContentsForemost(web_contents())) {
-    CloseDialog(false, base::string16(), DismissalCause::BROWSER_SWITCHED);
+    CloseDialog(DismissalCause::BROWSER_SWITCHED, false, base::string16());
   }
 }
 
@@ -319,30 +304,24 @@ void JavaScriptDialogTabHelper::LogDialogDismissalCause(
   }
 }
 
-void JavaScriptDialogTabHelper::OnDialogClosed(
-    DialogClosedCallback callback,
-    bool success,
-    const base::string16& user_input) {
-  LogDialogDismissalCause(DismissalCause::DIALOG_BUTTON_CLICKED);
-  callback.Run(success, user_input);
-
-  ClearDialogInfo();
-}
-
-void JavaScriptDialogTabHelper::CloseDialog(bool success,
-                                            const base::string16& user_input,
-                                            DismissalCause cause) {
+void JavaScriptDialogTabHelper::CloseDialog(DismissalCause cause,
+                                            bool success,
+                                            const base::string16& user_input) {
   DCHECK(dialog_);
   LogDialogDismissalCause(cause);
 
-  dialog_->CloseDialogWithoutCallback();
-  dialog_callback_.Run(success, user_input);
+  // CloseDialog() can be called two ways. It can be called from within
+  // JavaScriptDialogTabHelper, in which case the dialog needs to be closed.
+  // However, it can also be called, bound, from the JavaScriptDialog. In that
+  // case, the dialog is already closing, so the JavaScriptDialog doesn't need
+  // to be told to close.
+  //
+  // Using the |cause| to distinguish a call from JavaScriptDialog vs from
+  // within JavaScriptDialogTabHelper is a bit hacky, but is the simplest way.
+  if (cause != DismissalCause::DIALOG_BUTTON_CLICKED)
+    dialog_->CloseDialogWithoutCallback();
+  std::move(dialog_callback_).Run(success, user_input);
 
-  ClearDialogInfo();
-}
-
-void JavaScriptDialogTabHelper::ClearDialogInfo() {
   dialog_.reset();
-  dialog_callback_.Reset();
   BrowserList::RemoveObserver(this);
 }

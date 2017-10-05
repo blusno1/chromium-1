@@ -18,6 +18,7 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/base/trace_constants.h"
+#include "net/base/url_util.h"
 #include "net/http/http_proxy_client_socket.h"
 #include "net/http/http_proxy_client_socket_pool.h"
 #include "net/log/net_log_source_type.h"
@@ -127,9 +128,11 @@ SSLConnectJob::SSLConnectJob(const std::string& group_name,
                context.transport_security_state,
                context.cert_transparency_verifier,
                context.ct_policy_enforcer,
-               (params->privacy_mode() == PRIVACY_MODE_ENABLED
-                    ? "pm/" + context.ssl_session_cache_shard
-                    : context.ssl_session_cache_shard)),
+               (context.ssl_session_cache_shard.empty()
+                    ? context.ssl_session_cache_shard
+                    : (params->privacy_mode() == PRIVACY_MODE_ENABLED
+                           ? "pm/" + context.ssl_session_cache_shard
+                           : context.ssl_session_cache_shard))),
       callback_(
           base::Bind(&SSLConnectJob::OnIOComplete, base::Unretained(this))),
       version_interference_probe_(false),
@@ -385,11 +388,7 @@ int SSLConnectJob::DoSSLConnectComplete(int result) {
       host == "google.com" ||
       (host.size() > 11 && host.rfind(".google.com") == host.size() - 11);
 
-  // These are hosts that we intend to use in the initial TLS 1.3 deployment.
-  // TLS connections to them, whether or not this browser is in the experiment
-  // group, form the basis of our comparisons.
-  bool tls13_supported = (host == "inbox.google.com" ||
-                          host == "mail.google.com" || host == "gmail.com");
+  bool tls13_supported = IsTLS13ExperimentHost(host);
 
   if (result == OK ||
       ssl_socket_->IgnoreCertError(result, params_->load_flags())) {
@@ -650,14 +649,17 @@ int SSLClientSocketPool::RequestSocket(const std::string& group_name,
                              respect_limits, handle, callback, net_log);
 }
 
-void SSLClientSocketPool::RequestSockets(const std::string& group_name,
-                                         const void* params,
-                                         int num_sockets,
-                                         const NetLogWithSource& net_log) {
+void SSLClientSocketPool::RequestSockets(
+    const std::string& group_name,
+    const void* params,
+    int num_sockets,
+    const NetLogWithSource& net_log,
+    HttpRequestInfo::RequestMotivation motivation) {
   const scoped_refptr<SSLSocketParams>* casted_params =
       static_cast<const scoped_refptr<SSLSocketParams>*>(params);
 
-  base_.RequestSockets(group_name, *casted_params, num_sockets, net_log);
+  base_.RequestSockets(group_name, *casted_params, num_sockets, net_log,
+                       motivation);
 }
 
 void SSLClientSocketPool::SetPriority(const std::string& group_name,

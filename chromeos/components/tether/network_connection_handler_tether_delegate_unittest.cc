@@ -199,6 +199,8 @@ TEST_F(NetworkConnectionHandlerTetherDelegateTest, TestDisconnect) {
 
 TEST_F(NetworkConnectionHandlerTetherDelegateTest,
        TestPendingCallbacksInvokedWhenDeleted) {
+  delegate_.reset();
+
   // Use "dummy" connector/disconnector.
   std::unique_ptr<DummyTetherConnector> dummy_connector =
       base::WrapUnique(new DummyTetherConnector());

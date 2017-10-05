@@ -390,11 +390,10 @@ bool StyleInvalidator::Invalidate(Element& element,
   bool this_element_needs_style_recalc = CheckInvalidationSetsAgainstElement(
       element, recursion_data, sibling_data);
 
-  bool some_children_need_style_recalc = false;
   if (recursion_data.HasInvalidationSets() ||
-      element.ChildNeedsStyleInvalidation())
-    some_children_need_style_recalc =
-        InvalidateChildren(element, recursion_data);
+      element.ChildNeedsStyleInvalidation()) {
+    InvalidateChildren(element, recursion_data);
+  }
 
   if (this_element_needs_style_recalc) {
     DCHECK(!recursion_data.WholeSubtreeInvalid());
@@ -407,8 +406,8 @@ bool StyleInvalidator::Invalidate(Element& element,
     element.SetNeedsStyleRecalc(kSubtreeStyleChange,
                                 StyleChangeReasonForTracing::Create(
                                     StyleChangeReason::kStyleInvalidator));
-  if (recursion_data.InvalidatesSlotted() && isHTMLSlotElement(element))
-    InvalidateSlotDistributedElements(toHTMLSlotElement(element),
+  if (recursion_data.InvalidatesSlotted() && IsHTMLSlotElement(element))
+    InvalidateSlotDistributedElements(ToHTMLSlotElement(element),
                                       recursion_data);
 
   element.ClearChildNeedsStyleInvalidation();

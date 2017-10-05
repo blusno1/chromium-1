@@ -23,8 +23,10 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "crypto/sha2.h"
+#include "net/base/hash_value.h"
 #include "net/base/host_port_pair.h"
 #include "net/cert/ct_policy_status.h"
+#include "net/cert/symantec_certs.h"
 #include "net/cert/x509_cert_types.h"
 #include "net/cert/x509_certificate.h"
 #include "net/dns/dns_util.h"
@@ -66,21 +68,6 @@ bool IsDynamicExpectCTEnabled() {
   return base::FeatureList::IsEnabled(
       TransportSecurityState::kDynamicExpectCTFeature);
 }
-
-// LessThan comparator for use with std::binary_search() in determining
-// whether a SHA-256 HashValue appears within a sorted array of
-// SHA256HashValues.
-struct SHA256ToHashValueComparator {
-  bool operator()(const SHA256HashValue& lhs, const HashValue& rhs) const {
-    DCHECK_EQ(HASH_VALUE_SHA256, rhs.tag);
-    return memcmp(lhs.data, rhs.data(), rhs.size()) < 0;
-  }
-
-  bool operator()(const HashValue& lhs, const SHA256HashValue& rhs) const {
-    DCHECK_EQ(HASH_VALUE_SHA256, lhs.tag);
-    return memcmp(lhs.data(), rhs.data, lhs.size()) < 0;
-  }
-};
 
 void RecordUMAForHPKPReportFailure(const GURL& report_uri,
                                    int net_error,
@@ -407,19 +394,19 @@ class HuffmanDecoder {
 // PreloadResult is the result of resolving a specific name in the preloaded
 // data.
 struct PreloadResult {
-  uint32_t pinset_id;
+  uint32_t pinset_id = 0;
   // hostname_offset contains the number of bytes from the start of the given
   // hostname where the name of the matching entry starts.
-  size_t hostname_offset;
-  bool sts_include_subdomains;
-  bool pkp_include_subdomains;
-  bool force_https;
-  bool has_pins;
-  bool expect_ct;
-  uint32_t expect_ct_report_uri_id;
-  bool expect_staple;
-  bool expect_staple_include_subdomains;
-  uint32_t expect_staple_report_uri_id;
+  size_t hostname_offset = 0;
+  bool sts_include_subdomains = false;
+  bool pkp_include_subdomains = false;
+  bool force_https = false;
+  bool has_pins = false;
+  bool expect_ct = false;
+  uint32_t expect_ct_report_uri_id = 0;
+  bool expect_staple = false;
+  bool expect_staple_include_subdomains = false;
+  uint32_t expect_staple_report_uri_id = 0;
 };
 
 // DecodeHSTSPreloadRaw resolves |hostname| in the preloaded data. It returns
@@ -533,37 +520,51 @@ bool DecodeHSTSPreloadRaw(const std::string& search_hostname,
 
       if (c == kEndOfString) {
         PreloadResult tmp;
-        if (!reader.Next(&tmp.sts_include_subdomains) ||
-            !reader.Next(&tmp.force_https) || !reader.Next(&tmp.has_pins)) {
+        bool is_simple_entry;
+        if (!reader.Next(&is_simple_entry)) {
           return false;
         }
 
-        tmp.pkp_include_subdomains = tmp.sts_include_subdomains;
-
-        if (tmp.has_pins) {
-          if (!reader.Read(4, &tmp.pinset_id) ||
-              (!tmp.sts_include_subdomains &&
-               !reader.Next(&tmp.pkp_include_subdomains))) {
+        // Simple entries only configure HSTS with IncludeSubdomains and use a
+        // compact serialization format where the other policy flags are
+        // omitted. The omitted flags are assumed to be 0 and the associated
+        // policies are disabled.
+        if (is_simple_entry) {
+          tmp.force_https = true;
+          tmp.sts_include_subdomains = true;
+        } else {
+          if (!reader.Next(&tmp.sts_include_subdomains) ||
+              !reader.Next(&tmp.force_https) || !reader.Next(&tmp.has_pins)) {
             return false;
           }
-        }
 
-        if (!reader.Next(&tmp.expect_ct))
-          return false;
+          tmp.pkp_include_subdomains = tmp.sts_include_subdomains;
 
-        if (tmp.expect_ct) {
-          if (!reader.Read(4, &tmp.expect_ct_report_uri_id))
-            return false;
-        }
+          if (tmp.has_pins) {
+            if (!reader.Read(4, &tmp.pinset_id) ||
+                (!tmp.sts_include_subdomains &&
+                 !reader.Next(&tmp.pkp_include_subdomains))) {
+              return false;
+            }
+          }
 
-        if (!reader.Next(&tmp.expect_staple))
-          return false;
-        tmp.expect_staple_include_subdomains = false;
-        if (tmp.expect_staple) {
-          if (!reader.Next(&tmp.expect_staple_include_subdomains))
+          if (!reader.Next(&tmp.expect_ct))
             return false;
-          if (!reader.Read(4, &tmp.expect_staple_report_uri_id))
+
+          if (tmp.expect_ct) {
+            if (!reader.Read(4, &tmp.expect_ct_report_uri_id))
+              return false;
+          }
+
+          if (!reader.Next(&tmp.expect_staple))
             return false;
+          tmp.expect_staple_include_subdomains = false;
+          if (tmp.expect_staple) {
+            if (!reader.Next(&tmp.expect_staple_include_subdomains))
+              return false;
+            if (!reader.Read(4, &tmp.expect_staple_report_uri_id))
+              return false;
+          }
         }
 
         tmp.hostname_offset = hostname_offset;
@@ -943,7 +944,8 @@ TransportSecurityState::CheckCTRequirements(
 #endif
 
   const base::Time epoch = base::Time::UnixEpoch();
-  for (const auto& restricted_ca : kCTRequiredPolicies) {
+  const CTRequiredPolicies& ct_required_policies = GetCTRequiredPolicies();
+  for (const auto& restricted_ca : ct_required_policies) {
     if (epoch + restricted_ca.effective_date >
         validated_certificate_chain->valid_start()) {
       // The candidate cert is not subject to the CT policy, because it
@@ -951,35 +953,23 @@ TransportSecurityState::CheckCTRequirements(
       continue;
     }
 
-    for (const auto& hash : public_key_hashes) {
-      if (hash.tag != HASH_VALUE_SHA256)
-        continue;
-
-      // Determine if |hash| is in the set of roots of |restricted_ca|.
-      if (!std::binary_search(restricted_ca.roots,
-                              restricted_ca.roots + restricted_ca.roots_length,
-                              hash, SHA256ToHashValueComparator())) {
-        continue;
-      }
-
-      // Found a match, indicating this certificate is potentially
-      // restricted. Determine if any of the hashes are on the exclusion
-      // list as exempt from the CT requirement.
-      for (const auto& sub_ca_hash : public_key_hashes) {
-        if (sub_ca_hash.tag != HASH_VALUE_SHA256)
-          continue;
-        if (std::binary_search(
-                restricted_ca.exceptions,
-                restricted_ca.exceptions + restricted_ca.exceptions_length,
-                sub_ca_hash, SHA256ToHashValueComparator())) {
-          // Found an excluded sub-CA; CT is not required.
-          return default_response;
-        }
-      }
-
-      // No exception found. This certificate must conform to the CT policy.
-      return CT_REQUIREMENTS_NOT_MET;
+    if (!IsAnySHA256HashInSortedArray(public_key_hashes, restricted_ca.roots,
+                                      restricted_ca.roots_length)) {
+      // No match for this set of restricted roots.
+      continue;
     }
+
+    // Found a match, indicating this certificate is potentially
+    // restricted. Determine if any of the hashes are on the exclusion
+    // list as exempt from the CT requirement.
+    if (IsAnySHA256HashInSortedArray(public_key_hashes,
+                                     restricted_ca.exceptions,
+                                     restricted_ca.exceptions_length)) {
+      // Found an excluded sub-CA; CT is not required.
+      return default_response;
+    }
+    // No exception found. This certificate must conform to the CT policy.
+    return CT_REQUIREMENTS_NOT_MET;
   }
 
   return default_response;
@@ -1505,7 +1495,9 @@ void TransportSecurityState::ProcessExpectCTHeader(
   base::TimeDelta max_age;
   bool enforce;
   GURL report_uri;
-  if (!ParseExpectCTHeader(value, &max_age, &enforce, &report_uri))
+  bool parsed = ParseExpectCTHeader(value, &max_age, &enforce, &report_uri);
+  UMA_HISTOGRAM_BOOLEAN("Net.ExpectCTHeader.ParseSuccess", parsed);
+  if (!parsed)
     return;
   // Do not persist Expect-CT headers if the connection was not chained to a
   // public root or did not comply with CT policy.

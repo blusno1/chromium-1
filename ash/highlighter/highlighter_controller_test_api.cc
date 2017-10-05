@@ -18,6 +18,13 @@ HighlighterControllerTestApi::HighlighterControllerTestApi(
 
 HighlighterControllerTestApi::~HighlighterControllerTestApi() {
   instance_->SetObserver(nullptr);
+  if (enabled_)
+    instance_->SetEnabled(false);
+  instance_->DestroyPointerView();
+}
+
+void HighlighterControllerTestApi::CallMetalayerDone() {
+  instance_->CallExitCallback();
 }
 
 void HighlighterControllerTestApi::SetEnabled(bool enabled) {
@@ -29,6 +36,8 @@ void HighlighterControllerTestApi::DestroyPointerView() {
 }
 
 void HighlighterControllerTestApi::SimulateInterruptedStrokeTimeout() {
+  if (!instance_->interrupted_stroke_timer_)
+    return;
   instance_->interrupted_stroke_timer_->Stop();
   instance_->RecognizeGesture();
 }
@@ -61,6 +70,15 @@ const FastInkPoints& HighlighterControllerTestApi::predicted_points() const {
 void HighlighterControllerTestApi::HandleSelection(const gfx::Rect& rect) {
   handle_selection_called_ = true;
   selection_ = rect;
+}
+
+void HighlighterControllerTestApi::HandleFailedSelection() {
+  handle_failed_selection_called_ = true;
+}
+
+void HighlighterControllerTestApi::HandleEnabledStateChange(bool enabled) {
+  handle_enabled_state_changed_called_ = true;
+  enabled_ = enabled;
 }
 
 }  // namespace ash

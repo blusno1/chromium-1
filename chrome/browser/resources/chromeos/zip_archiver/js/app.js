@@ -55,6 +55,12 @@ unpacker.app = {
   compressors: {},
 
   /**
+   * A promise used to postpone all calls to access string assets.
+   * @type {?Promise<!Object>}
+   */
+  stringDataLoadedPromise: null,
+
+  /**
    * A map with promises of loading a volume's metadata from NaCl.
    * Any call from fileSystemProvider API should work only on valid metadata.
    * These promises ensure that the fileSystemProvider API calls wait for the
@@ -149,11 +155,17 @@ unpacker.app = {
   },
 
   /**
-   * Saves state in case of restarts, event page suspend, crashes, etc.
+   * Saves state in case of restarts, event page suspend, crashes, etc. This
+   * method does nothing when context is in incognito mode.
    * @param {!Array<!unpacker.types.FileSystemId>} fileSystemIdsArray
    * @private
    */
   saveState_: function(fileSystemIdsArray) {
+    // If current context is in incognito mode, then skip save state because
+    // retainEntry is not available in incognito mode.
+    if (chrome.extension.inIncognitoContext)
+      return;
+
     chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
       if (!result[unpacker.app.STORAGE_KEY])  // First save state call.
         result[unpacker.app.STORAGE_KEY] = {};
@@ -176,10 +188,14 @@ unpacker.app = {
   },
 
   /**
-   * Removes state from local storage for a single volume.
+   * Removes state from local storage for a single volume. This method does
+   * nothing when context is in incognito mode.
    * @param {!unpacker.types.FileSystemId} fileSystemId
    */
   removeState_: function(fileSystemId) {
+    if (chrome.extension.inIncognitoContext)
+      return;
+
     chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
       console.assert(
           result[unpacker.app.STORAGE_KEY] &&
@@ -235,7 +251,7 @@ unpacker.app = {
    * @param {!Object<!unpacker.types.RequestId,
    *                 !unpacker.types.OpenFileRequestedOptions>}
    *     openedFiles Previously opened files before a suspend.
-   * @param {string} passphrase Previously used passphrase before a suspend.
+   * @param {?string} passphrase Previously used passphrase before a suspend.
    * @return {!Promise} Promise fulfilled on success and rejected on failure.
    * @private
    */
@@ -393,6 +409,17 @@ unpacker.app = {
   },
 
   /**
+   * Loads string assets.
+   */
+  loadStringData: function() {
+    unpacker.app.stringDataLoadedPromise = new Promise(function(fulfill) {
+      chrome.fileManagerPrivate.getStrings(function(strings) {
+        fulfill(strings);
+      });
+    });
+  },
+
+  /**
    * Loads the NaCl module.
    * @param {string} pathToConfigureFile Path to the module's configuration
    *     file, which should be a .nmf file.
@@ -499,6 +526,16 @@ unpacker.app = {
       compressor.archiveFileEntry.remove();
 
     delete unpacker.app.compressors[compressorId];
+  },
+
+  /**
+   * Updates the state in case of restarts, event page suspend, crashes, etc.
+   * Use this method to update or save the state out side of the object in case
+   * when password changes, etc.
+   * @param {!Array<!unpacker.types.FileSystemId>} fileSystemIdsArray
+   */
+  updateState: function(fileSystemIdsArray) {
+    unpacker.app.saveState_(fileSystemIdsArray);
   },
 
   /**
@@ -729,6 +766,9 @@ unpacker.app = {
 
     unpacker.app.moduleLoadedPromise
         .then(function() {
+          return unpacker.app.stringDataLoadedPromise;
+        })
+        .then(function(stringData) {
           unpacker.app.mountProcessCounter--;
           launchData.items.forEach(function(item) {
             unpacker.app.mountProcessCounter++;
@@ -742,7 +782,7 @@ unpacker.app = {
                           type: 'basic',
                           iconUrl: chrome.runtime.getManifest().icons[128],
                           title: entry.name,
-                          message: chrome.i18n.getMessage('mountingMessage'),
+                          message: stringData['ZIP_ARCHIVER_MOUNTING_MESSAGE'],
                         },
                         function() {});
                   }, unpacker.app.MOUNTING_NOTIFICATION_DELAY);
@@ -763,7 +803,8 @@ unpacker.app = {
                           type: 'basic',
                           iconUrl: chrome.runtime.getManifest().icons[128],
                           title: entry.name,
-                          message: chrome.i18n.getMessage('otherErrorMessage')
+                          message:
+                              stringData['ZIP_ARCHIVER_OTHER_ERROR_MESSAGE'],
                         },
                         function() {});
                     if (opt_onError)
@@ -786,7 +827,7 @@ unpacker.app = {
                   };
 
                   var loadPromise = unpacker.app.loadVolume_(
-                      fileSystemId, entry, {}, '' /* passphrase */);
+                      fileSystemId, entry, {}, null /* passphrase */);
                   loadPromise
                       .then(function() {
                         // Mount the volume and save its information in local

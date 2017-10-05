@@ -22,14 +22,14 @@
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/layer_test_common.h"
+#include "cc/test/mock_layer_client.h"
 #include "cc/test/stub_layer_tree_host_single_thread_client.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host.h"
-#include "cc/trees/mutable_properties.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/transform_node.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -923,8 +923,6 @@ TEST_F(LayerTest, CheckPropertyChangeCausesCorrectBehavior) {
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetForceRenderSurfaceForTesting(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetHideLayerAndSubtree(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetElementId(ElementId(2)));
-  EXPECT_SET_NEEDS_COMMIT(
-      1, test_layer->SetMutableProperties(MutableProperty::kTransform));
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1, test_layer->SetMaskLayer(
       dummy_layer1.get()));
@@ -1266,7 +1264,7 @@ TEST_F(LayerTest, SafeOpaqueBackgroundColor) {
 class DrawsContentChangeLayer : public Layer {
  public:
   static scoped_refptr<DrawsContentChangeLayer> Create() {
-    return make_scoped_refptr(new DrawsContentChangeLayer());
+    return base::WrapRefCounted(new DrawsContentChangeLayer());
   }
 
   void SetLayerTreeHost(LayerTreeHost* host) override {
@@ -1417,7 +1415,7 @@ TEST_F(LayerTest, AnimationSchedulesLayerUpdate) {
   Mock::VerifyAndClearExpectations(layer_tree_host_.get());
 }
 
-TEST_F(LayerTest, ElementIdAndMutablePropertiesArePushed) {
+TEST_F(LayerTest, ElementIdIsPushed) {
   scoped_refptr<Layer> test_layer = Layer::Create();
   std::unique_ptr<LayerImpl> impl_layer =
       LayerImpl::Create(host_impl_.active_tree(), 1);
@@ -1425,18 +1423,15 @@ TEST_F(LayerTest, ElementIdAndMutablePropertiesArePushed) {
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,
                                   layer_tree_host_->SetRootLayer(test_layer));
 
-  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(2);
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
 
   test_layer->SetElementId(ElementId(2));
-  test_layer->SetMutableProperties(MutableProperty::kTransform);
 
   EXPECT_FALSE(impl_layer->element_id());
-  EXPECT_EQ(MutableProperty::kNone, impl_layer->mutable_properties());
 
   test_layer->PushPropertiesTo(impl_layer.get());
 
   EXPECT_EQ(ElementId(2), impl_layer->element_id());
-  EXPECT_EQ(MutableProperty::kTransform, impl_layer->mutable_properties());
 }
 
 TEST_F(LayerTest, SetLayerTreeHostNotUsingLayerListsManagesElementId) {
@@ -1484,6 +1479,26 @@ TEST_F(LayerTest, SetElementIdNotUsingLayerLists) {
   EXPECT_EQ(test_layer, layer_tree_host_->LayerByElementId(other_element_id));
 
   test_layer->SetLayerTreeHost(nullptr);
+}
+
+// Verify that LayerClient::DidChangeLayerOpacity() is called when
+// Layer::SetOpacity() is called and the opacity changes.
+TEST_F(LayerTest, SetOpacityNotifiesClient) {
+  testing::StrictMock<MockLayerClient> client;
+  scoped_refptr<Layer> layer = Layer::Create();
+  layer->SetLayerClient(&client);
+  EXPECT_CALL(client, DidChangeLayerOpacity(1.0f, 0.5f));
+  layer->SetOpacity(0.5f);
+}
+
+// Verify that LayerClient::DidChangeLayerOpacity() is not called when
+// Layer::SetOpacity() is called but the opacity does not change.
+TEST_F(LayerTest, SetOpacityNoChangeDoesNotNotifyClient) {
+  testing::StrictMock<MockLayerClient> client;
+  scoped_refptr<Layer> layer = Layer::Create();
+  layer->SetLayerClient(&client);
+  // Since |client| is a StrictMock, the test will fail if it is notified.
+  layer->SetOpacity(1.0f);
 }
 
 class LayerTestWithLayerLists : public LayerTest {

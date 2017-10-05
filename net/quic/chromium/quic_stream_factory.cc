@@ -8,6 +8,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -178,6 +179,12 @@ void HistogramAndLogMigrationFailure(const NetLogWithSource& net_log,
 void HistogramMigrationStatus(enum QuicConnectionMigrationStatus status) {
   UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ConnectionMigration", status,
                             MIGRATION_STATUS_MAX);
+}
+
+void LogPlatformNotificationInHistogram(
+    enum QuicPlatformNotification notification) {
+  UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.PlatformNotification",
+                            notification, NETWORK_NOTIFICATION_MAX);
 }
 
 void SetInitialRttEstimate(base::TimeDelta estimate,
@@ -359,12 +366,13 @@ class QuicStreamFactory::Job {
   size_t EstimateMemoryUsage() const;
 
   void AddRequest(QuicStreamRequest* request) {
+    CHECK(request->server_id() == key_.server_id());
     stream_requests_.insert(request);
   }
 
   void RemoveRequest(QuicStreamRequest* request) {
     auto request_iter = stream_requests_.find(request);
-    DCHECK(request_iter != stream_requests_.end());
+    CHECK(request_iter != stream_requests_.end());
     stream_requests_.erase(request_iter);
   }
 
@@ -380,8 +388,9 @@ class QuicStreamFactory::Job {
     STATE_CONNECT,
     STATE_CONNECT_COMPLETE,
   };
-  IoState io_state_;
 
+  bool in_loop_;  // Temporary to investigate crbug.com/750271.
+  IoState io_state_;
   QuicStreamFactory* factory_;
   QuicVersion quic_version_;
   HostResolver* host_resolver_;
@@ -409,7 +418,8 @@ QuicStreamFactory::Job::Job(QuicStreamFactory* factory,
                             bool was_alternative_service_recently_broken,
                             int cert_verify_flags,
                             const NetLogWithSource& net_log)
-    : io_state_(STATE_RESOLVE_HOST),
+    : in_loop_(false),
+      io_state_(STATE_RESOLVE_HOST),
       factory_(factory),
       quic_version_(quic_version),
       host_resolver_(host_resolver),
@@ -437,7 +447,9 @@ QuicStreamFactory::Job::Job(QuicStreamFactory* factory,
 
 QuicStreamFactory::Job::~Job() {
   net_log_.EndEvent(NetLogEventType::QUIC_STREAM_FACTORY_JOB);
-  DCHECK(callback_.is_null());
+  CHECK(!in_loop_);
+  // If |this| is destroyed in QuicStreamFactory's destructor, |callback_| is
+  // non-null.
 }
 
 int QuicStreamFactory::Job::Run(const CompletionCallback& callback) {
@@ -450,6 +462,9 @@ int QuicStreamFactory::Job::Run(const CompletionCallback& callback) {
 
 int QuicStreamFactory::Job::DoLoop(int rv) {
   TRACE_EVENT0(kNetTracingCategory, "QuicStreamFactory::Job::DoLoop");
+  CHECK(!in_loop_);
+  base::AutoReset<bool> auto_reset_in_loop(&in_loop_, true);
+
   do {
     IoState state = io_state_;
     io_state_ = STATE_NONE;
@@ -478,8 +493,10 @@ int QuicStreamFactory::Job::DoLoop(int rv) {
 
 void QuicStreamFactory::Job::OnIOComplete(int rv) {
   rv = DoLoop(rv);
-  if (rv != ERR_IO_PENDING && !callback_.is_null())
+  if (rv != ERR_IO_PENDING && !callback_.is_null()) {
+    CHECK(!in_loop_);
     base::ResetAndReturn(&callback_).Run(rv);
+  }
 }
 
 void QuicStreamFactory::Job::PopulateNetErrorDetails(
@@ -682,14 +699,13 @@ QuicStreamFactory::QuicStreamFactory(
     size_t max_packet_length,
     const std::string& user_agent_id,
     bool store_server_configs_in_properties,
-    bool close_sessions_on_ip_change,
     bool mark_quic_broken_when_network_blackholes,
     int idle_connection_timeout_seconds,
     int reduced_ping_timeout_seconds,
+    bool connect_using_default_network,
     bool migrate_sessions_on_network_change,
     bool migrate_sessions_early,
     bool allow_server_migration,
-    bool force_hol_blocking,
     bool race_cert_verification,
     bool estimate_initial_rtt,
     const QuicTagVector& connection_options,
@@ -723,17 +739,18 @@ QuicStreamFactory::QuicStreamFactory(
       ping_timeout_(QuicTime::Delta::FromSeconds(kPingTimeoutSecs)),
       reduced_ping_timeout_(
           QuicTime::Delta::FromSeconds(reduced_ping_timeout_seconds)),
+      most_recent_path_degrading_timestamp_(base::TimeTicks()),
+      most_recent_network_disconnected_timestamp_(base::TimeTicks()),
       yield_after_packets_(kQuicYieldAfterPacketsRead),
       yield_after_duration_(QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds)),
-      close_sessions_on_ip_change_(close_sessions_on_ip_change),
-      migrate_sessions_on_network_change_(
-          migrate_sessions_on_network_change &&
+      connect_using_default_network_(
+          connect_using_default_network &&
           NetworkChangeNotifier::AreNetworkHandlesSupported()),
+      migrate_sessions_on_network_change_(migrate_sessions_on_network_change),
       migrate_sessions_early_(migrate_sessions_early &&
                               migrate_sessions_on_network_change_),
       allow_server_migration_(allow_server_migration),
-      force_hol_blocking_(force_hol_blocking),
       race_cert_verification_(race_cert_verification),
       estimate_initial_rtt(estimate_initial_rtt),
       need_to_check_persisted_supports_quic_(true),
@@ -769,15 +786,10 @@ QuicStreamFactory::QuicStreamFactory(
   // migrate_sessions_on_network_change is set to true.
   if (migrate_sessions_early)
     DCHECK(migrate_sessions_on_network_change);
-  // close_sessions_on_ip_change and migrate_sessions_on_network_change should
-  // never be simultaneously set to true.
-  DCHECK(!(close_sessions_on_ip_change && migrate_sessions_on_network_change));
 
-  if (migrate_sessions_on_network_change_) {
+  NetworkChangeNotifier::AddIPAddressObserver(this);
+  if (NetworkChangeNotifier::AreNetworkHandlesSupported())
     NetworkChangeNotifier::AddNetworkObserver(this);
-  } else if (close_sessions_on_ip_change_) {
-    NetworkChangeNotifier::AddIPAddressObserver(this);
-  }
 }
 
 QuicStreamFactory::~QuicStreamFactory() {
@@ -791,11 +803,9 @@ QuicStreamFactory::~QuicStreamFactory() {
     active_cert_verifier_jobs_.erase(active_cert_verifier_jobs_.begin());
   if (ssl_config_service_.get())
     ssl_config_service_->RemoveObserver(this);
-  if (migrate_sessions_on_network_change_) {
+  NetworkChangeNotifier::RemoveIPAddressObserver(this);
+  if (NetworkChangeNotifier::AreNetworkHandlesSupported())
     NetworkChangeNotifier::RemoveNetworkObserver(this);
-  } else if (close_sessions_on_ip_change_) {
-    NetworkChangeNotifier::RemoveIPAddressObserver(this);
-  }
 }
 
 void QuicStreamFactory::set_require_confirmation(bool require_confirmation) {
@@ -1122,6 +1132,7 @@ void QuicStreamFactory::OnBlackholeAfterHandshakeConfirmed(
 
 void QuicStreamFactory::CancelRequest(QuicStreamRequest* request) {
   auto job_iter = active_jobs_.find(request->server_id());
+  CHECK(job_iter != active_jobs_.end());
   job_iter->second->RemoveRequest(request);
 }
 
@@ -1169,11 +1180,18 @@ void QuicStreamFactory::ClearCachedStatesInCryptoConfig(
 }
 
 void QuicStreamFactory::OnIPAddressChanged() {
+  LogPlatformNotificationInHistogram(NETWORK_IP_ADDRESS_CHANGED);
+  // Do nothing if connection migration is in use.
+  if (migrate_sessions_on_network_change_)
+    return;
   CloseAllSessions(ERR_NETWORK_CHANGED, QUIC_IP_ADDRESS_CHANGED);
   set_require_confirmation(true);
 }
 
 void QuicStreamFactory::OnNetworkConnected(NetworkHandle network) {
+  LogPlatformNotificationInHistogram(NETWORK_CONNECTED);
+  if (!migrate_sessions_on_network_change_)
+    return;
   ScopedConnectionMigrationEventLog scoped_event_log(net_log_,
                                                      "OnNetworkConnected");
   QuicStreamFactory::SessionIdMap::iterator it = all_sessions_.begin();
@@ -1186,15 +1204,54 @@ void QuicStreamFactory::OnNetworkConnected(NetworkHandle network) {
 }
 
 void QuicStreamFactory::OnNetworkMadeDefault(NetworkHandle network) {
+  LogPlatformNotificationInHistogram(NETWORK_MADE_DEFAULT);
+  if (most_recent_path_degrading_timestamp_ != base::TimeTicks()) {
+    if (most_recent_network_disconnected_timestamp_ != base::TimeTicks()) {
+      // NetworkDiscconected happens before NetworkMadeDefault, the platform
+      // is dropping WiFi.
+      base::TimeTicks now = base::TimeTicks::Now();
+      base::TimeDelta disconnection_duration =
+          now - most_recent_network_disconnected_timestamp_;
+      base::TimeDelta degrading_duration =
+          now - most_recent_path_degrading_timestamp_;
+      UMA_HISTOGRAM_CUSTOM_TIMES("Net.QuicNetworkDisconnectionDuration",
+                                 disconnection_duration,
+                                 base::TimeDelta::FromMilliseconds(1),
+                                 base::TimeDelta::FromMinutes(10), 100);
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          "Net.QuicNetworkDegradingDurationTillNewNetworkMadeDefault",
+          degrading_duration, base::TimeDelta::FromMilliseconds(1),
+          base::TimeDelta::FromMinutes(10), 100);
+      most_recent_network_disconnected_timestamp_ = base::TimeTicks();
+    }
+    most_recent_path_degrading_timestamp_ = base::TimeTicks();
+  }
+
+  if (!migrate_sessions_on_network_change_)
+    return;
+  DCHECK_NE(NetworkChangeNotifier::kInvalidNetworkHandle, network);
   ScopedConnectionMigrationEventLog scoped_event_log(net_log_,
                                                      "OnNetworkMadeDefault");
-  DCHECK_NE(NetworkChangeNotifier::kInvalidNetworkHandle, network);
   MaybeMigrateOrCloseSessions(network, /*close_if_cannot_migrate=*/false,
                               scoped_event_log.net_log());
   set_require_confirmation(true);
 }
 
 void QuicStreamFactory::OnNetworkDisconnected(NetworkHandle network) {
+  LogPlatformNotificationInHistogram(NETWORK_DISCONNECTED);
+  if (most_recent_path_degrading_timestamp_ != base::TimeTicks()) {
+    most_recent_network_disconnected_timestamp_ = base::TimeTicks::Now();
+    base::TimeDelta degrading_duration =
+        most_recent_network_disconnected_timestamp_ -
+        most_recent_path_degrading_timestamp_;
+    UMA_HISTOGRAM_CUSTOM_TIMES(
+        "Net.QuicNetworkDegradingDurationTillDisconnected", degrading_duration,
+        base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromMinutes(10),
+        100);
+  }
+
+  if (!migrate_sessions_on_network_change_)
+    return;
   ScopedConnectionMigrationEventLog scoped_event_log(net_log_,
                                                      "OnNetworkDisconnected");
   NetworkHandle new_network = FindAlternateNetwork(network);
@@ -1204,7 +1261,9 @@ void QuicStreamFactory::OnNetworkDisconnected(NetworkHandle network) {
 
 // This method is expected to only be called when migrating from Cellular to
 // WiFi on Android, and should always be preceded by OnNetworkMadeDefault().
-void QuicStreamFactory::OnNetworkSoonToDisconnect(NetworkHandle network) {}
+void QuicStreamFactory::OnNetworkSoonToDisconnect(NetworkHandle network) {
+  LogPlatformNotificationInHistogram(NETWORK_SOON_TO_DISCONNECT);
+}
 
 NetworkHandle QuicStreamFactory::FindAlternateNetwork(
     NetworkHandle old_network) {
@@ -1288,6 +1347,10 @@ void QuicStreamFactory::MaybeMigrateOrCloseSessions(
 MigrationResult QuicStreamFactory::MaybeMigrateSingleSession(
     QuicChromiumClientSession* session,
     MigrationCause migration_cause) {
+  if (migration_cause == EARLY_MIGRATION &&
+      most_recent_path_degrading_timestamp_ == base::TimeTicks())
+    most_recent_path_degrading_timestamp_ = base::TimeTicks::Now();
+
   ScopedConnectionMigrationEventLog scoped_event_log(
       net_log_,
       migration_cause == EARLY_MIGRATION ? "EarlyMigration" : "WriteError");
@@ -1437,6 +1500,8 @@ int QuicStreamFactory::ConfigureSocket(DatagramClientSocket* socket,
     } else {
       rv = socket->ConnectUsingNetwork(network, addr);
     }
+  } else if (connect_using_default_network_) {
+    rv = socket->ConnectUsingDefaultNetwork(addr);
   } else {
     rv = socket->Connect(addr);
   }
@@ -1539,9 +1604,6 @@ int QuicStreamFactory::CreateSession(const QuicSessionKey& key,
   config.SetInitialStreamFlowControlWindowToSend(kQuicStreamMaxRecvWindowSize);
   config.SetBytesForConnectionIdToSend(0);
   ConfigureInitialRttEstimate(server_id, &config);
-
-  if (force_hol_blocking_)
-    config.SetForceHolBlocking();
 
   // Use the factory to create a new socket performance watcher, and pass the
   // ownership to QuicChromiumClientSession.

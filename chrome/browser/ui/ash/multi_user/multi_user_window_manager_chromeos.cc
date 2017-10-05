@@ -7,7 +7,6 @@
 #include <set>
 #include <vector>
 
-#include "ash/media_controller.h"
 #include "ash/multi_profile_uma.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
@@ -21,6 +20,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/media_client.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/user_switch_animator_chromeos.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
@@ -260,7 +260,7 @@ void MultiUserWindowManagerChromeOS::SetWindowOwner(
 
   // Add observers to track state changes.
   window->AddObserver(this);
-  wm::TransientWindowManager::Get(window)->AddObserver(this);
+  wm::TransientWindowManager::GetOrCreate(window)->AddObserver(this);
 
   // Check if this window was created due to a user interaction. If it was,
   // transfer it to the current user.
@@ -389,9 +389,13 @@ void MultiUserWindowManagerChromeOS::ActiveUserChanged(
   animation_.reset(new UserSwitchAnimatorChromeOS(
       this, current_account_id_,
       GetAdjustedAnimationTimeInMS(kUserFadeTimeMS)));
-  // Call notifier here instead of observing ActiveUserChanged because
-  // this must happen after MultiUserWindowManagerChromeOS is notified.
-  ash::Shell::Get()->media_controller()->RequestCaptureState();
+
+  // Call RequestCaptureState here instead of having MediaClient observe
+  // ActiveUserChanged because it must happen after
+  // MultiUserWindowManagerChromeOS is notified. The MediaClient may be null in
+  // tests.
+  if (MediaClient::Get())
+    MediaClient::Get()->RequestCaptureState();
 }
 
 void MultiUserWindowManagerChromeOS::OnWindowDestroyed(aura::Window* window) {
@@ -401,7 +405,7 @@ void MultiUserWindowManagerChromeOS::OnWindowDestroyed(aura::Window* window) {
     RemoveTransientOwnerRecursive(window);
     return;
   }
-  wm::TransientWindowManager::Get(window)->RemoveObserver(this);
+  wm::TransientWindowManager::GetOrCreate(window)->RemoveObserver(this);
   // Remove the window from the owners list.
   delete window_to_entry_[window];
   window_to_entry_.erase(window);
@@ -525,23 +529,20 @@ bool MultiUserWindowManagerChromeOS::ShowWindowForUserIntern(
   WindowToEntryMap::iterator it = window_to_entry_.find(window);
   it->second->set_show_for_user(account_id);
 
-  // Show avatar icon on the teleported window.
-  if (GetMultiProfileMode() == MULTI_PROFILE_MODE_ON) {
-    // Tests could either not have a UserManager or the UserManager does not
-    // know the window owner.
-    const user_manager::User* const window_owner =
-        user_manager::UserManager::IsInitialized()
-            ? user_manager::UserManager::Get()->FindUser(owner)
-            : nullptr;
+  // Tests could either not have a UserManager or the UserManager does not
+  // know the window owner.
+  const user_manager::User* const window_owner =
+      user_manager::UserManager::IsInitialized()
+          ? user_manager::UserManager::Get()->FindUser(owner)
+          : nullptr;
 
-    const bool teleported = !IsWindowOnDesktopOfUser(window, owner);
-    if (window_owner && teleported) {
-      window->SetProperty(
-          aura::client::kAvatarIconKey,
-          new gfx::ImageSkia(GetAvatarImageForUser(window_owner)));
-    } else {
-      window->ClearProperty(aura::client::kAvatarIconKey);
-    }
+  const bool teleported = !IsWindowOnDesktopOfUser(window, owner);
+  if (window_owner && teleported) {
+    window->SetProperty(
+        aura::client::kAvatarIconKey,
+        new gfx::ImageSkia(GetAvatarImageForUser(window_owner)));
+  } else {
+    window->ClearProperty(aura::client::kAvatarIconKey);
   }
 
   // Show the window if the added user is the current one.
@@ -659,7 +660,7 @@ void MultiUserWindowManagerChromeOS::AddTransientOwnerRecursive(
 
   // Add observers to track state changes.
   window->AddObserver(this);
-  wm::TransientWindowManager::Get(window)->AddObserver(this);
+  wm::TransientWindowManager::GetOrCreate(window)->AddObserver(this);
 
   // Hide the window if it should not be shown. Note that this hide operation
   // will hide recursively this and all children - but we have already collected
@@ -683,7 +684,7 @@ void MultiUserWindowManagerChromeOS::RemoveTransientOwnerRecursive(
   DCHECK(visibility_item != transient_window_to_visibility_.end());
 
   window->RemoveObserver(this);
-  wm::TransientWindowManager::Get(window)->RemoveObserver(this);
+  wm::TransientWindowManager::GetOrCreate(window)->RemoveObserver(this);
 
   bool unowned_view_state = visibility_item->second;
   transient_window_to_visibility_.erase(visibility_item);

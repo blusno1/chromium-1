@@ -34,7 +34,6 @@
 namespace blink {
 
 class Node;
-enum class TextAffinity;
 class TreeScope;
 
 enum class PositionAnchorType : unsigned {
@@ -158,6 +157,8 @@ class CORE_TEMPLATE_CLASS_EXPORT PositionTemplate {
     return anchor_node_ && anchor_node_->isConnected();
   }
 
+  bool IsValidFor(const Document&) const;
+
   bool IsNull() const { return !anchor_node_; }
   bool IsNotNull() const { return anchor_node_; }
   bool IsOrphan() const { return anchor_node_ && !anchor_node_->isConnected(); }
@@ -191,10 +192,16 @@ class CORE_TEMPLATE_CLASS_EXPORT PositionTemplate {
   static PositionTemplate<Strategy> FirstPositionInNode(
       const Node& anchor_node);
   static PositionTemplate<Strategy> LastPositionInNode(const Node& anchor_node);
+  // TODO(editing-dev): Instead of these two deprecated functions please use
+  // const-ref implementation below.
+  static PositionTemplate<Strategy> FirstPositionInOrBeforeNodeDeprecated(
+      Node* anchor_node);
+  static PositionTemplate<Strategy> LastPositionInOrAfterNodeDeprecated(
+      Node* anchor_node);
   static PositionTemplate<Strategy> FirstPositionInOrBeforeNode(
-      Node* anchor_node);
+      const Node& anchor_node);
   static PositionTemplate<Strategy> LastPositionInOrAfterNode(
-      Node* anchor_node);
+      const Node& anchor_node);
 
   String ToAnchorTypeAndOffsetString() const;
 #ifndef NDEBUG

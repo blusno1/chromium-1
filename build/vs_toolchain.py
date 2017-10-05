@@ -22,8 +22,8 @@ sys.path.insert(0, os.path.join(chrome_src, 'tools', 'gyp', 'pylib'))
 json_data_file = os.path.join(script_dir, 'win_toolchain.json')
 
 
-# Use MSVS2015 as the default toolchain.
-CURRENT_DEFAULT_TOOLCHAIN_VERSION = '2015'
+# Use MSVS2017 as the default toolchain.
+CURRENT_DEFAULT_TOOLCHAIN_VERSION = '2017'
 
 
 def SetEnvironmentAndGetRuntimeDllDirs():
@@ -153,6 +153,7 @@ def DetectVisualStudioPath():
     # For now we use a hardcoded default with an environment variable override.
     for path in (
         os.environ.get('vs2017_install'),
+        r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise',
         r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional',
         r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Community'):
       if path and os.path.exists(path):

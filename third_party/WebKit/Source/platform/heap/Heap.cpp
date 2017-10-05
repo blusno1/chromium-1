@@ -32,7 +32,6 @@
 
 #include <memory>
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/CallbackStack.h"
@@ -122,27 +121,27 @@ void ThreadHeapStats::Reset() {
 }
 
 void ThreadHeapStats::IncreaseAllocatedObjectSize(size_t delta) {
-  AtomicAdd(&allocated_object_size_, static_cast<long>(delta));
+  allocated_object_size_ += delta;
   ProcessHeap::IncreaseTotalAllocatedObjectSize(delta);
 }
 
 void ThreadHeapStats::DecreaseAllocatedObjectSize(size_t delta) {
-  AtomicSubtract(&allocated_object_size_, static_cast<long>(delta));
+  allocated_object_size_ -= delta;
   ProcessHeap::DecreaseTotalAllocatedObjectSize(delta);
 }
 
 void ThreadHeapStats::IncreaseMarkedObjectSize(size_t delta) {
-  AtomicAdd(&marked_object_size_, static_cast<long>(delta));
+  marked_object_size_ += delta;
   ProcessHeap::IncreaseTotalMarkedObjectSize(delta);
 }
 
 void ThreadHeapStats::IncreaseAllocatedSpace(size_t delta) {
-  AtomicAdd(&allocated_space_, static_cast<long>(delta));
+  allocated_space_ += delta;
   ProcessHeap::IncreaseTotalAllocatedSpace(delta);
 }
 
 void ThreadHeapStats::DecreaseAllocatedSpace(size_t delta) {
-  AtomicSubtract(&allocated_space_, static_cast<long>(delta));
+  allocated_space_ -= delta;
   ProcessHeap::DecreaseTotalAllocatedSpace(delta);
 }
 
@@ -319,6 +318,15 @@ void ThreadHeap::DecommitCallbackStacks() {
 }
 
 void ThreadHeap::ProcessMarkingStack(Visitor* visitor) {
+  bool complete = AdvanceMarkingStackProcessing(
+      visitor, std::numeric_limits<double>::infinity());
+  CHECK(complete);
+}
+
+bool ThreadHeap::AdvanceMarkingStackProcessing(Visitor* visitor,
+                                               double deadline_seconds) {
+  const size_t kDeadlineCheckInterval = 2500;
+  size_t processed_callback_count = 0;
   // Ephemeron fixed point loop.
   do {
     {
@@ -326,6 +334,12 @@ void ThreadHeap::ProcessMarkingStack(Visitor* visitor) {
       // currently pushed onto the marking stack.
       TRACE_EVENT0("blink_gc", "ThreadHeap::processMarkingStackSingleThreaded");
       while (PopAndInvokeTraceCallback(visitor)) {
+        processed_callback_count++;
+        if (processed_callback_count % kDeadlineCheckInterval == 0) {
+          if (deadline_seconds <= MonotonicallyIncreasingTime()) {
+            return false;
+          }
+        }
       }
     }
 
@@ -338,6 +352,7 @@ void ThreadHeap::ProcessMarkingStack(Visitor* visitor) {
 
     // Rerun loop if ephemeron processing queued more objects for tracing.
   } while (!marking_stack_->IsEmpty());
+  return true;
 }
 
 void ThreadHeap::PostMarkingProcessing(Visitor* visitor) {
@@ -511,7 +526,6 @@ void ThreadHeap::ResetHeapCounters() {
   ProcessHeap::DecreaseTotalMarkedObjectSize(stats_.MarkedObjectSize());
 
   stats_.Reset();
-  thread_state_->ResetHeapCounters();
 }
 
 ThreadHeap* ThreadHeap::main_thread_heap_ = nullptr;

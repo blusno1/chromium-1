@@ -65,21 +65,28 @@ class SessionControllerClient
   // |animation_finished_callback| will be invoked when the animation finishes.
   void RunUnlockAnimation(base::Closure animation_finished_callback);
 
+  // Asks the session controller to show the window teleportation dialog.
+  void ShowTeleportWarningDialog(
+      base::OnceCallback<void(bool, bool)> on_accept);
+
   // ash::mojom::SessionControllerClient:
   void RequestLockScreen() override;
+  void RequestSignOut() override;
   void SwitchActiveUser(const AccountId& account_id) override;
   void CycleActiveUser(ash::CycleUserDirection direction) override;
   void ShowMultiProfileLogin() override;
 
-  static bool IsMultiProfileEnabled();
+  // Returns true if a multi-profile user can be added to the session or if
+  // multiple users are already signed in.
+  static bool IsMultiProfileAvailable();
 
   // user_manager::UserManager::UserSessionStateObserver:
   void ActiveUserChanged(const user_manager::User* active_user) override;
   void UserAddedToSession(const user_manager::User* added_user) override;
-  void UserChangedChildStatus(user_manager::User* user) override;
 
   // user_manager::UserManager::Observer
   void OnUserImageChanged(const user_manager::User& user) override;
+  void OnChildStatusChanged(const user_manager::User& user) override;
 
   // session_manager::SessionManagerObserver:
   void OnSessionStateChanged() override;
@@ -104,6 +111,7 @@ class SessionControllerClient
   static void FlushForTesting();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(SessionControllerClientTest, CyclingThreeUsers);
   FRIEND_TEST_ALL_PREFIXES(SessionControllerClientTest, SendUserSession);
   FRIEND_TEST_ALL_PREFIXES(SessionControllerClientTest, SupervisedUser);
   FRIEND_TEST_ALL_PREFIXES(SessionControllerClientTest, UserPrefsChange);
@@ -133,7 +141,8 @@ class SessionControllerClient
   // Binds to the client interface.
   mojo::Binding<ash::mojom::SessionControllerClient> binding_;
 
-  // SessionController interface in ash.
+  // SessionController interface in ash. Holding the interface pointer keeps the
+  // pipe alive to receive mojo return values.
   ash::mojom::SessionControllerPtr session_controller_;
 
   // Whether the primary user session info is sent to ash.

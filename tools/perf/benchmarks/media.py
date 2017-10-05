@@ -19,7 +19,7 @@ from measurements import media
 import page_sets
 
 
-# TODO(rnephew): Revist the re-enabled benchmarks on Wed, Aug 8 2017.
+# TODO(rnephew): Revisit the re-enabled benchmarks on Wed, Aug 8 2017.
 # See tr.v.Numeric.getSummarizedScalarNumericsWithNames()
 # https://github.com/catapult-project/catapult/blob/master/tracing/tracing/value/numeric.html#L323
 _IGNORED_STATS_RE = re.compile(
@@ -106,6 +106,9 @@ class _MediaTBMv2Benchmark(perf_benchmark.PerfBenchmark):
     # time to different activities, such as video_animation, etc.
     category_filter.AddIncludedCategory('rail')
 
+    # Collect media related events required by mediaMetric.
+    category_filter.AddIncludedCategory('media')
+
     # Collect memory data.
     category_filter.AddDisabledByDefault('disabled-by-default-memory-infra')
 
@@ -117,7 +120,7 @@ class _MediaTBMv2Benchmark(perf_benchmark.PerfBenchmark):
     options.config.chrome_trace_config.SetMemoryDumpConfig(
         chrome_trace_config.MemoryDumpConfig())
 
-    options.SetTimelineBasedMetrics(['powerMetric',
+    options.SetTimelineBasedMetrics(['powerMetric', 'mediaMetric',
                                      'cpuTimeMetric', 'memoryMetric'])
     return options
 

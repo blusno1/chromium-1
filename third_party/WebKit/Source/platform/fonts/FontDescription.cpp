@@ -30,7 +30,6 @@
 #include "platform/fonts/FontDescription.h"
 
 #include "platform/Language.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashFunctions.h"
 #include "platform/wtf/StringHasher.h"
@@ -346,6 +345,151 @@ SkFontStyle FontDescription::SkiaFontStyle() const {
     skia_weight = static_cast<int>(roundf(Weight() / 100) * 100);
 
   return SkFontStyle(skia_weight, skia_width, slant);
+}
+
+String FontDescription::ToString(GenericFamilyType familyType) {
+  switch (familyType) {
+    case GenericFamilyType::kNoFamily:
+      return "None";
+    case GenericFamilyType::kStandardFamily:
+      return "Standard";
+    case GenericFamilyType::kSerifFamily:
+      return "Serif";
+    case GenericFamilyType::kSansSerifFamily:
+      return "SansSerif";
+    case GenericFamilyType::kMonospaceFamily:
+      return "Monospace";
+    case GenericFamilyType::kCursiveFamily:
+      return "Cursive";
+    case GenericFamilyType::kFantasyFamily:
+      return "Fantasy";
+    case GenericFamilyType::kPictographFamily:
+      return "Pictograph";
+  }
+  return "Unknown";
+}
+
+String FontDescription::ToString(Kerning kerning) {
+  switch (kerning) {
+    case Kerning::kAutoKerning:
+      return "Auto";
+    case Kerning::kNormalKerning:
+      return "Normal";
+    case Kerning::kNoneKerning:
+      return "None";
+  }
+  return "Unknown";
+}
+
+String FontDescription::ToString(LigaturesState state) {
+  switch (state) {
+    case LigaturesState::kNormalLigaturesState:
+      return "Normal";
+    case LigaturesState::kDisabledLigaturesState:
+      return "Disabled";
+    case LigaturesState::kEnabledLigaturesState:
+      return "Enabled";
+  }
+  return "Unknown";
+}
+
+String FontDescription::ToString(FontVariantCaps variant) {
+  switch (variant) {
+    case FontVariantCaps::kCapsNormal:
+      return "Normal";
+    case FontVariantCaps::kSmallCaps:
+      return "SmallCaps";
+    case FontVariantCaps::kAllSmallCaps:
+      return "AllSmallCaps";
+    case FontVariantCaps::kPetiteCaps:
+      return "PetiteCaps";
+    case FontVariantCaps::kAllPetiteCaps:
+      return "AllPetiteCaps";
+    case FontVariantCaps::kUnicase:
+      return "Unicase";
+    case FontVariantCaps::kTitlingCaps:
+      return "TitlingCaps";
+  }
+  return "Unknown";
+}
+
+String FontDescription::VariantLigatures::ToString() const {
+  return String::Format(
+      "common=%s, discretionary=%s, historical=%s, contextual=%s",
+      FontDescription::ToString(static_cast<LigaturesState>(common))
+          .Ascii()
+          .data(),
+      FontDescription::ToString(static_cast<LigaturesState>(discretionary))
+          .Ascii()
+          .data(),
+      FontDescription::ToString(static_cast<LigaturesState>(historical))
+          .Ascii()
+          .data(),
+      FontDescription::ToString(static_cast<LigaturesState>(contextual))
+          .Ascii()
+          .data());
+}
+
+String FontDescription::Size::ToString() const {
+  return String::Format(
+      "keyword_size=%u, specified_size=%f, is_absolute_size=%s", keyword, value,
+      is_absolute ? "true" : "false");
+}
+
+String FontDescription::FamilyDescription::ToString() const {
+  return String::Format(
+      "generic_family=%s, family=[%s]",
+      FontDescription::ToString(generic_family).Ascii().data(),
+      family.ToString().Ascii().data());
+}
+
+static const char* ToBooleanString(bool value) {
+  return value ? "true" : "false";
+}
+
+String FontDescription::ToString() const {
+  return String::Format(
+      "family_list=[%s], feature_settings=[%s], variation_settings=[%s], "
+      "locale=%s, "
+      "specified_size=%f, computed_size=%f, adjusted_size=%f, "
+      "size_adjust=%f, letter_spacing=%f, word_spacing=%f, "
+      "font_selection_request=[%s], "
+      "typesetting_features=[%s], "
+      "orientation=%s, width_variant=%s, variant_caps=%s, "
+      "is_absolute_size=%s, generic_family=%s, kerning=%s, "
+      "variant_ligatures=[%s], "
+      "keyword_size=%u, font_smoothing=%s, text_rendering=%s, "
+      "synthetic_bold=%s, synthetic_italic=%s, subpixel_positioning=%s, "
+      "subpixel_ascent_descent=%s, variant_numeric=[%s], "
+      "variant_east_asian=[%s]",
+      family_list_.ToString().Ascii().data(),
+      (feature_settings_ ? feature_settings_->ToString().Ascii().data() : ""),
+      (variation_settings_ ? variation_settings_->ToString().Ascii().data()
+                           : ""),
+      // TODO(wkorman): Locale has additional internal fields such as
+      // hyphenation and script. Consider adding a more detailed
+      // string method.
+      (locale_ ? locale_->LocaleString().Ascii().data() : ""), specified_size_,
+      computed_size_, adjusted_size_, size_adjust_, letter_spacing_,
+      word_spacing_, font_selection_request_.ToString().Ascii().data(),
+      blink::ToString(
+          static_cast<TypesettingFeatures>(fields_.typesetting_features_))
+          .Ascii()
+          .data(),
+      blink::ToString(Orientation()).Ascii().data(),
+      blink::ToString(WidthVariant()).Ascii().data(),
+      FontDescription::ToString(VariantCaps()).Ascii().data(),
+      ToBooleanString(IsAbsoluteSize()),
+      FontDescription::ToString(GenericFamily()).Ascii().data(),
+      FontDescription::ToString(Kerning()).Ascii().data(),
+      GetVariantLigatures().ToString().Ascii().data(), KeywordSize(),
+      blink::ToString(FontSmoothing()).Ascii().data(),
+      blink::ToString(TextRendering()).Ascii().data(),
+      ToBooleanString(IsSyntheticBold()), ToBooleanString(IsSyntheticItalic()),
+      ToBooleanString(UseSubpixelPositioning()),
+      ToBooleanString(SubpixelAscentDescent()),
+      VariantNumeric().ToString().Ascii().data(),
+      VariantEastAsian().ToString().Ascii().data());
 }
 
 }  // namespace blink

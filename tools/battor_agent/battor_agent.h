@@ -12,8 +12,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/threading/thread_checker.h"
+#include "base/time/default_tick_clock.h"
 #include "tools/battor_agent/battor_connection.h"
 #include "tools/battor_agent/battor_error.h"
 
@@ -99,6 +100,9 @@ class BattOrAgent : public BattOrConnection::Listener,
   // protocol primitives. This is protected so that it can be replaced with a
   // fake in testing.
   std::unique_ptr<BattOrConnection> connection_;
+
+  // A source of TimeTicks. Protected so that it can be faked in testing.
+  std::unique_ptr<base::TickClock> tick_clock_;
 
   // Timeout for when an action isn't completed within the allotted time. This
   // is virtual and protected so that timeouts can be disabled in testing. The
@@ -192,9 +196,6 @@ class BattOrAgent : public BattOrConnection::Listener,
   // The time at which the last clock sync marker was recorded.
   base::TimeTicks last_clock_sync_time_;
 
-  // Checker to make sure that this is only ever called on the IO thread.
-  base::ThreadChecker thread_checker_;
-
   // The BattOr's EEPROM (which is required for calibration).
   std::unique_ptr<BattOrEEPROM> battor_eeprom_;
 
@@ -216,6 +217,8 @@ class BattOrAgent : public BattOrConnection::Listener,
 
   // The git hash of the BattOr firmware.
   std::string firmware_git_hash_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(BattOrAgent);
 };

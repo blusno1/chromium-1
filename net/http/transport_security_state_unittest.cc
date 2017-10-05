@@ -917,6 +917,7 @@ TEST_F(TransportSecurityStateTest, IsPreloaded) {
   const std::string aypal = "aypal.com";
   const std::string google = "google";
   const std::string www_google = "www.google";
+  const std::string foo = "foo";
 
   TransportSecurityState state;
   TransportSecurityState::STSState sts_state;
@@ -927,6 +928,7 @@ TEST_F(TransportSecurityStateTest, IsPreloaded) {
   EXPECT_FALSE(sts_state.include_subdomains);
   EXPECT_TRUE(GetStaticDomainState(&state, google, &sts_state, &pkp_state));
   EXPECT_TRUE(GetStaticDomainState(&state, www_google, &sts_state, &pkp_state));
+  EXPECT_TRUE(GetStaticDomainState(&state, foo, &sts_state, &pkp_state));
   EXPECT_FALSE(
       GetStaticDomainState(&state, a_www_paypal, &sts_state, &pkp_state));
   EXPECT_FALSE(
@@ -1033,6 +1035,8 @@ TEST_F(TransportSecurityStateTest, Preloaded) {
   EXPECT_TRUE(StaticShouldRedirect("ssl.google-analytics.com"));
   EXPECT_TRUE(StaticShouldRedirect("google"));
   EXPECT_TRUE(StaticShouldRedirect("foo.google"));
+  EXPECT_TRUE(StaticShouldRedirect("foo"));
+  EXPECT_TRUE(StaticShouldRedirect("domaintest.foo"));
   EXPECT_TRUE(StaticShouldRedirect("gmail.com"));
   EXPECT_TRUE(StaticShouldRedirect("www.gmail.com"));
   EXPECT_TRUE(StaticShouldRedirect("googlemail.com"));
@@ -2438,6 +2442,23 @@ TEST_F(TransportSecurityStateTest, DecodePreloadedMultipleMix) {
   EXPECT_TRUE(staple_state.include_subdomains);
   EXPECT_EQ(GURL("https://report.badssl.com/staple-upload"),
             staple_state.report_uri);
+
+  sts_state = TransportSecurityState::STSState();
+  pkp_state = TransportSecurityState::PKPState();
+  ct_state = TransportSecurityState::ExpectCTState();
+  staple_state = TransportSecurityState::ExpectStapleState();
+
+  // This should be a simple entry in the context of
+  // TrieWriter::IsSimpleEntry().
+  EXPECT_TRUE(GetStaticDomainState(&state, "simple-entry.example.com",
+                                   &sts_state, &pkp_state));
+  EXPECT_TRUE(sts_state.include_subdomains);
+  EXPECT_EQ(TransportSecurityState::STSState::MODE_FORCE_HTTPS,
+            sts_state.upgrade_mode);
+  EXPECT_FALSE(pkp_state.include_subdomains);
+  EXPECT_FALSE(GetExpectCTState(&state, "simple-entry.example.com", &ct_state));
+  EXPECT_FALSE(
+      GetExpectStapleState(&state, "simple-entry.example.com", &staple_state));
 }
 
 static const struct ExpectStapleErrorResponseData {
@@ -3376,6 +3397,48 @@ TEST_F(TransportSecurityStateTest, CheckCTRequirementsWithExpectCTAndDelegate) {
   EXPECT_EQ(sct_list[0].status,
             reporter.signed_certificate_timestamps()[0].status);
   EXPECT_EQ(sct_list[0].sct, reporter.signed_certificate_timestamps()[0].sct);
+}
+
+// Tests that the dynamic Expect-CT UMA histogram is recorded correctly.
+TEST_F(TransportSecurityStateTest, DynamicExpectCTUMA) {
+  const char kHistogramName[] = "Net.ExpectCTHeader.ParseSuccess";
+  SSLInfo ssl;
+  ssl.is_issued_by_known_root = true;
+  ssl.ct_compliance_details_available = true;
+  ssl.ct_cert_policy_compliance =
+      ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      TransportSecurityState::kDynamicExpectCTFeature);
+
+  // Test that the histogram is recorded correctly when the header successfully
+  // parses.
+  {
+    const char kHeader[] = "max-age=123,enforce,report-uri=\"http://foo.test\"";
+    base::HistogramTester histograms;
+    TransportSecurityState state;
+    MockExpectCTReporter reporter;
+    state.SetExpectCTReporter(&reporter);
+    state.ProcessExpectCTHeader(kHeader, HostPortPair("example.test", 443),
+                                ssl);
+    histograms.ExpectTotalCount(kHistogramName, 1);
+    histograms.ExpectBucketCount(kHistogramName, true, 1);
+  }
+
+  // Test that the histogram is recorded correctly when the header fails to
+  // parse (due to semi-colons instead of commas).
+  {
+    const char kHeader[] = "max-age=123;enforce;report-uri=\"http://foo.test\"";
+    base::HistogramTester histograms;
+    TransportSecurityState state;
+    MockExpectCTReporter reporter;
+    state.SetExpectCTReporter(&reporter);
+    state.ProcessExpectCTHeader(kHeader, HostPortPair("example.test", 443),
+                                ssl);
+    histograms.ExpectTotalCount(kHistogramName, 1);
+    histograms.ExpectBucketCount(kHistogramName, false, 1);
+  }
 }
 
 }  // namespace net

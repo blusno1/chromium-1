@@ -35,6 +35,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/threading/thread.h"
@@ -139,7 +140,7 @@ class CONTENT_EXPORT MediaStreamManager
   // creates a new request which is identified by a unique string that's
   // returned to the caller.  |render_process_id| and |render_frame_id| are used
   // to determine where the infobar will appear to the user.
-  void GenerateStream(MediaStreamRequester* requester,
+  void GenerateStream(base::WeakPtr<MediaStreamRequester> requester,
                       int render_process_id,
                       int render_frame_id,
                       const std::string& salt,
@@ -167,7 +168,7 @@ class CONTENT_EXPORT MediaStreamManager
   // Open a device identified by |device_id|.  |type| must be either
   // MEDIA_DEVICE_AUDIO_CAPTURE or MEDIA_DEVICE_VIDEO_CAPTURE.
   // The request is identified using string returned to the caller.
-  void OpenDevice(MediaStreamRequester* requester,
+  void OpenDevice(base::WeakPtr<MediaStreamRequester> requester,
                   int render_process_id,
                   int render_frame_id,
                   const std::string& salt,
@@ -223,9 +224,11 @@ class CONTENT_EXPORT MediaStreamManager
   void OnSuspend() override;
   void OnResume() override;
 
-  // Called by the tests to specify a fake UI that should be used for next
-  // generated stream (or when using --use-fake-ui-for-media-stream).
-  void UseFakeUIForTests(std::unique_ptr<FakeMediaStreamUIProxy> fake_ui);
+  // Called by the tests to specify a factory for creating
+  // FakeMediaStreamUIProxys to be used for generated streams.
+  void UseFakeUIFactoryForTests(
+      base::Callback<std::unique_ptr<FakeMediaStreamUIProxy>(void)>
+          fake_ui_factory);
 
   // Register and unregister a new callback for receiving native log entries.
   // The registered callback will be invoked on the IO thread.
@@ -424,8 +427,8 @@ class CONTENT_EXPORT MediaStreamManager
   // All non-closed request. Must be accessed on IO thread.
   DeviceRequests requests_;
 
-  bool use_fake_ui_;
-  std::unique_ptr<FakeMediaStreamUIProxy> fake_ui_;
+  base::Callback<std::unique_ptr<FakeMediaStreamUIProxy>(void)>
+      fake_ui_factory_;
 
   // Maps render process hosts to log callbacks. Used on the IO thread.
   std::map<int, base::Callback<void(const std::string&)>> log_callbacks_;

@@ -5,12 +5,18 @@
 #include "ash/login/ui/login_user_view.h"
 
 #include "ash/ash_constants.h"
+#include "ash/login/ui/animated_rounded_image_view.h"
+#include "ash/login/ui/image_parser.h"
 #include "ash/login/ui/login_bubble.h"
 #include "ash/login/ui/login_constants.h"
+#include "ash/login/ui/non_accessible_view.h"
 #include "ash/login/ui/user_switch_flip_animation.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/system/user/rounded_image_view.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -51,9 +57,9 @@ constexpr float kOpaqueUserViewOpacity = 1.f;
 constexpr float kTransparentUserViewOpacity = 0.63f;
 constexpr float kUserFadeAnimationDurationMs = 180;
 
-constexpr const char* kUserViewClassName = "UserView";
-constexpr const char* kLoginUserImageClassName = "LoginUserImage";
-constexpr const char* kLoginUserLabelClassName = "LoginUserLabel";
+constexpr const char kUserViewClassName[] = "UserView";
+constexpr const char kLoginUserImageClassName[] = "LoginUserImage";
+constexpr const char kLoginUserLabelClassName[] = "LoginUserLabel";
 
 int GetImageSize(LoginDisplayStyle style) {
   switch (style) {
@@ -71,7 +77,7 @@ int GetImageSize(LoginDisplayStyle style) {
 }
 
 views::View* MakePreferredSizeView(gfx::Size size) {
-  auto* view = new views::View();
+  auto* view = new NonAccessibleView();
   view->SetPreferredSize(size);
   return view;
 }
@@ -79,37 +85,64 @@ views::View* MakePreferredSizeView(gfx::Size size) {
 }  // namespace
 
 // Renders a user's profile icon.
-class LoginUserView::UserImage : public views::View {
+class LoginUserView::UserImage : public NonAccessibleView {
  public:
-  UserImage(int size) : size_(size) {
+  UserImage(int size)
+      : NonAccessibleView(kLoginUserImageClassName),
+        size_(size),
+        weak_factory_(this) {
     SetLayoutManager(new views::FillLayout());
 
     // TODO(jdufault): We need to render a black border. We will probably have
-    // to add support directly to RoundedImageView, since the existing
+    // to add support directly to AnimatedRoundedImageView, since the existing
     // views::Border renders based on bounds (ie, a rectangle).
-    image_ = new ash::tray::RoundedImageView(size_ / 2);
+    image_ = new AnimatedRoundedImageView(size_ / 2);
     AddChildView(image_);
   }
   ~UserImage() override = default;
 
-  void UpdateForUser(const mojom::UserInfoPtr& user) {
-    image_->SetImage(user->avatar, gfx::Size(size_, size_));
+  void UpdateForUser(const mojom::LoginUserInfoPtr& user) {
+    // Set the initial image from |avatar| since we already have it available.
+    // Then, decode the bytes via blink's PNG decoder and play any animated
+    // frames if they are available.
+    if (!user->basic_user_info->avatar.isNull())
+      image_->SetImage(user->basic_user_info->avatar, gfx::Size(size_, size_));
+
+    // Decode the avatar using blink, as blink's PNG decoder supports APNG,
+    // which is the format used for the animated avators.
+    if (!user->basic_user_info->avatar_bytes.empty()) {
+      DecodeAnimation(user->basic_user_info->avatar_bytes,
+                      base::Bind(&LoginUserView::UserImage::OnImageDecoded,
+                                 weak_factory_.GetWeakPtr()));
+    }
   }
 
-  // views::View:
-  const char* GetClassName() const override { return kLoginUserImageClassName; }
+  void SetAnimationEnabled(bool enable) { image_->SetAnimationEnabled(enable); }
 
  private:
-  ash::tray::RoundedImageView* image_ = nullptr;
+  void OnImageDecoded(AnimationFrames animation) {
+    // If there is only a single frame to display, show the existing avatar.
+    if (animation.size() <= 1) {
+      LOG_IF(ERROR, animation.empty()) << "Decoding user avatar failed";
+      return;
+    }
+
+    image_->SetAnimation(animation, gfx::Size(size_, size_));
+  }
+
+  AnimatedRoundedImageView* image_ = nullptr;
   int size_;
+
+  base::WeakPtrFactory<UserImage> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(UserImage);
 };
 
 // Shows the user's name.
-class LoginUserView::UserLabel : public views::View {
+class LoginUserView::UserLabel : public NonAccessibleView {
  public:
-  UserLabel(LoginDisplayStyle style) {
+  UserLabel(LoginDisplayStyle style)
+      : NonAccessibleView(kLoginUserLabelClassName) {
     SetLayoutManager(new views::FillLayout());
 
     user_name_ = new views::Label();
@@ -140,18 +173,15 @@ class LoginUserView::UserLabel : public views::View {
   }
   ~UserLabel() override = default;
 
-  void UpdateForUser(const mojom::UserInfoPtr& user) {
-    std::string display_name = user->display_name;
+  void UpdateForUser(const mojom::LoginUserInfoPtr& user) {
+    std::string display_name = user->basic_user_info->display_name;
     // display_name can be empty in debug builds with stub users.
     if (display_name.empty())
-      display_name = user->display_email;
+      display_name = user->basic_user_info->display_email;
     user_name_->SetText(base::UTF8ToUTF16(display_name));
   }
 
   const base::string16& displayed_name() const { return user_name_->text(); }
-
-  // views::View:
-  const char* GetClassName() const override { return kLoginUserLabelClassName; }
 
  private:
   views::Label* user_name_ = nullptr;
@@ -238,7 +268,7 @@ LoginUserView::LoginUserView(LoginDisplayStyle style,
         gfx::CreateVectorIcon(kLockScreenDropdownIcon, SK_ColorWHITE));
     user_dropdown_->SetFocusBehavior(FocusBehavior::ALWAYS);
     user_dropdown_->SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-        ash::kFocusBorderColor, ash::kFocusBorderThickness, gfx::InsetsF()));
+        kFocusBorderColor, kFocusBorderThickness, gfx::InsetsF()));
   }
 
   switch (style) {
@@ -274,7 +304,7 @@ LoginUserView::~LoginUserView() {
   RemovePreTargetHandler(opacity_input_handler_.get());
 }
 
-void LoginUserView::UpdateForUser(const mojom::UserInfoPtr& user,
+void LoginUserView::UpdateForUser(const mojom::LoginUserInfoPtr& user,
                                   bool animate) {
   current_user_ = user->Clone();
 
@@ -366,13 +396,17 @@ void LoginUserView::ButtonPressed(Button* sender, const ui::Event& event) {
   if (user_dropdown_ && sender == user_dropdown_) {
     if (!user_menu_ || !user_menu_->IsVisible()) {
       user_menu_ = base::MakeUnique<LoginBubble>();
-      // TODO: Use mojom::LoginUserInfo for current_user_ which has
-      // is_device_owner information. See crbug.com/762343.
-      user_menu_->ShowUserMenu(base::UTF8ToUTF16(current_user_->display_name),
-                               base::UTF8ToUTF16(current_user_->display_email),
-                               user_dropdown_ /*anchor_view*/,
-                               user_dropdown_ /*bubble_opener*/,
-                               false /*show_remove_user*/);
+      base::string16 display_name =
+          base::UTF8ToUTF16(current_user_->basic_user_info->display_name);
+
+      user_menu_->ShowUserMenu(
+          current_user_->is_device_owner
+              ? l10n_util::GetStringFUTF16(IDS_ASH_LOGIN_POD_OWNER_USER,
+                                           display_name)
+              : display_name,
+          base::UTF8ToUTF16(current_user_->basic_user_info->display_email),
+          user_dropdown_ /*anchor_view*/, user_dropdown_ /*bubble_opener*/,
+          false /*show_remove_user*/);
     } else {
       user_menu_->Close();
     }
@@ -380,6 +414,8 @@ void LoginUserView::ButtonPressed(Button* sender, const ui::Event& event) {
 }
 
 void LoginUserView::UpdateCurrentUserState() {
+  SetAccessibleName(
+      base::UTF8ToUTF16(current_user_->basic_user_info->display_email));
   user_image_->UpdateForUser(current_user_);
   user_label_->UpdateForUser(current_user_);
   Layout();
@@ -411,6 +447,9 @@ void LoginUserView::UpdateOpacity() {
     auto user_dropdown_settings = build_settings(user_dropdown_);
     user_dropdown_->layer()->SetOpacity(target_opacity);
   }
+
+  // Animate avatar only if we are opaque.
+  user_image_->SetAnimationEnabled(is_opaque_);
 }
 
 void LoginUserView::SetLargeLayout() {
@@ -426,7 +465,7 @@ void LoginUserView::SetLargeLayout() {
 
   // Centered user image
   {
-    auto* row = new views::View();
+    auto* row = new NonAccessibleView();
     AddChildView(row);
 
     auto* layout = new views::BoxLayout(views::BoxLayout::kHorizontal);
@@ -439,7 +478,7 @@ void LoginUserView::SetLargeLayout() {
 
   // User name, menu dropdown
   {
-    auto* row = new views::View();
+    auto* row = new NonAccessibleView();
     AddChildView(row);
 
     auto* layout =

@@ -404,9 +404,6 @@ void LayoutGrid::UpdateBlockLayout(bool relayout_children) {
       SetLogicalHeight(
           std::max(LogicalHeight(), MinimumLogicalHeightForEmptyLine()));
 
-    ApplyStretchAlignmentToTracksIfNeeded(kForColumns);
-    ApplyStretchAlignmentToTracksIfNeeded(kForRows);
-
     LayoutGridItems();
     track_sizing_algorithm_.Reset();
 
@@ -1170,44 +1167,6 @@ const StyleContentAlignmentData& LayoutGrid::ContentAlignmentNormalBehavior() {
   static const StyleContentAlignmentData kNormalBehavior = {
       kContentPositionNormal, kContentDistributionStretch};
   return kNormalBehavior;
-}
-
-void LayoutGrid::ApplyStretchAlignmentToTracksIfNeeded(
-    GridTrackSizingDirection direction) {
-  Optional<LayoutUnit> free_space =
-      track_sizing_algorithm_.FreeSpace(direction);
-  if (!free_space || free_space.value() <= 0 ||
-      (direction == kForColumns &&
-       StyleRef().ResolvedJustifyContentDistribution(
-           ContentAlignmentNormalBehavior()) != kContentDistributionStretch) ||
-      (direction == kForRows &&
-       StyleRef().ResolvedAlignContentDistribution(
-           ContentAlignmentNormalBehavior()) != kContentDistributionStretch))
-    return;
-
-  // Spec defines auto-sized tracks as the ones with an 'auto' max-sizing
-  // function.
-  Vector<GridTrack>& all_tracks = track_sizing_algorithm_.Tracks(direction);
-  Vector<unsigned> auto_sized_tracks_index;
-  for (unsigned i = 0; i < all_tracks.size(); ++i) {
-    const GridTrackSize& track_size =
-        track_sizing_algorithm_.GetGridTrackSize(direction, i);
-    if (track_size.HasAutoMaxTrackBreadth())
-      auto_sized_tracks_index.push_back(i);
-  }
-
-  unsigned number_of_auto_sized_tracks = auto_sized_tracks_index.size();
-  if (number_of_auto_sized_tracks < 1)
-    return;
-
-  LayoutUnit size_to_increase =
-      free_space.value() / number_of_auto_sized_tracks;
-  for (const auto& track_index : auto_sized_tracks_index) {
-    GridTrack* track = all_tracks.data() + track_index;
-    LayoutUnit base_size = track->BaseSize() + size_to_increase;
-    track->SetBaseSize(base_size);
-  }
-  track_sizing_algorithm_.SetFreeSpace(direction, LayoutUnit());
 }
 
 void LayoutGrid::LayoutGridItems() {
@@ -2269,37 +2228,37 @@ static ContentAlignmentData ContentDistributionOffset(
   return {};
 }
 
+StyleContentAlignmentData LayoutGrid::ContentAlignment(
+    GridTrackSizingDirection direction) const {
+  return direction == kForColumns ? StyleRef().ResolvedJustifyContent(
+                                        ContentAlignmentNormalBehavior())
+                                  : StyleRef().ResolvedAlignContent(
+                                        ContentAlignmentNormalBehavior());
+}
+
 ContentAlignmentData LayoutGrid::ComputeContentPositionAndDistributionOffset(
     GridTrackSizingDirection direction,
     const LayoutUnit& available_free_space,
     unsigned number_of_grid_tracks) const {
-  bool is_row_axis = direction == kForColumns;
-  ContentPosition position = is_row_axis
-                                 ? StyleRef().ResolvedJustifyContentPosition(
-                                       ContentAlignmentNormalBehavior())
-                                 : StyleRef().ResolvedAlignContentPosition(
-                                       ContentAlignmentNormalBehavior());
-  ContentDistributionType distribution =
-      is_row_axis ? StyleRef().ResolvedJustifyContentDistribution(
-                        ContentAlignmentNormalBehavior())
-                  : StyleRef().ResolvedAlignContentDistribution(
-                        ContentAlignmentNormalBehavior());
+  StyleContentAlignmentData content_alignment_data =
+      ContentAlignment(direction);
+  ContentPosition position = content_alignment_data.GetPosition();
   // If <content-distribution> value can't be applied, 'position' will become
   // the associated <content-position> fallback value.
   ContentAlignmentData content_alignment = ContentDistributionOffset(
-      available_free_space, position, distribution, number_of_grid_tracks);
+      available_free_space, position, content_alignment_data.Distribution(),
+      number_of_grid_tracks);
   if (content_alignment.IsValid())
     return content_alignment;
 
-  OverflowAlignment overflow =
-      is_row_axis ? StyleRef().JustifyContentOverflowAlignment()
-                  : StyleRef().AlignContentOverflowAlignment();
   // TODO (lajava): Default value for overflow isn't exaclty as 'unsafe'.
   // https://drafts.csswg.org/css-align/#overflow-values
   if (available_free_space == 0 ||
-      (available_free_space < 0 && overflow == kOverflowAlignmentSafe))
+      (available_free_space < 0 &&
+       content_alignment_data.Overflow() == kOverflowAlignmentSafe))
     return {LayoutUnit(), LayoutUnit()};
 
+  bool is_row_axis = direction == kForColumns;
   switch (position) {
     case kContentPositionLeft:
       // The align-content's axis is always orthogonal to the inline-axis.

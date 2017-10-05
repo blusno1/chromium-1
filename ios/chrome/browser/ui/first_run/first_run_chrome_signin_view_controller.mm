@@ -45,8 +45,7 @@ NSString* const kSignInSkipButtonAccessibilityIdentifier =
                             tabModel:(TabModel*)tabModel
                       firstRunConfig:(FirstRunConfiguration*)firstRunConfig
                       signInIdentity:(ChromeIdentity*)identity
-                          dispatcher:
-                              (id<ApplicationSettingsCommands>)dispatcher {
+                          dispatcher:(id<ApplicationCommands>)dispatcher {
   self = [super
        initWithBrowserState:browserState
       isPresentedOnSettings:NO
@@ -99,7 +98,8 @@ NSString* const kSignInSkipButtonAccessibilityIdentifier =
 
 - (void)finishFirstRunAndDismiss {
   DCHECK(self.presentingViewController);
-  FinishFirstRun(self.browserState, [_tabModel currentTab], _firstRunConfig);
+  FinishFirstRun(self.browserState, [_tabModel currentTab], _firstRunConfig,
+                 self.dispatcher);
   [self.presentingViewController dismissViewControllerAnimated:YES
                                                     completion:^{
                                                       FirstRunDismissed();

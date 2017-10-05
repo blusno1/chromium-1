@@ -5,7 +5,6 @@
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/shell.h"
-#include "ash/wm/window_util.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -257,7 +256,7 @@ class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
   }
 
   ash::ShelfItemDelegate* GetShelfItemDelegate(const std::string& id) {
-    ash::ShelfModel* model = ash::Shell::Get()->shelf_model();
+    auto* model = ChromeLauncherController::instance()->shelf_model();
     return model->GetShelfItemDelegate(ash::ShelfID(id));
   }
 

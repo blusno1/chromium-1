@@ -24,7 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "EditingStyleUtilities.h"
+#include "core/editing/EditingStyleUtilities.h"
 
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSColorValue.h"
@@ -34,6 +34,9 @@
 #include "core/css/parser/CSSParser.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 
 namespace blink {
 
@@ -61,8 +64,8 @@ EditingStyleUtilities::CreateWrappingStyleForAnnotatedSerialization(
   // has applied. This helps us get the color of content pasted into
   // blockquotes right.
   wrapping_style->RemoveStyleAddedByElement(ToHTMLElement(EnclosingNodeOfType(
-      FirstPositionInOrBeforeNode(context), IsMailHTMLBlockquoteElement,
-      kCanCrossEditingBoundary)));
+      FirstPositionInOrBeforeNodeDeprecated(context),
+      IsMailHTMLBlockquoteElement, kCanCrossEditingBoundary)));
 
   // Call collapseTextDecorationProperties first or otherwise it'll copy the
   // value over from in-effect to text-decorations.

@@ -142,7 +142,7 @@ def origin_trial_features(interface, constants, attributes, methods):
 
     if features:
         includes.add('platform/bindings/ScriptState.h')
-        includes.add('core/origin_trials/OriginTrials.h')
+        includes.add('core/origin_trials/origin_trials.h')
     return features
 
 
@@ -1410,9 +1410,7 @@ def property_getter(getter, cpp_arguments):
         return None
 
     def is_null_expression(idl_type):
-        if idl_type.use_output_parameter_for_result:
-            return 'result.isNull()'
-        if idl_type.is_string_type:
+        if idl_type.use_output_parameter_for_result or idl_type.is_string_type:
             return 'result.IsNull()'
         if idl_type.is_interface_type:
             return '!result'

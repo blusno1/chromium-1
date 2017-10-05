@@ -4,6 +4,7 @@
 
 #include "components/feature_engagement/public/feature_list.h"
 
+#include "components/feature_engagement/features.h"
 #include "components/feature_engagement/public/feature_constants.h"
 
 namespace feature_engagement {
@@ -21,13 +22,14 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDownloadPageFeature,
     &kIPHDownloadPageScreenshotFeature,
     &kIPHChromeHomeExpandFeature,
+    &kIPHChromeHomeMenuHeaderFeature,
     &kIPHMediaDownloadFeature,
 #endif  // defined(OS_ANDROID)
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
     &kIPHBookmarkFeature,
     &kIPHIncognitoWindowFeature,
     &kIPHNewTabFeature,
-#endif  // defined(OS_WIN) || defined(OS_LINUX)
+#endif  // BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 #if defined(OS_IOS)
     &kIPHNewTabTipFeature,
     &kIPHNewIncognitoTabTipFeature,

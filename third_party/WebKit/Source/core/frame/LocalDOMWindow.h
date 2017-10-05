@@ -57,7 +57,6 @@ class EventQueue;
 class ExceptionState;
 class External;
 class FrameConsole;
-class FrameRequestCallback;
 class History;
 class IdleRequestOptions;
 class MediaQueryList;
@@ -72,6 +71,7 @@ class SecurityOrigin;
 class SerializedScriptValue;
 class SourceLocation;
 class StyleMedia;
+class V8FrameRequestCallback;
 class V8IdleRequestCallback;
 
 enum PageshowEventPersistence {
@@ -213,15 +213,16 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   MediaQueryList* matchMedia(const String&);
 
   // DOM Level 2 Style Interface
-  CSSStyleDeclaration* getComputedStyle(Element*,
-                                        const String& pseudo_elt) const;
+  CSSStyleDeclaration* getComputedStyle(
+      Element*,
+      const String& pseudo_elt = String()) const;
 
   // WebKit extension
   CSSRuleList* getMatchedCSSRules(Element*, const String& pseudo_elt) const;
 
   // WebKit animation extensions
-  int requestAnimationFrame(FrameRequestCallback*);
-  int webkitRequestAnimationFrame(FrameRequestCallback*);
+  int requestAnimationFrame(V8FrameRequestCallback*);
+  int webkitRequestAnimationFrame(V8FrameRequestCallback*);
   void cancelAnimationFrame(int id);
 
   // Idle callback extensions
@@ -305,7 +306,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void EnqueuePopstateEvent(RefPtr<SerializedScriptValue>);
   void DispatchWindowLoadEvent();
   void DocumentWasClosed();
-  void StatePopped(PassRefPtr<SerializedScriptValue>);
+  void StatePopped(RefPtr<SerializedScriptValue>);
 
   // FIXME: This shouldn't be public once LocalDOMWindow becomes
   // ExecutionContext.

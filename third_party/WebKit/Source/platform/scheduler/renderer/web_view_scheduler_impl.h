@@ -45,7 +45,8 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   // WebViewScheduler implementation:
   void SetPageVisible(bool page_visible) override;
   std::unique_ptr<WebFrameScheduler> CreateFrameScheduler(
-      BlameContext* blame_context) override;
+      BlameContext* blame_context,
+      WebFrameScheduler::FrameType frame_type) override;
   void EnableVirtualTime() override;
   void DisableVirtualTimeForTesting() override;
   bool VirtualTimeAllowedToAdvance() const override;
@@ -62,7 +63,8 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   virtual void ReportIntervention(const std::string& message);
 
   std::unique_ptr<WebFrameSchedulerImpl> CreateWebFrameSchedulerImpl(
-      base::trace_event::BlameContext* blame_context);
+      base::trace_event::BlameContext* blame_context,
+      WebFrameScheduler::FrameType frame_type);
 
   void DidStartLoading(unsigned long identifier);
   void DidStopLoading(unsigned long identifier);
@@ -74,9 +76,15 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   void DidBeginProvisionalLoad(WebFrameSchedulerImpl* frame_scheduler);
   void DidEndProvisionalLoad(WebFrameSchedulerImpl* frame_scheduler);
 
+  void OnBeginNestedRunLoop();
+  void OnExitNestedRunLoop();
+
   bool IsAudioPlaying() const;
 
   void OnConnectionUpdated();
+
+  // Return a number of child web frame schedulers for this WebViewScheduler.
+  size_t FrameCount() const;
 
   void AsValueInto(base::trace_event::TracedValue* state) const;
 
@@ -87,8 +95,7 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   void MaybeInitializeBackgroundCPUTimeBudgetPool();
 
   void SetAllowVirtualTimeToAdvance(bool allow_virtual_time_to_advance);
-  void ApplyVirtualTimePolicyForLoading();
-  void ApplyVirtualTimePolicyToTimers();
+  void ApplyVirtualTimePolicy();
 
   void OnThrottlingReported(base::TimeDelta throttling_duration);
 
@@ -119,12 +126,11 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   bool page_visible_;
   bool disable_background_timer_throttling_;
   bool allow_virtual_time_to_advance_;
-  bool virtual_time_paused_;
-  bool have_seen_loading_task_;
   bool virtual_time_;
   bool is_audio_playing_;
   bool reported_background_throttling_since_navigation_;
   bool has_active_connection_;
+  bool nested_runloop_;
   CPUTimeBudgetPool* background_time_budget_pool_;  // Not owned.
   WebViewScheduler::WebViewSchedulerDelegate* delegate_;  // Not owned.
   base::ObserverList<VirtualTimeObserver> virtual_time_observers_;

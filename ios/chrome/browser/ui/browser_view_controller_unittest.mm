@@ -82,7 +82,6 @@ using web::WebStateImpl;
 - (void)tabSelected:(Tab*)tab;
 - (void)tabDeselected:(NSNotification*)notification;
 - (void)tabCountChanged:(NSNotification*)notification;
-- (IBAction)chromeExecuteCommand:(id)sender;
 @end
 
 @interface BVCTestTabMock : OCMockComplexTypeHelper {
@@ -129,12 +128,14 @@ using web::WebStateImpl;
 
 @interface BVCTestTabModel : OCMockComplexTypeHelper
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
+@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
 @end
 
 @implementation BVCTestTabModel {
   FakeWebStateListDelegate _webStateListDelegate;
   std::unique_ptr<WebStateList> _webStateList;
 }
+@synthesize browserState = _browserState;
 
 - (instancetype)init {
   if ((self = [super
@@ -184,6 +185,7 @@ class BrowserViewControllerTest : public BlockCleanupTest {
 
     // Set up mock TabModel, Tab, and CRWWebController.
     id tabModel = [[BVCTestTabModel alloc] init];
+    [tabModel setBrowserState:chrome_browser_state_.get()];
     id currentTab = [[BVCTestTabMock alloc]
         initWithRepresentedObject:[OCMockObject niceMockForClass:[Tab class]]];
     id webControllerMock =
@@ -224,16 +226,12 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     // Set up a stub dependency factory.
     id factory = [OCMockObject
         mockForClass:[BrowserViewControllerDependencyFactory class]];
-    [[[factory stub] andReturn:nil]
-        newTabStripControllerWithTabModel:[OCMArg any]
-                               dispatcher:[OCMArg any]];
     [[[factory stub] andReturnValue:OCMOCK_VALUE(toolbarModelIOS_)]
         newToolbarModelIOSWithDelegate:static_cast<ToolbarModelDelegateIOS*>(
                                            [OCMArg anyPointer])];
     [[[factory stub] andReturn:nil]
         newWebToolbarControllerWithDelegate:[OCMArg any]
                                   urlLoader:[OCMArg any]
-                            preloadProvider:[OCMArg any]
                                  dispatcher:[OCMArg any]];
     [[[factory stub] andReturn:passKitViewController_]
         newPassKitViewControllerForPass:nil];
@@ -460,7 +458,8 @@ TEST_F(BrowserViewControllerTest, TestClearPresentedState) {
   EXPECT_CALL(*this, OnCompletionCalled());
   [bvc_ clearPresentedStateWithCompletion:^{
     this->OnCompletionCalled();
-  }];
+  }
+                           dismissOmnibox:YES];
 }
 
 // Tests for the browser view controller when Payment Request is enabled.

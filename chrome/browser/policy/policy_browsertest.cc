@@ -90,6 +90,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/common/extensions/extension_test_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -204,6 +205,7 @@
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/accessibility_types.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/shell_port_classic.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
@@ -217,6 +219,7 @@
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "components/arc/arc_prefs.h"
 #include "components/arc/arc_session_runner.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/test/fake_arc_session.h"
@@ -494,7 +497,7 @@ void FlushBlacklistPolicy() {
   // Updates of the URLBlacklist are done on IO, after building the blacklist
   // on the blocking pool, which is initiated from IO.
   content::RunAllPendingInMessageLoop(BrowserThread::IO);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   content::RunAllPendingInMessageLoop(BrowserThread::IO);
 }
 
@@ -780,7 +783,7 @@ class PolicyTest : public InProcessBrowserTest {
     extensions::TestExtensionRegistryObserver observer(
         extensions::ExtensionRegistry::Get(browser()->profile()));
     extension_service()->DisableExtension(
-        id, extensions::disable_reason::DISABLE_NONE);
+        id, extensions::disable_reason::DISABLE_USER_ACTION);
     observer.WaitForExtensionUnloaded();
   }
 
@@ -877,7 +880,7 @@ class LocalePolicyTest : public PolicyTest {
     // The "en-US" ResourceBundle is always loaded before this step for tests,
     // but in this test we want the browser to load the bundle as it
     // normally would.
-    ResourceBundle::CleanupSharedInstance();
+    ui::ResourceBundle::CleanupSharedInstance();
   }
 };
 
@@ -994,13 +997,10 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   ASSERT_TRUE(default_search);
   EXPECT_NE(kKeyword, default_search->keyword());
   EXPECT_NE(kSearchURL, default_search->url());
-  EXPECT_NE(kInstantURL, default_search->instant_url());
   EXPECT_FALSE(
     default_search->alternate_urls().size() == 2 &&
     default_search->alternate_urls()[0] == kAlternateURL0 &&
     default_search->alternate_urls()[1] == kAlternateURL1 &&
-    default_search->search_terms_replacement_key() ==
-        kSearchTermsReplacementKey &&
     default_search->image_url() == kImageURL &&
     default_search->image_url_post_params() == kImageURLPostParams &&
     default_search->new_tab_url() == kNewTabURL);
@@ -1043,12 +1043,9 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   ASSERT_TRUE(default_search);
   EXPECT_EQ(kKeyword, default_search->keyword());
   EXPECT_EQ(kSearchURL, default_search->url());
-  EXPECT_EQ(kInstantURL, default_search->instant_url());
   EXPECT_EQ(2U, default_search->alternate_urls().size());
   EXPECT_EQ(kAlternateURL0, default_search->alternate_urls()[0]);
   EXPECT_EQ(kAlternateURL1, default_search->alternate_urls()[1]);
-  EXPECT_EQ(kSearchTermsReplacementKey,
-            default_search->search_terms_replacement_key());
   EXPECT_EQ(kImageURL, default_search->image_url());
   EXPECT_EQ(kImageURLPostParams, default_search->image_url_post_params());
   EXPECT_EQ(kNewTabURL, default_search->new_tab_url());
@@ -1205,9 +1202,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ForceGoogleSafeSearch) {
                           safe_search == 0  // ForceGoogleSafeSearch
                               ? nullptr
                               : base::MakeUnique<base::Value>(safe_search == 1),
-                          nullptr,  // ForceYouTubeSafetyMode
-                          nullptr   // ForceYouTubeRestrict
-                          );
+                          nullptr,   // ForceYouTubeSafetyMode
+                          nullptr);  // ForceYouTubeRestrict
     // Verify that the safe search pref behaves the way we expect.
     PrefService* prefs = browser()->profile()->GetPrefs();
     EXPECT_EQ(safe_search != 0,
@@ -1561,8 +1557,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallBlacklistSharedModules) {
                                        .AppendASCII("update.xml");
   GURL update_xml_url(
       URLRequestMockHTTPJob::GetMockUrl(update_xml_path.MaybeAsASCII()));
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kAppsGalleryUpdateURL, update_xml_url.spec());
+  extension_test_util::SetGalleryUpdateURL(update_xml_url);
   ui_test_utils::NavigateToURL(browser(), update_xml_url);
 
   // Blacklist "*" but force-install the importer extension. The shared module
@@ -3197,7 +3192,6 @@ class MediaStreamDevicesControllerBrowserTest
             browser()->tab_strip_model()->GetActiveWebContents());
     prompt_factory_.reset(new MockPermissionPromptFactory(manager));
     prompt_factory_->set_response_type(PermissionRequestManager::ACCEPT_ALL);
-    manager->DisplayPendingRequests();
   }
 
   void TearDownOnMainThread() override { prompt_factory_.reset(); }
@@ -3209,7 +3203,7 @@ class MediaStreamDevicesControllerBrowserTest
         browser()->tab_strip_model()->GetActiveWebContents();
     EXPECT_EQ(request_url_,
               web_contents->GetMainFrame()->GetLastCommittedURL());
-    int render_process_id = web_contents->GetRenderProcessHost()->GetID();
+    int render_process_id = web_contents->GetMainFrame()->GetProcess()->GetID();
     int render_frame_id = web_contents->GetMainFrame()->GetRoutingID();
     return content::MediaStreamRequest(
         render_process_id, render_frame_id, 0, request_url_.GetOrigin(), false,
@@ -4239,8 +4233,9 @@ class ArcPolicyTest : public PolicyTest {
         base::MakeUnique<arc::ArcSessionRunner>(
             base::Bind(arc::FakeArcSession::Create)));
 
-    browser()->profile()->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
-    browser()->profile()->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted,
+    browser()->profile()->GetPrefs()->SetBoolean(arc::prefs::kArcSignedIn,
+                                                 true);
+    browser()->profile()->GetPrefs()->SetBoolean(arc::prefs::kArcTermsAccepted,
                                                  true);
   }
 
@@ -4262,7 +4257,7 @@ class ArcPolicyTest : public PolicyTest {
     UpdateProviderPolicy(policies);
     if (browser()) {
       const PrefService* const prefs = browser()->profile()->GetPrefs();
-      EXPECT_EQ(prefs->GetBoolean(prefs::kArcEnabled), enabled);
+      EXPECT_EQ(prefs->GetBoolean(arc::prefs::kArcEnabled), enabled);
     }
   }
 
@@ -4276,16 +4271,16 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcEnabled) {
   const auto* const arc_session_manager = arc::ArcSessionManager::Get();
 
   // ARC is switched off by default.
-  EXPECT_TRUE(arc_session_manager->IsSessionStopped());
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
+  EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcEnabled));
+  EXPECT_FALSE(arc_session_manager->enable_requested());
 
   // Enable ARC.
   SetArcEnabledByPolicy(true);
-  EXPECT_TRUE(arc_session_manager->IsSessionRunning());
+  EXPECT_TRUE(arc_session_manager->enable_requested());
 
   // Disable ARC.
   SetArcEnabledByPolicy(false);
-  EXPECT_TRUE(arc_session_manager->IsSessionStopped());
+  EXPECT_FALSE(arc_session_manager->enable_requested());
 }
 
 // Test ArcBackupRestoreEnabled policy.
@@ -4293,12 +4288,12 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcBackupRestoreEnabled) {
   PrefService* const pref = browser()->profile()->GetPrefs();
 
   // ARC Backup & Restore is switched off by default.
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
-  EXPECT_FALSE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
+  EXPECT_FALSE(pref->IsManagedPreference(arc::prefs::kArcBackupRestoreEnabled));
 
   // Switch on ARC Backup & Restore in the user prefs.
-  pref->SetBoolean(prefs::kArcBackupRestoreEnabled, true);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
+  pref->SetBoolean(arc::prefs::kArcBackupRestoreEnabled, true);
+  EXPECT_TRUE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
 
   // Disable ARC Backup & Restore through the policy.
   PolicyMap policies;
@@ -4306,16 +4301,16 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcBackupRestoreEnabled) {
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::MakeUnique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
-  EXPECT_TRUE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(pref->IsManagedPreference(arc::prefs::kArcBackupRestoreEnabled));
 
   // Enable ARC Backup & Restore through the policy.
   policies.Set(key::kArcBackupRestoreEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::MakeUnique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
-  EXPECT_TRUE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(pref->IsManagedPreference(arc::prefs::kArcBackupRestoreEnabled));
 }
 
 // Test ArcLocationServiceEnabled policy and its interplay with the
@@ -4337,12 +4332,13 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
   test_default_geo_policy_values.emplace_back(3);  // 'AskGeolocation'
 
   // The pref is switched off by default.
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
-  EXPECT_FALSE(pref->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+  EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcLocationServiceEnabled));
+  EXPECT_FALSE(
+      pref->IsManagedPreference(arc::prefs::kArcLocationServiceEnabled));
 
   // Switch on the pref in the user prefs.
-  pref->SetBoolean(prefs::kArcLocationServiceEnabled, true);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
+  pref->SetBoolean(arc::prefs::kArcLocationServiceEnabled, true);
+  EXPECT_TRUE(pref->GetBoolean(arc::prefs::kArcLocationServiceEnabled));
 
   for (const auto& test_policy_value : test_policy_values) {
     for (const auto& test_default_geo_policy_value :
@@ -4369,7 +4365,7 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
           !(should_be_disabled_by_policy ||
             should_be_disabled_by_default_geo_policy);
       EXPECT_EQ(expected_pref_value,
-                pref->GetBoolean(prefs::kArcLocationServiceEnabled))
+                pref->GetBoolean(arc::prefs::kArcLocationServiceEnabled))
           << "ArcLocationServiceEnabled policy is set to " << test_policy_value
           << "DefaultGeolocationSetting policy is set to "
           << test_default_geo_policy_value;
@@ -4378,8 +4374,9 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
           test_policy_value.is_bool() ||
           (test_default_geo_policy_value.is_int() &&
            test_default_geo_policy_value.GetInt() == 2);
-      EXPECT_EQ(expected_pref_managed,
-                pref->IsManagedPreference(prefs::kArcLocationServiceEnabled))
+      EXPECT_EQ(
+          expected_pref_managed,
+          pref->IsManagedPreference(arc::prefs::kArcLocationServiceEnabled))
           << "ArcLocationServiceEnabled policy is set to " << test_policy_value
           << "DefaultGeolocationSetting policy is set to "
           << test_default_geo_policy_value;
@@ -4471,6 +4468,7 @@ class NoteTakingOnLockScreenPolicyTest : public PolicyTest {
     // whitelisted as well.
     command_line->AppendSwitchASCII(
         extensions::switches::kWhitelistedExtensionID, kTestAppId);
+    command_line->AppendSwitch(ash::switches::kAshForceEnableStylusTools);
     PolicyTest::SetUpCommandLine(command_line);
   }
 

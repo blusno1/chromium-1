@@ -14,6 +14,7 @@
     {
       'target_name': 'detail_view',
        'dependencies': [
+        '<(DEPTH)/ui/webui/resources/cr_elements/compiled_resources2.gyp:cr_container_shadow_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
@@ -72,6 +73,7 @@
     {
       'target_name': 'item_list',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/cr_elements/compiled_resources2.gyp:cr_container_shadow_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
@@ -95,9 +97,26 @@
     {
       'target_name': 'keyboard_shortcuts',
        'dependencies': [
+        '<(DEPTH)/ui/webui/resources/cr_elements/compiled_resources2.gyp:cr_container_shadow_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(EXTERNS_GYP):developer_private',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'kiosk_browser_proxy',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'kiosk_dialog',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
+        'kiosk_browser_proxy',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
@@ -124,6 +143,7 @@
         'item_util',
         'load_error',
         'keyboard_shortcuts',
+        'kiosk_browser_proxy',
         'navigation_helper',
         'sidebar',
         'toolbar',

@@ -30,6 +30,7 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.firstrun.FirstRunUtils;
 import org.chromium.chrome.browser.omnibox.OmniboxPlaceholderFieldTrial;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -244,7 +245,7 @@ public class FeatureUtilities {
     }
 
     /**
-     * Cache whether or not Chrome Home is enabled.
+     * Cache whether or not Chrome Home and related features are enabled.
      */
     public static void cacheChromeHomeEnabled() {
         // Chrome Home doesn't work with tablets.
@@ -253,6 +254,22 @@ public class FeatureUtilities {
         boolean isChromeHomeEnabled = ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME);
         ChromePreferenceManager manager = ChromePreferenceManager.getInstance();
         manager.setChromeHomeEnabled(isChromeHomeEnabled);
+
+        PrefServiceBridge.getInstance().setChromeHomePersonalizedOmniboxSuggestionsEnabled(
+                !isChromeHomeEnabled()
+                        ? false
+                        : ChromeFeatureList.isEnabled(
+                                  ChromeFeatureList.CHROME_HOME_PERSONALIZED_OMNIBOX_SUGGESTIONS));
+    }
+
+    /**
+     * Update the user's setting for Chrome Home. This is a user-facing setting different from the
+     * one in chrome://flags. This setting will take prescience over the one in flags.
+     * @param enabled Whether or not the feature should be enabled.
+     */
+    public static void switchChromeHomeUserSetting(boolean enabled) {
+        ChromePreferenceManager.getInstance().setChromeHomeUserEnabled(enabled);
+        sChromeHomeEnabled = enabled;
     }
 
     /**
@@ -263,17 +280,25 @@ public class FeatureUtilities {
         if (DeviceFormFactor.isTablet()) return false;
 
         if (sChromeHomeEnabled == null) {
+            boolean isUserPreferenceSet = false;
+            ChromePreferenceManager prefManager = ChromePreferenceManager.getInstance();
+
             // Allow disk access for preferences while Chrome Home is in experimentation.
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
             try {
-                sChromeHomeEnabled = ChromePreferenceManager.getInstance().isChromeHomeEnabled();
+                if (ChromePreferenceManager.getInstance().isChromeHomeUserPreferenceSet()) {
+                    isUserPreferenceSet = true;
+                    sChromeHomeEnabled = prefManager.isChromeHomeUserEnabled();
+                } else {
+                    sChromeHomeEnabled = prefManager.isChromeHomeEnabled();
+                }
             } finally {
                 StrictMode.setThreadPolicy(oldPolicy);
             }
 
             // If the browser has been initialized by this point, check the experiment as well to
             // avoid the restart logic in cacheChromeHomeEnabled.
-            if (ChromeFeatureList.isInitialized()) {
+            if (ChromeFeatureList.isInitialized() && !isUserPreferenceSet) {
                 boolean chromeHomeExperimentEnabled =
                         ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME);
 
@@ -283,8 +308,8 @@ public class FeatureUtilities {
                             chromeHomeExperimentEnabled);
                 }
             }
+            ChromePreferenceManager.setChromeHomeEnabledDate(sChromeHomeEnabled);
         }
-
         return sChromeHomeEnabled;
     }
 
@@ -316,19 +341,6 @@ public class FeatureUtilities {
         }
 
         return sChromeHomeSwipeLogicType;
-    }
-
-    /**
-     * @return Whether or not the Chrome Home Modern layout is enabled.
-     */
-    public static boolean isChromeHomeModernEnabled() {
-        if (!isChromeHomeEnabled()) return false;
-
-        // Modern is enabled by default for Chrome Home, so return true if the feature list isn't
-        // yet initialized.
-        if (!ChromeFeatureList.isInitialized()) return true;
-
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_MODERN_LAYOUT);
     }
 
     /**

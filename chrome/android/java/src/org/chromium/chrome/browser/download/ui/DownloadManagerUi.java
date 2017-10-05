@@ -16,6 +16,7 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.ViewGroup;
 
+import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.FileUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
@@ -23,18 +24,23 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.BasicNativePage;
+import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.widget.ThumbnailProvider;
+import org.chromium.chrome.browser.widget.ThumbnailProviderImpl;
 import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar.SearchDelegate;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
+import org.chromium.components.offline_items_collection.OfflineContentProvider;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -66,14 +72,17 @@ public class DownloadManagerUi implements OnMenuItemClickListener, SearchDelegat
     }
 
     private static class DownloadBackendProvider implements BackendProvider {
-        private OfflinePageDownloadBridge mOfflinePageBridge;
         private SelectionDelegate<DownloadHistoryItemWrapper> mSelectionDelegate;
         private ThumbnailProvider mThumbnailProvider;
 
-        DownloadBackendProvider() {
-            mOfflinePageBridge = new OfflinePageDownloadBridge(Profile.getLastUsedProfile());
+        DownloadBackendProvider(DiscardableReferencePool referencePool) {
             mSelectionDelegate = new DownloadItemSelectionDelegate();
-            mThumbnailProvider = new ThumbnailProviderImpl();
+            mThumbnailProvider = new ThumbnailProviderImpl(referencePool);
+
+            // Create a OfflinePageDownloadBridge in order to initialize and register the offline
+            // pages backend to the offline content aggregator.
+            // TODO(shaktisahu): Find an explicit way of doing this.
+            new OfflinePageDownloadBridge(Profile.getLastUsedProfile().getOriginalProfile());
         }
 
         @Override
@@ -82,8 +91,9 @@ public class DownloadManagerUi implements OnMenuItemClickListener, SearchDelegat
         }
 
         @Override
-        public OfflinePageDownloadBridge getOfflinePageBridge() {
-            return mOfflinePageBridge;
+        public OfflineContentProvider getOfflineContentProvider() {
+            return OfflineContentAggregatorFactory.forProfile(
+                    Profile.getLastUsedProfile().getOriginalProfile());
         }
 
         @Override
@@ -98,8 +108,6 @@ public class DownloadManagerUi implements OnMenuItemClickListener, SearchDelegat
 
         @Override
         public void destroy() {
-            getOfflinePageBridge().destroy();
-
             mThumbnailProvider.destroy();
             mThumbnailProvider = null;
         }
@@ -182,8 +190,10 @@ public class DownloadManagerUi implements OnMenuItemClickListener, SearchDelegat
             ComponentName parentComponent, boolean isSeparateActivity,
             SnackbarManager snackbarManager) {
         mActivity = activity;
-        mBackendProvider =
-                sProviderForTests == null ? new DownloadBackendProvider() : sProviderForTests;
+        ChromeApplication application = (ChromeApplication) activity.getApplication();
+        mBackendProvider = sProviderForTests == null
+                ? new DownloadBackendProvider(application.getReferencePool())
+                : sProviderForTests;
         mSnackbarManager = snackbarManager;
 
         mMainView = (ViewGroup) LayoutInflater.from(activity).inflate(R.layout.download_main, null);
@@ -216,8 +226,8 @@ public class DownloadManagerUi implements OnMenuItemClickListener, SearchDelegat
         mToolbar = (DownloadManagerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.download_manager_toolbar, mBackendProvider.getSelectionDelegate(), 0, null,
                 R.id.normal_menu_group, R.id.selection_mode_menu_group,
-                FeatureUtilities.isChromeHomeModernEnabled() ? R.color.modern_toolbar_bg
-                                                             : R.color.modern_primary_color,
+                FeatureUtilities.isChromeHomeEnabled() ? R.color.modern_toolbar_bg
+                                                       : R.color.modern_primary_color,
                 this, true);
         mToolbar.setManager(this);
         mToolbar.initializeFilterSpinner(mFilterAdapter);
@@ -506,5 +516,12 @@ public class DownloadManagerUi implements OnMenuItemClickListener, SearchDelegat
     @VisibleForTesting
     public static void setProviderForTests(BackendProvider provider) {
         sProviderForTests = provider;
+    }
+
+    /**
+     * Called to scroll to the top of the downloads list.
+     */
+    public void scrollToTop() {
+        mRecyclerView.smoothScrollToPosition(0);
     }
 }

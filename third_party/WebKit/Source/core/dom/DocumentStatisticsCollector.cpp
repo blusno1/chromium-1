@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "DocumentStatisticsCollector.h"
+#include "core/dom/DocumentStatisticsCollector.h"
 
-#include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeComputedStyle.h"
@@ -14,6 +13,7 @@
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMetaElement.h"
+#include "core/html_names.h"
 #include "core/page/Page.h"
 #include "platform/Histogram.h"
 #include "public/platform/Platform.h"
@@ -129,7 +129,7 @@ void CollectFeatures(Element& root,
     } else if (element.HasTagName(formTag)) {
       features.form_count++;
     } else if (element.HasTagName(inputTag)) {
-      const HTMLInputElement& input = toHTMLInputElement(element);
+      const HTMLInputElement& input = ToHTMLInputElement(element);
       if (input.type() == InputTypeNames::text) {
         features.text_input_count++;
       } else if (input.type() == InputTypeNames::password) {
@@ -168,9 +168,9 @@ bool HasOpenGraphArticle(const Element& head) {
   DEFINE_STATIC_LOCAL(AtomicString, property_attr, ("property"));
   for (const Element* child = ElementTraversal::FirstChild(head); child;
        child = ElementTraversal::NextSibling(*child)) {
-    if (!isHTMLMetaElement(*child))
+    if (!IsHTMLMetaElement(*child))
       continue;
-    const HTMLMetaElement& meta = toHTMLMetaElement(*child);
+    const HTMLMetaElement& meta = ToHTMLMetaElement(*child);
 
     if (meta.GetName() == og_type ||
         meta.getAttribute(property_attr) == og_type) {

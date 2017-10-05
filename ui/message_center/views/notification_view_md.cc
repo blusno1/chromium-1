@@ -9,6 +9,7 @@
 
 #include "base/i18n/case_conversion.h"
 #include "base/strings/string_util.h"
+#include "components/url_formatter/elide_url.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
@@ -53,7 +54,7 @@ constexpr gfx::Insets kActionsRowPadding(8, 8, 8, 8);
 constexpr int kActionsRowHorizontalSpacing = 8;
 constexpr gfx::Insets kActionButtonPadding(0, 12, 0, 12);
 constexpr gfx::Insets kStatusTextPadding(4, 0, 0, 0);
-constexpr gfx::Size kActionButtonMinSize(88, 32);
+constexpr gfx::Size kActionButtonMinSize(0, 32);
 // TODO(tetsui): Move |kIconViewSize| to public/cpp/message_center_constants.h
 // and merge with contradicting |kNotificationIconSize|.
 constexpr gfx::Size kIconViewSize(36, 36);
@@ -110,58 +111,9 @@ gfx::FontList GetTextFontList() {
   return gfx::FontList(font);
 }
 
-#if defined(OS_CHROMEOS)
-// Return true if the default |display_source| should be used for the
-// notifications from the notifier.
-//
-// Ideally, we shuold fix the callers to set appropriate |display_source|, but
-// string resource is frozen in M62. For now, we should use this to prevent
-// empty |display_source| in system notifications.
-// TODO(tetsui): Remove this hack after M62 is released.
-bool ShowDefaultDisplaySource(const NotifierId& notifier) {
-  // The string constants are written in plain to prevent circular dependencies.
-  // This should not be accepted usually but I think it's OK here, as this
-  // function has a clear plan to be removed soon.
-  return notifier.type == NotifierId::SYSTEM_COMPONENT &&
-         (
-             // ARC notification.
-             // chrome/browser/chromeos/arc/arc_auth_notification.cc
-             notifier.id == "arc_auth" ||
-             // chrome/browser/chromeos/arc/notification/
-             //   arc_boot_error_notification.cc
-             notifier.id == "arc_boot_error" ||
-             // chrome/browser/chromeos/arc/notification/
-             //   arc_provision_notification_service.cc
-             notifier.id == "arc_managed_provision" ||
-             // Happiness survey notification.
-             // chrome/browser/chromeos/hats/hats_notification_controller.cc
-             notifier.id == "ash.hats" ||
-             // Sign-in error notification.
-             // chrome/browser/signin/signin_error_notifier_ash.cc
-             // chrome/browser/chromeos/authpolicy/
-             //   auth_policy_credentials_manager.cc
-             notifier.id == "chrome://settings/signin/" ||
-             // CUPS printing notification.
-             // chrome/browser/chromeos/printing/cups_print_job_notification.cc
-             notifier.id ==
-                 "chrome://settings/printing/cups-print-job-notification");
-}
-#endif
+}  // anonymous namespace
 
 // ItemView ////////////////////////////////////////////////////////////////////
-
-// ItemViews are responsible for drawing each list notification item's title and
-// message next to each other within a single column.
-class ItemView : public views::View {
- public:
-  explicit ItemView(const message_center::NotificationItem& item);
-  ~ItemView() override;
-
-  const char* GetClassName() const override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ItemView);
-};
 
 ItemView::ItemView(const message_center::NotificationItem& item) {
   SetLayoutManager(
@@ -194,30 +146,6 @@ const char* ItemView::GetClassName() const {
 }
 
 // CompactTitleMessageView /////////////////////////////////////////////////////
-
-// CompactTitleMessageView shows notification title and message in a single
-// line. This view is used for NOTIFICATION_TYPE_PROGRESS.
-class CompactTitleMessageView : public views::View {
- public:
-  explicit CompactTitleMessageView();
-  ~CompactTitleMessageView() override;
-
-  const char* GetClassName() const override;
-
-  void OnPaint(gfx::Canvas* canvas) override;
-
-  void set_title(const base::string16& title) { title_ = title; }
-  void set_message(const base::string16& message) { message_ = message; }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CompactTitleMessageView);
-
-  base::string16 title_;
-  base::string16 message_;
-
-  views::Label* title_view_ = nullptr;
-  views::Label* message_view_ = nullptr;
-};
 
 CompactTitleMessageView::~CompactTitleMessageView() = default;
 
@@ -273,24 +201,6 @@ void CompactTitleMessageView::OnPaint(gfx::Canvas* canvas) {
 }
 
 // LargeImageView //////////////////////////////////////////////////////////////
-
-class LargeImageView : public views::View {
- public:
-  LargeImageView();
-  ~LargeImageView() override;
-
-  void SetImage(const gfx::ImageSkia& image);
-
-  void OnPaint(gfx::Canvas* canvas) override;
-  const char* GetClassName() const override;
-
- private:
-  gfx::Size GetResizedImageSize();
-
-  gfx::ImageSkia image_;
-
-  DISALLOW_COPY_AND_ASSIGN(LargeImageView);
-};
 
 LargeImageView::LargeImageView() {
   SetBackground(views::CreateSolidBackground(kLargeImageBackgroundColor));
@@ -350,22 +260,6 @@ gfx::Size LargeImageView::GetResizedImageSize() {
 
 // LargeImageContainerView /////////////////////////////////////////////////////
 
-// We have a container view outside LargeImageView, because we want to fill
-// area that is not coverted by the image by background color.
-class LargeImageContainerView : public views::View {
- public:
-  LargeImageContainerView();
-  ~LargeImageContainerView() override;
-
-  void SetImage(const gfx::ImageSkia& image);
-  const char* GetClassName() const override;
-
- private:
-  LargeImageView* const image_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(LargeImageContainerView);
-};
-
 LargeImageContainerView::LargeImageContainerView()
     : image_view_(new LargeImageView()) {
   SetLayoutManager(new views::FillLayout());
@@ -384,8 +278,6 @@ void LargeImageContainerView::SetImage(const gfx::ImageSkia& image) {
 const char* LargeImageContainerView::GetClassName() const {
   return "LargeImageContainerView";
 }
-
-}  // anonymous namespace
 
 // NotificationButtonMD ////////////////////////////////////////////////////////
 
@@ -550,10 +442,10 @@ void NotificationViewMD::ScrollRectToVisible(const gfx::Rect& rect) {
 }
 
 gfx::NativeCursor NotificationViewMD::GetCursor(const ui::MouseEvent& event) {
-  if (!clickable_ || !controller()->HasClickedListener(notification_id()))
-    return views::View::GetCursor(event);
+  if (clickable_ || controller()->HasClickedListener(notification_id()))
+    return views::GetNativeHandCursor();
 
-  return views::GetNativeHandCursor();
+  return views::View::GetCursor(event);
 }
 
 void NotificationViewMD::OnMouseEntered(const ui::MouseEvent& event) {
@@ -628,9 +520,8 @@ void NotificationViewMD::CreateOrUpdateContextTitleView(
   // TODO(tetsui): Remove this after all system notification transition is
   // completed.
   // All system notification should use Notification::CreateSystemNotification()
-  if ((notification.display_source().empty() &&
-       notification.origin_url().is_empty()) ||
-      ShowDefaultDisplaySource(notification.notifier_id())) {
+  if (notification.display_source().empty() &&
+      notification.origin_url().is_empty()) {
     header_row_->SetAppName(l10n_util::GetStringFUTF16(
         IDS_MESSAGE_CENTER_NOTIFICATION_CHROMEOS_SYSTEM,
         MessageCenter::Get()->GetProductOSName()));
@@ -640,7 +531,14 @@ void NotificationViewMD::CreateOrUpdateContextTitleView(
   }
 #endif
 
-  header_row_->SetAppName(notification.display_source());
+  if (notification.origin_url().is_valid() &&
+      notification.origin_url().SchemeIsHTTPOrHTTPS()) {
+    header_row_->SetAppName(url_formatter::FormatUrlForSecurityDisplay(
+        notification.origin_url(),
+        url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
+  } else {
+    header_row_->SetAppName(notification.display_source());
+  }
   header_row_->SetAccentColor(
       notification.accent_color() == SK_ColorTRANSPARENT
           ? message_center::kNotificationDefaultAccentColor
@@ -746,7 +644,10 @@ void NotificationViewMD::CreateOrUpdateProgressBarView(
   progress_bar_view_->SetValue(notification.progress() / 100.0);
   progress_bar_view_->SetVisible(notification.items().empty());
 
-  header_row_->SetProgress(notification.progress());
+  if (0 <= notification.progress() && notification.progress() <= 100)
+    header_row_->SetProgress(notification.progress());
+  else
+    header_row_->ClearProgress();
 }
 
 void NotificationViewMD::CreateOrUpdateProgressStatusView(

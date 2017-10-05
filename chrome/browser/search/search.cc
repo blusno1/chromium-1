@@ -25,6 +25,7 @@
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 
@@ -80,17 +81,6 @@ const TemplateURL* GetDefaultSearchProviderTemplateURL(Profile* profile) {
   return NULL;
 }
 
-GURL TemplateURLRefToGURL(const TemplateURLRef& ref,
-                          const SearchTermsData& search_terms_data,
-                          bool append_extra_query_params,
-                          bool force_instant_results) {
-  TemplateURLRef::SearchTermsArgs search_terms_args =
-      TemplateURLRef::SearchTermsArgs(base::string16());
-  search_terms_args.append_extra_query_params = append_extra_query_params;
-  search_terms_args.force_instant_results = force_instant_results;
-  return GURL(ref.ReplaceSearchTerms(search_terms_args, search_terms_data));
-}
-
 // Returns true if |url| can be used as an Instant URL for |profile|.
 bool IsInstantURL(const GURL& url, Profile* profile) {
   if (!IsInstantExtendedAPIEnabled())
@@ -104,31 +94,7 @@ bool IsInstantURL(const GURL& url, Profile* profile) {
                                  IsMatchingServiceWorker(url, new_tab_url))) {
     return true;
   }
-
-  const TemplateURL* template_url =
-      GetDefaultSearchProviderTemplateURL(profile);
-  if (!template_url)
-    return false;
-
-  if (!template_url->HasSearchTermsReplacementKey(url))
-    return false;
-
-  // |url| should either have a secure scheme or have a non-HTTPS base URL that
-  // the user specified using --google-base-url. (This allows testers to use
-  // --google-base-url to point at non-HTTPS servers, which eases testing.)
-  if (!url.SchemeIsCryptographic() &&
-      !google_util::StartsWithCommandLineGoogleBaseURL(url)) {
-    return false;
-  }
-
-  const TemplateURLRef& instant_url_ref = template_url->instant_url_ref();
-  UIThreadSearchTermsData search_terms_data(profile);
-  const GURL instant_url = TemplateURLRefToGURL(
-      instant_url_ref, search_terms_data, false, false);
-  if (!instant_url.is_valid())
-    return false;
-
-  return MatchesOriginAndPath(url, instant_url);
+  return false;
 }
 
 bool IsURLAllowedForSupervisedUser(const GURL& url, Profile* profile) {
@@ -196,9 +162,9 @@ struct NewTabURLDetails {
     if (!profile || !template_url)
       return NewTabURLDetails(local_url, NEW_TAB_URL_BAD);
 
-    GURL search_provider_url = TemplateURLRefToGURL(
-        template_url->new_tab_url_ref(), UIThreadSearchTermsData(profile),
-        false, false);
+    GURL search_provider_url(template_url->new_tab_url_ref().ReplaceSearchTerms(
+        TemplateURLRef::SearchTermsArgs(base::string16()),
+        UIThreadSearchTermsData(profile)));
 
     if (ShouldShowLocalNewTab(search_provider_url, profile))
       return NewTabURLDetails(local_url, NEW_TAB_URL_VALID);
@@ -221,22 +187,10 @@ struct NewTabURLDetails {
   NewTabURLState state;
 };
 
-base::string16 ExtractSearchTermsFromURL(Profile* profile, const GURL& url) {
-  const TemplateURL* template_url =
-      GetDefaultSearchProviderTemplateURL(profile);
-  base::string16 search_terms;
-  if (template_url)
-    template_url->ExtractSearchTermsFromURL(
-        url, UIThreadSearchTermsData(profile), &search_terms);
-  return search_terms;
-}
-
 }  // namespace
 
 bool ShouldAssignURLToInstantRenderer(const GURL& url, Profile* profile) {
-  return url.is_valid() &&
-         profile &&
-         IsInstantExtendedAPIEnabled() &&
+  return url.is_valid() && profile && IsInstantExtendedAPIEnabled() &&
          (url.SchemeIs(chrome::kChromeSearchScheme) ||
           IsInstantURL(url, profile));
 }
@@ -244,7 +198,7 @@ bool ShouldAssignURLToInstantRenderer(const GURL& url, Profile* profile) {
 bool IsRenderedInInstantProcess(const content::WebContents* contents,
                                 Profile* profile) {
   const content::RenderProcessHost* process_host =
-      contents->GetRenderProcessHost();
+      contents->GetMainFrame()->GetProcess();
   if (!process_host)
     return false;
 
@@ -287,8 +241,8 @@ bool IsNTPURL(const GURL& url, Profile* profile) {
   if (!IsInstantExtendedAPIEnabled())
     return url == chrome::kChromeUINewTabURL;
 
-  const base::string16 search_terms = ExtractSearchTermsFromURL(profile, url);
-  return profile && ((IsInstantURL(url, profile) && search_terms.empty()) ||
+  // TODO(treib,sfiera): Tolerate query params when detecting local NTPs.
+  return profile && (IsInstantURL(url, profile) ||
                      url == chrome::kChromeSearchLocalNtpUrl);
 }
 
@@ -316,6 +270,7 @@ bool IsInstantNTPURL(const GURL& url, Profile* profile) {
   if (!IsInstantExtendedAPIEnabled())
     return false;
 
+  // TODO(treib,sfiera): Tolerate query params when detecting local NTPs.
   if (url == chrome::kChromeSearchLocalNtpUrl)
     return true;
 
@@ -326,20 +281,6 @@ bool IsInstantNTPURL(const GURL& url, Profile* profile) {
 bool IsSuggestPrefEnabled(Profile* profile) {
   return profile && !profile->IsOffTheRecord() && profile->GetPrefs() &&
          profile->GetPrefs()->GetBoolean(prefs::kSearchSuggestEnabled);
-}
-
-// Returns URLs associated with the default search engine for |profile|.
-std::vector<GURL> GetSearchURLs(Profile* profile) {
-  std::vector<GURL> result;
-  const TemplateURL* template_url =
-      GetDefaultSearchProviderTemplateURL(profile);
-  if (!template_url)
-    return result;
-  for (const TemplateURLRef& ref : template_url->url_refs()) {
-    result.push_back(TemplateURLRefToGURL(ref, UIThreadSearchTermsData(profile),
-                                          false, false));
-  }
-  return result;
 }
 
 GURL GetNewTabPageURL(Profile* profile) {

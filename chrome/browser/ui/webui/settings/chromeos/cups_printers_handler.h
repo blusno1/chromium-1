@@ -62,12 +62,20 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
   // string. |ipp_everywhere| indicates if configuration using the CUPS IPP
   // Everywhere driver should be attempted. If |success| is false, the values of
   // |make|, |model|, |make_and_model|, and |ipp_everywhere| are not specified.
-  void OnPrinterInfo(const std::string& callback_id,
-                     bool success,
-                     const std::string& make,
-                     const std::string& model,
-                     const std::string& make_and_model,
-                     bool ipp_everywhere);
+  void OnAutoconfQueried(const std::string& callback_id,
+                         bool success,
+                         const std::string& make,
+                         const std::string& model,
+                         const std::string& make_and_model,
+                         bool ipp_everywhere);
+
+  // Handles the callback for HandleGetPrinterInfo for a discovered printer.
+  void OnAutoconfQueriedDiscovered(std::unique_ptr<Printer> printer,
+                                   bool success,
+                                   const std::string& make,
+                                   const std::string& model,
+                                   const std::string& make_and_model,
+                                   bool ipp_everywhere);
 
   void HandleAddCupsPrinter(const base::ListValue* args);
 
@@ -75,7 +83,10 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
   // location of (i.e. a printer that was not 'discovered' automatically).
   void OnAddedSpecifiedPrinter(const Printer& printer,
                                PrinterSetupResult result);
-  void OnAddPrinterError();
+
+  // Handles the result of failure to add a printer. |result_code| is used to
+  // determine the reason for the failure.
+  void OnAddPrinterError(PrinterSetupResult result_code);
 
   // Get a list of all manufacturers for which we have at least one model of
   // printer supported.  Takes one argument, the callback id for the result.
@@ -119,8 +130,7 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
                                 PrinterSetupResult result_code);
 
   // Code common between the discovered and manual add printer code paths.
-  // Returns true if the printer was added successfully, false otherwise.
-  bool OnAddedPrinterCommon(const Printer& printer,
+  void OnAddedPrinterCommon(const Printer& printer,
                             PrinterSetupResult result_code);
 
   // CupsPrintersManager::Observer override:

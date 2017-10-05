@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/accessibility/focus_ring_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray.h"
@@ -44,6 +45,7 @@
 #include "chrome/browser/chromeos/login/signin/token_handle_util.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
+#include "chrome/browser/chromeos/login/ui/internet_detail_dialog.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -51,12 +53,12 @@
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
-#include "chrome/browser/chromeos/ui/focus_ring_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
@@ -94,6 +96,7 @@
 #include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -306,6 +309,42 @@ void ScheduleCompletionCallbacks(std::vector<base::OnceClosure>&& callbacks) {
   }
 }
 
+class CloseAfterCommit : public ui::CompositorObserver,
+                         public views::WidgetObserver {
+ public:
+  explicit CloseAfterCommit(views::Widget* widget) : widget_(widget) {
+    widget->GetCompositor()->AddObserver(this);
+    widget_->AddObserver(this);
+  }
+  ~CloseAfterCommit() override {
+    widget_->RemoveObserver(this);
+    widget_->GetCompositor()->RemoveObserver(this);
+  }
+
+  // ui::CompositorObserver:
+  void OnCompositingDidCommit(ui::Compositor* compositor) override {
+    DCHECK_EQ(widget_->GetCompositor(), compositor);
+    widget_->Close();
+  }
+
+  void OnCompositingStarted(ui::Compositor* compositor,
+                            base::TimeTicks start_time) override {}
+  void OnCompositingEnded(ui::Compositor* compositor) override {}
+  void OnCompositingLockStateChanged(ui::Compositor* compositor) override {}
+  void OnCompositingShuttingDown(ui::Compositor* compositor) override {}
+
+  // views::WidgetObserver:
+  void OnWidgetDestroying(views::Widget* widget) override {
+    DCHECK_EQ(widget, widget_);
+    delete this;
+  }
+
+ private:
+  views::Widget* const widget_;
+
+  DISALLOW_COPY_AND_ASSIGN(CloseAfterCommit);
+};
+
 }  // namespace
 
 namespace chromeos {
@@ -377,6 +416,7 @@ class LoginDisplayHostImpl::LoginWidgetDelegate : public views::WidgetDelegate {
 
 LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& wallpaper_bounds)
     : wallpaper_bounds_(wallpaper_bounds),
+      startup_sound_played_(StartupUtils::IsOobeCompleted()),
       pointer_factory_(this),
       animation_weak_ptr_factory_(this) {
   if (ash_util::IsRunningInMash()) {
@@ -589,9 +629,10 @@ void LoginDisplayHostImpl::Finalize(base::OnceClosure completion_callback) {
   }
 }
 
-void LoginDisplayHostImpl::OpenProxySettings(const std::string& network_id) {
-  if (login_view_)
-    login_view_->OpenProxySettings(network_id);
+void LoginDisplayHostImpl::OpenInternetDetailDialog(
+    const std::string& network_id) {
+  InternetDetailDialog::ShowDialog(ProfileHelper::GetSigninProfile(),
+                                   GetNativeWindow(), network_id);
 }
 
 void LoginDisplayHostImpl::SetStatusAreaVisible(bool visible) {
@@ -1152,7 +1193,7 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
   if (system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation()) {
     views::FocusManager::set_arrow_key_traversal_enabled(true);
     // crbug.com/405859
-    focus_ring_controller_.reset(new FocusRingController);
+    focus_ring_controller_ = std::make_unique<ash::FocusRingController>();
     focus_ring_controller_->SetVisible(true);
 
     keyboard_driven_oobe_key_handler_.reset(new KeyboardDrivenOobeKeyHandler);
@@ -1227,7 +1268,15 @@ void LoginDisplayHostImpl::ResetLoginWindowAndView() {
   }
 
   if (login_window_) {
-    login_window_->Close();
+    if (ash_util::IsRunningInMash()) {
+      login_window_->Close();
+    } else {
+      login_window_->Hide();
+      // This CompositorObserver becomes "owned" by login_window_ after
+      // construction and will delete itself once login_window_ is destroyed.
+      new CloseAfterCommit(login_window_);
+    }
+    login_window_->RemoveRemovalsObserver(this);
     login_window_ = nullptr;
     login_window_delegate_ = nullptr;
   }

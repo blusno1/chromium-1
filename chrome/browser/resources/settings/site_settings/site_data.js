@@ -22,6 +22,8 @@ Polymer({
 
   behaviors: [
     CookieTreeBehavior,
+    I18nBehavior,
+    settings.RouteObserverBehavior,
   ],
 
   properties: {
@@ -35,9 +37,6 @@ Polymer({
       value: '',
     },
 
-    /** @private */
-    confirmationDeleteMsg_: String,
-
     /** @type {!Map<string, string>} */
     focusConfig: {
       type: Object,
@@ -45,9 +44,27 @@ Polymer({
     },
   },
 
-  /** @override */
-  ready: function() {
-    this.loadCookies();
+  /**
+   * Reload cookies when the site data page is visited.
+   *
+   * settings.RouteObserverBehavior
+   * @param {!settings.Route} currentRoute
+   * @protected
+   */
+  currentRouteChanged: function(currentRoute) {
+    if (currentRoute == settings.routes.SITE_SETTINGS_SITE_DATA) {
+      this.loadCookies();
+    }
+  },
+
+  /**
+   * Returns the icon to use for a given site.
+   * @param {string} url The url of the site to fetch the icon for.
+   * @return {string} Value for background-image style.
+   * @private
+   */
+  favicon_: function(url) {
+    return cr.icon.getFavicon(url);
   },
 
   /**
@@ -123,8 +140,6 @@ Polymer({
    */
   onRemoveShowingSitesTap_: function(e) {
     e.preventDefault();
-    this.confirmationDeleteMsg_ =
-        loadTimeData.getString('siteSettingsCookieRemoveMultipleConfirmation');
     this.$.confirmDeleteDialog.showModal();
   },
 
@@ -141,10 +156,10 @@ Polymer({
       var items = this.$.list.items;
       for (var i = 0; i < items.length; ++i) {
         if (this.showItem_(items[i]))
-          this.browserProxy.removeCookie(items[i].id);
+          this.browserProxy_.removeCookie(items[i].id);
       }
       // We just deleted all items found by the filter, let's reset the filter.
-      /** @type {SettingsSubpageSearchElement} */ (this.$.filter).setValue('');
+      this.fire('clear-subpage-search');
     }
   },
 
@@ -155,7 +170,7 @@ Polymer({
    */
   onRemoveSiteTap_: function(e) {
     e.stopPropagation();
-    this.browserProxy.removeCookie(e.model.item.id);
+    this.browserProxy_.removeCookie(e.model.item.id);
   },
 
   /**

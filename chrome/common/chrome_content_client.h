@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "chrome/common/features.h"
 #include "chrome/common/origin_trials/chrome_origin_trial_policy.h"
+#include "components/nacl/common/features.h"
 #include "content/public/common/content_client.h"
 #include "ppapi/features/features.h"
 
@@ -46,7 +47,7 @@ class ChromeContentClient : public content::ContentClient {
   // pointers for built-in plugins. We avoid linking these plugins into
   // chrome_common because then on Windows we would ship them twice because of
   // the split DLL.
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   static void SetNaClEntryFunctions(
       content::PepperPluginInfo::GetInterfaceFunc get_interface,
       content::PepperPluginInfo::PPP_InitializeModuleFunc initialize_module,
@@ -75,7 +76,7 @@ class ChromeContentClient : public content::ContentClient {
       std::vector<content::PepperPluginInfo>* plugins) override;
   void AddContentDecryptionModules(
       std::vector<content::CdmInfo>* cdms,
-      std::vector<content::CdmHostFilePath>* cdm_host_file_paths) override;
+      std::vector<media::CdmHostFilePath>* cdm_host_file_paths) override;
 
   void AddAdditionalSchemes(Schemes* schemes) override;
   std::string GetProduct() const override;
@@ -89,14 +90,7 @@ class ChromeContentClient : public content::ContentClient {
   gfx::Image& GetNativeImageNamed(int resource_id) const override;
   std::string GetProcessTypeNameInEnglish(int type) override;
 
-#if defined(OS_MACOSX)
-  bool GetSandboxProfileForSandboxType(
-      int sandbox_type,
-      int* sandbox_profile_resource_id) const override;
-#endif
-
   bool AllowScriptExtensionForServiceWorker(const GURL& script_url) override;
-
   bool IsSupplementarySiteIsolationModeEnabled() override;
 
   content::OriginTrialPolicy* GetOriginTrialPolicy() override;

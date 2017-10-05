@@ -423,6 +423,13 @@ bool IsInternalURL(const GURL& url) {
       [[FlippedView alloc] initWithFrame:[superview frame]]);
   [superview addSubview:siteSettingsSectionView];
 
+  permissionsView_ =
+      [[[FlippedView alloc] initWithFrame:[superview frame]] autorelease];
+  [siteSettingsSectionView addSubview:permissionsView_];
+
+  // The certificate section is created on demand.
+  certificateView_ = nil;
+
   // Initialize the two containers that hold the controls. The initial frames
   // are arbitrary, and will be adjusted after the controls are laid out.
   PageInfoUI::PermissionInfo info;
@@ -436,13 +443,6 @@ bool IsInternalURL(const GURL& url) {
                                IDS_PAGE_INFO_NUM_COOKIES, 0)];
   [cookiesView_ setLinkTarget:self
                    withAction:@selector(showCookiesAndSiteData:)];
-
-  permissionsView_ =
-      [[[FlippedView alloc] initWithFrame:[superview frame]] autorelease];
-  [siteSettingsSectionView addSubview:permissionsView_];
-
-  // The certificate section is created on demand.
-  certificateView_ = nil;
 
   // Create the link button to view site settings. Its position will be set in
   // performLayout.
@@ -645,7 +645,7 @@ bool IsInternalURL(const GURL& url) {
 }
 
 - (void)layoutSecuritySection {
-  // Start the layout with the first element. Margins are handled by the caller.
+  // Margins are handled by the caller.
   CGFloat yPos = 0;
 
   [self sizeTextFieldHeightToFit:securitySummaryField_];
@@ -656,8 +656,10 @@ bool IsInternalURL(const GURL& url) {
   yPos = [self setYPositionOfView:securityDetailsField_
                                to:yPos + kSecurityParagraphSpacing];
 
-  NSPoint helpOrigin =
-      NSMakePoint(kSectionHorizontalPadding - kLinkButtonXAdjustment, yPos);
+  // A common anchor point for link elements
+  CGFloat linkY = kSectionHorizontalPadding - kLinkButtonXAdjustment;
+
+  NSPoint helpOrigin = NSMakePoint(linkY, yPos);
   if (base::i18n::IsRTL()) {
     helpOrigin.x = NSWidth([contentView_ frame]) - helpOrigin.x -
                    NSWidth(connectionHelpButton_.frame);
@@ -669,10 +671,13 @@ bool IsInternalURL(const GURL& url) {
     DCHECK(resetDecisionsField_);
     yPos = [self setYPositionOfView:resetDecisionsField_
                                  to:yPos + kSecurityParagraphSpacing];
-    [resetDecisionsButton_
-        setFrameOrigin:NSMakePoint(NSMinX([resetDecisionsButton_ frame]) -
-                                       kLinkButtonXAdjustment,
-                                   yPos)];
+
+    NSPoint resetOrigin = NSMakePoint(linkY, yPos);
+    if (base::i18n::IsRTL()) {
+      resetOrigin.x = NSWidth([contentView_ frame]) - resetOrigin.x -
+                      NSWidth(resetDecisionsButton_.frame);
+    }
+    [resetDecisionsButton_ setFrameOrigin:resetOrigin];
     yPos = NSMaxY([resetDecisionsButton_ frame]);
   }
 
@@ -716,26 +721,27 @@ bool IsInternalURL(const GURL& url) {
 }
 
 - (void)layoutSiteSettingsSection {
-  // Start the layout with the first element. Margins are handled by the caller.
-  CGFloat yPos = kSectionVerticalPadding;
+  // Margins are handled by the caller.
+  CGFloat yPos = 0;
+
+  if (permissionsPresent_) {
+    yPos = [self setYPositionOfView:permissionsView_ to:yPos] +
+           kPermissionsVerticalSpacing;
+  }
 
   if (certificateView_) {
     yPos = [self setYPositionOfView:certificateView_ to:yPos] +
            kPermissionsVerticalSpacing;
   }
 
-  yPos = [self setYPositionOfView:cookiesView_ to:yPos];
+  yPos =
+      [self setYPositionOfView:cookiesView_ to:yPos] + kSectionVerticalPadding;
 
-  if (permissionsPresent_) {
-    // Put the permission info just below the link button.
-    yPos = [self setYPositionOfView:permissionsView_ to:yPos];
-  }
-
-  yPos = [self layoutViewAtRTLStart:siteSettingsButton_ withYPosition:yPos];
+  yPos = [self layoutViewAtRTLStart:siteSettingsButton_ withYPosition:yPos] +
+         kSectionVerticalPadding;
 
   // Resize the height based on contents.
-  [self setHeightOfView:siteSettingsSectionView_
-                     to:yPos + kSectionVerticalPadding];
+  [self setHeightOfView:siteSettingsSectionView_ to:yPos];
 }
 
 // Adjust the size of the window to match the size of the content, and position
@@ -910,33 +916,36 @@ bool IsInternalURL(const GURL& url) {
                          toView:securitySectionView_];
       [resetDecisionsButton_ setTarget:self];
       [resetDecisionsButton_ setAction:@selector(resetCertificateDecisions:)];
-    }
 
-    if (PageInfoUI::ShouldShowCertificateLink()) {
-      bool isValid = (identityInfo.identity_status !=
-                      PageInfo::SITE_IDENTITY_STATUS_ERROR);
-      NSString* linkText = l10n_util::GetNSString(
-          isValid ? IDS_PAGE_INFO_CERTIFICATE_VALID_LINK
-                  : IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK);
-
-      certificateView_ =
-          [self addInspectLinkToView:siteSettingsSectionView_
-                         sectionIcon:NSImageFromImageSkia(
-                                         PageInfoUI::GetCertificateIcon())
-                        sectionTitle:l10n_util::GetStringUTF16(
-                                         IDS_PAGE_INFO_CERTIFICATE)
-                            linkText:linkText];
-      if (isValid) {
-        [certificateView_
-            setLinkToolTip:l10n_util::GetNSStringF(
-                               IDS_PAGE_INFO_CERTIFICATE_VALID_LINK_TOOLTIP,
-                               base::UTF8ToUTF16(
-                                   certificate_->issuer().GetDisplayName()))];
+      if (base::i18n::IsRTL()) {
+        resetDecisionsField_.alignment = NSRightTextAlignment;
       }
-
-      [certificateView_ setLinkTarget:self
-                           withAction:@selector(showCertificateInfo:)];
     }
+
+    // Show information about the page's certificate.
+    bool isValid =
+        (identityInfo.identity_status != PageInfo::SITE_IDENTITY_STATUS_ERROR);
+    NSString* linkText = l10n_util::GetNSString(
+        isValid ? IDS_PAGE_INFO_CERTIFICATE_VALID_LINK
+                : IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK);
+
+    certificateView_ =
+        [self addInspectLinkToView:siteSettingsSectionView_
+                       sectionIcon:NSImageFromImageSkia(
+                                       PageInfoUI::GetCertificateIcon())
+                      sectionTitle:l10n_util::GetStringUTF16(
+                                       IDS_PAGE_INFO_CERTIFICATE)
+                          linkText:linkText];
+    if (isValid) {
+      [certificateView_
+          setLinkToolTip:l10n_util::GetNSStringF(
+                             IDS_PAGE_INFO_CERTIFICATE_VALID_LINK_TOOLTIP,
+                             base::UTF8ToUTF16(
+                                 certificate_->issuer().GetDisplayName()))];
+    }
+
+    [certificateView_ setLinkTarget:self
+                         withAction:@selector(showCertificateInfo:)];
   }
   if (identityInfo.show_change_password_buttons) {
     changePasswordButton_ =
@@ -1300,8 +1309,6 @@ bool IsInternalURL(const GURL& url) {
                                              atPoint:controlOrigin];
       controlOrigin.y = rowBottomRight.y;
     }
-
-    controlOrigin.y += kPermissionsVerticalSpacing;
   }
 
   [permissionsView_ setFrameSize:NSMakeSize(NSWidth([permissionsView_ frame]),

@@ -25,17 +25,20 @@
 
 #include "core/editing/commands/InsertParagraphSeparatorCommand.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/InsertLineBreakCommand.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLQuoteElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 
@@ -52,7 +55,7 @@ static Element* HighestVisuallyEquivalentDivBelowRoot(Element* start_block) {
   // We don't want to return a root node (if it happens to be a div, e.g., in a
   // document fragment) because there are no siblings for us to append to.
   while (!cur_block->nextSibling() &&
-         isHTMLDivElement(*cur_block->parentElement()) &&
+         IsHTMLDivElement(*cur_block->parentElement()) &&
          cur_block->parentElement()->parentElement()) {
     if (cur_block->parentElement()->hasAttributes())
       break;
@@ -212,14 +215,14 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
       CreateVisiblePosition(insertion_position).DeepEquivalent();
   if (!start_block || !start_block->NonShadowBoundaryParentNode() ||
       IsTableCell(start_block) ||
-      isHTMLFormElement(*start_block)
+      IsHTMLFormElement(*start_block)
       // FIXME: If the node is hidden, we don't have a canonical position so we
       // will do the wrong thing for tables and <hr>.
       // https://bugs.webkit.org/show_bug.cgi?id=40342
       || (!canonical_pos.IsNull() &&
           IsDisplayInsideTable(canonical_pos.AnchorNode())) ||
       (!canonical_pos.IsNull() &&
-       isHTMLHRElement(*canonical_pos.AnchorNode()))) {
+       IsHTMLHRElement(*canonical_pos.AnchorNode()))) {
     ApplyCommandToComposite(InsertLineBreakCommand::Create(GetDocument()),
                             editing_state);
     return;
@@ -316,7 +319,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
         // startBlock (e.g., when nesting within lists). However, for div nodes,
         // this can result in nested div tags that are hard to break out of.
         Element* sibling_element = start_block;
-        if (isHTMLDivElement(*block_to_insert))
+        if (IsHTMLDivElement(*block_to_insert))
           sibling_element = HighestVisuallyEquivalentDivBelowRoot(start_block);
         InsertNodeAfter(block_to_insert, sibling_element, editing_state);
       }
@@ -576,8 +579,6 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
   // Handle whitespace that occurs after the split
   if (position_after_split.IsNotNull()) {
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-    // TODO(yosin) |isRenderedCharacter()| should be removed, and we should
-    // use |VisiblePosition::characterAfter()|.
     if (!IsRenderedCharacter(position_after_split)) {
       // Clear out all whitespace and insert one non-breaking space
       DCHECK(!position_after_split.ComputeContainerNode()->GetLayoutObject() ||

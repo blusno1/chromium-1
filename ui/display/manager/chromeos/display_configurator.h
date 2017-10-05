@@ -9,10 +9,10 @@
 
 #include <map>
 #include <memory>
-#include <queue>
 #include <string>
 #include <vector>
 
+#include "base/containers/queue.h"
 #include "base/event_types.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -95,7 +95,7 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
 
     // Called when displays are detected.
     virtual MultipleDisplayState GetStateForDisplayIds(
-        const DisplayConfigurator::DisplayStateList& outputs) const = 0;
+        const DisplayConfigurator::DisplayStateList& outputs) = 0;
 
     // Queries the resolution (|size|) in pixels to select display mode for the
     // given display id.
@@ -404,9 +404,9 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // task.
   std::vector<ConfigurationCallback> in_progress_configuration_callbacks_;
 
-  std::queue<base::Closure> content_protection_tasks_;
-  std::queue<QueryProtectionCallback> query_protection_callbacks_;
-  std::queue<SetProtectionCallback> set_protection_callbacks_;
+  base::queue<base::Closure> content_protection_tasks_;
+  base::queue<QueryProtectionCallback> query_protection_callbacks_;
+  base::queue<SetProtectionCallback> set_protection_callbacks_;
 
   // True if the caller wants to force the display configuration process.
   bool force_configure_;

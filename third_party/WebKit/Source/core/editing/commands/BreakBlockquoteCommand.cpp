@@ -25,14 +25,17 @@
 
 #include "core/editing/commands/BreakBlockquoteCommand.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
+#include "core/editing/VisibleUnits.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLQuoteElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutListItem.h"
 
 namespace blink {
@@ -200,7 +203,7 @@ void BreakBlockquoteCommand::DoApply(EditingState* editing_state) {
   if (!start_node->IsDescendantOf(top_blockquote)) {
     SetEndingSelection(SelectionForUndoStep::From(
         SelectionInDOMTree::Builder()
-            .Collapse(FirstPositionInOrBeforeNode(start_node))
+            .Collapse(FirstPositionInOrBeforeNode(*start_node))
             .SetIsDirectional(EndingSelection().IsDirectional())
             .Build()));
     return;
@@ -227,11 +230,11 @@ void BreakBlockquoteCommand::DoApply(EditingState* editing_state) {
   for (size_t i = ancestors.size(); i != 0; --i) {
     Element* cloned_child = ancestors[i - 1]->CloneElementWithoutChildren();
     // Preserve list item numbering in cloned lists.
-    if (isHTMLOListElement(*cloned_child)) {
+    if (IsHTMLOListElement(*cloned_child)) {
       Node* list_child_node = i > 1 ? ancestors[i - 2].Get() : start_node;
       // The first child of the cloned list might not be a list item element,
       // find the first one so that we know where to start numbering.
-      while (list_child_node && !isHTMLLIElement(*list_child_node))
+      while (list_child_node && !IsHTMLLIElement(*list_child_node))
         list_child_node = list_child_node->nextSibling();
       if (IsListItem(list_child_node))
         SetNodeAttribute(

@@ -50,6 +50,8 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
 
     _placeholderLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _placeholderLabel.textAlignment = NSTextAlignmentCenter;
+    _placeholderLabel.font = [MDCTypography captionFont];
+
     [_placeholderLabel setHidden:YES];
     [self.contentView addSubview:_placeholderLabel];
   }
@@ -62,7 +64,7 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
   self.titleText.text = bookmark_utils_ios::TitleForBookmarkNode(node);
   self.titleText.accessibilityIdentifier = self.titleText.text;
 
-  self.imageView.image = [UIImage imageNamed:@"bookmark_gray_folder"];
+  self.imageView.image = [UIImage imageNamed:@"bookmark_gray_folder_new"];
   if (node->is_folder()) {
     [self setAccessoryType:UITableViewCellAccessoryDisclosureIndicator];
   } else {

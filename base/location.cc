@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
+#include "base/location.h"
 
 #if defined(COMPILER_MSVC)
 #include <intrin.h>
 #endif
 
-#include "base/location.h"
+#include "base/compiler_specific.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 
-namespace tracked_objects {
+namespace base {
 
 Location::Location() = default;
 Location::Location(const Location& other) = default;
@@ -42,9 +43,9 @@ Location::Location(const char* function_name,
 std::string Location::ToString() const {
   if (has_source_info()) {
     return std::string(function_name_) + "@" + file_name_ + ":" +
-           base::IntToString(line_number_);
+           IntToString(line_number_);
   }
-  return base::StringPrintf("pc:%p", program_counter_);
+  return StringPrintf("pc:%p", program_counter_);
 }
 
 // TODO(brettw) if chrome://profiler is removed, this function can probably
@@ -52,9 +53,9 @@ std::string Location::ToString() const {
 void Location::Write(bool display_filename, bool display_function_name,
                      std::string* output) const {
   if (has_source_info()) {
-    base::StringAppendF(output, "%s[%d] ",
-                        display_filename && file_name_ ? file_name_ : "line",
-                        line_number_);
+    StringAppendF(output, "%s[%d] ",
+                  display_filename && file_name_ ? file_name_ : "line",
+                  line_number_);
 
     if (display_function_name && function_name_) {
       output->append(function_name_);
@@ -77,18 +78,30 @@ LocationSnapshot::LocationSnapshot(const Location& location)
 
 LocationSnapshot::~LocationSnapshot() = default;
 
-//------------------------------------------------------------------------------
 #if defined(COMPILER_MSVC)
-__declspec(noinline)
-#endif
-BASE_EXPORT const void* GetProgramCounter() {
-#if defined(COMPILER_MSVC)
-  return _ReturnAddress();
+#define RETURN_ADDRESS() _ReturnAddress()
 #elif defined(COMPILER_GCC) && !defined(OS_NACL)
-  return __builtin_extract_return_addr(__builtin_return_address(0));
+#define RETURN_ADDRESS() \
+  __builtin_extract_return_addr(__builtin_return_address(0))
 #else
-  return nullptr;
+#define RETURN_ADDRESS() nullptr
 #endif
+
+// static
+NOINLINE Location Location::CreateFromHere(const char* file_name) {
+  return Location(file_name, RETURN_ADDRESS());
 }
 
-}  // namespace tracked_objects
+// static
+NOINLINE Location Location::CreateFromHere(const char* function_name,
+                                           const char* file_name,
+                                           int line_number) {
+  return Location(function_name, file_name, line_number, RETURN_ADDRESS());
+}
+
+//------------------------------------------------------------------------------
+NOINLINE const void* GetProgramCounter() {
+  return RETURN_ADDRESS();
+}
+
+}  // namespace base

@@ -6,9 +6,6 @@ static_library("core") {
   sources = [
     "address_normalization_manager.cc",
     "address_normalization_manager.h",
-    "address_normalizer.h",
-    "address_normalizer_impl.cc",
-    "address_normalizer_impl.h",
     "autofill_payment_instrument.cc",
     "autofill_payment_instrument.h",
     "basic_card_response.cc",
@@ -54,8 +51,6 @@ static_library("core") {
     "payments_validators.h",
     "strings_util.cc",
     "strings_util.h",
-    "subkey_requester.cc",
-    "subkey_requester.h",
   ]
 
   deps = [
@@ -69,7 +64,6 @@ static_library("core") {
     "//net",
     "//services/metrics/public/cpp:metrics_cpp",
     "//services/metrics/public/cpp:ukm_builders",
-    "//third_party/libphonenumber",
     "//third_party/re2",
     "//ui/base",
     "//url",
@@ -86,8 +80,6 @@ static_library("test_support") {
   sources = [
     "payments_test_util.cc",
     "payments_test_util.h",
-    "test_address_normalizer.cc",
-    "test_address_normalizer.h",
     "test_payment_request_delegate.cc",
     "test_payment_request_delegate.h",
   ]
@@ -107,7 +99,6 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "address_normalization_manager_unittest.cc",
-    "address_normalizer_impl_unittest.cc",
     "autofill_payment_instrument_unittest.cc",
     "basic_card_response_unittest.cc",
     "can_make_payment_query_unittest.cc",
@@ -117,6 +108,7 @@ source_set("unit_tests") {
     "payment_currency_amount_unittest.cc",
     "payment_details_modifier_unittest.cc",
     "payment_details_unittest.cc",
+    "payment_details_validation_unittest.cc",
     "payment_item_unittest.cc",
     "payment_manifest_downloader_unittest.cc",
     "payment_method_data_unittest.cc",
@@ -125,7 +117,6 @@ source_set("unit_tests") {
     "payments_profile_comparator_unittest.cc",
     "payments_validators_unittest.cc",
     "strings_util_unittest.cc",
-    "subkey_requester_unittest.cc",
   ]
 
   deps = [

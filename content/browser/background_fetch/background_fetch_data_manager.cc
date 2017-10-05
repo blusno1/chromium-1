@@ -5,9 +5,9 @@
 #include "content/browser/background_fetch/background_fetch_data_manager.h"
 
 #include <algorithm>
-#include <queue>
 
 #include "base/command_line.h"
+#include "base/containers/queue.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/checked_math.h"
 #include "base/strings/string_number_conversions.h"
@@ -470,10 +470,14 @@ class BackgroundFetchDataManager::RegistrationData {
     return completed_requests_;
   }
 
+  void SetTitle(const std::string& title) { options_.title = title; }
+
+  const BackgroundFetchOptions& options() const { return options_; }
+
  private:
   BackgroundFetchOptions options_;
 
-  std::queue<scoped_refptr<BackgroundFetchRequestInfo>> pending_requests_;
+  base::queue<scoped_refptr<BackgroundFetchRequestInfo>> pending_requests_;
   std::vector<scoped_refptr<BackgroundFetchRequestInfo>> active_requests_;
 
   // TODO(peter): Right now it's safe for this to be a vector because we only
@@ -497,12 +501,24 @@ BackgroundFetchDataManager::BackgroundFetchDataManager(
 
   // Store the blob storage context for the given |browser_context|.
   blob_storage_context_ =
-      make_scoped_refptr(ChromeBlobStorageContext::GetFor(browser_context));
+      base::WrapRefCounted(ChromeBlobStorageContext::GetFor(browser_context));
   DCHECK(blob_storage_context_);
 }
 
 BackgroundFetchDataManager::~BackgroundFetchDataManager() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+}
+
+void BackgroundFetchDataManager::SetListener(
+    const BackgroundFetchRegistrationId& registration_id,
+    RegistrationListener* listener) {
+  if (listener) {
+    DCHECK_EQ(0u, listeners_.count(registration_id));
+    listeners_[registration_id] = listener;
+  } else {
+    DCHECK_EQ(1u, listeners_.count(registration_id));
+    listeners_.erase(registration_id);
+  }
 }
 
 void BackgroundFetchDataManager::CreateRegistration(
@@ -529,6 +545,55 @@ void BackgroundFetchDataManager::CreateRegistration(
       registration_id, base::MakeUnique<RegistrationData>(requests, options)));
 
   // Inform the |callback| of the newly created registration.
+  std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE);
+}
+
+void BackgroundFetchDataManager::GetRegistration(
+    const BackgroundFetchRegistrationId& registration_id,
+    blink::mojom::BackgroundFetchService::GetRegistrationCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  auto iter = registrations_.find(registration_id);
+  if (iter == registrations_.end()) {  // Not found.
+    std::move(callback).Run(blink::mojom::BackgroundFetchError::INVALID_ID,
+                            base::nullopt /* registration */);
+    return;
+  }
+
+  const BackgroundFetchOptions& options = iter->second->options();
+
+  // Compile the BackgroundFetchRegistration object that will be given to the
+  // developer, representing the data associated with the |controller|.
+  BackgroundFetchRegistration registration;
+  registration.id = iter->first.id();
+  registration.icons = options.icons;
+  registration.title = options.title;
+  registration.download_total = options.download_total;
+
+  std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE,
+                          registration);
+}
+
+void BackgroundFetchDataManager::UpdateRegistrationUI(
+    const BackgroundFetchRegistrationId& registration_id,
+    const std::string& title,
+    blink::mojom::BackgroundFetchService::UpdateUICallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  auto registrations_iter = registrations_.find(registration_id);
+  if (registrations_iter == registrations_.end()) {  // Not found.
+    std::move(callback).Run(blink::mojom::BackgroundFetchError::INVALID_ID);
+    return;
+  }
+
+  // Update stored registration.
+  registrations_iter->second->SetTitle(title);
+
+  // Update any active JobController that cached this data for notifications.
+  auto listeners_iter = listeners_.find(registration_id);
+  if (listeners_iter != listeners_.end())
+    listeners_iter->second->UpdateUI(title);
+
   std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE);
 }
 
@@ -675,6 +740,23 @@ void BackgroundFetchDataManager::DeleteRegistration(
   registrations_.erase(iter);
 
   std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE);
+}
+
+void BackgroundFetchDataManager::GetIdsForServiceWorker(
+    int64_t service_worker_registration_id,
+    blink::mojom::BackgroundFetchService::GetIdsCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  std::vector<std::string> ids;
+  for (const auto& entry : registrations_) {
+    const BackgroundFetchRegistrationId& registration_id = entry.first;
+    if (service_worker_registration_id ==
+        registration_id.service_worker_registration_id()) {
+      ids.emplace_back(registration_id.id());
+    }
+  }
+
+  std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE, ids);
 }
 
 void BackgroundFetchDataManager::AddDatabaseTask(

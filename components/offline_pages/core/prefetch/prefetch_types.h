@@ -16,6 +16,24 @@
 
 namespace offline_pages {
 
+// Controls how to reschedule a background task.
+// A Java counterpart will be generated for this enum.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.offlinepages
+enum class PrefetchBackgroundTaskRescheduleType {
+  // No reschedule.
+  NO_RESCHEDULE,
+  // Reschedules the task in the next available WiFi window after 15 minutes
+  // have passed.
+  RESCHEDULE_WITHOUT_BACKOFF,
+  // Reschedules the task with backoff included.
+  RESCHEDULE_WITH_BACKOFF,
+  // Reschedules the task due to the fact that it is killed due to the system
+  // constraint.
+  RESCHEDULE_DUE_TO_SYSTEM,
+  // Reschedules the task after 1 day.
+  SUSPEND
+};
+
 // Status for sending prefetch request to the server.
 enum class PrefetchRequestStatus {
   // Request completed successfully.
@@ -68,6 +86,10 @@ struct RenderPageInfo {
 // List of states a prefetch item can be at during its progress through the
 // prefetching process. They follow somewhat the order below, but some states
 // might be skipped.
+//
+// Changes to this enum must be reflected in the respective metrics enum named
+// OfflinePrefetchItemState in enums.xml. Use the exact same integer value for
+// each mirrored entry.
 enum class PrefetchItemState {
   // New request just received from the client.
   NEW_REQUEST = 0,
@@ -101,6 +123,8 @@ enum class PrefetchItemState {
   // to confirm that the same URL is not being repeatedly requested by its
   // client.
   ZOMBIE = 100,
+  // Max item state, needed for histograms
+  MAX = ZOMBIE
 };
 
 // Error codes used to identify the reason why a prefetch entry has finished
@@ -113,8 +137,8 @@ enum class PrefetchItemState {
 // MAX value if adding a new trailing item.
 //
 // Changes to this enum must be reflected in the respective metrics enum named
-// PrefetchItemErrorCode in enums.xml. Use the exact same integer value for each
-// mirrored entry.
+// OflinePrefetchItemErrorCode in enums.xml. Use the exact same integer value
+// for each mirrored entry.
 enum class PrefetchItemErrorCode {
   // The entry had gone through the pipeline and successfully completed
   // prefetching. Explicitly setting to 0 as that is the default value for the

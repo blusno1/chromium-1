@@ -8,7 +8,9 @@
 #include "core/dom/Document.h"
 #include "core/dom/Range.h"
 #include "core/dom/Text.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/Position.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/TextControlElement.h"
@@ -35,7 +37,7 @@ void SurroundingTextTest::SetUp() {
 }
 
 void SurroundingTextTest::SetHTML(const String& content) {
-  GetDocument().body()->setInnerHTML(content);
+  GetDocument().body()->SetInnerHTMLFromString(content);
   GetDocument().UpdateStyleAndLayout();
 }
 

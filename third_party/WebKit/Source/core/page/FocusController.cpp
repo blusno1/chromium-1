@@ -26,7 +26,6 @@
 
 #include "core/page/FocusController.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
@@ -52,6 +51,7 @@
 #include "core/html/HTMLShadowElement.h"
 #include "core/html/HTMLSlotElement.h"
 #include "core/html/TextControlElement.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutObject.h"
@@ -72,7 +72,7 @@ namespace {
 
 inline bool IsShadowInsertionPointFocusScopeOwner(Element& element) {
   return IsActiveShadowInsertionPoint(element) &&
-         toHTMLShadowElement(element).OlderShadowRoot();
+         ToHTMLShadowElement(element).OlderShadowRoot();
 }
 
 class ScopedFocusNavigation {
@@ -266,11 +266,12 @@ ScopedFocusNavigation ScopedFocusNavigation::OwnedByNonFocusableFocusScopeOwner(
     Element& element) {
   if (IsShadowHost(element))
     return ScopedFocusNavigation::OwnedByShadowHost(element);
-  if (IsShadowInsertionPointFocusScopeOwner(element))
+  if (IsShadowInsertionPointFocusScopeOwner(element)) {
     return ScopedFocusNavigation::OwnedByShadowInsertionPoint(
-        toHTMLShadowElement(element));
+        ToHTMLShadowElement(element));
+  }
   return ScopedFocusNavigation::OwnedByHTMLSlotElement(
-      toHTMLSlotElement(element));
+      ToHTMLSlotElement(element));
 }
 
 ScopedFocusNavigation ScopedFocusNavigation::OwnedByShadowHost(
@@ -305,10 +306,8 @@ HTMLSlotElement* ScopedFocusNavigation::FindFallbackScopeOwnerSlot(
     const Element& element) {
   Element* parent = const_cast<Element*>(element.parentElement());
   while (parent) {
-    if (isHTMLSlotElement(parent))
-      return toHTMLSlotElement(parent)->AssignedNodes().IsEmpty()
-                 ? toHTMLSlotElement(parent)
-                 : nullptr;
+    if (auto* slot = ToHTMLSlotElementOrNull(parent))
+      return slot->AssignedNodes().IsEmpty() ? slot : nullptr;
     parent = parent->parentElement();
   }
   return nullptr;
@@ -323,10 +322,11 @@ bool ScopedFocusNavigation::IsSlotFallbackScopedForThisSlot(
     const Element& current) {
   Element* parent = current.parentElement();
   while (parent) {
-    if (isHTMLSlotElement(parent) &&
-        toHTMLSlotElement(parent)->AssignedNodes().IsEmpty())
+    if (IsHTMLSlotElement(parent) &&
+        ToHTMLSlotElement(parent)->AssignedNodes().IsEmpty()) {
       return !SlotScopedTraversal::IsSlotScoped(current) &&
-             toHTMLSlotElement(parent) == slot;
+             ToHTMLSlotElement(parent) == slot;
+    }
     parent = parent->parentElement();
   }
   return false;
@@ -412,7 +412,7 @@ inline bool IsKeyboardFocusableShadowHost(const Element& element) {
 inline bool IsNonFocusableFocusScopeOwner(Element& element) {
   return IsNonKeyboardFocusableShadowHost(element) ||
          IsShadowInsertionPointFocusScopeOwner(element) ||
-         isHTMLSlotElement(element);
+         IsHTMLSlotElement(element);
 }
 
 inline bool IsShadowHostDelegatesFocus(const Element& element) {
@@ -1386,14 +1386,6 @@ bool FocusController::AdvanceFocusDirectionallyInContainer(
   // We found a new focus node, navigate to it.
   Element* element = ToElement(focus_candidate.focusable_node);
   DCHECK(element);
-
-  if (!element->IsTextControl() && !HasEditableStyle(*element->ToNode())) {
-    // To fulfill the expectation of spatial-navigation/snav-textarea.html
-    // we clear selection when spatnav moves focus away from a text-field.
-    // TODO(hugoh@opera.com): crbug.com/734552 remove Selection.Clear()
-    if (FocusedFrame())
-      FocusedFrame()->Selection().Clear();
-  }
   element->focus(FocusParams(SelectionBehaviorOnFocus::kReset, type, nullptr));
   return true;
 }
@@ -1423,12 +1415,11 @@ bool FocusController::AdvanceFocusDirectionally(WebFocusType type) {
           type, focused_element);
       starting_rect = NodeRectInAbsoluteCoordinates(focused_element,
                                                     true /* ignore border */);
-    } else if (isHTMLAreaElement(*focused_element)) {
-      HTMLAreaElement& area = toHTMLAreaElement(*focused_element);
-      if (area.ImageElement()) {
+    } else if (auto* area = ToHTMLAreaElementOrNull(*focused_element)) {
+      if (area->ImageElement()) {
         container = ScrollableEnclosingBoxOrParentFrameForNodeInDirection(
-            type, area.ImageElement());
-        starting_rect = VirtualRectForAreaElementAndDirection(area, type);
+            type, area->ImageElement());
+        starting_rect = VirtualRectForAreaElementAndDirection(*area, type);
       }
     }
   }

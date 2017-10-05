@@ -1302,7 +1302,7 @@ std::vector<SkIRect> test_irects = {
     SkIRect::MakeXYWH(-1, -1, 0, 0), SkIRect::MakeXYWH(-100, -101, -102, -103)};
 
 std::vector<SkMatrix> test_matrices = {
-    SkMatrix(),
+    SkMatrix::I(),
     SkMatrix::MakeScale(3.91f, 4.31f),
     SkMatrix::MakeTrans(-5.2f, 8.7f),
     [] {
@@ -1844,6 +1844,20 @@ void CompareFlags(const PaintFlags& original, const PaintFlags& written) {
 
 void CompareImages(const PaintImage& original, const PaintImage& written) {}
 
+void CompareMatrices(const SkMatrix& original, const SkMatrix& written) {
+  // Compare the 3x3 matrix values.
+  EXPECT_EQ(original, written);
+
+  // If a serialized matrix says it is identity, then the original must have
+  // those values, as the serialization process clobbers the matrix values.
+  if (original.isIdentity()) {
+    EXPECT_EQ(SkMatrix::I(), original);
+    EXPECT_EQ(SkMatrix::I(), written);
+  }
+
+  EXPECT_EQ(original.getType(), written.getType());
+}
+
 void CompareAnnotateOp(const AnnotateOp* original, const AnnotateOp* written) {
   EXPECT_TRUE(original->IsValid());
   EXPECT_TRUE(written->IsValid());
@@ -1885,8 +1899,7 @@ void CompareClipRRectOp(const ClipRRectOp* original,
 void CompareConcatOp(const ConcatOp* original, const ConcatOp* written) {
   EXPECT_TRUE(original->IsValid());
   EXPECT_TRUE(written->IsValid());
-  EXPECT_EQ(original->matrix, written->matrix);
-  EXPECT_EQ(original->matrix.getType(), written->matrix.getType());
+  CompareMatrices(original->matrix, written->matrix);
 }
 
 void CompareDrawColorOp(const DrawColorOp* original,
@@ -2059,7 +2072,7 @@ void CompareSetMatrixOp(const SetMatrixOp* original,
                         const SetMatrixOp* written) {
   EXPECT_TRUE(original->IsValid());
   EXPECT_TRUE(written->IsValid());
-  EXPECT_EQ(original->matrix, written->matrix);
+  CompareMatrices(original->matrix, written->matrix);
 }
 
 void CompareTranslateOp(const TranslateOp* original,
@@ -2808,10 +2821,8 @@ class MockImageProvider : public ImageProvider {
 
   ~MockImageProvider() override = default;
 
-  ScopedDecodedDrawImage GetDecodedDrawImage(const PaintImage& paint_image,
-                                             const SkRect& src_rect,
-                                             SkFilterQuality filter_quality,
-                                             const SkMatrix& matrix) override {
+  ScopedDecodedDrawImage GetDecodedDrawImage(
+      const DrawImage& draw_image) override {
     if (fail_all_decodes_)
       return ScopedDecodedDrawImage();
 

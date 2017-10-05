@@ -13,7 +13,6 @@
 #include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/threading/thread_collision_warner.h"
-#include "components/leveldb_proto/options.h"
 #include "third_party/leveldatabase/env_chromium.h"
 
 namespace base {
@@ -25,7 +24,6 @@ namespace leveldb {
 class Cache;
 class DB;
 class Env;
-struct Options;
 }  // namespace leveldb
 
 namespace leveldb_proto {
@@ -42,9 +40,10 @@ class LevelDB {
   explicit LevelDB(const char* client_name);
   virtual ~LevelDB();
 
-  // Initializes a leveldb with the given options. If |options.database_dir| is
+  // Initializes a leveldb with the given options. If |database_dir| is
   // empty, this opens an in-memory db.
-  virtual bool Init(const leveldb_proto::Options& options);
+  virtual bool Init(const base::FilePath& database_dir,
+                    const leveldb_env::Options& options);
 
   virtual bool Save(const base::StringPairs& pairs_to_save,
                     const std::vector<std::string>& keys_to_remove);
@@ -54,19 +53,14 @@ class LevelDB {
 
   static bool Destroy(const base::FilePath& database_dir);
 
- protected:
-  virtual bool InitWithOptions(const base::FilePath& database_dir,
-                               const leveldb_env::Options& options);
-
  private:
   FRIEND_TEST_ALL_PREFIXES(ProtoDatabaseImplLevelDBTest, TestDBInitFail);
 
   DFAKE_MUTEX(thread_checker_);
 
   // The declaration order of these members matters: |db_| depends on |env_| and
-  // |custom_block_cache_| and therefore has to be destructed first.
+  // therefore has to be destructed first.
   std::unique_ptr<leveldb::Env> env_;
-  std::unique_ptr<leveldb::Cache> custom_block_cache_;
   std::unique_ptr<leveldb::DB> db_;
   base::HistogramBase* open_histogram_;
 

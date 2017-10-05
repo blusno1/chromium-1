@@ -4,9 +4,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# TODO(mmoss) This currently only works with official builds, since non-official
-# builds don't add the "${BUILDDIR}/installer/" files needed for packaging.
-
 set -e
 set -o pipefail
 if [ "$VERBOSE" ]; then
@@ -54,6 +51,7 @@ stage_install_debian() {
   # use update-alternatives for /usr/bin/google-chrome.
   local USR_BIN_SYMLINK_NAME="${PACKAGE}-${CHANNEL}"
 
+  local PACKAGE_ORIG="${PACKAGE}"
   if [ "$CHANNEL" != "stable" ]; then
     # Avoid file collisions between channels.
     local INSTALLDIR="${INSTALLDIR}-${CHANNEL}"
@@ -65,15 +63,16 @@ stage_install_debian() {
     local MENUNAME="${MENUNAME} (${CHANNEL})"
   fi
   prep_staging_debian
+  SHLIB_PERMS=644
   stage_install_common
-  echo "Staging Debian install files in '${STAGEDIR}'..."
+  log_cmd echo "Staging Debian install files in '${STAGEDIR}'..."
   install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/cron"
   process_template "${BUILDDIR}/installer/common/repo.cron" \
       "${STAGEDIR}/${INSTALLDIR}/cron/${PACKAGE}"
   chmod 755 "${STAGEDIR}/${INSTALLDIR}/cron/${PACKAGE}"
-  pushd "${STAGEDIR}/etc/cron.daily/"
+  pushd "${STAGEDIR}/etc/cron.daily/" > /dev/null
   ln -snf "${INSTALLDIR}/cron/${PACKAGE}" "${PACKAGE}"
-  popd
+  popd > /dev/null
   process_template "${BUILDDIR}/installer/debian/debian.menu" \
     "${STAGEDIR}/usr/share/menu/${PACKAGE}.menu"
   chmod 644 "${STAGEDIR}/usr/share/menu/${PACKAGE}.menu"
@@ -90,12 +89,14 @@ stage_install_debian() {
 
 verify_package() {
   local DEPENDS="$1"
-  echo ${DEPENDS} | sed 's/, /\n/g' | LANG=C sort > expected_deb_depends
+  local EXPECTED_DEPENDS="${TMPFILEDIR}/expected_deb_depends"
+  local ACTUAL_DEPENDS="${TMPFILEDIR}/actual_deb_depends"
+  echo ${DEPENDS} | sed 's/, /\n/g' | LANG=C sort > "${EXPECTED_DEPENDS}"
   dpkg -I "${PACKAGE}-${CHANNEL}_${VERSIONFULL}_${ARCHITECTURE}.deb" | \
       grep '^ Depends: ' | sed 's/^ Depends: //' | sed 's/, /\n/g' | \
-      LANG=C sort > actual_deb_depends
+      LANG=C sort > "${ACTUAL_DEPENDS}"
   BAD_DIFF=0
-  diff -u expected_deb_depends actual_deb_depends || BAD_DIFF=1
+  diff -u "${EXPECTED_DEPENDS}" "${ACTUAL_DEPENDS}" || BAD_DIFF=1
   if [ $BAD_DIFF -ne 0 ]; then
     echo
     echo "ERROR: bad dpkg dependencies!"
@@ -106,11 +107,9 @@ verify_package() {
 
 # Actually generate the package file.
 do_package() {
-  echo "Packaging ${ARCHITECTURE}..."
+  log_cmd echo "Packaging ${ARCHITECTURE}..."
   PREDEPENDS="$COMMON_PREDEPS"
   DEPENDS="${COMMON_DEPS}"
-  REPLACES=""
-  CONFLICTS=""
   PROVIDES="www-browser"
   gen_changelog
   process_template "${SCRIPTDIR}/control.template" "${DEB_CONTROL}"
@@ -123,13 +122,13 @@ do_package() {
   else
     local COMPRESSION_OPTS="-Znone"
   fi
-  fakeroot dpkg-deb ${COMPRESSION_OPTS} -b "${STAGEDIR}" .
+  log_cmd fakeroot dpkg-deb ${COMPRESSION_OPTS} -b "${STAGEDIR}" .
   verify_package "$DEPENDS"
 }
 
 # Remove temporary files and unwanted packaging output.
 cleanup() {
-  echo "Cleaning..."
+  log_cmd echo "Cleaning..."
   rm -rf "${STAGEDIR}"
   rm -rf "${TMPFILEDIR}"
 }
@@ -275,6 +274,9 @@ case "$TARGETARCH" in
     ;;
   x64 )
     export ARCHITECTURE="amd64"
+    ;;
+  mipsel )
+    export ARCHITECTURE="mipsel"
     ;;
   * )
     echo

@@ -8,6 +8,7 @@ import android.accounts.Account;
 import android.content.Context;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
+import android.support.annotation.Nullable;
 import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.view.View;
@@ -18,12 +19,13 @@ import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.AccountManagementFragment;
 import org.chromium.chrome.browser.signin.AccountSigninActivity;
+import org.chromium.chrome.browser.signin.DisplayableProfileData;
+import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
 import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.signin.SigninPromoController;
-import org.chromium.chrome.browser.signin.SigninPromoView;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.ProfileSyncService.SyncStateChangedListener;
 import org.chromium.chrome.browser.util.ViewUtils;
@@ -43,9 +45,9 @@ public class SignInPreference
         extends Preference implements SignInAllowedObserver, ProfileDataCache.Observer,
                                       AndroidSyncSettings.AndroidSyncSettingsObserver,
                                       SyncStateChangedListener, AccountsChangeObserver {
-    private boolean mShowingPromo;
+    private boolean mWasGenericSigninPromoDisplayed;
     private boolean mViewEnabled;
-    private SigninPromoController mSigninPromoController;
+    private @Nullable SigninPromoController mSigninPromoController;
     private final ProfileDataCache mProfileDataCache;
 
     /**
@@ -110,10 +112,12 @@ public class SignInPreference
         } else if (accountName == null) {
             // Don't change the promo type if the promo is already being shown.
             final boolean forceNew = mSigninPromoController != null;
-            if (forceNew || SigninPromoController.shouldShowPromo(SigninAccessPoint.SETTINGS)) {
-                setupNewPromo();
+            if ((SigninPromoController.hasNotReachedImpressionLimit(SigninAccessPoint.SETTINGS)
+                        && SigninPromoController.arePersonalizedPromosEnabled())
+                    || forceNew) {
+                setupPersonalizedPromo();
             } else {
-                setupOldPromo();
+                setupGenericPromo();
             }
         } else {
             setupSignedIn(accountName);
@@ -132,40 +136,27 @@ public class SignInPreference
         setWidgetLayoutResource(0);
         setViewEnabled(false);
         mSigninPromoController = null;
-        mShowingPromo = false;
+        mWasGenericSigninPromoDisplayed = false;
     }
 
-    private void setupNewPromo() {
+    private void setupPersonalizedPromo() {
         setLayoutResource(R.layout.custom_preference);
         setTitle("");
         setSummary("");
         setFragment(null);
         setIcon(null);
-        setWidgetLayoutResource(R.layout.signin_promo_view_settings);
+        setWidgetLayoutResource(R.layout.personalized_signin_promo_view_settings);
         setViewEnabled(true);
 
-        Account[] accounts = AccountManagerFacade.get().tryGetGoogleAccounts();
-        String defaultAccountName = accounts.length == 0 ? null : accounts[0].name;
-
-        if (defaultAccountName != null) {
-            mProfileDataCache.update(Collections.singletonList(defaultAccountName));
-        }
-
         if (mSigninPromoController == null) {
-            mSigninPromoController =
-                    new SigninPromoController(mProfileDataCache, SigninAccessPoint.SETTINGS);
+            mSigninPromoController = new SigninPromoController(SigninAccessPoint.SETTINGS);
         }
 
-        mSigninPromoController.setAccountName(defaultAccountName);
-        if (!mShowingPromo) {
-            mSigninPromoController.recordSigninPromoImpression();
-        }
-
-        mShowingPromo = true;
+        mWasGenericSigninPromoDisplayed = false;
         notifyChanged();
     }
 
-    private void setupOldPromo() {
+    private void setupGenericPromo() {
         setLayoutResource(R.layout.account_management_account_row);
         setTitle(R.string.sign_in_to_chrome);
         setSummary(R.string.sign_in_to_chrome_summary);
@@ -175,29 +166,28 @@ public class SignInPreference
         setViewEnabled(true);
         mSigninPromoController = null;
 
-        if (!mShowingPromo) {
+        if (!mWasGenericSigninPromoDisplayed) {
             RecordUserAction.record("Signin_Impression_FromSettings");
         }
 
-        mShowingPromo = true;
+        mWasGenericSigninPromoDisplayed = true;
     }
 
     private void setupSignedIn(String accountName) {
         mProfileDataCache.update(Collections.singletonList(accountName));
+        DisplayableProfileData profileData = mProfileDataCache.getProfileDataOrDefault(accountName);
 
         setLayoutResource(R.layout.account_management_account_row);
-        String title = mProfileDataCache.getFullName(accountName);
-        if (title == null) title = accountName;
-        setTitle(title);
+        setTitle(profileData.getFullNameOrEmail());
         setSummary(SyncPreference.getSyncStatusSummary(getContext()));
         setFragment(AccountManagementFragment.class.getName());
-        setIcon(mProfileDataCache.getImage(accountName));
-
+        setIcon(profileData.getImage());
         setWidgetLayoutResource(
                 SyncPreference.showSyncErrorIcon(getContext()) ? R.layout.sync_error_widget : 0);
         setViewEnabled(true);
+
         mSigninPromoController = null;
-        mShowingPromo = false;
+        mWasGenericSigninPromoDisplayed = false;
     }
 
     // This just changes visual representation. Actual enabled flag in preference stays
@@ -214,10 +204,21 @@ public class SignInPreference
     protected void onBindView(final View view) {
         super.onBindView(view);
         ViewUtils.setEnabledRecursive(view, mViewEnabled);
-        if (mSigninPromoController != null) {
-            SigninPromoView signinPromoView = view.findViewById(R.id.signin_promo_view_container);
-            mSigninPromoController.setupSigninPromoView(getContext(), signinPromoView, null);
+
+        if (mSigninPromoController == null) {
+            return;
         }
+
+        DisplayableProfileData profileData = null;
+        Account[] accounts = AccountManagerFacade.get().tryGetGoogleAccounts();
+        if (accounts.length > 0) {
+            String defaultAccountName = accounts[0].name;
+            mProfileDataCache.update(Collections.singletonList(defaultAccountName));
+            profileData = mProfileDataCache.getProfileDataOrDefault(defaultAccountName);
+        }
+        PersonalizedSigninPromoView signinPromoView =
+                view.findViewById(R.id.signin_promo_view_container);
+        mSigninPromoController.setupPromoView(getContext(), signinPromoView, profileData, null);
     }
 
     // ProfileSyncServiceListener implementation.

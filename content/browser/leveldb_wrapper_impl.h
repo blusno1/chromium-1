@@ -40,6 +40,8 @@ class CONTENT_EXPORT LevelDBWrapperImpl : public mojom::LevelDBWrapper {
  public:
   using ValueMap = std::map<std::vector<uint8_t>, std::vector<uint8_t>>;
   using ValueMapCallback = base::OnceCallback<void(std::unique_ptr<ValueMap>)>;
+  using Change =
+      std::pair<std::vector<uint8_t>, base::Optional<std::vector<uint8_t>>>;
 
   class CONTENT_EXPORT Delegate {
    public:
@@ -49,6 +51,9 @@ class CONTENT_EXPORT LevelDBWrapperImpl : public mojom::LevelDBWrapper {
     virtual void DidCommit(leveldb::mojom::DatabaseError error) = 0;
     // Called during loading if no data was found. Needs to call |callback|.
     virtual void MigrateData(ValueMapCallback callback);
+    // Called during loading to give delegate a chance to modify the data as
+    // stored in the database.
+    virtual std::vector<Change> FixUpData(const ValueMap& data);
     virtual void OnMapLoaded(leveldb::mojom::DatabaseError error);
   };
 
@@ -67,6 +72,10 @@ class CONTENT_EXPORT LevelDBWrapperImpl : public mojom::LevelDBWrapper {
 
   bool empty() const { return bytes_used_ == 0; }
   size_t bytes_used() const { return bytes_used_; }
+
+  bool has_pending_load_tasks() const {
+    return !on_load_complete_tasks_.empty();
+  }
 
   // Commence aggressive flushing. This should be called early during startup,
   // before any localStorage writing. Currently scheduled writes will not be

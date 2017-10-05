@@ -42,13 +42,11 @@
 #include "core/geometry/DOMRectReadOnly.h"
 #include "core/html/ImageData.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/StaticBitmapImage.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/DateMath.h"
 #include "public/platform/WebBlobInfo.h"
-#include "public/platform/WebMessagePortChannel.h"
-#include "public/platform/WebMessagePortChannelClient.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -57,14 +55,6 @@
 
 namespace blink {
 namespace {
-
-RefPtr<SerializedScriptValue> SerializedValue(const Vector<uint8_t>& bytes) {
-  // TODO(jbroman): Fix this once SerializedScriptValue can take bytes without
-  // endianness swapping.
-  DCHECK_EQ(bytes.size() % 2, 0u);
-  return SerializedScriptValue::Create(
-      String(reinterpret_cast<const UChar*>(&bytes[0]), bytes.size() / 2));
-}
 
 v8::Local<v8::Value> RoundTrip(
     v8::Local<v8::Value> value,
@@ -78,7 +68,7 @@ v8::Local<v8::Value> RoundTrip(
                                         : scope.GetExceptionState();
 
   // Extract message ports and disentangle them.
-  MessagePortChannelArray channels;
+  Vector<MessagePortChannel> channels;
   if (transferables) {
     channels = MessagePort::DisentanglePorts(scope.GetExecutionContext(),
                                              transferables->message_ports,
@@ -121,11 +111,21 @@ String ToJSON(v8::Local<v8::Object> object, const V8TestingScope& scope) {
       v8::JSON::Stringify(scope.GetContext(), object).ToLocalChecked(),
       kDoNotExternalize);
 }
+}  // namespace
+
+RefPtr<SerializedScriptValue> SerializedValue(const Vector<uint8_t>& bytes) {
+  // TODO(jbroman): Fix this once SerializedScriptValue can take bytes without
+  // endianness swapping.
+  DCHECK_EQ(bytes.size() % 2, 0u);
+  return SerializedScriptValue::Create(
+      String(reinterpret_cast<const UChar*>(&bytes[0]), bytes.size() / 2));
+}
 
 // Checks for a DOM exception, including a rethrown one.
-::testing::AssertionResult HadDOMException(const StringView& name,
-                                           ScriptState* script_state,
-                                           ExceptionState& exception_state) {
+::testing::AssertionResult HadDOMExceptionInCoreTest(
+    const StringView& name,
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
   if (!exception_state.HadException())
     return ::testing::AssertionFailure() << "no exception thrown";
   DOMException* dom_exception = V8DOMException::ToImplWithTypeCheck(
@@ -137,6 +137,8 @@ String ToJSON(v8::Local<v8::Object> object, const V8TestingScope& scope) {
     return ::testing::AssertionFailure() << "was " << dom_exception->name();
   return ::testing::AssertionSuccess();
 }
+
+namespace {
 
 TEST(V8ScriptValueSerializerTest, RoundTripJSONLikeValue) {
   // Ensure that simple JavaScript objects work.
@@ -165,7 +167,8 @@ TEST(V8ScriptValueSerializerTest, ThrowsDataCloneError) {
   DCHECK(symbol->IsSymbol());
   ASSERT_FALSE(
       V8ScriptValueSerializer(script_state).Serialize(symbol, exception_state));
-  ASSERT_TRUE(HadDOMException("DataCloneError", script_state, exception_state));
+  ASSERT_TRUE(HadDOMExceptionInCoreTest("DataCloneError", script_state,
+                                        exception_state));
   DOMException* dom_exception =
       V8DOMException::ToImpl(exception_state.GetException().As<v8::Object>());
   EXPECT_TRUE(dom_exception->message().Contains("postMessage"));
@@ -218,8 +221,8 @@ TEST(V8ScriptValueSerializerTest, NeuteringHappensAfterSerialization) {
 
   RoundTrip(object, scope, &exception_state, &transferables);
   ASSERT_TRUE(exception_state.HadException());
-  EXPECT_FALSE(HadDOMException("DataCloneError", scope.GetScriptState(),
-                               exception_state));
+  EXPECT_FALSE(HadDOMExceptionInCoreTest(
+      "DataCloneError", scope.GetScriptState(), exception_state));
   EXPECT_FALSE(array_buffer->IsNeutered());
 }
 
@@ -870,39 +873,25 @@ TEST(V8ScriptValueSerializerTest, DecodeImageDataV18) {
                      new_image_data->BufferBase()->Data())[0]);
 }
 
-class WebMessagePortChannelImpl final : public WebMessagePortChannel {
- public:
-  // WebMessagePortChannel
-  void SetClient(WebMessagePortChannelClient* client) override {}
-  void PostMessage(const uint8_t*, size_t, WebMessagePortChannelArray) {
-    NOTIMPLEMENTED();
-  }
-  bool TryGetMessage(WebVector<uint8_t>*, WebMessagePortChannelArray&) {
-    return false;
-  }
-};
-
-MessagePort* MakeMessagePort(
-    ExecutionContext* execution_context,
-    WebMessagePortChannel** unowned_channel_out = nullptr) {
-  std::unique_ptr<WebMessagePortChannelImpl> channel =
-      WTF::MakeUnique<WebMessagePortChannelImpl>();
-  auto* unowned_channel_ptr = channel.get();
+MessagePort* MakeMessagePort(ExecutionContext* execution_context,
+                             MojoHandle* unowned_handle_out = nullptr) {
   MessagePort* port = MessagePort::Create(*execution_context);
-  port->Entangle(std::move(channel));
+  mojo::MessagePipe pipe;
+  MojoHandle unowned_handle = pipe.handle0.get().value();
+  port->Entangle(std::move(pipe.handle0));
   EXPECT_TRUE(port->IsEntangled());
-  EXPECT_EQ(unowned_channel_ptr, port->EntangledChannelForTesting());
-  if (unowned_channel_out)
-    *unowned_channel_out = unowned_channel_ptr;
+  EXPECT_EQ(unowned_handle, port->EntangledHandleForTesting());
+  if (unowned_handle_out)
+    *unowned_handle_out = unowned_handle;
   return port;
 }
 
 TEST(V8ScriptValueSerializerTest, RoundTripMessagePort) {
   V8TestingScope scope;
 
-  WebMessagePortChannel* unowned_channel;
+  MojoHandle unowned_handle;
   MessagePort* port =
-      MakeMessagePort(scope.GetExecutionContext(), &unowned_channel);
+      MakeMessagePort(scope.GetExecutionContext(), &unowned_handle);
   v8::Local<v8::Value> wrapper = ToV8(port, scope.GetScriptState());
   Transferables transferables;
   transferables.message_ports.push_back(port);
@@ -913,7 +902,7 @@ TEST(V8ScriptValueSerializerTest, RoundTripMessagePort) {
   MessagePort* new_port = V8MessagePort::ToImpl(result.As<v8::Object>());
   EXPECT_FALSE(port->IsEntangled());
   EXPECT_TRUE(new_port->IsEntangled());
-  EXPECT_EQ(unowned_channel, new_port->EntangledChannelForTesting());
+  EXPECT_EQ(unowned_handle, new_port->EntangledHandleForTesting());
 }
 
 TEST(V8ScriptValueSerializerTest, NeuteredMessagePortThrowsDataCloneError) {
@@ -929,8 +918,8 @@ TEST(V8ScriptValueSerializerTest, NeuteredMessagePortThrowsDataCloneError) {
   transferables.message_ports.push_back(port);
 
   RoundTrip(wrapper, scope, &exception_state, &transferables);
-  ASSERT_TRUE(HadDOMException("DataCloneError", scope.GetScriptState(),
-                              exception_state));
+  ASSERT_TRUE(HadDOMExceptionInCoreTest(
+      "DataCloneError", scope.GetScriptState(), exception_state));
 }
 
 TEST(V8ScriptValueSerializerTest,
@@ -940,15 +929,13 @@ TEST(V8ScriptValueSerializerTest,
                                  ExceptionState::kExecutionContext, "Window",
                                  "postMessage");
 
-  WebMessagePortChannel* unowned_channel;
-  MessagePort* port =
-      MakeMessagePort(scope.GetExecutionContext(), &unowned_channel);
+  MessagePort* port = MakeMessagePort(scope.GetExecutionContext());
   v8::Local<v8::Value> wrapper = ToV8(port, scope.GetScriptState());
   Transferables transferables;
 
   RoundTrip(wrapper, scope, &exception_state, &transferables);
-  ASSERT_TRUE(HadDOMException("DataCloneError", scope.GetScriptState(),
-                              exception_state));
+  ASSERT_TRUE(HadDOMExceptionInCoreTest(
+      "DataCloneError", scope.GetScriptState(), exception_state));
 }
 
 TEST(V8ScriptValueSerializerTest, OutOfRangeMessagePortIndex) {
@@ -1804,20 +1791,6 @@ TEST(V8ScriptValueSerializerTest, DecodeFileListIndex) {
   EXPECT_EQ("d875dfc2-4505-461b-98fe-0cf6cc5eaf44", new_file->Uuid());
   EXPECT_EQ("text/plain", new_file->type());
 }
-
-class ScopedEnableCompositorWorker {
- public:
-  ScopedEnableCompositorWorker()
-      : was_enabled_(RuntimeEnabledFeatures::CompositorWorkerEnabled()) {
-    RuntimeEnabledFeatures::SetCompositorWorkerEnabled(true);
-  }
-  ~ScopedEnableCompositorWorker() {
-    RuntimeEnabledFeatures::SetCompositorWorkerEnabled(was_enabled_);
-  }
-
- private:
-  bool was_enabled_;
-};
 
 // Decode tests aren't included here because they're slightly non-trivial (an
 // element with the right ID must actually exist) and this feature is both

@@ -100,6 +100,8 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 - (void)setBillingProfile:(autofill::AutofillProfile*)billingProfile {
   _billingProfile = billingProfile;
   [self.consumer setEditorFields:[self createEditorFields]];
+  if (self.creditCardExpDateField)
+    [self loadMonthsAndYears];
 }
 
 #pragma mark - PaymentRequestEditViewControllerDataSource

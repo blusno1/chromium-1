@@ -62,13 +62,17 @@ PASS oldChildWindow.navigator.usb.ondisconnect is newChildWindow.navigator.usb.o
 PASS oldChildWindow.navigator.userAgent is newChildWindow.navigator.userAgent
 PASS oldChildWindow.navigator.vendor is newChildWindow.navigator.vendor
 PASS oldChildWindow.navigator.vendorSub is newChildWindow.navigator.vendorSub
+PASS oldChildWindow.navigator.vr.ondeviceconnect is newChildWindow.navigator.vr.ondeviceconnect
+PASS oldChildWindow.navigator.vr.ondevicedisconnect is newChildWindow.navigator.vr.ondevicedisconnect
 PASS oldChildWindow.onabort is newChildWindow.onabort
+PASS oldChildWindow.onafterprint is newChildWindow.onafterprint
 PASS oldChildWindow.onanimationend is newChildWindow.onanimationend
 PASS oldChildWindow.onanimationiteration is newChildWindow.onanimationiteration
 PASS oldChildWindow.onanimationstart is newChildWindow.onanimationstart
 PASS oldChildWindow.onappinstalled is newChildWindow.onappinstalled
 PASS oldChildWindow.onauxclick is newChildWindow.onauxclick
 PASS oldChildWindow.onbeforeinstallprompt is newChildWindow.onbeforeinstallprompt
+PASS oldChildWindow.onbeforeprint is newChildWindow.onbeforeprint
 PASS oldChildWindow.onbeforeunload is newChildWindow.onbeforeunload
 PASS oldChildWindow.onblur is newChildWindow.onblur
 PASS oldChildWindow.oncancel is newChildWindow.oncancel
@@ -225,6 +229,8 @@ PASS oldChildWindow.toolbar.visible is newChildWindow.toolbar.visible
 PASS oldChildWindow.visualViewport.height is newChildWindow.visualViewport.height
 PASS oldChildWindow.visualViewport.offsetLeft is newChildWindow.visualViewport.offsetLeft
 PASS oldChildWindow.visualViewport.offsetTop is newChildWindow.visualViewport.offsetTop
+PASS oldChildWindow.visualViewport.onresize is newChildWindow.visualViewport.onresize
+PASS oldChildWindow.visualViewport.onscroll is newChildWindow.visualViewport.onscroll
 PASS oldChildWindow.visualViewport.pageLeft is newChildWindow.visualViewport.pageLeft
 PASS oldChildWindow.visualViewport.pageTop is newChildWindow.visualViewport.pageTop
 PASS oldChildWindow.visualViewport.scale is newChildWindow.visualViewport.scale

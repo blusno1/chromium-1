@@ -151,8 +151,8 @@ public class BookmarkManager implements BookmarkDelegate, SearchDelegate {
         mToolbar = (BookmarkActionBar) mSelectableListLayout.initializeToolbar(
                 R.layout.bookmark_action_bar, mSelectionDelegate, 0, null, R.id.normal_menu_group,
                 R.id.selection_mode_menu_group,
-                FeatureUtilities.isChromeHomeModernEnabled() ? R.color.modern_toolbar_bg
-                                                             : R.color.modern_primary_color,
+                FeatureUtilities.isChromeHomeEnabled() ? R.color.modern_toolbar_bg
+                                                       : R.color.modern_primary_color,
                 null, true);
         mToolbar.initializeSearchView(
                 this, R.string.bookmark_action_bar_search, R.id.search_menu_id);
@@ -460,5 +460,12 @@ public class BookmarkManager implements BookmarkDelegate, SearchDelegate {
     @VisibleForTesting
     public BookmarkActionBar getToolbarForTests() {
         return mToolbar;
+    }
+
+    /**
+     * Called to scroll to the top of the bookmarks list.
+     */
+    public void scrollToTop() {
+        mRecyclerView.smoothScrollToPosition(0);
     }
 }

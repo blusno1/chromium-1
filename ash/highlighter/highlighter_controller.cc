@@ -59,6 +59,12 @@ void HighlighterController::SetObserver(
   observer_ = observer;
 }
 
+void HighlighterController::SetExitCallback(base::OnceClosure exit_callback,
+                                            bool require_success) {
+  exit_callback_ = std::move(exit_callback);
+  require_success_ = require_success;
+}
+
 void HighlighterController::SetEnabled(bool enabled) {
   FastInkPointerController::SetEnabled(enabled);
   if (enabled) {
@@ -78,6 +84,8 @@ void HighlighterController::SetEnabled(bool enabled) {
     if (highlighter_view_ && !highlighter_view_->animating())
       DestroyPointerView();
   }
+  if (observer_)
+    observer_->HandleEnabledStateChange(enabled);
 }
 
 views::View* HighlighterController::GetPointerView() const {
@@ -131,6 +139,7 @@ void HighlighterController::RecognizeGesture() {
 
   aura::Window* current_window =
       highlighter_view_->GetWidget()->GetNativeWindow()->GetRootWindow();
+  const gfx::Rect bounds = current_window->bounds();
 
   const FastInkPoints& points = highlighter_view_->points();
   gfx::RectF box = points.GetBoundingBoxF();
@@ -145,8 +154,7 @@ void HighlighterController::RecognizeGesture() {
     box = AdjustHorizontalStroke(box, HighlighterView::kPenTipSize);
   } else if (gesture_type == HighlighterGestureType::kClosedShape) {
     const float fraction =
-        box.width() * box.height() /
-        (current_window->bounds().width() * current_window->bounds().height());
+        box.width() * box.height() / (bounds.width() * bounds.height());
     UMA_HISTOGRAM_PERCENTAGE("Ash.Shelf.Palette.Assistant.CircledPercentage",
                              static_cast<int>(fraction * 100));
   }
@@ -156,7 +164,14 @@ void HighlighterController::RecognizeGesture() {
       base::Bind(&HighlighterController::DestroyHighlighterView,
                  base::Unretained(this)));
 
-  if (gesture_type != HighlighterGestureType::kNotRecognized) {
+  // |box| is not guaranteed to be inside the screen bounds, clip it.
+  // Not converting |box| to gfx::Rect here to avoid accumulating rounding
+  // errors, instead converting |bounds| to gfx::RectF.
+  box.Intersect(
+      gfx::RectF(bounds.x(), bounds.y(), bounds.width(), bounds.height()));
+
+  if (!box.IsEmpty() &&
+      gesture_type != HighlighterGestureType::kNotRecognized) {
     if (observer_) {
       observer_->HandleSelection(gfx::ToEnclosingRect(
           gfx::ScaleRect(box, GetScreenshotScale(current_window))));
@@ -168,6 +183,12 @@ void HighlighterController::RecognizeGesture() {
                                      base::Unretained(this)));
 
     recognized_gesture_counter_++;
+    CallExitCallback();
+  } else {
+    if (observer_)
+      observer_->HandleFailedSelection();
+    if (!require_success_)
+      CallExitCallback();
   }
 
   gesture_counter_++;
@@ -208,6 +229,11 @@ void HighlighterController::DestroyHighlighterView() {
 
 void HighlighterController::DestroyResultView() {
   result_view_.reset();
+}
+
+void HighlighterController::CallExitCallback() {
+  if (!exit_callback_.is_null())
+    std::move(exit_callback_).Run();
 }
 
 }  // namespace ash

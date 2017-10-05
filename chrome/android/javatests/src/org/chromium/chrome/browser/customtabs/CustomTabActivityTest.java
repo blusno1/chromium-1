@@ -76,6 +76,8 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.TabsOpenedFromExternalAppTest;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.appmenu.AppMenuHandler;
+import org.chromium.chrome.browser.browserservices.BrowserSessionContentUtils;
+import org.chromium.chrome.browser.browserservices.OriginVerifier;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.history.BrowsingHistoryBridge;
@@ -824,6 +826,7 @@ public class CustomTabActivityTest {
                 "A custom tab toolbar is never shown", toolbarView instanceof CustomTabToolbar);
         CustomTabToolbar toolbar = (CustomTabToolbar) toolbarView;
         Assert.assertEquals(expectedColor, toolbar.getBackground().getColor());
+        Assert.assertFalse(toolbar.shouldEmphasizeHttpsScheme());
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP) {
             Assert.assertEquals(ColorUtils.getDarkenedColorForStatusBar(expectedColor),
                     mCustomTabActivityTestRule.getActivity().getWindow().getStatusBarColor());
@@ -963,7 +966,7 @@ public class CustomTabActivityTest {
                 ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
                     @Override
                     public Boolean call() throws Exception {
-                        return CustomTabActivity.handleInActiveContentIfNeeded(
+                        return BrowserSessionContentUtils.handleInActiveContentIfNeeded(
                                 CustomTabsTestUtils.createMinimalCustomTabIntent(
                                         context, mTestPage2));
                     }
@@ -979,7 +982,7 @@ public class CustomTabActivityTest {
                     @Override
                     public Boolean call() throws Exception {
                         intent.setData(Uri.parse(mTestPage2));
-                        return CustomTabActivity.handleInActiveContentIfNeeded(intent);
+                        return BrowserSessionContentUtils.handleInActiveContentIfNeeded(intent);
                     }
                 }));
         final Tab tab = getActivity().getActivityTab();
@@ -1070,7 +1073,7 @@ public class CustomTabActivityTest {
                 ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
                     @Override
                     public Boolean call() throws Exception {
-                        return CustomTabActivity.handleInActiveContentIfNeeded(intent);
+                        return BrowserSessionContentUtils.handleInActiveContentIfNeeded(intent);
                     }
                 }));
         try {
@@ -1122,7 +1125,7 @@ public class CustomTabActivityTest {
                 ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
                     @Override
                     public Boolean call() throws Exception {
-                        return CustomTabActivity.handleInActiveContentIfNeeded(intent);
+                        return BrowserSessionContentUtils.handleInActiveContentIfNeeded(intent);
                     }
                 }));
         try {
@@ -1187,6 +1190,11 @@ public class CustomTabActivityTest {
                 Assert.assertEquals(CustomTabsConnection.PAGE_LOAD_METRICS_CALLBACK, callbackName);
 
                 long navigationStart = args.getLong(PageLoadMetrics.NAVIGATION_START, -1);
+                if (navigationStart == -1) {
+                    // Return if the callback just had network quality information, which
+                    // isn't tested.
+                    return;
+                }
                 long current = SystemClock.uptimeMillis();
                 Assert.assertTrue(navigationStart <= current);
                 Assert.assertTrue(navigationStart >= activityStartTimeMs.get());

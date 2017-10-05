@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/screens/base_screen_delegate.h"
 #include "chrome/browser/chromeos/login/screens/controller_pairing_screen.h"
@@ -38,7 +39,6 @@ class SharkConnectionListener;
 
 namespace chromeos {
 
-class AutoEnrollmentController;
 class ErrorScreen;
 struct Geoposition;
 class LoginDisplayHost;
@@ -71,6 +71,9 @@ class WizardController : public BaseScreenDelegate,
     return skip_post_login_screens_;
   }
 
+  // Whether to skip any prompts that may be normally shown during enrollment.
+  static bool skip_enrollment_prompts() { return skip_enrollment_prompts_; }
+
   // Sets delays to zero. MUST be used only for tests.
   static void SetZeroDelays();
 
@@ -83,6 +86,9 @@ class WizardController : public BaseScreenDelegate,
   // Skips any screens that may normally be shown after login (registration,
   // Terms of Service, user image selection).
   static void SkipPostLoginScreensForTesting();
+
+  // Skips any enrollment prompts that may be normally shown.
+  static void SkipEnrollmentPromptsForTesting();
 
   // Returns true if OOBE is operating under the
   // Zero-Touch Hands-Off Enrollment Flow.
@@ -128,6 +134,9 @@ class WizardController : public BaseScreenDelegate,
   // Allocate a given BaseScreen for the given |Screen|. Used by
   // |screen_manager_|.
   BaseScreen* CreateScreen(OobeScreen screen);
+
+  // Set the current screen. For Test use only.
+  void SetCurrentScreenForTesting(BaseScreen* screen);
 
  private:
   // Show specific screen.
@@ -332,6 +341,8 @@ class WizardController : public BaseScreenDelegate,
   static bool skip_post_login_screens_;
 
   static bool zero_delay_enabled_;
+
+  static bool skip_enrollment_prompts_;
 
   // Screen that's currently active.
   BaseScreen* current_screen_ = nullptr;

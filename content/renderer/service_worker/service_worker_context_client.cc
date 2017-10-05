@@ -25,14 +25,12 @@
 #include "content/child/service_worker/service_worker_handle_reference.h"
 #include "content/child/service_worker/service_worker_network_provider.h"
 #include "content/child/service_worker/service_worker_provider_context.h"
-#include "content/child/service_worker/service_worker_registration_handle_reference.h"
 #include "content/child/service_worker/web_service_worker_impl.h"
 #include "content/child/service_worker/web_service_worker_provider_impl.h"
 #include "content/child/service_worker/web_service_worker_registration_impl.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/web_data_consumer_handle_impl.h"
 #include "content/child/web_url_loader_impl.h"
-#include "content/child/webmessageportchannel_impl.h"
 #include "content/common/devtools_messages.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
@@ -66,7 +64,6 @@
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebBlobRegistry.h"
-#include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -81,10 +78,12 @@
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "third_party/WebKit/public/web/modules/serviceworker/WebServiceWorkerContextClient.h"
 #include "third_party/WebKit/public/web/modules/serviceworker/WebServiceWorkerContextProxy.h"
 
 using blink::WebURLRequest;
+using blink::MessagePortChannel;
 
 namespace content {
 
@@ -116,13 +115,13 @@ class WebServiceWorkerNetworkProviderImpl
 
   std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
       const blink::WebURLRequest& request,
-      base::SingleThreadTaskRunner* task_runner) override {
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     RenderThreadImpl* child_thread = RenderThreadImpl::current();
     if (child_thread && provider_->script_loader_factory() &&
         ServiceWorkerUtils::IsServicificationEnabled() &&
         IsScriptRequest(request)) {
       return base::MakeUnique<WebURLLoaderImpl>(
-          child_thread->resource_dispatcher(), task_runner,
+          child_thread->resource_dispatcher(), std::move(task_runner),
           provider_->script_loader_factory());
     }
     return nullptr;
@@ -771,18 +770,20 @@ void ServiceWorkerContextClient::WorkerContextStarted(
   // willDestroyWorkerContext.
   context_.reset(new WorkerContextData(this));
 
-  ServiceWorkerRegistrationObjectInfo registration_info;
+  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr registration_info;
   ServiceWorkerVersionAttributes version_attrs;
-  provider_context_->GetRegistration(&registration_info, &version_attrs);
-  DCHECK_NE(registration_info.registration_id,
-            kInvalidServiceWorkerRegistrationId);
+  provider_context_->TakeRegistrationForServiceWorkerGlobalScope(
+      &registration_info, &version_attrs);
+  DCHECK_NE(registration_info->registration_id,
+            blink::mojom::kInvalidServiceWorkerRegistrationId);
 
   DCHECK(pending_dispatcher_request_.is_pending());
   DCHECK(!context_->event_dispatcher_binding.is_bound());
   context_->event_dispatcher_binding.Bind(
       std::move(pending_dispatcher_request_));
 
-  SetRegistrationInServiceWorkerGlobalScope(registration_info, version_attrs);
+  SetRegistrationInServiceWorkerGlobalScope(std::move(registration_info),
+                                            version_attrs);
 
   (*instance_host_)->OnThreadStarted(WorkerThread::GetCurrentId());
 
@@ -1262,10 +1263,9 @@ ServiceWorkerContextClient::CreateServiceWorkerProvider() {
 void ServiceWorkerContextClient::PostMessageToClient(
     const blink::WebString& uuid,
     const blink::WebString& message,
-    blink::WebMessagePortChannelArray channels) {
+    blink::WebVector<MessagePortChannel> channels) {
   Send(new ServiceWorkerHostMsg_PostMessageToClient(
-      GetRoutingID(), uuid.Utf8(), message.Utf16(),
-      WebMessagePortChannelImpl::ExtractMessagePorts(std::move(channels))));
+      GetRoutingID(), uuid.Utf8(), message.Utf16(), channels.ReleaseVector()));
 }
 
 void ServiceWorkerContextClient::Focus(
@@ -1394,7 +1394,7 @@ void ServiceWorkerContextClient::SendWorkerStarted() {
 }
 
 void ServiceWorkerContextClient::SetRegistrationInServiceWorkerGlobalScope(
-    const ServiceWorkerRegistrationObjectInfo& info,
+    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info,
     const ServiceWorkerVersionAttributes& attrs) {
   DCHECK(worker_task_runner_->RunsTasksInCurrentSequence());
   ServiceWorkerDispatcher* dispatcher =
@@ -1404,7 +1404,7 @@ void ServiceWorkerContextClient::SetRegistrationInServiceWorkerGlobalScope(
   // Register a registration and its version attributes with the dispatcher
   // living on the worker thread.
   scoped_refptr<WebServiceWorkerRegistrationImpl> registration(
-      dispatcher->GetOrCreateRegistration(info, attrs));
+      dispatcher->GetOrCreateRegistration(std::move(info), attrs));
 
   proxy_->SetRegistration(
       WebServiceWorkerRegistrationImpl::CreateHandle(registration));
@@ -1519,15 +1519,14 @@ void ServiceWorkerContextClient::DispatchExtendableMessageEvent(
       base::MakeUnique<DispatchExtendableMessageEventCallback>(
           std::move(callback)));
 
-  blink::WebMessagePortChannelArray ports =
-      WebMessagePortChannelImpl::CreateFromMessagePipeHandles(
-          std::move(event->message_ports));
   if (event->source.client_info.IsValid()) {
     blink::WebServiceWorkerClientInfo web_client =
         ToWebServiceWorkerClientInfo(event->source.client_info);
     proxy_->DispatchExtendableMessageEvent(
         request_id, blink::WebString::FromUTF16(event->message),
-        event->source_origin, std::move(ports), web_client);
+        event->source_origin,
+        MessagePortChannel::CreateFromHandles(std::move(event->message_ports)),
+        web_client);
     return;
   }
 
@@ -1542,7 +1541,8 @@ void ServiceWorkerContextClient::DispatchExtendableMessageEvent(
       dispatcher->GetOrCreateServiceWorker(std::move(handle));
   proxy_->DispatchExtendableMessageEvent(
       request_id, blink::WebString::FromUTF16(event->message),
-      event->source_origin, std::move(ports),
+      event->source_origin,
+      MessagePortChannel::CreateFromHandles(std::move(event->message_ports)),
       WebServiceWorkerImpl::CreateHandle(worker));
 }
 

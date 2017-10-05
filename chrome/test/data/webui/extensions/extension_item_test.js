@@ -110,10 +110,21 @@ cr.define('extension_item_tests', function() {
       testNormalElementsAreVisible(item);
       testDeveloperElementsAreVisible(item);
 
+      // Developer reload button should be visible only for enabled unpacked
+      // extensions.
       extension_test_util.testVisible(item, '#dev-reload-button', false);
+
       item.set('data.location', chrome.developerPrivate.Location.UNPACKED);
       Polymer.dom.flush();
       extension_test_util.testVisible(item, '#dev-reload-button', true);
+
+      item.set('data.state', chrome.developerPrivate.ExtensionState.DISABLED);
+      Polymer.dom.flush();
+      extension_test_util.testVisible(item, '#dev-reload-button', false);
+
+      item.set('data.state', chrome.developerPrivate.ExtensionState.TERMINATED);
+      Polymer.dom.flush();
+      extension_test_util.testVisible(item, '#dev-reload-button', false);
     });
 
     /** Tests that the delegate methods are correctly called. */
@@ -217,20 +228,20 @@ cr.define('extension_item_tests', function() {
       var icon = item.$$('#source-indicator iron-icon');
       assertTrue(!!icon);
       expectEquals('extensions-icons:unpacked', icon.icon);
-      extension_test_util.testIronIcons(item);
+      extension_test_util.testIcons(item);
 
       item.set('data.location', 'THIRD_PARTY');
       Polymer.dom.flush();
       expectTrue(extension_test_util.isVisible(item, '#source-indicator'));
       expectEquals('input', icon.icon);
-      extension_test_util.testIronIcons(item);
+      extension_test_util.testIcons(item);
 
       item.set('data.location', 'FROM_STORE');
       item.set('data.controlledInfo', {type: 'POLICY', text: 'policy'});
       Polymer.dom.flush();
       expectTrue(extension_test_util.isVisible(item, '#source-indicator'));
       expectEquals('communication:business', icon.icon);
-      extension_test_util.testIronIcons(item);
+      extension_test_util.testIcons(item);
 
       item.set('data.controlledInfo', null);
       Polymer.dom.flush();

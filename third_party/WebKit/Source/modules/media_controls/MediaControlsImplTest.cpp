@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "build/build_config.h"
-#include "core/HTMLNames.h"
 #include "core/css/StyleEngine.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
@@ -18,6 +17,7 @@
 #include "core/geometry/DOMRect.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLVideoElement.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/EmptyClients.h"
@@ -30,8 +30,8 @@
 #include "modules/media_controls/elements/MediaControlVolumeSliderElement.h"
 #include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
 #include "modules/remoteplayback/RemotePlayback.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/Handle.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/testing/EmptyWebMediaPlayer.h"
 #include "platform/testing/HistogramTester.h"
 #include "platform/testing/TestingPlatformSupport.h"
@@ -184,7 +184,7 @@ class MediaControlsImplTest : public ::testing::Test {
 
     GetDocument().write("<video>");
     HTMLVideoElement& video =
-        toHTMLVideoElement(*GetDocument().QuerySelector("video"));
+        ToHTMLVideoElement(*GetDocument().QuerySelector("video"));
     media_controls_ = static_cast<MediaControlsImpl*>(video.GetMediaControls());
 
     // If scripts are not enabled, controls will always be shown.
@@ -561,7 +561,8 @@ class MediaControlsImplInProductHelpTest : public MediaControlsImplTest {
     return *MediaControls().DownloadInProductHelp();
   }
 
-  void Play() { MediaControls().OnPlay(); }
+  void Play() { MediaControls().OnPlaying(); }
+  void OnTimeUpdate() { MediaControls().OnTimeUpdate(); }
 
   bool EnableDownloadInProductHelp() override { return true; }
 };
@@ -640,6 +641,9 @@ TEST_F(MediaControlsImplInProductHelpTest,
   MediaControls().MaybeShow();
   EXPECT_TRUE(Manager().IsShowingInProductHelp());
 
+  OnTimeUpdate();
+  EXPECT_TRUE(Manager().IsShowingInProductHelp());
+
   // Hiding the controls dismissed in-product-help.
   MediaControls().Hide();
   EXPECT_FALSE(Manager().IsShowingInProductHelp());
@@ -711,36 +715,6 @@ TEST_F(MediaControlsImplTest, TimelineImmediatelyUpdatesCurrentTime) {
   TimelineElement()->setValueAsNumber(duration / 2, ASSERT_NO_EXCEPTION);
   TimelineElement()->DispatchInputEvent();
   EXPECT_EQ(duration / 2, current_time_display->CurrentValue());
-}
-
-TEST_F(MediaControlsImplTest, VolumeSliderPaintInvalidationOnInput) {
-  EnsureSizing();
-
-  Element* volume_slider = VolumeSliderElement();
-
-  MockLayoutObject layout_object(volume_slider);
-  LayoutObject* prev_layout_object = volume_slider->GetLayoutObject();
-  volume_slider->SetLayoutObject(&layout_object);
-
-  layout_object.ClearPaintInvalidationFlags();
-  EXPECT_FALSE(layout_object.ShouldDoFullPaintInvalidation());
-  Event* event = Event::Create(EventTypeNames::input);
-  volume_slider->DefaultEventHandler(event);
-  EXPECT_TRUE(layout_object.ShouldDoFullPaintInvalidation());
-
-  layout_object.ClearPaintInvalidationFlags();
-  EXPECT_FALSE(layout_object.ShouldDoFullPaintInvalidation());
-  event = Event::Create(EventTypeNames::input);
-  volume_slider->DefaultEventHandler(event);
-  EXPECT_TRUE(layout_object.ShouldDoFullPaintInvalidation());
-
-  layout_object.ClearPaintInvalidationFlags();
-  EXPECT_FALSE(layout_object.ShouldDoFullPaintInvalidation());
-  event = Event::Create(EventTypeNames::input);
-  volume_slider->DefaultEventHandler(event);
-  EXPECT_TRUE(layout_object.ShouldDoFullPaintInvalidation());
-
-  volume_slider->SetLayoutObject(prev_layout_object);
 }
 
 TEST_F(MediaControlsImplTest, TimelineMetricsWidth) {
@@ -960,6 +934,13 @@ class MediaControlsImplTestWithMockScheduler : public MediaControlsImplTest {
     MediaControlsImplTest::SetUp();
   }
 
+  bool IsCursorHidden() {
+    const StylePropertySet* style = MediaControls().InlineStyle();
+    if (!style)
+      return false;
+    return style->GetPropertyValue(CSSPropertyCursor) == "none";
+  }
+
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform_;
 };
@@ -1001,6 +982,36 @@ TEST_F(MediaControlsImplTestWithMockScheduler,
   EXPECT_FALSE(IsElementVisible(*panel));
 }
 
+TEST_F(MediaControlsImplTestWithMockScheduler, CursorHidesWhenControlsHide) {
+  EnsureSizing();
+
+  MediaControls().MediaElement().SetBooleanAttribute(HTMLNames::controlsAttr,
+                                                     true);
+  MediaControls().MediaElement().SetSrc("http://example.com");
+
+  // Cursor is not initially hidden.
+  EXPECT_FALSE(IsCursorHidden());
+
+  MediaControls().MediaElement().Play();
+
+  // Tabbing into the controls shows the controls and therefore the cursor.
+  MediaControls().DispatchEvent(Event::Create("focusin"));
+  EXPECT_FALSE(IsCursorHidden());
+
+  // Once the controls hide, the cursor is hidden.
+  platform_->RunForPeriodSeconds(4);
+  EXPECT_TRUE(IsCursorHidden());
+
+  // If the mouse moves, the controls are shown and the cursor is no longer
+  // hidden.
+  MediaControls().DispatchEvent(Event::Create("pointermove"));
+  EXPECT_FALSE(IsCursorHidden());
+
+  // Once the controls hide again, the cursor is hidden again.
+  platform_->RunForPeriodSeconds(4);
+  EXPECT_TRUE(IsCursorHidden());
+}
+
 TEST_F(MediaControlsImplTest,
        RemovingFromDocumentRemovesListenersAndCallbacks) {
   auto page_holder = DummyPageHolder::Create();
@@ -1019,7 +1030,7 @@ TEST_F(MediaControlsImplTest,
   WeakPersistent<HTMLMediaElement> weak_persistent_video = element;
   {
     Persistent<HTMLMediaElement> persistent_video = element;
-    page_holder->GetDocument().body()->setInnerHTML("");
+    page_holder->GetDocument().body()->SetInnerHTMLFromString("");
 
     // When removed from the document, the event listeners should have been
     // dropped.

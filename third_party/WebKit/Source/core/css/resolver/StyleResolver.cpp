@@ -31,7 +31,6 @@
 #include "core/css/resolver/StyleResolver.h"
 
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
 #include "core/MediaTypeNames.h"
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/CSSInterpolationEnvironment.h"
@@ -87,11 +86,12 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLSlotElement.h"
+#include "core/html_names.h"
 #include "core/layout/GeneratedChildren.h"
 #include "core/probe/CoreProbes.h"
 #include "core/style/StyleInheritedVariables.h"
 #include "core/svg/SVGElement.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/StdLibExtras.h"
 
 namespace blink {
@@ -198,11 +198,17 @@ static inline ScopedStyleResolver* ScopedResolverFor(const Element& element) {
   // An assumption here is that these elements belong to scopes without a
   // ScopedStyleResolver due to the fact that VTT scopes and UA shadow trees
   // don't have <style> or <link> elements. This is backed up by the DCHECKs
-  // below.
+  // below. The one exception to this assumption are the media controls which
+  // use a <style> element for CSS animations in the shadow DOM. If a <style>
+  // element is present in the shadow DOM then this will also block any
+  // author styling.
 
   TreeScope* tree_scope = &element.GetTreeScope();
   if (ScopedStyleResolver* resolver = tree_scope->GetScopedStyleResolver()) {
-    DCHECK(element.ShadowPseudoId().IsEmpty());
+#if DCHECK_IS_ON()
+    if (!element.HasMediaControlAncestor())
+      DCHECK(element.ShadowPseudoId().IsEmpty());
+#endif
     DCHECK(!element.IsVTTElement());
     return resolver;
   }
@@ -592,7 +598,9 @@ RefPtr<ComputedStyle> StyleResolver::StyleForElement(
   // loading.
   if (!GetDocument().IsRenderingReady() && !element->GetLayoutObject()) {
     if (!style_not_yet_available_) {
-      style_not_yet_available_ = ComputedStyle::Create().LeakRef();
+      auto style = ComputedStyle::Create();
+      style->AddRef();
+      style_not_yet_available_ = style.get();
       style_not_yet_available_->SetDisplay(EDisplay::kNone);
       style_not_yet_available_->GetFont().Update(
           GetDocument().GetStyleEngine().GetFontSelector());
@@ -727,7 +735,7 @@ RefPtr<ComputedStyle> StyleResolver::StyleForElement(
     StyleAdjuster::AdjustComputedStyle(state, element);
   }
 
-  if (isHTMLBodyElement(*element))
+  if (IsHTMLBodyElement(*element))
     GetDocument().GetTextLinkColors().SetTextColor(state.Style()->GetColor());
 
   SetAnimationUpdateIfNeeded(state, *element);
@@ -822,7 +830,7 @@ PseudoElement* StyleResolver::CreatePseudoElementIfNeeded(Element& parent,
   DCHECK(style);
   parent_style->AddCachedPseudoStyle(style);
 
-  if (!PseudoElementLayoutObjectIsNeeded(style.Get()))
+  if (!PseudoElementLayoutObjectIsNeeded(style.get()))
     return nullptr;
 
   PseudoElement* pseudo = CreatePseudoElement(&parent, pseudo_id);
@@ -943,7 +951,7 @@ RefPtr<ComputedStyle> StyleResolver::PseudoStyleForElement(
 RefPtr<ComputedStyle> StyleResolver::StyleForPage(int page_index) {
   RefPtr<ComputedStyle> initial_style = InitialStyleForElement(GetDocument());
   StyleResolverState state(GetDocument(), GetDocument().documentElement(),
-                           initial_style.Get(), initial_style.Get());
+                           initial_style.get(), initial_style.get());
 
   RefPtr<ComputedStyle> style = ComputedStyle::Create();
   const ComputedStyle* root_element_style =
@@ -1249,7 +1257,6 @@ void StyleResolver::ApplyAnimatedStandardProperties(
     } else if (interpolation.IsTransitionInterpolation()) {
       ToTransitionInterpolation(interpolation).Apply(state);
     } else {
-      // TODO(alancutter): Move CustomCompositorAnimations off AnimatableValues.
       ToLegacyStyleInterpolation(interpolation).Apply(state);
     }
   }
@@ -1297,7 +1304,6 @@ static inline bool IsValidCueStyleProperty(CSSPropertyID id) {
     case CSSPropertyTextDecorationStyle:
     case CSSPropertyTextDecorationColor:
     case CSSPropertyTextDecorationSkip:
-      DCHECK(RuntimeEnabledFeatures::CSS3TextDecorationsEnabled());
       return true;
     case CSSPropertyFontVariationSettings:
       DCHECK(RuntimeEnabledFeatures::CSSVariableFontsEnabled());
@@ -1358,6 +1364,7 @@ static inline bool IsValidFirstLetterStyleProperty(CSSPropertyID id) {
     case CSSPropertyFontVariantCaps:
     case CSSPropertyFontVariantLigatures:
     case CSSPropertyFontVariantNumeric:
+    case CSSPropertyFontVariantEastAsian:
     case CSSPropertyFontWeight:
     case CSSPropertyLetterSpacing:
     case CSSPropertyLineHeight:
@@ -1407,14 +1414,10 @@ static inline bool IsValidFirstLetterStyleProperty(CSSPropertyID id) {
     case CSSPropertyFontVariationSettings:
       DCHECK(RuntimeEnabledFeatures::CSSVariableFontsEnabled());
       return true;
-    case CSSPropertyTextDecoration:
-      DCHECK(!RuntimeEnabledFeatures::CSS3TextDecorationsEnabled());
-      return true;
     case CSSPropertyTextDecorationColor:
     case CSSPropertyTextDecorationLine:
     case CSSPropertyTextDecorationStyle:
     case CSSPropertyTextDecorationSkip:
-      DCHECK(RuntimeEnabledFeatures::CSS3TextDecorationsEnabled());
       return true;
 
     // text-shadow added in text decoration spec:
@@ -1496,7 +1499,8 @@ void StyleResolver::ApplyAllProperty(
     // c.f. http://dev.w3.org/csswg/css-cascade/#all-shorthand
     // We skip applyProperty when a given property is unicode-bidi or
     // direction.
-    if (!CSSProperty::IsAffectedByAllProperty(property_id))
+    if (!CSSPropertyAPI::Get(resolveCSSPropertyID(property_id))
+             .IsAffectedByAll())
       continue;
 
     if (!IsPropertyInWhitelist(property_whitelist_type, property_id,
@@ -1852,7 +1856,7 @@ void StyleResolver::ApplyMatchedStandardProperties(
       state, match_result.UaRules(), true, apply_inherited_only,
       needs_apply_pass);
 
-  if (UNLIKELY(isSVGForeignObjectElement(state.GetElement()))) {
+  if (UNLIKELY(IsSVGForeignObjectElement(state.GetElement()))) {
     // LayoutSVGRoot handles zooming for the whole SVG subtree, so foreignObject
     // content should not be scaled again.
     //

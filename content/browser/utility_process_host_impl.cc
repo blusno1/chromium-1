@@ -21,17 +21,18 @@
 #include "content/common/child_process_host_impl.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/service_manager/child_connection.h"
+#include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/utility_process_host_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
-#include "content/public/common/sandbox_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "media/base/media_switches.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 #include "ui/base/ui_base_switches.h"
 
 #if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
@@ -49,10 +50,11 @@ namespace content {
 class UtilitySandboxedProcessLauncherDelegate
     : public SandboxedProcessLauncherDelegate {
  public:
-  UtilitySandboxedProcessLauncherDelegate(const base::FilePath& exposed_dir,
-                                          bool launch_elevated,
-                                          SandboxType sandbox_type,
-                                          const base::EnvironmentMap& env)
+  UtilitySandboxedProcessLauncherDelegate(
+      const base::FilePath& exposed_dir,
+      bool launch_elevated,
+      service_manager::SandboxType sandbox_type,
+      const base::EnvironmentMap& env)
       : exposed_dir_(exposed_dir),
 #if defined(OS_WIN)
         launch_elevated_(launch_elevated),
@@ -60,9 +62,12 @@ class UtilitySandboxedProcessLauncherDelegate
         env_(env),
 #endif  // OS_WIN
         sandbox_type_(sandbox_type) {
-    DCHECK(sandbox_type_ == SANDBOX_TYPE_NO_SANDBOX ||
-           sandbox_type_ == SANDBOX_TYPE_UTILITY ||
-           sandbox_type_ == SANDBOX_TYPE_NETWORK);
+    DCHECK(sandbox_type_ == service_manager::SANDBOX_TYPE_NO_SANDBOX ||
+           sandbox_type_ == service_manager::SANDBOX_TYPE_UTILITY ||
+           sandbox_type_ == service_manager::SANDBOX_TYPE_NETWORK ||
+           sandbox_type_ == service_manager::SANDBOX_TYPE_CDM ||
+           sandbox_type_ == service_manager::SANDBOX_TYPE_PDF_COMPOSITOR ||
+           sandbox_type_ == service_manager::SANDBOX_TYPE_PPAPI);
   }
 
   ~UtilitySandboxedProcessLauncherDelegate() override {}
@@ -92,15 +97,19 @@ class UtilitySandboxedProcessLauncherDelegate
 
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
   ZygoteHandle GetZygote() override {
-    if (IsUnsandboxedSandboxType(sandbox_type_) || !exposed_dir_.empty())
+    if (service_manager::IsUnsandboxedSandboxType(sandbox_type_) ||
+        !exposed_dir_.empty()) {
       return nullptr;
+    }
     return GetGenericZygote();
   }
 #endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
   base::EnvironmentMap GetEnvironment() override { return env_; }
 #endif  // OS_WIN
 
-  SandboxType GetSandboxType() override { return sandbox_type_; }
+  service_manager::SandboxType GetSandboxType() override {
+    return sandbox_type_;
+  }
 
  private:
   base::FilePath exposed_dir_;
@@ -110,7 +119,7 @@ class UtilitySandboxedProcessLauncherDelegate
 #elif defined(OS_POSIX)
   base::EnvironmentMap env_;
 #endif  // OS_WIN
-  SandboxType sandbox_type_;
+  service_manager::SandboxType sandbox_type_;
 };
 
 UtilityMainThreadFactoryFunction g_utility_main_thread_factory = NULL;
@@ -131,7 +140,7 @@ UtilityProcessHostImpl::UtilityProcessHostImpl(
     const scoped_refptr<base::SequencedTaskRunner>& client_task_runner)
     : client_(client),
       client_task_runner_(client_task_runner),
-      sandbox_type_(SANDBOX_TYPE_UTILITY),
+      sandbox_type_(service_manager::SANDBOX_TYPE_UTILITY),
       run_elevated_(false),
 #if defined(OS_LINUX)
       child_flags_(ChildProcessHost::CHILD_ALLOW_SELF),
@@ -164,14 +173,15 @@ void UtilityProcessHostImpl::SetExposedDir(const base::FilePath& dir) {
   exposed_dir_ = dir;
 }
 
-void UtilityProcessHostImpl::SetSandboxType(SandboxType sandbox_type) {
-  DCHECK(sandbox_type != SANDBOX_TYPE_INVALID);
+void UtilityProcessHostImpl::SetSandboxType(
+    service_manager::SandboxType sandbox_type) {
+  DCHECK(sandbox_type != service_manager::SANDBOX_TYPE_INVALID);
   sandbox_type_ = sandbox_type;
 }
 
 #if defined(OS_WIN)
 void UtilityProcessHostImpl::ElevatePrivileges() {
-  sandbox_type_ = SANDBOX_TYPE_NO_SANDBOX;
+  sandbox_type_ = service_manager::SANDBOX_TYPE_NO_SANDBOX;
   run_elevated_ = true;
 }
 #endif
@@ -199,6 +209,15 @@ void UtilityProcessHostImpl::BindInterface(
 
 void UtilityProcessHostImpl::SetName(const base::string16& name) {
   name_ = name;
+}
+
+void UtilityProcessHostImpl::SetServiceIdentity(
+    const service_manager::Identity& identity) {
+  service_identity_ = identity;
+}
+
+void UtilityProcessHostImpl::AddFilter(BrowserMessageFilter* filter) {
+  process_->AddFilter(filter);
 }
 
 bool UtilityProcessHostImpl::StartProcess() {
@@ -263,15 +282,14 @@ bool UtilityProcessHostImpl::StartProcess() {
     cmd_line->AppendArg(switches::kPrefetchArgumentOther);
 #endif  // defined(OS_WIN)
 
-    if (IsUnsandboxedSandboxType(sandbox_type_))
-      cmd_line->AppendSwitch(switches::kNoSandbox);
+    service_manager::SetCommandLineFlagsForSandboxType(cmd_line.get(),
+                                                       sandbox_type_);
 
     // Browser command-line switches to propagate to the utility process.
     static const char* const kSwitchNames[] = {
       switches::kHostResolverRules,
       switches::kLogNetLog,
       switches::kNoSandbox,
-      switches::kProfilerTiming,
       switches::kProxyServer,
 #if defined(OS_MACOSX)
       switches::kEnableSandboxLogging,
@@ -303,6 +321,12 @@ bool UtilityProcessHostImpl::StartProcess() {
     if (run_elevated_)
       cmd_line->AppendSwitch(switches::kUtilityProcessRunningElevated);
 #endif
+
+    const bool is_service = service_identity_.has_value();
+    if (is_service) {
+      GetContentClient()->browser()->AdjustUtilityServiceProcessCommandLine(
+          *service_identity_, cmd_line.get());
+    }
 
     process_->Launch(base::MakeUnique<UtilitySandboxedProcessLauncherDelegate>(
                          exposed_dir_, run_elevated_, sandbox_type_, env_),

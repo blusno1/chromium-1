@@ -19,6 +19,8 @@
 #include "chrome/browser/chromeos/lock_screen_apps/app_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/focus_cycler_delegate.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_observer.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -52,6 +54,8 @@
 #include "ui/events/devices/stylus_state.h"
 #include "ui/events/test/device_data_manager_test_api.h"
 
+using ash::mojom::CloseLockScreenNoteReason;
+using ash::mojom::LockScreenNoteOrigin;
 using ash::mojom::TrayActionState;
 using extensions::DictionaryBuilder;
 using extensions::ListBuilder;
@@ -273,9 +277,9 @@ class TestTrayAction : public ash::mojom::TrayAction {
     observed_states_.push_back(state);
   }
 
-  void SendNewNoteRequest() {
+  void SendNewNoteRequest(LockScreenNoteOrigin origin) {
     ASSERT_TRUE(client_);
-    client_->RequestNewLockScreenNote();
+    client_->RequestNewLockScreenNote(origin);
   }
 
   const std::vector<TrayActionState>& observed_states() const {
@@ -378,7 +382,10 @@ class LockScreenAppStateNotSupportedTest : public testing::Test {
 class LockScreenAppStateTest : public BrowserWithTestWindowTest {
  public:
   LockScreenAppStateTest()
-      : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+      : fake_user_manager_(new chromeos::FakeChromeUserManager),
+        user_manager_enabler_(fake_user_manager_),
+        profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+
   ~LockScreenAppStateTest() override = default;
 
   void SetUp() override {
@@ -452,6 +459,9 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
   }
 
   TestingProfile* CreateProfile() override {
+    const AccountId account_id(AccountId::FromUserEmail(kPrimaryProfileName));
+    AddTestUser(account_id);
+    fake_user_manager()->LoginUser(account_id);
     return profile_manager_.CreateTestingProfile(kPrimaryProfileName);
   }
 
@@ -465,6 +475,12 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
     } else {
       ADD_FAILURE() << "Request to destroy unknown profile.";
     }
+  }
+
+  // Adds test user for the primary profile - virtual so test fixture can
+  // override the test user type.
+  virtual void AddTestUser(const AccountId& account_id) {
+    fake_user_manager()->AddUser(account_id);
   }
 
   void InitExtensionSystem(Profile* profile) {
@@ -541,7 +557,8 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
     if (target_state == TrayActionState::kAvailable)
       return true;
 
-    tray_action()->SendNewNoteRequest();
+    tray_action()->SendNewNoteRequest(
+        LockScreenNoteOrigin::kLockScreenButtonTap);
     state_controller_->FlushTrayActionForTesting();
 
     ClearObservedStates();
@@ -568,6 +585,10 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
 
     return state_controller()->GetLockScreenNoteState() ==
            TrayActionState::kActive;
+  }
+
+  chromeos::FakeChromeUserManager* fake_user_manager() {
+    return fake_user_manager_;
   }
 
   TestingProfile* lock_screen_profile() { return lock_screen_profile_; }
@@ -599,6 +620,9 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
 
  private:
   std::unique_ptr<base::test::ScopedCommandLine> command_line_;
+
+  chromeos::FakeChromeUserManager* fake_user_manager_;
+  chromeos::ScopedUserManagerEnabler user_manager_enabler_;
   TestingProfileManager profile_manager_;
   TestingProfile* lock_screen_profile_ = nullptr;
 
@@ -636,7 +660,30 @@ class LockScreenAppStateTest : public BrowserWithTestWindowTest {
   DISALLOW_COPY_AND_ASSIGN(LockScreenAppStateTest);
 };
 
+class LockScreenAppStateKioskUserTest : public LockScreenAppStateTest {
+ public:
+  LockScreenAppStateKioskUserTest() {}
+  ~LockScreenAppStateKioskUserTest() override {}
+
+  void AddTestUser(const AccountId& account_id) override {
+    fake_user_manager()->AddKioskAppUser(account_id);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(LockScreenAppStateKioskUserTest);
+};
+
 }  // namespace
+
+TEST_F(LockScreenAppStateKioskUserTest, SetPrimaryProfile) {
+  ASSERT_EQ(TestAppManager::State::kNotInitialized, app_manager()->state());
+  SetPrimaryProfileAndWaitUntilReady();
+
+  EXPECT_EQ(TestAppManager::State::kNotInitialized, app_manager()->state());
+  EXPECT_EQ(TrayActionState::kNotAvailable,
+            state_controller()->GetLockScreenNoteState());
+  EXPECT_EQ(0u, observer()->observed_states().size());
+}
 
 TEST_F(LockScreenAppStateNotSupportedTest, NoInstance) {
   EXPECT_FALSE(lock_screen_apps::StateController::IsEnabled());
@@ -647,7 +694,8 @@ TEST_F(LockScreenAppStateTest, InitialState) {
             state_controller()->GetLockScreenNoteState());
 
   EXPECT_EQ(TestAppManager::State::kNotInitialized, app_manager()->state());
-  state_controller()->MoveToBackground();
+  state_controller()->CloseLockScreenNote(
+      CloseLockScreenNoteReason::kUnlockButtonPressed);
 
   EXPECT_EQ(TrayActionState::kNotAvailable,
             state_controller()->GetLockScreenNoteState());
@@ -833,7 +881,8 @@ TEST_F(LockScreenAppStateTest, AppManagerNoApp) {
   EXPECT_EQ(0u, observer()->observed_states().size());
   EXPECT_EQ(0u, tray_action()->observed_states().size());
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
 
   EXPECT_EQ(TrayActionState::kNotAvailable,
             state_controller()->GetLockScreenNoteState());
@@ -883,42 +932,12 @@ TEST_F(LockScreenAppStateTest, AppAvailabilityChanges) {
                             "Available on other app set");
 }
 
-// TODO(tbarzic): Remove or rewrite this test after refactoring
-// foreground/background code.
-TEST_F(LockScreenAppStateTest, DISABLED_MoveToBackgroundAndForeground) {
-  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kActive,
-                                      true /* enable_app_launch */));
-
-  state_controller()->MoveToBackground();
-  state_controller()->FlushTrayActionForTesting();
-
-  EXPECT_EQ(TrayActionState::kBackground,
-            state_controller()->GetLockScreenNoteState());
-
-  ExpectObservedStatesMatch({TrayActionState::kBackground},
-                            "Move to background");
-  ClearObservedStates();
-
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(app_window()->closed());
-
-  state_controller()->MoveToForeground();
-  state_controller()->FlushTrayActionForTesting();
-
-  EXPECT_EQ(TrayActionState::kActive,
-            state_controller()->GetLockScreenNoteState());
-
-  ExpectObservedStatesMatch({TrayActionState::kActive}, "Move to foreground");
-
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(app_window()->closed());
-}
-
-TEST_F(LockScreenAppStateTest, MoveToBackgroundWhileLaunching) {
+TEST_F(LockScreenAppStateTest, CloseAppWhileLaunching) {
   ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kLaunching,
                                       true /* enable_app_launch */));
 
-  state_controller()->MoveToBackground();
+  state_controller()->CloseLockScreenNote(
+      CloseLockScreenNoteReason::kUnlockButtonPressed);
   state_controller()->FlushTrayActionForTesting();
 
   EXPECT_EQ(TrayActionState::kAvailable,
@@ -929,28 +948,15 @@ TEST_F(LockScreenAppStateTest, MoveToBackgroundWhileLaunching) {
       base::MakeUnique<ChromeAppDelegate>(true)));
 
   ExpectObservedStatesMatch({TrayActionState::kAvailable},
-                            "Move to background cancels launch.");
-}
-
-TEST_F(LockScreenAppStateTest, MoveToForegroundFromNonBackgroundState) {
-  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kAvailable,
-                                      true /* enable_app_launch */));
-
-  state_controller()->MoveToForeground();
-  state_controller()->FlushTrayActionForTesting();
-
-  EXPECT_EQ(TrayActionState::kAvailable,
-            state_controller()->GetLockScreenNoteState());
-
-  EXPECT_EQ(0u, observer()->observed_states().size());
-  EXPECT_EQ(0u, tray_action()->observed_states().size());
+                            "Close app window cancels launch.");
 }
 
 TEST_F(LockScreenAppStateTest, HandleActionWhenNotAvaiable) {
   ASSERT_EQ(TrayActionState::kNotAvailable,
             state_controller()->GetLockScreenNoteState());
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
   state_controller()->FlushTrayActionForTesting();
 
   EXPECT_EQ(0u, observer()->observed_states().size());
@@ -961,7 +967,8 @@ TEST_F(LockScreenAppStateTest, HandleAction) {
   ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kAvailable,
                                       true /* enable_app_launch */));
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
   state_controller()->FlushTrayActionForTesting();
 
   ExpectObservedStatesMatch({TrayActionState::kLaunching},
@@ -969,7 +976,8 @@ TEST_F(LockScreenAppStateTest, HandleAction) {
   ClearObservedStates();
   EXPECT_EQ(1, app_manager()->launch_count());
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
   state_controller()->FlushTrayActionForTesting();
 
   // There should be no state change - the state_controller was already in
@@ -983,7 +991,8 @@ TEST_F(LockScreenAppStateTest, HandleActionWithLaunchFailure) {
   ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kAvailable,
                                       false /* enable_app_launch */));
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
   state_controller()->FlushTrayActionForTesting();
 
   EXPECT_EQ(TrayActionState::kAvailable,
@@ -995,7 +1004,8 @@ TEST_F(LockScreenAppStateTest, HandleActionWithLaunchFailure) {
 
   EXPECT_EQ(1, app_manager()->launch_count());
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
   state_controller()->FlushTrayActionForTesting();
 
   EXPECT_EQ(TrayActionState::kAvailable,
@@ -1081,7 +1091,8 @@ TEST_F(LockScreenAppStateTest, AppWindowRegistration) {
       CreateNoteTakingWindow(lock_screen_profile(), app());
   EXPECT_FALSE(app_window->window());
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
   state_controller()->FlushTrayActionForTesting();
 
   EXPECT_EQ(TrayActionState::kLaunching,
@@ -1233,7 +1244,8 @@ TEST_F(LockScreenAppStateTest, AppWindowClosedOnNoteTakingAppChange) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(app_window()->closed());
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
   state_controller()->FlushTrayActionForTesting();
 
   std::unique_ptr<TestAppWindow> app_window =
@@ -1270,17 +1282,9 @@ TEST_F(LockScreenAppStateTest, NoFocusCyclerDelegate) {
   ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kActive,
                                       true /* enable_app_launch */));
 
-  state_controller()->MoveToBackground();
+  state_controller()->CloseLockScreenNote(
+      CloseLockScreenNoteReason::kUnlockButtonPressed);
   state_controller()->FlushTrayActionForTesting();
-
-  EXPECT_EQ(TrayActionState::kAvailable,
-            state_controller()->GetLockScreenNoteState());
-
-  state_controller()->MoveToForeground();
-  state_controller()->FlushTrayActionForTesting();
-
-  EXPECT_EQ(TrayActionState::kAvailable,
-            state_controller()->GetLockScreenNoteState());
 
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(app_window()->closed());
@@ -1302,7 +1306,8 @@ TEST_F(LockScreenAppStateTest, FocusCyclerDelegateGetsSetOnAppWindowCreation) {
   ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kAvailable,
                                       true /* enable_app_launch */));
 
-  tray_action()->SendNewNoteRequest();
+  tray_action()->SendNewNoteRequest(
+      LockScreenNoteOrigin::kLockScreenButtonSwipe);
   state_controller()->FlushTrayActionForTesting();
 
   EXPECT_FALSE(focus_cycler_delegate()->HasHandler());
@@ -1313,7 +1318,9 @@ TEST_F(LockScreenAppStateTest, FocusCyclerDelegateGetsSetOnAppWindowCreation) {
 
   EXPECT_TRUE(focus_cycler_delegate()->HasHandler());
 
-  state_controller()->MoveToBackground();
+  state_controller()->CloseLockScreenNote(
+      CloseLockScreenNoteReason::kUnlockButtonPressed);
+
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(focus_cycler_delegate()->HasHandler());
   EXPECT_TRUE(app_window->closed());
@@ -1338,25 +1345,39 @@ TEST_F(LockScreenAppStateTest, TakeFocus) {
   EXPECT_TRUE(focus_cycler_delegate()->lock_screen_app_focused());
 }
 
-// TODO(tbarzic): Remove or rewrite this test after refactoring
-// foreground/background code.
-TEST_F(LockScreenAppStateTest,
-       DISABLED_RequestFocusFromBackgroundMovesAppToForeground) {
+TEST_F(LockScreenAppStateTest, CloseNoteInActiveState) {
   ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kActive,
                                       true /* enable_app_launch */));
 
-  ASSERT_TRUE(state_controller()->HandleTakeFocus(
-      app_window()->window()->web_contents(), true));
-  EXPECT_FALSE(focus_cycler_delegate()->lock_screen_app_focused());
+  state_controller()->CloseLockScreenNote(
+      CloseLockScreenNoteReason::kUnlockButtonPressed);
+  state_controller()->FlushTrayActionForTesting();
 
-  state_controller()->MoveToBackground();
-
-  EXPECT_EQ(TrayActionState::kBackground,
+  EXPECT_EQ(TrayActionState::kAvailable,
             state_controller()->GetLockScreenNoteState());
 
-  focus_cycler_delegate()->RequestAppFocus(true);
-  EXPECT_TRUE(focus_cycler_delegate()->lock_screen_app_focused());
+  ExpectObservedStatesMatch({TrayActionState::kAvailable},
+                            "Close lock screen note.");
+  ClearObservedStates();
 
-  EXPECT_EQ(TrayActionState::kActive,
+  EXPECT_TRUE(app_window()->closed());
+}
+
+TEST_F(LockScreenAppStateTest, CloseNoteWhileLaunching) {
+  ASSERT_TRUE(InitializeNoteTakingApp(TrayActionState::kLaunching,
+                                      true /* enable_app_launch */));
+
+  state_controller()->CloseLockScreenNote(
+      CloseLockScreenNoteReason::kUnlockButtonPressed);
+  state_controller()->FlushTrayActionForTesting();
+
+  EXPECT_EQ(TrayActionState::kAvailable,
             state_controller()->GetLockScreenNoteState());
+
+  EXPECT_FALSE(state_controller()->CreateAppWindowForLockScreenAction(
+      profile(), app(), extensions::api::app_runtime::ACTION_TYPE_NEW_NOTE,
+      base::MakeUnique<ChromeAppDelegate>(true)));
+
+  ExpectObservedStatesMatch({TrayActionState::kAvailable},
+                            "Close lock screen note.");
 }

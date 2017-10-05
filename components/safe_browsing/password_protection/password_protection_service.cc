@@ -20,10 +20,10 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/whitelist_checker_client.h"
 #include "components/safe_browsing/features.h"
 #include "components/safe_browsing/password_protection/password_protection_request.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/whitelist_checker_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/google_api_keys.h"
@@ -148,16 +148,22 @@ void PasswordProtectionService::RecordWarningAction(WarningUIType ui_type,
   }
 }
 
-void PasswordProtectionService::OnWarningDone(WebContents* web_contents,
-                                              WarningUIType ui_type,
-                                              WarningAction action) {
-  RecordWarningAction(ui_type, action);
-  // TODO(jialiul): Need to send post-warning report, trigger event logger and
-  // other tasks.
-  if (action == MARK_AS_LEGITIMATE) {
-    DCHECK_EQ(PAGE_INFO, ui_type);
-    UpdateSecurityState(SB_THREAT_TYPE_SAFE, web_contents);
-  }
+// static
+bool PasswordProtectionService::ShouldShowModalWarning(
+    TriggerType trigger_type,
+    bool matches_sync_password,
+    SyncAccountType account_type,
+    VerdictType verdict_type) {
+  return base::FeatureList::IsEnabled(kGoogleBrandedPhishingWarning) &&
+         trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT &&
+         matches_sync_password &&
+         account_type ==
+             LoginReputationClientRequest::PasswordReuseEvent::GMAIL &&
+         (verdict_type == LoginReputationClientResponse::PHISHING ||
+          (verdict_type == LoginReputationClientResponse::LOW_REPUTATION &&
+           base::GetFieldTrialParamByFeatureAsBool(
+               kGoogleBrandedPhishingWarning, "warn_on_low_reputation",
+               false)));
 }
 
 void PasswordProtectionService::OnWarningShown(WebContents* web_contents,
@@ -172,7 +178,7 @@ bool PasswordProtectionService::ShouldShowSofterWarning() {
 }
 
 // We cache both types of pings under the same content settings type (
-// CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION). Since UNFAMILIAR_LOGING_PAGE
+// CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION). Since UNFAMILIAR_LOGIN_PAGE
 // verdicts are only enabled on extended reporting users, we cache them one
 // layer lower in the content setting DictionaryValue than PASSWORD_REUSE_EVENT
 // verdicts.
@@ -181,7 +187,7 @@ bool PasswordProtectionService::ShouldShowSofterWarning() {
 // To cache a PASSWORD_REUSE_EVENT, three levels of keys are used:
 // (1) origin, (2) 2nd level key is always |kPasswordOnFocusCacheKey|,
 // (3) cache expression.
-LoginReputationClientResponse::VerdictType
+PasswordProtectionService::VerdictType
 PasswordProtectionService::GetCachedVerdict(
     const GURL& url,
     TriggerType trigger_type,
@@ -216,7 +222,7 @@ PasswordProtectionService::GetCachedVerdict(
   std::vector<std::string> paths;
   GeneratePathVariantsWithoutQuery(url, &paths);
   int max_path_depth = -1;
-  LoginReputationClientResponse::VerdictType most_matching_verdict =
+  VerdictType most_matching_verdict =
       LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED;
   // For all the verdicts of the same origin, we key them by |cache_expression|.
   // Its corresponding value is a DictionaryValue contains its creation time and
@@ -427,9 +433,16 @@ void PasswordProtectionService::RequestFinished(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(request);
 
-  if (response && !already_cached) {
-    CacheVerdict(request->main_frame_url(), request->trigger_type(),
-                 response.get(), base::Time::Now());
+  if (response) {
+    if (!already_cached) {
+      CacheVerdict(request->main_frame_url(), request->trigger_type(),
+                   response.get(), base::Time::Now());
+    }
+    if (ShouldShowModalWarning(
+            request->trigger_type(), request->matches_sync_password(),
+            GetSyncAccountType(), response->verdict_type())) {
+      ShowModalWarning(request->web_contents(), response->verdict_token());
+    }
   }
 
   // Finished processing this request. Remove it from pending list.
@@ -545,11 +558,6 @@ void PasswordProtectionService::OnURLsDeleted(
     bool expired,
     const history::URLRows& deleted_rows,
     const std::set<GURL>& favicon_urls) {
-  if (stored_verdict_count_password_on_focus_ <= 0 &&
-      stored_verdict_count_password_entry_ <= 0) {
-    return;
-  }
-
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&PasswordProtectionService::RemoveContentSettingsOnURLsDeleted,
@@ -725,23 +733,16 @@ void PasswordProtectionService::GeneratePathVariantsWithoutQuery(
 }
 
 // Return the path of the cache expression. e.g.:
-// "www.google.com"     -> "/"
-// "www.google.com/abc" -> "/abc/"
+// "www.google.com"     -> ""
+// "www.google.com/abc" -> "/abc"
 // "foo.com/foo/bar/"  -> "/foo/bar/"
 std::string PasswordProtectionService::GetCacheExpressionPath(
     const std::string& cache_expression) {
-  // TODO(jialiul): Change this to a DCHECk when SB server is ready.
-  if (cache_expression.empty())
-    return std::string("/");
-
-  std::string out_put(cache_expression);
-  // Append a trailing slash if needed.
-  if (out_put[out_put.length() - 1] != '/')
-    out_put.append("/");
-
-  size_t first_slash_pos = out_put.find_first_of("/");
-  DCHECK_NE(std::string::npos, first_slash_pos);
-  return out_put.substr(first_slash_pos);
+  DCHECK(!cache_expression.empty());
+  size_t first_slash_pos = cache_expression.find_first_of("/");
+  if (first_slash_pos == std::string::npos)
+    return "";
+  return cache_expression.substr(first_slash_pos);
 }
 
 // Convert a LoginReputationClientResponse proto into a DictionaryValue.

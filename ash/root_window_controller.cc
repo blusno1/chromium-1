@@ -9,12 +9,12 @@
 #include <vector>
 
 #include "ash/ash_constants.h"
-#include "ash/ash_switches.h"
 #include "ash/ash_touch_exploration_manager_chromeos.h"
 #include "ash/focus_cycler.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/login_status.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -87,6 +87,12 @@
 
 namespace ash {
 namespace {
+
+// Returns true if the md-based login/lock UI is enabled.
+bool IsUsingMdLogin() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kShowMdLogin);
+}
 
 bool IsWindowAboveContainer(aura::Window* window,
                             aura::Window* blocking_container) {
@@ -868,9 +874,13 @@ void RootWindowController::CreateContainers() {
   wm::SetSnapsChildrenToPhysicalPixelBoundary(app_list_container);
   app_list_container->SetProperty(kUsesScreenCoordinatesKey, true);
 
-  aura::Window* shelf_container =
-      CreateContainer(kShellWindowId_ShelfContainer, "ShelfContainer",
-                      non_lock_screen_containers);
+  // The shelf should be displayed on lock screen if md-based login/lock UI is
+  // enabled.
+  aura::Window* shelf_container_parent = IsUsingMdLogin()
+                                             ? lock_screen_related_containers
+                                             : non_lock_screen_containers;
+  aura::Window* shelf_container = CreateContainer(
+      kShellWindowId_ShelfContainer, "ShelfContainer", shelf_container_parent);
   wm::SetSnapsChildrenToPhysicalPixelBoundary(shelf_container);
   shelf_container->SetProperty(kUsesScreenCoordinatesKey, true);
   shelf_container->SetProperty(kLockedToRootKey, true);

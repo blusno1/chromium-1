@@ -4,6 +4,8 @@
 
 #include <stddef.h>
 
+#include <vector>
+
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
@@ -17,6 +19,7 @@
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/reload_type.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -27,13 +30,6 @@ namespace chrome {
 namespace {
 
 class BrowserInstantControllerTest : public InstantUnitTestBase {
- public:
-  void SetUp() override {
-    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-        "EmbeddedSearch", "Group1 use_cacheable_ntp:1"));
-    InstantUnitTestBase::SetUp();
-  }
-
  protected:
   friend class FakeWebContentsObserver;
 };
@@ -49,28 +45,19 @@ struct TabReloadTestCase {
 
 // Test cases for when Google is the initial, but not final provider.
 const TabReloadTestCase kTabReloadTestCasesFinalProviderNotGoogle[] = {
-    {"Local Embedded NTP", chrome::kChromeSearchLocalNtpUrl,
-     true, true, true, true},
-    {"Remote Embedded NTP", "https://www.google.com/newtab",
-     true, true, false, false},
-    {"Remote Embedded SERP", "https://www.google.com/url?strk&bar=search+terms",
-     false, false, false, false},
-    {"Other NTP", "https://bar.com/newtab",
-     false, false, false, false}
-};
+    {"Local NTP", chrome::kChromeSearchLocalNtpUrl, true, true, true, true},
+    {"Remote NTP", "https://www.google.com/newtab", true, true, false, false},
+    {"Remote SERP", "https://www.google.com/url?bar=search+terms", false, false,
+     false, false},
+    {"Other NTP", "https://bar.com/newtab", false, false, false, false}};
 
 // Test cases for when Google is both the initial and final provider.
 const TabReloadTestCase kTabReloadTestCasesFinalProviderGoogle[] = {
-    {"Local Embedded NTP", chrome::kChromeSearchLocalNtpUrl,
-     true, true, true, true},
-    {"Remote Embedded NTP", "https://www.google.com/newtab",
-     true, false, true, true},
-    {"Remote Embedded SERP", "https://www.google.com/url?strk&bar=search+terms",
-     false, false, false, false},
-    {"Other NTP", "https://bar.com/newtab",
-     false, false, false, false}
-};
-
+    {"Local NTP", chrome::kChromeSearchLocalNtpUrl, true, true, true, true},
+    {"Remote NTP", "https://www.google.com/newtab", true, false, true, true},
+    {"Remote SERP", "https://www.google.com/url?bar=search+terms", false, false,
+     false, false},
+    {"Other NTP", "https://bar.com/newtab", false, false, false, false}};
 
 class FakeWebContentsObserver : public content::WebContentsObserver {
  public:
@@ -126,9 +113,9 @@ TEST_F(BrowserInstantControllerTest, DefaultSearchProviderChanged) {
 
     // Validate initial instant state.
     EXPECT_EQ(test.start_in_instant_process,
-        instant_service_->IsInstantProcess(
-          contents->GetRenderProcessHost()->GetID()))
-      << test.description;
+              instant_service_->IsInstantProcess(
+                  contents->GetMainFrame()->GetProcess()->GetID()))
+        << test.description;
 
     // Setup an observer to verify reload or absence thereof.
     observers.push_back(base::MakeUnique<FakeWebContentsObserver>(contents));
@@ -173,9 +160,9 @@ TEST_F(BrowserInstantControllerTest, GoogleBaseURLUpdated) {
 
     // Validate initial instant state.
     EXPECT_EQ(test.start_in_instant_process,
-        instant_service_->IsInstantProcess(
-          contents->GetRenderProcessHost()->GetID()))
-      << test.description;
+              instant_service_->IsInstantProcess(
+                  contents->GetMainFrame()->GetProcess()->GetID()))
+        << test.description;
 
     // Setup an observer to verify reload or absence thereof.
     observers.push_back(base::MakeUnique<FakeWebContentsObserver>(contents));

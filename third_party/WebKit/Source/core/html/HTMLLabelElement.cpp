@@ -24,17 +24,18 @@
 
 #include "core/html/HTMLLabelElement.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionController.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLFormControlElement.h"
 #include "core/html/ListedElement.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutObject.h"
 

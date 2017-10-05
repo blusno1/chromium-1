@@ -410,7 +410,6 @@ TEST_P(QuicSpdyStreamTest, StreamFlowControlBlocked) {
                          stream_->flow_controller()));
 
   // Try to send more data than the flow control limit allows.
-  string headers = SpdyUtils::SerializeUncompressedHeaders(headers_);
   const uint64_t kOverflow = 15;
   string body(kWindow + kOverflow, 'a');
 
@@ -928,18 +927,14 @@ TEST_P(QuicSpdyStreamTest, WritingTrailersWithQueuedBytes) {
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
       .WillOnce(Return(QuicConsumedData(kBodySize - 1, false)));
   stream_->WriteOrBufferData(string(kBodySize, 'x'), false, nullptr);
-  if (!session_->force_hol_blocking()) {
-    EXPECT_EQ(1u, stream_->queued_data_bytes());
-  }
+  EXPECT_EQ(1u, stream_->queued_data_bytes());
 
   // Writing trailers will send a FIN, but not close the write side of the
   // stream as there are queued bytes.
   EXPECT_CALL(*session_, WriteHeadersMock(_, _, true, _, _));
   stream_->WriteTrailers(SpdyHeaderBlock(), nullptr);
   EXPECT_TRUE(stream_->fin_sent());
-  if (!session_->force_hol_blocking()) {
-    EXPECT_FALSE(stream_->write_side_closed());
-  }
+  EXPECT_FALSE(stream_->write_side_closed());
 
   // Writing the queued bytes will close the write side of the stream.
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))

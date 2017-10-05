@@ -9,6 +9,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.support.annotation.Nullable;
 
@@ -34,6 +35,11 @@ public class DownloadForegroundService extends Service {
      * @param notification The new notification to be pinned to.
      */
     public void startOrUpdateForegroundService(int notificationId, Notification notification) {
+        // If possible, detach notification so it doesn't get cancelled by accident.
+        if (Build.VERSION.SDK_INT >= 24) {
+            stopForeground(STOP_FOREGROUND_DETACH);
+        }
+
         startForeground(notificationId, notification);
     }
 
@@ -41,13 +47,40 @@ public class DownloadForegroundService extends Service {
      * Stop the foreground service that is running.
      */
     public void stopDownloadForegroundService(boolean isCancelled) {
-        stopForeground(isCancelled /* kill notification if cancelled */);
+        // If it's not cancelled, just detach the notification from the service, if possible.
+        if (!isCancelled && Build.VERSION.SDK_INT >= 24) {
+            stopForeground(STOP_FOREGROUND_DETACH);
+            return;
+        }
+
+        // Otherwise, just stop the foreground and correct it elsewhere.
+        stopForeground(true);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // In the case the service was restarted when the intent is null.
+        if (intent == null) {
+            DownloadForegroundServiceObservers.alertObserversServiceRestarted();
+
+            // Allow observers to restart service on their own, if needed.
+            stopSelf();
+        }
+
         // This should restart service after Chrome gets killed (except for Android 4.4.2).
         return START_STICKY;
+    }
+
+    @Override
+    public void onDestroy() {
+        DownloadForegroundServiceObservers.alertObserversServiceDestroyed();
+        super.onDestroy();
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        DownloadForegroundServiceObservers.alertObserversTaskRemoved();
+        super.onTaskRemoved(rootIntent);
     }
 
     @Nullable

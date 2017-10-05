@@ -57,6 +57,12 @@
     <message name="IDS_SETTINGS_ABOUT_PAGE_RELAUNCH_AND_POWERWASH" desc="The label for the  button that relaunches and powerwashes the browser once update is complete">
       Relaunch and Powerwash
     </message>
+    <message name="IDS_SETTINGS_ABOUT_TPM_FIRMWARE_UPDATE_TITLE" desc="Title for the line item on the about page that allows the user to trigger a device hardware reset and request installation of a TPM firmware update.">
+      Powerwash for added security
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_TPM_FIRMWARE_UPDATE_DESCRIPTION" desc="Descriptive text shown alongside the line item on the about page that allows the user to trigger a device hardware reset and request installation of a TPM firmware update.">
+      This upgrade resets your Chromebook and removes current user data.
+    </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING" desc="Status label: Updating ChromiumOS or ChromeOS">
       Updating your device
     </message>
@@ -191,8 +197,8 @@
     <message name="IDS_SETTINGS_TAP_DRAGGING_LABEL" desc="Label for checkbox which enables tap dragging.">
       Enable tap dragging
     </message>
-    <message name="IDS_SETTINGS_CLICK_ON_STOP_LABEL" desc="Label for checkbox which enables automatically clicking when the mouse pointer stops.">
-      Automatically click when the mouse pointer stops
+    <message name="IDS_SETTINGS_CLICK_ON_STOP_LABEL" desc="Label for checkbox which enables automatically clicking when the mouse cursor stops.">
+      Automatically click when the mouse cursor stops
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_LABEL" desc="Label for dropdown menu which contains various time delays for clicks.">
       Delay before click:
@@ -295,7 +301,7 @@
   <if expr="chromeos">
     <!-- Android Apps Page -->
     <message name="IDS_SETTINGS_ANDROID_APPS_TITLE" desc="The title of Google Play Store (Arc++ / Android Apps) section.">
-      Google Play Store (beta)
+      Google Play Store
     </message>
     <message name="IDS_SETTINGS_ANDROID_SETTINGS_TITLE" desc="The title of Android settings section in case Play Store app is not available.">
       Android settings
@@ -314,9 +320,6 @@
     </message>
     <message name="IDS_SETTINGS_ANDROID_APPS_REMOVE" desc="Label for the control to open a dialog confirming removal of the Google Play Store.">
       Remove Google Play Store
-    </message>
-    <message name="IDS_SETTINGS_ANDROID_APPS_LEARN_MORE" desc="Link for more informaiton about installing Android apps on Chrome OS.">
-      Learn more
     </message>
 
     <message name="IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_TITLE" desc="Title of the confirmation dialog for disabling android apps.">
@@ -591,6 +594,12 @@
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_EXCEPTIONS_NONE" desc="Placeholder text that is shown when there are no sites in the list of sites for which to never save passwords.">
     Sites which never save passwords will appear here
+  </message>
+  <message name="IDS_SETTINGS_PASSWORD_UNDO" desc="Label for a button triggering an undo of a saved password or exception deletion.">
+    Undo
+  </message>
+  <message name="IDS_SETTINGS_PASSWORD_DELETED_PASSWORD" desc="Label for an undo tooltip following a saved password deletion.">
+    Password deleted
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_MANAGE_PASSWORDS" desc="Shown in the passwords section of settings. Descriptive text to inform that passwords can be accessed online. Has a link.">
     Access your passwords from any device at <ph name="BEGIN_LINK">&lt;a is="action-link" href="$1" target="_blank"&gt;</ph>passwords.google.com<ph name="END_LINK">&lt;/a&gt;</ph>
@@ -914,8 +923,23 @@
   <message name="IDS_SETTINGS_CLEAR_FOLLOWING_ITEMS_FROM" desc="Label at the top of the client area of the dialog, preceding the period combo box">
     Clear the following items from
   </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_TITLE" desc="Label of the dropdown that selects the time range for which browsing data will be deleted.">
+    Time range
+  </message>
   <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY" desc="Checkbox for deleting Browsing History">
     Browsing history
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_COOKIES_AND_SITE_DATA_SUMMARY_BASIC" desc="A summary for the 'Cookies and site data' option in the 'Clear Browsing Data' screen, explaining that deleting cookies and site data will sign the user out of most websites.">
+    Signs you out of most sites.
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY" desc="A subtext for the basic tab explaining browsing history.">
+    Clears history and autocompletions in the address bar.
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SIGNED_IN" desc="A description explaining other forms of activity for signed in users.">
+    Clears history and autocompletions in the address bar. Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;a target='_blank' href='$1'&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SYNCED" desc="A description for the basic tab explaining browsing history for users with history sync.">
+    Clears history from all signed-in devices. Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;a target='_blank' href='$1'&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
   </message>
   <message name="IDS_SETTINGS_CLEAR_DOWNLOAD_HISTORY" desc="Checkbox for deleting Download History">
     Download history
@@ -955,6 +979,21 @@
   </message>
   <message name="IDS_SETTINGS_CLEAR_DATA_EVERYTHING" desc="deletion period combo box: everything. In English this finishes the sentence that starts with 'Delete the following items from'.">
     the beginning of time
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_HOUR" desc="The option to delete browsing data from the last hour.">
+    Last hour
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_24_HOURS" desc="The option to delete browsing data from the last 24 hours.">
+    Last 24 hours
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_7_DAYS" desc="The option to delete browsing data from the last seven days.">
+    Last 7 days
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_FOUR_WEEKS" desc="The option to delete browsing data from the last 4 weeks.">
+    Last 4 weeks
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_EVERYTHING" desc="The option to delete browsing data from the beginning of time.">
+    All time
   </message>
   <message name="IDS_SETTINGS_CLEAR_DATA_SOME_STUFF_REMAINS" desc="A text shown at the bottom of the Clear Browsing Data dialog, informing the user that some data types will not be cleared.">
     Some settings that may reflect browsing habits will not be cleared.
@@ -1109,6 +1148,24 @@
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_ERROR_MESSAGE" desc="The message shown when a new printer is not set up successfully.">
       Error adding printer
     </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_FATAL_ERROR_MESSAGE" desc="The message shown when a fatal error occurs while trying to add a new printer.">
+      Unrecoverable error while adding printer - Reboot required
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_PRINTER_UNREACHABLE_MESSAGE" desc="The message shown when the printer that is to be added is unreachable for configuration.">
+      Could not contact printer for configuration
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_PPD_TOO_LARGE_MESSAGE" desc="The message shown when the PPD provided while trying to add new printer is too large.">
+      Provided PPD is too large
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_INVALID_PPD_MESSAGE" desc="The message shown when the PPD provided while trying to add a new printer is invalid.">
+      Provided PPD is invalid
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_PPD_NOT_FOUND" desc="The message shown when the PPD provided while trying to add a new printer cannot be found.">
+      Could not locate provided PPD
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_PPD_UNRETRIEVABLE" desc="The message shown when the PPD provided while trying to add a new printer is unretrievable.">
+      Provided PPD could not be retrieved from server
+    </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_TRY_AGAIN_MESSAGE" desc="The try-again message shown when a new printer is not set up successfully.">
       Try again
     </message>
@@ -1130,7 +1187,7 @@
   <message name="IDS_SETTINGS_DOWNLOADS" desc="Name of the settings page which displays download preferences.">
     Downloads
   </message>
-  <message name="IDS_SETTINGS_DOWNLOAD_LOCATION" desc="Label for the input which allows the user to specify the default download directory.">
+  <message name="IDS_SETTINGS_DOWNLOAD_LOCATION" desc="Label for the input which allows the user to specify the default download directory." meaning="File location">
     Location
   </message>
   <message name="IDS_SETTINGS_CHANGE_DOWNLOAD_LOCATION" desc="Text for the button which allows the user to change the default download directory.">
@@ -1263,6 +1320,21 @@
     <message name="IDS_SETTINGS_INTERNET_CONFIG_SAVE_CREDENTIALS" desc="Settings > Internet > Network config: Label for the setting to save identity and password.">
       Save identity and password
     </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CA_USE_DEFAULT" desc="Settings > Internet > Network config: Label for selecting the default Certificate Authority for an EAP network.">
+      Default
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CA_DO_NOT_CHECK" desc="Settings > Internet > Network config: Label for selecting that no Certificate Authority should be used for an EAP network.">
+      Do not check
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NAME" desc="Settings > Internet > Network config: Formatting string for network certificate names.">
+      <ph name="ISSUED_BY">$1<ex>Google Inc</ex></ph> [<ph name="ISSUED_TO">$2<ex>John Doe</ex></ph>]
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NAME_HARDWARE_BACKED" desc="Settings > Internet > Network configuration: Formatting string for network certificate names that are hardware backed.">
+      <ph name="ISSUED_BY">$1<ex>Google Inc</ex></ph> [<ph name="ISSUED_TO">$2<ex>John Doe</ex></ph>] (hardware-backed)
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NONE_INSTALLED" desc="Settings > Internet > Network configuration: Label when no certificates are installed.">
+      None installed
+    </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_ACCESS_POINT" desc="Settings > Internet > Network details: Access Point section label.">
       Access Point
     </message>
@@ -1296,11 +1368,20 @@
     <message name="IDS_SETTINGS_SETTINGS_NETWORK_ALLOW_DATA_ROAMING" desc="Settings > Internet > Network details: Toggle label to allow mobile data roaming.">
       Allow mobile data roaming
     </message>
-    <message name="IDS_SETTINGS_SETTINGS_NETWORK_CHOOSE_MOBILE_DETAIL" desc="Settings > Internet > Network details: Label for section to choose a mobile data network.">
-      Choose a mobile data network
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CHOOSE_MOBILE" desc="Settings > Internet > Network details: Label for control to choose a mobile data network.">
+      Mobile data network
     </message>
-    <message name="IDS_SETTINGS_SETTINGS_NETWORK_CHOOSE_MOBILE_BUTTON" desc="Settings > Internet > Network details: Label for button to choose a mobile data network.">
-      Choose network
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN" desc="Settings > Internet > Network details: Label for button to start a Cellular scan.">
+      Scan
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN_COMPLETED" desc="Settings > Internet > Network details: Status text when a scan has completed.">
+      Scan completed
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCANNING" desc="Settings > Internet > Network details: Status text when a scan is in progress.">
+      Scanning...
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_NO_NETWORKS" desc="Settings > Internet > Network details: Dropdown text when no cellular networks were found after a scan.">
+      No networks
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SHARED" desc="Settings > Internet > Network details: Text to show when a network is shared.">
       Other users of this device can use this network.
@@ -1665,14 +1746,23 @@
     <message name="IDS_ONC_EAP_OUTER_TTLS" desc="ONC Property value for EAP.Outer = TTLS">
       EAP-TTLS
     </message>
+    <message name="IDS_ONC_EAP_SERVER_CA" desc="ONC Property label for EAP Server CA Certificate">
+      Server CA certificate
+    </message>
     <message name="IDS_ONC_EAP_SUBJECT_MATCH" desc="ONC Property label for EAP.SubjectMatch">
       Subject match
+    </message>
+    <message name="IDS_ONC_EAP_USER_CERT" desc="ONC Property label for EAP User Certs">
+      User certificate
     </message>
     <message name="IDS_ONC_NOT_CONNECTED" desc="Settings > Internet, text in network summary when a network is not connecting or connected.">
       Not Connected
     </message>
     <message name="IDS_ONC_MAC_ADDRESS" desc="ONC Property label for MacAddress">
       MAC address
+    </message>
+    <message name="IDS_ONC_NAME" desc="ONC Property label for the network Name (displayed when configuring a VPN service name)">
+      Service name
     </message>
     <message name="IDS_ONC_RESTRICTED_CONNECTIVITY" desc="ONC Property label for RestrictedConnectivity">
       Restricted IP
@@ -1708,12 +1798,21 @@
       Unknown carrier
     </message>
     <message name="IDS_ONC_VPN_HOST" desc="ONC Property label for VPN.Host">
-      Host
+      Server hostname
     </message>
-    <message name="IDS_ONC_VPN_L2TP_USERNAME" desc="ONC Property label for VPN.L2TP.Username">
-      Username
+    <message name="IDS_ONC_VPN_IPSEC_GROUP" desc="ONC Property label for VPN.IPSec.Group">
+      Group name
     </message>
-    <message name="IDS_ONC_VPN_OPEN_VPN_USERNAME" desc="ONC Property label for VPN.OpenVPN.Username">
+    <message name="IDS_ONC_VPN_IPSEC_PSK" desc="ONC Property label for VPN.IPSec.PSK">
+      Pre-shared key
+    </message>
+    <message name="IDS_ONC_VPN_OPENVPN_OTP" desc="ONC Property label for VPN.OpenVPN.OTP">
+      OTP
+    </message>
+    <message name="IDS_ONC_VPN_PASSWORD" desc="ONC Property label for VPN.OpenVPN.Password or VPN.L2TP.Password">
+      Password
+    </message>
+    <message name="IDS_ONC_VPN_USERNAME" desc="ONC Property label for VPN.OpenVPN.Username or VPN.L2TP.Username">
       Username
     </message>
     <message name="IDS_ONC_VPN_THIRD_PARTY_VPN_PROVIDER_NAME" desc="ONC Property label for VPN.ThirdPartyVPN.ProviderName">
@@ -1721,6 +1820,21 @@
     </message>
     <message name="IDS_ONC_VPN_TYPE" desc="ONC Property label for VPN.Type">
       Provider type
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_L2TP_IPSEC" desc="ONC Property label for VPN.Type.L2TP-IPSec">
+      L2TP/IPsec
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_L2TP_IPSEC_PSK" desc="ONC Property label for configuring VPN.Type.L2TP-IPSec with AuthenticationType = PSK">
+      L2TP/IPsec + pre-shared key
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_L2TP_IPSEC_CERT" desc="ONC Property label for configuring VPN.Type.L2TP-IPSec  with AuthenticationType = Cert">
+      L2TP/IPsec + user certificate
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_OPENVPN" desc="ONC Property label for VPN.Type.OpenVPN">
+      Open VPN
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_ARCVPN" desc="ONC Property label for VPN.Type.ARCVPN">
+      Android VPN
     </message>
     <message name="IDS_ONC_WIFI_FREQUENCY" desc="ONC Property label for WiFi.Frequency">
       Frequency
@@ -1757,15 +1871,6 @@
   <!-- On Startup Page -->
   <message name="IDS_SETTINGS_ON_STARTUP" desc="Name of the on startup page.">
     On startup
-  </message>
-  <message name="IDS_SETTINGS_ON_STARTUP_DESCRIPTION" desc="Secondary line for IDS_SETTINGS_ON_STARTUP_MANAGE describing the OnStartup features.">
-    Restore tabs or open specific pages
-  </message>
-  <message name="IDS_SETTINGS_ON_STARTUP_MANAGE" desc="Button label to open subpage for OnStartup URLs and heading for that subpage.">
-    Manage on startup pages
-  </message>
-  <message name="IDS_SETTINGS_ON_STARTUP_PAGES" desc="Label for list of OnStartup URLs.">
-    Pages to open on startup
   </message>
   <message name="IDS_SETTINGS_ON_STARTUP_OPEN_NEW_TAB" desc="Radio button option to open the new tab page.">
     Open the New Tab page
@@ -1972,7 +2077,10 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_DESCRIPTION" desc="Secondary, continued explanation of what content settings in Chrome do">
     Control what information websites can use and what content they can show you
   </message>
-  <message name="IDS_SETTINGS_CLEAR_DATA" desc="Text for clear browsing data button in Privacy options">
+  <message name="IDS_SETTINGS_CLEAR_DATA" desc="Text for clear browsing data button in Privacy options in the tabbed UI">
+    Clear data
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA" desc="Text for clear browsing data button in Privacy options">
     Clear browsing data
   </message>
   <message name="IDS_SETTINGS_CLEAR_DATA_DESCRIPTION" desc="Description for clear browsing data button in Privacy options. 'History' refers to browsing history. 'Cookies' refers to the technical meaning of a cookie, i.e. data saved by a website on the user's computer, as in when a website saves your preferences.">
@@ -2060,9 +2168,6 @@
   <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_RETRAIN" desc="Text for button to retrain the OK Google hotword voice model.">
     Retrain
   </message>
-  <message name="IDS_SETTINGS_SEARCH_ENABLE_GOOGLE_NOW" desc="Label for the checkbox which enables the Google Now in the launcher.">
-    Show Google Now cards in the launcher
-  </message>
 <if expr="chromeos">
   <message name="IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT" desc="Label for the Google Assistant button.">
     Google Assistant
@@ -2128,10 +2233,10 @@
     Google Assistant
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_CONTEXT" desc="Title for a toggle that lets the assistant use whats on the screen.">
-    Let assistant use what's on your screen
+    Let Assistant use what's on your screen
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_CONTEXT_DESCRIPTION" desc="Sub label for context-enable toggle.">
-    Enables the assistant to show you related info, apps, and actions.
+    Enables the Assistant to show you related info, apps, and actions.
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_SETTINGS" desc="Title for a button that opens the Google Assistant app settings.">
     Google Assistant settings
@@ -2172,7 +2277,7 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLERS" desc="Label for the protocol handlers (e.g. mailto) in site settings.">
     Handlers
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCATION" desc="Label for the location site settings.">
+  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCATION" desc="Label for the geolocation site settings." meaning="Geolocation">
     Location
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_MIC" desc="Label for the microphone site settings.">
@@ -2203,7 +2308,10 @@
     Popups
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT" desc="Label for the protected content site settings.">
-    Protected Content
+    Protected content
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_IDENTIFIERS" desc="Label for the permission to allow a site to use unique identifiers to access protected content in site details.">
+    Protected content identifiers
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_ENABLE" desc="Label for the toggle enabling protected content.">
     Allow sites to play protected content (recommended)
@@ -2348,6 +2456,9 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCK" desc="Label for add block sites in site settings.">
     Block
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCK_SOUND" desc="Label for add muted sites in site settings.">
+    Muted
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SESSION_ONLY" desc="Label for sites in site settings allowing cookies for the current session only.">
     Clear on exit
   </message>
@@ -2387,6 +2498,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS" desc="The Permissions header, used to group together permissions, such as Geolocation, on the Site Details page.">
     Permissions
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_DRM_DISABLED" desc="A label shown when the protected content / protected media identifier permission on the Site Details page is disabled because the user has turned off using unique identifiers to access protected content.">
+    To change this setting, first <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>turn on identifiers<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_KILL_SWITCH" desc="A label shown when a permission on the Site Details page is temporarily blocked for the user's safety.">
     Temporarily blocked to protect your security
@@ -2762,14 +2876,14 @@
     <message name="IDS_SETTINGS_PHOTO_DISCARD_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce that a photo was discarded.">
       Photo was discarded
     </message>
-    <message name="IDS_SETTINGS_CHANGE_PICTURE_FLIP_PHOTO" desc="The text on the button to flip the camera image horizontally.">
-      Flip camera image horizontally
+    <message name="IDS_SETTINGS_CHANGE_PICTURE_SWITCH_MODE" desc="The text on the button to switch the mode of the camera between photo and video.">
+    Switch camera mode
     </message>
-    <message name="IDS_SETTINGS_PHOTO_FLIP_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce horizontal flip of camera image.">
-      Photo flipped
+    <message name="IDS_SETTINGS_PHOTO_MODE_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce a switch to photo mode for camera.">
+      Photo mode entered
     </message>
-    <message name="IDS_SETTINGS_PHOTO_FLIPBACK_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce horizontal back-flip of camera image to not-flipped state.">
-      Photo flipped back
+    <message name="IDS_SETTINGS_VIDEO_MODE_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce a switch to video mode for camera.">
+      Video mode entered
     </message>
     <message name="IDS_SETTINGS_CHANGE_PICTURE_PREVIEW_ALT" desc="Alt text for the big preview of user image.">
       User image preview

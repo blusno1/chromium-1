@@ -30,7 +30,7 @@ std::unique_ptr<EventListener> EventListener::ForExtension(
     content::RenderProcessHost* process,
     std::unique_ptr<base::DictionaryValue> filter) {
   return base::WrapUnique(new EventListener(event_name, extension_id, GURL(),
-                                            process, false, kNonWorkerThreadId,
+                                            process, false, kMainThreadId,
                                             std::move(filter)));
 }
 
@@ -46,7 +46,7 @@ std::unique_ptr<EventListener> EventListener::ForURL(
   // we dispatched events to processes more intelligently this could be avoided.
   return base::WrapUnique(new EventListener(
       event_name, ExtensionId(), url::Origin(listener_url).GetURL(), process,
-      false, kNonWorkerThreadId, std::move(filter)));
+      false, kMainThreadId, std::move(filter)));
 }
 
 std::unique_ptr<EventListener> EventListener::ForExtensionServiceWorker(
@@ -90,7 +90,11 @@ bool EventListener::IsLazy() const {
 }
 
 void EventListener::MakeLazy() {
-  DCHECK_EQ(worker_thread_id_, kNonWorkerThreadId);
+  // A lazy listener neither has a process attached to it nor it has a worker
+  // thread id (if the listener was for a service worker), so reset these values
+  // below to reflect that.
+  if (is_for_service_worker_)
+    worker_thread_id_ = kMainThreadId;
   process_ = nullptr;
 }
 
@@ -233,6 +237,20 @@ void EventListenerMap::LoadUnfilteredLazyListeners(
   for (const auto& name : event_names) {
     AddListener(EventListener::ForExtension(
         name, extension_id, nullptr, std::unique_ptr<DictionaryValue>()));
+  }
+}
+
+void EventListenerMap::LoadUnfilteredWorkerListeners(
+    const ExtensionId& extension_id,
+    const std::set<std::string>& event_names) {
+  for (const auto& name : event_names) {
+    AddListener(EventListener::ForExtensionServiceWorker(
+        name, extension_id, nullptr,
+        // TODO(lazyboy): We need to store correct scopes of each worker into
+        // ExtensionPrefs for events. This currently assumes all workers are
+        // registered in the '/' scope.
+        Extension::GetBaseURLFromExtensionId(extension_id), kMainThreadId,
+        nullptr));
   }
 }
 

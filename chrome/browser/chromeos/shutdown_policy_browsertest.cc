@@ -146,7 +146,7 @@ class ShutdownPolicyInSessionTest
   // Opens the system tray menu. This creates the tray views.
   void OpenSystemTrayMenu() {
     ash::Shell::Get()->GetPrimarySystemTray()->ShowDefaultView(
-        ash::BUBBLE_CREATE_NEW);
+        ash::BUBBLE_CREATE_NEW, false /* show_by_click */);
   }
 
   // Closes the system tray menu. This deletes the tray views.
@@ -249,6 +249,11 @@ class ShutdownPolicyLockerTest : public ShutdownPolicyBaseTest {
 
     // Wait for the login UI to be ready.
     WaitUntilOobeUIIsReady(web_ui_screen_locker->GetOobeUI());
+  }
+
+  void TearDownOnMainThread() override {
+    ScreenLocker::Hide();
+    ShutdownPolicyBaseTest::TearDownOnMainThread();
   }
 
  private:

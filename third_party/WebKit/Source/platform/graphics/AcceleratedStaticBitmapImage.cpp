@@ -23,23 +23,23 @@
 
 namespace blink {
 
-PassRefPtr<AcceleratedStaticBitmapImage>
+RefPtr<AcceleratedStaticBitmapImage>
 AcceleratedStaticBitmapImage::CreateFromSkImage(
     sk_sp<SkImage> image,
     WeakPtr<WebGraphicsContext3DProviderWrapper>&& context_provider_wrapper) {
   DCHECK(image->isTextureBacked());
-  return AdoptRef(new AcceleratedStaticBitmapImage(
+  return WTF::AdoptRef(new AcceleratedStaticBitmapImage(
       std::move(image), std::move(context_provider_wrapper)));
 }
 
-PassRefPtr<AcceleratedStaticBitmapImage>
+RefPtr<AcceleratedStaticBitmapImage>
 AcceleratedStaticBitmapImage::CreateFromWebGLContextImage(
     const gpu::Mailbox& mailbox,
     const gpu::SyncToken& sync_token,
     unsigned texture_id,
     WeakPtr<WebGraphicsContext3DProviderWrapper>&& context_provider_wrapper,
     IntSize mailbox_size) {
-  return AdoptRef(new AcceleratedStaticBitmapImage(
+  return WTF::AdoptRef(new AcceleratedStaticBitmapImage(
       mailbox, sync_token, texture_id, std::move(context_provider_wrapper),
       mailbox_size));
 }
@@ -179,7 +179,8 @@ PaintImage AcceleratedStaticBitmapImage::PaintImageForCurrentFrame() {
 
   PaintImageBuilder builder;
   InitPaintImageBuilder(builder);
-  builder.set_image(texture_holder_->GetSkImage());
+  builder.set_image(texture_holder_->GetSkImage())
+      .set_completion_state(PaintImage::CompletionState::DONE);
   return builder.TakePaintImage();
 }
 

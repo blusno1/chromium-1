@@ -24,7 +24,6 @@ class FakeRendererScheduler : public RendererScheduler {
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> LoadingTaskRunner() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner> TimerTaskRunner() override;
   std::unique_ptr<RenderWidgetSchedulingState> NewRenderWidgetSchedulingState()
       override;
   void WillBeginFrame(const viz::BeginFrameArgs& args) override;
@@ -55,7 +54,7 @@ class FakeRendererScheduler : public RendererScheduler {
   void ResumeTimerQueue() override;
   void VirtualTimePaused() override;
   void VirtualTimeResumed() override;
-  void SetTimerQueueStoppingWhenBackgroundedEnabled(bool enabled) override;
+  void SetStoppingWhenBackgroundedEnabled(bool enabled) override;
   void SetTopLevelBlameContext(
       base::trace_event::BlameContext* blame_context) override;
   void SetRAILModeObserver(RAILModeObserver* observer) override;

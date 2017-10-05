@@ -21,8 +21,10 @@
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/transform.h"
 
 namespace base {
 namespace trace_event {
@@ -30,12 +32,12 @@ class TracedValue;
 }
 }
 
-namespace cc {
-class CompositorFrame;
-}
-
 namespace gfx {
 class Path;
+}
+
+namespace viz {
+class CompositorFrame;
 }
 
 namespace exo {
@@ -143,9 +145,9 @@ class Surface final : public ui::PropertyHandler {
 
   // This will synchronously commit all pending state of the surface and its
   // descendants by recursively calling CommitSurfaceHierarchy() for each
-  // sub-surface with pending state.
-  void CommitSurfaceHierarchy(
-      const gfx::Point& origin,
+  // sub-surface with pending state. Returns the bounding box of the surface
+  // and its descendants, in the local coordinate space of the surface.
+  gfx::Rect CommitSurfaceHierarchy(
       std::list<FrameCallback>* frame_callbacks,
       std::list<PresentationCallback>* presentation_callbacks);
 
@@ -153,7 +155,7 @@ class Surface final : public ui::PropertyHandler {
       const gfx::Point& origin,
       float device_scale_factor,
       LayerTreeFrameSinkHolder* frame_sink_holder,
-      cc::CompositorFrame* frame);
+      viz::CompositorFrame* frame);
 
   // Returns true if surface is in synchronized mode.
   bool IsSynchronized() const;
@@ -170,6 +172,11 @@ class Surface final : public ui::PropertyHandler {
 
   // Returns the current input region of surface in the form of a hit-test mask.
   void GetHitTestMask(gfx::Path* mask) const;
+
+  // Returns the current input region of surface in the form of a set of
+  // hit-test rects.
+  std::unique_ptr<aura::WindowTargeter::HitTestRects> GetHitTestShapeRects()
+      const;
 
   // Surface does not own cursor providers. It is the responsibility of the
   // caller to remove the cursor provider before it is destroyed.
@@ -260,11 +267,14 @@ class Surface final : public ui::PropertyHandler {
   // will be called.
   void UpdateResource(LayerTreeFrameSinkHolder* frame_sink_holder);
 
+  // Updates buffer_transform_ to match the current buffer parameters.
+  void UpdateBufferTransform();
+
   // Puts the current surface into a draw quad, and appends the draw quads into
   // the |frame|.
   void AppendContentsToFrame(const gfx::Point& origin,
                              float device_scale_factor,
-                             cc::CompositorFrame* frame);
+                             viz::CompositorFrame* frame);
 
   // Update surface content size base on current buffer size.
   void UpdateContentSize();
@@ -340,6 +350,10 @@ class Surface final : public ui::PropertyHandler {
 
   // This is true if UpdateResources() should be called.
   bool needs_update_resource_ = true;
+
+  // The current buffer transform matrix. It specifies the transformation from
+  // normalized buffer coordinates to post-tranform buffer coordinates.
+  gfx::Transform buffer_transform_;
 
   // This is set when the compositing starts and passed to active frame
   // callbacks when compositing successfully ends.

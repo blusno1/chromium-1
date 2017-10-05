@@ -60,22 +60,6 @@ ui::AXEvent ToAXEvent(arc::mojom::AccessibilityEventType arc_event_type) {
   return ui::AX_EVENT_CHILDREN_CHANGED;
 }
 
-const gfx::Rect GetBounds(arc::mojom::AccessibilityNodeInfoData* node) {
-  exo::WMHelper* wm_helper = exo::WMHelper::GetInstance();
-  if (!wm_helper)
-    return gfx::Rect();
-
-  aura::Window* focused_window = wm_helper->GetFocusedWindow();
-  gfx::Rect bounds_in_screen = node->bounds_in_screen;
-  if (focused_window) {
-    aura::Window* toplevel_window = focused_window->GetToplevelWindow();
-    return gfx::ScaleToEnclosingRect(
-        bounds_in_screen,
-        1.0f / toplevel_window->layer()->device_scale_factor());
-  }
-  return bounds_in_screen;
-}
-
 bool GetBooleanProperty(arc::mojom::AccessibilityNodeInfoData* node,
                         arc::mojom::AccessibilityBooleanProperty prop) {
   if (!node->boolean_properties)
@@ -290,6 +274,10 @@ void PopulateAXState(arc::mojom::AccessibilityNodeInfoData* node,
     out_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
                               ui::AX_RESTRICTION_DISABLED);
   }
+
+  if (!GetBooleanProperty(node, AXBooleanProperty::VISIBLE_TO_USER)) {
+    out_data->AddState(ui::AX_STATE_INVISIBLE);
+  }
 }
 
 }  // namespace
@@ -322,6 +310,7 @@ class AXTreeSourceArc::FocusStealer : public views::View {
 AXTreeSourceArc::AXTreeSourceArc(Delegate* delegate)
     : current_tree_serializer_(new AXTreeArcSerializer(this)),
       root_id_(-1),
+      window_id_(-1),
       focused_node_id_(-1),
       delegate_(delegate),
       focus_stealer_(new FocusStealer(tree_id())) {}
@@ -335,6 +324,9 @@ void AXTreeSourceArc::NotifyAccessibilityEvent(
   tree_map_.clear();
   parent_map_.clear();
   root_id_ = -1;
+
+  window_id_ = event_data->window_id;
+
   for (size_t i = 0; i < event_data->node_data.size(); ++i) {
     if (!event_data->node_data[i]->int_list_properties)
       continue;
@@ -505,10 +497,20 @@ void AXTreeSourceArc::SerializeNode(mojom::AccessibilityNodeInfoData* node,
     out_data->AddBoolAttribute(ui::AX_ATTR_SCROLLABLE, true);
   }
 
-  const gfx::Rect bounds_in_screen = GetBounds(node);
-  out_data->location.SetRect(bounds_in_screen.x(), bounds_in_screen.y(),
-                             bounds_in_screen.width(),
-                             bounds_in_screen.height());
+  exo::WMHelper* wm_helper = exo::WMHelper::GetInstance();
+
+  // To get bounds of a node which can be passed to AXNodeData.location,
+  // - Root node must exist.
+  // - Window where this tree is attached to need to be focused.
+  if (root_id_ != -1 && wm_helper) {
+    aura::Window* focused_window = wm_helper->GetFocusedWindow();
+    if (focused_window) {
+      const gfx::Rect bounds_in_screen = GetBounds(node, focused_window);
+      out_data->location.SetRect(bounds_in_screen.x(), bounds_in_screen.y(),
+                                 bounds_in_screen.width(),
+                                 bounds_in_screen.height());
+    }
+  }
 
   if (out_data->role == ui::AX_ROLE_TEXT_FIELD && !text.empty())
     out_data->AddStringAttribute(ui::AX_ATTR_VALUE, text);
@@ -542,6 +544,35 @@ void AXTreeSourceArc::SerializeNode(mojom::AccessibilityNodeInfoData* node,
   }
 }
 
+const gfx::Rect AXTreeSourceArc::GetBounds(
+    mojom::AccessibilityNodeInfoData* node,
+    aura::Window* focused_window) const {
+  DCHECK(focused_window);
+  DCHECK_NE(root_id_, -1);
+
+  gfx::Rect node_bounds = node->bounds_in_screen;
+
+  if (node->id == root_id_) {
+    // Top level window returns its bounds in dip.
+    aura::Window* toplevel_window = focused_window->GetToplevelWindow();
+    float scale = toplevel_window->layer()->device_scale_factor();
+
+    // Bounds of root node is relative to its container, i.e. focused window.
+    node_bounds.Offset(
+        static_cast<int>(-1.0f * scale *
+                         static_cast<float>(toplevel_window->bounds().x())),
+        static_cast<int>(-1.0f * scale *
+                         static_cast<float>(toplevel_window->bounds().y())));
+
+    return node_bounds;
+  }
+
+  // Bounds of non-root node is relative to its tree's root.
+  gfx::Rect root_bounds = GetFromId(root_id_)->bounds_in_screen;
+  node_bounds.Offset(-1 * root_bounds.x(), -1 * root_bounds.y());
+  return node_bounds;
+}
+
 void AXTreeSourceArc::PerformAction(const ui::AXActionData& data) {
   delegate_->OnAction(data);
 }
@@ -552,6 +583,12 @@ void AXTreeSourceArc::Reset() {
   current_tree_serializer_.reset(new AXTreeArcSerializer(this));
   root_id_ = -1;
   focused_node_id_ = -1;
+  if (focus_stealer_->parent()) {
+    views::View* parent = focus_stealer_->parent();
+    parent->RemoveChildView(focus_stealer_.get());
+    parent->NotifyAccessibilityEvent(ui::AX_EVENT_CHILDREN_CHANGED, false);
+  }
+  focus_stealer_.reset();
   extensions::AutomationEventRouter* router =
       extensions::AutomationEventRouter::GetInstance();
   if (!router)

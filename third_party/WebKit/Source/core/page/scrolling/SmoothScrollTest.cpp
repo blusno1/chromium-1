@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "bindings/core/v8/scroll_into_view_options_or_boolean.h"
+#include "core/dom/Element.h"
 #include "core/frame/ScrollIntoViewOptions.h"
 #include "core/frame/ScrollToOptions.h"
 #include "core/frame/WebLocalFrameImpl.h"
@@ -35,7 +36,7 @@ TEST_F(SmoothScrollTest, InstantScroll) {
   ScrollIntoViewOptionsOrBoolean arg;
   ScrollIntoViewOptions options;
   options.setBlock("start");
-  arg.setScrollIntoViewOptions(options);
+  arg.SetScrollIntoViewOptions(options);
   content->scrollIntoView(arg);
 
   ASSERT_EQ(Window().scrollY(), content->OffsetTop());
@@ -55,7 +56,7 @@ TEST_F(SmoothScrollTest, SmoothScroll) {
   ScrollIntoViewOptions options;
   options.setBlock("start");
   options.setBehavior("smooth");
-  arg.setScrollIntoViewOptions(options);
+  arg.SetScrollIntoViewOptions(options);
   Compositor().BeginFrame();
   ASSERT_EQ(Window().scrollY(), 0);
 
@@ -89,7 +90,7 @@ TEST_F(SmoothScrollTest, NestedContainer) {
   ScrollIntoViewOptions options;
   options.setBlock("start");
   options.setBehavior("smooth");
-  arg.setScrollIntoViewOptions(options);
+  arg.SetScrollIntoViewOptions(options);
   Compositor().BeginFrame();
   ASSERT_EQ(Window().scrollY(), 0);
   ASSERT_EQ(container->scrollTop(), 0);
@@ -141,7 +142,7 @@ TEST_F(SmoothScrollTest, NewScrollIntoViewAbortsCurrentAnimation) {
   ScrollIntoViewOptions options;
   options.setBlock("start");
   options.setBehavior("smooth");
-  arg.setScrollIntoViewOptions(options);
+  arg.SetScrollIntoViewOptions(options);
 
   Compositor().BeginFrame();
   ASSERT_EQ(Window().scrollY(), 0);
@@ -200,7 +201,7 @@ TEST_F(SmoothScrollTest, ScrollWindowAbortsCurrentAnimation) {
   ScrollIntoViewOptions options;
   options.setBlock("start");
   options.setBehavior("smooth");
-  arg.setScrollIntoViewOptions(options);
+  arg.SetScrollIntoViewOptions(options);
   Compositor().BeginFrame();
   ASSERT_EQ(Window().scrollY(), 0);
   ASSERT_EQ(container->scrollTop(), 0);
@@ -251,7 +252,7 @@ TEST_F(SmoothScrollTest, BlockAndInlineSettings) {
 
   options.setBlock("nearest");
   options.setInlinePosition("nearest");
-  arg1.setScrollIntoViewOptions(options);
+  arg1.SetScrollIntoViewOptions(options);
   content->scrollIntoView(arg1);
   ASSERT_EQ(Window().scrollX(),
             content->OffsetLeft() + content_width - window_width);
@@ -260,14 +261,14 @@ TEST_F(SmoothScrollTest, BlockAndInlineSettings) {
 
   options.setBlock("start");
   options.setInlinePosition("start");
-  arg2.setScrollIntoViewOptions(options);
+  arg2.SetScrollIntoViewOptions(options);
   content->scrollIntoView(arg2);
   ASSERT_EQ(Window().scrollX(), content->OffsetLeft());
   ASSERT_EQ(Window().scrollY(), content->OffsetTop());
 
   options.setBlock("center");
   options.setInlinePosition("center");
-  arg3.setScrollIntoViewOptions(options);
+  arg3.SetScrollIntoViewOptions(options);
   content->scrollIntoView(arg3);
   ASSERT_EQ(Window().scrollX(),
             content->OffsetLeft() + (content_width - window_width) / 2);
@@ -276,7 +277,7 @@ TEST_F(SmoothScrollTest, BlockAndInlineSettings) {
 
   options.setBlock("end");
   options.setInlinePosition("end");
-  arg4.setScrollIntoViewOptions(options);
+  arg4.SetScrollIntoViewOptions(options);
   content->scrollIntoView(arg4);
   ASSERT_EQ(Window().scrollX(),
             content->OffsetLeft() + content_width - window_width);
@@ -306,7 +307,7 @@ TEST_F(SmoothScrollTest, SmoothAndInstantInChain) {
   ScrollIntoViewOptionsOrBoolean arg;
   ScrollIntoViewOptions options;
   options.setBlock("start");
-  arg.setScrollIntoViewOptions(options);
+  arg.SetScrollIntoViewOptions(options);
   Compositor().BeginFrame();
   ASSERT_EQ(Window().scrollY(), 0);
   ASSERT_EQ(container->scrollTop(), 0);
@@ -400,7 +401,7 @@ TEST_F(SmoothScrollTest, ApplyRootElementScrollBehaviorToViewport) {
   ScrollIntoViewOptionsOrBoolean arg;
   ScrollIntoViewOptions options;
   options.setBlock("start");
-  arg.setScrollIntoViewOptions(options);
+  arg.SetScrollIntoViewOptions(options);
   Compositor().BeginFrame();
   ASSERT_EQ(Window().scrollY(), 0);
 
@@ -414,6 +415,64 @@ TEST_F(SmoothScrollTest, ApplyRootElementScrollBehaviorToViewport) {
   // Finish scrolling the container
   Compositor().BeginFrame(1);
   ASSERT_EQ(Window().scrollY(), content->OffsetTop());
+}
+
+// This test passes if it doesn't crash/hit an ASAN check.
+TEST_F(SmoothScrollTest, RemoveSequencedScrollableArea) {
+  v8::HandleScope HandleScope(v8::Isolate::GetCurrent());
+  WebView().Resize(WebSize(800, 600));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(
+      "<!DOCTYPE html>"
+      "<style>"
+      ".scroller {"
+      "  scroll-behavior: smooth;"
+      "  overflow: scroll;"
+      "  position: absolute;"
+      "  z-index: 0;"
+      "  border: 10px solid #cce;"
+      "}"
+      "#outer {"
+      "  width: 350px;"
+      "  height: 200px;"
+      "  left: 50px;"
+      "  top: 50px;"
+      "}"
+      "#inner {"
+      "  width: 200px;"
+      "  height: 100px;"
+      "  left: 50px;"
+      "  top: 200px;"
+      "}"
+      "#target {"
+      "  margin: 200px 0 20px 200px;"
+      "  width: 50px;"
+      "  height: 30px;"
+      "  background-color: #c88;"
+      "}"
+      "</style>"
+      "<body>"
+      "<div class='scroller' id='outer'>"
+      "  <div class='scroller' id='inner'>"
+      "    <div id='target'></div>"
+      "  </div>"
+      "</div>");
+
+  Compositor().BeginFrame();
+
+  Element* target = GetDocument().getElementById("target");
+  target->scrollIntoView();
+
+  Compositor().BeginFrame();  // update run_state_.
+  Compositor().BeginFrame();  // Set start_time = now.
+
+  Element* inner = GetDocument().getElementById("inner");
+  Element* outer = GetDocument().getElementById("outer");
+  outer->removeChild(inner);
+
+  // Make sure that we don't try to animate the removed scroller.
+  Compositor().BeginFrame(1);
 }
 
 }  // namespace

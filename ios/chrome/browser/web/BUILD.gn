@@ -44,7 +44,6 @@ source_set("web") {
     "//ios/chrome/app/strings:ios_strings_grit",
     "//ios/chrome/browser",
     "//ios/chrome/browser/ui",
-    "//ios/chrome/browser/ui/alert_coordinator:alert_coordinator",
     "//ios/chrome/browser/ui/commands:commands",
     "//ios/chrome/browser/ui/util:util",
     "//ios/web",
@@ -67,6 +66,7 @@ source_set("tab_helper_delegates") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "page_placeholder_tab_helper_delegate.h",
+    "repost_form_tab_helper_delegate.h",
     "sad_tab_tab_helper_delegate.h",
   ]
 }
@@ -94,9 +94,7 @@ source_set("unit_tests") {
     ":web",
     "//base:base",
     "//base/test:test_support",
-    "//components/strings:components_strings_grit",
     "//ios/chrome/browser/browser_state:test_support",
-    "//ios/chrome/browser/ui:ui",
     "//ios/chrome/test:test_support",
     "//ios/web:web",
     "//ios/web/public/test",
@@ -147,8 +145,9 @@ source_set("web_internal") {
     "external_app_launcher.h",
     "external_app_launcher.mm",
     "passkit_dialog_provider.h",
-    "print_observer.h",
-    "print_observer.mm",
+    "print_tab_helper.h",
+    "print_tab_helper.mm",
+    "web_state_printer.h",
   ]
   deps = [
     ":chrome_bundle",
@@ -175,6 +174,7 @@ source_set("web_internal") {
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui:ui_util",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/external_app",
     "//ios/chrome/browser/ui/static_content",
     "//ios/chrome/browser/web",
     "//ios/public/provider/chrome/browser",
@@ -187,7 +187,10 @@ source_set("web_internal") {
     "//ui/gfx",
     "//url",
   ]
-  libs = [ "UIKit.framework" ]
+  libs = [
+    "UIKit.framework",
+    "Foundation.framework",
+  ]
 }
 
 source_set("test_support") {

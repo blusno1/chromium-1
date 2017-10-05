@@ -234,39 +234,11 @@ STDMETHODIMP BrowserAccessibilityComWin::get_imageSize(LONG* height,
 //
 
 STDMETHODIMP BrowserAccessibilityComWin::get_nCharacters(LONG* n_characters) {
-  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_CHARACTERS);
-  AddAccessibilityModeFlags(kScreenReaderAndHTMLAccessibilityModes |
-                            ui::AXMode::kInlineTextBoxes);
-  if (!owner())
-    return E_FAIL;
-
-  if (!n_characters)
-    return E_INVALIDARG;
-
-  *n_characters = static_cast<LONG>(GetText().size());
-  return S_OK;
+  return AXPlatformNodeWin::get_nCharacters(n_characters);
 }
 
 STDMETHODIMP BrowserAccessibilityComWin::get_caretOffset(LONG* offset) {
-  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CARET_OFFSET);
-  AddAccessibilityModeFlags(kScreenReaderAndHTMLAccessibilityModes);
-  if (!owner())
-    return E_FAIL;
-
-  if (!offset)
-    return E_INVALIDARG;
-
-  if (!owner()->HasCaret())
-    return S_FALSE;
-
-  int selection_start, selection_end;
-  GetSelectionOffsets(&selection_start, &selection_end);
-  // The caret is always at the end of the selection.
-  *offset = selection_end;
-  if (*offset < 0)
-    return S_FALSE;
-
-  return S_OK;
+  return AXPlatformNodeWin::get_caretOffset(offset);
 }
 
 STDMETHODIMP BrowserAccessibilityComWin::get_characterExtents(
@@ -312,55 +284,14 @@ STDMETHODIMP BrowserAccessibilityComWin::get_characterExtents(
 }
 
 STDMETHODIMP BrowserAccessibilityComWin::get_nSelections(LONG* n_selections) {
-  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_SELECTIONS);
-  AddAccessibilityModeFlags(kScreenReaderAndHTMLAccessibilityModes);
-  if (!owner())
-    return E_FAIL;
-
-  if (!n_selections)
-    return E_INVALIDARG;
-
-  *n_selections = 0;
-  int selection_start, selection_end;
-  GetSelectionOffsets(&selection_start, &selection_end);
-  if (selection_start >= 0 && selection_end >= 0 &&
-      selection_start != selection_end) {
-    *n_selections = 1;
-  }
-
-  return S_OK;
+  return AXPlatformNodeWin::get_nSelections(n_selections);
 }
 
 STDMETHODIMP BrowserAccessibilityComWin::get_selection(LONG selection_index,
                                                        LONG* start_offset,
                                                        LONG* end_offset) {
-  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SELECTION);
-  AddAccessibilityModeFlags(kScreenReaderAndHTMLAccessibilityModes);
-  if (!owner())
-    return E_FAIL;
-
-  if (!start_offset || !end_offset || selection_index != 0)
-    return E_INVALIDARG;
-
-  *start_offset = 0;
-  *end_offset = 0;
-  int selection_start, selection_end;
-  GetSelectionOffsets(&selection_start, &selection_end);
-  if (selection_start >= 0 && selection_end >= 0 &&
-      selection_start != selection_end) {
-    // We should ignore the direction of the selection when exposing start and
-    // end offsets. According to the IA2 Spec the end offset is always increased
-    // by one past the end of the selection. This wouldn't make sense if
-    // end < start.
-    if (selection_end < selection_start)
-      std::swap(selection_start, selection_end);
-
-    *start_offset = selection_start;
-    *end_offset = selection_end;
-    return S_OK;
-  }
-
-  return E_INVALIDARG;
+  return AXPlatformNodeWin::get_selection(selection_index, start_offset,
+                                          end_offset);
 }
 
 STDMETHODIMP BrowserAccessibilityComWin::get_text(LONG start_offset,
@@ -561,7 +492,7 @@ STDMETHODIMP BrowserAccessibilityComWin::get_oldText(IA2TextSegment* old_text) {
   if (old_len == 0)
     return E_FAIL;
 
-  base::string16 old_hypertext = old_hypertext_;
+  base::string16 old_hypertext = old_hypertext_.hypertext;
   base::string16 substr = old_hypertext.substr(start, old_len);
   old_text->text = SysAllocString(substr.c_str());
   old_text->start = static_cast<long>(start);
@@ -628,34 +559,11 @@ STDMETHODIMP BrowserAccessibilityComWin::scrollSubstringToPoint(
 
 STDMETHODIMP BrowserAccessibilityComWin::addSelection(LONG start_offset,
                                                       LONG end_offset) {
-  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_ADD_SELECTION);
-  AddAccessibilityModeFlags(kScreenReaderAndHTMLAccessibilityModes);
-  if (!owner())
-    return E_FAIL;
-
-  // We only support one selection.
-  SetIA2HypertextSelection(start_offset, end_offset);
-  return S_OK;
+  return AXPlatformNodeWin::addSelection(start_offset, end_offset);
 }
 
 STDMETHODIMP BrowserAccessibilityComWin::removeSelection(LONG selection_index) {
-  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_REMOVE_SELECTION);
-  AddAccessibilityModeFlags(kScreenReaderAndHTMLAccessibilityModes);
-  if (!owner())
-    return E_FAIL;
-
-  if (selection_index != 0)
-    return E_INVALIDARG;
-
-  // Simply collapse the selection to the position of the caret if a caret is
-  // visible, otherwise set the selection to 0.
-  LONG caret_offset = 0;
-  int selection_start, selection_end;
-  GetSelectionOffsets(&selection_start, &selection_end);
-  if (owner()->HasCaret() && selection_end >= 0)
-    caret_offset = selection_end;
-  SetIA2HypertextSelection(caret_offset, caret_offset);
-  return S_OK;
+  return AXPlatformNodeWin::removeSelection(selection_index);
 }
 
 STDMETHODIMP BrowserAccessibilityComWin::setCaretOffset(LONG offset) {
@@ -732,7 +640,7 @@ STDMETHODIMP BrowserAccessibilityComWin::get_nHyperlinks(
   if (!hyperlink_count)
     return E_INVALIDARG;
 
-  *hyperlink_count = hyperlink_offset_to_index_.size();
+  *hyperlink_count = hypertext_.hyperlink_offset_to_index.size();
   return S_OK;
 }
 
@@ -745,11 +653,11 @@ STDMETHODIMP BrowserAccessibilityComWin::get_hyperlink(
     return E_FAIL;
 
   if (!hyperlink || index < 0 ||
-      index >= static_cast<long>(hyperlinks_.size())) {
+      index >= static_cast<long>(hypertext_.hyperlinks.size())) {
     return E_INVALIDARG;
   }
 
-  int32_t id = hyperlinks_[index];
+  int32_t id = hypertext_.hyperlinks[index];
   auto* link = static_cast<BrowserAccessibilityComWin*>(
       AXPlatformNodeWin::GetFromUniqueId(id));
   if (!link)
@@ -775,8 +683,8 @@ STDMETHODIMP BrowserAccessibilityComWin::get_hyperlinkIndex(
   }
 
   std::map<int32_t, int32_t>::iterator it =
-      hyperlink_offset_to_index_.find(char_index);
-  if (it == hyperlink_offset_to_index_.end()) {
+      hypertext_.hyperlink_offset_to_index.find(char_index);
+  if (it == hypertext_.hyperlink_offset_to_index.end()) {
     *hyperlink_index = -1;
     return S_FALSE;
   }
@@ -1890,14 +1798,8 @@ void BrowserAccessibilityComWin::UpdateStep1ComputeWinAttributes() {
   // old_win_attributes_ is cleared at the end of UpdateStep3FireEvents.
   old_win_attributes_.swap(win_attributes_);
 
-  old_hyperlinks_.swap(hyperlinks_);
-  hyperlinks_.clear();
-
-  old_hyperlink_offset_to_index_.swap(hyperlink_offset_to_index_);
-  hyperlink_offset_to_index_.clear();
-
-  old_hypertext_.swap(hypertext_);
-  hypertext_.clear();
+  old_hypertext_ = hypertext_;
+  hypertext_ = ui::AXHypertext();
 
   win_attributes_.reset(new WinAttributes());
 
@@ -1919,62 +1821,13 @@ void BrowserAccessibilityComWin::UpdateStep1ComputeWinAttributes() {
   win_attributes_->description =
       owner()->GetString16Attribute(ui::AX_ATTR_DESCRIPTION);
 
-  base::string16 value = owner()->GetValue();
-
-  // Expose slider value.
-  if (IsRangeValueSupported()) {
-    value = GetRangeValueText();
-  } else if (owner()->IsDocument()) {
-    // On Windows, the value of a document should be its url.
-    value = base::UTF8ToUTF16(Manager()->GetTreeData().url);
-  }
-  // If this doesn't have a value and is linked then set its value to the url
-  // attribute. This allows screen readers to read an empty link's
-  // destination.
-  if (value.empty() && (MSAAState() & STATE_SYSTEM_LINKED))
-    value = owner()->GetString16Attribute(ui::AX_ATTR_URL);
-
-  win_attributes_->value = value;
+  win_attributes_->value = GetValue();
 
   CalculateRelationships();
 }
 
 void BrowserAccessibilityComWin::UpdateStep2ComputeHypertext() {
-  if (owner()->IsSimpleTextControl()) {
-    hypertext_ = value();
-    return;
-  }
-
-  if (!owner()->PlatformChildCount()) {
-    if (owner()->IsRichTextControl()) {
-      // We don't want to expose any associated label in IA2 Hypertext.
-      return;
-    }
-    hypertext_ = name();
-    return;
-  }
-
-  // Construct the hypertext for this node, which contains the concatenation
-  // of all of the static text and widespace of this node's children and an
-  // embedded object character for all the other children. Build up a map from
-  // the character index of each embedded object character to the id of the
-  // child object it points to.
-  auto child_count = owner()->PlatformChildCount();
-  for (unsigned int i = 0; i < child_count; ++i) {
-    auto* child = ToBrowserAccessibilityComWin(owner()->PlatformGetChild(i));
-    DCHECK(child);
-    // Similar to Firefox, we don't expose text-only objects in IA2 hypertext.
-    if (child->owner()->IsTextOnlyObject()) {
-      hypertext_ += child->name();
-    } else {
-      int32_t char_offset = static_cast<int32_t>(GetText().size());
-      int32_t child_unique_id = child->unique_id();
-      int32_t index = hyperlinks_.size();
-      hyperlink_offset_to_index_[char_offset] = index;
-      hyperlinks_.push_back(child_unique_id);
-      hypertext_ += kEmbeddedCharacter;
-    }
-  }
+  hypertext_ = ComputeHypertext();
 }
 
 void BrowserAccessibilityComWin::UpdateStep3FireEvents(
@@ -1997,8 +1850,10 @@ void BrowserAccessibilityComWin::UpdateStep3FireEvents(
     // Do not fire EVENT_OBJECT_STATECHANGE if the change was due to a focus
     // change.
     if ((MSAAState() & ~STATE_SYSTEM_FOCUSED) !=
-        (old_win_attributes_->ia_state & ~STATE_SYSTEM_FOCUSED))
+            (old_win_attributes_->ia_state & ~STATE_SYSTEM_FOCUSED) ||
+        ComputeIA2State() != old_win_attributes_->ia2_state) {
       FireNativeEvent(EVENT_OBJECT_STATECHANGE);
+    }
 
     // Handle selection being added or removed.
     bool is_selected_now = (MSAAState() & STATE_SYSTEM_SELECTED) != 0;
@@ -2059,9 +1914,7 @@ void BrowserAccessibilityComWin::UpdateStep3FireEvents(
   }
 
   old_win_attributes_.reset(nullptr);
-  old_hyperlinks_.clear();
-  old_hyperlink_offset_to_index_.clear();
-  old_hypertext_.clear();
+  old_hypertext_ = ui::AXHypertext();
 }
 
 BrowserAccessibilityManager* BrowserAccessibilityComWin::Manager() const {

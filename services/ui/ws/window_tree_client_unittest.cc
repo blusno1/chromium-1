@@ -59,6 +59,13 @@ void EmbedCallbackImpl(base::RunLoop* run_loop,
   run_loop->Quit();
 }
 
+void ScheduleEmbedCallbackImpl(base::RunLoop* run_loop,
+                               base::UnguessableToken* resulting_token,
+                               const base::UnguessableToken& token) {
+  *resulting_token = token;
+  run_loop->Quit();
+}
+
 // -----------------------------------------------------------------------------
 
 bool EmbedUrl(service_manager::Connector* connector,
@@ -88,6 +95,27 @@ bool Embed(WindowTree* tree, Id root_id, mojom::WindowTreeClientPtr client) {
   }
   run_loop.Run();
   return result;
+}
+
+bool EmbedUsingToken(WindowTree* tree,
+                     Id root_id,
+                     const base::UnguessableToken& token) {
+  bool result = false;
+  base::RunLoop run_loop;
+  const uint32_t embed_flags = 0;
+  tree->EmbedUsingToken(root_id, token, embed_flags,
+                        base::Bind(&EmbedCallbackImpl, &run_loop, &result));
+  run_loop.Run();
+  return result;
+}
+
+void ScheduleEmbed(WindowTree* tree,
+                   mojom::WindowTreeClientPtr client,
+                   base::UnguessableToken* token) {
+  base::RunLoop run_loop;
+  tree->ScheduleEmbed(std::move(client),
+                      base::Bind(&ScheduleEmbedCallbackImpl, &run_loop, token));
+  run_loop.Run();
 }
 
 void GetWindowTree(WindowTree* tree,
@@ -360,11 +388,13 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   void OnWindowParentDrawnStateChanged(uint32_t window, bool drawn) override {
     tracker()->OnWindowParentDrawnStateChanged(window, drawn);
   }
-  void OnWindowInputEvent(uint32_t event_id,
-                          Id window_id,
-                          int64_t display_id,
-                          std::unique_ptr<ui::Event> event,
-                          bool matches_pointer_watcher) override {
+  void OnWindowInputEvent(
+      uint32_t event_id,
+      Id window_id,
+      int64_t display_id,
+      const gfx::PointF& event_location_in_screen_pixel_layout,
+      std::unique_ptr<ui::Event> event,
+      bool matches_pointer_watcher) override {
     // Ack input events to clear the state on the server. These can be received
     // during test startup. X11Window::DispatchEvent sends a synthetic move
     // event to notify of entry.
@@ -2038,6 +2068,72 @@ TEST_F(WindowTreeClientTest, EmbedSupplyingWindowTreeClient) {
             SingleChangeToDescription(*client2.tracker()->changes()));
 }
 
+TEST_F(WindowTreeClientTest, EmbedUsingToken) {
+  // Embed client2.
+  ASSERT_TRUE(wt_client1()->NewWindow(1));
+  TestWindowTreeClient client2;
+  mojom::WindowTreeClientPtr client2_ptr;
+  mojo::Binding<WindowTreeClient> client2_binding(
+      &client2, mojo::MakeRequest(&client2_ptr));
+  ASSERT_TRUE(
+      Embed(wt1(), BuildWindowId(client_id_1(), 1), std::move(client2_ptr)));
+  client2.WaitForOnEmbed();
+  EXPECT_EQ("OnEmbed",
+            SingleChangeToDescription(*client2.tracker()->changes()));
+
+  // Schedule an embed of |client3| from wt1().
+  TestWindowTreeClient client3;
+  mojom::WindowTreeClientPtr client3_ptr;
+  mojo::Binding<WindowTreeClient> client3_binding(
+      &client3, mojo::MakeRequest(&client3_ptr));
+  base::UnguessableToken token;
+  ScheduleEmbed(wt1(), std::move(client3_ptr), &token);
+
+  // Have |client2| embed using the token scheduled above.
+  const Id window_id = client2.NewWindow(121);
+  ASSERT_TRUE(window_id);
+  ASSERT_TRUE(EmbedUsingToken(client2.tree(), BuildWindowId(client_id_2(), 121),
+                              token));
+  client3.WaitForOnEmbed();
+  EXPECT_EQ("OnEmbed",
+            SingleChangeToDescription(*client3.tracker()->changes()));
+
+  // EmbedUsingToken() should fail when passed a token that was already used.
+  EXPECT_FALSE(EmbedUsingToken(client2.tree(),
+                               BuildWindowId(client_id_2(), 121), token));
+
+  // EmbedUsingToken() should fail when passed a locally generated token.
+  EXPECT_FALSE(EmbedUsingToken(client2.tree(),
+                               BuildWindowId(client_id_2(), 121),
+                               base::UnguessableToken::Create()));
+}
+
+TEST_F(WindowTreeClientTest, EmbedUsingTokenFailsWithInvalidWindow) {
+  // Embed client2.
+  ASSERT_TRUE(wt_client1()->NewWindow(1));
+  TestWindowTreeClient client2;
+  mojom::WindowTreeClientPtr client2_ptr;
+  mojo::Binding<WindowTreeClient> client2_binding(
+      &client2, mojo::MakeRequest(&client2_ptr));
+  ASSERT_TRUE(
+      Embed(wt1(), BuildWindowId(client_id_1(), 1), std::move(client2_ptr)));
+  client2.WaitForOnEmbed();
+  EXPECT_EQ("OnEmbed",
+            SingleChangeToDescription(*client2.tracker()->changes()));
+
+  // Schedule an embed of |client3| from wt1().
+  TestWindowTreeClient client3;
+  mojom::WindowTreeClientPtr client3_ptr;
+  mojo::Binding<WindowTreeClient> client3_binding(
+      &client3, mojo::MakeRequest(&client3_ptr));
+  base::UnguessableToken token;
+  ScheduleEmbed(wt1(), std::move(client3_ptr), &token);
+
+  // This should fail as the window id does not identify a valid window.
+  EXPECT_FALSE(EmbedUsingToken(client2.tree(),
+                               BuildWindowId(client_id_2(), 121), token));
+}
+
 TEST_F(WindowTreeClientTest, EmbedFailsFromOtherClient) {
   ASSERT_NO_FATAL_FAILURE(EstablishSecondClient(true));
 
@@ -2280,8 +2376,8 @@ TEST_F(WindowTreeClientTest, SurfaceIdPropagation) {
     wt2()->AttachCompositorFrameSink(window_1_100_in_ws2,
                                      mojo::MakeRequest(&surface_ptr),
                                      std::move(surface_client_ptr));
-    cc::CompositorFrame compositor_frame;
-    std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
+    viz::CompositorFrame compositor_frame;
+    std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
     gfx::Rect frame_rect(0, 0, 100, 100);
     render_pass->SetNew(1, frame_rect, frame_rect, gfx::Transform());
     compositor_frame.render_pass_list.push_back(std::move(render_pass));
@@ -2294,8 +2390,11 @@ TEST_F(WindowTreeClientTest, SurfaceIdPropagation) {
   // Make sure the parent connection gets the surface ID.
   wt_client1()->WaitForChangeCount(1);
   // Verify that the submitted frame is for |window_2_101|.
-  EXPECT_EQ(window_1_100_in_ws2,
-            changes1()->back().surface_id.frame_sink_id().client_id());
+  viz::FrameSinkId frame_sink_id =
+      changes1()->back().surface_id.frame_sink_id();
+  // FrameSinkId is based on window's ClientWindowId.
+  EXPECT_NE(0u, frame_sink_id.client_id());
+  EXPECT_EQ(LoWord(window_1_100), frame_sink_id.sink_id());
   changes1()->clear();
 
   // The first window created in the second client gets a server id of
@@ -2317,8 +2416,8 @@ TEST_F(WindowTreeClientTest, SurfaceIdPropagation) {
     wt2()->AttachCompositorFrameSink(window_2_101,
                                      mojo::MakeRequest(&surface_ptr),
                                      std::move(surface_client_ptr));
-    cc::CompositorFrame compositor_frame;
-    std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
+    viz::CompositorFrame compositor_frame;
+    std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
     gfx::Rect frame_rect(0, 0, 100, 100);
     render_pass->SetNew(1, frame_rect, frame_rect, gfx::Transform());
     compositor_frame.render_pass_list.push_back(std::move(render_pass));
@@ -2331,8 +2430,11 @@ TEST_F(WindowTreeClientTest, SurfaceIdPropagation) {
   // Make sure the parent connection gets the surface ID.
   wt_client2()->WaitForChangeCount(1);
   // Verify that the submitted frame is for |window_2_101|.
-  EXPECT_EQ(window_2_101_in_ws2,
-            changes2()->back().surface_id.frame_sink_id().client_id());
+  viz::FrameSinkId frame_sink_id2 =
+      changes2()->back().surface_id.frame_sink_id();
+  // FrameSinkId is based on window's ClientWindowId.
+  EXPECT_NE(0u, frame_sink_id2.client_id());
+  EXPECT_EQ(LoWord(window_2_101), frame_sink_id2.sink_id());
 }
 
 // Verifies when an unknown window with a known child is added to a hierarchy

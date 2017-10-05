@@ -6,7 +6,6 @@
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/modules/v8/v8_remote_playback_availability_callback.h"
-#include "core/HTMLNames.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
@@ -14,6 +13,7 @@
 #include "core/dom/events/Event.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLVideoElement.h"
+#include "core/html_names.h"
 #include "core/probe/CoreProbes.h"
 #include "modules/EventTargetModules.h"
 #include "modules/presentation/PresentationController.h"
@@ -342,7 +342,7 @@ void RemotePlayback::StateChanged(WebRemotePlaybackState state) {
       if (RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled() &&
           media_element_->IsHTMLVideoElement()) {
         // TODO(xjz): Pass the remote device name.
-        toHTMLVideoElement(media_element_)->MediaRemotingStarted(WebString());
+        ToHTMLVideoElement(media_element_)->MediaRemotingStarted(WebString());
       }
       break;
     case WebRemotePlaybackState::kConnected:
@@ -352,7 +352,7 @@ void RemotePlayback::StateChanged(WebRemotePlaybackState state) {
       DispatchEvent(Event::Create(EventTypeNames::disconnect));
       if (RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled() &&
           media_element_->IsHTMLVideoElement()) {
-        toHTMLVideoElement(media_element_)->MediaRemotingStopped();
+        ToHTMLVideoElement(media_element_)->MediaRemotingStopped();
       }
       break;
   }

@@ -4,11 +4,11 @@
 
 package org.chromium.chrome.browser.ntp;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.res.Resources;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewTreeObserver.OnScrollChangedListener;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.LinearLayout.LayoutParams;
@@ -17,8 +17,6 @@ import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.widget.FadingShadow;
-import org.chromium.chrome.browser.widget.FadingShadowView;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContentController;
 
@@ -32,14 +30,10 @@ public class IncognitoBottomSheetContent extends IncognitoNewTabPage implements 
      * Constructs a new IncognitoBottomSheetContent.
      * @param activity The {@link Activity} displaying this bottom sheet content.
      */
+    // TODO(crbug.com/762591): Fix and remove NewApi suppression.
+    @SuppressLint("NewApi")
     public IncognitoBottomSheetContent(final Activity activity) {
         super(activity);
-
-        final FadingShadowView shadow =
-                (FadingShadowView) mIncognitoNewTabPageView.findViewById(R.id.shadow);
-        shadow.init(ApiCompatibilityUtils.getColor(
-                            mIncognitoNewTabPageView.getResources(), R.color.toolbar_shadow_color),
-                FadingShadow.POSITION_TOP);
 
         initTextViews();
 
@@ -57,14 +51,6 @@ public class IncognitoBottomSheetContent extends IncognitoNewTabPage implements 
                         - ((int) activity.getResources().getDimension(
                                   R.dimen.toolbar_height_no_shadow)),
                 ApiCompatibilityUtils.getPaddingEnd(mScrollView), mScrollView.getPaddingBottom());
-
-        mScrollView.getViewTreeObserver().addOnScrollChangedListener(new OnScrollChangedListener() {
-            @Override
-            public void onScrollChanged() {
-                boolean shadowVisible = mScrollView.canScrollVertically(-1);
-                shadow.setVisibility(shadowVisible ? View.VISIBLE : View.GONE);
-            }
-        });
     }
 
     private void initTextViews() {
@@ -128,12 +114,6 @@ public class IncognitoBottomSheetContent extends IncognitoNewTabPage implements 
     }
 
     @Override
-    protected int getLayoutResource() {
-        return useMDIncognitoNTP() ? R.layout.incognito_bottom_sheet_content_md
-                                   : R.layout.incognito_bottom_sheet_content;
-    }
-
-    @Override
     public View getContentView() {
         return getView();
     }
@@ -169,5 +149,10 @@ public class IncognitoBottomSheetContent extends IncognitoNewTabPage implements 
     @Override
     public boolean applyDefaultTopPadding() {
         return true;
+    }
+
+    @Override
+    public void scrollToTop() {
+        mScrollView.smoothScrollTo(0, 0);
     }
 }

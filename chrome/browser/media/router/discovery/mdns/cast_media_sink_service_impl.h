@@ -9,6 +9,7 @@
 #include <set>
 
 #include "base/gtest_prod_util.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "chrome/browser/media/router/discovery/discovery_network_monitor.h"
@@ -17,6 +18,7 @@
 #include "components/cast_channel/cast_channel_enum.h"
 #include "components/cast_channel/cast_socket.h"
 #include "net/base/backoff_entry.h"
+#include "net/url_request/url_request_context_getter.h"
 
 namespace cast_channel {
 class CastSocketService;
@@ -32,21 +34,22 @@ class CastMediaSinkServiceImpl
       public base::SupportsWeakPtr<CastMediaSinkServiceImpl>,
       public DiscoveryNetworkMonitor::Observer {
  public:
+  using SinkSource = CastDeviceCountMetrics::SinkSource;
+
   // Default Cast control port to open Cast Socket from DIAL sink.
   static constexpr int kCastControlPort = 8009;
-  // TODO(zhaobin): Remove this when we switch to use max delay instead of max
-  // number of retry attempts to decide when to stop retry.
-  static constexpr int kMaxAttempts = 3;
-  // Initial delay (in seconds) used by backoff policy.
-  static constexpr int kDelayInSeconds = 15;
 
-  CastMediaSinkServiceImpl(const OnSinksDiscoveredCallback& callback,
-                           cast_channel::CastSocketService* cast_socket_service,
-                           DiscoveryNetworkMonitor* network_monitor);
+  CastMediaSinkServiceImpl(
+      const OnSinksDiscoveredCallback& callback,
+      cast_channel::CastSocketService* cast_socket_service,
+      DiscoveryNetworkMonitor* network_monitor,
+      scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
   ~CastMediaSinkServiceImpl() override;
 
   void SetTaskRunnerForTest(
       scoped_refptr<base::SequencedTaskRunner> task_runner);
+  void SetClockForTest(std::unique_ptr<base::Clock> clock);
 
   // MediaSinkService implementation
   void Start() override;
@@ -58,9 +61,15 @@ class CastMediaSinkServiceImpl
   void RecordDeviceCounts() override;
 
   // Opens cast channels on the IO thread.
-  virtual void OpenChannels(std::vector<MediaSinkInternal> cast_sinks);
+  virtual void OpenChannels(std::vector<MediaSinkInternal> cast_sinks,
+                            SinkSource sink_source);
 
   void OnDialSinkAdded(const MediaSinkInternal& sink);
+
+  // Tries to open cast channels for sinks found by current round of mDNS
+  // discovery, but without opened cast channels.
+  // |cast_sinks|: list of sinks found by current round of mDNS discovery.
+  void AttemptConnection(const std::vector<MediaSinkInternal>& cast_sinks);
 
  private:
   friend class CastMediaSinkServiceImplTest;
@@ -99,6 +108,20 @@ class CastMediaSinkServiceImpl
                            CacheDialDiscoveredSinks);
   FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest,
                            DualDiscoveryDoesntDuplicateCacheItems);
+  FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest, TestAttemptConnection);
+  FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest,
+                           TestInitRetryParametersWithFeatureDisabled);
+  FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest,
+                           TestInitRetryParameters);
+  FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest,
+                           TestInitRetryParametersWithDefaultValue);
+  FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest,
+                           TestCreateCastSocketOpenParams);
+  FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest,
+                           TestInitRetryParametersWithFeatureDisabled);
+  FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest, TestInitParameters);
+  FRIEND_TEST_ALL_PREFIXES(CastMediaSinkServiceImplTest,
+                           TestInitRetryParametersWithDefaultValue);
 
   // CastSocket::Observer implementation.
   void OnError(const cast_channel::CastSocket& socket,
@@ -109,22 +132,33 @@ class CastMediaSinkServiceImpl
   // DiscoveryNetworkMonitor::Observer implementation
   void OnNetworksChanged(const std::string& network_id) override;
 
+  // Returns cast socket open parameters. Parameters are read from Finch.
+  // Connect / liveness timeout value are dynamically calculated
+  // based on the channel's last error status.
+  // |ip_endpoint|: ip endpoint of cast channel to be connected to.
+  cast_channel::CastSocketOpenParams CreateCastSocketOpenParams(
+      const net::IPEndPoint& ip_endpoint);
+
   // Opens cast channel.
   // |ip_endpoint|: cast channel's target IP endpoint.
   // |cast_sink|: Cast sink created from mDNS service description or DIAL sink.
   // |backoff_entry|: backoff entry passed to |OnChannelOpened| callback.
   void OpenChannel(const net::IPEndPoint& ip_endpoint,
                    const MediaSinkInternal& cast_sink,
-                   std::unique_ptr<net::BackoffEntry> backoff_entry);
+                   std::unique_ptr<net::BackoffEntry> backoff_entry,
+                   SinkSource sink_source);
 
   // Invoked when opening cast channel on IO thread completes.
   // |cast_sink|: Cast sink created from mDNS service description or DIAL sink.
   // |backoff_entry|: backoff entry passed to |OnChannelErrorMayRetry| callback
   // if open channel fails.
+  // |start_time|: time at which corresponding |OpenChannel| was called.
   // |socket|: raw pointer of newly created cast channel. Does not take
   // ownership of |socket|.
   void OnChannelOpened(const MediaSinkInternal& cast_sink,
                        std::unique_ptr<net::BackoffEntry> backoff_entry,
+                       SinkSource sink_source,
+                       base::Time start_time,
                        cast_channel::CastSocket* socket);
 
   // Invoked by |OnChannelOpened| if opening cast channel failed. It will retry
@@ -137,19 +171,66 @@ class CastMediaSinkServiceImpl
   // |error_state|: erorr encountered when opending cast channel.
   void OnChannelErrorMayRetry(MediaSinkInternal cast_sink,
                               std::unique_ptr<net::BackoffEntry> backoff_entry,
-                              cast_channel::ChannelError error_state);
+                              cast_channel::ChannelError error_state,
+                              SinkSource sink_source);
 
   // Invoked when opening cast channel on IO thread succeeds.
   // |cast_sink|: Cast sink created from mDNS service description or DIAL sink.
   // |socket|: raw pointer of newly created cast channel. Does not take
   // ownership of |socket|.
   void OnChannelOpenSucceeded(MediaSinkInternal cast_sink,
-                              cast_channel::CastSocket* socket);
+                              cast_channel::CastSocket* socket,
+                              SinkSource sink_source);
 
   // Invoked when opening cast channel on IO thread fails after all retry
   // attempts.
   // |ip_endpoint|: ip endpoint of cast channel failing to connect to.
   void OnChannelOpenFailed(const net::IPEndPoint& ip_endpoint);
+
+  // Holds Finch field trial parameters controlling Cast channel retry strategy.
+  struct RetryParams {
+    // Initial delay (in ms) once backoff starts.
+    int initial_delay_in_milliseconds;
+
+    // Max retry attempts allowed when opening a Cast socket.
+    int max_retry_attempts;
+
+    // Factor by which the delay will be multiplied on each subsequent failure.
+    // This must be >= 1.0.
+    double multiply_factor;
+
+    RetryParams();
+    ~RetryParams();
+
+    bool Validate();
+
+    static RetryParams GetFromFieldTrialParam();
+  };
+
+  // Holds Finch field trial parameters controlling Cast channel open.
+  struct OpenParams {
+    // Connect timeout value when opening a Cast socket.
+    int connect_timeout_in_seconds;
+
+    // Amount of idle time to wait before pinging the Cast device.
+    int ping_interval_in_seconds;
+
+    // Amount of idle time to wait before disconnecting.
+    int liveness_timeout_in_seconds;
+
+    // Dynamic time out delta for connect timeout and liveness timeout. If
+    // previous channel open operation with opening parameters (liveness
+    // timeout, connect timeout) fails, next channel open will have parameters
+    // (liveness timeout + delta, connect timeout + delta).
+    int dynamic_timeout_delta_in_seconds;
+
+    OpenParams();
+    ~OpenParams();
+
+    bool Validate();
+
+    static OpenParams GetFromFieldTrialParam();
+  };
 
   // Set of IP endpoints pending to be connected to.
   std::set<net::IPEndPoint> pending_for_open_ip_endpoints_;
@@ -178,13 +259,24 @@ class CastMediaSinkServiceImpl
 
   CastDeviceCountMetrics metrics_;
 
-  // Default backoff policy to reopen Cast Socket when channel error occurs.
-  static const net::BackoffEntry::Policy kBackoffPolicy;
+  RetryParams retry_params_;
 
-  // Does not take ownership of |backoff_policy_|.
-  const net::BackoffEntry::Policy* backoff_policy_;
+  OpenParams open_params_;
+
+  net::BackoffEntry::Policy backoff_policy_;
+
+  // Map of consecutive failure count keyed by IP endpoint. Keeps track of
+  // failure counts for each IP endpoint. Used to dynamically adjust timeout
+  // values. If a Cast channel opens successfully, it is removed from the map.
+  std::map<net::IPEndPoint, int> failure_count_map_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  // This is a temporary workaround to get access to the net::NetLog* from the
+  // NetworkService.
+  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
+
+  std::unique_ptr<base::Clock> clock_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

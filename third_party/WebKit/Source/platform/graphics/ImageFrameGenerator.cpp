@@ -30,7 +30,6 @@
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "platform/wtf/PtrUtil.h"
 #include "third_party/skia/include/core/SkYUVSizeInfo.h"
 
 namespace blink {
@@ -203,7 +202,7 @@ bool ImageFrameGenerator::DecodeToYUV(SegmentReader* data,
   DCHECK(decoder);
 
   std::unique_ptr<ImagePlanes> image_planes =
-      WTF::MakeUnique<ImagePlanes>(planes, row_bytes);
+      std::make_unique<ImagePlanes>(planes, row_bytes);
   decoder->SetImagePlanes(std::move(image_planes));
 
   DCHECK(decoder->CanDecodeToYUV());
@@ -383,7 +382,7 @@ ImageFrame* ImageFrameGenerator::Decode(SegmentReader* data,
   // we have to do it before clearing SegmentReader.
   if (used_external_allocator)
     (*decoder)->SetMemoryAllocator(nullptr);
-  (*decoder)->SetData(PassRefPtr<SegmentReader>(nullptr),
+  (*decoder)->SetData(RefPtr<SegmentReader>(nullptr),
                       false);  // Unref SegmentReader from ImageDecoder.
   (*decoder)->ClearCacheExceptFrame(index);
 

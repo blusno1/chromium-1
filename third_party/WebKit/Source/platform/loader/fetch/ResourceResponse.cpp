@@ -26,7 +26,7 @@
 
 #include "platform/loader/fetch/ResourceResponse.h"
 
-#include "platform/HTTPNames.h"
+#include "platform/http_names.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/CurrentTime.h"
@@ -554,7 +554,7 @@ void ResourceResponse::SetConnectionID(unsigned connection_id) {
 }
 
 ResourceLoadTiming* ResourceResponse::GetResourceLoadTiming() const {
-  return resource_load_timing_.Get();
+  return resource_load_timing_.get();
 }
 
 void ResourceResponse::SetResourceLoadTiming(
@@ -563,7 +563,7 @@ void ResourceResponse::SetResourceLoadTiming(
 }
 
 RefPtr<ResourceLoadInfo> ResourceResponse::GetResourceLoadInfo() const {
-  return resource_load_info_.Get();
+  return resource_load_info_.get();
 }
 
 void ResourceResponse::SetResourceLoadInfo(RefPtr<ResourceLoadInfo> load_info) {
@@ -600,7 +600,7 @@ void ResourceResponse::SetDownloadedFilePath(
     const String& downloaded_file_path) {
   downloaded_file_path_ = downloaded_file_path;
   if (downloaded_file_path_.IsEmpty()) {
-    downloaded_file_handle_.Clear();
+    downloaded_file_handle_ = nullptr;
     return;
   }
   // TODO(dmurph): Investigate whether we need the mimeType on this blob.

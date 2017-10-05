@@ -5,6 +5,7 @@
 #import <EarlGrey/EarlGrey.h>
 #import <XCTest/XCTest.h>
 
+#include "base/strings/sys_string_conversions.h"
 #include "base/test/scoped_command_line.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "ios/chrome/browser/application_context.h"
@@ -17,18 +18,21 @@
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_whats_new_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_provider_test_singleton.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_test_utils.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
+#import "ios/chrome/test/app/history_test_util.h"
+#import "ios/chrome/test/app/tab_test_util.h"
 #include "ios/chrome/test/earl_grey/accessibility_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -37,6 +41,27 @@
 using namespace content_suggestions;
 using namespace ntp_home;
 using namespace ntp_snippets;
+
+namespace {
+const char kPageLoadedString[] = "Page loaded!";
+const char kPageURL[] = "/test-page.html";
+const char kPageTitle[] = "Page title!";
+
+// Provides responses for redirect and changed window location URLs.
+std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
+    const net::test_server::HttpRequest& request) {
+  if (request.relative_url != kPageURL) {
+    return nullptr;
+  }
+  std::unique_ptr<net::test_server::BasicHttpResponse> http_response =
+      base::MakeUnique<net::test_server::BasicHttpResponse>();
+  http_response->set_code(net::HTTP_OK);
+  http_response->set_content("<html><head><title>" + std::string(kPageTitle) +
+                             "</title></head><body>" +
+                             std::string(kPageLoadedString) + "</body></html>");
+  return std::move(http_response);
+}
+}
 
 // Test case for the NTP home UI. More precisely, this tests the positions of
 // the elements after interacting with the device.
@@ -57,6 +82,18 @@ using namespace ntp_snippets;
 
 + (void)setUp {
   [super setUp];
+  if (IsIPadIdiom()) {
+    // Make sure we are on the Home panel on iPad.
+    chrome_test_util::OpenNewTab();
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+        performAction:grey_typeText(@"chrome://newtab/#most_visited\n")];
+  }
+
+  // Clear the pasteboard in case there is a URL copied, triggering an omnibox
+  // suggestion.
+  UIPasteboard* pasteboard = [UIPasteboard generalPasteboard];
+  [pasteboard setValue:@"" forPasteboardType:UIPasteboardNameGeneral];
+
   [self closeAllTabs];
   ios::ChromeBrowserState* browserState =
       chrome_test_util::GetOriginalBrowserState();
@@ -210,10 +247,8 @@ using namespace ntp_snippets;
     EARL_GREY_TEST_DISABLED(@"Disabled for iPad due to device rotation bug.");
   }
 
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(
-                                   [ContentSuggestionsViewController
-                                       collectionAccessibilityIdentifier])]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          ContentSuggestionCollectionView()]
       performAction:grey_swipeFastInDirection(kGREYDirectionUp)];
 
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
@@ -268,6 +303,209 @@ using namespace ntp_snippets;
   [defaults setInteger:experimental_flags::WHATS_NEW_DEFAULT
                 forKey:@"WhatsNewPromoStatus"];
   ios::NotificationPromo::MigrateUserPrefs(local_state);
+}
+
+// Tests that the position of the collection view is restored when navigating
+// back to the NTP.
+- (void)testPositionRestored {
+  [self addMostVisitedTile];
+
+  // Add suggestions to be able to scroll on iPad.
+  ReadingListModelFactory::GetForBrowserState(self.browserState)
+      ->AddEntry(GURL("http://chromium.org/"), "title",
+                 reading_list::ADDED_VIA_CURRENT_APP);
+  self.provider->FireSuggestionsChanged(self.category, ntp_home::Suggestions());
+
+  // Scroll to have a position to restored.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          ContentSuggestionCollectionView()]
+      performAction:grey_scrollInDirection(kGREYDirectionDown, 150)];
+
+  // Save the position before navigating.
+  UIView* omnibox = ntp_home::FakeOmnibox();
+  CGPoint previousPosition = omnibox.bounds.origin;
+
+  // Navigate and come back.
+  [[EarlGrey selectElementWithMatcher:
+                 chrome_test_util::StaticTextWithAccessibilityLabel(
+                     base::SysUTF8ToNSString(kPageTitle))]
+      performAction:grey_tap()];
+  [ChromeEarlGrey waitForWebViewContainingText:kPageLoadedString];
+  [ChromeEarlGrey goBack];
+
+  // Check that the new position is the same.
+  omnibox = ntp_home::FakeOmnibox();
+  GREYAssertEqual(previousPosition.y, omnibox.bounds.origin.y,
+                  @"Omnibox not at the same position");
+}
+
+// Tests that when navigating back to the NTP while having the omnibox focused
+// and moved up, the scroll position restored is the position before the omnibox
+// is selected.
+- (void)testPositionRestoredWithOmniboxFocused {
+  [self addMostVisitedTile];
+
+  // Add suggestions to be able to scroll on iPad.
+  ReadingListModelFactory::GetForBrowserState(self.browserState)
+      ->AddEntry(GURL("http://chromium.org/"), "title",
+                 reading_list::ADDED_VIA_CURRENT_APP);
+  self.provider->FireSuggestionsChanged(self.category, ntp_home::Suggestions());
+
+  // Scroll to have a position to restored.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          ContentSuggestionCollectionView()]
+      performAction:grey_scrollInDirection(kGREYDirectionDown, 150)];
+
+  // Save the position before navigating.
+  UIView* omnibox = ntp_home::FakeOmnibox();
+  CGPoint previousPosition = omnibox.bounds.origin;
+
+  // Tap the omnibox to focus it.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          FakeOmniboxAccessibilityID())]
+      performAction:grey_tap()];
+
+  // Navigate and come back.
+  [[EarlGrey selectElementWithMatcher:
+                 chrome_test_util::StaticTextWithAccessibilityLabel(
+                     base::SysUTF8ToNSString(kPageTitle))]
+      performAction:grey_tap()];
+  [ChromeEarlGrey waitForWebViewContainingText:kPageLoadedString];
+  [ChromeEarlGrey goBack];
+
+  // Check that the new position is the same.
+  omnibox = ntp_home::FakeOmnibox();
+  GREYAssertEqual(previousPosition.y, omnibox.bounds.origin.y,
+                  @"Omnibox not at the same position");
+}
+
+// Tests that tapping the fake omnibox focuses the real omnibox.
+- (void)testTapFakeOmnibox {
+  // Setup the server.
+  self.testServer->RegisterRequestHandler(base::Bind(&StandardResponse));
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL pageURL = self.testServer->GetURL(kPageURL);
+
+  NSString* URL = base::SysUTF8ToNSString(pageURL.spec());
+  // Type the URL in the fake omnibox and navigate to the page.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          FakeOmniboxAccessibilityID())]
+      performAction:grey_typeText([URL stringByAppendingString:@"\n"])];
+
+  // Check that the page is loaded.
+  [ChromeEarlGrey waitForWebViewContainingText:kPageLoadedString];
+}
+
+// Tests that tapping the fake omnibox moves the collection.
+- (void)testTapFakeOmniboxScroll {
+  // Get the collection and its layout.
+  UIView* collection = ntp_home::CollectionView();
+  GREYAssertTrue([collection isKindOfClass:[UICollectionView class]],
+                 @"The collection has not been correctly selected.");
+  UICollectionView* collectionView = (UICollectionView*)collection;
+  GREYAssertTrue(
+      [collectionView.delegate
+          conformsToProtocol:@protocol(UICollectionViewDelegateFlowLayout)],
+      @"The collection has not the expected delegate.");
+  id<UICollectionViewDelegateFlowLayout> delegate =
+      (id<UICollectionViewDelegateFlowLayout>)(collectionView.delegate);
+  CGFloat headerHeight =
+      [delegate collectionView:collectionView
+                                   layout:collectionView.collectionViewLayout
+          referenceSizeForHeaderInSection:0]
+          .height;
+
+  // Offset before the tap.
+  CGPoint origin = collectionView.contentOffset;
+
+  // Tap the omnibox to focus it.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          FakeOmniboxAccessibilityID())]
+      performAction:grey_tap()];
+
+  // Offset after the fake omnibox has been tapped.
+  CGPoint offsetAfterTap = collectionView.contentOffset;
+
+  // Make sure the fake omnibox has been hidden and the collection has moved.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          FakeOmniboxAccessibilityID())]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
+  GREYAssertTrue(offsetAfterTap.y >= origin.y + headerHeight - 60,
+                 @"The collection has not moved.");
+
+  // Unfocus the omnibox.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          ContentSuggestionCollectionView()]
+      performAction:grey_tapAtPoint(CGPointMake(0, offsetAfterTap.y + 100))];
+
+  // Check the fake omnibox is displayed again at the same position.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          FakeOmniboxAccessibilityID())]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  GREYAssertEqual(
+      origin.y, collectionView.contentOffset.y,
+      @"The collection is not scrolled back to its previous position");
+}
+
+// Tests that tapping the fake omnibox then unfocusing it moves the collection
+// back to where it was.
+- (void)testTapFakeOmniboxScrollScrolled {
+  // Get the collection and its layout.
+  UIView* collection = ntp_home::CollectionView();
+  GREYAssertTrue([collection isKindOfClass:[UICollectionView class]],
+                 @"The collection has not been correctly selected.");
+  UICollectionView* collectionView = (UICollectionView*)collection;
+
+  // Scroll to have a position different from the default.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          ContentSuggestionCollectionView()]
+      performAction:grey_scrollInDirection(kGREYDirectionDown, 50)];
+
+  // Offset before the tap.
+  CGPoint origin = collectionView.contentOffset;
+
+  // Tap the omnibox to focus it.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          FakeOmniboxAccessibilityID())]
+      performAction:grey_tap()];
+
+  // Unfocus the omnibox.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          ContentSuggestionCollectionView()]
+      performAction:grey_tapAtPoint(
+                        CGPointMake(0, collectionView.contentOffset.y + 100))];
+
+  // Check the fake omnibox is displayed again at the same position.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          FakeOmniboxAccessibilityID())]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // The collection might be slightly moved on iPhone.
+  GREYAssertTrue(
+      collectionView.contentOffset.y >= origin.y &&
+          collectionView.contentOffset.y <= origin.y + 6,
+      @"The collection is not scrolled back to its previous position");
+}
+
+#pragma mark - Helpers
+
+- (void)addMostVisitedTile {
+  self.testServer->RegisterRequestHandler(base::Bind(&StandardResponse));
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL pageURL = self.testServer->GetURL(kPageURL);
+
+  // Clear history to ensure the tile will be shown.
+  chrome_test_util::ClearBrowsingHistory();
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGrey loadURL:pageURL];
+  [ChromeEarlGrey waitForWebViewContainingText:kPageLoadedString];
+
+  // After loading URL, need to do another action before opening a new tab
+  // with the icon present.
+  [ChromeEarlGrey goBack];
+  [[self class] closeAllTabs];
+  chrome_test_util::OpenNewTab();
 }
 
 @end

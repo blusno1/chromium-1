@@ -4,11 +4,12 @@
 
 #include "modules/accessibility/AXObject.h"
 
+#include <memory>
+#include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
@@ -45,7 +46,7 @@ TEST_F(AXObjectTest, IsARIAWidget) {
       "id=\"focusable-parent\">focusable-parent</div></div><br>"
       "</body>";
 
-  GetDocument().documentElement()->setInnerHTML(test_content);
+  GetDocument().documentElement()->SetInnerHTMLFromString(test_content);
   GetDocument().UpdateStyleAndLayout();
   Element* root(GetDocument().documentElement());
   EXPECT_FALSE(AXObjectCache::IsInsideFocusableElementOrARIAWidget(

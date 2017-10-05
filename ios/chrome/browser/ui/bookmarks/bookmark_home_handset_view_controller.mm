@@ -49,11 +49,6 @@ using bookmarks::BookmarkNode;
 @interface BookmarkHomeHandsetViewController ()<BookmarkMenuViewDelegate,
                                                 BookmarkPanelViewDelegate>
 
-// When the view is first shown on the screen, this property represents the
-// cached value of the y of the content offset of the folder view. This
-// property is set to nil after it is used.
-@property(nonatomic, strong) NSNumber* cachedContentPosition;
-
 #pragma mark Navigation bar
 
 - (void)updateNavigationBarWithDuration:(CGFloat)duration
@@ -79,11 +74,12 @@ using bookmarks::BookmarkNode;
 
 @implementation BookmarkHomeHandsetViewController
 
-@synthesize cachedContentPosition = _cachedContentPosition;
-
 - (instancetype)initWithLoader:(id<UrlLoader>)loader
-                  browserState:(ios::ChromeBrowserState*)browserState {
-  self = [super initWithLoader:loader browserState:browserState];
+                  browserState:(ios::ChromeBrowserState*)browserState
+                    dispatcher:(id<ApplicationCommands>)dispatcher {
+  self = [super initWithLoader:loader
+                  browserState:browserState
+                    dispatcher:dispatcher];
   if (self) {
     self.sideSwipingPossible = YES;
   }
@@ -133,8 +129,6 @@ using bookmarks::BookmarkNode;
 - (void)viewWillLayoutSubviews {
   [super viewWillLayoutSubviews];
   if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
-    // TODO(crbug.com/695749): See if we need to store/restore the content
-    // scroll position for BookmarkTableView here.
     return;
   }
 

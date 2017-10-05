@@ -13,24 +13,15 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "content/browser/background_fetch/background_fetch_data_manager.h"
+#include "content/browser/background_fetch/background_fetch_delegate_proxy.h"
+#include "content/browser/background_fetch/background_fetch_event_dispatcher.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/WebKit/public/platform/modules/background_fetch/background_fetch.mojom.h"
 
-namespace net {
-class URLRequestContextGetter;
-}
-
-namespace url {
-class Origin;
-}
-
 namespace content {
 
-class BackgroundFetchDataManager;
-class BackgroundFetchDelegate;
-class BackgroundFetchDelegateProxy;
-class BackgroundFetchEventDispatcher;
 class BackgroundFetchJobController;
 struct BackgroundFetchOptions;
 class BackgroundFetchRegistrationId;
@@ -53,11 +44,6 @@ class CONTENT_EXPORT BackgroundFetchContext
       BrowserContext* browser_context,
       const scoped_refptr<ServiceWorkerContextWrapper>& service_worker_context);
 
-  // Finishes initializing the Background Fetch context on the IO thread by
-  // setting the |request_context_getter|.
-  void InitializeOnIOThread(
-      scoped_refptr<net::URLRequestContextGetter> request_context_getter);
-
   // Starts a Background Fetch for the |registration_id|. The |requests| will be
   // asynchronously fetched. The |callback| will be invoked when the fetch has
   // been registered, or an error occurred that avoids it from doing so.
@@ -66,16 +52,12 @@ class CONTENT_EXPORT BackgroundFetchContext
                   const BackgroundFetchOptions& options,
                   blink::mojom::BackgroundFetchService::FetchCallback callback);
 
-  // Returns a vector with the ids of the active fetches for the given |origin|
-  // and |service_worker_registration_id|.
-  std::vector<std::string> GetActiveIdsForServiceWorkerRegistration(
-      int64_t service_worker_registration_id,
-      const url::Origin& origin) const;
-
   // Returns the JobController that is handling the |registration_id|, or a
   // nullptr if it does not exist. Must be immediately used by the caller.
   BackgroundFetchJobController* GetActiveFetch(
       const BackgroundFetchRegistrationId& registration_id) const;
+
+  BackgroundFetchDataManager& data_manager() { return data_manager_; }
 
  private:
   friend class base::DeleteHelper<BackgroundFetchContext>;
@@ -118,15 +100,12 @@ class CONTENT_EXPORT BackgroundFetchContext
   // |this| is owned, indirectly, by the BrowserContext.
   BrowserContext* browser_context_;
 
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
+  BackgroundFetchDataManager data_manager_;
+  BackgroundFetchEventDispatcher event_dispatcher_;
+  BackgroundFetchDelegateProxy delegate_proxy_;
 
-  std::unique_ptr<BackgroundFetchDataManager> data_manager_;
-  std::unique_ptr<BackgroundFetchEventDispatcher> event_dispatcher_;
-  std::unique_ptr<BackgroundFetchDelegate, BrowserThread::DeleteOnUIThread>
-      delegate_;
-  std::unique_ptr<BackgroundFetchDelegateProxy> delegate_proxy_;
-
-  // Map of the Background Fetch fetches that are currently in-progress.
+  // Map of the Background Fetch fetches that are currently in-progress. Must
+  // be destroyed before |data_manager_|.
   std::map<BackgroundFetchRegistrationId,
            std::unique_ptr<BackgroundFetchJobController>>
       active_fetches_;

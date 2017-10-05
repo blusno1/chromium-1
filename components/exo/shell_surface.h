@@ -94,8 +94,8 @@ class ShellSurface : public SurfaceTreeHost,
 
   // Set the callback to run when the surface state changed.
   using StateChangedCallback =
-      base::Callback<void(ash::wm::WindowStateType old_state_type,
-                          ash::wm::WindowStateType new_state_type)>;
+      base::Callback<void(ash::mojom::WindowStateType old_state_type,
+                          ash::mojom::WindowStateType new_state_type)>;
   void set_state_changed_callback(
       const StateChangedCallback& state_changed_callback) {
     state_changed_callback_ = state_changed_callback;
@@ -107,7 +107,7 @@ class ShellSurface : public SurfaceTreeHost,
   // in steps of NxM pixels).
   using ConfigureCallback =
       base::Callback<uint32_t(const gfx::Size& size,
-                              ash::wm::WindowStateType state_type,
+                              ash::mojom::WindowStateType state_type,
                               bool resizing,
                               bool activated,
                               const gfx::Vector2d& origin_offset)>;
@@ -228,7 +228,6 @@ class ShellSurface : public SurfaceTreeHost,
 
   // Overridden from SurfaceDelegate:
   void OnSurfaceCommit() override;
-  void OnSurfaceContentSizeChanged() override;
   void OnSetFrame(SurfaceFrameType type) override;
 
   // Overridden from SurfaceObserver:
@@ -259,10 +258,12 @@ class ShellSurface : public SurfaceTreeHost,
   gfx::Size GetMinimumSize() const override;
 
   // Overridden from ash::wm::WindowStateObserver:
-  void OnPreWindowStateTypeChange(ash::wm::WindowState* window_state,
-                                  ash::wm::WindowStateType old_type) override;
-  void OnPostWindowStateTypeChange(ash::wm::WindowState* window_state,
-                                   ash::wm::WindowStateType old_type) override;
+  void OnPreWindowStateTypeChange(
+      ash::wm::WindowState* window_state,
+      ash::mojom::WindowStateType old_type) override;
+  void OnPostWindowStateTypeChange(
+      ash::wm::WindowState* window_state,
+      ash::mojom::WindowStateType old_type) override;
 
   // Overridden from aura::WindowObserver:
   void OnWindowBoundsChanged(aura::Window* window,
@@ -293,7 +294,7 @@ class ShellSurface : public SurfaceTreeHost,
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
 
-  // Ovrridden ui::CompositorLockClient:
+  // Overridden from ui::CompositorLockClient:
   void CompositorLockTimedOut() override;
 
   aura::Window* shadow_overlay() { return shadow_overlay_.get(); }
@@ -302,15 +303,9 @@ class ShellSurface : public SurfaceTreeHost,
   Surface* surface_for_testing() { return root_surface(); }
 
  private:
+  struct Config;
   class ScopedConfigure;
   class ScopedAnimationsDisabled;
-
-  // Surface state associated with each configure request.
-  struct Config {
-    uint32_t serial;
-    gfx::Vector2d origin_offset;
-    int resize_component;
-  };
 
   // Creates the |widget_| for |surface_|. |show_state| is the initial state
   // of the widget (e.g. maximized).
@@ -361,7 +356,9 @@ class ShellSurface : public SurfaceTreeHost,
 
   // Lock the compositor if it's not already locked, or extends the
   // lock timeout if it's already locked.
-  void EnsureCompositorIsLocked();
+  // TODO(reveman): Remove this when using configure callbacks for orientation.
+  // crbug.com/765954
+  void EnsureCompositorIsLockedForOrientationChange();
 
   views::Widget* widget_ = nullptr;
   aura::Window* parent_;
@@ -386,6 +383,7 @@ class ShellSurface : public SurfaceTreeHost,
   StateChangedCallback state_changed_callback_;
   ConfigureCallback configure_callback_;
   ScopedConfigure* scoped_configure_ = nullptr;
+  std::unique_ptr<ui::CompositorLock> configure_compositor_lock_;
   bool ignore_window_bounds_changes_ = false;
   gfx::Vector2d origin_offset_;
   gfx::Vector2d pending_origin_offset_;
@@ -397,18 +395,20 @@ class ShellSurface : public SurfaceTreeHost,
   gfx::Rect shadow_content_bounds_;
   bool shadow_content_bounds_changed_ = false;
   float shadow_background_opacity_ = 1.0;
-  base::circular_deque<Config> pending_configs_;
+  base::circular_deque<std::unique_ptr<Config>> pending_configs_;
   std::unique_ptr<ash::WindowResizer> resizer_;
   std::unique_ptr<ScopedAnimationsDisabled> scoped_animations_disabled_;
   int top_inset_height_ = 0;
   int pending_top_inset_height_ = 0;
   bool shadow_underlay_in_surface_ = true;
   bool pending_shadow_underlay_in_surface_ = true;
+  // TODO(reveman): Use configure callbacks for orientation. crbug.com/765954
   Orientation pending_orientation_ = Orientation::LANDSCAPE;
   Orientation orientation_ = Orientation::LANDSCAPE;
   Orientation expected_orientation_ = Orientation::LANDSCAPE;
-  std::unique_ptr<ui::CompositorLock> compositor_lock_;
+  std::unique_ptr<ui::CompositorLock> orientation_compositor_lock_;
   bool system_modal_ = false;
+  bool non_system_modal_window_was_active_ = false;
   gfx::ImageSkia icon_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellSurface);

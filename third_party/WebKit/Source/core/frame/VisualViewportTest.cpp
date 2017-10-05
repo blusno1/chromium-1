@@ -1243,15 +1243,16 @@ TEST_P(VisualViewportTest, ScrollIntoViewFractionalOffset) {
   EXPECT_SIZE_EQ(FloatSize(250.5f, 100.5f), visual_viewport.GetScrollOffset());
 }
 
-static ScrollOffset expectedMaxFrameViewScrollOffset(
+static ScrollOffset expectedMaxLayoutViewportScrollOffset(
     VisualViewport& visual_viewport,
     LocalFrameView& frame_view) {
   float aspect_ratio = visual_viewport.VisibleRect().Width() /
                        visual_viewport.VisibleRect().Height();
   float new_height = frame_view.FrameRect().Width() / aspect_ratio;
-  return ScrollOffset(
-      frame_view.ContentsSize().Width() - frame_view.FrameRect().Width(),
-      frame_view.ContentsSize().Height() - new_height);
+  IntSize contents_size =
+      frame_view.LayoutViewportScrollableArea()->ContentsSize();
+  return ScrollOffset(contents_size.Width() - frame_view.FrameRect().Width(),
+                      contents_size.Height() - new_height);
 }
 
 TEST_P(VisualViewportTest, TestBrowserControlsAdjustment) {
@@ -1283,8 +1284,9 @@ TEST_P(VisualViewportTest, TestBrowserControlsAdjustment) {
   // The outer viewport (LocalFrameView) should be affected as well.
   frame_view.LayoutViewportScrollableArea()->ScrollBy(
       ScrollOffset(10000, 10000), kUserScroll);
-  EXPECT_SIZE_EQ(expectedMaxFrameViewScrollOffset(visual_viewport, frame_view),
-                 frame_view.LayoutViewportScrollableArea()->GetScrollOffset());
+  EXPECT_SIZE_EQ(
+      expectedMaxLayoutViewportScrollOffset(visual_viewport, frame_view),
+      frame_view.LayoutViewportScrollableArea()->GetScrollOffset());
 
   // Simulate bringing up the browser controls by 10.5px.
   WebView()->ApplyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(),
@@ -1300,8 +1302,9 @@ TEST_P(VisualViewportTest, TestBrowserControlsAdjustment) {
   // The outer viewport (LocalFrameView) should be affected as well.
   frame_view.LayoutViewportScrollableArea()->ScrollBy(
       ScrollOffset(10000, 10000), kUserScroll);
-  EXPECT_SIZE_EQ(expectedMaxFrameViewScrollOffset(visual_viewport, frame_view),
-                 frame_view.LayoutViewportScrollableArea()->GetScrollOffset());
+  EXPECT_SIZE_EQ(
+      expectedMaxLayoutViewportScrollOffset(visual_viewport, frame_view),
+      frame_view.LayoutViewportScrollableArea()->GetScrollOffset());
 }
 
 TEST_P(VisualViewportTest, TestBrowserControlsAdjustmentWithScale) {
@@ -1333,7 +1336,7 @@ TEST_P(VisualViewportTest, TestBrowserControlsAdjustmentWithScale) {
   frame_view.LayoutViewportScrollableArea()->ScrollBy(
       ScrollOffset(10000, 10000), kUserScroll);
   ScrollOffset expected =
-      expectedMaxFrameViewScrollOffset(visual_viewport, frame_view);
+      expectedMaxLayoutViewportScrollOffset(visual_viewport, frame_view);
   EXPECT_SIZE_EQ(expected,
                  frame_view.LayoutViewportScrollableArea()->GetScrollOffset());
 
@@ -1370,8 +1373,9 @@ TEST_P(VisualViewportTest, TestBrowserControlsAdjustmentWithScale) {
 
   frame_view.LayoutViewportScrollableArea()->ScrollBy(
       ScrollOffset(10000, 10000), kUserScroll);
-  EXPECT_SIZE_EQ(expectedMaxFrameViewScrollOffset(visual_viewport, frame_view),
-                 frame_view.LayoutViewportScrollableArea()->GetScrollOffset());
+  EXPECT_SIZE_EQ(
+      expectedMaxLayoutViewportScrollOffset(visual_viewport, frame_view),
+      frame_view.LayoutViewportScrollableArea()->GetScrollOffset());
 }
 
 // Tests that a scroll all the way to the bottom of the page, while hiding the
@@ -1420,7 +1424,7 @@ TEST_P(VisualViewportTest, TestBrowserControlsAdjustmentAndResize) {
                  visual_viewport.VisibleRect().Size());
 
   ScrollOffset frame_view_expected =
-      expectedMaxFrameViewScrollOffset(visual_viewport, frame_view);
+      expectedMaxLayoutViewportScrollOffset(visual_viewport, frame_view);
   ScrollOffset visual_viewport_expected = ScrollOffset(
       750, layout_viewport_height - visual_viewport_height / page_scale);
 
@@ -1702,7 +1706,7 @@ TEST_P(VisualViewportTest, visualViewportIsInert) {
 
   LocalDOMWindow* window =
       web_view_impl->MainFrameImpl()->GetFrame()->DomWindow();
-  HTMLElement* html = toHTMLHtmlElement(window->document()->documentElement());
+  HTMLElement* html = ToHTMLHtmlElement(window->document()->documentElement());
 
   ASSERT_EQ(200, window->innerWidth());
   ASSERT_EQ(300, window->innerHeight());
@@ -1941,7 +1945,7 @@ TEST_P(VisualViewportTest, WindowDimensionsOnLoad) {
   Element* output = GetFrame()->GetDocument()->getElementById("output");
   DCHECK(output);
   EXPECT_EQ(std::string("1600x1200"),
-            std::string(output->innerHTML().Ascii().data()));
+            std::string(output->InnerHTMLAsString().Ascii().data()));
 }
 
 // Similar to above but make sure the initial scale is updated with the content
@@ -1957,7 +1961,7 @@ TEST_P(VisualViewportTest, WindowDimensionsOnLoadWideContent) {
   Element* output = GetFrame()->GetDocument()->getElementById("output");
   DCHECK(output);
   EXPECT_EQ(std::string("2000x1500"),
-            std::string(output->innerHTML().Ascii().data()));
+            std::string(output->InnerHTMLAsString().Ascii().data()));
 }
 
 TEST_P(VisualViewportTest, PinchZoomGestureScrollsVisualViewportOnly) {

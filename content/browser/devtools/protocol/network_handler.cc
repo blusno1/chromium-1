@@ -11,6 +11,7 @@
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/containers/hash_tables.h"
+#include "base/containers/queue.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -21,6 +22,9 @@
 #include "content/browser/devtools/protocol/security.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/common/devtools/devtools_network_conditions.h"
+#include "content/common/devtools/devtools_network_controller.h"
+#include "content/common/devtools/devtools_network_transaction.h"
 #include "content/common/navigation_params.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -30,6 +34,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_context.h"
+#include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -357,7 +362,7 @@ std::vector<GURL> ComputeCookieURLs(RenderFrameHostImpl* frame_host,
     for (size_t i = 0; i < actual_urls->length(); i++)
       urls.push_back(GURL(actual_urls->get(i)));
   } else {
-    std::queue<FrameTreeNode*> queue;
+    base::queue<FrameTreeNode*> queue;
     queue.push(frame_host->frame_tree_node());
     while (!queue.empty()) {
       FrameTreeNode* node = queue.front();
@@ -565,9 +570,9 @@ class NetworkNavigationThrottle : public content::NavigationThrottle {
   NavigationThrottle::ThrottleCheckResult WillProcessResponse() override {
     if (network_handler_ && network_handler_->ShouldCancelNavigation(
                                 navigation_handle()->GetGlobalRequestID())) {
-      return ThrottleCheckResult::CANCEL_AND_IGNORE;
+      return CANCEL_AND_IGNORE;
     }
-    return ThrottleCheckResult::PROCEED;
+    return PROCEED;
   }
 
   const char* GetNameForLogging() override {
@@ -579,14 +584,29 @@ class NetworkNavigationThrottle : public content::NavigationThrottle {
   DISALLOW_COPY_AND_ASSIGN(NetworkNavigationThrottle);
 };
 
+void ConfigureServiceWorkerContextOnIO() {
+  std::set<std::string> headers;
+  headers.insert(
+      DevToolsNetworkTransaction::kDevToolsEmulateNetworkConditionsClientId);
+  content::ServiceWorkerContext::AddExcludedHeadersForFetchEvent(headers);
+}
+
 }  // namespace
 
-NetworkHandler::NetworkHandler()
+NetworkHandler::NetworkHandler(const std::string& host_id)
     : DevToolsDomainHandler(Network::Metainfo::domainName),
       host_(nullptr),
       enabled_(false),
       interception_enabled_(false),
-      weak_factory_(this) {}
+      host_id_(host_id),
+      weak_factory_(this) {
+  static bool have_configured_service_worker_context = false;
+  if (have_configured_service_worker_context)
+    return;
+  have_configured_service_worker_context = true;
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::BindOnce(&ConfigureServiceWorkerContextOnIO));
+}
 
 NetworkHandler::~NetworkHandler() {
 }
@@ -617,6 +637,10 @@ Response NetworkHandler::Disable() {
   enabled_ = false;
   user_agent_ = std::string();
   SetRequestInterceptionEnabled(false, Maybe<protocol::Array<String>>());
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&DevToolsNetworkController::SetNetworkState, host_id_,
+                     nullptr));
   return Response::FallThrough();
 }
 
@@ -776,8 +800,26 @@ Response NetworkHandler::SetUserAgentOverride(const std::string& user_agent) {
 }
 
 Response NetworkHandler::CanEmulateNetworkConditions(bool* result) {
-  *result = false;
+  *result = true;
   return Response::OK();
+}
+
+Response NetworkHandler::EmulateNetworkConditions(
+    bool offline,
+    double latency,
+    double download_throughput,
+    double upload_throughput,
+    Maybe<protocol::Network::ConnectionType>) {
+  std::unique_ptr<DevToolsNetworkConditions> conditions(
+      new DevToolsNetworkConditions(offline, std::max(latency, 0.0),
+                                    std::max(download_throughput, 0.0),
+                                    std::max(upload_throughput, 0.0)));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&DevToolsNetworkController::SetNetworkState, host_id_,
+                     std::move(conditions)));
+
+  return Response::FallThrough();
 }
 
 void NetworkHandler::NavigationPreloadRequestSent(
@@ -1028,6 +1070,7 @@ void NetworkHandler::ContinueInterceptedRequest(
   }
 
   base::Optional<net::Error> error;
+  bool mark_as_canceled = false;
   if (error_reason.isJust()) {
     bool ok;
     error = NetErrorFromString(error_reason.fromJust(), &ok);
@@ -1035,6 +1078,8 @@ void NetworkHandler::ContinueInterceptedRequest(
       callback->sendFailure(Response::InvalidParams("Invalid errorReason."));
       return;
     }
+
+    mark_as_canceled = true;
 
     if (error_reason.fromJust() == Network::ErrorReasonEnum::Aborted) {
       auto it = navigation_requests_.find(interception_id);
@@ -1053,7 +1098,7 @@ void NetworkHandler::ContinueInterceptedRequest(
       base::MakeUnique<DevToolsURLRequestInterceptor::Modifications>(
           std::move(error), std::move(raw_response), std::move(url),
           std::move(method), std::move(post_data), std::move(headers),
-          std::move(auth_challenge_response)),
+          std::move(auth_challenge_response), mark_as_canceled),
       std::move(callback));
 }
 

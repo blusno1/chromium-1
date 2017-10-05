@@ -48,7 +48,12 @@ IntegrationTestRunner._setupTestHelpers = function(target) {
  */
 TestRunner.evaluateInPage = async function(code, callback) {
   var lines = new Error().stack.split('at ');
-  var components = lines[lines.length - 2].trim().split('/');
+
+  // Handles cases where the function is safe wrapped
+  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
+  var functionLine = lines.reduce((acc, line) => line.includes(testScriptURL) ? line : acc, lines[lines.length - 2]);
+
+  var components = functionLine.trim().split('/');
   var source = components[components.length - 1].slice(0, -1).split(':');
   var fileName = source[0];
   var lineOffset = parseInt(source[1], 10);
@@ -155,17 +160,15 @@ TestRunner.loadHTML = function(html) {
 
 /**
  * @param {string} path
- * @return {!Promise<!SDK.RemoteObject>}
+ * @return {!Promise<!SDK.RemoteObject|undefined>}
  */
 TestRunner.addScriptTag = function(path) {
-  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
-  var resolvedPath = testScriptURL + '/../' + path;
-
-  return TestRunner.evaluateInPagePromise(`
+  return TestRunner.evaluateInPageAsync(`
     (function(){
       var script = document.createElement('script');
-      script.src = '${resolvedPath}';
+      script.src = '${TestRunner.url(path)}';
       document.head.append(script);
+      return new Promise(f => script.onload = f);
     })();
   `);
 };
@@ -175,15 +178,12 @@ TestRunner.addScriptTag = function(path) {
  * @return {!Promise<!SDK.RemoteObject|undefined>}
  */
 TestRunner.addStylesheetTag = function(path) {
-  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
-  var resolvedPath = testScriptURL + '/../' + path;
-
   return TestRunner.evaluateInPageAsync(`
     (function(){
       var link = document.createElement('link');
       link.rel = 'stylesheet';
       link.type = 'text/css';
-      link.href = '${resolvedPath}';
+      link.href = '${TestRunner.url(path)}';
       link.onload = onload;
       document.head.append(link);
       var resolve;
@@ -203,26 +203,29 @@ TestRunner.addStylesheetTag = function(path) {
  * @return {!Promise<!SDK.RemoteObject|undefined>}
  */
 TestRunner.addIframe = function(path) {
-  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
-  var resolvedPath = testScriptURL + '/../' + path;
-
   return TestRunner.evaluateInPageAsync(`
     (function(){
       var iframe = document.createElement('iframe');
-      iframe.src = '${resolvedPath}';
-      iframe.onload = onload;
+      iframe.src = '${TestRunner.url(path)}';
       document.body.appendChild(iframe);
-
-      var resolve;
-      var promise = new Promise(r => resolve = r);
-      function onload() {
-        resolve();
-      }
-      return promise;
+      return new Promise(f => iframe.onload = f);
     })();
   `);
 };
 
+/** @type {number} */
+TestRunner._pendingInits = 0;
+
+/**
+ * @param {string} code
+ */
+TestRunner.initAsync = async function(code) {
+  TestRunner._pendingInits++;
+  await TestRunner.RuntimeAgent.invoke_evaluate({expression: code, objectGroup: 'console'});
+  TestRunner._pendingInits--;
+  if (!TestRunner._pendingInits)
+    TestRunner._resolveOnFinishInits();
+};
 
 /**
  * @param {string} title
@@ -824,6 +827,15 @@ TestRunner.waitForUISourceCodeRemoved = function(callback) {
   Workspace.workspace.once(Workspace.Workspace.Events.UISourceCodeRemoved).then(callback);
 };
 
+/**
+ * @param {string} relativeURL
+ * @return {string}
+ */
+TestRunner.url = function(relativeURL) {
+  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
+  return testScriptURL + '/../' + relativeURL;
+};
+
 /** @type {boolean} */
 IntegrationTestRunner._startedTest = false;
 
@@ -852,13 +864,13 @@ IntegrationTestRunner.TestObserver = class {
 };
 
 IntegrationTestRunner.runTest = async function() {
-  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
-  var basePath = testScriptURL + '/../';
-  await TestRunner.evaluateInPagePromise(`
+  var basePath = TestRunner.url('');
+  var code = `
     function relativeToTest(relativePath) {
       return '${basePath}' + relativePath;
     }
-  `);
+  `;
+  await TestRunner.RuntimeAgent.invoke_evaluate({expression: code, objectGroup: 'console'});
   TestRunner.executeTestScript();
 };
 

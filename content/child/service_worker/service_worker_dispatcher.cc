@@ -9,6 +9,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_local.h"
@@ -16,12 +17,9 @@
 #include "base/trace_event/trace_event.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
 #include "content/child/service_worker/service_worker_provider_context.h"
-#include "content/child/service_worker/service_worker_registration_handle_reference.h"
 #include "content/child/service_worker/web_service_worker_impl.h"
 #include "content/child/service_worker/web_service_worker_registration_impl.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/child/webmessageportchannel_impl.h"
-#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/content_constants.h"
@@ -29,6 +27,7 @@
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebNavigationPreloadState.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProviderClient.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "url/url_constants.h"
 
 using blink::WebServiceWorkerError;
@@ -72,8 +71,6 @@ void ServiceWorkerDispatcher::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ServiceWorkerUpdated, OnUpdated)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ServiceWorkerUnregistered,
                         OnUnregistered)
-    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DidGetRegistrationForReady,
-                        OnDidGetRegistrationForReady)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DidEnableNavigationPreload,
                         OnDidEnableNavigationPreload)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DidGetNavigationPreloadState,
@@ -127,18 +124,6 @@ void ServiceWorkerDispatcher::UnregisterServiceWorker(
                            request_id, "Registration ID", registration_id);
   thread_safe_sender_->Send(new ServiceWorkerHostMsg_UnregisterServiceWorker(
       CurrentWorkerId(), request_id, provider_id, registration_id));
-}
-
-void ServiceWorkerDispatcher::GetRegistrationForReady(
-    int provider_id,
-    std::unique_ptr<WebServiceWorkerGetRegistrationForReadyCallbacks>
-        callbacks) {
-  int request_id = get_for_ready_callbacks_.Add(std::move(callbacks));
-  TRACE_EVENT_ASYNC_BEGIN0("ServiceWorker",
-                           "ServiceWorkerDispatcher::GetRegistrationForReady",
-                           request_id);
-  thread_safe_sender_->Send(new ServiceWorkerHostMsg_GetRegistrationForReady(
-      CurrentWorkerId(), request_id, provider_id));
 }
 
 void ServiceWorkerDispatcher::EnableNavigationPreload(
@@ -254,18 +239,16 @@ ServiceWorkerDispatcher::GetOrCreateServiceWorker(
 
 scoped_refptr<WebServiceWorkerRegistrationImpl>
 ServiceWorkerDispatcher::GetOrCreateRegistration(
-    const ServiceWorkerRegistrationObjectInfo& info,
+    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info,
     const ServiceWorkerVersionAttributes& attrs) {
-  RegistrationObjectMap::iterator found = registrations_.find(info.handle_id);
+  RegistrationObjectMap::iterator found = registrations_.find(info->handle_id);
   if (found != registrations_.end())
     return found->second;
 
   // WebServiceWorkerRegistrationImpl constructor calls
-  // AddServiceWorkerRegistration.
-  scoped_refptr<WebServiceWorkerRegistrationImpl> registration(
-      new WebServiceWorkerRegistrationImpl(
-          ServiceWorkerRegistrationHandleReference::Create(
-              info, thread_safe_sender_.get())));
+  // AddServiceWorkerRegistration to add itself into |registrations_|.
+  auto registration =
+      base::MakeRefCounted<WebServiceWorkerRegistrationImpl>(std::move(info));
 
   registration->SetInstalling(
       GetOrCreateServiceWorker(ServiceWorkerHandleReference::Create(
@@ -281,10 +264,10 @@ ServiceWorkerDispatcher::GetOrCreateRegistration(
 
 scoped_refptr<WebServiceWorkerRegistrationImpl>
 ServiceWorkerDispatcher::GetOrAdoptRegistration(
-    const ServiceWorkerRegistrationObjectInfo& info,
+    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info,
     const ServiceWorkerVersionAttributes& attrs) {
-  std::unique_ptr<ServiceWorkerRegistrationHandleReference> registration_ref =
-      Adopt(info);
+  int32_t registration_handle_id = info->handle_id;
+
   std::unique_ptr<ServiceWorkerHandleReference> installing_ref =
       Adopt(attrs.installing);
   std::unique_ptr<ServiceWorkerHandleReference> waiting_ref =
@@ -292,14 +275,15 @@ ServiceWorkerDispatcher::GetOrAdoptRegistration(
   std::unique_ptr<ServiceWorkerHandleReference> active_ref =
       Adopt(attrs.active);
 
-  RegistrationObjectMap::iterator found = registrations_.find(info.handle_id);
+  RegistrationObjectMap::iterator found =
+      registrations_.find(registration_handle_id);
   if (found != registrations_.end())
     return found->second;
 
   // WebServiceWorkerRegistrationImpl constructor calls
-  // AddServiceWorkerRegistration.
-  scoped_refptr<WebServiceWorkerRegistrationImpl> registration(
-      new WebServiceWorkerRegistrationImpl(std::move(registration_ref)));
+  // AddServiceWorkerRegistration to add itself into |registrations_|.
+  auto registration =
+      base::MakeRefCounted<WebServiceWorkerRegistrationImpl>(std::move(info));
   registration->SetInstalling(
       GetOrCreateServiceWorker(std::move(installing_ref)));
   registration->SetWaiting(GetOrCreateServiceWorker(std::move(waiting_ref)));
@@ -342,30 +326,6 @@ void ServiceWorkerDispatcher::OnUnregistered(int thread_id,
     return;
   callbacks->OnSuccess(is_success);
   pending_unregistration_callbacks_.Remove(request_id);
-}
-
-void ServiceWorkerDispatcher::OnDidGetRegistrationForReady(
-    int thread_id,
-    int request_id,
-    const ServiceWorkerRegistrationObjectInfo& info,
-    const ServiceWorkerVersionAttributes& attrs) {
-  TRACE_EVENT_ASYNC_STEP_INTO0(
-      "ServiceWorker",
-      "ServiceWorkerDispatcher::GetRegistrationForReady",
-      request_id,
-      "OnDidGetRegistrationForReady");
-  TRACE_EVENT_ASYNC_END0("ServiceWorker",
-                         "ServiceWorkerDispatcher::GetRegistrationForReady",
-                         request_id);
-  WebServiceWorkerGetRegistrationForReadyCallbacks* callbacks =
-      get_for_ready_callbacks_.Lookup(request_id);
-  DCHECK(callbacks);
-  if (!callbacks)
-    return;
-
-  callbacks->OnSuccess(WebServiceWorkerRegistrationImpl::CreateHandle(
-      GetOrAdoptRegistration(info, attrs)));
-  get_for_ready_callbacks_.Remove(request_id);
 }
 
 void ServiceWorkerDispatcher::OnDidEnableNavigationPreload(int thread_id,
@@ -498,11 +458,11 @@ void ServiceWorkerDispatcher::OnSetNavigationPreloadHeaderError(
 void ServiceWorkerDispatcher::OnServiceWorkerStateChanged(
     int thread_id,
     int handle_id,
-    blink::WebServiceWorkerState state) {
+    blink::mojom::ServiceWorkerState state) {
   TRACE_EVENT2("ServiceWorker",
                "ServiceWorkerDispatcher::OnServiceWorkerStateChanged",
                "Thread ID", thread_id,
-               "State", state);
+               "State", static_cast<int>(state));
   WorkerObjectMap::iterator worker = service_workers_.find(handle_id);
   if (worker != service_workers_.end())
     worker->second->OnStateChanged(state);
@@ -556,14 +516,6 @@ void ServiceWorkerDispatcher::OnSetControllerServiceWorker(
       "ServiceWorker", "ServiceWorkerDispatcher::OnSetControllerServiceWorker",
       "Thread ID", params.thread_id, "Provider ID", params.provider_id);
 
-  mojom::ServiceWorkerEventDispatcherPtrInfo event_dispatcher_ptr_info;
-  if (params.controller_event_dispatcher.is_valid()) {
-    // Chrome doesn't use interface versioning.
-    event_dispatcher_ptr_info = mojom::ServiceWorkerEventDispatcherPtrInfo(
-        mojo::ScopedMessagePipeHandle(params.controller_event_dispatcher),
-        0u /* version */);
-  }
-
   // Adopt the reference sent from the browser process and pass it to the
   // provider context if it exists.
   std::unique_ptr<ServiceWorkerHandleReference> handle_ref =
@@ -571,8 +523,8 @@ void ServiceWorkerDispatcher::OnSetControllerServiceWorker(
   ProviderContextMap::iterator provider =
       provider_contexts_.find(params.provider_id);
   if (provider != provider_contexts_.end()) {
-    provider->second->SetController(std::move(handle_ref), params.used_features,
-                                    std::move(event_dispatcher_ptr_info));
+    provider->second->SetController(std::move(handle_ref),
+                                    params.used_features);
   }
 
   ProviderClientMap::iterator found =
@@ -616,12 +568,10 @@ void ServiceWorkerDispatcher::OnPostMessage(
     return;
   }
 
-  blink::WebMessagePortChannelArray ports =
-      WebMessagePortChannelImpl::CreateFromMessagePorts(params.message_ports);
-
   found->second->DispatchMessageEvent(
       WebServiceWorkerImpl::CreateHandle(worker),
-      blink::WebString::FromUTF16(params.message), std::move(ports));
+      blink::WebString::FromUTF16(params.message),
+      std::move(params.message_ports));
 }
 
 void ServiceWorkerDispatcher::OnCountFeature(int thread_id,
@@ -659,13 +609,6 @@ void ServiceWorkerDispatcher::RemoveServiceWorkerRegistration(
     int registration_handle_id) {
   DCHECK(base::ContainsKey(registrations_, registration_handle_id));
   registrations_.erase(registration_handle_id);
-}
-
-std::unique_ptr<ServiceWorkerRegistrationHandleReference>
-ServiceWorkerDispatcher::Adopt(
-    const ServiceWorkerRegistrationObjectInfo& info) {
-  return ServiceWorkerRegistrationHandleReference::Adopt(
-      info, thread_safe_sender_.get());
 }
 
 std::unique_ptr<ServiceWorkerHandleReference> ServiceWorkerDispatcher::Adopt(

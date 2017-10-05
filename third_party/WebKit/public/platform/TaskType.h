@@ -53,7 +53,7 @@ enum class TaskType : unsigned {
   // https://html.spec.whatwg.org/multipage/webappapis.html#timers
   // This task source is used to queue tasks queued by setInterval() and similar
   // APIs.
-  kTimer,
+  kJavascriptTimer,
 
   // https://html.spec.whatwg.org/multipage/comms.html#sse-processing-model
   // This task source is used for any tasks that are queued by EventSource
@@ -94,6 +94,9 @@ enum class TaskType : unsigned {
   // https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15
   // This task source is used for all tasks in the WebGL spec.
   kWebGL,
+
+  // https://www.w3.org/TR/requestidlecallback/#start-an-event-loop-s-idle-period
+  kIdleTask,
 
   // Use MiscPlatformAPI for a task that is defined in the spec but is not yet
   // associated with any specific task runner in the spec. MiscPlatformAPI is

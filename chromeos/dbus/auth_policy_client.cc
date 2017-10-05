@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 #include "chromeos/dbus/auth_policy_client.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/weak_ptr.h"
@@ -147,7 +149,7 @@ class AuthPolicyClientImpl : public AuthPolicyClient {
       dbus::ObjectProxy::OnConnectedCallback on_connected_callback) override {
     proxy_->ConnectToSignal(authpolicy::kAuthPolicyInterface,
                             std::move(signal_name), std::move(signal_callback),
-                            on_connected_callback);
+                            std::move(on_connected_callback));
   }
 
  protected:

@@ -4,7 +4,6 @@
 
 #include "modules/fetch/FormDataBytesConsumer.h"
 
-#include "core/dom/Document.h"
 #include "core/html/FormData.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
@@ -29,7 +28,7 @@ using ::testing::Return;
 using Checkpoint = ::testing::StrictMock<::testing::MockFunction<void(int)>>;
 using MockBytesConsumer = BytesConsumerTestUtil::MockBytesConsumer;
 
-PassRefPtr<EncodedFormData> ComplexFormData() {
+RefPtr<EncodedFormData> ComplexFormData() {
   RefPtr<EncodedFormData> data = EncodedFormData::Create();
 
   data->AppendData("foo", 3);

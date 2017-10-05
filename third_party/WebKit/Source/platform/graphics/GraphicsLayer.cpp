@@ -45,8 +45,10 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/LinkHighlight.h"
+#include "platform/graphics/compositing/PaintChunksToCcLayer.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/graphics/paint/PropertyTreeState.h"
 #include "platform/graphics/paint/RasterInvalidationTracking.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/json/JSONValues.h"
@@ -61,6 +63,7 @@
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
+#include "public/platform/WebDisplayItemList.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebFloatRect.h"
 #include "public/platform/WebLayer.h"
@@ -248,7 +251,7 @@ void GraphicsLayer::RemoveAllChildren() {
 void GraphicsLayer::RemoveFromParent() {
   if (parent_) {
     // We use reverseFind so that removeAllChildren() isn't n^2.
-    parent_->children_.erase(parent_->children_.ReverseFind(this));
+    parent_->children_.EraseAt(parent_->children_.ReverseFind(this));
     SetParent(0);
   }
 
@@ -1185,7 +1188,7 @@ void GraphicsLayer::AddLinkHighlight(LinkHighlight* link_highlight) {
 }
 
 void GraphicsLayer::RemoveLinkHighlight(LinkHighlight* link_highlight) {
-  link_highlights_.erase(link_highlights_.Find(link_highlight));
+  link_highlights_.EraseAt(link_highlights_.Find(link_highlight));
   UpdateChildList();
 }
 
@@ -1232,11 +1235,6 @@ CompositorElementId GraphicsLayer::GetElementId() const {
   return CompositorElementId();
 }
 
-void GraphicsLayer::SetCompositorMutableProperties(uint32_t properties) {
-  if (WebLayer* layer = PlatformLayer())
-    layer->SetCompositorMutableProperties(properties);
-}
-
 sk_sp<PaintRecord> GraphicsLayer::CaptureRecord() {
   if (!DrawsContent())
     return nullptr;
@@ -1247,6 +1245,17 @@ sk_sp<PaintRecord> GraphicsLayer::CaptureRecord() {
   graphics_context.BeginRecording(bounds);
   GetPaintController().GetPaintArtifact().Replay(bounds, graphics_context);
   return graphics_context.EndRecording();
+}
+
+void GraphicsLayer::SetLayerState(PropertyTreeState&& layer_state,
+                                  const IntPoint& layer_offset) {
+  if (!layer_state_) {
+    layer_state_ = std::make_unique<LayerState>(
+        LayerState{std::move(layer_state), layer_offset});
+    return;
+  }
+  layer_state_->state = std::move(layer_state);
+  layer_state_->offset = layer_offset;
 }
 
 void GraphicsLayer::PaintContents(WebDisplayItemList* web_display_item_list,
@@ -1283,8 +1292,25 @@ void GraphicsLayer::PaintContents(WebDisplayItemList* web_display_item_list,
   if (painting_control != kPaintDefaultBehavior)
     Paint(nullptr, disabled_mode);
 
-  paint_controller.GetPaintArtifact().AppendToWebDisplayItemList(
-      OffsetFromLayoutObjectWithSubpixelAccumulation(), web_display_item_list);
+  if (layer_state_) {
+    DCHECK(RuntimeEnabledFeatures::SlimmingPaintV175Enabled());
+
+    Vector<const PaintChunk*> all_chunks;
+    all_chunks.ReserveInitialCapacity(
+        paint_controller.GetPaintArtifact().PaintChunks().size());
+    for (const auto& chunk : paint_controller.GetPaintArtifact().PaintChunks())
+      all_chunks.push_back(&chunk);
+
+    PaintChunksToCcLayer::ConvertInto(
+        all_chunks, layer_state_->state,
+        gfx::Vector2dF(layer_state_->offset.X(), layer_state_->offset.Y()),
+        paint_controller.GetPaintArtifact().GetDisplayItemList(),
+        *web_display_item_list->GetCcDisplayItemList());
+  } else {
+    paint_controller.GetPaintArtifact().AppendToWebDisplayItemList(
+        OffsetFromLayoutObjectWithSubpixelAccumulation(),
+        web_display_item_list);
+  }
 
   paint_controller.SetDisplayItemConstructionIsDisabled(false);
   paint_controller.SetSubsequenceCachingIsDisabled(false);

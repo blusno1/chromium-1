@@ -121,6 +121,11 @@ void ArcBridgeHostImpl::OnCastReceiverInstanceReady(
                   std::move(cast_receiver_ptr));
 }
 
+void ArcBridgeHostImpl::OnCertStoreInstanceReady(
+    mojom::CertStoreInstancePtr instance_ptr) {
+  OnInstanceReady(arc_bridge_service_->cert_store(), std::move(instance_ptr));
+}
+
 void ArcBridgeHostImpl::OnClipboardInstanceReady(
     mojom::ClipboardInstancePtr clipboard_ptr) {
   OnInstanceReady(arc_bridge_service_->clipboard(), std::move(clipboard_ptr));
@@ -168,6 +173,11 @@ void ArcBridgeHostImpl::OnLockScreenInstanceReady(
 void ArcBridgeHostImpl::OnMetricsInstanceReady(
     mojom::MetricsInstancePtr metrics_ptr) {
   OnInstanceReady(arc_bridge_service_->metrics(), std::move(metrics_ptr));
+}
+
+void ArcBridgeHostImpl::OnMidisInstanceReady(
+    mojom::MidisInstancePtr midis_ptr) {
+  OnInstanceReady(arc_bridge_service_->midis(), std::move(midis_ptr));
 }
 
 void ArcBridgeHostImpl::OnNetInstanceReady(mojom::NetInstancePtr net_ptr) {

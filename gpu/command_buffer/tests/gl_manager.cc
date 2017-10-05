@@ -337,14 +337,15 @@ void GLManager::InitializeWithWorkaroundsImpl(
       options.context_lost_allowed));
 
   decoder_.reset(::gpu::gles2::GLES2Decoder::Create(
-      command_buffer_.get(), command_buffer_->service(), context_group));
+      command_buffer_.get(), command_buffer_->service(), &outputter_,
+      context_group));
   if (options.force_shader_name_hashing) {
     decoder_->SetForceShaderNameHashingForTest(true);
   }
 
   command_buffer_->set_handler(decoder_.get());
 
-  surface_ = gl::init::CreateOffscreenGLSurface(options.size);
+  surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
   ASSERT_TRUE(surface_.get() != NULL) << "could not create offscreen surface";
 
   if (base_context_) {

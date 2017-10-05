@@ -28,6 +28,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "ipc/ipc_export.h"
 #include "ipc/ipc_message_start.h"
 #include "ipc/ipc_param_traits.h"
 #include "ipc/ipc_sync_message.h"
@@ -364,7 +365,7 @@ template <class P>
 struct ParamTraits<std::vector<P>> {
   typedef std::vector<P> param_type;
   static void Write(base::Pickle* m, const param_type& p) {
-    WriteParam(m, static_cast<int>(p.size()));
+    WriteParam(m, base::checked_cast<int>(p.size()));
     for (size_t i = 0; i < p.size(); i++)
       WriteParam(m, p[i]);
   }
@@ -398,7 +399,7 @@ template <class P>
 struct ParamTraits<std::set<P> > {
   typedef std::set<P> param_type;
   static void Write(base::Pickle* m, const param_type& p) {
-    WriteParam(m, static_cast<int>(p.size()));
+    WriteParam(m, base::checked_cast<int>(p.size()));
     typename param_type::const_iterator iter;
     for (iter = p.begin(); iter != p.end(); ++iter)
       WriteParam(m, *iter);
@@ -426,7 +427,7 @@ template <class K, class V, class C, class A>
 struct ParamTraits<std::map<K, V, C, A> > {
   typedef std::map<K, V, C, A> param_type;
   static void Write(base::Pickle* m, const param_type& p) {
-    WriteParam(m, static_cast<int>(p.size()));
+    WriteParam(m, base::checked_cast<int>(p.size()));
     typename param_type::const_iterator iter;
     for (iter = p.begin(); iter != p.end(); ++iter) {
       WriteParam(m, iter->first);
@@ -694,7 +695,7 @@ template <class P, size_t stack_capacity>
 struct ParamTraits<base::StackVector<P, stack_capacity> > {
   typedef base::StackVector<P, stack_capacity> param_type;
   static void Write(base::Pickle* m, const param_type& p) {
-    WriteParam(m, static_cast<int>(p->size()));
+    WriteParam(m, base::checked_cast<int>(p->size()));
     for (size_t i = 0; i < p->size(); i++)
       WriteParam(m, p[i]);
   }
@@ -734,7 +735,7 @@ struct ParamTraits<base::small_map<NormalMap, kArraySize, EqualKey, MapInit>> {
   using K = typename param_type::key_type;
   using V = typename param_type::data_type;
   static void Write(base::Pickle* m, const param_type& p) {
-    WriteParam(m, static_cast<int>(p.size()));
+    WriteParam(m, base::checked_cast<int>(p.size()));
     typename param_type::const_iterator iter;
     for (iter = p.begin(); iter != p.end(); ++iter) {
       WriteParam(m, iter->first);
@@ -767,7 +768,7 @@ struct ParamTraits<base::flat_map<Key, Mapped, Compare>> {
   using param_type = base::flat_map<Key, Mapped, Compare>;
   static void Write(base::Pickle* m, const param_type& p) {
     DCHECK(base::IsValueInRangeForNumericType<int>(p.size()));
-    WriteParam(m, static_cast<int>(p.size()));
+    WriteParam(m, base::checked_cast<int>(p.size()));
     for (const auto& iter : p) {
       WriteParam(m, iter.first);
       WriteParam(m, iter.second);

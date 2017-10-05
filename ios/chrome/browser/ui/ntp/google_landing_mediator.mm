@@ -33,7 +33,6 @@
 #import "ios/chrome/browser/ui/ntp/google_landing_consumer.h"
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
 #include "ios/chrome/browser/ui/ntp/ntp_tile_saver.h"
-#import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
@@ -402,7 +401,8 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
       _browserState, new_tab_page_uma::ACTION_OPENED_MOST_VISITED_ENTRY);
   base::RecordAction(UserMetricsAction("MobileNTPMostVisited"));
   const ntp_tiles::NTPTile& tile = _mostVisitedData[visitedIndex];
-  ntp_tiles::metrics::RecordTileClick(visitedIndex, tile.source, tileType);
+  ntp_tiles::metrics::RecordTileClick(visitedIndex, tile.title_source,
+                                      tile.source, tileType);
 }
 
 - (ReadingListModel*)readingListModel {
@@ -468,7 +468,7 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
     ntp_tiles::NTPTile& ntpTile = _mostVisitedDataForLogging[i];
     if (ntpTile.url == URL) {
       ntp_tiles::metrics::RecordTileImpression(
-          i, ntpTile.source, tileType, URL,
+          i, ntpTile.title_source, ntpTile.source, tileType, URL,
           GetApplicationContext()->GetRapporServiceImpl());
       // Reset the URL to be sure to log the impression only once.
       ntpTile.url = GURL();

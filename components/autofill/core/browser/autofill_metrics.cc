@@ -233,13 +233,9 @@ void LogUMAHistogramEnumeration(const std::string& name,
   DCHECK_LT(sample, boundary_value);
 
   // Note: This leaks memory, which is expected behavior.
-  base::HistogramBase* histogram =
-      base::LinearHistogram::FactoryGet(
-          name,
-          1,
-          boundary_value,
-          boundary_value + 1,
-          base::HistogramBase::kUmaTargetedHistogramFlag);
+  base::HistogramBase* histogram = base::LinearHistogram::FactoryGet(
+      name, 1, boundary_value, boundary_value + 1,
+      base::HistogramBase::kUmaTargetedHistogramFlag);
   histogram->Add(sample);
 }
 
@@ -248,13 +244,9 @@ void LogUMAHistogramEnumeration(const std::string& name,
 void LogUMAHistogramLongTimes(const std::string& name,
                               const base::TimeDelta& duration) {
   // Note: This leaks memory, which is expected behavior.
-  base::HistogramBase* histogram =
-      base::Histogram::FactoryTimeGet(
-          name,
-          base::TimeDelta::FromMilliseconds(1),
-          base::TimeDelta::FromHours(1),
-          50,
-          base::HistogramBase::kUmaTargetedHistogramFlag);
+  base::HistogramBase* histogram = base::Histogram::FactoryTimeGet(
+      name, base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromHours(1),
+      50, base::HistogramBase::kUmaTargetedHistogramFlag);
   histogram->AddTime(duration);
 }
 
@@ -702,7 +694,7 @@ void AutofillMetrics::LogServerPredictionQualityMetrics(
     QualityMetricType metric_type) {
   LogPredictionQualityMetrics(
       PREDICTION_SOURCE_SERVER,
-      AutofillType(field.server_type()).GetStorableType(),
+      AutofillType(field.overall_server_type()).GetStorableType(),
       form_interactions_ukm_logger, form, field, metric_type);
 }
 
@@ -734,30 +726,24 @@ void AutofillMetrics::LogUserHappinessMetric(UserHappinessMetric metric) {
 void AutofillMetrics::LogFormFillDurationFromLoadWithAutofill(
     const base::TimeDelta& duration) {
   UMA_HISTOGRAM_CUSTOM_TIMES("Autofill.FillDuration.FromLoad.WithAutofill",
-                             duration,
-                             base::TimeDelta::FromMilliseconds(100),
-                             base::TimeDelta::FromMinutes(10),
-                             50);
+                             duration, base::TimeDelta::FromMilliseconds(100),
+                             base::TimeDelta::FromMinutes(10), 50);
 }
 
 // static
 void AutofillMetrics::LogFormFillDurationFromLoadWithoutAutofill(
     const base::TimeDelta& duration) {
   UMA_HISTOGRAM_CUSTOM_TIMES("Autofill.FillDuration.FromLoad.WithoutAutofill",
-                             duration,
-                             base::TimeDelta::FromMilliseconds(100),
-                             base::TimeDelta::FromMinutes(10),
-                             50);
+                             duration, base::TimeDelta::FromMilliseconds(100),
+                             base::TimeDelta::FromMinutes(10), 50);
 }
 
 // static
 void AutofillMetrics::LogFormFillDurationFromInteractionWithAutofill(
     const base::TimeDelta& duration) {
   UMA_HISTOGRAM_CUSTOM_TIMES(
-      "Autofill.FillDuration.FromInteraction.WithAutofill",
-      duration,
-      base::TimeDelta::FromMilliseconds(100),
-      base::TimeDelta::FromMinutes(10),
+      "Autofill.FillDuration.FromInteraction.WithAutofill", duration,
+      base::TimeDelta::FromMilliseconds(100), base::TimeDelta::FromMinutes(10),
       50);
 }
 
@@ -765,11 +751,9 @@ void AutofillMetrics::LogFormFillDurationFromInteractionWithAutofill(
 void AutofillMetrics::LogFormFillDurationFromInteractionWithoutAutofill(
     const base::TimeDelta& duration) {
   UMA_HISTOGRAM_CUSTOM_TIMES(
-       "Autofill.FillDuration.FromInteraction.WithoutAutofill",
-       duration,
-       base::TimeDelta::FromMilliseconds(100),
-       base::TimeDelta::FromMinutes(10),
-       50);
+      "Autofill.FillDuration.FromInteraction.WithoutAutofill", duration,
+      base::TimeDelta::FromMilliseconds(100), base::TimeDelta::FromMinutes(10),
+      50);
 }
 
 // static
@@ -917,6 +901,18 @@ void AutofillMetrics::LogStoredCreditCardMetrics(
 }
 
 // static
+void AutofillMetrics::LogNumberOfCreditCardsSuppressedForDisuse(
+    size_t num_cards) {
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.CreditCardsSuppressedForDisuse",
+                            num_cards);
+}
+
+// static
+void AutofillMetrics::LogNumberOfCreditCardsDeletedForDisuse(size_t num_cards) {
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.CreditCardsDeletedForDisuse", num_cards);
+}
+
+// static
 void AutofillMetrics::LogNumberOfProfilesAtAutofillableFormSubmission(
     size_t num_profiles) {
   UMA_HISTOGRAM_COUNTS(
@@ -935,6 +931,12 @@ void AutofillMetrics::LogNumberOfAddressesSuppressedForDisuse(
     size_t num_profiles) {
   UMA_HISTOGRAM_COUNTS_1000("Autofill.AddressesSuppressedForDisuse",
                             num_profiles);
+}
+
+// static
+void AutofillMetrics::LogNumberOfAddressesDeletedForDisuse(
+    size_t num_profiles) {
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.AddressesDeletedForDisuse", num_profiles);
 }
 
 // static
@@ -1116,6 +1118,8 @@ AutofillMetrics::FormEventLogger::FormEventLogger(
       has_logged_will_submit_(false),
       has_logged_submitted_(false),
       has_logged_bank_name_available_(false),
+      has_logged_detected_card_in_submitted_form_(false),
+      has_logged_submitted_known_card(false),
       logged_suggestion_filled_was_server_data_(false),
       logged_suggestion_filled_was_masked_server_card_(false),
       form_interactions_ukm_logger_(form_interactions_ukm_logger) {}
@@ -1303,11 +1307,31 @@ void AutofillMetrics::FormEventLogger::OnFormSubmitted() {
 
   if (has_logged_suggestions_shown_) {
     Log(AutofillMetrics::FORM_EVENT_SUGGESTION_SHOWN_SUBMITTED_ONCE);
+    if (is_for_credit_card_ && !has_logged_suggestion_filled_) {
+      if (!has_logged_detected_card_in_submitted_form_) {
+        Log(AutofillMetrics::
+                FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_NO_CARD);
+      } else if (has_logged_submitted_known_card) {
+        Log(AutofillMetrics::
+                FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_KNOWN_CARD);
+      } else {
+        Log(AutofillMetrics::
+                FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_UNKNOWN_CARD);
+      }
+    }
   }
 }
 
 void AutofillMetrics::FormEventLogger::SetBankNameAvailable() {
   has_logged_bank_name_available_ = true;
+}
+
+void AutofillMetrics::FormEventLogger::DetectedCardInSubmittedForm() {
+  has_logged_detected_card_in_submitted_form_ = true;
+}
+
+void AutofillMetrics::FormEventLogger::SubmittedKnownCard() {
+  has_logged_submitted_known_card = true;
 }
 
 void AutofillMetrics::FormEventLogger::Log(FormEvent event) const {
@@ -1389,7 +1413,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogSuggestionsShown(
   ukm::builders::Autofill_SuggestionsShown(source_id_)
       .SetHeuristicType(static_cast<int>(field.heuristic_type()))
       .SetHtmlFieldType(static_cast<int>(field.html_type()))
-      .SetServerType(static_cast<int>(field.server_type()))
+      .SetServerType(static_cast<int>(field.overall_server_type()))
       .SetMillisecondsSinceFormParsed(
           MillisecondsSinceFormParsed(form_parsed_timestamp))
       .Record(ukm_recorder_);
@@ -1437,7 +1461,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogTextFieldDidChange(
   ukm::builders::Autofill_TextFieldDidChange(source_id_)
       .SetFieldTypeGroup(static_cast<int>(field.Type().group()))
       .SetHeuristicType(static_cast<int>(field.heuristic_type()))
-      .SetServerType(static_cast<int>(field.server_type()))
+      .SetServerType(static_cast<int>(field.overall_server_type()))
       .SetHtmlFieldType(static_cast<int>(field.html_type()))
       .SetHtmlFieldMode(static_cast<int>(field.html_mode()))
       .SetIsAutofilled(field.is_autofilled)

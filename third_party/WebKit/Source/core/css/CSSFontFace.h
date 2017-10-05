@@ -49,7 +49,7 @@ class CORE_EXPORT CSSFontFace final
 
  public:
   CSSFontFace(FontFace* font_face, Vector<UnicodeRange>& ranges)
-      : ranges_(AdoptRef(new UnicodeRangeSet(ranges))),
+      : ranges_(WTF::AdoptRef(new UnicodeRangeSet(ranges))),
         segmented_font_face_(nullptr),
         font_face_(font_face) {
     DCHECK(font_face_);
@@ -68,7 +68,8 @@ class CORE_EXPORT CSSFontFace final
   void AddSource(CSSFontFaceSource*);
 
   void DidBeginLoad();
-  void FontLoaded(RemoteFontFaceSource*);
+  enum class LoadFinishReason { WasCancelled, NormalFinish };
+  void FontLoaded(RemoteFontFaceSource*, LoadFinishReason);
   void DidBecomeVisibleFallback(RemoteFontFaceSource*);
 
   RefPtr<SimpleFontData> GetFontData(const FontDescription&);

@@ -32,7 +32,6 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "build/build_config.h"
-#include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/clipboard/DataTransfer.h"
 #include "core/dom/DOMNodeIds.h"
@@ -44,6 +43,7 @@
 #include "core/dom/events/EventPath.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionController.h"
 #include "core/events/GestureEvent.h"
@@ -64,6 +64,7 @@
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLFrameSetElement.h"
 #include "core/html/HTMLInputElement.h"
+#include "core/html_names.h"
 #include "core/input/EventHandlingUtil.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/input/TouchActionUtil.h"
@@ -86,12 +87,12 @@
 #include "core/paint/PaintLayer.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/CursorData.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WindowsKeyboardCodes.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/graphics/Image.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/wtf/Assertions.h"
@@ -116,7 +117,7 @@ bool ShouldRefetchEventTarget(const MouseEventWithHitTestResults& mev) {
   if (!target_node || !target_node->parentNode())
     return true;
   return target_node->IsShadowRoot() &&
-         isHTMLInputElement(ToShadowRoot(target_node)->host());
+         IsHTMLInputElement(ToShadowRoot(target_node)->host());
 }
 
 }  // namespace
@@ -172,8 +173,7 @@ EventHandler::EventHandler(LocalFrame& frame)
       should_only_fire_drag_over_event_(false),
       scroll_manager_(new ScrollManager(frame)),
       mouse_event_manager_(new MouseEventManager(frame, *scroll_manager_)),
-      mouse_wheel_event_manager_(
-          new MouseWheelEventManager(frame, *scroll_manager_)),
+      mouse_wheel_event_manager_(new MouseWheelEventManager(frame)),
       keyboard_event_manager_(
           new KeyboardEventManager(frame, *scroll_manager_)),
       pointer_event_manager_(
@@ -214,7 +214,7 @@ void EventHandler::Clear() {
   frame_set_being_resized_ = nullptr;
   drag_target_ = nullptr;
   should_only_fire_drag_over_event_ = false;
-  last_mouse_down_user_gesture_token_.Clear();
+  last_mouse_down_user_gesture_token_ = nullptr;
   capturing_mouse_events_node_ = nullptr;
   pointer_event_manager_->Clear();
   scroll_manager_->Clear();
@@ -320,8 +320,8 @@ IntPoint EventHandler::DragDataTransferLocationForTesting() {
 }
 
 static bool IsSubmitImage(Node* node) {
-  return isHTMLInputElement(node) &&
-         toHTMLInputElement(node)->type() == InputTypeNames::image;
+  return IsHTMLInputElement(node) &&
+         ToHTMLInputElement(node)->type() == InputTypeNames::image;
 }
 
 bool EventHandler::UseHandCursor(Node* node, bool is_over_link) {
@@ -371,23 +371,20 @@ void EventHandler::UpdateCursor() {
   }
 }
 
-bool EventHandler::ShouldShowIBeamForNode(const Node* node,
-                                          const HitTestResult& result) {
-  if (!node)
-    return false;
-
+bool EventHandler::ShouldShowResizeForNode(const Node* node,
+                                           const HitTestResult& result) {
   if (LayoutObject* layout_object = node->GetLayoutObject()) {
     PaintLayer* layer = layout_object->EnclosingLayer();
     if (layer->GetScrollableArea() &&
         layer->GetScrollableArea()->IsPointInResizeControl(
             result.RoundedPointInMainFrame(), kResizerForPointer)) {
-      return false;
-    }
-
-    if (layout_object->IsText() && node->CanStartSelection())
       return true;
+    }
   }
+  return false;
+}
 
+bool EventHandler::IsSelectingLink(const HitTestResult& result) {
   // If a drag may be starting or we're capturing mouse events for a particular
   // node, don't treat this as a selection. Note calling
   // ComputeVisibleSelectionInDOMTreeDeprecated may update layout.
@@ -399,9 +396,18 @@ bool EventHandler::ShouldShowIBeamForNode(const Node* node,
       !frame_->Selection()
            .ComputeVisibleSelectionInDOMTreeDeprecated()
            .IsNone();
-  const bool mouse_selects_link = mouse_selection && result.IsOverLink();
+  return mouse_selection && result.IsOverLink();
+}
 
-  return mouse_selects_link || HasEditableStyle(*node);
+bool EventHandler::ShouldShowIBeamForNode(const Node* node,
+                                          const HitTestResult& result) {
+  if (!node)
+    return false;
+
+  if (node->IsTextNode() && (node->CanStartSelection() || result.IsOverLink()))
+    return true;
+
+  return HasEditableStyle(*node);
 }
 
 OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
@@ -420,6 +426,9 @@ OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
   Node* node = result.InnerPossiblyPseudoNode();
   if (!node)
     return SelectAutoCursor(result, node, IBeamCursor());
+
+  if (ShouldShowResizeForNode(node, result))
+    return PointerCursor();
 
   LayoutObject* layout_object = node->GetLayoutObject();
   const ComputedStyle* style = layout_object ? layout_object->Style() : nullptr;
@@ -469,17 +478,17 @@ OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
     }
   }
 
+  bool horizontal_text = !style || style->IsHorizontalWritingMode();
+  const Cursor& i_beam = horizontal_text ? IBeamCursor() : VerticalTextCursor();
+
   switch (style ? style->Cursor() : ECursor::kAuto) {
     case ECursor::kAuto: {
-      bool horizontal_text = !style || style->IsHorizontalWritingMode();
-      const Cursor& i_beam =
-          horizontal_text ? IBeamCursor() : VerticalTextCursor();
       return SelectAutoCursor(result, node, i_beam);
     }
     case ECursor::kCrosshair:
       return CrossCursor();
     case ECursor::kPointer:
-      return HandCursor();
+      return IsSelectingLink(result) ? i_beam : HandCursor();
     case ECursor::kMove:
       return MoveCursor();
     case ECursor::kAllScroll:
@@ -513,7 +522,7 @@ OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
     case ECursor::kRowResize:
       return RowResizeCursor();
     case ECursor::kText:
-      return IBeamCursor();
+      return i_beam;
     case ECursor::kWait:
       return WaitCursor();
     case ECursor::kHelp:
@@ -553,12 +562,6 @@ OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
 OptionalCursor EventHandler::SelectAutoCursor(const HitTestResult& result,
                                               Node* node,
                                               const Cursor& i_beam) {
-  const bool is_over_link =
-      !GetSelectionController().MouseDownMayStartSelect() &&
-      result.IsOverLink();
-  if (UseHandCursor(node, is_over_link))
-    return HandCursor();
-
   if (ShouldShowIBeamForNode(node, result))
     return i_beam;
 
@@ -2046,7 +2049,6 @@ bool EventHandler::PassMousePressEventToScrollbar(
 
   if (!scrollbar || !scrollbar->Enabled())
     return false;
-  scroll_manager_->SetFrameWasScrolledByUser();
   scrollbar->MouseDown(mev.Event());
   return true;
 }

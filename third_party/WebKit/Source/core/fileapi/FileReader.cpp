@@ -38,6 +38,7 @@
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/ProgressEvent.h"
 #include "core/fileapi/File.h"
+#include "core/frame/UseCounter.h"
 #include "core/probe/CoreProbes.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "platform/Supplementable.h"
@@ -350,14 +351,20 @@ void FileReader::abort() {
                  WTF::Bind(&FileReader::Terminate, WrapPersistent(this)));
 }
 
-void FileReader::result(StringOrArrayBuffer& result_attribute) const {
+void FileReader::result(ScriptState* state,
+                        StringOrArrayBuffer& result_attribute) const {
   if (error_ || !loader_)
     return;
 
+  if (!loader_->HasFinishedLoading()) {
+    UseCounter::Count(ExecutionContext::From(state),
+                      WebFeature::kFileReaderResultBeforeCompletion);
+  }
+
   if (read_type_ == FileReaderLoader::kReadAsArrayBuffer)
-    result_attribute.setArrayBuffer(loader_->ArrayBufferResult());
+    result_attribute.SetArrayBuffer(loader_->ArrayBufferResult());
   else
-    result_attribute.setString(loader_->StringResult());
+    result_attribute.SetString(loader_->StringResult());
 }
 
 void FileReader::Terminate() {

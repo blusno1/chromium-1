@@ -35,7 +35,6 @@
 #include "SkFontMgr.h"
 #include "SkTypeface_win.h"
 #include "platform/Language.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontFaceCreationParams.h"
 #include "platform/fonts/FontPlatformData.h"
@@ -110,7 +109,7 @@ FontCache::FontCache() : purge_prevent_count_(0) {
 
 // Given the desired base font, this will create a SimpleFontData for a specific
 // font that can be used to render the given range of characters.
-PassRefPtr<SimpleFontData> FontCache::FallbackFontForCharacter(
+RefPtr<SimpleFontData> FontCache::FallbackFontForCharacter(
     const FontDescription& font_description,
     UChar32 character,
     const SimpleFontData* original_font_data,

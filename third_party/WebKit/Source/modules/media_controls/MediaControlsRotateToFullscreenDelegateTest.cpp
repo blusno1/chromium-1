@@ -4,7 +4,6 @@
 
 #include "modules/media_controls/MediaControlsRotateToFullscreenDelegate.h"
 
-#include "core/HTMLNames.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
@@ -15,6 +14,7 @@
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLAudioElement.h"
 #include "core/html/HTMLVideoElement.h"
+#include "core/html_names.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
 #include "modules/device_orientation/DeviceOrientationController.h"
@@ -495,6 +495,36 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   // the necessary hardware to support the Device Orientation API.
   DeviceOrientationController::From(GetDocument())
       .SetOverride(DeviceOrientationData::Create());
+  testing::RunPendingTasks();
+
+  // Play video.
+  PlayVideo();
+  UpdateVisibilityObserver();
+
+  EXPECT_TRUE(ObservedVisibility());
+
+  // Rotate screen to landscape.
+  RotateTo(kWebScreenOrientationLandscapePrimary);
+
+  // Should not enter fullscreen since Device Orientation is not available.
+  EXPECT_FALSE(GetVideo().IsFullscreen());
+}
+
+TEST_F(MediaControlsRotateToFullscreenDelegateTest,
+       EnterFailZeroDeviceOrientation) {
+  // Portrait screen, landscape video.
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480),
+                     false /* with_device_orientation */);
+  EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
+  EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
+
+  // Dispatch a Device Orientation event where all values are zero, as happens
+  // on poorly configured devices that lack the necessary hardware to support
+  // the Device Orientation API, but don't properly expose that lack.
+  DeviceOrientationController::From(GetDocument())
+      .SetOverride(
+          DeviceOrientationData::Create(0.0 /* alpha */, 0.0 /* beta */,
+                                        0.0 /* gamma */, false /* absolute */));
   testing::RunPendingTasks();
 
   // Play video.

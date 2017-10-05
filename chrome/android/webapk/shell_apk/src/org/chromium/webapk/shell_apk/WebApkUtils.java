@@ -16,6 +16,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.TextView;
@@ -23,6 +24,7 @@ import android.widget.TextView;
 import org.chromium.webapk.lib.common.WebApkConstants;
 import org.chromium.webapk.lib.common.WebApkMetaDataKeys;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -34,6 +36,8 @@ import java.util.Set;
  */
 public class WebApkUtils {
     public static final String SHARED_PREF_RUNTIME_HOST = "runtime_host";
+
+    private static final String TAG = "cr_WebApkUtils";
 
     /**
      * The package names of the channels of Chrome that support WebAPKs. The most preferred one
@@ -131,32 +135,31 @@ public class WebApkUtils {
      * scheme and host name in this case, and append orginal intent url if |loggedIntentUrlParam| is
      * set.
      */
-    public static String rewriteIntentUrlIfNecessary(String startUrl, Bundle metadata) {
-        String returnUrl = startUrl;
+    public static String rewriteIntentUrlIfNecessary(String intentStartUrl, Bundle metadata) {
         String scopeUrl = metadata.getString(WebApkMetaDataKeys.SCOPE);
-        if (!TextUtils.isEmpty(scopeUrl)) {
-            Uri parsedStartUrl = Uri.parse(startUrl);
-            Uri parsedScope = Uri.parse(scopeUrl);
+        String startUrl = metadata.getString(WebApkMetaDataKeys.START_URL);
+        String loggedIntentUrlParam =
+                metadata.getString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM);
 
-            if (!parsedStartUrl.getScheme().equals(parsedScope.getScheme())
-                    || !parsedStartUrl.getEncodedAuthority().equals(
-                               parsedScope.getEncodedAuthority())) {
-                Uri.Builder returnUrlBuilder =
-                        parsedStartUrl.buildUpon()
-                                .scheme(parsedScope.getScheme())
-                                .encodedAuthority(parsedScope.getEncodedAuthority());
-
-                String loggedIntentUrlParam =
-                        metadata.getString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM);
-                if (loggedIntentUrlParam != null && !TextUtils.isEmpty(loggedIntentUrlParam)) {
-                    String orginalUrl = Uri.encode(startUrl).toString();
-                    returnUrlBuilder.appendQueryParameter(loggedIntentUrlParam, orginalUrl);
-                }
-
-                returnUrl = returnUrlBuilder.build().toString();
-            }
+        if (TextUtils.isEmpty(scopeUrl) || TextUtils.isEmpty(loggedIntentUrlParam)) {
+            return intentStartUrl;
         }
-        return returnUrl;
+
+        if (!isUrlInScope(intentStartUrl, scopeUrl)) {
+            Uri.Builder returnUrlBuilder = Uri.parse(startUrl).buildUpon();
+            returnUrlBuilder.appendQueryParameter(loggedIntentUrlParam, intentStartUrl);
+            return returnUrlBuilder.toString();
+        }
+
+        return intentStartUrl;
+    }
+
+    private static boolean isUrlInScope(String url, String scopeUrl) {
+        Uri parsedUrl = Uri.parse(url);
+        Uri parsedScopeUrl = Uri.parse(scopeUrl);
+        return parsedUrl.getScheme().equals(parsedScopeUrl.getScheme())
+                && parsedUrl.getHost().equals(parsedScopeUrl.getHost())
+                && parsedUrl.getPath().startsWith(parsedScopeUrl.getPath());
     }
 
     /**
@@ -306,8 +309,9 @@ public class WebApkUtils {
         titleView.setTextSize(
                 TypedValue.COMPLEX_UNIT_PX, res.getDimension(R.dimen.headline_size_medium));
         int dialogContentPadding = res.getDimensionPixelSize(R.dimen.dialog_content_padding);
-        setPaddingInPixel(
-                titleView, dialogContentPadding, dialogContentPadding, dialogContentPadding, 0);
+        int titleBottomPadding = res.getDimensionPixelSize(R.dimen.title_bottom_padding);
+        setPaddingInPixel(titleView, dialogContentPadding, dialogContentPadding,
+                dialogContentPadding, titleBottomPadding);
 
         int dialogContentTopPadding = res.getDimensionPixelSize(R.dimen.dialog_content_top_padding);
         setPaddingInPixel(contentView, dialogContentPadding, dialogContentTopPadding,
@@ -323,6 +327,24 @@ public class WebApkUtils {
             return res.getColor(id, null);
         } else {
             return res.getColor(id);
+        }
+    }
+
+    /** Delete the given File and (if it's a directory) everything within it. */
+    public static void deletePath(File file) {
+        if (file == null) return;
+
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deletePath(child);
+                }
+            }
+        }
+
+        if (!file.delete()) {
+            Log.e(TAG, "Failed to delete : " + file.getAbsolutePath());
         }
     }
 }

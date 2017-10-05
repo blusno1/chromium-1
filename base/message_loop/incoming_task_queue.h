@@ -13,7 +13,6 @@
 #include "base/pending_task.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/lock.h"
-#include "base/synchronization/read_write_lock.h"
 #include "base/time/time.h"
 
 namespace base {
@@ -37,7 +36,7 @@ class BASE_EXPORT IncomingTaskQueue
   // Returns true if the task was successfully added to the queue, otherwise
   // returns false. In all cases, the ownership of |task| is transferred to the
   // called method.
-  bool AddToIncomingQueue(const tracked_objects::Location& from_here,
+  bool AddToIncomingQueue(const Location& from_here,
                           OnceClosure task,
                           TimeDelta delay,
                           bool nestable);
@@ -70,47 +69,53 @@ class BASE_EXPORT IncomingTaskQueue
   // does not retain |pending_task->task| beyond this function call.
   bool PostPendingTask(PendingTask* pending_task);
 
+  // Does the real work of posting a pending task. Returns true if the caller
+  // should call ScheduleWork() on the message loop.
+  bool PostPendingTaskLockRequired(PendingTask* pending_task);
+
   // Wakes up the message loop and schedules work.
   void ScheduleWork();
 
+  // Checks calls made only on the MessageLoop thread.
+  SEQUENCE_CHECKER(sequence_checker_);
+
   debug::TaskAnnotator task_annotator_;
+
+  // True if we always need to call ScheduleWork when receiving a new task, even
+  // if the incoming queue was not empty.
+  const bool always_schedule_work_;
+
+  // Lock that protects |message_loop_| to prevent it from being deleted while
+  // a request is made to schedule work.
+  base::Lock message_loop_lock_;
+
+  // Points to the message loop that owns |this|.
+  MessageLoop* message_loop_;
+
+  // Synchronizes access to all members below this line.
+  base::Lock incoming_queue_lock_;
 
   // Number of tasks that require high resolution timing. This value is kept
   // so that ReloadWorkQueue() completes in constant time.
-  int high_res_task_count_;
-
-  // The lock that protects access to the members of this class, except
-  // |message_loop_|.
-  base::Lock incoming_queue_lock_;
-
-  // Lock that protects |message_loop_| to prevent it from being deleted while a
-  // task is being posted.
-  base::subtle::ReadWriteLock message_loop_lock_;
+  int high_res_task_count_ = 0;
 
   // An incoming queue of tasks that are acquired under a mutex for processing
   // on this instance's thread. These tasks have not yet been been pushed to
   // |message_loop_|.
   TaskQueue incoming_queue_;
 
-  // Points to the message loop that owns |this|.
-  MessageLoop* message_loop_;
+  // True if new tasks should be accepted.
+  bool accept_new_tasks_ = true;
 
   // The next sequence number to use for delayed tasks.
-  int next_sequence_num_;
+  int next_sequence_num_ = 0;
 
   // True if our message loop has already been scheduled and does not need to be
   // scheduled again until an empty reload occurs.
-  bool message_loop_scheduled_;
-
-  // True if we always need to call ScheduleWork when receiving a new task, even
-  // if the incoming queue was not empty.
-  const bool always_schedule_work_;
+  bool message_loop_scheduled_ = false;
 
   // False until StartScheduling() is called.
-  bool is_ready_for_scheduling_;
-
-  // Checks calls made only on the MessageLoop thread.
-  SEQUENCE_CHECKER(sequence_checker_);
+  bool is_ready_for_scheduling_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(IncomingTaskQueue);
 };

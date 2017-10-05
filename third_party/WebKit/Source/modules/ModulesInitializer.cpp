@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ModulesInitializer.h"
+#include "modules/ModulesInitializer.h"
 
 #include "bindings/modules/v8/ModuleBindingsInitializer.h"
 #include "core/EventTypeNames.h"
@@ -19,9 +19,8 @@
 #include "core/inspector/InspectorSession.h"
 #include "core/leak_detector/BlinkLeakDetector.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
-#include "core/origin_trials/OriginTrials.h"
+#include "core/origin_trials/origin_trials.h"
 #include "core/page/ChromeClient.h"
-#include "core/workers/Worker.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerContentSettingsClient.h"
 #include "modules/EventModulesFactory.h"
@@ -36,8 +35,7 @@
 #include "modules/audio_output_devices/HTMLMediaElementAudioOutputDevice.h"
 #include "modules/cachestorage/InspectorCacheStorageAgent.h"
 #include "modules/canvas2d/CanvasRenderingContext2D.h"
-#include "modules/compositorworker/AbstractAnimationWorkletThread.h"
-#include "modules/compositorworker/CompositorWorkerThread.h"
+#include "modules/compositorworker/AnimationWorkletThread.h"
 #include "modules/credentialmanager/CredentialManagerClient.h"
 #include "modules/csspaint/CSSPaintImageGeneratorImpl.h"
 #include "modules/device_orientation/DeviceMotionController.h"
@@ -278,7 +276,7 @@ void ModulesInitializer::ForceNextWebGLContextCreationToFail() const {
 }
 
 void ModulesInitializer::CollectAllGarbageForAnimationWorklet() const {
-  AbstractAnimationWorkletThread::CollectAllGarbage();
+  AnimationWorkletThread::CollectAllGarbage();
 }
 
 }  // namespace blink

@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/strings/string16.h"
-#include "chrome/browser/ui/search/search_model.h"
 
 class GURL;
 class Profile;
@@ -71,9 +70,6 @@ bool NavEntryIsInstantNTP(const content::WebContents* contents,
 // Returns true if |url| corresponds to a New Tab page that would get rendered
 // by Instant.
 bool IsInstantNTPURL(const GURL& url, Profile* profile);
-
-// Returns URLs associated with the default search engine for |profile|.
-std::vector<GURL> GetSearchURLs(Profile* profile);
 
 
 // Transforms the input |url| into its "effective URL". |url| must be an

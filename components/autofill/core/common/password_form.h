@@ -185,8 +185,8 @@ struct PasswordForm {
 
   // This member is populated in cases where we there are multiple posssible
   // password values. Used in pending password state, to populate a dropdown
-  // for possible passwords. Optional.
-  std::vector<base::string16> other_possible_passwords;
+  // for possible passwords. Contains all possible passwords. Optional.
+  std::vector<base::string16> all_possible_passwords;
 
   // The name of the input element corresponding to the current password.
   // Optional (improves scoring).
@@ -337,7 +337,11 @@ struct PasswordForm {
 
   PasswordForm();
   PasswordForm(const PasswordForm& other);
+  PasswordForm(PasswordForm&& other);
   ~PasswordForm();
+
+  PasswordForm& operator=(const PasswordForm& form);
+  PasswordForm& operator=(PasswordForm&& form);
 };
 
 // True if the unique keys for the forms are the same. The unique key is

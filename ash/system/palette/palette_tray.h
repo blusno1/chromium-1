@@ -86,7 +86,7 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   void Initialize() override;
   bool PerformAction(const ui::Event& event) override;
   void CloseBubble() override;
-  void ShowBubble() override;
+  void ShowBubble(bool show_by_click) override;
   views::TrayBubbleView* GetBubbleView() override;
 
   // PaletteToolManager::Delegate:
@@ -130,6 +130,9 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
 
   // Called when the has seen stylus pref has changed.
   void OnHasSeenStylusPrefChanged();
+
+  // Deactivates the active tool. Returns false if there was no active tool.
+  bool DeactivateActiveTool();
 
   std::unique_ptr<PaletteToolManager> palette_tool_manager_;
   std::unique_ptr<TrayBubbleWrapper> bubble_;

@@ -207,10 +207,11 @@ def ParseGTestOutput(output, symbolizer, device_abi):
 def ParseGTestXML(xml_content):
   """Parse gtest XML result."""
   results = []
+  if not xml_content:
+    return results
 
   html = HTMLParser.HTMLParser()
 
-  # TODO(jbudorick): Unclear how this handles crashes.
   testsuites = xml.etree.ElementTree.fromstring(xml_content)
   for testsuite in testsuites:
     suite_name = testsuite.attrib['name']
@@ -286,10 +287,13 @@ class GtestTestInstance(test_instance.TestInstance):
     self._extract_test_list_from_filter = args.extract_test_list_from_filter
     self._filter_tests_lock = threading.Lock()
     self._shard_timeout = args.shard_timeout
+    self._should_save_logcat = bool(args.json_results_file)
     self._store_tombstones = args.store_tombstones
     self._total_external_shards = args.test_launcher_total_shards
     self._suite = args.suite_name[0]
     self._symbolizer = stack_symbolizer.Symbolizer(None, False)
+    self._gs_test_artifacts_bucket = args.gs_test_artifacts_bucket
+    self._wait_for_java_debugger = args.wait_for_java_debugger
 
     # GYP:
     if args.executable_dist_dir:
@@ -324,6 +328,8 @@ class GtestTestInstance(test_instance.TestInstance):
         self._extras[_EXTRA_SHARD_SIZE_LIMIT] = 1
         self._extras[EXTRA_SHARD_NANO_TIMEOUT] = int(1e9 * self._shard_timeout)
         self._shard_timeout = 10 * self._shard_timeout
+      if args.wait_for_java_debugger:
+        self._extras[EXTRA_SHARD_NANO_TIMEOUT] = int(1e15)  # Forever
 
     if not self._apk_helper and not self._exe_dist_dir:
       error_func('Could not find apk or executable for %s' % self._suite)
@@ -417,6 +423,10 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._flags
 
   @property
+  def gs_test_artifacts_bucket(self):
+    return self._gs_test_artifacts_bucket
+
+  @property
   def gtest_filter(self):
     return self._gtest_filter
 
@@ -435,6 +445,12 @@ class GtestTestInstance(test_instance.TestInstance):
   @property
   def shard_timeout(self):
     return self._shard_timeout
+
+  # TODO(jbudorick): Remove this once mikecase lands
+  # https://codereview.chromium.org/2933993002/
+  @property
+  def should_save_logcat(self):
+    return self._should_save_logcat
 
   @property
   def store_tombstones(self):
@@ -455,6 +471,10 @@ class GtestTestInstance(test_instance.TestInstance):
   @property
   def total_external_shards(self):
     return self._total_external_shards
+
+  @property
+  def wait_for_java_debugger(self):
+    return self._wait_for_java_debugger
 
   #override
   def TestType(self):

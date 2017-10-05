@@ -52,11 +52,14 @@ class CORE_EXPORT Navigator final : public GarbageCollected<Navigator>,
   // NavigatorCookies
   bool cookieEnabled() const;
 
+  bool webdriver() const { return true; }
+
   float deviceMemory() const;
   String productSub() const;
   String vendor() const;
   String vendorSub() const;
 
+  String platform() const override;
   String userAgent() const override;
 
   // NavigatorLanguage

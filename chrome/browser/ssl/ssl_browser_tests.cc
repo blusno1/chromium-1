@@ -16,6 +16,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -44,6 +45,7 @@
 #include "chrome/browser/ssl/certificate_reporting_test_utils.h"
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate.h"
 #include "chrome/browser/ssl/common_name_mismatch_handler.h"
+#include "chrome/browser/ssl/mitm_software_blocking_page.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ssl/ssl_blocking_page.h"
 #include "chrome/browser/ssl/ssl_error_assistant.pb.h"
@@ -138,10 +140,6 @@
 #include "chrome/browser/ssl/captive_portal_blocking_page.h"
 #endif
 
-#if !defined(OS_IOS)
-#include "chrome/browser/ssl/mitm_software_blocking_page.h"
-#endif
-
 #if defined(USE_NSS_CERTS)
 #include "chrome/browser/net/nss_context.h"
 #include "net/cert/nss_cert_database.h"
@@ -159,6 +157,10 @@ using web_modal::WebContentsModalDialogManager;
 
 const base::FilePath::CharType kDocRoot[] =
     FILE_PATH_LITERAL("chrome/test/data");
+
+const uint32_t kLargeVersionId = 0xFFFFFFu;
+
+const char kHstsTestHostName[] = "hsts-example.test";
 
 namespace {
 
@@ -389,6 +391,18 @@ bool ComparePreAndPostInterstitialSSLStatuses(const content::SSLStatus& one,
          one.key_exchange_group == two.key_exchange_group &&
          one.connection_status == two.connection_status &&
          one.pkp_bypassed == two.pkp_bypassed;
+}
+
+// Set HSTS for the test host name, so that all errors thrown on this domain
+// will be nonoverridable.
+void SetHSTSForHostName(
+    scoped_refptr<net::URLRequestContextGetter> context_getter) {
+  net::TransportSecurityState* state =
+      context_getter->GetURLRequestContext()->transport_security_state();
+  const base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
+  EXPECT_FALSE(state->ShouldUpgradeToSSL(kHstsTestHostName));
+  state->AddHSTS(kHstsTestHostName, expiry, false);
+  EXPECT_TRUE(state->ShouldUpgradeToSSL(kHstsTestHostName));
 }
 
 }  // namespace
@@ -827,6 +841,18 @@ class SSLUITestWithExtendedReporting : public SSLUITest {
   }
 };
 
+class SSLUITestHSTS : public SSLUITest {
+ public:
+  void SetUpOnMainThread() override {
+    SSLUITest::SetUpOnMainThread();
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &SetHSTSForHostName,
+            base::RetainedRef(browser()->profile()->GetRequestContext())));
+  }
+};
+
 // Visits a regular page over http.
 IN_PROC_BROWSER_TEST_F(SSLUITest, TestHTTP) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -923,16 +949,16 @@ class SecurityStateWebContentsObserver : public content::WebContentsObserver {
   base::RunLoop run_loop_;
 };
 
-// A WebContentsObserver that allows the user to wait for a same-page
-// navigation. Tests using this observer will fail if a non-same-page navigation
-// completes after calling WaitForSamePageNavigation.
-class SamePageNavigationObserver : public content::WebContentsObserver {
+// A WebContentsObserver that allows the user to wait for a same-document
+// navigation. Tests using this observer will fail if a non-same-document
+// navigation completes after calling WaitForSameDocumentNavigation.
+class SameDocumentNavigationObserver : public content::WebContentsObserver {
  public:
-  explicit SamePageNavigationObserver(content::WebContents* web_contents)
+  explicit SameDocumentNavigationObserver(content::WebContents* web_contents)
       : content::WebContentsObserver(web_contents) {}
-  ~SamePageNavigationObserver() override {}
+  ~SameDocumentNavigationObserver() override {}
 
-  void WaitForSamePageNavigation() { run_loop_.Run(); }
+  void WaitForSameDocumentNavigation() { run_loop_.Run(); }
 
   // WebContentsObserver:
   void DidFinishNavigation(
@@ -982,7 +1008,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, GoBackToMixedContent) {
 }
 
 // Tests that the mixed content flags are not reset for an in-page navigation.
-IN_PROC_BROWSER_TEST_F(SSLUITest, MixedContentWithSamePageNavigation) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, MixedContentWithSameDocumentNavigation) {
   ASSERT_TRUE(https_server_.Start());
 
   // Navigate to a URL and dynamically load mixed content.
@@ -1000,12 +1026,12 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, MixedContentWithSamePageNavigation) {
   CheckSecurityState(tab, CertError::NONE, security_state::NONE,
                      AuthState::DISPLAYED_INSECURE_CONTENT);
 
-  // Initiate a same-page navigation and check that the page is still marked as
-  // having displayed mixed content.
-  SamePageNavigationObserver navigation_observer(tab);
+  // Initiate a same-document navigation and check that the page is still
+  // marked as having displayed mixed content.
+  SameDocumentNavigationObserver navigation_observer(tab);
   ui_test_utils::NavigateToURL(browser(),
                                https_server_.GetURL("/ssl/google.html#foo"));
-  navigation_observer.WaitForSamePageNavigation();
+  navigation_observer.WaitForSameDocumentNavigation();
   CheckSecurityState(tab, CertError::NONE, security_state::NONE,
                      AuthState::DISPLAYED_INSECURE_CONTENT);
 }
@@ -1130,20 +1156,14 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestOKHTTPS) {
 }
 
 // Visits a page with https error and proceed:
-#if defined(OS_LINUX)
-// flaky http://crbug.com/396462
-#define MAYBE_TestHTTPSExpiredCertAndProceed \
-    DISABLED_TestHTTPSExpiredCertAndProceed
-#else
-#define MAYBE_TestHTTPSExpiredCertAndProceed TestHTTPSExpiredCertAndProceed
-#endif
-IN_PROC_BROWSER_TEST_F(SSLUITest, MAYBE_TestHTTPSExpiredCertAndProceed) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, TestHTTPSExpiredCertAndProceed) {
   ASSERT_TRUE(https_server_expired_.Start());
 
   ui_test_utils::NavigateToURL(
       browser(), https_server_expired_.GetURL("/ssl/google.html"));
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  WaitForInterstitialAttach(tab);
   CheckAuthenticationBrokenState(
       tab, net::CERT_STATUS_DATE_INVALID, AuthState::SHOWING_INTERSTITIAL);
 
@@ -1571,7 +1591,11 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, MarkHTTPAsDangerous) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Navigate to a non-local HTTP page.
-  ui_test_utils::NavigateToURL(browser(), GURL("http://example.com/"));
+  GURL url = embedded_test_server()->GetURL("/ssl/google.html");
+  GURL::Replacements http_url_replacements;
+  http_url_replacements.SetHostStr("example.test");
+  url = url.ReplaceComponents(http_url_replacements);
+  ui_test_utils::NavigateToURL(browser(), url);
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   SecurityStateTabHelper* helper = SecurityStateTabHelper::FromWebContents(tab);
   ASSERT_TRUE(helper);
@@ -1788,15 +1812,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestBadHTTPSDownload) {
 // Insecure content
 //
 
-#if defined(OS_WIN)
-// http://crbug.com/152940 Flaky on win.
-#define MAYBE_TestDisplaysInsecureContent DISABLED_TestDisplaysInsecureContent
-#else
-#define MAYBE_TestDisplaysInsecureContent TestDisplaysInsecureContent
-#endif
-
 // Visits a page that displays insecure content.
-IN_PROC_BROWSER_TEST_F(SSLUITest, MAYBE_TestDisplaysInsecureContent) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, TestDisplaysInsecureContent) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
 
@@ -2134,7 +2151,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestRunsInsecureContentTwoTabs) {
   observer.Wait();
 
   // Both tabs should have the same process.
-  EXPECT_EQ(tab1->GetRenderProcessHost(), tab2->GetRenderProcessHost());
+  EXPECT_EQ(tab1->GetMainFrame()->GetProcess(),
+            tab2->GetMainFrame()->GetProcess());
 
   // The new tab has insecure content.
   CheckAuthenticationBrokenState(tab2, CertError::NONE,
@@ -2172,18 +2190,10 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestDisplaysCachedInsecureContent) {
                      AuthState::DISPLAYED_INSECURE_CONTENT);
 }
 
-// http://crbug.com/84729
-#if defined(OS_CHROMEOS)
-#define MAYBE_TestRunsCachedInsecureContent \
-    DISABLED_TestRunsCachedInsecureContent
-#else
-#define MAYBE_TestRunsCachedInsecureContent TestRunsCachedInsecureContent
-#endif  // defined(OS_CHROMEOS)
-
 // Visits a page with script over http.  Visits another page over https
 // referencing that same script over http (hoping it is coming from the webcore
 // memory cache).
-IN_PROC_BROWSER_TEST_F(SSLUITest, MAYBE_TestRunsCachedInsecureContent) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, TestRunsCachedInsecureContent) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
 
@@ -3424,15 +3434,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITestIgnoreCertErrorsBySPKIHTTPS,
 
 // Verifies that the interstitial can proceed, even if JavaScript is disabled.
 // http://crbug.com/322948
-#if defined(OS_LINUX)
-// flaky http://crbug.com/396458
-#define MAYBE_TestInterstitialJavaScriptProceeds \
-    DISABLED_TestInterstitialJavaScriptProceeds
-#else
-#define MAYBE_TestInterstitialJavaScriptProceeds \
-    TestInterstitialJavaScriptProceeds
-#endif
-IN_PROC_BROWSER_TEST_F(SSLUITest, MAYBE_TestInterstitialJavaScriptProceeds) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, TestInterstitialJavaScriptProceeds) {
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
       ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_JAVASCRIPT,
                                  CONTENT_SETTING_BLOCK);
@@ -3444,20 +3446,20 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, MAYBE_TestInterstitialJavaScriptProceeds) {
   CheckAuthenticationBrokenState(
       tab, net::CERT_STATUS_DATE_INVALID, AuthState::SHOWING_INTERSTITIAL);
 
-  content::WindowedNotificationObserver observer(
-      content::NOTIFICATION_LOAD_STOP,
-      content::Source<NavigationController>(&tab->GetController()));
   InterstitialPage* interstitial_page = tab->GetInterstitialPage();
   ASSERT_EQ(SSLBlockingPage::kTypeForTesting,
             interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
-  content::RenderViewHost* interstitial_rvh =
-      interstitial_page->GetMainFrame()->GetRenderViewHost();
+  EXPECT_TRUE(WaitForRenderFrameReady(interstitial_page->GetMainFrame()));
+
+  content::WindowedNotificationObserver observer(
+      content::NOTIFICATION_LOAD_STOP,
+      content::Source<NavigationController>(&tab->GetController()));
   int result = -1;
   const std::string javascript =
       base::StringPrintf("window.domAutomationController.send(%d);",
                          security_interstitials::CMD_PROCEED);
   ASSERT_TRUE(content::ExecuteScriptAndExtractInt(
-              interstitial_rvh, javascript, &result));
+      interstitial_page->GetMainFrame(), javascript, &result));
   // The above will hang without the fix.
   EXPECT_EQ(1, result);
   observer.Wait();
@@ -3497,6 +3499,74 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestInterstitialJavaScriptGoesBack) {
   EXPECT_EQ(0, result);
   observer.Wait();
   EXPECT_EQ("about:blank", tab->GetVisibleURL().spec());
+}
+
+// Verifies that an overridable interstitial has a proceed link.
+IN_PROC_BROWSER_TEST_F(SSLUITest, TestInterstitialOptionsOverridable) {
+  ASSERT_TRUE(https_server_expired_.Start());
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  ui_test_utils::NavigateToURL(
+      browser(), https_server_expired_.GetURL("/ssl/google.html"));
+  content::WaitForInterstitialAttach(tab);
+  CheckAuthenticationBrokenState(tab, net::CERT_STATUS_DATE_INVALID,
+                                 AuthState::SHOWING_INTERSTITIAL);
+
+  InterstitialPage* interstitial_page = tab->GetInterstitialPage();
+  ASSERT_EQ(SSLBlockingPage::kTypeForTesting,
+            interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
+  content::RenderViewHost* interstitial_rvh =
+      interstitial_page->GetMainFrame()->GetRenderViewHost();
+
+  content::RenderFrameHost* rfh = interstitial_page->GetMainFrame();
+  ASSERT_TRUE(content::WaitForRenderFrameReady(rfh));
+  int result = security_interstitials::CMD_ERROR;
+  const std::string javascript = base::StringPrintf(
+      "domAutomationController.send("
+      "(document.querySelector(\"#proceed-link\") === null) "
+      "? (%d) : (%d))",
+      security_interstitials::CMD_TEXT_NOT_FOUND,
+      security_interstitials::CMD_TEXT_FOUND);
+  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(interstitial_rvh, javascript,
+                                                  &result));
+  EXPECT_EQ(security_interstitials::CMD_TEXT_FOUND, result);
+}
+
+// Verifies that a non-overridable interstitial does not have a proceed link.
+IN_PROC_BROWSER_TEST_F(SSLUITestHSTS, TestInterstitialOptionsNonOverridable) {
+  ASSERT_TRUE(https_server_expired_.Start());
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+
+  GURL::Replacements replacements;
+  replacements.SetHostStr(kHstsTestHostName);
+  GURL url = https_server_expired_.GetURL("/ssl/google.html")
+                 .ReplaceComponents(replacements);
+
+  ui_test_utils::NavigateToURL(browser(), url);
+  content::WaitForInterstitialAttach(tab);
+  // Since we are connecting to a different domain than the test server default,
+  // we also expect CERT_STATUS_COMMON_NAME_INVALID.
+  CheckAuthenticationBrokenState(
+      tab, net::CERT_STATUS_DATE_INVALID | net::CERT_STATUS_COMMON_NAME_INVALID,
+      AuthState::SHOWING_INTERSTITIAL);
+
+  InterstitialPage* interstitial_page = tab->GetInterstitialPage();
+  ASSERT_EQ(SSLBlockingPage::kTypeForTesting,
+            interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
+  content::RenderViewHost* interstitial_rvh =
+      interstitial_page->GetMainFrame()->GetRenderViewHost();
+
+  content::RenderFrameHost* rfh = interstitial_page->GetMainFrame();
+  ASSERT_TRUE(content::WaitForRenderFrameReady(rfh));
+  int result = security_interstitials::CMD_ERROR;
+  const std::string javascript = base::StringPrintf(
+      "domAutomationController.send("
+      "(document.querySelector(\"#proceed-link\") === null) "
+      "? (%d) : (%d))",
+      security_interstitials::CMD_TEXT_NOT_FOUND,
+      security_interstitials::CMD_TEXT_FOUND);
+  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(interstitial_rvh, javascript,
+                                                  &result));
+  EXPECT_EQ(security_interstitials::CMD_TEXT_NOT_FOUND, result);
 }
 
 // Verifies that links in the interstitial open in a new tab.
@@ -4813,9 +4883,9 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, DISABLED_RestoreThenNavigateHasSSLState) {
 
 // Simulate the URL changing when the user presses enter in the omnibox. This
 // could happen when the user's login is expired and the server redirects them
-// to a login page. This will be considered a SAME_PAGE navigation but we do
-// want to update the SSL state.
-IN_PROC_BROWSER_TEST_F(SSLUITest, SamePageHasSSLState) {
+// to a login page. This will be considered a same document navigation but we
+// do want to update the SSL state.
+IN_PROC_BROWSER_TEST_F(SSLUITest, SameDocumentHasSSLState) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
 
@@ -4900,19 +4970,20 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, ClientRedirectToMixedContentSSLState) {
                      AuthState::DISPLAYED_INSECURE_CONTENT);
 }
 
-// Checks that in-page navigations during page load preserves SSL state.
-IN_PROC_BROWSER_TEST_F(SSLUITest, InPageNavigationDuringLoadSSLState) {
+// Checks that same-document navigations during page load preserve SSL state.
+IN_PROC_BROWSER_TEST_F(SSLUITest, SameDocumentNavigationDuringLoadSSLState) {
   ASSERT_TRUE(https_server_.Start());
 
   ui_test_utils::NavigateToURL(
       browser(),
-      https_server_.GetURL("/ssl/in_page_navigation_during_load.html"));
+      https_server_.GetURL("/ssl/same_document_navigation_during_load.html"));
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   CheckAuthenticatedState(tab, AuthState::NONE);
 }
 
-// Checks that in-page navigations after the page load preserves SSL state.
-IN_PROC_BROWSER_TEST_F(SSLUITest, InPageNavigationAfterLoadSSLState) {
+// Checks that same-document navigations after the page load preserve SSL
+// state.
+IN_PROC_BROWSER_TEST_F(SSLUITest, SameDocumentNavigationAfterLoadSSLState) {
   ASSERT_TRUE(https_server_.Start());
 
   ui_test_utils::NavigateToURL(browser(),
@@ -4960,6 +5031,18 @@ using SSLUICaptivePortalListTest = SSLUITest;
 
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
 
+std::unique_ptr<chrome_browser_ssl::SSLErrorAssistantConfig>
+MakeCaptivePortalConfig(int version_id,
+                        const std::set<std::string>& spki_hashes) {
+  auto config_proto =
+      base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
+  config_proto->set_version_id(version_id);
+  for (const std::string& hash : spki_hashes) {
+    config_proto->add_captive_portal_cert()->set_sha256_hash(hash);
+  }
+  return config_proto;
+}
+
 // Tests that the captive portal certificate list is not used when the feature
 // is disabled via Finch. The list is passed to SSLErrorHandler via a proto.
 IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListTest, Disabled) {
@@ -4976,11 +5059,9 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListTest, Disabled) {
   // Mark the server's cert as a captive portal cert.
   const net::HashValue server_spki_hash =
       GetSPKIHash(https_server_mismatched_.GetCertificate().get());
-  auto config_proto =
-      base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
-  config_proto->add_captive_portal_cert()->set_sha256_hash(
-      server_spki_hash.ToString());
-  SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+  SSLErrorHandler::SetErrorAssistantProto(MakeCaptivePortalConfig(
+      kLargeVersionId, std::set<std::string>{server_spki_hash.ToString()}));
+  ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() > 0);
 
   // Navigate to an unsafe page on the server. A normal SSL interstitial should
   // be displayed since CaptivePortalCertificateList feature is disabled.
@@ -5020,11 +5101,9 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListTest, Enabled_FromProto) {
   // Mark the server's cert as a captive portal cert.
   const net::HashValue server_spki_hash =
       GetSPKIHash(https_server_mismatched_.GetCertificate().get());
-  auto config_proto =
-      base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
-  config_proto->add_captive_portal_cert()->set_sha256_hash(
-      server_spki_hash.ToString());
-  SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+  SSLErrorHandler::SetErrorAssistantProto(MakeCaptivePortalConfig(
+      kLargeVersionId, std::set<std::string>{server_spki_hash.ToString()}));
+  ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() > 0);
 
   // Navigate to an unsafe page on the server. The captive portal interstitial
   // should be displayed since CaptivePortalCertificateList feature is enabled.
@@ -5048,6 +5127,36 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListTest, Enabled_FromProto) {
       SSLErrorHandler::SHOW_CAPTIVE_PORTAL_INTERSTITIAL_OVERRIDABLE, 1);
   histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
                                SSLErrorHandler::CAPTIVE_PORTAL_CERT_FOUND, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(SSLUITest, OSReportsCaptivePortal) {
+  ASSERT_TRUE(https_server_mismatched_.Start());
+  base::HistogramTester histograms;
+
+  SSLErrorHandler::SetOSReportsCaptivePortalForTesting(true);
+
+  // Navigate to an unsafe page on the server. The captive portal interstitial
+  // should be displayed since the OS reports a captive portal status.
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  SSLInterstitialTimerObserver interstitial_timer_observer(tab);
+  ui_test_utils::NavigateToURL(
+      browser(), https_server_mismatched_.GetURL("/ssl/blank_page.html"));
+  content::WaitForInterstitialAttach(tab);
+
+  InterstitialPage* interstitial_page = tab->GetInterstitialPage();
+  ASSERT_EQ(CaptivePortalBlockingPage::kTypeForTesting,
+            interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
+  EXPECT_FALSE(interstitial_timer_observer.timer_started());
+
+  // Check that the histogram for the captive portal cert was recorded.
+  histograms.ExpectTotalCount(SSLErrorHandler::GetHistogramNameForTesting(), 3);
+  histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
+                               SSLErrorHandler::HANDLE_ALL, 1);
+  histograms.ExpectBucketCount(
+      SSLErrorHandler::GetHistogramNameForTesting(),
+      SSLErrorHandler::SHOW_CAPTIVE_PORTAL_INTERSTITIAL_OVERRIDABLE, 1);
+  histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
+                               SSLErrorHandler::OS_REPORTS_CAPTIVE_PORTAL, 1);
 }
 
 namespace {
@@ -5180,7 +5289,7 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListResourceBundleTest, Enabled) {
                                SSLErrorHandler::CAPTIVE_PORTAL_CERT_FOUND, 1);
 }
 
-// Same as SSLUICaptivePortalListResourceBundleTest.Enabled, but this time the
+// Same as SSLUICaptivePortalListResourceBundleTest. Enabled, but this time the
 // proto is dynamically updated (e.g. by the component updater). The dynamic
 // update should always override the proto loaded from the resource bundle.
 IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListResourceBundleTest,
@@ -5200,13 +5309,12 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListResourceBundleTest,
   {
     // Dynamically update the SSL error assistant config, do not include the
     // captive portal SPKI hash.
-    auto config_proto =
-        base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
-    config_proto->add_captive_portal_cert()->set_sha256_hash(
-        "sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    config_proto->add_captive_portal_cert()->set_sha256_hash(
-        "sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+    SSLErrorHandler::SetErrorAssistantProto(MakeCaptivePortalConfig(
+        kLargeVersionId,
+        std::set<std::string>{"sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                              "sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}));
+    ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() >
+                0);
 
     // Navigate to an unsafe page on the server. A generic SSL interstitial
     // should be displayed because the dynamic update doesn't contain the hash
@@ -5233,16 +5341,13 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListResourceBundleTest,
   {
     // Dynamically update the error assistant config and add the captive portal
     // SPKI hash.
-    auto config_proto =
-        base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
-    config_proto->set_version_id(1);
-    config_proto->add_captive_portal_cert()->set_sha256_hash(
-        "sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    config_proto->add_captive_portal_cert()->set_sha256_hash(
-        "sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    config_proto->add_captive_portal_cert()->set_sha256_hash(
-        kCaptivePortalSPKI);
-    SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+    SSLErrorHandler::SetErrorAssistantProto(MakeCaptivePortalConfig(
+        kLargeVersionId + 1,
+        std::set<std::string>{"sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                              "sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                              kCaptivePortalSPKI}));
+    ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() >
+                0);
 
     // Navigate to the unsafe page again. This time, a captive portal
     // interstitial should be displayed.
@@ -5271,10 +5376,10 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListResourceBundleTest,
     // Try dynamically updating the error assistant config with an empty config
     // with the same version number. The update should be ignored, and a captive
     // portal interstitial should still be displayed.
-    auto empty_config =
-        base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
-    empty_config->set_version_id(1);
-    SSLErrorHandler::SetErrorAssistantProto(std::move(empty_config));
+    SSLErrorHandler::SetErrorAssistantProto(
+        MakeCaptivePortalConfig(kLargeVersionId + 1, std::set<std::string>()));
+    ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() >
+                0);
 
     // Navigate to the unsafe page again. This time, a captive portal
     // interstitial should be displayed.
@@ -5351,13 +5456,9 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListTest, PortalChecksDisabled) {
   base::HistogramTester histograms;
 
   // Mark the server's cert as a captive portal cert.
-  const net::HashValue server_spki_hash =
-      GetSPKIHash(https_server_mismatched_.GetCertificate().get());
-  auto config_proto =
-      base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
-  config_proto->add_captive_portal_cert()->set_sha256_hash(
-      server_spki_hash.ToString());
-  SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+  SSLErrorHandler::SetErrorAssistantProto(MakeCaptivePortalConfig(
+      kLargeVersionId + 1, std::set<std::string>{server_spki_hash.ToString()}));
+  ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() > 0);
 
   // Navigate to an unsafe page on the server. The captive portal interstitial
   // should be displayed since CaptivePortalCertificateList feature is enabled.
@@ -5383,24 +5484,9 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListTest, PortalChecksDisabled) {
 
 #endif  // BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
 
-// The MITM software interstitial is not yet supported on iOS.
-#if !defined(OS_IOS)
 namespace {
 
-char kTestHostName[] = "example.test";
 char kTestMITMSoftwareName[] = "Misconfigured Firewall";
-
-// Set HSTS for the test host name, so that all errors thrown on this domain
-// will be nonoverridable.
-void SetHSTSForHostName(
-    scoped_refptr<net::URLRequestContextGetter> context_getter) {
-  net::TransportSecurityState* state =
-      context_getter->GetURLRequestContext()->transport_security_state();
-  const base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
-  EXPECT_FALSE(state->ShouldUpgradeToSSL(kTestHostName));
-  state->AddHSTS(kTestHostName, expiry, false);
-  EXPECT_TRUE(state->ShouldUpgradeToSSL(kTestHostName));
-}
 
 class SSLUIMITMSoftwareTest : public CertVerifierBrowserTest {
  public:
@@ -5435,9 +5521,11 @@ class SSLUIMITMSoftwareTest : public CertVerifierBrowserTest {
 
   // Sets up an SSLErrorAssistantProto that lists |https_server_|'s default
   // certificate as a MITM software certificate.
-  void SetUpMITMSoftwareCertList() {
+  void SetUpMITMSoftwareCertList(uint32_t version_id) {
     auto config_proto =
         base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
+    config_proto->set_version_id(version_id);
+
     chrome_browser_ssl::MITMSoftware* mitm_software =
         config_proto->add_mitm_software();
     mitm_software->set_name(kTestMITMSoftwareName);
@@ -5446,13 +5534,15 @@ class SSLUIMITMSoftwareTest : public CertVerifierBrowserTest {
     mitm_software->set_issuer_organization_regex(
         https_server()->GetCertificate().get()->issuer().organization_names[0]);
     SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+    ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() >
+                0);
   }
 
   // Returns a URL which triggers an interstitial with the host name that has
   // HSTS set.
   GURL GetHSTSTestURL() const {
     GURL::Replacements replacements;
-    replacements.SetHostStr(kTestHostName);
+    replacements.SetHostStr(kHstsTestHostName);
     return https_server()
         ->GetURL("/ssl/blank_page.html")
         .ReplaceComponents(replacements);
@@ -5461,7 +5551,8 @@ class SSLUIMITMSoftwareTest : public CertVerifierBrowserTest {
   void TestMITMSoftwareInterstitial() {
     base::HistogramTester histograms;
     ASSERT_TRUE(https_server()->Start());
-    SetUpMITMSoftwareCertList();
+    ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() >
+                0);
 
     // Navigate to an unsafe page on the server. Mock out the URL host name to
     // equal the one set for HSTS.
@@ -5491,7 +5582,8 @@ class SSLUIMITMSoftwareTest : public CertVerifierBrowserTest {
   void TestNoMITMSoftwareInterstitial() {
     base::HistogramTester histograms;
     ASSERT_TRUE(https_server()->Start());
-    SetUpMITMSoftwareCertList();
+    ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() >
+                0);
 
     // Navigate to an unsafe page on the server. Mock out the URL host name to
     // equal the one set for HSTS.
@@ -5577,6 +5669,7 @@ class SSLUIMITMSoftwareDisabledTest : public SSLUIMITMSoftwareTest {
 // is disabled by Finch.
 IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareDisabledTest, DisabledWithFinch) {
   SetUpCertVerifier(net::CERT_STATUS_AUTHORITY_INVALID);
+  SetUpMITMSoftwareCertList(kLargeVersionId);
   TestNoMITMSoftwareInterstitial();
 }
 
@@ -5584,6 +5677,7 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareDisabledTest, DisabledWithFinch) {
 // enabled by Finch.
 IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest, EnabledWithFinch) {
   SetUpCertVerifier(net::CERT_STATUS_AUTHORITY_INVALID);
+  SetUpMITMSoftwareCertList(kLargeVersionId);
   TestMITMSoftwareInterstitial();
 }
 
@@ -5610,6 +5704,7 @@ IN_PROC_BROWSER_TEST_F(
   mitm_software->set_issuer_organization_regex(
       "pattern-that-does-not-match-anything");
   SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+  ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() > 0);
 
   // Navigate to an unsafe page on the server. Mock out the URL host name to
   // equal the one set for HSTS.
@@ -5657,6 +5752,7 @@ IN_PROC_BROWSER_TEST_F(
   mitm_software->set_issuer_organization_regex(
       https_server()->GetCertificate().get()->issuer().organization_names[0]);
   SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+  ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() > 0);
 
   // Navigate to an unsafe page on the server. Mock out the URL host name to
   // equal the one set for HSTS.
@@ -5702,6 +5798,7 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest,
   mitm_software->set_issuer_organization_regex(
       "pattern-that-does-not-match-anything");
   SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+  ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() > 0);
 
   // Navigate to an unsafe page on the server. Mock out the URL host name to
   // equal the one set for HSTS.
@@ -5732,6 +5829,7 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest,
                        TwoCertErrors_NoMITMSoftwareInterstitial) {
   SetUpCertVerifier(net::CERT_STATUS_AUTHORITY_INVALID |
                     net::CERT_STATUS_COMMON_NAME_INVALID);
+  SetUpMITMSoftwareCertList(kLargeVersionId);
   TestNoMITMSoftwareInterstitial();
 }
 
@@ -5740,6 +5838,7 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest,
 IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest,
                        WrongCertError_NoMITMSoftwareInterstitial) {
   SetUpCertVerifier(net::CERT_STATUS_COMMON_NAME_INVALID);
+  SetUpMITMSoftwareCertList(kLargeVersionId);
   TestNoMITMSoftwareInterstitial();
 }
 
@@ -5752,7 +5851,7 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest,
   SetUpCertVerifier(net::CERT_STATUS_AUTHORITY_INVALID);
 
   ASSERT_TRUE(https_server()->Start());
-  SetUpMITMSoftwareCertList();
+  SetUpMITMSoftwareCertList(kLargeVersionId);
 
   // Navigate to an unsafe page to trigger an interstitial, but don't replace
   // the host name with the one set for HSTS.
@@ -5786,6 +5885,7 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest, EnterpriseManaged) {
   SSLErrorHandler::SetEnterpriseManagedForTesting(true);
   ASSERT_TRUE(SSLErrorHandler::IsEnterpriseManagedFlagSetForTesting());
 
+  SetUpMITMSoftwareCertList(kLargeVersionId);
   TestMITMSoftwareInterstitial();
 
   InterstitialPage* interstitial_page = browser()
@@ -5816,6 +5916,7 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest, NotEnterpriseManaged) {
   SSLErrorHandler::SetEnterpriseManagedForTesting(false);
   ASSERT_TRUE(SSLErrorHandler::IsEnterpriseManagedFlagSetForTesting());
 
+  SetUpMITMSoftwareCertList(kLargeVersionId);
   TestMITMSoftwareInterstitial();
 
   InterstitialPage* interstitial_page = browser()
@@ -5836,17 +5937,18 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest, NotEnterpriseManaged) {
       interstitial_page, expected_explanation));
 }
 
-#else
-
-// Tests that the MITM software interstitial does not render on iOS, where it
-// is disabled by build.
+// Initialize MITMSoftware certificate list but set the version_id to zero. This
+// less than the version_id of the local resource bundle, so the dynamic
+// update will be ignored and a non-MITM interstitial will be shown.
 IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest,
-                       DisabledByBuild_NoMITMSoftwareInterstitial) {
+                       IgnoreDynamicUpdateWithSmallVersionId) {
   SetUpCertVerifier(net::CERT_STATUS_AUTHORITY_INVALID);
+  SSLErrorHandler::SetEnterpriseManagedForTesting(false);
+  ASSERT_TRUE(SSLErrorHandler::IsEnterpriseManagedFlagSetForTesting());
+
+  SetUpMITMSoftwareCertList(0u);
   TestNoMITMSoftwareInterstitial();
 }
-
-#endif  // #if !defined(OS_IOS)
 
 class SuperfishSSLUITest : public CertVerifierBrowserTest {
  public:
@@ -6032,6 +6134,122 @@ IN_PROC_BROWSER_TEST_F(SuperfishSSLUITest, SuperfishInterstitialDisabled) {
       l10n_util::GetStringUTF8(IDS_SSL_V2_HEADING);
   EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
       interstitial_page, expected_title));
+}
+
+// Allows tests to effectively turn off CT requirements. Used by
+// SymantecMessageSSLUITest below to test Symantec certificates issued after the
+// CT requirement date.
+class NoRequireCTDelegate
+    : public net::TransportSecurityState::RequireCTDelegate {
+ public:
+  NoRequireCTDelegate() {}
+  ~NoRequireCTDelegate() override = default;
+
+  CTRequirementLevel IsCTRequiredForHost(const std::string& hostname) override {
+    return CTRequirementLevel::NOT_REQUIRED;
+  }
+};
+
+void SetRequireCTDelegateOnIOThread(
+    scoped_refptr<net::URLRequestContextGetter> context_getter,
+    net::TransportSecurityState::RequireCTDelegate* delegate) {
+  net::TransportSecurityState* state =
+      context_getter->GetURLRequestContext()->transport_security_state();
+  state->SetRequireCTDelegate(delegate);
+}
+
+// A test fixture that mocks certificate verifications for legacy Symantec
+// certificates that are slated to be distrusted in future Chrome releases.
+class SymantecMessageSSLUITest : public CertVerifierBrowserTest {
+ public:
+  SymantecMessageSSLUITest()
+      : CertVerifierBrowserTest(),
+        https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
+  ~SymantecMessageSSLUITest() override {}
+
+  void SetUpOnMainThread() override {
+    CertVerifierBrowserTest::SetUpOnMainThread();
+
+    require_ct_delegate_ = base::MakeUnique<NoRequireCTDelegate>();
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &SetRequireCTDelegateOnIOThread,
+            base::RetainedRef(browser()->profile()->GetRequestContext()),
+            require_ct_delegate_.get()));
+  }
+
+ protected:
+  void SetUpCertVerifier(bool use_chrome_66_date) {
+    net::CertVerifyResult verify_result;
+    {
+      base::ThreadRestrictions::ScopedAllowIO allow_io;
+      verify_result.verified_cert = net::CreateCertificateChainFromFile(
+          net::GetTestCertsDirectory(),
+          use_chrome_66_date ? "pre_june_2016.pem" : "post_june_2016.pem",
+          net::X509Certificate::FORMAT_AUTO);
+    }
+    ASSERT_TRUE(verify_result.verified_cert);
+    verify_result.cert_status = 0;
+
+    // Collect the hashes of the leaf and intermediates.
+    verify_result.public_key_hashes.push_back(
+        GetSPKIHash(verify_result.verified_cert.get()));
+    for (const net::X509Certificate::OSCertHandle& intermediate :
+         verify_result.verified_cert->GetIntermediateCertificates()) {
+      scoped_refptr<net::X509Certificate> intermediate_x509 =
+          net::X509Certificate::CreateFromHandle(
+              intermediate, net::X509Certificate::OSCertHandles());
+      ASSERT_TRUE(intermediate_x509);
+      verify_result.public_key_hashes.push_back(
+          GetSPKIHash(intermediate_x509.get()));
+    }
+
+    mock_cert_verifier()->AddResultForCert(https_server_.GetCertificate().get(),
+                                           verify_result, net::OK);
+  }
+
+  net::EmbeddedTestServer* https_server() { return &https_server_; }
+
+ private:
+  net::EmbeddedTestServer https_server_;
+  std::unique_ptr<NoRequireCTDelegate> require_ct_delegate_;
+
+  DISALLOW_COPY_AND_ASSIGN(SymantecMessageSSLUITest);
+};
+
+// Tests that the Symantec console message is properly overridden for pre-June
+// 2016 certificates.
+IN_PROC_BROWSER_TEST_F(SymantecMessageSSLUITest, PreJune2016) {
+  ASSERT_NO_FATAL_FAILURE(
+      SetUpCertVerifier(true /* use Chrome 66 distrust date */));
+  ASSERT_TRUE(https_server()->Start());
+  GURL url(https_server()->GetURL("/ssl/google.html"));
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  content::ConsoleObserverDelegate console_observer(
+      tab, "*distrusted in Chrome 66*");
+  tab->SetDelegate(&console_observer);
+  ui_test_utils::NavigateToURL(browser(), url);
+  console_observer.Wait();
+  EXPECT_TRUE(base::MatchPattern(console_observer.message(),
+                                 "*The certificate used to load*"));
+}
+
+// Tests that the Symantec console message is properly overridden for post-June
+// 2016 certificates.
+IN_PROC_BROWSER_TEST_F(SymantecMessageSSLUITest, PostJune2016) {
+  ASSERT_NO_FATAL_FAILURE(
+      SetUpCertVerifier(false /* use Chrome 66 distrust date */));
+  ASSERT_TRUE(https_server()->Start());
+  GURL url(https_server()->GetURL("/ssl/google.html"));
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  content::ConsoleObserverDelegate console_observer(
+      tab, "*distrusted in Chrome 66*");
+  tab->SetDelegate(&console_observer);
+  ui_test_utils::NavigateToURL(browser(), url);
+  console_observer.Wait();
+  EXPECT_TRUE(base::MatchPattern(console_observer.message(),
+                                 "*The certificate used to load*"));
 }
 
 // TODO(jcampan): more tests to do below.

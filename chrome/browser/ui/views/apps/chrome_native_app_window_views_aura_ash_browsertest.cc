@@ -5,8 +5,8 @@
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_aura_ash.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "ui/base/ui_base_types.h"
@@ -17,15 +17,7 @@ class ChromeNativeAppWindowViewsAuraAshBrowserTest
   ChromeNativeAppWindowViewsAuraAshBrowserTest() = default;
   ~ChromeNativeAppWindowViewsAuraAshBrowserTest() override = default;
 
-  void SetUpInProcessBrowserTestFixture() override {
-    scoped_feature_list.InitAndEnableFeature(
-        ash::kAutoHideTitleBarsInTabletMode);
-    PlatformAppBrowserTest::SetUpInProcessBrowserTestFixture();
-  }
-
  private:
-  base::test::ScopedFeatureList scoped_feature_list;
-
   DISALLOW_COPY_AND_ASSIGN(ChromeNativeAppWindowViewsAuraAshBrowserTest);
 };
 
@@ -49,22 +41,24 @@ IN_PROC_BROWSER_TEST_F(ChromeNativeAppWindowViewsAuraAshBrowserTest,
   // Verify that since the auto hide title bars in tablet mode feature turned
   // on, immersive mode is enabled once tablet mode is entered, and disabled
   // once tablet mode is exited.
-  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
-      true);
+  ash::TabletModeController* tablet_mode_controller =
+      ash::Shell::Get()->tablet_mode_controller();
+  tablet_mode_controller->EnableTabletModeWindowManager(true);
+  tablet_mode_controller->FlushForTesting();
   EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
-  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
-      false);
+  tablet_mode_controller->EnableTabletModeWindowManager(false);
+  tablet_mode_controller->FlushForTesting();
   EXPECT_FALSE(window->immersive_fullscreen_controller_->IsEnabled());
 
   // Verify that the window was fullscreened before entering tablet mode, it
   // will remain fullscreened after exiting tablet mode.
   window->SetFullscreen(extensions::AppWindow::FULLSCREEN_TYPE_OS);
   EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
-  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
-      true);
+  tablet_mode_controller->EnableTabletModeWindowManager(true);
+  tablet_mode_controller->FlushForTesting();
   EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
-  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
-      false);
+  tablet_mode_controller->EnableTabletModeWindowManager(false);
+  tablet_mode_controller->FlushForTesting();
   EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
 
   CloseAppWindow(app_window);

@@ -13,7 +13,7 @@ cr.define('options', function() {
    * Dimensions for camera capture.
    * @const
    */
-  var CAPTURE_SIZE = {height: 480, width: 480};
+  var CAPTURE_SIZE = {height: 576, width: 576};
 
   /**
    * Path for internal URLs.
@@ -47,7 +47,7 @@ cr.define('options', function() {
       // than actual images so there is no need in full scale on HDPI.
       var url = this.dataItem.url;
       if (url.slice(0, CHROME_THEME_PATH.length) == CHROME_THEME_PATH)
-        imageEl.src = this.dataItem.url + '@1x';
+        imageEl.src = this.dataItem.url + '[0]@1x';
       else
         imageEl.src = this.dataItem.url;
       imageEl.title = this.dataItem.title || '';
@@ -180,7 +180,7 @@ cr.define('options', function() {
       var url = this.selectedItemUrl;
       if (url && this.previewImage_) {
         if (url.slice(0, CHROME_THEME_PATH.length) == CHROME_THEME_PATH)
-          this.previewImage_.src = url + '@' + window.devicePixelRatio + 'x';
+          this.previewImage_.src = url + '@2x';
         else
           this.previewImage_.src = url;
       }
@@ -440,30 +440,6 @@ cr.define('options', function() {
     },
 
     /**
-     * Whether the camera live stream and photo should be flipped horizontally.
-     * If setting this property results in photo update, 'photoupdated' event
-     * will be fired with 'dataURL' property containing the photo encoded as
-     * a data URL
-     * @type {boolean}
-     */
-    get flipPhoto() {
-      return this.flipPhoto_ || false;
-    },
-    set flipPhoto(value) {
-      if (this.flipPhoto_ == value)
-        return;
-      this.flipPhoto_ = value;
-      this.previewElement.classList.toggle('flip-x', value);
-      if (!this.cameraLive) {
-        // Flip current still photo.
-        var e = new Event('photoupdated');
-        e.dataURL = this.flipPhoto ? this.flipFrame_(this.previewImage_) :
-                                     this.previewImage_.src;
-        this.dispatchEvent(e);
-      }
-    },
-
-    /**
      * Performs photo capture from the live camera stream. 'phototaken' event
      * will be fired as soon as captured photo is available, with 'dataURL'
      * property containing the photo encoded as a data URL.
@@ -488,7 +464,7 @@ cr.define('options', function() {
       }.bind(this));
       previewImg.src = canvas.toDataURL('image/png');
       var e = new Event('phototaken');
-      e.dataURL = this.flipPhoto ? this.flipFrame_(canvas) : previewImg.src;
+      e.dataURL = this.flipFrame_(canvas);
       this.dispatchEvent(e);
       return true;
     },

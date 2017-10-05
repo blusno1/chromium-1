@@ -13,16 +13,12 @@
 
 namespace blink {
 
-class BlockPainterTest : public ::testing::WithParamInterface<bool>,
-                         private ScopedRootLayerScrollingForTest,
-                         public PaintControllerPaintTestBase {
- public:
-  BlockPainterTest()
-      : ScopedRootLayerScrollingForTest(GetParam()),
-        PaintControllerPaintTestBase(true) {}
-};
+using BlockPainterTest = PaintControllerPaintTest;
 
-INSTANTIATE_TEST_CASE_P(All, BlockPainterTest, ::testing::Bool());
+INSTANTIATE_TEST_CASE_P(
+    All,
+    BlockPainterTest,
+    ::testing::ValuesIn(kSlimmingPaintV2TestConfigurations));
 
 TEST_P(BlockPainterTest, ScrollHitTestProperties) {
   SetBodyInnerHTML(
@@ -87,8 +83,8 @@ TEST_P(BlockPainterTest, ScrollHitTestProperties) {
   auto* contents_transform =
       contents_chunk.properties.property_tree_state.Transform();
   auto* contents_scroll = contents_transform->ScrollNode();
-  EXPECT_EQ(IntSize(200, 300), contents_scroll->Bounds());
-  EXPECT_EQ(IntSize(200, 200), contents_scroll->ContainerBounds());
+  EXPECT_EQ(IntRect(0, 0, 200, 300), contents_scroll->ContentsRect());
+  EXPECT_EQ(IntRect(0, 0, 200, 200), contents_scroll->ContainerRect());
   auto* contents_clip = contents_chunk.properties.property_tree_state.Clip();
   EXPECT_EQ(FloatRect(0, 0, 200, 200), contents_clip->ClipRect().Rect());
 
@@ -145,8 +141,8 @@ TEST_P(BlockPainterTest, FrameScrollHitTestProperties) {
   auto* contents_transform =
       contents_chunk.properties.property_tree_state.Transform();
   auto* contents_scroll = contents_transform->ScrollNode();
-  EXPECT_EQ(IntSize(800, 2000), contents_scroll->Bounds());
-  EXPECT_EQ(IntSize(800, 600), contents_scroll->ContainerBounds());
+  EXPECT_EQ(IntRect(0, 0, 800, 2000), contents_scroll->ContentsRect());
+  EXPECT_EQ(IntRect(0, 0, 800, 600), contents_scroll->ContainerRect());
   auto* contents_clip = contents_chunk.properties.property_tree_state.Clip();
   EXPECT_EQ(FloatRect(0, 0, 800, 600), contents_clip->ClipRect().Rect());
 

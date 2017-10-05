@@ -90,6 +90,7 @@
 // gn check ignored on OverlayManagerCast as it's not a public ozone
 // header, but is exported to allow injecting the overlay-composited
 // callback.
+#include "chromecast/browser/cast_display_configurator.h"
 #include "chromecast/graphics/cast_screen.h"
 #include "ui/display/screen.h"
 #include "ui/ozone/platform/cast/overlay_manager_cast.h"  // nogncheck
@@ -254,9 +255,6 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
     // BrowserThreadsStarted).  The GPU process will be created as soon as a
     // renderer needs it, which always happens after main loop starts.
     {switches::kDisableGpuEarlyInit, ""},
-    // TODO(halliwell): Cast builds don't support ES3. Remove this switch when
-    // support is added (crbug.com/659395)
-    {switches::kDisableES3GLContext, ""},
     // Enable navigator.connection API.
     // TODO(derekjchow): Remove this switch when enabled by default.
     {switches::kEnableNetworkInformationDownlinkMax, ""},
@@ -265,6 +263,9 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
     // TODO(halliwell): Revert after fix for b/63101386.
     {switches::kDisallowNonExactResourceReuse, ""},
     {switches::kEnableMediaSuspend, ""},
+    // Enable autoplay without requiring any user gesture.
+    {switches::kAutoplayPolicy,
+     switches::autoplay::kNoUserGestureRequiredPolicy},
 };
 
 void AddDefaultCommandLineSwitches(base::CommandLine* command_line) {
@@ -280,6 +281,13 @@ void AddDefaultCommandLineSwitches(base::CommandLine* command_line) {
     } else {
       VLOG(2) << "Skip setting default switch '" << name << "', already set";
     }
+  }
+
+  // If browser-side navigation is not explicitly enabled or disabled, disable
+  // it.
+  if (!command_line->HasSwitch(switches::kDisableBrowserSideNavigation) &&
+      !command_line->HasSwitch(switches::kEnableBrowserSideNavigation)) {
+    command_line->AppendSwitch(switches::kDisableBrowserSideNavigation);
   }
 }
 
@@ -419,7 +427,8 @@ int CastBrowserMainParts::PreCreateThreads() {
   breakpad::CrashDumpObserver::Create();
   breakpad::CrashDumpObserver::GetInstance()->RegisterClient(
       base::MakeUnique<breakpad::ChildProcessCrashObserver>(
-          crash_dumps_dir, kAndroidMinidumpDescriptor));
+          crash_dumps_dir, kAndroidMinidumpDescriptor,
+          base::Bind(&base::DoNothing)));
 #else
   base::FilePath home_dir;
   CHECK(PathService::Get(DIR_CAST_HOME, &home_dir));
@@ -462,6 +471,8 @@ int CastBrowserMainParts::PreCreateThreads() {
   cast_browser_process_->SetCastScreen(base::WrapUnique(new CastScreen()));
   DCHECK(!display::Screen::GetScreen());
   display::Screen::SetScreenInstance(cast_browser_process_->cast_screen());
+  display_configurator_ = base::MakeUnique<CastDisplayConfigurator>(
+      cast_browser_process_->cast_screen());
 #endif
 
   content::ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(

@@ -26,7 +26,7 @@
 
 #include "core/layout/LayoutTableRow.h"
 
-#include "core/HTMLNames.h"
+#include "core/html_names.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutState.h"
@@ -194,8 +194,10 @@ void LayoutTableRow::UpdateLayout() {
     cell->SetLogicalTop(LogicalTop());
     if (!cell->NeedsLayout())
       Section()->MarkChildForPaginationRelayoutIfNeeded(*cell, layouter);
-    if (cell->NeedsLayout())
+    if (cell->NeedsLayout()) {
+      cell->ClearIntrinsicPadding();
       cell->UpdateLayout();
+    }
     if (paginated)
       Section()->UpdateFragmentationInfoForChild(*cell);
   }

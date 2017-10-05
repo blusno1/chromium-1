@@ -31,6 +31,7 @@
 #include <map>
 
 #include "build/build_config.h"
+#include "core/dom/ClassCollection.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementShadow.h"
@@ -43,11 +44,11 @@
 #include "platform/SharedBuffer.h"
 #include "platform/mhtml/MHTMLArchive.h"
 #include "platform/mhtml/MHTMLParser.h"
+#include "platform/testing/TestingPlatformSupport.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
@@ -95,8 +96,7 @@ class MHTMLTest : public ::testing::Test {
   void SetUp() override { helper_.Initialize(); }
 
   void TearDown() override {
-    Platform::Current()
-        ->GetURLLoaderMockFactory()
+    platform_->GetURLLoaderMockFactory()
         ->UnregisterAllURLsAndClearMemoryCache();
   }
 
@@ -195,6 +195,7 @@ class MHTMLTest : public ::testing::Test {
   String file_path_;
   Vector<SerializedResource> resources_;
   FrameTestHelpers::WebViewHelper helper_;
+  ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
 };
 
 // Checks that the domain is set to the actual MHTML file, not the URL it was
@@ -212,7 +213,8 @@ TEST_F(MHTMLTest, CheckDomain) {
   Document* document = frame->GetDocument();
   ASSERT_TRUE(document);
 
-  EXPECT_STREQ(kFileURL, frame->DomWindow()->location()->href().Ascii().data());
+  EXPECT_STREQ(kFileURL,
+               frame->DomWindow()->location()->toString().Ascii().data());
 
   SecurityOrigin* origin = document->GetSecurityOrigin();
   EXPECT_STRNE("localhost", origin->Domain().Ascii().data());
@@ -303,16 +305,16 @@ TEST_F(MHTMLTest, MHTMLFromScheme) {
 
   // MHTMLArchives can only be initialized from local schemes, http/https
   // schemes, and content scheme(Android specific).
-  EXPECT_NE(nullptr, MHTMLArchive::Create(http_url, data.Get()));
+  EXPECT_NE(nullptr, MHTMLArchive::Create(http_url, data.get()));
 #if defined(OS_ANDROID)
-  EXPECT_NE(nullptr, MHTMLArchive::Create(content_url, data.Get()));
+  EXPECT_NE(nullptr, MHTMLArchive::Create(content_url, data.get()));
 #else
-  EXPECT_EQ(nullptr, MHTMLArchive::Create(content_url, data.Get()));
+  EXPECT_EQ(nullptr, MHTMLArchive::Create(content_url, data.get()));
 #endif
-  EXPECT_NE(nullptr, MHTMLArchive::Create(file_url, data.Get()));
-  EXPECT_EQ(nullptr, MHTMLArchive::Create(special_scheme_url, data.Get()));
+  EXPECT_NE(nullptr, MHTMLArchive::Create(file_url, data.get()));
+  EXPECT_EQ(nullptr, MHTMLArchive::Create(special_scheme_url, data.get()));
   SchemeRegistry::RegisterURLSchemeAsLocal("fooscheme");
-  EXPECT_NE(nullptr, MHTMLArchive::Create(special_scheme_url, data.Get()));
+  EXPECT_NE(nullptr, MHTMLArchive::Create(special_scheme_url, data.get()));
 }
 
 // Checks that full sandboxing protection has been turned on.
@@ -418,6 +420,27 @@ TEST_F(MHTMLTest, ShadowDom) {
                    ->Shadow()
                    ->OldestShadowRoot()
                    .getElementById("s2"));
+}
+
+TEST_F(MHTMLTest, FormControlElements) {
+  const char kURL[] = "http://www.example.com";
+
+  // Register the mocked frame and load it.
+  RegisterMockedURLLoad(kURL, "form.mht");
+  LoadURLInTopFrame(ToKURL(kURL));
+  ASSERT_TRUE(GetPage());
+  LocalFrame* frame = ToLocalFrame(GetPage()->MainFrame());
+  ASSERT_TRUE(frame);
+  Document* document = frame->GetDocument();
+  ASSERT_TRUE(document);
+
+  ClassCollection* formControlElements = document->getElementsByClassName("fc");
+  ASSERT_TRUE(formControlElements);
+  for (Element* element : *formControlElements)
+    EXPECT_TRUE(element->IsDisabledFormControl());
+
+  EXPECT_FALSE(document->getElementById("h1")->IsDisabledFormControl());
+  EXPECT_FALSE(document->getElementById("fm")->IsDisabledFormControl());
 }
 
 }  // namespace blink

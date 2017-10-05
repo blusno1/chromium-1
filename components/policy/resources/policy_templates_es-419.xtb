@@ -52,6 +52,7 @@
 <translation id="1198465924256827162">Frecuencia de envío de cargas de estado del dispositivo, en milisegundos.
 
       Si esta política no se establece, la frecuencia predeterminada es de 3 horas. La frecuencia mínima permitida es de 60 segundos.</translation>
+<translation id="1204263402976895730">Impresoras empresariales habilitadas</translation>
 <translation id="1221359380862872747">Cargar las URL especificadas en el inicio de sesión del demo</translation>
 <translation id="123081309365616809">Permite transmitir contenido al dispositivo</translation>
 <translation id="1265053460044691532">Permite limitar el tiempo durante el cual un usuario autenticado mediante SAML puede acceder sin conexión.</translation>
@@ -77,6 +78,7 @@
 
       Si esta política se establece en false, <ph name="PRODUCT_NAME" /> no permitirá que se inicien perfiles de invitado.</translation>
 <translation id="1363275621236827384">Habilitar las consultas a Quirks Server para perfiles de hardware</translation>
+<translation id="1393485621820363363">Impresoras empresariales habilitadas asociadas a dispositivos</translation>
 <translation id="1397855852561539316">Dirección URL sugerida para el proveedor de búsqueda predeterminado</translation>
 <translation id="1426410128494586442">Sí</translation>
 <translation id="1427655258943162134">Dirección o dirección URL del servidor proxy</translation>
@@ -237,6 +239,7 @@
 <translation id="2024476116966025075">Configurar el nombre de dominio requerido para los clientes de acceso remoto</translation>
 <translation id="2030905906517501646">Palabra clave del proveedor de búsqueda predeterminado</translation>
 <translation id="203096360153626918">Esta política no tiene efecto en las apps de Android. Podrán implementar el modo de pantalla completa, incluso si esta política se establece como <ph name="FALSE" />.</translation>
+<translation id="2043770014371753404">Impresoras empresariales inhabilitadas</translation>
 <translation id="206623763829450685">Especifica qué esquemas de autenticación de HTTP son compatibles con <ph name="PRODUCT_NAME" />.
 
           Los valores posibles son "basic", "digest", "ntlm" y "negotiate". Cuando haya más de un valor, sepáralos con comas.
@@ -280,6 +283,15 @@
       Si se establece esta configuración, se les solicitará a los usuarios que usan el desbloqueo rápido que ingresen sus contraseñas en la pantalla bloqueada, de acuerdo con esta configuración.
 
       Si no se establece esta configuración, se les solicitará a los usuarios que usan el desbloqueo rápido que ingresen sus contraseñas en la pantalla bloqueada todos los días.</translation>
+<translation id="2194470398825717446">Esta política dejó de estar disponible en M61, usa EcryptfsMigrationStrategy en su lugar.
+
+Especifica el comportamiento de un dispositivo que se envió con ecryptfs y debe realizar una transición a la encriptación ext4.
+
+Si estableces esta política como "DisallowArc", las apps de Android se inhabilitarán para todos los usuarios en el dispositivo (incluidas las que ya tienen una encriptación ext4) y no se ofrecerá la migración de ecryptfs a la encriptación ext4 para los usuarios.
+
+Si estableces esta política como "AllowMigration", se les ofrecerá a los usuarios con directorios de inicio de ecryptfs migrar estos directorios a la encriptación ext4 si es necesario (actualmente, cuando Android N está disponible en el dispositivo).
+
+Esta política no se aplica a las aplicaciones de kiosko; estas se migran de forma automática. Si no se establece esta política, el dispositivo se comportará como si se eligiera la opción "DisallowArc".</translation>
 <translation id="2201555246697292490">Configurar la lista blanca de mensajería nativa</translation>
 <translation id="2204753382813641270">Controlar opción para ocultar archivos automáticamente</translation>
 <translation id="2208976000652006649">Parámetros para URL de búsqueda que utiliza POST</translation>
@@ -521,13 +533,6 @@
           El valor de la política debe especificarse en milisegundos. Los valores se establecerán para que sean inferiores o equivalentes a la demora de pantalla apagada (si está configurada) y la demora de inactividad.</translation>
 <translation id="2987155890997901449">Habilitar ARC</translation>
 <translation id="2987227569419001736">Controlar el uso de la API de Bluetooth web</translation>
-<translation id="2998881342848488968">Esta política permite que <ph name="PRODUCT_OS_NAME" /> omita cualquier proxy para la autenticación de portales cautivos.
-
-      Esta política se aplica únicamente si hay un proxy configurado (por ejemplo, a través de la política, por el usuario en chrome://settings o por extensiones).
-
-      Si se habilita esta configuración, se mostrarán las páginas de autenticación de portales cautivos (es decir, todas las páginas web desde la página de acceso del portal cautivo hasta que <ph name="PRODUCT_NAME" /> detecte una conexión a Internet exitosa) en una ventana separada; además, se ignorarán todos los ajustes de configuración de la política y las restricciones para el usuario actual.
-
-      Si se inhabilita esta configuración o se deja sin establecer, las páginas de autenticación de portales cautivos se mostrarán en una pestaña nueva del navegador (normal), con la configuración de proxy del usuario actual.</translation>
 <translation id="3001534538097271560">Configura esta política como falsa para evitar que los usuarios elijan mandar determinada información del sistema y contenido de páginas a los servidores de Google. Si esta opción se establece como verdadera o no se configura, los usuarios podrán enviar determinada información del sistema y contenido de páginas a Navegación segura para colaborar en la detección de apps y sitios peligrosos.
 
       Consulta https://developers.google.com/safe-browsing para obtener más información sobre Navegación segura.</translation>
@@ -590,6 +595,7 @@
 <translation id="3219421230122020860">Modo incógnito disponible</translation>
 <translation id="3220624000494482595">Si la Aplicación de kiosko es una app de Android, esta no tendrá control sobre la versión de <ph name="PRODUCT_OS_NAME" />, incluso si esta política se establece como <ph name="TRUE" />.</translation>
 <translation id="3236046242843493070">Patrones de URL desde los que se pueden instalar secuencias de comandos de usuario, aplicaciones y extensiones</translation>
+<translation id="3240609035816615922">Política de acceso para la configuración de las impresoras</translation>
 <translation id="3243309373265599239">Especifica el período de tiempo sin intervención del usuario luego del cual se atenúa la pantalla si se usa alimentación de CA.
 
            Si esta política se establece en un valor mayor que cero, se especifica el período de tiempo que el usuario debe permanecer inactivo antes de que <ph name="PRODUCT_OS_NAME" /> atenúe la pantalla.
@@ -618,6 +624,9 @@
 <translation id="3322771899429619102">Te permite configurar una lista de patrones de URL que especifican los sitios que están autorizados a utilizar la generación de claves. Si un patrón de URL tiene configurada la política "KeygenBlockedForUrls", se anulan estas excepciones.
 
           Si esta política no se configura, se usará el valor global predeterminado para todos los sitios, ya sea de la política "DefaultKeygenSetting" si está configurada o de otro tipo de configuración personal del usuario.</translation>
+<translation id="332771718998993005">Determina el nombre anunciado como un destino de <ph name="PRODUCT_NAME" />.
+
+          Si esta política se establece con una string no vacía, esa string se usará como el nombre del destino de <ph name="PRODUCT_NAME" />. De lo contrario, el nombre del destino será el nombre del dispositivo. Si esta política no se establece, el nombre del destino será el nombre del dispositivo, y el propietario del dispositivo (o un usuario del dominio que administre el dispositivo) podrá cambiarlo. El nombre tiene un límite máximo de 24 caracteres.</translation>
 <translation id="3381968327636295719">Utilizar el navegador del host de manera predeterminada</translation>
 <translation id="3417418267404583991">Si esta política no se configura o se establece en "true", <ph name="PRODUCT_OS_NAME" /> permitirá iniciar sesión como invitado. Los inicios de sesión como invitado son sesiones de usuario anónimas y no requieren contraseña.
 
@@ -656,6 +665,7 @@
 
           Esta política solo se respeta si se habilita la política "DefaultSearchProviderEnabled".</translation>
 <translation id="350797926066071931">Habilitar Traductor de Google</translation>
+<translation id="3512226956150568738">Si el modelo del dispositivo del cliente ya era compatible con ARC, la migración a ext4 era necesaria para ejecutar ARC y se establece la política ArcEnabled como verdadera, esta opción se comportará como AskUser (valor 3). En los demás casos (si el modelo del dispositivo no era compatible con ARC o se establece la política ArcEnabled como falsa), este valor es equivalente a DisallowArc (valor 0).</translation>
 <translation id="3528000905991875314">Habilitar páginas de error alternativas</translation>
 <translation id="3547954654003013442">Configuración de proxy</translation>
 <translation id="3591584750136265240">Configurar el comportamiento de autenticación en el acceso</translation>
@@ -700,6 +710,11 @@
           Si la política "EnableMediaRouter" se establece como falsa, su valor no tendrá efecto y el ícono no aparecerá en la barra de herramientas.</translation>
 <translation id="3788662722837364290">Configuración de la administración de energía cuando el usuario está inactivo</translation>
 <translation id="3793095274466276777">Configura los controles del navegador predeterminado en <ph name="PRODUCT_NAME" /> y evita que los usuarios los cambien. Si se habilita esta configuración, <ph name="PRODUCT_NAME" /> siempre comprobará al iniciarse si es el navegador predeterminado y se registrará automáticamente en caso de ser posible. Si esta opción está inhabilitada, <ph name="PRODUCT_NAME" /> nunca verificará si es el navegador predeterminado e inhabilitará los controles de usuario para poder configurar esta opción. Si no se ha establecido esta configuración, <ph name="PRODUCT_NAME" /> permitirá al usuario controlar si es el navegador predeterminado y si las notificaciones para el usuario deben mostrarse cuando no lo es.</translation>
+<translation id="379602782757302612">Permite especificar las extensiones que los usuarios NO pueden instalar. Si se incluyen en la lista negra, se inhabilitarán las extensiones ya instaladas y el usuario no podrá habilitarlas. Cuando una extensión inhabilitada se quite de la lista negra, se volverá a habilitar automáticamente.
+
+          El valor "*" en la lista negra significa que todas las extensiones están inhabilitadas a menos que se incluyan de forma explícita en la lista blanca.
+
+          Si esta política no se establece, el usuario podrá instalar cualquier extensión en <ph name="PRODUCT_NAME" />.</translation>
 <translation id="3800626789999016379">Configura el directorio que <ph name="PRODUCT_NAME" /> usará para descargar archivos.
 
       Si estableces esta política, <ph name="PRODUCT_NAME" /> usará el directorio proporcionado, sin importar si el usuario especificó uno o si habilitó que la marca solicite una ubicación de descarga cada vez.
@@ -837,6 +852,7 @@
       Nota: Actualmente, los reinicios automáticos solo se habilitan cuando se muestra la pantalla de acceso o cuando hay una sesión de la aplicación del kiosco en curso. Esta restricción se modificará en el futuro, y la política se aplicará en todo momento, sin importar si hay alguna sesión en curso.
 
       El valor de la política se debe especificar en segundos. Los valores deben ser iguales o superiores a 3600 segundos (una hora).</translation>
+<translation id="4203879074082863035">Los usuarios solo ven las impresoras en la lista blanca</translation>
 <translation id="420512303455129789">Es un diccionario que asigna URL a un indicador booleano que especifica si se debe permitir (true) o bloquear (false) el acceso al host.
 
           Esta política es para uso interno de <ph name="PRODUCT_NAME" />.</translation>
@@ -1039,8 +1055,10 @@
 <translation id="5052081091120171147">Esta política, si se habilita, fuerza la importación del historial de navegación del navegador predeterminado actual. Si se la habilita, esta política también afecta el cuadro de diálogo de importación. Si se la inhabilita, no se importa ningún historial de navegación. Si no se configura, se le puede preguntar al usuario si desea importar el historial de navegación o la importación puede realizarse de forma automática.</translation>
 <translation id="5056708224511062314">La lupa está inhabilitada.</translation>
 <translation id="5067143124345820993">Lista de usuarios con permiso para iniciar sesión</translation>
+<translation id="5068140065960598044">La política de nube de <ph name="PRODUCT_NAME" /> anula la política de la máquina.</translation>
 <translation id="5085647276663819155">Inhabilitar vista previa de impresión</translation>
 <translation id="5105313908130842249">Demora de bloqueo de pantalla con batería</translation>
+<translation id="5108031557082757679">Impresoras empresariales inhabilitadas asociadas a dispositivos</translation>
 <translation id="5130288486815037971">Si se habilitan los conjuntos de cifrado de RC4 en TLS</translation>
 <translation id="5141670636904227950">Establece el tipo de lupa predeterminado habilitado en la pantalla de acceso.</translation>
 <translation id="5142301680741828703">Siempre procesar los siguientes patrones de URL en <ph name="PRODUCT_FRAME_NAME" /></translation>
@@ -1092,6 +1110,9 @@
           El valor de la política deberá especificarse en milisegundos. Los valores deben ser menores o iguales que la demora por inactividad.</translation>
 <translation id="5307432759655324440">Disponibilidad del modo incógnito</translation>
 <translation id="5318185076587284965">Habilitar el uso de servidores de retransmisión por parte del host de acceso remoto</translation>
+<translation id="5323128137188992869">Permite que se transmita contenido al dispositivo que esté usando <ph name="PRODUCT_NAME" />.
+
+          Si se establece esta política como falsa, los usuarios no podrán transmitir contenido al dispositivo. Si se establece como verdadera, los usuarios podrán transmitir contenido. Si no se establece, los usuarios no podrán transmitir contenido a dispositivos con Sistema operativo Chrome, pero sí podrán hacerlo a otros dispositivos.</translation>
 <translation id="5330684698007383292">Permitir que <ph name="PRODUCT_FRAME_NAME" /> gestione los siguientes tipos de contenido</translation>
 <translation id="5365946944967967336">Mostrar el botón "Página principal" en la barra de herramientas</translation>
 <translation id="5366977351895725771">Si está configurada en falso, la creación de usuarios supervisados por este usuario estará inhabilitada. Los usuarios supervisados existentes seguirán estando disponibles.
@@ -1304,6 +1325,7 @@
 <translation id="6111936128861357925">Permitir juego del huevo de pascua del dinosaurio</translation>
 <translation id="6114416803310251055">en desuso</translation>
 <translation id="6133088669883929098">Permitir que todos los sitios utilicen la generación de claves</translation>
+<translation id="6139485614509308022">Si se establece la política "OffHours", se ignorarán las políticas de dispositivo especificadas (se usará la configuración predeterminada de estas políticas) durante los intervalos definidos. Chrome vuelve a aplicar las políticas de dispositivo en todos los eventos cuando comienza y finaliza el período de "OffHours". Se le notificará al usuario y se lo obligará a salir de su cuenta cuando finalice el tiempo de "OffHours" y se modifique la configuración de las políticas de dispositivo (p. ej., cuando el usuario accede con una cuenta no habilitada).</translation>
 <translation id="6145799962557135888">Te permite configurar una lista de patrones de URL que especifican los sitios que están autorizados a ejecutar JavaScript. Si esta política no se configura, se usará el valor global predeterminado para todos los sitios ya sea de la política "DefaultJavaScriptSetting", si está configurada, o de otro tipo de configuración personal del usuario.</translation>
 <translation id="614662973812186053">Esta política también controla la recopilación de datos de diagnóstico y uso de Android.</translation>
 <translation id="6155936611791017817">Establece el estado predeterminado del cursor grande en la pantalla de acceso.</translation>
@@ -1333,6 +1355,7 @@
 <translation id="6211428344788340116">Indica el tiempo de actividad del dispositivo.
 
       Si esta política no se establece o se establece en "True", los dispositivos registrados notificarán los períodos durante los que se utilice activamente el dispositivo. Si esta política se establece en "False", no se registrará ni se informará sobre el tiempo de actividad del dispositivo.</translation>
+<translation id="6212868225782276239">Se muestran todas las impresoras, excepto las de la lista negra.</translation>
 <translation id="6219965209794245435">Esta política, si se habilita, fuerza la importación de los datos del formulario de Autocompletar del navegador predeterminado anterior. Si se la habilita, esta política también afecta el cuadro de diálogo de importación.
 
       Si se inhabilita, no se importan los datos del formulario de Autocompletar.
@@ -1474,6 +1497,13 @@
           Si estableces esta política, los usuarios no podrán modificarla ni anularla.
 
           Si no se establece esta política, inicialmente los comentarios por voz estarán inhabilitados, pero el usuario podrá habilitarlos en cualquier momento.</translation>
+<translation id="6922040258551909078">
+      Si la política se establece como verdadera, la política de nube tiene prioridad en caso de contradecirse con la política de la máquina.
+      Si la política se establece como falsa o no se configura, la política de la máquina tiene prioridad en caso de contradecirse con la política de nube.
+      Para obtener más información sobre la prioridad de la política, visita: https://support.google.com/chrome?p=set_chrome_policies_for_devices
+
+      Esta política no está disponible en instancias de Windows que no estén unidas a un dominio de <ph name="MS_AD_NAME" />.
+      </translation>
 <translation id="6922884955650325312">Bloquear el complemento <ph name="FLASH_PLUGIN_NAME" /></translation>
 <translation id="6923366716660828830">Especifica el nombre del proveedor de búsqueda predeterminado. Si se deja vacío o si no se configura, se usará el nombre de host especificado por la URL de búsqueda. Esta política solo se considera si la política "DefaultSearchProviderEnabled" está habilitada.</translation>
 <translation id="6931242315485576290">Inhabilitar la sincronización de datos con Google</translation>
@@ -1542,6 +1572,7 @@ Si se selecciona "U2F_EXTENDED", el segundo factor integrado proporcionará func
 <translation id="7132877481099023201">Las URL que recibirán acceso a dispositivos de captura de video sin solicitarlo</translation>
 <translation id="7167436895080860385">Permitir que los usuarios muestren las contraseñas en el administrador de contraseñas (dejó de estar disponible)</translation>
 <translation id="7173856672248996428">Perfil efímero</translation>
+<translation id="717630378807352957">Permite todas las impresoras del archivo de configuración.</translation>
 <translation id="7185078796915954712">TLS 1.3</translation>
 <translation id="718956142899066210">Tipos de conexión permitidos para realizar actualizaciones</translation>
 <translation id="7194407337890404814">Nombre del proveedor de búsqueda predeterminado</translation>
@@ -1584,6 +1615,7 @@ Si se selecciona "U2F_EXTENDED", el segundo factor integrado proporcionará func
 
       Si se establece como falsa, la página Nueva pestaña no mostrará sugerencias de contenido generadas de forma automática.</translation>
 <translation id="7323896582714668701">Parámetros de línea de comandos adicionales para <ph name="PRODUCT_NAME" /></translation>
+<translation id="7326394567531622570">Similar a Wipe (valor 2), pero intenta preservar los tokens de acceso para que el usuario no tenga que volver a acceder.</translation>
 <translation id="7329842439428490522">Especifica el período de tiempo sin intervención del usuario luego del cual se apaga la pantalla si se usa alimentación de la batería.
 
            Si esta política se establece en un valor mayor que cero, se especifica el período de tiempo que el usuario debe permanecer inactivo antes de que <ph name="PRODUCT_OS_NAME" /> apague la pantalla.
@@ -1608,6 +1640,7 @@ Si se selecciona "U2F_EXTENDED", el segundo factor integrado proporcionará func
       Si esta política no se establece, la limpieza automática utilizará la estrategia integrada predeterminada, que actualmente es "RemoveLRUIfDormant".</translation>
 <translation id="7336878834592315572">Guardar las cookies durante la sesión</translation>
 <translation id="7340034977315324840">Notificar tiempo de actividad del dispositivo</translation>
+<translation id="7343497214039883642">Archivo de configuración de las impresoras empresariales para los dispositivos</translation>
 <translation id="7384999953864505698">Permite el protocolo QUIC</translation>
 <translation id="7417972229667085380">Indica el porcentaje en el que debe ajustarse la demora de inactividad en el modo de presentación (en desuso).</translation>
 <translation id="7421483919690710988">Establecer tamaño de caché de disco de medios en bytes</translation>
@@ -1617,7 +1650,6 @@ Si se selecciona "U2F_EXTENDED", el segundo factor integrado proporcionará func
       Si la política se establece en false o no se configura, <ph name="TLS_FALSE_START" /> se habilitará. Si se establece en true, <ph name="TLS_FALSE_START" /> se inhabilitará.</translation>
 <translation id="7433714841194914373">Habilitar Instant</translation>
 <translation id="7443616896860707393">Avisos de autenticación básica de HTTP de origen cruzado</translation>
-<translation id="7468416082528382842">Ubicación del registro de Windows:</translation>
 <translation id="7469554574977894907">Habilitar sugerencias de búsqueda</translation>
 <translation id="7474249562477552702">Establecer si se permiten los certificados firmados con SHA-1 y emitidos por los anclajes de confianza locales</translation>
 <translation id="7485481791539008776">Normas de selección de la impresora predeterminada</translation>
@@ -1789,6 +1821,7 @@ Si se selecciona "U2F_EXTENDED", el segundo factor integrado proporcionará func
       Si esta política no se establece, el dispositivo utilizará el formato de reloj de 24 horas de manera predeterminada.</translation>
 <translation id="8114382167597081590">No aplicar el modo restringido en YouTube</translation>
 <translation id="8118665053362250806">Configurar el tamaño de caché de disco de medios</translation>
+<translation id="8124468781472887384">Política de acceso para la configuración de las impresoras asociadas a dispositivos</translation>
 <translation id="8135937294926049787">Especifica el período de tiempo sin intervención del usuario luego del cual se apaga la pantalla si se usa alimentación de CA.
 
            Si esta política se establece en un valor mayor que cero, se especifica el período de tiempo que el usuario debe permanecer inactivo antes de que <ph name="PRODUCT_OS_NAME" /> apague la pantalla.
@@ -1904,7 +1937,6 @@ Si se selecciona "U2F_EXTENDED", el segundo factor integrado proporcionará func
 <translation id="8424255554404582727">Establecer la rotación predeterminada de la pantalla que se volverá a aplicar en cada reinicio</translation>
 <translation id="8426231401662877819">Rotar la pantalla hacia la derecha 90 grados</translation>
 <translation id="8451988835943702790">Usar la página Nueva pestaña como página principal</translation>
-<translation id="8458790683633857482">Especifica el conjunto de políticas que se enviará al tiempo de ejecución de ARC. El valor debe ser un formato JSON válido.</translation>
 <translation id="8465065632133292531">Parámetros para URL instantánea que utiliza POST</translation>
 <translation id="847472800012384958">No permitir que ningún sitio muestre ventanas emergentes</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2013,6 +2045,7 @@ Si se selecciona "U2F_EXTENDED", el segundo factor integrado proporcionará func
 <translation id="9096086085182305205">Lista blanca del servidor de autenticación</translation>
 <translation id="9098553063150791878">Políticas para la autenticación HTTP</translation>
 <translation id="9105265795073104888">Las apps de Android tienen a su disposición solo un subgrupo de opciones de configuración de proxy. Dichas apps pueden elegir usar el proxy de forma voluntaria, pero no puedes forzarlas a que lo usen.</translation>
+<translation id="9112727953998243860">Archivo de configuración de impresoras empresariales</translation>
 <translation id="9112897538922695510">Te permite registrar una lista de controladores de protocolo. Esto solo puede ser una política recomendada. La propiedad |protocol| se debe establecer para el esquema (por ejemplo, "mailto") de la URL, y la propiedad |url| se debe establecer para el patrón de la URL de la aplicación que controla el esquema. El patrón puede incluir una especificación "%s" que, si está presente, se reemplazará por la URL controlada.
 
           Los controladores de protocolo registrados por la política se fusionan con los registrados por el usuario, y todos están disponibles para utilizarse. El usuario puede anular los controladores de protocolos instalados por la política si instala un nuevo controlador predeterminado, pero no puede eliminar un controlador de protocolo registrado por la política.</translation>

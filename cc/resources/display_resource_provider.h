@@ -14,7 +14,6 @@ class SharedBitmapManager;
 }  // namespace viz
 
 namespace cc {
-class BlockingTaskRunner;
 
 // This class is not thread-safe and can only be called from the thread it was
 // created on.
@@ -24,9 +23,7 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
       viz::ContextProvider* compositor_context_provider,
       viz::SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      BlockingTaskRunner* blocking_main_thread_task_runner,
       bool delegated_sync_points_required,
-      bool enable_color_correct_rasterization,
       const viz::ResourceSettings& resource_settings);
   ~DisplayResourceProvider() override;
 

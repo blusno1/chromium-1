@@ -22,6 +22,7 @@ class HighlighterControllerTestApi : public HighlighterSelectionObserver {
   explicit HighlighterControllerTestApi(HighlighterController* instance);
   ~HighlighterControllerTestApi() override;
 
+  void CallMetalayerDone();
   void SetEnabled(bool enabled);
   void DestroyPointerView();
   void SimulateInterruptedStrokeTimeout();
@@ -32,18 +33,35 @@ class HighlighterControllerTestApi : public HighlighterSelectionObserver {
   const FastInkPoints& points() const;
   const FastInkPoints& predicted_points() const;
 
-  void ResetSelection() { handle_selection_called_ = false; }
+  void ResetEnabledState() { handle_enabled_state_changed_called_ = false; }
+  bool handle_enabled_state_changed_called() const {
+    return handle_enabled_state_changed_called_;
+  }
+  bool enabled() const { return enabled_; }
+
+  void ResetSelection() {
+    handle_selection_called_ = false;
+    handle_failed_selection_called_ = false;
+  }
   bool handle_selection_called() const { return handle_selection_called_; }
+  bool handle_failed_selection_called() const {
+    return handle_failed_selection_called_;
+  }
   const gfx::Rect& selection() const { return selection_; }
 
  private:
   // HighlighterSelectionObserver:
   void HandleSelection(const gfx::Rect& rect) override;
+  void HandleFailedSelection() override;
+  void HandleEnabledStateChange(bool enabled) override;
 
   HighlighterController* instance_;
 
   bool handle_selection_called_ = false;
+  bool handle_failed_selection_called_ = false;
+  bool handle_enabled_state_changed_called_ = false;
   gfx::Rect selection_;
+  bool enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(HighlighterControllerTestApi);
 };

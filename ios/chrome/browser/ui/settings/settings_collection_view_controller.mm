@@ -65,9 +65,9 @@
 #import "ios/chrome/browser/ui/settings/save_passwords_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/search_engine_settings_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_utils.h"
+#import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/settings/voicesearch_collection_view_controller.h"
-#import "ios/chrome/browser/ui/sync/sync_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/browser/voice/speech_input_locale_config.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -293,6 +293,8 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     _settingsMainPageDispatcher = self;
     _dispatcher = dispatcher;
 
+    // TODO(crbug.com/764578): -loadModel should not be called from
+    // initializer. A possible fix is to move this call to -viewDidLoad.
     [self loadModel];
   }
   return self;
@@ -351,7 +353,8 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
         _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
             initWithBrowserState:_browserState
                      accessPoint:signin_metrics::AccessPoint::
-                                     ACCESS_POINT_SETTINGS];
+                                     ACCESS_POINT_SETTINGS
+                      dispatcher:self.dispatcher];
         _signinPromoViewMediator.consumer = self;
         prefs->SetInteger(prefs::kIosSettingsSigninPromoDisplayedCount,
                           displayedCount + 1);
@@ -996,12 +999,10 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                     dispatcher:self.dispatcher];
 
   __weak SettingsCollectionViewController* weakSelf = self;
-  [_signinInteractionController
-      signInWithViewController:self
-                      identity:identity
-                    completion:^(BOOL success) {
-                      [weakSelf didFinishSignin:success];
-                    }];
+  [_signinInteractionController signInWithIdentity:identity
+                                        completion:^(BOOL success) {
+                                          [weakSelf didFinishSignin:success];
+                                        }];
 }
 
 - (void)didFinishSignin:(BOOL)signedIn {

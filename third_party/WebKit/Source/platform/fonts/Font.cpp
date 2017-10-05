@@ -26,7 +26,6 @@
 
 #include "platform/LayoutTestSupport.h"
 #include "platform/LayoutUnit.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/CharacterRange.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontFallbackIterator.h"
@@ -431,7 +430,7 @@ void Font::WillUseFontData(const String& text) const {
         GetFontDescription(), family.Family(), text);
 }
 
-PassRefPtr<FontFallbackIterator> Font::CreateFontFallbackIterator(
+RefPtr<FontFallbackIterator> Font::CreateFontFallbackIterator(
     FontFallbackPriority fallback_priority) const {
   return FontFallbackIterator::Create(font_description_, font_fallback_list_,
                                       fallback_priority);

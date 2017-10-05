@@ -99,6 +99,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/upload_data_stream.h"
+#include "net/base/url_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_request_headers.h"
@@ -196,17 +197,6 @@ const double kMaxRequestsPerProcessRatio = 0.45;
 // should be and once we stop blocking multiple simultaneous requests for the
 // same resource (see bugs 46104 and 31014).
 const int kDefaultDetachableCancelDelayMs = 30000;
-
-bool IsDetachableResourceType(ResourceType type) {
-  switch (type) {
-    case RESOURCE_TYPE_PREFETCH:
-    case RESOURCE_TYPE_PING:
-    case RESOURCE_TYPE_CSP_REPORT:
-      return true;
-    default:
-      return false;
-  }
-}
 
 // Aborts a request before an URLRequest has actually been created.
 void AbortRequestBeforeItStarts(
@@ -709,6 +699,11 @@ void ResourceDispatcherHostImpl::DidFinishLoading(ResourceLoader* loader) {
                                     -loader->request()->status().error());
       }
 
+      if (net::IsTLS13ExperimentHost(loader->request()->url().host_piece())) {
+        UMA_HISTOGRAM_SPARSE_SLOWLY("Net.ErrorCodesForTLS13ExperimentMainFrame",
+                                    -loader->request()->status().error());
+      }
+
       int num_valid_scts = std::count_if(
           loader->request()->ssl_info().signed_certificate_timestamps.begin(),
           loader->request()->ssl_info().signed_certificate_timestamps.end(),
@@ -742,7 +737,11 @@ std::unique_ptr<net::ClientCertStore>
 }
 
 void ResourceDispatcherHostImpl::OnInit() {
-  scheduler_.reset(new ResourceScheduler);
+  // In some tests |delegate_| does not get set, when that happens assume the
+  // scheduler is enabled.
+  bool enable_resource_scheduler =
+      delegate_ ? delegate_->ShouldUseResourceScheduler() : true;
+  scheduler_.reset(new ResourceScheduler(enable_resource_scheduler));
 }
 
 void ResourceDispatcherHostImpl::OnShutdown() {
@@ -1151,7 +1150,7 @@ void ResourceDispatcherHostImpl::BeginRequest(
               it.name(), it.value(), child_id, resource_context,
               base::Bind(
                   &ResourceDispatcherHostImpl::ContinuePendingBeginRequest,
-                  base::Unretained(this), make_scoped_refptr(requester_info),
+                  base::Unretained(this), base::WrapRefCounted(requester_info),
                   request_id, request_data, is_sync_load, sync_result_handler,
                   route_id, request_data.headers,
                   base::Passed(std::move(mojo_request)),
@@ -1357,17 +1356,16 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
       requester_info, route_id,
       -1,  // frame_tree_node_id
       request_data.origin_pid, request_id, request_data.render_frame_id,
-      request_data.is_main_frame, request_data.parent_is_main_frame,
-      request_data.resource_type, request_data.transition_type,
-      request_data.should_replace_current_entry,
+      request_data.is_main_frame, request_data.resource_type,
+      request_data.transition_type, request_data.should_replace_current_entry,
       false,  // is download
       false,  // is stream
       allow_download, request_data.has_user_gesture,
       request_data.enable_load_timing, request_data.enable_upload_progress,
-      do_not_prompt_for_login, request_data.referrer_policy,
-      request_data.visibility_state, resource_context, report_raw_headers,
-      !is_sync_load, previews_state, request_data.request_body,
-      request_data.initiated_in_secure_context);
+      do_not_prompt_for_login, request_data.keepalive,
+      request_data.referrer_policy, request_data.visibility_state,
+      resource_context, report_raw_headers, !is_sync_load, previews_state,
+      request_data.request_body, request_data.initiated_in_secure_context);
   extra_info->SetBlobHandles(std::move(blob_handles));
 
   // Request takes ownership.
@@ -1470,8 +1468,8 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
 
   // Prefetches and <a ping> requests outlive their child process.
   if (!sync_result_handler &&
-      (start_detached ||
-       IsDetachableResourceType(request_data.resource_type))) {
+      (start_detached || request_data.resource_type == RESOURCE_TYPE_PREFETCH ||
+       request_data.keepalive)) {
     auto timeout =
         base::TimeDelta::FromMilliseconds(kDefaultDetachableCancelDelayMs);
     int timeout_set_by_finch_in_sec = base::GetFieldTrialParamByFeatureAsInt(
@@ -1703,7 +1701,6 @@ ResourceRequestInfoImpl* ResourceDispatcherHostImpl::CreateRequestInfo(
       -1,  // frame_tree_node_id
       0, MakeRequestID(), render_frame_route_id,
       false,  // is_main_frame
-      false,  // parent_is_main_frame
       RESOURCE_TYPE_SUB_RESOURCE, ui::PAGE_TRANSITION_LINK,
       false,     // should_replace_current_entry
       download,  // is_download
@@ -1713,6 +1710,7 @@ ResourceRequestInfoImpl* ResourceDispatcherHostImpl::CreateRequestInfo(
       false,     // enable_load_timing
       false,     // enable_upload_progress
       false,     // do_not_prompt_for_login
+      false,     // keepalive
       blink::kWebReferrerPolicyDefault, blink::kWebPageVisibilityStateVisible,
       context,
       false,           // report_raw_headers
@@ -1783,7 +1781,11 @@ void ResourceDispatcherHostImpl::CancelRequestsForRoute(
     if (loader.first.child_id != child_id)
       continue;
 
+    // Added for http://crbug.com/754704; remove when that bug is resolved.
+    loader.second->AssertURLRequestPresent();
+
     ResourceRequestInfoImpl* info = loader.second->GetRequestInfo();
+    CHECK(info);
 
     GlobalRequestID id(child_id, loader.first.request_id);
     DCHECK(id == loader.first);
@@ -1793,7 +1795,8 @@ void ResourceDispatcherHostImpl::CancelRequestsForRoute(
     if (cancel_all_routes || route_id == info->GetRenderFrameID()) {
       if (info->detachable_handler()) {
         if (base::FeatureList::IsEnabled(
-                features::kKeepAliveRendererForKeepaliveRequests)) {
+                features::kKeepAliveRendererForKeepaliveRequests) &&
+            info->keepalive()) {
           // If the feature is enabled, the renderer process's lifetime is
           // prolonged so there's no need to detach.
           if (cancel_all_routes) {
@@ -2121,8 +2124,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       -1,  // request_data.origin_pid,
       MakeRequestID(),
       -1,  // request_data.render_frame_id,
-      info.is_main_frame, info.parent_is_main_frame, resource_type,
-      info.common_params.transition,
+      info.is_main_frame, resource_type, info.common_params.transition,
       // should_replace_current_entry. This was only maintained at layer for
       // request transfers and isn't needed for browser-side navigations.
       false,
@@ -2132,6 +2134,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       true,   // enable_load_timing
       false,  // enable_upload_progress
       false,  // do_not_prompt_for_login
+      false,  // keepalive
       info.common_params.referrer.policy, info.page_visibility_state,
       resource_context, info.report_raw_headers,
       true,  // is_async

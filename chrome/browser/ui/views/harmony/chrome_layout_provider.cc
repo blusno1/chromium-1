@@ -45,6 +45,8 @@ ChromeLayoutProvider::CreateLayoutProvider() {
 
 gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
   switch (metric) {
+    case ChromeInsetsMetric::INSETS_OMNIBOX:
+      return gfx::Insets(3);
     case ChromeInsetsMetric::INSETS_TOAST:
       return gfx::Insets(0, 8);
     default:
@@ -76,6 +78,8 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 8;
     case DISTANCE_TOAST_LABEL_VERTICAL:
       return 12;
+    case DISTANCE_MODAL_DIALOG_WIDTH_CONTAINING_MULTILINE_TEXT:
+      return 400;
     default:
       return views::LayoutProvider::GetDistanceMetric(metric);
   }

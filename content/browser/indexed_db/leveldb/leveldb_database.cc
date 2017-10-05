@@ -33,6 +33,7 @@
 #include "content/browser/indexed_db/leveldb/leveldb_iterator_impl.h"
 #include "content/browser/indexed_db/leveldb/leveldb_write_batch.h"
 #include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/env.h"
@@ -74,21 +75,14 @@ class LockImpl : public LevelDBLock {
   DISALLOW_COPY_AND_ASSIGN(LockImpl);
 };
 
-leveldb::Slice MakeSlice(const StringPiece& s) {
-  return leveldb::Slice(s.begin(), s.size());
-}
-
-StringPiece MakeStringPiece(const leveldb::Slice& s) {
-  return StringPiece(s.data(), s.size());
-}
-
 class ComparatorAdapter : public leveldb::Comparator {
  public:
   explicit ComparatorAdapter(const LevelDBComparator* comparator)
       : comparator_(comparator) {}
 
   int Compare(const leveldb::Slice& a, const leveldb::Slice& b) const override {
-    return comparator_->Compare(MakeStringPiece(a), MakeStringPiece(b));
+    return comparator_->Compare(leveldb_env::MakeStringPiece(a),
+                                leveldb_env::MakeStringPiece(b));
   }
 
   const char* Name() const override { return comparator_->Name(); }
@@ -123,7 +117,7 @@ leveldb::Status OpenDB(
   // https://code.google.com/p/chromium/issues/detail?id=227313#c11
   options.max_open_files = 80;
   options.env = env;
-  options.block_cache = leveldb_env::SharedWebBlockCache();
+  options.block_cache = leveldb_chrome::GetSharedWebBlockCache();
 
   // ChromiumEnv assumes UTF8, converts back to FilePath before using.
   return leveldb_env::OpenDB(options, path.AsUTF8Unsafe(), db);
@@ -376,8 +370,8 @@ leveldb::Status LevelDBDatabase::Put(const StringPiece& key,
   leveldb::WriteOptions write_options;
   write_options.sync = kSyncWrites;
 
-  const leveldb::Status s =
-      db_->Put(write_options, MakeSlice(key), MakeSlice(*value));
+  const leveldb::Status s = db_->Put(write_options, leveldb_env::MakeSlice(key),
+                                     leveldb_env::MakeSlice(*value));
   if (!s.ok())
     LOG(ERROR) << "LevelDB put failed: " << s.ToString();
   else
@@ -390,7 +384,8 @@ leveldb::Status LevelDBDatabase::Remove(const StringPiece& key) {
   leveldb::WriteOptions write_options;
   write_options.sync = kSyncWrites;
 
-  const leveldb::Status s = db_->Delete(write_options, MakeSlice(key));
+  const leveldb::Status s =
+      db_->Delete(write_options, leveldb_env::MakeSlice(key));
   if (!s.IsNotFound())
     LOG(ERROR) << "LevelDB remove failed: " << s.ToString();
   return s;
@@ -406,7 +401,8 @@ leveldb::Status LevelDBDatabase::Get(const StringPiece& key,
                                          // performance impact is too great.
   read_options.snapshot = snapshot ? snapshot->snapshot_ : 0;
 
-  const leveldb::Status s = db_->Get(read_options, MakeSlice(key), value);
+  const leveldb::Status s =
+      db_->Get(read_options, leveldb_env::MakeSlice(key), value);
   if (s.ok()) {
     *found = true;
     return s;
@@ -459,8 +455,8 @@ const LevelDBComparator* LevelDBDatabase::Comparator() const {
 void LevelDBDatabase::Compact(const base::StringPiece& start,
                               const base::StringPiece& stop) {
   IDB_TRACE("LevelDBDatabase::Compact");
-  const leveldb::Slice start_slice = MakeSlice(start);
-  const leveldb::Slice stop_slice = MakeSlice(stop);
+  const leveldb::Slice start_slice = leveldb_env::MakeSlice(start);
+  const leveldb::Slice stop_slice = leveldb_env::MakeSlice(stop);
   // NULL batch means just wait for earlier writes to be done
   db_->Write(leveldb::WriteOptions(), NULL);
   db_->CompactRange(&start_slice, &stop_slice);
@@ -480,8 +476,9 @@ bool LevelDBDatabase::OnMemoryDump(
   DCHECK(res);
   base::StringToUint64(value, &size);
 
-  auto* dump = pmd->CreateAllocatorDump(base::StringPrintf(
-      "leveldb/index_db/0x%" PRIXPTR, reinterpret_cast<uintptr_t>(db_.get())));
+  auto* dump = pmd->CreateAllocatorDump(
+      base::StringPrintf("site_storage/index_db/0x%" PRIXPTR,
+                         reinterpret_cast<uintptr_t>(db_.get())));
   dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                   base::trace_event::MemoryAllocatorDump::kUnitsBytes, size);
 

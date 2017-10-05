@@ -895,11 +895,11 @@ int SSLClientSocketImpl::Init() {
     case kTLS13VariantExperiment:
       SSL_set_tls13_variant(ssl_.get(), tls13_experiment);
       break;
-    case kTLS13VariantRecordTypeExperiment:
-      SSL_set_tls13_variant(ssl_.get(), tls13_record_type_experiment);
+    case kTLS13VariantExperiment2:
+      SSL_set_tls13_variant(ssl_.get(), tls13_experiment2);
       break;
-    case kTLS13VariantNoSessionIDExperiment:
-      SSL_set_tls13_variant(ssl_.get(), tls13_no_session_id_experiment);
+    case kTLS13VariantExperiment3:
+      SSL_set_tls13_variant(ssl_.get(), tls13_experiment3);
       break;
   }
 
@@ -1203,9 +1203,9 @@ int SSLClientSocketImpl::DoVerifyCert(int result) {
   server_cert_ = x509_util::CreateX509CertificateFromBuffers(
       SSL_get0_peer_certificates(ssl_.get()));
 
-  // OpenSSL decoded the certificate, but the platform certificate
-  // implementation could not. This is treated as a fatal SSL-level protocol
-  // error rather than a certificate error. See https://crbug.com/91341.
+  // OpenSSL decoded the certificate, but the X509Certificate implementation
+  // could not. This is treated as a fatal SSL-level protocol error rather than
+  // a certificate error. See https://crbug.com/91341.
   if (!server_cert_)
     return ERR_SSL_SERVER_CERT_BAD_FORMAT;
 

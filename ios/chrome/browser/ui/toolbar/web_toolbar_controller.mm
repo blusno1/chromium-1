@@ -44,7 +44,10 @@
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #include "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/image_util.h"
+#include "ios/chrome/browser/ui/omnibox/location_bar_controller.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_controller_impl.h"
+#include "ios/chrome/browser/ui/omnibox/location_bar_delegate.h"
+#include "ios/chrome/browser/ui/omnibox/omnibox_popup_view_ios.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_view.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
@@ -52,7 +55,6 @@
 #import "ios/chrome/browser/ui/toolbar/keyboard_assist/toolbar_assistive_keyboard_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/keyboard_assist/toolbar_assistive_keyboard_views.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller+protected.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_model_ios.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_resource_macros.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -65,8 +67,6 @@
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/images/branded_image_provider.h"
 #import "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
-#include "ios/shared/chrome/browser/ui/omnibox/location_bar_controller.h"
-#include "ios/shared/chrome/browser/ui/omnibox/location_bar_delegate.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/ProgressView/src/MaterialProgressView.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
@@ -250,7 +250,8 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   UIImageView* _incognitoIcon;
   UIView* _clippingView;
 
-  std::unique_ptr<LocationBarController> _locationBar;
+  std::unique_ptr<LocationBarControllerImpl> _locationBar;
+  std::unique_ptr<OmniboxPopupViewIOS> _popupView;
   BOOL _initialLayoutComplete;
   // If |YES|, toolbar is incognito.
   BOOL _incognito;
@@ -316,6 +317,13 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 - (void)handleLongPress:(UILongPressGestureRecognizer*)gesture;
 - (void)setImagesForNavButton:(UIButton*)button
         withTabHistoryVisible:(BOOL)tabHistoryVisible;
+// Returns a map where the keys are names of text-to-speech notifications and
+// the values are the selectors to use for these notifications.
++ (const std::map<__strong NSString*, SEL>&)selectorsForTTSNotificationNames;
+// Starts or stops observing the NSNotifications from
+// |-selectorsForTTSNotificationNames|.
+- (void)startObservingTTSNotifications;
+- (void)stopObservingTTSNotifications;
 // Received when a TTS player has received audio data.
 - (void)audioReadyForPlayback:(NSNotification*)notification;
 // Updates the TTS button depending on whether or not TTS is currently playing.
@@ -347,6 +355,8 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 - (void)updateSnapshotWithWidth:(CGFloat)width forced:(BOOL)force;
 // Insert 'com' without the period if cursor is directly after a period.
 - (NSString*)updateTextForDotCom:(NSString*)text;
+// Updates all buttons visibility, including the parent class buttons.
+- (void)updateToolbarButtons;
 @end
 
 @implementation WebToolbarController
@@ -357,7 +367,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 - (instancetype)initWithDelegate:(id<WebToolbarDelegate>)delegate
                        urlLoader:(id<UrlLoader>)urlLoader
                     browserState:(ios::ChromeBrowserState*)browserState
-                 preloadProvider:(id<PreloadProvider>)preloader
                       dispatcher:
                           (id<ApplicationCommands, BrowserCommands>)dispatcher {
   DCHECK(delegate);
@@ -614,7 +623,8 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
                                    UIViewAutoresizingFlexibleBottomMargin];
   [_webToolbar setFrame:[self specificControlsArea]];
   _locationBar = base::MakeUnique<LocationBarControllerImpl>(
-      _omniBox, _browserState, preloader, self, self, self.dispatcher);
+      _omniBox, _browserState, self, self.dispatcher);
+  _popupView = _locationBar->CreatePopupView(self);
 
   // Create the determinate progress bar (phone only).
   if (idiom == IPHONE_IDIOM) {
@@ -650,26 +660,8 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
     [_voiceSearchButton setEnabled:NO];
   }
 
-  // Register for text-to-speech (TTS) events on tablet.
-  if (idiom == IPAD_IDIOM) {
-    NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
-    [defaultCenter addObserver:self
-                      selector:@selector(audioReadyForPlayback:)
-                          name:kTTSAudioReadyForPlaybackNotification
-                        object:nil];
-    [defaultCenter addObserver:self
-                      selector:@selector(updateIsTTSPlaying:)
-                          name:kTTSWillStartPlayingNotification
-                        object:nil];
-    [defaultCenter addObserver:self
-                      selector:@selector(updateIsTTSPlaying:)
-                          name:kTTSDidStopPlayingNotification
-                        object:nil];
-    [defaultCenter addObserver:self
-                      selector:@selector(moveVoiceOverToVoiceSearchButton)
-                          name:kVoiceSearchWillHideNotification
-                        object:nil];
-  }
+  [self startObservingTTSNotifications];
+
   [self.view setDelegate:self];
 
   if (idiom == IPHONE_IDIOM) {
@@ -693,13 +685,29 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 
 - (void)browserStateDestroyed {
   // The location bar has a browser state reference, so must be destroyed at
-  // this point.
+  // this point. The popup has to be destroyed before the location bar.
+  _popupView.reset();
   _locationBar.reset();
   _browserState = nullptr;
 }
 
 - (void)dealloc {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark -
+#pragma mark Acessors
+
+- (void)setDelegate:(id<WebToolbarDelegate>)delegate {
+  if (_delegate == delegate)
+    return;
+
+  // TTS notifications cannot be handled without a delegate.
+  if (_delegate)
+    [self stopObservingTTSNotifications];
+  _delegate = delegate;
+  if (_delegate)
+    [self startObservingTTSNotifications];
 }
 
 #pragma mark -
@@ -808,16 +816,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   [self cancelOmniboxEdit];
 }
 
-- (CGRect)bookmarkButtonAnchorRect {
-  // Shrink the padding around the bookmark button so the popovers are anchored
-  // correctly.
-  return CGRectInset([_starButton bounds], 6, 11);
-}
-
-- (UIView*)bookmarkButtonView {
-  return _starButton;
-}
-
 - (CGRect)visibleOmniboxFrame {
   CGRect frame = _omniboxBackground.frame;
   frame = [self.view.superview convertRect:frame
@@ -844,8 +842,8 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   return omniboxViewIOS->IsPopupOpen();
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
+- (void)updateToolbarButtons {
+  [super updateStandardButtons];
   _lastKnownTraitCollection = [UITraitCollection
       traitCollectionWithTraitsFromCollections:@[ self.view.traitCollection ]];
   if (IsIPadIdiom()) {
@@ -1339,8 +1337,7 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
     // For iPhone place the popup just below the toolbar.
     CGRect fieldFrame =
         [parent convertRect:[_webToolbar bounds] fromView:_webToolbar];
-    frame.origin.y =
-        CGRectGetMaxY(fieldFrame) - [ToolbarController toolbarDropShadowHeight];
+    frame.origin.y = CGRectGetMaxY(fieldFrame);
     frame.size.height = CGRectGetMaxY([parent bounds]) - frame.origin.y;
   }
   return frame;
@@ -1358,8 +1355,12 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 - (void)windowDidChange {
   if (![_lastKnownTraitCollection
           containsTraitsInCollection:self.view.traitCollection]) {
-    [self traitCollectionDidChange:_lastKnownTraitCollection];
+    [self updateToolbarButtons];
   }
+}
+
+- (void)traitCollectionDidChange {
+  [self updateToolbarButtons];
 }
 
 #pragma mark -
@@ -1410,6 +1411,7 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 }
 
 - (void)keyboardAccessoryCameraSearchTouchUp {
+  base::RecordAction(UserMetricsAction("MobileCustomRowCameraSearch"));
   [self.dispatcher showQRScanner];
 }
 
@@ -1729,6 +1731,48 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
     _backButtonMode = newMode;
   else
     _forwardButtonMode = newMode;
+}
+
++ (const std::map<__strong NSString*, SEL>&)selectorsForTTSNotificationNames {
+  static std::map<__strong NSString*, SEL> selectorsForNotifications;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    selectorsForNotifications[kTTSAudioReadyForPlaybackNotification] =
+        @selector(audioReadyForPlayback:);
+    selectorsForNotifications[kTTSWillStartPlayingNotification] =
+        @selector(updateIsTTSPlaying:);
+    selectorsForNotifications[kTTSDidStopPlayingNotification] =
+        @selector(updateIsTTSPlaying:);
+    selectorsForNotifications[kVoiceSearchWillHideNotification] =
+        @selector(moveVoiceOverToVoiceSearchButton);
+  });
+  return selectorsForNotifications;
+}
+
+- (void)startObservingTTSNotifications {
+  // The toolbar is only used to play text-to-speech search results on iPads.
+  if (IsIPadIdiom()) {
+    NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
+    const auto& selectorsForTTSNotifications =
+        [[self class] selectorsForTTSNotificationNames];
+    for (const auto& selectorForNotification : selectorsForTTSNotifications) {
+      [defaultCenter addObserver:self
+                        selector:selectorForNotification.second
+                            name:selectorForNotification.first
+                          object:nil];
+    }
+  }
+}
+
+- (void)stopObservingTTSNotifications {
+  NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
+  const auto& selectorsForTTSNotifications =
+      [[self class] selectorsForTTSNotificationNames];
+  for (const auto& selectorForNotification : selectorsForTTSNotifications) {
+    [defaultCenter removeObserver:self
+                             name:selectorForNotification.first
+                           object:nil];
+  }
 }
 
 - (void)audioReadyForPlayback:(NSNotification*)notification {
@@ -2080,6 +2124,11 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 }
 
 - (void)fadeInOmniboxTrailingView {
+  UIView* trailingView = [_omniBox rightView];
+  trailingView.alpha = 0;
+  [_cancelButton setAlpha:0];
+  [_cancelButton setHidden:NO];
+
   // Instead of passing a delay into -fadeInView:, wait to call -fadeInView:.
   // The CABasicAnimation's start and end positions are calculated immediately
   // instead of after the animation's delay, but the omnibox's layer isn't set
@@ -2088,11 +2137,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   dispatch_time_t delay = dispatch_time(
       DISPATCH_TIME_NOW, ios::material::kDuration6 * NSEC_PER_SEC);
   dispatch_after(delay, dispatch_get_main_queue(), ^(void) {
-    UIView* trailingView = [_omniBox rightView];
-    trailingView.alpha = 0;
-    [_cancelButton setAlpha:0];
-    [_cancelButton setHidden:NO];
-
     [self fadeInView:trailingView
         fromLeadingOffset:kPositionAnimationLeadingOffset
              withDuration:ios::material::kDuration1

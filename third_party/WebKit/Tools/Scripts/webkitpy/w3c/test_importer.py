@@ -117,6 +117,10 @@ class TestImporter(object):
             _log.info('Done: no changes to import.')
             return 0
 
+        if self._only_wpt_manifest_changed():
+            _log.info('Only WPT_BASE_MANIFEST.json was updated; skipping the import.')
+            return 0
+
         self._commit_changes(commit_message)
         _log.info('Changes imported and committed.')
 
@@ -198,6 +202,7 @@ class TestImporter(object):
             _log.info('CQ appears to have passed; trying to commit.')
             self.git_cl.run(['upload', '-f', '--send-mail'])  # Turn off WIP mode.
             self.git_cl.run(['set-commit'])
+            self.git_cl.wait_for_closed_status()
             _log.info('Update completed.')
             return True
 
@@ -334,6 +339,13 @@ class TestImporter(object):
         return_code, _ = self.run(['git', 'diff', '--quiet', 'HEAD'], exit_on_failure=False)
         return return_code == 1
 
+    def _only_wpt_manifest_changed(self):
+        changed_files = self.host.git().changed_files()
+        wpt_base_manifest = self.fs.relpath(
+            self.fs.join(self.dest_path, '..', 'WPT_BASE_MANIFEST.json'),
+            self.finder.chromium_base())
+        return changed_files == [wpt_base_manifest]
+
     def _commit_message(self, chromium_commit_sha, import_commit_sha,
                         locally_applied_commits=None):
         message = 'Import {}\n\nUsing wpt-import in Chromium {}.\n'.format(
@@ -423,14 +435,11 @@ class TestImporter(object):
             description,
             '--tbrs',
             'qyearsley@chromium.org',
-        ] + self._cc_part(directory_owners))
-
-    @staticmethod
-    def _cc_part(directory_owners):
-        cc_part = []
-        for owner_tuple in sorted(directory_owners):
-            cc_part.extend('--cc=' + owner for owner in owner_tuple)
-        return cc_part
+            # Note: we used to CC all the directory owners, but have stopped
+            # in search of a better notification mechanism. (crbug.com/765334)
+            '--cc',
+            'robertma@chromium.org',
+        ])
 
     def get_directory_owners(self):
         """Returns a mapping of email addresses to owners of changed tests."""

@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/network_session_configurator/common/network_switches.h"
@@ -22,6 +23,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_features.h"
@@ -915,4 +917,43 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest, BlockLegacySubresources) {
       }
     }
   }
+}
+
+// Check that it's possible to navigate to a chrome scheme URL from a crashed
+// tab. See https://crbug.com/764641.
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest, ChromeSchemeNavFromSadTab) {
+  // Kill the renderer process.
+  content::RenderProcessHost* process = browser()
+                                            ->tab_strip_model()
+                                            ->GetActiveWebContents()
+                                            ->GetMainFrame()
+                                            ->GetProcess();
+  content::RenderProcessHostWatcher crash_observer(
+      process, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  process->Shutdown(-1, true);
+  crash_observer.Wait();
+
+  // Attempt to navigate to a chrome://... URL.  This used to hang and never
+  // commit in PlzNavigate mode.
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIVersionURL));
+}
+
+// Check that a browser-initiated navigation to a cross-site URL that then
+// redirects to a pdf hosted on another site works.
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest, CrossSiteRedirectionToPDF) {
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  ASSERT_TRUE(https_server.Start());
+
+  GURL initial_url = embedded_test_server()->GetURL("/title1.html");
+  GURL pdf_url = embedded_test_server()->GetURL("/pdf/test.pdf");
+  GURL cross_site_redirecting_url =
+      https_server.GetURL("/server-redirect?" + pdf_url.spec());
+  ui_test_utils::NavigateToURL(browser(), initial_url);
+  ui_test_utils::NavigateToURL(browser(), cross_site_redirecting_url);
+  EXPECT_EQ(pdf_url, browser()
+                         ->tab_strip_model()
+                         ->GetActiveWebContents()
+                         ->GetLastCommittedURL());
 }

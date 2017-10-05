@@ -18,7 +18,10 @@ namespace blink {
 class HeapObjectHeader;
 class ScriptWrappable;
 class ScriptWrappableVisitor;
+template <typename T>
+class Supplement;
 class TraceWrapperBase;
+class TraceWrapperBaseForSupplement;
 template <typename T>
 class TraceWrapperV8Reference;
 
@@ -106,6 +109,8 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
  public:
   static ScriptWrappableVisitor* CurrentVisitor(v8::Isolate*);
 
+  bool WrapperTracingInProgress() const { return tracing_in_progress_; }
+
   // Replace all dead objects in the marking deque with nullptr after Oilpan
   // garbage collection.
   static void InvalidateDeadObjectsInMarkingDeque(v8::Isolate*);
@@ -151,7 +156,15 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
 
   // TODO(mlippautz): Remove once ScriptWrappable is converted to
   // TraceWrapperV8Reference.
-  static void WriteBarrier(v8::Isolate*, const v8::Persistent<v8::Object>*);
+  static void WriteBarrier(v8::Isolate* isolate,
+                           const v8::Persistent<v8::Object>* dst_object) {
+    ScriptWrappableVisitor* visitor = CurrentVisitor(isolate);
+    if (!dst_object || dst_object->IsEmpty() ||
+        !visitor->WrapperTracingInProgress()) {
+      return;
+    }
+    visitor->MarkWrapper(&(dst_object->As<v8::Value>()));
+  }
 
   ScriptWrappableVisitor(v8::Isolate* isolate) : isolate_(isolate){};
   virtual ~ScriptWrappableVisitor();
@@ -189,7 +202,6 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
     MarkAndTraceWrappers(traceable);
   }
 
-  virtual void DispatchTraceWrappers(const TraceWrapperBase*) const;
   template <typename V8Type>
   void TraceWrappers(const TraceWrapperV8Reference<V8Type>& v8reference) const {
     TraceWrappers(v8reference.template Cast<v8::Value>());
@@ -197,18 +209,28 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
   virtual void TraceWrappers(const TraceWrapperV8Reference<v8::Value>&) const;
   virtual void MarkWrapper(const v8::PersistentBase<v8::Value>*) const;
   virtual bool MarkWrapperHeader(HeapObjectHeader*) const;
+
+  virtual void DispatchTraceWrappers(const TraceWrapperBase*) const;
+  template <typename T>
+  void DispatchTraceWrappers(const Supplement<T>* traceable) const {
+    const TraceWrapperBaseForSupplement* base = traceable;
+    DispatchTraceWrappersForSupplement(base);
+  }
+  // Catch all handlers needed because of mixins except for Supplement<T>.
+  void DispatchTraceWrappers(const void*) const { CHECK(false); }
+
   // Mark wrappers in all worlds for the given ScriptWrappable as alive in V8.
   virtual void MarkWrappersInAllWorlds(const ScriptWrappable*) const;
-
   void MarkWrappersInAllWorlds(const TraceWrapperBase*) const {
     // TraceWrapperBase cannot point to V8 and thus doesn't need to
     // mark wrappers.
   }
-
-  // Catch all handlers needed because of mixins.
-  void DispatchTraceWrappers(const void*) const { CHECK(false); }
-
-  // Catch all handlers needed because of mixins.
+  template <typename T>
+  void MarkWrappersInAllWorlds(const Supplement<T>*) const {
+    // Supplement<T> which is not ScriptWrappable cannot point to V8 and thus
+    // doesn't need to mark wrappers.
+  }
+  // Catch all handlers needed because of mixins except for Supplement<T>.
   void MarkWrappersInAllWorlds(const void*) const { CHECK(false); }
 
   // v8::EmbedderHeapTracer interface.
@@ -270,6 +292,12 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
     }
 #endif
   }
+
+  // Supplement-specific implementation of DispatchTraceWrappers.  The suffix of
+  // "ForSupplement" is necessary not to make this member function a candidate
+  // of overload resolutions.
+  void DispatchTraceWrappersForSupplement(
+      const TraceWrapperBaseForSupplement*) const;
 
   // Schedule an idle task to perform a lazy (incremental) clean up of
   // wrappers.

@@ -16,11 +16,13 @@ namespace features {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
+CONTENT_EXPORT extern const base::Feature kAllowActivationDelegationAttr;
 CONTENT_EXPORT extern const base::Feature
     kAllowContentInitiatedDataUrlNavigations;
 CONTENT_EXPORT extern const base::Feature kAsmJsToWebAssembly;
 CONTENT_EXPORT extern const base::Feature kAsyncWheelEvents;
 CONTENT_EXPORT extern const base::Feature kBlockCredentialedSubresources;
+CONTENT_EXPORT extern const base::Feature kDataSaverHoldback;
 CONTENT_EXPORT extern const base::Feature kBrotliEncoding;
 CONTENT_EXPORT extern const base::Feature kBrowserSideNavigation;
 CONTENT_EXPORT extern const base::Feature kBuggyRSAParser;
@@ -44,7 +46,6 @@ CONTENT_EXPORT extern const base::Feature
 CONTENT_EXPORT extern const base::Feature kLazyInitializeMediaControls;
 CONTENT_EXPORT extern const base::Feature kLazyParseCSS;
 CONTENT_EXPORT extern const base::Feature kLoadingWithMojo;
-CONTENT_EXPORT extern const base::Feature kMediaStreamOldAudioConstraints;
 CONTENT_EXPORT extern const base::Feature kMemoryCoordinator;
 CONTENT_EXPORT extern const base::Feature kNetworkService;
 CONTENT_EXPORT extern const base::Feature kNotificationContentImage;
@@ -55,6 +56,7 @@ CONTENT_EXPORT extern const base::Feature kMojoVideoEncodeAccelerator;
 CONTENT_EXPORT extern const base::Feature kModuleScripts;
 CONTENT_EXPORT extern const base::Feature kModuleScriptsDynamicImport;
 CONTENT_EXPORT extern const base::Feature kOffMainThreadFetch;
+CONTENT_EXPORT extern const base::Feature kOriginManifest;
 CONTENT_EXPORT extern const base::Feature kOriginTrials;
 CONTENT_EXPORT extern const base::Feature kOutOfBlinkCORS;
 CONTENT_EXPORT extern const base::Feature kParallelDownloading;
@@ -84,6 +86,7 @@ CONTENT_EXPORT extern const base::Feature
     kTurnOff2DAndOpacityCompositorAnimations;
 CONTENT_EXPORT extern const base::Feature kUseFeaturePolicyForPermissions;
 CONTENT_EXPORT extern const base::Feature kUseMojoAudioOutputStreamFactory;
+CONTENT_EXPORT extern const base::Feature kV8ContextSnapshot;
 CONTENT_EXPORT extern const base::Feature kVibrateRequiresUserGesture;
 CONTENT_EXPORT extern const base::Feature kVrShell;
 CONTENT_EXPORT extern const base::Feature kWebAssembly;

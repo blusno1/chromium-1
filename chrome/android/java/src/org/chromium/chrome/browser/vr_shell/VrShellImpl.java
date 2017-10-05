@@ -14,8 +14,12 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewGroup.LayoutParams;
 import android.view.ViewTreeObserver.OnPreDrawListener;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.RelativeLayout;
 
 import com.google.vr.ndk.base.AndroidCompat;
 import com.google.vr.ndk.base.GvrLayout;
@@ -311,8 +315,11 @@ public class VrShellImpl
     }
 
     @Override
+    // TODO(crbug.com/762588): Fix getRealMetrics and remove suppression.
+    @SuppressLint("NewApi")
     public void initializeNative(Tab currentTab, boolean forWebVr,
             boolean webVrAutopresentationExpected, boolean inCct) {
+        assert currentTab != null;
         // Get physical and pixel size of the display, which is needed by native
         // to dynamically calculate the content's resolution and window size.
         DisplayMetrics dm = new DisplayMetrics();
@@ -327,7 +334,7 @@ public class VrShellImpl
                 dm.heightPixels);
 
         reparentAllTabs(mContentVrWindowAndroid);
-        swapToForegroundTab();
+        swapToTab(currentTab);
         createTabList();
         mActivity.getTabModelSelector().addObserver(mTabModelSelectorObserver);
         createTabModelSelectorTabObserver();
@@ -356,10 +363,15 @@ public class VrShellImpl
     private void swapToForegroundTab() {
         Tab tab = mActivity.getActivityTab();
         if (tab == mTab) return;
-        if (!mDelegate.canEnterVr(tab, false)) {
+        if (tab == null || !mDelegate.canEnterVr(tab, false)) {
             forceExitVr();
             return;
         }
+        swapToTab(tab);
+    }
+
+    private void swapToTab(Tab tab) {
+        assert tab != null;
         if (mTab != null) {
             mTab.removeObserver(mTabObserver);
             restoreTabFromVR();
@@ -455,7 +467,9 @@ public class VrShellImpl
 
         Point size = new Point(surfaceWidth, surfaceHeight);
         mContentVirtualDisplay.update(size, dpr, null, null, null, null, null);
-        if (mTab != null && mTab.getContentViewCore() != null) {
+        assert mTab != null;
+        if (mTab.getContentViewCore() != null) {
+            mTab.getContentViewCore().onSizeChanged(surfaceWidth, surfaceHeight, 0, 0);
             nativeOnPhysicalBackingSizeChanged(
                     mNativeVrShell, mTab.getWebContents(), surfaceWidth, surfaceHeight);
         }
@@ -516,6 +530,7 @@ public class VrShellImpl
     @Override
     public void shutdown() {
         mActivity.getFullscreenManager().removeListener(this);
+        mActivity.getFullscreenManager().setPersistentFullscreenMode(false);
         reparentAllTabs(mActivity.getWindowAndroid());
         if (mNativeVrShell != 0) {
             nativeDestroy(mNativeVrShell);
@@ -527,7 +542,12 @@ public class VrShellImpl
         mTab.removeObserver(mTabObserver);
         restoreTabFromVR();
 
-        if (mTab != null) mTab.updateBrowserControlsState(BrowserControlsState.SHOWN, true);
+        assert mTab != null;
+        if (mTab.getContentViewCore() != null) {
+            View parent = mTab.getContentViewCore().getContainerView();
+            mTab.getContentViewCore().onSizeChanged(parent.getWidth(), parent.getHeight(), 0, 0);
+        }
+        mTab.updateBrowserControlsState(BrowserControlsState.SHOWN, true);
 
         mContentVirtualDisplay.destroy();
         super.shutdown();
@@ -591,6 +611,46 @@ public class VrShellImpl
     @Override
     public FrameLayout getContainer() {
         return this;
+    }
+
+    @Override
+    public void onDensityChanged(float oldDpi, float newDpi) {
+        // TODO(mthiesse, crbug.com/767603): Remove this workaround for b/66493165.
+        // This is extremely hacky. The GvrUiLayout doesn't update in response to density changes,
+        // so we manually go in and scale their elements to be the correct size (though due to the
+        // scaling they don't actually look pixel-perfectly identical to what they should be).
+        // These elements are dynamically loaded and inserted into the view hierarchy so we don't
+        // have IDs for them that we can look up.
+        try {
+            float scale = newDpi / oldDpi;
+            ViewGroup gvrLayoutImpl = (ViewGroup) getContainer().getChildAt(0);
+            RelativeLayout relativeLayout = (RelativeLayout) gvrLayoutImpl.getChildAt(1);
+
+            ImageButton x_button = (ImageButton) relativeLayout.getChildAt(0);
+            RelativeLayout alignment_marker = (RelativeLayout) relativeLayout.getChildAt(1);
+            ImageButton settings_button = (ImageButton) relativeLayout.getChildAt(2);
+
+            ViewGroup.LayoutParams params = alignment_marker.getLayoutParams();
+            params.width = (int) (params.width * scale);
+            params.height = (int) (params.height * scale);
+            alignment_marker.setLayoutParams(params);
+
+            int padding = (int) (x_button.getPaddingLeft() * scale);
+
+            x_button.setImageDrawable(x_button.getDrawable().getConstantState().newDrawable(
+                    mActivity.getResources()));
+            x_button.setPadding(padding, padding, padding, padding);
+
+            settings_button.setImageDrawable(
+                    settings_button.getDrawable().getConstantState().newDrawable(
+                            mActivity.getResources()));
+            settings_button.setPadding(padding, padding, padding, padding);
+        } catch (Throwable e) {
+            // Ignore any errors. We're working around a bug in dynamically loaded code, so if it
+            // goes wrong that means the loaded code changed. ¯\_(ツ)_/¯
+            // In the worst case the close and settings buttons won't be drawn for the correct
+            // density.
+        }
     }
 
     @Override
@@ -701,10 +761,7 @@ public class VrShellImpl
     }
 
     private void updateHistoryButtonsVisibility() {
-        if (mTab == null) {
-            nativeSetHistoryButtonsEnabled(mNativeVrShell, false, false);
-            return;
-        }
+        assert mTab != null;
         boolean willCloseTab = false;
         if (mActivity instanceof ChromeTabbedActivity) {
             // If hitting back would minimize Chrome, disable the back button.

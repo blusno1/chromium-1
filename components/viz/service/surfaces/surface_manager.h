@@ -33,10 +33,6 @@
 #include <string>
 #endif
 
-namespace cc {
-class CompositorFrame;
-}
-
 namespace viz {
 
 namespace test {
@@ -137,6 +133,9 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // called.
   void SetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id,
                               const std::string& debug_label);
+
+  // Returns the debug label associated with |frame_sink_id| if any.
+  std::string GetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id) const;
 
   // Register a relationship between two namespaces.  This relationship means
   // that surfaces from the child namespace will be displayed in the parent.

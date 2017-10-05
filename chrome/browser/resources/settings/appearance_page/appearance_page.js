@@ -35,6 +35,9 @@ Polymer({
     /** @private */
     defaultZoom_: Number,
 
+    /** @private */
+    isWallpaperPolicyControlled_: {type: Boolean, value: true},
+
     /**
      * List of options for the font size drop-down menu.
      * @type {!DropdownMenuOptionList}
@@ -101,8 +104,7 @@ Polymer({
         var map = new Map();
         if (settings.routes.FONTS) {
           map.set(
-              settings.routes.FONTS.path,
-              '#customize-fonts-subpage-trigger .subpage-arrow');
+              settings.routes.FONTS.path, '#customize-fonts-subpage-trigger');
         }
         return map;
       },
@@ -135,6 +137,17 @@ Polymer({
     this.browserProxy_.getDefaultZoom().then(zoom => {
       this.defaultZoom_ = zoom;
     });
+    // <if expr="chromeos">
+    this.browserProxy_.isWallpaperSettingVisible().then(
+        isWallpaperSettingVisible => {
+          assert(this.pageVisibility);
+          this.pageVisibility.setWallpaper = isWallpaperSettingVisible;
+        });
+    this.browserProxy_.isWallpaperPolicyControlled().then(
+        isPolicyControlled => {
+          this.isWallpaperPolicyControlled_ = isPolicyControlled;
+        });
+    // </if>
   },
 
   /**
@@ -184,12 +197,11 @@ Polymer({
   },
 
   /**
-   * URL for either current theme or the theme gallery.
-   * @return {string}
+   * Open URL for either current theme or the theme gallery.
    * @private
    */
-  getThemeHref_: function() {
-    return this.themeUrl_ || loadTimeData.getString('themesGalleryUrl');
+  openThemeUrl_: function() {
+    window.open(this.themeUrl_ || loadTimeData.getString('themesGalleryUrl'));
   },
 
   // <if expr="chromeos">

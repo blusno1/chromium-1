@@ -390,12 +390,12 @@ cr.define('print_preview', function() {
           this.printIfReady_.bind(this));
       this.tracker.add(
           this.destinationStore_,
-          print_preview.DestinationStore.EventType.DESTINATION_SELECT,
-          this.onDestinationSelect_.bind(this));
+          print_preview.DestinationStore.EventType.SELECTED_DESTINATION_INVALID,
+          this.onSelectedDestinationInvalid_.bind(this));
       this.tracker.add(
           this.destinationStore_,
-          print_preview.DestinationStore.EventType.DESTINATION_SEARCH_DONE,
-          this.onDestinationSearchDone_.bind(this));
+          print_preview.DestinationStore.EventType.DESTINATION_SELECT,
+          this.onDestinationSelect_.bind(this));
 
       this.tracker.add(
           this.printHeader_,
@@ -440,17 +440,14 @@ cr.define('print_preview', function() {
           print_preview.AdvancedOptionsSettings.EventType.BUTTON_ACTIVATED,
           this.onAdvancedOptionsButtonActivated_.bind(this));
 
-      // TODO(rltoscano): Move no-destinations-promo into its own component
-      // instead being part of PrintPreview.
-      this.tracker.add(
-          this.getChildElement('#no-destinations-promo .close-button'), 'click',
-          this.onNoDestinationsPromoClose_.bind(this));
-      this.tracker.add(
-          this.getChildElement('#no-destinations-promo .not-now-button'),
-          'click', this.onNoDestinationsPromoClose_.bind(this));
-      this.tracker.add(
-          this.getChildElement('#no-destinations-promo .add-printer-button'),
-          'click', this.onNoDestinationsPromoClick_.bind(this));
+      /* Ticket items that may be invalid. */
+      [this.printTicketStore_.copies, this.printTicketStore_.pageRange,
+       this.printTicketStore_.scaling,
+      ].forEach((item) => {
+        this.tracker.add(
+            item, print_preview.ticket_items.TicketItem.EventType.CHANGE,
+            this.onTicketChange_.bind(this));
+      });
     },
 
     /** @override */
@@ -481,9 +478,9 @@ cr.define('print_preview', function() {
      */
     setIsEnabled_: function(isEnabled) {
       if ($('system-dialog-link'))
-        $('system-dialog-link').classList.toggle('disabled', !isEnabled);
+        $('system-dialog-link').disabled = !isEnabled;
       if ($('open-pdf-in-preview-link'))
-        $('open-pdf-in-preview-link').classList.toggle('disabled', !isEnabled);
+        $('open-pdf-in-preview-link').disabled = !isEnabled;
       this.printHeader_.isEnabled = isEnabled;
       this.destinationSettings_.isEnabled = isEnabled;
       this.pageSettings_.isEnabled = isEnabled;
@@ -661,13 +658,13 @@ cr.define('print_preview', function() {
       // The following components must be initialized in this order.
       this.appState_.init(settings.serializedAppStateStr);
       this.documentInfo_.init(
-          settings.isDocumentModifiable, settings.documentTitle,
+          settings.previewModifiable, settings.documentTitle,
           settings.documentHasSelection);
       this.printTicketStore_.init(
           settings.thousandsDelimeter, settings.decimalDelimeter,
-          settings.unitType, settings.selectionOnly);
+          settings.unitType, settings.shouldPrintSelectionOnly);
       this.destinationStore_.init(
-          settings.isInAppKioskMode, settings.systemDefaultDestinationId,
+          settings.isInAppKioskMode, settings.printerName,
           settings.serializedDefaultDestinationSelectionRulesStr);
       this.appState_.setInitialized();
 
@@ -929,6 +926,17 @@ cr.define('print_preview', function() {
     },
 
     /**
+     * Called when the destination store fails to fetch capabilities for the
+     * selected printer.
+     * @private
+     */
+    onSelectedDestinationInvalid_: function() {
+      this.previewArea_.showCustomMessage(
+          loadTimeData.getString('invalidPrinterSettings'));
+      this.onSettingsInvalid_();
+    },
+
+    /**
      * Called when native layer receives invalid settings for a print request.
      * @private
      */
@@ -936,6 +944,21 @@ cr.define('print_preview', function() {
       this.uiState_ = PrintPreviewUiState_.ERROR;
       this.isPreviewGenerationInProgress_ = false;
       this.printHeader_.isPrintButtonEnabled = false;
+    },
+
+    /**
+     * Called when a ticket item that can be invalid is updated. Updates the
+     * enabled state of the system dialog link on Windows and the open pdf in
+     * preview link on Mac.
+     * @private
+     */
+    onTicketChange_: function() {
+      this.printHeader_.onTicketChange();
+      var disable = !this.printHeader_.isPrintButtonEnabled;
+      if (cr.isWindows && $('system-dialog-link'))
+        $('system-dialog-link').disabled = disable;
+      if ($('open-pdf-in-preview-link'))
+        $('open-pdf-in-preview-link').disabled = disable;
     },
 
     /**
@@ -1222,53 +1245,6 @@ cr.define('print_preview', function() {
         this.onPrintButtonClick_();
       }
     },
-
-    /**
-     * Called when the destination store loads a group of destinations. Shows
-     * a promo on Chrome OS if the user has no print destinations promoting
-     * Google Cloud Print.
-     * @private
-     */
-    onDestinationSearchDone_: function() {
-      var isPromoVisible = cr.isChromeOS && this.cloudPrintInterface_ &&
-          this.userInfo_.activeUser && !this.appState_.isGcpPromoDismissed &&
-          !this.destinationStore_.isLocalDestinationSearchInProgress &&
-          !this.destinationStore_.isCloudDestinationSearchInProgress &&
-          this.destinationStore_.hasOnlyDefaultCloudDestinations();
-      setIsVisible(
-          this.getChildElement('#no-destinations-promo'), isPromoVisible);
-      if (isPromoVisible) {
-        new print_preview.GcpPromoMetricsContext().record(
-            print_preview.Metrics.GcpPromoBucket.PROMO_SHOWN);
-      }
-    },
-
-    /**
-     * Called when the close button on the no-destinations-promotion is clicked.
-     * Hides the promotion.
-     * @private
-     */
-    onNoDestinationsPromoClose_: function() {
-      new print_preview.GcpPromoMetricsContext().record(
-          print_preview.Metrics.GcpPromoBucket.PROMO_CLOSED);
-      setIsVisible(this.getChildElement('#no-destinations-promo'), false);
-      this.appState_.persistIsGcpPromoDismissed(true);
-    },
-
-    /**
-     * Called when the no-destinations promotion link is clicked. Opens the
-     * Google Cloud Print management page and closes the print preview.
-     * @private
-     */
-    onNoDestinationsPromoClick_: function() {
-      new print_preview.GcpPromoMetricsContext().record(
-          print_preview.Metrics.GcpPromoBucket.PROMO_CLICKED);
-      this.appState_.persistIsGcpPromoDismissed(true);
-      window.open(
-          this.cloudPrintInterface_.baseUrl +
-          '?authuser=' + this.userInfo_.activeUser + '#printers');
-      this.close_(false);
-    }
   };
 
   // Export

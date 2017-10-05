@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.omnibox;
 import android.content.Context;
 import android.graphics.Rect;
 import android.os.StrictMode;
+import android.provider.Settings;
 import android.support.annotation.CallSuper;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -62,10 +63,10 @@ public class AutocompleteEditText
 
         if (!ChromeFeatureList.isInitialized()
                 || ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
-            Log.i(TAG, "Using spannable model...");
+            Log.w(TAG, "Using spannable model...");
             mModel = new SpannableAutocompleteEditTextModel(this);
         } else {
-            Log.i(TAG, "Using non-spannable model...");
+            Log.w(TAG, "Using non-spannable model...");
             mModel = new AutocompleteEditTextModel(this);
         }
         // Feed initial values.
@@ -132,6 +133,7 @@ public class AutocompleteEditText
     protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
         if (mModel != null) mModel.onFocusChanged(focused);
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
+        if (!focused) setCursorVisible(false);
     }
 
     @Override
@@ -306,4 +308,11 @@ public class AutocompleteEditText
 
     @Override
     public void onUpdateSelectionForTesting(int selStart, int selEnd) {}
+
+    @Override
+    public String getKeyboardPackageName() {
+        String defaultIme = Settings.Secure.getString(
+                getContext().getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
+        return defaultIme == null ? "" : defaultIme;
+    }
 }

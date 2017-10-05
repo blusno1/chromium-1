@@ -17,13 +17,20 @@ core_global_constructors_original_interfaces = [
   "DedicatedWorkerGlobalScope",
 ]
 
+# The size and the order in the following list must match to the previous one.
+core_global_constructors_original_interface_basenames = [
+  "window",
+  "shared_worker_global_scope",
+  "dedicated_worker_global_scope",
+]
+
 # The interfaces aren't technically files, but we can treat them as file names
 # to get process_file_template to generate lists of IDL files corresponding
 # to each interface.
 core_global_constructors_generated_idl_files =
     process_file_template(
-        core_global_constructors_original_interfaces,
-        [ "$blink_core_output_dir/{{source_name_part}}CoreConstructors.idl" ])
+        core_global_constructors_original_interface_basenames,
+        [ "$blink_core_output_dir/{{source_name_part}}_core_constructors.idl" ])
 
 core_idl_files =
     get_path_info([
@@ -99,7 +106,6 @@ core_idl_files =
                     "dom/DocumentFragment.idl",
                     "dom/DocumentType.idl",
                     "dom/Element.idl",
-                    "dom/FrameRequestCallback.idl",
                     "dom/IdleDeadline.idl",
                     "dom/Iterator.idl",
                     "dom/MessageChannel.idl",
@@ -121,6 +127,9 @@ core_idl_files =
                     "dom/events/CustomEvent.idl",
                     "dom/events/Event.idl",
                     "dom/events/EventTarget.idl",
+                    "dom/trustedtypes/TrustedHTML.idl",
+                    "dom/trustedtypes/TrustedScriptURL.idl",
+                    "dom/trustedtypes/TrustedURL.idl",
                     "editing/Selection.idl",
                     "events/AnimationEvent.idl",
                     "events/AnimationPlaybackEvent.idl",
@@ -159,6 +168,7 @@ core_idl_files =
                     "frame/DeprecationReport.idl",
                     "frame/External.idl",
                     "frame/History.idl",
+                    "frame/InterventionReport.idl",
                     "frame/Location.idl",
                     "frame/Report.idl",
                     "frame/ReportBody.idl",
@@ -180,12 +190,10 @@ core_idl_files =
                     "html/HTMLBRElement.idl",
                     "html/HTMLBaseElement.idl",
                     "html/HTMLBodyElement.idl",
-                    "html/HTMLButtonElement.idl",
                     "html/HTMLCollection.idl",
                     "html/HTMLContentElement.idl",
                     "html/HTMLDListElement.idl",
                     "html/HTMLDataElement.idl",
-                    "html/HTMLDataListElement.idl",
                     "html/HTMLDetailsElement.idl",
                     "html/HTMLDialogElement.idl",
                     "html/HTMLDirectoryElement.idl",
@@ -193,7 +201,6 @@ core_idl_files =
                     "html/HTMLDocument.idl",
                     "html/HTMLElement.idl",
                     "html/HTMLEmbedElement.idl",
-                    "html/HTMLFieldSetElement.idl",
                     "html/HTMLFontElement.idl",
                     "html/HTMLFormControlsCollection.idl",
                     "html/HTMLFormElement.idl",
@@ -206,7 +213,6 @@ core_idl_files =
                     "html/HTMLImageElement.idl",
                     "html/HTMLLIElement.idl",
                     "html/HTMLLabelElement.idl",
-                    "html/HTMLLegendElement.idl",
                     "html/HTMLLinkElement.idl",
                     "html/HTMLMapElement.idl",
                     "html/HTMLMarqueeElement.idl",
@@ -253,6 +259,10 @@ core_idl_files =
                     "html/ValidityState.idl",
                     "html/VoidCallback.idl",
                     "html/custom/CustomElementRegistry.idl",
+                    "html/forms/HTMLButtonElement.idl",
+                    "html/forms/HTMLDataListElement.idl",
+                    "html/forms/HTMLFieldSetElement.idl",
+                    "html/forms/HTMLLegendElement.idl",
                     "html/media/MediaError.idl",
                     "html/track/AudioTrackList.idl",
                     "html/track/TextTrack.idl",
@@ -473,6 +483,7 @@ core_dependency_idl_files =
                     "dom/events/EventListener.idl",
                     "events/NavigatorEvents.idl",
                     "fileapi/URLFileAPI.idl",
+                    "frame/NavigatorAutomationInformation.idl",
                     "frame/NavigatorClipboard.idl",
                     "frame/NavigatorConcurrentHardware.idl",
                     "frame/NavigatorCookies.idl",
@@ -511,6 +522,7 @@ core_typedefs_enums_only_idl_files =
 
 core_callback_function_idl_files =
     get_path_info([
+                    "dom/FrameRequestCallback.idl",
                     "dom/FunctionStringCallback.idl",
                     "dom/IdleRequestCallback.idl",
                   ],
@@ -641,13 +653,23 @@ webcore_testing_idl_with_modules_dependency_files =
 webcore_testing_dependency_idl_files =
     get_path_info([ "testing/OriginTrialsTestPartial.idl" ], "abspath")
 
-generated_webcore_testing_idl_files =
-    get_path_info(
-        [
-          "$blink_core_output_dir/testing/InternalRuntimeFlags.idl",
-          "$blink_core_output_dir/testing/InternalSettingsGenerated.idl",
-        ],
-        "abspath")
+if (snake_case_source_files) {
+  generated_webcore_testing_idl_files =
+      get_path_info(
+          [
+            "$blink_core_output_dir/testing/internal_runtime_flags.idl",
+            "$blink_core_output_dir/testing/internal_settings_generated.idl",
+          ],
+          "abspath")
+} else {
+  generated_webcore_testing_idl_files =
+      get_path_info(
+          [
+            "$blink_core_output_dir/testing/InternalRuntimeFlags.idl",
+            "$blink_core_output_dir/testing/InternalSettingsGenerated.idl",
+          ],
+          "abspath")
+}
 
 core_definition_idl_files = core_dictionary_idl_files + core_idl_files +
                             core_idl_with_modules_dependency_files

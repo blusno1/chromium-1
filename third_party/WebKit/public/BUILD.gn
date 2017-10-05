@@ -266,8 +266,6 @@ source_set("blink_headers") {
     "platform/WebMemoryPressureLevel.h",
     "platform/WebMemoryState.h",
     "platform/WebMenuSourceType.h",
-    "platform/WebMessagePortChannel.h",
-    "platform/WebMessagePortChannelClient.h",
     "platform/WebMixedContent.h",
     "platform/WebMixedContentContextType.h",
     "platform/WebMockClipboard.h",
@@ -460,7 +458,6 @@ source_set("blink_headers") {
     "platform/modules/serviceworker/WebServiceWorkerResponse.h",
     "platform/modules/serviceworker/WebServiceWorkerResponseError.h",
     "platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h",
-    "platform/modules/serviceworker/WebServiceWorkerState.h",
     "platform/modules/serviceworker/WebServiceWorkerStreamHandle.h",
     "platform/modules/webmidi/WebMIDIAccessor.h",
     "platform/modules/webmidi/WebMIDIAccessorClient.h",
@@ -473,6 +470,7 @@ source_set("blink_headers") {
     "web/WebAXEnums.h",
     "web/WebAXObject.h",
     "web/WebActiveWheelFlingParameters.h",
+    "web/WebApplyConstraintsRequest.h",
     "web/WebArrayBuffer.h",
     "web/WebArrayBufferConverter.h",
     "web/WebArrayBufferView.h",
@@ -597,8 +595,6 @@ source_set("blink_headers") {
     "web/WebSharedWorker.h",
     "web/WebSharedWorkerClient.h",
     "web/WebSharedWorkerConnectListener.h",
-    "web/WebSharedWorkerCreationContextType.h",
-    "web/WebSharedWorkerCreationErrors.h",
     "web/WebSharedWorkerRepositoryClient.h",
     "web/WebSpeechGrammar.h",
     "web/WebSpeechRecognitionHandle.h",
@@ -656,6 +652,7 @@ source_set("blink_headers") {
   public_deps = [
     "//net",
     "//skia",
+    "//third_party/WebKit/common:blink_common",
     "//url",
   ]
 
@@ -775,6 +772,8 @@ mojom("mojo_bindings") {
     "//third_party/WebKit/Source/platform/loader",
   ]
   sources = [
+    "platform/address_space.mojom",
+    "platform/content_security_policy.mojom",
     "platform/display_mode.mojom",
     "platform/media_download_in_product_help.mojom",
     "platform/media_engagement.mojom",
@@ -800,6 +799,8 @@ mojom("mojo_bindings") {
     "platform/modules/presentation/presentation.mojom",
     "platform/modules/serviceworker/service_worker_error_type.mojom",
     "platform/modules/serviceworker/service_worker_event_status.mojom",
+    "platform/modules/serviceworker/service_worker_registration.mojom",
+    "platform/modules/serviceworker/service_worker_state.mojom",
     "platform/modules/serviceworker/service_worker_stream_handle.mojom",
     "platform/modules/webauth/authenticator.mojom",
     "platform/modules/websockets/websocket.mojom",
@@ -807,6 +808,8 @@ mojom("mojo_bindings") {
     "platform/reporting.mojom",
     "platform/site_engagement.mojom",
     "web/console_message.mojom",
+    "web/selection_menu_behavior.mojom",
+    "web/shared_worker_creation_context_type.mojom",
     "web/window_features.mojom",
     "web/worker_content_settings_proxy.mojom",
   ]

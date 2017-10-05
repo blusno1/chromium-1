@@ -75,6 +75,9 @@ const uint32_t kDefaultInitialEnablePush = 1;
 const uint32_t kDefaultInitialInitialWindowSize = 65535;
 const uint32_t kDefaultInitialMaxFrameSize = 16384;
 
+// The maximum size of header list that the server is allowed to send.
+const uint32_t kSpdyMaxHeaderListSize = 256 * 1024;
+
 bool IsSpdySettingAtDefaultInitialValue(SpdySettingsIds setting_id,
                                         uint32_t value) {
   switch (setting_id) {
@@ -637,8 +640,8 @@ SpdySession::UnclaimedPushedStreamContainer::erase(const_iterator it) {
   DCHECK(it != end());
   // Only allow cross-origin push for secure resources.
   if (it->first.SchemeIsCryptographic()) {
-    spdy_session_->pool_->UnregisterUnclaimedPushedStream(it->first,
-                                                          spdy_session_);
+    spdy_session_->pool_->push_promise_index()->UnregisterUnclaimedPushedStream(
+        it->first, spdy_session_);
   }
   return streams_.erase(it);
 }
@@ -652,7 +655,7 @@ SpdySession::UnclaimedPushedStreamContainer::insert(
   DCHECK(spdy_session_->pool_);
   // Only allow cross-origin push for https resources.
   if (url.SchemeIsCryptographic()) {
-    spdy_session_->pool_->RegisterUnclaimedPushedStream(
+    spdy_session_->pool_->push_promise_index()->RegisterUnclaimedPushedStream(
         url, spdy_session_->GetWeakPtr());
   }
   return streams_.insert(
@@ -792,7 +795,6 @@ SpdySession::SpdySession(const SpdySessionKey& spdy_session_key,
   DCHECK(base::ContainsKey(initial_settings_, SETTINGS_HEADER_TABLE_SIZE));
   DCHECK(base::ContainsKey(initial_settings_, SETTINGS_MAX_CONCURRENT_STREAMS));
   DCHECK(base::ContainsKey(initial_settings_, SETTINGS_INITIAL_WINDOW_SIZE));
-  DCHECK(base::ContainsKey(initial_settings_, SETTINGS_MAX_HEADER_LIST_SIZE));
 
   // TODO(mbelshe): consider randomization of the stream_hi_water_mark.
 }
@@ -883,8 +885,12 @@ void SpdySession::InitializeWithSocket(
   session_send_window_size_ = kDefaultInitialWindowSize;
   session_recv_window_size_ = kDefaultInitialWindowSize;
 
-  buffered_spdy_framer_ = std::make_unique<BufferedSpdyFramer>(
-      initial_settings_.find(SETTINGS_MAX_HEADER_LIST_SIZE)->second, net_log_);
+  SettingsMap::const_iterator it =
+      initial_settings_.find(SETTINGS_MAX_HEADER_LIST_SIZE);
+  uint32_t spdy_max_header_list_size =
+      (it == initial_settings_.end()) ? kSpdyMaxHeaderListSize : it->second;
+  buffered_spdy_framer_ =
+      std::make_unique<BufferedSpdyFramer>(spdy_max_header_list_size, net_log_);
   buffered_spdy_framer_->set_visitor(this);
   buffered_spdy_framer_->set_debug_visitor(this);
   buffered_spdy_framer_->UpdateHeaderDecoderTableSize(max_header_table_size_);
@@ -1626,7 +1632,7 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
 
   // "Promised requests MUST be cacheable and MUST be safe [...]" (RFC7540
   // Section 8.2).  Only cacheable safe request methods are GET and HEAD.
-  SpdyHeaderBlock::const_iterator it = headers.find(":method");
+  SpdyHeaderBlock::const_iterator it = headers.find(kHttp2MethodHeader);
   if (it == headers.end() ||
       (it->second.compare("GET") != 0 && it->second.compare("HEAD") != 0)) {
     EnqueueResetStreamFrame(
@@ -2188,14 +2194,26 @@ void SpdySession::HandleSetting(uint32_t id, uint32_t value) {
 }
 
 void SpdySession::UpdateStreamsSendWindowSize(int32_t delta_window_size) {
-  for (ActiveStreamMap::iterator it = active_streams_.begin();
-       it != active_streams_.end(); ++it) {
-    it->second->AdjustSendWindowSize(delta_window_size);
+  for (const auto& value : active_streams_) {
+    if (!value.second->AdjustSendWindowSize(delta_window_size)) {
+      DoDrainSession(
+          ERR_SPDY_FLOW_CONTROL_ERROR,
+          SpdyStringPrintf("New SETTINGS_INITIAL_WINDOW_SIZE value overflows "
+                           "flow control window of stream %d.",
+                           value.second->stream_id()));
+      return;
+    }
   }
 
-  for (CreatedStreamSet::const_iterator it = created_streams_.begin();
-       it != created_streams_.end(); it++) {
-    (*it)->AdjustSendWindowSize(delta_window_size);
+  for (auto* const stream : created_streams_) {
+    if (!stream->AdjustSendWindowSize(delta_window_size)) {
+      DoDrainSession(
+          ERR_SPDY_FLOW_CONTROL_ERROR,
+          SpdyStringPrintf("New SETTINGS_INITIAL_WINDOW_SIZE value overflows "
+                           "flow control window of stream %d.",
+                           stream->stream_id()));
+      return;
+    }
   }
 }
 
@@ -3189,7 +3207,7 @@ void SpdySession::ResumeSendStalledStreams() {
   // have to worry about streams being closed, as well as ourselves
   // being closed.
 
-  std::deque<SpdyStream*> streams_to_requeue;
+  base::circular_deque<SpdyStream*> streams_to_requeue;
 
   while (!IsSendStalled()) {
     size_t old_size = 0;
@@ -3222,7 +3240,7 @@ void SpdySession::ResumeSendStalledStreams() {
 
 SpdyStreamId SpdySession::PopStreamToPossiblyResume() {
   for (int i = MAXIMUM_PRIORITY; i >= MINIMUM_PRIORITY; --i) {
-    std::deque<SpdyStreamId>* queue = &stream_send_unstall_queue_[i];
+    base::circular_deque<SpdyStreamId>* queue = &stream_send_unstall_queue_[i];
     if (!queue->empty()) {
       SpdyStreamId stream_id = queue->front();
       queue->pop_front();

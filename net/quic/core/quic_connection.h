@@ -18,11 +18,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <list>
 #include <map>
 #include <memory>
-#include <queue>
 #include <string>
 #include <vector>
 
@@ -42,6 +40,7 @@
 #include "net/quic/core/quic_sent_packet_manager.h"
 #include "net/quic/core/quic_time.h"
 #include "net/quic/core/quic_types.h"
+#include "net/quic/platform/api/quic_containers.h"
 #include "net/quic/platform/api/quic_export.h"
 #include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/platform/api/quic_string_piece.h"
@@ -672,8 +671,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // Set data producer in framer.
   void SetDataProducer(QuicStreamFrameDataProducer* data_producer);
 
-  // Return the name of the cipher of the primary decrypter of the framer.
-  const char* cipher_name() const { return framer_.decrypter()->cipher_name(); }
   // Return the id of the cipher of the primary decrypter of the framer.
   uint32_t cipher_id() const { return framer_.decrypter()->cipher_id(); }
 
@@ -911,7 +908,7 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // established, but which could not be decrypted.  We buffer these on
   // the assumption that they could not be processed because they were
   // sent with the INITIAL encryption and the CHLO message was lost.
-  std::deque<std::unique_ptr<QuicEncryptedPacket>> undecryptable_packets_;
+  QuicDeque<std::unique_ptr<QuicEncryptedPacket>> undecryptable_packets_;
 
   // Maximum number of undecryptable packets the connection will store.
   size_t max_undecryptable_packets_;

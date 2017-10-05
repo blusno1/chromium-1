@@ -92,11 +92,6 @@ class CHROMEOS_EXPORT ShillDeviceClient : public DBusClient {
   virtual void GetProperties(const dbus::ObjectPath& device_path,
                              const DictionaryValueCallback& callback) = 0;
 
-  // Calls ProposeScan method.
-  // |callback| is called after the method call finishes.
-  virtual void ProposeScan(const dbus::ObjectPath& device_path,
-                           VoidDBusMethodCallback callback) = 0;
-
   // Calls SetProperty method.
   // |callback| is called after the method call finishes.
   virtual void SetProperty(const dbus::ObjectPath& device_path,
@@ -172,7 +167,7 @@ class CHROMEOS_EXPORT ShillDeviceClient : public DBusClient {
 
   // Adds |ip_endpoint| to the list of tcp connections that the device should
   // monitor to wake the system from suspend.
-   virtual void AddWakeOnPacketConnection(
+  virtual void AddWakeOnPacketConnection(
       const dbus::ObjectPath& device_path,
       const net::IPEndPoint& ip_endpoint,
       const base::Closure& callback,

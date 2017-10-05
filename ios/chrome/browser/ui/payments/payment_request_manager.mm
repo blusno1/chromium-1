@@ -46,7 +46,6 @@
 #include "ios/chrome/browser/payments/ios_payment_instrument_launcher.h"
 #include "ios/chrome/browser/payments/ios_payment_instrument_launcher_factory.h"
 #include "ios/chrome/browser/payments/ios_payment_request_cache_factory.h"
-#include "ios/chrome/browser/payments/origin_security_checker.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_cache.h"
 #import "ios/chrome/browser/payments/payment_response_helper.h"
@@ -115,10 +114,6 @@ struct PendingPaymentResponse {
   // PersonalDataManager used to manage user credit cards and addresses.
   autofill::PersonalDataManager* _personalDataManager;
 
-  // Maintains a map of web::WebState to a list of payments::PaymentRequest
-  // instances maintained for that WebState.
-  payments::PaymentRequestCache* _paymentRequestCache;
-
   // The observer for |_activeWebState|.
   std::unique_ptr<web::WebStateObserverBridge> _activeWebStateObserver;
 
@@ -154,6 +149,10 @@ struct PendingPaymentResponse {
 
 // Object that manages JavaScript injection into the web view.
 @property(nonatomic, weak) JSPaymentRequestManager* paymentRequestJsManager;
+
+// Maintains a map of web::WebState to a list of payments::PaymentRequest
+// instances maintained for that WebState.
+@property(nonatomic, assign) payments::PaymentRequestCache* paymentRequestCache;
 
 // The payments::PaymentRequest instance currently showing, if any.
 @property(nonatomic, assign) payments::PaymentRequest* pendingPaymentRequest;
@@ -257,6 +256,7 @@ struct PendingPaymentResponse {
 @synthesize activeWebState = _activeWebState;
 @synthesize paymentRequestCoordinator = _paymentRequestCoordinator;
 @synthesize paymentRequestJsManager = _paymentRequestJsManager;
+@synthesize paymentRequestCache = _paymentRequestCache;
 @synthesize pendingPaymentRequest = _pendingPaymentRequest;
 @synthesize dispatcher = _dispatcher;
 @synthesize coordinatorDidStopCallback = _coordinatorDidStopCallback;
@@ -289,7 +289,6 @@ struct PendingPaymentResponse {
 }
 
 - (void)setActiveWebState:(web::WebState*)webState {
-  [self cancelRequest];
   [self disableActiveWebState];
 
   _paymentRequestJsManager = nil;
@@ -308,19 +307,32 @@ struct PendingPaymentResponse {
 }
 
 - (void)stopTrackingWebState:(web::WebState*)webState {
-  for (const auto& paymentRequest :
-       _paymentRequestCache->GetPaymentRequests(_activeWebState)) {
-    if (paymentRequest->state() != payments::PaymentRequest::State::CLOSED) {
-      paymentRequest->journey_logger().SetAborted(
-          payments::JourneyLogger::ABORT_REASON_USER_NAVIGATION);
-      paymentRequest->set_updating(false);
-      paymentRequest->set_state(payments::PaymentRequest::State::CLOSED);
+  __weak PaymentRequestManager* weakSelf = self;
+  ProceduralBlockWithBool callback = ^(BOOL) {
+    for (const auto& paymentRequest :
+         weakSelf.paymentRequestCache->GetPaymentRequests(webState)) {
+      if (paymentRequest->state() != payments::PaymentRequest::State::CLOSED) {
+        paymentRequest->journey_logger().SetAborted(
+            payments::JourneyLogger::ABORT_REASON_USER_NAVIGATION);
+        paymentRequest->set_updating(false);
+        paymentRequest->set_state(payments::PaymentRequest::State::CLOSED);
+      }
     }
+    // The lifetime of a PaymentRequest is tied to the WebState it is associated
+    // with and the current URL. Therefore, PaymentRequest instances should get
+    // destroyed when the WebState goes away.
+    weakSelf.paymentRequestCache->ClearPaymentRequests(webState);
+  };
+
+  // Abort any pending request.
+  if (_pendingPaymentRequest) {
+    [self abortPendingRequestWithReason:payments::JourneyLogger::
+                                            ABORT_REASON_MERCHANT_NAVIGATION
+                           errorMessage:kCancelErrorMessage
+                               callback:callback];
+  } else {
+    callback(YES);
   }
-  // The lifetime of a PaymentRequest is tied to the WebState it is associated
-  // with and the current URL. Therefore, PaymentRequest instances should get
-  // destroyed when the WebState goes away.
-  _paymentRequestCache->ClearPaymentRequests(webState);
 }
 
 - (void)enablePaymentRequest:(BOOL)enabled {
@@ -703,13 +715,6 @@ paymentRequestFromMessage:(const base::DictionaryValue&)message
     return YES;
   }
 
-  if (paymentRequest->IsIncognito()) {
-    [_paymentRequestJsManager resolveCanMakePaymentPromiseWithValue:YES
-                                                  completionHandler:nil];
-    paymentRequest->journey_logger().SetCanMakePaymentValue(true);
-    return YES;
-  }
-
   BOOL canMakePayment = paymentRequest->CanMakePayment();
 
   payments::CanMakePaymentQuery* canMakePaymentQuery =
@@ -723,6 +728,12 @@ paymentRequestFromMessage:(const base::DictionaryValue&)message
           GURL(url_formatter::FormatUrlForSecurityDisplay(
               _activeWebState->GetLastCommittedURL())),
           paymentRequest->stringified_method_data())) {
+    if (paymentRequest->IsIncognito()) {
+      canMakePayment = !paymentRequest->supported_card_networks_set().empty() ||
+                       base::FeatureList::IsEnabled(
+                           payments::features::kWebPaymentsNativeApps);
+    }
+
     [_paymentRequestJsManager
         resolveCanMakePaymentPromiseWithValue:canMakePayment
                             completionHandler:nil];
@@ -911,23 +922,21 @@ paymentRequestFromMessage:(const base::DictionaryValue&)message
 
   const GURL lastCommittedURL = _activeWebState->GetLastCommittedURL();
 
-  if (!payments::OriginSecurityChecker::IsContextSecure(lastCommittedURL)) {
-    LOG(ERROR) << "Not in a secure context.";
+  if (!web::IsOriginSecure(lastCommittedURL) ||
+      lastCommittedURL.scheme() == url::kDataScheme) {
+    DLOG(ERROR) << "Not in a secure context.";
     return NO;
   }
 
-  if (!payments::OriginSecurityChecker::IsSchemeCryptographic(
-          lastCommittedURL) &&
-      !payments::OriginSecurityChecker::IsOriginLocalhostOrFile(
-          lastCommittedURL)) {
-    LOG(ERROR) << "Not localhost, or with file or cryptographic scheme.";
+  if (!security_state::IsSchemeCryptographic(lastCommittedURL) &&
+      !security_state::IsOriginLocalhostOrFile(lastCommittedURL)) {
+    DLOG(ERROR) << "Not localhost, or with file or cryptographic scheme.";
     return NO;
   }
 
   // If the scheme is cryptographic, the SSL certificate must also be valid.
-  return !payments::OriginSecurityChecker::IsSchemeCryptographic(
-             lastCommittedURL) ||
-         payments::OriginSecurityChecker::IsSSLCertificateValid(
+  return !security_state::IsSchemeCryptographic(lastCommittedURL) ||
+         security_state::IsSslCertificateValid(
              _toolbarModel->GetToolbarModel()->GetSecurityLevel(true));
 }
 
@@ -1090,35 +1099,43 @@ requestFullCreditCard:(const autofill::CreditCard&)creditCard
 
 - (void)webState:(web::WebState*)webState
     didStartNavigation:(web::NavigationContext*)navigation {
-  // Reset any pending request.
-  if (_pendingPaymentRequest) {
-    _pendingPaymentRequest = nullptr;
-    [self resetIOSPaymentInstrumentLauncherDelegate];
-  }
+  payments::JourneyLogger::AbortReason abortReason =
+      navigation->IsRendererInitiated()
+          ? payments::JourneyLogger::ABORT_REASON_MERCHANT_NAVIGATION
+          : payments::JourneyLogger::ABORT_REASON_USER_NAVIGATION;
 
-  [self dismissUIWithCallback:nil];
-
-  for (const auto& paymentRequest :
-       _paymentRequestCache->GetPaymentRequests(_activeWebState)) {
-    if (paymentRequest->state() != payments::PaymentRequest::State::CLOSED) {
-      paymentRequest->journey_logger().SetAborted(
-          navigation->IsRendererInitiated()
-              ? payments::JourneyLogger::ABORT_REASON_MERCHANT_NAVIGATION
-              : payments::JourneyLogger::ABORT_REASON_USER_NAVIGATION);
-      paymentRequest->set_updating(false);
-      paymentRequest->set_state(payments::PaymentRequest::State::CLOSED);
+  __weak PaymentRequestManager* weakSelf = self;
+  ProceduralBlockWithBool callback = ^(BOOL) {
+    for (const auto& paymentRequest :
+         weakSelf.paymentRequestCache->GetPaymentRequests(
+             weakSelf.activeWebState)) {
+      if (paymentRequest->state() != payments::PaymentRequest::State::CLOSED) {
+        paymentRequest->journey_logger().SetAborted(abortReason);
+        paymentRequest->set_updating(false);
+        paymentRequest->set_state(payments::PaymentRequest::State::CLOSED);
+      }
     }
-  }
+    // The lifetime of a PaymentRequest is tied to the WebState it is associated
+    // with and the current URL. Therefore, PaymentRequest instances should get
+    // destroyed when the user navigates to a URL.
+    weakSelf.paymentRequestCache->ClearPaymentRequests(weakSelf.activeWebState);
+  };
 
-  // The lifetime of a PaymentRequest is tied to the WebState it is associated
-  // with and the current URL. Therefore, PaymentRequest instances should get
-  // destroyed when the WebState goes away or the user navigates to a URL.
-  _paymentRequestCache->ClearPaymentRequests(_activeWebState);
+  // Abort any pending request.
+  if (_pendingPaymentRequest) {
+    [self abortPendingRequestWithReason:abortReason
+                           errorMessage:kCancelErrorMessage
+                               callback:callback];
+  } else {
+    callback(YES);
+  }
 
   // Set the JS isContextSecure global variable at the earliest opportunity.
   [_paymentRequestJsManager
-       setContextSecure:payments::OriginSecurityChecker::IsContextSecure(
-                            _activeWebState->GetLastCommittedURL())
+       setContextSecure:(web::IsOriginSecure(
+                             _activeWebState->GetLastCommittedURL()) &&
+                         _activeWebState->GetLastCommittedURL().scheme() !=
+                             url::kDataScheme)
       completionHandler:nil];
 }
 

@@ -1,6 +1,7 @@
 {
   "name": "ash",
   "display_name": "Ash Window Manager and Shell",
+  "sandbox_type": "none",
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
@@ -20,7 +21,7 @@
           "ash::mojom::ShelfController",
           "ash::mojom::ShutdownController",
           "ash::mojom::SystemTray",
-          "ash::mojom::TabletModeManager",
+          "ash::mojom::TabletModeController",
           "ash::mojom::TrayAction",
           "ash::mojom::VpnList",
           "ash::mojom::WallpaperController"

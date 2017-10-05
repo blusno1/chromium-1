@@ -80,6 +80,7 @@ struct SiteSettingSourceStringMapping {
 
 const SiteSettingSourceStringMapping kSiteSettingSourceStringMapping[] = {
     {SiteSettingSource::kDefault, "default"},
+    {SiteSettingSource::kDrmDisabled, "drm-disabled"},
     {SiteSettingSource::kEmbargo, "embargo"},
     {SiteSettingSource::kExtension, "extension"},
     {SiteSettingSource::kInsecureOrigin, "insecure-origin"},
@@ -98,14 +99,17 @@ static_assert(arraysize(kSiteSettingSourceStringMapping) ==
 //    2. Insecure origins (some permissions are denied to insecure origins).
 //    3. Enterprise policy.
 //    4. Extensions.
-//    5. User-set per-origin setting.
-//    6. Embargo.
-//    7. User-set patterns.
-//    8. User-set global default for a ContentSettingsType.
-//    9. Chrome's built-in default.
+//    5. DRM disabled (for CrOS's Protected Content ContentSettingsType only).
+//    6. User-set per-origin setting.
+//    7. Embargo.
+//    8. User-set patterns.
+//    9. User-set global default for a ContentSettingsType.
+//   10. Chrome's built-in default.
 SiteSettingSource CalculateSiteSettingSource(
+    Profile* profile,
+    const ContentSettingsType content_type,
     const content_settings::SettingInfo& info,
-    PermissionStatusSource permission_status_source) {
+    const PermissionStatusSource permission_status_source) {
   if (permission_status_source == PermissionStatusSource::KILL_SWITCH)
     return SiteSettingSource::kKillSwitch;  // Source #1.
 
@@ -120,6 +124,12 @@ SiteSettingSource CalculateSiteSettingSource(
   if (info.source == content_settings::SETTING_SOURCE_EXTENSION)
     return SiteSettingSource::kExtension;  // Source #4.
 
+  // Protected Content will be blocked if the |kEnableDRM| pref is off.
+  if (content_type == CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER &&
+      !profile->GetPrefs()->GetBoolean(prefs::kEnableDRM)) {
+    return SiteSettingSource::kDrmDisabled;  // Source #5.
+  }
+
   DCHECK_NE(content_settings::SETTING_SOURCE_NONE, info.source);
   if (info.source == content_settings::SETTING_SOURCE_USER) {
     if (permission_status_source ==
@@ -127,13 +137,13 @@ SiteSettingSource CalculateSiteSettingSource(
         permission_status_source ==
             PermissionStatusSource::MULTIPLE_DISMISSALS ||
         permission_status_source == PermissionStatusSource::MULTIPLE_IGNORES) {
-      return SiteSettingSource::kEmbargo;  // Source #6.
+      return SiteSettingSource::kEmbargo;  // Source #7.
     }
     if (info.primary_pattern == ContentSettingsPattern::Wildcard() &&
         info.secondary_pattern == ContentSettingsPattern::Wildcard()) {
-      return SiteSettingSource::kDefault;  // Source #8, #9.
+      return SiteSettingSource::kDefault;  // Source #9, #10.
     }
-    // Source #5, #7. When #5 is the source, |permission_status_source| won't
+    // Source #6, #8. When #6 is the source, |permission_status_source| won't
     // be set to any of the source #6 enum values, as PermissionManager is
     // aware of the difference between these two sources internally. The
     // subtlety here should go away when PermissionManager can handle all
@@ -227,6 +237,21 @@ std::unique_ptr<base::DictionaryValue> GetExceptionForPage(
   return exception;
 }
 
+std::string GetDisplayNameForExtension(
+    const GURL& url,
+    const extensions::ExtensionRegistry* extension_registry) {
+  if (extension_registry && url.SchemeIs(extensions::kExtensionScheme)) {
+    // For the extension scheme, the pattern must be a valid URL.
+    DCHECK(url.is_valid());
+    const extensions::Extension* extension =
+        extension_registry->GetExtensionById(
+            url.host(), extensions::ExtensionRegistry::EVERYTHING);
+    if (extension)
+      return extension->name();
+  }
+  return std::string();
+}
+
 // Takes |url| and converts it into an individual origin string or retrieves
 // name of the extension it belongs to.
 std::string GetDisplayNameForGURL(
@@ -236,16 +261,13 @@ std::string GetDisplayNameForGURL(
   if (origin.unique())
     return url.spec();
 
-  if (extension_registry && origin.scheme() == extensions::kExtensionScheme) {
-    const extensions::Extension* extension =
-        extension_registry->GetExtensionById(
-            origin.host(), extensions::ExtensionRegistry::EVERYTHING);
-    if (extension)
-      return extension->name();
-  }
+  std::string display_name =
+      GetDisplayNameForExtension(url, extension_registry);
+  if (!display_name.empty())
+    return display_name;
 
-  // Note that using Serialize() here will chop off any default port numbers
-  // which may be confusing to users.
+  // Note that using Serialize() here will chop off default port numbers and
+  // percent encode the origin.
   return origin.Serialize();
 }
 
@@ -255,9 +277,10 @@ std::string GetDisplayNameForPattern(
     const ContentSettingsPattern& pattern,
     const extensions::ExtensionRegistry* extension_registry) {
   const GURL url(pattern.ToString());
-  url::Origin origin(url);
-  if (!origin.unique())
-    return GetDisplayNameForGURL(url, extension_registry);
+  const std::string extension_display_name =
+      GetDisplayNameForExtension(url, extension_registry);
+  if (!extension_display_name.empty())
+    return extension_display_name;
   return pattern.ToString();
 }
 
@@ -410,8 +433,9 @@ ContentSetting GetContentSettingForOrigin(
 
   // Retrieve the source of the content setting.
   *source_string = SiteSettingSourceToString(
-      CalculateSiteSettingSource(info, result.source));
+      CalculateSiteSettingSource(profile, content_type, info, result.source));
   *display_name = GetDisplayNameForGURL(origin, extension_registry);
+
   return result.content_setting;
 }
 

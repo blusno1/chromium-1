@@ -7,6 +7,7 @@
 #include "base/atomic_sequence_num.h"
 #include "base/callback.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/child/service_worker/controller_service_worker_connector.h"
 #include "content/common/service_worker/service_worker_loader_helpers.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/child/child_url_loader_factory_getter.h"
@@ -14,15 +15,6 @@
 #include "ui/base/page_transition_types.h"
 
 namespace content {
-
-namespace {
-
-int GetNextFetchEventID() {
-  static base::AtomicSequenceNumber seq;
-  return seq.GetNext();
-}
-
-}  // namespace
 
 // ServiceWorkerSubresourceLoader -------------------------------------------
 
@@ -34,8 +26,7 @@ ServiceWorkerSubresourceLoader::ServiceWorkerSubresourceLoader(
     const ResourceRequest& resource_request,
     mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-    scoped_refptr<base::RefCountedData<mojom::ServiceWorkerEventDispatcherPtr>>
-        event_dispatcher,
+    scoped_refptr<ControllerServiceWorkerConnector> controller_connector,
     scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter,
     const GURL& controller_origin,
     scoped_refptr<base::RefCountedData<storage::mojom::BlobRegistryPtr>>
@@ -43,7 +34,7 @@ ServiceWorkerSubresourceLoader::ServiceWorkerSubresourceLoader(
     : url_loader_client_(std::move(client)),
       url_loader_binding_(this, std::move(request)),
       response_callback_binding_(this),
-      event_dispatcher_(std::move(event_dispatcher)),
+      controller_connector_(std::move(controller_connector)),
       routing_id_(routing_id),
       request_id_(request_id),
       options_(options),
@@ -54,7 +45,7 @@ ServiceWorkerSubresourceLoader::ServiceWorkerSubresourceLoader(
       blob_registry_(std::move(blob_registry)),
       default_loader_factory_getter_(std::move(default_loader_factory_getter)),
       weak_factory_(this) {
-  DCHECK(event_dispatcher_ && event_dispatcher_->data);
+  DCHECK(controller_connector_);
   url_loader_binding_.set_connection_error_handler(base::BindOnce(
       &ServiceWorkerSubresourceLoader::DeleteSoon, weak_factory_.GetWeakPtr()));
   StartRequest(resource_request);
@@ -68,6 +59,8 @@ void ServiceWorkerSubresourceLoader::DeleteSoon() {
 
 void ServiceWorkerSubresourceLoader::StartRequest(
     const ResourceRequest& resource_request) {
+  // TODO(kinuko): Implement request.request_body handling.
+  DCHECK(!resource_request.request_body);
   std::unique_ptr<ServiceWorkerFetchRequest> request =
       ServiceWorkerLoaderHelpers::CreateFetchRequest(resource_request);
   DCHECK_EQ(Status::kNotStarted, status_);
@@ -76,9 +69,11 @@ void ServiceWorkerSubresourceLoader::StartRequest(
   mojom::ServiceWorkerFetchResponseCallbackPtr response_callback_ptr;
   response_callback_binding_.Bind(mojo::MakeRequest(&response_callback_ptr));
 
-  event_dispatcher_->data->DispatchFetchEvent(
-      GetNextFetchEventID(), *request, mojom::FetchEventPreloadHandlePtr(),
-      std::move(response_callback_ptr),
+  // At this point controller should be non-null.
+  // TODO(kinuko): re-start the request if we get connection error before we
+  // get response for this.
+  controller_connector_->GetControllerServiceWorker()->DispatchFetchEvent(
+      *request, std::move(response_callback_ptr),
       base::Bind(&ServiceWorkerSubresourceLoader::OnFetchEventFinished,
                  weak_factory_.GetWeakPtr()));
 }
@@ -86,12 +81,19 @@ void ServiceWorkerSubresourceLoader::StartRequest(
 void ServiceWorkerSubresourceLoader::OnFetchEventFinished(
     ServiceWorkerStatusCode status,
     base::Time dispatch_event_time) {
-  if (status != SERVICE_WORKER_OK) {
-    // TODO(kinuko): Log the failure.
-    // If status is not OK response callback may not be called.
-    weak_factory_.InvalidateWeakPtrs();
-    OnFallback(dispatch_event_time);
+  // Status OK and WAIT_UNTIL_REJECTED are expected status: the
+  // ServiceWorkerFetchResponseCallback interface (OnResponse*() or OnFallback()
+  // below) is expected to be called normally. In the case of REJECTED,
+  // OnResponse() is called with an error about the rejected promise.
+  if (status == SERVICE_WORKER_OK ||
+      status == SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED) {
+    return;
   }
+  // Otherwise, we have an unexpected error: fetch event dispatch failed. Return
+  // network error.
+  // TODO(kinuko): Log the failure.
+  weak_factory_.InvalidateWeakPtrs();
+  CommitCompleted(net::ERR_FAILED);
 }
 
 void ServiceWorkerSubresourceLoader::OnResponse(
@@ -135,6 +137,13 @@ void ServiceWorkerSubresourceLoader::StartResponse(
     const ServiceWorkerResponse& response,
     storage::mojom::BlobPtr body_as_blob,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream) {
+  // A response with status code 0 is Blink telling us to respond with network
+  // error.
+  if (response.status_code == 0) {
+    CommitCompleted(net::ERR_FAILED);
+    return;
+  }
+
   ServiceWorkerLoaderHelpers::SaveResponseInfo(response, &response_head_);
   ServiceWorkerLoaderHelpers::SaveResponseHeaders(
       response.status_code, response.status_text, response.headers,
@@ -143,6 +152,7 @@ void ServiceWorkerSubresourceLoader::StartResponse(
   // Handle a stream response body.
   if (!body_as_stream.is_null() && body_as_stream->stream.is_valid()) {
     CommitResponseHeaders();
+    DCHECK(url_loader_client_.is_bound());
     url_loader_client_->OnStartLoadingResponseBody(
         std::move(body_as_stream->stream));
     // TODO(falken): Call CommitCompleted() when stream finished.
@@ -181,6 +191,7 @@ void ServiceWorkerSubresourceLoader::StartResponse(
 
 void ServiceWorkerSubresourceLoader::CommitResponseHeaders() {
   DCHECK_EQ(Status::kStarted, status_);
+  DCHECK(url_loader_client_.is_bound());
   status_ = Status::kSentHeader;
   // TODO(kinuko): Fill the ssl_info.
   url_loader_client_->OnReceiveResponse(response_head_,
@@ -190,23 +201,12 @@ void ServiceWorkerSubresourceLoader::CommitResponseHeaders() {
 
 void ServiceWorkerSubresourceLoader::CommitCompleted(int error_code) {
   DCHECK_LT(status_, Status::kCompleted);
+  DCHECK(url_loader_client_.is_bound());
   status_ = Status::kCompleted;
   ResourceRequestCompletionStatus completion_status;
   completion_status.error_code = error_code;
   completion_status.completion_time = base::TimeTicks::Now();
   url_loader_client_->OnComplete(completion_status);
-}
-
-void ServiceWorkerSubresourceLoader::DeliverErrorResponse() {
-  DCHECK_GT(status_, Status::kNotStarted);
-  DCHECK_LT(status_, Status::kCompleted);
-  if (status_ < Status::kSentHeader) {
-    ServiceWorkerLoaderHelpers::SaveResponseHeaders(
-        500, "Service Worker Response Error", ServiceWorkerHeaderMap(),
-        &response_head_);
-    CommitResponseHeaders();
-  }
-  CommitCompleted(net::ERR_FAILED);
 }
 
 // ServiceWorkerSubresourceLoader: URLLoader implementation -----------------
@@ -222,6 +222,10 @@ void ServiceWorkerSubresourceLoader::SetPriority(net::RequestPriority priority,
   // Not supported (do nothing).
 }
 
+void ServiceWorkerSubresourceLoader::PauseReadingBodyFromNet() {}
+
+void ServiceWorkerSubresourceLoader::ResumeReadingBodyFromNet() {}
+
 // ServiceWorkerSubresourceLoader: URLLoaderClient for Blob reading ---------
 
 void ServiceWorkerSubresourceLoader::OnReceiveResponse(
@@ -229,6 +233,7 @@ void ServiceWorkerSubresourceLoader::OnReceiveResponse(
     const base::Optional<net::SSLInfo>& ssl_info,
     mojom::DownloadedTempFilePtr downloaded_file) {
   DCHECK_EQ(Status::kStarted, status_);
+  DCHECK(url_loader_client_.is_bound());
   status_ = Status::kSentHeader;
   if (response_head.headers->response_code() >= 400) {
     DVLOG(1) << "Blob::OnReceiveResponse got error: "
@@ -271,12 +276,14 @@ void ServiceWorkerSubresourceLoader::OnTransferSizeUpdated(
 
 void ServiceWorkerSubresourceLoader::OnStartLoadingResponseBody(
     mojo::ScopedDataPipeConsumerHandle body) {
+  DCHECK(url_loader_client_.is_bound());
   url_loader_client_->OnStartLoadingResponseBody(std::move(body));
 }
 
 void ServiceWorkerSubresourceLoader::OnComplete(
     const ResourceRequestCompletionStatus& status) {
   DCHECK_EQ(Status::kSentHeader, status_);
+  DCHECK(url_loader_client_.is_bound());
   status_ = Status::kCompleted;
   url_loader_client_->OnComplete(status);
 }
@@ -284,13 +291,12 @@ void ServiceWorkerSubresourceLoader::OnComplete(
 // ServiceWorkerSubresourceLoaderFactory ------------------------------------
 
 ServiceWorkerSubresourceLoaderFactory::ServiceWorkerSubresourceLoaderFactory(
-    scoped_refptr<base::RefCountedData<mojom::ServiceWorkerEventDispatcherPtr>>
-        event_dispatcher,
+    scoped_refptr<ControllerServiceWorkerConnector> controller_connector,
     scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter,
     const GURL& controller_origin,
     scoped_refptr<base::RefCountedData<storage::mojom::BlobRegistryPtr>>
         blob_registry)
-    : event_dispatcher_(std::move(event_dispatcher)),
+    : controller_connector_(std::move(controller_connector)),
       default_loader_factory_getter_(std::move(default_loader_factory_getter)),
       controller_origin_(controller_origin),
       blob_registry_(std::move(blob_registry)) {
@@ -315,7 +321,7 @@ void ServiceWorkerSubresourceLoaderFactory::CreateLoaderAndStart(
   // destructs itself (while the loader client continues to work).
   new ServiceWorkerSubresourceLoader(
       std::move(request), routing_id, request_id, options, resource_request,
-      std::move(client), traffic_annotation, event_dispatcher_,
+      std::move(client), traffic_annotation, controller_connector_,
       default_loader_factory_getter_, controller_origin_, blob_registry_);
 }
 

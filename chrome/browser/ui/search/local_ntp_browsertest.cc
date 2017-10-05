@@ -9,12 +9,18 @@
 
 #include "base/command_line.h"
 #include "base/i18n/base_i18n_switches.h"
+#include "base/json/string_escape.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/permissions/permission_manager.h"
+#include "chrome/browser/permissions/permission_manager_factory.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
+#include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_fetcher.h"
@@ -22,9 +28,12 @@
 #include "chrome/browser/search/one_google_bar/one_google_bar_service_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
+#include "chrome/browser/search_provider_logos/logo_service_factory.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/browser/ui/search/instant_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
@@ -32,17 +41,33 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/search_provider_logos/logo_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
+#include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/resource/resource_bundle.h"
+
+using search_provider_logos::EncodedLogo;
+using search_provider_logos::EncodedLogoCallback;
+using search_provider_logos::LogoCallbacks;
+using search_provider_logos::LogoCallbackReason;
+using search_provider_logos::LogoObserver;
+using search_provider_logos::LogoService;
+using testing::_;
+using testing::DoAll;
+using testing::Eq;
+using testing::IsEmpty;
 
 namespace {
 
@@ -361,6 +386,17 @@ IN_PROC_BROWSER_TEST_F(LocalNTPVoiceJavascriptTest, TextTests) {
   EXPECT_TRUE(success);
 }
 
+IN_PROC_BROWSER_TEST_F(LocalNTPVoiceJavascriptTest, SpeechTests) {
+  content::WebContents* active_tab =
+      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  // Run the tests.
+  bool success = false;
+  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
+      active_tab, "!!runSimpleTests('speech')", &success));
+  EXPECT_TRUE(success);
+}
+
 IN_PROC_BROWSER_TEST_F(LocalNTPVoiceJavascriptTest, ViewTests) {
   content::WebContents* active_tab =
       OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
@@ -580,6 +616,12 @@ class LocalNTPVoiceSearchSmokeTest : public InProcessBrowserTest {
     InProcessBrowserTest::SetUp();
   }
 
+  void SetUpCommandLine(base::CommandLine* cmdline) override {
+    // Requesting microphone permission doesn't work unless there's a device
+    // available.
+    cmdline->AppendSwitch(switches::kUseFakeDeviceForMediaStream);
+  }
+
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -600,14 +642,265 @@ IN_PROC_BROWSER_TEST_F(LocalNTPVoiceSearchSmokeTest,
             active_tab->GetController().GetVisibleEntry()->GetURL());
 
   // Make sure the microphone icon in the fakebox is present and visible.
-  bool fakebox_speech_is_visible = false;
+  bool fakebox_microphone_is_visible = false;
   ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
       active_tab,
-      "!!document.getElementById('fakebox-speech') && "
-      "!document.getElementById('fakebox-speech').hidden",
-      &fakebox_speech_is_visible));
-  EXPECT_TRUE(fakebox_speech_is_visible);
+      "!!document.getElementById('fakebox-microphone') && "
+      "!document.getElementById('fakebox-microphone').hidden",
+      &fakebox_microphone_is_visible));
+  EXPECT_TRUE(fakebox_microphone_is_visible);
 
   // We shouldn't have gotten any console error messages.
   EXPECT_TRUE(console_observer.message().empty()) << console_observer.message();
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPVoiceSearchSmokeTest, MicrophonePermission) {
+  // Open a new NTP.
+  content::WebContents* active_tab =
+      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
+  ASSERT_TRUE(search::IsInstantNTP(active_tab));
+  ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
+            active_tab->GetController().GetVisibleEntry()->GetURL());
+
+  PermissionRequestManager* request_manager =
+      PermissionRequestManager::FromWebContents(active_tab);
+  MockPermissionPromptFactory prompt_factory(request_manager);
+
+  PermissionManager* permission_manager =
+      PermissionManagerFactory::GetForProfile(browser()->profile());
+
+  // Make sure microphone permission for the NTP isn't set yet.
+  const PermissionResult mic_permission_before =
+      permission_manager->GetPermissionStatus(
+          CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+          GURL(chrome::kChromeSearchLocalNtpUrl).GetOrigin(),
+          GURL(chrome::kChromeUINewTabURL).GetOrigin());
+  ASSERT_EQ(CONTENT_SETTING_ASK, mic_permission_before.content_setting);
+  ASSERT_EQ(PermissionStatusSource::UNSPECIFIED, mic_permission_before.source);
+
+  ASSERT_EQ(0, prompt_factory.TotalRequestCount());
+
+  // Auto-approve the permissions bubble as soon as it shows up.
+  prompt_factory.set_response_type(PermissionRequestManager::ACCEPT_ALL);
+
+  // Click on the microphone button, which will trigger a permission request.
+  ASSERT_TRUE(content::ExecuteScript(
+      active_tab, "document.getElementById('fakebox-microphone').click();"));
+
+  // Make sure the request arrived.
+  prompt_factory.WaitForPermissionBubble();
+  EXPECT_EQ(1, prompt_factory.show_count());
+  EXPECT_EQ(1, prompt_factory.request_count());
+  EXPECT_EQ(1, prompt_factory.TotalRequestCount());
+  EXPECT_TRUE(prompt_factory.RequestTypeSeen(
+      PermissionRequestType::PERMISSION_MEDIASTREAM_MIC));
+  // ...and that it showed the Google base URL, not the NTP URL.
+  const GURL google_base_url(
+      UIThreadSearchTermsData(browser()->profile()).GoogleBaseURLValue());
+  EXPECT_TRUE(prompt_factory.RequestOriginSeen(google_base_url.GetOrigin()));
+  EXPECT_FALSE(prompt_factory.RequestOriginSeen(
+      GURL(chrome::kChromeUINewTabURL).GetOrigin()));
+  EXPECT_FALSE(prompt_factory.RequestOriginSeen(
+      GURL(chrome::kChromeSearchLocalNtpUrl).GetOrigin()));
+
+  // Now microphone permission for the NTP should be set.
+  const PermissionResult mic_permission_after =
+      permission_manager->GetPermissionStatus(
+          CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+          GURL(chrome::kChromeSearchLocalNtpUrl).GetOrigin(),
+          GURL(chrome::kChromeUINewTabURL).GetOrigin());
+  EXPECT_EQ(CONTENT_SETTING_ALLOW, mic_permission_after.content_setting);
+}
+
+class MockLogoService : public LogoService {
+ public:
+  MOCK_METHOD1(GetLogoPtr, void(LogoCallbacks* callbacks));
+
+  void GetLogo(LogoCallbacks callbacks) override { GetLogoPtr(&callbacks); }
+  void GetLogo(LogoObserver* observer) override { NOTREACHED(); }
+};
+
+ACTION_P2(ReturnCachedLogo, reason, logo) {
+  if (arg0->on_cached_encoded_logo_available) {
+    std::move(arg0->on_cached_encoded_logo_available).Run(reason, logo);
+  }
+}
+
+ACTION_P2(ReturnFreshLogo, reason, logo) {
+  if (arg0->on_fresh_encoded_logo_available) {
+    std::move(arg0->on_fresh_encoded_logo_available).Run(reason, logo);
+  }
+}
+
+class LocalNTPDoodleTest : public InProcessBrowserTest {
+ protected:
+  LocalNTPDoodleTest() {}
+
+  MockLogoService* logo_service() {
+    return static_cast<MockLogoService*>(
+        LogoServiceFactory::GetForProfile(browser()->profile()));
+  }
+
+  base::Optional<double> GetComputedOpacity(content::WebContents* tab,
+                                            const std::string& id) {
+    std::string css_value;
+    double double_value;
+    if (instant_test_utils::GetStringFromJS(
+            tab,
+            base::StringPrintf(
+                "getComputedStyle(document.getElementById(%s)).opacity",
+                base::GetQuotedJSONString(id).c_str()),
+            &css_value) &&
+        base::StringToDouble(css_value, &double_value)) {
+      return double_value;
+    }
+    return base::nullopt;
+  }
+
+  void WaitForFadeIn(content::WebContents* tab, const std::string& id) {
+    content::ConsoleObserverDelegate console_observer(tab, "WaitForFadeIn");
+    tab->SetDelegate(&console_observer);
+
+    bool result = false;
+    if (!instant_test_utils::GetBoolFromJS(
+            tab,
+            base::StringPrintf(
+                R"js(
+                  (function(id, message) {
+                    var element = document.getElementById(id);
+                    if (window.getComputedStyle(element).opacity == 1.0) {
+                      console.log(message);
+                    } else {
+                      element.addEventListener('transitionend', function() {
+                        console.log(message);
+                      });
+                    }
+                    return true;
+                  })(%s, 'WaitForFadeIn')
+                )js",
+                base::GetQuotedJSONString(id).c_str()),
+            &result) &&
+        result) {
+      ADD_FAILURE() << "failed to wait for fade-in";
+      return;
+    }
+
+    console_observer.Wait();
+  }
+
+ private:
+  void SetUp() override {
+    feature_list_.InitWithFeatures(
+        {features::kUseGoogleLocalNtp, features::kDoodlesOnLocalNtp}, {});
+    InProcessBrowserTest::SetUp();
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    will_create_browser_context_services_subscription_ =
+        BrowserContextDependencyManager::GetInstance()
+            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
+                base::Bind(
+                    &LocalNTPDoodleTest::OnWillCreateBrowserContextServices,
+                    base::Unretained(this)));
+  }
+
+  static std::unique_ptr<KeyedService> CreateLogoService(
+      content::BrowserContext* context) {
+    return base::MakeUnique<MockLogoService>();
+  }
+
+  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
+    LogoServiceFactory::GetInstance()->SetTestingFactory(
+        context, &LocalNTPDoodleTest::CreateLogoService);
+  }
+
+  base::test::ScopedFeatureList feature_list_;
+
+  std::unique_ptr<
+      base::CallbackList<void(content::BrowserContext*)>::Subscription>
+      will_create_browser_context_services_subscription_;
+};
+
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
+                       ShouldBeUnchangedOnLogoFetchCancelled) {
+  EXPECT_CALL(*logo_service(), GetLogoPtr(_))
+      .WillRepeatedly(
+          DoAll(ReturnCachedLogo(LogoCallbackReason::CANCELED, base::nullopt),
+                ReturnFreshLogo(LogoCallbackReason::CANCELED, base::nullopt)));
+
+  // Open a new blank tab, then go to NTP and listen for console messages.
+  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  content::ConsoleObserverDelegate console_observer(active_tab, "*");
+  active_tab->SetDelegate(&console_observer);
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(1.0));
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(0.0));
+  EXPECT_THAT(console_observer.message(), IsEmpty());
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
+                       ShouldBeUnchangedWhenNoCachedOrFreshDoodle) {
+  EXPECT_CALL(*logo_service(), GetLogoPtr(_))
+      .WillRepeatedly(DoAll(
+          ReturnCachedLogo(LogoCallbackReason::DETERMINED, base::nullopt),
+          ReturnFreshLogo(LogoCallbackReason::REVALIDATED, base::nullopt)));
+
+  // Open a new blank tab, then go to NTP and listen for console messages.
+  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  content::ConsoleObserverDelegate console_observer(active_tab, "*");
+  active_tab->SetDelegate(&console_observer);
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(1.0));
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(0.0));
+  EXPECT_THAT(console_observer.message(), IsEmpty());
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldShowDoodleWhenCached) {
+  EncodedLogo cached_logo;
+  std::string encoded_image = "data:image/svg+xml,<svg/>";
+  cached_logo.encoded_image =
+      base::RefCountedString::TakeString(&encoded_image);
+  cached_logo.metadata.on_click_url = GURL("https://www.chromium.org");
+  cached_logo.metadata.alt_text = "Chromium";
+
+  EXPECT_CALL(*logo_service(), GetLogoPtr(_))
+      .WillRepeatedly(DoAll(
+          ReturnCachedLogo(LogoCallbackReason::DETERMINED, cached_logo),
+          ReturnFreshLogo(LogoCallbackReason::REVALIDATED, base::nullopt)));
+
+  // Open a new blank tab, then go to NTP and listen for console messages.
+  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  content::ConsoleObserverDelegate console_observer(active_tab, "*");
+  active_tab->SetDelegate(&console_observer);
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(0.0));
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(1.0));
+  EXPECT_THAT(console_observer.message(), IsEmpty());
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldFadeToDoodleWhenFetched) {
+  EncodedLogo fresh_logo;
+  std::string encoded_image = "data:image/svg+xml,<svg/>";
+  fresh_logo.encoded_image = base::RefCountedString::TakeString(&encoded_image);
+  fresh_logo.metadata.on_click_url = GURL("https://www.chromium.org");
+  fresh_logo.metadata.alt_text = "Chromium";
+
+  EXPECT_CALL(*logo_service(), GetLogoPtr(_))
+      .WillOnce(
+          DoAll(ReturnCachedLogo(LogoCallbackReason::DETERMINED, base::nullopt),
+                ReturnFreshLogo(LogoCallbackReason::DETERMINED, fresh_logo)))
+      .WillRepeatedly(DoAll(
+          ReturnCachedLogo(LogoCallbackReason::DETERMINED, fresh_logo),
+          ReturnFreshLogo(LogoCallbackReason::REVALIDATED, base::nullopt)));
+
+  // Open a new blank tab, then go to NTP.
+  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  WaitForFadeIn(active_tab, "logo-doodle");
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(0.0));
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(1.0));
 }

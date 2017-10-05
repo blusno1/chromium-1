@@ -278,7 +278,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
   LayoutSize ContentOffsetInCompositingLayer() const;
 
-  LayoutPoint SquashingOffsetFromTransformedAncestor() {
+  LayoutPoint SquashingOffsetFromTransformedAncestor() const {
     return squashing_layer_offset_from_transformed_ancestor_;
   }
 
@@ -369,10 +369,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   void UpdateScrollingLayerGeometry(const IntRect& local_compositing_bounds);
   void UpdateChildClippingMaskLayerGeometry();
   void UpdateStickyConstraints(const ComputedStyle&);
-
-  // Returns true if the compositor will be responsible for applying the sticky
-  // position offset for this composited layer.
-  bool UsesCompositedStickyPosition() const;
 
   void CreatePrimaryGraphicsLayer();
   void DestroyGraphicsLayers();

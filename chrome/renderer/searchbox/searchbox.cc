@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -220,7 +221,8 @@ SearchBox::SearchBox(content::RenderFrame* render_frame)
       is_input_in_progress_(false),
       is_key_capture_enabled_(false),
       most_visited_items_cache_(kMaxInstantMostVisitedItemCacheSize),
-      binding_(this) {
+      binding_(this),
+      weak_ptr_factory_(this) {
   // Connect to the embedded search interface in the browser.
   chrome::mojom::EmbeddedSearchConnectorAssociatedPtr connector;
   render_frame->GetRemoteAssociatedInterfaces()->GetInterface(&connector);
@@ -243,26 +245,35 @@ void SearchBox::LogEvent(NTPLoggingEventType event) {
   embedded_search_service_->LogEvent(page_seq_no_, event, delta);
 }
 
-void SearchBox::LogMostVisitedImpression(int position,
-                                         ntp_tiles::TileSource tile_source,
-                                         ntp_tiles::TileVisualType tile_type) {
-  embedded_search_service_->LogMostVisitedImpression(page_seq_no_, position,
-                                                     tile_source, tile_type);
+void SearchBox::LogMostVisitedImpression(
+    int position,
+    ntp_tiles::TileTitleSource tile_title_source,
+    ntp_tiles::TileSource tile_source,
+    ntp_tiles::TileVisualType tile_type) {
+  embedded_search_service_->LogMostVisitedImpression(
+      page_seq_no_, position, tile_title_source, tile_source, tile_type);
 }
 
-void SearchBox::LogMostVisitedNavigation(int position,
-                                         ntp_tiles::TileSource tile_source,
-                                         ntp_tiles::TileVisualType tile_type) {
-  embedded_search_service_->LogMostVisitedNavigation(page_seq_no_, position,
-                                                     tile_source, tile_type);
+void SearchBox::LogMostVisitedNavigation(
+    int position,
+    ntp_tiles::TileTitleSource tile_title_source,
+    ntp_tiles::TileSource tile_source,
+    ntp_tiles::TileVisualType tile_type) {
+  embedded_search_service_->LogMostVisitedNavigation(
+      page_seq_no_, position, tile_title_source, tile_source, tile_type);
 }
 
 void SearchBox::CheckIsUserSignedInToChromeAs(const base::string16& identity) {
-  embedded_search_service_->ChromeIdentityCheck(page_seq_no_, identity);
+  embedded_search_service_->ChromeIdentityCheck(
+      page_seq_no_, identity,
+      base::BindOnce(&SearchBox::ChromeIdentityCheckResult,
+                     weak_ptr_factory_.GetWeakPtr(), identity));
 }
 
 void SearchBox::CheckIsUserSyncingHistory() {
-  embedded_search_service_->HistorySyncCheck(page_seq_no_);
+  embedded_search_service_->HistorySyncCheck(
+      page_seq_no_, base::BindOnce(&SearchBox::HistorySyncCheckResult,
+                                   weak_ptr_factory_.GetWeakPtr()));
 }
 
 void SearchBox::DeleteMostVisitedItem(
@@ -409,12 +420,6 @@ GURL SearchBox::GetURLForMostVisitedItem(InstantRestrictedID item_id) const {
 void SearchBox::Bind(
     chrome::mojom::EmbeddedSearchClientAssociatedRequest request) {
   binding_.Bind(std::move(request));
-}
-
-void SearchBox::Reset() {
-  is_focused_ = false;
-  is_key_capture_enabled_ = false;
-  theme_info_ = ThemeBackgroundInfo();
 }
 
 void SearchBox::OnDestruct() {

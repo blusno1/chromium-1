@@ -50,7 +50,6 @@
 #include "platform/LengthBox.h"
 #include "platform/LengthPoint.h"
 #include "platform/LengthSize.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ThemeTypes.h"
 #include "platform/fonts/Font.h"
 #include "platform/fonts/FontDescription.h"
@@ -58,6 +57,7 @@
 #include "platform/geometry/LayoutRectOutsets.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/TouchAction.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/text/TextDirection.h"
 #include "platform/text/WritingModeUtils.h"
@@ -229,11 +229,15 @@ class ComputedStyle : public ComputedStyleBase,
   StyleSelfAlignmentData ResolvedAlignSelf(
       ItemPosition normal_value_behaviour,
       const ComputedStyle* parent_style = nullptr) const;
+  StyleContentAlignmentData ResolvedAlignContent(
+      const StyleContentAlignmentData& normal_behaviour) const;
   StyleSelfAlignmentData ResolvedJustifyItems(
       ItemPosition normal_value_behaviour) const;
   StyleSelfAlignmentData ResolvedJustifySelf(
       ItemPosition normal_value_behaviour,
       const ComputedStyle* parent_style = nullptr) const;
+  StyleContentAlignmentData ResolvedJustifyContent(
+      const StyleContentAlignmentData& normal_behaviour) const;
 
   StyleDifference VisualInvalidationDiff(const ComputedStyle&) const;
 
@@ -241,7 +245,7 @@ class ComputedStyle : public ComputedStyleBase,
                    IsAtShadowBoundary = kNotAtShadowBoundary);
   void CopyNonInheritedFromCached(const ComputedStyle&);
 
-  PseudoId StyleType() const { return StyleTypeInternal(); }
+  PseudoId StyleType() const { return static_cast<PseudoId>(StyleTypeInternal()); }
   void SetStyleType(PseudoId style_type) { SetStyleTypeInternal(style_type); }
 
   ComputedStyle* GetCachedPseudoStyle(PseudoId) const;
@@ -293,9 +297,7 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   static StyleSelfAlignmentData InitialDefaultAlignment() {
-    return StyleSelfAlignmentData(RuntimeEnabledFeatures::CSSGridLayoutEnabled()
-                                      ? kItemPositionNormal
-                                      : kItemPositionStretch,
+    return StyleSelfAlignmentData(kItemPositionNormal,
                                   kOverflowAlignmentDefault);
   }
 
@@ -490,7 +492,6 @@ class ComputedStyle : public ComputedStyleBase,
     SetHasAutoClipInternal(false);
     SetClipInternal(box);
   }
-  bool HasAutoClip() const { return HasAutoClipInternal(); }
   void SetHasAutoClip() {
     SetHasAutoClipInternal(true);
     SetClipInternal(ComputedStyle::InitialClip());
@@ -500,23 +501,21 @@ class ComputedStyle : public ComputedStyleBase,
   // column-count (aka -webkit-column-count)
   static unsigned short InitialColumnCount() { return 1; }
   void SetColumnCount(unsigned short c) {
-    SetColumnAutoCountInternal(false);
+    SetHasAutoColumnCountInternal(false);
     SetColumnCountInternal(c);
   }
-  bool HasAutoColumnCount() const { return ColumnAutoCountInternal(); }
   void SetHasAutoColumnCount() {
-    SetColumnAutoCountInternal(true);
+    SetHasAutoColumnCountInternal(true);
     SetColumnCountInternal(InitialColumnCount());
   }
 
   // column-gap (aka -webkit-column-gap)
   void SetColumnGap(float f) {
-    SetColumnNormalGapInternal(false);
+    SetHasNormalColumnGapInternal(false);
     SetColumnGapInternal(f);
   }
-  bool HasNormalColumnGap() const { return ColumnNormalGapInternal(); }
   void SetHasNormalColumnGap() {
-    SetColumnNormalGapInternal(true);
+    SetHasNormalColumnGapInternal(true);
     SetColumnGapInternal(0);
   }
 
@@ -542,12 +541,11 @@ class ComputedStyle : public ComputedStyleBase,
 
   // column-width (aka -webkit-column-width)
   void SetColumnWidth(float f) {
-    SetColumnAutoWidthInternal(false);
+    SetHasAutoColumnWidthInternal(false);
     SetColumnWidthInternal(f);
   }
-  bool HasAutoColumnWidth() const { return ColumnAutoWidthInternal(); }
   void SetHasAutoColumnWidth() {
-    SetColumnAutoWidthInternal(true);
+    SetHasAutoColumnWidthInternal(true);
     SetColumnWidthInternal(0);
   }
 
@@ -827,18 +825,14 @@ class ComputedStyle : public ComputedStyleBase,
   static EVerticalAlign InitialVerticalAlign() {
     return EVerticalAlign::kBaseline;
   }
-  EVerticalAlign VerticalAlign() const { return VerticalAlignInternal(); }
-  const Length& GetVerticalAlignLength() const {
-    return VerticalAlignLengthInternal();
-  }
-  void SetVerticalAlign(EVerticalAlign v) { SetVerticalAlignInternal(v); }
+  EVerticalAlign VerticalAlign() const { return static_cast<EVerticalAlign>(VerticalAlignInternal()); }
+  void SetVerticalAlign(EVerticalAlign v) { SetVerticalAlignInternal(static_cast<unsigned>(v)); }
   void SetVerticalAlignLength(const Length& length) {
-    SetVerticalAlignInternal(EVerticalAlign::kLength);
+    SetVerticalAlignInternal(static_cast<unsigned>(EVerticalAlign::kLength));
     SetVerticalAlignLengthInternal(length);
   }
 
   // z-index
-  bool HasAutoZIndex() const { return HasAutoZIndexInternal(); }
   void SetZIndex(int v) {
     SetHasAutoZIndexInternal(false);
     SetZIndexInternal(v);
@@ -849,7 +843,6 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // zoom
-  float EffectiveZoom() const { return EffectiveZoomInternal(); }
   bool SetZoom(float);
   bool SetEffectiveZoom(float);
 
@@ -864,6 +857,12 @@ class ComputedStyle : public ComputedStyleBase,
 
   // Mask properties.
   // -webkit-mask-box-image-outset
+  bool HasMaskBoxImageOutsets() const {
+    return MaskBoxImageInternal().HasImage() && MaskBoxImageOutset().NonZero();
+  }
+  LayoutRectOutsets MaskBoxImageOutsets() const {
+    return ImageOutsets(MaskBoxImageInternal());
+  }
   const BorderImageLengthBox& MaskBoxImageOutset() const {
     return MaskBoxImageInternal().Outset();
   }
@@ -903,9 +902,7 @@ class ComputedStyle : public ComputedStyleBase,
   void SetColor(const Color&);
 
   // line-height
-  static Length InitialLineHeight() { return Length(-100.0, kPercent); }
   Length LineHeight() const;
-  CORE_EXPORT void SetLineHeight(const Length& specified_line_height);
 
   // List style properties.
   // list-style-image
@@ -934,11 +931,6 @@ class ComputedStyle : public ComputedStyleBase,
     SetTextEmphasisColorInternal(color.Resolve(Color()));
     SetTextEmphasisColorIsCurrentColorInternal(color.IsCurrentColor());
   }
-
-  // -webkit-line-clamp
-  static LineClampValue InitialLineClamp() { return LineClampValue(); }
-  const LineClampValue& LineClamp() const { return LineClampInternal(); }
-  void SetLineClamp(LineClampValue c) { SetLineClampInternal(c); }
 
   // -webkit-text-fill-color
   void SetTextFillColor(const StyleColor& color) {
@@ -1116,7 +1108,7 @@ class ComputedStyle : public ComputedStyleBase,
   bool InheritedDataShared(const ComputedStyle&) const;
 
   bool HasChildDependentFlags() const {
-    return EmptyStateInternal() || HasExplicitlyInheritedProperties();
+    return EmptyState() || HasExplicitlyInheritedProperties();
   }
   void CopyChildDependentFlagsFrom(const ComputedStyle&);
 
@@ -1191,15 +1183,11 @@ class ComputedStyle : public ComputedStyleBase,
   void AddCallbackSelector(const String& selector);
 
   // Non-property flags.
-  bool EmptyState() const { return EmptyStateInternal(); }
   void SetEmptyState(bool b) {
     SetUnique();
     SetEmptyStateInternal(b);
   }
 
-  float TextAutosizingMultiplier() const {
-    return TextAutosizingMultiplierInternal();
-  }
   CORE_EXPORT void SetTextAutosizingMultiplier(float);
 
   // Column utility functions.
@@ -2122,7 +2110,8 @@ class ComputedStyle : public ComputedStyleBase,
   // currently handled through their self-painting layers. So the layout code
   // doesn't account for them.
   bool HasVisualOverflowingEffect() const {
-    return BoxShadow() || HasBorderImageOutsets() || HasOutline();
+    return BoxShadow() || HasBorderImageOutsets() || HasOutline() ||
+           HasMaskBoxImageOutsets();
   }
 
   // Stacking contexts and positioned elements[1] are stacked (sorted in
@@ -2620,7 +2609,7 @@ inline bool ComputedStyle::SetEffectiveZoom(float f) {
   // Clamp the effective zoom value to a smaller (but hopeful still large
   // enough) range, to avoid overflow in derived computations.
   float clamped_effective_zoom = clampTo<float>(f, 1e-6, 1e6);
-  if (EffectiveZoomInternal() == clamped_effective_zoom)
+  if (EffectiveZoom() == clamped_effective_zoom)
     return false;
   SetEffectiveZoomInternal(clamped_effective_zoom);
   return true;

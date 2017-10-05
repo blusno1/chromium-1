@@ -19,13 +19,11 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/process/process_metrics.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -33,7 +31,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "third_party/leveldatabase/chromium_logger.h"
-#include "third_party/leveldatabase/src/include/leveldb/cache.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/re2/src/re2/re2.h"
 
@@ -44,9 +42,56 @@ using leveldb::Status;
 
 namespace leveldb_env {
 
+// Helper class to limit resource usage to avoid exhaustion. Currently used to
+// limit read-only file usage so that we do not end up running out of file
+// descriptors, or running into kernel performance problems for very large
+// databases.
+class Semaphore {
+ public:
+  // Limit maximum number of resources to |n|.
+  explicit Semaphore(intptr_t n) { SetAvailable(n); }
+
+  // If another resource is available, acquire it and return true.
+  // Else return false.
+  bool TryAcquire() {
+    if (GetAvailable() <= 0)
+      return false;
+    leveldb::MutexLock l(&mutex_);
+    intptr_t x = GetAvailable();
+    if (x <= 0) {
+      return false;
+    } else {
+      SetAvailable(x - 1);
+      return true;
+    }
+  }
+
+  // Release a resource acquired by a previous call to TryAcquire() that
+  // returned true.
+  void Release() {
+    leveldb::MutexLock l(&mutex_);
+    SetAvailable(GetAvailable() + 1);
+  }
+
+ private:
+  intptr_t GetAvailable() const {
+    return reinterpret_cast<intptr_t>(available_.Acquire_Load());
+  }
+
+  // REQUIRES: mutex_ must be held
+  void SetAvailable(intptr_t v) {
+    DCHECK_LE(0, v);
+    available_.Release_Store(reinterpret_cast<void*>(v));
+  }
+
+  leveldb::port::Mutex mutex_;
+  leveldb::port::AtomicPointer available_;
+
+  DISALLOW_COPY_AND_ASSIGN(Semaphore);
+};
+
 namespace {
 
-const FilePath::CharType backup_table_extension[] = FILE_PATH_LITERAL(".bak");
 const FilePath::CharType table_extension[] = FILE_PATH_LITERAL(".ldb");
 
 static const FilePath::CharType kLevelDBTestDirectoryPrefix[] =
@@ -225,11 +270,22 @@ class ChromiumSequentialFile : public leveldb::SequentialFile {
 
 class ChromiumRandomAccessFile : public leveldb::RandomAccessFile {
  public:
-  ChromiumRandomAccessFile(const std::string& fname,
+  ChromiumRandomAccessFile(base::FilePath file_path,
                            base::File file,
-                           const UMALogger* uma_logger)
-      : filename_(fname), file_(std::move(file)), uma_logger_(uma_logger) {}
-  virtual ~ChromiumRandomAccessFile() {}
+                           const UMALogger* uma_logger,
+                           Semaphore* file_semaphore)
+      : filepath_(std::move(file_path)),
+        file_(std::move(file)),
+        uma_logger_(uma_logger),
+        file_semaphore_(file_semaphore),
+        open_before_read_(!file_semaphore->TryAcquire()) {
+    if (open_before_read_)
+      file_.Close();  // Open file on every access.
+  }
+  virtual ~ChromiumRandomAccessFile() {
+    if (!open_before_read_)
+      file_semaphore_->Release();
+  }
 
   Status Read(uint64_t offset,
               size_t n,
@@ -237,11 +293,22 @@ class ChromiumRandomAccessFile : public leveldb::RandomAccessFile {
               char* scratch) const override {
     TRACE_EVENT2("leveldb", "ChromiumRandomAccessFile::Read", "offset", offset,
                  "size", n);
+    if (open_before_read_) {
+      DCHECK(!file_.IsValid());
+      int flags = base::File::FLAG_READ | base::File::FLAG_OPEN;
+      file_.Initialize(filepath_, flags);
+      if (!file_.IsValid()) {
+        return MakeIOError(filepath_.AsUTF8Unsafe(), "Could not perform read",
+                           kRandomAccessFileRead);
+      }
+    }
     int bytes_read = file_.Read(offset, scratch, n);
+    if (open_before_read_)
+      file_.Close();
     *result = Slice(scratch, (bytes_read < 0) ? 0 : bytes_read);
     if (bytes_read < 0) {
       uma_logger_->RecordErrorAt(kRandomAccessFileRead);
-      return MakeIOError(filename_, "Could not perform read",
+      return MakeIOError(filepath_.AsUTF8Unsafe(), "Could not perform read",
                          kRandomAccessFileRead);
     }
     if (bytes_read > 0)
@@ -250,9 +317,12 @@ class ChromiumRandomAccessFile : public leveldb::RandomAccessFile {
   }
 
  private:
-  std::string filename_;
+  const base::FilePath filepath_;
   mutable base::File file_;
   const UMALogger* uma_logger_;
+  Semaphore* file_semaphore_;
+  // If true, file_ is closed and we open on every read.
+  bool open_before_read_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromiumRandomAccessFile);
 };
@@ -321,7 +391,7 @@ Status ChromiumWritableFile::Append(const Slice& data) {
   DCHECK(file_.IsValid());
   DCHECK(uma_logger_);
   int bytes_written = file_.WriteAtCurrentPos(data.data(), data.size());
-  if (bytes_written != data.size()) {
+  if (static_cast<size_t>(bytes_written) != data.size()) {
     base::File::Error error = LastFileError();
     uma_logger_->RecordOSError(kWritableFileAppend, error);
     return MakeIOError(filename_, base::File::ErrorToString(error),
@@ -364,33 +434,14 @@ Status ChromiumWritableFile::Sync() {
 
 base::LazyInstance<ChromiumEnv>::Leaky default_env = LAZY_INSTANCE_INITIALIZER;
 
-size_t DefaultBlockCacheSize() {
-  if (base::SysInfo::IsLowEndDevice())
-    return 1 << 20;  // 1MB
-  else
-    return 8 << 20;  // 8MB
-}
-
-leveldb::Cache* GetDefaultBlockCache() {
-  static leveldb::Cache* cache = leveldb::NewLRUCache(DefaultBlockCacheSize());
-  return cache;
+// Return the maximum number of read-only files to keep open.
+int MaxOpenFiles() {
+  // Allow use of 20% of available file descriptors for read-only files.
+  int open_read_only_file_limit = base::GetMaxFds() / 5;
+  return open_read_only_file_limit;
 }
 
 }  // unnamed namespace
-
-// Returns a separate (from the default) block cache for use by web APIs.
-// This must be used when opening the databases accessible to Web-exposed APIs,
-// so rogue pages can't mount a denial of service attack by hammering the block
-// cache. Without separate caches, such an attack might slow down Chrome's UI to
-// the point where the user can't close the offending page's tabs.
-leveldb::Cache* SharedWebBlockCache() {
-  if (base::SysInfo::IsLowEndDevice())
-    return GetDefaultBlockCache();
-
-  const int block_cache_size = 8 << 20;  // 8MB
-  static leveldb::Cache* cache = leveldb::NewLRUCache(block_cache_size);
-  return cache;
-}
 
 Options::Options() {
 // Note: Ensure that these default values correspond to those in
@@ -411,7 +462,7 @@ Options::Options() {
   // By default use a single shared block cache to conserve memory. The owner of
   // this object can create their own, or set to NULL to have leveldb create a
   // new db-specific block cache.
-  block_cache = GetDefaultBlockCache();
+  block_cache = leveldb_chrome::GetSharedBrowserBlockCache();
 }
 
 const char* MethodIDToString(MethodID method) {
@@ -630,7 +681,8 @@ ChromiumEnv::ChromiumEnv(const std::string& name)
     : kMaxRetryTimeMillis(1000),
       name_(name),
       bgsignal_(&mu_),
-      started_bgthread_(false) {
+      started_bgthread_(false),
+      file_semaphore_(new Semaphore(MaxOpenFiles())) {
   uma_ioerror_base_name_ = name_ + ".IOError.BFE";
 }
 
@@ -701,6 +753,11 @@ void ChromiumEnv::DeleteBackupFiles(const FilePath& dir) {
        fname = dir_reader.Next()) {
     histogram->AddBoolean(base::DeleteFile(fname, false));
   }
+}
+
+// Test must call this *before* opening any random-access files.
+void ChromiumEnv::SetReadOnlyFileLimitForTesting(int max_open_files) {
+  file_semaphore_.reset(new Semaphore(max_open_files));
 }
 
 Status ChromiumEnv::GetChildren(const std::string& dir,
@@ -921,30 +978,17 @@ Status ChromiumEnv::NewSequentialFile(const std::string& fname,
   }
 }
 
-void ChromiumEnv::RecordOpenFilesLimit(const std::string& type) {
-#if defined(OS_POSIX)
-  GetMaxFDHistogram(type)->Add(base::GetMaxFds());
-#elif defined(OS_WIN)
-// Windows is only limited by available memory
-#else
-#error "Need to determine limit to open files for this OS"
-#endif
-}
-
 Status ChromiumEnv::NewRandomAccessFile(const std::string& fname,
                                         leveldb::RandomAccessFile** result) {
   int flags = base::File::FLAG_READ | base::File::FLAG_OPEN;
-  base::File file(FilePath::FromUTF8Unsafe(fname), flags);
+  base::FilePath file_path = FilePath::FromUTF8Unsafe(fname);
+  base::File file(file_path, flags);
   if (file.IsValid()) {
-    *result = new ChromiumRandomAccessFile(fname, std::move(file), this);
-    RecordOpenFilesLimit("Success");
+    *result = new ChromiumRandomAccessFile(
+        std::move(file_path), std::move(file), this, file_semaphore_.get());
     return Status::OK();
   }
   base::File::Error error_code = file.error_details();
-  if (error_code == base::File::FILE_ERROR_TOO_MANY_OPENED)
-    RecordOpenFilesLimit("TooManyOpened");
-  else
-    RecordOpenFilesLimit("OtherError");
   *result = NULL;
   RecordOSError(kNewRandomAccessFile, error_code);
   return MakeIOError(fname, FileErrorString(error_code), kNewRandomAccessFile,
@@ -1026,19 +1070,6 @@ base::HistogramBase* ChromiumEnv::GetMethodIOErrorHistogram() const {
   uma_name.append(".IOError");
   return base::LinearHistogram::FactoryGet(uma_name, 1, kNumEntries,
       kNumEntries + 1, base::Histogram::kUmaTargetedHistogramFlag);
-}
-
-base::HistogramBase* ChromiumEnv::GetMaxFDHistogram(
-    const std::string& type) const {
-  std::string uma_name(name_);
-  uma_name.append(".MaxFDs.").append(type);
-  // These numbers make each bucket twice as large as the previous bucket.
-  const int kFirstEntry = 1;
-  const int kLastEntry = 65536;
-  const int kNumBuckets = 18;
-  return base::Histogram::FactoryGet(
-      uma_name, kFirstEntry, kLastEntry, kNumBuckets,
-      base::Histogram::kUmaTargetedHistogramFlag);
 }
 
 base::HistogramBase* ChromiumEnv::GetLockFileAncestorHistogram() const {
@@ -1251,18 +1282,14 @@ class DBTracker::MemoryDumpProvider
  public:
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override {
-    // Don't dump in background mode ("from the field") until whitelisted.
-    if (args.level_of_detail ==
-        base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
-      return true;
-    }
-
     auto db_visitor = [](const base::trace_event::MemoryDumpArgs& args,
                          base::trace_event::ProcessMemoryDump* pmd,
                          TrackedDB* db) {
       auto* dump = DBTracker::GetOrCreateAllocatorDump(pmd, db);
-      // TODO(ssid): Do not add string attribute in background mode.
-      dump->AddString("name", "", db->name());
+      if (args.level_of_detail !=
+          base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
+        dump->AddString("name", "", db->name());
+      }
     };
 
     DBTracker::GetInstance()->VisitDatabases(
@@ -1280,6 +1307,7 @@ DBTracker::~DBTracker() {
   NOTREACHED();  // DBTracker is a singleton
 }
 
+// static
 DBTracker* DBTracker::GetInstance() {
   static DBTracker* instance = new DBTracker();
   return instance;
@@ -1289,12 +1317,17 @@ DBTracker* DBTracker::GetInstance() {
 base::trace_event::MemoryAllocatorDump* DBTracker::GetOrCreateAllocatorDump(
     base::trace_event::ProcessMemoryDump* pmd,
     leveldb::DB* tracked_db) {
-  if (pmd->dump_args().level_of_detail ==
-      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
-    return nullptr;
-  }
-  std::string dump_name = base::StringPrintf(
-      "leveldatabase/0x%" PRIXPTR, reinterpret_cast<uintptr_t>(tracked_db));
+  DCHECK(GetInstance()->IsTrackedDB(tracked_db))
+      << std::hex << tracked_db << " is not tracked";
+  return GetOrCreateAllocatorDump(pmd, static_cast<TrackedDB*>(tracked_db));
+}
+
+// static
+base::trace_event::MemoryAllocatorDump* DBTracker::GetOrCreateAllocatorDump(
+    base::trace_event::ProcessMemoryDump* pmd,
+    TrackedDB* db) {
+  std::string dump_name = base::StringPrintf("leveldatabase/0x%" PRIXPTR,
+                                             reinterpret_cast<uintptr_t>(db));
   auto* dump = pmd->GetAllocatorDump(dump_name);
   if (dump)
     return dump;
@@ -1302,9 +1335,9 @@ base::trace_event::MemoryAllocatorDump* DBTracker::GetOrCreateAllocatorDump(
 
   uint64_t memory_usage = 0;
   std::string usage_string;
-  bool success = tracked_db->GetProperty("leveldb.approximate-memory-usage",
-                                         &usage_string) &&
-                 base::StringToUint64(usage_string, &memory_usage);
+  bool success =
+      db->GetProperty("leveldb.approximate-memory-usage", &usage_string) &&
+      base::StringToUint64(usage_string, &memory_usage);
   DCHECK(success);
   dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                   base::trace_event::MemoryAllocatorDump::kUnitsBytes,
@@ -1316,6 +1349,15 @@ base::trace_event::MemoryAllocatorDump* DBTracker::GetOrCreateAllocatorDump(
   if (system_allocator_name)
     pmd->AddSuballocation(dump->guid(), system_allocator_name);
   return dump;
+}
+
+bool DBTracker::IsTrackedDB(const leveldb::DB* db) const {
+  base::AutoLock lock(databases_lock_);
+  for (auto* i = databases_.head(); i != databases_.end(); i = i->next()) {
+    if (i->value() == db)
+      return true;
+  }
+  return false;
 }
 
 leveldb::Status DBTracker::OpenDatabase(const leveldb::Options& options,
@@ -1360,6 +1402,14 @@ leveldb::Status OpenDB(const leveldb_env::Options& options,
     dbptr->reset(tracked_db);
   }
   return status;
+}
+
+base::StringPiece MakeStringPiece(const leveldb::Slice& s) {
+  return base::StringPiece(s.data(), s.size());
+}
+
+leveldb::Slice MakeSlice(const base::StringPiece& s) {
+  return leveldb::Slice(s.begin(), s.size());
 }
 
 }  // namespace leveldb_env

@@ -13,15 +13,11 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/search/search_model.h"
-#include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/search/instant_types.h"
 #include "chrome/common/url_constants.h"
-#include "components/omnibox/browser/omnibox_popup_model.h"
-#include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -78,10 +74,7 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(TabReloader);
 // BrowserInstantController ---------------------------------------------------
 
 BrowserInstantController::BrowserInstantController(Browser* browser)
-    : browser_(browser),
-      instant_(this) {
-  browser_->search_model()->AddObserver(this);
-
+    : browser_(browser), instant_(profile(), browser_->tab_strip_model()) {
   TemplateURLService* template_url_service =
       TemplateURLServiceFactory::GetForProfile(profile());
   // TemplateURLService can be null in tests.
@@ -95,26 +88,7 @@ BrowserInstantController::BrowserInstantController(Browser* browser)
   }
 }
 
-BrowserInstantController::~BrowserInstantController() {
-  browser_->search_model()->RemoveObserver(this);
-}
-
-Profile* BrowserInstantController::profile() const {
-  return browser_->profile();
-}
-
-content::WebContents* BrowserInstantController::GetActiveWebContents() const {
-  return browser_->tab_strip_model()->GetActiveWebContents();
-}
-
-void BrowserInstantController::ActiveTabChanged() {
-  instant_.ActiveTabChanged();
-}
-
-void BrowserInstantController::ModelChanged(SearchModel::Origin old_origin,
-                                            SearchModel::Origin new_origin) {
-  instant_.SearchModeChanged(old_origin, new_origin);
-}
+BrowserInstantController::~BrowserInstantController() = default;
 
 void BrowserInstantController::OnSearchEngineBaseURLChanged(
     SearchEngineBaseURLTracker::ChangeReason change_reason) {
@@ -131,7 +105,7 @@ void BrowserInstantController::OnSearchEngineBaseURLChanged(
       continue;
 
     // Send new search URLs to the renderer.
-    content::RenderProcessHost* rph = contents->GetRenderProcessHost();
+    content::RenderProcessHost* rph = contents->GetMainFrame()->GetProcess();
     instant_service->SendSearchURLsToRenderer(rph);
 
     if (!instant_service->IsInstantProcess(rph->GetID()))
@@ -140,11 +114,9 @@ void BrowserInstantController::OnSearchEngineBaseURLChanged(
     bool google_base_url_domain_changed =
         change_reason ==
         SearchEngineBaseURLTracker::ChangeReason::GOOGLE_BASE_URL;
-    SearchModel* model = SearchTabHelper::FromWebContents(contents)->model();
-    if (google_base_url_domain_changed &&
-        model->origin() == SearchModel::Origin::NTP) {
+    if (google_base_url_domain_changed) {
       GURL local_ntp_url(chrome::kChromeSearchLocalNtpUrl);
-      // Replace the server NTP with the local NTP.
+      // Replace the server NTP with the local NTP (or reload the local NTP).
       content::NavigationController::LoadURLParams params(local_ntp_url);
       params.should_replace_current_entry = true;
       params.referrer = content::Referrer();
@@ -156,4 +128,8 @@ void BrowserInstantController::OnSearchEngineBaseURLChanged(
       TabReloader::Reload(contents);
     }
   }
+}
+
+Profile* BrowserInstantController::profile() const {
+  return browser_->profile();
 }

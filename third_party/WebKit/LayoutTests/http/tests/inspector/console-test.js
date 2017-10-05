@@ -93,7 +93,7 @@ InspectorTest.dumpConsoleMessages = function(printOriginatingCommand, dumpClassN
 
 InspectorTest.dumpConsoleMessagesIntoArray = function(printOriginatingCommand, dumpClassNames, formatter)
 {
-    Console.ConsoleViewFilter.levelFilterSetting().set(Console.ConsoleViewFilter.allLevelsFilterValue());
+    Console.ConsoleViewFilter.levelFilterSetting().set(Console.ConsoleFilter.allLevelsFilterValue());
     formatter = formatter || InspectorTest.prepareConsoleMessageText;
     var result = [];
     InspectorTest.disableConsoleViewport();
@@ -235,9 +235,11 @@ InspectorTest.dumpConsoleClassesBrief = function()
     }
 }
 
-InspectorTest.dumpConsoleCounters = function()
+InspectorTest.dumpConsoleCounters = async function()
 {
     var counter = ConsoleCounters.WarningErrorCounter._instanceForTest;
+    if (counter._updatingForTest)
+        await InspectorTest.addSnifferPromise(counter, '_updatedForTest');
     for (var index = 0; index < counter._titles.length; ++index)
         InspectorTest.addResult(counter._titles[index]);
     InspectorTest.dumpConsoleClassesBrief();

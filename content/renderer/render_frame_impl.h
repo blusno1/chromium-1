@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <set>
@@ -16,6 +15,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/containers/id_map.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
@@ -473,9 +473,8 @@ class CONTENT_EXPORT RenderFrameImpl
   bool IsPasting() const override;
   blink::WebPageVisibilityState GetVisibilityState() const override;
   bool IsBrowserSideNavigationPending() override;
-  base::SingleThreadTaskRunner* GetTimerTaskRunner() override;
-  base::SingleThreadTaskRunner* GetLoadingTaskRunner() override;
-  base::SingleThreadTaskRunner* GetUnthrottledTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(
+      blink::TaskType task_type) override;
   int GetEnabledBindings() const override;
   // Returns non-null.
   // It is invalid to call this in an incomplete env where
@@ -662,7 +661,7 @@ class CONTENT_EXPORT RenderFrameImpl
   blink::WebEncryptedMediaClient* EncryptedMediaClient() override;
   blink::WebString UserAgentOverride() override;
   blink::WebString DoNotTrackValue() override;
-  bool AllowWebGL(bool default_value) override;
+  bool ShouldBlockWebGL() override;
   bool AllowContentInitiatedDataUrlNavigations(
       const blink::WebURL& url) override;
   blink::WebScreenOrientationClient* GetWebScreenOrientationClient() override;
@@ -692,7 +691,7 @@ class CONTENT_EXPORT RenderFrameImpl
   blink::WebPageVisibilityState VisibilityState() const override;
   std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
       const blink::WebURLRequest& request,
-      base::SingleThreadTaskRunner* task_runner) override;
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
   void DraggableRegionsChanged() override;
 
   // WebFrameSerializerClient implementation:
@@ -713,8 +712,8 @@ class CONTENT_EXPORT RenderFrameImpl
                  mojom::FrameRequest request,
                  mojom::FrameHostInterfaceBrokerPtr frame_host);
 
-  // Virtual so the test render frame can flush the interface.
-  virtual mojom::FrameHostAssociatedPtr GetFrameHost();
+  // Virtual so that a TestRenderFrame can mock out the interface.
+  virtual mojom::FrameHost* GetFrameHost();
 
   void BindFrameBindingsControl(
       mojom::FrameBindingsControlAssociatedRequest request);
@@ -907,6 +906,7 @@ class CONTENT_EXPORT RenderFrameImpl
                  const FrameReplicationState& replicated_frame_state);
   void OnDeleteFrame();
   void OnStop();
+  void OnDroppedNavigation();
   void OnCollapse(bool collapse);
   void OnShowContextMenu(const gfx::Point& location);
   void OnContextMenuClosed(const CustomContextMenuContext& custom_context);
@@ -923,7 +923,9 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnDelete();
   void OnSelectAll();
   void OnSelectRange(const gfx::Point& base, const gfx::Point& extent);
-  void OnAdjustSelectionByCharacterOffset(int start_adjust, int end_adjust);
+  void OnAdjustSelectionByCharacterOffset(int start_adjust,
+                                          int end_adjust,
+                                          bool show_selection_menu);
   void OnCollapseSelection();
   void OnMoveRangeSelectionExtent(const gfx::Point& point);
   void OnReplace(const base::string16& text);
@@ -1139,7 +1141,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // Sets the NavigationState on the DocumentState based on
   // the value of |pending_navigation_params_|.
   void UpdateNavigationState(DocumentState* document_state,
-                             bool was_within_same_page,
+                             bool was_within_same_document,
                              bool content_initiated);
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -1394,7 +1396,8 @@ class CONTENT_EXPORT RenderFrameImpl
   // callback, and the remaining elements are the other file chooser completion
   // still waiting to be run (in order).
   struct PendingFileChooser;
-  std::deque<std::unique_ptr<PendingFileChooser>> file_chooser_completions_;
+  base::circular_deque<std::unique_ptr<PendingFileChooser>>
+      file_chooser_completions_;
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
   // The external popup for the currently showing select popup.
@@ -1447,6 +1450,7 @@ class CONTENT_EXPORT RenderFrameImpl
   bool name_changed_before_first_commit_ = false;
 
   bool browser_side_navigation_pending_ = false;
+  GURL browser_side_navigation_pending_url_;
 
   // A bitwise OR of bindings types that have been enabled for this RenderFrame.
   // See BindingsPolicy for details.
@@ -1478,6 +1482,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   service_manager::BindSourceInfo browser_info_;
 
+  mojom::FrameHostAssociatedPtr frame_host_ptr_;
   mojo::BindingSet<service_manager::mojom::InterfaceProvider>
       interface_provider_bindings_;
 

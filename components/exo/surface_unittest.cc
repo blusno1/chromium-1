@@ -7,13 +7,13 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/quads/texture_draw_quad.h"
 #include "components/exo/buffer.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/sub_surface.h"
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/test/begin_frame_args_test.h"
@@ -100,13 +100,13 @@ TEST_P(SurfaceTest, Attach) {
   ASSERT_EQ(1, release_buffer_call_count);
 }
 
-const cc::CompositorFrame& GetFrameFromSurface(ShellSurface* shell_surface) {
+const viz::CompositorFrame& GetFrameFromSurface(ShellSurface* shell_surface) {
   viz::SurfaceId surface_id = shell_surface->host_window()->GetSurfaceId();
   viz::SurfaceManager* surface_manager = aura::Env::GetInstance()
                                              ->context_factory_private()
                                              ->GetFrameSinkManager()
                                              ->surface_manager();
-  const cc::CompositorFrame& frame =
+  const viz::CompositorFrame& frame =
       surface_manager->GetSurfaceForId(surface_id)->GetActiveFrame();
   return frame;
 }
@@ -116,7 +116,7 @@ TEST_P(SurfaceTest, Damage) {
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   std::unique_ptr<Surface> surface(new Surface);
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   // Attach the buffer to the surface. This will update the pending bounds of
   // the surface to the buffer size.
@@ -136,7 +136,8 @@ TEST_P(SurfaceTest, Damage) {
   RunAllPendingInMessageLoop();
 
   {
-    const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
     EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 512, 512)),
               frame.render_pass_list.back()->damage_rect);
   }
@@ -147,7 +148,8 @@ TEST_P(SurfaceTest, Damage) {
   RunAllPendingInMessageLoop();
 
   {
-    const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
     EXPECT_EQ(ToPixel(gfx::Rect(64, 128, 16, 32)),
               frame.render_pass_list.back()->damage_rect);
   }
@@ -171,10 +173,10 @@ TEST_P(SurfaceTest, RequestFrameCallback) {
 
 TEST_P(SurfaceTest, SetOpaqueRegion) {
   gfx::Size buffer_size(1, 1);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   // Attaching a buffer with alpha channel.
   surface->Attach(buffer.get());
@@ -186,7 +188,8 @@ TEST_P(SurfaceTest, SetOpaqueRegion) {
   RunAllPendingInMessageLoop();
 
   {
-    const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
     ASSERT_EQ(1u, frame.render_pass_list.size());
     ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
     EXPECT_FALSE(frame.render_pass_list.back()
@@ -202,7 +205,8 @@ TEST_P(SurfaceTest, SetOpaqueRegion) {
   RunAllPendingInMessageLoop();
 
   {
-    const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
     ASSERT_EQ(1u, frame.render_pass_list.size());
     ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
     EXPECT_TRUE(frame.render_pass_list.back()
@@ -223,7 +227,8 @@ TEST_P(SurfaceTest, SetOpaqueRegion) {
   RunAllPendingInMessageLoop();
 
   {
-    const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
     ASSERT_EQ(1u, frame.render_pass_list.size());
     ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
     EXPECT_FALSE(frame.render_pass_list.back()
@@ -235,21 +240,77 @@ TEST_P(SurfaceTest, SetOpaqueRegion) {
 }
 
 TEST_P(SurfaceTest, SetInputRegion) {
-  std::unique_ptr<Surface> surface(new Surface);
+  // Create a shell surface which size is 512x512.
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
+  gfx::Size buffer_size(512, 512);
+  auto buffer = std::make_unique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
+  surface->Attach(buffer.get());
+  surface->Commit();
+  EXPECT_FALSE(surface->HasHitTestMask());
 
-  // Setting a non-empty input region should succeed.
-  surface->SetInputRegion(SkRegion(SkIRect::MakeWH(256, 256)));
+  {
+    // Setting a non-empty input region should succeed.
+    surface->SetInputRegion(SkRegion(SkIRect::MakeWH(256, 256)));
+    surface->Commit();
+    std::unique_ptr<std::vector<gfx::Rect>> rects =
+        surface->GetHitTestShapeRects();
 
-  // Setting an empty input region should succeed.
-  surface->SetInputRegion(SkRegion(SkIRect::MakeEmpty()));
+    // The input region doesn't contain the surface, so we need hit test mask.
+    EXPECT_TRUE(surface->HasHitTestMask());
+    ASSERT_EQ(1u, rects->size());
+    ASSERT_EQ(gfx::Rect(256, 256), (*rects)[0]);
+  }
+
+  {
+    // Setting an empty input region should succeed.
+    surface->SetInputRegion(SkRegion(SkIRect::MakeEmpty()));
+    surface->Commit();
+
+    // The input region doesn't contain the surface, so we need hit test mask.
+    EXPECT_TRUE(surface->HasHitTestMask());
+    auto rects = surface->GetHitTestShapeRects();
+    EXPECT_TRUE(rects->empty());
+  }
+
+  {
+    // Setting an input region which contains the surface.
+    surface->SetInputRegion(SkRegion(SkIRect::MakeWH(512, 512)));
+    surface->Commit();
+
+    // The input region contains the surface, so we don't need hit test mask.
+    EXPECT_FALSE(surface->HasHitTestMask());
+  }
+
+  {
+    SkRegion region(SkIRect::MakeWH(512, 512));
+    region.op(SkIRect::MakeXYWH(0, 64, 64, 64), SkRegion::kDifference_Op);
+    region.op(SkIRect::MakeXYWH(88, 88, 12, 55), SkRegion::kDifference_Op);
+    region.op(SkIRect::MakeXYWH(100, 0, 33, 66), SkRegion::kDifference_Op);
+
+    // Setting a non-rectangle input region should succeed.
+    surface->SetInputRegion(SkRegion(region));
+    surface->Commit();
+
+    // The input region doesn't contain the surface, so we need hit test mask.
+    EXPECT_TRUE(surface->HasHitTestMask());
+
+    auto rects = surface->GetHitTestShapeRects();
+    ASSERT_EQ(10u, rects->size());
+    SkRegion result(SkIRect::MakeEmpty());
+    for (const auto& r : *rects)
+      result.op(gfx::RectToSkIRect(r), SkRegion::kUnion_Op);
+    ASSERT_EQ(result, region);
+  }
 }
 
 TEST_P(SurfaceTest, SetBufferScale) {
   gfx::Size buffer_size(512, 512);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   // This will update the bounds of the surface and take the buffer scale into
   // account.
@@ -266,7 +327,7 @@ TEST_P(SurfaceTest, SetBufferScale) {
 
   RunAllPendingInMessageLoop();
 
-  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  const viz::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
   ASSERT_EQ(1u, frame.render_pass_list.size());
   EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 256, 256)),
             frame.render_pass_list.back()->damage_rect);
@@ -274,10 +335,10 @@ TEST_P(SurfaceTest, SetBufferScale) {
 
 TEST_P(SurfaceTest, SetBufferTransform) {
   gfx::Size buffer_size(256, 512);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   // This will update the bounds of the surface and take the buffer transform
   // into account.
@@ -292,12 +353,13 @@ TEST_P(SurfaceTest, SetBufferTransform) {
   RunAllPendingInMessageLoop();
 
   {
-    const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
     ASSERT_EQ(1u, frame.render_pass_list.size());
     EXPECT_EQ(
         ToPixel(gfx::Rect(0, 0, buffer_size.height(), buffer_size.width())),
         frame.render_pass_list.back()->damage_rect);
-    const cc::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    const auto& quad_list = frame.render_pass_list[0]->quad_list;
     ASSERT_EQ(1u, quad_list.size());
     EXPECT_EQ(
         ToPixel(gfx::Rect(0, 0, 512, 256)),
@@ -307,11 +369,11 @@ TEST_P(SurfaceTest, SetBufferTransform) {
   }
 
   gfx::Size child_buffer_size(64, 128);
-  auto child_buffer = base::MakeUnique<Buffer>(
+  auto child_buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(child_buffer_size));
-  auto child_surface = base::MakeUnique<Surface>();
+  auto child_surface = std::make_unique<Surface>();
   auto sub_surface =
-      base::MakeUnique<SubSurface>(child_surface.get(), surface.get());
+      std::make_unique<SubSurface>(child_surface.get(), surface.get());
 
   // Set position to 20, 10.
   gfx::Point child_position(20, 10);
@@ -333,9 +395,10 @@ TEST_P(SurfaceTest, SetBufferTransform) {
   RunAllPendingInMessageLoop();
 
   {
-    const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
     ASSERT_EQ(1u, frame.render_pass_list.size());
-    const cc::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    const auto& quad_list = frame.render_pass_list[0]->quad_list;
     ASSERT_EQ(2u, quad_list.size());
     EXPECT_EQ(
         ToPixel(gfx::Rect(child_position,
@@ -349,10 +412,10 @@ TEST_P(SurfaceTest, SetBufferTransform) {
 
 TEST_P(SurfaceTest, MirrorLayers) {
   gfx::Size buffer_size(512, 512);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   surface->Attach(buffer.get());
   surface->Commit();
@@ -370,10 +433,10 @@ TEST_P(SurfaceTest, MirrorLayers) {
 
 TEST_P(SurfaceTest, SetViewport) {
   gfx::Size buffer_size(1, 1);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   // This will update the bounds of the surface and take the viewport into
   // account.
@@ -394,7 +457,7 @@ TEST_P(SurfaceTest, SetViewport) {
 
   RunAllPendingInMessageLoop();
 
-  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  const viz::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
   ASSERT_EQ(1u, frame.render_pass_list.size());
   EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 512, 512)),
             frame.render_pass_list.back()->damage_rect);
@@ -402,10 +465,10 @@ TEST_P(SurfaceTest, SetViewport) {
 
 TEST_P(SurfaceTest, SetCrop) {
   gfx::Size buffer_size(16, 16);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   surface->Attach(buffer.get());
   gfx::Size crop_size(12, 12);
@@ -417,25 +480,216 @@ TEST_P(SurfaceTest, SetCrop) {
 
   RunAllPendingInMessageLoop();
 
-  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  const viz::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
   ASSERT_EQ(1u, frame.render_pass_list.size());
   EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 12, 12)),
             frame.render_pass_list.back()->damage_rect);
 }
 
+TEST_P(SurfaceTest, SetCropAndBufferTransform) {
+  gfx::Size buffer_size(128, 64);
+  auto buffer = std::make_unique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
+
+  const gfx::RectF crop_0(
+      gfx::SkRectToRectF(SkRect::MakeLTRB(0.03125f, 0.1875f, 0.4375f, 0.25f)));
+  const gfx::RectF crop_90(
+      gfx::SkRectToRectF(SkRect::MakeLTRB(0.875f, 0.0625f, 0.90625f, 0.875f)));
+  const gfx::RectF crop_180(
+      gfx::SkRectToRectF(SkRect::MakeLTRB(0.5625f, 0.75f, 0.96875f, 0.8125f)));
+  const gfx::RectF crop_270(
+      gfx::SkRectToRectF(SkRect::MakeLTRB(0.09375f, 0.125f, 0.125f, 0.9375f)));
+  const gfx::Rect target_with_no_viewport(ToPixel(gfx::Rect(gfx::Size(52, 4))));
+  const gfx::Rect target_with_viewport(ToPixel(gfx::Rect(gfx::Size(128, 64))));
+
+  surface->Attach(buffer.get());
+  gfx::Size crop_size(52, 4);
+  surface->SetCrop(gfx::RectF(gfx::PointF(4, 12), gfx::SizeF(crop_size)));
+  surface->SetBufferTransform(Transform::NORMAL);
+  surface->Commit();
+
+  RunAllPendingInMessageLoop();
+
+  {
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    const viz::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    ASSERT_EQ(1u, quad_list.size());
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(quad_list.front());
+    EXPECT_EQ(crop_0.origin(), quad->uv_top_left);
+    EXPECT_EQ(crop_0.bottom_right(), quad->uv_bottom_right);
+    EXPECT_EQ(
+        ToPixel(gfx::Rect(0, 0, 52, 4)),
+        cc::MathUtil::MapEnclosingClippedRect(
+            quad->shared_quad_state->quad_to_target_transform, quad->rect));
+  }
+
+  surface->SetBufferTransform(Transform::ROTATE_90);
+  surface->Commit();
+
+  RunAllPendingInMessageLoop();
+
+  {
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    const viz::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    ASSERT_EQ(1u, quad_list.size());
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(quad_list.front());
+    EXPECT_EQ(crop_90.origin(), quad->uv_top_left);
+    EXPECT_EQ(crop_90.bottom_right(), quad->uv_bottom_right);
+    EXPECT_EQ(
+        ToPixel(gfx::Rect(0, 0, 52, 4)),
+        cc::MathUtil::MapEnclosingClippedRect(
+            quad->shared_quad_state->quad_to_target_transform, quad->rect));
+  }
+
+  surface->SetBufferTransform(Transform::ROTATE_180);
+  surface->Commit();
+
+  RunAllPendingInMessageLoop();
+
+  {
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    const viz::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    ASSERT_EQ(1u, quad_list.size());
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(quad_list.front());
+    EXPECT_EQ(crop_180.origin(), quad->uv_top_left);
+    EXPECT_EQ(crop_180.bottom_right(), quad->uv_bottom_right);
+    EXPECT_EQ(
+        ToPixel(gfx::Rect(0, 0, 52, 4)),
+        cc::MathUtil::MapEnclosingClippedRect(
+            quad->shared_quad_state->quad_to_target_transform, quad->rect));
+  }
+
+  surface->SetBufferTransform(Transform::ROTATE_270);
+  surface->Commit();
+
+  RunAllPendingInMessageLoop();
+
+  {
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    const viz::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    ASSERT_EQ(1u, quad_list.size());
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(quad_list.front());
+    EXPECT_EQ(crop_270.origin(), quad->uv_top_left);
+    EXPECT_EQ(crop_270.bottom_right(), quad->uv_bottom_right);
+    EXPECT_EQ(
+        target_with_no_viewport,
+        cc::MathUtil::MapEnclosingClippedRect(
+            quad->shared_quad_state->quad_to_target_transform, quad->rect));
+  }
+
+  surface->SetViewport(gfx::Size(128, 64));
+  surface->SetBufferTransform(Transform::NORMAL);
+  surface->Commit();
+
+  RunAllPendingInMessageLoop();
+
+  {
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    const viz::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    ASSERT_EQ(1u, quad_list.size());
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(quad_list.front());
+    EXPECT_EQ(crop_0.origin(), quad->uv_top_left);
+    EXPECT_EQ(crop_0.bottom_right(), quad->uv_bottom_right);
+    EXPECT_EQ(
+        target_with_viewport,
+        cc::MathUtil::MapEnclosingClippedRect(
+            quad->shared_quad_state->quad_to_target_transform, quad->rect));
+  }
+
+  surface->SetBufferTransform(Transform::ROTATE_90);
+  surface->Commit();
+
+  RunAllPendingInMessageLoop();
+
+  {
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    const viz::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    ASSERT_EQ(1u, quad_list.size());
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(quad_list.front());
+    EXPECT_EQ(crop_90.origin(), quad->uv_top_left);
+    EXPECT_EQ(crop_90.bottom_right(), quad->uv_bottom_right);
+    EXPECT_EQ(
+        target_with_viewport,
+        cc::MathUtil::MapEnclosingClippedRect(
+            quad->shared_quad_state->quad_to_target_transform, quad->rect));
+  }
+
+  surface->SetBufferTransform(Transform::ROTATE_180);
+  surface->Commit();
+
+  RunAllPendingInMessageLoop();
+
+  {
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    const viz::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    ASSERT_EQ(1u, quad_list.size());
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(quad_list.front());
+    EXPECT_EQ(crop_180.origin(), quad->uv_top_left);
+    EXPECT_EQ(crop_180.bottom_right(), quad->uv_bottom_right);
+    EXPECT_EQ(
+        target_with_viewport,
+        cc::MathUtil::MapEnclosingClippedRect(
+            quad->shared_quad_state->quad_to_target_transform, quad->rect));
+  }
+
+  surface->SetBufferTransform(Transform::ROTATE_270);
+  surface->Commit();
+
+  RunAllPendingInMessageLoop();
+
+  {
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    const viz::QuadList& quad_list = frame.render_pass_list[0]->quad_list;
+    ASSERT_EQ(1u, quad_list.size());
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(quad_list.front());
+    EXPECT_EQ(crop_270.origin(), quad->uv_top_left);
+    EXPECT_EQ(crop_270.bottom_right(), quad->uv_bottom_right);
+    EXPECT_EQ(
+        target_with_viewport,
+        cc::MathUtil::MapEnclosingClippedRect(
+            quad->shared_quad_state->quad_to_target_transform, quad->rect));
+  }
+}
+
 TEST_P(SurfaceTest, SetBlendMode) {
   gfx::Size buffer_size(1, 1);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   surface->Attach(buffer.get());
   surface->SetBlendMode(SkBlendMode::kSrc);
   surface->Commit();
   RunAllPendingInMessageLoop();
 
-  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  const viz::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
   ASSERT_EQ(1u, frame.render_pass_list.size());
   ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
   EXPECT_FALSE(frame.render_pass_list.back()
@@ -445,44 +699,77 @@ TEST_P(SurfaceTest, SetBlendMode) {
 
 TEST_P(SurfaceTest, OverlayCandidate) {
   gfx::Size buffer_size(1, 1);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D, 0,
       true, true);
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
   surface->Attach(buffer.get());
   surface->Commit();
   RunAllPendingInMessageLoop();
 
-  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  const viz::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
   ASSERT_EQ(1u, frame.render_pass_list.size());
   ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
   viz::DrawQuad* draw_quad = frame.render_pass_list.back()->quad_list.back();
   ASSERT_EQ(viz::DrawQuad::TEXTURE_CONTENT, draw_quad->material);
 
-  const cc::TextureDrawQuad* texture_quad =
-      cc::TextureDrawQuad::MaterialCast(draw_quad);
+  const viz::TextureDrawQuad* texture_quad =
+      viz::TextureDrawQuad::MaterialCast(draw_quad);
   EXPECT_FALSE(texture_quad->resource_size_in_pixels().IsEmpty());
 }
 
 TEST_P(SurfaceTest, SetAlpha) {
   gfx::Size buffer_size(1, 1);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D, 0,
       true, true);
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
-  surface->Attach(buffer.get());
-  surface->SetAlpha(0.5f);
-  surface->Commit();
-  RunAllPendingInMessageLoop();
+  {
+    surface->Attach(buffer.get());
+    surface->SetAlpha(0.5f);
+    surface->Commit();
+    RunAllPendingInMessageLoop();
 
-  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
-  ASSERT_EQ(1u, frame.render_pass_list.size());
-  EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 1, 1)),
-            frame.render_pass_list.back()->damage_rect);
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
+    ASSERT_EQ(1u, frame.resource_list.size());
+    ASSERT_EQ(1u, frame.resource_list.back().id);
+    EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 1, 1)),
+              frame.render_pass_list.back()->damage_rect);
+  }
+
+  {
+    surface->SetAlpha(0.f);
+    surface->Commit();
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    // No quad if alpha is 0.
+    ASSERT_EQ(0u, frame.render_pass_list.back()->quad_list.size());
+    ASSERT_EQ(0u, frame.resource_list.size());
+    EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 1, 1)),
+              frame.render_pass_list.back()->damage_rect);
+  }
+
+  {
+    surface->SetAlpha(1.f);
+    surface->Commit();
+    const viz::CompositorFrame& frame =
+        GetFrameFromSurface(shell_surface.get());
+    ASSERT_EQ(1u, frame.render_pass_list.size());
+    ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
+    ASSERT_EQ(1u, frame.resource_list.size());
+    // The resource should be updated again, the id should be changed.
+    ASSERT_EQ(2u, frame.resource_list.back().id);
+    EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 1, 1)),
+              frame.render_pass_list.back()->damage_rect);
+  }
 }
 
 TEST_P(SurfaceTest, Commit) {
@@ -495,11 +782,11 @@ TEST_P(SurfaceTest, Commit) {
 TEST_P(SurfaceTest, SendsBeginFrameAcks) {
   viz::FakeExternalBeginFrameSource source(0.f, false);
   gfx::Size buffer_size(1, 1);
-  auto buffer = base::MakeUnique<Buffer>(
+  auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D, 0,
       true, true);
-  auto surface = base::MakeUnique<Surface>();
-  auto shell_surface = base::MakeUnique<ShellSurface>(surface.get());
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
   shell_surface->SetBeginFrameSource(&source);
   surface->Attach(buffer.get());
 
@@ -523,11 +810,37 @@ TEST_P(SurfaceTest, SendsBeginFrameAcks) {
   surface->Commit();  // Acknowledges the BeginFrame via CompositorFrame.
   RunAllPendingInMessageLoop();
 
-  const cc::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
+  const viz::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
   viz::BeginFrameAck expected_ack(args.source_id, args.sequence_number, true);
   EXPECT_EQ(expected_ack, frame.metadata.begin_frame_ack);
 
   // TODO(eseckler): Add test for DidNotProduceFrame plumbing.
+}
+
+TEST_P(SurfaceTest, RemoveSubSurface) {
+  gfx::Size buffer_size(256, 256);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
+  surface->Attach(buffer.get());
+
+  // Create a subsurface:
+  gfx::Size child_buffer_size(64, 128);
+  auto child_buffer = std::make_unique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(child_buffer_size));
+  auto child_surface = std::make_unique<Surface>();
+  auto sub_surface =
+      std::make_unique<SubSurface>(child_surface.get(), surface.get());
+  sub_surface->SetPosition(gfx::Point(20, 10));
+  child_surface->Attach(child_buffer.get());
+  child_surface->Commit();
+  surface->Commit();
+  RunAllPendingInMessageLoop();
+
+  // Remove the subsurface by destroying it. This should damage |surface|.
+  sub_surface.reset();
+  EXPECT_TRUE(surface->HasPendingDamageForTesting(gfx::Rect(20, 10, 64, 128)));
 }
 
 }  // namespace

@@ -14,6 +14,7 @@
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_crypto_server_stream.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_containers.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/platform/api/quic_string_piece.h"
@@ -60,12 +61,11 @@ class QuicSimpleServerSessionPeer {
   }
 
   static QuicSimpleServerStream* CreateOutgoingDynamicStream(
-      QuicSimpleServerSession* s,
-      SpdyPriority priority) {
-    return s->CreateOutgoingDynamicStream(priority);
+      QuicSimpleServerSession* s) {
+    return s->CreateOutgoingDynamicStream();
   }
 
-  static std::deque<PromisedStreamInfo>* promised_streams(
+  static QuicDeque<PromisedStreamInfo>* promised_streams(
       QuicSimpleServerSession* s) {
     return &(s->promised_streams_);
   }
@@ -349,9 +349,9 @@ TEST_P(QuicSimpleServerSessionTest, CreateOutgoingDynamicStreamDisconnected) {
   // Tests that outgoing stream creation fails when connection is not connected.
   size_t initial_num_open_stream = session_->GetNumOpenOutgoingStreams();
   QuicConnectionPeer::TearDownLocalConnectionState(connection_);
-  EXPECT_QUIC_BUG(QuicSimpleServerSessionPeer::CreateOutgoingDynamicStream(
-                      session_.get(), kDefaultPriority),
-                  "ShouldCreateOutgoingDynamicStream called when disconnected");
+  EXPECT_QUIC_BUG(
+      QuicSimpleServerSessionPeer::CreateOutgoingDynamicStream(session_.get()),
+      "ShouldCreateOutgoingDynamicStream called when disconnected");
 
   EXPECT_EQ(initial_num_open_stream, session_->GetNumOpenOutgoingStreams());
 }
@@ -360,9 +360,9 @@ TEST_P(QuicSimpleServerSessionTest, CreateOutgoingDynamicStreamUnencrypted) {
   // Tests that outgoing stream creation fails when encryption has not yet been
   // established.
   size_t initial_num_open_stream = session_->GetNumOpenOutgoingStreams();
-  EXPECT_QUIC_BUG(QuicSimpleServerSessionPeer::CreateOutgoingDynamicStream(
-                      session_.get(), kDefaultPriority),
-                  "Encryption not established so no outgoing stream created.");
+  EXPECT_QUIC_BUG(
+      QuicSimpleServerSessionPeer::CreateOutgoingDynamicStream(session_.get()),
+      "Encryption not established so no outgoing stream created.");
   EXPECT_EQ(initial_num_open_stream, session_->GetNumOpenOutgoingStreams());
 }
 
@@ -390,14 +390,14 @@ TEST_P(QuicSimpleServerSessionTest, CreateOutgoingDynamicStreamUptoLimit) {
   for (size_t i = 0; i < kMaxStreamsForTest; ++i) {
     QuicSpdyStream* created_stream =
         QuicSimpleServerSessionPeer::CreateOutgoingDynamicStream(
-            session_.get(), kDefaultPriority);
+            session_.get());
     EXPECT_EQ(GetNthServerInitiatedId(i), created_stream->id());
     EXPECT_EQ(i + 1, session_->GetNumOpenOutgoingStreams());
   }
 
   // Continuing creating push stream would fail.
   EXPECT_EQ(nullptr, QuicSimpleServerSessionPeer::CreateOutgoingDynamicStream(
-                         session_.get(), kDefaultPriority));
+                         session_.get()));
   EXPECT_EQ(kMaxStreamsForTest, session_->GetNumOpenOutgoingStreams());
 
   // Create peer initiated stream should have no problem.
@@ -510,24 +510,10 @@ class QuicSimpleServerSessionServerPushTest
                     WriteHeadersMock(stream_id, _, false, kDefaultPriority, _));
         // Since flow control window is smaller than response body, not the
         // whole body will be sent.
-        if (!session_->force_hol_blocking()) {
-          EXPECT_CALL(*connection_, SendStreamData(stream_id, _, 0, NO_FIN, _))
-              .WillOnce(Return(
-                  QuicConsumedData(kStreamFlowControlWindowSize, false)));
-          EXPECT_CALL(*connection_, SendBlocked(stream_id));
-        } else {
-          // The forced HOL blocking encapsulates the stream data into
-          // HTTP/2 DATA frames within the headers stream.  HTTP/2
-          // DATA frames are limited to a max size of 16KB, so the
-          // 64KB body will be fragemented into four DATA frames.
-          EXPECT_CALL(*connection_, SendStreamData(_, _, _, NO_FIN, _))
-              .Times(body_size / 16384)
-              .WillOnce(Return(QuicConsumedData(9 + 16394, false)))
-              .WillOnce(Return(QuicConsumedData(9 + 16394, false)))
-              .WillOnce(Return(QuicConsumedData(9 + 16394, false)))
-              .WillOnce(Return(QuicConsumedData(9 + 16394, false)));
-          EXPECT_CALL(*connection_, SendBlocked(_));
-        }
+        EXPECT_CALL(*connection_, SendStreamData(stream_id, _, 0, NO_FIN, _))
+            .WillOnce(
+                Return(QuicConsumedData(kStreamFlowControlWindowSize, false)));
+        EXPECT_CALL(*connection_, SendBlocked(stream_id));
       }
     }
     session_->PromisePushResources(request_url, push_resources,
@@ -544,9 +530,6 @@ TEST_P(QuicSimpleServerSessionServerPushTest, TestPromisePushResources) {
   // PUSH_PROMISE's will be sent out and only |kMaxOpenStreamForTest| streams
   // will be opened and send push response.
 
-  if (session_->force_hol_blocking()) {
-    return;
-  }
   size_t num_resources = kMaxStreamsForTest + 5;
   PromisePushResources(num_resources);
   EXPECT_EQ(kMaxStreamsForTest, session_->GetNumOpenOutgoingStreams());
@@ -554,10 +537,6 @@ TEST_P(QuicSimpleServerSessionServerPushTest, TestPromisePushResources) {
 
 TEST_P(QuicSimpleServerSessionServerPushTest,
        HandlePromisedPushRequestsAfterStreamDraining) {
-  if (session_->force_hol_blocking()) {
-    return;
-  }
-
   // Tests that after promised stream queued up, when an opened stream is marked
   // draining, a queued promised stream will become open and send push response.
   size_t num_resources = kMaxStreamsForTest + 1;
@@ -581,9 +560,6 @@ TEST_P(QuicSimpleServerSessionServerPushTest,
 
 TEST_P(QuicSimpleServerSessionServerPushTest,
        ResetPromisedStreamToCancelServerPush) {
-  if (session_->force_hol_blocking()) {
-    return;
-  }
   // Tests that after all resources are promised, a RST frame from client can
   // prevent a promised resource to be send out.
 
@@ -621,9 +597,6 @@ TEST_P(QuicSimpleServerSessionServerPushTest,
 
 TEST_P(QuicSimpleServerSessionServerPushTest,
        CloseStreamToHandleMorePromisedStream) {
-  if (session_->force_hol_blocking()) {
-    return;
-  }
   // Tests that closing a open outgoing stream can trigger a promised resource
   // in the queue to be send out.
   size_t num_resources = kMaxStreamsForTest + 1;

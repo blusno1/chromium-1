@@ -29,16 +29,6 @@ service_manager::Connector* ShellDelegateMus::GetShellConnector() const {
   return connector_;
 }
 
-bool ShellDelegateMus::IsIncognitoAllowed() const {
-  NOTIMPLEMENTED();
-  return false;
-}
-
-bool ShellDelegateMus::IsMultiProfilesEnabled() const {
-  NOTIMPLEMENTED();
-  return true;  // For manual testing of multi-profile under mash.
-}
-
 bool ShellDelegateMus::IsRunningInForcedAppMode() const {
   NOTIMPLEMENTED();
   return false;
@@ -62,24 +52,12 @@ void ShellDelegateMus::PreShutdown() {
   NOTIMPLEMENTED();
 }
 
-void ShellDelegateMus::Exit() {
-  NOTIMPLEMENTED();
-}
-
 std::unique_ptr<keyboard::KeyboardUI> ShellDelegateMus::CreateKeyboardUI() {
   NOTIMPLEMENTED();
   return nullptr;
 }
 
 void ShellDelegateMus::OpenUrlFromArc(const GURL& url) {
-  NOTIMPLEMENTED();
-}
-
-void ShellDelegateMus::ShelfInit() {
-  NOTIMPLEMENTED();
-}
-
-void ShellDelegateMus::ShelfShutdown() {
   NOTIMPLEMENTED();
 }
 
@@ -118,17 +96,6 @@ base::string16 ShellDelegateMus::GetProductName() const {
 gfx::Image ShellDelegateMus::GetDeprecatedAcceleratorImage() const {
   NOTIMPLEMENTED();
   return gfx::Image();
-}
-
-bool ShellDelegateMus::GetTouchscreenEnabled(
-    TouchscreenEnabledSource source) const {
-  NOTIMPLEMENTED();
-  return true;
-}
-
-void ShellDelegateMus::SetTouchscreenEnabled(bool enabled,
-                                             TouchscreenEnabledSource source) {
-  NOTIMPLEMENTED();
 }
 
 ui::InputDeviceControllerClient*

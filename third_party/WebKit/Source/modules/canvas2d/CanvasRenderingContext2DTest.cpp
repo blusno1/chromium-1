@@ -183,13 +183,13 @@ CanvasRenderingContext2DTest::CanvasRenderingContext2DTest()
 void CanvasRenderingContext2DTest::CreateContext(
     OpacityMode opacity_mode,
     String color_space,
-    LinearPixelMathState linear_pixel_math_state) {
+    LinearPixelMathState LinearPixelMath_state) {
   String canvas_type("2d");
   CanvasContextCreationAttributes attributes;
   attributes.setAlpha(opacity_mode == kNonOpaque);
   if (!color_space.IsEmpty()) {
     attributes.setColorSpace(color_space);
-    if (linear_pixel_math_state == kLinearPixelMathEnabled) {
+    if (LinearPixelMath_state == kLinearPixelMathEnabled) {
       attributes.setPixelFormat("float16");
       attributes.setLinearPixelMath(true);
     }
@@ -209,10 +209,10 @@ void CanvasRenderingContext2DTest::SetUp() {
   dummy_page_holder_ = DummyPageHolder::Create(
       IntSize(800, 600), &page_clients, nullptr, override_settings_function_);
   document_ = &dummy_page_holder_->GetDocument();
-  document_->documentElement()->setInnerHTML(
+  document_->documentElement()->SetInnerHTMLFromString(
       "<body><canvas id='c'></canvas></body>");
   document_->View()->UpdateAllLifecyclePhases();
-  canvas_element_ = toHTMLCanvasElement(document_->getElementById("c"));
+  canvas_element_ = ToHTMLCanvasElement(document_->getElementById("c"));
 
   full_image_data_ = ImageData::Create(IntSize(10, 10));
   partial_image_data_ = ImageData::Create(IntSize(2, 2));
@@ -224,7 +224,7 @@ void CanvasRenderingContext2DTest::SetUp() {
   EXPECT_FALSE(exception_state.HadException());
   opaque_gradient->addColorStop(1, String("blue"), exception_state);
   EXPECT_FALSE(exception_state.HadException());
-  this->OpaqueGradient().setCanvasGradient(opaque_gradient);
+  this->OpaqueGradient().SetCanvasGradient(opaque_gradient);
 
   CanvasGradient* alpha_gradient =
       CanvasGradient::Create(FloatPoint(0, 0), FloatPoint(10, 0));
@@ -234,7 +234,7 @@ void CanvasRenderingContext2DTest::SetUp() {
                                exception_state);
   EXPECT_FALSE(exception_state.HadException());
   StringOrCanvasGradientOrCanvasPattern wrapped_alpha_gradient;
-  this->AlphaGradient().setCanvasGradient(alpha_gradient);
+  this->AlphaGradient().SetCanvasGradient(alpha_gradient);
 
   global_memory_cache_ = ReplaceMemoryCacheForTesting(MemoryCache::Create());
 }
@@ -841,7 +841,7 @@ TEST_F(CanvasRenderingContext2DTest, ImageResourceLifetime) {
       canvas->GetCanvasRenderingContext("2d", attributes));
   DummyExceptionStateForTesting exception_state;
   CanvasImageSourceUnion image_source;
-  image_source.setImageBitmap(image_bitmap_derived);
+  image_source.SetImageBitmap(image_bitmap_derived);
   context->drawImage(GetScriptState(), image_source, 0, 0, exception_state);
 }
 
@@ -1063,12 +1063,11 @@ TEST_F(CanvasRenderingContext2DTest, DisableAcceleration) {
 
 enum class ColorSpaceConversion : uint8_t {
   NONE = 0,
-  DEFAULT_NOT_COLOR_CORRECTED = 1,
-  DEFAULT_COLOR_CORRECTED = 2,
-  SRGB = 3,
-  LINEAR_RGB = 4,
-  P3 = 5,
-  REC2020 = 6,
+  DEFAULT_COLOR_CORRECTED = 1,
+  SRGB = 2,
+  LINEAR_RGB = 3,
+  P3 = 4,
+  REC2020 = 5,
 
   LAST = REC2020
 };
@@ -1083,10 +1082,7 @@ static ImageBitmapOptions PrepareBitmapOptionsAndSetRuntimeFlags(
       kConversions[static_cast<uint8_t>(color_space_conversion)]);
 
   // Set the runtime flags
-  bool flag = (color_space_conversion !=
-               ColorSpaceConversion::DEFAULT_NOT_COLOR_CORRECTED);
   RuntimeEnabledFeatures::SetExperimentalCanvasFeaturesEnabled(true);
-  RuntimeEnabledFeatures::SetColorCorrectRenderingEnabled(flag);
   RuntimeEnabledFeatures::SetColorCanvasExtensionsEnabled(true);
 
   return options;
@@ -1107,7 +1103,7 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
   CanvasRenderingContext2D* context = static_cast<CanvasRenderingContext2D*>(
       canvas->GetCanvasRenderingContext("2d", attributes));
   StringOrCanvasGradientOrCanvasPattern fill_style;
-  fill_style.setString("#FF0000");
+  fill_style.SetString("#FF0000");
   context->setFillStyle(fill_style);
   context->fillRect(0, 0, 10, 10);
   NonThrowableExceptionState exception_state;
@@ -1128,8 +1124,8 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
   SkColorSpaceXform::ColorFormat color_format = color_format32;
   sk_sp<SkColorSpace> src_rgb_color_space = SkColorSpace::MakeSRGB();
 
-  for (uint8_t i = static_cast<uint8_t>(
-           ColorSpaceConversion::DEFAULT_NOT_COLOR_CORRECTED);
+  for (uint8_t i =
+           static_cast<uint8_t>(ColorSpaceConversion::DEFAULT_COLOR_CORRECTED);
        i <= static_cast<uint8_t>(ColorSpaceConversion::LAST); i++) {
     ColorSpaceConversion color_space_conversion =
         static_cast<ColorSpaceConversion>(i);
@@ -1142,15 +1138,6 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
     switch (color_space_conversion) {
       case ColorSpaceConversion::NONE:
         NOTREACHED();
-        break;
-      case ColorSpaceConversion::DEFAULT_NOT_COLOR_CORRECTED:
-        color_space = ColorBehavior::GlobalTargetColorSpace().ToSkColorSpace();
-        if (color_space->gammaIsLinear()) {
-          color_type = SkColorType::kRGBA_F16_SkColorType;
-          color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
-        } else {
-          color_format = color_format32;
-        }
         break;
       case ColorSpaceConversion::DEFAULT_COLOR_CORRECTED:
       case ColorSpaceConversion::SRGB:
@@ -1425,7 +1412,7 @@ void TestPutImageDataOnCanvasWithColorSpaceSettings(
         pixels_from_get_image_data =
             context->getImageData(0, 0, 2, 2, exception_state)
                 ->dataUnion()
-                .getAsFloat32Array()
+                .GetAsFloat32Array()
                 .View()
                 ->Data();
         ColorCorrectionTestUtils::CompareColorCorrectedPixels(

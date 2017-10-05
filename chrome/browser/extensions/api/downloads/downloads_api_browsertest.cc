@@ -44,6 +44,7 @@
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
@@ -279,16 +280,13 @@ class DownloadExtensionTest : public ExtensionApiTest {
         ui::PAGE_TRANSITION_LINK);
     EventRouter::Get(current_browser()->profile())
         ->AddEventListener(downloads::OnCreated::kEventName,
-                           tab->GetRenderProcessHost(),
-                           GetExtensionId());
+                           tab->GetMainFrame()->GetProcess(), GetExtensionId());
     EventRouter::Get(current_browser()->profile())
         ->AddEventListener(downloads::OnChanged::kEventName,
-                           tab->GetRenderProcessHost(),
-                           GetExtensionId());
+                           tab->GetMainFrame()->GetProcess(), GetExtensionId());
     EventRouter::Get(current_browser()->profile())
         ->AddEventListener(downloads::OnErased::kEventName,
-                           tab->GetRenderProcessHost(),
-                           GetExtensionId());
+                           tab->GetMainFrame()->GetProcess(), GetExtensionId());
   }
 
   content::RenderProcessHost* AddFilenameDeterminer() {
@@ -300,9 +298,8 @@ class DownloadExtensionTest : public ExtensionApiTest {
         ui::PAGE_TRANSITION_LINK);
     EventRouter::Get(current_browser()->profile())
         ->AddEventListener(downloads::OnDeterminingFilename::kEventName,
-                           tab->GetRenderProcessHost(),
-                           GetExtensionId());
-    return tab->GetRenderProcessHost();
+                           tab->GetMainFrame()->GetProcess(), GetExtensionId());
+    return tab->GetMainFrame()->GetProcess();
   }
 
   void RemoveFilenameDeterminer(content::RenderProcessHost* host) {
@@ -1005,7 +1002,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   download_item->Cancel(true);
   ASSERT_FALSE(download_item->GetTargetFilePath().empty());
   // Let cleanup complete on blocking threads.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   // Check the path passed to the icon extractor post-cancellation.
   EXPECT_TRUE(RunFunctionAndReturnString(MockedGetFileIconFunction(
           download_item->GetTargetFilePath(), IconLoader::NORMAL, "foo"),

@@ -76,7 +76,7 @@ class HatsNotificationControllerTest : public BrowserWithTestWindowTest {
         new HatsNotificationController(&profile_);
 
     // HatsController::IsNewDevice() is run on a blocking thread.
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
 
     // Send a callback to the observer to simulate internet connectivity is
     // present on device.
@@ -128,7 +128,7 @@ TEST_F(HatsNotificationControllerTest, NewDevice_ShouldNotShowNotification) {
 
   const Notification* notification =
       g_browser_process->notification_ui_manager()->FindById(
-          HatsNotificationController::kDelegateId, &profile_);
+          HatsNotificationController::kNotificationId, &profile_);
   EXPECT_FALSE(notification);
 }
 
@@ -151,7 +151,7 @@ TEST_F(HatsNotificationControllerTest, OldDevice_ShouldShowNotification) {
   // Finally check if notification was launched to confirm initialization.
   const Notification* notification =
       g_browser_process->notification_ui_manager()->FindById(
-          HatsNotificationController::kDelegateId, &profile_);
+          HatsNotificationController::kNotificationId, &profile_);
   EXPECT_TRUE(notification != nullptr);
 }
 
@@ -184,7 +184,7 @@ TEST_F(HatsNotificationControllerTest, NoInternet_DoNotShowNotification) {
 
   const Notification* notification =
       g_browser_process->notification_ui_manager()->FindById(
-          HatsNotificationController::kDelegateId, &profile_);
+          HatsNotificationController::kNotificationId, &profile_);
   EXPECT_FALSE(notification);
 }
 

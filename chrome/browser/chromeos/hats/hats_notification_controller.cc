@@ -4,8 +4,6 @@
 
 #include "chrome/browser/chromeos/hats/hats_notification_controller.h"
 
-#include "ash/strings/grit/ash_strings.h"
-#include "ash/system/system_notifier.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
@@ -21,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/network/network_state.h"
 #include "components/prefs/pref_service.h"
@@ -30,11 +29,14 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification_types.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 #include "ui/strings/grit/ui_strings.h"
 
 namespace {
 
 const char kNotificationOriginUrl[] = "chrome://hats";
+
+const char kNotifierHats[] = "ash.hats";
 
 // Minimum amount of time before the notification is displayed again after a
 // user has interacted with it.
@@ -81,9 +83,6 @@ bool IsTestingEnabled() {
 }  // namespace
 
 namespace chromeos {
-
-// static
-const char HatsNotificationController::kDelegateId[] = "hats_delegate";
 
 // static
 const char HatsNotificationController::kNotificationId[] = "hats_notification";
@@ -159,11 +158,6 @@ bool HatsNotificationController::ShouldShowSurveyToProfile(Profile* profile) {
   return true;
 }
 
-// NotificationDelegate override:
-std::string HatsNotificationController::id() const {
-  return kDelegateId;
-}
-
 // message_center::NotificationDelegate override:
 void HatsNotificationController::Click() {
   ButtonClick(0 /* unused */);
@@ -178,7 +172,7 @@ void HatsNotificationController::ButtonClick(int /* button_index */) {
 
   // Remove the notification.
   g_browser_process->notification_ui_manager()->CancelById(
-      id(), NotificationUIManager::GetProfileID(profile_));
+      kNotificationId, NotificationUIManager::GetProfileID(profile_));
 }
 
 // message_center::NotificationDelegate override:
@@ -208,21 +202,30 @@ void HatsNotificationController::OnPortalDetectionCompleted(
 
 Notification* HatsNotificationController::CreateNotification() {
   message_center::RichNotificationData optional;
-  optional.buttons.push_back(message_center::ButtonInfo(
-      l10n_util::GetStringUTF16(IDS_ASH_HATS_NOTIFICATION_TAKE_SURVEY_BUTTON)));
+  if (!message_center::IsNewStyleNotificationEnabled()) {
+    optional.buttons.push_back(message_center::ButtonInfo(
+        l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_TAKE_SURVEY_BUTTON)));
+  }
 
   Notification* notification = new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
-      l10n_util::GetStringUTF16(IDS_ASH_HATS_NOTIFICATION_TITLE),
-      l10n_util::GetStringUTF16(IDS_ASH_HATS_NOTIFICATION_BODY),
+      message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
+      l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_TITLE),
+      l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_BODY),
       gfx::Image(
           gfx::CreateVectorIcon(kGoogleGLogoIcon, gfx::kPlaceholderColor)),
       message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
-                                 ash::system_notifier::kNotifierHats),
+                                 kNotifierHats),
       l10n_util::GetStringUTF16(IDS_MESSAGE_CENTER_NOTIFIER_HATS_NAME),
       GURL(kNotificationOriginUrl), kNotificationId, optional, this);
-  notification->set_accent_color(
-      message_center::kSystemNotificationColorNormal);
+  if (message_center::IsNewStyleNotificationEnabled()) {
+    notification->set_icon(gfx::Image());
+    notification->set_accent_color(
+        message_center::kSystemNotificationColorNormal);
+    notification->set_small_image(gfx::Image(gfx::CreateVectorIcon(
+        kNotificationGoogleIcon, message_center::kSmallImageSizeMD,
+        message_center::kSystemNotificationColorNormal)));
+    notification->set_vector_small_image(kNotificationGoogleIcon);
+  }
   return notification;
 }
 

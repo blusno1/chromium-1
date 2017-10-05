@@ -66,7 +66,7 @@ namespace {
 
 const char* const kCommonSwitches[] = {
     "disable-popup-blocking", "enable-automation", "ignore-certificate-errors",
-    "metrics-recording-only",
+    "metrics-recording-only", "disable-browser-side-navigation",
 };
 
 const char* const kDesktopSwitches[] = {
@@ -144,6 +144,8 @@ Status PrepareCommandLine(uint16_t port,
   }
   switches.SetFromSwitches(capabilities.switches);
 
+  if (capabilities.exclude_switches.count("user-data-dir") > 0)
+    LOG(WARNING) << "excluding user-data-dir switch is not supported";
   base::FilePath user_data_dir_path;
   if (switches.HasSwitch("user-data-dir")) {
     user_data_dir_path = base::FilePath(
@@ -162,15 +164,22 @@ Status PrepareCommandLine(uint16_t port,
   if (status.IsError())
     return status;
 
-  if (!extension_dir->CreateUniqueTempDir()) {
-    return Status(kUnknownError,
-                  "cannot create temp dir for unpacking extensions");
+  if (capabilities.exclude_switches.count("load-extension") > 0) {
+    if (capabilities.extensions.size() > 0)
+      return Status(
+          kUnknownError,
+          "cannot exclude load-extension switch when extensions are specified");
+  } else {
+    if (!extension_dir->CreateUniqueTempDir()) {
+      return Status(kUnknownError,
+                    "cannot create temp dir for unpacking extensions");
+    }
+    status = internal::ProcessExtensions(
+        capabilities.extensions, extension_dir->GetPath(),
+        capabilities.use_automation_extension, &switches, extension_bg_pages);
+    if (status.IsError())
+      return status;
   }
-  status = internal::ProcessExtensions(
-      capabilities.extensions, extension_dir->GetPath(),
-      capabilities.use_automation_extension, &switches, extension_bg_pages);
-  if (status.IsError())
-    return status;
   switches.AppendToCommandLine(&command);
   *prepared_command = command;
   return Status(kOk);

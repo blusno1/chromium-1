@@ -19,6 +19,7 @@
 #include "chrome/common/file_patcher.mojom.h"
 #include "chrome/common/profiling/constants.mojom.h"
 #include "chrome/profiling/profiling_service.h"
+#include "chrome/utility/printing/pdf_to_pwg_raster_converter_impl.h"
 #include "chrome/utility/utility_message_handler.h"
 #include "components/payments/content/utility/payment_manifest_parser.h"
 #include "components/safe_json/utility/safe_json_parser_mojo_impl.h"
@@ -31,6 +32,7 @@
 #include "extensions/features/features.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "printing/features/features.h"
+#include "services/proxy_resolver/public/cpp/mojo_proxy_resolver_factory_impl.h"
 #include "services/service_manager/embedder/embedded_service_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/zlib/google/zip.h"
@@ -40,7 +42,7 @@
 #include "chrome/utility/importer/profile_import_impl.h"
 #include "chrome/utility/importer/profile_import_service.h"
 #include "chrome/utility/media_router/dial_device_description_parser_impl.h"
-#include "net/proxy/mojo_proxy_resolver_factory_impl.h"  // nogncheck
+#include "content/public/network/url_request_context_builder_mojo.h"
 #include "net/proxy/proxy_resolver_v8.h"
 #endif  // !defined(OS_ANDROID)
 
@@ -54,6 +56,15 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/utility/extensions/extensions_handler.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+#include "chrome/utility/mash_service_factory.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#include "chrome/common/printing/pdf_to_pwg_raster_converter.mojom.h"
+#include "chrome/utility/printing/pdf_to_pwg_raster_converter_service.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) || \
@@ -196,9 +207,10 @@ class SafeArchiveAnalyzerImpl : public chrome::mojom::SafeArchiveAnalyzer {
 
 #if !defined(OS_ANDROID)
 void CreateProxyResolverFactory(
-    net::interfaces::ProxyResolverFactoryRequest request) {
-  mojo::MakeStrongBinding(base::MakeUnique<net::MojoProxyResolverFactoryImpl>(),
-                          std::move(request));
+    proxy_resolver::mojom::ProxyResolverFactoryRequest request) {
+  mojo::MakeStrongBinding(
+      base::MakeUnique<proxy_resolver::MojoProxyResolverFactoryImpl>(),
+      std::move(request));
 }
 
 class ResourceUsageReporterImpl : public chrome::mojom::ResourceUsageReporter {
@@ -237,7 +249,7 @@ base::LazyInstance<ChromeContentUtilityClient::NetworkBinderCreationCallback>::
 ChromeContentUtilityClient::ChromeContentUtilityClient()
     : utility_process_running_elevated_(false) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  handlers_.push_back(base::MakeUnique<extensions::ExtensionsHandler>());
+  extensions::InitExtensionsClient();
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) || \
@@ -267,8 +279,8 @@ void ChromeContentUtilityClient::UtilityThreadStarted() {
 
   auto registry = base::MakeUnique<service_manager::BinderRegistry>();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::ExtensionsHandler::ExposeInterfacesToBrowser(
-      registry.get(), utility_process_running_elevated_);
+  extensions::ExposeInterfacesToBrowser(registry.get(),
+                                        utility_process_running_elevated_);
   extensions::utility_handler::ExposeInterfacesToBrowser(
       registry.get(), utility_process_running_elevated_);
 #endif
@@ -278,7 +290,7 @@ void ChromeContentUtilityClient::UtilityThreadStarted() {
     registry->AddInterface(base::Bind(&FilePatcherImpl::Create),
                            base::ThreadTaskRunnerHandle::Get());
 #if !defined(OS_ANDROID)
-    registry->AddInterface<net::interfaces::ProxyResolverFactory>(
+    registry->AddInterface<proxy_resolver::mojom::ProxyResolverFactory>(
         base::Bind(CreateProxyResolverFactory),
         base::ThreadTaskRunnerHandle::Get());
     registry->AddInterface(base::Bind(CreateResourceUsageReporter),
@@ -332,6 +344,14 @@ void ChromeContentUtilityClient::RegisterServices(
   services->emplace(printing::mojom::kServiceName, pdf_compositor_info);
 #endif
 
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+  service_manager::EmbeddedServiceInfo pdf_to_pwg_converter_info;
+  pdf_to_pwg_converter_info.factory =
+      base::Bind(&printing::PDFToPWGRasterConverterService::CreateService);
+  services->emplace(printing::mojom::kPdfToPwgRasterConverterServiceName,
+                    pdf_to_pwg_converter_info);
+#endif
+
   service_manager::EmbeddedServiceInfo profiling_info;
   profiling_info.task_runner = content::ChildThread::Get()->GetIOTaskRunner();
   profiling_info.factory =
@@ -345,6 +365,10 @@ void ChromeContentUtilityClient::RegisterServices(
   services->emplace(chrome::mojom::kProfileImportServiceName,
                     profile_import_info);
 #endif
+
+#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+  RegisterMashServices(services);
+#endif
 }
 
 void ChromeContentUtilityClient::RegisterNetworkBinders(
@@ -356,7 +380,7 @@ void ChromeContentUtilityClient::RegisterNetworkBinders(
 // static
 void ChromeContentUtilityClient::PreSandboxStartup() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::ExtensionsHandler::PreSandboxStartup();
+  extensions::PreSandboxStartup();
 #endif
 }
 

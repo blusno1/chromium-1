@@ -22,6 +22,7 @@ class ComputedStyle;
 class Document;
 class GraphicsContext;
 class GraphicsContextStateSaver;
+class TextDecorationOffsetBase;
 struct PaintInfo;
 
 // Base class for text painting. Has no dependencies on the layout tree and thus
@@ -50,9 +51,16 @@ class CORE_EXPORT TextPainterBase {
                                     bool horizontal,
                                     GraphicsContextStateSaver&);
 
+  void PaintDecorationsExceptLineThrough(const TextDecorationOffsetBase&,
+                                         const DecorationInfo&,
+                                         const PaintInfo&,
+                                         const Vector<AppliedTextDecoration>&,
+                                         const TextPaintStyle& text_style,
+                                         bool* has_line_through_decoration);
   void PaintDecorationsOnlyLineThrough(const DecorationInfo&,
                                        const PaintInfo&,
-                                       const Vector<AppliedTextDecoration>&);
+                                       const Vector<AppliedTextDecoration>&,
+                                       const TextPaintStyle&);
   void PaintDecorationUnderOrOverLine(GraphicsContext&,
                                       const DecorationInfo&,
                                       const AppliedTextDecoration&,
@@ -101,6 +109,7 @@ class CORE_EXPORT TextPainterBase {
   LayoutPoint text_origin_;
   LayoutRect text_bounds_;
   bool horizontal_;
+  bool has_combined_text_;
   AtomicString emphasis_mark_;
   int emphasis_mark_offset_;
   int ellipsis_offset_;

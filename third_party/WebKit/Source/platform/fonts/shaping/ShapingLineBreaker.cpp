@@ -121,7 +121,7 @@ unsigned ShapingLineBreaker::Hyphenate(unsigned offset,
   unsigned previous_break_opportunity =
       break_iterator_->PreviousBreakOpportunity(offset, start);
   unsigned word_start = previous_break_opportunity;
-  if (!break_iterator_->BreakAfterSpace()) {
+  if (break_iterator_->BreakSpace() != BreakSpaceType::kAfter) {
     while (word_start < text.length() &&
            LazyLineBreakIterator::IsBreakableSpace(text[word_start]))
       word_start++;
@@ -176,10 +176,9 @@ unsigned ShapingLineBreaker::NextBreakOpportunity(unsigned offset,
   return break_iterator_->NextBreakOpportunity(offset);
 }
 
-inline PassRefPtr<ShapeResult> ShapingLineBreaker::Shape(
-    TextDirection direction,
-    unsigned start,
-    unsigned end) {
+inline RefPtr<ShapeResult> ShapingLineBreaker::Shape(TextDirection direction,
+                                                     unsigned start,
+                                                     unsigned end) {
   if (!spacing_ || !spacing_->HasSpacing())
     return shaper_->Shape(font_, direction, start, end);
 
@@ -217,7 +216,7 @@ inline PassRefPtr<ShapeResult> ShapingLineBreaker::Shape(
 //   If we further assume that the font kerns with space then even though it's a
 //   valid break opportunity reshaping is required as the combined width of the
 //   two segments "Line " and "breaking" may be different from "Line breaking".
-PassRefPtr<ShapeResult> ShapingLineBreaker::ShapeLine(
+RefPtr<ShapeResult> ShapingLineBreaker::ShapeLine(
     unsigned start,
     LayoutUnit available_space,
     ShapingLineBreaker::Result* result_out) {
@@ -257,7 +256,7 @@ PassRefPtr<ShapeResult> ShapingLineBreaker::ShapeLine(
   candidate_break = std::max(candidate_break, start);
 
   unsigned break_opportunity;
-  if (break_iterator_->BreakAfterSpace() &&
+  if (break_iterator_->BreakSpace() == BreakSpaceType::kAfter &&
       IsHangableSpace(text[candidate_break])) {
     // If BreakAfterSpace, allow spaces to hang over the available space.
     result_out->has_hanging_spaces = true;
@@ -353,11 +352,11 @@ PassRefPtr<ShapeResult> ShapingLineBreaker::ShapeLine(
   RefPtr<ShapeResult> line_result = ShapeResult::Create(font_, 0, direction);
   unsigned max_length = std::numeric_limits<unsigned>::max();
   if (line_start_result)
-    line_start_result->CopyRange(0, max_length, line_result.Get());
+    line_start_result->CopyRange(0, max_length, line_result.get());
   if (last_safe > first_safe)
-    result_->CopyRange(first_safe, last_safe, line_result.Get());
+    result_->CopyRange(first_safe, last_safe, line_result.get());
   if (line_end_result)
-    line_end_result->CopyRange(last_safe, max_length, line_result.Get());
+    line_end_result->CopyRange(last_safe, max_length, line_result.get());
 
   DCHECK_GT(break_opportunity, start);
   // TODO(layout-dev): This hits on Mac and Mac only for a number of tests in
@@ -374,10 +373,9 @@ PassRefPtr<ShapeResult> ShapingLineBreaker::ShapeLine(
 
 // Shape from the specified offset to the end of the ShapeResult.
 // If |start| is safe-to-break, this copies the subset of the result.
-PassRefPtr<ShapeResult> ShapingLineBreaker::ShapeToEnd(
-    unsigned start,
-    LayoutUnit start_position,
-    unsigned range_end) {
+RefPtr<ShapeResult> ShapingLineBreaker::ShapeToEnd(unsigned start,
+                                                   LayoutUnit start_position,
+                                                   unsigned range_end) {
   unsigned first_safe = result_->NextSafeToBreakOffset(start);
   DCHECK_GE(first_safe, start);
 
@@ -386,11 +384,11 @@ PassRefPtr<ShapeResult> ShapingLineBreaker::ShapeToEnd(
   if (first_safe == start) {
     // If |start| is safe-to-break no reshape is needed.
     line_result = ShapeResult::Create(font_, 0, direction);
-    result_->CopyRange(start, range_end, line_result.Get());
+    result_->CopyRange(start, range_end, line_result.get());
   } else if (first_safe < range_end) {
     // Otherwise reshape to |first_safe|, then copy the rest.
     line_result = Shape(direction, start, first_safe);
-    result_->CopyRange(first_safe, range_end, line_result.Get());
+    result_->CopyRange(first_safe, range_end, line_result.get());
   } else {
     // If no safe-to-break offset is found in range, reshape the entire range.
     line_result = Shape(direction, start, range_end);

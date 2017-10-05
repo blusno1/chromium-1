@@ -321,19 +321,11 @@ void MidiManagerAlsa::DispatchSendMidiData(MidiManagerClient* client,
                                            uint32_t port_index,
                                            const std::vector<uint8_t>& data,
                                            double timestamp) {
-  base::TimeDelta delay;
-  if (timestamp != 0.0) {
-    base::TimeTicks time_to_send =
-        base::TimeTicks() + base::TimeDelta::FromMicroseconds(
-                                timestamp * base::Time::kMicrosecondsPerSecond);
-    delay = std::max(time_to_send - base::TimeTicks::Now(), base::TimeDelta());
-  }
-
   service()->task_service()->PostBoundDelayedTask(
       kSendTaskRunner,
       base::BindOnce(&MidiManagerAlsa::SendMidiData, base::Unretained(this),
                      client, port_index, data),
-      delay);
+      MidiService::TimestampToTimeDeltaDelay(timestamp));
 }
 
 MidiManagerAlsa::MidiPort::Id::Id() = default;
@@ -1391,10 +1383,8 @@ MidiManagerAlsa::CreateScopedSndMidiEventPtr(size_t size) {
   return ScopedSndMidiEventPtr(coder);
 }
 
-#if !defined(OS_CHROMEOS)
 MidiManager* MidiManager::Create(MidiService* service) {
   return new MidiManagerAlsa(service);
 }
-#endif
 
 }  // namespace midi

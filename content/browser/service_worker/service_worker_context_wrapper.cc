@@ -33,6 +33,7 @@
 #include "net/base/url_util.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/quota/special_storage_policy.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -64,7 +65,7 @@ void StartActiveWorkerOnIO(
     // |registration| is 1, it will be deleted after WorkerStarted is called.
     registration->active_version()->StartWorker(
         ServiceWorkerMetrics::EventType::UNKNOWN,
-        base::Bind(WorkerStarted, callback));
+        base::BindOnce(WorkerStarted, callback));
     return;
   }
   BrowserThread::PostTask(
@@ -112,7 +113,7 @@ void FoundReadyRegistrationForStartActiveWorker(
         ServiceWorkerMetrics::EventType::EXTERNAL_REQUEST,
         base::BindOnce(&DidStartWorker, active_version,
                        std::move(info_callback)),
-        base::Bind(&DidFailStartWorker, base::Passed(&failure_callback)));
+        base::BindOnce(&DidFailStartWorker, std::move(failure_callback)));
   } else {
     std::move(failure_callback).Run();
   }
@@ -278,7 +279,8 @@ void ServiceWorkerContextWrapper::RegisterServiceWorker(
                             base::BindOnce(std::move(callback), false));
     return;
   }
-  ServiceWorkerRegistrationOptions options(net::SimplifyUrlForRequest(pattern));
+  blink::mojom::ServiceWorkerRegistrationOptions options(
+      net::SimplifyUrlForRequest(pattern));
   context()->RegisterServiceWorker(
       net::SimplifyUrlForRequest(script_url), options,
       nullptr /* provider_host */,
@@ -426,7 +428,7 @@ void ServiceWorkerContextWrapper::StartActiveWorkerForPattern(
 
 void ServiceWorkerContextWrapper::StartServiceWorkerForNavigationHint(
     const GURL& document_url,
-    const StartServiceWorkerForNavigationHintCallback& callback) {
+    StartServiceWorkerForNavigationHintCallback callback) {
   TRACE_EVENT1("ServiceWorker", "StartServiceWorkerForNavigationHint",
                "document_url", document_url.spec());
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -436,9 +438,9 @@ void ServiceWorkerContextWrapper::StartServiceWorkerForNavigationHint(
       base::BindOnce(
           &ServiceWorkerContextWrapper::StartServiceWorkerForNavigationHintOnIO,
           this, document_url,
-          base::Bind(&ServiceWorkerContextWrapper::
-                         RecordStartServiceWorkerForNavigationHintResult,
-                     this, callback)));
+          base::BindOnce(&ServiceWorkerContextWrapper::
+                             RecordStartServiceWorkerForNavigationHintResult,
+                         this, std::move(callback))));
 }
 
 void ServiceWorkerContextWrapper::StopAllServiceWorkersForOrigin(
@@ -458,8 +460,22 @@ void ServiceWorkerContextWrapper::StopAllServiceWorkersForOrigin(
   for (const ServiceWorkerVersionInfo& info : live_versions) {
     ServiceWorkerVersion* version = GetLiveVersion(info.version_id);
     if (version && version->scope().GetOrigin() == origin)
-      version->StopWorker(base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+      version->StopWorker(base::BindOnce(&base::DoNothing));
   }
+}
+
+void ServiceWorkerContextWrapper::StopAllServiceWorkers(
+    base::OnceClosure callback) {
+  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&ServiceWorkerContextWrapper::StopAllServiceWorkersOnIO,
+                       this, std::move(callback),
+                       base::ThreadTaskRunnerHandle::Get()));
+    return;
+  }
+  StopAllServiceWorkersOnIO(std::move(callback),
+                            base::ThreadTaskRunnerHandle::Get());
 }
 
 ServiceWorkerRegistration* ServiceWorkerContextWrapper::GetLiveRegistration(
@@ -948,23 +964,23 @@ void ServiceWorkerContextWrapper::CountExternalRequests(
 
 void ServiceWorkerContextWrapper::StartServiceWorkerForNavigationHintOnIO(
     const GURL& document_url,
-    const StartServiceWorkerForNavigationHintCallback& callback) {
+    StartServiceWorkerForNavigationHintCallback callback) {
   TRACE_EVENT1("ServiceWorker", "StartServiceWorkerForNavigationHintOnIO",
                "document_url", document_url.spec());
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!context_core_) {
-    callback.Run(StartServiceWorkerForNavigationHintResult::FAILED);
+    std::move(callback).Run(StartServiceWorkerForNavigationHintResult::FAILED);
     return;
   }
   context_core_->storage()->FindRegistrationForDocument(
       net::SimplifyUrlForRequest(document_url),
       base::Bind(
           &ServiceWorkerContextWrapper::DidFindRegistrationForNavigationHint,
-          this, callback));
+          this, base::Passed(std::move(callback))));
 }
 
 void ServiceWorkerContextWrapper::DidFindRegistrationForNavigationHint(
-    const StartServiceWorkerForNavigationHintCallback& callback,
+    StartServiceWorkerForNavigationHintCallback callback,
     ServiceWorkerStatusCode status,
     scoped_refptr<ServiceWorkerRegistration> registration) {
   TRACE_EVENT1("ServiceWorker", "DidFindRegistrationForNavigationHint",
@@ -972,53 +988,77 @@ void ServiceWorkerContextWrapper::DidFindRegistrationForNavigationHint(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!registration) {
     DCHECK_NE(status, SERVICE_WORKER_OK);
-    callback.Run(StartServiceWorkerForNavigationHintResult::
-                     NO_SERVICE_WORKER_REGISTRATION);
+    std::move(callback).Run(StartServiceWorkerForNavigationHintResult::
+                                NO_SERVICE_WORKER_REGISTRATION);
     return;
   }
   if (!registration->active_version()) {
-    callback.Run(StartServiceWorkerForNavigationHintResult::
-                     NO_ACTIVE_SERVICE_WORKER_VERSION);
+    std::move(callback).Run(StartServiceWorkerForNavigationHintResult::
+                                NO_ACTIVE_SERVICE_WORKER_VERSION);
     return;
   }
   if (registration->active_version()->fetch_handler_existence() ==
       ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST) {
-    callback.Run(StartServiceWorkerForNavigationHintResult::NO_FETCH_HANDLER);
+    std::move(callback).Run(
+        StartServiceWorkerForNavigationHintResult::NO_FETCH_HANDLER);
     return;
   }
   if (registration->active_version()->running_status() ==
       EmbeddedWorkerStatus::RUNNING) {
-    callback.Run(StartServiceWorkerForNavigationHintResult::ALREADY_RUNNING);
+    std::move(callback).Run(
+        StartServiceWorkerForNavigationHintResult::ALREADY_RUNNING);
     return;
   }
 
   registration->active_version()->StartWorker(
       ServiceWorkerMetrics::EventType::NAVIGATION_HINT,
-      base::Bind(
+      base::BindOnce(
           &ServiceWorkerContextWrapper::DidStartServiceWorkerForNavigationHint,
-          this, registration->pattern(), callback));
+          this, registration->pattern(), base::Passed(std::move(callback))));
 }
 
 void ServiceWorkerContextWrapper::DidStartServiceWorkerForNavigationHint(
     const GURL& pattern,
-    const StartServiceWorkerForNavigationHintCallback& callback,
+    StartServiceWorkerForNavigationHintCallback callback,
     ServiceWorkerStatusCode code) {
   TRACE_EVENT2("ServiceWorker", "DidStartServiceWorkerForNavigationHint", "url",
                pattern.spec(), "code", ServiceWorkerStatusToString(code));
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  callback.Run(code == SERVICE_WORKER_OK
-                   ? StartServiceWorkerForNavigationHintResult::STARTED
-                   : StartServiceWorkerForNavigationHintResult::FAILED);
+  std::move(callback).Run(
+      code == SERVICE_WORKER_OK
+          ? StartServiceWorkerForNavigationHintResult::STARTED
+          : StartServiceWorkerForNavigationHintResult::FAILED);
 }
 
 void ServiceWorkerContextWrapper::
     RecordStartServiceWorkerForNavigationHintResult(
-        const StartServiceWorkerForNavigationHintCallback& callback,
+        StartServiceWorkerForNavigationHintCallback callback,
         StartServiceWorkerForNavigationHintResult result) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   ServiceWorkerMetrics::RecordStartServiceWorkerForNavigationHintResult(result);
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(callback, result));
+                          base::BindOnce(std::move(callback), result));
+}
+
+void ServiceWorkerContextWrapper::StopAllServiceWorkersOnIO(
+    base::OnceClosure callback,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (!context_core_.get()) {
+    task_runner_for_callback->PostTask(FROM_HERE, std::move(callback));
+    return;
+  }
+  std::vector<ServiceWorkerVersionInfo> live_versions = GetAllLiveVersionInfo();
+  base::RepeatingClosure barrier = base::BarrierClosure(
+      live_versions.size(),
+      base::BindOnce(
+          base::IgnoreResult(&base::SingleThreadTaskRunner::PostTask),
+          std::move(task_runner_for_callback), FROM_HERE, std::move(callback)));
+  for (const ServiceWorkerVersionInfo& info : live_versions) {
+    ServiceWorkerVersion* version = GetLiveVersion(info.version_id);
+    DCHECK(version);
+    version->StopWorker(base::BindOnce(barrier));
+  }
 }
 
 ServiceWorkerContextCore* ServiceWorkerContextWrapper::context() {

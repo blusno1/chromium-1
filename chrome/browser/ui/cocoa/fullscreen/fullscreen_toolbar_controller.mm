@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_menubar_tracker.h"
@@ -17,28 +18,23 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 
-@interface NSMenu (PrivateAPI)
-- (void)_lockMenuPosition;
-- (void)_unlockMenuPosition;
-@end
-
 namespace {
 
 // Visibility fractions for the menubar and toolbar.
 const CGFloat kHideFraction = 0.0;
 const CGFloat kShowFraction = 1.0;
 
-void LockMenu() {
-  if ([NSMenu instancesRespondToSelector:@selector(_lockMenuPosition)])
-    [[NSApp mainMenu] _lockMenuPosition];
-}
-
-void UnlockMenu() {
-  if ([NSMenu instancesRespondToSelector:@selector(_unlockMenuPosition)])
-    [[NSApp mainMenu] _unlockMenuPosition];
+void RecordToolbarStyle(FullscreenToolbarStyle style) {
+  UMA_HISTOGRAM_ENUMERATION("OSX.Fullscreen.ToolbarStyle", style,
+                            kFullscreenToolbarStyleCount);
 }
 
 }  // namespace
+
+@interface FullscreenToolbarController ()
+// Updates |toolbarStyle_|.
+- (void)updateToolbarStyle:(BOOL)isExitingTabFullscreen;
+@end
 
 @implementation FullscreenToolbarController
 
@@ -64,7 +60,8 @@ void UnlockMenu() {
   DCHECK(!inFullscreenMode_);
   inFullscreenMode_ = YES;
 
-  [self updateToolbarStyleExitingTabFullscreen:NO];
+  [self updateToolbarStyle:NO];
+  RecordToolbarStyle(toolbarStyle_);
 
   if ([browserController_ isInImmersiveFullscreen]) {
     immersiveFullscreenController_.reset([[ImmersiveFullscreenController alloc]
@@ -74,8 +71,7 @@ void UnlockMenu() {
     menubarTracker_.reset([[FullscreenMenubarTracker alloc]
         initWithFullscreenToolbarController:self]);
     mouseTracker_.reset([[FullscreenToolbarMouseTracker alloc]
-        initWithFullscreenToolbarController:self
-                        animationController:animationController_.get()]);
+        initWithFullscreenToolbarController:self]);
   }
 }
 
@@ -157,7 +153,6 @@ void UnlockMenu() {
 
   FullscreenMenubarState menubarState = [menubarTracker_ state];
   return menubarState == FullscreenMenubarState::SHOWN ||
-         [mouseTracker_ mouseInsideTrackingArea] ||
          [visibilityLockController_ isToolbarVisibilityLocked];
 }
 
@@ -166,9 +161,7 @@ void UnlockMenu() {
     [mouseTracker_ updateToolbarFrame:frame];
 }
 
-- (void)updateToolbarStyleExitingTabFullscreen:(BOOL)isExitingTabFullscreen {
-  FullscreenToolbarStyle oldStyle = toolbarStyle_;
-
+- (void)updateToolbarStyle:(BOOL)isExitingTabFullscreen {
   if ([browserController_ isFullscreenForTabContentOrExtension] &&
       !isExitingTabFullscreen) {
     toolbarStyle_ = FullscreenToolbarStyle::TOOLBAR_NONE;
@@ -178,22 +171,19 @@ void UnlockMenu() {
                         ? FullscreenToolbarStyle::TOOLBAR_PRESENT
                         : FullscreenToolbarStyle::TOOLBAR_HIDDEN;
   }
-
-  if (oldStyle != toolbarStyle_)
-    [self updateToolbarLayout];
 }
 
-- (void)updateToolbarLayout {
-  if ([mouseTracker_ mouseInsideTrackingArea]) {
-    if (!menubarLocked_)
-      LockMenu();
-    menubarLocked_ = YES;
-  } else {
-    if (menubarLocked_)
-      UnlockMenu();
-    menubarLocked_ = NO;
-  }
+- (void)layoutToolbarStyleIsExitingTabFullscreen:(BOOL)isExitingTabFullscreen {
+  FullscreenToolbarStyle oldStyle = toolbarStyle_;
+  [self updateToolbarStyle:isExitingTabFullscreen];
 
+  if (oldStyle != toolbarStyle_) {
+    [self layoutToolbar];
+    RecordToolbarStyle(toolbarStyle_);
+  }
+}
+
+- (void)layoutToolbar {
   [browserController_ layoutSubviews];
   animationController_->ToolbarDidUpdate();
   [mouseTracker_ updateTrackingArea];

@@ -6,9 +6,9 @@
 
 #include <stddef.h>
 
-#include <queue>
 #include <utility>
 
+#include "base/containers/queue.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -311,10 +311,10 @@ void NavigationEntryImpl::SetDataURLAsString(
     DCHECK(base::StartsWith(data_url->front_as<char>(), url::kDataScheme,
                             base::CompareCase::SENSITIVE));
   }
-  data_url_as_string_ = data_url;
+  data_url_as_string_ = std::move(data_url);
 }
 
-const scoped_refptr<const base::RefCountedString>
+const scoped_refptr<const base::RefCountedString>&
 NavigationEntryImpl::GetDataURLAsString() const {
   return data_url_as_string_;
 }
@@ -892,7 +892,7 @@ void NavigationEntryImpl::ClearStaleFrameEntriesForNewFrame(
   DCHECK(!frame_tree_node->IsMainFrame());
 
   NavigationEntryImpl::TreeNode* node = nullptr;
-  std::queue<NavigationEntryImpl::TreeNode*> work_queue;
+  base::queue<NavigationEntryImpl::TreeNode*> work_queue;
   int count = 0;
 
   work_queue.push(root_node());
@@ -941,7 +941,7 @@ GURL NavigationEntryImpl::GetHistoryURLForDataURL() const {
 NavigationEntryImpl::TreeNode* NavigationEntryImpl::FindFrameEntry(
     FrameTreeNode* frame_tree_node) const {
   NavigationEntryImpl::TreeNode* node = nullptr;
-  std::queue<NavigationEntryImpl::TreeNode*> work_queue;
+  base::queue<NavigationEntryImpl::TreeNode*> work_queue;
   work_queue.push(root_node());
   while (!work_queue.empty()) {
     node = work_queue.front();

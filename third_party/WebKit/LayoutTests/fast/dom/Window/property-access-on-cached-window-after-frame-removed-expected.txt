@@ -34,12 +34,14 @@ PASS childWindow.navigator.userAgent is ''
 PASS childWindow.navigator.vendor is window.navigator.vendor
 PASS childWindow.navigator.vendorSub is ''
 PASS childWindow.onabort is null
+PASS childWindow.onafterprint is null
 PASS childWindow.onanimationend is null
 PASS childWindow.onanimationiteration is null
 PASS childWindow.onanimationstart is null
 PASS childWindow.onappinstalled is null
 PASS childWindow.onauxclick is null
 PASS childWindow.onbeforeinstallprompt is null
+PASS childWindow.onbeforeprint is null
 PASS childWindow.onbeforeunload is null
 PASS childWindow.onblur is null
 PASS childWindow.oncancel is null
@@ -193,6 +195,8 @@ PASS childWindow.toolbar.visible is false
 PASS childWindow.visualViewport.height is 0
 PASS childWindow.visualViewport.offsetLeft is 0
 PASS childWindow.visualViewport.offsetTop is 0
+PASS childWindow.visualViewport.onresize is null
+PASS childWindow.visualViewport.onscroll is null
 PASS childWindow.visualViewport.pageLeft is 0
 PASS childWindow.visualViewport.pageTop is 0
 PASS childWindow.visualViewport.scale is 0

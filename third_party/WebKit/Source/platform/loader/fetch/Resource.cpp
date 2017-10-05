@@ -33,12 +33,10 @@
 #include "build/build_config.h"
 #include "platform/Histogram.h"
 #include "platform/InstanceCounters.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/CachedMetadata.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/loader/fetch/MemoryCache.h"
@@ -46,6 +44,7 @@
 #include "platform/loader/fetch/ResourceClientWalker.h"
 #include "platform/loader/fetch/ResourceFinishObserver.h"
 #include "platform/loader/fetch/ResourceLoader.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/weborigin/KURL.h"
@@ -167,7 +166,7 @@ void Resource::CachedMetadataHandlerImpl::SetCachedMetadata(
 
 void Resource::CachedMetadataHandlerImpl::ClearCachedMetadata(
     CachedMetadataHandler::CacheType cache_type) {
-  cached_metadata_.Clear();
+  cached_metadata_ = nullptr;
   if (cache_type == CachedMetadataHandler::kSendToPlatform)
     SendToPlatform();
 }
@@ -272,7 +271,6 @@ Resource::Resource(const ResourceRequest& request,
       decoded_size_(0),
       overhead_size_(CalculateOverheadSize()),
       cache_identifier_(MemoryCache::DefaultCacheIdentifier()),
-      needs_synchronous_cache_hit_(false),
       link_preload_(false),
       is_revalidating_(false),
       is_alive_(false),
@@ -280,19 +278,6 @@ Resource::Resource(const ResourceRequest& request,
       integrity_disposition_(ResourceIntegrityDisposition::kNotChecked),
       options_(options),
       response_timestamp_(CurrentTime()),
-      cancel_timer_(
-          // We use MainThread() for main-thread cases to avoid syscall cost
-          // when checking main_thread_->isCurrentThread() in currentThread().
-          IsMainThread() ? Platform::Current()
-                               ->MainThread()
-                               ->Scheduler()
-                               ->LoadingTaskRunner()
-                         : Platform::Current()
-                               ->CurrentThread()
-                               ->Scheduler()
-                               ->LoadingTaskRunner(),
-          this,
-          &Resource::CancelTimerFired),
       resource_request_(request) {
   InstanceCounters::IncrementCounter(InstanceCounters::kResourceCounter);
 
@@ -325,6 +310,11 @@ void Resource::SetLoader(ResourceLoader* loader) {
 }
 
 void Resource::CheckResourceIntegrity() {
+  // Skip the check and reuse the previous check result, especially on
+  // successful revalidation.
+  if (IntegrityDisposition() != ResourceIntegrityDisposition::kNotChecked)
+    return;
+
   // Loading error occurred? Then result is uncheckable.
   integrity_report_info_.Clear();
   if (ErrorOccurred()) {
@@ -401,7 +391,7 @@ void Resource::SetResourceBuffer(RefPtr<SharedBuffer> resource_buffer) {
 }
 
 void Resource::ClearData() {
-  data_.Clear();
+  data_ = nullptr;
   encoded_size_memory_usage_ = 0;
 }
 
@@ -574,7 +564,7 @@ void Resource::SetResponse(const ResourceResponse& response) {
   response_ = response;
   if (this->GetResponse().WasFetchedViaServiceWorker()) {
     cache_handler_ = ServiceWorkerResponseCachedMetadataHandler::Create(
-        this, fetcher_security_origin_.Get());
+        this, fetcher_security_origin_.get());
   }
 }
 
@@ -687,10 +677,9 @@ void Resource::AddClient(ResourceClient* client) {
   }
 
   // If an error has occurred or we have existing data to send to the new client
-  // and the resource type supprts it, send it asynchronously.
+  // and the resource type supports it, send it asynchronously.
   if ((ErrorOccurred() || !GetResponse().IsNull()) &&
-      !TypeNeedsSynchronousCacheHit(GetType()) &&
-      !needs_synchronous_cache_hit_) {
+      !TypeNeedsSynchronousCacheHit(GetType())) {
     clients_awaiting_callback_.insert(client);
     if (!async_finish_pending_clients_task_.IsActive()) {
       async_finish_pending_clients_task_ =
@@ -767,16 +756,8 @@ void Resource::DidRemoveClientOrObserver() {
 }
 
 void Resource::AllClientsAndObserversRemoved() {
-  if (!loader_)
-    return;
-  if (!cancel_timer_.IsActive())
-    cancel_timer_.StartOneShot(0, BLINK_FROM_HERE);
-}
-
-void Resource::CancelTimerFired(TimerBase* timer) {
-  DCHECK_EQ(timer, &cancel_timer_);
-  if (!HasClientsOrObservers() && loader_)
-    loader_->Cancel();
+  if (loader_)
+    loader_->ScheduleCancel();
 }
 
 void Resource::SetDecodedSize(size_t decoded_size) {
@@ -1070,6 +1051,8 @@ void Resource::RevalidationFailed() {
   SECURITY_CHECK(redirect_chain_.IsEmpty());
   ClearData();
   cache_handler_.Clear();
+  integrity_disposition_ = ResourceIntegrityDisposition::kNotChecked;
+  integrity_report_info_.Clear();
   DestroyDecodedDataForFailedRevalidation();
   is_revalidating_ = false;
 }
@@ -1079,7 +1062,7 @@ void Resource::MarkAsPreload() {
   is_unused_preload_ = true;
 }
 
-bool Resource::MatchPreload(const FetchParameters& params) {
+bool Resource::MatchPreload(const FetchParameters& params, WebTaskRunner*) {
   DCHECK(is_unused_preload_);
   is_unused_preload_ = false;
 

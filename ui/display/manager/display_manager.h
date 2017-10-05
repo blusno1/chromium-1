@@ -28,6 +28,7 @@
 #include "ui/display/types/display_constants.h"
 
 #if defined(OS_CHROMEOS)
+#include "base/optional.h"
 #include "ui/display/manager/chromeos/display_configurator.h"
 #endif
 
@@ -127,6 +128,9 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Initialize default display.
   void InitDefaultDisplay();
 
+  // Update the internal display's display info.
+  void UpdateInternalDisplay(const ManagedDisplayInfo& display_info);
+
   // Initializes font related params that depends on display configuration.
   void RefreshFontParams();
 
@@ -190,7 +194,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
       const gfx::Insets* overscan_insets,
       const gfx::Size& resolution_in_pixels,
       float device_scale_factor,
-      const TouchCalibrationData* touch_calibration_data);
+      std::map<uint32_t, TouchCalibrationData>* touch_calibration_data_map);
 
   // Register stored rotation properties for the internal display.
   void RegisterDisplayRotationProperties(bool rotation_lock,
@@ -319,8 +323,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   void SetTouchCalibrationData(
       int64_t display_id,
       const TouchCalibrationData::CalibrationPointPairQuad& point_pair_quad,
-      const gfx::Size& display_bounds);
-  void ClearTouchCalibrationData(int64_t display_id);
+      const gfx::Size& display_bounds,
+      uint32_t touch_device_identifier);
+  void ClearTouchCalibrationData(
+      int64_t display_id,
+      base::Optional<uint32_t> touch_device_identifier);
 #endif
 
   // Sets/gets default multi display mode.

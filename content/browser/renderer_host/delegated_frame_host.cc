@@ -14,11 +14,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/time/default_tick_clock.h"
 #include "cc/base/switches.h"
-#include "cc/output/compositor_frame.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/gl_helper.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/single_release_callback.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/single_release_callback.h"
+#include "components/viz/common/switches.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -43,15 +44,17 @@ namespace content {
 // DelegatedFrameHost
 
 DelegatedFrameHost::DelegatedFrameHost(const viz::FrameSinkId& frame_sink_id,
-                                       DelegatedFrameHostClient* client)
+                                       DelegatedFrameHostClient* client,
+                                       bool enable_surface_synchronization)
     : frame_sink_id_(frame_sink_id),
       client_(client),
+      enable_surface_synchronization_(enable_surface_synchronization),
       compositor_(nullptr),
       tick_clock_(new base::DefaultTickClock()),
       skipped_frames_(false),
       background_color_(SK_ColorRED),
-      current_scale_factor_(1.f),
-      frame_evictor_(new viz::FrameEvictor(this)) {
+      frame_evictor_(new viz::FrameEvictor(this)),
+      weak_ptr_factory_(this) {
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   factory->GetContextFactory()->AddObserver(this);
   viz::HostFrameSinkManager* host_frame_sink_manager =
@@ -67,7 +70,7 @@ DelegatedFrameHost::DelegatedFrameHost(const viz::FrameSinkId& frame_sink_id,
 void DelegatedFrameHost::WasShown(const ui::LatencyInfo& latency_info) {
   frame_evictor_->SetVisible(true);
 
-  if (!has_frame_ && !released_front_lock_.get()) {
+  if (!has_primary_surface_ && !released_front_lock_.get()) {
     if (compositor_)
       released_front_lock_ = compositor_->GetCompositorLock(nullptr);
   }
@@ -96,7 +99,7 @@ void DelegatedFrameHost::MaybeCreateResizeLock() {
           switches::kDisableResizeLock))
     return;
 
-  if (!has_frame_)
+  if (!has_primary_surface_)
     return;
 
   if (!client_->DelegatedFrameCanCreateResizeLock())
@@ -217,7 +220,7 @@ bool DelegatedFrameHost::TransformPointToCoordSpaceForView(
     const gfx::Point& point,
     RenderWidgetHostViewBase* target_view,
     gfx::Point* transformed_point) {
-  if (!has_frame_)
+  if (!has_primary_surface_)
     return false;
 
   return target_view->TransformPointToLocalCoordSpace(
@@ -247,11 +250,38 @@ bool DelegatedFrameHost::ShouldSkipFrame(const gfx::Size& size_in_dip) {
   return size_in_dip != resize_lock_->expected_size();
 }
 
+void DelegatedFrameHost::WillDrawSurface(const viz::LocalSurfaceId& id,
+                                         const gfx::Rect& damage_rect) {
+  if (id != local_surface_id_)
+    return;
+  AttemptFrameSubscriberCapture(damage_rect);
+}
+
 void DelegatedFrameHost::WasResized() {
   if (client_->DelegatedFrameHostDesiredSizeInDIP() !=
           current_frame_size_in_dip_ &&
-      !client_->DelegatedFrameHostIsVisible())
+      !client_->DelegatedFrameHostIsVisible()) {
     EvictDelegatedFrame();
+  }
+
+  if (enable_surface_synchronization_) {
+    ui::Layer* layer = client_->DelegatedFrameHostGetLayer();
+    gfx::Size desired_size_in_pixels =
+        gfx::ConvertSizeToPixel(layer->device_scale_factor(),
+                                client_->DelegatedFrameHostDesiredSizeInDIP());
+
+    viz::SurfaceId surface_id(frame_sink_id_, client_->GetLocalSurfaceId());
+    viz::SurfaceInfo surface_info(surface_id, layer->device_scale_factor(),
+                                  desired_size_in_pixels);
+    ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+    viz::FrameSinkManagerImpl* manager =
+        factory->GetContextFactoryPrivate()->GetFrameSinkManager();
+    client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
+        surface_info, manager->surface_manager()->reference_factory());
+    has_primary_surface_ = true;
+    frame_evictor_->SwappedFrame(client_->DelegatedFrameHostIsVisible());
+  }
+
   // If |create_resize_lock_after_commit_| is true, we're waiting to recreate
   // an expired resize lock after the next UI frame is submitted, so don't
   // make a lock here.
@@ -268,7 +298,7 @@ SkColor DelegatedFrameHost::GetGutterColor() const {
 }
 
 void DelegatedFrameHost::UpdateGutters() {
-  if (!has_frame_) {
+  if (!has_primary_surface_ || enable_surface_synchronization_) {
     right_gutter_.reset();
     bottom_gutter_.reset();
     return;
@@ -375,7 +405,8 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
 
   // To avoid unnecessary browser composites, try to go directly to the Surface
   // rather than through the Layer (which goes through the browser compositor).
-  if (has_frame_ && request_copy_of_output_callback_for_testing_.is_null()) {
+  if (has_primary_surface_ &&
+      request_copy_of_output_callback_for_testing_.is_null()) {
     support_->RequestCopyOfSurface(std::move(request));
   } else {
     RequestCopyOfOutput(std::move(request));
@@ -384,7 +415,6 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
 
 void DelegatedFrameHost::DidCreateNewRendererCompositorFrameSink(
     viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
-  EvictDelegatedFrame();
   ResetCompositorFrameSinkSupport();
   renderer_compositor_frame_sink_ = renderer_compositor_frame_sink;
   CreateCompositorFrameSinkSupport();
@@ -392,7 +422,7 @@ void DelegatedFrameHost::DidCreateNewRendererCompositorFrameSink(
 
 void DelegatedFrameHost::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
 #if defined(OS_CHROMEOS)
   DCHECK(!resize_lock_ || !client_->IsAutoResizeEnabled());
 #endif
@@ -401,7 +431,7 @@ void DelegatedFrameHost::SubmitCompositorFrame(
 
   DCHECK(!frame.render_pass_list.empty());
 
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
+  viz::RenderPass* root_pass = frame.render_pass_list.back().get();
 
   gfx::Size frame_size = root_pass->output_rect.size();
   gfx::Size frame_size_in_dip =
@@ -440,7 +470,7 @@ void DelegatedFrameHost::SubmitCompositorFrame(
     damage_rect_in_dip = gfx::Rect(frame_size_in_dip);
 
     // Give the same damage rect to the compositor.
-    cc::RenderPass* root_pass = frame.render_pass_list.back().get();
+    viz::RenderPass* root_pass = frame.render_pass_list.back().get();
     root_pass->damage_rect = damage_rect;
   }
 
@@ -450,55 +480,33 @@ void DelegatedFrameHost::SubmitCompositorFrame(
     DCHECK(frame.resource_list.empty());
     EvictDelegatedFrame();
   } else {
-    ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-    viz::FrameSinkManagerImpl* manager =
-        factory->GetContextFactoryPrivate()->GetFrameSinkManager();
-
     frame.metadata.latency_info.insert(frame.metadata.latency_info.end(),
                                        skipped_latency_info_list_.begin(),
                                        skipped_latency_info_list_.end());
     skipped_latency_info_list_.clear();
 
-    if (local_surface_id != local_surface_id_ || !has_frame_) {
-      // manager must outlive compositors using it.
-      viz::SurfaceId surface_id(frame_sink_id_, local_surface_id);
-      viz::SurfaceInfo surface_info(surface_id, frame_device_scale_factor,
-                                    frame_size);
-      client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
-          surface_info, manager->surface_manager()->reference_factory());
-      current_surface_size_ = frame_size;
-      current_scale_factor_ = frame_device_scale_factor;
-    }
-
-    has_frame_ = true;
-
     // If surface synchronization is off, then OnFirstSurfaceActivation will be
-    // called in the same call stack and so to ensure that the fallback surface
-    // is set, then primary surface must be set prior to calling
-    // CompositorFrameSinkSupport::SubmitCompositorFrame.
+    // called in the same call stack.
     // TODO(kenrb): Supply HitTestRegionList data here as described in
     // crbug.com/750755.
     bool result = support_->SubmitCompositorFrame(local_surface_id,
                                                   std::move(frame), nullptr);
     DCHECK(result);
-  }
-  local_surface_id_ = local_surface_id;
 
-  released_front_lock_ = NULL;
-  current_frame_size_in_dip_ = frame_size_in_dip;
-  CheckResizeLock();
-
-  UpdateGutters();
-
-  if (!damage_rect_in_dip.IsEmpty()) {
-    client_->DelegatedFrameHostGetLayer()->OnDelegatedFrameDamage(
-        damage_rect_in_dip);
+    DCHECK(enable_surface_synchronization_ || has_primary_surface_);
   }
 
-  if (has_frame_) {
-    frame_evictor_->SwappedFrame(client_->DelegatedFrameHostIsVisible());
+  // TODO(fsamuel): This is used to detect video. We need to develop an
+  // alternative mechanism to detect video in a frame for Viz.
+  if (!enable_surface_synchronization_) {
+    if (!damage_rect_in_dip.IsEmpty()) {
+      client_->DelegatedFrameHostGetLayer()->OnDelegatedFrameDamage(
+          damage_rect_in_dip);
+    }
+    if (has_primary_surface_)
+      frame_evictor_->SwappedFrame(client_->DelegatedFrameHostIsVisible());
+    // Note: the frame may have been evicted immediately.
   }
-  // Note: the frame may have been evicted immediately.
 }
 
 void DelegatedFrameHost::ClearDelegatedFrame() {
@@ -520,13 +528,6 @@ void DelegatedFrameHost::ReclaimResources(
   renderer_compositor_frame_sink_->ReclaimResources(resources);
 }
 
-void DelegatedFrameHost::WillDrawSurface(const viz::LocalSurfaceId& id,
-                                         const gfx::Rect& damage_rect) {
-  if (id != local_surface_id_)
-    return;
-  AttemptFrameSubscriberCapture(damage_rect);
-}
-
 void DelegatedFrameHost::OnBeginFramePausedChanged(bool paused) {
   if (renderer_compositor_frame_sink_)
     renderer_compositor_frame_sink_->OnBeginFramePausedChanged(paused);
@@ -534,8 +535,30 @@ void DelegatedFrameHost::OnBeginFramePausedChanged(bool paused) {
 
 void DelegatedFrameHost::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
-  if (has_frame_)
-    client_->DelegatedFrameHostGetLayer()->SetFallbackSurface(surface_info);
+  if (!enable_surface_synchronization_) {
+    ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+    viz::FrameSinkManagerImpl* manager =
+        factory->GetContextFactoryPrivate()->GetFrameSinkManager();
+    client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
+        surface_info, manager->surface_manager()->reference_factory());
+    has_primary_surface_ = true;
+  }
+
+  // If surface synchronization is enabled, and we don't have a primary surface
+  // then that means it has been evicted, and so we have nothing to do here.
+  if (!has_primary_surface_)
+    return;
+
+  client_->DelegatedFrameHostGetLayer()->SetFallbackSurface(surface_info);
+  local_surface_id_ = surface_info.id().local_surface_id();
+
+  released_front_lock_ = NULL;
+  gfx::Size frame_size_in_dip = gfx::ConvertSizeToDIP(
+      surface_info.device_scale_factor(), surface_info.size_in_pixels());
+  current_frame_size_in_dip_ = frame_size_in_dip;
+  CheckResizeLock();
+
+  UpdateGutters();
 }
 
 void DelegatedFrameHost::OnBeginFrame(const viz::BeginFrameArgs& args) {
@@ -545,11 +568,11 @@ void DelegatedFrameHost::OnBeginFrame(const viz::BeginFrameArgs& args) {
 }
 
 void DelegatedFrameHost::EvictDelegatedFrame() {
-  if (!has_frame_)
+  if (!has_primary_surface_)
     return;
   client_->DelegatedFrameHostGetLayer()->SetShowSolidColorContent();
   support_->EvictCurrentSurface();
-  has_frame_ = false;
+  has_primary_surface_ = false;
   resize_lock_.reset();
   frame_evictor_->DiscardedFrame();
   UpdateGutters();
@@ -663,14 +686,22 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
   if (!texture_mailbox.IsTexture())
     return;
 
-  gfx::Rect result_rect(result->size());
-
+  if (!dfh->yuv_readback_pipeline_) {
+    dfh->yuv_readback_pipeline_ =
+        gl_helper->CreateReadbackPipelineYUV(true, true);
+  }
   viz::ReadbackYUVInterface* yuv_readback_pipeline =
       dfh->yuv_readback_pipeline_.get();
-  if (yuv_readback_pipeline == NULL ||
-      yuv_readback_pipeline->scaler()->SrcSize() != result_rect.size() ||
-      yuv_readback_pipeline->scaler()->SrcSubrect() != result_rect ||
-      yuv_readback_pipeline->scaler()->DstSize() != region_in_frame.size()) {
+  viz::GLHelper::ScalerInterface* const scaler =
+      yuv_readback_pipeline->scaler();
+  const gfx::Vector2d scale_from(result->size().width(),
+                                 result->size().height());
+  const gfx::Vector2d scale_to(region_in_frame.width(),
+                               region_in_frame.height());
+  if (scale_from == scale_to) {
+    if (scaler)
+      yuv_readback_pipeline->SetScaler(nullptr);
+  } else if (!scaler || !scaler->IsSameScaleRatio(scale_from, scale_to)) {
     // The scaler chosen here is based on performance measurements of full
     // end-to-end systems.  When down-scaling, always use the "fast" scaler
     // because it performs well on both low- and high- end machines, provides
@@ -680,19 +711,19 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
     // huge with insignificant performance penalty.  Note that this strategy
     // differs from single-frame snapshot capture.
     viz::GLHelper::ScalerQuality quality =
-        ((result_rect.size().width() < region_in_frame.size().width()) &&
-         (result_rect.size().height() < region_in_frame.size().height()))
+        ((result->size().width() < region_in_frame.size().width()) &&
+         (result->size().height() < region_in_frame.size().height()))
             ? viz::GLHelper::SCALER_QUALITY_BEST
             : viz::GLHelper::SCALER_QUALITY_FAST;
 
-    DVLOG(1) << "Re-creating YUV readback pipeline for source rect "
-             << result_rect.ToString() << " and destination size "
+    DVLOG(1) << "Re-creating YUV readback pipeline scaler for source rect "
+             << result->rect().ToString() << " and destination size "
              << region_in_frame.size().ToString();
 
-    dfh->yuv_readback_pipeline_.reset(gl_helper->CreateReadbackPipelineYUV(
-        quality, result_rect.size(), result_rect, region_in_frame.size(), true,
-        true));
-    yuv_readback_pipeline = dfh->yuv_readback_pipeline_.get();
+    std::unique_ptr<viz::GLHelper::ScalerInterface> scaler =
+        gl_helper->CreateScaler(quality, scale_from, scale_to, false, false);
+    DCHECK(scaler);  // Arguments to CreateScaler() should never be invalid.
+    yuv_readback_pipeline->SetScaler(std::move(scaler));
   }
 
   ignore_result(scoped_callback_runner.Release());
@@ -703,8 +734,8 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
       video_frame, dfh->AsWeakPtr(), base::Bind(callback, region_in_frame),
       subscriber_texture, base::Passed(&release_callback));
   yuv_readback_pipeline->ReadbackYUV(
-      texture_mailbox.mailbox(), texture_mailbox.sync_token(),
-      video_frame->visible_rect(),
+      texture_mailbox.mailbox(), texture_mailbox.sync_token(), result->size(),
+      gfx::Rect(region_in_frame.size()),
       video_frame->stride(media::VideoFrame::kYPlane),
       video_frame->data(media::VideoFrame::kYPlane),
       video_frame->stride(media::VideoFrame::kUPlane),
@@ -863,6 +894,8 @@ void DelegatedFrameHost::CreateCompositorFrameSinkSupport() {
                  ->GetHostFrameSinkManager()
                  ->CreateCompositorFrameSinkSupport(this, frame_sink_id_,
                                                     is_root, needs_sync_points);
+  support_->SetWillDrawSurfaceCallback(base::BindRepeating(
+      &DelegatedFrameHost::WillDrawSurface, weak_ptr_factory_.GetWeakPtr()));
   if (compositor_)
     compositor_->AddFrameSink(frame_sink_id_);
   if (needs_begin_frame_)

@@ -135,7 +135,6 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       const net::SSLInfo& ssl_info,
       const GURL& request_url,
       content::ResourceType resource_type,
-      bool overridable,
       bool strict_enforcement,
       bool expired_previous_decision,
       const base::Callback<void(content::CertificateRequestResultType)>&
@@ -162,6 +161,9 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       service_manager::BinderRegistry* registry,
       content::AssociatedInterfaceRegistry* associated_registry,
       content::RenderProcessHost* render_process_host) override;
+  void ExposeInterfacesToMediaService(
+      service_manager::BinderRegistry* registry,
+      content::RenderFrameHost* render_frame_host) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(
       base::StringPiece service_name) override;

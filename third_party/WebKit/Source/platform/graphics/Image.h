@@ -30,6 +30,7 @@
 #include "platform/PlatformExport.h"
 #include "platform/SharedBuffer.h"
 #include "platform/geometry/IntRect.h"
+#include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/ImageAnimationPolicy.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/ImageOrientation.h"
@@ -37,7 +38,6 @@
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/WeakPtr.h"
@@ -74,7 +74,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
  public:
   virtual ~Image();
 
-  static PassRefPtr<Image> LoadPlatformResource(const char* name);
+  static RefPtr<Image> LoadPlatformResource(const char* name);
   static bool SupportsType(const String&);
 
   virtual bool IsSVGImage() const { return false; }
@@ -136,13 +136,12 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
   virtual void DestroyDecodedData() = 0;
 
-  virtual PassRefPtr<SharedBuffer> Data() { return encoded_image_data_; }
+  virtual RefPtr<SharedBuffer> Data() { return encoded_image_data_; }
 
   // Animation begins whenever someone draws the image, so startAnimation() is
   // not normally called. It will automatically pause once all observers no
   // longer want to render the image anywhere.
-  enum CatchUpAnimation { kDoNotCatchUp, kCatchUp };
-  virtual void StartAnimation(CatchUpAnimation = kCatchUp) {}
+  virtual void StartAnimation() {}
   virtual void ResetAnimation() {}
 
   // True if this image can potentially animate.
@@ -173,7 +172,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
   enum TileRule { kStretchTile, kRoundTile, kSpaceTile, kRepeatTile };
 
-  virtual PassRefPtr<Image> ImageForDefaultFrame();
+  virtual RefPtr<Image> ImageForDefaultFrame();
 
   virtual PaintImage PaintImageForCurrentFrame() = 0;
 
@@ -226,6 +225,17 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     return nullptr;
   }
 
+  HighContrastClassification GetHighContrastClassification() {
+    return high_contrast_classification_;
+  }
+
+  // High contrast classification result is cached to be consistent and have
+  // higher performance for future paints.
+  void SetHighContrastClassification(
+      const HighContrastClassification high_contrast_classification) {
+    high_contrast_classification_ = high_contrast_classification;
+  }
+
  protected:
   Image(ImageObserver* = 0, bool is_multipart = false);
 
@@ -267,6 +277,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   WeakPersistent<ImageObserver> image_observer_;
   PaintImage::Id stable_image_id_;
   const bool is_multipart_;
+  HighContrastClassification high_contrast_classification_;
 };
 
 #define DEFINE_IMAGE_TYPE_CASTS(typeName)                          \

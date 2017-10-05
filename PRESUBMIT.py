@@ -10,13 +10,13 @@ for more details about the presubmit API built into depot_tools.
 
 
 _EXCLUDED_PATHS = (
-    r"^breakpad[\\\/].*",
     r"^native_client_sdk[\\\/]src[\\\/]build_tools[\\\/]make_rules.py",
     r"^native_client_sdk[\\\/]src[\\\/]build_tools[\\\/]make_simple.py",
     r"^native_client_sdk[\\\/]src[\\\/]tools[\\\/].*.mk",
     r"^net[\\\/]tools[\\\/]spdyshark[\\\/].*",
     r"^skia[\\\/].*",
     r"^third_party[\\\/](WebKit|blink)[\\\/].*",
+    r"^third_party[\\\/]breakpad[\\\/].*",
     r"^v8[\\\/].*",
     r".*MakeFile$",
     r".+_autogen\.h$",
@@ -64,6 +64,25 @@ _INCLUDE_ORDER_WARNING = (
     'collation (LC_COLLATE=C) and check\nhttps://google.github.io/styleguide/'
     'cppguide.html#Names_and_Order_of_Includes')
 
+
+_BANNED_JAVA_FUNCTIONS = (
+    (
+      'StrictMode.allowThreadDiskReads()',
+      (
+       'Prefer using StrictModeContext.allowDiskReads() to using StrictMode '
+       'directly.',
+      ),
+      False,
+    ),
+    (
+      'StrictMode.allowThreadDiskWrites()',
+      (
+       'Prefer using StrictModeContext.allowDiskWrites() to using StrictMode '
+       'directly.',
+      ),
+      False,
+    ),
+)
 
 _BANNED_OBJC_FUNCTIONS = (
     (
@@ -147,6 +166,15 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
+    (
+      r'__unsafe_unretained',
+      (
+        'The use of __unsafe_unretained is almost certainly wrong, unless',
+        'when interacting with NSFastEnumeration or NSInvocation.',
+        'Please use __weak in files build with ARC, nothing otherwise.',
+      ),
+      False,
+    ),
 )
 
 
@@ -196,52 +224,6 @@ _BANNED_CPP_FUNCTIONS = (
         r"^gpu[\\\/]ipc[\\\/]service[\\\/]gpu_watchdog_thread\.cc$",
         r"^remoting[\\\/]host[\\\/]linux[\\\/]x_server_clipboard\.cc$",
         r"^ui[\\\/]gfx[\\\/]x[\\\/]x11_atom_cache\.cc$",
-      ),
-    ),
-    (
-      'ScopedAllowIO',
-      (
-       'New production code should not use ScopedAllowIO (using it in',
-       'tests is fine). Post a task to a MayBlock task runner instead.',
-      ),
-      True,
-      (
-        r"^.*(browser|unit)(|_)test[a-z_]*\.cc$",
-        r"^base[\\\/]memory[\\\/]shared_memory_posix\.cc$",
-        r"^base[\\\/]process[\\\/]internal_aix\.cc$",
-        r"^base[\\\/]process[\\\/]process_linux\.cc$",
-        r"^base[\\\/]process[\\\/]process_metrics_linux\.cc$",
-        r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]boot_times_recorder\.cc$",
-        r"^chrome[\\\/]browser[\\\/]extensions[\\\/]" +
-            r"chrome_test_extension_loader.cc$",
-        r"^chrome[\\\/]browser[\\\/]lifetime[\\\/]application_lifetime\.cc$",
-        r"^components[\\\/]crash[\\\/]app[\\\/]breakpad_mac\.mm$",
-        r"^content[\\\/]shell[\\\/]browser[\\\/]layout_test[\\\/]" +
-            r"test_info_extractor\.cc$",
-        r"^content[\\\/]shell[\\\/]browser[\\\/]shell_browser_main\.cc$",
-        r"^content[\\\/]shell[\\\/]browser[\\\/]shell_message_filter\.cc$",
-        r"^content[\\\/]test[\\\/]ppapi[\\\/]ppapi_test\.cc$",
-        r"^media[\\\/]cast[\\\/]test[\\\/]utility[\\\/]" +
-            r"standalone_cast_environment\.cc$",
-        r"^mojo[\\\/]edk[\\\/]embedder[\\\/]" +
-            r"simple_platform_shared_buffer_posix\.cc$",
-        r"^net[\\\/]disk_cache[\\\/]cache_util\.cc$",
-        r"^net[\\\/]cert[\\\/]test_root_certs\.cc$",
-        r"^net[\\\/]test[\\\/]embedded_test_server[\\\/]" +
-            r"embedded_test_server\.cc$",
-        r"^net[\\\/]test[\\\/]spawned_test_server[\\\/]local_test_server\.cc$",
-        r"^net[\\\/]test[\\\/]spawned_test_server[\\\/]" +
-            r"remote_test_server_config\.cc$",
-        r"^net[\\\/]test[\\\/]test_data_directory\.cc$",
-        r"^net[\\\/]url_request[\\\/]test_url_fetcher_factory\.cc$",
-        r"^remoting[\\\/]protocol[\\\/]webrtc_transport\.cc$",
-        r"^ui[\\\/]base[\\\/]material_design[\\\/]"
-            "material_design_controller\.cc$",
-        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_mac\.cc$",
-        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_win\.cc$",
-        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_x11\.cc$",
-        r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
-            "drm_display_host_manager\.cc$",
       ),
     ),
     (
@@ -329,16 +311,6 @@ _BANNED_CPP_FUNCTIONS = (
       '#pragma comment(lib,',
       (
         'Specify libraries to link with in build files and not in the source.',
-      ),
-      True,
-      (),
-    ),
-    (
-      r'/(WebThread|BrowserThread)::GetBlockingPool',
-      (
-        'Use base/task_scheduler/post_task.h instead of the blocking pool. See',
-        'mapping between both APIs in content/public/browser/browser_thread.h.',
-        'For questions, contact base/task_scheduler/OWNERS.',
       ),
       True,
       (),
@@ -444,7 +416,16 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       True,
       (),
-    )
+    ),
+    (
+      (r'/base::ThreadRestrictions::(ScopedAllowIO|AssertIOAllowed|'
+       r'DisallowWaiting|AssertWaitAllowed|SetWaitAllowed|ScopedAllowWait)'),
+      (
+        'Use the new API in base/threading/thread_restrictions.h.',
+      ),
+      True,
+      (),
+    ),
 )
 
 
@@ -764,6 +745,12 @@ def _CheckNoBannedFunctions(input_api, output_api):
       problems.append('    %s:%d:' % (affected_file.LocalPath(), line_num))
       for message_line in message:
         problems.append('      %s' % message_line)
+
+  file_filter = lambda f: f.LocalPath().endswith(('.java'))
+  for f in input_api.AffectedFiles(file_filter=file_filter):
+    for line_num, line in f.ChangedContents():
+      for func_name, message, error in _BANNED_JAVA_FUNCTIONS:
+        CheckForMatch(f, line_num, line, func_name, message, error)
 
   file_filter = lambda f: f.LocalPath().endswith(('.mm', '.m', '.h'))
   for f in input_api.AffectedFiles(file_filter=file_filter):
@@ -1911,6 +1898,41 @@ def _CheckAndroidNewMdpiAssetLocation(input_api, output_api):
   return results
 
 
+def _CheckAndroidWebkitImports(input_api, output_api):
+  """Checks that code uses org.chromium.base.Callback instead of
+     android.widget.ValueCallback except in the WebView glue layer.
+  """
+  valuecallback_import_pattern = input_api.re.compile(
+      r'^import android\.webkit\.ValueCallback;$')
+
+  errors = []
+
+  sources = lambda affected_file: input_api.FilterSourceFile(
+      affected_file,
+      black_list=(_EXCLUDED_PATHS +
+                  _TEST_CODE_EXCLUDED_PATHS +
+                  input_api.DEFAULT_BLACK_LIST +
+                  (r'^android_webview[\\\/]glue[\\\/].*',)),
+      white_list=(r'.*\.java$',))
+
+  for f in input_api.AffectedSourceFiles(sources):
+    for line_num, line in f.ChangedContents():
+      if valuecallback_import_pattern.search(line):
+        errors.append("%s:%d" % (f.LocalPath(), line_num))
+
+  results = []
+
+  if errors:
+    results.append(output_api.PresubmitError(
+        'android.webkit.ValueCallback usage is detected outside of the glue'
+        ' layer. To stay compatible with the support library, android.webkit.*'
+        ' classes should only be used inside the glue layer and'
+        ' org.chromium.base.Callback should be used instead.',
+        errors))
+
+  return results
+
+
 class PydepsChecker(object):
   def __init__(self, input_api, pydeps_files):
     self._file_cache = {}
@@ -2361,6 +2383,7 @@ def _AndroidSpecificOnUploadChecks(input_api, output_api):
   results.extend(_CheckAndroidTestJUnitInheritance(input_api, output_api))
   results.extend(_CheckAndroidTestJUnitFrameworkImport(input_api, output_api))
   results.extend(_CheckAndroidTestAnnotationUsage(input_api, output_api))
+  results.extend(_CheckAndroidWebkitImports(input_api, output_api))
   return results
 
 

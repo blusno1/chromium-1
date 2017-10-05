@@ -183,6 +183,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   void SetIsRootForIsolatedGroup(bool);
 
   void SetShouldHitTest(bool);
+  bool GetShouldHitTestForTesting() { return should_hit_test_; }
 
   void SetFilters(CompositorFilterOperations);
   void SetBackdropFilters(CompositorFilterOperations);
@@ -260,7 +261,8 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
       cc::Layer*) override;
   void didUpdateMainThreadScrollingReasons() override;
-  void didChangeScrollbarsHidden(bool);
+  void didChangeScrollbarsHidden(bool) override;
+  void DidChangeLayerOpacity(float, float) override {}
 
   PaintController& GetPaintController() const;
 
@@ -269,8 +271,6 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
 
   void SetElementId(const CompositorElementId&);
   CompositorElementId GetElementId() const;
-
-  void SetCompositorMutableProperties(uint32_t);
 
   WebContentLayerClient& WebContentLayerClientForTesting() { return *this; }
 
@@ -283,12 +283,14 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   void SetScrollBoundaryBehavior(const WebScrollBoundaryBehavior&);
   void SetIsResizedByBrowserControls(bool);
 
+  void SetLayerState(PropertyTreeState&&, const IntPoint& layer_offset);
+
  protected:
   String DebugName(cc::Layer*) const;
   bool ShouldFlattenTransform() const { return should_flatten_transform_; }
 
   explicit GraphicsLayer(GraphicsLayerClient*);
-  // for testing
+
   friend class CompositedLayerMappingTest;
   friend class PaintControllerPaintTestBase;
 
@@ -403,6 +405,12 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   mutable std::unique_ptr<PaintController> paint_controller_;
 
   IntRect previous_interest_rect_;
+
+  struct LayerState {
+    PropertyTreeState state;
+    IntPoint offset;
+  };
+  std::unique_ptr<LayerState> layer_state_;
 };
 
 // ObjectPaintInvalidatorWithContext::InvalidatePaintRectangleWithContext uses

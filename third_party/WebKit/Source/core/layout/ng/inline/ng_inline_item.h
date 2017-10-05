@@ -59,7 +59,7 @@ class CORE_EXPORT NGInlineItem {
   NGInlineItemType Type() const { return static_cast<NGInlineItemType>(type_); }
   const char* NGInlineItemTypeToString(int val) const;
 
-  const ShapeResult* TextShapeResult() const { return shape_result_.Get(); }
+  const ShapeResult* TextShapeResult() const { return shape_result_.get(); }
   NGLayoutInlineShapeOptions ShapeOptions() const {
     return static_cast<NGLayoutInlineShapeOptions>(shape_options_);
   }
@@ -70,7 +70,7 @@ class CORE_EXPORT NGInlineItem {
   TextDirection Direction() const { return DirectionFromLevel(BidiLevel()); }
   UBiDiLevel BidiLevel() const { return static_cast<UBiDiLevel>(bidi_level_); }
   UScriptCode GetScript() const { return script_; }
-  const ComputedStyle* Style() const { return style_.Get(); }
+  const ComputedStyle* Style() const { return style_.get(); }
   LayoutObject* GetLayoutObject() const { return layout_object_; }
 
   void SetOffset(unsigned start, unsigned end);
@@ -104,11 +104,6 @@ class CORE_EXPORT NGInlineItem {
   unsigned type_ : 3;
   unsigned bidi_level_ : 8;  // UBiDiLevel is defined as uint8_t.
   unsigned shape_options_ : 2;
-  unsigned rotate_sideways_ : 1;
-
-  // TODO(layout-ng): Do we need fallback_priority_ here? If so we should pack
-  // it with the bit field above.
-  FontFallbackPriority fallback_priority_;
 
   friend class NGInlineNode;
 };

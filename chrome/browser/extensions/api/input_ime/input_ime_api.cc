@@ -27,6 +27,12 @@ using input_method::InputMethodEngineBase;
 namespace {
 const char kErrorEngineNotAvailable[] = "Engine is not available";
 const char kErrorSetKeyEventsFail[] = "Could not send key events";
+
+bool IsKeyboardRestricted() {
+  const keyboard::KeyboardConfig config = keyboard::GetKeyboardConfig();
+  return !(config.spell_check && config.auto_complete && config.auto_correct &&
+           config.voice_input && config.handwriting);
+}
 }
 namespace ui {
 
@@ -34,8 +40,11 @@ ImeObserver::ImeObserver(const std::string& extension_id, Profile* profile)
     : extension_id_(extension_id), profile_(profile) {}
 
 void ImeObserver::OnActivate(const std::string& component_id) {
-  if (extension_id_.empty() || !HasListener(input_ime::OnActivate::kEventName))
+  if (extension_id_.empty() ||
+      !HasListener(input_ime::OnActivate::kEventName)) {
+    LOG(ERROR) << "Can't send onActivate event to \"" << extension_id_ << "\"";
     return;
+  }
 
   std::unique_ptr<base::ListValue> args(input_ime::OnActivate::Create(
       component_id, input_ime::ParseScreenType(GetCurrentScreenType())));
@@ -199,7 +208,9 @@ std::string ImeObserver::ConvertInputContextType(
   // This is a hack, but tricking the virtual keyboard to think the
   // current input context is password will disable all keyboard features
   // that are not supported in restricted keyboard mode.
-  if (keyboard::GetKeyboardRestricted() &&
+  // TODO(oka): Remove this hack once VK extension starts to honor the
+  // virtualKeyboardPrivate.GetKeyboardConfig parameters.
+  if (IsKeyboardRestricted() &&
       input_context.type != ui::TEXT_INPUT_TYPE_TELEPHONE &&
       input_context.type != ui::TEXT_INPUT_TYPE_NUMBER) {
     return "password";
@@ -234,19 +245,19 @@ std::string ImeObserver::ConvertInputContextType(
 
 bool ImeObserver::ConvertInputContextAutoCorrect(
     ui::IMEEngineHandlerInterface::InputContext input_context) {
-  return !keyboard::GetKeyboardRestricted() &&
+  return keyboard::GetKeyboardConfig().auto_correct &&
          !(input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF);
 }
 
 bool ImeObserver::ConvertInputContextAutoComplete(
     ui::IMEEngineHandlerInterface::InputContext input_context) {
-  return !keyboard::GetKeyboardRestricted() &&
+  return keyboard::GetKeyboardConfig().auto_complete &&
          !(input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCOMPLETE_OFF);
 }
 
 bool ImeObserver::ConvertInputContextSpellCheck(
     ui::IMEEngineHandlerInterface::InputContext input_context) {
-  return !keyboard::GetKeyboardRestricted() &&
+  return keyboard::GetKeyboardConfig().spell_check &&
          !(input_context.flags & ui::TEXT_INPUT_FLAG_SPELLCHECK_OFF);
 }
 

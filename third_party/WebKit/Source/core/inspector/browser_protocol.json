@@ -697,7 +697,7 @@
                 "parameters": [
                     { "name": "frameId", "$ref": "FrameId", "description": "Id of the frame that has scheduled a navigation." },
                     { "name": "delay", "type": "number", "description": "Delay (in seconds) until the navigation is scheduled to begin. The navigation is not guaranteed to start." },
-                    { "name": "reason", "type": "string", "experimental": true, "enum": ["formSubmission", "httpHeaderRefresh", "scriptInitiated", "metaTagRefresh", "pageBlockInterstitial", "reload"], "description": "The reason for the navigation." },
+                    { "name": "reason", "type": "string", "experimental": true, "enum": ["formSubmissionGet", "formSubmissionPost", "httpHeaderRefresh", "scriptInitiated", "metaTagRefresh", "pageBlockInterstitial", "reload"], "description": "The reason for the navigation." },
                     { "name": "url", "type": "string", "experimental": true, "description": "The destination URL for the scheduled navigation." }
                 ],
                 "experimental": true
@@ -1082,6 +1082,14 @@
                 "experimental": true
             },
             {
+                "name": "setNavigatorOverrides",
+                "description": "Overrides value returned by the javascript navigator object.",
+                "parameters": [
+                    { "name": "platform", "type": "string", "description": "The platform navigator.platform should return." }
+                ],
+                "experimental": true
+            },
+            {
                 "name": "setDefaultBackgroundColorOverride",
                 "description": "Sets or clears an override of the default background color of the frame. This override is used if the content does not specify one.",
                 "parameters": [
@@ -1376,7 +1384,7 @@
                 "description": "HTTP response data.",
                 "properties": [
                     { "name": "url", "type": "string", "description": "Response URL. This URL can be different from CachedResource.url in case of redirect." },
-                    { "name": "status", "type": "number", "description": "HTTP response status code." },
+                    { "name": "status", "type": "integer", "description": "HTTP response status code." },
                     { "name": "statusText", "type": "string", "description": "HTTP response status text." },
                     { "name": "headers", "$ref": "Headers", "description": "HTTP response headers." },
                     { "name": "headersText", "type": "string", "optional": true, "description": "HTTP response headers text." },
@@ -1411,7 +1419,7 @@
                 "description": "WebSocket response data.",
                 "experimental": true,
                 "properties": [
-                    { "name": "status", "type": "number", "description": "HTTP response status code." },
+                    { "name": "status", "type": "integer", "description": "HTTP response status code." },
                     { "name": "statusText", "type": "string", "description": "HTTP response status text." },
                     { "name": "headers", "$ref": "Headers", "description": "HTTP response headers." },
                     { "name": "headersText", "type": "string", "optional": true, "description": "HTTP response headers text." },
@@ -2724,7 +2732,7 @@
                 "returns": [
                     { "name": "nodeIds", "type": "array", "items": { "$ref": "NodeId" }, "description": "Ids of the search result nodes." }
                 ],
-                "description": "Returns search results from given <code>fromIndex</code> to given <code>toIndex</code> from the sarch with the given identifier.",
+                "description": "Returns search results from given <code>fromIndex</code> to given <code>toIndex</code> from the search with the given identifier.",
                 "experimental": true
             },
             {
@@ -4078,6 +4086,9 @@
                 ]
             },
             {
+                "name": "stopAllWorkers"
+            },
+            {
                 "name": "inspectWorker",
                 "parameters": [
                     { "name": "versionId", "type": "string" }
@@ -4573,8 +4584,8 @@
                     { "name": "playbackRate", "type": "number", "description": "<code>Animation</code>'s playback rate." },
                     { "name": "startTime", "type": "number", "description": "<code>Animation</code>'s start time." },
                     { "name": "currentTime", "type": "number", "description": "<code>Animation</code>'s current time." },
-                    { "name": "source", "$ref": "AnimationEffect", "description": "<code>Animation</code>'s source animation node." },
                     { "name": "type", "type": "string", "enum": ["CSSTransition", "CSSAnimation", "WebAnimation"], "description": "Animation type of <code>Animation</code>." },
+                    { "name": "source", "$ref": "AnimationEffect", "optional": true, "description": "<code>Animation</code>'s source animation node." },
                     { "name": "cssId", "type": "string", "optional": true, "description": "A unique ID for <code>Animation</code> representing the sources that triggered this CSS animation/transition."}
                 ],
                 "description": "Animation instance."
@@ -4591,7 +4602,7 @@
                     { "name": "duration", "type": "number", "description": "<code>AnimationEffect</code>'s iteration duration." },
                     { "name": "direction", "type": "string", "description": "<code>AnimationEffect</code>'s playback direction." },
                     { "name": "fill", "type": "string", "description": "<code>AnimationEffect</code>'s fill mode." },
-                    { "name": "backendNodeId", "$ref": "DOM.BackendNodeId", "description": "<code>AnimationEffect</code>'s target node." },
+                    { "name": "backendNodeId", "$ref": "DOM.BackendNodeId", "optional": true, "description": "<code>AnimationEffect</code>'s target node." },
                     { "name": "keyframesRule", "$ref": "KeyframesRule", "optional": true, "description": "<code>AnimationEffect</code>'s keyframes." },
                     { "name": "easing", "type": "string", "description": "<code>AnimationEffect</code>'s timing function." }
                 ],
@@ -4916,6 +4927,20 @@
                     { "name": "origin", "type": "string", "description": "Security origin." }
                 ],
                 "description": "Unregisters origin from receiving notifications for cache storage."
+            },
+            {
+                "name": "trackIndexedDBForOrigin",
+                "parameters": [
+                    { "name": "origin", "type": "string", "description": "Security origin." }
+                ],
+                "description": "Registers origin to be notified when an update occurs to its IndexedDB."
+            },
+            {
+                "name": "untrackIndexedDBForOrigin",
+                "parameters": [
+                    { "name": "origin", "type": "string", "description": "Security origin." }
+                ],
+                "description": "Unregisters origin from receiving notifications for IndexedDB."
             }
         ],
         "events": [
@@ -4933,6 +4958,22 @@
                     { "name": "cacheName", "type": "string", "description": "Name of cache in origin." }
                 ],
                 "description": "A cache's contents have been modified."
+            },
+            {
+                "name": "indexedDBListUpdated",
+                "parameters": [
+                    { "name": "origin", "type": "string", "description": "Origin to update." }
+                ],
+                "description": "The origin's IndexedDB database list has been modified."
+            },
+            {
+                "name": "indexedDBContentUpdated",
+                "parameters": [
+                    { "name": "origin", "type": "string", "description": "Origin to update." },
+                    { "name": "databaseName", "type": "string", "description": "Database to update." },
+                    { "name": "objectStoreName", "type": "string", "description": "ObjectStore to update." }
+                ],
+                "description": "The origin's IndexedDB object store has been modified."
             }
         ]
     },
@@ -4947,7 +4988,7 @@
                 "type": "object",
                 "description": "Log entry.",
                 "properties": [
-                    { "name": "source", "type": "string", "enum": ["xml", "javascript", "network", "storage", "appcache", "rendering", "security", "deprecation", "worker", "violation", "intervention", "other"], "description": "Log entry source." },
+                    { "name": "source", "type": "string", "enum": ["xml", "javascript", "network", "storage", "appcache", "rendering", "security", "deprecation", "worker", "violation", "intervention", "recommendation", "other"], "description": "Log entry source." },
                     { "name": "level", "type": "string", "enum": ["verbose", "info", "warning", "error"], "description": "Log entry severity." },
                     { "name": "text", "type": "string", "description": "Logged text." },
                     { "name": "timestamp", "$ref": "Runtime.Timestamp", "description": "Timestamp when this entry was added." },
@@ -4955,7 +4996,8 @@
                     { "name": "lineNumber", "type": "integer", "optional": true, "description": "Line number in the resource." },
                     { "name": "stackTrace", "$ref": "Runtime.StackTrace", "optional": true, "description": "JavaScript stack trace." },
                     { "name": "networkRequestId", "$ref": "Network.RequestId", "optional": true, "description": "Identifier of the network request associated with this entry." },
-                    { "name": "workerId", "type": "string", "optional": true, "description": "Identifier of the worker associated with this entry." }
+                    { "name": "workerId", "type": "string", "optional": true, "description": "Identifier of the worker associated with this entry." },
+                    { "name": "args", "type": "array", "items": { "$ref": "Runtime.RemoteObject" }, "optional": true, "description": "Call arguments." }
                 ]
             },
             {

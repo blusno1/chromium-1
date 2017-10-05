@@ -117,12 +117,12 @@ class PLATFORM_EXPORT ImageDecoder {
   // failure is due to insufficient or bad data.
   static bool HasSufficientDataToSniffImageType(const SharedBuffer&);
 
-  void SetData(PassRefPtr<SegmentReader> data, bool all_data_received) {
+  void SetData(RefPtr<SegmentReader> data, bool all_data_received) {
     if (failed_)
       return;
     data_ = std::move(data);
     is_all_data_received_ = all_data_received;
-    OnSetData(data_.Get());
+    OnSetData(data_.get());
   }
 
   void SetData(RefPtr<SharedBuffer> data, bool all_data_received) {

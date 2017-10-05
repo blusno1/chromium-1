@@ -8,10 +8,11 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/layer_tree_frame_sink.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
 #include "components/exo/surface.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -77,13 +78,17 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 
 SurfaceTreeHost::SurfaceTreeHost(const std::string& window_name,
                                  aura::WindowDelegate* window_delegate) {
-  host_window_ = base::MakeUnique<aura::Window>(window_delegate);
+  host_window_ = std::make_unique<aura::Window>(window_delegate);
   host_window_->SetType(aura::client::WINDOW_TYPE_CONTROL);
   host_window_->SetName(window_name);
   host_window_->Init(ui::LAYER_SOLID_COLOR);
   host_window_->set_owned_by_parent(false);
-  host_window_->SetEventTargeter(base::MakeUnique<CustomWindowTargeter>(this));
-  layer_tree_frame_sink_holder_ = base::MakeUnique<LayerTreeFrameSinkHolder>(
+  // The host window is a container of surface tree. It doesn't handle pointer
+  // events.
+  host_window_->SetEventTargetingPolicy(
+      ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+  host_window_->SetEventTargeter(std::make_unique<CustomWindowTargeter>(this));
+  layer_tree_frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
       this, host_window_->CreateLayerTreeFrameSink());
   aura::Env::GetInstance()->context_factory()->AddObserver(this);
 }
@@ -138,8 +143,6 @@ void SurfaceTreeHost::SetRootSurface(Surface* root_surface) {
     root_surface_ = root_surface;
     root_surface_->SetSurfaceDelegate(this);
     host_window_->AddChild(root_surface_->window());
-    host_window_->SetBounds(gfx::Rect(host_window_->bounds().origin(),
-                                      root_surface_->content_size()));
     root_surface_->window()->Show();
   }
 }
@@ -197,14 +200,14 @@ void SurfaceTreeHost::UpdateNeedsBeginFrame() {
 // SurfaceDelegate overrides:
 
 void SurfaceTreeHost::OnSurfaceCommit() {
-  root_surface_->CommitSurfaceHierarchy(gfx::Point(), &frame_callbacks_,
-                                        &presentation_callbacks_);
-  SubmitCompositorFrame();
-}
+  gfx::Rect bounds = root_surface_->CommitSurfaceHierarchy(
+      &frame_callbacks_, &presentation_callbacks_);
 
-void SurfaceTreeHost::OnSurfaceContentSizeChanged() {
-  host_window_->SetBounds(gfx::Rect(host_window_->bounds().origin(),
-                                    root_surface_->content_size()));
+  host_window_->SetBounds(
+      gfx::Rect(host_window_->bounds().origin(), bounds.size()));
+  host_window_->layer()->SetFillsBoundsOpaquely(
+      bounds.size() == root_surface_->content_size() &&
+      root_surface_->FillsBoundsOpaquely());
 }
 
 bool SurfaceTreeHost::IsSurfaceSynchronized() const {
@@ -238,6 +241,19 @@ void SurfaceTreeHost::OnWindowDestroying(aura::Window* window) {
 bool SurfaceTreeHost::OnBeginFrameDerivedImpl(const viz::BeginFrameArgs& args) {
   current_begin_frame_ack_ =
       viz::BeginFrameAck(args.source_id, args.sequence_number, false);
+
+  if (!frame_callbacks_.empty()) {
+    // In this case, the begin frame arrives just before
+    // |DidReceivedCompositorFrameAck()|, we need more begin frames to run
+    // |frame_callbacks_| which will be moved to |active_frame_callbacks_| by
+    // |DidReceivedCompositorFrameAck()| shortly.
+    layer_tree_frame_sink_holder_->frame_sink()->DidNotProduceFrame(
+        current_begin_frame_ack_);
+    current_begin_frame_ack_.sequence_number =
+        viz::BeginFrameArgs::kInvalidFrameNumber;
+    begin_frame_source_->DidFinishFrame(this);
+  }
+
   while (!active_frame_callbacks_.empty()) {
     active_frame_callbacks_.front().Run(args.frame_time);
     active_frame_callbacks_.pop_front();
@@ -275,9 +291,12 @@ void SurfaceTreeHost::OnLostResources() {
   SubmitCompositorFrame();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// SurfaceTreeHost, protected:
+
 void SurfaceTreeHost::SubmitCompositorFrame() {
   DCHECK(root_surface_);
-  cc::CompositorFrame frame;
+  viz::CompositorFrame frame;
   // If we commit while we don't have an active BeginFrame, we acknowledge a
   // manual one.
   if (current_begin_frame_ack_.sequence_number ==
@@ -287,24 +306,17 @@ void SurfaceTreeHost::SubmitCompositorFrame() {
     current_begin_frame_ack_.has_damage = true;
   }
   frame.metadata.begin_frame_ack = current_begin_frame_ack_;
+  frame.render_pass_list.push_back(viz::RenderPass::Create());
+  const std::unique_ptr<viz::RenderPass>& render_pass =
+      frame.render_pass_list.back();
   const int kRenderPassId = 1;
-  std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
   render_pass->SetNew(kRenderPassId, gfx::Rect(), gfx::Rect(),
                       gfx::Transform());
-  frame.render_pass_list.push_back(std::move(render_pass));
   float device_scale_factor = host_window()->layer()->device_scale_factor();
+  frame.metadata.device_scale_factor = device_scale_factor;
   root_surface_->AppendSurfaceHierarchyContentsToFrame(
       gfx::Point(), device_scale_factor, layer_tree_frame_sink_holder_.get(),
       &frame);
-  // Surface uses DIP, but the |output_rect| uses pixels, so we need
-  // scale it beased on the |device_scale_factor|.
-  frame.render_pass_list.back()->output_rect =
-      gfx::Rect(gfx::ConvertSizeToPixel(device_scale_factor,
-                                        root_surface_->content_size()));
-
-  host_window_->layer()->SetFillsBoundsOpaquely(
-      root_surface_->FillsBoundsOpaquely());
-  frame.metadata.device_scale_factor = device_scale_factor;
   layer_tree_frame_sink_holder_->frame_sink()->SubmitCompositorFrame(
       std::move(frame));
 

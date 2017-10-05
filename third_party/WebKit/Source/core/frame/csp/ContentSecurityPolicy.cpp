@@ -49,7 +49,6 @@
 #include "core/loader/PingLoader.h"
 #include "core/probe/CoreProbes.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/json/JSONValues.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/loader/fetch/ResourceRequest.h"
@@ -57,6 +56,7 @@
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/network/EncodedFormData.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/KnownPorts.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -154,6 +154,7 @@ ContentSecurityPolicy::ContentSecurityPolicy()
       style_hash_algorithms_used_(kContentSecurityPolicyHashAlgorithmNone),
       sandbox_mask_(0),
       treat_as_public_address_(false),
+      require_safe_types_(false),
       insecure_request_policy_(kLeaveInsecureRequestsAlone) {}
 
 void ContentSecurityPolicy::BindToExecutionContext(
@@ -190,6 +191,8 @@ void ContentSecurityPolicy::ApplyPolicySideEffectsToExecutionContext() {
     execution_context_->GetSecurityContext().SetAddressSpace(
         kWebAddressSpacePublic);
   }
+  if (require_safe_types_)
+    execution_context_->GetSecurityContext().SetRequireTrustedTypes();
 
   if (document) {
     document->EnforceInsecureRequestPolicy(insecure_request_policy_);
@@ -291,7 +294,7 @@ bool ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
     return true;
   }
 
-  if (parent_origin->CanAccess(SecurityOrigin::Create(response.Url()).Get()))
+  if (parent_origin->CanAccess(SecurityOrigin::Create(response.Url()).get()))
     return true;
 
   String header = response.HttpHeaderField(HTTPNames::Allow_CSP_From);
@@ -300,7 +303,7 @@ bool ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
     return true;
   if (RefPtr<SecurityOrigin> child_origin =
           SecurityOrigin::CreateFromString(header)) {
-    return parent_origin->CanAccess(child_origin.Get());
+    return parent_origin->CanAccess(child_origin.get());
   }
 
   return false;
@@ -1065,6 +1068,12 @@ void ContentSecurityPolicy::TreatAsPublicAddress() {
   treat_as_public_address_ = true;
 }
 
+void ContentSecurityPolicy::RequireTrustedTypes() {
+  if (!RuntimeEnabledFeatures::TrustedDOMTypesEnabled())
+    return;
+  require_safe_types_ = true;
+}
+
 void ContentSecurityPolicy::EnforceStrictMixedContentChecking() {
   insecure_request_policy_ |= kBlockAllMixedContent;
 }
@@ -1640,6 +1649,8 @@ const char* ContentSecurityPolicy::GetDirectiveName(const DirectiveType& type) {
       return "report-uri";
     case DirectiveType::kRequireSRIFor:
       return "require-sri-for";
+    case DirectiveType::kRequireTrustedTypes:
+      return "require-trusted-types";
     case DirectiveType::kSandbox:
       return "sandbox";
     case DirectiveType::kScriptSrc:
@@ -1697,6 +1708,8 @@ ContentSecurityPolicy::DirectiveType ContentSecurityPolicy::GetDirectiveType(
     return DirectiveType::kReportURI;
   if (name == "require-sri-for")
     return DirectiveType::kRequireSRIFor;
+  if (name == "require-trusted-types")
+    return DirectiveType::kRequireTrustedTypes;
   if (name == "sandbox")
     return DirectiveType::kSandbox;
   if (name == "script-src")

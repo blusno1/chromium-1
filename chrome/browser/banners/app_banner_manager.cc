@@ -56,57 +56,6 @@ void AppBannerManager::SetTotalEngagementToTrigger(double engagement) {
   AppBannerSettingsHelper::SetTotalEngagementToTrigger(engagement);
 }
 
-}  // namespace banners
-
-namespace {
-
-// Returns a string parameter for a devtools console message corresponding to
-// |code|. Returns the empty string if |code| requires no parameter.
-std::string GetStatusParam(InstallableStatusCode code) {
-  if (code == NO_ACCEPTABLE_ICON || code == MANIFEST_MISSING_SUITABLE_ICON) {
-    return base::IntToString(InstallableManager::GetMinimumIconSizeInPx());
-  }
-
-  return std::string();
-}
-
-// Logs installable status codes to the console.
-class ConsoleStatusReporter : public banners::AppBannerManager::StatusReporter {
- public:
-  bool Waiting() const override { return false; }
-
-  // Logs an error message corresponding to |code| to the devtools console
-  // attached to |web_contents|.
-  void ReportStatus(content::WebContents* web_contents,
-                    InstallableStatusCode code) override {
-    LogErrorToConsole(web_contents, code, GetStatusParam(code));
-  }
-};
-
-// Tracks installable status codes via a UMA histogram.
-class TrackingStatusReporter
-    : public banners::AppBannerManager::StatusReporter {
- public:
-  TrackingStatusReporter() : done_(false) {}
-  bool Waiting() const override { return !done_; }
-
-  // Records code via a UMA histogram.
-  void ReportStatus(content::WebContents* web_contents,
-                    InstallableStatusCode code) override {
-    // Ensure that we haven't yet logged a status code for this page.
-    DCHECK(!done_);
-    banners::TrackInstallableStatusCode(code);
-    done_ = true;
-  }
-
- private:
-  bool done_;
-};
-
-}  // anonymous namespace
-
-namespace banners {
-
 void AppBannerManager::RequestAppBanner(const GURL& validated_url,
                                         bool is_debug_mode) {
   content::WebContents* contents = web_contents();
@@ -121,12 +70,10 @@ void AppBannerManager::RequestAppBanner(const GURL& validated_url,
   UpdateState(State::ACTIVE);
   triggered_by_devtools_ = is_debug_mode;
 
-  // We only need to use TrackingStatusReporter if we aren't in debug mode
-  // (this avoids skew from testing).
-  status_reporter_.reset(
-      IsDebugMode()
-          ? static_cast<StatusReporter*>(new ConsoleStatusReporter())
-          : static_cast<StatusReporter*>(new TrackingStatusReporter()));
+  // We only need to call ReportStatus if we aren't in debug mode (this avoids
+  // skew from testing).
+  DCHECK(!need_to_log_status_);
+  need_to_log_status_ = !IsDebugMode();
 
   // Exit if this is an incognito window, non-main frame, or insecure context.
   InstallableStatusCode code = NO_ERROR_DETECTED;
@@ -140,8 +87,7 @@ void AppBannerManager::RequestAppBanner(const GURL& validated_url,
   }
 
   if (code != NO_ERROR_DETECTED) {
-    ReportStatus(contents, code);
-    Stop();
+    StopWithCode(code);
     return;
   }
 
@@ -190,6 +136,7 @@ AppBannerManager::AppBannerManager(content::WebContents* web_contents)
       has_sufficient_engagement_(false),
       load_finished_(false),
       triggered_by_devtools_(false),
+      need_to_log_status_(false),
       weak_factory_(this) {
   DCHECK(manager_);
 
@@ -207,12 +154,16 @@ std::string AppBannerManager::GetBannerType() {
   return "web";
 }
 
-int AppBannerManager::GetIdealPrimaryIconSizeInPx() {
-  return InstallableManager::GetMinimumIconSizeInPx();
+std::string AppBannerManager::GetStatusParam(InstallableStatusCode code) {
+  if (code == NO_ACCEPTABLE_ICON || code == MANIFEST_MISSING_SUITABLE_ICON) {
+    return base::IntToString(InstallableManager::GetMinimumIconSizeInPx());
+  }
+
+  return std::string();
 }
 
-int AppBannerManager::GetMinimumPrimaryIconSizeInPx() {
-  return InstallableManager::GetMinimumIconSizeInPx();
+bool AppBannerManager::HasSufficientEngagement() const {
+  return has_sufficient_engagement_ || IsDebugMode();
 }
 
 bool AppBannerManager::IsDebugMode() const {
@@ -231,8 +182,7 @@ bool AppBannerManager::IsWebAppInstalled(
 void AppBannerManager::OnDidGetManifest(const InstallableData& data) {
   UpdateState(State::ACTIVE);
   if (data.error_code != NO_ERROR_DETECTED) {
-    ReportStatus(web_contents(), data.error_code);
-    Stop();
+    StopWithCode(data.error_code);
     return;
   }
 
@@ -247,8 +197,6 @@ void AppBannerManager::OnDidGetManifest(const InstallableData& data) {
 
 InstallableParams AppBannerManager::ParamsToPerformInstallableCheck() {
   InstallableParams params;
-  params.ideal_primary_icon_size_in_px = GetIdealPrimaryIconSizeInPx();
-  params.minimum_primary_icon_size_in_px = GetMinimumPrimaryIconSizeInPx();
   params.check_installable = true;
   params.fetch_valid_primary_icon = true;
 
@@ -279,8 +227,7 @@ void AppBannerManager::OnDidPerformInstallableCheck(
     if (data.error_code == NO_MATCHING_SERVICE_WORKER)
       TrackDisplayEvent(DISPLAY_EVENT_LACKS_SERVICE_WORKER);
 
-    ReportStatus(web_contents(), data.error_code);
-    Stop();
+    StopWithCode(data.error_code);
     return;
   }
 
@@ -293,9 +240,9 @@ void AppBannerManager::OnDidPerformInstallableCheck(
 
   // If we triggered the installability check on page load, then it's possible
   // we don't have enough engagement yet. If that's the case, return here but
-  // don't call Stop(). We wait for OnEngagementIncreased to tell us that we
-  // should trigger.
-  if (!has_sufficient_engagement_) {
+  // don't call Terminate(). We wait for OnEngagementIncreased to tell us that
+  // we should trigger.
+  if (!HasSufficientEngagement()) {
     UpdateState(State::PENDING_ENGAGEMENT);
     return;
   }
@@ -318,8 +265,14 @@ void AppBannerManager::RecordDidShowBanner(const std::string& event_name) {
 
 void AppBannerManager::ReportStatus(content::WebContents* web_contents,
                                     InstallableStatusCode code) {
-  DCHECK(status_reporter_);
-  status_reporter_->ReportStatus(web_contents, code);
+  if (IsDebugMode()) {
+    LogErrorToConsole(web_contents, code, GetStatusParam(code));
+  } else {
+    // Ensure that we haven't yet logged a status code for this page.
+    DCHECK(need_to_log_status_);
+    TrackInstallableStatusCode(code);
+    need_to_log_status_ = false;
+  }
 }
 
 void AppBannerManager::ResetCurrentPageData() {
@@ -330,27 +283,30 @@ void AppBannerManager::ResetCurrentPageData() {
   referrer_.erase();
 }
 
-void AppBannerManager::Stop() {
-  // Record the status if we are currently waiting for data.
-  InstallableStatusCode code = NO_ERROR_DETECTED;
+void AppBannerManager::Terminate() {
+  if (state_ == State::PENDING_PROMPT)
+    TrackBeforeInstallEvent(
+        BEFORE_INSTALL_EVENT_PROMPT_NOT_CALLED_AFTER_PREVENT_DEFAULT);
+
+  if (state_ == State::PENDING_ENGAGEMENT && !has_sufficient_engagement_)
+    TrackDisplayEvent(DISPLAY_EVENT_NOT_VISITED_ENOUGH);
+
+  StopWithCode(TerminationCode());
+}
+
+InstallableStatusCode AppBannerManager::TerminationCode() const {
   switch (state_) {
     case State::PENDING_PROMPT:
-      TrackBeforeInstallEvent(
-          BEFORE_INSTALL_EVENT_PROMPT_NOT_CALLED_AFTER_PREVENT_DEFAULT);
-      code = RENDERER_CANCELLED;
-      break;
+      return RENDERER_CANCELLED;
     case State::PENDING_ENGAGEMENT:
-      if (!has_sufficient_engagement_) {
-        TrackDisplayEvent(DISPLAY_EVENT_NOT_VISITED_ENOUGH);
-        code = INSUFFICIENT_ENGAGEMENT;
-      }
-      break;
+      return has_sufficient_engagement_ ? NO_ERROR_DETECTED
+                                        : INSUFFICIENT_ENGAGEMENT;
     case State::FETCHING_MANIFEST:
-      code = WAITING_FOR_MANIFEST;
-      break;
+      return WAITING_FOR_MANIFEST;
+    case State::FETCHING_NATIVE_DATA:
+      return WAITING_FOR_NATIVE_DATA;
     case State::PENDING_INSTALLABLE_CHECK:
-      code = WAITING_FOR_INSTALLABLE_CHECK;
-      break;
+      return WAITING_FOR_INSTALLABLE_CHECK;
     case State::ACTIVE:
     case State::SENDING_EVENT:
     case State::SENDING_EVENT_GOT_EARLY_PROMPT:
@@ -358,23 +314,22 @@ void AppBannerManager::Stop() {
     case State::COMPLETE:
       break;
   }
+  return NO_ERROR_DETECTED;
+}
 
+void AppBannerManager::StopWithCode(InstallableStatusCode code) {
   if (code != NO_ERROR_DETECTED)
     ReportStatus(web_contents(), code);
 
   // In every non-debug run through the banner pipeline, we should have called
-  // ReportStatus(). The only case where we don't is if we're still running and
-  // aren't blocked on the network. When running and blocked on the network the
-  // state should be logged.
-  // If the pipeline has not been started, status_reporter will be null.
-  // TODO(dominickn): log when the pipeline is fetching native app banner
-  // details.
-  DCHECK(!status_reporter_ || !status_reporter_->Waiting() ||
-         (IsRunning() && !IsWaitingForData()));
+  // ReportStatus() and set need_to_log_status_ to false. The only case where
+  // we don't is if we're still running and aren't blocked on the network. When
+  // running and blocked on the network the state should be logged.
+  DCHECK(!need_to_log_status_ || (IsRunning() && !IsWaitingForData()));
 
   ResetBindings();
   UpdateState(State::COMPLETE);
-  status_reporter_.reset(nullptr);
+  need_to_log_status_ = false;
   has_sufficient_engagement_ = false;
 }
 
@@ -403,7 +358,7 @@ void AppBannerManager::DidStartNavigation(content::NavigationHandle* handle) {
     return;
 
   if (state_ != State::COMPLETE && state_ != State::INACTIVE)
-    Stop();
+    Terminate();
   UpdateState(State::INACTIVE);
   load_finished_ = false;
   has_sufficient_engagement_ = false;
@@ -426,11 +381,9 @@ void AppBannerManager::DidFinishLoad(
   load_finished_ = true;
   validated_url_ = validated_url;
 
-  // If the bypass flag is on, or if we require no engagement to trigger the
-  // banner, the rest of the banner pipeline should operate as if the engagement
-  // threshold has been met.
-  // Additionally, if the page already has enough engagement, trigger the
-  // pipeline immediately.
+  // If we already have enough engagement, or require no engagement to trigger
+  // the banner, the rest of the banner pipeline should operate as if the
+  // engagement threshold has been met.
   if (AppBannerSettingsHelper::HasSufficientEngagement(0) ||
       AppBannerSettingsHelper::HasSufficientEngagement(
           GetSiteEngagementService()->GetScore(validated_url))) {
@@ -460,7 +413,7 @@ void AppBannerManager::MediaStoppedPlaying(const MediaPlayerInfo& media_info,
 }
 
 void AppBannerManager::WebContentsDestroyed() {
-  Stop();
+  Terminate();
 }
 
 void AppBannerManager::OnEngagementIncreased(content::WebContents* contents,
@@ -497,6 +450,7 @@ bool AppBannerManager::IsRunning() const {
       return false;
     case State::ACTIVE:
     case State::FETCHING_MANIFEST:
+    case State::FETCHING_NATIVE_DATA:
     case State::PENDING_INSTALLABLE_CHECK:
     case State::SENDING_EVENT:
     case State::SENDING_EVENT_GOT_EARLY_PROMPT:
@@ -506,8 +460,21 @@ bool AppBannerManager::IsRunning() const {
 }
 
 bool AppBannerManager::IsWaitingForData() const {
-  return (state_ == State::FETCHING_MANIFEST ||
-          state_ == State::PENDING_INSTALLABLE_CHECK);
+  switch (state_) {
+    case State::INACTIVE:
+    case State::ACTIVE:
+    case State::PENDING_ENGAGEMENT:
+    case State::SENDING_EVENT:
+    case State::SENDING_EVENT_GOT_EARLY_PROMPT:
+    case State::PENDING_PROMPT:
+    case State::COMPLETE:
+      return false;
+    case State::FETCHING_MANIFEST:
+    case State::FETCHING_NATIVE_DATA:
+    case State::PENDING_INSTALLABLE_CHECK:
+      return true;
+  }
+  return false;
 }
 
 // static
@@ -564,8 +531,7 @@ bool AppBannerManager::CheckIfShouldShowBanner() {
       default:
         NOTREACHED();
     }
-    ReportStatus(contents, code);
-    Stop();
+    StopWithCode(code);
     return false;
   }
   return true;
@@ -579,9 +545,9 @@ void AppBannerManager::OnBannerPromptReply(
   controller_.reset();
 
   // The renderer might have requested the prompt to be canceled. They may
-  // request that it is redisplayed later, so don't Stop() here. However, log
-  // that the cancelation was requested, so Stop() can be called if a redisplay
-  // isn't asked for.
+  // request that it is redisplayed later, so don't Terminate() here. However,
+  // log that the cancelation was requested, so Terminate() can be called if a
+  // redisplay isn't asked for.
   //
   // If the redisplay request has not been received already, we stop here and
   // wait for the prompt function to be called. If the redisplay request has
@@ -633,12 +599,7 @@ void AppBannerManager::ShowBanner() {
 
 void AppBannerManager::DisplayAppBanner(bool user_gesture) {
   if (IsExperimentalAppBannersEnabled() && !user_gesture) {
-    ReportStatus(web_contents(), NO_GESTURE);
-
-    // The state is manually set to COMPLETE before calling Stop, because
-    // otherwise Stop will complain that the status has already been reported.
-    UpdateState(State::COMPLETE);
-    Stop();
+    StopWithCode(NO_GESTURE);
     return;
   }
 

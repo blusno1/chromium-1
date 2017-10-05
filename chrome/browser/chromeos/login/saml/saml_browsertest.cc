@@ -113,34 +113,34 @@ namespace chromeos {
 
 namespace {
 
-const char kGAIASIDCookieName[] = "SID";
-const char kGAIALSIDCookieName[] = "LSID";
+constexpr char kGAIASIDCookieName[] = "SID";
+constexpr char kGAIALSIDCookieName[] = "LSID";
 
-const char kTestAuthSIDCookie1[] = "fake-auth-SID-cookie-1";
-const char kTestAuthSIDCookie2[] = "fake-auth-SID-cookie-2";
-const char kTestAuthLSIDCookie1[] = "fake-auth-LSID-cookie-1";
-const char kTestAuthLSIDCookie2[] = "fake-auth-LSID-cookie-2";
+constexpr char kTestAuthSIDCookie1[] = "fake-auth-SID-cookie-1";
+constexpr char kTestAuthSIDCookie2[] = "fake-auth-SID-cookie-2";
+constexpr char kTestAuthLSIDCookie1[] = "fake-auth-LSID-cookie-1";
+constexpr char kTestAuthLSIDCookie2[] = "fake-auth-LSID-cookie-2";
 
-const char kFirstSAMLUserEmail[] = "bob@example.com";
-const char kSecondSAMLUserEmail[] = "alice@example.com";
-const char kHTTPSAMLUserEmail[] = "carol@example.com";
-const char kNonSAMLUserEmail[] = "dan@example.com";
-const char kDifferentDomainSAMLUserEmail[] = "eve@example.test";
+constexpr char kFirstSAMLUserEmail[] = "bob@example.com";
+constexpr char kSecondSAMLUserEmail[] = "alice@example.com";
+constexpr char kHTTPSAMLUserEmail[] = "carol@example.com";
+constexpr char kNonSAMLUserEmail[] = "dan@example.com";
+constexpr char kDifferentDomainSAMLUserEmail[] = "eve@example.test";
 
-const char kIdPHost[] = "login.example.com";
-const char kAdditionalIdPHost[] = "login2.example.com";
+constexpr char kIdPHost[] = "login.example.com";
+constexpr char kAdditionalIdPHost[] = "login2.example.com";
 
-const char kSAMLIdPCookieName[] = "saml";
-const char kSAMLIdPCookieValue1[] = "value-1";
-const char kSAMLIdPCookieValue2[] = "value-2";
+constexpr char kSAMLIdPCookieName[] = "saml";
+constexpr char kSAMLIdPCookieValue1[] = "value-1";
+constexpr char kSAMLIdPCookieValue2[] = "value-2";
 
-const char kRelayState[] = "RelayState";
+constexpr char kRelayState[] = "RelayState";
 
-const char kTestUserinfoToken[] = "fake-userinfo-token";
-const char kTestRefreshToken[] = "fake-refresh-token";
-const char kPolicy[] = "{\"managed_users\": [\"*\"]}";
+constexpr char kTestUserinfoToken[] = "fake-userinfo-token";
+constexpr char kTestRefreshToken[] = "fake-refresh-token";
+constexpr char kPolicy[] = "{\"managed_users\": [\"*\"]}";
 
-const char kAffiliationID[] = "some-affiliation-id";
+constexpr char kAffiliationID[] = "some-affiliation-id";
 
 // FakeSamlIdp serves IdP auth form and the form submission. The form is
 // served with the template's RelayState placeholder expanded to the real
@@ -289,7 +289,7 @@ class SecretInterceptingFakeCryptohomeClient : public FakeCryptohomeClient {
   void MountEx(const cryptohome::Identification& id,
                const cryptohome::AuthorizationRequest& auth,
                const cryptohome::MountRequest& request,
-               const ProtobufMethodCallback& callback) override;
+               DBusMethodCallback<cryptohome::BaseReply> callback) override;
 
   const std::string& salted_hashed_secret() { return salted_hashed_secret_; }
 
@@ -307,9 +307,9 @@ void SecretInterceptingFakeCryptohomeClient::MountEx(
     const cryptohome::Identification& id,
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::MountRequest& request,
-    const ProtobufMethodCallback& callback) {
+    DBusMethodCallback<cryptohome::BaseReply> callback) {
   salted_hashed_secret_ = auth.key().secret();
-  FakeCryptohomeClient::MountEx(id, auth, request, callback);
+  FakeCryptohomeClient::MountEx(id, auth, request, std::move(callback));
 }
 
 }  // namespace
@@ -924,7 +924,13 @@ content::WebContents* SAMLEnrollmentTest::GetEnrollmentContents() {
   return content::WebContents::FromRenderFrameHost(frame_host);
 }
 
-IN_PROC_BROWSER_TEST_F(SAMLEnrollmentTest, WithoutCredentialsPassingAPI) {
+// Flaky. See crbug.com/766953.
+#if defined(ADDRESS_SANITIZER) || defined(OS_CHROMEOS)
+#define MAYBE_WithoutCredentialsPassingAPI DISABLED_WithoutCredentialsPassingAPI
+#else
+#define MAYBE_WithoutCredentialsPassingAPI WithoutCredentialsPassingAPI
+#endif
+IN_PROC_BROWSER_TEST_F(SAMLEnrollmentTest, MAYBE_WithoutCredentialsPassingAPI) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
 
@@ -936,7 +942,13 @@ IN_PROC_BROWSER_TEST_F(SAMLEnrollmentTest, WithoutCredentialsPassingAPI) {
   WaitForEnrollmentSuccess();
 }
 
-IN_PROC_BROWSER_TEST_F(SAMLEnrollmentTest, WithCredentialsPassingAPI) {
+// Flaky. See crbug.com/766953.
+#if defined(ADDRESS_SANITIZER) || defined(OS_CHROMEOS)
+#define MAYBE_WithCredentialsPassingAPI DISABLED_WithCredentialsPassingAPI
+#else
+#define MAYBE_WithCredentialsPassingAPI WithCredentialsPassingAPI
+#endif
+IN_PROC_BROWSER_TEST_F(SAMLEnrollmentTest, MAYBE_WithCredentialsPassingAPI) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_api_login.html");
   fake_saml_idp()->SetLoginAuthHTMLTemplate("saml_api_login_auth.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
@@ -1185,6 +1197,8 @@ void SAMLPolicyTest::LogInWithSAML(const std::string& user_id,
 
   fake_gaia_->SetFakeMergeSessionParams(user_id, auth_sid_cookie,
                                         auth_lsid_cookie);
+  SetupFakeGaiaForLogin(user_id, "", kTestRefreshToken);
+
   SetSignFormField("Email", "fake_user");
   SetSignFormField("Password", "fake_password");
 
@@ -1242,6 +1256,10 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_NoSAML) {
   SetSAMLOfflineSigninTimeLimitPolicy(0);
 
   WaitForSigninScreen();
+
+  fake_gaia_->SetFakeMergeSessionParams(kNonSAMLUserEmail, kFakeSIDCookie,
+                                        kFakeLSIDCookie);
+  SetupFakeGaiaForLogin(kNonSAMLUserEmail, "", kTestRefreshToken);
 
   // Log in without SAML.
   GetLoginDisplay()->ShowSigninScreenForCreds(kNonSAMLUserEmail, "password");

@@ -19,6 +19,11 @@
 
 namespace cc {
 namespace {
+SkIRect RoundOutRect(const SkRect& rect) {
+  SkIRect result;
+  rect.roundOut(&result);
+  return result;
+}
 
 bool IsImageShader(const PaintFlags& flags) {
   return flags.HasShader() &&
@@ -70,8 +75,10 @@ class ScopedImageFlags {
     total_image_matrix.preConcat(ctm);
     SkRect src_rect =
         SkRect::MakeIWH(paint_image.width(), paint_image.height());
-    scoped_decoded_draw_image_ = image_provider->GetDecodedDrawImage(
-        paint_image, src_rect, flags.getFilterQuality(), total_image_matrix);
+    DrawImage draw_image(paint_image, RoundOutRect(src_rect),
+                         flags.getFilterQuality(), total_image_matrix);
+    scoped_decoded_draw_image_ =
+        image_provider->GetDecodedDrawImage(draw_image);
 
     if (!scoped_decoded_draw_image_)
       return;
@@ -743,7 +750,11 @@ PaintOp* ConcatOp::Deserialize(const volatile void* input,
                                void* output,
                                size_t output_size) {
   DCHECK_GE(output_size, sizeof(ConcatOp));
-  return SimpleDeserialize<ConcatOp>(input, input_size, output, output_size);
+  auto* op =
+      SimpleDeserialize<ConcatOp>(input, input_size, output, output_size);
+  if (op)
+    PaintOpReader::FixupMatrixPostSerialization(&op->matrix);
+  return op;
 }
 
 PaintOp* DrawColorOp::Deserialize(const volatile void* input,
@@ -1027,7 +1038,11 @@ PaintOp* SetMatrixOp::Deserialize(const volatile void* input,
                                   void* output,
                                   size_t output_size) {
   DCHECK_GE(output_size, sizeof(SetMatrixOp));
-  return SimpleDeserialize<SetMatrixOp>(input, input_size, output, output_size);
+  auto* op =
+      SimpleDeserialize<SetMatrixOp>(input, input_size, output, output_size);
+  if (op)
+    PaintOpReader::FixupMatrixPostSerialization(&op->matrix);
+  return op;
 }
 
 PaintOp* TranslateOp::Deserialize(const volatile void* input,
@@ -1105,11 +1120,12 @@ void DrawImageOp::RasterWithFlags(const DrawImageOp* op,
     return;
   }
 
-  SkRect image_rect = SkRect::MakeIWH(op->image.width(), op->image.height());
-  auto scoped_decoded_draw_image = params.image_provider->GetDecodedDrawImage(
-      op->image, image_rect,
+  DrawImage draw_image(
+      op->image, SkIRect::MakeWH(op->image.width(), op->image.height()),
       flags ? flags->getFilterQuality() : kNone_SkFilterQuality,
       canvas->getTotalMatrix());
+  auto scoped_decoded_draw_image =
+      params.image_provider->GetDecodedDrawImage(draw_image);
   if (!scoped_decoded_draw_image)
     return;
 
@@ -1150,9 +1166,11 @@ void DrawImageRectOp::RasterWithFlags(const DrawImageRectOp* op,
   matrix.setRectToRect(op->src, op->dst, SkMatrix::kFill_ScaleToFit);
   matrix.postConcat(canvas->getTotalMatrix());
 
-  auto scoped_decoded_draw_image = params.image_provider->GetDecodedDrawImage(
-      op->image, op->src,
+  DrawImage draw_image(
+      op->image, RoundOutRect(op->src),
       flags ? flags->getFilterQuality() : kNone_SkFilterQuality, matrix);
+  auto scoped_decoded_draw_image =
+      params.image_provider->GetDecodedDrawImage(draw_image);
   if (!scoped_decoded_draw_image)
     return;
 

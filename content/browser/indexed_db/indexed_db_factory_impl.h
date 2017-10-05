@@ -10,7 +10,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <string>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -78,7 +77,15 @@ class CONTENT_EXPORT IndexedDBFactoryImpl : public IndexedDBFactory {
   void DatabaseDeleted(
       const IndexedDBDatabase::Identifier& identifier) override;
 
+  // Called by IndexedDBBackingStore when blob files have been cleaned.
+  void BlobFilesCleaned(const url::Origin& origin) override;
+
   size_t GetConnectionCount(const url::Origin& origin) const override;
+
+  void NotifyIndexedDBContentChanged(
+      const url::Origin& origin,
+      const base::string16& database_name,
+      const base::string16& object_store_name) override;
 
  protected:
   ~IndexedDBFactoryImpl() override;

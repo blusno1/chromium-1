@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing/db/util.h"
 
 namespace safe_browsing {
 class ListIdentifier;
@@ -32,10 +32,10 @@ class TestSafeBrowsingDatabaseHelper {
       std::vector<safe_browsing::ListIdentifier> lists_to_insert);
   ~TestSafeBrowsingDatabaseHelper();
 
-  void MarkUrlAsMatchingListWithId(
+  void MarkUrlAsMatchingListIdWithMetadata(
       const GURL& bad_url,
       const safe_browsing::ListIdentifier& list_id,
-      safe_browsing::ThreatPatternType threat_pattern_type);
+      const safe_browsing::ThreatMetadata& threat_metadata);
 
   bool HasListSynced(const safe_browsing::ListIdentifier& list_id);
 

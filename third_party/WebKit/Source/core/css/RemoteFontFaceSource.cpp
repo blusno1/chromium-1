@@ -11,7 +11,6 @@
 #include "core/frame/LocalFrameClient.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontCustomPlatformData.h"
 #include "platform/fonts/FontDescription.h"
@@ -19,6 +18,7 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
 #include "platform/network/NetworkStateNotifier.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/CurrentTime.h"
 #include "public/platform/WebEffectiveConnectionType.h"
 
@@ -75,10 +75,6 @@ RemoteFontFaceSource::RemoteFontFaceSource(FontResource* font,
   if (ShouldTriggerWebFontsIntervention()) {
     is_intervention_triggered_ = true;
     period_ = kSwapPeriod;
-    font_selector_->GetDocument()->AddConsoleMessage(ConsoleMessage::Create(
-        kOtherMessageSource, kInfoMessageLevel,
-        "Slow network is detected. Fallback font will be used while loading: " +
-            font_->Url().ElidedString()));
   }
 
   // Note: this may call notifyFinished() and clear font_.
@@ -100,7 +96,7 @@ void RemoteFontFaceSource::PruneTable() {
     return;
 
   for (const auto& item : font_data_table_) {
-    SimpleFontData* font_data = item.value.Get();
+    SimpleFontData* font_data = item.value.get();
     if (font_data && font_data->GetCustomFontData())
       font_data->GetCustomFontData()->ClearFontFaceSource();
   }
@@ -144,13 +140,17 @@ void RemoteFontFaceSource::NotifyFinished(Resource* unused_resource) {
           "OTS parsing error: " + font_->OtsParsingMessage()));
   }
 
+  CSSFontFace::LoadFinishReason load_finish_reason =
+      font_->GetResourceError().IsCancellation()
+          ? CSSFontFace::LoadFinishReason::WasCancelled
+          : CSSFontFace::LoadFinishReason::NormalFinish;
   font_->RemoveClient(this);
   font_ = nullptr;
 
   PruneTable();
   if (face_) {
     font_selector_->FontFaceInvalidated();
-    face_->FontLoaded(this);
+    face_->FontLoaded(this, load_finish_reason);
   }
 }
 
@@ -273,6 +273,13 @@ void RemoteFontFaceSource::BeginLoadIfNeeded() {
       if (!font_->IsLoaded())
         font_->StartLoadLimitTimers();
       histograms_.LoadStarted();
+    }
+    if (is_intervention_triggered_) {
+      font_selector_->GetDocument()->AddConsoleMessage(
+          ConsoleMessage::Create(kOtherMessageSource, kInfoMessageLevel,
+                                 "Slow network is detected. Fallback font will "
+                                 "be used while loading: " +
+                                     font_->Url().ElidedString()));
     }
   }
 

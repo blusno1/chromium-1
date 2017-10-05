@@ -136,6 +136,7 @@ const char kEmulateNetworkConditionsPage[] =
     "files/devtools/emulate_network_conditions.html";
 const char kDispatchKeyEventShowsAutoFill[] =
     "files/devtools/dispatch_key_event_shows_auto_fill.html";
+const char kDOMWarningsTestPage[] = "files/devtools/dom_warnings_page.html";
 
 template <typename... T>
 void DispatchOnTestSuiteSkipCheck(DevToolsWindow* window,
@@ -1683,6 +1684,10 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkPushTime) {
   CloseDevToolsWindow();
 }
 
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDOMWarnings) {
+  RunTest("testDOMWarnings", kDOMWarningsTestPage);
+}
+
 // Tests that console messages are not duplicated on navigation back.
 #if defined(OS_WIN)
 // Flaking on windows swarm try runs: crbug.com/409285.
@@ -2016,7 +2021,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsPixelOutputTests,
   DispatchInPageAndWait("waitForEvent", "click");
 
   SimulateMouseWheelEvent(web_contents, gfx::Point(300, 100),
-                          gfx::Vector2d(0, 120));
+                          gfx::Vector2d(0, 120),
+                          blink::WebMouseWheelEvent::kPhaseBegan);
   DispatchInPageAndWait("waitForEvent", "wheel");
 
   SimulateTapAt(web_contents, gfx::Point(30, 60));

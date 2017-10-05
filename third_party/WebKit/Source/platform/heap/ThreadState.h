@@ -53,13 +53,16 @@ class Isolate;
 namespace blink {
 
 class BasePage;
-class GarbageCollectedMixinConstructorMarker;
+class GarbageCollectedMixinConstructorMarkerBase;
 class PersistentNode;
 class PersistentRegion;
 class BaseArena;
 class ThreadHeap;
 class ThreadState;
 class Visitor;
+
+template <ThreadAffinity affinity>
+class ThreadStateFor;
 
 // Declare that a class has a pre-finalizer. The pre-finalizer is called
 // before any object gets swept, so it is safe to touch on-heap objects
@@ -265,8 +268,12 @@ class PLATFORM_EXPORT ThreadState {
   // - isSweepingInProgress() returns true while any sweeping operation is
   //   running.
   void MakeConsistentForGC();
-  void PreGC();
-  void PostGC(BlinkGC::GCType);
+  void MarkPhasePrologue(BlinkGC::StackState,
+                         BlinkGC::GCType,
+                         BlinkGC::GCReason);
+  void MarkPhaseVisitRoots();
+  bool MarkPhaseAdvanceMarking(double deadline_seconds);
+  void MarkPhaseEpilogue();
   void CompleteSweep();
   void PreSweep(BlinkGC::GCType);
   void PostSweep();
@@ -454,7 +461,7 @@ class PLATFORM_EXPORT ThreadState {
   // fully should a GC be allowed while its subclasses are being
   // constructed.
   void EnterGCForbiddenScopeIfNeeded(
-      GarbageCollectedMixinConstructorMarker* gc_mixin_marker) {
+      GarbageCollectedMixinConstructorMarkerBase* gc_mixin_marker) {
     DCHECK(CheckThread());
     if (!gc_mixin_marker_) {
       EnterMixinConstructionScope();
@@ -462,7 +469,7 @@ class PLATFORM_EXPORT ThreadState {
     }
   }
   void LeaveGCForbiddenScopeIfNeeded(
-      GarbageCollectedMixinConstructorMarker* gc_mixin_marker) {
+      GarbageCollectedMixinConstructorMarkerBase* gc_mixin_marker) {
     DCHECK(CheckThread());
     if (gc_mixin_marker_ == gc_mixin_marker) {
       LeaveMixinConstructionScope();
@@ -537,11 +544,6 @@ class PLATFORM_EXPORT ThreadState {
   void leaveStaticReferenceRegistrationDisabledScope();
 #endif
 
-  void ResetHeapCounters();
-  void IncreaseAllocatedObjectSize(size_t);
-  void DecreaseAllocatedObjectSize(size_t);
-  void IncreaseMarkedObjectSize(size_t);
-
   v8::Isolate* GetIsolate() const { return isolate_; }
 
   BlinkGC::StackState GetStackState() const { return stack_state_; }
@@ -557,7 +559,8 @@ class PLATFORM_EXPORT ThreadState {
     PrefinalizerRegistration(T* self) {
       static_assert(sizeof(&T::InvokePreFinalizer) > 0,
                     "USING_PRE_FINALIZER(T) must be defined.");
-      ThreadState* state = ThreadState::Current();
+      ThreadState* state =
+          ThreadStateFor<ThreadingTrait<T>::kAffinity>::GetState();
 #if DCHECK_IS_ON()
       DCHECK(state->CheckThread());
 #endif
@@ -699,7 +702,7 @@ class PLATFORM_EXPORT ThreadState {
   size_t arena_ages_[BlinkGC::kNumberOfArenas];
   size_t current_arena_ages_;
 
-  GarbageCollectedMixinConstructorMarker* gc_mixin_marker_;
+  GarbageCollectedMixinConstructorMarkerBase* gc_mixin_marker_;
 
   bool should_flush_heap_does_not_contain_cache_;
   GCState gc_state_;
@@ -744,16 +747,20 @@ class PLATFORM_EXPORT ThreadState {
       kLikelyToBePromptlyFreedArraySize - 1;
   std::unique_ptr<int[]> likely_to_be_promptly_freed_;
 
-  // Stats for heap memory of this thread.
-  size_t allocated_object_size_;
-  size_t marked_object_size_;
   size_t reported_memory_to_v8_;
 
   int gc_age_ = 0;
-};
 
-template <ThreadAffinity affinity>
-class ThreadStateFor;
+  struct GCData {
+    BlinkGC::StackState stack_state;
+    BlinkGC::GCType gc_type;
+    BlinkGC::GCReason reason;
+    double marking_time_in_milliseconds;
+    size_t marked_object_size;
+    std::unique_ptr<Visitor> visitor;
+  };
+  GCData current_gc_data_;
+};
 
 template <>
 class ThreadStateFor<kMainThreadOnly> {

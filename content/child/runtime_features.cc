@@ -18,6 +18,7 @@
 #include "media/base/media_switches.h"
 #include "services/device/public/cpp/device_features.h"
 #include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
+#include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/native_theme/native_theme_features.h"
 
@@ -150,6 +151,11 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableWebGLDraftExtensions))
     WebRuntimeFeatures::EnableWebGLDraftExtensions(true);
 
+  if (command_line.HasSwitch(switches::kEnableAutomation) ||
+      command_line.HasSwitch(switches::kHeadless)) {
+    WebRuntimeFeatures::EnableAutomationControlled(true);
+  }
+
 #if defined(OS_MACOSX)
   bool enable_canvas_2d_image_chromium = command_line.HasSwitch(
       switches::kEnableGpuMemoryBufferCompositorResources) &&
@@ -264,6 +270,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       base::FeatureList::IsEnabled(features::kScrollAnchoring) ||
       enableExperimentalWebPlatformFeatures);
 
+  if (command_line.HasSwitch(switches::kEnableSlimmingPaintV175))
+    WebRuntimeFeatures::EnableFeatureFromString("SlimmingPaintV175", true);
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV2))
     WebRuntimeFeatures::EnableSlimmingPaintV2(true);
 
@@ -357,6 +365,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kOutOfBlinkCORS))
     WebRuntimeFeatures::EnableOutOfBlinkCORS(true);
 
+  if (base::FeatureList::IsEnabled(features::kOriginManifest))
+    WebRuntimeFeatures::EnableOriginManifest(true);
+
   WebRuntimeFeatures::EnableMediaCastOverlayButton(
       base::FeatureList::IsEnabled(media::kMediaCastOverlayButton));
 
@@ -409,6 +420,15 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableModuleScriptsDynamicImport(
       base::FeatureList::IsEnabled(features::kModuleScriptsDynamicImport));
 
+  WebRuntimeFeatures::EnableOverflowIconsForMediaControls(
+      base::FeatureList::IsEnabled(media::kOverflowIconsForMediaControls));
+
+  WebRuntimeFeatures::EnableAllowActivationDelegationAttr(
+      base::FeatureList::IsEnabled(features::kAllowActivationDelegationAttr));
+
+  WebRuntimeFeatures::EnableModernMediaControls(
+      base::FeatureList::IsEnabled(media::kUseModernMediaControls));
+
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.
   for (const std::string& feature :
@@ -419,6 +439,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
        FeaturesFromSwitch(command_line, switches::kDisableBlinkFeatures)) {
     WebRuntimeFeatures::EnableFeatureFromString(feature, false);
   }
-}
+
+  if (base::FeatureList::IsEnabled(features::kV8ContextSnapshot))
+    WebRuntimeFeatures::EnableV8ContextSnapshot(true);
+};
 
 }  // namespace content

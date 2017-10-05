@@ -50,6 +50,7 @@ class PaymentRequestDialog;
 namespace safe_browsing {
 class ChromeCleanerController;
 class ChromeCleanerDialogController;
+class SettingsResetPromptController;
 }
 
 namespace task_manager {
@@ -80,7 +81,7 @@ gfx::NativeWindow ShowWebDialog(gfx::NativeView parent,
                                 ui::WebDialogDelegate* delegate);
 #endif  // !defined(OS_MACOSX)
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
 // Creates and shows an HTML dialog with the given delegate and browser context.
 // The dialog is placed in the ash window hierarchy in the given container. The
 // window is automatically destroyed when it is closed.
@@ -90,7 +91,7 @@ gfx::NativeWindow ShowWebDialog(gfx::NativeView parent,
 gfx::NativeWindow ShowWebDialogInContainer(int container_id,
                                            content::BrowserContext* context,
                                            ui::WebDialogDelegate* delegate);
-#endif  // defined(USE_ASH)
+#endif  // defined(OS_CHROMEOS)
 
 // Shows the create chrome app shortcut dialog box.
 // |close_callback| may be null.
@@ -256,6 +257,12 @@ enum class DialogIdentifier {
 void RecordDialogCreation(DialogIdentifier identifier);
 
 #if defined(OS_WIN)
+
+// Shows the settings reset prompt dialog asking the user if they want to reset
+// some of their settings.
+void ShowSettingsResetPrompt(
+    Browser* browser,
+    safe_browsing::SettingsResetPromptController* controller);
 
 // Shows the Chrome Cleanup dialog asking the user if they want to clean their
 // system from unwanted software. This is called when unwanted software has been

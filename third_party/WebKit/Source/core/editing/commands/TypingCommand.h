@@ -26,6 +26,7 @@
 #ifndef TypingCommand_h
 #define TypingCommand_h
 
+#include "core/editing/TextGranularity.h"
 #include "core/editing/commands/CompositeEditCommand.h"
 
 namespace blink {
@@ -102,7 +103,8 @@ class CORE_EXPORT TypingCommand final : public CompositeEditCommand {
   }
   void AdjustSelectionAfterIncrementalInsertion(LocalFrame*,
                                                 const size_t selection_start,
-                                                const size_t text_length);
+                                                const size_t text_length,
+                                                EditingState*);
 
   ETypingCommand CommandTypeOfOpenCommand() const { return command_type_; }
   TextCompositionType CompositionType() const { return composition_type_; }

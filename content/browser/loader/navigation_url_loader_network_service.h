@@ -38,6 +38,7 @@ class NavigationURLLoaderNetworkService : public NavigationURLLoader {
   // NavigationURLLoader implementation:
   void FollowRedirect() override;
   void ProceedWithResponse() override;
+  void InterceptNavigation(NavigationInterceptionCB callback) override;
 
   void OnReceiveResponse(scoped_refptr<ResourceResponse> response,
                          const base::Optional<net::SSLInfo>& ssl_info,
@@ -50,6 +51,8 @@ class NavigationURLLoaderNetworkService : public NavigationURLLoader {
  private:
   class URLLoaderRequestController;
 
+  bool IsDownload() const;
+
   NavigationURLLoaderDelegate* delegate_;
 
   scoped_refptr<ResourceResponse> response_;
@@ -58,6 +61,8 @@ class NavigationURLLoaderNetworkService : public NavigationURLLoader {
 
   // Lives on the IO thread.
   std::unique_ptr<URLLoaderRequestController> request_controller_;
+
+  bool allow_download_;
 
   base::WeakPtrFactory<NavigationURLLoaderNetworkService> weak_factory_;
 

@@ -11,38 +11,24 @@
 #include "base/macros.h"
 #include "chrome/browser/search/search_engine_base_url_tracker.h"
 #include "chrome/browser/ui/search/instant_controller.h"
-#include "chrome/browser/ui/search/search_model_observer.h"
 
 class Browser;
 class Profile;
 
-namespace content {
-class WebContents;
-}
-
-class BrowserInstantController : public SearchModelObserver {
+// BrowserInstantController is responsible for reloading any Instant tabs (which
+// today just means NTPs) when the default search provider changes. This can
+// happen when the user chooses a different default search engine, or when the
+// Google base URL changes while Google is the default search engine.
+class BrowserInstantController {
  public:
   explicit BrowserInstantController(Browser* browser);
-  ~BrowserInstantController() override;
-
-  // Returns the Profile associated with the Browser that owns this object.
-  Profile* profile() const;
-
-  InstantController* instant() { return &instant_; }
-
-  // Invoked by |instant_| to get the currently active tab.
-  content::WebContents* GetActiveWebContents() const;
-
-  // Invoked by |browser_| when the active tab changes.
-  void ActiveTabChanged();
+  ~BrowserInstantController();
 
  private:
-  // SearchModelObserver:
-  void ModelChanged(SearchModel::Origin old_origin,
-                    SearchModel::Origin new_origin) override;
-
   void OnSearchEngineBaseURLChanged(
       SearchEngineBaseURLTracker::ChangeReason change_reason);
+
+  Profile* profile() const;
 
   Browser* const browser_;
 

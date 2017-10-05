@@ -108,6 +108,10 @@ void CrasAudioHandler::AudioObserver::OnOuputChannelRemixingChanged(
     bool /* mono_on */) {
 }
 
+void CrasAudioHandler::AudioObserver::OnHotwordTriggered(
+    uint64_t /* tv_sec */,
+    uint64_t /* tv_nsec */) {}
+
 // static
 void CrasAudioHandler::Initialize(
     scoped_refptr<AudioDevicesPrefHandler> audio_pref_handler) {
@@ -807,6 +811,11 @@ void CrasAudioHandler::ActiveInputNodeChanged(uint64_t node_id) {
   }
 }
 
+void CrasAudioHandler::HotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec) {
+  for (auto& observer : observers_)
+    observer.OnHotwordTriggered(tv_sec, tv_nsec);
+}
+
 void CrasAudioHandler::OnAudioPolicyPrefChanged() {
   ApplyAudioPolicy();
 }
@@ -1267,6 +1276,13 @@ void CrasAudioHandler::HandleHotPlugDevice(
   if (!hotplug_device.is_for_simple_usage())
     return;
 
+  // Whenever 35mm headphone is hot plugged, always pick it as the active
+  // output device.
+  if (hotplug_device.type == AUDIO_TYPE_HEADPHONE) {
+    SwitchToDevice(hotplug_device, true, ACTIVATE_BY_USER);
+    return;
+  }
+
   bool last_state_active = false;
   bool last_activate_by_user = false;
   if (!audio_pref_handler_->GetDeviceActive(hotplug_device, &last_state_active,
@@ -1294,9 +1310,42 @@ void CrasAudioHandler::HandleHotPlugDevice(
 
     SwitchToDevice(hotplug_device, true, ACTIVATE_BY_RESTORE_PREVIOUS_STATE);
   } else {
-    // Do not active the device if its previous state is inactive.
-    VLOG(1) << "Hotplug device remains inactive as its previous state:"
-            << hotplug_device.ToString();
+    // The hot plugged device was not active last time it was plugged in.
+    // Let's check how the current active device is activated, if it is not
+    // activated by user choice, then select the hot plugged device it is of
+    // higher priority.
+    uint64_t& active_node_id = hotplug_device.is_input ? active_input_node_id_
+                                                       : active_output_node_id_;
+    const AudioDevice* active_device = GetDeviceFromId(active_node_id);
+    if (!active_device) {
+      // Can't find any current active device.
+      // This is an odd case, but if it happens, switch to hotplug device.
+      LOG(ERROR) << "Can not find current active device when the device is"
+                 << " hot plugged: " << hotplug_device.ToString();
+      SwitchToDevice(hotplug_device, true, ACTIVATE_BY_PRIORITY);
+      return;
+    }
+
+    bool activate_by_user = false;
+    bool state_active = false;
+    bool found_active_state = audio_pref_handler_->GetDeviceActive(
+        *active_device, &state_active, &activate_by_user);
+    DCHECK(found_active_state && state_active);
+    if (!found_active_state || !state_active) {
+      LOG(ERROR) << "Cannot retrieve current active device's state in prefs: "
+                 << active_device->ToString();
+      return;
+    }
+    if (!activate_by_user &&
+        device_priority_queue.top().id == hotplug_device.id) {
+      SwitchToDevice(hotplug_device, true, ACTIVATE_BY_PRIORITY);
+    } else {
+      // Do not active the hotplug device. Either the current device is
+      // expliciltly activated by user, or the hotplug device is of lower
+      // priority.
+      VLOG(1) << "Hotplug device remains inactive as its previous state:"
+              << hotplug_device.ToString();
+    }
   }
 }
 
@@ -1398,6 +1447,16 @@ void CrasAudioHandler::UpdateDevicesAndSwitchActive(
   HandleAudioDeviceChange(true, input_devices_pq_, hotplug_input_nodes,
                           input_devices_changed, has_input_removed,
                           active_input_removed);
+
+  // content::MediaStreamManager listens to
+  // base::SystemMonitor::DevicesChangedObserver for audio devices,
+  // and updates EnumerateDevices when OnDevicesChanged is called.
+  base::SystemMonitor* monitor = base::SystemMonitor::Get();
+  // In some unittest, |monitor| might be nullptr.
+  if (!monitor)
+    return;
+  monitor->ProcessDevicesChanged(
+      base::SystemMonitor::DeviceType::DEVTYPE_AUDIO);
 }
 
 void CrasAudioHandler::HandleAudioDeviceChange(

@@ -42,6 +42,7 @@
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/WebLocalFrameImpl.h"
+#include "core/html/HTMLElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/page/Page.h"
 #include "platform/KeyboardCodes.h"
@@ -1330,7 +1331,8 @@ TEST_F(WebPluginContainerTest, CompositedPluginSPv2) {
 
   paint_controller->UpdateCurrentPaintChunkProperties(nullptr, properties);
   GraphicsContext graphics_context(*paint_controller);
-  container->Paint(graphics_context, CullRect(IntRect(10, 10, 400, 300)));
+  container->Paint(graphics_context, kGlobalPaintNormalPhase,
+                   CullRect(IntRect(10, 10, 400, 300)));
   paint_controller->CommitNewDisplayItems();
 
   const auto& display_items =

@@ -433,9 +433,8 @@ public class LocaleManager {
      * @return List of engines to show.
      */
     public List<TemplateUrl> getSearchEnginesForPromoDialog(@SearchEnginePromoType int promoType) {
-        TemplateUrlService instance = TemplateUrlService.getInstance();
-        assert instance.isLoaded();
-        return instance.getSearchEngines();
+        throw new IllegalStateException(
+                "Not applicable unless existing or new promos are required");
     }
 
     /** Set a LocaleManager to be used for testing. */
@@ -450,12 +449,6 @@ public class LocaleManager {
      * @param widgetPresent Whether there is at least one search widget on home screen.
      */
     public void recordLocaleBasedSearchWidgetMetrics(boolean widgetPresent) {}
-
-    // Deprecated.  Use hasCompletedSearchEnginePromo.
-    // TODO(tedchoc): Remove once downstream uses hasCompletedSearchEnginePromo.
-    public boolean hasShownSearchEnginePromo() {
-        return hasCompletedSearchEnginePromo();
-    }
 
     /**
      * @return Whether the search engine promo has been shown and the user selected a valid option

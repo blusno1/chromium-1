@@ -356,10 +356,10 @@ scoped_refptr<SSLPrivateKey> CreateSSLPrivateKeyForSecKey(
     return nullptr;
 
   if (__builtin_available(macOS 10.12, *)) {
-    return make_scoped_refptr(
-        new ThreadedSSLPrivateKey(std::make_unique<SSLPlatformKeySecKey>(
-                                      key_type, max_length, private_key),
-                                  GetSSLPlatformKeyTaskRunner()));
+    return base::MakeRefCounted<ThreadedSSLPrivateKey>(
+        std::make_unique<SSLPlatformKeySecKey>(key_type, max_length,
+                                               private_key),
+        GetSSLPlatformKeyTaskRunner());
   }
 
   const CSSM_KEY* cssm_key;
@@ -369,10 +369,10 @@ scoped_refptr<SSLPrivateKey> CreateSSLPrivateKeyForSecKey(
     return nullptr;
   }
 
-  return make_scoped_refptr(new ThreadedSSLPrivateKey(
+  return base::MakeRefCounted<ThreadedSSLPrivateKey>(
       std::make_unique<SSLPlatformKeyCSSM>(key_type, max_length, private_key,
                                            cssm_key),
-      GetSSLPlatformKeyTaskRunner()));
+      GetSSLPlatformKeyTaskRunner());
 }
 
 }  // namespace

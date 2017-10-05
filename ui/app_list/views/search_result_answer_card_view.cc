@@ -16,9 +16,11 @@
 namespace app_list {
 
 namespace {
+
 constexpr int kVerticalPadding = 11;
 constexpr int kHorizontalPadding = 16;
-}
+
+}  // namespace
 
 // Container of the search answer view.
 class SearchResultAnswerCardView::SearchAnswerContainerView
@@ -28,6 +30,8 @@ class SearchResultAnswerCardView::SearchAnswerContainerView
  public:
   explicit SearchAnswerContainerView(AppListViewDelegate* view_delegate)
       : Button(this), view_delegate_(view_delegate) {
+    if (features::IsAppListFocusEnabled())
+      SetFocusBehavior(FocusBehavior::ALWAYS);
     // Center the card horizontally in the container.
     views::BoxLayout* answer_container_layout =
         new views::BoxLayout(views::BoxLayout::kHorizontal,
@@ -107,7 +111,7 @@ class SearchResultAnswerCardView::SearchAnswerContainerView
  private:
   void UpdateBackgroundColor() {
     if (selected_) {
-      SetBackground(views::CreateSolidBackground(kSelectedColor));
+      SetBackground(views::CreateSolidBackground(kAnswerCardSelectedColor));
     } else {
       SetBackground(nullptr);
     }
@@ -193,6 +197,11 @@ views::View* SearchResultAnswerCardView::GetSelectedView() const {
   return search_answer_container_view_->selected()
              ? search_answer_container_view_
              : nullptr;
+}
+
+views::View* SearchResultAnswerCardView::SetFirstResultSelected(bool selected) {
+  search_answer_container_view_->SetSelected(selected);
+  return search_answer_container_view_;
 }
 
 }  // namespace app_list

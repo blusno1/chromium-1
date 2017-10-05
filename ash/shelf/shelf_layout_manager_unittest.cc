@@ -1457,7 +1457,11 @@ TEST_F(ShelfLayoutManagerFullscreenAppListTest,
   app_list::test::TestAppListPresenter test_app_list_presenter;
   Shell::Get()->app_list()->SetAppListPresenter(
       test_app_list_presenter.CreateInterfacePtrAndBind());
-  gfx::Point start = GetShelfWidget()->GetWindowBoundsInScreen().CenterPoint();
+  // Starts the drag from the center of the shelf's bottom.
+  gfx::Rect shelf_widget_bounds = GetShelfWidget()->GetWindowBoundsInScreen();
+  gfx::Point start =
+      gfx::Point(shelf_widget_bounds.x() + shelf_widget_bounds.width() / 2,
+                 shelf_widget_bounds.bottom());
 
   // Fling up that exceeds the velocity threshold should show the fullscreen app
   // list.
@@ -1542,7 +1546,11 @@ TEST_F(ShelfLayoutManagerFullscreenAppListTest,
   constexpr base::TimeDelta kTimeDelta = base::TimeDelta::FromMilliseconds(100);
   constexpr int kNumScrollSteps = 4;
 
-  gfx::Point start = GetShelfWidget()->GetWindowBoundsInScreen().CenterPoint();
+  // Starts the drag from the center of the shelf's bottom.
+  gfx::Rect shelf_widget_bounds = GetShelfWidget()->GetWindowBoundsInScreen();
+  gfx::Point start =
+      gfx::Point(shelf_widget_bounds.x() + shelf_widget_bounds.width() / 2,
+                 shelf_widget_bounds.bottom());
   gfx::Vector2d delta;
 
   // Swiping up more than the threshold should show the app list.
@@ -1612,6 +1620,10 @@ TEST_F(ShelfLayoutManagerFullscreenAppListTest,
 
 TEST_F(ShelfLayoutManagerFullscreenAppListTest,
        SwipingUpOnShelfInLaptopModeForFullscreenAppList) {
+  // TODO: investigate failure in mash, http://crbug.com/695686.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   Shelf* shelf = GetPrimaryShelf();
   EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
@@ -1625,7 +1637,11 @@ TEST_F(ShelfLayoutManagerFullscreenAppListTest,
   constexpr base::TimeDelta kTimeDelta = base::TimeDelta::FromMilliseconds(100);
   constexpr int kNumScrollSteps = 4;
 
-  gfx::Point start = GetShelfWidget()->GetWindowBoundsInScreen().CenterPoint();
+  // Starts the drag from the center of the shelf's bottom.
+  gfx::Rect shelf_widget_bounds = GetShelfWidget()->GetWindowBoundsInScreen();
+  gfx::Point start =
+      gfx::Point(shelf_widget_bounds.x() + shelf_widget_bounds.width() / 2,
+                 shelf_widget_bounds.bottom());
   gfx::Vector2d delta;
 
   // Swiping up less than the close threshold should close the app list.
@@ -1640,6 +1656,7 @@ TEST_F(ShelfLayoutManagerFullscreenAppListTest,
             test_app_list_presenter.app_list_state());
 
   // Swiping up more than the close threshold but less than peeking threshold
+  // should keep the app list at PEEKING state.
   delta.set_y(ShelfLayoutManager::kAppListDragSnapToPeekingThreshold - 10);
   end = start - delta;
   generator.GestureScrollSequence(start, end, kTimeDelta, kNumScrollSteps);
@@ -2149,42 +2166,20 @@ class ShelfLayoutManagerKeyboardTest : public AshTestBase {
   DISALLOW_COPY_AND_ASSIGN(ShelfLayoutManagerKeyboardTest);
 };
 
-TEST_F(ShelfLayoutManagerKeyboardTest, ShelfChangeWorkAreaInNonStickyMode) {
-  // Append the flag to cause work area change in non-sticky mode.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitch(::switches::kDisableNewVirtualKeyboardBehavior);
+TEST_F(ShelfLayoutManagerKeyboardTest, ShelfNotMoveOnKeyboardOpen) {
+  gfx::Rect orig_bounds = GetShelfWidget()->GetWindowBoundsInScreen();
 
   ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
   InitKeyboardBounds();
   keyboard::KeyboardController* kb_controller =
       keyboard::KeyboardController::GetInstance();
-  gfx::Rect orig_work_area(
-      display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
-
   // Open keyboard in non-sticky mode.
   kb_controller->ShowKeyboard(false);
   layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
   layout_manager->LayoutShelf();
 
-  // Work area should be changed.
-  EXPECT_NE(orig_work_area,
-            display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
-
-  kb_controller->HideKeyboard(
-      keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
-  layout_manager->OnKeyboardBoundsChanging(gfx::Rect());
-  layout_manager->LayoutShelf();
-  EXPECT_EQ(orig_work_area,
-            display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
-
-  // Open keyboard in sticky mode.
-  kb_controller->ShowKeyboard(true);
-  layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
-  layout_manager->LayoutShelf();
-
-  // Work area should be changed.
-  EXPECT_NE(orig_work_area,
-            display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
+  // Shelf position should not be changed.
+  EXPECT_EQ(orig_bounds, GetShelfWidget()->GetWindowBoundsInScreen());
 }
 
 // When kAshUseNewVKWindowBehavior flag enabled, do not change accessibility
@@ -2213,6 +2208,16 @@ TEST_F(ShelfLayoutManagerKeyboardTest,
   layout_manager->LayoutShelf();
   EXPECT_EQ(orig_work_area,
             display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
+}
+
+// Change accessibility keyboard work area in sticky mode.
+TEST_F(ShelfLayoutManagerKeyboardTest, ShelfShouldChangeWorkAreaInStickyMode) {
+  ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
+  InitKeyboardBounds();
+  keyboard::KeyboardController* kb_controller =
+      keyboard::KeyboardController::GetInstance();
+  gfx::Rect orig_work_area(
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
 
   // Open keyboard in sticky mode.
   kb_controller->ShowKeyboard(true);

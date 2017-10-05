@@ -72,7 +72,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 
   content::BrowserMainParts* CreateBrowserMainParts(
       const content::MainFunctionParams& parameters) override;
-  void PostAfterStartupTask(const tracked_objects::Location& from_here,
+  void PostAfterStartupTask(const base::Location& from_here,
                             const scoped_refptr<base::TaskRunner>& task_runner,
                             base::OnceClosure task) override;
   bool IsBrowserStartupComplete() override;
@@ -117,6 +117,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
       const GURL& url,
       content::SiteInstance* parent_site_instance) override;
+  bool ShouldStayInParentProcessForNTP(
+      const GURL& url,
+      content::SiteInstance* parent_site_instance) override;
+
   bool IsSuitableHost(content::RenderProcessHost* process_host,
                       const GURL& site_url) override;
   bool MayReuseHost(content::RenderProcessHost* process_host) override;
@@ -137,10 +141,16 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   std::vector<url::Origin> GetOriginsRequiringDedicatedProcess() override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
+  void AdjustUtilityServiceProcessCommandLine(
+      const service_manager::Identity& identity,
+      base::CommandLine* command_line) override;
   std::string GetApplicationLocale() override;
   std::string GetAcceptLangs(content::BrowserContext* context) override;
   const gfx::ImageSkia* GetDefaultFavicon() override;
   bool IsDataSaverEnabled(content::BrowserContext* context) override;
+  std::unique_ptr<net::HttpRequestHeaders>
+  GetAdditionalNavigationRequestHeaders(content::BrowserContext* context,
+                                        const GURL& url) const override;
   bool AllowAppCache(const GURL& manifest_url,
                      const GURL& first_party,
                      content::ResourceContext* context) override;
@@ -180,6 +190,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   net::URLRequestContext* OverrideRequestContextForURL(
       const GURL& url,
       content::ResourceContext* context) override;
+  std::string GetGeolocationApiKey() override;
   content::QuotaPermissionContext* CreateQuotaPermissionContext() override;
   void GetQuotaSettings(
       content::BrowserContext* context,
@@ -192,7 +203,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const net::SSLInfo& ssl_info,
       const GURL& request_url,
       content::ResourceType resource_type,
-      bool overridable,
       bool strict_enforcement,
       bool expired_previous_decision,
       const base::Callback<void(content::CertificateRequestResultType)>&
@@ -335,10 +345,15 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 
   std::unique_ptr<base::TaskScheduler::InitParams> GetTaskSchedulerInitParams()
       override;
-  base::FilePath GetLoggingFileName() override;
+  base::FilePath GetLoggingFileName(
+      const base::CommandLine& command_line) override;
   std::vector<std::unique_ptr<content::URLLoaderThrottle>>
   CreateURLLoaderThrottles(
       const base::Callback<content::WebContents*()>& wc_getter) override;
+  bool OverrideLegacySymantecCertConsoleMessage(
+      const GURL& url,
+      const scoped_refptr<net::X509Certificate>& cert,
+      std::string* console_messsage) override;
 
  protected:
   static bool HandleWebUI(GURL* url, content::BrowserContext* browser_context);

@@ -425,14 +425,20 @@ interface BackgroundFetchManager
     method fetch
     method get
     method getIds
-interface BackgroundFetchRegistration
+interface BackgroundFetchRegistration : EventTarget
     attribute @@toStringTag
+    getter downloadTotal
+    getter downloaded
     getter icons
     getter id
+    getter onprogress
     getter title
     getter totalDownloadSize
+    getter uploadTotal
+    getter uploaded
     method abort
     method constructor
+    setter onprogress
 interface BarProp
     attribute @@toStringTag
     getter visible
@@ -1063,15 +1069,6 @@ interface CompositionEvent : UIEvent
     getter data
     method constructor
     method initCompositionEvent
-interface CompositorWorker : EventTarget
-    attribute @@toStringTag
-    getter onerror
-    getter onmessage
-    method constructor
-    method postMessage
-    method terminate
-    setter onerror
-    setter onmessage
 interface ConstantSourceNode : AudioScheduledSourceNode
     attribute @@toStringTag
     getter offset
@@ -1430,6 +1427,7 @@ interface DetectedFace
 interface DetectedText
     attribute @@toStringTag
     getter boundingBox
+    getter cornerPoints
     getter rawValue
     method constructor
 interface DeviceMotionEvent : Event
@@ -1451,7 +1449,6 @@ interface Document : Node
     attribute @@unscopables
     getter URL
     getter activeElement
-    getter addressSpace
     getter anchors
     getter applets
     getter body
@@ -2229,6 +2226,8 @@ interface HTMLBodyElement : HTMLElement
     getter background
     getter bgColor
     getter link
+    getter onafterprint
+    getter onbeforeprint
     getter onbeforeunload
     getter onblur
     getter onerror
@@ -2256,6 +2255,8 @@ interface HTMLBodyElement : HTMLElement
     setter background
     setter bgColor
     setter link
+    setter onafterprint
+    setter onbeforeprint
     setter onbeforeunload
     setter onblur
     setter onerror
@@ -2681,6 +2682,8 @@ interface HTMLFrameElement : HTMLElement
 interface HTMLFrameSetElement : HTMLElement
     attribute @@toStringTag
     getter cols
+    getter onafterprint
+    getter onbeforeprint
     getter onbeforeunload
     getter onblur
     getter onerror
@@ -2704,6 +2707,8 @@ interface HTMLFrameSetElement : HTMLElement
     getter rows
     method constructor
     setter cols
+    setter onafterprint
+    setter onbeforeprint
     setter onbeforeunload
     setter onblur
     setter onerror
@@ -4477,6 +4482,7 @@ interface Navigator
     getter userAgent
     getter vendor
     getter vendorSub
+    getter vr
     getter webkitPersistentStorage
     getter webkitTemporaryStorage
     method cancelKeyboardLock
@@ -4747,6 +4753,12 @@ interface OscillatorNode : AudioScheduledSourceNode
     method constructor
     method setPeriodicWave
     setter type
+interface OverconstrainedError
+    attribute @@toStringTag
+    getter constraint
+    getter message
+    getter name
+    method constructor
 interface PageTransitionEvent : Event
     attribute @@toStringTag
     getter persisted
@@ -4818,6 +4830,15 @@ interface PaymentAddress
     getter sortingCode
     method constructor
     method toJSON
+interface PaymentInstruments
+    attribute @@toStringTag
+    method clear
+    method constructor
+    method delete
+    method get
+    method has
+    method keys
+    method set
 interface PaymentManager
     attribute @@toStringTag
     getter instruments
@@ -6059,6 +6080,7 @@ interface SVGImageElement : SVGGraphicsElement
     getter x
     getter y
     method constructor
+    method decode
 interface SVGLength
     attribute @@toStringTag
     attribute SVG_LENGTHTYPE_CM
@@ -6564,6 +6586,7 @@ interface Selection
 interface Sensor : EventTarget
     attribute @@toStringTag
     getter activated
+    getter hasReading
     getter onactivate
     getter onerror
     getter onreading
@@ -6986,6 +7009,23 @@ interface TreeWalker
     method previousNode
     method previousSibling
     setter currentNode
+interface TrustedHTML
+    static method escape
+    static method unsafelyCreate
+    attribute @@toStringTag
+    method constructor
+    method toString
+interface TrustedScriptURL
+    static method unsafelyCreate
+    attribute @@toStringTag
+    method constructor
+    method toString
+interface TrustedURL
+    static method create
+    static method unsafelyCreate
+    attribute @@toStringTag
+    method constructor
+    method toString
 interface UIEvent : Event
     attribute @@toStringTag
     getter detail
@@ -7143,6 +7183,25 @@ interface USBOutTransferResult
     getter bytesWritten
     getter status
     method constructor
+interface VR : EventTarget
+    attribute @@toStringTag
+    getter ondeviceconnect
+    getter ondevicedisconnect
+    method constructor
+    method getDevices
+    setter ondeviceconnect
+    setter ondevicedisconnect
+interface VRDevice : EventTarget
+    attribute @@toStringTag
+    getter deviceName
+    getter isExternal
+    method constructor
+    method requestSession
+    method supportsSession
+interface VRDeviceEvent : Event
+    attribute @@toStringTag
+    getter device
+    method constructor
 interface VRDisplay : EventTarget
     attribute @@toStringTag
     getter capabilities
@@ -7197,6 +7256,28 @@ interface VRPose
     getter linearVelocity
     getter orientation
     getter position
+    method constructor
+interface VRSession : EventTarget
+    attribute @@toStringTag
+    getter depthFar
+    getter depthNear
+    getter device
+    getter exclusive
+    getter onblur
+    getter onend
+    getter onfocus
+    getter onresetpose
+    method constructor
+    method end
+    setter depthFar
+    setter depthNear
+    setter onblur
+    setter onend
+    setter onfocus
+    setter onresetpose
+interface VRSessionEvent : Event
+    attribute @@toStringTag
+    getter session
     method constructor
 interface VRStageParameters
     attribute @@toStringTag
@@ -7290,11 +7371,15 @@ interface VisualViewport : EventTarget
     getter height
     getter offsetLeft
     getter offsetTop
+    getter onresize
+    getter onscroll
     getter pageLeft
     getter pageTop
     getter scale
     getter width
     method constructor
+    setter onresize
+    setter onscroll
 interface WaveShaperNode : AudioNode
     attribute @@toStringTag
     getter curve
@@ -8718,6 +8803,12 @@ interface Worklet
     attribute @@toStringTag
     method addModule
     method constructor
+interface WorkletAnimation
+    attribute @@toStringTag
+    getter playState
+    method cancel
+    method constructor
+    method play
 interface WritableStream
     getter locked
     method abort
@@ -9033,12 +9124,14 @@ interface webkitURL
     getter navigator
     getter offscreenBuffering
     getter onabort
+    getter onafterprint
     getter onanimationend
     getter onanimationiteration
     getter onanimationstart
     getter onappinstalled
     getter onauxclick
     getter onbeforeinstallprompt
+    getter onbeforeprint
     getter onbeforeunload
     getter onblur
     getter oncancel
@@ -9176,7 +9269,6 @@ interface webkitURL
     method gc
     method getComputedStyle
     method getComputedStyleMap
-    method getMatchedCSSRules
     method getSelection
     method matchMedia
     method moveBy
@@ -9214,12 +9306,14 @@ interface webkitURL
     setter name
     setter offscreenBuffering
     setter onabort
+    setter onafterprint
     setter onanimationend
     setter onanimationiteration
     setter onanimationstart
     setter onappinstalled
     setter onauxclick
     setter onbeforeinstallprompt
+    setter onbeforeprint
     setter onbeforeunload
     setter onblur
     setter oncancel

@@ -17,6 +17,8 @@ source_set("util") {
     "label_observer.mm",
     "manual_text_framer.h",
     "manual_text_framer.mm",
+    "named_guide.h",
+    "named_guide.mm",
     "pasteboard_util.h",
     "pasteboard_util.mm",
     "relaxed_bounds_constraints_hittest.h",
@@ -48,13 +50,16 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "CRUILabel+AttributeUtils_unittest.mm",
+    "constraints_ui_util_unittest.mm",
     "core_text_util_unittest.mm",
     "label_link_controller_unittest.mm",
     "label_observer_unittest.mm",
     "manual_text_framer_unittest.mm",
+    "named_guide_unittest.mm",
     "text_region_mapper_unittest.mm",
   ]
   deps = [
+    ":constraints_ui",
     ":util",
     "//base",
     "//ios/third_party/material_components_ios",

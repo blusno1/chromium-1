@@ -237,5 +237,6 @@ void ChromeBrowserFieldTrials::SetupFeatureControllingFieldTrials(
 void ChromeBrowserFieldTrials::InstantiateDynamicTrials() {
   // Persistent histograms must be enabled as soon as possible.
   InstantiatePersistentHistograms();
+
   tracing::SetupBackgroundTracingFieldTrial();
 }

@@ -44,10 +44,10 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_switches.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/test_database_manager.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/proto/csd.pb.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/test_database_manager.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/test/mock_download_item.h"
@@ -1416,7 +1416,7 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadZip) {
                           base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
     ASSERT_TRUE(HasClientDownloadRequest());
-    EXPECT_EQ(0, GetClientDownloadRequest()->archived_binary_size());
+    EXPECT_EQ(1, GetClientDownloadRequest()->archived_binary_size());
     EXPECT_TRUE(GetClientDownloadRequest()->has_download_type());
     EXPECT_EQ(ClientDownloadRequest_DownloadType_ZIPPED_ARCHIVE,
               GetClientDownloadRequest()->download_type());

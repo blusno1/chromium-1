@@ -4,7 +4,7 @@
 
 #include "ui/aura/local/layer_tree_frame_sink_local.h"
 
-#include "cc/output/layer_tree_frame_sink_client.h"
+#include "cc/trees/layer_tree_frame_sink_client.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
@@ -77,7 +77,8 @@ void LayerTreeFrameSinkLocal::SetLocalSurfaceId(
   local_surface_id_ = local_surface_id;
 }
 
-void LayerTreeFrameSinkLocal::SubmitCompositorFrame(cc::CompositorFrame frame) {
+void LayerTreeFrameSinkLocal::SubmitCompositorFrame(
+    viz::CompositorFrame frame) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   DCHECK(frame.metadata.begin_frame_ack.has_damage);

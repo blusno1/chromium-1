@@ -17,7 +17,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/single_thread_task_runner.h"
-#include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "components/variations/child_process_field_trial_syncer.h"
 #include "content/common/associated_interfaces.mojom.h"
@@ -59,10 +58,6 @@ class QuotaDispatcher;
 class QuotaMessageFilter;
 class ResourceDispatcher;
 class ThreadSafeSender;
-
-#if defined(OS_MACOSX)
-class AppNapActivity;
-#endif
 
 // The main thread of a child process derives from this class.
 class CONTENT_EXPORT ChildThreadImpl
@@ -228,9 +223,6 @@ class CONTENT_EXPORT ChildThreadImpl
 
   // IPC message handlers.
   void OnShutdown();
-  void OnSetProfilerStatus(tracked_objects::ThreadData::Status status);
-  void OnGetChildProfilerData(int sequence_number, int current_profiling_phase);
-  void OnProfilingPhaseCompleted(int profiling_phase);
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   void OnSetIPCLoggingEnabled(bool enable);
 #endif
@@ -292,10 +284,6 @@ class CONTENT_EXPORT ChildThreadImpl
   std::unique_ptr<base::PowerMonitor> power_monitor_;
 
   scoped_refptr<base::SingleThreadTaskRunner> browser_process_io_runner_;
-
-#if defined(OS_MACOSX)
-  std::unique_ptr<AppNapActivity> app_nap_activity_;
-#endif  // defined(OS_MACOSX)
 
   std::unique_ptr<variations::ChildProcessFieldTrialSyncer> field_trial_syncer_;
 

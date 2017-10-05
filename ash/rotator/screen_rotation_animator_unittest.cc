@@ -4,9 +4,9 @@
 
 #include "ash/rotator/screen_rotation_animator.h"
 
-#include "ash/ash_switches.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
 #include "ash/rotator/screen_rotation_animator_test_api.h"
@@ -21,8 +21,8 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"

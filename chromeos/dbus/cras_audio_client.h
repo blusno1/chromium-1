@@ -7,12 +7,16 @@
 
 #include <stdint.h>
 
+#include <string>
+#include <vector>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/audio_node.h"
 #include "chromeos/dbus/dbus_client.h"
+#include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/volume_state.h"
 
 namespace chromeos {
@@ -44,6 +48,9 @@ class CHROMEOS_EXPORT CrasAudioClient : public DBusClient {
 
     // Called when output node's volume changed.
     virtual void OutputNodeVolumeChanged(uint64_t node_id, int volume);
+
+    // Called when hotword is triggered.
+    virtual void HotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec);
 
    protected:
     virtual ~Observer();
@@ -79,9 +86,6 @@ class CHROMEOS_EXPORT CrasAudioClient : public DBusClient {
   // contains the detailed dbus error message.
   typedef base::Callback<void(const std::string&,
                               const std::string&)> ErrorCallback;
-  // A callback for cras dbus method WaitForServiceToBeAvailable.
-  typedef base::Callback<void(bool service_is_ready)>
-      WaitForServiceToBeAvailableCallback;
 
   // Gets the volume state, asynchronously.
   virtual void GetVolumeState(const GetVolumeStateCallback& callback) = 0;
@@ -146,7 +150,7 @@ class CHROMEOS_EXPORT CrasAudioClient : public DBusClient {
 
   // Runs the callback as soon as the service becomes available.
   virtual void WaitForServiceToBeAvailable(
-      const WaitForServiceToBeAvailableCallback& callback) = 0;
+      WaitForServiceToBeAvailableCallback callback) = 0;
 
   // Creates the instance.
   static CrasAudioClient* Create();

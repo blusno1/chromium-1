@@ -39,13 +39,6 @@ cr.define('login', function() {
   var PORTRAIT_MODE_LIMIT = 9;
 
   /**
-   * Minimal padding between user pod and virtual keyboard.
-   * @type {number}
-   * @const
-   */
-  var USER_POD_KEYBOARD_MIN_PADDING = 20;
-
-  /**
    * Distance between the bubble and user pod.
    * @type {number}
    * @const
@@ -2958,15 +2951,12 @@ cr.define('login', function() {
 
     /**
      * Return true if user pod row has only single user pod in it, which should
-     * always be focused except desktop and tablet modes.
+     * always be focused except desktop mode.
      * @type {boolean}
      */
     get alwaysFocusSinglePod() {
-      var isDesktopUserManager = Oobe.getInstance().displayType ==
-          DISPLAY_TYPE.DESKTOP_USER_MANAGER;
-
-      return (isDesktopUserManager || this.tabletModeEnabled_) ?
-          false :
+      return Oobe.getInstance().displayType !=
+          DISPLAY_TYPE.DESKTOP_USER_MANAGER &&
           this.pods.length == 1;
     },
 
@@ -3176,33 +3166,6 @@ cr.define('login', function() {
       this.users_ = users;
 
       this.rebuildPods();
-    },
-
-    /**
-     * Scrolls focused user pod into view.
-     */
-    scrollFocusedPodIntoView: function() {
-      var pod = this.focusedPod_;
-      if (!pod)
-        return;
-
-      // First check whether focused pod is already fully visible.
-      var visibleArea = $('scroll-container');
-      // Visible area may not defined at user manager screen on all platforms.
-      // Windows, Mac and Linux do not have visible area.
-      if (!visibleArea)
-        return;
-      var scrollTop = visibleArea.scrollTop;
-      var clientHeight = visibleArea.clientHeight;
-      var podTop = $('oobe').offsetTop + pod.offsetTop;
-      var padding = USER_POD_KEYBOARD_MIN_PADDING;
-      if (podTop + pod.height + padding <= scrollTop + clientHeight &&
-          podTop - padding >= scrollTop) {
-        return;
-      }
-
-      // Scroll so that user pod is as centered as possible.
-      visibleArea.scrollTop = podTop - (clientHeight - pod.offsetHeight) / 2;
     },
 
     /**
@@ -3680,6 +3643,8 @@ cr.define('login', function() {
       // apply to account picker.
       // This is a hacky solution: we can make #scroll-container hide the
       // overflow area and manully position #inner-container.
+      // NOTE: The global states set here might need to be cleared in
+      //   handleHide. Please update the code there when adding new stuff here.
       var isScreenShrinked = this.isScreenShrinked_();
       $('scroll-container')
           .classList.toggle('disable-scroll', isScreenShrinked);
@@ -3759,16 +3724,15 @@ cr.define('login', function() {
       var smallPodsTotalHeight = (pods.length - 1) * CROS_SMALL_POD_HEIGHT +
           (pods.length - 2) * actualSmallPodPadding;
 
+      // SCROLL_TOP_PADDING denotes the smallest top padding we can tolerate
+      // before allowing the container to overflow and show the scroll bar.
       var SCROLL_TOP_PADDING = this.isPortraitMode_() ? 66 : 72;
       if (smallPodsTotalHeight + SCROLL_TOP_PADDING * 2 >
           this.screenSize.height) {
-        // Edge case: the design spec assumes that the screen height is large
-        // enough if the pod count limits set above are not exceeded, but for
-        // smaller screens the contents may still overflow.
-        // SCROLL_TOP_PADDING denotes the smallest top padding we can tolerate
-        // before allowing the container to overflow and show the scroll bar.
-        // If virtual keyboard is shown, we will first try a smaller padding
-        // and recalculate the total height.
+        // In case the contents overflow for any reason (it shouldn't if the
+        // pod count is within limits), fall to the scrollable container case.
+        // But before that we'll try a smaller top padding and recalculate the
+        // total height if virtual keyboard is shown.
         if (this.isScreenShrinked_()) {
           actualSmallPodPadding = 32;
           smallPodsTotalHeight = (pods.length - 1) * CROS_SMALL_POD_HEIGHT +
@@ -4207,7 +4171,7 @@ cr.define('login', function() {
 
       this.removeChild(this.mainPod_);
       // It must have the same index with the original small pod, instead
-      // of being appended as the last child, in order to maintain the 'Tab'
+      // of being appended as the last child, in order to maintain the tab
       // order.
       parent.insertBefore(this.mainPod_, children[insert]);
       this.mainPod_.left = left;
@@ -4766,8 +4730,10 @@ cr.define('login', function() {
             event, this.listeners_[event][0], this.listeners_[event][1]);
       }
       $('login-header-bar').buttonsTabIndex = UserPodTabOrder.HEADER_BAR;
-      // Header bar should be hidden when virtual keyboard is shown.
-      Oobe.getInstance().headerHidden = this.isScreenShrinked_();
+      // Header bar should be hidden when virtual keyboard is shown, or
+      // views-based shelf is shown.
+      Oobe.getInstance().headerHidden =
+          this.isScreenShrinked_() || Oobe.getInstance().showingViewsBasedShelf;
 
       if (this.podPlacementPostponed_) {
         this.podPlacementPostponed_ = false;
@@ -4787,6 +4753,11 @@ cr.define('login', function() {
             event, this.listeners_[event][0], this.listeners_[event][1]);
       }
       $('login-header-bar').buttonsTabIndex = 0;
+
+      // Clear global states that should only applies to account picker.
+      $('scroll-container').classList.remove('disable-scroll');
+      $('inner-container').classList.remove('disable-scroll');
+      $('inner-container').style.top = 'unset';
     },
 
     /**
@@ -4812,7 +4783,8 @@ cr.define('login', function() {
      */
     maybePreselectPod: function() {
       var pod = this.preselectedPod;
-      this.focusPod(pod);
+      // Force a focus update to ensure the correct wallpaper is loaded.
+      this.focusPod(pod, true /* force */);
 
       // Hide user-type-bubble in case all user pods are disabled and we focus
       // first pod.

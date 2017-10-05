@@ -102,7 +102,7 @@
 #include "device/gamepad/gamepad_service.h"
 #include "gpu/vulkan/features.h"
 #include "media/audio/audio_manager.h"
-#include "media/audio/audio_system_impl.h"
+#include "media/audio/audio_system.h"
 #include "media/audio/audio_thread_impl.h"
 #include "media/base/media.h"
 #include "media/base/user_input_monitor.h"
@@ -115,8 +115,9 @@
 #include "net/socket/client_socket_factory.h"
 #include "net/ssl/ssl_config_service.h"
 #include "ppapi/features/features.h"
-#include "services/resource_coordinator/memory_instrumentation/coordinator_impl.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/client_process_impl.h"
+#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
+#include "services/resource_coordinator/public/interfaces/service_constants.mojom.h"
 #include "services/service_manager/runner/common/client_util.h"
 #include "skia/ext/event_tracer_impl.h"
 #include "skia/ext/skia_memory_dump_provider.h"
@@ -152,7 +153,6 @@
 #if defined(OS_MACOSX)
 #include "base/allocator/allocator_interception_mac.h"
 #include "base/memory/memory_pressure_monitor_mac.h"
-#include "content/browser/bootstrap_sandbox_manager_mac.h"
 #include "content/browser/cocoa/system_hotkey_helper_mac.h"
 #include "content/browser/mach_broker_mac.h"
 #include "content/browser/renderer_host/browser_compositor_view_mac.h"
@@ -189,14 +189,14 @@
 #endif
 
 #if defined(OS_FUCHSIA)
-#include <magenta/process.h>
-#include <magenta/syscalls.h>
+#include <zircon/process.h>
+#include <zircon/syscalls.h>
 
 #include "base/fuchsia/default_job.h"
 #endif  // defined(OS_FUCHSIA)
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
-#include "content/browser/renderer_host/render_sandbox_host_linux.h"
+#include "content/browser/sandbox_host_linux.h"
 #include "content/browser/zygote_host/zygote_host_impl_linux.h"
 
 #if !defined(OS_ANDROID)
@@ -249,9 +249,9 @@ bool IsUsingMus() {
     !defined(OS_FUCHSIA)
 void SetupSandbox(const base::CommandLine& parsed_command_line) {
   TRACE_EVENT0("startup", "SetupSandbox");
-  // RenderSandboxHostLinux needs to be initialized even if the sandbox and
-  // zygote are both disabled. It initializes the renderer socket.
-  RenderSandboxHostLinux::GetInstance()->Init();
+  // SandboxHostLinux needs to be initialized even if the sandbox and
+  // zygote are both disabled. It initializes the sandboxed process socket.
+  SandboxHostLinux::GetInstance()->Init();
 
   if (parsed_command_line.HasSwitch(switches::kNoZygote) &&
       !parsed_command_line.HasSwitch(switches::kNoSandbox)) {
@@ -469,10 +469,10 @@ constexpr base::TimeDelta kSwapMetricsInterval =
 // Create and register the job which will contain all child processes
 // of the browser process as well as their descendents.
 void InitDefaultJob() {
-  base::ScopedMxHandle handle;
-  mx_status_t result = mx_job_create(mx_job_default(), 0, handle.receive());
-  CHECK_EQ(MX_OK, result) << "mx_job_create(job): "
-                          << mx_status_get_string(result);
+  base::ScopedZxHandle handle;
+  zx_status_t result = zx_job_create(zx_job_default(), 0, handle.receive());
+  CHECK_EQ(ZX_OK, result) << "zx_job_create(job): "
+                          << zx_status_get_string(result);
   base::SetDefaultJob(std::move(handle));
 }
 #endif  // defined(OS_FUCHSIA)
@@ -780,14 +780,6 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
                  "BrowserMainLoop::Subsystem:ScreenOrientationProvider");
     screen_orientation_delegate_.reset(
         new ScreenOrientationDelegateAndroid());
-  }
-#endif
-
-#if defined(OS_MACOSX)
-  if (BootstrapSandboxManager::ShouldEnable()) {
-    TRACE_EVENT0("startup",
-                 "BrowserMainLoop::Subsystem:BootstrapSandbox");
-    CHECK(BootstrapSandboxManager::GetInstance());
   }
 #endif
 
@@ -1359,16 +1351,6 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
       }
     }
 
-    // Close the blocking I/O pool after the other threads. Other threads such
-    // as the I/O thread may need to schedule work like closing files or
-    // flushing data during shutdown, so the blocking pool needs to be
-    // available. There may also be slow operations pending that will blcok
-    // shutdown, so closing it here (which will block until required operations
-    // are complete) gives more head start for those operations to finish.
-    {
-      TRACE_EVENT0("shutdown", "BrowserMainLoop::Subsystem:ThreadPool");
-      BrowserThreadImpl::ShutdownThreadPool();
-    }
     {
       TRACE_EVENT0("shutdown", "BrowserMainLoop::Subsystem:TaskScheduler");
       base::TaskScheduler::GetInstance()->Shutdown();
@@ -1439,24 +1421,18 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   // so this cannot happen any earlier than now.
   InitializeMojo();
 
-  // Create the memory instrumentation service. It will initialize the memory
-  // dump manager, too. It makes sense that BrowserMainLoop owns the service;
-  // this way, the service is alive for the lifetime of Mojo. Mojo is shutdown
-  // in BrowserMainLoop::ShutdownThreadsAndCleanupIO.
-  service_manager::Connector* connector =
-      content::ServiceManagerConnection::GetForProcess()->GetConnector();
-  memory_instrumentation_coordinator_ =
-      base::MakeUnique<memory_instrumentation::CoordinatorImpl>(connector);
-
   // Registers the browser process as a memory-instrumentation client, so
   // that data for the browser process will be available in memory dumps.
+  service_manager::Connector* connector =
+      content::ServiceManagerConnection::GetForProcess()->GetConnector();
   memory_instrumentation::ClientProcessImpl::Config config(
-      connector, mojom::kBrowserServiceName,
+      connector, resource_coordinator::mojom::kServiceName,
       memory_instrumentation::mojom::ProcessType::BROWSER);
   memory_instrumentation::ClientProcessImpl::CreateInstance(config);
 
+  const bool is_mus = IsUsingMus();
 #if defined(USE_AURA)
-  if (IsUsingMus()) {
+  if (is_mus) {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kIsRunningInMash);
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -1494,7 +1470,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   established_gpu_channel = true;
   if (!GpuDataManagerImpl::GetInstance()->CanUseGpuBrowserCompositor() ||
       parsed_command_line_.HasSwitch(switches::kDisableGpuEarlyInit) ||
-      IsUsingMus()) {
+      is_mus) {
     established_gpu_channel = always_uses_gpu = false;
   }
   gpu::GpuChannelEstablishFactory* factory =
@@ -1504,7 +1480,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
     factory = BrowserGpuChannelHostFactory::instance();
   }
 #if !defined(OS_ANDROID)
-  if (!IsUsingMus()) {
+  if (!is_mus) {
     // TODO(kylechar): Remove flag along with surface sequences.
     // See https://crbug.com/676384.
     auto surface_lifetime_type =
@@ -1525,8 +1501,11 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 #endif
 
   DCHECK(factory);
-  ImageTransportFactory::Initialize(GetResizeTaskRunner());
-  ImageTransportFactory::GetInstance()->SetGpuChannelEstablishFactory(factory);
+  if (!is_mus) {
+    ImageTransportFactory::Initialize(GetResizeTaskRunner());
+    ImageTransportFactory::GetInstance()->SetGpuChannelEstablishFactory(
+        factory);
+  }
 #if defined(USE_AURA)
   if (env_->mode() == aura::Env::Mode::LOCAL) {
     env_->set_context_factory(GetContextFactory());
@@ -1628,7 +1607,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   // ChildProcess instance which is created by the renderer thread.
   if (GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(NULL) &&
       !established_gpu_channel && always_uses_gpu && !UsingInProcessGpu() &&
-      !IsUsingMus()) {
+      !is_mus) {
     TRACE_EVENT_INSTANT0("gpu", "Post task to launch GPU process",
                          TRACE_EVENT_SCOPE_THREAD);
     BrowserThread::PostTask(
@@ -1846,8 +1825,7 @@ void BrowserMainLoop::CreateAudioManager() {
         MediaInternals::GetInstance());
   }
   CHECK(audio_manager_);
-
-  audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
+  audio_system_ = media::AudioSystem::CreateInstance();
   CHECK(audio_system_);
 }
 

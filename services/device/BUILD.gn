@@ -45,6 +45,7 @@ source_set("lib") {
     deps += [ ":device_service_jni_headers" ]
   } else {
     deps += [
+      "//device/hid",
       "//services/device/battery",
       "//services/device/vibration",
     ]

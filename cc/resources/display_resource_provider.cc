@@ -18,16 +18,12 @@ DisplayResourceProvider::DisplayResourceProvider(
     viz::ContextProvider* compositor_context_provider,
     viz::SharedBitmapManager* shared_bitmap_manager,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    BlockingTaskRunner* blocking_main_thread_task_runner,
     bool delegated_sync_points_required,
-    bool enable_color_correct_rasterization,
     const viz::ResourceSettings& resource_settings)
     : ResourceProvider(compositor_context_provider,
                        shared_bitmap_manager,
                        gpu_memory_buffer_manager,
-                       blocking_main_thread_task_runner,
                        delegated_sync_points_required,
-                       enable_color_correct_rasterization,
                        resource_settings) {}
 
 DisplayResourceProvider::~DisplayResourceProvider() {
@@ -252,8 +248,7 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
     returned->sync_token = new_sync_token;
 
   if (!to_return.empty())
-    child_info->return_callback.Run(to_return,
-                                    blocking_main_thread_task_runner_);
+    child_info->return_callback.Run(to_return);
 
   if (child_info->marked_for_deletion &&
       child_info->child_to_parent_map.empty()) {
@@ -286,8 +281,7 @@ void DisplayResourceProvider::ReceiveFromChild(
           "cc", "DisplayResourceProvider::ReceiveFromChild dropping invalid");
       std::vector<viz::ReturnedResource> to_return;
       to_return.push_back(it->ToReturnedResource());
-      child_info.return_callback.Run(to_return,
-                                     blocking_main_thread_task_runner_);
+      child_info.return_callback.Run(to_return);
       continue;
     }
 
@@ -299,10 +293,10 @@ void DisplayResourceProvider::ReceiveFromChild(
                                          Resource::DELEGATED, GL_LINEAR));
     } else {
       resource = InsertResource(
-          local_id, Resource(0, it->size, Resource::DELEGATED,
-                             it->mailbox_holder.texture_target, it->filter,
-                             TEXTURE_HINT_IMMUTABLE, RESOURCE_TYPE_GL_TEXTURE,
-                             it->format));
+          local_id,
+          Resource(0, it->size, Resource::DELEGATED,
+                   it->mailbox_holder.texture_target, it->filter,
+                   TEXTURE_HINT_DEFAULT, RESOURCE_TYPE_GL_TEXTURE, it->format));
       resource->buffer_format = it->buffer_format;
       resource->SetMailbox(viz::TextureMailbox(
           it->mailbox_holder.mailbox, it->mailbox_holder.sync_token,

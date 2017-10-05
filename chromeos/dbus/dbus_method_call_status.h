@@ -5,9 +5,13 @@
 #ifndef CHROMEOS_DBUS_DBUS_METHOD_CALL_STATUS_H_
 #define CHROMEOS_DBUS_DBUS_METHOD_CALL_STATUS_H_
 
+// TODO(hidehiko): Rename this file to dbus_callback.h, when we fully
+// get rid of DBusMethodCallStatus enum defined below.
+
 #include <string>
 
 #include "base/callback.h"
+#include "base/optional.h"
 #include "chromeos/chromeos_export.h"
 
 namespace dbus {
@@ -24,34 +28,25 @@ enum DBusMethodCallStatus {
   DBUS_METHOD_CALL_SUCCESS,
 };
 
+// Callback to handle response of methods with result.
+// In case of error, nullopt should be passed.
+template <typename ResultType>
+using DBusMethodCallback =
+    base::OnceCallback<void(base::Optional<ResultType> result)>;
+
 // A callback to handle responses of methods without results.
 using VoidDBusMethodCallback =
     base::OnceCallback<void(DBusMethodCallStatus call_status)>;
 
 // TODO(crbug.com/739622): Use OnceCallback in following definition, too.
 
-// A callback to handle responses of methods returning a bool value.
-typedef base::Callback<void(DBusMethodCallStatus call_status,
-                            bool result)> BoolDBusMethodCallback;
-
-// A callback to handle responses of methods returning a string value.
-using StringDBusMethodCallback =
-    base::OnceCallback<void(DBusMethodCallStatus call_status,
-                            const std::string& result)>;
-
-// A callback to handle responses of methods returning a boolean value.
-typedef base::Callback<void(
-    DBusMethodCallStatus call_status,
-    bool result)> BooleanDBusMethodCallback;
-
-// A callback to handle responses of methods returning a ObjectPath value.
-typedef base::Callback<void(
-    DBusMethodCallStatus call_status,
-    const dbus::ObjectPath& result)> ObjectPathDBusMethodCallback;
-
 // A callback to handle responses of methods returning a ObjectPath value that
 // doesn't get call status.
 typedef base::Callback<void(const dbus::ObjectPath& result)> ObjectPathCallback;
+
+// Called when service becomes available.
+using WaitForServiceToBeAvailableCallback =
+    base::OnceCallback<void(bool service_is_available)>;
 
 // Returns an empty callback that does nothing.
 CHROMEOS_EXPORT VoidDBusMethodCallback EmptyVoidDBusMethodCallback();

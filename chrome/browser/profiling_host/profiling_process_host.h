@@ -52,8 +52,8 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
     // No profiling enabled.
     kNone,
 
-    // Only profile the browser process.
-    kBrowser,
+    // Only profile the browser and GPU processes.
+    kMinimal,
 
     // Profile all processes.
     kAll,
@@ -80,7 +80,9 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
 
   // Sends a message to the profiling process that it dump the given process'
   // memory data to the given file.
-  void RequestProcessDump(base::ProcessId pid, const base::FilePath& dest);
+  void RequestProcessDump(base::ProcessId pid,
+                          base::FilePath dest,
+                          base::OnceClosure done);
 
   // Sends a message to the profiling process that it report the given process'
   // memory data to the crash server (slow-report).
@@ -117,8 +119,9 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
 
-  void OnDumpProcessForTracingCallback(mojo::ScopedSharedBufferHandle buffer,
-                                       uint32_t size);
+  void OnDumpProcessesForTracingCallback(
+      uint64_t guid,
+      std::vector<profiling::mojom::SharedBufferWithSizePtr> buffers);
 
   // Starts the profiling process.
   void LaunchAsService();
@@ -132,17 +135,20 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
                                mojo::ScopedHandle handle);
 
   void GetOutputFileOnBlockingThread(base::ProcessId pid,
-                                     const base::FilePath& dest,
+                                     base::FilePath dest,
                                      std::string trigger_name,
-                                     bool upload);
+                                     bool upload,
+                                     base::OnceClosure done);
   void HandleDumpProcessOnIOThread(base::ProcessId pid,
                                    base::FilePath file_path,
                                    base::File file,
                                    std::string trigger_name,
-                                   bool upload);
+                                   bool upload,
+                                   base::OnceClosure done);
   void OnProcessDumpComplete(base::FilePath file_path,
                              std::string trigger_name,
                              bool upload,
+                             base::OnceClosure done,
                              bool success);
 
   // Returns the metadata for the trace. This is the minimum amount of metadata

@@ -421,6 +421,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
   RunAriaTest(FILE_PATH_LITERAL("aria-describedby.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityAriaDescribedByUpdates) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-describedby-updates.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaDetails) {
   RunAriaTest(FILE_PATH_LITERAL("aria-details.html"));
 }
@@ -532,6 +537,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaLabel) {
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
                        AccessibilityAriaLabelledByHeading) {
   RunAriaTest(FILE_PATH_LITERAL("aria-labelledby-heading.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityAriaLabelledByUpdates) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-labelledby-updates.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaLevel) {
@@ -1381,6 +1391,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityLabel) {
   RunHtmlTest(FILE_PATH_LITERAL("label.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityLabelUpdates) {
+  RunHtmlTest(FILE_PATH_LITERAL("label-updates.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityLandmark) {
   RunHtmlTest(FILE_PATH_LITERAL("landmark.html"));
 }
@@ -1480,6 +1494,15 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityObject) {
   RunHtmlTest(FILE_PATH_LITERAL("object.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityOffscreen) {
+  RunHtmlTest(FILE_PATH_LITERAL("offscreen.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityOffscreenScroll) {
+  RunHtmlTest(FILE_PATH_LITERAL("offscreen-scroll.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityOptgroup) {
   RunHtmlTest(FILE_PATH_LITERAL("optgroup.html"));
 }
@@ -1512,6 +1535,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityProgress) {
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityQ) {
   RunHtmlTest(FILE_PATH_LITERAL("q.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityReplaceData) {
+  RunHtmlTest(FILE_PATH_LITERAL("replace-data.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityRuby) {
@@ -1579,6 +1606,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityTableSimple) {
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityTableThColHeader) {
+  RunHtmlTest(FILE_PATH_LITERAL("table-th-colheader.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
                        AccessibilityTableThRowHeader) {
   RunHtmlTest(FILE_PATH_LITERAL("table-th-rowheader.html"));
 }
@@ -1642,6 +1674,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, DISABLED_AccessibilityVideo) {
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityWbr) {
   RunHtmlTest(FILE_PATH_LITERAL("wbr.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityWindowCropsItems) {
+  RunHtmlTest(FILE_PATH_LITERAL("window-crops-items.html"));
 }
 
 }  // namespace content

@@ -23,10 +23,10 @@
 #define SVGElement_h
 
 #include "core/CoreExport.h"
-#include "core/SVGNames.h"
 #include "core/dom/Element.h"
 #include "core/svg/SVGParsingError.h"
 #include "core/svg/properties/SVGPropertyInfo.h"
+#include "core/svg_names.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
@@ -163,7 +163,7 @@ class CORE_EXPORT SVGElement : public Element {
 
   virtual bool HaveLoadedRequiredResources();
 
-  void InvalidateRelativeLengthClients(SubtreeLayoutScope* = 0);
+  void InvalidateRelativeLengthClients(SubtreeLayoutScope* = nullptr);
 
   void AddToPropertyMap(SVGAnimatedPropertyBase*);
 

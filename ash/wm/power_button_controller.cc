@@ -5,7 +5,7 @@
 #include "ash/wm/power_button_controller.h"
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
@@ -18,6 +18,7 @@
 #include "ash/wm/session_state_animator.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
+#include "base/time/default_tick_clock.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -25,11 +26,21 @@
 #include "ui/wm/core/compound_event_filter.h"
 
 namespace ash {
+namespace {
 
-PowerButtonController::PowerButtonController(LockStateController* controller)
-    : lock_state_controller_(controller) {
+// When clamshell power button behavior is forced, turn the screen off this long
+// after locking is requested via the power button.
+constexpr base::TimeDelta kDisplayOffAfterLockDelay =
+    base::TimeDelta::FromSeconds(3);
+
+}  // namespace
+
+PowerButtonController::PowerButtonController()
+    : lock_state_controller_(Shell::Get()->lock_state_controller()),
+      tick_clock_(new base::DefaultTickClock) {
   ProcessCommandLine();
-  display_controller_ = base::MakeUnique<PowerButtonDisplayController>();
+  display_controller_ =
+      std::make_unique<PowerButtonDisplayController>(tick_clock_.get());
   chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
       this);
   chromeos::AccelerometerReader::GetInstance()->AddObserver(this);
@@ -45,14 +56,12 @@ PowerButtonController::~PowerButtonController() {
       this);
 }
 
-void PowerButtonController::OnScreenBrightnessChanged(double percent) {
-  brightness_is_zero_ = percent <= 0.001;
-}
-
 void PowerButtonController::OnPowerButtonEvent(
     bool down,
     const base::TimeTicks& timestamp) {
   power_button_down_ = down;
+  if (down)
+    started_lock_animation_for_power_button_down_ = false;
 
   if (lock_state_controller_->ShutdownRequested())
     return;
@@ -68,6 +77,12 @@ void PowerButtonController::OnPowerButtonEvent(
     tablet_controller_->OnPowerButtonEvent(down, timestamp);
     return;
   }
+
+  // PowerButtonDisplayController ignores power button events, so tell it to
+  // stop forcing the display off if TabletPowerButtonController isn't being
+  // used.
+  if (down && force_clamshell_power_button_)
+    display_controller_->SetDisplayForcedOff(false);
 
   // Avoid starting the lock/shutdown sequence if the power button is pressed
   // while the screen is off (http://crbug.com/128451), unless an external
@@ -108,25 +123,39 @@ void PowerButtonController::OnPowerButtonEvent(
         lock_state_controller_->RequestShutdown(ShutdownReason::POWER_BUTTON);
       }
     }
-  } else {  // !has_legacy_power_button_
-    if (down) {
-      // If we already have a pending request to lock the screen, wait.
-      if (lock_state_controller_->LockRequested())
-        return;
+    return;
+  }
 
-      if (session_controller->CanLockScreen() &&
-          !session_controller->IsUserSessionBlocked()) {
-        lock_state_controller_->StartLockThenShutdownAnimation(
-            ShutdownReason::POWER_BUTTON);
-      } else {
-        lock_state_controller_->StartShutdownAnimation(
-            ShutdownReason::POWER_BUTTON);
-      }
-    } else {  // Button is up.
-      if (lock_state_controller_->CanCancelLockAnimation())
-        lock_state_controller_->CancelLockAnimation();
-      else if (lock_state_controller_->CanCancelShutdownAnimation())
-        lock_state_controller_->CancelShutdownAnimation();
+  if (down) {
+    // If we already have a pending request to lock the screen, wait.
+    if (lock_state_controller_->LockRequested())
+      return;
+
+    if (session_controller->CanLockScreen() &&
+        !session_controller->IsUserSessionBlocked()) {
+      lock_state_controller_->StartLockThenShutdownAnimation(
+          ShutdownReason::POWER_BUTTON);
+      started_lock_animation_for_power_button_down_ = true;
+    } else {
+      lock_state_controller_->StartShutdownAnimation(
+          ShutdownReason::POWER_BUTTON);
+    }
+  } else {  // Button is up.
+    if (lock_state_controller_->CanCancelLockAnimation())
+      lock_state_controller_->CancelLockAnimation();
+    else if (lock_state_controller_->CanCancelShutdownAnimation())
+      lock_state_controller_->CancelShutdownAnimation();
+
+    // Avoid awkwardly keeping the display on at the lock screen for a long time
+    // if we're forcing clamshell behavior on a convertible device, since it
+    // makes it difficult to transport the device while it's in tablet mode.
+    if (force_clamshell_power_button_ &&
+        started_lock_animation_for_power_button_down_ &&
+        (session_controller->IsScreenLocked() ||
+         lock_state_controller_->LockRequested())) {
+      display_off_timer_.Start(
+          FROM_HERE, kDisplayOffAfterLockDelay, this,
+          &PowerButtonController::ForceDisplayOffAfterLock);
     }
   }
 }
@@ -165,6 +194,18 @@ void PowerButtonController::OnKeyEvent(ui::KeyEvent* event) {
           audio_handler->GetOutputVolumePercent();
     }
   }
+  if (event->key_code() != ui::VKEY_POWER)
+    display_off_timer_.Stop();
+}
+
+void PowerButtonController::OnMouseEvent(ui::MouseEvent* event) {
+  if (event->flags() & ui::EF_IS_SYNTHESIZED)
+    return;
+  display_off_timer_.Stop();
+}
+
+void PowerButtonController::OnTouchEvent(ui::TouchEvent* event) {
+  display_off_timer_.Stop();
 }
 
 void PowerButtonController::OnDisplayModeChanged(
@@ -183,6 +224,10 @@ void PowerButtonController::OnDisplayModeChanged(
       internal_display_off && external_display_on;
 }
 
+void PowerButtonController::BrightnessChanged(int level, bool user_initiated) {
+  brightness_is_zero_ = level == 0;
+}
+
 void PowerButtonController::PowerButtonEventReceived(
     bool down,
     const base::TimeTicks& timestamp) {
@@ -194,7 +239,26 @@ void PowerButtonController::OnAccelerometerUpdated(
   if (force_clamshell_power_button_ || tablet_controller_)
     return;
   tablet_controller_.reset(new TabletPowerButtonController(
-      lock_state_controller_, display_controller_.get()));
+      display_controller_.get(), tick_clock_.get()));
+}
+
+void PowerButtonController::SetTickClockForTesting(
+    std::unique_ptr<base::TickClock> tick_clock) {
+  DCHECK(tick_clock);
+  tick_clock_ = std::move(tick_clock);
+
+  display_controller_ =
+      std::make_unique<PowerButtonDisplayController>(tick_clock_.get());
+}
+
+bool PowerButtonController::TriggerDisplayOffTimerForTesting() {
+  if (!display_off_timer_.IsRunning())
+    return false;
+
+  base::Closure task = display_off_timer_.user_task();
+  display_off_timer_.Stop();
+  task.Run();
+  return true;
 }
 
 void PowerButtonController::ProcessCommandLine() {
@@ -202,6 +266,10 @@ void PowerButtonController::ProcessCommandLine() {
   has_legacy_power_button_ = cl->HasSwitch(switches::kAuraLegacyPowerButton);
   force_clamshell_power_button_ =
       cl->HasSwitch(switches::kForceClamshellPowerButton);
+}
+
+void PowerButtonController::ForceDisplayOffAfterLock() {
+  display_controller_->SetDisplayForcedOff(true);
 }
 
 }  // namespace ash

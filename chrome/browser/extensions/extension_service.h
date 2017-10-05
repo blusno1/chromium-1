@@ -28,6 +28,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/crx_file_info.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/external_provider_interface.h"
 #include "extensions/browser/install_flag.h"
 #include "extensions/browser/process_manager.h"
@@ -63,7 +64,6 @@ class ExtensionSystem;
 class ExtensionUpdater;
 class ExternalInstallManager;
 class OneShotEvent;
-class RendererStartupHelper;
 class SharedModuleService;
 class UpdateObserver;
 }  // namespace extensions
@@ -150,7 +150,9 @@ class ExtensionServiceInterface
   virtual void CheckForUpdatesSoon() = 0;
 
   // Adds |extension| to this ExtensionService and notifies observers that the
-  // extensions have been loaded.
+  // extension has been loaded.
+  // TODO(michaelpg): Refactor this function into single-purpose functions and
+  // migrate common code into ExtensionRegistrar.
   virtual void AddExtension(const extensions::Extension* extension) = 0;
 
   // Check if we have preferences for the component extension and, if not or if
@@ -236,10 +238,9 @@ class ExtensionService
       const extensions::ExternalProviderInterface* provider) override;
   void OnExternalProviderUpdateComplete(
       const extensions::ExternalProviderInterface* provider,
-      const std::vector<
-          std::unique_ptr<extensions::ExternalInstallInfoUpdateUrl>>&
+      const std::vector<extensions::ExternalInstallInfoUpdateUrl>&
           external_update_url_extensions,
-      const std::vector<std::unique_ptr<extensions::ExternalInstallInfoFile>>&
+      const std::vector<extensions::ExternalInstallInfoFile>&
           external_file_extensions,
       const std::set<std::string>& removed_extensions) override;
 
@@ -515,16 +516,15 @@ class ExtensionService
                                 const std::string& install_parameter);
 
   // Handles sending notification that |extension| was loaded.
+  // TODO(michaelpg): Move to a delegate provided to ExtensionRegistrar, so
+  // ExtensionRegistrar is responsible for calling this at the right times.
   void NotifyExtensionLoaded(const extensions::Extension* extension);
 
-  // Completes extension loading after URLRequestContexts have been updated
-  // on the IO thread.
-  void OnExtensionRegisteredWithRequestContexts(
+  // Handles updating the profile when |extension| is disabled or removed.
+  // TODO(michaelpg): Move to a delegate provided to ExtensionRegistrar, so
+  // ExtensionRegistrar is responsible for calling this at the right times.
+  void PostDeactivateExtension(
       scoped_refptr<const extensions::Extension> extension);
-
-  // Handles sending notification that |extension| was unloaded.
-  void NotifyExtensionUnloaded(const extensions::Extension* extension,
-                               extensions::UnloadedExtensionReason reason);
 
   // Common helper to finish installing the given extension.
   void FinishInstallation(const extensions::Extension* extension);
@@ -719,14 +719,13 @@ class ExtensionService
   // The SharedModuleService used to check for import dependencies.
   std::unique_ptr<extensions::SharedModuleService> shared_module_service_;
 
-  // The associated RendererStartupHelper. Guaranteed to outlive the
-  // ExtensionSystem, and thus us.
-  extensions::RendererStartupHelper* renderer_helper_;
-
   base::ObserverList<extensions::UpdateObserver, true> update_observers_;
 
   // Migrates app data when upgrading a legacy packaged app to a platform app
   std::unique_ptr<extensions::AppDataMigrator> app_data_migrator_;
+
+  // Helper to register and unregister extensions.
+  extensions::ExtensionRegistrar extension_registrar_;
 
   using InstallGateRegistry = std::map<extensions::ExtensionPrefs::DelayReason,
                                        extensions::InstallGate*>;

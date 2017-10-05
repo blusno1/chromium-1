@@ -353,6 +353,20 @@ MATCHER_P2(NoSpliceForBadMux, overlapped_buffer_count, splice_time_us, "") {
                                   base::IntToString(splice_time_us));
 }
 
+MATCHER_P(BufferingByPtsDts, by_pts_bool, "") {
+  return CONTAINS_STRING(arg, std::string("ChunkDemuxer: buffering by ") +
+                                  (by_pts_bool ? "PTS" : "DTS"));
+}
+
+MATCHER_P3(NegativeDtsFailureWhenByDts, frame_type, pts_us, dts_us, "") {
+  return CONTAINS_STRING(
+      arg, std::string(frame_type) + " frame with PTS " +
+               base::IntToString(pts_us) + "us has negative DTS " +
+               base::IntToString(dts_us) +
+               "us after applying timestampOffset, handling any discontinuity, "
+               "and filtering against append window");
+}
+
 }  // namespace media
 
 #endif  // MEDIA_BASE_TEST_HELPERS_H_

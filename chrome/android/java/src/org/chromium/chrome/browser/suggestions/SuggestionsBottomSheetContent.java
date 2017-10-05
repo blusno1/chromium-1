@@ -6,17 +6,13 @@ package org.chromium.chrome.browser.suggestions;
 
 import android.annotation.SuppressLint;
 import android.content.res.Resources;
-import android.graphics.Rect;
 import android.support.annotation.Nullable;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.RecyclerView.OnScrollListener;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
-import android.view.TouchDelegate;
 import android.view.View;
+import android.view.View.OnAttachStateChangeListener;
 import android.view.ViewGroup;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -37,9 +33,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.ViewUtils;
-import org.chromium.chrome.browser.widget.FadingShadow;
-import org.chromium.chrome.browser.widget.FadingShadowView;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.StateChangeReason;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContentController;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetNewTabController;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
@@ -58,20 +53,23 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
     @Nullable
     private final SuggestionsCarousel mSuggestionsCarousel;
     private final SuggestionsSheetVisibilityChangeObserver mBottomSheetObserver;
+    private final ChromeActivity mActivity;
     private final BottomSheet mSheet;
     private final LogoView mLogoView;
     private final LogoDelegateImpl mLogoDelegate;
-    private final ViewGroup mToolbarView;
+    private final ViewGroup mControlContainerView;
+    private final View mToolbarPullHandle;
+    private final View mToolbarShadow;
 
     private boolean mNewTabShown;
     private boolean mSearchProviderHasLogo = true;
     private float mLastSheetHeightFraction = 1f;
 
-    // The sheet height fractions at which the logo transitions start and end.
-    private static final float LOGO_TRANSITION_BOTTOM_START = 0.3f;
-    private static final float LOGO_TRANSITION_BOTTOM_END = 0.1f;
-    private static final float LOGO_TRANSITION_TOP_START = 0.75f;
-    private static final float LOGO_TRANSITION_TOP_END = 0.95f;
+    /**
+     * Whether {@code mView} is currently attached to the window. This is used in place of
+     * {@link View#isAttachedToWindow()} to support older versions of Android (KitKat & JellyBean).
+     */
+    private boolean mIsAttachedToWindow;
 
     public SuggestionsBottomSheetContent(final ChromeActivity activity, final BottomSheet sheet,
             TabModelSelector tabModelSelector, SnackbarManager snackbarManager) {
@@ -79,12 +77,13 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         Profile profile = Profile.getLastUsedProfile();
         SuggestionsNavigationDelegate navigationDelegate =
                 new SuggestionsNavigationDelegateImpl(activity, profile, sheet, tabModelSelector);
+        mActivity = activity;
         mSheet = sheet;
         mTileGroupDelegate =
                 new TileGroupDelegateImpl(activity, profile, navigationDelegate, snackbarManager);
         mSuggestionsUiDelegate = new SuggestionsUiDelegateImpl(
                 depsFactory.createSuggestionSource(profile), depsFactory.createEventReporter(),
-                navigationDelegate, profile, sheet, activity.getReferencePool());
+                navigationDelegate, profile, sheet, activity.getReferencePool(), snackbarManager);
 
         mView = LayoutInflater.from(activity).inflate(
                 R.layout.suggestions_bottom_sheet_content, null);
@@ -94,41 +93,41 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         mRecyclerView = mView.findViewById(R.id.recycler_view);
         mRecyclerView.setBackgroundColor(backgroundColor);
 
-        TouchEnabledDelegate touchEnabledDelegate = new TouchEnabledDelegate() {
-            @Override
-            public void setTouchEnabled(boolean enabled) {
-                activity.getBottomSheet().setTouchEnabled(enabled);
-            }
-        };
-
+        TouchEnabledDelegate touchEnabledDelegate = activity.getBottomSheet()::setTouchEnabled;
         mContextMenuManager =
                 new ContextMenuManager(activity, navigationDelegate, touchEnabledDelegate);
         activity.getWindowAndroid().addContextMenuCloseListener(mContextMenuManager);
-        mSuggestionsUiDelegate.addDestructionObserver(new DestructionObserver() {
-            @Override
-            public void onDestroy() {
-                activity.getWindowAndroid().removeContextMenuCloseListener(mContextMenuManager);
-            }
+        mSuggestionsUiDelegate.addDestructionObserver(() -> {
+            activity.getWindowAndroid().removeContextMenuCloseListener(mContextMenuManager);
         });
 
         UiConfig uiConfig = new UiConfig(mRecyclerView);
         mRecyclerView.init(uiConfig, mContextMenuManager);
 
+        OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(profile);
+
         mSuggestionsCarousel =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SUGGESTIONS_CAROUSEL)
-                ? new SuggestionsCarousel(uiConfig, mSuggestionsUiDelegate, mContextMenuManager)
+                ? new SuggestionsCarousel(
+                          uiConfig, mSuggestionsUiDelegate, mContextMenuManager, offlinePageBridge)
                 : null;
 
         final NewTabPageAdapter adapter = new NewTabPageAdapter(mSuggestionsUiDelegate,
-                /* aboveTheFoldView = */ null, uiConfig, OfflinePageBridge.getForProfile(profile),
-                mContextMenuManager, mTileGroupDelegate, mSuggestionsCarousel);
+                /* aboveTheFoldView = */ null, uiConfig, offlinePageBridge, mContextMenuManager,
+                mTileGroupDelegate, mSuggestionsCarousel);
 
         mBottomSheetObserver = new SuggestionsSheetVisibilityChangeObserver(this, activity) {
             @Override
             public void onContentShown(boolean isFirstShown) {
+                // TODO(dgn): Temporary workaround to trigger an event in the backend when the
+                // sheet is opened following inactivity. See https://crbug.com/760974. Should be
+                // moved back to the "new opening of the sheet" path once we are able to trigger it
+                // in that case.
+                mSuggestionsUiDelegate.getEventReporter().onSurfaceOpened();
+                SuggestionsMetrics.recordSurfaceVisible();
+
                 if (isFirstShown) {
                     adapter.refreshSuggestions();
-                    mSuggestionsUiDelegate.getEventReporter().onSurfaceOpened();
 
                     maybeUpdateContextualSuggestions();
 
@@ -139,8 +138,6 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
                     mRecyclerView.scrollToPosition(0);
                     mRecyclerView.getScrollEventReporter().reset();
                 }
-
-                SuggestionsMetrics.recordSurfaceVisible();
             }
 
             @Override
@@ -157,11 +154,13 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
                     SuggestionsMetrics.recordSurfaceFullyVisible();
                     mRecyclerView.setScrollEnabled(true);
                 }
+
+                updateLogoTransition();
             }
 
             @Override
-            public void onSheetClosed() {
-                super.onSheetClosed();
+            public void onSheetClosed(@StateChangeReason int reason) {
+                super.onSheetClosed(reason);
                 mRecyclerView.setAdapter(null);
                 updateLogoTransition();
             }
@@ -172,8 +171,6 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
                 updateLogoTransition();
             }
         };
-
-        initializeShadow();
 
         final LocationBar locationBar = (LocationBar) sheet.findViewById(R.id.location_bar);
         mRecyclerView.setOnTouchListener(new View.OnTouchListener() {
@@ -190,7 +187,9 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         });
 
         mLogoView = mView.findViewById(R.id.search_provider_logo);
-        mToolbarView = (ViewGroup) activity.findViewById(R.id.toolbar);
+        mControlContainerView = (ViewGroup) activity.findViewById(R.id.control_container);
+        mToolbarPullHandle = activity.findViewById(R.id.toolbar_handle);
+        mToolbarShadow = activity.findViewById(R.id.bottom_toolbar_shadow);
         mLogoDelegate = new LogoDelegateImpl(navigationDelegate, mLogoView, profile);
         updateSearchProviderHasLogo();
         if (mSearchProviderHasLogo) {
@@ -199,6 +198,20 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         }
         TemplateUrlService.getInstance().addObserver(this);
         sheet.getNewTabController().addObserver(this);
+
+        mView.addOnAttachStateChangeListener(new OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                mIsAttachedToWindow = true;
+                updateLogoTransition();
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                mIsAttachedToWindow = false;
+                updateLogoTransition();
+            }
+        });
     }
 
     @Override
@@ -232,6 +245,7 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         mSuggestionsUiDelegate.onDestroy();
         mTileGroupDelegate.destroy();
         TemplateUrlService.getInstance().removeObserver(this);
+        mSheet.getNewTabController().removeObserver(this);
     }
 
     @Override
@@ -259,27 +273,6 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         updateSearchProviderHasLogo();
         loadSearchProviderLogo();
         updateLogoTransition();
-    }
-
-    private void initializeShadow() {
-        final FadingShadowView shadowView = (FadingShadowView) mView.findViewById(R.id.shadow);
-
-        if (FeatureUtilities.isChromeHomeModernEnabled()) {
-            ((ViewGroup) mView).removeView(shadowView);
-            return;
-        }
-
-        shadowView.init(
-                ApiCompatibilityUtils.getColor(mView.getResources(), R.color.toolbar_shadow_color),
-                FadingShadow.POSITION_TOP);
-
-        mRecyclerView.addOnScrollListener(new OnScrollListener() {
-            @Override
-            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-                boolean shadowVisible = mRecyclerView.canScrollVertically(-1);
-                shadowView.setVisibility(shadowVisible ? View.VISIBLE : View.GONE);
-            }
-        });
     }
 
     private void maybeUpdateContextualSuggestions() {
@@ -317,114 +310,55 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
 
     private void updateLogoTransition() {
         boolean showLogo = mSearchProviderHasLogo && mNewTabShown && mSheet.isSheetOpen()
+                && !mActivity.getTabModelSelector().isIncognitoSelected() && mIsAttachedToWindow
+                && !mSheet.isSmallScreen()
+                && mActivity.getTabModelSelector().getModel(false).getCount() > 0
                 && FeatureUtilities.isChromeHomeDoodleEnabled();
 
         if (!showLogo) {
             mLogoView.setVisibility(View.GONE);
-            mToolbarView.setTranslationY(0);
+            mControlContainerView.setTranslationY(0);
+            mToolbarPullHandle.setTranslationY(0);
+            mToolbarShadow.setTranslationY(0);
             mRecyclerView.setTranslationY(0);
-            mSheet.setTouchDelegate(null);
-            ViewUtils.setAncestorsShouldClipChildren(mToolbarView, true);
+            ViewUtils.setAncestorsShouldClipChildren(mControlContainerView, true);
             return;
         }
 
         mLogoView.setVisibility(View.VISIBLE);
-        ViewUtils.setAncestorsShouldClipChildren(mToolbarView, false);
-
-        // TODO(mvanouwerkerk): Consider using Material animation curves.
-        final float transitionFraction;
-        if (mLastSheetHeightFraction > LOGO_TRANSITION_TOP_START) {
-            float range = LOGO_TRANSITION_TOP_END - LOGO_TRANSITION_TOP_START;
-            transitionFraction =
-                    Math.min((mLastSheetHeightFraction - LOGO_TRANSITION_TOP_START) / range, 1.0f);
-        } else if (mLastSheetHeightFraction < LOGO_TRANSITION_BOTTOM_START) {
-            float range = LOGO_TRANSITION_BOTTOM_START - LOGO_TRANSITION_BOTTOM_END;
-            transitionFraction = Math.min(
-                    (LOGO_TRANSITION_BOTTOM_START - mLastSheetHeightFraction) / range, 1.0f);
-        } else {
-            transitionFraction = 0.0f;
-        }
+        ViewUtils.setAncestorsShouldClipChildren(mControlContainerView, false);
 
         ViewGroup.MarginLayoutParams logoParams =
                 (ViewGroup.MarginLayoutParams) mLogoView.getLayoutParams();
+        float maxToolbarOffset = logoParams.height + logoParams.topMargin + logoParams.bottomMargin;
+
+        // Transform the sheet height fraction back to pixel scale.
+        float rangePx =
+                (mSheet.getFullRatio() - mSheet.getPeekRatio()) * mSheet.getSheetContainerHeight();
+        float sheetHeightPx = mLastSheetHeightFraction * rangePx;
+
+        // Calculate the transition fraction for hiding the logo: 0 means the logo is fully visible,
+        // 1 means it is fully invisible.
+        // The transition starts when the sheet is `2 * maxToolbarOffset` from the bottom or the
+        // top. This makes the toolbar stay vertically centered in the sheet during the
+        // bottom transition.
+        float transitionFraction =
+                Math.max(Math.max(1 - sheetHeightPx / (2 * maxToolbarOffset),
+                                 1 + (sheetHeightPx - rangePx) / (2 * maxToolbarOffset)),
+                        0);
+
         mLogoView.setTranslationY(logoParams.topMargin * -transitionFraction);
         mLogoView.setAlpha(Math.max(0.0f, 1.0f - (transitionFraction * 3.0f)));
 
-        float maxToolbarOffset = logoParams.height + logoParams.topMargin + logoParams.bottomMargin;
         float toolbarOffset = maxToolbarOffset * (1.0f - transitionFraction);
-        mToolbarView.setTranslationY(toolbarOffset);
+        mControlContainerView.setTranslationY(toolbarOffset);
+        mToolbarPullHandle.setTranslationY(-toolbarOffset);
+        mToolbarShadow.setTranslationY(-toolbarOffset);
         mRecyclerView.setTranslationY(toolbarOffset);
-
-        if (transitionFraction == 0.f) {
-            mSheet.setTouchDelegate(new NtpTouchDelegate(mSheet, mToolbarView, mLogoView));
-        } else {
-            mSheet.setTouchDelegate(null);
-        }
     }
 
-    /**
-     * Routes touch events when the NTP is showing a search provider logo. When Views are translated
-     * outside of their parent's bounds, they typically cannot receive touch input. This class sends
-     * touch events to the search provider logo, toolbar, and menu button.
-     */
-    private static class NtpTouchDelegate extends TouchDelegate {
-        private final TouchDelegate mLogoTouchDelegate;
-        private final TouchDelegate mMenuButtonTouchDelegate;
-        private final TouchDelegate mToolbarTouchDelegate;
-        private final Rect mLogoRect;
-        private final Rect mMenuButtonRect;
-        private final Rect mToolbarRect;
-
-        /**
-         * Creates a new NTP touch delegate.
-         * @param bottomSheet The {@link BottomSheet} that contains the
-         *                    SuggestionBottomSheetContent. Used to determine hit rects for children
-         *                    contained within the BottomSheet.
-         * @param toolbarView The {@link View} containing the toolbar.
-         * @param logoView    The {@link View} containing the search provider logo.
-         */
-        public NtpTouchDelegate(View bottomSheet, View toolbarView, View logoView) {
-            // We don't actually rely on the superclass for anything, so initialize it with dummy
-            // values.
-            super(new Rect(), bottomSheet);
-
-            int[] parentLocationOnScreen = new int[2];
-            bottomSheet.getLocationOnScreen(parentLocationOnScreen);
-
-            mLogoRect = createTouchDelegateRect(logoView, parentLocationOnScreen);
-
-            View menuButton = toolbarView.findViewById(R.id.menu_button);
-            mMenuButtonRect = createTouchDelegateRect(menuButton, parentLocationOnScreen);
-
-            mToolbarRect = createTouchDelegateRect(toolbarView, parentLocationOnScreen);
-
-            mLogoTouchDelegate = new TouchDelegate(mLogoRect, logoView);
-            mMenuButtonTouchDelegate = new TouchDelegate(mMenuButtonRect, menuButton);
-            mToolbarTouchDelegate = new TouchDelegate(mToolbarRect, toolbarView);
-        }
-
-        @Override
-        public boolean onTouchEvent(MotionEvent event) {
-            int x = (int) event.getX();
-            int y = (int) event.getY();
-
-            if (mLogoRect.contains(x, y)) return mLogoTouchDelegate.onTouchEvent(event);
-            if (mMenuButtonRect.contains(x, y)) return mMenuButtonTouchDelegate.onTouchEvent(event);
-            if (mToolbarRect.contains(x, y)) return mToolbarTouchDelegate.onTouchEvent(event);
-
-            return false;
-        }
-
-        private Rect createTouchDelegateRect(View childView, int[] parentLocationOnScreen) {
-            int[] childLocationOnScreen = new int[2];
-            childView.getLocationOnScreen(childLocationOnScreen);
-
-            Rect touchRect = new Rect();
-            touchRect.top = childLocationOnScreen[1] - parentLocationOnScreen[1];
-            touchRect.bottom = touchRect.top + childView.getMeasuredHeight();
-            touchRect.left = childLocationOnScreen[0] - parentLocationOnScreen[0];
-            touchRect.right = touchRect.left + childView.getMeasuredWidth();
-            return touchRect;
-        }
+    @Override
+    public void scrollToTop() {
+        mRecyclerView.smoothScrollToPosition(0);
     }
 }

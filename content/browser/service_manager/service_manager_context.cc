@@ -19,22 +19,24 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/service_manager/common_browser_interfaces.h"
+#include "content/browser/utility_process_host_impl.h"
 #include "content/browser/wake_lock/wake_lock_context_host.h"
 #include "content/common/service_manager/service_manager_connection_impl.h"
 #include "content/grit/content_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_service_registry.h"
-#include "content/public/browser/utility_process_host.h"
 #include "content/public/browser/utility_process_host_client.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
+#include "device/geolocation/geolocation_provider.h"
 #include "media/mojo/features.h"
 #include "media/mojo/interfaces/constants.mojom.h"
 #include "mojo/edk/embedder/embedder.h"
@@ -55,6 +57,7 @@
 #include "services/service_manager/public/interfaces/service.mojom.h"
 #include "services/service_manager/runner/common/client_util.h"
 #include "services/service_manager/runner/host/service_process_launcher.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 #include "services/service_manager/service_manager.h"
 #include "services/shape_detection/public/interfaces/constants.mojom.h"
 #include "services/video_capture/public/cpp/constants.h"
@@ -64,6 +67,10 @@
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
 #include "jni/ContentNfcDelegate_jni.h"
+#endif
+
+#if defined(OS_WIN)
+#include "content/browser/renderer_host/dwrite_font_proxy_message_filter_win.h"
 #endif
 
 namespace content {
@@ -83,10 +90,18 @@ void StartServiceInUtilityProcess(
     service_manager::mojom::ConnectResult query_result,
     const std::string& sandbox_string) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  UtilityProcessHost* process_host =
-      UtilityProcessHost::Create(nullptr, nullptr);
+  service_manager::SandboxType sandbox_type =
+      service_manager::UtilitySandboxTypeFromString(sandbox_string);
+
+  UtilityProcessHostImpl* process_host =
+      new UtilityProcessHostImpl(nullptr, nullptr);
+#if defined(OS_WIN)
+  if (sandbox_type == service_manager::SANDBOX_TYPE_PPAPI)
+    process_host->AddFilter(new DWriteFontProxyMessageFilter());
+#endif
   process_host->SetName(process_name);
-  process_host->SetSandboxType(UtilitySandboxTypeFromString(sandbox_string));
+  process_host->SetServiceIdentity(service_manager::Identity(service_name));
+  process_host->SetSandboxType(sandbox_type);
   process_host->Start();
 
   service_manager::mojom::ServiceFactoryPtr service_factory;
@@ -340,6 +355,13 @@ ServiceManagerContext::ServiceManagerContext() {
   device_info.task_runner = base::ThreadTaskRunnerHandle::Get();
   packaged_services_connection_->AddEmbeddedService(device::mojom::kServiceName,
                                                     device_info);
+
+  // Pipe embedder-supplied API key through to GeolocationProvider.
+  // TODO(amoylan): Once GeolocationProvider hangs off DeviceService
+  // (https://crbug.com/709301), pass this via CreateDeviceService above
+  // instead.
+  device::GeolocationProvider::SetApiKey(
+      GetContentClient()->browser()->GetGeolocationApiKey());
 
   if (base::FeatureList::IsEnabled(features::kGlobalResourceCoordinator)) {
     service_manager::EmbeddedServiceInfo resource_coordinator_info;

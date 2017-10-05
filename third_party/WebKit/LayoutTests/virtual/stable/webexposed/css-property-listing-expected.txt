@@ -197,6 +197,7 @@ All changes to this list should go through Blink's feature review process: http:
     font-stretch
     font-style
     font-variant-caps
+    font-variant-east-asian
     font-variant-ligatures
     font-variant-numeric
     font-variation-settings
@@ -280,6 +281,8 @@ All changes to this list should go through Blink's feature review process: http:
     rx
     ry
     scroll-behavior
+    scroll-boundary-behavior-x
+    scroll-boundary-behavior-y
     shape-image-threshold
     shape-margin
     shape-outside
@@ -503,12 +506,14 @@ All changes to this list should go through Blink's feature review process: http:
         font-stretch
         font-style
         font-variant-caps
+        font-variant-east-asian
         font-variant-ligatures
         font-variant-numeric
         font-weight
         line-height
     font-variant
         font-variant-caps
+        font-variant-east-asian
         font-variant-ligatures
         font-variant-numeric
     grid
@@ -580,6 +585,9 @@ All changes to this list should go through Blink's feature review process: http:
     place-self
         align-self
         justify-self
+    scroll-boundary-behavior
+        scroll-boundary-behavior-x
+        scroll-boundary-behavior-y
     text-decoration
         text-decoration-color
         text-decoration-line

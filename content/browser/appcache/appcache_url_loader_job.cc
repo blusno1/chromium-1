@@ -135,10 +135,6 @@ void AppCacheURLLoaderJob::DeliverErrorResponse() {
                                                   start_time_tick_);
 }
 
-const GURL& AppCacheURLLoaderJob::GetURL() const {
-  return request_.url;
-}
-
 AppCacheURLLoaderJob* AppCacheURLLoaderJob::AsURLLoaderJob() {
   return this;
 }
@@ -178,6 +174,16 @@ void AppCacheURLLoaderJob::SetPriority(net::RequestPriority priority,
                                        int32_t intra_priority_value) {
   if (network_loader_)
     network_loader_->SetPriority(priority, intra_priority_value);
+}
+
+void AppCacheURLLoaderJob::PauseReadingBodyFromNet() {
+  if (network_loader_)
+    network_loader_->PauseReadingBodyFromNet();
+}
+
+void AppCacheURLLoaderJob::ResumeReadingBodyFromNet() {
+  if (network_loader_)
+    network_loader_->ResumeReadingBodyFromNet();
 }
 
 void AppCacheURLLoaderJob::OnReceiveResponse(

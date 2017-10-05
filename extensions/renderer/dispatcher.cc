@@ -80,6 +80,7 @@
 #include "extensions/renderer/process_info_native_handler.h"
 #include "extensions/renderer/render_frame_observer_natives.h"
 #include "extensions/renderer/renderer_extension_registry.h"
+#include "extensions/renderer/renderer_messaging_service.h"
 #include "extensions/renderer/request_sender.h"
 #include "extensions/renderer/runtime_custom_bindings.h"
 #include "extensions/renderer/safe_builtins.h"
@@ -193,7 +194,7 @@ base::LazyInstance<WorkerScriptContextSet>::DestructorAtExit
 Dispatcher::Dispatcher(DispatcherDelegate* delegate)
     : delegate_(delegate),
       content_watcher_(new ContentWatcher()),
-      source_map_(&ResourceBundle::GetSharedInstance()),
+      source_map_(&ui::ResourceBundle::GetSharedInstance()),
       v8_schema_registry_(new V8SchemaRegistry),
       user_script_set_manager_observer_(this),
       activity_logging_enabled_(false) {
@@ -446,7 +447,7 @@ void Dispatcher::DidInitializeServiceWorkerContextOnWorkerThread(
 
   // Fetch the source code for service_worker_bindings.js.
   base::StringPiece script_resource =
-      ResourceBundle::GetSharedInstance().GetRawDataResource(
+      ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
           IDR_SERVICE_WORKER_BINDINGS_JS);
   v8::Local<v8::String> script = v8::String::NewExternal(
       isolate, new StaticV8ExternalOneByteStringResource(script_resource));
@@ -543,7 +544,7 @@ void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
       (extension->is_extension() || extension->is_platform_app())) {
     int resource_id = extension->is_platform_app() ? IDR_PLATFORM_APP_CSS
                                                    : IDR_EXTENSION_FONTS_CSS;
-    std::string stylesheet = ResourceBundle::GetSharedInstance()
+    std::string stylesheet = ui::ResourceBundle::GetSharedInstance()
                                  .GetRawDataResource(resource_id)
                                  .as_string();
     base::ReplaceFirstSubstringAfterOffset(
@@ -563,7 +564,7 @@ void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
       OptionsPageInfo::ShouldUseChromeStyle(extension) &&
       effective_document_url == OptionsPageInfo::GetOptionsPage(extension)) {
     base::StringPiece extension_css =
-        ResourceBundle::GetSharedInstance().GetRawDataResource(
+        ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
             IDR_EXTENSION_CSS);
     frame->GetDocument().InsertStyleSheet(
         WebString::FromUTF8(extension_css.data(), extension_css.length()));
@@ -964,9 +965,9 @@ void Dispatcher::OnCancelSuspend(const std::string& extension_id) {
 
 void Dispatcher::OnDeliverMessage(const PortId& target_port_id,
                                   const Message& message) {
-  MessagingBindings::DeliverMessage(*script_context_set_, target_port_id,
-                                    message,
-                                    NULL);  // All render frames.
+  bindings_system_->GetMessagingService()->DeliverMessage(
+      *script_context_set_, target_port_id, message,
+      NULL);  // All render frames.
 }
 
 void Dispatcher::OnDispatchOnConnect(
@@ -977,17 +978,17 @@ void Dispatcher::OnDispatchOnConnect(
     const std::string& tls_channel_id) {
   DCHECK(!target_port_id.is_opener);
 
-  MessagingBindings::DispatchOnConnect(*script_context_set_, target_port_id,
-                                       channel_name, source, info,
-                                       tls_channel_id,
-                                       NULL);  // All render frames.
+  bindings_system_->GetMessagingService()->DispatchOnConnect(
+      *script_context_set_, target_port_id, channel_name, source, info,
+      tls_channel_id,
+      NULL);  // All render frames.
 }
 
 void Dispatcher::OnDispatchOnDisconnect(const PortId& port_id,
                                         const std::string& error_message) {
-  MessagingBindings::DispatchOnDisconnect(*script_context_set_, port_id,
-                                          error_message,
-                                          NULL);  // All render frames.
+  bindings_system_->GetMessagingService()->DispatchOnDisconnect(
+      *script_context_set_, port_id, error_message,
+      NULL);  // All render frames.
 }
 
 void Dispatcher::OnLoaded(

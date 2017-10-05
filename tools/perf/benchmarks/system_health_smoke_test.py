@@ -45,10 +45,11 @@ _DISABLED_TESTS = frozenset({
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.long_running:tools:gmail-foreground',  # pylint: disable=line-too-long
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.long_running:tools:gmail-background',  # pylint: disable=line-too-long
 
-  # Disable media tests in CQ. crbug.com/649392
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:media:soundcloud',  # pylint: disable=line-too-long
+  # crbug.com/769263
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.play:media:soundcloud',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.play:media:google_play_music',  # pylint: disable=line-too-long
+
+  # crbug.com/769809
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse_accessibility:tools:gmail_compose', # pylint: disable=line-too-long
 
   # crbug.com/
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:news:nytimes',  # pylint: disable=line-too-long
@@ -63,8 +64,6 @@ _DISABLED_TESTS = frozenset({
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:drive',  # pylint: disable=line-too-long
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:gmail',  # pylint: disable=line-too-long
 
-  # crbug.com/699966
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.multitab:misc:typical24', # pylint: disable=line-too-long
   # crbug.com/725386
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:social:twitter', # pylint: disable=line-too-long
 

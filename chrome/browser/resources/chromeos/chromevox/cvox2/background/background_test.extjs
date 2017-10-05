@@ -64,6 +64,14 @@ BackgroundTest.prototype = {
     <p>end<span>of test</span></p>
   */},
 
+  buttonDoc: function() {/*!
+    <p>start</p>
+    <button>hello button one</button>
+    cats
+    <button>hello button two</button>
+    <p>end</p>
+  */},
+
   formsDoc: function() {/*!
     <select id="fruitSelect">
       <option>apple</option>
@@ -188,6 +196,10 @@ TEST_F('BackgroundTest', 'CaretNavigation', function() {
         .expectSpeech('alpha', 'Link');
     mockFeedback.call(doCmd('nextWord'))
         .expectSpeech('beta', 'Link');
+    mockFeedback.call(doCmd('previousWord'))
+        .expectSpeech('alpha', 'Link');
+    mockFeedback.call(doCmd('nextWord'))
+        .expectSpeech('beta', 'Link');
     mockFeedback.call(doCmd('nextWord'))
         .expectSpeech('charlie', 'Heading 1');
     mockFeedback.call(doCmd('nextLine'))
@@ -214,6 +226,29 @@ TEST_F('BackgroundTest', 'CaretNavigation', function() {
         .expectSpeech('t');
     mockFeedback.call(doCmd('nextWord'))
         .expectSpeech('echo', 'Link');
+    mockFeedback.replay();
+  });
+});
+
+/** Tests that individual buttons are stops for move-by-word functionality. */
+TEST_F('BackgroundTest', 'CaretNavigationTreatsButtonAsWord', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(this.buttonDoc, function() {
+    mockFeedback.expectSpeech('start');
+    mockFeedback.call(doCmd('nextWord'))
+        .expectSpeech('hello button one', 'Button');
+    mockFeedback.call(doCmd('nextWord'))
+        .expectSpeech('cats');
+    mockFeedback.call(doCmd('nextWord'))
+        .expectSpeech('hello button two', 'Button');
+    mockFeedback.call(doCmd('nextWord'))
+        .expectSpeech('end');
+    mockFeedback.call(doCmd('previousWord'))
+        .expectSpeech('hello button two', 'Button');
+    mockFeedback.call(doCmd('previousWord'))
+        .expectSpeech('cats');
+    mockFeedback.call(doCmd('previousWord'))
+        .expectSpeech('hello button one', 'Button');
     mockFeedback.replay();
   });
 });
@@ -428,28 +463,6 @@ TEST_F('BackgroundTest', 'EarconsForControls', function() {
 
       mockFeedback.replay();
     }.bind(this));
-});
-
-TEST_F('BackgroundTest', 'ToggleChromeVoxVersion', function() {
-  var mockFeedback = this.createMockFeedback();
-  this.runWithLoadedTree(this.linksAndHeadingsDoc, function() {
-    var gotCmd = CommandHandler.onCommand;
-
-    // The command came from the background keyboard handler.
-    var togglerFromBackground = gotCmd.bind(gotCmd, 'toggleChromeVoxVersion');
-
-    // The command came from a content script.
-    var togglerFromContent = gotCmd.bind(gotCmd, 'toggleChromeVoxVersion',
-                                         true);
-
-    mockFeedback.call(togglerFromBackground)
-        .expectSpeech('Switched to Classic ChromeVox')
-        .call(togglerFromContent)
-        .expectSpeech('Switched to ChromeVox Next')
-        .call(togglerFromBackground)
-        .expectSpeech('Switched to Classic ChromeVox');
-    mockFeedback.replay();
-  });
 });
 
 SYNC_TEST_F('BackgroundTest', 'GlobsToRegExp', function() {
@@ -756,7 +769,7 @@ TEST_F('BackgroundTest', 'ForwardObjectNavigationThroughIframes', function() {
     mockFeedback.call(doCmd('nextObject'))
         .expectSpeech('After', 'Button');
     mockFeedback.call(doCmd('previousObject'))
-        .expectSpeech('Inside', 'Heading 1');
+        .expectSpeech('Heading 1', 'Inside');
     mockFeedback.call(doCmd('previousObject'))
         .expectSpeech('Inside', 'Button');
     mockFeedback.call(doCmd('previousObject'))
@@ -1262,7 +1275,7 @@ TEST_F('BackgroundTest', 'ListItem', function() {
   */}, function(root) {
     mockFeedback.call(doCmd('nextLine'))
         .expectSpeech('\u2022 ', 'apple', 'List item')
-        .expectBraille('\u2022 apple lstitm list +3')
+        .expectBraille('\u2022 apple lstitm lst +3')
         .call(doCmd('nextLine'))
         .expectSpeech('\u2022 ', 'grape', 'List item')
         .expectBraille('\u2022 grape lstitm')
@@ -1272,7 +1285,7 @@ TEST_F('BackgroundTest', 'ListItem', function() {
 
         .call(doCmd('nextLine'))
         .expectSpeech('1. ', 'pork', 'List item')
-        .expectBraille('1. pork lstitm list +3')
+        .expectBraille('1. pork lstitm lst +3')
         .call(doCmd('nextLine'))
         .expectSpeech('2. ', 'beef', 'List item')
         .expectBraille('2. beef lstitm')

@@ -4600,6 +4600,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="EventTargeting_DeletedTarget">
+  <owner>riajiang@chromium.org</owner>
+  <owner>rjkroege@chromium.org</owner>
+  <description>
+    Events for a target window are processed after that target window has been
+    deleted.
+  </description>
+</action>
+
 <action name="Exit">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -5295,6 +5304,26 @@ should be able to be added at any place in this file.
   <description>The user triggered an event in in-product help.</description>
 </action>
 
+<action name="InProductHelp.NotifyEvent.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered an event related to the Chrome Home cold start in-product
+    help. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered an event related to the Chrome Home menu header
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
 <action name="InProductHelp.NotifyEvent.IPH_DataSaverDetail">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
@@ -5373,6 +5402,26 @@ should be able to be added at any place in this file.
   <description>The user triggered a used event in in-product help.</description>
 </action>
 
+<action name="InProductHelp.NotifyUsedEvent.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the Chrome Home cold start
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the Chrome Home menu header
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
 <action name="InProductHelp.NotifyUsedEvent.IPH_DataSaverDetail">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
@@ -5448,6 +5497,26 @@ should be able to be added at any place in this file.
   <description>
     The feature engagement tracker tried to determine whether in-product help
     should be shown to the user.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the Chrome Home
+    cold start in-product help should be shown to the user. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the Chrome Home
+    menu header in-product help should be shown to the user. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
   </description>
 </action>
 
@@ -5560,6 +5629,28 @@ should be able to be added at any place in this file.
 </action>
 
 <action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action that could have triggered the Chrome Home cold start
+    in-product help did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action that could have triggered the Chrome Home menu header
+    in-product help did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
     name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_DataSaverDetail">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
@@ -5659,6 +5750,26 @@ should be able to be added at any place in this file.
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
   <description>A user action triggered In-Product Help.</description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action triggered the Chrome Home cold start in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action triggered the Chrome Home menu header in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
 </action>
 
 <action
@@ -10430,6 +10541,20 @@ should be able to be added at any place in this file.
   <description>Custom Feedback dialog is shown.</description>
 </action>
 
+<action name="MobileCustomRowCameraSearch">
+  <owner>jif@chromium.org</owner>
+  <description>
+    Records when a user starts a camera search from the omnibox' assistive view.
+  </description>
+</action>
+
+<action name="MobileCustomRowVoiceSearch">
+  <owner>jif@chromium.org</owner>
+  <description>
+    Records when a user starts a voice search from the omnibox' assistive view.
+  </description>
+</action>
+
 <action name="MobileExternalNavigationDispatched">
   <owner>mariakhomenko@chromium.org</owner>
   <description>
@@ -13902,7 +14027,9 @@ should be able to be added at any place in this file.
 <action name="OutdatedUpgradeBubble.Later">
   <owner>mad@chromium.org</owner>
   <description>
-    When the user clicks on the Later button of the outdated upgrade bubble.
+    When the user dismisses the outdated upgrade bubble without accepting it. In
+    m62 and earlier this was via a &quot;Later&quot; button. Since m63, that
+    button was removed and replaced by a close [x] reporting the same metric.
   </description>
 </action>
 
@@ -15627,6 +15754,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_Android_GmsUserRecoverableDialogAccepted">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded when user accepts an option presented by Google Play services error
+    dialog (e.g., clicks &quot;Update&quot; button).
+  </description>
+</action>
+
 <action name="Signin_Android_GmsUserRecoverableDialogShown"
     not_user_triggered="true">
   <owner>bsazonov@chromium.org</owner>
@@ -16995,6 +17130,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Suggestions.AllDismissed.Shown">
+  <owner>peconn@chromium.org</owner>
+  <description>
+    User dismissed all cards and was not able to get any more suggestions
+    resulting in the All Dismissed State. Only records for users with Chrome
+    Home enabled.
+  </description>
+</action>
+
 <action name="Suggestions.Card.ActionTapped">
   <owner>finkm@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
@@ -17414,6 +17558,21 @@ should be able to be added at any place in this file.
 <action name="Tab_DropURLOnTab">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Tablet_BackButton">
+  <owner>sammiequon@chromium.org</owner>
+  <description>
+    User tapped the shelf back button in tablet mode on Chrome OS.
+  </description>
+</action>
+
+<action name="Tablet_QuickSwitch">
+  <owner>sammiequon@chromium.org</owner>
+  <description>
+    User double tapped the overview button in tablet mode on Chrome OS, which
+    quick switches the current application.
+  </description>
 </action>
 
 <action name="Tablet_WindowCloseFromCaptionButton">

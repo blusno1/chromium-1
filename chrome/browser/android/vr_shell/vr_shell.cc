@@ -23,7 +23,6 @@
 #include "chrome/browser/android/vr_shell/android_ui_gesture_target.h"
 #include "chrome/browser/android/vr_shell/vr_compositor.h"
 #include "chrome/browser/android/vr_shell/vr_gl_thread.h"
-#include "chrome/browser/android/vr_shell/vr_input_manager.h"
 #include "chrome/browser/android/vr_shell/vr_shell_delegate.h"
 #include "chrome/browser/android/vr_shell/vr_shell_gl.h"
 #include "chrome/browser/android/vr_shell/vr_usage_monitor.h"
@@ -34,6 +33,7 @@
 #include "chrome/browser/vr/ui_interface.h"
 #include "chrome/browser/vr/ui_scene_manager.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
+#include "chrome/browser/vr/web_contents_event_forwarder.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -197,12 +197,13 @@ void VrShell::SwapContents(
 
   if (target) {
     android_ui_gesture_target_.reset(target);
-    input_manager_ = nullptr;
+    web_contents_event_forwarder_ = nullptr;
     metrics_helper_ = nullptr;
     return;
   }
-  input_manager_ =
-      base::MakeUnique<VrInputManager>(GetNonNativePageWebContents());
+  web_contents_event_forwarder_ =
+      base::MakeUnique<vr::WebContentsEventForwarder>(
+          GetNonNativePageWebContents());
   // TODO(billorr): Make VrMetricsHelper tab-aware and able to track multiple
   // tabs. crbug.com/684661
   metrics_helper_ =
@@ -260,7 +261,7 @@ VrShell::~VrShell() {
   g_instance = nullptr;
 }
 
-void VrShell::PostToGlThread(const tracked_objects::Location& from_here,
+void VrShell::PostToGlThread(const base::Location& from_here,
                              const base::Closure& task) {
   gl_thread_->message_loop()->task_runner()->PostTask(from_here, task);
 }
@@ -452,26 +453,19 @@ void VrShell::OnTabRemoved(JNIEnv* env,
   ui_->RemoveTab(incognito, id);
 }
 
-void VrShell::SetWebVRSecureOrigin(bool secure_origin) {
-  ui_->SetWebVrSecureOrigin(secure_origin);
-}
-
-void VrShell::CreateVRDisplayInfo(
-    const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
-    uint32_t device_id) {
-  PostToGlThread(FROM_HERE,
-                 base::Bind(&VrShellGl::CreateVRDisplayInfo,
-                            gl_thread_->GetVrShellGl(), callback, device_id));
-}
+// TODO(mthiesse): Remove this function.
+void VrShell::SetWebVRSecureOrigin(bool secure_origin) {}
 
 void VrShell::ConnectPresentingService(
     device::mojom::VRSubmitFrameClientPtr submit_client,
-    device::mojom::VRPresentationProviderRequest request) {
-  PostToGlThread(FROM_HERE,
-                 base::Bind(&VrShellGl::ConnectPresentingService,
-                            gl_thread_->GetVrShellGl(),
-                            base::Passed(submit_client.PassInterface()),
-                            base::Passed(&request)));
+    device::mojom::VRPresentationProviderRequest request,
+    device::mojom::VRDisplayInfoPtr display_info) {
+  PostToGlThread(
+      FROM_HERE,
+      base::Bind(&VrShellGl::ConnectPresentingService,
+                 gl_thread_->GetVrShellGl(),
+                 base::Passed(submit_client.PassInterface()),
+                 base::Passed(&request), base::Passed(&display_info)));
 }
 
 base::android::ScopedJavaGlobalRef<jobject> VrShell::TakeContentSurface(
@@ -593,7 +587,7 @@ void VrShell::ContentFrameWasResized(bool width_changed) {
 }
 
 void VrShell::ContentWebContentsDestroyed() {
-  input_manager_.reset();
+  web_contents_event_forwarder_.reset();
   web_contents_ = nullptr;
   // TODO(mthiesse): Handle web contents being destroyed.
   ForceExitVr();
@@ -601,13 +595,14 @@ void VrShell::ContentWebContentsDestroyed() {
 
 void VrShell::ContentWasHidden() {
   // Ensure we don't continue sending input to it.
-  input_manager_ = nullptr;
+  web_contents_event_forwarder_ = nullptr;
 }
 
 void VrShell::ContentWasShown() {
   if (GetNonNativePageWebContents()) {
-    input_manager_ =
-        base::MakeUnique<VrInputManager>(GetNonNativePageWebContents());
+    web_contents_event_forwarder_ =
+        base::MakeUnique<vr::WebContentsEventForwarder>(
+            GetNonNativePageWebContents());
   }
 }
 
@@ -799,8 +794,8 @@ void VrShell::SetContentCssSize(float width, float height, float dpr) {
 
 void VrShell::ProcessContentGesture(
     std::unique_ptr<blink::WebInputEvent> event) {
-  if (input_manager_) {
-    input_manager_->ProcessUpdatedGesture(std::move(event));
+  if (web_contents_event_forwarder_) {
+    web_contents_event_forwarder_->ForwardEvent(std::move(event));
   } else if (android_ui_gesture_target_) {
     android_ui_gesture_target_->DispatchWebInputEvent(std::move(event));
   }

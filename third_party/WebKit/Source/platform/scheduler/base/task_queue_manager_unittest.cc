@@ -5,11 +5,10 @@
 #include "platform/scheduler/base/task_queue_manager.h"
 
 #include <stddef.h>
-
+#include <memory>
 #include <utility>
 
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -45,6 +44,8 @@ using blink::scheduler::internal::EnqueueOrder;
 
 namespace blink {
 namespace scheduler {
+// To avoid symbol collisions in jumbo builds.
+namespace task_queue_manager_unittest {
 
 class TaskQueueManagerForTest : public TaskQueueManager {
  public:
@@ -59,7 +60,8 @@ class MessageLoopTaskRunner : public TaskQueueManagerDelegateForTest {
  public:
   static scoped_refptr<MessageLoopTaskRunner> Create(
       std::unique_ptr<base::TickClock> tick_clock) {
-    return make_scoped_refptr(new MessageLoopTaskRunner(std::move(tick_clock)));
+    return base::WrapRefCounted(
+        new MessageLoopTaskRunner(std::move(tick_clock)));
   }
 
   // TaskQueueManagerDelegateForTest:
@@ -90,6 +92,8 @@ class TaskQueueManagerTest : public ::testing::Test {
   void DeleteTaskQueueManager() { manager_.reset(); }
 
  protected:
+  void TearDown() { manager_.reset(); }
+
   scoped_refptr<TestTaskQueue> CreateTaskQueueWithSpec(TaskQueue::Spec spec) {
     return manager_->CreateTaskQueue<TestTaskQueue>(spec);
   }
@@ -105,13 +109,13 @@ class TaskQueueManagerTest : public ::testing::Test {
 
   void InitializeWithClock(size_t num_queues,
                            std::unique_ptr<base::TickClock> test_time_source) {
-    test_task_runner_ = make_scoped_refptr(
+    test_task_runner_ = base::WrapRefCounted(
         new cc::OrderedSimpleTaskRunner(now_src_.get(), false));
     main_task_runner_ = TaskQueueManagerDelegateForTest::Create(
         test_task_runner_.get(),
-        base::MakeUnique<TestTimeSource>(now_src_.get()));
+        std::make_unique<TestTimeSource>(now_src_.get()));
 
-    manager_ = base::MakeUnique<TaskQueueManagerForTest>(main_task_runner_);
+    manager_ = std::make_unique<TaskQueueManagerForTest>(main_task_runner_);
 
     for (size_t i = 0; i < num_queues; i++)
       runners_.push_back(CreateTaskQueue());
@@ -121,7 +125,7 @@ class TaskQueueManagerTest : public ::testing::Test {
     now_src_.reset(new base::SimpleTestTickClock());
     now_src_->Advance(base::TimeDelta::FromMicroseconds(1000));
     InitializeWithClock(num_queues,
-                        base::MakeUnique<TestTimeSource>(now_src_.get()));
+                        std::make_unique<TestTimeSource>(now_src_.get()));
   }
 
   void InitializeWithRealMessageLoop(size_t num_queues) {
@@ -130,7 +134,7 @@ class TaskQueueManagerTest : public ::testing::Test {
     // A null clock triggers some assertions.
     now_src_->Advance(base::TimeDelta::FromMicroseconds(1000));
     manager_ =
-        base::MakeUnique<TaskQueueManagerForTest>(MessageLoopTaskRunner::Create(
+        std::make_unique<TaskQueueManagerForTest>(MessageLoopTaskRunner::Create(
             base::WrapUnique(new TestTimeSource(now_src_.get()))));
 
     for (size_t i = 0; i < num_queues; i++)
@@ -168,8 +172,7 @@ class TaskQueueManagerTest : public ::testing::Test {
     return manager_->GetNextSequenceNumber();
   }
 
-  void MaybeScheduleImmediateWorkLocked(
-      const tracked_objects::Location& from_here) {
+  void MaybeScheduleImmediateWorkLocked(const base::Location& from_here) {
     MoveableAutoLock lock(manager_->any_thread_lock_);
     manager_->MaybeScheduleImmediateWorkLocked(from_here, std::move(lock));
   }
@@ -228,7 +231,7 @@ TEST_F(TaskQueueManagerTest,
       new TestCountUsesTimeSource();
 
   manager_ =
-      base::MakeUnique<TaskQueueManagerForTest>(MessageLoopTaskRunner::Create(
+      std::make_unique<TaskQueueManagerForTest>(MessageLoopTaskRunner::Create(
           base::WrapUnique(test_count_uses_time_source)));
   manager_->SetWorkBatchSize(6);
   manager_->AddTaskTimeObserver(&test_task_time_observer_);
@@ -259,7 +262,7 @@ TEST_F(TaskQueueManagerTest, NowNotCalledForNestedTasks) {
       new TestCountUsesTimeSource();
 
   manager_ =
-      base::MakeUnique<TaskQueueManagerForTest>(MessageLoopTaskRunner::Create(
+      std::make_unique<TaskQueueManagerForTest>(MessageLoopTaskRunner::Create(
           base::WrapUnique(test_count_uses_time_source)));
   manager_->AddTaskTimeObserver(&test_task_time_observer_);
 
@@ -1418,6 +1421,7 @@ class MockObserver : public TaskQueueManager::Observer {
  public:
   MOCK_METHOD0(OnTriedToExecuteBlockedTask, void());
   MOCK_METHOD0(OnBeginNestedRunLoop, void());
+  MOCK_METHOD0(OnExitNestedRunLoop, void());
 };
 
 }  // namespace
@@ -1803,7 +1807,7 @@ TEST_F(TaskQueueManagerTest, TaskQueueObserver_DelayedWorkWhichCanRunNow) {
   Mock::VerifyAndClearExpectations(&observer);
 
   std::unique_ptr<TimeDomain> mock_time_domain =
-      base::MakeUnique<RealTimeDomain>();
+      std::make_unique<RealTimeDomain>();
   manager_->RegisterTimeDomain(mock_time_domain.get());
 
   now_src_->Advance(delay10s);
@@ -3010,5 +3014,6 @@ TEST_F(TaskQueueManagerTest, ProcessTasksWithTaskTimeObservers) {
   EXPECT_THAT(run_order, ElementsAre(1, 2, 3, 4, 5, 6, 7, 8));
 }
 
+}  // namespace task_queue_manager_unittest
 }  // namespace scheduler
 }  // namespace blink

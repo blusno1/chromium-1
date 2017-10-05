@@ -29,12 +29,12 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
-#include "third_party/skia/include/gpu/GrTexture.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gl/trace_util.h"
 
 namespace cc {
 namespace {
+
 // The number or entries to keep in the cache, depending on the memory state of
 // the system. This limit can be breached by in-use cache items, which cannot
 // be deleted.
@@ -42,21 +42,14 @@ static const int kNormalMaxItemsInCache = 2000;
 static const int kThrottledMaxItemsInCache = 100;
 static const int kSuspendedMaxItemsInCache = 0;
 
-// lock_count │ used  │ result state
-// ═══════════╪═══════╪══════════════════
-//  1         │ false │ WASTED_ONCE
-//  1         │ true  │ USED_ONCE
-//  >1        │ false │ WASTED_RELOCKED
-//  >1        │ true  │ USED_RELOCKED
-// Note that it's important not to reorder the following enum, since the
-// numerical values are used in the histogram code.
-enum ImageUsageState : int {
-  IMAGE_USAGE_STATE_WASTED_ONCE,
-  IMAGE_USAGE_STATE_USED_ONCE,
-  IMAGE_USAGE_STATE_WASTED_RELOCKED,
-  IMAGE_USAGE_STATE_USED_RELOCKED,
-  IMAGE_USAGE_STATE_COUNT
-};
+// The factor by which to reduce the GPU memory size of the cache when in the
+// THROTTLED memory state.
+static const int kThrottledCacheSizeReductionFactor = 2;
+
+// The maximum size in bytes of GPU memory in the cache while SUSPENDED or not
+// visible. This limit can be breached by in-use cache items, which cannot be
+// deleted.
+static const int kSuspendedOrInvisibleMaxGpuImageBytes = 0;
 
 // Returns true if an image would not be drawn and should therefore be
 // skipped rather than decoded.
@@ -128,7 +121,8 @@ gfx::Size CalculateSizeForMipLevel(const DrawImage& draw_image, int mip_level) {
 // if not, decodes to a compatible temporary pixmap and then converts that into
 // the |target_pixmap|.
 bool DrawAndScaleImage(const DrawImage& draw_image, SkPixmap* target_pixmap) {
-  const SkImage* image = draw_image.paint_image().GetSkImage().get();
+  sk_sp<SkImage> image =
+      draw_image.paint_image().GetSkImageForFrame(draw_image.frame_index());
   if (image->dimensions() == target_pixmap->bounds().size() ||
       target_pixmap->info().colorType() == kN32_SkColorType) {
     // If no scaling is occurring, or if the target colortype is already N32,
@@ -153,14 +147,6 @@ bool DrawAndScaleImage(const DrawImage& draw_image, SkPixmap* target_pixmap) {
                           SkImage::kDisallow_CachingHint))
     return false;
   return decode_pixmap.readPixels(*target_pixmap);
-}
-
-// Returns the GL texture ID backing the given SkImage.
-GrGLuint GlIdFromSkImage(SkImage* image) {
-  DCHECK(image->isTextureBacked());
-  const GrGLTextureInfo* info = skia::GrBackendObjectToGrGLTextureInfo(
-      image->getTextureHandle(true /* flushPendingGrContextIO */));
-  return info->fID;
 }
 
 }  // namespace
@@ -225,7 +211,7 @@ class ImageDecodeTaskImpl : public TileTask {
     TRACE_EVENT2("cc", "ImageDecodeTaskImpl::RunOnWorkerThread", "mode", "gpu",
                  "source_prepare_tiles_id", tracing_info_.prepare_tiles_id);
     devtools_instrumentation::ScopedImageDecodeTask image_decode_task(
-        image_.paint_image().GetSkImage().get(),
+        &image_.paint_image(),
         devtools_instrumentation::ScopedImageDecodeTask::kGpu,
         ImageDecodeCache::ToScopedTaskType(tracing_info_.task_type));
     cache_->DecodeImage(image_, tracing_info_.task_type);
@@ -291,87 +277,78 @@ class ImageUploadTaskImpl : public TileTask {
   DISALLOW_COPY_AND_ASSIGN(ImageUploadTaskImpl);
 };
 
-GpuImageDecodeCache::ImageDataBase::ImageDataBase() = default;
-GpuImageDecodeCache::ImageDataBase::~ImageDataBase() = default;
-
-void GpuImageDecodeCache::ImageDataBase::OnSetLockedData(bool out_of_raster) {
-  DCHECK_EQ(usage_stats_.lock_count, 1);
-  DCHECK(!is_locked_);
-  usage_stats_.first_lock_out_of_raster = out_of_raster;
-  is_locked_ = true;
-}
-
-void GpuImageDecodeCache::ImageDataBase::OnResetData() {
-  is_locked_ = false;
-  usage_stats_ = UsageStats();
-}
-
-void GpuImageDecodeCache::ImageDataBase::OnLock() {
-  DCHECK(!is_locked_);
-  is_locked_ = true;
-  ++usage_stats_.lock_count;
-}
-
-void GpuImageDecodeCache::ImageDataBase::OnUnlock() {
-  DCHECK(is_locked_);
-  is_locked_ = false;
-  if (usage_stats_.lock_count == 1)
-    usage_stats_.first_lock_wasted = !usage_stats_.used;
-}
-
-int GpuImageDecodeCache::ImageDataBase::UsageState() const {
-  ImageUsageState state = IMAGE_USAGE_STATE_WASTED_ONCE;
-  if (usage_stats_.lock_count == 1) {
-    if (usage_stats_.used)
-      state = IMAGE_USAGE_STATE_USED_ONCE;
-    else
-      state = IMAGE_USAGE_STATE_WASTED_ONCE;
-  } else {
-    if (usage_stats_.used)
-      state = IMAGE_USAGE_STATE_USED_RELOCKED;
-    else
-      state = IMAGE_USAGE_STATE_WASTED_RELOCKED;
-  }
-
-  return state;
-}
-
 GpuImageDecodeCache::DecodedImageData::DecodedImageData() = default;
 GpuImageDecodeCache::DecodedImageData::~DecodedImageData() {
   ResetData();
 }
 
 bool GpuImageDecodeCache::DecodedImageData::Lock() {
-  if (data_->Lock())
-    OnLock();
+  DCHECK(!is_locked_);
+  is_locked_ = data_->Lock();
+  if (is_locked_)
+    ++usage_stats_.lock_count;
   return is_locked_;
 }
 
 void GpuImageDecodeCache::DecodedImageData::Unlock() {
+  DCHECK(is_locked_);
   data_->Unlock();
-  OnUnlock();
+  if (usage_stats_.lock_count == 1)
+    usage_stats_.first_lock_wasted = !usage_stats_.used;
+  is_locked_ = false;
 }
 
 void GpuImageDecodeCache::DecodedImageData::SetLockedData(
     std::unique_ptr<base::DiscardableMemory> data,
     bool out_of_raster) {
+  DCHECK(!is_locked_);
   DCHECK(data);
   DCHECK(!data_);
+  DCHECK_EQ(usage_stats_.lock_count, 1);
   data_ = std::move(data);
-  OnSetLockedData(out_of_raster);
+  is_locked_ = true;
+  usage_stats_.first_lock_out_of_raster = out_of_raster;
 }
 
 void GpuImageDecodeCache::DecodedImageData::ResetData() {
+  DCHECK(!is_locked_);
   if (data_)
     ReportUsageStats();
   data_ = nullptr;
-  OnResetData();
+  usage_stats_ = UsageStats();
 }
 
 void GpuImageDecodeCache::DecodedImageData::ReportUsageStats() const {
-  UMA_HISTOGRAM_ENUMERATION("Renderer4.GpuImageDecodeState",
-                            static_cast<ImageUsageState>(UsageState()),
-                            IMAGE_USAGE_STATE_COUNT);
+  // lock_count │ used  │ result state
+  // ═══════════╪═══════╪══════════════════
+  //  1         │ false │ WASTED_ONCE
+  //  1         │ true  │ USED_ONCE
+  //  >1        │ false │ WASTED_RELOCKED
+  //  >1        │ true  │ USED_RELOCKED
+  // Note that it's important not to reorder the following enums, since the
+  // numerical values are used in the histogram code.
+  enum State : int {
+    DECODED_IMAGE_STATE_WASTED_ONCE,
+    DECODED_IMAGE_STATE_USED_ONCE,
+    DECODED_IMAGE_STATE_WASTED_RELOCKED,
+    DECODED_IMAGE_STATE_USED_RELOCKED,
+    DECODED_IMAGE_STATE_COUNT
+  } state = DECODED_IMAGE_STATE_WASTED_ONCE;
+
+  if (usage_stats_.lock_count == 1) {
+    if (usage_stats_.used)
+      state = DECODED_IMAGE_STATE_USED_ONCE;
+    else
+      state = DECODED_IMAGE_STATE_WASTED_ONCE;
+  } else {
+    if (usage_stats_.used)
+      state = DECODED_IMAGE_STATE_USED_RELOCKED;
+    else
+      state = DECODED_IMAGE_STATE_WASTED_RELOCKED;
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("Renderer4.GpuImageDecodeState", state,
+                            DECODED_IMAGE_STATE_COUNT);
   UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuImageDecodeState.FirstLockWasted",
                         usage_stats_.first_lock_wasted);
   if (usage_stats_.first_lock_out_of_raster)
@@ -382,33 +359,23 @@ void GpuImageDecodeCache::DecodedImageData::ReportUsageStats() const {
 
 GpuImageDecodeCache::UploadedImageData::UploadedImageData() = default;
 GpuImageDecodeCache::UploadedImageData::~UploadedImageData() {
-  DCHECK(!image());
+  SetImage(nullptr);
 }
 
 void GpuImageDecodeCache::UploadedImageData::SetImage(sk_sp<SkImage> image) {
-  DCHECK(!image_);
-  DCHECK(image);
-  image_ = std::move(image);
-  if (image_->isTextureBacked())
-    gl_id_ = GlIdFromSkImage(image_.get());
-  OnSetLockedData(false /* out_of_raster */);
-}
-
-void GpuImageDecodeCache::UploadedImageData::ResetImage() {
-  if (image_)
+  DCHECK(!image_ || !image);
+  if (image_) {
     ReportUsageStats();
-
-  image_ = nullptr;
-  gl_id_ = 0;
-  OnResetData();
+    usage_stats_ = UsageStats();
+  }
+  image_ = std::move(image);
 }
 
 void GpuImageDecodeCache::UploadedImageData::ReportUsageStats() const {
-  UMA_HISTOGRAM_ENUMERATION("Renderer4.GpuImageUploadState",
-                            static_cast<ImageUsageState>(UsageState()),
-                            IMAGE_USAGE_STATE_COUNT);
-  UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuImageUploadState.FirstLockWasted",
-                        usage_stats_.first_lock_wasted);
+  UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuImageUploadState.Used",
+                        usage_stats_.used);
+  UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuImageUploadState.FirstRefWasted",
+                        usage_stats_.first_ref_wasted);
 }
 
 GpuImageDecodeCache::ImageData::ImageData(
@@ -434,17 +401,21 @@ GpuImageDecodeCache::ImageData::~ImageData() {
 
 GpuImageDecodeCache::GpuImageDecodeCache(viz::ContextProvider* context,
                                          SkColorType color_type,
-                                         size_t max_working_set_bytes)
+                                         size_t max_working_set_bytes,
+                                         size_t max_cache_bytes)
     : color_type_(color_type),
       context_(context),
       persistent_cache_(PersistentCache::NO_AUTO_EVICT),
-      max_working_set_bytes_(max_working_set_bytes) {
+      max_working_set_bytes_(max_working_set_bytes),
+      normal_max_cache_bytes_(max_cache_bytes) {
+  DCHECK_GE(max_working_set_bytes_, normal_max_cache_bytes_);
+
   // Acquire the context_lock so that we can safely retrieve the
   // GrContextThreadSafeProxy. This proxy can then be used with no lock held.
   {
     viz::ContextProvider::ScopedContextLock context_lock(context_);
     context_threadsafe_proxy_ = sk_sp<GrContextThreadSafeProxy>(
-        context_->GrContext()->threadSafeProxy());
+        context->GrContext()->threadSafeProxy());
   }
 
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
@@ -472,33 +443,30 @@ GpuImageDecodeCache::~GpuImageDecodeCache() {
   base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
 }
 
-bool GpuImageDecodeCache::GetTaskForImageAndRef(const DrawImage& draw_image,
-                                                const TracingInfo& tracing_info,
-                                                scoped_refptr<TileTask>* task) {
+ImageDecodeCache::TaskResult GpuImageDecodeCache::GetTaskForImageAndRef(
+    const DrawImage& draw_image,
+    const TracingInfo& tracing_info) {
   DCHECK_EQ(tracing_info.task_type, TaskType::kInRaster);
-  return GetTaskForImageAndRefInternal(
-      draw_image, tracing_info, DecodeTaskType::PART_OF_UPLOAD_TASK, task);
+  return GetTaskForImageAndRefInternal(draw_image, tracing_info,
+                                       DecodeTaskType::PART_OF_UPLOAD_TASK);
 }
 
-bool GpuImageDecodeCache::GetOutOfRasterDecodeTaskForImageAndRef(
-    const DrawImage& draw_image,
-    scoped_refptr<TileTask>* task) {
+ImageDecodeCache::TaskResult
+GpuImageDecodeCache::GetOutOfRasterDecodeTaskForImageAndRef(
+    const DrawImage& draw_image) {
   return GetTaskForImageAndRefInternal(
       draw_image, TracingInfo(0, TilePriority::NOW, TaskType::kOutOfRaster),
-      DecodeTaskType::STAND_ALONE_DECODE_TASK, task);
+      DecodeTaskType::STAND_ALONE_DECODE_TASK);
 }
 
-bool GpuImageDecodeCache::GetTaskForImageAndRefInternal(
+ImageDecodeCache::TaskResult GpuImageDecodeCache::GetTaskForImageAndRefInternal(
     const DrawImage& draw_image,
     const TracingInfo& tracing_info,
-    DecodeTaskType task_type,
-    scoped_refptr<TileTask>* task) {
+    DecodeTaskType task_type) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "GpuImageDecodeCache::GetTaskForImageAndRef");
-  if (SkipImage(draw_image)) {
-    *task = nullptr;
-    return false;
-  }
+  if (SkipImage(draw_image))
+    return TaskResult(false);
 
   base::AutoLock lock(lock_);
   const PaintImage::FrameKey frame_key = draw_image.frame_key();
@@ -510,31 +478,30 @@ bool GpuImageDecodeCache::GetTaskForImageAndRefInternal(
     image_data = new_data.get();
   } else if (image_data->is_at_raster) {
     // Image is at-raster, just return, this usage will be at-raster as well.
-    *task = nullptr;
-    return false;
+    return TaskResult(false);
   } else if (image_data->decode.decode_failure) {
     // We have already tried and failed to decode this image, so just return.
-    *task = nullptr;
-    return false;
+    return TaskResult(false);
+  } else if (image_data->upload.image()) {
+    // The image is already uploaded, ref and return.
+    RefImage(draw_image);
+    return TaskResult(true);
   } else if (task_type == DecodeTaskType::PART_OF_UPLOAD_TASK &&
              image_data->upload.task) {
     // We had an existing upload task, ref the image and return the task.
     RefImage(draw_image);
-    *task = image_data->upload.task;
-    return true;
+    return TaskResult(image_data->upload.task);
   } else if (task_type == DecodeTaskType::STAND_ALONE_DECODE_TASK &&
              image_data->decode.stand_alone_task) {
     // We had an existing out of raster task, ref the image and return the task.
     RefImage(draw_image);
-    *task = image_data->decode.stand_alone_task;
-    return true;
+    return TaskResult(image_data->decode.stand_alone_task);
   }
 
   // Ensure that the image we're about to decode/upload will fit in memory.
   if (!EnsureCapacity(image_data->size)) {
     // Image will not fit, do an at-raster decode.
-    *task = nullptr;
-    return false;
+    return TaskResult(false);
   }
 
   // If we had to create new image data, add it to our map now that we know it
@@ -546,28 +513,21 @@ bool GpuImageDecodeCache::GetTaskForImageAndRefInternal(
   // it is their responsibility to release it by calling UnrefImage.
   RefImage(draw_image);
 
-  // If we already have an image and it is locked (or lock-able), just return
-  // that.
-  if (image_data->upload.image() &&
-      TryLockImage(HaveContextLock::kNo, draw_image, image_data)) {
-    *task = nullptr;
-    return true;
-  }
-
+  scoped_refptr<TileTask> task;
   if (task_type == DecodeTaskType::PART_OF_UPLOAD_TASK) {
     // Ref image and create a upload and decode tasks. We will release this ref
     // in UploadTaskCompleted.
     RefImage(draw_image);
-    *task = make_scoped_refptr(new ImageUploadTaskImpl(
+    task = base::MakeRefCounted<ImageUploadTaskImpl>(
         this, draw_image,
         GetImageDecodeTaskAndRef(draw_image, tracing_info, task_type),
-        tracing_info));
-    image_data->upload.task = *task;
+        tracing_info);
+    image_data->upload.task = task;
   } else {
-    *task = GetImageDecodeTaskAndRef(draw_image, tracing_info, task_type);
+    task = GetImageDecodeTaskAndRef(draw_image, tracing_info, task_type);
   }
 
-  return true;
+  return TaskResult(task);
 }
 
 void GpuImageDecodeCache::UnrefImage(const DrawImage& draw_image) {
@@ -617,8 +577,7 @@ DecodedDrawImage GpuImageDecodeCache::GetDecodedImageForDraw(
   UnrefImageDecode(draw_image);
 
   sk_sp<SkImage> image = image_data->upload.image();
-  if (image)
-    image_data->upload.mark_used();
+  image_data->upload.mark_used();
   DCHECK(image || image_data->decode.decode_failure);
 
   SkSize scale_factor = CalculateScaleFactorForMipLevel(
@@ -648,7 +607,7 @@ void GpuImageDecodeCache::DrawWithImageFinished(
   // We are mid-draw and holding the context lock, ensure we clean up any
   // textures (especially at-raster), which may have just been marked for
   // deletion by UnrefImage.
-  RunPendingContextThreadOperations();
+  DeletePendingImages();
 }
 
 void GpuImageDecodeCache::ReduceCacheUsage() {
@@ -656,14 +615,6 @@ void GpuImageDecodeCache::ReduceCacheUsage() {
                "GpuImageDecodeCache::ReduceCacheUsage");
   base::AutoLock lock(lock_);
   EnsureCapacity(0);
-
-  // This is typically called when no tasks are running (between scheduling
-  // tasks). Try to lock and run pending operations if possible, but don't
-  // block on it.
-  if (context_->GetLock()->Try()) {
-    RunPendingContextThreadOperations();
-    context_->GetLock()->Release();
-  }
 }
 
 void GpuImageDecodeCache::SetShouldAggressivelyFreeResources(
@@ -674,15 +625,17 @@ void GpuImageDecodeCache::SetShouldAggressivelyFreeResources(
   if (aggressively_free_resources) {
     viz::ContextProvider::ScopedContextLock context_lock(context_);
     base::AutoLock lock(lock_);
-    aggressively_freeing_resources_ = aggressively_free_resources;
+    // We want to keep as little in our cache as possible. Set our memory limit
+    // to zero and EnsureCapacity to clean up memory.
+    cached_bytes_limit_ = kSuspendedOrInvisibleMaxGpuImageBytes;
     EnsureCapacity(0);
 
     // We are holding the context lock, so finish cleaning up deleted images
     // now.
-    RunPendingContextThreadOperations();
+    DeletePendingImages();
   } else {
     base::AutoLock lock(lock_);
-    aggressively_freeing_resources_ = aggressively_free_resources;
+    cached_bytes_limit_ = normal_max_cache_bytes_;
   }
 }
 
@@ -694,14 +647,17 @@ void GpuImageDecodeCache::ClearCache() {
       // Orphan the entry so it will be deleted once no longer in use.
       entry.second->is_orphaned = true;
     } else if (entry.second->upload.image()) {
-      DeleteImage(entry.second.get());
+      bytes_used_ -= entry.second->size;
+      images_pending_deletion_.push_back(entry.second->upload.image());
+      entry.second->upload.SetImage(nullptr);
+      entry.second->upload.budgeted = false;
     }
   }
   persistent_cache_.Clear();
 }
 
 size_t GpuImageDecodeCache::GetMaximumMemoryLimitBytes() const {
-  return max_working_set_bytes_;
+  return normal_max_cache_bytes_;
 }
 
 void GpuImageDecodeCache::NotifyImageUnused(
@@ -712,7 +668,11 @@ void GpuImageDecodeCache::NotifyImageUnused(
         it->second->upload.ref_count != 0) {
       it->second->is_orphaned = true;
     } else if (it->second->upload.image()) {
-      DeleteImage(it->second.get());
+      DCHECK(!it->second->decode.is_locked());
+      bytes_used_ -= it->second->size;
+      images_pending_deletion_.push_back(it->second->upload.image());
+      it->second->upload.SetImage(nullptr);
+      it->second->upload.budgeted = false;
     }
     persistent_cache_.Erase(it);
   }
@@ -733,7 +693,7 @@ bool GpuImageDecodeCache::OnMemoryDump(
         "cc/image_memory/cache_0x%" PRIXPTR, reinterpret_cast<uintptr_t>(this));
     MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(dump_name);
     dump->AddScalar(MemoryAllocatorDump::kNameSize,
-                    MemoryAllocatorDump::kUnitsBytes, working_set_bytes_);
+                    MemoryAllocatorDump::kUnitsBytes, bytes_used_);
 
     // Early out, no need for more detail in a BACKGROUND dump.
     return true;
@@ -761,7 +721,8 @@ bool GpuImageDecodeCache::OnMemoryDump(
     }
 
     // If we have an uploaded image (that is actually on the GPU, not just a
-    // CPU wrapper), upload it here.
+    // CPU
+    // wrapper), upload it here.
     if (image_data->upload.image() &&
         image_data->mode == DecodedDataMode::GPU) {
       std::string gpu_dump_name = base::StringPrintf(
@@ -771,17 +732,15 @@ bool GpuImageDecodeCache::OnMemoryDump(
       dump->AddScalar(MemoryAllocatorDump::kNameSize,
                       MemoryAllocatorDump::kUnitsBytes, image_data->size);
 
-      // Dump the "locked_size" as an additional column.
-      size_t locked_size =
-          image_data->upload.is_locked() ? image_data->size : 0u;
-      dump->AddScalar("locked_size", MemoryAllocatorDump::kUnitsBytes,
-                      locked_size);
-
       // Create a global shred GUID to associate this data with its GPU
-      // process counterpart.
+      // process
+      // counterpart.
+      GLuint gl_id = skia::GrBackendObjectToGrGLTextureInfo(
+                         image_data->upload.image()->getTextureHandle(
+                             false /* flushPendingGrContextIO */))
+                         ->fID;
       MemoryAllocatorDumpGuid guid = gl::GetGLTextureClientGUIDForTracing(
-          context_->ContextSupport()->ShareGroupTracingGUID(),
-          image_data->upload.gl_id());
+          context_->ContextSupport()->ShareGroupTracingGUID(), gl_id);
 
       // kImportance is somewhat arbitrary - we chose 3 to be higher than the
       // value used in the GPU process (1), and Skia (2), causing us to appear
@@ -892,8 +851,8 @@ scoped_refptr<TileTask> GpuImageDecodeCache::GetImageDecodeTaskAndRef(
     // Ref image decode and create a decode task. This ref will be released in
     // DecodeTaskCompleted.
     RefImageDecode(draw_image);
-    existing_task = make_scoped_refptr(
-        new ImageDecodeTaskImpl(this, draw_image, tracing_info, task_type));
+    existing_task = base::MakeRefCounted<ImageDecodeTaskImpl>(
+        this, draw_image, tracing_info, task_type);
   }
   return existing_task;
 }
@@ -983,61 +942,68 @@ void GpuImageDecodeCache::OwnershipChanged(const DrawImage& draw_image,
       persistent_cache_.Erase(found_persistent);
   }
 
-  // If we have no refs on an uploaded image, it should be unlocked. Do this
-  // before any attempts to delete the image.
-  if (image_data->mode == DecodedDataMode::GPU &&
-      image_data->upload.ref_count == 0 && image_data->upload.is_locked()) {
-    UnlockImage(image_data);
-  }
-
   // Don't keep around orphaned images.
   if (image_data->is_orphaned && !has_any_refs) {
-    DeleteImage(image_data);
+    images_pending_deletion_.push_back(std::move(image_data->upload.image()));
+    image_data->upload.SetImage(nullptr);
   }
 
   // Don't keep CPU images if they are unused, these images can be recreated by
   // re-locking discardable (rather than requiring a full upload like GPU
   // images).
   if (image_data->mode == DecodedDataMode::CPU && !has_any_refs) {
-    DeleteImage(image_data);
+    images_pending_deletion_.push_back(image_data->upload.image());
+    image_data->upload.SetImage(nullptr);
   }
 
   if (image_data->is_at_raster && !has_any_refs) {
-    // We have an at-raster image with no refs. Convert it to not-at-raster and
-    // cache it unlocked.
+    // We have an at-raster image which has reached zero refs. If it won't fit
+    // in our cache, delete the image to allow it to fit.
+    if (image_data->upload.image() && !CanFitInCache(image_data->size)) {
+      images_pending_deletion_.push_back(image_data->upload.image());
+      image_data->upload.SetImage(nullptr);
+    }
+
+    // We now have an at-raster image which will fit in our cache. Convert it
+    // to not-at-raster.
     image_data->is_at_raster = false;
-    DCHECK(!image_data->upload.budgeted);
+    if (image_data->upload.image()) {
+      bytes_used_ += image_data->size;
+      image_data->upload.budgeted = true;
+    }
   }
 
-  // If we have image that should be budgeted, but isn't, budget it now.
+  // If we have image refs on a non-at-raster image, it must be budgeted, as it
+  // is either uploaded or pending upload.
   if (image_data->upload.ref_count > 0 && !image_data->upload.budgeted &&
       !image_data->is_at_raster) {
     // We should only be taking non-at-raster refs on images that fit in cache.
     DCHECK(CanFitInWorkingSet(image_data->size));
 
-    working_set_bytes_ += image_data->size;
+    bytes_used_ += image_data->size;
     image_data->upload.budgeted = true;
   }
 
   // If we have no image refs on an image, it should only be budgeted if it has
   // an uploaded image. If no image exists (upload was cancelled), we should
   // un-budget the image.
-  if (image_data->upload.ref_count == 0 && image_data->upload.budgeted) {
-    DCHECK_GE(working_set_bytes_, image_data->size);
-    working_set_bytes_ -= image_data->size;
+  if (image_data->upload.ref_count == 0 && image_data->upload.budgeted &&
+      !image_data->upload.image()) {
+    DCHECK_GE(bytes_used_, image_data->size);
+    bytes_used_ -= image_data->size;
     image_data->upload.budgeted = false;
   }
 
-  // We should unlock the decoded image memory for the image in two cases:
+  // We should unlock the discardable memory for the image in two cases:
   // 1) The image is no longer being used (no decode or upload refs).
   // 2) This is a GPU backed image that has already been uploaded (no decode
   //    refs, and we actually already have an image).
-  bool should_unlock_decode =
+  bool should_unlock_discardable =
       !has_any_refs ||
       (image_data->mode == DecodedDataMode::GPU &&
        !image_data->decode.ref_count && image_data->upload.image());
 
-  if (should_unlock_decode && image_data->decode.is_locked()) {
+  if (should_unlock_discardable && image_data->decode.is_locked()) {
     DCHECK(image_data->decode.data());
     image_data->decode.Unlock();
   }
@@ -1048,8 +1014,7 @@ void GpuImageDecodeCache::OwnershipChanged(const DrawImage& draw_image,
 #if DCHECK_IS_ON()
   // Sanity check the above logic.
   if (image_data->upload.image()) {
-    DCHECK(image_data->is_at_raster || image_data->upload.budgeted ||
-           !image_data->upload.is_locked());
+    DCHECK(image_data->is_at_raster || image_data->upload.budgeted);
     if (image_data->mode == DecodedDataMode::CPU)
       DCHECK(image_data->decode.is_locked());
   } else {
@@ -1066,11 +1031,18 @@ bool GpuImageDecodeCache::EnsureCapacity(size_t required_size) {
                "GpuImageDecodeCache::EnsureCapacity");
   lock_.AssertAcquired();
 
-  if (CanFitInWorkingSet(required_size) && !ExceedsPreferredCount())
+  // While we only care whether |required_size| fits in our working set, we
+  // also want to keep our cache under-budget if possible. Working set size
+  // will always match or exceed cache size, so keeping the cache under budget
+  // may be impossible.
+  if (CanFitInCache(required_size) && !ExceedsPreferredCount())
     return true;
 
   // While we are over memory or preferred item capacity, we iterate through
-  // our set of cached image data in LRU order, removing unreferenced images.
+  // our set of cached image data in LRU order. For each image, we can do two
+  // things: 1) We can free the uploaded image, reducing the memory usage of
+  // the cache and 2) we can remove the entry entirely, reducing the count of
+  // elements in the cache.
   for (auto it = persistent_cache_.rbegin(); it != persistent_cache_.rend();) {
     if (it->second->decode.ref_count != 0 ||
         it->second->upload.ref_count != 0) {
@@ -1085,23 +1057,52 @@ bool GpuImageDecodeCache::EnsureCapacity(size_t required_size) {
     // upload.
     DCHECK(!it->second->upload.budgeted || it->second->upload.image());
 
-    // Free the uploaded image if it exists.
-    if (it->second->upload.image())
-      DeleteImage(it->second.get());
+    // Free the uploaded image if possible.
+    if (it->second->upload.image()) {
+      DCHECK(it->second->upload.budgeted);
+      DCHECK_GE(bytes_used_, it->second->size);
+      bytes_used_ -= it->second->size;
+      images_pending_deletion_.push_back(it->second->upload.image());
+      it->second->upload.SetImage(nullptr);
+      it->second->upload.budgeted = false;
+    }
 
-    it = persistent_cache_.Erase(it);
+    // Free the entire entry if necessary.
+    if (ExceedsPreferredCount()) {
+      it = persistent_cache_.Erase(it);
+    } else {
+      ++it;
+    }
 
-    if (CanFitInWorkingSet(required_size) && !ExceedsPreferredCount())
+    if (CanFitInCache(required_size) && !ExceedsPreferredCount())
       return true;
   }
 
-  return false;
+  return CanFitInWorkingSet(required_size);
+}
+
+bool GpuImageDecodeCache::CanFitInCache(size_t size) const {
+  lock_.AssertAcquired();
+
+  size_t bytes_limit;
+  if (memory_state_ == base::MemoryState::NORMAL) {
+    bytes_limit = cached_bytes_limit_;
+  } else if (memory_state_ == base::MemoryState::THROTTLED) {
+    bytes_limit = cached_bytes_limit_ / kThrottledCacheSizeReductionFactor;
+  } else {
+    DCHECK_EQ(base::MemoryState::SUSPENDED, memory_state_);
+    bytes_limit = kSuspendedOrInvisibleMaxGpuImageBytes;
+  }
+
+  base::CheckedNumeric<uint32_t> new_size(bytes_used_);
+  new_size += size;
+  return new_size.IsValid() && new_size.ValueOrDie() <= bytes_limit;
 }
 
 bool GpuImageDecodeCache::CanFitInWorkingSet(size_t size) const {
   lock_.AssertAcquired();
 
-  base::CheckedNumeric<uint32_t> new_size(working_set_bytes_);
+  base::CheckedNumeric<uint32_t> new_size(bytes_used_);
   new_size += size;
   return new_size.IsValid() && new_size.ValueOrDie() <= max_working_set_bytes_;
 }
@@ -1110,9 +1111,7 @@ bool GpuImageDecodeCache::ExceedsPreferredCount() const {
   lock_.AssertAcquired();
 
   size_t items_limit;
-  if (aggressively_freeing_resources_) {
-    items_limit = kSuspendedMaxItemsInCache;
-  } else if (memory_state_ == base::MemoryState::NORMAL) {
+  if (memory_state_ == base::MemoryState::NORMAL) {
     items_limit = kNormalMaxItemsInCache;
   } else if (memory_state_ == base::MemoryState::THROTTLED) {
     items_limit = kThrottledMaxItemsInCache;
@@ -1136,8 +1135,7 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
     return;
   }
 
-  if (image_data->upload.image() &&
-      TryLockImage(HaveContextLock::kNo, draw_image, image_data)) {
+  if (image_data->upload.image()) {
     // We already have an uploaded image, no reason to decode.
     return;
   }
@@ -1181,7 +1179,8 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
         // TODO(crbug.com/649167): Params should not have changed since initial
         // sizing. Somehow this still happens. We should investigate and re-add
         // DCHECKs here to enforce this.
-        SkImage* image = draw_image.paint_image().GetSkImage().get();
+        sk_sp<SkImage> image = draw_image.paint_image().GetSkImageForFrame(
+            draw_image.frame_index());
         if (!image->getDeferredTextureImageData(
                 *context_threadsafe_proxy_.get(), &image_data->upload_params, 1,
                 backing_memory->data(), nullptr, color_type_)) {
@@ -1215,18 +1214,12 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
   context_->GetLock()->AssertAcquired();
   lock_.AssertAcquired();
 
-  // We are about to upload a new image and are holding the context lock.
-  // Ensure that any images which have been marked for deletion are actually
-  // cleaned up so we don't exceed our memory limit during this upload.
-  RunPendingContextThreadOperations();
-
   if (image_data->decode.decode_failure) {
     // We were unnable to decode this image. Don't try to upload.
     return;
   }
 
-  if (image_data->upload.image() &&
-      TryLockImage(HaveContextLock::kYes, draw_image, image_data)) {
+  if (image_data->upload.image()) {
     // Someone has uploaded this image before us (at raster).
     return;
   }
@@ -1235,6 +1228,11 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
   DCHECK(image_data->decode.is_locked());
   DCHECK_GT(image_data->decode.ref_count, 0u);
   DCHECK_GT(image_data->upload.ref_count, 0u);
+
+  // We are about to upload a new image and are holding the context lock.
+  // Ensure that any images which have been marked for deletion are actually
+  // cleaned up so we don't exceed our memory limit during this upload.
+  DeletePendingImages();
 
   sk_sp<SkImage> uploaded_image;
   {
@@ -1259,36 +1257,20 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
   }
   image_data->decode.mark_used();
 
-  // TODO(crbug.com/740737): Any time Skia returns a GPU backed SkImage it may
-  // be null due to lost context. Early out in in these cases.
-  if (!uploaded_image)
-    return;
+  // TODO(crbug.com/740737): uploaded_image is sometimes null for reasons that
+  // need investigation.
 
-  if (draw_image.target_color_space().IsValid()) {
+  if (uploaded_image && draw_image.target_color_space().IsValid()) {
     TRACE_EVENT0("cc", "GpuImageDecodeCache::UploadImage - color conversion");
     uploaded_image = uploaded_image->makeColorSpace(
         draw_image.target_color_space().ToSkColorSpace(),
         SkTransferFunctionBehavior::kIgnore);
   }
 
-  // makeColorSpace may also return a null SkImage if context is lost.
-  if (!uploaded_image)
-    return;
-
   // At-raster may have decoded this while we were unlocked. If so, ignore our
   // result.
-  if (!image_data->upload.image()) {
+  if (!image_data->upload.image())
     image_data->upload.SetImage(std::move(uploaded_image));
-
-    // If we have a new GPU-backed image, initialize it for use in the GPU
-    // discardable system.
-    if (image_data->mode == DecodedDataMode::GPU) {
-      // Notify the discardable system of this image so it will count against
-      // budgets.
-      context_->ContextGL()->InitializeDiscardableTextureCHROMIUM(
-          image_data->upload.gl_id());
-    }
-  }
 }
 
 scoped_refptr<GpuImageDecodeCache::ImageData>
@@ -1303,7 +1285,8 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image) {
   auto params = SkImage::DeferredTextureImageUsageParams(
       SkMatrix::I(), CalculateDesiredFilterQuality(draw_image),
       upload_scale_mip_level);
-  SkImage* image = draw_image.paint_image().GetSkImage().get();
+  sk_sp<SkImage> image =
+      draw_image.paint_image().GetSkImageForFrame(draw_image.frame_index());
   size_t data_size = image->getDeferredTextureImageData(
       *context_threadsafe_proxy_.get(), &params, 1, nullptr, nullptr,
       color_type_);
@@ -1318,57 +1301,13 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image) {
     mode = DecodedDataMode::GPU;
   }
 
-  return make_scoped_refptr(
-      new ImageData(mode, data_size, draw_image.target_color_space(), params));
+  return base::MakeRefCounted<ImageData>(
+      mode, data_size, draw_image.target_color_space(), params);
 }
 
-void GpuImageDecodeCache::DeleteImage(ImageData* image_data) {
-  if (image_data->mode == DecodedDataMode::GPU && image_data->upload.image()) {
-    DCHECK(!image_data->upload.is_locked());
-    images_pending_deletion_.push_back(image_data->upload.image());
-  }
-  image_data->upload.ResetImage();
-}
-
-void GpuImageDecodeCache::UnlockImage(ImageData* image_data) {
-  DCHECK_EQ(DecodedDataMode::GPU, image_data->mode);
-  images_pending_unlock_.push_back(image_data->upload.image().get());
-  image_data->upload.OnUnlock();
-}
-
-// We always run pending operations in the following order:
-//   Lock > Unlock > Delete
-// This ensures that:
-//   a) We never fully unlock an image that's pending lock (lock before unlock)
-//   b) We never delete an image that has pending locks/unlocks.
-// As this can be run at-raster, to unlock/delete an image that was just used,
-// we need to call GlIdFromSkImage, which flushes pending IO on the image,
-// rather than just using a cached GL ID.
-void GpuImageDecodeCache::RunPendingContextThreadOperations() {
+void GpuImageDecodeCache::DeletePendingImages() {
   context_->GetLock()->AssertAcquired();
   lock_.AssertAcquired();
-
-  for (auto* image : images_pending_complete_lock_) {
-    context_->ContextSupport()->CompleteLockDiscardableTexureOnContextThread(
-        GlIdFromSkImage(image));
-  }
-  images_pending_complete_lock_.clear();
-
-  for (auto* image : images_pending_unlock_) {
-    context_->ContextGL()->UnlockDiscardableTextureCHROMIUM(
-        GlIdFromSkImage(image));
-  }
-  images_pending_unlock_.clear();
-
-  for (auto& image : images_pending_deletion_) {
-    // We *always* abandon images, to prevent Skia from caching/re-using them.
-    // TODO(ericrk): Handle this in a better way. crbug.com/735736
-    uint32_t texture_id = GlIdFromSkImage(image.get());
-    if (context_->ContextGL()->LockDiscardableTextureCHROMIUM(texture_id)) {
-      context_->ContextGL()->DeleteTextures(1, &texture_id);
-    }
-    image->getTexture()->abandon();
-  }
   images_pending_deletion_.clear();
 }
 
@@ -1380,39 +1319,6 @@ SkImageInfo GpuImageDecodeCache::CreateImageInfoForDrawImage(
   return SkImageInfo::Make(mip_size.width(), mip_size.height(), color_type_,
                            kPremul_SkAlphaType,
                            draw_image.target_color_space().ToSkColorSpace());
-}
-
-bool GpuImageDecodeCache::TryLockImage(HaveContextLock have_context_lock,
-                                       const DrawImage& draw_image,
-                                       ImageData* data) {
-  if (data->upload.is_locked())
-    return true;
-
-  if (have_context_lock == HaveContextLock::kYes &&
-      context_->ContextGL()->LockDiscardableTextureCHROMIUM(
-          data->upload.gl_id())) {
-    // If |have_context_lock|, we can immediately lock the image and send
-    // the lock command to the GPU process.
-    data->upload.OnLock();
-    return true;
-  } else if (context_->ContextSupport()
-                 ->ThreadSafeShallowLockDiscardableTexture(
-                     data->upload.gl_id())) {
-    // If !|have_context_lock|, we use ThreadsafeShallowLockDiscardableTexture.
-    // This takes a reference to the image, ensuring that it can't be deleted
-    // by the service, but delays sending a lock command over the command
-    // buffer. This command must be sent before the image is used, but is now
-    // guaranteed to succeed. We will send this command via
-    // CompleteLockDiscardableTextureOnContextThread in UploadImageIfNecessary,
-    // which is guaranteed to run before the texture is used.
-    data->upload.OnLock();
-    images_pending_complete_lock_.push_back(data->upload.image().get());
-    return true;
-  }
-
-  // Couldn't lock, abandon the image.
-  DeleteImage(data);
-  return false;
 }
 
 // Tries to find an ImageData that can be used to draw the provided

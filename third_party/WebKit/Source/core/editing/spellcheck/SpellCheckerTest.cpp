@@ -5,6 +5,9 @@
 #include "core/editing/spellcheck/SpellChecker.h"
 
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/markers/SpellCheckMarker.h"
 #include "core/editing/spellcheck/SpellCheckRequester.h"
@@ -75,7 +78,7 @@ TEST_F(SpellCheckerTest, AdvancedToNextMisspellingWrapSearchNoCrash) {
 TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
   SetBodyContent("<input>");
   HTMLInputElement* input =
-      toHTMLInputElement(GetDocument().QuerySelector("input"));
+      ToHTMLInputElement(GetDocument().QuerySelector("input"));
   input->focus();
   input->setValue("Hello, input field");
   GetDocument().UpdateStyleAndLayout();

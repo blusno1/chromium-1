@@ -24,10 +24,11 @@
  */
 
 #ifndef MockImageDecoder_h
+#define MockImageDecoder_h
 
 #include <memory>
+#include "platform/graphics/ImageFrameGenerator.h"
 #include "platform/image-decoders/ImageDecoder.h"
-#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -65,12 +66,12 @@ class MockImageDecoder : public ImageDecoder {
  public:
   static std::unique_ptr<MockImageDecoder> Create(
       MockImageDecoderClient* client) {
-    return WTF::MakeUnique<MockImageDecoder>(client);
+    return std::make_unique<MockImageDecoder>(client);
   }
 
   MockImageDecoder(MockImageDecoderClient* client)
       : ImageDecoder(kAlphaPremultiplied,
-                     ColorBehavior::TransformToTargetForTesting(),
+                     ColorBehavior::TransformToSRGB(),
                      kNoDecodedImageByteLimit),
         client_(client) {}
 

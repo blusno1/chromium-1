@@ -57,8 +57,7 @@ std::unique_ptr<WebState> WebState::Create(const CreateParams& params) {
   // Initialize the new session.
   web_state->GetNavigationManagerImpl().InitializeSession();
 
-  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
-  return std::move(web_state);
+  return web_state;
 }
 
 /* static */
@@ -66,11 +65,7 @@ std::unique_ptr<WebState> WebState::CreateWithStorageSession(
     const CreateParams& params,
     CRWSessionStorage* session_storage) {
   DCHECK(session_storage);
-  std::unique_ptr<WebStateImpl> web_state(
-      new WebStateImpl(params, session_storage));
-
-  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
-  return std::move(web_state);
+  return base::WrapUnique(new WebStateImpl(params, session_storage));
 }
 
 WebStateImpl::WebStateImpl(const CreateParams& params)
@@ -242,6 +237,10 @@ double WebStateImpl::GetLoadingProgress() const {
 
 bool WebStateImpl::IsCrashed() const {
   return [web_controller_ isWebProcessCrashed];
+}
+
+bool WebStateImpl::IsVisible() const {
+  return [web_controller_ isVisible];
 }
 
 bool WebStateImpl::IsEvicted() const {
@@ -512,6 +511,23 @@ bool WebStateImpl::ShouldAllowResponse(NSURLResponse* response,
   return true;
 }
 
+bool WebStateImpl::ShouldPreviewLink(const GURL& link_url) {
+  return delegate_ && delegate_->ShouldPreviewLink(this, link_url);
+}
+
+UIViewController* WebStateImpl::GetPreviewingViewController(
+    const GURL& link_url) {
+  return delegate_ ? delegate_->GetPreviewingViewController(this, link_url)
+                   : nil;
+}
+
+void WebStateImpl::CommitPreviewingViewController(
+    UIViewController* previewing_view_controller) {
+  if (delegate_) {
+    delegate_->CommitPreviewingViewController(this, previewing_view_controller);
+  }
+}
+
 #pragma mark - RequestTracker management
 
 WebStateInterfaceProvider* WebStateImpl::GetWebStateInterfaceProvider() {
@@ -657,10 +673,10 @@ const GURL& WebStateImpl::GetLastCommittedURL() const {
 
 GURL WebStateImpl::GetCurrentURL(URLVerificationTrustLevel* trust_level) const {
   GURL URL = [web_controller_ currentURLWithTrustLevel:trust_level];
-  bool equalURLs = web::GURLByRemovingRefFromGURL(URL) ==
-                   web::GURLByRemovingRefFromGURL(GetLastCommittedURL());
-  DCHECK(equalURLs);
-  UMA_HISTOGRAM_BOOLEAN("Web.CurrentURLEqualsLastCommittedURL", equalURLs);
+  bool equalOrigins = URL.GetOrigin() == GetLastCommittedURL().GetOrigin();
+  DCHECK(equalOrigins);
+  UMA_HISTOGRAM_BOOLEAN("Web.CurrentOriginEqualsLastCommittedOrigin",
+                        equalOrigins);
   return URL;
 }
 

@@ -79,7 +79,11 @@ template("compute_interfaces_info_individual") {
     ]
 
     response_file_contents = rebase_path(invoker.sources, root_build_dir)
-    args = [
+    args = []
+    if (snake_case_source_files) {
+      args += [ "--snake-case-generated-files" ]
+    }
+    args += [
       "--cache-directory",
       rebase_path(bindings_scripts_output_dir, root_build_dir),
       "--idl-files-list",
@@ -198,17 +202,28 @@ template("idl_compiler") {
       outputs = []
       foreach(_source, sources) {
         _name_part = get_path_info(_source, "name")
-        outputs += [
-          "$output_dir/V8${_name_part}${output_name_suffix}.cpp",
-          "$output_dir/V8${_name_part}${output_name_suffix}.h",
-        ]
+        if (snake_case_source_files) {
+          outputs += [
+            "$output_dir/v8_${_name_part}${output_name_suffix}.cc",
+            "$output_dir/v8_${_name_part}${output_name_suffix}.h",
+          ]
+        } else {
+          outputs += [
+            "$output_dir/V8${_name_part}${output_name_suffix}.cpp",
+            "$output_dir/V8${_name_part}${output_name_suffix}.h",
+          ]
+        }
       }
 
       idl_files_list = "$target_gen_dir/${target_name}_file_list.tmp"
       write_file(idl_files_list, rebase_path(invoker.sources, root_build_dir))
       inputs += [ idl_files_list ]
 
-      args = [
+      args = []
+      if (snake_case_source_files) {
+        args += [ "--snake-case-generated-files" ]
+      }
+      args += [
         "--cache-dir",
         rebase_path(bindings_scripts_output_dir, root_build_dir),
         "--output-dir",
@@ -228,12 +243,23 @@ template("idl_compiler") {
       public_deps = _public_deps
 
       sources = invoker.sources
-      outputs = [
-        "$output_dir/V8{{source_name_part}}${output_name_suffix}.cpp",
-        "$output_dir/V8{{source_name_part}}${output_name_suffix}.h",
-      ]
+      if (snake_case_source_files) {
+        outputs = [
+          "$output_dir/v8_{{source_name_part}}${output_name_suffix}.cc",
+          "$output_dir/v8_{{source_name_part}}${output_name_suffix}.h",
+        ]
+      } else {
+        outputs = [
+          "$output_dir/V8{{source_name_part}}${output_name_suffix}.cpp",
+          "$output_dir/V8{{source_name_part}}${output_name_suffix}.h",
+        ]
+      }
 
-      args = [
+      args = []
+      if (snake_case_source_files) {
+        args += [ "--snake-case-generated-files" ]
+      }
+      args += [
         "--cache-dir",
         rebase_path(bindings_scripts_output_dir, root_build_dir),
         "--output-dir",
@@ -285,13 +311,24 @@ template("idl_impl") {
       rel_path = rebase_path(dict_idl, "//third_party/WebKit/Source")
       impl_dir = get_path_info(rel_path, "dir")
       idl_name = get_path_info(rel_path, "name")
-      outputs += [
-        "${dictionary_impl_output_dir}$impl_dir/$idl_name.cpp",
-        "${dictionary_impl_output_dir}$impl_dir/$idl_name.h",
-      ]
+      if (snake_case_source_files) {
+        outputs += [
+          "${dictionary_impl_output_dir}$impl_dir/$idl_name.cc",
+          "${dictionary_impl_output_dir}$impl_dir/$idl_name.h",
+        ]
+      } else {
+        outputs += [
+          "${dictionary_impl_output_dir}$impl_dir/$idl_name.cpp",
+          "${dictionary_impl_output_dir}$impl_dir/$idl_name.h",
+        ]
+      }
     }
 
-    args = [
+    args = []
+    if (snake_case_source_files) {
+      args += [ "--snake-case-generated-files" ]
+    }
+    args += [
       "--cache-dir",
       rebase_path(bindings_scripts_output_dir, root_build_dir),
       "--output-dir",
@@ -332,7 +369,11 @@ template("aggregate_generated_bindings") {
     outputs = invoker.outputs
 
     response_file_contents = rebase_path(inputs, root_build_dir)
-    args = [
+    args = []
+    if (snake_case_source_files) {
+      args += [ "--snake-case-generated-files" ]
+    }
+    args += [
       "--component",
       invoker.component,
       "{{response_file_name}}",
@@ -421,16 +462,22 @@ template("generate_global_constructors") {
     output_dir = invoker.output_dir
     component = invoker.component
 
-    # generate outputs from invoker.interfaces.
+    # generate outputs from invoker.interfaces and invoker.basenames.
     output_idl_files = []
     output_header_files = []
+
+    # Need a variable due to a GN sytax restriction. We can't do "invoker.basenames[i]".
+    basename_list = invoker.basenames
+    i = 0
     foreach(interface, invoker.interfaces) {
+      basename = basename_list[i]
       args += [ interface ]
-      output_idl_file = "$output_dir/${interface}${component}Constructors.idl"
+      output_idl_file = "$output_dir/${basename}_${component}_constructors.idl"
       args += [ rebase_path(output_idl_file, root_build_dir) ]
       output_idl_files += [ output_idl_file ]
       output_header_files +=
-          [ "$output_dir/${interface}${component}Constructors.h" ]
+          [ "$output_dir/${basename}_${component}_constructors.h" ]
+      i += 1
     }
 
     outputs = output_idl_files + output_header_files
@@ -463,7 +510,11 @@ template("generate_conditional_features") {
                idl_files_list,
              ] + invoker.sources
 
-    args = [
+    args = []
+    if (snake_case_source_files) {
+      args += [ "--snake-case-generated-files" ]
+    }
+    args += [
       "--output-directory",
       rebase_path(invoker.output_dir, root_build_dir),
       "--info-dir",

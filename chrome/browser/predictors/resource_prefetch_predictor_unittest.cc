@@ -69,8 +69,7 @@ class MockResourcePrefetchPredictorTables
       scoped_refptr<base::SequencedTaskRunner> db_task_runner)
       : ResourcePrefetchPredictorTables(std::move(db_task_runner)) {}
 
-  void ScheduleDBTask(const tracked_objects::Location& from_here,
-                      DBTask task) override {
+  void ScheduleDBTask(const base::Location& from_here, DBTask task) override {
     ExecuteDBTaskOnDBSequence(std::move(task));
   }
 
@@ -182,9 +181,10 @@ class ResourcePrefetchPredictorTest : public testing::Test {
 
 ResourcePrefetchPredictorTest::ResourcePrefetchPredictorTest()
     : profile_(base::MakeUnique<TestingProfile>()),
-      db_task_runner_(new base::TestSimpleTaskRunner()),
-      mock_tables_(new StrictMock<MockResourcePrefetchPredictorTables>(
-          db_task_runner_)) {}
+      db_task_runner_(base::MakeRefCounted<base::TestSimpleTaskRunner>()),
+      mock_tables_(
+          base::MakeRefCounted<StrictMock<MockResourcePrefetchPredictorTables>>(
+              db_task_runner_)) {}
 
 ResourcePrefetchPredictorTest::~ResourcePrefetchPredictorTest() = default;
 
@@ -201,7 +201,7 @@ void ResourcePrefetchPredictorTest::SetUp() {
   // for the |profile_|. The PredictorDatabase is initialized asynchronously and
   // we have to wait for the initialization completion even though the database
   // object is later replaced by a mock object.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   CHECK_EQ(predictor_->initialization_state_,
            ResourcePrefetchPredictor::NOT_INITIALIZED);
   InitializePredictor();
@@ -1022,6 +1022,7 @@ TEST_F(ResourcePrefetchPredictorTest, GetPrefetchData) {
   ResourcePrefetchPredictor::Prediction prediction;
   std::vector<GURL>& urls = prediction.subresource_urls;
   // No prefetch data.
+  EXPECT_FALSE(predictor_->IsUrlPrefetchable(main_frame_url));
   EXPECT_FALSE(predictor_->GetPrefetchData(main_frame_url, &prediction));
 
   // Add a resource associated with the main frame host.
@@ -1034,6 +1035,7 @@ TEST_F(ResourcePrefetchPredictorTest, GetPrefetchData) {
                                               google_host);
 
   urls.clear();
+  EXPECT_TRUE(predictor_->IsUrlPrefetchable(main_frame_url));
   EXPECT_TRUE(predictor_->GetPrefetchData(main_frame_url, &prediction));
   EXPECT_THAT(urls, UnorderedElementsAre(GURL(script_url)));
 
@@ -1046,6 +1048,7 @@ TEST_F(ResourcePrefetchPredictorTest, GetPrefetchData) {
 
   // Prediction failed: no data associated with the host redirect endpoint.
   urls.clear();
+  EXPECT_FALSE(predictor_->IsUrlPrefetchable(main_frame_url));
   EXPECT_FALSE(predictor_->GetPrefetchData(main_frame_url, &prediction));
 
   // Add a resource associated with host redirect endpoint.
@@ -1058,6 +1061,7 @@ TEST_F(ResourcePrefetchPredictorTest, GetPrefetchData) {
                                               www_google_host);
 
   urls.clear();
+  EXPECT_TRUE(predictor_->IsUrlPrefetchable(main_frame_url));
   EXPECT_TRUE(predictor_->GetPrefetchData(main_frame_url, &prediction));
   EXPECT_THAT(urls, UnorderedElementsAre(GURL(style_url)));
 
@@ -1072,6 +1076,7 @@ TEST_F(ResourcePrefetchPredictorTest, GetPrefetchData) {
                                              google_url);
 
   urls.clear();
+  EXPECT_TRUE(predictor_->IsUrlPrefetchable(main_frame_url));
   EXPECT_TRUE(predictor_->GetPrefetchData(main_frame_url, &prediction));
   EXPECT_THAT(urls, UnorderedElementsAre(GURL(image_url)));
 
@@ -1086,6 +1091,7 @@ TEST_F(ResourcePrefetchPredictorTest, GetPrefetchData) {
   // Url redirect endpoint doesn't have associated resources so we get
   // host-based data.
   urls.clear();
+  EXPECT_TRUE(predictor_->IsUrlPrefetchable(main_frame_url));
   EXPECT_TRUE(predictor_->GetPrefetchData(main_frame_url, &prediction));
   EXPECT_THAT(urls, UnorderedElementsAre(GURL(style_url)));
 
@@ -1100,6 +1106,7 @@ TEST_F(ResourcePrefetchPredictorTest, GetPrefetchData) {
                                              www_google_url);
 
   urls.clear();
+  EXPECT_TRUE(predictor_->IsUrlPrefetchable(main_frame_url));
   EXPECT_TRUE(predictor_->GetPrefetchData(main_frame_url, &prediction));
   EXPECT_THAT(urls, UnorderedElementsAre(GURL(font_url)));
 }
@@ -1108,6 +1115,7 @@ TEST_F(ResourcePrefetchPredictorTest, TestPredictPreconnectOrigins) {
   const GURL main_frame_url("http://google.com/?query=cats");
   auto prediction = base::MakeUnique<PreconnectPrediction>();
   // No prefetch data.
+  EXPECT_FALSE(predictor_->IsUrlPreconnectable(main_frame_url));
   EXPECT_FALSE(
       predictor_->PredictPreconnectOrigins(main_frame_url, prediction.get()));
 
@@ -1127,6 +1135,7 @@ TEST_F(ResourcePrefetchPredictorTest, TestPredictPreconnectOrigins) {
   predictor_->origin_data_->UpdateData(google.host(), google);
 
   prediction = base::MakeUnique<PreconnectPrediction>();
+  EXPECT_TRUE(predictor_->IsUrlPreconnectable(main_frame_url));
   EXPECT_TRUE(
       predictor_->PredictPreconnectOrigins(main_frame_url, prediction.get()));
   EXPECT_EQ(*prediction, CreatePreconnectPrediction("google.com", false,
@@ -1141,6 +1150,7 @@ TEST_F(ResourcePrefetchPredictorTest, TestPredictPreconnectOrigins) {
 
   // Prediction failed: no data associated with the redirect endpoint.
   prediction = base::MakeUnique<PreconnectPrediction>();
+  EXPECT_FALSE(predictor_->IsUrlPreconnectable(main_frame_url));
   EXPECT_FALSE(
       predictor_->PredictPreconnectOrigins(main_frame_url, prediction.get()));
 
@@ -1152,6 +1162,7 @@ TEST_F(ResourcePrefetchPredictorTest, TestPredictPreconnectOrigins) {
   predictor_->origin_data_->UpdateData(www_google.host(), www_google);
 
   prediction = base::MakeUnique<PreconnectPrediction>();
+  EXPECT_TRUE(predictor_->IsUrlPreconnectable(main_frame_url));
   EXPECT_TRUE(
       predictor_->PredictPreconnectOrigins(main_frame_url, prediction.get()));
   EXPECT_EQ(*prediction, CreatePreconnectPrediction("www.google.com", true,

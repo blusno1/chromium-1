@@ -275,12 +275,22 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
 #endif
     return location_;
   }
+
   // FIXME: size() should DCHECK(!needs_position_update_) as well, but that
   // fails in some tests, for example, fast/repaint/clipped-relative.html.
-  const IntSize& size() const { return size_; }
+  const IntSize& Size() const { return size_; }
+
   void SetSizeHackForLayoutTreeAsText(const IntSize& size) { size_ = size; }
 
-  LayoutRect Rect() const { return LayoutRect(Location(), LayoutSize(size())); }
+  LayoutRect Rect() const { return LayoutRect(Location(), LayoutSize(Size())); }
+
+  // For LayoutTreeAsText
+  LayoutRect RectIgnoringNeedsPositionUpdate() const {
+    return LayoutRect(location_, LayoutSize(size_));
+  }
+#if DCHECK_IS_ON()
+  bool NeedsPositionUpdate() const { return needs_position_update_; }
+#endif
 
   bool IsRootLayer() const { return is_root_layer_; }
 
@@ -878,6 +888,21 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
       ShouldRespectOverflowClipType = kRespectOverflowClip,
       const LayoutPoint* offset_from_root = 0,
       const LayoutSize& sub_pixel_accumulation = LayoutSize()) const;
+
+  // Use this method for callsites within paint, and |CollectFragments|
+  // otherwise. This is because non-paint use cases have not yet been
+  // migrated to use property trees.
+  void CollectFragmentsForPaint(
+      PaintLayerFragments&,
+      const PaintLayer* root_layer,
+      const LayoutRect& dirty_rect,
+      ClipRectsCacheSlot,
+      GeometryMapperOption,
+      OverlayScrollbarClipBehavior = kIgnorePlatformOverlayScrollbarSize,
+      ShouldRespectOverflowClipType = kRespectOverflowClip,
+      const LayoutPoint* offset_from_root = 0,
+      const LayoutSize& sub_pixel_accumulation = LayoutSize()) const;
+
   void CollectFragments(
       PaintLayerFragments&,
       const PaintLayer* root_layer,
@@ -1020,6 +1045,14 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // RLS mode it returns false.
   bool IsScrolledByFrameView() const;
 
+  // Returns true if this PaintLayer should be fragmented, relative
+  // to the given |compositing_layer| backing. In SPv1 mode, fragmentation
+  // may not cross compositing boundaries, so this wil return false
+  // if EnclosingPaginationLayer() is above |compositing_layer|.
+  // If |compositing_layer| is not provided, it will be computed if necessary.
+  bool ShouldFragmentCompositedBounds(
+      const PaintLayer* compositing_layer = nullptr) const;
+
  private:
   void SetNeedsCompositingInputsUpdateInternal();
 
@@ -1139,9 +1172,6 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
     needs_paint_phase_descendant_block_backgrounds_ |=
         layer.needs_paint_phase_descendant_block_backgrounds_;
   }
-
-  bool ShouldFragmentCompositedBounds(
-      const PaintLayer* compositing_layer) const;
 
   void ExpandRectForStackingChildren(const PaintLayer& composited_layer,
                                      LayoutRect& result,

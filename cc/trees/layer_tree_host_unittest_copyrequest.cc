@@ -9,14 +9,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/layers/effect_tree_layer_list_iterator.h"
-#include "cc/output/direct_renderer.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/layer_tree_test.h"
 #include "cc/trees/layer_tree_impl.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/GLES2/gl2extchromium.h"
 
@@ -134,12 +134,12 @@ class LayerTreeHostCopyRequestTestMultipleRequests
 
   void AfterTest() override { EXPECT_EQ(4u, callbacks_.size()); }
 
-  std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
     if (!use_gl_renderer_) {
       return FakeOutputSurface::CreateSoftware(
-          base::WrapUnique(new SoftwareOutputDevice));
+          std::make_unique<viz::SoftwareOutputDevice>());
     }
 
     scoped_refptr<TestContextProvider> display_context_provider =
@@ -508,7 +508,7 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
 
   void DisplayWillDrawAndSwapOnThread(
       bool will_draw_and_swap,
-      const RenderPassList& render_passes) override {
+      const viz::RenderPassList& render_passes) override {
     EXPECT_TRUE(will_draw_and_swap) << did_swap_;
     if (did_swap_) {
       // TODO(crbug.com/564832): Ignore the extra frame that occurs due to copy
@@ -524,7 +524,8 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
   }
 
   void DisplayDidDrawAndSwapOnThread() override {
-    DirectRenderer* renderer = frame_sink_->display()->renderer_for_testing();
+    viz::DirectRenderer* renderer =
+        frame_sink_->display()->renderer_for_testing();
 
     // |parent| owns a surface, but it was hidden and not part of the copy
     // request so it should not allocate any resource.
@@ -548,8 +549,8 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
 
   void AfterTest() override { EXPECT_TRUE(did_swap_); }
 
-  RenderPassId parent_render_pass_id = 0;
-  RenderPassId copy_layer_render_pass_id = 0;
+  viz::RenderPassId parent_render_pass_id = 0;
+  viz::RenderPassId copy_layer_render_pass_id = 0;
   viz::TestLayerTreeFrameSink* frame_sink_ = nullptr;
   bool did_swap_ = false;
   FakeContentLayerClient client_;
@@ -757,7 +758,7 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestAsyncTwoReadbacksWithoutDraw);
 class LayerTreeHostCopyRequestTestDeleteTexture
     : public LayerTreeHostCopyRequestTest {
  protected:
-  std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
     display_context_provider_ = TestContextProvider::Create();
@@ -886,7 +887,7 @@ class LayerTreeHostCopyRequestTestCountTextures
     settings->resource_settings.texture_id_allocation_chunk_size = 1;
   }
 
-  std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
     // These tests expect the LayerTreeHostImpl to share a context with

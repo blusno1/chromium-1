@@ -47,7 +47,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/result_codes.h"
-#include "content/public/common/sandbox_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
@@ -65,9 +64,9 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/runner/common/client_util.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/latency/latency_info.h"
@@ -143,7 +142,6 @@ static const char* const kSwitchNames[] = {
     switches::kEnableLowEndDeviceMode,
     switches::kDisableLowEndDeviceMode,
     switches::kNoSandbox,
-    switches::kProfilerTiming,
     switches::kTestGLLib,
     switches::kTraceConfigFile,
     switches::kTraceStartup,
@@ -301,14 +299,14 @@ class GpuSandboxedProcessLauncherDelegate
   }
 #endif  // OS_WIN
 
-  SandboxType GetSandboxType() override {
+  service_manager::SandboxType GetSandboxType() override {
 #if defined(OS_WIN)
     if (cmd_line_.HasSwitch(switches::kDisableGpuSandbox)) {
       DVLOG(1) << "GPU sandbox is disabled";
-      return SANDBOX_TYPE_NO_SANDBOX;
+      return service_manager::SANDBOX_TYPE_NO_SANDBOX;
     }
 #endif
-    return SANDBOX_TYPE_GPU;
+    return service_manager::SANDBOX_TYPE_GPU;
   }
 
  private:
@@ -694,7 +692,7 @@ void GpuProcessHost::EstablishGpuChannel(
   // If GPU features are already blacklisted, no need to establish the channel.
   if (!GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(NULL)) {
     DVLOG(1) << "GPU blacklisted, refusing to open a GPU channel.";
-    callback.Run(IPC::ChannelHandle(), gpu::GPUInfo(),
+    callback.Run(IPC::ChannelHandle(), gpu::GPUInfo(), gpu::GpuFeatureInfo(),
                  EstablishChannelStatus::GPU_ACCESS_DENIED);
     return;
   }
@@ -777,7 +775,7 @@ void GpuProcessHost::OnChannelEstablished(
   if (channel_handle.is_valid() &&
       !gpu_data_manager->GpuAccessAllowed(nullptr)) {
     gpu_service_ptr_->CloseChannel(client_id);
-    callback.Run(IPC::ChannelHandle(), gpu::GPUInfo(),
+    callback.Run(IPC::ChannelHandle(), gpu::GPUInfo(), gpu::GpuFeatureInfo(),
                  EstablishChannelStatus::GPU_ACCESS_DENIED);
     RecordLogMessage(logging::LOG_WARNING, "WARNING",
                      "Hardware acceleration is unavailable.");
@@ -785,7 +783,9 @@ void GpuProcessHost::OnChannelEstablished(
   }
 
   callback.Run(IPC::ChannelHandle(channel_handle.release()),
-               gpu_data_manager->GetGPUInfo(), EstablishChannelStatus::SUCCESS);
+               gpu_data_manager->GetGPUInfo(),
+               gpu_data_manager->GetGpuFeatureInfo(),
+               EstablishChannelStatus::SUCCESS);
 }
 
 void GpuProcessHost::OnGpuMemoryBufferCreated(
@@ -1086,7 +1086,7 @@ void GpuProcessHost::SendOutstandingReplies() {
   while (!channel_requests_.empty()) {
     auto callback = channel_requests_.front();
     channel_requests_.pop();
-    callback.Run(IPC::ChannelHandle(), gpu::GPUInfo(),
+    callback.Run(IPC::ChannelHandle(), gpu::GPUInfo(), gpu::GpuFeatureInfo(),
                  EstablishChannelStatus::GPU_HOST_INVALID);
   }
 

@@ -40,8 +40,11 @@
 #include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/PositionWithAffinity.h"
 #include "core/editing/TextAffinity.h"
+#include "core/editing/VisibleUnits.h"
 #include "core/frame/DeprecatedScheduleStyleRecalcDuringLayout.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/LocalFrame.h"
@@ -75,8 +78,11 @@
 #include "core/layout/api/LayoutAPIShim.h"
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
+#include "core/layout/ng/layout_ng_list_item.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_unpositioned_float.h"
+#include "core/layout/svg/SVGResources.h"
+#include "core/layout/svg/SVGResourcesCache.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
 #include "core/paint/ObjectPaintInvalidator.h"
@@ -85,12 +91,12 @@
 #include "core/style/ContentData.h"
 #include "core/style/CursorData.h"
 #include "platform/InstanceCounters.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/TouchAction.h"
 #include "platform/graphics/paint/PropertyTreeState.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/allocator/Partitions.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/WTFString.h"
@@ -141,8 +147,8 @@ bool LayoutObject::affects_parent_block_ = false;
 
 void* LayoutObject::operator new(size_t sz) {
   DCHECK(IsMainThread());
-  return PartitionAlloc(WTF::Partitions::LayoutPartition(), sz,
-                        WTF_HEAP_PROFILER_TYPE_NAME(LayoutObject));
+  return WTF::PartitionAlloc(WTF::Partitions::LayoutPartition(), sz,
+                             WTF_HEAP_PROFILER_TYPE_NAME(LayoutObject));
 }
 
 void LayoutObject::operator delete(void* ptr) {
@@ -191,6 +197,8 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
         return new LayoutNGBlockFlow(element);
       return new LayoutBlockFlow(element);
     case EDisplay::kListItem:
+      if (RuntimeEnabledFeatures::LayoutNGEnabled())
+        return new LayoutNGListItem(element);
       return new LayoutListItem(element);
     case EDisplay::kTable:
     case EDisplay::kInlineTable:
@@ -255,7 +263,7 @@ bool LayoutObject::IsDescendantOf(const LayoutObject* obj) const {
 }
 
 bool LayoutObject::IsHR() const {
-  return isHTMLHRElement(GetNode());
+  return IsHTMLHRElement(GetNode());
 }
 
 void LayoutObject::SetIsInsideFlowThreadIncludingDescendants(
@@ -1128,11 +1136,16 @@ IntSize LayoutObject::ScrollAdjustmentForPaintInvalidation(
   return IntSize();
 }
 
-LayoutRect LayoutObject::InvalidatePaintRectangle(
-    const LayoutRect& dirty_rect,
-    DisplayItemClient* display_item_client) const {
-  return ObjectPaintInvalidator(*this).InvalidatePaintRectangle(
-      dirty_rect, display_item_client);
+void LayoutObject::InvalidatePaintRectangle(const LayoutRect& dirty_rect) {
+  if (dirty_rect.IsEmpty())
+    return;
+
+  SetPartialInvalidationRect(UnionRect(dirty_rect, PartialInvalidationRect()));
+
+  // Not using the WithoutGeometryChange version because we need to map the
+  // partial invalidated rect to visual rect in backing or the containing
+  // transform node.
+  SetMayNeedPaintInvalidation();
 }
 
 LayoutRect LayoutObject::SelectionRectInViewCoordinates() const {
@@ -1167,7 +1180,10 @@ LayoutRect LayoutObject::VisualRectIncludingCompositedScrolling(
 
 void LayoutObject::ClearPreviousVisualRects() {
   SetVisualRect(LayoutRect());
-  ObjectPaintInvalidator(*this).SetLocationInBacking(LayoutPoint());
+  if (rare_paint_data_) {
+    rare_paint_data_->SetLocationInBacking(LayoutPoint());
+    rare_paint_data_->SetSelectionVisualRect(LayoutRect());
+  }
   // Ensure check paint invalidation of subtree that would be triggered by
   // location change if we had valid previous location.
   SetMayNeedPaintInvalidationSubtree();
@@ -1525,14 +1541,14 @@ void LayoutObject::SetStyle(RefPtr<ComputedStyle> style) {
   RefPtr<ComputedStyle> old_style = std::move(style_);
   SetStyleInternal(std::move(style));
 
-  UpdateFillImages(old_style ? &old_style->BackgroundLayers() : 0,
+  UpdateFillImages(old_style ? &old_style->BackgroundLayers() : nullptr,
                    style_->BackgroundLayers());
-  UpdateFillImages(old_style ? &old_style->MaskLayers() : 0,
+  UpdateFillImages(old_style ? &old_style->MaskLayers() : nullptr,
                    style_->MaskLayers());
 
-  UpdateImage(old_style ? old_style->BorderImage().GetImage() : 0,
+  UpdateImage(old_style ? old_style->BorderImage().GetImage() : nullptr,
               style_->BorderImage().GetImage());
-  UpdateImage(old_style ? old_style->MaskBoxImage().GetImage() : 0,
+  UpdateImage(old_style ? old_style->MaskBoxImage().GetImage() : nullptr,
               style_->MaskBoxImage().GetImage());
 
   StyleImage* new_content_image =
@@ -1554,14 +1570,16 @@ void LayoutObject::SetStyle(RefPtr<ComputedStyle> style) {
           : nullptr;
   UpdateImage(old_box_reflect_mask_image, new_box_reflect_mask_image);
 
-  UpdateShapeImage(old_style ? old_style->ShapeOutside() : 0,
+  UpdateShapeImage(old_style ? old_style->ShapeOutside() : nullptr,
                    style_->ShapeOutside());
   UpdateCursorImages(old_style ? old_style->Cursors() : nullptr,
                      style_->Cursors());
 
+  CheckCounterChanges(old_style.get(), style_.get());
+
   bool does_not_need_layout_or_paint_invalidation = !parent_;
 
-  StyleDidChange(diff, old_style.Get());
+  StyleDidChange(diff, old_style.get());
 
   // FIXME: |this| might be destroyed here. This can currently happen for a
   // LayoutTextFragment when its first-letter block gets an update in
@@ -1757,8 +1775,6 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
     return;
 
   if (diff.NeedsFullLayout()) {
-    LayoutCounter::LayoutObjectStyleChanged(*this, old_style, *style_);
-
     // If the in-flow state of an element is changed, disable scroll
     // anchoring on the containing scroller.
     if (old_style->HasOutOfFlowPosition() != style_->HasOutOfFlowPosition())
@@ -1942,6 +1958,20 @@ void LayoutObject::UpdateShapeImage(const ShapeValue* old_shape_value,
   if (old_shape_value || new_shape_value)
     UpdateImage(old_shape_value ? old_shape_value->GetImage() : 0,
                 new_shape_value ? new_shape_value->GetImage() : 0);
+}
+
+void LayoutObject::CheckCounterChanges(const ComputedStyle* old_style,
+                                       const ComputedStyle* new_style) {
+  DCHECK(new_style);
+  if (old_style) {
+    if (old_style->CounterDirectivesEqual(*new_style))
+      return;
+  } else {
+    if (!new_style->GetCounterDirectives())
+      return;
+  }
+  LayoutCounter::LayoutObjectStyleChanged(*this, old_style, *new_style);
+  View()->SetNeedsCounterUpdate();
 }
 
 LayoutRect LayoutObject::ViewRect() const {
@@ -2236,7 +2266,7 @@ void LayoutObject::LocalToAncestorRects(Vector<LayoutRect>& rects,
         LocalToAncestorQuad(FloatQuad(FloatRect(rect)), ancestor);
     LayoutRect container_rect = LayoutRect(container_quad.BoundingBox());
     if (container_rect.IsEmpty()) {
-      rects.erase(i--);
+      rects.EraseAt(i--);
       continue;
     }
     container_rect.MoveBy(post_offset);
@@ -2274,7 +2304,12 @@ LayoutSize LayoutObject::OffsetFromAncestorContainer(
     DCHECK(next_container);
     if (!next_container)
       break;
-    DCHECK(!curr_container->HasTransformRelatedProperty());
+    // Table sections can have transforms but are not containers (they are
+    // not derived from LayoutBlock). Allow them here. It is the responsibility
+    // of calling code to correctly handle the fact that the value returned from
+    // this method does not account for the table section transform.
+    DCHECK(!curr_container->HasTransformRelatedProperty() ||
+           curr_container->IsTableSection());
     LayoutSize current_offset =
         curr_container->OffsetFromContainer(next_container);
     offset += current_offset;
@@ -2427,7 +2462,7 @@ RespectImageOrientationEnum LayoutObject::ShouldRespectImageOrientation(
   if (layout_object->GetDocument().IsImageDocument())
     return kRespectImageOrientation;
 
-  if (!isHTMLImageElement(layout_object->GetNode()))
+  if (!IsHTMLImageElement(layout_object->GetNode()))
     return kDoNotRespectImageOrientation;
 
   if (layout_object->GetDocument().GetSettings() &&
@@ -2548,8 +2583,6 @@ void LayoutObject::WillBeDestroyed() {
   }
 
   SetAncestorLineBoxDirty(false);
-
-  ObjectPaintInvalidator::ObjectWillBeDestroyed(*this);
 
   ClearLayoutRootIfNeeded();
 
@@ -2860,11 +2893,7 @@ bool LayoutObject::HitTest(HitTestResult& result,
   return inside;
 }
 
-void LayoutObject::UpdateHitTestResult(HitTestResult& result,
-                                       const LayoutPoint& point) {
-  if (result.InnerNode())
-    return;
-
+Node* LayoutObject::NodeForHitTest() const {
   Node* node = this->GetNode();
 
   // If we hit the anonymous layoutObjects inside generated content we should
@@ -2875,8 +2904,16 @@ void LayoutObject::UpdateHitTestResult(HitTestResult& result,
       node = layout_object->GetNode();
   }
 
-  if (node)
-    result.SetNodeAndPosition(node, point);
+  return node;
+}
+
+void LayoutObject::UpdateHitTestResult(HitTestResult& result,
+                                       const LayoutPoint& point) {
+  if (result.InnerNode())
+    return;
+
+  if (Node* n = NodeForHitTest())
+    result.SetNodeAndPosition(n, point);
 }
 
 bool LayoutObject::NodeAtPoint(HitTestResult&,
@@ -2963,17 +3000,17 @@ RefPtr<ComputedStyle> LayoutObject::UncachedFirstLineStyle() const {
 
   DCHECK(!IsText());
 
-  return FirstLineStyleForCachedUncachedType(kUncached, this, style_.Get());
+  return FirstLineStyleForCachedUncachedType(kUncached, this, style_.get());
 }
 
 ComputedStyle* LayoutObject::CachedFirstLineStyle() const {
   DCHECK(GetDocument().GetStyleEngine().UsesFirstLineRules());
 
   if (RefPtr<ComputedStyle> style = FirstLineStyleForCachedUncachedType(
-          kCached, IsText() ? Parent() : this, style_.Get()))
-    return style.Get();
+          kCached, IsText() ? Parent() : this, style_.get()))
+    return style.get();
 
-  return style_.Get();
+  return style_.get();
 }
 
 ComputedStyle* LayoutObject::GetCachedPseudoStyle(
@@ -3116,11 +3153,11 @@ Element* LayoutObject::OffsetParent(const Element* base) const {
     if (ancestor->CanContainAbsolutePositionObjects())
       break;
 
-    if (isHTMLBodyElement(*node))
+    if (IsHTMLBodyElement(*node))
       break;
 
     if (!IsPositioned() &&
-        (isHTMLTableElement(*node) || IsHTMLTableCellElement(*node)))
+        (IsHTMLTableElement(*node) || IsHTMLTableCellElement(*node)))
       break;
 
     // Webkit specific extension where offsetParent stops at zoom level changes.
@@ -3165,8 +3202,10 @@ PositionWithAffinity LayoutObject::CreatePositionWithAffinity(
     // Find non-anonymous content after.
     for (LayoutObject* layout_object = child->NextInPreOrder(parent);
          layout_object; layout_object = layout_object->NextInPreOrder(parent)) {
-      if (Node* node = layout_object->NonPseudoNode())
-        return PositionWithAffinity(FirstPositionInOrBeforeNode(node));
+      if (Node* node = layout_object->NonPseudoNode()) {
+        return PositionWithAffinity(
+            FirstPositionInOrBeforeNodeDeprecated(node));
+      }
     }
 
     // Find non-anonymous content before.
@@ -3175,12 +3214,12 @@ PositionWithAffinity LayoutObject::CreatePositionWithAffinity(
       if (layout_object == parent)
         break;
       if (Node* node = layout_object->NonPseudoNode())
-        return PositionWithAffinity(LastPositionInOrAfterNode(node));
+        return PositionWithAffinity(LastPositionInOrAfterNodeDeprecated(node));
     }
 
     // Use the parent itself unless it too is anonymous.
     if (Node* node = parent->NonPseudoNode())
-      return PositionWithAffinity(FirstPositionInOrBeforeNode(node));
+      return PositionWithAffinity(FirstPositionInOrBeforeNodeDeprecated(node));
 
     // Repeat at the next level up.
     child = parent;
@@ -3216,6 +3255,12 @@ bool LayoutObject::CanUpdateSelectionOnRootLineBoxes() const {
 }
 
 void LayoutObject::SetNeedsBoundariesUpdate() {
+  if (IsSVGChild()) {
+    // The boundaries affect mask clip.
+    auto* resources = SVGResourcesCache::CachedResourcesForLayoutObject(this);
+    if (resources && resources->Masker())
+      SetNeedsPaintPropertyUpdate();
+  }
   if (LayoutObject* layout_object = Parent())
     layout_object->SetNeedsBoundariesUpdate();
 }
@@ -3366,11 +3411,13 @@ void LayoutObject::SetMayNeedPaintInvalidationAnimatedBackgroundImage() {
 }
 
 void LayoutObject::ClearPaintInvalidationFlags() {
-// paintInvalidationStateIsDirty should be kept in sync with the
+// PaintInvalidationStateIsDirty should be kept in sync with the
 // booleans that are cleared below.
 #if DCHECK_IS_ON()
   DCHECK(!ShouldCheckForPaintInvalidation() || PaintInvalidationStateIsDirty());
 #endif
+  if (rare_paint_data_ && !RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+    rare_paint_data_->SetPartialInvalidationRect(LayoutRect());
   ClearShouldDoFullPaintInvalidation();
   bitfields_.SetMayNeedPaintInvalidation(false);
   bitfields_.SetMayNeedPaintInvalidationSubtree(false);
@@ -3419,7 +3466,7 @@ void LayoutObject::SetIsBackgroundAttachmentFixedObject(
 
 RarePaintData& LayoutObject::EnsureRarePaintData() {
   if (!rare_paint_data_)
-    rare_paint_data_ = WTF::MakeUnique<RarePaintData>();
+    rare_paint_data_ = WTF::MakeUnique<RarePaintData>(visual_rect_.Location());
   return *rare_paint_data_.get();
 }
 
@@ -3440,6 +3487,11 @@ FragmentData* LayoutObject::MutableForPainting::FirstFragment() {
 
 FragmentData& LayoutObject::MutableForPainting::EnsureFirstFragment() {
   return layout_object_.EnsureRarePaintData().EnsureFragment();
+}
+
+void LayoutObject::MutableForPainting::ClearFirstFragment() {
+  if (auto* paint_data = layout_object_.GetRarePaintData())
+    paint_data->ClearFragment();
 }
 
 void LayoutObject::InvalidatePaintForSelection() {
@@ -3464,6 +3516,13 @@ void LayoutObject::InvalidatePaintForSelection() {
     if (child->GetSelectionState() == SelectionState::kNone)
       continue;
     child->SetShouldInvalidateSelection();
+  }
+}
+
+void LayoutObject::InvalidateIfControlStateChanged(ControlState control_state) {
+  if (LayoutTheme::GetTheme().ControlStateChanged(GetNode(), StyleRef(),
+                                                  control_state)) {
+    SetShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
   }
 }
 

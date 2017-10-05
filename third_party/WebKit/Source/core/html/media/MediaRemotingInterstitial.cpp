@@ -4,6 +4,7 @@
 
 #include "core/html/media/MediaRemotingInterstitial.h"
 
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLVideoElement.h"
@@ -48,7 +49,8 @@ MediaRemotingInterstitial::MediaRemotingInterstitial(
 
 void MediaRemotingInterstitial::Show(
     const WebString& remote_device_friendly_name) {
-  DCHECK(!should_be_visible_);
+  if (should_be_visible_)
+    return;
   if (remote_device_friendly_name.IsEmpty()) {
     cast_text_message_->setInnerText(
         GetVideoElement().GetLocale().QueryString(
@@ -71,7 +73,8 @@ void MediaRemotingInterstitial::Show(
 }
 
 void MediaRemotingInterstitial::Hide() {
-  DCHECK(should_be_visible_);
+  if (!should_be_visible_)
+    return;
   if (toggle_insterstitial_timer_.IsActive())
     toggle_insterstitial_timer_.Stop();
   should_be_visible_ = false;

@@ -56,7 +56,8 @@ class TracingControllerImpl
                                 base::RefCountedString*)>& callback);
 
   CONTENT_EXPORT static scoped_refptr<TraceDataSink> CreateCompressedStringSink(
-      scoped_refptr<TraceDataEndpoint> endpoint);
+      scoped_refptr<TraceDataEndpoint> endpoint,
+      bool compress_with_background_priority);
   static scoped_refptr<TraceDataSink> CreateJSONSink(
       scoped_refptr<TraceDataEndpoint> endpoint);
 
@@ -143,10 +144,10 @@ class TracingControllerImpl
   void OnTraceLogStatusReply(TraceMessageFilter* trace_message_filter,
                              const base::trace_event::TraceLogStatus& status);
 
-  void SetEnabledOnFileThread(
+  void SetEnabledOnBackgroundThread(
       const base::trace_event::TraceConfig& trace_config,
       const base::Closure& callback);
-  void SetDisabledOnFileThread(const base::Closure& callback);
+  void SetDisabledOnBackgroundThread(const base::Closure& callback);
   void OnAllTracingAgentsStarted();
   void StopTracingAfterClockSync();
   void OnStopTracingDone();
@@ -198,6 +199,7 @@ class TracingControllerImpl
   scoped_refptr<TraceDataSink> trace_data_sink_;
   scoped_refptr<TraceDataSink> monitoring_data_sink_;
   std::unique_ptr<base::DictionaryValue> metadata_;
+  const scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(TracingControllerImpl);
 };

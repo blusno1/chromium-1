@@ -41,8 +41,8 @@ extern const int kTrayLabelItemVerticalPaddingVerticalAlignment;
 extern const int kTrayMenuBottomRowPadding;
 extern const int kTrayMenuBottomRowPaddingBetweenItems;
 
-// The minimum width of the tray menu.
-extern const int kTrayMenuMinimumWidth;
+// The width of the tray menu.
+extern const int kTrayMenuWidth;
 
 extern const int kTrayPopupAutoCloseDelayInSeconds;
 extern const int kTrayPopupAutoCloseDelayForTextInSeconds;
@@ -88,6 +88,8 @@ extern const SkColor kHeaderBackgroundColor;
 
 extern const SkColor kHeaderTextColorNormal;
 extern const SkColor kHeaderTextColorHover;
+
+extern const SkColor kMobileNotConnectedXIconColor;
 
 extern const int kTrayPopupMinWidth;
 extern const int kTrayPopupMaxWidth;

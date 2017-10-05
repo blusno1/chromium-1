@@ -456,6 +456,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         // sync tries to start without being signed in natively and crashes.
         ChromeSigninController.get().setSignedInAccountName(mSignInState.account.name);
         AndroidSyncSettings.updateAccount(mContext, mSignInState.account);
+        AndroidSyncSettings.enableChromeSync(mContext);
 
         if (mSignInState.callback != null) {
             mSignInState.callback.onSignInComplete();

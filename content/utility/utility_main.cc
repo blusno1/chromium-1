@@ -17,6 +17,7 @@
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/sandbox_init.h"
 #include "content/utility/utility_thread_impl.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 
 #if defined(OS_LINUX)
 #include "content/common/sandbox_linux/sandbox_linux.h"
@@ -31,8 +32,12 @@ namespace content {
 
 // Mainline routine for running as the utility process.
 int UtilityMain(const MainFunctionParams& parameters) {
+  const base::MessageLoop::Type message_loop_type =
+      parameters.command_line.HasSwitch(switches::kMessageLoopTypeUi)
+          ? base::MessageLoop::TYPE_UI
+          : base::MessageLoop::TYPE_DEFAULT;
   // The main message loop of the utility process.
-  base::MessageLoop main_message_loop;
+  base::MessageLoop main_message_loop(message_loop_type);
   base::PlatformThread::SetName("CrUtilityMain");
 
   if (parameters.command_line.HasSwitch(switches::kUtilityStartupDialog))
@@ -67,8 +72,9 @@ int UtilityMain(const MainFunctionParams& parameters) {
   }
 
 #if defined(OS_WIN)
-  bool no_sandbox = parameters.command_line.HasSwitch(switches::kNoSandbox);
-  if (!no_sandbox) {
+  if (!service_manager::IsUnsandboxedSandboxType(
+          service_manager::SandboxTypeFromCommandLine(
+              parameters.command_line))) {
     sandbox::TargetServices* target_services =
         parameters.sandbox_info->target_services;
     if (!target_services)

@@ -17,6 +17,12 @@ namespace safe_browsing {
 // them to the ExperimentalFeaturesList below to start displaying their status
 // on the chrome://safe-browsing page.
 
+// Allows an ad sample report to be created but not sent. Used to measure
+// performance impact of report generation.
+const base::Feature kAdSamplerCollectButDontSendFeature{
+    "SafeBrowsingAdSamplerCollectButDontSend",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls various parameters related to occasionally collecting ad samples,
 // for example to control how often collection should occur.
 const base::Feature kAdSamplerTriggerFeature{"SafeBrowsingAdSamplerTrigger",
@@ -67,13 +73,14 @@ constexpr struct {
   // True if the feature is running at a probability other than 1 or 0.
   bool probabilistically_enabled;
 } kExperimentalFeatures[]{
+    {&kAdSamplerCollectButDontSendFeature, false},
     {&kAdSamplerTriggerFeature, false},
     {&kGaiaPasswordReuseReporting, true},
-    {&kGoogleBrandedPhishingWarning, false},
+    {&kGoogleBrandedPhishingWarning, true},
     {&kLocalDatabaseManagerEnabled, true},
     {&kParallelUrlCheck, true},
-    {&kPasswordFieldOnFocusPinging, true},
-    {&kProtectedPasswordEntryPinging, true},
+    {&kPasswordFieldOnFocusPinging, false},
+    {&kProtectedPasswordEntryPinging, false},
     {&kThreatDomDetailsTagAndAttributeFeature, false},
     {&kTriggerThrottlerDailyQuotaFeature, false},
     {&kV4OnlyEnabled, true},

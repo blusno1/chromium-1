@@ -6,8 +6,6 @@
 #import "ios/clean/chrome/browser/ui/tab/tab_container_view_controller+internal.h"
 
 #import "base/logging.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/clean/chrome/browser/ui/toolbar/toolbar_constants.h"
 #import "ios/clean/chrome/browser/ui/transitions/animators/swap_from_above_animator.h"
 #import "ios/clean/chrome/browser/ui/transitions/containment_transition_context.h"
 #import "ios/clean/chrome/browser/ui/transitions/containment_transitioning_delegate.h"
@@ -32,11 +30,6 @@ const CGFloat kToolbarHeight = 56.0f;
 @property(nonatomic, strong) UIView* toolbarView;
 @property(nonatomic, strong) UIView* contentView;
 
-// Status Bar background view. Its size is directly linked to the difference
-// between this VC's view topLayoutGuide top anchor and bottom anchor. This
-// means that this view will not be displayed on landscape.
-@property(nonatomic, strong) UIView* statusBarBackgroundView;
-
 @end
 
 @implementation TabContainerViewController
@@ -47,7 +40,6 @@ const CGFloat kToolbarHeight = 56.0f;
 @synthesize findBarView = _findBarView;
 @synthesize toolbarView = _toolbarView;
 @synthesize contentView = _contentView;
-@synthesize statusBarBackgroundView = _statusBarBackgroundView;
 @synthesize containmentTransitioningDelegate =
     _containmentTransitioningDelegate;
 @synthesize usesBottomToolbar = _usesBottomToolbar;
@@ -59,7 +51,6 @@ const CGFloat kToolbarHeight = 56.0f;
   [self configureSubviews];
 
   NSMutableArray* constraints = [NSMutableArray array];
-  [constraints addObjectsFromArray:[self statusBarBackgroundConstraints]];
   [constraints addObjectsFromArray:[self commonToolbarConstraints]];
   [constraints addObjectsFromArray:(self.usesBottomToolbar
                                         ? [self bottomToolbarConstraints]
@@ -179,22 +170,17 @@ const CGFloat kToolbarHeight = 56.0f;
   self.findBarView = [[UIView alloc] init];
   self.toolbarView = [[UIView alloc] init];
   self.contentView = [[UIView alloc] init];
-  self.statusBarBackgroundView = [[UIView alloc] init];
   self.containerView.translatesAutoresizingMaskIntoConstraints = NO;
   self.findBarView.translatesAutoresizingMaskIntoConstraints = NO;
   self.toolbarView.translatesAutoresizingMaskIntoConstraints = NO;
   self.contentView.translatesAutoresizingMaskIntoConstraints = NO;
-  self.statusBarBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
   self.view.backgroundColor = [UIColor blackColor];
   self.findBarView.backgroundColor = [UIColor clearColor];
   self.toolbarView.backgroundColor = [UIColor blackColor];
   self.contentView.backgroundColor = [UIColor blackColor];
-  self.statusBarBackgroundView.backgroundColor =
-      UIColorFromRGB(kToolbarBackgroundColor);
   self.findBarView.clipsToBounds = YES;
 
   [self.view addSubview:self.containerView];
-  [self.view addSubview:self.statusBarBackgroundView];
   [self.containerView addSubview:self.toolbarView];
   [self.containerView addSubview:self.contentView];
   // Findbar should have higher z-order than toolbar.
@@ -231,20 +217,6 @@ animationControllerForAddingChildController:(UIViewController*)addedChild
 
 #pragma mark - Private methods
 
-// Constraints for the status bar background.
-- (Constraints*)statusBarBackgroundConstraints {
-  return @[
-    [self.statusBarBackgroundView.topAnchor
-        constraintEqualToAnchor:self.topLayoutGuide.topAnchor],
-    [self.statusBarBackgroundView.bottomAnchor
-        constraintEqualToAnchor:self.topLayoutGuide.bottomAnchor],
-    [self.statusBarBackgroundView.leadingAnchor
-        constraintEqualToAnchor:self.view.leadingAnchor],
-    [self.statusBarBackgroundView.trailingAnchor
-        constraintEqualToAnchor:self.view.trailingAnchor],
-  ];
-}
-
 // Constraints for the findbar.
 - (Constraints*)findbarConstraints {
   return @[
@@ -263,12 +235,11 @@ animationControllerForAddingChildController:(UIViewController*)addedChild
 // configurations.
 - (Constraints*)commonToolbarConstraints {
   return @[
-    // Toolbar leading, trailing, and height constraints.
+    // Toolbar leading, trailing constraints.
     [self.toolbarView.leadingAnchor
         constraintEqualToAnchor:self.containerView.leadingAnchor],
     [self.toolbarView.trailingAnchor
         constraintEqualToAnchor:self.containerView.trailingAnchor],
-    [self.toolbarView.heightAnchor constraintEqualToConstant:kToolbarHeight],
 
     // Content leading and trailing constraints.
     [self.contentView.leadingAnchor
@@ -282,11 +253,15 @@ animationControllerForAddingChildController:(UIViewController*)addedChild
 - (Constraints*)topToolbarConstraints {
   return @[
     [self.toolbarView.topAnchor
-        constraintEqualToAnchor:self.containerView.topAnchor],
+        constraintEqualToAnchor:self.topLayoutGuide.topAnchor],
     [self.contentView.topAnchor
         constraintEqualToAnchor:self.toolbarView.bottomAnchor],
     [self.contentView.bottomAnchor
         constraintEqualToAnchor:self.containerView.bottomAnchor],
+    [self.toolbarView.heightAnchor
+        constraintEqualToConstant:kToolbarHeight +
+                                  [UIApplication sharedApplication]
+                                      .statusBarFrame.size.height],
   ];
 }
 
@@ -299,6 +274,7 @@ animationControllerForAddingChildController:(UIViewController*)addedChild
         constraintEqualToAnchor:self.contentView.bottomAnchor],
     [self.toolbarView.bottomAnchor
         constraintEqualToAnchor:self.containerView.bottomAnchor],
+    [self.toolbarView.heightAnchor constraintEqualToConstant:kToolbarHeight],
   ];
 }
 

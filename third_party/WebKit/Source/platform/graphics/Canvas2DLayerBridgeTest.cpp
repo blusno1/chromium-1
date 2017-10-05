@@ -25,14 +25,14 @@
 
 #include "platform/graphics/Canvas2DLayerBridge.h"
 
+#include "base/run_loop.h"
 #include "build/build_config.h"
-#include "components/viz/common/quads/single_release_callback.h"
 #include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "platform/CrossThreadFunctional.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/graphics/ImageBuffer.h"
@@ -43,9 +43,9 @@
 #include "platform/graphics/paint/PaintFlags.h"
 #include "platform/graphics/test/FakeGLES2Interface.h"
 #include "platform/graphics/test/FakeWebGraphicsContext3DProvider.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/testing/TestingPlatformSupport.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
@@ -840,7 +840,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_SnapshotWhileHibernating)
   RefPtr<StaticBitmapImage> image =
       bridge->NewImageSnapshot(kPreferAcceleration, kSnapshotReasonUnitTests);
   EXPECT_FALSE(image->IsTextureBacked());
-  image.Clear();
+  image = nullptr;
 
   // Verify that taking a snapshot did not affect the state of bridge
   EXPECT_FALSE(bridge->IsAccelerated());
@@ -1062,7 +1062,7 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_PrepareMailboxWhileBackgroundRendering)
 
   // Test entering hibernation
   std::unique_ptr<WaitableEvent> hibernation_started_event =
-      WTF::MakeUnique<WaitableEvent>();
+      std::make_unique<WaitableEvent>();
   EXPECT_CALL(
       *mock_logger_ptr,
       ReportHibernationEvent(Canvas2DLayerBridge::kHibernationScheduled));

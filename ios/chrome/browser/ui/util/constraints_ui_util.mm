@@ -132,3 +132,48 @@ void AddSameConstraints(UIView* view1, UIView* view2) {
     [view1.bottomAnchor constraintEqualToAnchor:view2.bottomAnchor]
   ]];
 }
+
+void PinToSafeArea(UIView* innerView, UIView* outerView) {
+  if (@available(iOS 11.0, *)) {
+    [NSLayoutConstraint activateConstraints:@[
+      [innerView.topAnchor
+          constraintEqualToAnchor:outerView.safeAreaLayoutGuide.topAnchor],
+      [innerView.leadingAnchor
+          constraintEqualToAnchor:outerView.safeAreaLayoutGuide.leadingAnchor],
+      [innerView.trailingAnchor
+          constraintEqualToAnchor:outerView.safeAreaLayoutGuide.trailingAnchor],
+      [innerView.bottomAnchor
+          constraintEqualToAnchor:outerView.safeAreaLayoutGuide.bottomAnchor],
+    ]];
+  } else {
+    AddSameConstraints(innerView, outerView);
+  }
+}
+
+UILayoutGuide* SafeAreaLayoutGuideForView(UIView* view) {
+  if (@available(iOS 11, *)) {
+    return view.safeAreaLayoutGuide;
+  } else {
+    NSString* kChromeSafeAreaLayoutGuideShim = @"ChromeSafeAreaLayoutGuideShim";
+    // Search for an existing shim safe area layout guide:
+    for (UILayoutGuide* guide in view.layoutGuides) {
+      if ([guide.identifier isEqualToString:kChromeSafeAreaLayoutGuideShim]) {
+        return guide;
+      }
+    }
+    // If no existing shim exist, create and return a new one.
+    UILayoutGuide* safeAreaLayoutShim = [[UILayoutGuide alloc] init];
+    safeAreaLayoutShim.identifier = kChromeSafeAreaLayoutGuideShim;
+    [view addLayoutGuide:safeAreaLayoutShim];
+    [NSLayoutConstraint activateConstraints:@[
+      [safeAreaLayoutShim.leadingAnchor
+          constraintEqualToAnchor:view.leadingAnchor],
+      [safeAreaLayoutShim.trailingAnchor
+          constraintEqualToAnchor:view.trailingAnchor],
+      [safeAreaLayoutShim.topAnchor constraintEqualToAnchor:view.topAnchor],
+      [safeAreaLayoutShim.bottomAnchor
+          constraintEqualToAnchor:view.bottomAnchor]
+    ]];
+    return safeAreaLayoutShim;
+  }
+}

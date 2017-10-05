@@ -40,9 +40,6 @@ Polymer({
      */
     hotwordSearchEnablePref_: Object,
 
-    /** @private */
-    googleNowAvailable_: Boolean,
-
     /** @type {?Map<string, string>} */
     focusConfig_: Object,
 
@@ -78,14 +75,6 @@ Polymer({
     // Hotword (OK Google) listener
     cr.addWebUIListener(
         'hotword-info-update', this.hotwordInfoUpdate_.bind(this));
-
-    // Google Now cards in the launcher
-    cr.addWebUIListener(
-        'google-now-availability-changed',
-        this.googleNowAvailabilityUpdate_.bind(this));
-    this.browserProxy_.getGoogleNowAvailability().then(available => {
-      this.googleNowAvailabilityUpdate_(available);
-    });
 
     this.focusConfig_ = new Map();
     if (settings.routes.SEARCH_ENGINES) {
@@ -158,14 +147,6 @@ Polymer({
   },
 
   /**
-   * @param {boolean} available
-   * @private
-   */
-  googleNowAvailabilityUpdate_: function(available) {
-    this.googleNowAvailable_ = available;
-  },
-
-  /**
    * @return {string}
    * @private
    */
@@ -215,8 +196,9 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  showAssistantSection_: function(featureAvailable, arcEnabled) {
-    return featureAvailable && arcEnabled;
+  showAssistantSection_: function(
+      featureAvailable, arcEnabled, valuePropAccepted) {
+    return featureAvailable && arcEnabled && valuePropAccepted;
   },
   // </if>
 

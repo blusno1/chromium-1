@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/webui/crashes_ui.h"
 #include "chrome/browser/ui/webui/device_log_ui.h"
 #include "chrome/browser/ui/webui/domain_reliability_internals_ui.h"
+#include "chrome/browser/ui/webui/download_internals/download_internals_ui.h"
 #include "chrome/browser/ui/webui/engagement/site_engagement_ui.h"
 #include "chrome/browser/ui/webui/flags_ui.h"
 #include "chrome/browser/ui/webui/flash_ui.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/ui/webui/identity_internals_ui.h"
 #include "chrome/browser/ui/webui/instant_ui.h"
 #include "chrome/browser/ui/webui/interstitials/interstitial_ui.h"
+#include "chrome/browser/ui/webui/interventions_internals/interventions_internals_ui.h"
 #include "chrome/browser/ui/webui/invalidations_ui.h"
 #include "chrome/browser/ui/webui/local_state/local_state_ui.h"
 #include "chrome/browser/ui/webui/log_web_ui_url.h"
@@ -47,6 +49,7 @@
 #include "chrome/browser/ui/webui/omnibox/omnibox_ui.h"
 #include "chrome/browser/ui/webui/password_manager_internals/password_manager_internals_ui.h"
 #include "chrome/browser/ui/webui/physical_web/physical_web_ui.h"
+#include "chrome/browser/ui/webui/policy_tool_ui.h"
 #include "chrome/browser/ui/webui/policy_ui.h"
 #include "chrome/browser/ui/webui/predictors/predictors_ui.h"
 #include "chrome/browser/ui/webui/quota_internals/quota_internals_ui.h"
@@ -74,6 +77,7 @@
 #include "components/favicon_base/favicon_util.h"
 #include "components/favicon_base/select_favicon_frames.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/nacl/common/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/web_ui/constants.h"
 #include "components/safe_browsing/web_ui/safe_browsing_ui.h"
@@ -91,7 +95,7 @@
 #include "ui/web_dialogs/web_dialog_ui.h"
 #include "url/gurl.h"
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 #include "chrome/browser/ui/webui/nacl_ui.h"
 #endif
 
@@ -133,22 +137,21 @@
 #include "base/sys_info.h"
 #include "chrome/browser/ui/webui/chromeos/bluetooth_pairing_ui.h"
 #include "chrome/browser/ui/webui/chromeos/certificate_manager_dialog_ui.h"
-#include "chrome/browser/ui/webui/chromeos/choose_mobile_network_ui.h"
 #include "chrome/browser/ui/webui/chromeos/cryptohome_ui.h"
 #include "chrome/browser/ui/webui/chromeos/drive_internals_ui.h"
 #include "chrome/browser/ui/webui/chromeos/first_run/first_run_ui.h"
+#include "chrome/browser/ui/webui/chromeos/internet_detail_dialog_ui.h"
 #include "chrome/browser/ui/webui/chromeos/keyboard_overlay_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/mobile_setup_ui.h"
 #include "chrome/browser/ui/webui/chromeos/network_ui.h"
 #include "chrome/browser/ui/webui/chromeos/power_ui.h"
-#include "chrome/browser/ui/webui/chromeos/proxy_settings_ui.h"
 #include "chrome/browser/ui/webui/chromeos/set_time_ui.h"
 #include "chrome/browser/ui/webui/chromeos/sim_unlock_ui.h"
 #include "chrome/browser/ui/webui/chromeos/slow_trace_ui.h"
 #include "chrome/browser/ui/webui/chromeos/slow_ui.h"
-#include "chrome/browser/ui/webui/sys_internals/sys_internals_ui.h"
-#include "chrome/browser/ui/webui/voice_search_ui.h"
+#include "chrome/browser/ui/webui/chromeos/sys_internals/sys_internals_ui.h"
+#include "chrome/browser/ui/webui/chromeos/voice_search_ui.h"
 #include "components/proximity_auth/webui/proximity_auth_ui.h"
 #include "components/proximity_auth/webui/url_constants.h"
 #endif
@@ -328,6 +331,11 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::DeviceLogUI>;
   if (url.host_piece() == chrome::kChromeUIDomainReliabilityInternalsHost)
     return &NewWebUI<DomainReliabilityInternalsUI>;
+  // TODO(dtrainor): Remove the OffTheRecord check once crbug.com/766363 is
+  // fixed.
+  if (url.host_piece() == chrome::kChromeUIDownloadInternalsHost &&
+      !profile->IsOffTheRecord())
+    return &NewWebUI<DownloadInternalsUI>;
   if (url.host_piece() == chrome::kChromeUIFlagsHost)
     return &NewWebUI<FlagsUI>;
   if (url.host_piece() == chrome::kChromeUIGCMInternalsHost)
@@ -336,10 +344,14 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<InstantUI>;
   if (url.host_piece() == chrome::kChromeUIInterstitialHost)
     return &NewWebUI<InterstitialUI>;
+  if (url.host_piece() == chrome::kChromeUIInterventionsInternalsHost)
+    return &NewWebUI<InterventionsInternalsUI>;
   if (url.host_piece() == chrome::kChromeUIInvalidationsHost)
     return &NewWebUI<InvalidationsUI>;
   if (url.host_piece() == chrome::kChromeUILocalStateHost)
     return &NewWebUI<LocalStateUI>;
+  if (url.host_piece() == chrome::kChromeUIMemoryInternalsHost)
+    return &NewWebUI<MemoryInternalsUI>;
   if (url.host_piece() == chrome::kChromeUINetExportHost)
     return &NewWebUI<NetExportUI>;
   if (url.host_piece() == chrome::kChromeUINetInternalsHost)
@@ -410,8 +422,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   // Identity API is not available on Android.
   if (url.host_piece() == chrome::kChromeUIIdentityInternalsHost)
     return &NewWebUI<IdentityInternalsUI>;
-  if (url.host_piece() == chrome::kChromeUIMemoryInternalsHost)
-    return &NewWebUI<MemoryInternalsUI>;
   if (url.host_piece() == chrome::kChromeUINewTabHost)
     return &NewWebUI<NewTabUI>;
   // Settings are implemented with native UI elements on Android.
@@ -437,8 +447,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::BluetoothPairingUI>;
   if (url.host_piece() == chrome::kChromeUICertificateManagerHost)
     return &NewWebUI<chromeos::CertificateManagerDialogUI>;
-  if (url.host_piece() == chrome::kChromeUIChooseMobileNetworkHost)
-    return &NewWebUI<chromeos::ChooseMobileNetworkUI>;
   if (url.host_piece() == chrome::kChromeUICryptohomeHost)
     return &NewWebUI<chromeos::CryptohomeUI>;
   if (url.host_piece() == chrome::kChromeUIDriveInternalsHost)
@@ -457,8 +465,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::PowerUI>;
   if (url.host_piece() == proximity_auth::kChromeUIProximityAuthHost)
     return &NewWebUI<proximity_auth::ProximityAuthUI>;
-  if (url.host_piece() == chrome::kChromeUIProxySettingsHost)
-    return &NewWebUI<chromeos::ProxySettingsUI>;
+  if (url.host_piece() == chrome::kChromeUIInternetDetailDialogHost)
+    return &NewWebUI<chromeos::InternetDetailDialogUI>;
   if (url.host_piece() == chrome::kChromeUISetTimeHost)
     return &NewWebUI<chromeos::SetTimeUI>;
   if (url.host_piece() == chrome::kChromeUISimUnlockHost)
@@ -525,7 +533,7 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   /****************************************************************************
    * Other #defines and special logics.
    ***************************************************************************/
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   if (url.host_piece() == chrome::kChromeUINaClHost)
     return &NewWebUI<NaClUI>;
 #endif
@@ -544,6 +552,12 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
 
   if (url.host_piece() == chrome::kChromeUIPolicyHost)
     return &NewWebUI<PolicyUI>;
+#if !defined(OS_ANDROID)
+  if (url.host_piece() == chrome::kChromeUIPolicyToolHost &&
+      PolicyToolUI::IsEnabled()) {
+    return &NewWebUI<PolicyToolUI>;
+  }
+#endif
 
 #if BUILDFLAG(ENABLE_APP_LIST)
   if (url.host_piece() == chrome::kChromeUIAppListStartPageHost)
@@ -646,7 +660,7 @@ WebUIController* ChromeWebUIControllerFactory::CreateWebUIControllerForURL(
   if (!function)
     return NULL;
 
-  if (web_ui->HasRenderFrame())
+  if (web_ui->GetWebContents()->GetMainFrame() != nullptr)
     webui::LogWebUIUrl(url);
 
   return (*function)(web_ui, url);

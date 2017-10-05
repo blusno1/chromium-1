@@ -17,7 +17,7 @@ class CSSFontVariationSettingsNonInterpolableValue
 
   static RefPtr<CSSFontVariationSettingsNonInterpolableValue> Create(
       Vector<AtomicString> tags) {
-    return AdoptRef(
+    return WTF::AdoptRef(
         new CSSFontVariationSettingsNonInterpolableValue(std::move(tags)));
   }
 
@@ -87,7 +87,7 @@ class InheritedFontVariationSettingsChecker
   bool IsValid(const StyleResolverState& state,
                const InterpolationValue&) const final {
     return DataEquivalent(
-        settings_.Get(),
+        settings_.get(),
         state.ParentStyle()->GetFontDescription().VariationSettings());
   }
 

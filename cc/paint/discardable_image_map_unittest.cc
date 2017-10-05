@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "base/test/gtest_util.h"
 #include "base/values.h"
 #include "cc/base/region.h"
 #include "cc/paint/paint_flags.h"
@@ -60,7 +61,8 @@ class DiscardableImageMapTest : public testing::Test {
     image_map.GetDiscardableImagesInRect(rect, &draw_image_ptrs);
     std::vector<DrawImage> draw_images;
     for (const auto* image : draw_image_ptrs)
-      draw_images.push_back(DrawImage(*image, 1.f, target_color_space));
+      draw_images.push_back(DrawImage(
+          *image, 1.f, PaintImage::kDefaultFrameIndex, target_color_space));
 
     std::vector<PositionScaleDrawImage> position_draw_images;
     for (DrawImage& image : image_map.images_rtree_.Search(rect)) {
@@ -691,6 +693,58 @@ TEST_F(DiscardableImageMapTest, GathersDiscardableImagesFromNestedOps) {
   image_map.GetDiscardableImagesInRect(gfx::Rect(105, 105, 5, 95), &images);
   EXPECT_EQ(1u, images.size());
   EXPECT_TRUE(discardable_image2 == images[0]->paint_image());
+}
+
+TEST_F(DiscardableImageMapTest, GathersAnimatedImages) {
+  gfx::Rect visible_rect(1000, 1000);
+  FakeContentLayerClient content_layer_client;
+  content_layer_client.set_bounds(visible_rect.size());
+
+  std::vector<FrameMetadata> frames = {
+      FrameMetadata(true, base::TimeDelta::FromMilliseconds(2)),
+      FrameMetadata(true, base::TimeDelta::FromMilliseconds(3))};
+
+  gfx::Size image_size(100, 100);
+  PaintImage static_image = CreateDiscardablePaintImage(image_size);
+  PaintImage animated_loop_none =
+      CreateAnimatedImage(image_size, frames, kAnimationNone);
+  PaintImage animation_loop_infinite =
+      CreateAnimatedImage(image_size, frames, 1u);
+
+  PaintFlags flags;
+  content_layer_client.add_draw_image(static_image, gfx::Point(0, 0), flags);
+  content_layer_client.add_draw_image(animated_loop_none, gfx::Point(100, 100),
+                                      flags);
+  content_layer_client.add_draw_image(animation_loop_infinite,
+                                      gfx::Point(200, 200), flags);
+
+  scoped_refptr<DisplayItemList> display_list =
+      content_layer_client.PaintContentsToDisplayList(
+          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  display_list->GenerateDiscardableImagesMetadata();
+  const auto& animated_images_metadata =
+      display_list->discardable_image_map().animated_images_metadata();
+
+  ASSERT_EQ(animated_images_metadata.size(), 1u);
+  EXPECT_EQ(animated_images_metadata[0].paint_image_id,
+            animation_loop_infinite.stable_id());
+  EXPECT_EQ(animated_images_metadata[0].completion_state,
+            animation_loop_infinite.completion_state());
+  EXPECT_EQ(animated_images_metadata[0].frames,
+            animation_loop_infinite.GetFrameMetadata());
+  EXPECT_EQ(animated_images_metadata[0].repetition_count,
+            animation_loop_infinite.repetition_count());
+
+  std::vector<const DrawImage*> images;
+  display_list->discardable_image_map().GetDiscardableImagesInRect(visible_rect,
+                                                                   &images);
+  ASSERT_EQ(images.size(), 3u);
+  EXPECT_EQ(images[0]->paint_image(), static_image);
+  EXPECT_DCHECK_DEATH(images[0]->frame_index());
+  EXPECT_EQ(images[1]->paint_image(), animated_loop_none);
+  EXPECT_DCHECK_DEATH(images[1]->frame_index());
+  EXPECT_EQ(images[2]->paint_image(), animation_loop_infinite);
+  EXPECT_DCHECK_DEATH(images[2]->frame_index());
 }
 
 class DiscardableImageMapColorSpaceTest

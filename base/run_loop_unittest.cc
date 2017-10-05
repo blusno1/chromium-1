@@ -4,11 +4,11 @@
 
 #include "base/run_loop.h"
 
-#include <queue>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -67,7 +67,7 @@ class SimpleSingleThreadTaskRunner : public SingleThreadTaskRunner {
  public:
   SimpleSingleThreadTaskRunner() = default;
 
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const Location& from_here,
                        OnceClosure task,
                        base::TimeDelta delay) override {
     if (delay > base::TimeDelta())
@@ -77,7 +77,7 @@ class SimpleSingleThreadTaskRunner : public SingleThreadTaskRunner {
     return true;
   }
 
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const Location& from_here,
                                   OnceClosure task,
                                   base::TimeDelta delay) override {
     return PostDelayedTask(from_here, std::move(task), delay);
@@ -106,7 +106,7 @@ class SimpleSingleThreadTaskRunner : public SingleThreadTaskRunner {
   ~SimpleSingleThreadTaskRunner() override = default;
 
   Lock tasks_lock_;
-  std::queue<OnceClosure> pending_tasks_;
+  base::queue<OnceClosure> pending_tasks_;
 
   // RunLoop relies on RunsTasksInCurrentSequence() signal. Use a
   // ThreadCheckerImpl to be able to reliably provide that signal even in

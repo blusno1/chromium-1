@@ -19,6 +19,10 @@ namespace content {
 // a public content/ API and uses a supplied policy.
 class SandboxSeccompBPF {
  public:
+  struct Options {
+    bool use_amd_specific_policies = false;  // For ChromiumOs.
+  };
+
   // This is the API to enable a seccomp-bpf sandbox for content/
   // process-types:
   // Is the sandbox globally enabled, can anything use it at all ?
@@ -32,10 +36,10 @@ class SandboxSeccompBPF {
   // Check if the kernel supports TSYNC (thread synchronization) with seccomp.
   static bool SupportsSandboxWithTsync();
   // Start the sandbox and apply the policy for process_type, depending on
-  // command line switches.
+  // command line switches and options.
   static bool StartSandbox(const std::string& process_type,
-                           base::ScopedFD proc_fd);
-
+                           base::ScopedFD proc_fd,
+                           const Options& options);
   // This is the API to enable a seccomp-bpf sandbox by using an
   // external policy.
   static bool StartSandboxWithExternalPolicy(

@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/memory/shared_memory.h"
-#include "base/tracked_objects.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/shared_bitmap_manager.h"
@@ -33,49 +32,10 @@
 #include "base/threading/platform_thread.h"
 #endif
 
-IPC_ENUM_TRAITS_MAX_VALUE(tracked_objects::ThreadData::Status,
-                          tracked_objects::ThreadData::STATUS_LAST)
-
-IPC_STRUCT_TRAITS_BEGIN(tracked_objects::LocationSnapshot)
+IPC_STRUCT_TRAITS_BEGIN(base::LocationSnapshot)
   IPC_STRUCT_TRAITS_MEMBER(file_name)
   IPC_STRUCT_TRAITS_MEMBER(function_name)
   IPC_STRUCT_TRAITS_MEMBER(line_number)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(tracked_objects::BirthOnThreadSnapshot)
-  IPC_STRUCT_TRAITS_MEMBER(location)
-  IPC_STRUCT_TRAITS_MEMBER(sanitized_thread_name)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(tracked_objects::DeathDataSnapshot)
-  IPC_STRUCT_TRAITS_MEMBER(count)
-  IPC_STRUCT_TRAITS_MEMBER(run_duration_sum)
-  IPC_STRUCT_TRAITS_MEMBER(run_duration_max)
-  IPC_STRUCT_TRAITS_MEMBER(run_duration_sample)
-  IPC_STRUCT_TRAITS_MEMBER(queue_duration_sum)
-  IPC_STRUCT_TRAITS_MEMBER(queue_duration_max)
-  IPC_STRUCT_TRAITS_MEMBER(queue_duration_sample)
-  IPC_STRUCT_TRAITS_MEMBER(alloc_ops)
-  IPC_STRUCT_TRAITS_MEMBER(free_ops)
-  IPC_STRUCT_TRAITS_MEMBER(allocated_bytes)
-  IPC_STRUCT_TRAITS_MEMBER(freed_bytes)
-  IPC_STRUCT_TRAITS_MEMBER(alloc_overhead_bytes)
-  IPC_STRUCT_TRAITS_MEMBER(max_allocated_bytes)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(tracked_objects::TaskSnapshot)
-  IPC_STRUCT_TRAITS_MEMBER(birth)
-  IPC_STRUCT_TRAITS_MEMBER(death_data)
-  IPC_STRUCT_TRAITS_MEMBER(death_sanitized_thread_name)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(tracked_objects::ProcessDataPhaseSnapshot)
-  IPC_STRUCT_TRAITS_MEMBER(tasks)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(tracked_objects::ProcessDataSnapshot)
-  IPC_STRUCT_TRAITS_MEMBER(phased_snapshots)
-  IPC_STRUCT_TRAITS_MEMBER(process_id)
 IPC_STRUCT_TRAITS_END()
 
 #if defined(OS_LINUX)
@@ -99,22 +59,6 @@ IPC_MESSAGE_CONTROL0(ChildProcessMsg_Shutdown)
 IPC_MESSAGE_CONTROL1(ChildProcessMsg_SetIPCLoggingEnabled,
                      bool /* on or off */)
 #endif
-
-// Tell the child process to enable or disable the profiler status.
-IPC_MESSAGE_CONTROL1(ChildProcessMsg_SetProfilerStatus,
-                     tracked_objects::ThreadData::Status /* profiler status */)
-
-// Send to all the child processes to send back profiler data (ThreadData in
-// tracked_objects).
-IPC_MESSAGE_CONTROL2(ChildProcessMsg_GetChildProfilerData,
-                     int /* sequence_number */,
-                     int /* current_profiling_phase */)
-
-// Send to all the child processes to mark the current profiling phase as
-// finished and start a new phase.
-IPC_MESSAGE_CONTROL1(ChildProcessMsg_ProfilingPhaseCompleted,
-                     int /* profiling_phase */)
-
 // Sent to set the shared memory buffer to be used for storing histograms that
 // are to be reported by the browser process to UMA. The following message
 // (GetChildNonPersistentHistogramData) will return any histograms created
@@ -145,12 +89,6 @@ IPC_SYNC_MESSAGE_CONTROL0_1(ChildProcessHostMsg_HasGpuProcess,
                             bool /* result */)
 
 IPC_MESSAGE_CONTROL0(ChildProcessHostMsg_ShutdownRequest)
-
-// Send back profiler data (ThreadData in tracked_objects).
-IPC_MESSAGE_CONTROL2(
-    ChildProcessHostMsg_ChildProfilerData,
-    int, /* sequence_number */
-    tracked_objects::ProcessDataSnapshot /* process_data_snapshot */)
 
 // Send back histograms as vector of pickled-histogram strings.
 IPC_MESSAGE_CONTROL2(ChildProcessHostMsg_ChildHistogramData,

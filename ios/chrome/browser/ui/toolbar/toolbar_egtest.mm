@@ -10,7 +10,7 @@
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_popup_material_row.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_popup_row.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 #include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -190,10 +190,6 @@ void SelectNewTabPagePanel(ntp_home::PanelIdentifier panel_type) {
 
 // Verifies the existence and state of toolbar UI elements.
 - (void)testToolbarUI {
-  id<GREYMatcher> backButton =
-      chrome_test_util::ButtonWithAccessibilityLabelId(IDS_ACCNAME_BACK);
-  id<GREYMatcher> forwardButton =
-      chrome_test_util::ButtonWithAccessibilityLabelId(IDS_ACCNAME_FORWARD);
   id<GREYMatcher> reloadButton =
       chrome_test_util::ButtonWithAccessibilityLabelId(IDS_IOS_ACCNAME_RELOAD);
   id<GREYMatcher> bookmarkButton =
@@ -214,9 +210,9 @@ void SelectNewTabPagePanel(ntp_home::PanelIdentifier panel_type) {
       assertWithMatcher:grey_sufficientlyVisible()];
 
   if (IsIPadIdiom()) {
-    [[EarlGrey selectElementWithMatcher:backButton]
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
         assertWithMatcher:grey_sufficientlyVisible()];
-    [[EarlGrey selectElementWithMatcher:forwardButton]
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::ForwardButton()]
         assertWithMatcher:grey_sufficientlyVisible()];
     [[EarlGrey selectElementWithMatcher:reloadButton]
         assertWithMatcher:grey_sufficientlyVisible()];
@@ -233,7 +229,7 @@ void SelectNewTabPagePanel(ntp_home::PanelIdentifier panel_type) {
 
   // Navigate to a page and verify the back button is enabled.
   [ChromeEarlGrey loadURL:GURL("chrome://version")];
-  [[EarlGrey selectElementWithMatcher:backButton]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
       assertWithMatcher:grey_interactable()];
 }
 
@@ -255,9 +251,8 @@ void SelectNewTabPagePanel(ntp_home::PanelIdentifier panel_type) {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Typing Shield")]
       assertWithMatcher:grey_notNil()];
 
-  id<GREYMatcher> backButton =
-      chrome_test_util::ButtonWithAccessibilityLabelId(IDS_ACCNAME_BACK);
-  [[EarlGrey selectElementWithMatcher:backButton] performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
+      performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Typing Shield")]
       assertWithMatcher:grey_notVisible()];
 
@@ -415,74 +410,72 @@ void SelectNewTabPagePanel(ntp_home::PanelIdentifier panel_type) {
 
   [[EarlGrey selectElementWithMatcher:locationbarButton]
       performAction:grey_typeText(@"a")];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"a"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+  [[EarlGrey selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"a"),
+                                                 grey_kindOfClass(
+                                                     [OmniboxPopupRow class]),
+                                                 nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(@"b")];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"ab"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+  [[EarlGrey selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"ab"),
+                                                 grey_kindOfClass(
+                                                     [OmniboxPopupRow class]),
+                                                 nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(@"C")];
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"abC"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityLabel(@"abC"),
+                                   grey_kindOfClass([OmniboxPopupRow class]),
+                                   nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(@"1")];
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"abC1"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityLabel(@"abC1"),
+                                   grey_kindOfClass([OmniboxPopupRow class]),
+                                   nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(@"2")];
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"abC12"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityLabel(@"abC12"),
+                                   grey_kindOfClass([OmniboxPopupRow class]),
+                                   nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(@"@")];
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"abC12@"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityLabel(@"abC12@"),
+                                   grey_kindOfClass([OmniboxPopupRow class]),
+                                   nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(@"{")];
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"abC12@{"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityLabel(@"abC12@{"),
+                                   grey_kindOfClass([OmniboxPopupRow class]),
+                                   nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(@"#")];
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"abC12@{#"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityLabel(@"abC12@{#"),
+                                   grey_kindOfClass([OmniboxPopupRow class]),
+                                   nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   NSString* cancelButtonText = l10n_util::GetNSString(IDS_CANCEL);
@@ -525,10 +518,10 @@ void SelectNewTabPagePanel(ntp_home::PanelIdentifier panel_type) {
 
   // Verify that the omnibox contains "/.com"
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"/.com"),
-                                          grey_kindOfClass(
-                                              [OmniboxPopupMaterialRow class]),
-                                          nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityLabel(@"/.com"),
+                                   grey_kindOfClass([OmniboxPopupRow class]),
+                                   nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 

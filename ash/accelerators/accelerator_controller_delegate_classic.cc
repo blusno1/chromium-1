@@ -52,7 +52,7 @@ void HandleMagnifyScreen(int delta_index) {
     float scale = Shell::Get()->magnification_controller()->GetScale();
     // Calculate rounded logarithm (base kMagnificationScaleFactor) of scale.
     int scale_index =
-        std::floor(std::log(scale) / std::log(kMagnificationScaleFactor) + 0.5);
+        std::round(std::log(scale) / std::log(kMagnificationScaleFactor));
 
     int new_scale_index = std::max(0, std::min(8, scale_index + delta_index));
 
@@ -83,11 +83,11 @@ void HandleTakeScreenshot(ScreenshotDelegate* screenshot_delegate) {
 }
 
 bool CanHandleUnpin() {
-  // Returns true only for WINDOW_STATE_TYPE_PINNED.
-  // WINDOW_STATE_TYPE_TRUSTED_PINNED does not accept user's unpin operation.
+  // Returns true only for WindowStateType::PINNED.
+  // WindowStateType::TRUSTED_PINNED does not accept user's unpin operation.
   wm::WindowState* window_state = wm::GetActiveWindowState();
   return window_state &&
-         window_state->GetStateType() == wm::WINDOW_STATE_TYPE_PINNED;
+         window_state->GetStateType() == mojom::WindowStateType::PINNED;
 }
 
 bool CanHandleTouchHud() {

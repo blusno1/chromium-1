@@ -299,9 +299,9 @@ ImeMenuTray::ImeMenuTray(Shelf* shelf)
       force_show_keyboard_(false),
       keyboard_suppressed_(false),
       show_bubble_after_keyboard_hidden_(false),
-      emoji_enabled_(false),
-      handwriting_enabled_(false),
-      voice_enabled_(false),
+      is_emoji_enabled_(false),
+      is_handwriting_enabled_(false),
+      is_voice_enabled_(false),
       weak_ptr_factory_(this) {
   DCHECK(ime_controller_);
   SetInkDropMode(InkDropMode::ON);
@@ -311,9 +311,6 @@ ImeMenuTray::ImeMenuTray(Shelf* shelf)
   SystemTrayNotifier* tray_notifier = Shell::Get()->system_tray_notifier();
   tray_notifier->AddIMEObserver(this);
   tray_notifier->AddVirtualKeyboardObserver(this);
-
-  if (!drag_controller())
-    set_drag_controller(base::MakeUnique<TrayDragController>(shelf));
 }
 
 ImeMenuTray::~ImeMenuTray() {
@@ -328,15 +325,16 @@ ImeMenuTray::~ImeMenuTray() {
     keyboard_controller->RemoveObserver(this);
 }
 
-void ImeMenuTray::ShowImeMenuBubbleInternal() {
+void ImeMenuTray::ShowImeMenuBubbleInternal(bool show_by_click) {
   views::TrayBubbleView::InitParams init_params;
   init_params.delegate = this;
   init_params.parent_window = GetBubbleWindowContainer();
   init_params.anchor_view = GetBubbleAnchor();
   init_params.anchor_alignment = GetAnchorAlignment();
-  init_params.min_width = kTrayMenuMinimumWidth;
-  init_params.max_width = kTrayMenuMinimumWidth;
+  init_params.min_width = kTrayMenuWidth;
+  init_params.max_width = kTrayMenuWidth;
   init_params.close_on_deactivate = true;
+  init_params.show_by_click = show_by_click;
 
   views::TrayBubbleView* bubble_view = new views::TrayBubbleView(init_params);
   bubble_view->set_anchor_view_insets(GetBubbleAnchorInsets());
@@ -353,7 +351,7 @@ void ImeMenuTray::ShowImeMenuBubbleInternal() {
 
   if (show_bottom_buttons) {
     bubble_view->AddChildView(new ImeButtonsView(
-        this, emoji_enabled_, handwriting_enabled_, voice_enabled_));
+        this, is_emoji_enabled_, is_handwriting_enabled_, is_voice_enabled_));
   }
 
   bubble_.reset(new TrayBubbleWrapper(this, bubble_view));
@@ -407,25 +405,22 @@ bool ImeMenuTray::ShouldShowBottomButtons() {
   // 2) third party IME extensions.
   // 3) login/lock screen.
   // 4) password input client.
-  InputMethodManager* input_method_manager = InputMethodManager::Get();
+
   bool should_show_buttom_buttoms =
-      input_method_manager &&
-      input_method_manager->IsEmojiHandwritingVoiceOnImeMenuEnabled() &&
+      ime_controller_->is_extra_input_options_enabled() &&
       !ime_controller_->current_ime().third_party && !IsInLoginOrLockScreen() &&
       !IsInPasswordInputContext();
 
   if (!should_show_buttom_buttoms) {
-    emoji_enabled_ = handwriting_enabled_ = voice_enabled_ = false;
+    is_emoji_enabled_ = is_handwriting_enabled_ = is_voice_enabled_ = false;
     return false;
   }
 
-  emoji_enabled_ = input_method_manager->GetImeMenuFeatureEnabled(
-      InputMethodManager::FEATURE_EMOJI);
-  handwriting_enabled_ = input_method_manager->GetImeMenuFeatureEnabled(
-      InputMethodManager::FEATURE_HANDWRITING);
-  voice_enabled_ = input_method_manager->GetImeMenuFeatureEnabled(
-      InputMethodManager::FEATURE_VOICE);
-  return emoji_enabled_ || handwriting_enabled_ || voice_enabled_;
+  is_emoji_enabled_ = ime_controller_->is_emoji_enabled();
+  is_handwriting_enabled_ = ime_controller_->is_handwriting_enabled();
+  is_voice_enabled_ = ime_controller_->is_voice_enabled();
+
+  return is_emoji_enabled_ || is_handwriting_enabled_ || is_voice_enabled_;
 }
 
 bool ImeMenuTray::ShouldShowKeyboardToggle() const {
@@ -450,7 +445,7 @@ bool ImeMenuTray::PerformAction(const ui::Event& event) {
   if (bubble_)
     CloseBubble();
   else
-    ShowBubble();
+    ShowBubble(event.IsMouseEvent() || event.IsGestureEvent());
   return true;
 }
 
@@ -461,7 +456,7 @@ void ImeMenuTray::CloseBubble() {
   shelf()->UpdateAutoHideState();
 }
 
-void ImeMenuTray::ShowBubble() {
+void ImeMenuTray::ShowBubble(bool show_by_click) {
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
   if (keyboard_controller && keyboard_controller->keyboard_visible()) {
@@ -471,7 +466,7 @@ void ImeMenuTray::ShowBubble() {
         keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
   } else {
     base::RecordAction(base::UserMetricsAction("Tray_ImeMenu_Opened"));
-    ShowImeMenuBubbleInternal();
+    ShowImeMenuBubbleInternal(show_by_click);
   }
 }
 
@@ -538,7 +533,7 @@ void ImeMenuTray::OnKeyboardHidden() {
     if (keyboard_controller)
       keyboard_controller->RemoveObserver(this);
 
-    ShowImeMenuBubbleInternal();
+    ShowImeMenuBubbleInternal(false /* show_by_click */);
     return;
   }
 

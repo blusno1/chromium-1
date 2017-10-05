@@ -16,11 +16,11 @@
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
-#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
+#include "ios/chrome/browser/history/history_tab_helper.h"
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
@@ -64,12 +64,12 @@ void AttachTabHelpers(web::WebState* web_state) {
   IOSChromeSyncedTabDelegate::CreateForWebState(web_state);
   InfoBarManagerImpl::CreateForWebState(web_state);
   IOSSecurityStateTabHelper::CreateForWebState(web_state);
-  RepostFormTabHelper::CreateForWebState(web_state);
   BlockedPopupTabHelper::CreateForWebState(web_state);
   FindTabHelper::CreateForWebState(web_state, tab.findInPageControllerDelegate);
   StoreKitTabHelper::CreateForWebState(web_state);
   PagePlaceholderTabHelper::CreateForWebState(web_state, tab);
   CaptivePortalDetectorTabHelper::CreateForWebState(web_state);
+  HistoryTabHelper::CreateForWebState(web_state);
 
   ReadingListModel* model =
       ReadingListModelFactory::GetForBrowserState(browser_state);
@@ -89,8 +89,7 @@ void AttachTabHelpers(web::WebState* web_state) {
       ios::FaviconServiceFactory::GetForBrowserState(
           original_browser_state, ServiceAccessType::IMPLICIT_ACCESS),
       ios::HistoryServiceFactory::GetForBrowserState(
-          original_browser_state, ServiceAccessType::IMPLICIT_ACCESS),
-      ios::BookmarkModelFactory::GetForBrowserState(original_browser_state));
+          original_browser_state, ServiceAccessType::IMPLICIT_ACCESS));
   history::WebStateTopSitesObserver::CreateForWebState(
       web_state,
       ios::TopSitesFactory::GetForBrowserState(original_browser_state).get());

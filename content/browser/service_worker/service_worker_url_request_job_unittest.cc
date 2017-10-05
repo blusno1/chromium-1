@@ -62,6 +62,7 @@
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "storage/common/blob_storage/blob_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -207,8 +208,9 @@ class ServiceWorkerURLRequestJobTest
 
     // Create a registration and service worker version.
     registration_ = new ServiceWorkerRegistration(
-        ServiceWorkerRegistrationOptions(GURL("https://example.com/")), 1L,
-        helper_->context()->AsWeakPtr());
+        blink::mojom::ServiceWorkerRegistrationOptions(
+            GURL("https://example.com/")),
+        1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
         registration_.get(), GURL("https://example.com/service_worker.js"), 1L,
         helper_->context()->AsWeakPtr());
@@ -220,7 +222,8 @@ class ServiceWorkerURLRequestJobTest
         ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
 
     // Make the registration findable via storage functions.
-    helper_->context()->storage()->LazyInitialize(base::Bind(&base::DoNothing));
+    helper_->context()->storage()->LazyInitializeForTest(
+        base::BindOnce(&base::DoNothing));
     base::RunLoop().RunUntilIdle();
     ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
     helper_->context()->storage()->StoreRegistration(
@@ -238,7 +241,7 @@ class ServiceWorkerURLRequestJobTest
     http_info.ssl_info.security_bits = 0x100;
     // SSL3 TLS_DHE_RSA_WITH_AES_256_CBC_SHA
     http_info.ssl_info.connection_status = 0x300039;
-    http_info.headers = make_scoped_refptr(new net::HttpResponseHeaders(""));
+    http_info.headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
     version_->SetMainScriptHttpResponseInfo(http_info);
 
     // Create a controlled client.
@@ -368,8 +371,8 @@ class ServiceWorkerURLRequestJobTest
         &url_request_delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
     ResourceRequestInfo::AllocateForTesting(
         request_.get(), resource_type, browser_context_->GetResourceContext(),
-        -1, -1, -1, resource_type == RESOURCE_TYPE_MAIN_FRAME, false, true,
-        true, PREVIEWS_OFF);
+        -1, -1, -1, resource_type == RESOURCE_TYPE_MAIN_FRAME, true, true,
+        PREVIEWS_OFF);
 
     request_->set_method("GET");
     request_->Start();
@@ -549,7 +552,7 @@ TEST_F(ServiceWorkerURLRequestJobTest,
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_MAX_VALUE;
   base::HistogramTester histogram_tester;
   version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
-                        base::Bind(&SaveStatusCallback, &status));
+                        base::BindOnce(&SaveStatusCallback, &status));
   base::RunLoop().RunUntilIdle();
   helper->CompleteStartWorker();
   base::RunLoop().RunUntilIdle();

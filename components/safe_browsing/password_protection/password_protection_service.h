@@ -18,8 +18,8 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/values.h"
 #include "components/history/core/browser/history_service_observer.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/proto/csd.pb.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
 
@@ -54,9 +54,11 @@ extern const char kSyncPasswordChromeSettingsHistogram[];
 // HostContentSettingsMap instance.
 class PasswordProtectionService : public history::HistoryServiceObserver {
  public:
-  using TriggerType = LoginReputationClientRequest::TriggerType;
+  // TODO(jialiul): Remove all these aliases, since they are unnecessary.
   using SyncAccountType =
       LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType;
+  using TriggerType = LoginReputationClientRequest::TriggerType;
+  using VerdictType = LoginReputationClientResponse::VerdictType;
 
   // The outcome of the request. These values are used for UMA.
   // DO NOT CHANGE THE ORDERING OF THESE VALUES.
@@ -125,10 +127,9 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // Looks up |settings| to find the cached verdict response. If verdict is not
   // available or is expired, return VERDICT_TYPE_UNSPECIFIED. Can be called on
   // any thread.
-  LoginReputationClientResponse::VerdictType GetCachedVerdict(
-      const GURL& url,
-      TriggerType trigger_type,
-      LoginReputationClientResponse* out_response);
+  VerdictType GetCachedVerdict(const GURL& url,
+                               TriggerType trigger_type,
+                               LoginReputationClientResponse* out_response);
 
   // Stores |verdict| in |settings| based on its |trigger_type|, |url|,
   // |verdict| and |receive_time|.
@@ -183,30 +184,41 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // Records user action to corresponding UMA histograms.
   void RecordWarningAction(WarningUIType ui_type, WarningAction action);
 
-  // Called when user close warning UI or navigate away.
-  void OnWarningDone(content::WebContents* web_contents,
-                     WarningUIType ui_type,
-                     WarningAction action);
+  // If we want to show password reuse modal warning.
+  static bool ShouldShowModalWarning(TriggerType trigger_type,
+                                     bool matches_sync_password,
+                                     SyncAccountType account_type,
+                                     VerdictType verdict_type);
 
   // Shows modal warning dialog on the current |web_contents| and pass the
   // |verdict_token| to callback of this dialog.
   virtual void ShowModalWarning(content::WebContents* web_contents,
-                                const std::string& verdict_token) {}
+                                const std::string& verdict_token) = 0;
 
   // Record UMA stats and trigger event logger when warning UI is shown.
   virtual void OnWarningShown(content::WebContents* web_contents,
                               WarningUIType ui_type);
 
+  // Called when user interacts with warning UIs.
+  virtual void OnUserAction(content::WebContents* web_contents,
+                            WarningUIType ui_type,
+                            WarningAction action) = 0;
+
   // If we want to show softer warnings based on Finch parameters.
   static bool ShouldShowSofterWarning();
 
   virtual void UpdateSecurityState(safe_browsing::SBThreatType threat_type,
-                                   content::WebContents* web_contents) {}
+                                   content::WebContents* web_contents) = 0;
 
   // Log the |reason| to several UMA metrics, depending on the value
   // of |matches_sync_password|.
   static void LogPasswordEntryRequestOutcome(RequestOutcome reason,
                                              bool matches_sync_password);
+
+  // If user has clicked through any Safe Browsing interstitial on this given
+  // |web_contents|.
+  virtual bool UserClickedThroughSBInterstitial(
+      content::WebContents* web_contents) = 0;
 
  protected:
   friend class PasswordProtectionRequest;

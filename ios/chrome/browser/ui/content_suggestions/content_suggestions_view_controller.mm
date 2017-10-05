@@ -18,6 +18,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_layout.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_layout_handset.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recording.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
@@ -70,9 +71,9 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style {
   UICollectionViewLayout* layout = nil;
   if (IsIPadIdiom()) {
-    layout = [[MDCCollectionViewFlowLayout alloc] init];
-  } else {
     layout = [[ContentSuggestionsLayout alloc] init];
+  } else {
+    layout = [[ContentSuggestionsLayoutHandset alloc] init];
   }
   self = [super initWithLayout:layout style:style];
   if (self) {
@@ -89,6 +90,10 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 
 - (void)setDataSource:(id<ContentSuggestionsDataSource>)dataSource {
   self.collectionUpdater.dataSource = dataSource;
+}
+
+- (void)setDispatcher:(id<SnackbarCommands>)dispatcher {
+  self.collectionUpdater.dispatcher = dispatcher;
 }
 
 - (void)dismissEntryAtIndexPath:(NSIndexPath*)indexPath {
@@ -137,10 +142,6 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 
 - (void)addSuggestions:(NSArray<CSCollectionViewItem*>*)suggestions
          toSectionInfo:(ContentSuggestionsSectionInformation*)sectionInfo {
-  if (suggestions.count == 0) {
-    return;
-  }
-
   [self.collectionView performBatchUpdates:^{
     NSIndexSet* addedSections = [self.collectionUpdater
         addSectionsForSectionInfoToModel:@[ sectionInfo ]];
@@ -211,7 +212,7 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  if (base::ios::IsRunningOnIOS10OrLater()) {
+  if (@available(iOS 10, *)) {
     self.collectionView.prefetchingEnabled = NO;
   }
   self.collectionView.accessibilityIdentifier =
@@ -435,18 +436,13 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
 
 #pragma mark - MDCCollectionViewStylingDelegate
 
-// TODO(crbug.com/724493): Use collectionView:hidesInkViewAtIndexPath: when it
-// is fixed. For now hidding the ink prevent cell interaction.
-- (UIColor*)collectionView:(UICollectionView*)collectionView
-       inkColorAtIndexPath:(NSIndexPath*)indexPath {
+- (BOOL)collectionView:(UICollectionView*)collectionView
+    hidesInkViewAtIndexPath:(NSIndexPath*)indexPath {
   ContentSuggestionType itemType = [self.collectionUpdater
       contentSuggestionTypeForItem:[self.collectionViewModel
                                        itemAtIndexPath:indexPath]];
-  if ([self.collectionUpdater isMostVisitedSection:indexPath.section] ||
-      itemType == ContentSuggestionTypeEmpty) {
-    return [UIColor clearColor];
-  }
-  return nil;
+  return [self.collectionUpdater isMostVisitedSection:indexPath.section] ||
+         itemType == ContentSuggestionTypeEmpty;
 }
 
 - (UIColor*)collectionView:(nonnull UICollectionView*)collectionView
@@ -590,6 +586,35 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
              ntp_home::FakeOmniboxAccessibilityID();
 }
 
+#pragma mark - UIAccessibilityAction
+
+- (BOOL)accessibilityScroll:(UIAccessibilityScrollDirection)direction {
+  // The collection displays the fake omnibox on the top of the other elements.
+  // The default scrolling action scrolls for the full height of the collection,
+  // hiding elements behing the fake omnibox. This reduces the scrolling by the
+  // height of the fake omnibox.
+  if (direction == UIAccessibilityScrollDirectionDown) {
+    CGFloat newYOffset = self.collectionView.contentOffset.y +
+                         self.collectionView.bounds.size.height -
+                         ntp_header::kToolbarHeight;
+    newYOffset = MIN(self.collectionView.contentSize.height -
+                         self.collectionView.bounds.size.height,
+                     newYOffset);
+    self.collectionView.contentOffset =
+        CGPointMake(self.collectionView.contentOffset.x, newYOffset);
+  } else if (direction == UIAccessibilityScrollDirectionUp) {
+    CGFloat newYOffset = self.collectionView.contentOffset.y -
+                         self.collectionView.bounds.size.height +
+                         ntp_header::kToolbarHeight;
+    newYOffset = MAX(0, newYOffset);
+    self.collectionView.contentOffset =
+        CGPointMake(self.collectionView.contentOffset.x, newYOffset);
+  } else {
+    return NO;
+  }
+  return YES;
+}
+
 #pragma mark - Private
 
 - (void)handleLongPress:(UILongPressGestureRecognizer*)gestureRecognizer {
@@ -637,6 +662,8 @@ BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
       break;
   }
 
+  if (IsIPadIdiom())
+    [self.headerSynchronizer unfocusOmnibox];
 }
 
 // Checks if the |section| is empty and add an empty element if it is the case.

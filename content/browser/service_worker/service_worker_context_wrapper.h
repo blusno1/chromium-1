@@ -125,8 +125,9 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
                                    base::OnceClosure failure_callback) override;
   void StartServiceWorkerForNavigationHint(
       const GURL& document_url,
-      const StartServiceWorkerForNavigationHintCallback& callback) override;
+      StartServiceWorkerForNavigationHintCallback callback) override;
   void StopAllServiceWorkersForOrigin(const GURL& origin) override;
+  void StopAllServiceWorkers(base::OnceClosure callback) override;
 
   // These methods must only be called from the IO thread.
   ServiceWorkerRegistration* GetLiveRegistration(int64_t registration_id);
@@ -256,6 +257,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   friend class base::RefCountedThreadSafe<ServiceWorkerContextWrapper>;
   friend class EmbeddedWorkerTestHelper;
   friend class EmbeddedWorkerBrowserTest;
+  friend class FakeServiceWorkerContextWrapper;
   friend class ForeignFetchRequestHandler;
   friend class ServiceWorkerDispatcherHost;
   friend class ServiceWorkerInternalsUI;
@@ -263,7 +265,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   friend class ServiceWorkerProcessManager;
   friend class ServiceWorkerRequestHandler;
   friend class ServiceWorkerVersionBrowserTest;
-  friend class MockServiceWorkerContextWrapper;
 
   ~ServiceWorkerContextWrapper() override;
 
@@ -303,21 +304,25 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   void StartServiceWorkerForNavigationHintOnIO(
       const GURL& document_url,
-      const StartServiceWorkerForNavigationHintCallback& callback);
+      StartServiceWorkerForNavigationHintCallback callback);
 
   void DidFindRegistrationForNavigationHint(
-      const StartServiceWorkerForNavigationHintCallback& callback,
+      StartServiceWorkerForNavigationHintCallback callback,
       ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
 
   void DidStartServiceWorkerForNavigationHint(
       const GURL& pattern,
-      const StartServiceWorkerForNavigationHintCallback& callback,
+      StartServiceWorkerForNavigationHintCallback callback,
       ServiceWorkerStatusCode code);
 
   void RecordStartServiceWorkerForNavigationHintResult(
-      const StartServiceWorkerForNavigationHintCallback& callback,
+      StartServiceWorkerForNavigationHintCallback callback,
       StartServiceWorkerForNavigationHintResult result);
+
+  void StopAllServiceWorkersOnIO(
+      base::OnceClosure callback,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_callback);
 
   // The core context is only for use on the IO thread.
   // Can be null before/during init, during/after shutdown, and after

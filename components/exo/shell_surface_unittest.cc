@@ -49,11 +49,11 @@ using ShellSurfaceTest = test::ExoTestBase;
 
 uint32_t ConfigureFullscreen(uint32_t serial,
                              const gfx::Size& size,
-                             ash::wm::WindowStateType state_type,
+                             ash::mojom::WindowStateType state_type,
                              bool resizing,
                              bool activated,
                              const gfx::Vector2d& origin_offset) {
-  EXPECT_EQ(ash::wm::WINDOW_STATE_TYPE_FULLSCREEN, state_type);
+  EXPECT_EQ(ash::mojom::WindowStateType::FULLSCREEN, state_type);
   return serial;
 }
 
@@ -128,6 +128,11 @@ TEST_F(ShellSurfaceTest, AcknowledgeConfigure) {
   EXPECT_EQ(origin.ToString(),
             surface->window()->GetBoundsInRootWindow().origin().ToString());
 
+  // Compositor should be locked until configure request is acknowledged.
+  ui::Compositor* compositor =
+      shell_surface->GetWidget()->GetNativeWindow()->layer()->GetCompositor();
+  EXPECT_TRUE(compositor->IsLocked());
+
   shell_surface->AcknowledgeConfigure(kSerial);
   std::unique_ptr<Buffer> fullscreen_buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(
@@ -137,6 +142,7 @@ TEST_F(ShellSurfaceTest, AcknowledgeConfigure) {
 
   EXPECT_EQ(gfx::Point().ToString(),
             surface->window()->GetBoundsInRootWindow().origin().ToString());
+  EXPECT_FALSE(compositor->IsLocked());
 }
 
 TEST_F(ShellSurfaceTest, SetParent) {
@@ -514,11 +520,11 @@ TEST_F(ShellSurfaceTest, SurfaceDestroyedCallback) {
 }
 
 uint32_t Configure(gfx::Size* suggested_size,
-                   ash::wm::WindowStateType* has_state_type,
+                   ash::mojom::WindowStateType* has_state_type,
                    bool* is_resizing,
                    bool* is_active,
                    const gfx::Size& size,
-                   ash::wm::WindowStateType state_type,
+                   ash::mojom::WindowStateType state_type,
                    bool resizing,
                    bool activated,
                    const gfx::Vector2d& origin_offset) {
@@ -534,17 +540,23 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
   gfx::Size suggested_size;
-  ash::wm::WindowStateType has_state_type = ash::wm::WINDOW_STATE_TYPE_NORMAL;
+  ash::mojom::WindowStateType has_state_type =
+      ash::mojom::WindowStateType::NORMAL;
   bool is_resizing = false;
   bool is_active = false;
   shell_surface->set_configure_callback(
       base::Bind(&Configure, base::Unretained(&suggested_size),
                  base::Unretained(&has_state_type),
                  base::Unretained(&is_resizing), base::Unretained(&is_active)));
+  // Commit without contents should result in a configure callback with empty
+  // suggested size as a mechanims to ask the client size itself.
+  surface->Commit();
+  EXPECT_EQ(gfx::Size(), suggested_size);
+
   shell_surface->Maximize();
   shell_surface->AcknowledgeConfigure(0);
   EXPECT_EQ(CurrentContext()->bounds().width(), suggested_size.width());
-  EXPECT_EQ(ash::wm::WINDOW_STATE_TYPE_MAXIMIZED, has_state_type);
+  EXPECT_EQ(ash::mojom::WindowStateType::MAXIMIZED, has_state_type);
   shell_surface->Restore();
   shell_surface->AcknowledgeConfigure(0);
 
@@ -552,7 +564,7 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
   shell_surface->AcknowledgeConfigure(0);
   EXPECT_EQ(CurrentContext()->bounds().size().ToString(),
             suggested_size.ToString());
-  EXPECT_EQ(ash::wm::WINDOW_STATE_TYPE_FULLSCREEN, has_state_type);
+  EXPECT_EQ(ash::mojom::WindowStateType::FULLSCREEN, has_state_type);
   shell_surface->SetFullscreen(false);
   shell_surface->AcknowledgeConfigure(0);
 
@@ -574,7 +586,26 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
   EXPECT_TRUE(is_resizing);
 }
 
-TEST_F(ShellSurfaceTest, ModalWindow) {
+TEST_F(ShellSurfaceTest, ModalWindowDefaultActive) {
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(
+      surface.get(), nullptr, ShellSurface::BoundsMode::SHELL, gfx::Point(),
+      true, false, ash::kShellWindowId_SystemModalContainer));
+  gfx::Size desktop_size(640, 480);
+  std::unique_ptr<Buffer> desktop_buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(desktop_size)));
+  surface->Attach(desktop_buffer.get());
+  surface->SetInputRegion(
+      SkRegion(gfx::RectToSkIRect(gfx::Rect(10, 10, 100, 100))));
+  ASSERT_FALSE(shell_surface->GetWidget());
+  shell_surface->SetSystemModal(true);
+  surface->Commit();
+
+  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
+}
+
+TEST_F(ShellSurfaceTest, UpdateModalWindow) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(
       surface.get(), nullptr, ShellSurface::BoundsMode::SHELL, gfx::Point(),
@@ -587,6 +618,7 @@ TEST_F(ShellSurfaceTest, ModalWindow) {
   surface->Commit();
 
   EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // Creating a surface without input region should not make it modal.
   std::unique_ptr<Display> display(new Display);
@@ -601,25 +633,44 @@ TEST_F(ShellSurfaceTest, ModalWindow) {
   child->Commit();
   surface->Commit();
   EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // Making the surface opaque shouldn't make it modal either.
   child->SetBlendMode(SkBlendMode::kSrc);
   child->Commit();
   surface->Commit();
   EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // Setting input regions won't make it modal either.
   surface->SetInputRegion(
       SkRegion(gfx::RectToSkIRect(gfx::Rect(10, 10, 100, 100))));
   surface->Commit();
   EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // Only SetSystemModal changes modality.
   shell_surface->SetSystemModal(true);
+
   EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
+
+  shell_surface->SetSystemModal(false);
+
+  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
+
+  // If the non modal system window was active,
+  shell_surface->GetWidget()->Activate();
+  EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
+
+  shell_surface->SetSystemModal(true);
+  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 
   shell_surface->SetSystemModal(false);
   EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 }
 
 TEST_F(ShellSurfaceTest, ModalWindowSetSystemModalBeforeCommit) {
@@ -1134,8 +1185,8 @@ TEST_F(ShellSurfaceTest, CompositorLockInRotation) {
   EXPECT_FALSE(compositor->IsLocked());
 }
 
-// System tray should be activated if user presses tab key while shell surface
-// is active.
+// If system tray is shown by click. It should be activated if user presses tab
+// key while shell surface is active.
 TEST_F(ShellSurfaceTest, KeyboardNavigationWithSystemTray) {
   const gfx::Size buffer_size(800, 600);
   std::unique_ptr<Buffer> buffer(
@@ -1150,9 +1201,11 @@ TEST_F(ShellSurfaceTest, KeyboardNavigationWithSystemTray) {
 
   EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 
-  // Show system tray.
+  // Show system tray by perfoming a gesture tap at tray.
   ash::SystemTray* system_tray = GetPrimarySystemTray();
-  system_tray->ShowDefaultView(ash::BUBBLE_CREATE_NEW);
+  ui::GestureEvent tap(0, 0, 0, base::TimeTicks(),
+                       ui::GestureEventDetails(ui::ET_GESTURE_TAP));
+  system_tray->PerformAction(tap);
   ASSERT_TRUE(system_tray->GetWidget());
 
   // Confirm that system tray is not active at this time.
