@@ -775,7 +775,7 @@ css_properties("make_core_generated_css_property_names") {
 
 code_generator("make_core_generated_media_features") {
   script = "../build/scripts/core/css/make_media_features.py"
-  json_inputs = [ "css/MediaFeatureNames.json5" ]
+  json_inputs = [ "css/media_feature_names.json5" ]
   templates = [ "../build/scripts/core/css/templates/MediaFeatures.h.tmpl" ]
   outputs = [
     "$blink_core_output_dir/css/MediaFeatures.h",
@@ -862,8 +862,8 @@ process_json5_files("make_core_generated_html_element_type_helpers") {
   in_files = [ "html/HTMLTagNames.json5" ]
   other_inputs = make_element_type_helpers_files
   outputs = [
-    "$blink_core_output_dir/HTMLElementTypeHelpers.cpp",
-    "$blink_core_output_dir/HTMLElementTypeHelpers.h",
+    "$blink_core_output_dir/html_element_type_helpers.cc",
+    "$blink_core_output_dir/html_element_type_helpers.h",
   ]
 }
 
@@ -889,7 +889,7 @@ process_json5_files("make_core_generated_svg_element_type_helpers") {
   in_files = [ "svg/SVGTagNames.json5" ]
   other_inputs = make_element_type_helpers_files
   outputs = [
-    "$blink_core_output_dir/SVGElementTypeHelpers.h",
+    "$blink_core_output_dir/svg_element_type_helpers.h",
   ]
 }
 
@@ -909,20 +909,20 @@ make_event_factory("make_core_generated_event_factory") {
 
 code_generator("make_core_generated_media_feature_names") {
   script = "../build/scripts/core/css/make_media_feature_names.py"
-  json_inputs = [ "css/MediaFeatureNames.json5" ]
+  json_inputs = [ "css/media_feature_names.json5" ]
   templates = [
     "../build/scripts/templates/MakeNames.cpp.tmpl",
     "../build/scripts/templates/MakeNames.h.tmpl",
   ]
   other_inputs = make_names_files
   outputs = [
-    "$blink_core_output_dir/css/MediaFeatureNames.cc",
-    "$blink_core_output_dir/css/MediaFeatureNames.h",
+    "$blink_core_output_dir/css/media_feature_names.cc",
+    "$blink_core_output_dir/css/media_feature_names.h",
   ]
 }
 
 make_names("make_core_generated_media_type_names") {
-  in_files = [ "css/MediaTypeNames.json5" ]
+  in_files = [ "css/media_type_names.json5" ]
   output_dir = blink_core_output_dir
 }
 
@@ -947,12 +947,12 @@ make_names("make_core_generated_html_tokenizer_names") {
 }
 
 make_names("make_core_generated_input_type_names") {
-  in_files = [ "html/forms/InputTypeNames.json5" ]
+  in_files = [ "html/forms/input_type_names.json5" ]
   output_dir = blink_core_output_dir
 }
 
 make_names("make_core_generated_input_mode_names") {
-  in_files = [ "editing/InputModeNames.json5" ]
+  in_files = [ "editing/input_mode_names.json5" ]
   output_dir = blink_core_output_dir
 }
 
@@ -1093,12 +1093,12 @@ action("make_core_generated_html_element_lookup_trie") {
   input_file = "html/HTMLTagNames.json5"
   inputs = make_trie_helpers_files + [
              input_file,
-             "../build/scripts/templates/ElementLookupTrie.cpp.tmpl",
-             "../build/scripts/templates/ElementLookupTrie.h.tmpl",
+             "../build/scripts/templates/element_lookup_trie.cc.tmpl",
+             "../build/scripts/templates/element_lookup_trie.h.tmpl",
            ]
   outputs = [
-    "$blink_core_output_dir/HTMLElementLookupTrie.cpp",
-    "$blink_core_output_dir/HTMLElementLookupTrie.h",
+    "$blink_core_output_dir/html_element_lookup_trie.cc",
+    "$blink_core_output_dir/html_element_lookup_trie.h",
   ]
 
   args = [
@@ -1466,8 +1466,6 @@ jumbo_source_set("unit_tests") {
     "html/HTMLLinkElementTest.cpp",
     "html/HTMLMediaElementEventListenersTest.cpp",
     "html/HTMLMediaElementTest.cpp",
-    "html/HTMLOutputElementTest.cpp",
-    "html/HTMLSelectElementTest.cpp",
     "html/HTMLSlotElementTest.cpp",
     "html/HTMLTableRowElementTest.cpp",
     "html/HTMLTextAreaElementTest.cpp",
@@ -1494,6 +1492,8 @@ jumbo_source_set("unit_tests") {
     "html/forms/EmailInputTypeTest.cpp",
     "html/forms/ExternalPopupMenuTest.cpp",
     "html/forms/FileInputTypeTest.cpp",
+    "html/forms/HTMLOutputElementTest.cpp",
+    "html/forms/HTMLSelectElementTest.cpp",
     "html/forms/OptionListTest.cpp",
     "html/forms/PasswordInputTypeTest.cpp",
     "html/forms/StepRangeTest.cpp",
@@ -1562,6 +1562,7 @@ jumbo_source_set("unit_tests") {
     "layout/ng/NGInlineLayoutTest.cpp",
     "layout/ng/geometry/ng_box_strut_test.cc",
     "layout/ng/geometry/ng_logical_offset_test.cc",
+    "layout/ng/geometry/ng_logical_rect_test.cc",
     "layout/ng/geometry/ng_physical_rect_test.cc",
     "layout/ng/inline/ng_inline_items_builder_test.cc",
     "layout/ng/inline/ng_inline_layout_algorithm_test.cc",

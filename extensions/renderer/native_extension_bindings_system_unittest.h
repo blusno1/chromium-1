@@ -47,9 +47,7 @@ class TestIPCMessageSender : public IPCMessageSender {
   // IPCMessageSender:
   void SendRequestIPC(ScriptContext* context,
                       std::unique_ptr<ExtensionHostMsg_Request_Params> params,
-                      binding::RequestThread thread) override {
-    last_params_ = std::move(params);
-  }
+                      binding::RequestThread thread) override;
   void SendOnRequestResponseReceivedIPC(int request_id) override {}
   // The event listener methods are less of a pain to mock (since they don't
   // have complex parameters like ExtensionHostMsg_Request_Params).
@@ -76,10 +74,10 @@ class TestIPCMessageSender : public IPCMessageSender {
                     const base::DictionaryValue& filter,
                     bool remove_lazy_listener));
 
-  MOCK_METHOD5(SendOpenChannelToExtension,
+  MOCK_METHOD5(SendOpenMessageChannel,
                void(ScriptContext* script_context,
                     const PortId& port_id,
-                    const std::string& target_id,
+                    const MessageTarget& target,
                     const std::string& channel_name,
                     bool include_tls_channel_id));
   MOCK_METHOD2(SendOpenMessagePort,

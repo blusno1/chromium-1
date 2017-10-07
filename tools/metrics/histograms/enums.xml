@@ -2396,6 +2396,11 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="AutofillUserHappiness">
+  <summary>
+    These metrics track the user happiness about Autofill on address and credit
+    card forms. Starting from M63, these metrics are also split between
+    Autofill.UserHappiness.Address and Autofill.UserHappiness.CreditCard.
+  </summary>
   <int value="0" label="Forms loaded"/>
   <int value="1" label="Deprecated 1"/>
   <int value="2" label="Deprecated 2"/>
@@ -3828,6 +3833,11 @@ uploading your change for review.  These are checked by presubmit scripts.
 <enum name="BooleanUsage">
   <int value="0" label="Not Used"/>
   <int value="1" label="Used"/>
+</enum>
+
+<enum name="BooleanUsernameCorrectionVote">
+  <int value="0" label="No username correction found"/>
+  <int value="1" label="Username correction found"/>
 </enum>
 
 <enum name="BooleanValid">
@@ -7705,6 +7715,9 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="DataUrlMimeType">
+  <obsolete>
+    Removed from code October 2017.
+  </obsolete>
   <int value="0" label="Other"/>
   <int value="1" label="HTML"/>
   <int value="2" label="XHTML"/>
@@ -9236,6 +9249,22 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1" label="Other Failure"/>
   <int value="2" label="Unauthorized Failure"/>
   <int value="3" label="Wrong MIME Type Failure"/>
+</enum>
+
+<enum name="DownloadPathGenerationEvent">
+  <int value="0" label="Use existing virtual path"/>
+  <int value="1" label="Use force path"/>
+  <int value="2" label="Use last prompt directory"/>
+  <int value="3" label="Use default directory"/>
+  <int value="4" label="No valid path"/>
+</enum>
+
+<enum name="DownloadPathValidationResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Path not writable"/>
+  <int value="2" label="Name too long"/>
+  <int value="3" label="Conflict"/>
+  <int value="4" label="Same as source"/>
 </enum>
 
 <enum name="DownloadSavePackageEvent">
@@ -11486,6 +11515,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="389" label="DeviceNativePrintersWhitelist"/>
   <int value="390" label="DeviceTPMFirmwareUpdateSettings"/>
   <int value="391" label="RunAllFlashInAllowMode"/>
+  <int value="392" label="AutoFillCreditCardEnabled"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations">
@@ -16447,6 +16477,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2162" label="AnimationSetPlaybackRateCompensatorySeek"/>
   <int value="2163" label="DeepCombinatorInStaticProfile"/>
   <int value="2164" label="PseudoShadowInStaticProfile"/>
+  <int value="2165" label="SchemeBypassesCSP"/>
+  <int value="2166" label="InnerSchemeBypassesCSP"/>
 </enum>
 
 <enum name="FeedbackSource">
@@ -20627,45 +20659,46 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="InfoBarIdentifier">
-  <int value="-1" label="INVALID"/>
-  <int value="0" label="TEST_INFOBAR"/>
   <int value="1" label="APP_BANNER_INFOBAR_DELEGATE_ANDROID"/>
   <int value="2" label="APP_BANNER_INFOBAR_DELEGATE_DESKTOP"/>
-  <int value="3" label="ANDROID_DOWNLOAD_MANAGER_OVERWRITE_INFOBAR_DELEGATE"/>
+  <int value="3"
+      label="ANDROID_DOWNLOAD_MANAGER_OVERWRITE_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="4" label="CHROME_DOWNLOAD_MANAGER_OVERWRITE_INFOBAR_DELEGATE"/>
-  <int value="5" label="DOWNLOAD_REQUEST_INFOBAR_DELEGATE_ANDROID"/>
-  <int value="6" label="FULLSCREEN_INFOBAR_DELEGATE"/>
+  <int value="5" label="DOWNLOAD_REQUEST_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
+  <int value="6" label="FULLSCREEN_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="7" label="HUNG_PLUGIN_INFOBAR_DELEGATE"/>
   <int value="8" label="HUNG_RENDERER_INFOBAR_DELEGATE"/>
-  <int value="9" label="MEDIA_STREAM_INFOBAR_DELEGATE_ANDROID"/>
-  <int value="10" label="MEDIA_THROTTLE_INFOBAR_DELEGATE"/>
-  <int value="11" label="REQUEST_QUOTA_INFOBAR_DELEGATE"/>
+  <int value="9" label="MEDIA_STREAM_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
+  <int value="10" label="MEDIA_THROTTLE_INFOBAR_DELEGATE (Obsolete)"/>
+  <int value="11" label="REQUEST_QUOTA_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="12" label="DEV_TOOLS_CONFIRM_INFOBAR_DELEGATE"/>
   <int value="13" label="EXTENSION_DEV_TOOLS_INFOBAR_DELEGATE"/>
   <int value="14" label="INCOGNITO_CONNECTABILITY_INFOBAR_DELEGATE"/>
   <int value="15" label="THEME_INSTALLED_INFOBAR_DELEGATE"/>
-  <int value="16" label="GEOLOCATION_INFOBAR_DELEGATE_ANDROID"/>
+  <int value="16" label="GEOLOCATION_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
   <int value="17" label="THREE_D_API_INFOBAR_DELEGATE"/>
-  <int value="18" label="INSECURE_CONTENT_INFOBAR_DELEGATE"/>
-  <int value="19" label="MIDI_PERMISSION_INFOBAR_DELEGATE_ANDROID"/>
-  <int value="20" label="PROTECTED_MEDIA_IDENTIFIER_INFOBAR_DELEGATE_ANDROID"/>
+  <int value="18" label="INSECURE_CONTENT_INFOBAR_DELEGATE (Obsolete)"/>
+  <int value="19" label="MIDI_PERMISSION_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
+  <int value="20"
+      label="PROTECTED_MEDIA_IDENTIFIER_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
   <int value="21" label="NACL_INFOBAR_DELEGATE"/>
   <int value="22"
-      label="OBSOLETE_DATA_REDUCTION_PROXY_INFOBAR_DELEGATE_ANDROID"/>
-  <int value="23" label="NOTIFICATION_PERMISSION_INFOBAR_DELEGATE"/>
-  <int value="24" label="AUTO_SIGNIN_FIRST_RUN_INFOBAR_DELEGATE"/>
+      label="DATA_REDUCTION_PROXY_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
+  <int value="23" label="NOTIFICATION_PERMISSION_INFOBAR_DELEGATE (Obsolete)"/>
+  <int value="24" label="AUTO_SIGNIN_FIRST_RUN_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="25" label="GENERATED_PASSWORD_SAVED_INFOBAR_DELEGATE_ANDROID"/>
   <int value="26" label="SAVE_PASSWORD_INFOBAR_DELEGATE"/>
   <int value="27" label="PEPPER_BROKER_INFOBAR_DELEGATE"/>
   <int value="28" label="PERMISSION_UPDATE_INFOBAR_DELEGATE"/>
-  <int value="29" label="DURABLE_STORAGE_PERMISSION_INFOBAR_DELEGATE_ANDROID"/>
-  <int value="30" label="NPAPI_REMOVAL_INFOBAR_DELEGATE"/>
+  <int value="29"
+      label="DURABLE_STORAGE_PERMISSION_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
+  <int value="30" label="NPAPI_REMOVAL_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="31" label="OUTDATED_PLUGIN_INFOBAR_DELEGATE"/>
-  <int value="32" label="PLUGIN_METRO_MODE_INFOBAR_DELEGATE"/>
+  <int value="32" label="PLUGIN_METRO_MODE_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="33" label="RELOAD_PLUGIN_INFOBAR_DELEGATE"/>
   <int value="34" label="PLUGIN_OBSERVER"/>
-  <int value="35" label="SSL_ADD_CERTIFICATE"/>
-  <int value="36" label="SSL_ADD_CERTIFICATE_INFOBAR_DELEGATE"/>
+  <int value="35" label="SSL_ADD_CERTIFICATE (Obsolete)"/>
+  <int value="36" label="SSL_ADD_CERTIFICATE_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="37" label="POPUP_BLOCKED_INFOBAR_DELEGATE"/>
   <int value="38" label="CHROME_SELECT_FILE_POLICY"/>
   <int value="39" label="KEYSTONE_PROMOTION_INFOBAR_DELEGATE"/>
@@ -20681,18 +20714,18 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="49" label="AUTOFILL_CC_INFOBAR_DELEGATE"/>
   <int value="50" label="TRANSLATE_INFOBAR_DELEGATE"/>
   <int value="51" label="IOS_CHROME_SAVE_PASSWORD_INFOBAR_DELEGATE"/>
-  <int value="52" label="NATIVE_APP_INSTALLER_INFOBAR_DELEGATE"/>
-  <int value="53" label="NATIVE_APP_LAUNCHER_INFOBAR_DELEGATE"/>
-  <int value="54" label="NATIVE_APP_OPEN_POLICY_INFOBAR_DELEGATE"/>
+  <int value="52" label="NATIVE_APP_INSTALLER_INFOBAR_DELEGATE (Obsolete)"/>
+  <int value="53" label="NATIVE_APP_LAUNCHER_INFOBAR_DELEGATE (Obsolete)"/>
+  <int value="54" label="NATIVE_APP_OPEN_POLICY_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="55" label="RE_SIGN_IN_INFOBAR_DELEGATE"/>
   <int value="56" label="SHOW_PASSKIT_ERROR_INFOBAR_DELEGATE"/>
-  <int value="57" label="READER_MODE_INFOBAR_DELEGATE"/>
+  <int value="57" label="READER_MODE_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="58" label="SYNC_ERROR_INFOBAR_DELEGATE"/>
   <int value="59" label="UPGRADE_INFOBAR_DELEGATE"/>
   <int value="60" label="CHROME_WINDOW_ERROR"/>
   <int value="61" label="CONFIRM_DANGEROUS_DOWNLOAD"/>
   <int value="62" label="WINDOWS_DESKTOP_SEARCH_INFOBAR_DELEGATE"/>
-  <int value="63" label="UPDATE_PASSWORD_INFOBAR_DELEGATE"/>
+  <int value="63" label="UPDATE_PASSWORD_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="64" label="DATA_REDUCTION_PROMO_INFOBAR_DELEGATE_ANDROID"/>
   <int value="65" label="AUTOFILL_CC_ASSIST_INFOBAR_DELEGATE"/>
   <int value="66" label="ADS_BLOCKED_INFOBAR_DELEGATE_ANDROID"/>
@@ -20707,6 +20740,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="75" label="READER_MODE_INFOBAR_ANDROID"/>
   <int value="76" label="VR_FEEDBACK_INFOBAR_ANDROID"/>
   <int value="77" label="FRAMEBUST_BLOCK_INFOBAR_ANDROID"/>
+  <int value="78" label="SURVEY_INFOBAR_ANDROID"/>
 </enum>
 
 <enum name="InfoBarResponse">
@@ -23833,6 +23867,7 @@ from previous Chrome versions.
   <int value="-364267715" label="disable-native-cups"/>
   <int value="-362022976" label="disable-quirks-client"/>
   <int value="-361948582" label="material-security-verbose"/>
+  <int value="-360453785" label="LeftToRightUrls:disabled"/>
   <int value="-360038744" label="invert-viewport-scroll-order"/>
   <int value="-354783358" label="NTPSaveToOffline:disabled"/>
   <int value="-353182790" label="ConsistentOmniboxGeolocation:disabled"/>
@@ -23900,6 +23935,7 @@ from previous Chrome versions.
   <int value="-192389983" label="NoStatePrefetch:enabled"/>
   <int value="-183246373" label="enable-multilingual-spellchecker"/>
   <int value="-181093956" label="ScrollAnchoring:enabled"/>
+  <int value="-174319545" label="BulkPrinters:enabled"/>
   <int value="-170986053" label="EnableManualFallbacksFilling:enabled"/>
   <int value="-165756594" label="enable-touch-feedback"/>
   <int value="-159877930" label="MaterialDesignUserManager:disabled"/>
@@ -24624,6 +24660,7 @@ from previous Chrome versions.
   <int value="1988506961" label="EnableManualSaving:enabled"/>
   <int value="1989051182" label="view-passwords:enabled"/>
   <int value="1989877708" label="PostScriptPrinting:enabled"/>
+  <int value="1991771852" label="LeftToRightUrls:enabled"/>
   <int value="1991912338" label="ModuleScriptsDynamicImport:enabled"/>
   <int value="1992466116" label="enable-passive-event-listeners-due-to-fling"/>
   <int value="1993258379" label="enable-icon-ntp"/>
@@ -24655,6 +24692,7 @@ from previous Chrome versions.
   <int value="2077917024"
       label="enable-supervised-user-managed-bookmarks-folder"/>
   <int value="2079672348" label="ExperimentalKeyboardLockUI:disabled"/>
+  <int value="2085186092" label="BulkPrinters:disabled"/>
   <int value="2085438501" label="ChromeHome:enabled"/>
   <int value="2089897928" label="enable-audio-focus"/>
   <int value="2093235103" label="default-tile-width"/>
@@ -33293,7 +33331,6 @@ from previous Chrome versions.
   <int value="13" label="FrameDeferrable"/>
   <int value="14" label="FramePausable"/>
   <int value="15" label="FrameUnpausable"/>
-  <int value="16" label="V8"/>
 </enum>
 
 <enum name="RendererType">

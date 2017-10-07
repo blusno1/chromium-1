@@ -302,8 +302,7 @@ void DeleteSelectionCommand::InitializePositionData(
   // to the selection
   leading_whitespace_ = LeadingWhitespacePosition(
       upstream_start_, selection_to_delete_.Affinity());
-  trailing_whitespace_ =
-      TrailingWhitespacePosition(downstream_end_, VP_DEFAULT_AFFINITY);
+  trailing_whitespace_ = TrailingWhitespacePosition(downstream_end_);
 
   if (smart_delete_) {
     // skip smart delete if the selection to delete already starts or ends with
@@ -312,12 +311,11 @@ void DeleteSelectionCommand::InitializePositionData(
         CreateVisiblePosition(upstream_start_, selection_to_delete_.Affinity())
             .DeepEquivalent();
     bool skip_smart_delete =
-        TrailingWhitespacePosition(pos, VP_DEFAULT_AFFINITY,
-                                   kConsiderNonCollapsibleWhitespace)
+        TrailingWhitespacePosition(pos, kConsiderNonCollapsibleWhitespace)
             .IsNotNull();
     if (!skip_smart_delete)
       skip_smart_delete =
-          LeadingWhitespacePosition(downstream_end_, VP_DEFAULT_AFFINITY,
+          LeadingWhitespacePosition(downstream_end_, TextAffinity::kDefault,
                                     kConsiderNonCollapsibleWhitespace)
               .IsNotNull();
 
@@ -328,8 +326,8 @@ void DeleteSelectionCommand::InitializePositionData(
                                   kConsiderNonCollapsibleWhitespace)
             .IsNotNull();
     if (!skip_smart_delete && has_leading_whitespace_before_adjustment) {
-      VisiblePosition visible_pos = PreviousPositionOf(
-          CreateVisiblePosition(upstream_start_, VP_DEFAULT_AFFINITY));
+      VisiblePosition visible_pos =
+          PreviousPositionOf(CreateVisiblePosition(upstream_start_));
       pos = visible_pos.DeepEquivalent();
       // Expand out one character upstream for smart delete and recalculate
       // positions based on this change.
@@ -345,18 +343,16 @@ void DeleteSelectionCommand::InitializePositionData(
     // leading whitespace, as in the case where you double-click the first word
     // of a paragraph.
     if (!skip_smart_delete && !has_leading_whitespace_before_adjustment &&
-        TrailingWhitespacePosition(downstream_end_, VP_DEFAULT_AFFINITY,
+        TrailingWhitespacePosition(downstream_end_,
                                    kConsiderNonCollapsibleWhitespace)
             .IsNotNull()) {
       // Expand out one character downstream for smart delete and recalculate
       // positions based on this change.
-      pos = NextPositionOf(
-                CreateVisiblePosition(downstream_end_, VP_DEFAULT_AFFINITY))
+      pos = NextPositionOf(CreateVisiblePosition(downstream_end_))
                 .DeepEquivalent();
       upstream_end_ = MostBackwardCaretPosition(pos);
       downstream_end_ = MostForwardCaretPosition(pos);
-      trailing_whitespace_ =
-          TrailingWhitespacePosition(downstream_end_, VP_DEFAULT_AFFINITY);
+      trailing_whitespace_ = TrailingWhitespacePosition(downstream_end_);
 
       SetStartingSelectionOnSmartDelete(downstream_start_, downstream_end_);
     }

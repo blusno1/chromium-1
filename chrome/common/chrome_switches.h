@@ -89,7 +89,6 @@ extern const char kDisablePrintPreview[];
 extern const char kDisablePromptOnRepost[];
 extern const char kDisablePushApiBackgroundMode[];
 extern const char kDisableSearchGeolocationDisclosure[];
-extern const char kDisableServiceProcessResourceLoading[];
 extern const char kDisableWebNotificationCustomLayouts[];
 extern const char kDisableZeroBrowsersOpenForTests[];
 extern const char kDiskCacheDir[];
@@ -122,7 +121,6 @@ extern const char kEnablePowerOverlay[];
 extern const char kEnablePrintPreviewRegisterPromos[];
 extern const char kEnablePushApiBackgroundMode[];
 extern const char kEnableSiteSettings[];
-extern const char kEnableSupervisedUserManagedBookmarksFolder[];
 extern const char kEnableTabAudioMuting[];
 extern const char kEnableWebNotificationCustomLayouts[];
 extern const char kEnableWebRtcEventLoggingFromExtension[];
@@ -300,7 +298,6 @@ extern const char kWindows10CustomTitlebar[];
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
 extern const char kMash[];
 extern const char kMus[];
-extern const char kMusConfig[];
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)

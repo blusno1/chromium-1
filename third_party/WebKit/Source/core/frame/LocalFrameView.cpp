@@ -28,7 +28,6 @@
 
 #include <algorithm>
 #include <memory>
-#include "core/MediaTypeNames.h"
 #include "core/animation/DocumentAnimations.h"
 #include "core/css/FontFaceSetDocument.h"
 #include "core/css/StyleChangeReason.h"
@@ -80,6 +79,7 @@
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
+#include "core/media_type_names.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
@@ -3801,8 +3801,7 @@ void LocalFrameView::SetTracksPaintInvalidations(
               track_paint_invalidations);
         }
       } else {
-        layout_view.Compositor()->SetTracksRasterInvalidations(
-            track_paint_invalidations);
+        layout_view.Compositor()->UpdateTrackingRasterInvalidations();
       }
     }
   }

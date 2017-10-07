@@ -63,7 +63,7 @@ public class ChromePreferenceManager {
 
     private static final String OMNIBOX_PLACEHOLDER_GROUP = "omnibox-placeholder-group";
 
-    private static final String CHROME_HOME_SHARED_PREFERENCES_KEY = "chrome_home_enabled_date";
+    public static final String CHROME_HOME_SHARED_PREFERENCES_KEY = "chrome_home_enabled_date";
 
     private static ChromePreferenceManager sPrefs;
 
@@ -436,6 +436,13 @@ public class ChromePreferenceManager {
      */
     public boolean isChromeHomeUserPreferenceSet() {
         return mSharedPreferences.contains(CHROME_HOME_USER_ENABLED_KEY);
+    }
+
+    /**
+     * Remove the Chrome Home user preference.
+     */
+    public void clearChromeHomeUserPreference() {
+        mSharedPreferences.edit().remove(CHROME_HOME_USER_ENABLED_KEY).apply();
     }
 
     /** Marks that the content suggestions surface has been shown. */

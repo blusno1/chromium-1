@@ -172,7 +172,10 @@
       name: "footer",
       interfaceName: "HTMLElement",
     },
-    "form",
+    {
+      name: "form",
+      interfaceHeaderDir: "core/html/forms",
+    },
     "frame",
     {
       name: "frameset",
@@ -249,7 +252,10 @@
       name: "keygen",
       interfaceName: "HTMLUnknownElement",
     },
-    "label",
+    {
+      name: "label",
+      interfaceHeaderDir: "core/html/forms",
+    },
     {
       name: "layer",
       interfaceName: "HTMLElement",
@@ -318,9 +324,16 @@
     {
       name: "optgroup",
       interfaceName: "HTMLOptGroupElement",
+      interfaceHeaderDir: "core/html/forms",
     },
-    "option",
-    "output",
+    {
+      name: "option",
+      interfaceHeaderDir: "core/html/forms",
+    },
+    {
+      name: "output",
+      interfaceHeaderDir: "core/html/forms",
+    },
     {
       name: "shadow",
       interfaceName: "HTMLShadowElement",
@@ -385,7 +398,10 @@
       name: "section",
       interfaceName: "HTMLElement",
     },
-    "select",
+    {
+      name: "select",
+      interfaceHeaderDir: "core/html/forms",
+    },      
     {
       name: "slot",
       interfaceName: "HTMLSlotElement",

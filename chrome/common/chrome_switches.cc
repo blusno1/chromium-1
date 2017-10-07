@@ -257,10 +257,6 @@ const char kDisablePushApiBackgroundMode[] = "disable-push-api-background-mode";
 const char kDisableSearchGeolocationDisclosure[] =
     "disable-search-geolocation-disclosure";
 
-// If set processes created to host a service will not load resources.
-const char kDisableServiceProcessResourceLoading[] =
-    "disable-service-process-resource-loading";
-
 // Disables Web Notification custom layouts.
 const char kDisableWebNotificationCustomLayouts[] =
     "disable-web-notification-custom-layouts";
@@ -382,10 +378,6 @@ const char kEnablePushApiBackgroundMode[] = "enable-push-api-background-mode";
 // Enables the site settings all sites list and site details pages in the Chrome
 // settings UI.
 const char kEnableSiteSettings[] = "enable-site-settings";
-
-// Enables the supervised user managed bookmarks folder.
-const char kEnableSupervisedUserManagedBookmarksFolder[] =
-    "enable-supervised-user-managed-bookmarks-folder";
 
 // Enables user control over muting tab audio from the tab strip.
 const char kEnableTabAudioMuting[]  = "enable-tab-audio-muting";
@@ -984,12 +976,6 @@ const char kMash[]                          = "mash";
 
 // Used to enable mus as a separate process, but chrome+ash still together.
 const char kMus[] = "mus";
-
-// This is added to child processes launched from mash or mus. The value of
-// this switch is either kMus or kMash. For example, if chrome is run with
-// '--mash' then the child process representing ash is launched with the
-// switch '--mus-config=mash'.
-const char kMusConfig[] = "mus-config";
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)

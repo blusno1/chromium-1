@@ -744,6 +744,14 @@ const char kLcdTextDescription[] =
     "If disabled, text is rendered with grayscale antialiasing instead of LCD "
     "(subpixel) when doing accelerated compositing.";
 
+const char kLeftToRightUrlsName[] =
+    "Render bidirectional URLs from left to right";
+const char kLeftToRightUrlsDescription[] =
+    "An experimental Bidi URL rendering algorithm where the URL components are "
+    "always shown in order from left to right, regardless of any RTL "
+    "characters. (The contents of each component are still rendered with the "
+    "normal Bidi algorithm.)";
+
 const char kLoadMediaRouterComponentExtensionName[] =
     "Load Media Router Component Extension";
 const char kLoadMediaRouterComponentExtensionDescription[] =
@@ -1288,11 +1296,6 @@ const char kSuggestionsWithSubStringMatchName[] =
 const char kSuggestionsWithSubStringMatchDescription[] =
     "Match Autofill suggestions based on substrings (token prefixes) rather "
     "than just prefixes.";
-
-const char kSupervisedUserManagedBookmarksFolderName[] =
-    "Managed bookmarks for supervised users";
-const char kSupervisedUserManagedBookmarksFolderDescription[] =
-    "Enable the managed bookmarks folder for supervised users.";
 
 const char kSyncAppListName[] = "App Launcher sync";
 const char kSyncAppListDescription[] =
@@ -2327,6 +2330,9 @@ const char kAshEnableUnifiedDesktopDescription[] =
 const char kBootAnimationName[] = "Boot animation";
 const char kBootAnimationDescription[] =
     "Wallpaper boot animation (except for OOBE case).";
+
+const char kBulkPrintersName[] = "Bulk Printers Policy";
+const char kBulkPrintersDescription[] = "Enables the new bulk printers policy";
 
 const char kCaptivePortalBypassProxyName[] =
     "Bypass proxy for Captive Portal Authorization";

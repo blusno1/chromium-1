@@ -15,8 +15,11 @@ namespace content {
 
 void UpdateLaunchOptionsForSandbox(service_manager::SandboxType type,
                                    base::LaunchOptions* options) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kNoSandbox))
-    type = service_manager::SANDBOX_TYPE_NO_SANDBOX;
+  // TODO(750938): Re-enable sandboxed sub-processes once we support things
+  // like resource file fetching by sandboxed processes.
+  // if
+  // (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kNoSandbox))
+  type = service_manager::SANDBOX_TYPE_NO_SANDBOX;
 
   if (type != service_manager::SANDBOX_TYPE_NO_SANDBOX) {
     options->clone_flags = LP_CLONE_FDIO_STDIO;

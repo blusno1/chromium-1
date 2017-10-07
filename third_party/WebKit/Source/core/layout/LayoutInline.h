@@ -115,6 +115,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
  public:
   explicit LayoutInline(Element*);
 
+  static LayoutInline* CreateAnonymous(Document*);
+
   LayoutObject* FirstChild() const {
     DCHECK_EQ(Children(), VirtualChildren());
     return Children()->FirstChild();
@@ -197,9 +199,9 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   }
   void UpdateAlwaysCreateLineBoxes(bool full_layout);
 
-  LayoutRect LocalCaretRect(InlineBox*,
+  LayoutRect LocalCaretRect(const InlineBox*,
                             int,
-                            LayoutUnit* extra_width_to_end_of_line) final;
+                            LayoutUnit* extra_width_to_end_of_line) const final;
 
   bool HitTestCulledInline(HitTestResult&,
                            const HitTestLocation& location_in_container,

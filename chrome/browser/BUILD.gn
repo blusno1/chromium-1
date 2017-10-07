@@ -3488,7 +3488,7 @@ split_static_library("browser") {
     ]
   }
 
-  if (enable_mojo_media) {
+  if (enable_library_cdms) {
     sources += [
       "media/output_protection_impl.cc",
       "media/output_protection_impl.h",
@@ -3831,8 +3831,6 @@ split_static_library("browser") {
       "supervised_user/experimental/supervised_user_filtering_switches.cc",
       "supervised_user/experimental/supervised_user_filtering_switches.h",
       "supervised_user/permission_request_creator.h",
-      "supervised_user/supervised_user_bookmarks_handler.cc",
-      "supervised_user/supervised_user_bookmarks_handler.h",
       "supervised_user/supervised_user_constants.cc",
       "supervised_user/supervised_user_constants.h",
       "supervised_user/supervised_user_content_provider_android.cc",
@@ -4121,6 +4119,7 @@ if (is_android) {
       "../android/java/src/org/chromium/chrome/browser/infobar/ReaderModeInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/SearchGeolocationDisclosureInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/SimpleConfirmInfoBarBuilder.java",
+      "../android/java/src/org/chromium/chrome/browser/infobar/SurveyInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/TranslateCompactInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/TranslateInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/UpdatePasswordInfoBar.java",

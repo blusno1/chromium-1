@@ -381,7 +381,6 @@ split_static_library("ui") {
     "//components/browsing_data/core",
     "//components/bubble:bubble",
     "//components/certificate_reporting:cert_logger_proto",
-    "//components/certificate_reporting:encrypted_cert_logger_proto",
     "//components/content_settings/core/browser",
     "//components/crash/content/app",
     "//components/crash/core/browser",
@@ -393,6 +392,7 @@ split_static_library("ui") {
     "//components/domain_reliability",
     "//components/download/content/factory",
     "//components/download/content/public",
+    "//components/encrypted_messages:encrypted_message_proto",
     "//components/favicon/content",
     "//components/favicon/core",
     "//components/feature_engagement:features",
@@ -598,6 +598,8 @@ split_static_library("ui") {
       "android/infobars/search_geolocation_disclosure_infobar.cc",
       "android/infobars/search_geolocation_disclosure_infobar.h",
       "android/infobars/simple_confirm_infobar_builder.cc",
+      "android/infobars/survey_infobar.cc",
+      "android/infobars/survey_infobar.h",
       "android/infobars/translate_compact_infobar.cc",
       "android/infobars/translate_compact_infobar.h",
       "android/infobars/translate_infobar.cc",
@@ -1331,6 +1333,8 @@ split_static_library("ui") {
       "webui/chromeos/first_run/first_run_ui.h",
       "webui/chromeos/image_source.cc",
       "webui/chromeos/image_source.h",
+      "webui/chromeos/internet_config_dialog.cc",
+      "webui/chromeos/internet_config_dialog.h",
       "webui/chromeos/internet_detail_dialog_ui.cc",
       "webui/chromeos/internet_detail_dialog_ui.h",
       "webui/chromeos/keyboard_overlay_ui.cc",
@@ -3356,6 +3360,7 @@ split_static_library("ui") {
         "ash/launcher/launcher_arc_app_updater.h",
         "views/arc_app_dialog_view.cc",
       ]
+      deps += [ "//mash/common" ]
     }
   } else {
     sources += [

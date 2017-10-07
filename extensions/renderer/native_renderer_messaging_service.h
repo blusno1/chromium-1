@@ -8,7 +8,9 @@
 #include <string>
 
 #include "base/macros.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/renderer/gin_port.h"
+#include "extensions/renderer/one_time_message_handler.h"
 #include "extensions/renderer/renderer_messaging_service.h"
 #include "gin/handle.h"
 
@@ -18,6 +20,7 @@ struct ExtensionMsg_TabConnectionInfo;
 namespace extensions {
 class NativeExtensionBindingsSystem;
 struct Message;
+struct MessageTarget;
 struct PortId;
 
 // The messaging service to handle dispatching extension messages and connection
@@ -65,9 +68,17 @@ class NativeRendererMessagingService : public RendererMessagingService,
 
   // Creates and opens a new message port in the specified context.
   gin::Handle<GinPort> Connect(ScriptContext* script_context,
-                               const ExtensionId& target_id,
+                               const MessageTarget& target,
                                const std::string& name,
                                bool include_tls_channel_id);
+
+  // Sends a one-time message, as is used by runtime.sendMessage.
+  void SendOneTimeMessage(ScriptContext* script_context,
+                          const MessageTarget& target,
+                          const std::string& channel_name,
+                          bool include_tls_channel_id,
+                          const Message& message,
+                          v8::Local<v8::Function> response_callback);
 
   // GinPort::Delegate:
   void PostMessageToPort(v8::Local<v8::Context> context,
@@ -118,6 +129,8 @@ class NativeRendererMessagingService : public RendererMessagingService,
 
   // The associated bindings system; guaranteed to outlive this object.
   NativeExtensionBindingsSystem* const bindings_system_;
+
+  OneTimeMessageHandler one_time_message_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeRendererMessagingService);
 };

@@ -23,10 +23,6 @@ cr.define('extension_code_section_tests', function() {
 
     var couldNotDisplayCode = 'No code here';
 
-    suiteSetup(function() {
-      return PolymerTest.importHtml('chrome://extensions/code_section.html');
-    });
-
     // Initialize an extension item before each test.
     setup(function() {
       PolymerTest.clearBody();
@@ -41,7 +37,7 @@ cr.define('extension_code_section_tests', function() {
       var testIsVisible = extension_test_util.isVisible.bind(null, codeSection);
       expectFalse(!!codeSection.code);
       expectTrue(codeSection.isEmpty());
-      expectTrue(codeSection.$$('#main').hidden);
+      expectTrue(codeSection.$$('#scroll-container').hidden);
       expectFalse(testIsVisible('#main'));
       expectTrue(testIsVisible('#no-code'));
       expectEquals('', codeSection.$['line-numbers'].textContent.trim());
@@ -54,7 +50,7 @@ cr.define('extension_code_section_tests', function() {
       expectEquals(
           code.beforeHighlight + code.highlight + code.afterHighlight,
           fullSpan.textContent);
-      var highlightSpan = codeSection.$$('.highlight');
+      var highlightSpan = codeSection.$$('#highlight');
       expectEquals(code.highlight, highlightSpan.textContent);
       expectEquals(code.message, highlightSpan.title);
       expectEquals(

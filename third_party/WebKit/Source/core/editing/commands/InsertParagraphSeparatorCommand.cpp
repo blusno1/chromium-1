@@ -95,7 +95,7 @@ void InsertParagraphSeparatorCommand::CalculateStyleBeforeInsertion(
   // boundaries of a paragraph. Otherwise, content that is moved as part of the
   // work of the command will lend their styles to the new paragraph without any
   // extra work needed.
-  VisiblePosition visible_pos = CreateVisiblePosition(pos, VP_DEFAULT_AFFINITY);
+  VisiblePosition visible_pos = CreateVisiblePosition(pos);
   if (!IsStartOfParagraph(visible_pos) && !IsEndOfParagraph(visible_pos))
     return;
 
@@ -181,13 +181,14 @@ Element* InsertParagraphSeparatorCommand::CloneHierarchyUnderNewBlock(
 void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
   // TODO(editing-dev): We shouldn't construct an
   // InsertParagraphSeparatorCommand with none or invalid selection.
-  if (EndingVisibleSelection().IsNone() ||
-      !EndingVisibleSelection().IsValidFor(GetDocument()))
+  const VisibleSelection& visible_selection = EndingVisibleSelection();
+  if (visible_selection.IsNone() ||
+      !visible_selection.IsValidFor(GetDocument()))
     return;
 
-  Position insertion_position = EndingVisibleSelection().Start();
+  Position insertion_position = visible_selection.Start();
 
-  TextAffinity affinity = EndingVisibleSelection().Affinity();
+  TextAffinity affinity = visible_selection.Affinity();
 
   // Delete the current selection.
   if (EndingSelection().IsRange()) {
@@ -196,8 +197,10 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
     DeleteSelection(editing_state, false, true);
     if (editing_state->IsAborted())
       return;
-    insertion_position = EndingVisibleSelection().Start();
-    affinity = EndingVisibleSelection().Affinity();
+    const VisibleSelection& visble_selection_after_delete =
+        EndingVisibleSelection();
+    insertion_position = visble_selection_after_delete.Start();
+    affinity = visble_selection_after_delete.Affinity();
   }
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -477,7 +480,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
   // FIXME: We need the affinity for pos, but mostForwardCaretPosition does not
   // give it
   Position leading_whitespace =
-      LeadingWhitespacePosition(insertion_position, VP_DEFAULT_AFFINITY);
+      LeadingWhitespacePosition(insertion_position, TextAffinity::kDefault);
   // FIXME: leadingWhitespacePosition is returning the position before preserved
   // newlines for positions after the preserved newline, causing the newline to
   // be turned into a nbsp.

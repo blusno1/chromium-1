@@ -239,7 +239,7 @@ class WebRtcGetUserMediaBrowserTest : public WebRtcContentBrowserTestBase {
         &error_message);
 
     ASSERT_TRUE(value.get() != NULL) << error_message;
-    EXPECT_EQ(value->GetType(), base::Value::Type::LIST);
+    EXPECT_EQ(value->type(), base::Value::Type::LIST);
 
     base::ListValue* values;
     ASSERT_TRUE(value->GetAsList(&values));
@@ -902,6 +902,29 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
   NavigateToURL(shell(), url);
   ExecuteJavascriptAndWaitForOk("srcObjectReassignSameObject()");
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest, ApplyConstraintsVideo) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("applyConstraintsVideo()");
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+                       ApplyConstraintsVideoTwoStreams) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("applyConstraintsVideoTwoStreams()");
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+                       ApplyConstraintsVideoOverconstrained) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("applyConstraintsVideoOverconstrained()");
 }
 
 }  // namespace content

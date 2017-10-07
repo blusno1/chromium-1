@@ -1709,11 +1709,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kSuggestionsWithSubStringMatchDescription, kOsAll,
      SINGLE_VALUE_TYPE(
          autofill::switches::kEnableSuggestionsWithSubstringMatch)},
-    {"enable-supervised-user-managed-bookmarks-folder",
-     flag_descriptions::kSupervisedUserManagedBookmarksFolderName,
-     flag_descriptions::kSupervisedUserManagedBookmarksFolderDescription,
-     kOsAll,
-     SINGLE_VALUE_TYPE(switches::kEnableSupervisedUserManagedBookmarksFolder)},
 #if BUILDFLAG(ENABLE_APP_LIST)
     {"enable-sync-app-list", flag_descriptions::kSyncAppListName,
      flag_descriptions::kSyncAppListDescription, kOsDesktop,
@@ -2665,6 +2660,9 @@ const FeatureEntry kFeatureEntries[] = {
      kOsCrOS,
      SINGLE_VALUE_TYPE(
          chromeos::switches::kDisableSystemTimezoneAutomaticDetectionPolicy)},
+    {"enable-bulk-printers", flag_descriptions::kBulkPrintersName,
+     flag_descriptions::kBulkPrintersDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kBulkPrinters)},
     {"enable-cros-component", flag_descriptions::kCrOSComponentName,
      flag_descriptions::kCrOSComponentDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(features::kCrOSComponent)},
@@ -3022,6 +3020,9 @@ const FeatureEntry kFeatureEntries[] = {
     {"new-omnibox-answer-types", flag_descriptions::kNewOmniboxAnswerTypesName,
      flag_descriptions::kNewOmniboxAnswerTypesDescription, kOsAll,
      FEATURE_VALUE_TYPE(omnibox::kNewOmniboxAnswerTypes)},
+    {"left-to-right-urls", flag_descriptions::kLeftToRightUrlsName,
+     flag_descriptions::kLeftToRightUrlsDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kLeftToRightUrls)},
 
 #if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
     {"omnibox-entity-suggestions",

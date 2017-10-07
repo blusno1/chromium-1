@@ -27,6 +27,8 @@ class PLATFORM_EXPORT WebViewScheduler {
 
   // The scheduler may throttle tasks associated with background pages.
   virtual void SetPageVisible(bool) = 0;
+  // The scheduler transitions app to and from STOPPED state in background.
+  virtual void SetPageStopped(bool) = 0;
 
   // Creates a new WebFrameScheduler. The caller is responsible for deleting
   // it. All tasks executed by the frame scheduler will be attributed to
@@ -78,13 +80,18 @@ class PLATFORM_EXPORT WebViewScheduler {
   // WebFrameSchedulers.
   virtual void SetVirtualTimePolicy(VirtualTimePolicy) = 0;
 
-  class VirtualTimeObserver {
+  class PLATFORM_EXPORT VirtualTimeObserver {
    public:
     virtual ~VirtualTimeObserver() {}
 
-    // Called the next microtask after virtual time pauses for any reason.
-    // |virtual_time_offset| is the offset between the current virtual time and
-    // the initial virtual time when EnableVirtualTime() was called.
+    // Called when virtual time advances. |virtual_time_offset| is the offset
+    // between the current virtual time and the initial virtual time when
+    // EnableVirtualTime() was called.
+    virtual void OnVirtualTimeAdvanced(base::TimeDelta virtual_time_offset) = 0;
+
+    // Called when virtual time pauses for any reason. |virtual_time_offset| is
+    // the offset between the current virtual time and the initial virtual time
+    // when EnableVirtualTime() was called.
     virtual void OnVirtualTimePaused(base::TimeDelta virtual_time_offset) = 0;
   };
 

@@ -4,13 +4,17 @@
 
 #include "core/layout/ng/layout_ng_list_item.h"
 
+#include "core/layout/LayoutInline.h"
+#include "core/layout/LayoutListMarker.h"
 #include "core/layout/ListMarkerText.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
 LayoutNGListItem::LayoutNGListItem(Element* element)
-    : LayoutNGBlockFlow(element) {
+    : LayoutNGBlockFlow(element),
+      marker_type_(kStatic),
+      is_marker_text_updated_(false) {
   SetInline(false);
 }
 
@@ -18,11 +22,15 @@ bool LayoutNGListItem::IsOfType(LayoutObjectType type) const {
   return type == kLayoutObjectNGListItem || LayoutNGBlockFlow::IsOfType(type);
 }
 
+bool LayoutNGListItem::IsListMarker(LayoutObject* layout_object) {
+  DCHECK(layout_object);
+  LayoutObject* parent = layout_object->Parent();
+  return parent && parent->IsLayoutNGListItem() &&
+         ToLayoutNGListItem(parent)->marker_ == layout_object;
+}
+
 void LayoutNGListItem::WillBeDestroyed() {
-  if (marker_) {
-    marker_->Destroy();
-    marker_ = nullptr;
-  }
+  DestroyMarker();
 
   LayoutNGBlockFlow::WillBeDestroyed();
 }
@@ -47,46 +55,93 @@ void LayoutNGListItem::StyleDidChange(StyleDifference diff,
 }
 
 void LayoutNGListItem::OrdinalValueChanged() {
-  if (marker_)
-    UpdateMarkerText(ToLayoutText(marker_->FirstChild()));
+  if (marker_type_ == kOrdinalValue && is_marker_text_updated_) {
+    is_marker_text_updated_ = false;
+    DCHECK(marker_);
+    marker_->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+        LayoutInvalidationReason::kListValueChange);
+  }
+}
+
+void LayoutNGListItem::WillCollectInlines() {
+  if (marker_ && !is_marker_text_updated_)
+    UpdateMarkerText(ToLayoutText(marker_->SlowFirstChild()));
+}
+
+// Returns true if this is 'list-style-position: inside', or should be laid out
+// as 'inside'.
+bool LayoutNGListItem::IsInside() const {
+  return ordinal_.NotInList() ||
+         StyleRef().ListStylePosition() == EListStylePosition::kInside;
+}
+
+// Destroy the list marker objects if exists.
+void LayoutNGListItem::DestroyMarker() {
+  if (marker_) {
+    marker_->Destroy();
+    marker_ = nullptr;
+  }
 }
 
 void LayoutNGListItem::UpdateMarkerText(LayoutText* text) {
   DCHECK(text);
   StringBuilder marker_text_builder;
-  MarkerText(&marker_text_builder, kWithSuffix);
+  marker_type_ = MarkerText(&marker_text_builder, kWithSuffix);
   text->SetText(marker_text_builder.ToString().ReleaseImpl());
+  is_marker_text_updated_ = true;
 }
 
 void LayoutNGListItem::UpdateMarker() {
   const ComputedStyle& style = StyleRef();
   if (style.ListStyleType() == EListStyleType::kNone) {
-    if (marker_) {
-      marker_->Destroy();
-      marker_ = nullptr;
-    }
+    DestroyMarker();
+    marker_type_ = kStatic;
+    is_marker_text_updated_ = true;
     return;
   }
 
-  if (!marker_)
-    marker_ = LayoutBlockFlow::CreateAnonymous(&GetDocument());
-
-  RefPtr<ComputedStyle> marker_style =
-      ComputedStyle::CreateAnonymousStyleWithDisplay(style,
-                                                     EDisplay::kInlineBlock);
+  // Create a marker box if it does not exist yet.
+  RefPtr<ComputedStyle> marker_style;
+  if (IsInside()) {
+    if (marker_ && !marker_->IsLayoutInline())
+      DestroyMarker();
+    if (!marker_)
+      marker_ = LayoutInline::CreateAnonymous(&GetDocument());
+    marker_style = ComputedStyle::CreateAnonymousStyleWithDisplay(
+        style, EDisplay::kInline);
+    bool is_image = false;  // TODO(kojii): implement
+    auto margins = LayoutListMarker::InlineMarginsForInside(style, is_image);
+    marker_style->SetMarginStart(Length(margins.first, kFixed));
+    marker_style->SetMarginEnd(Length(margins.second, kFixed));
+  } else {
+    if (marker_ && !marker_->IsLayoutBlockFlow())
+      DestroyMarker();
+    if (!marker_)
+      marker_ = LayoutBlockFlow::CreateAnonymous(&GetDocument());
+    marker_style = ComputedStyle::CreateAnonymousStyleWithDisplay(
+        style, EDisplay::kInlineBlock);
+    // Do not break inside the marker, and honor the trailing spaces.
+    marker_style->SetWhiteSpace(EWhiteSpace::kPre);
+    // Compute margins for 'outside' during layout, because it requires the
+    // layout size of the marker.
+    // TODO(kojii): absolute position looks more reasonable, and maybe required
+    // in some cases, but this is currently blocked by crbug.com/734554
+    // marker_style->SetPosition(EPosition::kAbsolute);
+    // marker_->SetPositionState(EPosition::kAbsolute);
+  }
   marker_->SetStyle(std::move(marker_style));
 
+  // Create a LayoutText in it.
   LayoutText* text = nullptr;
-  if (LayoutObject* child = marker_->FirstChild()) {
+  if (LayoutObject* child = marker_->SlowFirstChild()) {
     text = ToLayoutText(child);
     text->SetStyle(marker_->MutableStyle());
   } else {
     text = LayoutText::CreateEmptyAnonymous(GetDocument());
     text->SetStyle(marker_->MutableStyle());
     marker_->AddChild(text);
+    is_marker_text_updated_ = false;
   }
-
-  UpdateMarkerText(text);
 
   LayoutObject* first_child = FirstChild();
   if (first_child != marker_) {
@@ -100,12 +155,13 @@ int LayoutNGListItem::Value() const {
   return ordinal_.Value(*GetNode());
 }
 
-void LayoutNGListItem::MarkerText(StringBuilder* text,
-                                  MarkerTextFormat format) const {
+LayoutNGListItem::MarkerType LayoutNGListItem::MarkerText(
+    StringBuilder* text,
+    MarkerTextFormat format) const {
   const ComputedStyle& style = StyleRef();
   switch (style.ListStyleType()) {
     case EListStyleType::kNone:
-      break;
+      return kStatic;
     case EListStyleType::kDisc:
     case EListStyleType::kCircle:
     case EListStyleType::kSquare:
@@ -113,7 +169,7 @@ void LayoutNGListItem::MarkerText(StringBuilder* text,
       text->Append(ListMarkerText::GetText(Style()->ListStyleType(), 0));
       if (format == kWithSuffix)
         text->Append(' ');
-      break;
+      return kStatic;
     case EListStyleType::kArabicIndic:
     case EListStyleType::kArmenian:
     case EListStyleType::kBengali:
@@ -172,9 +228,11 @@ void LayoutNGListItem::MarkerText(StringBuilder* text,
         text->Append(ListMarkerText::Suffix(Style()->ListStyleType(), value));
         text->Append(' ');
       }
-      break;
+      return kOrdinalValue;
     }
   }
+  NOTREACHED();
+  return kStatic;
 }
 
 String LayoutNGListItem::MarkerTextWithoutSuffix() const {

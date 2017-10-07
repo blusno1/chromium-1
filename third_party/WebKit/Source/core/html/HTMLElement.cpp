@@ -52,10 +52,10 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLDimension.h"
-#include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTemplateElement.h"
+#include "core/html/forms/HTMLFormElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html_names.h"
 #include "core/layout/LayoutBoxModelObject.h"
@@ -1034,8 +1034,7 @@ Node::InsertionNotificationRequest HTMLElement::InsertedInto(
   // updated.
   Element::InsertedInto(insertion_point);
 
-  if (RuntimeEnabledFeatures::HideNonceContentAttributeEnabled() &&
-      GetDocument().GetContentSecurityPolicy()->HasHeaderDeliveredPolicy() &&
+  if (GetDocument().GetContentSecurityPolicy()->HasHeaderDeliveredPolicy() &&
       InActiveDocument() && FastHasAttribute(nonceAttr)) {
     setAttribute(nonceAttr, g_empty_atom);
   }

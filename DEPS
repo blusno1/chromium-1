@@ -38,6 +38,9 @@ vars = {
   # custom_vars.
   'checkout_src_internal': 'False',
 
+  # TODO(dpranke): change to != "small" once != is supported.
+  'checkout_traffic_annotation_tools': 'checkout_configuration == "default"',
+
   'chromium_git': 'https://chromium.googlesource.com',
   'swiftshader_git': 'https://swiftshader.googlesource.com',
   'pdfium_git': 'https://pdfium.googlesource.com',
@@ -51,11 +54,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '8d64ee7795991ceaa2346a63bd9660e4722f346e',
+  'skia_revision': 'e1da1d9a7dfa6c9ebdcbd2845acebd045edd2a6f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '4754eed2fed55b8747f36ce52b876d240fa76cff',
+  'v8_revision': '991ca91f98cff16a93a1fee6820058c6a20acd7b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -63,7 +66,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'a60d35672ed9dba63e5141859fcb25d903de65b5',
+  'angle_revision': '000dab88d3d34fa7038bab00600764b51b245526',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -71,11 +74,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling SwiftShader
   # and whatever else without interference from each other.
-  'swiftshader_revision': '9d56da27fd2f97af9a5f6a96227abdd5564503cb',
+  'swiftshader_revision': 'ec5da193b1c29dc8bee19dcc8fe297901ff74911',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '480ca10f7a20dd65921dcec046d91b503f3599c3',
+  'pdfium_revision': 'b962ecceb7a7d961fdebc1bdf314d450cc6bf204',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -107,11 +110,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '400dbc4b2b007f4b6fdbda426a5473888cd64a98',
+  'catapult_revision': 'dbe4475f85d6756d5de36e0ba015c4c5555a9686',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
-  'libfuzzer_revision': '9cd51e5be7208c1c19d87aba23260bdb34829b2a',
+  'libfuzzer_revision': '06fb50cc1f0197398c8a70658928a3b91912e68a',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling devtools-node-modules
   # and whatever else without interference from each other.
@@ -169,7 +172,7 @@ deps = {
   },
 
   'src/ios/third_party/material_components_ios/src': {
-      'url': Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + '74e87aa83f93ef27347b91c33a6d54af34b90977',
+      'url': Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + '0de8fc584658c8fb88a507981181e6dc999c3a78',
       'condition': 'checkout_ios',
   },
 
@@ -275,7 +278,7 @@ deps = {
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'b5807979e8a9515f57cece1df7b19808b83d24ab',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '77b7687e4837223f820e1e98c369d36696f3f2b3',
 
   # DevTools node modules. Used on Linux buildbots only.
   'src/third_party/devtools-node-modules': {
@@ -586,7 +589,7 @@ deps = {
     Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '34842fa3c36988840c89f5bc6a68503175acf7d9',
 
   'src/third_party/webrtc':
-    Var('webrtc_git') + '/src.git' + '@' + 'ca95748c73cba168573ec6fe054cb17ba4ae9b19', # commit position 20165
+    Var('webrtc_git') + '/src.git' + '@' + '82eb3c430916be1c7350972d6f7ab51f07e3ad6c', # commit position 20165
 
   'src/third_party/xdg-utils': {
       'url': Var('chromium_git') + '/chromium/deps/xdg-utils.git' + '@' + 'd80274d5869b17b8c9067a1022e4416ee7ed5e0d',
@@ -1016,6 +1019,23 @@ hooks = [
     ],
   },
 
+  # This is used to ensure that all network operations are properly
+  # annotated so we can document what they're for.
+  {
+    'name': 'tools_traffic_annotation_linux',
+    'pattern': '.',
+    'condition': 'host_os == "linux" and checkout_traffic_annotation_tools',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--platform=linux*',
+                '--no_auth',
+                '--num_threads=4',
+                '--bucket', 'chromium-tools-traffic_annotation',
+                '-d', 'src/tools/traffic_annotation/bin/linux64',
+    ],
+  },
+
   # Pull down Zucchini test data.
   {
     'name': 'zucchini_testdata',
@@ -1343,7 +1363,7 @@ hooks = [
     'action': [
       'python',
       'src/build/fuchsia/update_sdk.py',
-      '36d9ffb6bda53112e826941757efe04654050d46',
+      '226f6dd0cad1d6be63a353ce2649423470729ae9',
     ],
   },
 ]

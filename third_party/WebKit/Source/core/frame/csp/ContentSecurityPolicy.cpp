@@ -94,12 +94,8 @@ bool CheckHeaderTypeMatches(
 }  // namespace
 
 bool ContentSecurityPolicy::IsNonceableElement(const Element* element) {
-  if (RuntimeEnabledFeatures::HideNonceContentAttributeEnabled()) {
-    if (element->nonce().IsNull())
-      return false;
-  } else if (!element->FastHasAttribute(HTMLNames::nonceAttr)) {
+  if (element->nonce().IsNull())
     return false;
-  }
 
   bool nonceable = true;
 
@@ -129,11 +125,7 @@ bool ContentSecurityPolicy::IsNonceableElement(const Element* element) {
       nonceable ? WebFeature::kCleanScriptElementWithNonce
                 : WebFeature::kPotentiallyInjectedScriptElementWithNonce);
 
-  // This behavior is locked behind the experimental flag for the moment; if we
-  // decide to ship it, drop this check. https://crbug.com/639293
-  return !RuntimeEnabledFeatures::
-             ExperimentalContentSecurityPolicyFeaturesEnabled() ||
-         nonceable;
+  return nonceable;
 }
 
 static WebFeature GetUseCounterType(ContentSecurityPolicyHeaderType type) {
@@ -650,7 +642,7 @@ bool ContentSecurityPolicy::AllowScriptFromSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url)) {
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_)) {
     UseCounter::Count(
         GetDocument(),
         parser_disposition == kParserInserted
@@ -788,7 +780,7 @@ bool ContentSecurityPolicy::AllowObjectFromSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -807,7 +799,7 @@ bool ContentSecurityPolicy::AllowFrameFromSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -826,7 +818,8 @@ bool ContentSecurityPolicy::AllowImageFromSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url, SchemeRegistry::kPolicyAreaImage))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_,
+                                        SchemeRegistry::kPolicyAreaImage))
     return true;
 
   bool is_allowed = true;
@@ -846,7 +839,8 @@ bool ContentSecurityPolicy::AllowStyleFromSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url, SchemeRegistry::kPolicyAreaStyle))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_,
+                                        SchemeRegistry::kPolicyAreaStyle))
     return true;
 
   bool is_allowed = true;
@@ -864,7 +858,7 @@ bool ContentSecurityPolicy::AllowFontFromSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -883,7 +877,7 @@ bool ContentSecurityPolicy::AllowMediaFromSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -902,7 +896,7 @@ bool ContentSecurityPolicy::AllowConnectToSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -921,7 +915,7 @@ bool ContentSecurityPolicy::AllowFormAction(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -941,7 +935,7 @@ bool ContentSecurityPolicy::AllowBaseURI(
     SecurityViolationReportingPolicy reporting_policy) const {
   // `base-uri` isn't affected by 'upgrade-insecure-requests', so we'll check
   // both report-only and enforce headers here.
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -966,7 +960,7 @@ bool ContentSecurityPolicy::AllowWorkerContextFromSource(
   if (Document* document = this->GetDocument()) {
     UseCounter::Count(*document, WebFeature::kWorkerSubjectToCSP);
     bool is_allowed_worker = true;
-    if (!ShouldBypassContentSecurityPolicy(url)) {
+    if (!ShouldBypassContentSecurityPolicy(url, execution_context_)) {
       for (const auto& policy : policies_) {
         if (!CheckHeaderTypeMatches(check_header_type, policy->HeaderType()))
           continue;
@@ -978,7 +972,7 @@ bool ContentSecurityPolicy::AllowWorkerContextFromSource(
 
     bool is_allowed_script = true;
 
-    if (!ShouldBypassContentSecurityPolicy(url)) {
+    if (!ShouldBypassContentSecurityPolicy(url, execution_context_)) {
       for (const auto& policy : policies_) {
         if (!CheckHeaderTypeMatches(check_header_type, policy->HeaderType()))
           continue;
@@ -995,7 +989,7 @@ bool ContentSecurityPolicy::AllowWorkerContextFromSource(
     }
   }
 
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -1014,7 +1008,7 @@ bool ContentSecurityPolicy::AllowManifestFromSource(
     RedirectStatus redirect_status,
     SecurityViolationReportingPolicy reporting_policy,
     CheckHeaderType check_header_type) const {
-  if (ShouldBypassContentSecurityPolicy(url))
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
     return true;
 
   bool is_allowed = true;
@@ -1240,7 +1234,8 @@ void ContentSecurityPolicy::ReportViolation(
   // https://crbug.com/524356 for detail.
   if (!violation_data.sourceFile().IsEmpty() &&
       ShouldBypassContentSecurityPolicy(
-          KURL(kParsedURLString, violation_data.sourceFile()))) {
+          KURL(kParsedURLString, violation_data.sourceFile()),
+          execution_context_)) {
     return;
   }
 
@@ -1744,16 +1739,27 @@ bool ContentSecurityPolicy::Subsumes(const ContentSecurityPolicy& other) const {
   return policies_[0]->Subsumes(other_vector);
 }
 
+// static
 bool ContentSecurityPolicy::ShouldBypassContentSecurityPolicy(
     const KURL& url,
+    ExecutionContext* execution_context,
     SchemeRegistry::PolicyAreas area) {
+  bool should_bypass_csp;
   if (SecurityOrigin::ShouldUseInnerURL(url)) {
-    return SchemeRegistry::SchemeShouldBypassContentSecurityPolicy(
+    should_bypass_csp = SchemeRegistry::SchemeShouldBypassContentSecurityPolicy(
         SecurityOrigin::ExtractInnerURL(url).Protocol(), area);
+    if (should_bypass_csp) {
+      UseCounter::Count(execution_context, WebFeature::kInnerSchemeBypassesCSP);
+    }
   } else {
-    return SchemeRegistry::SchemeShouldBypassContentSecurityPolicy(
+    should_bypass_csp = SchemeRegistry::SchemeShouldBypassContentSecurityPolicy(
         url.Protocol(), area);
   }
+  if (should_bypass_csp) {
+    UseCounter::Count(execution_context, WebFeature::kSchemeBypassesCSP);
+  }
+
+  return should_bypass_csp;
 }
 
 // static

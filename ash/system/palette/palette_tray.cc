@@ -4,7 +4,7 @@
 
 #include "ash/system/palette/palette_tray.h"
 
-#include "ash/accessibility_delegate.h"
+#include "ash/accessibility/accessibility_delegate.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -185,7 +185,6 @@ PaletteTray::PaletteTray(Shelf* shelf)
   tray_container()->AddChildView(icon_);
 
   Shell::Get()->AddShellObserver(this);
-  ui::InputDeviceManager::GetInstance()->AddObserver(this);
 }
 
 PaletteTray::~PaletteTray() {
@@ -393,6 +392,8 @@ void PaletteTray::Initialize() {
     return;
 
   TrayBackgroundView::Initialize();
+
+  ui::InputDeviceManager::GetInstance()->AddObserver(this);
 
   // OnPaletteEnabledPrefChanged will get called with the initial pref value,
   // which will take care of showing the palette.

@@ -662,6 +662,8 @@ jumbo_component("platform") {
     "fonts/AcceptLanguagesResolver.cpp",
     "fonts/AcceptLanguagesResolver.h",
     "fonts/AlternateFontFamily.h",
+    "fonts/BitmapGlyphsBlacklist.cpp",
+    "fonts/BitmapGlyphsBlacklist.h",
     "fonts/CharacterRange.h",
     "fonts/CustomFontData.h",
     "fonts/FallbackListCompositeKey.h",
@@ -1773,6 +1775,7 @@ test("blink_platform_unittests") {
     "exported/WebStringTest.cpp",
     "feature_policy/FeaturePolicyTest.cpp",
     "fonts/AcceptLanguagesResolverTest.cpp",
+    "fonts/BitmapGlyphsBlacklistTest.cpp",
     "fonts/FontCacheTest.cpp",
     "fonts/FontDescriptionTest.cpp",
     "fonts/FontFamilyTest.cpp",
@@ -2134,6 +2137,18 @@ fuzzer_test("feature_policy_fuzzer") {
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/feature_policy.dict"
   seed_corpus = "//testing/libfuzzer/fuzzers/feature_policy_corpus"
+}
+
+fuzzer_test("blink_harfbuzz_shaper_fuzzer") {
+  sources = [
+    "fonts/shaping/HarfBuzzShaperFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+    "//third_party/icu",
+  ]
+  libfuzzer_options = [ "max_len=256" ]
 }
 
 # Fuzzer template for WTF::TextCodec.

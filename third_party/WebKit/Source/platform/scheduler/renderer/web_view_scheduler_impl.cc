@@ -137,6 +137,11 @@ void WebViewSchedulerImpl::SetPageVisible(bool page_visible) {
   UpdateBackgroundThrottlingState();
 }
 
+void WebViewSchedulerImpl::SetPageStopped(bool stopped) {
+  for (WebFrameSchedulerImpl* frame_scheduler : frame_schedulers_)
+    frame_scheduler->SetPageStopped(stopped);
+}
+
 std::unique_ptr<WebFrameSchedulerImpl>
 WebViewSchedulerImpl::CreateWebFrameSchedulerImpl(
     base::trace_event::BlameContext* blame_context,
@@ -179,6 +184,8 @@ void WebViewSchedulerImpl::EnableVirtualTime() {
   virtual_time_ = true;
   renderer_scheduler_->GetVirtualTimeDomain()->SetCanAdvanceVirtualTime(
       allow_virtual_time_to_advance_);
+
+  renderer_scheduler_->GetVirtualTimeDomain()->SetObserver(this);
 
   if (!allow_virtual_time_to_advance_) {
     renderer_scheduler_->VirtualTimePaused();
@@ -313,6 +320,16 @@ void WebViewSchedulerImpl::AddVirtualTimeObserver(
 void WebViewSchedulerImpl::RemoveVirtualTimeObserver(
     VirtualTimeObserver* observer) {
   virtual_time_observers_.RemoveObserver(observer);
+}
+
+void WebViewSchedulerImpl::OnVirtualTimeAdvanced() {
+  DCHECK(allow_virtual_time_to_advance_);
+
+  for (auto& observer : virtual_time_observers_) {
+    observer.OnVirtualTimeAdvanced(
+        renderer_scheduler_->GetVirtualTimeDomain()->Now() -
+        initial_virtual_time_);
+  }
 }
 
 void WebViewSchedulerImpl::NotifyVirtualTimePaused() {

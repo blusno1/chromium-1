@@ -16,6 +16,9 @@ void RendererMainPlatformDelegate::PlatformInitialize() {}
 void RendererMainPlatformDelegate::PlatformUninitialize() {}
 
 bool RendererMainPlatformDelegate::EnableSandbox() {
+  // TODO(750938): Report NOTIMPLEMENTED() here until we re-enable sandboxing
+  // of sub-processes.
+  NOTIMPLEMENTED();
   return true;
 }
 

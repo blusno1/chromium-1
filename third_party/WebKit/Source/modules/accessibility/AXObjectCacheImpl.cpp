@@ -28,7 +28,6 @@
 
 #include "modules/accessibility/AXObjectCacheImpl.h"
 
-#include "core/InputTypeNames.h"
 #include "core/dom/AccessibleNode.h"
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
@@ -42,10 +41,11 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
-#include "core/html/HTMLLabelElement.h"
-#include "core/html/HTMLOptionElement.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLLabelElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
 #include "core/html_names.h"
+#include "core/input_type_names.h"
 #include "core/layout/LayoutListBox.h"
 #include "core/layout/LayoutMenuList.h"
 #include "core/layout/LayoutProgress.h"

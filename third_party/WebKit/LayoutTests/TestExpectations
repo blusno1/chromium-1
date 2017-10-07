@@ -1144,10 +1144,6 @@ crbug.com/528062 [ Win ] virtual/mojo-loading/http/tests/security/contentSecurit
 crbug.com/528062 [ Win ] virtual/mojo-loading/http/tests/security/xssAuditor/cached-frame.html [ Failure ]
 crbug.com/528062 [ Win ] virtual/mojo-loading/http/tests/security/xssAuditor/chunked-big-script.html [ Failure ]
 
-crbug.com/392706 virtual/threaded/animations/play-state-initially-paused.html [ Failure ]
-
-# Added Linux in crbug.com/750549
-
 # Part of a larger issue referenced in the bug. This specific issue will be fixed shortly.
 crbug.com/408159 accessibility/is-ignored-change-sends-notification.html [ Timeout ]
 
@@ -1726,33 +1722,35 @@ crbug.com/751952 editing/selection/modify_extend/extend_by_character.html [ Pass
 crbug.com/751952 fast/dom/Range/getClientRects.html [ Pass Failure ]
 crbug.com/751952 http/tests/devtools/console/console-format.html [ Pass Failure ]
 crbug.com/751952 virtual/mojo-loading/http/tests/devtools/console/console-format.html [ Pass Failure ]
-crbug.com/751952 http/tests/inspector-unit/datagrid-editable-longtext.js [ Pass Failure ]
+crbug.com/751952 http/tests/devtools/unit/datagrid-editable-longtext.js [ Pass Failure ]
 crbug.com/751952 http/tests/devtools/console/console-uncaught-promise.html [ Pass Failure ]
 crbug.com/751952 virtual/mojo-loading/http/tests/devtools/console/console-uncaught-promise.html [ Pass Failure ]
-crbug.com/751952 virtual/mojo-loading/http/tests/inspector-unit/datagrid-editable-longtext.js [ Pass Failure ]
+crbug.com/751952 virtual/mojo-loading/http/tests/devtools/unit/datagrid-editable-longtext.js [ Pass Failure ]
 crbug.com/751952 virtual/origin-trials-runtimeflags-disabled/http/tests/origin_trials/webexposed/budget-api-origin-trial-interfaces.html [ Pass Failure ]
 
+crbug.com/771729 [ Win Debug ] external/wpt/html/semantics/scripting-1/the-script-element/execution-timing/039.html [ Pass Failure ]
+
 # ====== New tests from wpt-importer added here ======
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_003-manual.htm [ Skip ]
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_004-manual.htm [ Skip ]
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_006-manual.htm [ Skip ]
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_007-manual.htm [ Skip ]
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_008-manual.htm [ Skip ]
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_010-manual.htm [ Skip ]
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_020-manual.htm [ Skip ]
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_021-manual.htm [ Skip ]
-crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_022-manual.htm [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/errors-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/file-webkitRelativePath-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/filesystem-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/filesystemdirectoryentry-getDirectory-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/filesystemdirectoryentry-getFile-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/filesystemdirectoryentry-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/filesystemdirectoryreader-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/filesystementry-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/filesystemfileentry-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/entries-api/interfaces-manual.html [ Skip ]
-crbug.com/626703 [ Android Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/speech-api/SpeechSynthesis-speak-twice.html [ Timeout ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_003-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_004-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_006-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_007-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_008-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_010-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_020-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_021-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_022-manual.htm [ Skip ]
+crbug.com/626703 external/wpt/entries-api/errors-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/file-webkitRelativePath-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/filesystem-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/filesystemdirectoryentry-getDirectory-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/filesystemdirectoryentry-getFile-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/filesystemdirectoryentry-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/filesystemdirectoryreader-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/filesystementry-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/filesystemfileentry-manual.html [ Skip ]
+crbug.com/626703 external/wpt/entries-api/interfaces-manual.html [ Skip ]
+crbug.com/626703 external/wpt/speech-api/SpeechSynthesis-speak-twice.html [ Timeout ]
 crbug.com/626703 external/wpt/requestidlecallback/basic.html [ Timeout ]
 crbug.com/626703 external/wpt/payment-request/PaymentRequestUpdateEvent/updateWith-call-immediate-manual.https.html [ Skip ]
 crbug.com/626703 external/wpt/payment-request/PaymentRequestUpdateEvent/updateWith-method-abort-update-manual.https.html [ Skip ]
@@ -2222,6 +2220,9 @@ crbug.com/626703 [ Linux ] external/wpt/XMLHttpRequest/send-content-type-string.
 crbug.com/626703 external/wpt/XMLHttpRequest/send-entity-body-document.htm [ Failure ]
 crbug.com/626703 external/wpt/XMLHttpRequest/setrequestheader-header-allowed.htm [ Failure ]
 crbug.com/626703 virtual/service-worker-script-streaming/external/wpt/service-workers/service-worker/update-bytecheck.https.html [ Timeout ]
+
+# The expectations in platform/win cause this test to fail on Linux.
+crbug.com/772327 external/wpt/css/css-shapes-1/shape-outside/values/shape-outside-computed-shape-000.html [ Failure Pass ]
 
 # These external tests fail after turning on color correct rendering for canvas
 # since they use a non-SRGB source image.
@@ -2714,7 +2715,7 @@ crbug.com/736333 [ Win7 Linux ] plugins/iframe-plugin-bgcolor.html [ Failure Pas
 crbug.com/742670 [ Mac ] plugins/iframe-plugin-bgcolor.html [ Failure Pass ]
 
 crbug.com/678346 [ Debug ] fast/dom/shadow/selections-in-shadow.html [ Pass Timeout ]
-crbug.com/678346 [ Win7 Debug ] storage/indexeddb/index-cursor.html [ Pass Timeout ]
+crbug.com/678346 [ Win7 Mac Debug ] storage/indexeddb/index-cursor.html [ Pass Timeout ]
 crbug.com/678346 [ Win7 Debug ] storage/indexeddb/mozilla/test_objectStore_openKeyCursor.html [ Pass Timeout ]
 crbug.com/678346 [ Win7 Debug ] storage/indexeddb/structured-clone.html [ Pass Timeout ]
 
@@ -3268,7 +3269,6 @@ crbug.com/755405 [ Android ] external/wpt/html/webappapis/timers/type-long-setti
 crbug.com/755405 [ Android ] external/wpt/html-imports/document/document-method-changes.html [ Failure ]
 crbug.com/755405 [ Android ] external/wpt/html-imports/fetching/already-in-import-map.html [ Failure ]
 crbug.com/755405 [ Android ] external/wpt/html-imports/fetching/loading-attempt.html [ Failure ]
-crbug.com/755405 [ Android ] external/wpt/infrastructure/failing-test.html [ Failure ]
 crbug.com/755405 [ Android ] external/wpt/innerText/setter.html [ Failure ]
 crbug.com/755405 [ Android ] external/wpt/input-events/idlharness.html [ Failure ]
 crbug.com/755405 [ Android ] external/wpt/media-capabilities/decodingInfo.html [ Failure ]
@@ -3625,9 +3625,6 @@ crbug.com/757955 [ Win7 Debug ] storage/indexeddb/objectstore-cursor.html [ Pass
 crbug.com/757955 [ Win7 Debug ] http/tests/devtools/tracing/timeline-paint/layer-tree.html [ Pass Failure Timeout ]
 crbug.com/760546 [ Win7 Debug ] virtual/mojo-loading/http/tests/devtools/tracing/timeline-paint/layer-tree.html [ Pass Failure Timeout ]
 
-# Tests flakely timing out on WebKit Linux Trusty dbg builder
-crbug.com/758109 [ Linux Debug ] fast/workers/worker-multi-startup.html [ Pass Timeout ]
-
 # This test has a fixed number of time which can depend on performance.
 
 crbug.com/669329 http/tests/devtools/tracing/timeline-js/timeline-runtime-stats.html [ Pass Failure Crash ]
@@ -3683,7 +3680,7 @@ crbug.com/762486 virtual/mojo-loading/http/tests/security/xss-DENIED-iframe-src-
 crbug.com/763208 http/tests/devtools/sources/debugger-ui/source-frame-count.html [ Pass Failure ]
 crbug.com/763208 virtual/mojo-loading/http/tests/devtools/sources/debugger-ui/source-frame-count.html [ Pass Failure ]
 
-crbug.com/763666 external/wpt/assumptions/ahem.html [ Failure ]
+crbug.com/763666 external/wpt/infrastructure/assumptions/ahem.html [ Failure ]
 crbug.com/763667 external/wpt/upgrade-insecure-requests/iframe-redirect-upgrade.https.html [ Timeout ]
 
 # Sheriff failures 2017-09-11
@@ -3736,7 +3733,7 @@ crbug.com/770971 [ Win7 ] fast/forms/suggested-value.html [ Pass Failure ]
 crbug.com/771492 [ Win Linux Mac ] external/wpt/css/css-tables-3/table-model-fixup-2.html [ Failure ]
 
 # Sheriff failures 2017-10-04
-crbug.com/770691 [ Win7 ] media/controls/lazy-loaded-style.html [ Failure Pass ]
-crbug.com/770691 [ Win7 ] virtual/new-remote-playback-pipeline/media/controls/lazy-loaded-style.html [ Failure Pass ]
+crbug.com/770691 [ Win7 Linux Mac10.11 ] media/controls/lazy-loaded-style.html [ Failure Pass ]
+crbug.com/770691 [ Win7 Linux Mac10.11 ] virtual/new-remote-playback-pipeline/media/controls/lazy-loaded-style.html [ Failure Pass ]
 crbug.com/771518 [ Win7 ] http/tests/devtools/persistence/persistence-move-breakpoints-on-reload.html [ Pass Failure ]
 crbug.com/771518 [ Win7 ] virtual/mojo-loading/http/tests/devtools/persistence/persistence-move-breakpoints-on-reload.html [ Pass Failure ]

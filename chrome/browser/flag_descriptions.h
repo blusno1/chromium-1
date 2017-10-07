@@ -471,6 +471,9 @@ extern const char kKeepAliveRendererForKeepaliveRequestsDescription[];
 extern const char kLcdTextName[];
 extern const char kLcdTextDescription[];
 
+extern const char kLeftToRightUrlsName[];
+extern const char kLeftToRightUrlsDescription[];
+
 extern const char kLoadMediaRouterComponentExtensionName[];
 extern const char kLoadMediaRouterComponentExtensionDescription[];
 
@@ -798,9 +801,6 @@ extern const char kTLS13VariantExperiment3[];
 
 extern const char kSuggestionsWithSubStringMatchName[];
 extern const char kSuggestionsWithSubStringMatchDescription[];
-
-extern const char kSupervisedUserManagedBookmarksFolderName[];
-extern const char kSupervisedUserManagedBookmarksFolderDescription[];
 
 extern const char kSyncAppListName[];
 extern const char kSyncAppListDescription[];
@@ -1433,6 +1433,9 @@ extern const char kAshEnableUnifiedDesktopDescription[];
 
 extern const char kBootAnimationName[];
 extern const char kBootAnimationDescription[];
+
+extern const char kBulkPrintersName[];
+extern const char kBulkPrintersDescription[];
 
 extern const char kCaptivePortalBypassProxyName[];
 extern const char kCaptivePortalBypassProxyDescription[];

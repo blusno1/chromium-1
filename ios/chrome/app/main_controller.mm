@@ -370,10 +370,6 @@ const int kExternalFilesCleanupDelaySeconds = 60;
                     accessPoint:(signin_metrics::AccessPoint)accessPoint
                     promoAction:(signin_metrics::PromoAction)promoAction
                        callback:(ShowSigninCommandCompletionCallback)callback;
-// Wraps a callback with one that first checks if sign-in was completed
-// successfully and the profile wasn't swapped before invoking.
-- (ShowSigninCommandCompletionCallback)successfulSigninCompletion:
-    (ProceduralBlock)callback;
 // Shows the tab switcher UI.
 - (void)showTabSwitcher;
 // Starts a voice search on the current BVC.
@@ -2006,11 +2002,9 @@ const int kExternalFilesCleanupDelaySeconds = 60;
     return;
   }
 
-  BOOL areSettingsPresented = _settingsNavigationController != NULL;
   _signinInteractionController = [[SigninInteractionController alloc]
           initWithBrowserState:_mainBrowserState
       presentingViewController:[self topPresentedViewController]
-         isPresentedOnSettings:areSettingsPresented
                    accessPoint:accessPoint
                    promoAction:promoAction
                     dispatcher:self.mainBVC.dispatcher];
@@ -2043,11 +2037,9 @@ const int kExternalFilesCleanupDelaySeconds = 60;
     return;
   }
 
-  BOOL areSettingsPresented = _settingsNavigationController != NULL;
   _signinInteractionController = [[SigninInteractionController alloc]
           initWithBrowserState:_mainBrowserState
       presentingViewController:[self topPresentedViewController]
-         isPresentedOnSettings:areSettingsPresented
                    accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN
                    promoAction:signin_metrics::PromoAction::
                                    PROMO_ACTION_NO_SIGNIN_PROMO
@@ -2064,23 +2056,6 @@ const int kExternalFilesCleanupDelaySeconds = 60;
   // |ShowSigninCommandCompletionCallback| passed when starting a show sign-in
   // operation.
   [_signinInteractionController cancelAndDismiss];
-}
-
-- (ShowSigninCommandCompletionCallback)successfulSigninCompletion:
-    (ProceduralBlock)callback {
-  return [^(BOOL successful) {
-    ios::ChromeBrowserState* browserState = [self currentBrowserState];
-    if (browserState->IsOffTheRecord()) {
-      NOTREACHED()
-          << "Ignore call to |handleSignInFinished| when in incognito.";
-      return;
-    }
-    DCHECK_EQ(self.mainBVC, self.currentBVC);
-    SigninManager* signinManager =
-        ios::SigninManagerFactory::GetForBrowserState(browserState);
-    if (signinManager->IsAuthenticated())
-      callback();
-  } copy];
 }
 
 - (void)closeSettingsAnimated:(BOOL)animated

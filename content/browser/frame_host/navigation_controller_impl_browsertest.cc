@@ -5524,9 +5524,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   ExplodedPageState exploded_state;
   EXPECT_TRUE(
       DecodePageState(entry->GetPageState().ToEncodedData(), &exploded_state));
-  EXPECT_EQ(url_a, GURL(exploded_state.top.url_string.string()));
+  EXPECT_EQ(url_a,
+            GURL(exploded_state.top.url_string.value_or(base::string16())));
   EXPECT_EQ(frame_url_a2,
-            GURL(exploded_state.top.children.at(0).url_string.string()));
+            GURL(exploded_state.top.children.at(0).url_string.value_or(
+                base::string16())));
 }
 
 // Start a provisional navigation, but abort it by going back before it commits.
@@ -5623,7 +5625,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   ExplodedPageState exploded_state;
   EXPECT_TRUE(
       DecodePageState(entry->GetPageState().ToEncodedData(), &exploded_state));
-  EXPECT_EQ(url_b, GURL(exploded_state.top.url_string.string()));
+  EXPECT_EQ(url_b,
+            GURL(exploded_state.top.url_string.value_or(base::string16())));
   EXPECT_EQ(0U, exploded_state.top.children.size());
 
   // Go back and then forward to see if the PageState loads correctly.
@@ -5712,7 +5715,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   ExplodedPageState exploded_state;
   EXPECT_TRUE(
       DecodePageState(entry->GetPageState().ToEncodedData(), &exploded_state));
-  EXPECT_EQ(url_b, GURL(exploded_state.top.url_string.string()));
+  EXPECT_EQ(url_b,
+            GURL(exploded_state.top.url_string.value_or(base::string16())));
 
   // Go back and then forward to see if the PageState loads correctly.
   controller.GoBack();
@@ -5937,20 +5941,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, PostViaOpenUrlMsg) {
   EXPECT_EQ("text=value\n", body);
 }
 
-// This test is flaky on Windows, see https://crbug.com/766378
-#if defined(OS_WIN)
-#define MAYBE_EnsureFrameNavigationEntriesClearedOnMismatch \
-  DISABLED_EnsureFrameNavigationEntriesClearedOnMismatch
-#else
-#define MAYBE_EnsureFrameNavigationEntriesClearedOnMismatch \
-  EnsureFrameNavigationEntriesClearedOnMismatch
-#endif
-
 // Tests that inserting a named subframe into the FrameTree clears any
 // previously existing FrameNavigationEntry objects for the same name.
 // See https://crbug.com/628677.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
-                       MAYBE_EnsureFrameNavigationEntriesClearedOnMismatch) {
+                       EnsureFrameNavigationEntriesClearedOnMismatch) {
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   NavigationControllerImpl& controller = web_contents->GetController();
@@ -5974,10 +5969,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
     // * The first child of the main frame is named and has two more children.
     FrameTreeNode* frame = root->child_at(0);
+    NavigationEntryImpl::TreeNode* tree_node = entry->GetTreeNode(frame);
     FrameNavigationEntry* frame_entry = entry->GetFrameEntry(frame);
+    EXPECT_NE(nullptr, tree_node);
     EXPECT_NE(nullptr, frame_entry);
     EXPECT_EQ("1-1-name", frame_entry->frame_unique_name());
-    EXPECT_EQ(2U, entry->root_node()->children[0]->children.size());
+    EXPECT_EQ(frame_entry, tree_node->frame_entry);
+    EXPECT_EQ(2U, tree_node->children.size());
   }
 
   // Removing the first child of the main frame should remove the corresponding
@@ -5991,7 +5989,25 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigationEntry* root_entry = entry->GetFrameEntry(root);
     EXPECT_NE(nullptr, root_entry);
     EXPECT_EQ(3U, entry->root_node()->children.size());
-    EXPECT_EQ(2U, entry->root_node()->children[0]->children.size());
+
+    // Since child count is known only to the FrameNavigationEntry::TreeNode,
+    // traverse the root entry to find the correct one matching the
+    // frame_unique_name. The ordering of entries in the FrameNavigationEntry
+    // tree is not guaranteed to be the same as the order in the FrameTreeNode
+    // tree. The latter depends on the order of frames committing navigations,
+    // which is undefined and depends on responses from the network.
+    // Traverse the FrameNavigationEntry tree, since the FrameTreeNode has
+    // been deleted and cannot be used for looking up the TreeNode.
+    NavigationEntryImpl::TreeNode* tree_node = nullptr;
+    for (auto& node : entry->root_node()->children) {
+      if (node->frame_entry->frame_unique_name() == "1-1-name") {
+        tree_node = node.get();
+        break;
+      }
+    }
+
+    EXPECT_TRUE(tree_node);
+    EXPECT_EQ(2U, tree_node->children.size());
   }
 
   // Now, insert a frame with the same name as the previously removed one
@@ -6014,22 +6030,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   }
 }
 
-// This test is flaky on Windows, see https://crbug.com/765107
-#if defined(OS_WIN)
-#define MAYBE_EnsureFrameNavigationEntriesClearedOnMismatchNoSrc \
-  DISABLED_EnsureFrameNavigationEntriesClearedOnMismatchNoSrc
-#else
-#define MAYBE_EnsureFrameNavigationEntriesClearedOnMismatchNoSrc \
-  EnsureFrameNavigationEntriesClearedOnMismatchNoSrc
-#endif
 // Tests that sending a PageState update from a named subframe does not get
 // incorrectly set on previously existing FrameNavigationEntry for the same
 // name. It is similar to EnsureFrameNavigationEntriesClearedOnMismatch, but
 // doesn't navigate the iframes to real URLs when added to the DOM.
 // See https://crbug.com/628677.
-IN_PROC_BROWSER_TEST_F(
-    NavigationControllerBrowserTest,
-    MAYBE_EnsureFrameNavigationEntriesClearedOnMismatchNoSrc) {
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       EnsureFrameNavigationEntriesClearedOnMismatchNoSrc) {
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* root = web_contents->GetFrameTree()->root();

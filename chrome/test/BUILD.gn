@@ -1019,13 +1019,6 @@ if (!is_android) {
       "//testing/xvfb.py",
       "//testing/scripts/run_telemetry_as_googletest.py",
     ]
-
-    if (enable_package_mash_services) {
-      deps += [ "//chrome:chrome_test" ]
-      data_deps = [
-        "//chrome:chrome_test",
-      ]
-    }
   }
 
   group("telemetry_gpu_unittests_run") {
@@ -1077,12 +1070,6 @@ static_library("browser_tests_runner") {
       "base/browser_tests_main_chromeos.cc",
       "base/mash_browser_tests_main.cc",
       "base/mash_browser_tests_main.h",
-    ]
-
-    deps += [
-      "//chrome/app/mash:embedded_services",
-      "//mash/session/public/interfaces:constants",
-      "//services/service_manager/background:lib",
     ]
   } else {
     sources += [ "base/browser_tests_main.cc" ]
@@ -1149,6 +1136,8 @@ test("browser_tests") {
 
     data_deps += [
       # Needed for --run-in-mash, which triggers launching chrome.
+      # TODO(sky): this seems wrong, figure a better way to get resources.
+      "//ash/mus:resources",
       "//chrome",
       "//ui/keyboard:resources",
     ]
@@ -2340,6 +2329,7 @@ test("browser_tests") {
         "../browser/ui/ash/launcher/arc_app_launcher_browsertest.cc",
         "../browser/ui/views/arc_app_dialog_view_browsertest.cc",
         "../browser/ui/views/frame/browser_frame_ash_browsertest.cc",
+        "../browser/ui/views/frame/immersive_mode_controller_ash_browsertest.cc",
         "../browser/ui/webui/chromeos/keyboard_overlay_ui_browsertest.cc",
       ]
       sources -= [
@@ -2966,13 +2956,6 @@ group("telemetry_perf_unittests") {
     # For smoke testing run_multiple_telemetry_benchmarks_as_googletest
     "//testing/scripts/run_multiple_telemetry_benchmarks_as_googletest.py",
   ]
-
-  if (enable_package_mash_services) {
-    deps += [ "//chrome:chrome_test" ]
-    data_deps = [
-      "//chrome:chrome_test",
-    ]
-  }
 }
 
 group("telemetry_perf_tests") {
@@ -3006,6 +2989,11 @@ group("telemetry_perf_tests_new") {
   testonly = true
   deps = [
     "//chrome/test:telemetry_perf_tests",
+  ]
+
+  data = [
+    # Needed for isolate script to execute.
+    "//testing/scripts/run_multiple_telemetry_benchmarks_as_googletest.py",
   ]
 }
 
@@ -4985,7 +4973,6 @@ test("unit_tests") {
       "../browser/supervised_user/child_accounts/family_info_fetcher_unittest.cc",
       "../browser/supervised_user/child_accounts/permission_request_creator_apiary_unittest.cc",
       "../browser/supervised_user/experimental/safe_search_url_reporter_unittest.cc",
-      "../browser/supervised_user/supervised_user_bookmarks_handler_unittest.cc",
       "../browser/supervised_user/supervised_user_pref_store_unittest.cc",
       "../browser/supervised_user/supervised_user_service_unittest.cc",
       "../browser/supervised_user/supervised_user_settings_service_unittest.cc",

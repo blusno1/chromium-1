@@ -129,8 +129,6 @@ RendererSchedulerImpl::RendererSchedulerImpl(
       NewLoadingTaskQueue(MainThreadTaskQueue::QueueType::DEFAULT_LOADING);
   default_timer_task_queue_ =
       NewTimerTaskQueue(MainThreadTaskQueue::QueueType::DEFAULT_TIMER);
-  v8_task_queue_ = NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
-      MainThreadTaskQueue::QueueType::V8));
 
   TRACE_EVENT_OBJECT_CREATED_WITH_ID(
       TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "RendererScheduler",
@@ -314,11 +312,6 @@ scoped_refptr<MainThreadTaskQueue> RendererSchedulerImpl::LoadingTaskQueue() {
 scoped_refptr<MainThreadTaskQueue> RendererSchedulerImpl::TimerTaskQueue() {
   helper_.CheckOnValidThread();
   return default_timer_task_queue_;
-}
-
-scoped_refptr<MainThreadTaskQueue> RendererSchedulerImpl::V8TaskQueue() {
-  helper_.CheckOnValidThread();
-  return v8_task_queue_;
 }
 
 scoped_refptr<MainThreadTaskQueue> RendererSchedulerImpl::ControlTaskQueue() {
@@ -1201,6 +1194,7 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
     if (RuntimeEnabledFeatures::StopLoadingInBackgroundAndroidEnabled())
       new_policy.loading_queue_policy().is_stopped = true;
   }
+
   if (main_thread_only().renderer_paused) {
     new_policy.loading_queue_policy().is_paused = true;
     new_policy.timer_queue_policy().is_paused = true;
@@ -1251,6 +1245,13 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
       new_policy.rail_mode() != main_thread_only().current_policy.rail_mode()) {
     main_thread_only().rail_mode_observer->OnRAILModeChanged(
         new_policy.rail_mode());
+  }
+
+  // TODO(skyostil): send these notifications after releasing the scheduler
+  // lock.
+  if (new_policy.loading_queue_policy().is_stopped !=
+      main_thread_only().current_policy.loading_queue_policy().is_stopped) {
+    SetStoppedInBackground(new_policy.loading_queue_policy().is_stopped);
   }
 
   if (new_policy.should_disable_throttling() !=
@@ -1400,6 +1401,13 @@ bool RendererSchedulerImpl::CanEnterLongIdlePeriod(
     return false;
   }
   return true;
+}
+
+void RendererSchedulerImpl::SetStoppedInBackground(bool stopped) const {
+  for (WebViewSchedulerImpl* web_view_scheduler :
+       main_thread_only().web_view_schedulers) {
+    web_view_scheduler->SetPageStopped(stopped);
+  }
 }
 
 MainThreadSchedulerHelper*
@@ -1826,16 +1834,12 @@ void RendererSchedulerImpl::SetTopLevelBlameContext(
   //
   // Per-frame task runners (loading, timers, etc.) are configured with a more
   // specific blame context by WebFrameSchedulerImpl.
-  //
-  // TODO(altimin): automatically enter top-level for all task queues associated
-  // with renderer scheduler which do not have a corresponding frame.
   control_task_queue_->SetBlameContext(blame_context);
   DefaultTaskQueue()->SetBlameContext(blame_context);
   default_loading_task_queue_->SetBlameContext(blame_context);
   default_timer_task_queue_->SetBlameContext(blame_context);
   compositor_task_queue_->SetBlameContext(blame_context);
   idle_helper_.IdleTaskRunner()->SetBlameContext(blame_context);
-  v8_task_queue_->SetBlameContext(blame_context);
 }
 
 void RendererSchedulerImpl::SetRAILModeObserver(RAILModeObserver* observer) {

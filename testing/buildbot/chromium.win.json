@@ -493,6 +493,13 @@
     ],
     "isolated_scripts": [
       {
+        "isolate_name": "metrics_python_tests",
+        "name": "metrics_python_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
+      {
         "isolate_name": "telemetry_gpu_unittests",
         "name": "telemetry_gpu_unittests",
         "swarming": {
@@ -1607,12 +1614,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "vr_common_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "webkit_unit_tests"
       },
       {
@@ -1638,6 +1639,13 @@
       {
         "isolate_name": "content_shell_crash_test",
         "name": "content_shell_crash_test",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
+      {
+        "isolate_name": "metrics_python_tests",
+        "name": "metrics_python_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         }
@@ -2113,12 +2121,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "viz_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "vr_common_unittests"
       },
       {
         "swarming": {

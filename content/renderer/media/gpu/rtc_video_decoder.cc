@@ -22,6 +22,7 @@
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
 #include "third_party/webrtc/rtc_base/bind.h"
 #include "third_party/webrtc/rtc_base/refcount.h"
+#include "third_party/webrtc/rtc_base/refcountedobject.h"
 
 #if defined(OS_WIN)
 #include "base/command_line.h"
@@ -455,9 +456,16 @@ scoped_refptr<media::VideoFrame> RTCVideoDecoder::CreateVideoFrame(
                          weak_factory_.GetWeakPtr(), factories_,
                          picture.picture_buffer_id(), pb.client_texture_ids())),
           pb.size(), visible_rect, visible_rect.size(), timestamp_ms);
-  if (frame && picture.allow_overlay()) {
+  if (frame) {
     frame->metadata()->SetBoolean(media::VideoFrameMetadata::ALLOW_OVERLAY,
-                                  true);
+                                  picture.allow_overlay());
+#if defined(OS_ANDROID)
+    frame->metadata()->SetBoolean(media::VideoFrameMetadata::SURFACE_TEXTURE,
+                                  picture.surface_texture());
+    frame->metadata()->SetBoolean(
+        media::VideoFrameMetadata::WANTS_PROMOTION_HINT,
+        picture.wants_promotion_hint());
+#endif
   }
   return frame;
 }

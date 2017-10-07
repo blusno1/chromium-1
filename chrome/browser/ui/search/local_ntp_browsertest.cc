@@ -14,6 +14,7 @@
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
@@ -70,6 +71,13 @@ using testing::Eq;
 using testing::IsEmpty;
 
 namespace {
+
+const char kCachedB64[] = "\161\247\041\171\337\276";  // b64decode("cached++")
+const char kFreshB64[] = "\176\267\254\207\357\276";   // b64decode("fresh+++")
+
+scoped_refptr<base::RefCountedString> MakeRefPtr(std::string content) {
+  return base::RefCountedString::TakeString(&content);
+}
 
 content::WebContents* OpenNewTab(Browser* browser, const GURL& url) {
   ui_test_utils::NavigateToURLWithDisposition(
@@ -757,6 +765,22 @@ class LocalNTPDoodleTest : public InProcessBrowserTest {
     return base::nullopt;
   }
 
+  // Gets $(id)[property]. Coerces to string.
+  base::Optional<std::string> GetElementProperty(content::WebContents* tab,
+                                                 const std::string& id,
+                                                 const std::string& property) {
+    std::string value;
+    if (instant_test_utils::GetStringFromJS(
+            tab,
+            base::StringPrintf("document.getElementById(%s)[%s] + ''",
+                               base::GetQuotedJSONString(id).c_str(),
+                               base::GetQuotedJSONString(property).c_str()),
+            &value)) {
+      return value;
+    }
+    return base::nullopt;
+  }
+
   void WaitForFadeIn(content::WebContents* tab, const std::string& id) {
     content::ConsoleObserverDelegate console_observer(tab, "WaitForFadeIn");
     tab->SetDelegate(&console_observer);
@@ -768,13 +792,15 @@ class LocalNTPDoodleTest : public InProcessBrowserTest {
                 R"js(
                   (function(id, message) {
                     var element = document.getElementById(id);
-                    if (window.getComputedStyle(element).opacity == 1.0) {
-                      console.log(message);
-                    } else {
-                      element.addEventListener('transitionend', function() {
+                    var fn = function() {
+                      if ((element.style.opacity == 1.0) &&
+                          (window.getComputedStyle(element).opacity == 1.0)) {
                         console.log(message);
-                      });
-                    }
+                      } else {
+                        element.addEventListener('transitionend', fn);
+                      }
+                    };
+                    fn();
                     return true;
                   })(%s, 'WaitForFadeIn')
                 )js",
@@ -787,6 +813,13 @@ class LocalNTPDoodleTest : public InProcessBrowserTest {
 
     console_observer.Wait();
   }
+
+  // See enum LogoImpressionType in ntp_user_data_logger.cc.
+  static const int kLogoImpressionStatic = 0;
+  static const int kLogoImpressionCta = 1;
+
+  // See enum LogoClickType in ntp_user_data_logger.cc.
+  static const int kLogoClickCta = 1;
 
  private:
   void SetUp() override {
@@ -832,11 +865,17 @@ IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
   content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
   content::ConsoleObserverDelegate console_observer(active_tab, "*");
   active_tab->SetDelegate(&console_observer);
+  base::HistogramTester histograms;
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
 
   EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(1.0));
   EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(0.0));
   EXPECT_THAT(console_observer.message(), IsEmpty());
+
+  histograms.ExpectTotalCount("NewTabPage.LogoShown", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.FromCache", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.Fresh", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShownTime2", 0);
 }
 
 IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
@@ -850,19 +889,24 @@ IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
   content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
   content::ConsoleObserverDelegate console_observer(active_tab, "*");
   active_tab->SetDelegate(&console_observer);
+  base::HistogramTester histograms;
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
 
   EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(1.0));
   EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(0.0));
   EXPECT_THAT(console_observer.message(), IsEmpty());
+
+  histograms.ExpectTotalCount("NewTabPage.LogoShown", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.FromCache", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.Fresh", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShownTime2", 0);
 }
 
 IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldShowDoodleWhenCached) {
   EncodedLogo cached_logo;
-  std::string encoded_image = "data:image/svg+xml,<svg/>";
-  cached_logo.encoded_image =
-      base::RefCountedString::TakeString(&encoded_image);
-  cached_logo.metadata.on_click_url = GURL("https://www.chromium.org");
+  cached_logo.encoded_image = MakeRefPtr(kCachedB64);
+  cached_logo.metadata.mime_type = "image/png";
+  cached_logo.metadata.on_click_url = GURL("https://www.chromium.org/");
   cached_logo.metadata.alt_text = "Chromium";
 
   EXPECT_CALL(*logo_service(), GetLogoPtr(_))
@@ -874,18 +918,68 @@ IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldShowDoodleWhenCached) {
   content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
   content::ConsoleObserverDelegate console_observer(active_tab, "*");
   active_tab->SetDelegate(&console_observer);
+  base::HistogramTester histograms;
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
 
   EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(0.0));
   EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(1.0));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-image", "title"),
+              Eq<std::string>("Chromium"));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-link", "href"),
+              Eq<std::string>("https://www.chromium.org/"));
   EXPECT_THAT(console_observer.message(), IsEmpty());
+
+  histograms.ExpectTotalCount("NewTabPage.LogoShown", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown", kLogoImpressionStatic,
+                               1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.FromCache", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown.FromCache",
+                               kLogoImpressionStatic, 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.Fresh", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShownTime2", 1);
 }
 
-IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldFadeToDoodleWhenFetched) {
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
+                       ShouldFadeDoodleToDefaultWhenFetched) {
+  EncodedLogo cached_logo;
+  cached_logo.encoded_image = MakeRefPtr(kCachedB64);
+  cached_logo.metadata.mime_type = "image/png";
+  cached_logo.metadata.on_click_url = GURL("https://www.chromium.org/");
+  cached_logo.metadata.alt_text = "Chromium";
+
+  EXPECT_CALL(*logo_service(), GetLogoPtr(_))
+      .WillOnce(
+          DoAll(ReturnCachedLogo(LogoCallbackReason::DETERMINED, cached_logo),
+                ReturnFreshLogo(LogoCallbackReason::DETERMINED, base::nullopt)))
+      .WillRepeatedly(DoAll(
+          ReturnCachedLogo(LogoCallbackReason::DETERMINED, base::nullopt),
+          ReturnFreshLogo(LogoCallbackReason::REVALIDATED, base::nullopt)));
+
+  // Open a new blank tab, then go to NTP.
+  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  base::HistogramTester histograms;
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  WaitForFadeIn(active_tab, "logo-default");
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(1.0));
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(0.0));
+
+  histograms.ExpectTotalCount("NewTabPage.LogoShown", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown", kLogoImpressionStatic,
+                               1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.FromCache", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown.FromCache",
+                               kLogoImpressionStatic, 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.Fresh", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShownTime2", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
+                       ShouldFadeDefaultToDoodleWhenFetched) {
   EncodedLogo fresh_logo;
-  std::string encoded_image = "data:image/svg+xml,<svg/>";
-  fresh_logo.encoded_image = base::RefCountedString::TakeString(&encoded_image);
-  fresh_logo.metadata.on_click_url = GURL("https://www.chromium.org");
+  fresh_logo.encoded_image = MakeRefPtr(kFreshB64);
+  fresh_logo.metadata.mime_type = "image/png";
+  fresh_logo.metadata.on_click_url = GURL("https://www.chromium.org/");
   fresh_logo.metadata.alt_text = "Chromium";
 
   EXPECT_CALL(*logo_service(), GetLogoPtr(_))
@@ -898,9 +992,169 @@ IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldFadeToDoodleWhenFetched) {
 
   // Open a new blank tab, then go to NTP.
   content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  base::HistogramTester histograms;
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
 
   WaitForFadeIn(active_tab, "logo-doodle");
   EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(0.0));
   EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(1.0));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-image", "title"),
+              Eq<std::string>("Chromium"));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-link", "href"),
+              Eq<std::string>("https://www.chromium.org/"));
+
+  histograms.ExpectTotalCount("NewTabPage.LogoShown", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown", kLogoImpressionStatic,
+                               1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.FromCache", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.Fresh", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown.Fresh",
+                               kLogoImpressionStatic, 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShownTime2", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
+                       ShouldFadeDoodleToDoodleWhenFetched) {
+  EncodedLogo cached_logo;
+  cached_logo.encoded_image = MakeRefPtr(kCachedB64);
+  cached_logo.metadata.mime_type = "image/png";
+  cached_logo.metadata.on_click_url = GURL("https://www.chromium.org/cached");
+  cached_logo.metadata.alt_text = "cached alt text";
+
+  EncodedLogo fresh_logo;
+  fresh_logo.encoded_image = MakeRefPtr(kFreshB64);
+  fresh_logo.metadata.mime_type = "image/png";
+  fresh_logo.metadata.on_click_url = GURL("https://www.chromium.org/fresh");
+  fresh_logo.metadata.alt_text = "fresh alt text";
+
+  EXPECT_CALL(*logo_service(), GetLogoPtr(_))
+      .WillOnce(
+          DoAll(ReturnCachedLogo(LogoCallbackReason::DETERMINED, cached_logo),
+                ReturnFreshLogo(LogoCallbackReason::DETERMINED, fresh_logo)))
+      .WillRepeatedly(DoAll(
+          ReturnCachedLogo(LogoCallbackReason::DETERMINED, fresh_logo),
+          ReturnFreshLogo(LogoCallbackReason::REVALIDATED, base::nullopt)));
+
+  // Open a new blank tab, then go to NTP.
+  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  base::HistogramTester histograms;
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  WaitForFadeIn(active_tab, "logo-doodle");
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(0.0));
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(1.0));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-image", "src"),
+              Eq<std::string>("data:image/png;base64,fresh+++"));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-image", "title"),
+              Eq<std::string>("fresh alt text"));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-link", "href"),
+              Eq<std::string>("https://www.chromium.org/fresh"));
+
+  // LogoShown is recorded for both cached and fresh Doodle, but LogoShownTime2
+  // is only recorded once per NTP.
+  histograms.ExpectTotalCount("NewTabPage.LogoShown", 2);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown", kLogoImpressionStatic,
+                               2);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.FromCache", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown.FromCache",
+                               kLogoImpressionStatic, 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.Fresh", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown.Fresh",
+                               kLogoImpressionStatic, 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShownTime2", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldUpdateMetadataWhenChanged) {
+  EncodedLogo cached_logo;
+  cached_logo.encoded_image = MakeRefPtr(kCachedB64);
+  cached_logo.metadata.mime_type = "image/png";
+  cached_logo.metadata.on_click_url = GURL("https://www.chromium.org/cached");
+  cached_logo.metadata.alt_text = "cached alt text";
+
+  EncodedLogo fresh_logo;
+  fresh_logo.encoded_image = cached_logo.encoded_image;
+  fresh_logo.metadata.mime_type = cached_logo.metadata.mime_type;
+  fresh_logo.metadata.on_click_url = GURL("https://www.chromium.org/fresh");
+  fresh_logo.metadata.alt_text = "fresh alt text";
+
+  EXPECT_CALL(*logo_service(), GetLogoPtr(_))
+      .WillOnce(
+          DoAll(ReturnCachedLogo(LogoCallbackReason::DETERMINED, cached_logo),
+                ReturnFreshLogo(LogoCallbackReason::DETERMINED, fresh_logo)))
+      .WillRepeatedly(DoAll(
+          ReturnCachedLogo(LogoCallbackReason::DETERMINED, fresh_logo),
+          ReturnFreshLogo(LogoCallbackReason::REVALIDATED, base::nullopt)));
+
+  // Open a new blank tab, then go to NTP.
+  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  base::HistogramTester histograms;
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(0.0));
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(1.0));
+
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-image", "title"),
+              Eq<std::string>("fresh alt text"));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-link", "href"),
+              Eq<std::string>("https://www.chromium.org/fresh"));
+
+  // Metadata update does not count as a new impression.
+  histograms.ExpectTotalCount("NewTabPage.LogoShown", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown", kLogoImpressionStatic,
+                               1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.FromCache", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown.FromCache",
+                               kLogoImpressionStatic, 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.Fresh", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShownTime2", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldAnimateLogoWhenClicked) {
+  EncodedLogo cached_logo;
+  cached_logo.encoded_image = MakeRefPtr(kCachedB64);
+  cached_logo.metadata.mime_type = "image/png";
+  cached_logo.metadata.animated_url =
+      GURL("https://www.chromium.org/animated.gif");
+  cached_logo.metadata.on_click_url = GURL("https://www.chromium.org/");
+  cached_logo.metadata.alt_text = "alt text";
+
+  EXPECT_CALL(*logo_service(), GetLogoPtr(_))
+      .WillRepeatedly(DoAll(
+          ReturnCachedLogo(LogoCallbackReason::DETERMINED, cached_logo),
+          ReturnFreshLogo(LogoCallbackReason::REVALIDATED, base::nullopt)));
+
+  // Open a new blank tab, then go to NTP.
+  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  base::HistogramTester histograms;
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-default"), Eq(0.0));
+  EXPECT_THAT(GetComputedOpacity(active_tab, "logo-doodle"), Eq(1.0));
+
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-image", "src"),
+              Eq<std::string>("data:image/png;base64,cached++"));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-image", "title"),
+              Eq<std::string>("alt text"));
+
+  ASSERT_THAT(GetElementProperty(active_tab, "logo-doodle-link", "href"),
+              Eq<std::string>(""));  // No href, just onclick handler.
+
+  // Click image, swapping out for animated URL.
+  ASSERT_TRUE(content::ExecuteScript(
+      active_tab, "document.getElementById('logo-doodle-link').click();"));
+
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-image", "src"),
+              Eq(cached_logo.metadata.animated_url.spec()));
+  EXPECT_THAT(GetElementProperty(active_tab, "logo-doodle-link", "href"),
+              Eq<std::string>("https://www.chromium.org/"));
+
+  histograms.ExpectTotalCount("NewTabPage.LogoShown", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown", kLogoImpressionCta, 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.FromCache", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoShown.FromCache",
+                               kLogoImpressionCta, 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoShown.Fresh", 0);
+  histograms.ExpectTotalCount("NewTabPage.LogoShownTime2", 1);
+  histograms.ExpectTotalCount("NewTabPage.LogoClick", 1);
+  histograms.ExpectBucketCount("NewTabPage.LogoClick", kLogoClickCta, 1);
 }
