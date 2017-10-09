@@ -29,6 +29,7 @@ import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 
 import java.util.concurrent.Callable;
@@ -106,7 +107,6 @@ public class ContentViewCoreSelectionTest {
     @Test
     @SmallTest
     @Feature({"TextSelection"})
-    @DisabledTest(message = "crbug.com/592428")
     public void testSelectionClearedAfterLossOfFocus() throws Throwable {
         requestFocusOnUiThread(true);
 
@@ -603,15 +603,11 @@ public class ContentViewCoreSelectionTest {
     @Test
     @SmallTest
     @Feature({"TextSelection", "TextInput"})
-    @DisabledTest(message = "http://crbug.com/606942")
     public void testCursorPositionAfterHidingActionMode() throws Exception {
         DOMUtils.longPressNode(mContentViewCore, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
-        selectActionBarSelectAll();
-        Assert.assertTrue(mSelectionPopupController.hasSelection());
-        waitForSelectActionBarVisible(true);
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "SampleTextArea");
         hideSelectActionMode();
         waitForSelectActionBarVisible(false);

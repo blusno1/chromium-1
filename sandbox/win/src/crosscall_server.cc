@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/atomicops.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "sandbox/win/src/crosscall_client.h"
@@ -136,6 +137,11 @@ CrossCallParamsEx* CrossCallParamsEx::CreateFromBuffer(void* buffer_base,
     min_declared_size =
         sizeof(CrossCallParams) + ((param_count + 1) * sizeof(ParamInfo));
 
+    // Initial check for the buffer being big enough to determine the actual
+    // buffer size.
+    if (buffer_size < min_declared_size)
+      return nullptr;
+
     // Retrieve the declared size which if it fails returns 0.
     declared_size = GetActualBufferSize(param_count, buffer_base);
 
@@ -151,7 +157,7 @@ CrossCallParamsEx* CrossCallParamsEx::CreateFromBuffer(void* buffer_base,
     // Avoid compiler optimizations across this point. Any value stored in
     // memory should be stored for real, and values previously read from memory
     // should be actually read.
-    _ReadWriteBarrier();
+    base::subtle::MemoryBarrier();
 
     min_declared_size =
         sizeof(CrossCallParams) + ((param_count + 1) * sizeof(ParamInfo));

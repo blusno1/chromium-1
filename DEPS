@@ -26,6 +26,11 @@
 #  git commit -a
 #  git cl upload
 
+gclient_gn_args_file = 'src/build/config/gclient_args.gni'
+gclient_gn_args = [
+  'checkout_nacl',
+]
+
 
 vars = {
   # By default, we should check out everything needed to run on the main
@@ -34,9 +39,13 @@ vars = {
   # purposes.
   'checkout_configuration': 'default',
 
+  # Check out and download nacl by default. This can be disabled e.g. with
+  # custom_vars.
+  'checkout_nacl': 'True',
+
   # By default, do not check out src-internal. This can be overridden e.g. with
   # custom_vars.
-  'checkout_src_internal': 'False',
+  'checkout_src_internal': False,
 
   # TODO(dpranke): change to != "small" once != is supported.
   'checkout_traffic_annotation_tools': 'checkout_configuration == "default"',
@@ -54,11 +63,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'e1da1d9a7dfa6c9ebdcbd2845acebd045edd2a6f',
+  'skia_revision': '67ef5d76406d702e7afe4ec5b490a75d9bcaba10',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '991ca91f98cff16a93a1fee6820058c6a20acd7b',
+  'v8_revision': 'd48dc2e0aef07c4f6c290bee2ac6077974cf2aca',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -110,7 +119,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'dbe4475f85d6756d5de36e0ba015c4c5555a9686',
+  'catapult_revision': 'fe511b3686feddb035898d390b5e0c0de54722be',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -204,8 +213,10 @@ deps = {
   'src/media/cdm/api':
     Var('chromium_git') + '/chromium/cdm.git' + '@' + '1f49c55d3151a4e1eec088befee5f578fea81f4b',
 
-  'src/native_client':
-    Var('chromium_git') + '/native_client/src/native_client.git' + '@' + Var('nacl_revision'),
+  'src/native_client': {
+      'url': Var('chromium_git') + '/native_client/src/native_client.git' + '@' + Var('nacl_revision'),
+      'condition': 'checkout_nacl',
+  },
 
   'src/third_party/SPIRV-Tools/src':
     Var('chromium_git') + '/external/github.com/KhronosGroup/SPIRV-Tools.git' + '@' + '9166854ac93ef81b026e943ccd230fed6c8b8d3c',
@@ -278,7 +289,7 @@ deps = {
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '77b7687e4837223f820e1e98c369d36696f3f2b3',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '8db10a6fb1d4b86909b8cb32e3b53e35624c8979',
 
   # DevTools node modules. Used on Linux buildbots only.
   'src/third_party/devtools-node-modules': {
@@ -342,7 +353,7 @@ deps = {
   # GNU binutils assembler for x86-32.
   'src/third_party/gnu_binutils': {
       'url': Var('chromium_git') + '/native_client/deps/third_party/gnu_binutils.git' + '@' + 'f4003433b61b25666565690caf3d7a7a1a4ec436',
-      'condition': 'checkout_win',
+      'condition': 'checkout_nacl and checkout_win',
   },
 
   'src/third_party/gperf': {
@@ -454,7 +465,7 @@ deps = {
   # GNU binutils assembler for x86-64.
   'src/third_party/mingw-w64/mingw/bin': {
       'url': Var('chromium_git') + '/native_client/deps/third_party/mingw-w64/mingw/bin.git' + '@' + '3cc8b140b883a9fe4986d12cfd46c16a093d3527',
-      'condition': 'checkout_win',
+      'condition': 'checkout_nacl and checkout_win',
   },
 
   # Graphics buffer allocator for Chrome OS.
@@ -477,7 +488,7 @@ deps = {
   # Binaries for nacl sdk.
   'src/third_party/nacl_sdk_binaries': {
       'url': Var('chromium_git') + '/chromium/deps/nacl_sdk_binaries.git' + '@' + '759dfca03bdc774da7ecbf974f6e2b84f43699a5',
-      'condition': 'checkout_win',
+      'condition': 'checkout_nacl and checkout_win',
   },
 
   'src/third_party/netty-tcnative/src': {
@@ -589,7 +600,7 @@ deps = {
     Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '34842fa3c36988840c89f5bc6a68503175acf7d9',
 
   'src/third_party/webrtc':
-    Var('webrtc_git') + '/src.git' + '@' + '82eb3c430916be1c7350972d6f7ab51f07e3ad6c', # commit position 20165
+    Var('webrtc_git') + '/src.git' + '@' + '59ff0e216b2736c2d002d94b9230ec7a918a5bda', # commit position 20165
 
   'src/third_party/xdg-utils': {
       'url': Var('chromium_git') + '/chromium/deps/xdg-utils.git' + '@' + 'd80274d5869b17b8c9067a1022e4416ee7ed5e0d',
@@ -698,6 +709,7 @@ hooks = [
     # anywhere from 30 minutes to 4 hours depending on platform to build.
     'name': 'nacltools',
     'pattern': '.',
+    'condition': 'checkout_nacl',
     'action': [
         'python',
         'src/build/download_nacl_toolchains.py',
@@ -712,19 +724,23 @@ hooks = [
     # official chrome builds or cross compiling.
     'name': 'sysroot',
     'pattern': '.',
+    'condition': 'checkout_linux',
     'action': ['python', 'src/build/linux/sysroot_scripts/install-sysroot.py',
                '--running-as-hook'],
   },
   {
-    # Update the Windows toolchain if necessary.
+    # Update the Windows toolchain if necessary.  Must run before 'clang' below.
     'name': 'win_toolchain',
     'pattern': '.',
+    # TODO(thakis): Put some condition here. Not just host_os == 'win', because
+    # we also need this for (mac|linux) -> win cross builds.
     'action': ['python', 'src/build/vs_toolchain.py', 'update'],
   },
   {
     # Update the Mac toolchain if necessary.
     'name': 'mac_toolchain',
     'pattern': '.',
+    'condition': 'checkout_mac',
     'action': ['python', 'src/build/mac_toolchain.py'],
   },
   # Pull binutils for linux, enabled debug fission for faster linking /
@@ -733,17 +749,17 @@ hooks = [
   {
     'name': 'binutils',
     'pattern': 'src/third_party/binutils',
+    'condition': 'host_os == "linux"',
     'action': [
         'python',
         'src/third_party/binutils/download.py',
     ],
   },
   {
-    # Pull clang if needed or requested via GYP_DEFINES.
     # Note: On Win, this should run after win_toolchain, as it may use it.
     'name': 'clang',
     'pattern': '.',
-    'action': ['python', 'src/tools/clang/scripts/update.py', '--if-needed'],
+    'action': ['python', 'src/tools/clang/scripts/update.py'],
   },
   {
     # Update LASTCHANGE.
@@ -899,6 +915,7 @@ hooks = [
   {
     'name': 'syzygy-binaries',
     'pattern': '.',
+    'condition': 'host_os == "win"',
     'action': ['python',
                'src/build/get_syzygy_binaries.py',
                '--output-dir=src/third_party/syzygy/binaries',

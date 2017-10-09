@@ -188,6 +188,9 @@ struct PasswordForm {
   // for possible passwords. Contains all possible passwords. Optional.
   std::vector<base::string16> all_possible_passwords;
 
+  // True if |all_possible_passwords| have autofilled value or its part.
+  bool form_has_autofilled_value;
+
   // The name of the input element corresponding to the current password.
   // Optional (improves scoring).
   //
@@ -358,6 +361,10 @@ struct LessThanUniqueKey {
 // Converts a vector of possible usernames to string.
 base::string16 OtherPossibleUsernamesToString(
     const PossibleUsernamesVector& possible_usernames);
+
+// Converts a vector of possible passwords to string.
+base::string16 AllPossiblePasswordsToString(
+    const std::vector<base::string16>& possible_passwords);
 
 // For testing.
 std::ostream& operator<<(std::ostream& os, PasswordForm::Layout layout);

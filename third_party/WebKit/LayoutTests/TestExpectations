@@ -1092,6 +1092,11 @@ crbug.com/658305 css3/filters/effect-reference-zoom.html [ Failure Pass ]
 crbug.com/658305 css3/filters/effect-reference-zoom-hw.html [ Failure Pass ]
 crbug.com/658305 css3/filters/filter-effect-removed.html [ Failure Pass ]
 
+crbug.com/459499 http/tests/devtools/sources/debugger-breakpoints/set-breakpoint.html [ Skip ]
+crbug.com/459499 http/tests/devtools/sources/debugger-breakpoints/debugger-set-breakpoint-regex.html [ Skip ]
+crbug.com/459499 virtual/mojo-loading/http/tests/devtools/sources/debugger-breakpoints/debugger-set-breakpoint-regex.html [ Skip ]
+crbug.com/459499 virtual/mojo-loading/http/tests/devtools/sources/debugger-breakpoints/set-breakpoint.html [ Skip ]
+
 crbug.com/267206 [ Mac ] fast/scrolling/scrollbar-tickmarks-hittest.html [ Timeout ]
 crbug.com/267206 [ Mac ] virtual/scroll_customization/fast/scrolling/scrollbar-tickmarks-hittest.html [ Timeout ]
 
@@ -1731,6 +1736,7 @@ crbug.com/751952 virtual/origin-trials-runtimeflags-disabled/http/tests/origin_t
 crbug.com/771729 [ Win Debug ] external/wpt/html/semantics/scripting-1/the-script-element/execution-timing/039.html [ Pass Failure ]
 
 # ====== New tests from wpt-importer added here ======
+crbug.com/626703 external/wpt/payment-method-basic-card/empty-data-manual.https.html [ Skip ]
 crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_003-manual.htm [ Skip ]
 crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_004-manual.htm [ Skip ]
 crbug.com/626703 external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox_006-manual.htm [ Skip ]
@@ -2220,9 +2226,6 @@ crbug.com/626703 [ Linux ] external/wpt/XMLHttpRequest/send-content-type-string.
 crbug.com/626703 external/wpt/XMLHttpRequest/send-entity-body-document.htm [ Failure ]
 crbug.com/626703 external/wpt/XMLHttpRequest/setrequestheader-header-allowed.htm [ Failure ]
 crbug.com/626703 virtual/service-worker-script-streaming/external/wpt/service-workers/service-worker/update-bytecheck.https.html [ Timeout ]
-
-# The expectations in platform/win cause this test to fail on Linux.
-crbug.com/772327 external/wpt/css/css-shapes-1/shape-outside/values/shape-outside-computed-shape-000.html [ Failure Pass ]
 
 # These external tests fail after turning on color correct rendering for canvas
 # since they use a non-SRGB source image.
@@ -3458,6 +3461,9 @@ crbug.com/686118 http/tests/security/contentSecurityPolicy/register-bypassing-sc
 crbug.com/686118 virtual/mojo-loading/http/tests/security/contentSecurityPolicy/register-bypassing-scheme-script.https.html [ Pass Crash ]
 
 crbug.com/757868 [ Linux ] virtual/threaded/animations/animations-parsing.html [ Pass Failure ]
+
+# To roll in https://skia.googlesource.com/skia.git/+/3cd0bef0fd9d062bbcc313c329b4f31925e8ded7
+skbug.com/5060 fast/block/float/overhanging-tall-block.html [ NeedsManualRebaseline ]
 
 # Tests currently failing on Windows when run on Swarming
 crbug.com/757165 [ Win ] compositing/culling/filter-occlusion-blur.html [ Skip ]
